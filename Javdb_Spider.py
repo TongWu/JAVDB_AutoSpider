@@ -6,7 +6,8 @@ import logging
 import os
 import argparse
 import sys
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
+from bs4.element import Tag
 from urllib.parse import urljoin
 from datetime import datetime
 
@@ -16,28 +17,42 @@ from utils.history_manager import load_parsed_movies_history, save_parsed_movie_
 from utils.parser import parse_index, parse_detail
 from utils.magnet_extractor import extract_magnets
 
+# Import unified configuration
+try:
+    from config import (
+        BASE_URL, START_PAGE, END_PAGE,
+        DAILY_REPORT_DIR, AD_HOC_DIR, PARSED_MOVIES_CSV,
+        SPIDER_LOG_FILE, LOG_LEVEL
+    )
+except ImportError:
+    # Fallback values if config.py doesn't exist
+    BASE_URL = 'https://javdb.com'
+    START_PAGE = 1
+    END_PAGE = 20
+    DAILY_REPORT_DIR = 'Daily Report'
+    AD_HOC_DIR = 'Ad Hoc'
+    PARSED_MOVIES_CSV = 'parsed_movies_history.csv'
+    SPIDER_LOG_FILE = 'logs/Javdb_Spider.log'
+    LOG_LEVEL = 'INFO'
+
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, LOG_LEVEL),
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('logs/Javdb_Spider.log', mode='w', encoding='utf-8'),
+        logging.FileHandler(SPIDER_LOG_FILE, mode='w', encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
 logger = logging.getLogger(__name__)
 
-BASE_URL = 'https://javdb.com'
-START_PAGE = 1
-END_PAGE = 20
-DAILY_REPORT_DIR = 'Daily Report'
-OUTPUT_CSV = f'Javdb_TodayTitle_{datetime.now().strftime("%Y%m%d")}.csv'
-PARSED_MOVIES_CSV = 'parsed_movies_history.csv'
-
 # Global set to track parsed links
 parsed_links = set()
+
+# Generate output CSV filename
+OUTPUT_CSV = f'Javdb_TodayTitle_{datetime.now().strftime("%Y%m%d")}.csv'
 
 
 def parse_arguments():
@@ -269,7 +284,7 @@ def main():
 
     # Determine output directory and filename
     if args.url:
-        output_dir = 'Ad Hoc'
+        output_dir = AD_HOC_DIR
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
             logger.info(f"Created directory: {output_dir}")

@@ -9,27 +9,32 @@ from email.utils import make_msgid
 from email.mime.base import MIMEBase
 from email import encoders
 
-# Import git configuration
+# Import unified configuration
 try:
-    from git_config import GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH
+    from config import (
+        GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH,
+        SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO,
+        PIPELINE_LOG_FILE, SPIDER_LOG_FILE, UPLOADER_LOG_FILE,
+        DAILY_REPORT_DIR
+    )
 except ImportError:
-    # Fallback values if git_config.py doesn't exist
+    # Fallback values if config.py doesn't exist
     GIT_USERNAME = 'your_github_username'
     GIT_PASSWORD = 'your_github_password_or_token'
     GIT_REPO_URL = 'https://github.com/your_username/your_repo_name.git'
     GIT_BRANCH = 'main'
-
-# Import SMTP configuration
-try:
-    from smtp_config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO
-except ImportError:
-    # Fallback values if git_config.py doesn't exist
+    
     SMTP_SERVER = 'smtp.gmail.com'
-    SMTP_PORT = '587'
-    SMTP_USER = 'example@gmail.com'
-    SMTP_PASSWORD = 'password'
-    EMAIL_FROM = 'example@gmail.com'
-    EMAIL_TO = 'example@gmail.com'
+    SMTP_PORT = 587
+    SMTP_USER = 'your_email@gmail.com'
+    SMTP_PASSWORD = 'your_email_password'
+    EMAIL_FROM = 'your_email@gmail.com'
+    EMAIL_TO = 'your_email@gmail.com'
+    
+    PIPELINE_LOG_FILE = 'logs/pipeline_run_and_notify.log'
+    SPIDER_LOG_FILE = 'logs/Javdb_Spider.log'
+    UPLOADER_LOG_FILE = 'logs/qbtorrent_uploader.log'
+    DAILY_REPORT_DIR = 'Daily Report'
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
@@ -38,7 +43,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(message)s',
     handlers=[
-        logging.FileHandler('logs/pipeline_run_and_notify.log', encoding='utf-8'),
+        logging.FileHandler(PIPELINE_LOG_FILE, encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
@@ -46,9 +51,9 @@ logger = logging.getLogger(__name__)
 
 # --- FILE PATHS ---
 today_str = datetime.now().strftime('%Y%m%d')
-csv_path = os.path.join('Daily Report', f'Javdb_TodayTitle_{today_str}.csv')
-spider_log_path = os.path.join('logs', 'Javdb_Spider.log')
-uploader_log_path = os.path.join('logs', 'qbtorrent_uploader.log')
+csv_path = os.path.join(DAILY_REPORT_DIR, f'Javdb_TodayTitle_{today_str}.csv')
+spider_log_path = SPIDER_LOG_FILE
+uploader_log_path = UPLOADER_LOG_FILE
 
 
 # --- PIPELINE EXECUTION ---
@@ -145,7 +150,7 @@ def git_add_commit(step):
 
         # Add all files in Daily Report and logs folders
         logger.info("Adding files to git...")
-        subprocess.run(['git', 'add', 'Daily Report/'], check=True)
+        subprocess.run(['git', 'add', DAILY_REPORT_DIR], check=True)
         subprocess.run(['git', 'add', 'logs/'], check=True)
 
         # Check if there are any changes to commit
