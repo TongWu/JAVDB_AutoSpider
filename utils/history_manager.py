@@ -97,7 +97,8 @@ def cleanup_history_file(history_file, href_records):
 
 
 def maintain_history_limit(history_file, max_records=1000):
-    """Maintain maximum records in history file by removing oldest entries"""
+    """Maintain maximum records in history file by removing oldest entries
+    NOTE: This function is currently DISABLED - no history size limit is enforced"""
 
     if not os.path.exists(history_file):
         return
@@ -188,7 +189,7 @@ def save_parsed_movie_to_history(history_file, href, phase, video_title, torrent
                 writer.writerow(record)
 
         # Maintain history limit after adding new record
-        maintain_history_limit(history_file)
+        # maintain_history_limit(history_file)  # DISABLED: No longer limiting history size
 
         logger.debug(
             f"Updated history for {href} with torrent types: {torrent_types_str} (total records: {len(records)})")
