@@ -1,0 +1,67 @@
+name: JavDB Spider
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-spider:
+    runs-on: self-hosted
+    permissions:
+      contents: write
+    environment: WT_DailyIngestion
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run spider
+        run: bash -c "cd /home/tedwu/actions-runner/_work/JAVDB_AutoSpider/JAVDB_AutoSpider && python3 ./Javdb_Spider.py"
+
+      - name: Commit CSV results
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add 'Daily Report'/*.csv
+          if git diff --cached --quiet; then
+            echo "No CSV changes to commit"
+          else
+            git commit -m "Update CSV results" && git push
+          fi
+
+      - name: Commit logs
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add 'logs'/*.log
+          if git diff --cached --quiet; then
+            echo "No log changes to commit"
+          else
+            git commit -m "Update logs" && git push
+          fi
+
+      - name: Run uploader
+        run: |
+          python3 ./qbtorrent_uploader.py --mode daily
+
+      - name: Send email summary
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "JavDB Spider Summary"
+          to: ${{ secrets.EMAIL_TO }}
+          from: ${{ secrets.EMAIL_FROM }}
+          attachments: logs/qbtorrent_uploader.log
+          body: |
+            Please find the attached log for details.
