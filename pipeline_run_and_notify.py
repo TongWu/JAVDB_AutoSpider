@@ -128,7 +128,7 @@ def send_email(subject, body, attachments=None):
     logger.info('Email sent successfully.')
 
 
-def git_add_commit(step):
+def git_add_commit_push(step):
     """Commit and push Daily Report and logs files to GitHub"""
     try:
         logger.info(f"Step {step}: Committing and pushing files to GitHub...")
@@ -162,7 +162,12 @@ def git_add_commit(step):
         # Commit with timestamp
         commit_message = f"Auto-commit: JavDB pipeline {step} results {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         logger.info(f"Commit changes for {step}")
+        subprocess.run(['git', 'add', 'logs/'], check=True)
         subprocess.run(['git', 'commit', '-m', commit_message], check=True)
+
+        # Push to remote repository
+        remote_url_with_auth = GIT_REPO_URL.replace('https://', f'https://{GIT_USERNAME}:{GIT_PASSWORD}@')
+        subprocess.run(['git', 'push', remote_url_with_auth, GIT_BRANCH], check=True)
 
         return True
 
@@ -188,34 +193,10 @@ def main():
         run_script('Javdb_Spider.py')
         logger.info("✓ JavDB Spider completed successfully")
 
-        # # Commit spider results immediately
-        # logger.info("Step 1.5: Committing spider results to GitHub...")
-        # # spider_git_success = git_add_commit("spider")
-        # if spider_git_success:
-        #     logger.info("✓ Spider results committed successfully")
-        # else:
-        #     logger.warning("⚠ Spider commit failed, but pipeline continues")
-
         # 2. Run qbtorrent_uploader
         logger.info("Step 2: Running qBittorrent Uploader...")
         run_script('qbtorrent_uploader.py')
         logger.info("✓ qBittorrent Uploader completed successfully")
-
-        # # Commit uploader results immediately
-        # logger.info("Step 2.5: Committing uploader results to GitHub...")
-        # uploader_git_success = git_add_commit("uploader")
-        # if uploader_git_success:
-        #     logger.info("✓ Uploader results committed successfully")
-        # else:
-        #     logger.warning("⚠ Uploader commit failed, but pipeline continues")
-
-        # 3. Final git commit and push (in case there are any remaining changes)
-        logger.info("Step 3: Final commit and push to GitHub...")
-        git_success = git_add_commit("final")
-        if git_success:
-            logger.info("✓ Final git operations completed successfully")
-        else:
-            logger.warning("⚠ Final git operations failed, but pipeline continues")
 
         pipeline_success = True
         logger.info("=" * 60)
@@ -278,10 +259,7 @@ Error occurred at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
     # Final commit for pipeline log
     logger.info("Final commit for pipeline log...")
-    git_add_commit("pipeline_log")
-    # Push to remote repository
-    remote_url_with_auth = GIT_REPO_URL.replace('https://', f'https://{GIT_USERNAME}:{GIT_PASSWORD}@')
-    subprocess.run(['git', 'push', remote_url_with_auth, GIT_BRANCH], check=True)
+    git_add_commit_push("pipeline_log")
 
 
 if __name__ == '__main__':
