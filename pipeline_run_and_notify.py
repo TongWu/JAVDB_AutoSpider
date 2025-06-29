@@ -188,26 +188,26 @@ def main():
         run_script('Javdb_Spider.py')
         logger.info("✓ JavDB Spider completed successfully")
 
-        # Commit spider results immediately
-        logger.info("Step 1.5: Committing spider results to GitHub...")
-        spider_git_success = git_add_commit("spider")
-        if spider_git_success:
-            logger.info("✓ Spider results committed successfully")
-        else:
-            logger.warning("⚠ Spider commit failed, but pipeline continues")
+        # # Commit spider results immediately
+        # logger.info("Step 1.5: Committing spider results to GitHub...")
+        # # spider_git_success = git_add_commit("spider")
+        # if spider_git_success:
+        #     logger.info("✓ Spider results committed successfully")
+        # else:
+        #     logger.warning("⚠ Spider commit failed, but pipeline continues")
 
         # 2. Run qbtorrent_uploader
         logger.info("Step 2: Running qBittorrent Uploader...")
         run_script('qbtorrent_uploader.py')
         logger.info("✓ qBittorrent Uploader completed successfully")
 
-        # Commit uploader results immediately
-        logger.info("Step 2.5: Committing uploader results to GitHub...")
-        uploader_git_success = git_add_commit("uploader")
-        if uploader_git_success:
-            logger.info("✓ Uploader results committed successfully")
-        else:
-            logger.warning("⚠ Uploader commit failed, but pipeline continues")
+        # # Commit uploader results immediately
+        # logger.info("Step 2.5: Committing uploader results to GitHub...")
+        # uploader_git_success = git_add_commit("uploader")
+        # if uploader_git_success:
+        #     logger.info("✓ Uploader results committed successfully")
+        # else:
+        #     logger.warning("⚠ Uploader commit failed, but pipeline continues")
 
         # 3. Final git commit and push (in case there are any remaining changes)
         logger.info("Step 3: Final commit and push to GitHub...")
