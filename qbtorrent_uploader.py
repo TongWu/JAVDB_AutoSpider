@@ -6,8 +6,32 @@ import time
 import os
 import argparse
 import sys
-# Import configuration
-from qbtorrent_config import *
+# Import unified configuration
+try:
+    from config import (
+        QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD,
+        TORRENT_CATEGORY, TORRENT_SAVE_PATH, AUTO_START, SKIP_CHECKING,
+        REQUEST_TIMEOUT, DELAY_BETWEEN_ADDITIONS,
+        UPLOADER_LOG_FILE, DAILY_REPORT_DIR, AD_HOC_DIR
+    )
+except ImportError:
+    # Fallback values if config.py doesn't exist
+    QB_HOST = 'your_qbittorrent_ip'
+    QB_PORT = 'your_qbittorrent_port'
+    QB_USERNAME = 'your_qbittorrent_username'
+    QB_PASSWORD = 'your_qbittorrent_password'
+    
+    TORRENT_CATEGORY = 'JavDB'
+    TORRENT_SAVE_PATH = ''
+    AUTO_START = True
+    SKIP_CHECKING = False
+    
+    REQUEST_TIMEOUT = 30
+    DELAY_BETWEEN_ADDITIONS = 1
+    
+    UPLOADER_LOG_FILE = 'logs/qbtorrent_uploader.log'
+    DAILY_REPORT_DIR = 'Daily Report'
+    AD_HOC_DIR = 'Ad Hoc'
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
@@ -16,7 +40,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('logs/qbtorrent_uploader.log', mode='w', encoding='utf-8'),
+        logging.FileHandler(UPLOADER_LOG_FILE, mode='w', encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
@@ -34,9 +58,9 @@ def get_csv_filename(mode='daily'):
     """Get the CSV filename for current date and mode"""
     current_date = datetime.now().strftime("%Y%m%d")
     if mode == 'adhoc':
-        folder = 'Ad Hoc'
+        folder = AD_HOC_DIR
     else:
-        folder = 'Daily Report'
+        folder = DAILY_REPORT_DIR
     return os.path.join(folder, f'Javdb_TodayTitle_{current_date}.csv')
 
 def test_qbittorrent_connection():
@@ -71,7 +95,7 @@ def login_to_qbittorrent(session):
             return True
         else:
             logger.error(f"Login failed with status code: {response.status_code}")
-            logger.error("Please check your username and password in qbtorrent_config.py")
+            logger.error("Please check your username and password in config.py")
             return False
             
     except requests.RequestException as e:
@@ -177,7 +201,7 @@ def main():
     #     logger.error("Cannot connect to qBittorrent. Please check:")
     #     logger.error("1. qBittorrent is running")
     #     logger.error("2. Web UI is enabled")
-    #     logger.error("3. Host and port settings in qbtorrent_config.py")
+    #     logger.error("3. Host and port settings in config.py")
     #     return
     
     # Get CSV filename for current date
