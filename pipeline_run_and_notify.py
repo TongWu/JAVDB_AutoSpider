@@ -8,6 +8,7 @@ from email.message import EmailMessage
 from email.utils import make_msgid
 from email.mime.base import MIMEBase
 from email import encoders
+import argparse
 
 # Import unified configuration
 try:
@@ -15,7 +16,7 @@ try:
         GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH,
         SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO,
         PIPELINE_LOG_FILE, SPIDER_LOG_FILE, UPLOADER_LOG_FILE,
-        DAILY_REPORT_DIR
+        DAILY_REPORT_DIR, AD_HOC_DIR
     )
 except ImportError:
     # Fallback values if config.py doesn't exist
@@ -35,6 +36,7 @@ except ImportError:
     SPIDER_LOG_FILE = 'logs/Javdb_Spider.log'
     UPLOADER_LOG_FILE = 'logs/qbtorrent_uploader.log'
     DAILY_REPORT_DIR = 'Daily Report'
+    AD_HOC_DIR = 'Ad Hoc'
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
@@ -151,6 +153,7 @@ def git_add_commit_push(step):
         # Add all files in Daily Report and logs folders
         logger.info("Adding files to git...")
         subprocess.run(['git', 'add', DAILY_REPORT_DIR], check=True)
+        subprocess.run(['git', 'add', AD_HOC_DIR], check=True)
         subprocess.run(['git', 'add', 'logs/'], check=True)
 
         # Check if there are any changes to commit
@@ -180,22 +183,81 @@ def git_add_commit_push(step):
         return False
 
 
+def parse_arguments():
+    """Parse command line arguments for the pipeline"""
+    parser = argparse.ArgumentParser(description='JavDB Pipeline - Run spider and uploader with optional arguments')
+    # Javdb_Spider arguments
+    parser.add_argument('--url', type=str, help='Custom URL to scrape (add ?page=x for pages)')
+    parser.add_argument('--start-page', type=int, help='Starting page number')
+    parser.add_argument('--end-page', type=int, help='Ending page number')
+    parser.add_argument('--all', action='store_true', help='Parse all pages until an empty page is found')
+    parser.add_argument('--ignore-history', action='store_true', help='Ignore history file and scrape all pages')
+    parser.add_argument('--phase', choices=['1', '2', 'all'], help='Which phase to run: 1 (subtitle+today), 2 (today only), all (default)')
+    parser.add_argument('--output-file', type=str, help='Specify output CSV file name')
+    parser.add_argument('--dry-run', action='store_true', help='Print items that would be written without changing CSV file')
+    return parser.parse_args()
+
+
 def main():
+    args = parse_arguments()
+    is_adhoc_mode = args.url is not None
+    # Determine CSV path based on mode
+    if is_adhoc_mode:
+        import Javdb_Spider
+        csv_filename = Javdb_Spider.generate_output_csv_name(args.url)
+        csv_path = os.path.join(AD_HOC_DIR, csv_filename)
+        logger.info(f"Ad hoc mode detected. Expected CSV: {csv_path}")
+    else:
+        today_str = datetime.now().strftime('%Y%m%d')
+        csv_path = os.path.join('Daily Report', f'Javdb_TodayTitle_{today_str}.csv')
+        logger.info(f"Daily mode. Expected CSV: {csv_path}")
+
+    # Build arguments for Javdb_Spider
+    spider_args = []
+    if args.url:
+        spider_args.extend(['--url', args.url])
+    if args.start_page is not None:
+        spider_args.extend(['--start-page', str(args.start_page)])
+    if args.end_page is not None:
+        spider_args.extend(['--end-page', str(args.end_page)])
+    if args.all:
+        spider_args.append('--all')
+    if args.ignore_history:
+        spider_args.append('--ignore-history')
+    if args.phase:
+        spider_args.extend(['--phase', args.phase])
+    if args.output_file:
+        spider_args.extend(['--output-file', args.output_file])
+    if args.dry_run:
+        spider_args.append('--dry-run')
+
+    # Build arguments for qbtorrent_uploader
+    uploader_args = []
+    if is_adhoc_mode:
+        uploader_args.extend(['--mode', 'adhoc'])
+    else:
+        uploader_args.extend(['--mode', 'daily'])
+
     pipeline_success = False
     git_success = False
     try:
         logger.info("=" * 60)
         logger.info("STARTING JAVDB PIPELINE")
+        if is_adhoc_mode:
+            logger.info("MODE: Ad Hoc")
+            logger.info(f"Custom URL: {args.url}")
+        else:
+            logger.info("MODE: Daily")
         logger.info("=" * 60)
 
         # 1. Run Javdb_Spider
         logger.info("Step 1: Running JavDB Spider...")
-        run_script('Javdb_Spider.py')
+        run_script('Javdb_Spider.py', spider_args)
         logger.info("✓ JavDB Spider completed successfully")
 
         # 2. Run qbtorrent_uploader
         logger.info("Step 2: Running qBittorrent Uploader...")
-        run_script('qbtorrent_uploader.py')
+        run_script('qbtorrent_uploader.py', uploader_args)
         logger.info("✓ qBittorrent Uploader completed successfully")
 
         pipeline_success = True
@@ -211,25 +273,21 @@ def main():
         pipeline_success = False
 
     # Send email based on pipeline result
+    today_str = datetime.now().strftime('%Y%m%d')
     if pipeline_success:
         # Pipeline succeeded - send detailed report with attachments
-        spider_summary = get_log_summary(spider_log_path, lines=35)
-        uploader_summary = get_log_summary(uploader_log_path, lines=13)
-
+        spider_summary = get_log_summary(SPIDER_LOG_FILE, lines=35)
+        uploader_summary = get_log_summary(UPLOADER_LOG_FILE, lines=13)
         git_status = "✓ SUCCESS" if git_success else "⚠ FAILED"
-
         body = f"""
 JavDB Spider and qBittorrent Uploader Pipeline Completed Successfully.
-
 Git Operations: {git_status}
-
 --- JavDB Spider Summary ---
 {spider_summary}
-
 --- qBittorrent Uploader Summary ---
 {uploader_summary}
 """
-        attachments = [csv_path, spider_log_path, uploader_log_path]
+        attachments = [csv_path, SPIDER_LOG_FILE, UPLOADER_LOG_FILE]
         try:
             send_email(
                 subject=f'JavDB Pipeline Report {today_str} - SUCCESS',
@@ -242,10 +300,8 @@ Git Operations: {git_status}
         # Pipeline failed - send simple failure notification
         body = f"""
 JavDB Pipeline Failed
-
 The pipeline encountered an error and could not complete successfully.
 Please check the logs for more details.
-
 Error occurred at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
         try:
