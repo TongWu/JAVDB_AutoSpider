@@ -227,8 +227,8 @@ def main():
     # Send email based on pipeline result
     if pipeline_success:
         # Pipeline succeeded - send detailed report with attachments
-        spider_summary = get_log_summary(spider_log_path, lines=25)
-        uploader_summary = get_log_summary(uploader_log_path, lines=50)
+        spider_summary = get_log_summary(spider_log_path, lines=35)
+        uploader_summary = get_log_summary(uploader_log_path, lines=13)
 
         git_status = "✓ SUCCESS" if git_success else "⚠ FAILED"
 
@@ -237,10 +237,10 @@ JavDB Spider and qBittorrent Uploader Pipeline Completed Successfully.
 
 Git Operations: {git_status}
 
---- JavDB Spider Summary (last 25 lines) ---
+--- JavDB Spider Summary ---
 {spider_summary}
 
---- qBittorrent Uploader Summary (last 50 lines) ---
+--- qBittorrent Uploader Summary ---
 {uploader_summary}
 """
         attachments = [csv_path, spider_log_path, uploader_log_path]
