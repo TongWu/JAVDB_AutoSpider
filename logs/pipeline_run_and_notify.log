@@ -1063,3 +1063,29 @@ Pulling latest changes from remote repository...
 ✓ Successfully pulled latest changes from remote
 Adding files to git...
 Commit changes for pipeline_log
+Git operation failed: Command ['git', 'push', 'https://tongwu:ghp_***MASKED***@github.com/TongWu/JAVDB_AutoSpider.git', 'main'] returned non-zero exit status 128
+Command output: No output available
+Ad hoc mode detected. Expected CSV: Ad Hoc/Javdb_AdHoc_actors_EvkJ_20250629.csv
+============================================================
+STARTING JAVDB PIPELINE
+MODE: Ad Hoc
+Custom URL: https://javdb.com/actors/EvkJ
+============================================================
+Step 1: Running JavDB Spider...
+Running: python3 Javdb_Spider.py --url https://javdb.com/actors/EvkJ --all
+✓ JavDB Spider completed successfully
+Step 2: Running qBittorrent Uploader...
+Running: python3 qbtorrent_uploader.py --mode adhoc
+✓ qBittorrent Uploader completed successfully
+============================================================
+PIPELINE COMPLETED SUCCESSFULLY
+============================================================
+Attachment not found: Ad Hoc/Javdb_AdHoc_actors_EvkJ_20250629.csv
+Connecting to SMTP server...
+Email sent successfully.
+Final commit for pipeline log...
+Step pipeline_log: Committing and pushing files to GitHub...
+Pulling latest changes from remote repository...
+✓ Successfully pulled latest changes from remote
+Adding files to git...
+Commit changes for pipeline_log
