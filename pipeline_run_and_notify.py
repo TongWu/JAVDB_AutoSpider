@@ -161,8 +161,8 @@ def git_add_commit(step):
 
         # Commit with timestamp
         commit_message = f"Auto-commit: JavDB pipeline {step} results {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        logger.info(f"Commit changes for {step}")
         subprocess.run(['git', 'commit', '-m', commit_message], check=True)
-        logger.info(f"✓ Committed changes for {step}")
 
         return True
 
