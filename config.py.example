@@ -88,4 +88,4 @@ DAILY_REPORT_DIR = 'Daily Report'
 AD_HOC_DIR = 'Ad Hoc'
 
 # History file
-PARSED_MOVIES_CSV = 'parsed_movies_history.csv' 
+PARSED_MOVIES_CSV = 'parsed_movies_history.csv'
