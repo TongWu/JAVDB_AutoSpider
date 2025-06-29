@@ -1,5 +1,3 @@
 __pycache__/
 test_history_integrity.py
-git_config.py
-qbtorrent_config.py
-smtp_config.py
+config.py
