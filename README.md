@@ -1,23 +1,38 @@
 # JavDB Auto Spider
 
-A Python script to automatically fetch and extract torrent links from javdb.com across multiple pages.
+A comprehensive Python automation system for extracting torrent links from javdb.com and automatically adding them to qBittorrent. The system includes intelligent history tracking, git integration, and automated pipeline execution.
 
 ## Features
 
+### Core Spider Functionality
 - Fetches data in real-time from `javdb.com/?vft=2` to `javdb.com/?page=5&vft=2`
 - Filters entries with both "含中字磁鏈" and "今日新種" tags (supports multiple language variations)
-- Extracts magnet links based on specific categories:
-  - 字幕 (subtitle) - magnet links with "Subtitle" tag
-  - hacked - magnet links with priority order:
-    1. UC无码破解 (-UC.无码破解.torrent)
-    2. UC (-UC.torrent)
-    3. U无码破解 (-U.无码破解.torrent)
-    4. U (-U.torrent)
-- Saves results to a timestamped CSV file in "Daily Report" directory
+- Extracts magnet links based on specific categories with priority ordering
+- Saves results to timestamped CSV files in "Daily Report" directory
 - Comprehensive logging with different levels (INFO, WARNING, DEBUG, ERROR)
 - Multi-page processing with progress tracking
-- Page tracking in CSV output
 - Additional metadata extraction (actor, rating, comment count)
+
+### Torrent Classification System
+- **字幕 (subtitle)**: Magnet links with "Subtitle" tag
+- **hacked**: Magnet links with priority order:
+  1. UC无码破解 (-UC.无码破解.torrent) - Highest priority
+  2. UC (-UC.torrent)
+  3. U无码破解 (-U.无码破解.torrent)
+  4. U (-U.torrent) - Lowest priority
+
+### qBittorrent Integration
+- Automatically reads current date's CSV file
+- Connects to qBittorrent via Web UI API
+- Adds torrents with proper categorization and settings
+- Comprehensive logging and progress tracking
+- Detailed summary reports
+
+### Git Integration & Pipeline
+- Automated git commit and push functionality
+- Incremental commits throughout pipeline execution
+- Email notifications with results and logs
+- Complete workflow automation
 
 ## Installation
 
@@ -26,257 +41,248 @@ A Python script to automatically fetch and extract torrent links from javdb.com 
 pip install -r requirements.txt
 ```
 
+2. Configure the system by copying and editing configuration files:
+```bash
+cp git_config.py.example git_config.py
+cp qbtorrent_config.py.example qbtorrent_config.py
+```
+
 ## Usage
 
-Run the script:
+### Individual Scripts
+
+**Run the spider to extract data:**
 ```bash
 python Javdb_Spider.py
 ```
 
-The script will:
-1. Fetch pages 1-5 from javdb.com (from `?vft=2` to `?page=5&vft=2`)
-2. Parse entries with required tags from each page
-3. For each entry, fetch the detail page and extract magnet links
-4. Save results to `Daily Report/Javdb_TodayTitle_{timestamp}.csv`
-5. Log all activities to both console and `javdb_spider.log` file
-
-## Output
-
-The CSV file contains the following columns:
-- `href`: The video page URL
-- `video-title`: The video title
-- `page`: The page number where the entry was found
-- `actor`: The main actor/actress name
-- `rate`: The rating score (e.g., "4.47")
-- `comment_number`: Number of user comments/ratings
-- `hacked_subtitle`: Magnet link for hacked version with subtitles (preferred)
-- `hacked_no_subtitle`: Magnet link for hacked version without subtitles
-- `subtitle`: Magnet link for subtitle version
-- `no_subtitle`: Magnet link for regular version (prefers 4K if available)
-- `size_hacked_subtitle`: Size of hacked subtitle torrent
-- `size_hacked_no_subtitle`: Size of hacked no subtitle torrent
-- `size_subtitle`: Size of subtitle torrent
-- `size_no_subtitle`: Size of no subtitle torrent
-
-## Logging
-
-The script provides comprehensive logging:
-- **INFO**: General progress information with page tracking
-- **WARNING**: Non-critical issues
-- **DEBUG**: Detailed debugging information
-- **ERROR**: Critical errors
-
-Logs are written to both:
-- Console output
-- `javdb_spider.log` file
-
-Progress tracking includes:
-- `[Page 1/5]` - Page-level progress
-- `[15/75]` - Entry-level progress across all pages
-- `[Page 2]` - Page-specific information
-
-## Configuration
-
-You can modify the page range by changing these variables in the script:
-```python
-START_PAGE = 1  # First page to process
-END_PAGE = 5    # Last page to process
+**Run the qBittorrent uploader:**
+```bash
+python qbtorrent_uploader.py
 ```
 
-## Notes
+### Command-Line Arguments
 
-- The script includes delays between requests to be respectful to the server
-- 1-second delay between detail page requests
-- 2-second delay between index page requests
-- Make sure you have a stable internet connection
-- The script uses proper headers to mimic a real browser
-- The "hacked" column uses priority-based selection - only the highest priority match is kept
-- Page information is tracked and included in the CSV output
-- CSV files are automatically saved to the "Daily Report" directory
-- Additional metadata (actor, rating, comments) is extracted from the index pages
+The JavDB Spider supports various command-line arguments for customization:
 
-## History System
+#### Basic Options
+```bash
+# Dry run mode (no CSV file written)
+python Javdb_Spider.py --dry-run
 
-The spider includes an intelligent history system that tracks which torrent types have been found for each movie:
+# Specify custom output filename
+python Javdb_Spider.py --output-file my_results.csv
 
-### Multiple Torrent Type Tracking
-- **Recent Fix**: Now correctly tracks ALL available torrent types per movie (e.g., both `hacked_subtitle` and `subtitle`)
-- **Smart Processing**: Avoids re-processing movies that already have complete torrent collections
-- **Missing Type Detection**: Only searches for torrent types that are missing based on preference rules
+# Custom page range
+python Javdb_Spider.py --start-page 3 --end-page 10
 
-### History File
-- Stored in `Daily Report/parsed_movies_history.csv`
-- Records href, phase, video title, parsed date, and all torrent types found
-- Automatically maintains one record per movie (removes duplicates)
+# Parse all pages until empty page is found
+python Javdb_Spider.py --all
+```
 
-### Processing Rules
-- **Phase 1**: Processes movies with missing torrent types based on preferences
-- **Phase 2**: Only processes movies that can be upgraded from `no_subtitle` to `hacked_no_subtitle`
-- **New Movies**: Always processed regardless of history
+#### Phase Control
+```bash
+# Run only Phase 1 (subtitle + today/yesterday tags)
+python Javdb_Spider.py --phase 1
 
-See `README_torrent_types.md` for detailed information about the history system and torrent type classification.
+# Run only Phase 2 (today/yesterday tags with quality filter)
+python Javdb_Spider.py --phase 2
 
-## Pipeline and Automation
+# Run both phases (default)
+python Javdb_Spider.py --phase all
+```
+
+#### History Control
+```bash
+# Ignore history file and scrape all pages
+python Javdb_Spider.py --ignore-history
+
+# Custom URL scraping (creates "Ad Hoc" directory)
+python Javdb_Spider.py --url "https://javdb.com/?vft=2"
+```
+
+#### Complete Examples
+```bash
+# Quick test run with limited pages
+python Javdb_Spider.py --start-page 1 --end-page 3 --dry-run
+
+# Full scrape ignoring history
+python Javdb_Spider.py --all --ignore-history
+
+# Custom URL with specific output file
+python Javdb_Spider.py --url "https://javdb.com/?vft=2" --output-file custom_results.csv
+
+# Phase 1 only with custom page range
+python Javdb_Spider.py --phase 1 --start-page 5 --end-page 15
+```
+
+#### Argument Reference
+
+| Argument | Description | Default | Example |
+|----------|-------------|---------|---------|
+| `--dry-run` | Print items without writing CSV | False | `--dry-run` |
+| `--output-file` | Custom CSV filename | Auto-generated | `--output-file results.csv` |
+| `--start-page` | Starting page number | 1 | `--start-page 5` |
+| `--end-page` | Ending page number | 20 | `--end-page 10` |
+| `--all` | Parse until empty page | False | `--all` |
+| `--ignore-history` | Skip history checking | False | `--ignore-history` |
+| `--url` | Custom URL to scrape | None | `--url "https://javdb.com/?vft=2"` |
+| `--phase` | Phase to run (1/2/all) | all | `--phase 1` |
 
 ### Automated Pipeline
 
-Use the pipeline script to run the complete workflow:
+**Run the complete workflow:**
 ```bash
 python pipeline_run_and_notify.py
 ```
 
 The pipeline will:
 1. Run the JavDB Spider to extract data
-2. **Commit spider results to GitHub immediately** (so you can see progress even while pipeline is running)
+2. Commit spider results to GitHub immediately
 3. Run the qBittorrent Uploader to add torrents
-4. **Commit uploader results to GitHub immediately** (so you can see progress even while pipeline is running)
-5. Perform final commit and push to GitHub (in case of any remaining changes)
+4. Commit uploader results to GitHub immediately
+5. Perform final commit and push to GitHub
 6. Send email notifications with results
 
-### Git Integration
+## Configuration
 
-The pipeline includes automatic git commit and push functionality with **incremental commits**:
-- **Spider Step**: Commits results immediately after spider completes
-- **Uploader Step**: Commits results immediately after uploader completes  
-- **Final Step**: Commits any remaining changes
-- Each commit includes timestamped messages indicating the pipeline step
-- Pushes to your configured GitHub repository after each step
-- Allows you to monitor progress in GitHub even while the pipeline is running
+### Git Configuration (`git_config.py`)
 
-**Setup Git Configuration:**
-1. Copy `git_config.py.example` to `git_config.py`
-2. Update with your GitHub credentials
-3. See `README_git_setup.md` for detailed instructions
-
-### Email Notifications
-
-The pipeline sends email notifications with:
-- Success/failure status
-- Log summaries
-- CSV file attachments
-- Git operation status
-
-Configure email settings in `pipeline_run_and_notify.py`.
-
-# Git Configuration Setup for JavDB Pipeline
-
-This document explains how to configure git operations for the JavDB pipeline.
-
-## Overview
-
-The pipeline now includes automatic git commit and push functionality that will:
-1. Add all files from the `Daily Report/` and `logs/` folders
-2. Commit them with a timestamped message
-3. Push to your GitHub repository
-
-## Setup Instructions
-
-### 1. Create Git Configuration File
-
-Copy the example configuration file:
-```bash
-cp git_config.py.example git_config.py
-```
-
-### 2. Update Git Configuration
-
-Edit `git_config.py` and update the following values:
+Configure git operations for the pipeline:
 
 ```python
 # GitHub username
-GIT_USERNAME = 'your_actual_github_username'
+GIT_USERNAME = 'your_github_username'
 
-# GitHub password or personal access token
-GIT_PASSWORD = 'your_github_password_or_personal_access_token'
+# GitHub personal access token (recommended) or password
+GIT_PASSWORD = 'your_github_token_or_password'
 
 # GitHub repository URL
 GIT_REPO_URL = 'https://github.com/your_username/your_repo_name.git'
 
-# Git branch to push to (usually 'main' or 'master')
+# Git branch to push to
 GIT_BRANCH = 'main'
 ```
 
-### 3. GitHub Authentication
-
-**Recommended: Use Personal Access Token**
+**GitHub Authentication Setup:**
 1. Go to GitHub Settings → Developer settings → Personal access tokens
 2. Generate a new token with `repo` permissions
 3. Use this token as `GIT_PASSWORD`
 
-**Alternative: Use GitHub Password**
-- Use your GitHub password (less secure, may not work with 2FA enabled)
+### qBittorrent Configuration (`qbtorrent_config.py`)
 
-### 4. Repository Setup
+Configure qBittorrent connection settings:
 
-Ensure your local repository is properly configured:
-```bash
-# Check if git is initialized
-git status
+```python
+# Connection settings
+QB_HOST = 'your_qbittorrent_ip'
+QB_PORT = 'your_qbittorrent_port'
+QB_USERNAME = 'your_qbittorrent_username'
+QB_PASSWORD = 'your_qbittorrent_password'
 
-# If not initialized, initialize git
-git init
+# Torrent settings
+TORRENT_CATEGORY = 'JavDB'
+TORRENT_SAVE_PATH = ''  # Leave empty for default
+AUTO_START = True
+SKIP_CHECKING = False
 
-# Add your GitHub repository as remote origin
-git remote add origin https://github.com/your_username/your_repo_name.git
-
-# Verify remote
-git remote -v
+# Performance settings
+REQUEST_TIMEOUT = 30
+DELAY_BETWEEN_ADDITIONS = 1
 ```
 
-## Security Notes
+## Output Structure
 
-- The `git_config.py` file is automatically excluded from git commits (added to `.gitignore`)
-- Never commit your actual credentials to the repository
-- Consider using environment variables for production deployments
+### CSV File Columns
+The spider generates CSV files with the following columns:
+- `href`: The video page URL
+- `video-title`: The video title
+- `page`: The page number where the entry was found
+- `actor`: The main actor/actress name
+- `rate`: The rating score
+- `comment_number`: Number of user comments/ratings
+- `hacked_subtitle`: Magnet link for hacked version with subtitles
+- `hacked_no_subtitle`: Magnet link for hacked version without subtitles
+- `subtitle`: Magnet link for subtitle version
+- `no_subtitle`: Magnet link for regular version (prefers 4K if available)
+- `size_hacked_subtitle`, `size_hacked_no_subtitle`, `size_subtitle`, `size_no_subtitle`: Corresponding sizes
 
-## Pipeline Integration
+### File Locations
+- **CSV files**: `Daily Report/Javdb_TodayTitle_YYYYMMDD.csv`
+- **History file**: `Daily Report/parsed_movies_history.csv`
+- **Log files**: `logs/` directory
+  - `Javdb_Spider.log`
+  - `qbtorrent_uploader.log`
+  - `pipeline_run_and_notify.log`
 
-The git operations are automatically executed throughout the pipeline with **incremental commits**:
-1. **Step 1**: Run JavDB Spider
-2. **Step 1.5**: Commit spider results to GitHub immediately
-3. **Step 2**: Run qBittorrent Uploader  
-4. **Step 2.5**: Commit uploader results to GitHub immediately
-5. **Step 3**: Final git commit and push (in case of any remaining changes)
+## History System
 
-**Benefits of Incremental Commits:**
-- You can monitor progress in GitHub even while the pipeline is running
-- Each step's results are committed separately with descriptive messages
-- If the pipeline fails partway through, you still have the completed steps committed
-- Commit messages include timestamps and step identification
+The spider includes an intelligent history system that tracks which torrent types have been found for each movie:
 
-If any git operation fails, the pipeline will continue and report the failure in the email notification.
+### Multiple Torrent Type Tracking
+- Tracks ALL available torrent types per movie (e.g., both `hacked_subtitle` and `subtitle`)
+- Prevents redundant processing when movies already have complete torrent collections
+- Only searches for torrent types that are missing based on preference rules
+
+### Processing Rules
+- **Phase 1**: Processes movies with missing torrent types based on preferences
+- **Phase 2**: Only processes movies that can be upgraded from `no_subtitle` to `hacked_no_subtitle`
+- **New Movies**: Always processed regardless of history
+
+### Preference Rules
+- **Hacked Category**: Always prefer `hacked_subtitle` over `hacked_no_subtitle`
+- **Subtitle Category**: Always prefer `subtitle` over `no_subtitle`
+- **Complete Collection Goal**: Each movie should have both categories represented
+
+## Logging
+
+The system provides comprehensive logging:
+- **INFO**: General progress information with tracking
+- **WARNING**: Non-critical issues
+- **DEBUG**: Detailed debugging information
+- **ERROR**: Critical errors
+
+Progress tracking includes:
+- `[Page 1/5]` - Page-level progress
+- `[15/75]` - Entry-level progress across all pages
+- `[1/25]` - Upload progress for qBittorrent
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Authentication Failed**
-   - Verify your username and password/token
-   - Ensure the token has `repo` permissions
-   - Check if 2FA is enabled (use token instead of password)
+**Spider Issues:**
+- **No entries found**: Check if the website structure has changed
+- **Connection errors**: Verify internet connection and website accessibility
+- **CSV not generated**: Check if the "Daily Report" directory exists
 
-2. **Repository Not Found**
-   - Verify the repository URL is correct
-   - Ensure the repository exists and you have access
+**qBittorrent Issues:**
+- **Cannot connect**: Check if qBittorrent is running and Web UI is enabled
+- **Login failed**: Verify username and password in configuration
+- **CSV file not found**: Run the spider first to generate the CSV file
 
-3. **Branch Issues**
-   - Check if the branch exists in your repository
-   - Update `GIT_BRANCH` to match your repository's default branch
-
-4. **No Changes to Commit**
-   - This is normal if no new files were generated
-   - The pipeline will report "No changes to commit"
+**Git Issues:**
+- **Authentication failed**: Verify username and token/password
+- **Repository not found**: Check repository URL and access permissions
+- **Branch issues**: Ensure the branch exists in your repository
 
 ### Debug Mode
 
-To see detailed git operations, you can temporarily increase logging level in the pipeline script.
+To see detailed operations, you can temporarily increase logging level in the scripts.
 
-## Example Configuration
+## Security Notes
 
-```python
-# Example git_config.py
-GIT_USERNAME = 'john_doe'
-GIT_PASSWORD = 'ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
-GIT_REPO_URL = 'https://github.com/john_doe/javdb-automation.git'
-GIT_BRANCH = 'main'
-``` 
+- Configuration files (`git_config.py`, `qbtorrent_config.py`) are automatically excluded from git commits
+- Never commit actual credentials to the repository
+- Use personal access tokens instead of passwords for GitHub authentication
+- Consider using environment variables for production deployments
+
+## Notes
+
+- The system includes delays between requests to be respectful to servers
+- 1-second delay between detail page requests
+- 2-second delay between index page requests
+- 1-second delay between qBittorrent additions
+- The system uses proper headers to mimic a real browser
+- CSV files are automatically saved to the "Daily Report" directory
+- The pipeline provides incremental commits for monitoring progress in real-time
