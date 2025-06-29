@@ -123,7 +123,7 @@ def send_email(subject, body, attachments=None):
     logger.info('Email sent successfully.')
 
 
-def git_add(step):
+def git_add_push(step):
     """Commit and push Daily Report and logs files to GitHub"""
     try:
         logger.info(f"Step {step}: Committing and pushing files to GitHub...")
@@ -131,6 +131,17 @@ def git_add(step):
         # Configure git with credentials
         subprocess.run(['git', 'config', 'user.name', GIT_USERNAME], check=True)
         subprocess.run(['git', 'config', 'user.email', f'{GIT_USERNAME}@users.noreply.github.com'], check=True)
+
+        # Pull latest changes from remote to avoid push conflicts
+        logger.info("Pulling latest changes from remote repository...")
+        try:
+            # Use git pull with credentials in URL to avoid authentication issues
+            remote_url_with_auth = GIT_REPO_URL.replace('https://', f'https://{GIT_USERNAME}:{GIT_PASSWORD}@')
+            subprocess.run(['git', 'pull', remote_url_with_auth, GIT_BRANCH], check=True)
+            logger.info("✓ Successfully pulled latest changes from remote")
+        except subprocess.CalledProcessError as e:
+            logger.warning(f"Pull failed (this might be normal for new repos): {e}")
+            # Continue with commit/push even if pull fails (e.g., new repository)
 
         # Add all files in Daily Report and logs folders
         logger.info("Adding files to git...")
@@ -142,6 +153,11 @@ def git_add(step):
         if not result.stdout.strip():
             logger.info(f"No changes to commit - files are already up to date")
             return True
+
+        # Commit with timestamp
+        commit_message = f"Auto-commit: JavDB pipeline {step} results {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        subprocess.run(['git', 'commit', '-m', commit_message], check=True)
+        logger.info(f"✓ Committed changes for {step}")
 
         return True
 
@@ -169,7 +185,7 @@ def main():
 
         # Commit spider results immediately
         logger.info("Step 1.5: Committing spider results to GitHub...")
-        spider_git_success = git_add("spider")
+        spider_git_success = git_add_push("spider")
         if spider_git_success:
             logger.info("✓ Spider results committed successfully")
         else:
@@ -182,7 +198,7 @@ def main():
 
         # Commit uploader results immediately
         logger.info("Step 2.5: Committing uploader results to GitHub...")
-        uploader_git_success = git_add("uploader")
+        uploader_git_success = git_add_push("uploader")
         if uploader_git_success:
             logger.info("✓ Uploader results committed successfully")
         else:
@@ -190,7 +206,7 @@ def main():
 
         # 3. Final git commit and push (in case there are any remaining changes)
         logger.info("Step 3: Final commit and push to GitHub...")
-        git_success = git_add("final")
+        git_success = git_add_push("final")
         if git_success:
             logger.info("✓ Final git operations completed successfully")
         else:
@@ -201,27 +217,12 @@ def main():
         logger.info("PIPELINE COMPLETED SUCCESSFULLY")
         logger.info("=" * 60)
 
-        # 4. Final commit specifically for the pipeline log (after pipeline completes)
-        # logger.info("Step 4: Committing pipeline log to GitHub...")
-        # pipeline_log_success = git_add("pipeline_log")
-        # if pipeline_log_success:
-        #     logger.info("✓ Pipeline log committed successfully")
-        # else:
-        #     logger.warning("⚠ Pipeline log commit failed, but pipeline completed successfully")
-
     except Exception as e:
         logger.error("=" * 60)
         logger.error("PIPELINE FAILED")
         logger.error("=" * 60)
         logger.error(f'Error: {e}')
         pipeline_success = False
-
-        # Even if pipeline failed, try to commit the pipeline log
-        try:
-            logger.info("Attempting to commit pipeline log despite failure...")
-            git_add("pipeline_log_failed")
-        except Exception as git_error:
-            logger.error(f"Failed to commit pipeline log: {git_error}")
 
     # Send email based on pipeline result
     if pipeline_success:
@@ -270,14 +271,10 @@ Error occurred at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         except Exception as e:
             logger.error(f'Failed to send failure email: {e}')
 
-    # Add pipeline run log
-    pipeline_log_success = git_add("pipeline_log")
-    # Commit with timestamp
-    commit_message = f"Auto-commit: JavDB pipeline pipeline_log results {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-    subprocess.run(['git', 'commit', '-m', commit_message], check=True)
-
+    # Final commit for pipeline log
+    logger.info("Final commit for pipeline log...")
+    git_add_push("pipeline_log")
     # Push to remote repository
-    # Use git push with credentials in URL
     remote_url_with_auth = GIT_REPO_URL.replace('https://', f'https://{GIT_USERNAME}:{GIT_PASSWORD}@')
     subprocess.run(['git', 'push', remote_url_with_auth, GIT_BRANCH], check=True)
 
