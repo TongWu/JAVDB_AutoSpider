@@ -299,7 +299,6 @@ def main():
         uploader_args.extend(['--mode', 'daily'])
 
     pipeline_success = False
-    git_success = False
     try:
         logger.info("=" * 60)
         logger.info("STARTING JAVDB PIPELINE")
@@ -338,10 +337,8 @@ def main():
         # Pipeline succeeded - send detailed report with attachments
         spider_summary = get_log_summary(SPIDER_LOG_FILE, lines=35)
         uploader_summary = get_log_summary(UPLOADER_LOG_FILE, lines=13)
-        git_status = "✓ SUCCESS" if git_success else "⚠ FAILED"
         body = f"""
 JavDB Spider and qBittorrent Uploader Pipeline Completed Successfully.
-Git Operations: {git_status}
 --- JavDB Spider Summary ---
 {spider_summary}
 --- qBittorrent Uploader Summary ---
