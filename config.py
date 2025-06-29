@@ -1,0 +1,91 @@
+# JavDB Auto Spider - Unified Configuration File
+# Copy this file to config.py and update with your actual credentials
+
+# =============================================================================
+# GIT CONFIGURATION
+# =============================================================================
+
+# GitHub username
+GIT_USERNAME = 'your_github_username'
+
+# GitHub password or personal access token
+# Note: It's recommended to use a personal access token instead of password
+# Generate one at: GitHub Settings → Developer settings → Personal access tokens
+GIT_PASSWORD = 'your_github_password_or_token'
+
+# GitHub repository URL
+# Format: https://github.com/username/repository.git
+GIT_REPO_URL = 'https://github.com/your_username/your_repo_name.git'
+
+# Git branch to push to (usually 'main' or 'master')
+GIT_BRANCH = 'main'
+
+# =============================================================================
+# QBITTORRENT CONFIGURATION
+# =============================================================================
+
+# qBittorrent Web UI settings
+QB_HOST = 'your_qbittorrent_ip'
+QB_PORT = 'your_qbittorrent_port'
+QB_USERNAME = 'your_qbittorrent_username'
+QB_PASSWORD = 'your_qbittorrent_password'
+
+# Torrent settings
+TORRENT_CATEGORY = 'JavDB'  # Category for all JavDB torrents
+TORRENT_SAVE_PATH = ''  # Leave empty for default path
+AUTO_START = True  # Set to False to add torrents in paused state
+SKIP_CHECKING = False  # Set to True to skip hash checking
+
+# Connection settings
+REQUEST_TIMEOUT = 30  # Timeout for API requests in seconds
+DELAY_BETWEEN_ADDITIONS = 1  # Delay between adding torrents in seconds
+
+# =============================================================================
+# SMTP CONFIGURATION (for email notifications)
+# =============================================================================
+
+# SMTP server settings
+SMTP_SERVER = 'smtp.gmail.com'
+SMTP_PORT = 587
+
+# Email credentials
+SMTP_USER = 'your_email@gmail.com'
+SMTP_PASSWORD = 'your_email_password_or_app_password'
+
+# Email addresses
+EMAIL_FROM = 'your_email@gmail.com'
+EMAIL_TO = 'your_email@gmail.com'
+
+# =============================================================================
+# SPIDER CONFIGURATION
+# =============================================================================
+
+# Page range for spider
+START_PAGE = 1
+END_PAGE = 20
+
+# Base URL for JavDB
+BASE_URL = 'https://javdb.com'
+
+# =============================================================================
+# LOGGING CONFIGURATION
+# =============================================================================
+
+# Log level (DEBUG, INFO, WARNING, ERROR)
+LOG_LEVEL = 'INFO'
+
+# Log file paths
+SPIDER_LOG_FILE = 'logs/Javdb_Spider.log'
+UPLOADER_LOG_FILE = 'logs/qbtorrent_uploader.log'
+PIPELINE_LOG_FILE = 'logs/pipeline_run_and_notify.log'
+
+# =============================================================================
+# FILE PATHS
+# =============================================================================
+
+# Output directories
+DAILY_REPORT_DIR = 'Daily Report'
+AD_HOC_DIR = 'Ad Hoc'
+
+# History file
+PARSED_MOVIES_CSV = 'parsed_movies_history.csv' 
