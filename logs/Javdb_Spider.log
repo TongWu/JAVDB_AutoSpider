@@ -1,161 +1,164 @@
-2025-06-29 17:20:59,672 - INFO - Starting JavDB spider...
-2025-06-29 17:20:59,672 - INFO - Arguments: start_page=1, end_page=20, phase=all
-2025-06-29 17:20:59,672 - INFO - Custom URL: https://javdb.com/actors/EvkJ
-2025-06-29 17:20:59,672 - INFO - PARSE ALL MODE: Will continue until empty page is found
-2025-06-29 17:20:59,672 - INFO - ==================================================
-2025-06-29 17:20:59,672 - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-06-29 17:20:59,672 - INFO - ==================================================
-2025-06-29 17:21:00,220 - INFO - [Page 1] New releases filter disabled - will process all entries
-2025-06-29 17:21:00,223 - INFO - [Page 1] Found 11 entries for phase 1
-2025-06-29 17:21:02,760 - INFO - [Page 2] New releases filter disabled - will process all entries
-2025-06-29 17:21:02,763 - INFO - [Page 2] Found 13 entries for phase 1
-2025-06-29 17:21:05,330 - INFO - [Page 3] New releases filter disabled - will process all entries
-2025-06-29 17:21:05,333 - INFO - [Page 3] Found 10 entries for phase 1
-2025-06-29 17:21:07,845 - INFO - [Page 4] New releases filter disabled - will process all entries
-2025-06-29 17:21:07,849 - INFO - [Page 4] Found 16 entries for phase 1
-2025-06-29 17:21:10,117 - INFO - [Page 5] New releases filter disabled - will process all entries
-2025-06-29 17:21:10,118 - INFO - [Page 5] Found 6 entries for phase 1
-2025-06-29 17:21:12,398 - WARNING - [Page 6] No movie list found!
-2025-06-29 17:21:12,398 - INFO - [Page 6] found 0 entries for phase 1
-2025-06-29 17:21:12,398 - INFO - [Page 6] No results found, stopping phase 1
-2025-06-29 17:21:12,398 - INFO - [1/56] [Page 1] Processing /v/4Ddxap
-2025-06-29 17:21:13,682 - INFO - [2/56] [Page 1] Processing /v/a8yV0p
-2025-06-29 17:21:15,148 - INFO - [3/56] [Page 1] Processing /v/a8BYxX
-2025-06-29 17:21:16,605 - INFO - [4/56] [Page 1] Processing /v/BzK0wM
-2025-06-29 17:21:18,051 - INFO - [5/56] [Page 1] Processing /v/Ebd6k0
-2025-06-29 17:21:19,511 - INFO - [6/56] [Page 1] Processing /v/z4M7xb
-2025-06-29 17:21:20,965 - INFO - [7/56] [Page 1] Processing /v/KknQbv
-2025-06-29 17:21:22,447 - INFO - [8/56] [Page 1] Processing /v/6dDJKQ
-2025-06-29 17:21:23,919 - INFO - [9/56] [Page 1] Processing /v/Yww4d6
-2025-06-29 17:21:25,378 - INFO - [10/56] [Page 1] Processing /v/veeE4G
-2025-06-29 17:21:26,824 - INFO - [11/56] [Page 1] Processing /v/QNNmQp
-2025-06-29 17:21:28,291 - INFO - [12/56] [Page 2] Processing /v/QNN9e4
-2025-06-29 17:21:29,767 - INFO - [13/56] [Page 2] Processing /v/GZZdZ7
-2025-06-29 17:21:31,234 - INFO - [14/56] [Page 2] Processing /v/4D5XME
-2025-06-29 17:21:32,706 - INFO - [15/56] [Page 2] Processing /v/4D5B1v
-2025-06-29 17:21:34,150 - INFO - [16/56] [Page 2] Processing /v/GZMEbD
-2025-06-29 17:21:35,613 - INFO - [17/56] [Page 2] Processing /v/Ww1yPp
-2025-06-29 17:21:37,061 - INFO - [18/56] [Page 2] Processing /v/bKAA06
-2025-06-29 17:21:38,518 - INFO - [19/56] [Page 2] Processing /v/K4zV5m
-2025-06-29 17:21:39,966 - INFO - [20/56] [Page 2] Processing /v/qD5Ew6
-2025-06-29 17:21:41,439 - INFO - [21/56] [Page 2] Processing /v/1BnXvw
-2025-06-29 17:21:42,910 - INFO - [22/56] [Page 2] Processing /v/J2QAg3
-2025-06-29 17:21:44,362 - INFO - [23/56] [Page 2] Processing /v/Yn167x
-2025-06-29 17:21:45,821 - INFO - [24/56] [Page 2] Processing /v/g0JB2Z
-2025-06-29 17:21:47,268 - INFO - [25/56] [Page 3] Processing /v/g08yOm
-2025-06-29 17:21:48,724 - INFO - [26/56] [Page 3] Processing /v/MmvbqX
-2025-06-29 17:21:50,181 - INFO - [27/56] [Page 3] Processing /v/B8wE34
-2025-06-29 17:21:51,665 - INFO - [28/56] [Page 3] Processing /v/YnJMe6
-2025-06-29 17:21:53,129 - INFO - [29/56] [Page 3] Processing /v/eKb2wp
-2025-06-29 17:21:54,593 - INFO - [30/56] [Page 3] Processing /v/MmEXER
-2025-06-29 17:21:56,043 - INFO - [31/56] [Page 3] Processing /v/PQ8O7v
-2025-06-29 17:21:57,521 - INFO - [32/56] [Page 3] Processing /v/W14M5q
-2025-06-29 17:21:59,028 - INFO - [33/56] [Page 3] Processing /v/W1KVxK
-2025-06-29 17:22:00,476 - INFO - [34/56] [Page 3] Processing /v/g0O1Yq
-2025-06-29 17:22:01,952 - INFO - [35/56] [Page 4] Processing /v/1BAd4d
-2025-06-29 17:22:03,413 - INFO - [36/56] [Page 4] Processing /v/0Rvnp3
-2025-06-29 17:22:04,881 - INFO - [37/56] [Page 4] Processing /v/OP77B
-2025-06-29 17:22:06,342 - INFO - [38/56] [Page 4] Processing /v/EY5kJ
-2025-06-29 17:22:07,812 - INFO - [39/56] [Page 4] Processing /v/RwRw4
-2025-06-29 17:22:09,286 - INFO - [40/56] [Page 4] Processing /v/rJ23R
-2025-06-29 17:22:10,750 - INFO - [41/56] [Page 4] Processing /v/b6ZDv
-2025-06-29 17:22:12,203 - INFO - [42/56] [Page 4] Processing /v/dXWVe
-2025-06-29 17:22:13,677 - INFO - [43/56] [Page 4] Processing /v/mBm4v
-2025-06-29 17:22:15,145 - INFO - [44/56] [Page 4] Processing /v/EyeR4
-2025-06-29 17:22:16,615 - INFO - [45/56] [Page 4] Processing /v/1zNJw
-2025-06-29 17:22:18,074 - INFO - [46/56] [Page 4] Processing /v/JpzGd
-2025-06-29 17:22:19,541 - INFO - [47/56] [Page 4] Processing /v/abZJp
-2025-06-29 17:22:21,034 - INFO - [48/56] [Page 4] Processing /v/POZPJ
-2025-06-29 17:22:22,489 - INFO - [49/56] [Page 4] Processing /v/x6qxg
-2025-06-29 17:22:23,951 - INFO - [50/56] [Page 4] Processing /v/EEgAd
-2025-06-29 17:22:25,423 - INFO - [51/56] [Page 5] Processing /v/0eGn3
-2025-06-29 17:22:26,902 - INFO - [52/56] [Page 5] Processing /v/WwG3Q
-2025-06-29 17:22:28,360 - INFO - [53/56] [Page 5] Processing /v/V4MZz
-2025-06-29 17:22:29,845 - INFO - [54/56] [Page 5] Processing /v/V4GbA
-2025-06-29 17:22:31,299 - INFO - [55/56] [Page 5] Processing /v/Bz1YG
-2025-06-29 17:22:32,750 - INFO - [56/56] [Page 5] Processing /v/4MdG
-2025-06-29 17:22:34,220 - INFO - Phase 1 completed: 56 entries processed
-2025-06-29 17:22:34,220 - INFO - ==================================================
-2025-06-29 17:22:34,220 - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4, comments > 80)
-2025-06-29 17:22:34,220 - INFO - ==================================================
-2025-06-29 17:22:34,697 - INFO - [Page 1] New releases filter disabled - will process all entries
-2025-06-29 17:22:34,701 - INFO - [Page 1] Found 4 entries for phase 2
-2025-06-29 17:22:37,207 - INFO - [Page 2] New releases filter disabled - will process all entries
-2025-06-29 17:22:37,210 - INFO - [Page 2] Found 6 entries for phase 2
-2025-06-29 17:22:39,702 - INFO - [Page 3] New releases filter disabled - will process all entries
-2025-06-29 17:22:39,705 - INFO - [Page 3] Found 8 entries for phase 2
-2025-06-29 17:22:42,184 - INFO - [Page 4] New releases filter disabled - will process all entries
-2025-06-29 17:22:42,187 - INFO - [Page 4] Found 10 entries for phase 2
-2025-06-29 17:22:44,504 - INFO - [Page 5] New releases filter disabled - will process all entries
-2025-06-29 17:22:44,505 - INFO - [Page 5] Found 1 entries for phase 2
-2025-06-29 17:22:46,755 - WARNING - [Page 6] No movie list found!
-2025-06-29 17:22:46,755 - INFO - [Page 6] found 0 entries for phase 2
-2025-06-29 17:22:46,755 - INFO - [Page 6] No results found, stopping phase 2
-2025-06-29 17:22:46,755 - INFO - [1/29] [Page 1] Processing /v/kKKw24
-2025-06-29 17:22:48,017 - INFO - [2/29] [Page 1] Processing /v/Mbba21
-2025-06-29 17:22:49,500 - INFO - [3/29] [Page 1] Processing /v/QNNwgG
-2025-06-29 17:22:50,953 - INFO - [4/29] [Page 1] Processing /v/bKKbJv
-2025-06-29 17:22:52,404 - INFO - [5/29] [Page 2] Processing /v/7yyPJd
-2025-06-29 17:22:52,855 - WARNING - [P2-5] No suitable magnet found
-2025-06-29 17:22:53,857 - INFO - [6/29] [Page 2] Processing /v/wKnOXe
-2025-06-29 17:22:54,303 - WARNING - [P2-6] No suitable magnet found
-2025-06-29 17:22:55,308 - INFO - [7/29] [Page 2] Processing /v/Yn6aXK
-2025-06-29 17:22:56,769 - INFO - [8/29] [Page 2] Processing /v/Vw5ebW
-2025-06-29 17:22:58,221 - INFO - [9/29] [Page 2] Processing /v/AzDDVO
-2025-06-29 17:22:59,678 - INFO - [10/29] [Page 2] Processing /v/K43w5v
-2025-06-29 17:23:01,111 - INFO - [11/29] [Page 3] Processing /v/8V8G8W
-2025-06-29 17:23:02,568 - INFO - [12/29] [Page 3] Processing /v/2ay9nm
-2025-06-29 17:23:04,023 - INFO - [13/29] [Page 3] Processing /v/8VaNX5
-2025-06-29 17:23:05,480 - INFO - [14/29] [Page 3] Processing /v/PQwdka
-2025-06-29 17:23:06,937 - INFO - [15/29] [Page 3] Processing /v/rmzmJr
-2025-06-29 17:23:08,398 - INFO - [16/29] [Page 3] Processing /v/9Dpywg
-2025-06-29 17:23:08,854 - WARNING - [P2-16] No suitable magnet found
-2025-06-29 17:23:09,855 - INFO - [17/29] [Page 3] Processing /v/p3Onew
-2025-06-29 17:23:11,386 - INFO - [18/29] [Page 3] Processing /v/B8Kk49
-2025-06-29 17:23:12,832 - INFO - [19/29] [Page 4] Processing /v/OndQz
-2025-06-29 17:23:14,286 - INFO - [20/29] [Page 4] Processing /v/QGmmp
-2025-06-29 17:23:15,754 - INFO - [21/29] [Page 4] Processing /v/V37AQ
-2025-06-29 17:23:17,211 - INFO - [22/29] [Page 4] Processing /v/d6Mme
-2025-06-29 17:23:18,657 - INFO - [23/29] [Page 4] Processing /v/KOvE0
-2025-06-29 17:23:20,101 - INFO - [24/29] [Page 4] Processing /v/JK5Ez
-2025-06-29 17:23:21,553 - INFO - [25/29] [Page 4] Processing /v/kNXY4
-2025-06-29 17:23:23,014 - INFO - [26/29] [Page 4] Processing /v/XO6WP
-2025-06-29 17:23:24,465 - INFO - [27/29] [Page 4] Processing /v/b26Ae
-2025-06-29 17:23:25,917 - INFO - [28/29] [Page 4] Processing /v/nn0W4
-2025-06-29 17:23:27,381 - INFO - [29/29] [Page 5] Processing /v/WQqKq
-2025-06-29 17:23:28,821 - INFO - Phase 2 completed: 26 entries processed
-2025-06-29 17:23:28,821 - INFO - [FINISH] Writing results to Ad Hoc/Javdb_TodayTitle_20250629.csv
-2025-06-29 17:23:28,823 - INFO - ==================================================
-2025-06-29 17:23:28,823 - INFO - SUMMARY REPORT
-2025-06-29 17:23:28,823 - INFO - ==================================================
-2025-06-29 17:23:28,823 - INFO - Pages processed: 1 to last page with results
-2025-06-29 17:23:28,823 - INFO - Tolerance mechanism: Stops after 3 consecutive empty pages
-2025-06-29 17:23:28,824 - INFO - ==============================
-2025-06-29 17:23:28,824 - INFO - PHASE 1 SUMMARY
-2025-06-29 17:23:28,824 - INFO - ==============================
-2025-06-29 17:23:28,824 - INFO - Phase 1 entries found: 56
-2025-06-29 17:23:28,824 - INFO -   - Subtitle torrents: 53 (94.6%)
-2025-06-29 17:23:28,824 - INFO -   - Hacked subtitle torrents: 46 (82.1%)
-2025-06-29 17:23:28,824 - INFO -   - Hacked no-subtitle torrents: 2 (3.6%)
-2025-06-29 17:23:28,824 - INFO -   - No-subtitle torrents: 3 (5.4%)
-2025-06-29 17:23:28,824 - INFO - ==============================
-2025-06-29 17:23:28,824 - INFO - PHASE 2 SUMMARY
-2025-06-29 17:23:28,825 - INFO - ==============================
-2025-06-29 17:23:28,825 - INFO - Phase 2 entries found: 26
-2025-06-29 17:23:28,825 - INFO -   - Subtitle torrents: 0 (0.0%)
-2025-06-29 17:23:28,825 - INFO -   - Hacked subtitle torrents: 0 (0.0%)
-2025-06-29 17:23:28,825 - INFO -   - Hacked no-subtitle torrents: 2 (7.7%)
-2025-06-29 17:23:28,825 - INFO -   - No-subtitle torrents: 26 (100.0%)
-2025-06-29 17:23:28,825 - INFO - ==============================
-2025-06-29 17:23:28,825 - INFO - OVERALL SUMMARY
-2025-06-29 17:23:28,825 - INFO - ==============================
-2025-06-29 17:23:28,825 - INFO - Total entries found: 82
-2025-06-29 17:23:28,825 - INFO - Successfully processed: 82
-2025-06-29 17:23:28,825 - INFO - Skipped already parsed in this session: 85
-2025-06-29 17:23:28,825 - INFO - Current parsed links in memory: 85
-2025-06-29 17:23:28,826 - INFO - Overall subtitle torrents: 53 (64.6%)
-2025-06-29 17:23:28,826 - INFO - Overall hacked subtitle torrents: 46 (56.1%)
-2025-06-29 17:23:28,826 - INFO - Overall hacked no-subtitle torrents: 4 (4.9%)
-2025-06-29 17:23:28,826 - INFO - Overall no-subtitle torrents: 29 (35.4%)
-2025-06-29 17:23:28,826 - INFO - Results saved to: Ad Hoc/Javdb_TodayTitle_20250629.csv
-2025-06-29 17:23:28,826 - INFO - ==================================================
+2025-06-29 17:37:59,905 - INFO - Starting JavDB spider...
+2025-06-29 17:37:59,905 - INFO - Arguments: start_page=1, end_page=20, phase=all
+2025-06-29 17:37:59,905 - INFO - Custom URL: https://javdb.com/actors/EvkJ
+2025-06-29 17:37:59,905 - INFO - AD HOC MODE: Will process all entries (no history checking) but record to history
+2025-06-29 17:37:59,905 - INFO - PARSE ALL MODE: Will continue until empty page is found
+2025-06-29 17:37:59,905 - INFO - ==================================================
+2025-06-29 17:37:59,905 - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-06-29 17:37:59,905 - INFO - ==================================================
+2025-06-29 17:38:00,634 - INFO - [Page 1] New releases filter disabled - will process all entries
+2025-06-29 17:38:00,637 - INFO - [Page 1] Found 11 entries for phase 1
+2025-06-29 17:38:03,131 - INFO - [Page 2] New releases filter disabled - will process all entries
+2025-06-29 17:38:03,134 - INFO - [Page 2] Found 13 entries for phase 1
+2025-06-29 17:38:05,592 - INFO - [Page 3] New releases filter disabled - will process all entries
+2025-06-29 17:38:05,595 - INFO - [Page 3] Found 10 entries for phase 1
+2025-06-29 17:38:08,143 - INFO - [Page 4] New releases filter disabled - will process all entries
+2025-06-29 17:38:08,146 - INFO - [Page 4] Found 16 entries for phase 1
+2025-06-29 17:38:10,412 - INFO - [Page 5] New releases filter disabled - will process all entries
+2025-06-29 17:38:10,414 - INFO - [Page 5] Found 6 entries for phase 1
+2025-06-29 17:38:12,680 - WARNING - [Page 6] No movie list found!
+2025-06-29 17:38:12,681 - INFO - [Page 6] found 0 entries for phase 1
+2025-06-29 17:38:12,681 - INFO - [Page 6] No results found, stopping phase 1
+2025-06-29 17:38:12,681 - INFO - [1/56] [Page 1] Processing /v/4Ddxap
+2025-06-29 17:38:13,973 - INFO - [2/56] [Page 1] Processing /v/a8yV0p
+2025-06-29 17:38:15,443 - INFO - [3/56] [Page 1] Processing /v/a8BYxX
+2025-06-29 17:38:16,892 - INFO - [4/56] [Page 1] Processing /v/BzK0wM
+2025-06-29 17:38:18,349 - INFO - [5/56] [Page 1] Processing /v/Ebd6k0
+2025-06-29 17:38:19,828 - INFO - [6/56] [Page 1] Processing /v/z4M7xb
+2025-06-29 17:38:21,295 - INFO - [7/56] [Page 1] Processing /v/KknQbv
+2025-06-29 17:38:22,730 - INFO - [8/56] [Page 1] Processing /v/6dDJKQ
+2025-06-29 17:38:24,190 - INFO - [9/56] [Page 1] Processing /v/Yww4d6
+2025-06-29 17:38:25,653 - INFO - [10/56] [Page 1] Processing /v/veeE4G
+2025-06-29 17:38:27,104 - INFO - [11/56] [Page 1] Processing /v/QNNmQp
+2025-06-29 17:38:28,573 - INFO - [12/56] [Page 2] Processing /v/QNN9e4
+2025-06-29 17:38:30,069 - INFO - [13/56] [Page 2] Processing /v/GZZdZ7
+2025-06-29 17:38:31,543 - INFO - [14/56] [Page 2] Processing /v/4D5XME
+2025-06-29 17:38:33,041 - INFO - [15/56] [Page 2] Processing /v/4D5B1v
+2025-06-29 17:38:34,515 - INFO - [16/56] [Page 2] Processing /v/GZMEbD
+2025-06-29 17:38:35,981 - INFO - [17/56] [Page 2] Processing /v/Ww1yPp
+2025-06-29 17:38:37,440 - INFO - [18/56] [Page 2] Processing /v/bKAA06
+2025-06-29 17:38:38,897 - INFO - [19/56] [Page 2] Processing /v/K4zV5m
+2025-06-29 17:38:40,362 - INFO - [20/56] [Page 2] Processing /v/qD5Ew6
+2025-06-29 17:38:41,822 - INFO - [21/56] [Page 2] Processing /v/1BnXvw
+2025-06-29 17:38:43,299 - INFO - [22/56] [Page 2] Processing /v/J2QAg3
+2025-06-29 17:38:44,765 - INFO - [23/56] [Page 2] Processing /v/Yn167x
+2025-06-29 17:38:46,218 - INFO - [24/56] [Page 2] Processing /v/g0JB2Z
+2025-06-29 17:38:47,673 - INFO - [25/56] [Page 3] Processing /v/g08yOm
+2025-06-29 17:38:49,277 - INFO - [26/56] [Page 3] Processing /v/MmvbqX
+2025-06-29 17:38:50,750 - INFO - [27/56] [Page 3] Processing /v/B8wE34
+2025-06-29 17:38:52,223 - INFO - [28/56] [Page 3] Processing /v/YnJMe6
+2025-06-29 17:38:53,706 - INFO - [29/56] [Page 3] Processing /v/eKb2wp
+2025-06-29 17:38:55,214 - INFO - [30/56] [Page 3] Processing /v/MmEXER
+2025-06-29 17:38:56,667 - INFO - [31/56] [Page 3] Processing /v/PQ8O7v
+2025-06-29 17:38:58,160 - INFO - [32/56] [Page 3] Processing /v/W14M5q
+2025-06-29 17:38:59,618 - INFO - [33/56] [Page 3] Processing /v/W1KVxK
+2025-06-29 17:39:01,116 - INFO - [34/56] [Page 3] Processing /v/g0O1Yq
+2025-06-29 17:39:02,668 - INFO - [35/56] [Page 4] Processing /v/1BAd4d
+2025-06-29 17:39:04,133 - INFO - [36/56] [Page 4] Processing /v/0Rvnp3
+2025-06-29 17:39:05,590 - INFO - [37/56] [Page 4] Processing /v/OP77B
+2025-06-29 17:39:07,044 - INFO - [38/56] [Page 4] Processing /v/EY5kJ
+2025-06-29 17:39:08,518 - INFO - [39/56] [Page 4] Processing /v/RwRw4
+2025-06-29 17:39:09,998 - INFO - [40/56] [Page 4] Processing /v/rJ23R
+2025-06-29 17:39:11,509 - INFO - [41/56] [Page 4] Processing /v/b6ZDv
+2025-06-29 17:39:12,981 - INFO - [42/56] [Page 4] Processing /v/dXWVe
+2025-06-29 17:39:14,434 - INFO - [43/56] [Page 4] Processing /v/mBm4v
+2025-06-29 17:39:15,902 - INFO - [44/56] [Page 4] Processing /v/EyeR4
+2025-06-29 17:39:17,353 - INFO - [45/56] [Page 4] Processing /v/1zNJw
+2025-06-29 17:39:18,813 - INFO - [46/56] [Page 4] Processing /v/JpzGd
+2025-06-29 17:39:20,355 - INFO - [47/56] [Page 4] Processing /v/abZJp
+2025-06-29 17:39:21,820 - INFO - [48/56] [Page 4] Processing /v/POZPJ
+2025-06-29 17:39:23,285 - INFO - [49/56] [Page 4] Processing /v/x6qxg
+2025-06-29 17:39:24,743 - INFO - [50/56] [Page 4] Processing /v/EEgAd
+2025-06-29 17:39:26,227 - INFO - [51/56] [Page 5] Processing /v/0eGn3
+2025-06-29 17:39:27,715 - INFO - [52/56] [Page 5] Processing /v/WwG3Q
+2025-06-29 17:39:29,170 - INFO - [53/56] [Page 5] Processing /v/V4MZz
+2025-06-29 17:39:30,651 - INFO - [54/56] [Page 5] Processing /v/V4GbA
+2025-06-29 17:39:32,136 - INFO - [55/56] [Page 5] Processing /v/Bz1YG
+2025-06-29 17:39:33,604 - INFO - [56/56] [Page 5] Processing /v/4MdG
+2025-06-29 17:39:35,057 - INFO - Phase 1 completed: 56 entries processed
+2025-06-29 17:39:35,057 - INFO - ==================================================
+2025-06-29 17:39:35,057 - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4, comments > 80)
+2025-06-29 17:39:35,057 - INFO - ==================================================
+2025-06-29 17:39:35,541 - INFO - [Page 1] New releases filter disabled - will process all entries
+2025-06-29 17:39:35,545 - INFO - [Page 1] Found 4 entries for phase 2
+2025-06-29 17:39:38,051 - INFO - [Page 2] New releases filter disabled - will process all entries
+2025-06-29 17:39:38,055 - INFO - [Page 2] Found 6 entries for phase 2
+2025-06-29 17:39:40,561 - INFO - [Page 3] New releases filter disabled - will process all entries
+2025-06-29 17:39:40,565 - INFO - [Page 3] Found 8 entries for phase 2
+2025-06-29 17:39:43,059 - INFO - [Page 4] New releases filter disabled - will process all entries
+2025-06-29 17:39:43,063 - INFO - [Page 4] Found 10 entries for phase 2
+2025-06-29 17:39:45,334 - INFO - [Page 5] New releases filter disabled - will process all entries
+2025-06-29 17:39:45,335 - INFO - [Page 5] Found 1 entries for phase 2
+2025-06-29 17:39:47,588 - WARNING - [Page 6] No movie list found!
+2025-06-29 17:39:47,588 - INFO - [Page 6] found 0 entries for phase 2
+2025-06-29 17:39:47,588 - INFO - [Page 6] No results found, stopping phase 2
+2025-06-29 17:39:47,588 - INFO - [1/29] [Page 1] Processing /v/kKKw24
+2025-06-29 17:39:48,878 - INFO - [2/29] [Page 1] Processing /v/Mbba21
+2025-06-29 17:39:50,410 - INFO - [3/29] [Page 1] Processing /v/QNNwgG
+2025-06-29 17:39:51,888 - INFO - [4/29] [Page 1] Processing /v/bKKbJv
+2025-06-29 17:39:53,354 - INFO - [5/29] [Page 2] Processing /v/7yyPJd
+2025-06-29 17:39:53,801 - WARNING - [P2-5] No suitable magnet found
+2025-06-29 17:39:54,809 - INFO - [6/29] [Page 2] Processing /v/wKnOXe
+2025-06-29 17:39:55,261 - WARNING - [P2-6] No suitable magnet found
+2025-06-29 17:39:56,269 - INFO - [7/29] [Page 2] Processing /v/Yn6aXK
+2025-06-29 17:39:57,906 - INFO - [8/29] [Page 2] Processing /v/Vw5ebW
+2025-06-29 17:39:59,389 - INFO - [9/29] [Page 2] Processing /v/AzDDVO
+2025-06-29 17:40:00,840 - INFO - [10/29] [Page 2] Processing /v/K43w5v
+2025-06-29 17:40:02,314 - INFO - [11/29] [Page 3] Processing /v/8V8G8W
+2025-06-29 17:40:03,785 - INFO - [12/29] [Page 3] Processing /v/2ay9nm
+2025-06-29 17:40:05,235 - INFO - [13/29] [Page 3] Processing /v/8VaNX5
+2025-06-29 17:40:06,723 - INFO - [14/29] [Page 3] Processing /v/PQwdka
+2025-06-29 17:40:08,183 - INFO - [15/29] [Page 3] Processing /v/rmzmJr
+2025-06-29 17:40:09,641 - INFO - [16/29] [Page 3] Processing /v/9Dpywg
+2025-06-29 17:40:10,105 - WARNING - [P2-16] No suitable magnet found
+2025-06-29 17:40:11,112 - INFO - [17/29] [Page 3] Processing /v/p3Onew
+2025-06-29 17:40:12,595 - INFO - [18/29] [Page 3] Processing /v/B8Kk49
+2025-06-29 17:40:14,059 - INFO - [19/29] [Page 4] Processing /v/OndQz
+2025-06-29 17:40:15,508 - INFO - [20/29] [Page 4] Processing /v/QGmmp
+2025-06-29 17:40:16,958 - INFO - [21/29] [Page 4] Processing /v/V37AQ
+2025-06-29 17:40:18,419 - INFO - [22/29] [Page 4] Processing /v/d6Mme
+2025-06-29 17:40:19,902 - INFO - [23/29] [Page 4] Processing /v/KOvE0
+2025-06-29 17:40:21,391 - INFO - [24/29] [Page 4] Processing /v/JK5Ez
+2025-06-29 17:40:22,864 - INFO - [25/29] [Page 4] Processing /v/kNXY4
+2025-06-29 17:40:24,303 - INFO - [26/29] [Page 4] Processing /v/XO6WP
+2025-06-29 17:40:25,776 - INFO - [27/29] [Page 4] Processing /v/b26Ae
+2025-06-29 17:40:27,231 - INFO - [28/29] [Page 4] Processing /v/nn0W4
+2025-06-29 17:40:28,693 - INFO - [29/29] [Page 5] Processing /v/WQqKq
+2025-06-29 17:40:30,153 - INFO - Phase 2 completed: 26 entries processed
+2025-06-29 17:40:30,153 - INFO - [FINISH] Writing results to Ad Hoc/Javdb_TodayTitle_20250629.csv
+2025-06-29 17:40:30,156 - INFO - ==================================================
+2025-06-29 17:40:30,156 - INFO - SUMMARY REPORT
+2025-06-29 17:40:30,156 - INFO - ==================================================
+2025-06-29 17:40:30,156 - INFO - Pages processed: 1 to last page with results
+2025-06-29 17:40:30,156 - INFO - Tolerance mechanism: Stops after 3 consecutive empty pages
+2025-06-29 17:40:30,156 - INFO - ==============================
+2025-06-29 17:40:30,156 - INFO - PHASE 1 SUMMARY
+2025-06-29 17:40:30,156 - INFO - ==============================
+2025-06-29 17:40:30,156 - INFO - Phase 1 entries found: 56
+2025-06-29 17:40:30,157 - INFO -   - Subtitle torrents: 53 (94.6%)
+2025-06-29 17:40:30,157 - INFO -   - Hacked subtitle torrents: 46 (82.1%)
+2025-06-29 17:40:30,157 - INFO -   - Hacked no-subtitle torrents: 2 (3.6%)
+2025-06-29 17:40:30,157 - INFO -   - No-subtitle torrents: 3 (5.4%)
+2025-06-29 17:40:30,157 - INFO - ==============================
+2025-06-29 17:40:30,157 - INFO - PHASE 2 SUMMARY
+2025-06-29 17:40:30,157 - INFO - ==============================
+2025-06-29 17:40:30,157 - INFO - Phase 2 entries found: 26
+2025-06-29 17:40:30,157 - INFO -   - Subtitle torrents: 0 (0.0%)
+2025-06-29 17:40:30,157 - INFO -   - Hacked subtitle torrents: 0 (0.0%)
+2025-06-29 17:40:30,157 - INFO -   - Hacked no-subtitle torrents: 2 (7.7%)
+2025-06-29 17:40:30,157 - INFO -   - No-subtitle torrents: 26 (100.0%)
+2025-06-29 17:40:30,157 - INFO - ==============================
+2025-06-29 17:40:30,157 - INFO - OVERALL SUMMARY
+2025-06-29 17:40:30,157 - INFO - ==============================
+2025-06-29 17:40:30,158 - INFO - Total entries found: 82
+2025-06-29 17:40:30,158 - INFO - Successfully processed: 82
+2025-06-29 17:40:30,158 - INFO - Skipped already parsed in this session: 85
+2025-06-29 17:40:30,158 - INFO - Ad hoc mode: No history checking performed
+2025-06-29 17:40:30,158 - INFO - Current parsed links in memory: 85
+2025-06-29 17:40:30,158 - INFO - Overall subtitle torrents: 53 (64.6%)
+2025-06-29 17:40:30,158 - INFO - Overall hacked subtitle torrents: 46 (56.1%)
+2025-06-29 17:40:30,158 - INFO - Overall hacked no-subtitle torrents: 4 (4.9%)
+2025-06-29 17:40:30,158 - INFO - Overall no-subtitle torrents: 29 (35.4%)
+2025-06-29 17:40:30,158 - INFO - Results saved to: Ad Hoc/Javdb_TodayTitle_20250629.csv
+2025-06-29 17:40:30,159 - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-06-29 17:40:30,159 - INFO - ==================================================
