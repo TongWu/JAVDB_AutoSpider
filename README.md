@@ -1,5 +1,7 @@
 # JavDB Auto Spider
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/TongWu/JAVDB_AutoSpider)
+
 A comprehensive Python automation system for extracting torrent links from javdb.com and automatically adding them to qBittorrent. The system includes intelligent history tracking, git integration, and automated pipeline execution.
 
 ## Features
