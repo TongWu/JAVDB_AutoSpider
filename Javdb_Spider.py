@@ -269,6 +269,48 @@ def create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet
     return row
 
 
+def extract_url_part_after_javdb(url):
+    """
+    Extract the part of URL after javdb.com and convert it to a filename-safe format.
+    Args:
+        url: The custom URL (e.g., 'https://javdb.com/actors/EvkJ')
+    Returns:
+        str: The extracted part converted to filename-safe format (e.g., 'actors_EvkJ')
+    """
+    try:
+        if 'javdb.com' in url:
+            domain_pos = url.find('javdb.com')
+            if domain_pos != -1:
+                after_domain = url[domain_pos + len('javdb.com'):]
+                if after_domain.startswith('/'):
+                    after_domain = after_domain[1:]
+                if after_domain.endswith('/'):
+                    after_domain = after_domain[:-1]
+                filename_part = after_domain.replace('/', '_')
+                if '?' in filename_part:
+                    filename_part = filename_part.split('?')[0]
+                return filename_part
+    except Exception as e:
+        logger.warning(f"Error extracting URL part from {url}: {e}")
+    return 'custom_url'
+
+
+def generate_output_csv_name(custom_url=None):
+    """
+    Generate the output CSV filename based on whether a custom URL is provided.
+    Args:
+        custom_url: Custom URL if provided, None otherwise
+    Returns:
+        str: The generated CSV filename
+    """
+    if custom_url:
+        url_part = extract_url_part_after_javdb(custom_url)
+        today_date = datetime.now().strftime("%Y%m%d")
+        return f'Javdb_AdHoc_{url_part}_{today_date}.csv'
+    else:
+        return f'Javdb_TodayTitle_{datetime.now().strftime("%Y%m%d")}.csv'
+
+
 def main():
     # Parse command line arguments
     args = parse_arguments()
@@ -347,6 +389,9 @@ def main():
     subtitle_count = 0
     hacked_count = 0
     no_subtitle_count = 0
+    
+    # Tolerance mechanism configuration
+    max_consecutive_empty = 3    # Maximum tolerance for consecutive empty pages
 
     # Phase 1: Collect entries with both "含中字磁鏈" and "今日新種"/"昨日新種" tags
     if phase_mode in ['1', 'all']:
@@ -355,6 +400,8 @@ def main():
         logger.info("=" * 50)
 
         page_num = start_page
+        consecutive_empty_pages = 0  # Track consecutive empty pages
+        
         while True:
             page_url = get_page_url(page_num, phase=1, custom_url=custom_url)
             logger.debug(f"[Page {page_num}] Fetching: {page_url}")
@@ -362,19 +409,32 @@ def main():
             # Fetch index page
             index_html = get_page(page_url, session)
             if not index_html:
-                logger.error(f"[Page {page_num}] Failed to fetch index page")
-                break
+                logger.info(f"[Page {page_num}] no movie list found (page fetch failed or does not exist)")
+                consecutive_empty_pages += 1
+                if consecutive_empty_pages >= max_consecutive_empty:
+                    logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping phase 1")
+                    break
+                page_num += 1
+                continue
 
             # Parse index page for phase 1
             page_results = parse_index(index_html, page_num, phase=1,
                                        disable_new_releases_filter=custom_url is not None)
 
+            if len(page_results) == 0:
+                logger.info(f"[Page {page_num}] found 0 entries for phase 1")
+                consecutive_empty_pages += 1
+                if consecutive_empty_pages >= max_consecutive_empty:
+                    logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping phase 1")
+                    break
+            else:
+                all_index_results.extend(page_results)
+                consecutive_empty_pages = 0  # Reset counter when we find results
+
             # If parse_all is enabled and no results found, stop
             if parse_all and len(page_results) == 0:
                 logger.info(f"[Page {page_num}] No results found, stopping phase 1")
                 break
-
-            all_index_results.extend(page_results)
 
             # If not parse_all and reached end_page, stop
             if not parse_all and page_num >= end_page:
@@ -477,6 +537,8 @@ def main():
         all_index_results_phase2 = []
 
         page_num = start_page
+        consecutive_empty_pages = 0  # Track consecutive empty pages
+        
         while True:
             page_url = get_page_url(page_num, phase=2, custom_url=custom_url)
             logger.debug(f"[Page {page_num}] Fetching for phase 2: {page_url}")
@@ -484,19 +546,32 @@ def main():
             # Fetch index page
             index_html = get_page(page_url, session)
             if not index_html:
-                logger.error(f"[Page {page_num}] Failed to fetch index page for phase 2")
-                break
+                logger.info(f"[Page {page_num}] no movie list found (page fetch failed or does not exist)")
+                consecutive_empty_pages += 1
+                if consecutive_empty_pages >= max_consecutive_empty:
+                    logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping phase 2")
+                    break
+                page_num += 1
+                continue
 
             # Parse index page for phase 2
             page_results = parse_index(index_html, page_num, phase=2,
                                        disable_new_releases_filter=custom_url is not None)
 
+            if len(page_results) == 0:
+                logger.info(f"[Page {page_num}] found 0 entries for phase 2")
+                consecutive_empty_pages += 1
+                if consecutive_empty_pages >= max_consecutive_empty:
+                    logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping phase 2")
+                    break
+            else:
+                all_index_results_phase2.extend(page_results)
+                consecutive_empty_pages = 0  # Reset counter when we find results
+
             # If parse_all is enabled and no results found, stop
             if parse_all and len(page_results) == 0:
                 logger.info(f"[Page {page_num}] No results found, stopping phase 2")
                 break
-
-            all_index_results_phase2.extend(page_results)
 
             # If not parse_all and reached end_page, stop
             if not parse_all and page_num >= end_page:
@@ -605,6 +680,8 @@ def main():
         logger.info(f"Pages processed: {start_page} to last page with results")
     else:
         logger.info(f"Pages processed: {start_page} to {end_page}")
+    
+    logger.info(f"Tolerance mechanism: Stops after {max_consecutive_empty} consecutive empty pages")
 
     # Phase 1 Summary
     if phase_mode in ['1', 'all']:
