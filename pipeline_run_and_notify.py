@@ -3,6 +3,7 @@ import smtplib
 import logging
 import os
 import sys
+import re
 from datetime import datetime
 from email.message import EmailMessage
 from email.utils import make_msgid
@@ -56,6 +57,55 @@ today_str = datetime.now().strftime('%Y%m%d')
 csv_path = os.path.join(DAILY_REPORT_DIR, f'Javdb_TodayTitle_{today_str}.csv')
 spider_log_path = SPIDER_LOG_FILE
 uploader_log_path = UPLOADER_LOG_FILE
+
+
+def mask_sensitive_info(text):
+    """Mask sensitive information in text to prevent exposure in logs"""
+    if not text:
+        return text
+    
+    # Mask GitHub personal access tokens (ghp_xxxxxxxxxx) - do this first
+    text = re.sub(r'ghp_[a-zA-Z0-9]{35,}', 'ghp_***MASKED***', text)
+    
+    # Mask other potential GitHub tokens (gho_, ghr_, ghs_)
+    text = re.sub(r'gh[o-r-s]_[a-zA-Z0-9]{35,}', 'gh*_***MASKED***', text)
+    
+    # Mask email passwords in SMTP URLs (but exclude GitHub URLs)
+    # This regex matches username:password@ but only if it's not a GitHub URL
+    def mask_email_password(match):
+        username, password, domain = match.groups()
+        if 'github.com' in domain:
+            # Don't mask GitHub URLs as they're handled above
+            return match.group(0)
+        return f"{username}:***MASKED***@{domain}"
+    
+    text = re.sub(r'([a-zA-Z0-9._%+-]+):([^@]+)@([^/\s]+)', mask_email_password, text)
+    
+    # Mask qBittorrent passwords
+    text = re.sub(r'password["\']?\s*[:=]\s*["\']?([^"\s]+)["\']?', r'password:***MASKED***', text)
+    
+    # Mask SMTP passwords
+    text = re.sub(r'SMTP_PASSWORD["\']?\s*[:=]\s*["\']?([^"\s]+)["\']?', r'SMTP_PASSWORD:***MASKED***', text)
+    
+    return text
+
+
+def safe_log_info(message):
+    """Log message with sensitive information masked"""
+    masked_message = mask_sensitive_info(message)
+    logger.info(masked_message)
+
+
+def safe_log_warning(message):
+    """Log warning message with sensitive information masked"""
+    masked_message = mask_sensitive_info(message)
+    logger.warning(masked_message)
+
+
+def safe_log_error(message):
+    """Log error message with sensitive information masked"""
+    masked_message = mask_sensitive_info(message)
+    logger.error(masked_message)
 
 
 # --- PIPELINE EXECUTION ---
@@ -133,25 +183,27 @@ def send_email(subject, body, attachments=None):
 def git_add_commit_push(step):
     """Commit and push Daily Report and logs files to GitHub"""
     try:
-        logger.info(f"Step {step}: Committing and pushing files to GitHub...")
+        safe_log_info(f"Step {step}: Committing and pushing files to GitHub...")
 
         # Configure git with credentials
         subprocess.run(['git', 'config', 'user.name', GIT_USERNAME], check=True)
         subprocess.run(['git', 'config', 'user.email', f'{GIT_USERNAME}@users.noreply.github.com'], check=True)
 
         # Pull latest changes from remote to avoid push conflicts
-        logger.info("Pulling latest changes from remote repository...")
+        safe_log_info("Pulling latest changes from remote repository...")
         try:
             # Use git pull with credentials in URL to avoid authentication issues
             remote_url_with_auth = GIT_REPO_URL.replace('https://', f'https://{GIT_USERNAME}:{GIT_PASSWORD}@')
             subprocess.run(['git', 'pull', remote_url_with_auth, GIT_BRANCH], check=True)
-            logger.info("✓ Successfully pulled latest changes from remote")
+            safe_log_info("✓ Successfully pulled latest changes from remote")
         except subprocess.CalledProcessError as e:
-            logger.warning(f"Pull failed (this might be normal for new repos): {e}")
+            # Mask the command that contains sensitive information
+            masked_cmd = mask_sensitive_info(str(e.cmd)) if hasattr(e, 'cmd') else str(e)
+            safe_log_warning(f"Pull failed (this might be normal for new repos): Command {masked_cmd} returned non-zero exit status {e.returncode}")
             # Continue with commit/push even if pull fails (e.g., new repository)
 
         # Add all files in Daily Report and logs folders
-        logger.info("Adding files to git...")
+        safe_log_info("Adding files to git...")
         subprocess.run(['git', 'add', DAILY_REPORT_DIR], check=True)
         subprocess.run(['git', 'add', AD_HOC_DIR], check=True)
         subprocess.run(['git', 'add', 'logs/'], check=True)
@@ -159,12 +211,12 @@ def git_add_commit_push(step):
         # Check if there are any changes to commit
         result = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True, check=True)
         if not result.stdout.strip():
-            logger.info(f"No changes to commit - files are already up to date")
+            safe_log_info(f"No changes to commit - files are already up to date")
             return True
 
         # Commit with timestamp
         commit_message = f"Auto-commit: JavDB pipeline {step} results {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        logger.info(f"Commit changes for {step}")
+        safe_log_info(f"Commit changes for {step}")
         subprocess.run(['git', 'add', 'logs/'], check=True)
         subprocess.run(['git', 'commit', '-m', commit_message], check=True)
 
@@ -175,11 +227,19 @@ def git_add_commit_push(step):
         return True
 
     except subprocess.CalledProcessError as e:
-        logger.error(f"Git operation failed: {e}")
-        logger.error(f"Command output: {e.output if hasattr(e, 'output') else 'No output available'}")
+        # Mask the command that contains sensitive information
+        masked_cmd = mask_sensitive_info(str(e.cmd)) if hasattr(e, 'cmd') else str(e)
+        safe_log_error(f"Git operation failed: Command {masked_cmd} returned non-zero exit status {e.returncode}")
+        
+        # Mask output if it contains sensitive information
+        if hasattr(e, 'output') and e.output:
+            masked_output = mask_sensitive_info(e.output)
+            safe_log_error(f"Command output: {masked_output}")
+        else:
+            safe_log_error("Command output: No output available")
         return False
     except Exception as e:
-        logger.error(f"Unexpected error during git operations: {e}")
+        safe_log_error(f"Unexpected error during git operations: {e}")
         return False
 
 
