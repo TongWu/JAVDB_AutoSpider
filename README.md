@@ -41,10 +41,9 @@ A comprehensive Python automation system for extracting torrent links from javdb
 pip install -r requirements.txt
 ```
 
-2. Configure the system by copying and editing configuration files:
+2. Configure the system by copying and editing the configuration file:
 ```bash
-cp git_config.py.example git_config.py
-cp qbtorrent_config.py.example qbtorrent_config.py
+cp config.py.example config.py
 ```
 
 ## Usage
@@ -146,50 +145,85 @@ The pipeline will:
 
 ## Configuration
 
-### Git Configuration (`git_config.py`)
+### Unified Configuration (`config.py`)
 
-Configure git operations for the pipeline:
+All configuration settings are now centralized in a single `config.py` file:
 
 ```python
-# GitHub username
+# =============================================================================
+# GIT CONFIGURATION
+# =============================================================================
 GIT_USERNAME = 'your_github_username'
-
-# GitHub personal access token (recommended) or password
 GIT_PASSWORD = 'your_github_token_or_password'
-
-# GitHub repository URL
 GIT_REPO_URL = 'https://github.com/your_username/your_repo_name.git'
-
-# Git branch to push to
 GIT_BRANCH = 'main'
+
+# =============================================================================
+# QBITTORRENT CONFIGURATION
+# =============================================================================
+QB_HOST = 'your_qbittorrent_ip'
+QB_PORT = 'your_qbittorrent_port'
+QB_USERNAME = 'your_qbittorrent_username'
+QB_PASSWORD = 'your_qbittorrent_password'
+TORRENT_CATEGORY = 'JavDB'
+TORRENT_SAVE_PATH = ''
+AUTO_START = True
+SKIP_CHECKING = False
+REQUEST_TIMEOUT = 30
+DELAY_BETWEEN_ADDITIONS = 1
+
+# =============================================================================
+# SMTP CONFIGURATION (for email notifications)
+# =============================================================================
+SMTP_SERVER = 'smtp.gmail.com'
+SMTP_PORT = 587
+SMTP_USER = 'your_email@gmail.com'
+SMTP_PASSWORD = 'your_email_password_or_app_password'
+EMAIL_FROM = 'your_email@gmail.com'
+EMAIL_TO = 'your_email@gmail.com'
+
+# =============================================================================
+# SPIDER CONFIGURATION
+# =============================================================================
+START_PAGE = 1
+END_PAGE = 20
+BASE_URL = 'https://javdb.com'
+
+# =============================================================================
+# LOGGING CONFIGURATION
+# =============================================================================
+LOG_LEVEL = 'INFO'
+SPIDER_LOG_FILE = 'logs/Javdb_Spider.log'
+UPLOADER_LOG_FILE = 'logs/qbtorrent_uploader.log'
+PIPELINE_LOG_FILE = 'logs/pipeline_run_and_notify.log'
+
+# =============================================================================
+# FILE PATHS
+# =============================================================================
+DAILY_REPORT_DIR = 'Daily Report'
+AD_HOC_DIR = 'Ad Hoc'
+PARSED_MOVIES_CSV = 'parsed_movies_history.csv'
 ```
+
+**Setup Instructions:**
+1. Copy `config.py.example` to `config.py`
+2. Update all the placeholder values with your actual credentials
+3. The `config.py` file is automatically excluded from git commits for security
 
 **GitHub Authentication Setup:**
 1. Go to GitHub Settings → Developer settings → Personal access tokens
 2. Generate a new token with `repo` permissions
 3. Use this token as `GIT_PASSWORD`
 
-### qBittorrent Configuration (`qbtorrent_config.py`)
+**qBittorrent Setup:**
+1. Enable Web UI in qBittorrent settings
+2. Note the IP address, port, username, and password
+3. Update the qBittorrent configuration section in `config.py`
 
-Configure qBittorrent connection settings:
-
-```python
-# Connection settings
-QB_HOST = 'your_qbittorrent_ip'
-QB_PORT = 'your_qbittorrent_port'
-QB_USERNAME = 'your_qbittorrent_username'
-QB_PASSWORD = 'your_qbittorrent_password'
-
-# Torrent settings
-TORRENT_CATEGORY = 'JavDB'
-TORRENT_SAVE_PATH = ''  # Leave empty for default
-AUTO_START = True
-SKIP_CHECKING = False
-
-# Performance settings
-REQUEST_TIMEOUT = 30
-DELAY_BETWEEN_ADDITIONS = 1
-```
+**Email Setup (Optional):**
+1. For Gmail, use an App Password instead of your regular password
+2. Enable 2-factor authentication and generate an App Password
+3. Update the SMTP configuration section in `config.py`
 
 ## Output Structure
 
