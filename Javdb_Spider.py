@@ -471,7 +471,7 @@ def main():
     # Phase 2: Collect entries with only "今日新種"/"昨日新種" tag (filtered by quality)
     if phase_mode in ['2', 'all']:
         logger.info("=" * 50)
-        logger.info("PHASE 2: Processing entries with only today/yesterday tag (rate > 3, comments > 50)")
+        logger.info("PHASE 2: Processing entries with only today/yesterday tag (rate > 4, comments > 80)")
         logger.info("=" * 50)
 
         all_index_results_phase2 = []
