@@ -1,0 +1,4 @@
+2025-06-29 02:28:17,691 - INFO - Starting qBittorrent uploader...
+2025-06-29 02:28:17,691 - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250629.csv
+2025-06-29 02:28:17,691 - INFO - Found 0 torrent links in Daily Report/Javdb_TodayTitle_20250629.csv
+2025-06-29 02:28:17,691 - WARNING - No torrent links found in CSV file

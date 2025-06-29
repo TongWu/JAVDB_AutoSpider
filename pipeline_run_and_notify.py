@@ -1,0 +1,286 @@
+import subprocess
+import smtplib
+import logging
+import os
+import sys
+from datetime import datetime
+from email.message import EmailMessage
+from email.utils import make_msgid
+from email.mime.base import MIMEBase
+from email import encoders
+
+# Import git configuration
+try:
+    from git_config import GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH
+except ImportError:
+    # Fallback values if git_config.py doesn't exist
+    GIT_USERNAME = 'your_github_username'
+    GIT_PASSWORD = 'your_github_password_or_token'
+    GIT_REPO_URL = 'https://github.com/your_username/your_repo_name.git'
+    GIT_BRANCH = 'main'
+
+# Import SMTP configuration
+try:
+    from smtp_config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO
+except ImportError:
+    # Fallback values if git_config.py doesn't exist
+    SMTP_SERVER = 'smtp.gmail.com'
+    SMTP_PORT = '587'
+    SMTP_USER = 'example@gmail.com'
+    SMTP_PASSWORD = 'password'
+    EMAIL_FROM = 'example@gmail.com'
+    EMAIL_TO = 'example@gmail.com'
+
+os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
+
+# --- LOGGING SETUP ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(message)s',
+    handlers=[
+        logging.FileHandler('logs/pipeline_run_and_notify.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# --- FILE PATHS ---
+today_str = datetime.now().strftime('%Y%m%d')
+csv_path = os.path.join('Daily Report', f'Javdb_TodayTitle_{today_str}.csv')
+spider_log_path = os.path.join('logs', 'Javdb_Spider.log')
+uploader_log_path = os.path.join('logs', 'qbtorrent_uploader.log')
+
+
+# --- PIPELINE EXECUTION ---
+def run_script(script_path, args=None):
+    cmd = ['python3', script_path]
+    if args:
+        cmd += args
+    logger.info(f'Running: {" ".join(cmd)}')
+
+    # Run with real-time output
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+        universal_newlines=True
+    )
+
+    # Print output in real-time (but don't log to pipeline log since sub-scripts have their own logging)
+    output_lines = []
+    if process.stdout:
+        for line in iter(process.stdout.readline, ''):
+            if line:
+                print(line.rstrip())  # Print to console only
+                output_lines.append(line)
+                # Don't log to pipeline log - sub-scripts have their own logging
+
+        process.stdout.close()
+
+    return_code = process.wait()
+
+    if return_code != 0:
+        logger.error(f'Script {script_path} failed with return code {return_code}')
+        raise RuntimeError(f'Script {script_path} failed with return code {return_code}')
+
+    return ''.join(output_lines)
+
+
+def get_log_summary(log_path, lines=200):
+    if not os.path.exists(log_path):
+        return f'Log file not found: {log_path}'
+    with open(log_path, 'r', encoding='utf-8') as f:
+        log_lines = f.readlines()
+    return ''.join(log_lines[-lines:])
+
+
+def send_email(subject, body, attachments=None):
+    msg = EmailMessage()
+    msg['Subject'] = subject
+    msg['From'] = EMAIL_FROM
+    msg['To'] = EMAIL_TO
+    msg.set_content(body)
+
+    if attachments:
+        for file_path in attachments:
+            if not os.path.exists(file_path):
+                logger.warning(f'Attachment not found: {file_path}')
+                continue
+            with open(file_path, 'rb') as f:
+                file_data = f.read()
+                file_name = os.path.basename(file_path)
+                maintype = 'application'
+                subtype = 'octet-stream'
+                msg.add_attachment(file_data, maintype=maintype, subtype=subtype, filename=file_name)
+
+    logger.info('Connecting to SMTP server...')
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.send_message(msg)
+    logger.info('Email sent successfully.')
+
+
+def git_add(step):
+    """Commit and push Daily Report and logs files to GitHub"""
+    try:
+        logger.info(f"Step {step}: Committing and pushing files to GitHub...")
+
+        # Configure git with credentials
+        subprocess.run(['git', 'config', 'user.name', GIT_USERNAME], check=True)
+        subprocess.run(['git', 'config', 'user.email', f'{GIT_USERNAME}@users.noreply.github.com'], check=True)
+
+        # Add all files in Daily Report and logs folders
+        logger.info("Adding files to git...")
+        subprocess.run(['git', 'add', 'Daily Report/'], check=True)
+        subprocess.run(['git', 'add', 'logs/'], check=True)
+
+        # Check if there are any changes to commit
+        result = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True, check=True)
+        if not result.stdout.strip():
+            logger.info(f"No changes to commit - files are already up to date")
+            return True
+
+        return True
+
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Git operation failed: {e}")
+        logger.error(f"Command output: {e.output if hasattr(e, 'output') else 'No output available'}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error during git operations: {e}")
+        return False
+
+
+def main():
+    pipeline_success = False
+    git_success = False
+    try:
+        logger.info("=" * 60)
+        logger.info("STARTING JAVDB PIPELINE")
+        logger.info("=" * 60)
+
+        # 1. Run Javdb_Spider
+        logger.info("Step 1: Running JavDB Spider...")
+        run_script('Javdb_Spider.py')
+        logger.info("✓ JavDB Spider completed successfully")
+
+        # Commit spider results immediately
+        logger.info("Step 1.5: Committing spider results to GitHub...")
+        spider_git_success = git_add("spider")
+        if spider_git_success:
+            logger.info("✓ Spider results committed successfully")
+        else:
+            logger.warning("⚠ Spider commit failed, but pipeline continues")
+
+        # 2. Run qbtorrent_uploader
+        logger.info("Step 2: Running qBittorrent Uploader...")
+        run_script('qbtorrent_uploader.py')
+        logger.info("✓ qBittorrent Uploader completed successfully")
+
+        # Commit uploader results immediately
+        logger.info("Step 2.5: Committing uploader results to GitHub...")
+        uploader_git_success = git_add("uploader")
+        if uploader_git_success:
+            logger.info("✓ Uploader results committed successfully")
+        else:
+            logger.warning("⚠ Uploader commit failed, but pipeline continues")
+
+        # 3. Final git commit and push (in case there are any remaining changes)
+        logger.info("Step 3: Final commit and push to GitHub...")
+        git_success = git_add("final")
+        if git_success:
+            logger.info("✓ Final git operations completed successfully")
+        else:
+            logger.warning("⚠ Final git operations failed, but pipeline continues")
+
+        pipeline_success = True
+        logger.info("=" * 60)
+        logger.info("PIPELINE COMPLETED SUCCESSFULLY")
+        logger.info("=" * 60)
+
+        # 4. Final commit specifically for the pipeline log (after pipeline completes)
+        # logger.info("Step 4: Committing pipeline log to GitHub...")
+        # pipeline_log_success = git_add("pipeline_log")
+        # if pipeline_log_success:
+        #     logger.info("✓ Pipeline log committed successfully")
+        # else:
+        #     logger.warning("⚠ Pipeline log commit failed, but pipeline completed successfully")
+
+    except Exception as e:
+        logger.error("=" * 60)
+        logger.error("PIPELINE FAILED")
+        logger.error("=" * 60)
+        logger.error(f'Error: {e}')
+        pipeline_success = False
+
+        # Even if pipeline failed, try to commit the pipeline log
+        try:
+            logger.info("Attempting to commit pipeline log despite failure...")
+            git_add("pipeline_log_failed")
+        except Exception as git_error:
+            logger.error(f"Failed to commit pipeline log: {git_error}")
+
+    # Send email based on pipeline result
+    if pipeline_success:
+        # Pipeline succeeded - send detailed report with attachments
+        spider_summary = get_log_summary(spider_log_path, lines=25)
+        uploader_summary = get_log_summary(uploader_log_path, lines=50)
+
+        git_status = "✓ SUCCESS" if git_success else "⚠ FAILED"
+
+        body = f"""
+JavDB Spider and qBittorrent Uploader Pipeline Completed Successfully.
+
+Git Operations: {git_status}
+
+--- JavDB Spider Summary (last 25 lines) ---
+{spider_summary}
+
+--- qBittorrent Uploader Summary (last 50 lines) ---
+{uploader_summary}
+"""
+        attachments = [csv_path, spider_log_path, uploader_log_path]
+        try:
+            send_email(
+                subject=f'JavDB Pipeline Report {today_str} - SUCCESS',
+                body=body,
+                attachments=attachments
+            )
+        except Exception as e:
+            logger.error(f'Failed to send success email: {e}')
+    else:
+        # Pipeline failed - send simple failure notification
+        body = f"""
+JavDB Pipeline Failed
+
+The pipeline encountered an error and could not complete successfully.
+Please check the logs for more details.
+
+Error occurred at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+        try:
+            send_email(
+                subject=f'JavDB Pipeline Report {today_str} - FAILED',
+                body=body,
+                attachments=None  # No attachments for failure
+            )
+        except Exception as e:
+            logger.error(f'Failed to send failure email: {e}')
+
+    # Add pipeline run log
+    pipeline_log_success = git_add("pipeline_log")
+    # Commit with timestamp
+    commit_message = f"Auto-commit: JavDB pipeline pipeline_log results {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    subprocess.run(['git', 'commit', '-m', commit_message], check=True)
+
+    # Push to remote repository
+    # Use git push with credentials in URL
+    remote_url_with_auth = GIT_REPO_URL.replace('https://', f'https://{GIT_USERNAME}:{GIT_PASSWORD}@')
+    subprocess.run(['git', 'push', remote_url_with_auth, GIT_BRANCH], check=True)
+
+
+if __name__ == '__main__':
+    main()
