@@ -154,12 +154,12 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                             if comment_match:
                                 comment_number = comment_match.group(1)
                     
-                    # Filter phase 2 entries: comment number > 50 and rate > 3
+                    # Filter phase 2 entries: comment number > 80 and rate > 4
                     try:
                         comment_num = int(comment_number) if comment_number else 0
                         rate_num = float(rate) if rate else 0
                         
-                        if comment_num > 50 and rate_num > 3:
+                        if comment_num > 80 and rate_num > 4:
                             logger.debug(f"[Page {page_num}] Found entry (filter disabled): {video_title} ({href}) - Rate: {rate}, Comments: {comment_number}")
                             
                             results.append({
@@ -208,12 +208,12 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                                 if comment_match:
                                     comment_number = comment_match.group(1)
                         
-                        # Filter phase 2 entries: comment number > 50 and rate > 3
+                        # Filter phase 2 entries: comment number > 80 and rate > 4
                         try:
                             comment_num = int(comment_number) if comment_number else 0
                             rate_num = float(rate) if rate else 0
                             
-                            if comment_num > 50 and rate_num > 3:
+                            if comment_num > 80 and rate_num > 4:
                                 logger.debug(f"[Page {page_num}] Found entry: {video_title} ({href}) - Rate: {rate}, Comments: {comment_number}")
                                 
                                 results.append({
