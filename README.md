@@ -157,3 +157,126 @@ The pipeline sends email notifications with:
 - Git operation status
 
 Configure email settings in `pipeline_run_and_notify.py`.
+
+# Git Configuration Setup for JavDB Pipeline
+
+This document explains how to configure git operations for the JavDB pipeline.
+
+## Overview
+
+The pipeline now includes automatic git commit and push functionality that will:
+1. Add all files from the `Daily Report/` and `logs/` folders
+2. Commit them with a timestamped message
+3. Push to your GitHub repository
+
+## Setup Instructions
+
+### 1. Create Git Configuration File
+
+Copy the example configuration file:
+```bash
+cp git_config.py.example git_config.py
+```
+
+### 2. Update Git Configuration
+
+Edit `git_config.py` and update the following values:
+
+```python
+# GitHub username
+GIT_USERNAME = 'your_actual_github_username'
+
+# GitHub password or personal access token
+GIT_PASSWORD = 'your_github_password_or_personal_access_token'
+
+# GitHub repository URL
+GIT_REPO_URL = 'https://github.com/your_username/your_repo_name.git'
+
+# Git branch to push to (usually 'main' or 'master')
+GIT_BRANCH = 'main'
+```
+
+### 3. GitHub Authentication
+
+**Recommended: Use Personal Access Token**
+1. Go to GitHub Settings → Developer settings → Personal access tokens
+2. Generate a new token with `repo` permissions
+3. Use this token as `GIT_PASSWORD`
+
+**Alternative: Use GitHub Password**
+- Use your GitHub password (less secure, may not work with 2FA enabled)
+
+### 4. Repository Setup
+
+Ensure your local repository is properly configured:
+```bash
+# Check if git is initialized
+git status
+
+# If not initialized, initialize git
+git init
+
+# Add your GitHub repository as remote origin
+git remote add origin https://github.com/your_username/your_repo_name.git
+
+# Verify remote
+git remote -v
+```
+
+## Security Notes
+
+- The `git_config.py` file is automatically excluded from git commits (added to `.gitignore`)
+- Never commit your actual credentials to the repository
+- Consider using environment variables for production deployments
+
+## Pipeline Integration
+
+The git operations are automatically executed throughout the pipeline with **incremental commits**:
+1. **Step 1**: Run JavDB Spider
+2. **Step 1.5**: Commit spider results to GitHub immediately
+3. **Step 2**: Run qBittorrent Uploader  
+4. **Step 2.5**: Commit uploader results to GitHub immediately
+5. **Step 3**: Final git commit and push (in case of any remaining changes)
+
+**Benefits of Incremental Commits:**
+- You can monitor progress in GitHub even while the pipeline is running
+- Each step's results are committed separately with descriptive messages
+- If the pipeline fails partway through, you still have the completed steps committed
+- Commit messages include timestamps and step identification
+
+If any git operation fails, the pipeline will continue and report the failure in the email notification.
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Authentication Failed**
+   - Verify your username and password/token
+   - Ensure the token has `repo` permissions
+   - Check if 2FA is enabled (use token instead of password)
+
+2. **Repository Not Found**
+   - Verify the repository URL is correct
+   - Ensure the repository exists and you have access
+
+3. **Branch Issues**
+   - Check if the branch exists in your repository
+   - Update `GIT_BRANCH` to match your repository's default branch
+
+4. **No Changes to Commit**
+   - This is normal if no new files were generated
+   - The pipeline will report "No changes to commit"
+
+### Debug Mode
+
+To see detailed git operations, you can temporarily increase logging level in the pipeline script.
+
+## Example Configuration
+
+```python
+# Example git_config.py
+GIT_USERNAME = 'john_doe'
+GIT_PASSWORD = 'ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+GIT_REPO_URL = 'https://github.com/john_doe/javdb-automation.git'
+GIT_BRANCH = 'main'
+``` 
