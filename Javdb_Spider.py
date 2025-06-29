@@ -332,17 +332,20 @@ def main():
             logger.info(f"Created directory: {output_dir}")
         output_csv = args.output_file if args.output_file else OUTPUT_CSV
         csv_path = os.path.join(output_dir, output_csv)
-        use_history = False
+        use_history_for_loading = False  # Don't check history for ad hoc mode
+        use_history_for_saving = True    # But still record to history
     else:
         output_dir = DAILY_REPORT_DIR
         output_csv = args.output_file if args.output_file else OUTPUT_CSV
         csv_path = os.path.join(output_dir, output_csv)
-        use_history = True
+        use_history_for_loading = True   # Check history for daily mode
+        use_history_for_saving = True    # Record to history for daily mode
 
     logger.info("Starting JavDB spider...")
     logger.info(f"Arguments: start_page={start_page}, end_page={end_page}, phase={phase_mode}")
     if custom_url:
         logger.info(f"Custom URL: {custom_url}")
+        logger.info("AD HOC MODE: Will process all entries (no history checking) but record to history")
     if dry_run:
         logger.info("DRY RUN MODE: No CSV file will be written")
     if ignore_history:
@@ -353,10 +356,13 @@ def main():
     # Ensure Daily Report directory exists
     ensure_daily_report_dir()
 
-    # Only load and write history if use_history is True
-    if use_history:
-        history_file = os.path.join(DAILY_REPORT_DIR, PARSED_MOVIES_CSV)
+    # Initialize history file path and data
+    history_file = os.path.join(DAILY_REPORT_DIR, PARSED_MOVIES_CSV)
+    parsed_movies_history_phase1 = {}
+    parsed_movies_history_phase2 = {}
 
+    # Only load history if use_history_for_loading is True
+    if use_history_for_loading:
         # Validate history file integrity
         if os.path.exists(history_file):
             logger.info("Validating history file integrity...")
@@ -368,6 +374,7 @@ def main():
             with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
                 f.write('href,phase,video_title,parsed_date,torrent_type\n')
             logger.info(f"Created new history file: {history_file}")
+        
         if ignore_history:
             parsed_movies_history_phase1 = {}
             parsed_movies_history_phase2 = {}
@@ -376,8 +383,11 @@ def main():
             # For phase 2, load ALL history (phase 1 and 2)
             parsed_movies_history_phase2 = load_parsed_movies_history(history_file, phase=None)
     else:
-        parsed_movies_history_phase1 = {}
-        parsed_movies_history_phase2 = {}
+        # For ad hoc mode, ensure history file exists for saving
+        if use_history_for_saving and not os.path.exists(history_file):
+            with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
+                f.write('href,phase,video_title,parsed_date,torrent_type\n')
+            logger.info(f"Created new history file for ad hoc mode: {history_file}")
 
     # Create session for connection reuse
     session = requests.Session()
@@ -502,7 +512,7 @@ def main():
                 set(history_torrent_types + current_torrent_types)) if history_torrent_types else current_torrent_types
 
             # Save to parsed movies history (unless dry-run or ignore-history)
-            if use_history and not dry_run and not ignore_history:
+            if use_history_for_saving and not dry_run and not ignore_history:
                 save_parsed_movie_to_history(history_file, href, 1, entry['video-title'], all_torrent_types)
 
             # Create row
@@ -639,7 +649,7 @@ def main():
                 set(history_torrent_types + current_torrent_types)) if history_torrent_types else current_torrent_types
 
             # Save to parsed movies history (unless dry-run or ignore-history)
-            if use_history and not dry_run and not ignore_history:
+            if use_history_for_saving and not dry_run and not ignore_history:
                 save_parsed_movie_to_history(history_file, href, 2, entry['video-title'], all_torrent_types)
 
             # Create row for Phase 2
@@ -736,8 +746,10 @@ def main():
     logger.info(f"Total entries found: {len(rows)}")
     logger.info(f"Successfully processed: {len(rows)}")
     logger.info(f"Skipped already parsed in this session: {len(parsed_links)}")
-    if use_history and not ignore_history:
+    if use_history_for_loading and not ignore_history:
         logger.info(f"Skipped already parsed in previous runs: {len(parsed_movies_history_phase1)}")
+    elif custom_url:
+        logger.info("Ad hoc mode: No history checking performed")
     logger.info(f"Current parsed links in memory: {len(parsed_links)}")
 
     # Overall torrent statistics
@@ -758,7 +770,7 @@ def main():
 
     if not dry_run:
         logger.info(f"Results saved to: {csv_path}")
-        if use_history:
+        if use_history_for_saving:
             logger.info(f"History saved to: {os.path.join(DAILY_REPORT_DIR, PARSED_MOVIES_CSV)}")
     logger.info("=" * 50)
 
