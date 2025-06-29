@@ -123,7 +123,7 @@ def send_email(subject, body, attachments=None):
     logger.info('Email sent successfully.')
 
 
-def git_add_push(step):
+def git_add_commit(step):
     """Commit and push Daily Report and logs files to GitHub"""
     try:
         logger.info(f"Step {step}: Committing and pushing files to GitHub...")
@@ -185,7 +185,7 @@ def main():
 
         # Commit spider results immediately
         logger.info("Step 1.5: Committing spider results to GitHub...")
-        spider_git_success = git_add_push("spider")
+        spider_git_success = git_add_commit("spider")
         if spider_git_success:
             logger.info("✓ Spider results committed successfully")
         else:
@@ -198,7 +198,7 @@ def main():
 
         # Commit uploader results immediately
         logger.info("Step 2.5: Committing uploader results to GitHub...")
-        uploader_git_success = git_add_push("uploader")
+        uploader_git_success = git_add_commit("uploader")
         if uploader_git_success:
             logger.info("✓ Uploader results committed successfully")
         else:
@@ -206,7 +206,7 @@ def main():
 
         # 3. Final git commit and push (in case there are any remaining changes)
         logger.info("Step 3: Final commit and push to GitHub...")
-        git_success = git_add_push("final")
+        git_success = git_add_commit("final")
         if git_success:
             logger.info("✓ Final git operations completed successfully")
         else:
@@ -273,7 +273,7 @@ Error occurred at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
     # Final commit for pipeline log
     logger.info("Final commit for pipeline log...")
-    git_add_push("pipeline_log")
+    git_add_commit("pipeline_log")
     # Push to remote repository
     remote_url_with_auth = GIT_REPO_URL.replace('https://', f'https://{GIT_USERNAME}:{GIT_PASSWORD}@')
     subprocess.run(['git', 'push', remote_url_with_auth, GIT_BRANCH], check=True)
