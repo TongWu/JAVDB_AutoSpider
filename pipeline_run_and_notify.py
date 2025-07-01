@@ -344,7 +344,7 @@ JavDB Spider and qBittorrent Uploader Pipeline Completed Successfully.
 --- qBittorrent Uploader Summary ---
 {uploader_summary}
 """
-        attachments = [csv_path, SPIDER_LOG_FILE, UPLOADER_LOG_FILE]
+        attachments = [csv_path, SPIDER_LOG_FILE, UPLOADER_LOG_FILE, PIPELINE_LOG_FILE]
         try:
             send_email(
                 subject=f'JavDB Pipeline Report {today_str} - SUCCESS',
@@ -365,7 +365,7 @@ Error occurred at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             send_email(
                 subject=f'JavDB Pipeline Report {today_str} - FAILED',
                 body=body,
-                attachments=None  # No attachments for failure
+                attachments=[PIPELINE_LOG_FILE]  # Include pipeline log for debugging
             )
         except Exception as e:
             logger.error(f'Failed to send failure email: {e}')
