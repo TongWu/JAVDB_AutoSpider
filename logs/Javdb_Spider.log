@@ -1,113 +1,131 @@
-2025-07-03 20:00:01,741 - INFO - Starting JavDB spider...
-2025-07-03 20:00:01,742 - INFO - Arguments: start_page=1, end_page=20, phase=all
-2025-07-03 20:00:01,742 - INFO - Validating history file integrity...
-2025-07-03 20:00:01,743 - INFO - Loaded 131 previously parsed movies from history for phase 1
-2025-07-03 20:00:01,744 - INFO - Loaded 225 previously parsed movies from history for phase all
-2025-07-03 20:00:01,744 - INFO - ==================================================
-2025-07-03 20:00:01,745 - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-07-03 20:00:01,745 - INFO - ==================================================
-2025-07-03 20:00:02,306 - INFO - [Page 1] Found 0 entries for phase 1
-2025-07-03 20:00:02,306 - INFO - [Page 1] found 0 entries for phase 1
-2025-07-03 20:00:04,802 - INFO - [Page 2] Found 11 entries for phase 1
-2025-07-03 20:00:07,321 - INFO - [Page 3] Found 4 entries for phase 1
-2025-07-03 20:00:09,852 - INFO - [Page 4] Found 8 entries for phase 1
-2025-07-03 20:00:12,373 - INFO - [Page 5] Found 0 entries for phase 1
-2025-07-03 20:00:12,373 - INFO - [Page 5] found 0 entries for phase 1
-2025-07-03 20:00:14,888 - INFO - [Page 6] Found 0 entries for phase 1
-2025-07-03 20:00:14,888 - INFO - [Page 6] found 0 entries for phase 1
-2025-07-03 20:00:17,501 - INFO - [Page 7] Found 0 entries for phase 1
-2025-07-03 20:00:17,501 - INFO - [Page 7] found 0 entries for phase 1
-2025-07-03 20:00:17,501 - INFO - [Page 7] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
-2025-07-03 20:00:17,501 - INFO - [1/23] [Page 2] Processing /v/xaz9B
-2025-07-03 20:00:18,969 - INFO - [2/23] [Page 2] Processing /v/Mbq17v
-2025-07-03 20:00:20,433 - INFO - [3/23] [Page 2] Processing /v/Rk218z
-2025-07-03 20:00:21,936 - INFO - [4/23] [Page 2] Processing /v/mOJnDM
-2025-07-03 20:00:23,391 - INFO - [5/23] [Page 2] Processing /v/ZNdORJ
-2025-07-03 20:00:24,856 - INFO - [6/23] [Page 2] Processing /v/AqK8Vw
-2025-07-03 20:00:26,332 - INFO - [7/23] [Page 2] Processing /v/kKy7Dm
-2025-07-03 20:00:27,804 - INFO - [8/23] [Page 2] Processing /v/0ed123
-2025-07-03 20:00:29,266 - INFO - [9/23] [Page 2] Processing /v/P92Ov9
-2025-07-03 20:00:30,722 - INFO - [10/23] [Page 2] Processing /v/Mbq17R
-2025-07-03 20:00:32,203 - INFO - [11/23] [Page 2] Processing /v/WwVepR
-2025-07-03 20:00:33,675 - INFO - [12/23] [Page 3] Processing /v/mezran
-2025-07-03 20:00:35,139 - INFO - [13/23] [Page 3] Processing /v/762Od
-2025-07-03 20:00:36,630 - INFO - [14/23] [Page 3] Processing /v/6dqNXE
-2025-07-03 20:00:38,090 - INFO - [15/23] [Page 3] Processing /v/WwVe7q
-2025-07-03 20:00:39,573 - INFO - [16/23] [Page 4] Processing /v/96qZnX
-2025-07-03 20:00:41,027 - INFO - [17/23] [Page 4] Processing /v/82qYB3
-2025-07-03 20:00:42,522 - INFO - [18/23] [Page 4] Processing /v/Rk216D
-2025-07-03 20:00:43,970 - INFO - [19/23] [Page 4] Processing /v/mOJnDY
-2025-07-03 20:00:45,428 - INFO - [20/23] [Page 4] Processing /v/Xe4V34
-2025-07-03 20:00:47,055 - INFO - [21/23] [Page 4] Processing /v/bKwOkg
-2025-07-03 20:00:48,517 - INFO - [22/23] [Page 4] Processing /v/5nXbY6
-2025-07-03 20:00:49,975 - INFO - [23/23] [Page 4] Processing /v/YwrO3B
-2025-07-03 20:00:50,492 - INFO - Phase 1 completed: 11 entries processed
-2025-07-03 20:00:50,492 - INFO - ==================================================
-2025-07-03 20:00:50,492 - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4, comments > 80)
-2025-07-03 20:00:50,493 - INFO - ==================================================
-2025-07-03 20:00:51,005 - INFO - [Page 1] Found 3 entries for phase 2
-2025-07-03 20:00:53,519 - INFO - [Page 2] Found 3 entries for phase 2
-2025-07-03 20:00:56,050 - INFO - [Page 3] Found 8 entries for phase 2
-2025-07-03 20:00:58,553 - INFO - [Page 4] Found 3 entries for phase 2
-2025-07-03 20:01:01,077 - INFO - [Page 5] Found 0 entries for phase 2
-2025-07-03 20:01:01,077 - INFO - [Page 5] found 0 entries for phase 2
-2025-07-03 20:01:03,605 - INFO - [Page 6] Found 0 entries for phase 2
-2025-07-03 20:01:03,605 - INFO - [Page 6] found 0 entries for phase 2
-2025-07-03 20:01:06,110 - INFO - [Page 7] Found 0 entries for phase 2
-2025-07-03 20:01:06,111 - INFO - [Page 7] found 0 entries for phase 2
-2025-07-03 20:01:06,111 - INFO - [Page 7] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
-2025-07-03 20:01:06,111 - INFO - [1/17] [Page 1] Processing /v/yx4MvA
-2025-07-03 20:01:07,582 - INFO - [2/17] [Page 1] Processing /v/ZNd5n6
-2025-07-03 20:01:09,030 - INFO - [3/17] [Page 1] Processing /v/MbqP2Q
-2025-07-03 20:01:10,499 - INFO - [4/17] [Page 2] Processing /v/DRVWDM
-2025-07-03 20:01:11,978 - INFO - [5/17] [Page 2] Processing /v/e8OnPp
-2025-07-03 20:01:13,423 - INFO - [6/17] [Page 2] Processing /v/QNW4eG
-2025-07-03 20:01:14,899 - INFO - [7/17] [Page 3] Processing /v/Xe4DOP
-2025-07-03 20:01:16,405 - INFO - [8/17] [Page 3] Processing /v/0edmE3
-2025-07-03 20:01:17,875 - INFO - [9/17] [Page 3] Processing /v/xAgb18
-2025-07-03 20:01:19,363 - INFO - [10/17] [Page 3] Processing /v/P92Dw9
-2025-07-03 20:01:20,825 - INFO - [11/17] [Page 3] Processing /v/V4NDxq
-2025-07-03 20:01:22,309 - INFO - [12/17] [Page 3] Processing /v/Nrgrr
-2025-07-03 20:01:23,796 - INFO - [13/17] [Page 3] Processing /v/1QWOJ
-2025-07-03 20:01:25,272 - INFO - [14/17] [Page 3] Processing /v/D22yV2
-2025-07-03 20:01:26,736 - INFO - [15/17] [Page 4] Processing /v/e8OnDN
-2025-07-03 20:01:28,170 - INFO - [16/17] [Page 4] Processing /v/96q556
-2025-07-03 20:01:29,628 - INFO - [17/17] [Page 4] Processing /v/KkKDy6
-2025-07-03 20:01:31,084 - INFO - Phase 2 completed: 9 entries processed
-2025-07-03 20:01:31,084 - INFO - [FINISH] Writing results to Daily Report/Javdb_TodayTitle_20250703.csv
-2025-07-03 20:01:31,085 - INFO - ==================================================
-2025-07-03 20:01:31,085 - INFO - SUMMARY REPORT
-2025-07-03 20:01:31,085 - INFO - ==================================================
-2025-07-03 20:01:31,085 - INFO - Pages processed: 1 to 20
-2025-07-03 20:01:31,085 - INFO - Tolerance mechanism: Stops after 3 consecutive empty pages
-2025-07-03 20:01:31,085 - INFO - ==============================
-2025-07-03 20:01:31,085 - INFO - PHASE 1 SUMMARY
-2025-07-03 20:01:31,085 - INFO - ==============================
-2025-07-03 20:01:31,085 - INFO - Phase 1 entries found: 11
-2025-07-03 20:01:31,085 - INFO -   - Subtitle torrents: 11 (100.0%)
-2025-07-03 20:01:31,085 - INFO -   - Hacked subtitle torrents: 2 (18.2%)
-2025-07-03 20:01:31,085 - INFO -   - Hacked no-subtitle torrents: 1 (9.1%)
-2025-07-03 20:01:31,085 - INFO -   - No-subtitle torrents: 0 (0.0%)
-2025-07-03 20:01:31,085 - INFO - ==============================
-2025-07-03 20:01:31,086 - INFO - PHASE 2 SUMMARY
-2025-07-03 20:01:31,086 - INFO - ==============================
-2025-07-03 20:01:31,086 - INFO - Phase 2 entries found: 9
-2025-07-03 20:01:31,086 - INFO -   - Subtitle torrents: 0 (0.0%)
-2025-07-03 20:01:31,086 - INFO -   - Hacked subtitle torrents: 1 (11.1%)
-2025-07-03 20:01:31,086 - INFO -   - Hacked no-subtitle torrents: 1 (11.1%)
-2025-07-03 20:01:31,086 - INFO -   - No-subtitle torrents: 8 (88.9%)
-2025-07-03 20:01:31,086 - INFO - ==============================
-2025-07-03 20:01:31,086 - INFO - OVERALL SUMMARY
-2025-07-03 20:01:31,086 - INFO - ==============================
-2025-07-03 20:01:31,086 - INFO - Total entries found: 20
-2025-07-03 20:01:31,086 - INFO - Successfully processed: 20
-2025-07-03 20:01:31,086 - INFO - Skipped already parsed in this session: 40
-2025-07-03 20:01:31,086 - INFO - Skipped already parsed in previous runs: 131
-2025-07-03 20:01:31,086 - INFO - Current parsed links in memory: 40
-2025-07-03 20:01:31,086 - INFO - Overall subtitle torrents: 11 (55.0%)
-2025-07-03 20:01:31,086 - INFO - Overall hacked subtitle torrents: 3 (15.0%)
-2025-07-03 20:01:31,086 - INFO - Overall hacked no-subtitle torrents: 2 (10.0%)
-2025-07-03 20:01:31,086 - INFO - Overall no-subtitle torrents: 8 (40.0%)
-2025-07-03 20:01:31,086 - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20250703.csv
-2025-07-03 20:01:31,086 - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-07-03 20:01:31,086 - INFO - ==================================================
+2025-07-04 20:00:01,659 - INFO - Starting JavDB spider...
+2025-07-04 20:00:01,659 - INFO - Arguments: start_page=1, end_page=20, phase=all
+2025-07-04 20:00:01,659 - INFO - Validating history file integrity...
+2025-07-04 20:00:01,661 - INFO - Loaded 142 previously parsed movies from history for phase 1
+2025-07-04 20:00:01,663 - INFO - Loaded 243 previously parsed movies from history for phase all
+2025-07-04 20:00:01,663 - INFO - ==================================================
+2025-07-04 20:00:01,663 - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-07-04 20:00:01,663 - INFO - ==================================================
+2025-07-04 20:00:02,403 - INFO - [Page 1] Found 0 entries for phase 1
+2025-07-04 20:00:02,403 - INFO - [Page 1] found 0 entries for phase 1
+2025-07-04 20:00:05,110 - INFO - [Page 2] Found 2 entries for phase 1
+2025-07-04 20:00:07,645 - INFO - [Page 3] Found 10 entries for phase 1
+2025-07-04 20:00:10,186 - INFO - [Page 4] Found 0 entries for phase 1
+2025-07-04 20:00:10,186 - INFO - [Page 4] found 0 entries for phase 1
+2025-07-04 20:00:12,717 - INFO - [Page 5] Found 0 entries for phase 1
+2025-07-04 20:00:12,717 - INFO - [Page 5] found 0 entries for phase 1
+2025-07-04 20:00:15,276 - INFO - [Page 6] Found 11 entries for phase 1
+2025-07-04 20:00:17,843 - INFO - [Page 7] Found 0 entries for phase 1
+2025-07-04 20:00:17,843 - INFO - [Page 7] found 0 entries for phase 1
+2025-07-04 20:00:20,370 - INFO - [Page 8] Found 0 entries for phase 1
+2025-07-04 20:00:20,370 - INFO - [Page 8] found 0 entries for phase 1
+2025-07-04 20:00:22,897 - INFO - [Page 9] Found 0 entries for phase 1
+2025-07-04 20:00:22,897 - INFO - [Page 9] found 0 entries for phase 1
+2025-07-04 20:00:22,897 - INFO - [Page 9] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
+2025-07-04 20:00:22,897 - INFO - [1/23] [Page 2] Processing /v/YwrB2p
+2025-07-04 20:00:24,341 - INFO - [2/23] [Page 2] Processing /v/6dqNXE
+2025-07-04 20:00:24,796 - INFO - [3/23] [Page 3] Processing /v/e8OnDN
+2025-07-04 20:00:26,242 - INFO - [4/23] [Page 3] Processing /v/z458V5
+2025-07-04 20:00:27,691 - INFO - [5/23] [Page 3] Processing /v/V4Nx7X
+2025-07-04 20:00:29,136 - INFO - [6/23] [Page 3] Processing /v/AqKaz0
+2025-07-04 20:00:30,582 - INFO - [7/23] [Page 3] Processing /v/3nrZMz
+2025-07-04 20:00:32,030 - INFO - [8/23] [Page 3] Processing /v/Mbq3m1
+2025-07-04 20:00:33,483 - INFO - [9/23] [Page 3] Processing /v/pkq639
+2025-07-04 20:00:34,935 - INFO - [10/23] [Page 3] Processing /v/qAJBva
+2025-07-04 20:00:36,430 - INFO - [11/23] [Page 3] Processing /v/ve06Dp
+2025-07-04 20:00:37,884 - INFO - [12/23] [Page 3] Processing /v/e8OM5M
+2025-07-04 20:00:39,399 - INFO - [13/23] [Page 6] Processing /v/xaz9B
+2025-07-04 20:00:40,864 - INFO - [14/23] [Page 6] Processing /v/Mbq17v
+2025-07-04 20:00:42,368 - INFO - [15/23] [Page 6] Processing /v/Rk218z
+2025-07-04 20:00:43,805 - INFO - [16/23] [Page 6] Processing /v/mOJnDM
+2025-07-04 20:00:44,307 - INFO - [17/23] [Page 6] Processing /v/ZNdORJ
+2025-07-04 20:00:45,760 - INFO - [18/23] [Page 6] Processing /v/AqK8Vw
+2025-07-04 20:00:47,202 - INFO - [19/23] [Page 6] Processing /v/kKy7Dm
+2025-07-04 20:00:48,691 - INFO - [20/23] [Page 6] Processing /v/0ed123
+2025-07-04 20:00:49,148 - INFO - [21/23] [Page 6] Processing /v/P92Ov9
+2025-07-04 20:00:50,611 - INFO - [22/23] [Page 6] Processing /v/Mbq17R
+2025-07-04 20:00:52,062 - INFO - [23/23] [Page 6] Processing /v/WwVepR
+2025-07-04 20:00:53,507 - INFO - Phase 1 completed: 11 entries processed
+2025-07-04 20:00:53,508 - INFO - ==================================================
+2025-07-04 20:00:53,508 - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4, comments > 80)
+2025-07-04 20:00:53,508 - INFO - ==================================================
+2025-07-04 20:00:54,041 - INFO - [Page 1] Found 3 entries for phase 2
+2025-07-04 20:00:56,575 - INFO - [Page 2] Found 9 entries for phase 2
+2025-07-04 20:00:59,080 - INFO - [Page 3] Found 3 entries for phase 2
+2025-07-04 20:01:01,598 - INFO - [Page 4] Found 4 entries for phase 2
+2025-07-04 20:01:04,151 - INFO - [Page 5] Found 4 entries for phase 2
+2025-07-04 20:01:06,687 - INFO - [Page 6] Found 6 entries for phase 2
+2025-07-04 20:01:09,238 - INFO - [Page 7] Found 0 entries for phase 2
+2025-07-04 20:01:09,238 - INFO - [Page 7] found 0 entries for phase 2
+2025-07-04 20:01:11,772 - INFO - [Page 8] Found 0 entries for phase 2
+2025-07-04 20:01:11,772 - INFO - [Page 8] found 0 entries for phase 2
+2025-07-04 20:01:14,300 - INFO - [Page 9] Found 0 entries for phase 2
+2025-07-04 20:01:14,300 - INFO - [Page 9] found 0 entries for phase 2
+2025-07-04 20:01:14,300 - INFO - [Page 9] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
+2025-07-04 20:01:14,301 - INFO - [1/29] [Page 1] Processing /v/a8yNqp
+2025-07-04 20:01:15,762 - INFO - [2/29] [Page 1] Processing /v/82qYp3
+2025-07-04 20:01:17,206 - INFO - [3/29] [Page 1] Processing /v/ZNdApJ
+2025-07-04 20:01:18,660 - INFO - [4/29] [Page 2] Processing /v/mOJnXY
+2025-07-04 20:01:20,125 - INFO - [5/29] [Page 2] Processing /v/3nrDY9
+2025-07-04 20:01:21,569 - INFO - [6/29] [Page 2] Processing /v/Bzg9G6
+2025-07-04 20:01:23,040 - INFO - [7/29] [Page 2] Processing /v/E4Mp0
+2025-07-04 20:01:24,485 - INFO - [8/29] [Page 2] Processing /v/d4B8OM
+2025-07-04 20:01:25,963 - INFO - [9/29] [Page 2] Processing /v/yxr1Br
+2025-07-04 20:01:27,438 - INFO - [10/29] [Page 2] Processing /v/wdeOb
+2025-07-04 20:01:28,912 - INFO - [11/29] [Page 2] Processing /v/WwVVAg
+2025-07-04 20:01:30,372 - INFO - [12/29] [Page 2] Processing /v/96q49R
+2025-07-04 20:01:31,838 - INFO - [13/29] [Page 3] Processing /v/7yqPVB
+2025-07-04 20:01:33,299 - INFO - [14/29] [Page 3] Processing /v/GZ4BWb
+2025-07-04 20:01:34,754 - INFO - [15/29] [Page 3] Processing /v/YwrOPe
+2025-07-04 20:01:36,227 - INFO - [16/29] [Page 4] Processing /v/ZNdwOq
+2025-07-04 20:01:37,687 - INFO - [17/29] [Page 4] Processing /v/ZNd9bX
+2025-07-04 20:01:39,125 - INFO - [18/29] [Page 4] Processing /v/yx4MvA
+2025-07-04 20:01:40,578 - INFO - [19/29] [Page 4] Processing /v/Xe4xM4
+2025-07-04 20:01:42,048 - INFO - [20/29] [Page 5] Processing /v/bKwbNg
+2025-07-04 20:01:43,556 - INFO - [21/29] [Page 5] Processing /v/V4Nk0n
+2025-07-04 20:01:44,993 - INFO - [22/29] [Page 5] Processing /v/ZNd5n6
+2025-07-04 20:01:46,434 - INFO - [23/29] [Page 5] Processing /v/MbqP2Q
+2025-07-04 20:01:47,896 - INFO - [24/29] [Page 6] Processing /v/DRVWDM
+2025-07-04 20:01:49,348 - INFO - [25/29] [Page 6] Processing /v/e8OnPp
+2025-07-04 20:01:50,818 - INFO - [26/29] [Page 6] Processing /v/Mbqnxv
+2025-07-04 20:01:52,265 - INFO - [27/29] [Page 6] Processing /v/ve0yK9
+2025-07-04 20:01:53,715 - INFO - [28/29] [Page 6] Processing /v/QNW4eG
+2025-07-04 20:01:55,183 - INFO - [29/29] [Page 6] Processing /v/Xe4DOP
+2025-07-04 20:01:56,655 - INFO - Phase 2 completed: 22 entries processed
+2025-07-04 20:01:56,655 - INFO - [FINISH] Writing results to Daily Report/Javdb_TodayTitle_20250704.csv
+2025-07-04 20:01:56,656 - INFO - ==================================================
+2025-07-04 20:01:56,656 - INFO - SUMMARY REPORT
+2025-07-04 20:01:56,656 - INFO - ==================================================
+2025-07-04 20:01:56,656 - INFO - Pages processed: 1 to 20
+2025-07-04 20:01:56,656 - INFO - Tolerance mechanism: Stops after 3 consecutive empty pages
+2025-07-04 20:01:56,656 - INFO - ==============================
+2025-07-04 20:01:56,656 - INFO - PHASE 1 SUMMARY
+2025-07-04 20:01:56,656 - INFO - ==============================
+2025-07-04 20:01:56,656 - INFO - Phase 1 entries found: 11
+2025-07-04 20:01:56,656 - INFO -   - Subtitle torrents: 10 (90.9%)
+2025-07-04 20:01:56,656 - INFO -   - Hacked subtitle torrents: 1 (9.1%)
+2025-07-04 20:01:56,657 - INFO -   - Hacked no-subtitle torrents: 1 (9.1%)
+2025-07-04 20:01:56,657 - INFO -   - No-subtitle torrents: 0 (0.0%)
+2025-07-04 20:01:56,657 - INFO - ==============================
+2025-07-04 20:01:56,657 - INFO - PHASE 2 SUMMARY
+2025-07-04 20:01:56,657 - INFO - ==============================
+2025-07-04 20:01:56,657 - INFO - Phase 2 entries found: 22
+2025-07-04 20:01:56,657 - INFO -   - Subtitle torrents: 0 (0.0%)
+2025-07-04 20:01:56,657 - INFO -   - Hacked subtitle torrents: 1 (4.5%)
+2025-07-04 20:01:56,657 - INFO -   - Hacked no-subtitle torrents: 6 (27.3%)
+2025-07-04 20:01:56,657 - INFO -   - No-subtitle torrents: 22 (100.0%)
+2025-07-04 20:01:56,657 - INFO - ==============================
+2025-07-04 20:01:56,657 - INFO - OVERALL SUMMARY
+2025-07-04 20:01:56,657 - INFO - ==============================
+2025-07-04 20:01:56,657 - INFO - Total entries found: 33
+2025-07-04 20:01:56,657 - INFO - Successfully processed: 33
+2025-07-04 20:01:56,657 - INFO - Skipped already parsed in this session: 52
+2025-07-04 20:01:56,657 - INFO - Skipped already parsed in previous runs: 142
+2025-07-04 20:01:56,657 - INFO - Current parsed links in memory: 52
+2025-07-04 20:01:56,657 - INFO - Overall subtitle torrents: 10 (30.3%)
+2025-07-04 20:01:56,657 - INFO - Overall hacked subtitle torrents: 2 (6.1%)
+2025-07-04 20:01:56,658 - INFO - Overall hacked no-subtitle torrents: 7 (21.2%)
+2025-07-04 20:01:56,658 - INFO - Overall no-subtitle torrents: 22 (66.7%)
+2025-07-04 20:01:56,658 - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20250704.csv
+2025-07-04 20:01:56,658 - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-07-04 20:01:56,658 - INFO - ==================================================
