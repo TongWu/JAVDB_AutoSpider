@@ -139,21 +139,27 @@ def get_page_url(page_num, phase=1, custom_url=None):
         return f'{BASE_URL}&page={page_num}'
 
 
-def write_csv(rows, csv_path, fieldnames, dry_run=False):
+def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
     """Write results to CSV file or print if dry-run"""
     if dry_run:
         logger.info(f"[DRY RUN] Would write {len(rows)} entries to {csv_path}")
         logger.info("[DRY RUN] Sample entries:")
         for i, row in enumerate(rows[:3]):  # Show first 3 entries
-            logger.info(f"[DRY RUN] Entry {i + 1}: {row['video-title']} (Page {row['page']})")
+            logger.info(f"[DRY RUN] Entry {i + 1}: {row['video_code']} (Page {row['page']})")
         if len(rows) > 3:
             logger.info(f"[DRY RUN] ... and {len(rows) - 3} more entries")
         return
 
-    logger.info(f"[FINISH] Writing results to {csv_path}")
-    with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
+    # Determine if we need to write header (only if file doesn't exist or not in append mode)
+    write_header = not os.path.exists(csv_path) or not append_mode
+    
+    mode = 'a' if append_mode else 'w'
+    logger.info(f"[FINISH] Writing results to {csv_path} (mode: {mode})")
+    
+    with open(csv_path, mode, newline='', encoding='utf-8-sig') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
+        if write_header:
+            writer.writeheader()
         for row in rows:
             writer.writerow(row)
 
@@ -182,7 +188,7 @@ def create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet
         # New movie, apply preference rules to current magnet links
         row = {
             'href': href,
-            'video-title': entry['video-title'],
+            'video_code': entry['video_code'],
             'page': page_num,
             'actor': actor_info,
             'rate': entry['rate'],
@@ -216,12 +222,16 @@ def create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet
 
         return row
 
-    # Check which torrent types are new (not in history) and apply preference rules
+    # Movie exists in history - check what torrent types are missing
     history_torrent_types = history_data[href].get('torrent_types', [])
-
+    current_torrent_types = determine_torrent_types(magnet_links)
+    
+    # Get missing torrent types that should be added to CSV
+    missing_types = get_missing_torrent_types(history_torrent_types, current_torrent_types)
+    
     row = {
         'href': href,
-        'video-title': entry['video-title'],
+        'video_code': entry['video_code'],
         'page': page_num,
         'actor': actor_info,
         'rate': entry['rate'],
@@ -236,35 +246,26 @@ def create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet
         'size_no_subtitle': ''
     }
 
-    # Apply preference rules and check what should be included
-
-    # Rule 1: Subtitle preference - if subtitle is available, ignore no_subtitle
-    if magnet_links['subtitle']:
-        # If subtitle is available and not in history, add it
-        if 'subtitle' not in history_torrent_types:
-            row['subtitle'] = magnet_links['subtitle']
-            row['size_subtitle'] = magnet_links['size_subtitle']
-        # Always ignore no_subtitle when subtitle is available
-        # (even if no_subtitle was in history, we don't include it)
-    else:
-        # Only include no_subtitle if subtitle is not available and no_subtitle is not in history
-        if 'no_subtitle' not in history_torrent_types and magnet_links['no_subtitle']:
-            row['no_subtitle'] = magnet_links['no_subtitle']
-            row['size_no_subtitle'] = magnet_links['size_no_subtitle']
-
-    # Rule 2: Hacked subtitle preference - if hacked_subtitle is available, ignore hacked_no_subtitle
-    if magnet_links['hacked_subtitle']:
-        # If hacked_subtitle is available and not in history, add it
-        if 'hacked_subtitle' not in history_torrent_types:
-            row['hacked_subtitle'] = magnet_links['hacked_subtitle']
-            row['size_hacked_subtitle'] = magnet_links['size_hacked_subtitle']
-        # Always ignore hacked_no_subtitle when hacked_subtitle is available
-        # (even if hacked_no_subtitle was in history, we don't include it)
-    else:
-        # Only include hacked_no_subtitle if hacked_subtitle is not available and hacked_no_subtitle is not in history
-        if 'hacked_no_subtitle' not in history_torrent_types and magnet_links['hacked_no_subtitle']:
-            row['hacked_no_subtitle'] = magnet_links['hacked_no_subtitle']
-            row['size_hacked_no_subtitle'] = magnet_links['size_hacked_no_subtitle']
+    # Only add torrents that are missing from history
+    if 'hacked_subtitle' in missing_types and magnet_links['hacked_subtitle']:
+        row['hacked_subtitle'] = magnet_links['hacked_subtitle']
+        row['size_hacked_subtitle'] = magnet_links['size_hacked_subtitle']
+        logger.debug(f"Adding missing hacked_subtitle torrent for {entry['video_code']}")
+    
+    if 'hacked_no_subtitle' in missing_types and magnet_links['hacked_no_subtitle']:
+        row['hacked_no_subtitle'] = magnet_links['hacked_no_subtitle']
+        row['size_hacked_no_subtitle'] = magnet_links['size_hacked_no_subtitle']
+        logger.debug(f"Adding missing hacked_no_subtitle torrent for {entry['video_code']}")
+    
+    if 'subtitle' in missing_types and magnet_links['subtitle']:
+        row['subtitle'] = magnet_links['subtitle']
+        row['size_subtitle'] = magnet_links['size_subtitle']
+        logger.debug(f"Adding missing subtitle torrent for {entry['video_code']}")
+    
+    if 'no_subtitle' in missing_types and magnet_links['no_subtitle']:
+        row['no_subtitle'] = magnet_links['no_subtitle']
+        row['size_no_subtitle'] = magnet_links['size_no_subtitle']
+        logger.debug(f"Adding missing no_subtitle torrent for {entry['video_code']}")
 
     return row
 
@@ -372,7 +373,7 @@ def main():
         # If history file does not exist, create it with header
         if not os.path.exists(history_file):
             with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
-                f.write('href,phase,video_title,parsed_date,torrent_type\n')
+                f.write('href,phase,video_code,parsed_date,torrent_type\n')
             logger.info(f"Created new history file: {history_file}")
         
         if ignore_history:
@@ -386,7 +387,7 @@ def main():
         # For ad hoc mode, ensure history file exists for saving
         if use_history_for_saving and not os.path.exists(history_file):
             with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
-                f.write('href,phase,video_title,parsed_date,torrent_type\n')
+                f.write('href,phase,video_code,parsed_date,torrent_type\n')
             logger.info(f"Created new history file for ad hoc mode: {history_file}")
 
     # Create session for connection reuse
@@ -399,6 +400,11 @@ def main():
     subtitle_count = 0
     hacked_count = 0
     no_subtitle_count = 0
+    
+    # Define fieldnames for CSV
+    fieldnames = ['href', 'video_code', 'page', 'actor', 'rate', 'comment_number', 'hacked_subtitle',
+                  'hacked_no_subtitle', 'subtitle', 'no_subtitle', 'size_hacked_subtitle', 'size_hacked_no_subtitle',
+                  'size_subtitle', 'size_no_subtitle']
     
     # Tolerance mechanism configuration
     max_consecutive_empty = 3    # Maximum tolerance for consecutive empty pages
@@ -432,11 +438,23 @@ def main():
                                        disable_new_releases_filter=custom_url is not None)
 
             if len(page_results) == 0:
-                logger.info(f"[Page {page_num}] found 0 entries for phase 1")
-                consecutive_empty_pages += 1
-                if consecutive_empty_pages >= max_consecutive_empty:
-                    logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping phase 1")
-                    break
+                # Check if this is due to "No movie list found!" (page structure issue)
+                # or due to no eligible entries (normal filtering)
+                # We can't directly check the log, but we can infer from the HTML structure
+                soup = BeautifulSoup(index_html, 'html.parser')
+                movie_list = soup.find('div', class_='movie-list h cols-4 vcols-8')
+                
+                if not movie_list:
+                    # No movie list found in HTML - this is a page structure issue
+                    logger.info(f"[Page {page_num}] No movie list found in HTML structure (page structure issue)")
+                    consecutive_empty_pages += 1
+                    if consecutive_empty_pages >= max_consecutive_empty:
+                        logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping phase 1")
+                        break
+                else:
+                    # Movie list exists but no eligible entries found (normal filtering)
+                    logger.debug(f"[Page {page_num}] found 0 entries for phase 1 (page has content but no eligible entries)")
+                    # Don't increment consecutive_empty_pages here - the page has content, just no eligible entries
             else:
                 all_index_results.extend(page_results)
                 consecutive_empty_pages = 0  # Reset counter when we find results
@@ -472,8 +490,6 @@ def main():
 
             detail_url = urljoin(BASE_URL, href)
 
-            logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Processing {href}")
-
             # Fetch detail page
             detail_html = get_page(detail_url, session)
             if not detail_html:
@@ -481,8 +497,11 @@ def main():
                 continue
 
             # Parse detail page
-            magnets, actor_info = parse_detail(detail_html, i)
+            magnets, actor_info, video_code = parse_detail(detail_html, i)
             magnet_links = extract_magnets(magnets, i)
+
+            # Log the processing with video_code instead of href
+            logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Processing {video_code}")
 
             # Check if we should process this movie based on history and phase rules
             should_process, history_torrent_types = should_process_movie(href, parsed_movies_history_phase1, 1,
@@ -511,13 +530,11 @@ def main():
             all_torrent_types = list(
                 set(history_torrent_types + current_torrent_types)) if history_torrent_types else current_torrent_types
 
-            # Save to parsed movies history (unless dry-run or ignore-history)
-            if use_history_for_saving and not dry_run and not ignore_history:
-                save_parsed_movie_to_history(history_file, href, 1, entry['video-title'], all_torrent_types)
-
-            # Create row
+            # Create row with video_code as title
             row = create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet_links,
                                                      parsed_movies_history_phase1)
+            # Override the title with video_code
+            row['video_code'] = video_code
 
             # Only add row if it contains new torrent categories
             has_new_torrents = any([
@@ -526,12 +543,19 @@ def main():
             ])
 
             if has_new_torrents:
+                # Write to CSV immediately (before updating history)
+                write_csv([row], csv_path, fieldnames, dry_run, append_mode=True)
                 rows.append(row)
                 phase1_rows.append(row)  # Track phase 1 entries
                 logger.debug(f"[{i}/{total_entries_phase1}] [Page {page_num}] Added to CSV with new torrent categories")
+                
+                # Save to parsed movies history AFTER writing to CSV (only if new torrents found)
+                if use_history_for_saving and not dry_run and not ignore_history:
+                    save_parsed_movie_to_history(history_file, href, 1, video_code, all_torrent_types)
             else:
                 logger.debug(
                     f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipped CSV entry - all torrent categories already in history")
+                # Don't update history if no new torrents were found
 
             # Small delay to be respectful to the server
             time.sleep(1)
@@ -569,11 +593,23 @@ def main():
                                        disable_new_releases_filter=custom_url is not None)
 
             if len(page_results) == 0:
-                logger.info(f"[Page {page_num}] found 0 entries for phase 2")
-                consecutive_empty_pages += 1
-                if consecutive_empty_pages >= max_consecutive_empty:
-                    logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping phase 2")
-                    break
+                # Check if this is due to "No movie list found!" (page structure issue)
+                # or due to no eligible entries (normal filtering)
+                # We can't directly check the log, but we can infer from the HTML structure
+                soup = BeautifulSoup(index_html, 'html.parser')
+                movie_list = soup.find('div', class_='movie-list h cols-4 vcols-8')
+                
+                if not movie_list:
+                    # No movie list found in HTML - this is a page structure issue
+                    logger.info(f"[Page {page_num}] No movie list found in HTML structure (page structure issue)")
+                    consecutive_empty_pages += 1
+                    if consecutive_empty_pages >= max_consecutive_empty:
+                        logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping phase 2")
+                        break
+                else:
+                    # Movie list exists but no eligible entries found (normal filtering)
+                    logger.debug(f"[Page {page_num}] found 0 entries for phase 2 (page has content but no eligible entries)")
+                    # Don't increment consecutive_empty_pages here - the page has content, just no eligible entries
             else:
                 all_index_results_phase2.extend(page_results)
                 consecutive_empty_pages = 0  # Reset counter when we find results
@@ -609,8 +645,6 @@ def main():
 
             detail_url = urljoin(BASE_URL, href)
 
-            logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Processing {href}")
-
             # Fetch detail page
             detail_html = get_page(detail_url, session)
             if not detail_html:
@@ -618,8 +652,11 @@ def main():
                 continue
 
             # Parse detail page
-            magnets, actor_info = parse_detail(detail_html, f"P2-{i}")
+            magnets, actor_info, video_code = parse_detail(detail_html, f"P2-{i}")
             magnet_links = extract_magnets(magnets, f"P2-{i}")
+
+            # Log the processing with video_code instead of href
+            logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Processing {video_code}")
 
             # Check if we should process this movie based on history and phase rules
             should_process, history_torrent_types = should_process_movie(href, parsed_movies_history_phase2, 2,
@@ -648,13 +685,11 @@ def main():
             all_torrent_types = list(
                 set(history_torrent_types + current_torrent_types)) if history_torrent_types else current_torrent_types
 
-            # Save to parsed movies history (unless dry-run or ignore-history)
-            if use_history_for_saving and not dry_run and not ignore_history:
-                save_parsed_movie_to_history(history_file, href, 2, entry['video-title'], all_torrent_types)
-
             # Create row for Phase 2
             row = create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet_links,
                                                      parsed_movies_history_phase2)
+            # Override the title with video_code
+            row['video_code'] = video_code
 
             # Only add row if it contains new torrent categories
             has_new_torrents = any([
@@ -663,24 +698,28 @@ def main():
             ])
 
             if has_new_torrents:
+                # Write to CSV immediately (before updating history)
+                write_csv([row], csv_path, fieldnames, dry_run, append_mode=True)
                 rows.append(row)
                 phase2_rows.append(row)  # Track phase 2 entries
                 logger.debug(f"[{i}/{total_entries_phase2}] [Page {page_num}] Added to CSV with new torrent categories")
+                
+                # Save to parsed movies history AFTER writing to CSV (only if new torrents found)
+                if use_history_for_saving and not dry_run and not ignore_history:
+                    save_parsed_movie_to_history(history_file, href, 2, video_code, all_torrent_types)
             else:
                 logger.debug(
                     f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipped CSV entry - all torrent categories already in history")
+                # Don't update history if no new torrents were found
 
             # Small delay to be respectful to the server
             time.sleep(1)
 
         logger.info(f"Phase 2 completed: {len(phase2_rows)} entries processed")
 
-    # Write CSV to output_dir
-    fieldnames = ['href', 'video-title', 'page', 'actor', 'rate', 'comment_number', 'hacked_subtitle',
-                  'hacked_no_subtitle', 'subtitle', 'no_subtitle', 'size_hacked_subtitle', 'size_hacked_no_subtitle',
-                  'size_subtitle', 'size_no_subtitle']
-
-    write_csv(rows, csv_path, fieldnames, dry_run)
+    # CSV has been written incrementally during processing
+    if not dry_run:
+        logger.info(f"CSV file written incrementally to: {csv_path}")
 
     # Generate summary
     logger.info("=" * 50)
@@ -691,7 +730,7 @@ def main():
     else:
         logger.info(f"Pages processed: {start_page} to {end_page}")
     
-    logger.info(f"Tolerance mechanism: Stops after {max_consecutive_empty} consecutive empty pages")
+    logger.info(f"Tolerance mechanism: Stops after {max_consecutive_empty} consecutive pages with no HTML content")
 
     # Phase 1 Summary
     if phase_mode in ['1', 'all']:
