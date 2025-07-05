@@ -39,7 +39,7 @@ def load_parsed_movies_history(history_file, phase=None):
                     # Load all records (for general checking)
                     history[href] = {
                         'phase': row['phase'],
-                        'video_title': row['video_title'],
+                        'video_code': row['video_code'],
                         'parsed_date': row['parsed_date'],
                         'torrent_types': torrent_types
                     }
@@ -48,7 +48,7 @@ def load_parsed_movies_history(history_file, phase=None):
                     if row['phase'] != '2':
                         history[href] = {
                             'phase': row['phase'],
-                            'video_title': row['video_title'],
+                            'video_code': row['video_code'],
                             'parsed_date': row['parsed_date'],
                             'torrent_types': torrent_types
                         }
@@ -56,7 +56,7 @@ def load_parsed_movies_history(history_file, phase=None):
                     # For phase 2, load all history records (same as phase 1)
                     history[href] = {
                         'phase': row['phase'],
-                        'video_title': row['video_title'],
+                        'video_code': row['video_code'],
                         'parsed_date': row['parsed_date'],
                         'torrent_types': torrent_types
                     }
@@ -84,7 +84,7 @@ def cleanup_history_file(history_file, href_records):
 
         # Write cleaned records back to file
         with open(history_file, 'w', newline='', encoding='utf-8-sig') as f:
-            fieldnames = ['href', 'phase', 'video_title', 'parsed_date', 'torrent_type']
+            fieldnames = ['href', 'phase', 'video_code', 'parsed_date', 'torrent_type']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for record in sorted_records:
@@ -119,7 +119,7 @@ def maintain_history_limit(history_file, max_records=1000):
 
             # Rewrite the file with remaining records
             with open(history_file, 'w', newline='', encoding='utf-8-sig') as f:
-                fieldnames = ['href', 'phase', 'video_title', 'parsed_date', 'torrent_type']
+                fieldnames = ['href', 'phase', 'video_code', 'parsed_date', 'torrent_type']
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 for record in records:
@@ -131,7 +131,7 @@ def maintain_history_limit(history_file, max_records=1000):
         logger.error(f"Error maintaining history limit: {e}")
 
 
-def save_parsed_movie_to_history(history_file, href, phase, video_title, torrent_types=None):
+def save_parsed_movie_to_history(history_file, href, phase, video_code, torrent_types=None):
     """Save a parsed movie to the history CSV file, updating existing records"""
 
     if torrent_types is None:
@@ -173,7 +173,7 @@ def save_parsed_movie_to_history(history_file, href, phase, video_title, torrent
     new_record = {
         'href': href,
         'phase': phase,
-        'video_title': video_title,
+        'video_code': video_code,
         'parsed_date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         'torrent_type': torrent_types_str
     }
@@ -182,7 +182,7 @@ def save_parsed_movie_to_history(history_file, href, phase, video_title, torrent
     # Write all records back to file
     try:
         with open(history_file, 'w', newline='', encoding='utf-8-sig') as f:
-            fieldnames = ['href', 'phase', 'video_title', 'parsed_date', 'torrent_type']
+            fieldnames = ['href', 'phase', 'video_code', 'parsed_date', 'torrent_type']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for record in records:
@@ -271,31 +271,34 @@ def determine_torrent_type(magnet_links):
 
 def get_missing_torrent_types(history_torrent_types, current_torrent_types):
     """Return the preferred types (hacked_subtitle, subtitle) that are missing, applying preference rules."""
-    all_types = set(history_torrent_types) | set(current_torrent_types)
-
-    # Check what we have in the combined set
-    has_hacked_subtitle = 'hacked_subtitle' in all_types
-    has_hacked_no_subtitle = 'hacked_no_subtitle' in all_types
-    has_subtitle = 'subtitle' in all_types
-    has_no_subtitle = 'no_subtitle' in all_types
-
     missing_types = []
 
+    # Check what we have in history vs what's currently available
+    has_hacked_subtitle_in_history = 'hacked_subtitle' in history_torrent_types
+    has_hacked_no_subtitle_in_history = 'hacked_no_subtitle' in history_torrent_types
+    has_subtitle_in_history = 'subtitle' in history_torrent_types
+    has_no_subtitle_in_history = 'no_subtitle' in history_torrent_types
+
+    has_hacked_subtitle_current = 'hacked_subtitle' in current_torrent_types
+    has_hacked_no_subtitle_current = 'hacked_no_subtitle' in current_torrent_types
+    has_subtitle_current = 'subtitle' in current_torrent_types
+    has_no_subtitle_current = 'no_subtitle' in current_torrent_types
+
     # Check for missing hacked category (prefer hacked_subtitle over hacked_no_subtitle)
-    if not has_hacked_subtitle and not has_hacked_no_subtitle:
-        # No hacked version at all
+    if has_hacked_subtitle_current and not has_hacked_subtitle_in_history:
+        # Current has hacked_subtitle but history doesn't - add it
         missing_types.append('hacked_subtitle')
-    elif has_hacked_no_subtitle and not has_hacked_subtitle:
-        # Have hacked_no_subtitle but not hacked_subtitle - could upgrade
-        missing_types.append('hacked_subtitle')
+    elif has_hacked_no_subtitle_current and not has_hacked_no_subtitle_in_history and not has_hacked_subtitle_in_history:
+        # Current has hacked_no_subtitle but history doesn't have any hacked version
+        missing_types.append('hacked_no_subtitle')
 
     # Check for missing subtitle category (prefer subtitle over no_subtitle)
-    if not has_subtitle and not has_no_subtitle:
-        # No subtitle version at all
+    if has_subtitle_current and not has_subtitle_in_history:
+        # Current has subtitle but history doesn't - add it
         missing_types.append('subtitle')
-    elif has_no_subtitle and not has_subtitle:
-        # Have no_subtitle but not subtitle - could upgrade
-        missing_types.append('subtitle')
+    elif has_no_subtitle_current and not has_no_subtitle_in_history and not has_subtitle_in_history:
+        # Current has no_subtitle but history doesn't have any subtitle version
+        missing_types.append('no_subtitle')
 
     return missing_types
 
