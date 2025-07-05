@@ -1,6 +1,7 @@
 import re
 import logging
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
+from bs4.element import Tag
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +42,8 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                 has_subtitle = ('含中字磁鏈' in tags or '含中字磁链' in tags or 'CnSub DL' in tags)
                 if has_subtitle:
                     href = a.get('href', '')
-                    video_title = a.find('div', class_='video-title')
-                    video_title = video_title.get_text(strip=True) if video_title else ''
+                    video_code = a.find('div', class_='video-title')
+                    video_code = video_code.get_text(strip=True) if video_code else ''
                     
                     # Extract rating information
                     rate = ''
@@ -67,11 +68,11 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                             if comment_match:
                                 comment_number = comment_match.group(1)
                     
-                    logger.debug(f"[Page {page_num}] Found entry (filter disabled): {video_title} ({href})")
+                    logger.debug(f"[Page {page_num}] Found entry (filter disabled): {video_code} ({href})")
                     
                     results.append({
                         'href': href,
-                        'video-title': video_title,
+                        'video_code': video_code,
                         'page': page_num,
                         'actor': '',  # Will be filled from detail page
                         'rate': rate,
@@ -84,8 +85,8 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                     ('CnSub DL' in tags and ('Today' in tags or 'Yesterday' in tags))):
                     
                     href = a.get('href', '')
-                    video_title = a.find('div', class_='video-title')
-                    video_title = video_title.get_text(strip=True) if video_title else ''
+                    video_code = a.find('div', class_='video-title')
+                    video_code = video_code.get_text(strip=True) if video_code else ''
                     
                     # Extract rating information
                     rate = ''
@@ -110,11 +111,11 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                             if comment_match:
                                 comment_number = comment_match.group(1)
                     
-                    logger.debug(f"[Page {page_num}] Found entry: {video_title} ({href})")
+                    logger.debug(f"[Page {page_num}] Found entry: {video_code} ({href})")
                     
                     results.append({
                         'href': href,
-                        'video-title': video_title,
+                        'video_code': video_code,
                         'page': page_num,
                         'actor': '',  # Will be filled from detail page
                         'rate': rate,
@@ -128,8 +129,8 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                 # Skip if it has subtitle tag (already processed in phase 1)
                 if not (('含中字磁鏈' in tags or '含中字磁链' in tags or 'CnSub DL' in tags)):
                     href = a.get('href', '')
-                    video_title = a.find('div', class_='video-title')
-                    video_title = video_title.get_text(strip=True) if video_title else ''
+                    video_code = a.find('div', class_='video-title')
+                    video_code = video_code.get_text(strip=True) if video_code else ''
                     
                     # Extract rating information
                     rate = ''
@@ -160,20 +161,20 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                         rate_num = float(rate) if rate else 0
                         
                         if comment_num > 80 and rate_num > 4:
-                            logger.debug(f"[Page {page_num}] Found entry (filter disabled): {video_title} ({href}) - Rate: {rate}, Comments: {comment_number}")
+                            logger.debug(f"[Page {page_num}] Found entry (filter disabled): {video_code} ({href}) - Rate: {rate}, Comments: {comment_number}")
                             
                             results.append({
                                 'href': href,
-                                'video-title': video_title,
+                                'video_code': video_code,
                                 'page': page_num,
                                 'actor': '',  # Will be filled from detail page
                                 'rate': rate,
                                 'comment_number': comment_number
                             })
                         else:
-                            logger.debug(f"[Page {page_num}] Skipped entry (filtered): {video_title} - Rate: {rate}, Comments: {comment_number}")
+                            logger.debug(f"[Page {page_num}] Skipped entry (filtered): {video_code} - Rate: {rate}, Comments: {comment_number}")
                     except (ValueError, TypeError):
-                        logger.debug(f"[Page {page_num}] Skipped entry (invalid data): {video_title} - Rate: {rate}, Comments: {comment_number}")
+                        logger.debug(f"[Page {page_num}] Skipped entry (invalid data): {video_code} - Rate: {rate}, Comments: {comment_number}")
             else:
                 # Original logic: check for new releases tags only
                 if (('今日新種' in tags or '昨日新種' in tags) or 
@@ -182,8 +183,8 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                     # Skip if it also has subtitle tag (already processed in phase 1)
                     if not (('含中字磁鏈' in tags or '含中字磁链' in tags or 'CnSub DL' in tags)):
                         href = a.get('href', '')
-                        video_title = a.find('div', class_='video-title')
-                        video_title = video_title.get_text(strip=True) if video_title else ''
+                        video_code = a.find('div', class_='video-title')
+                        video_code = video_code.get_text(strip=True) if video_code else ''
                         
                         # Extract rating information
                         rate = ''
@@ -214,20 +215,20 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                             rate_num = float(rate) if rate else 0
                             
                             if comment_num > 80 and rate_num > 4:
-                                logger.debug(f"[Page {page_num}] Found entry: {video_title} ({href}) - Rate: {rate}, Comments: {comment_number}")
+                                logger.debug(f"[Page {page_num}] Found entry: {video_code} ({href}) - Rate: {rate}, Comments: {comment_number}")
                                 
                                 results.append({
                                     'href': href,
-                                    'video-title': video_title,
+                                    'video_code': video_code,
                                     'page': page_num,
                                     'actor': '',  # Will be filled from detail page
                                     'rate': rate,
                                     'comment_number': comment_number
                                 })
                             else:
-                                logger.debug(f"[Page {page_num}] Skipped entry (filtered): {video_title} - Rate: {rate}, Comments: {comment_number}")
+                                logger.debug(f"[Page {page_num}] Skipped entry (filtered): {video_code} - Rate: {rate}, Comments: {comment_number}")
                         except (ValueError, TypeError):
-                            logger.debug(f"[Page {page_num}] Skipped entry (invalid data): {video_title} - Rate: {rate}, Comments: {comment_number}")
+                            logger.debug(f"[Page {page_num}] Skipped entry (invalid data): {video_code} - Rate: {rate}, Comments: {comment_number}")
     
     logger.info(f"[Page {page_num}] Found {len(results)} entries for phase {phase}")
     return results
@@ -237,8 +238,17 @@ def parse_detail(html_content, index=None):
     soup = BeautifulSoup(html_content, 'html.parser')
     magnets = []
     actor_info = ''
+    video_code = ''
     
     prefix = f"[{index}]" if index is not None else ""
+    
+    # Extract movie code from the copy button
+    copy_button = soup.find('a', class_='button is-white copy-to-clipboard')
+    if copy_button:
+        video_code = copy_button.get('data-clipboard-text', '')
+        logger.debug(f"{prefix} Found video code: {video_code}")
+    else:
+        logger.warning(f"{prefix} No copy button found for video code")
     
     # Extract actor information from the detail page
     video_meta_panel = soup.find('div', class_='video-meta-panel')
@@ -261,7 +271,7 @@ def parse_detail(html_content, index=None):
     magnets_content = soup.find('div', id='magnets-content')
     if not magnets_content:
         logger.warning(f"{prefix} No magnets content found in detail page")
-        return magnets, actor_info
+        return magnets, actor_info, video_code
     
     for item in magnets_content.find_all('div', class_=re.compile(r'item columns is-desktop')):
         magnet_name_div = item.find('div', class_='magnet-name')
@@ -311,4 +321,4 @@ def parse_detail(html_content, index=None):
         })
     
     logger.debug(f"{prefix} Found {len(magnets)} magnet links")
-    return magnets, actor_info 
+    return magnets, actor_info, video_code
