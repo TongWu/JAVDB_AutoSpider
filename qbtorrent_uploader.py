@@ -155,7 +155,7 @@ def read_csv_file(filename):
                 if row.get('hacked_subtitle') and row['hacked_subtitle'].strip():
                     torrents.append({
                         'magnet': row['hacked_subtitle'].strip(),
-                        'title': f"{row['video-title']} [破解+字幕]",
+                        'title': f"{row['video_code']} [破解+字幕]",
                         'page': row.get('page', 'N/A'),
                         'type': 'hacked_subtitle'
                     })
@@ -163,7 +163,7 @@ def read_csv_file(filename):
                 if row.get('hacked_no_subtitle') and row['hacked_no_subtitle'].strip():
                     torrents.append({
                         'magnet': row['hacked_no_subtitle'].strip(),
-                        'title': f"{row['video-title']} [破解无字幕]",
+                        'title': f"{row['video_code']} [破解无字幕]",
                         'page': row.get('page', 'N/A'),
                         'type': 'hacked_no_subtitle'
                     })
@@ -171,7 +171,7 @@ def read_csv_file(filename):
                 if row.get('subtitle') and row['subtitle'].strip():
                     torrents.append({
                         'magnet': row['subtitle'].strip(),
-                        'title': f"{row['video-title']} [字幕]",
+                        'title': f"{row['video_code']} [字幕]",
                         'page': row.get('page', 'N/A'),
                         'type': 'subtitle'
                     })
@@ -179,7 +179,7 @@ def read_csv_file(filename):
                 if row.get('no_subtitle') and row['no_subtitle'].strip():
                     torrents.append({
                         'magnet': row['no_subtitle'].strip(),
-                        'title': f"{row['video-title']} [无字幕]",
+                        'title': f"{row['video_code']} [无字幕]",
                         'page': row.get('page', 'N/A'),
                         'type': 'no_subtitle'
                     })
