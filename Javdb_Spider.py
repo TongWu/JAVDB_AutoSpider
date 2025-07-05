@@ -22,7 +22,7 @@ try:
     from config import (
         BASE_URL, START_PAGE, END_PAGE,
         DAILY_REPORT_DIR, AD_HOC_DIR, PARSED_MOVIES_CSV,
-        SPIDER_LOG_FILE, LOG_LEVEL
+        SPIDER_LOG_FILE, LOG_LEVEL, DETAIL_PAGE_SLEEP, PAGE_SLEEP, MOVIE_SLEEP
     )
 except ImportError:
     # Fallback values if config.py doesn't exist
@@ -34,6 +34,9 @@ except ImportError:
     PARSED_MOVIES_CSV = 'parsed_movies_history.csv'
     SPIDER_LOG_FILE = 'logs/Javdb_Spider.log'
     LOG_LEVEL = 'INFO'
+    DETAIL_PAGE_SLEEP = 5
+    PAGE_SLEEP = 2
+    MOVIE_SLEEP = 1
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
@@ -471,7 +474,7 @@ def main():
             page_num += 1
 
             # Small delay between pages
-            time.sleep(2)
+            time.sleep(PAGE_SLEEP)
 
         # Process phase 1 entries
         total_entries_phase1 = len(all_index_results)
@@ -558,7 +561,7 @@ def main():
                 # Don't update history if no new torrents were found
 
             # Small delay to be respectful to the server
-            time.sleep(1)
+            time.sleep(MOVIE_SLEEP)
 
         logger.info(f"Phase 1 completed: {len(phase1_rows)} entries processed")
 
@@ -626,7 +629,7 @@ def main():
             page_num += 1
 
             # Small delay between pages
-            time.sleep(2)
+            time.sleep(PAGE_SLEEP)
 
         # Process phase 2 entries
         total_entries_phase2 = len(all_index_results_phase2)
@@ -713,7 +716,7 @@ def main():
                 # Don't update history if no new torrents were found
 
             # Small delay to be respectful to the server
-            time.sleep(1)
+            time.sleep(MOVIE_SLEEP)
 
         logger.info(f"Phase 2 completed: {len(phase2_rows)} entries processed")
 
