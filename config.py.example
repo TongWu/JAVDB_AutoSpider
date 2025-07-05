@@ -67,6 +67,11 @@ END_PAGE = 20
 # Base URL for JavDB
 BASE_URL = 'https://javdb.com'
 
+# Sleep time configuration (in seconds)
+DETAIL_PAGE_SLEEP = 5  # Sleep time before parsing detail pages to avoid DDoS protection
+PAGE_SLEEP = 2  # Sleep time between pages
+MOVIE_SLEEP = 1  # Sleep time between movies
+
 # =============================================================================
 # LOGGING CONFIGURATION
 # =============================================================================
