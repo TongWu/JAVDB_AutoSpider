@@ -1,7 +1,15 @@
 import re
 import logging
+import time
 from bs4 import BeautifulSoup
 from bs4.element import Tag
+
+# Import configuration
+try:
+    from config import DETAIL_PAGE_SLEEP
+except ImportError:
+    # Fallback value if config.py doesn't exist
+    DETAIL_PAGE_SLEEP = 5
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +243,9 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
 
 def parse_detail(html_content, index=None):
     """Parse the detail page to extract magnet links and actor information"""
+    # Wait to be respectful to JavDB website and avoid DDoS protection
+    time.sleep(DETAIL_PAGE_SLEEP)
+    
     soup = BeautifulSoup(html_content, 'html.parser')
     magnets = []
     actor_info = ''
