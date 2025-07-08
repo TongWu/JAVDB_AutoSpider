@@ -22,7 +22,8 @@ try:
     from config import (
         BASE_URL, START_PAGE, END_PAGE,
         DAILY_REPORT_DIR, AD_HOC_DIR, PARSED_MOVIES_CSV,
-        SPIDER_LOG_FILE, LOG_LEVEL, DETAIL_PAGE_SLEEP, PAGE_SLEEP, MOVIE_SLEEP
+        SPIDER_LOG_FILE, LOG_LEVEL, DETAIL_PAGE_SLEEP, PAGE_SLEEP, MOVIE_SLEEP,
+        JAVDB_SESSION_COOKIE
     )
 except ImportError:
     # Fallback values if config.py doesn't exist
@@ -37,6 +38,7 @@ except ImportError:
     DETAIL_PAGE_SLEEP = 5
     PAGE_SLEEP = 2
     MOVIE_SLEEP = 1
+    JAVDB_SESSION_COOKIE = None
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
@@ -96,7 +98,7 @@ def ensure_daily_report_dir():
         logger.info(f"Created directory: {DAILY_REPORT_DIR}")
 
 
-def get_page(url, session=None):
+def get_page(url, session=None, use_cookie=False):
     """Fetch a webpage with proper headers"""
     if session is None:
         session = requests.Session()
@@ -114,6 +116,10 @@ def get_page(url, session=None):
         'Sec-Fetch-User': '?1',
         'Cache-Control': 'max-age=0',
     }
+    
+    # Only add cookie if use_cookie is True and JAVDB_SESSION_COOKIE is configured
+    if use_cookie and JAVDB_SESSION_COOKIE:
+        headers['Cookie'] = f'_jdb_session={JAVDB_SESSION_COOKIE}'
 
     try:
         logger.debug(f"Fetching URL: {url}")
@@ -426,7 +432,7 @@ def main():
             logger.debug(f"[Page {page_num}] Fetching: {page_url}")
 
             # Fetch index page
-            index_html = get_page(page_url, session)
+            index_html = get_page(page_url, session, use_cookie=custom_url is not None)
             if not index_html:
                 logger.info(f"[Page {page_num}] no movie list found (page fetch failed or does not exist)")
                 consecutive_empty_pages += 1
@@ -494,7 +500,7 @@ def main():
             detail_url = urljoin(BASE_URL, href)
 
             # Fetch detail page
-            detail_html = get_page(detail_url, session)
+            detail_html = get_page(detail_url, session, use_cookie=custom_url is not None)
             if not detail_html:
                 logger.error(f"[{i}/{total_entries_phase1}] [Page {page_num}] Failed to fetch detail page")
                 continue
@@ -581,7 +587,7 @@ def main():
             logger.debug(f"[Page {page_num}] Fetching for phase 2: {page_url}")
 
             # Fetch index page
-            index_html = get_page(page_url, session)
+            index_html = get_page(page_url, session, use_cookie=custom_url is not None)
             if not index_html:
                 logger.info(f"[Page {page_num}] no movie list found (page fetch failed or does not exist)")
                 consecutive_empty_pages += 1
@@ -649,7 +655,7 @@ def main():
             detail_url = urljoin(BASE_URL, href)
 
             # Fetch detail page
-            detail_html = get_page(detail_url, session)
+            detail_html = get_page(detail_url, session, use_cookie=custom_url is not None)
             if not detail_html:
                 logger.error(f"[{i}/{total_entries_phase2}] [Page {page_num}] Failed to fetch detail page")
                 continue
