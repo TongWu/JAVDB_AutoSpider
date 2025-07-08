@@ -67,6 +67,11 @@ END_PAGE = 20
 # Base URL for JavDB
 BASE_URL = 'https://javdb.com'
 
+# JavDB session cookie (only needed for custom URL mode)
+# Get this value from your browser's developer tools → Application → Cookies → _jdb_session
+# Only enter the value part, not including "_jdb_session="
+JAVDB_SESSION_COOKIE = 'your_javdb_session_cookie_value_here'
+
 # Sleep time configuration (in seconds)
 DETAIL_PAGE_SLEEP = 5  # Sleep time before parsing detail pages to avoid DDoS protection
 PAGE_SLEEP = 2  # Sleep time between pages
