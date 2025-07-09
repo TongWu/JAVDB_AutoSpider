@@ -1,7 +1,32 @@
-2025-07-09 22:31:47,866 - INFO - Starting qBittorrent uploader...
-2025-07-09 22:31:47,866 - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250709.csv
-2025-07-09 22:31:47,866 - INFO - Adding downloaded indicators to CSV file...
-2025-07-09 22:31:47,867 - INFO - Added downloaded indicators to Daily Report/Javdb_TodayTitle_20250709.csv
-2025-07-09 22:31:47,867 - INFO - Found 0 torrent links in Daily Report/Javdb_TodayTitle_20250709.csv
-2025-07-09 22:31:47,867 - INFO - Skipped 24 already downloaded torrents
-2025-07-09 22:31:47,867 - WARNING - No torrent links found in CSV file
+2025-07-09 22:44:27,589 - INFO - Starting qBittorrent uploader...
+2025-07-09 22:44:27,589 - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250709.csv
+2025-07-09 22:44:27,589 - INFO - Found 12 torrent links in Daily Report/Javdb_TodayTitle_20250709.csv
+2025-07-09 22:44:27,589 - INFO - Attempting to login to qBittorrent at http://192.168.1.2:12301
+2025-07-09 22:44:27,744 - INFO - Successfully logged in to qBittorrent
+2025-07-09 22:44:27,745 - INFO - History manager imported, will update downloaded status
+2025-07-09 22:44:27,745 - INFO - Starting to add 12 torrents to qBittorrent...
+2025-07-09 22:44:27,745 - INFO - [1/12] Adding: IPZZ-574 [Hacked+Subtitle]
+2025-07-09 22:44:28,757 - INFO - [2/12] Adding: IPZZ-575 [Subtitle]
+2025-07-09 22:44:29,778 - INFO - [3/12] Adding: IPZZ-599 [Subtitle]
+2025-07-09 22:44:30,797 - INFO - [4/12] Adding: IPZZ-601 [Subtitle]
+2025-07-09 22:44:31,815 - INFO - [5/12] Adding: IPZZ-602 [Subtitle]
+2025-07-09 22:44:32,820 - INFO - [6/12] Adding: IPZZ-604 [Subtitle]
+2025-07-09 22:44:33,840 - INFO - [7/12] Adding: SONE-758 [Subtitle]
+2025-07-09 22:44:34,848 - INFO - [8/12] Adding: SONE-795 [Subtitle]
+2025-07-09 22:44:35,864 - INFO - [9/12] Adding: SONE-798 [Subtitle]
+2025-07-09 22:44:36,879 - INFO - [10/12] Adding: SONE-804 [Subtitle]
+2025-07-09 22:44:37,885 - INFO - [11/12] Adding: SONE-805 [Subtitle]
+2025-07-09 22:44:38,897 - INFO - [12/12] Adding: MFCW-053 [NoSubtitle]
+2025-07-09 22:44:39,914 - INFO - ==================================================
+2025-07-09 22:44:39,914 - INFO - UPLOAD SUMMARY
+2025-07-09 22:44:39,914 - INFO - ==================================================
+2025-07-09 22:44:39,914 - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250709.csv
+2025-07-09 22:44:39,914 - INFO - Total torrents found: 12
+2025-07-09 22:44:39,915 - INFO - Successfully added: 12
+2025-07-09 22:44:39,915 - INFO -   - Hacked subtitle torrents: 1
+2025-07-09 22:44:39,915 - INFO -   - Hacked no subtitle torrents: 0
+2025-07-09 22:44:39,915 - INFO -   - Subtitle torrents: 10
+2025-07-09 22:44:39,915 - INFO -   - No subtitle torrents: 1
+2025-07-09 22:44:39,915 - INFO - Failed to add: 0
+2025-07-09 22:44:39,915 - INFO - Success rate: 100.0%
+2025-07-09 22:44:39,915 - INFO - ==================================================
