@@ -1,7 +1,7 @@
-2025-07-09 22:53:43,568 - INFO - Starting qBittorrent uploader...
-2025-07-09 22:53:43,568 - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250709.csv
-2025-07-09 22:53:43,568 - INFO - Adding downloaded indicators to CSV file...
-2025-07-09 22:53:43,569 - INFO - Added downloaded indicators to Daily Report/Javdb_TodayTitle_20250709.csv
-2025-07-09 22:53:43,569 - INFO - Found 0 torrent links in Daily Report/Javdb_TodayTitle_20250709.csv
-2025-07-09 22:53:43,569 - INFO - Skipped 10 already downloaded torrents
-2025-07-09 22:53:43,569 - WARNING - No torrent links found in CSV file
+2025-07-09 23:18:04,291 - INFO - Starting qBittorrent uploader...
+2025-07-09 23:18:04,291 - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250709.csv
+2025-07-09 23:18:04,291 - INFO - Adding downloaded indicators to CSV file...
+2025-07-09 23:18:04,293 - INFO - Added downloaded indicators to Daily Report/Javdb_TodayTitle_20250709.csv
+2025-07-09 23:18:04,293 - INFO - Found 0 torrent links in Daily Report/Javdb_TodayTitle_20250709.csv
+2025-07-09 23:18:04,293 - INFO - Skipped 21 already downloaded torrents
+2025-07-09 23:18:04,293 - WARNING - No torrent links found in CSV file
