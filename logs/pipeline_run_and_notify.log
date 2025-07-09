@@ -1569,3 +1569,49 @@ Pulling latest changes from remote repository...
 ✓ Successfully pulled latest changes from remote
 Adding files to git...
 Commit changes for pipeline_log
+Ad hoc mode detected. Expected CSV: Ad Hoc/Javdb_AdHoc_tags_20250709.csv
+============================================================
+STARTING JAVDB PIPELINE
+MODE: Ad Hoc
+Custom URL: https://javdb.com/tags?c6=60&c10=2
+============================================================
+Step 1: Running JavDB Spider...
+Running: python3 Javdb_Spider.py --url https://javdb.com/tags?c6=60&c10=2
+Ad hoc mode detected. Expected CSV: Ad Hoc/Javdb_AdHoc_actors_RdE77_20250709.csv
+============================================================
+STARTING JAVDB PIPELINE
+MODE: Ad Hoc
+Custom URL: https://javdb.com/actors/RdE77
+============================================================
+Step 1: Running JavDB Spider...
+Running: python3 Javdb_Spider.py --url https://javdb.com/actors/RdE77
+Ad hoc mode detected. Expected CSV: Ad Hoc/Javdb_AdHoc_tags_20250709.csv
+============================================================
+STARTING JAVDB PIPELINE
+MODE: Ad Hoc
+Custom URL: https://javdb.com/tags?c10=2&c6=60
+============================================================
+Step 1: Running JavDB Spider...
+Running: python3 Javdb_Spider.py --url https://javdb.com/tags?c10=2&c6=60
+Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20250709.csv
+============================================================
+STARTING JAVDB PIPELINE
+MODE: Daily
+============================================================
+Step 1: Running JavDB Spider...
+Running: python3 Javdb_Spider.py
+✓ JavDB Spider completed successfully
+Step 2: Running qBittorrent Uploader...
+Running: python3 qbtorrent_uploader.py --mode daily
+✓ qBittorrent Uploader completed successfully
+============================================================
+PIPELINE COMPLETED SUCCESSFULLY
+============================================================
+Connecting to SMTP server...
+Email sent successfully.
+Final commit for pipeline log...
+Step pipeline_log: Committing and pushing files to GitHub...
+Pulling latest changes from remote repository...
+✓ Successfully pulled latest changes from remote
+Adding files to git...
+Commit changes for pipeline_log
