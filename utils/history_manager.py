@@ -23,9 +23,9 @@ def load_parsed_movies_history(history_file, phase=None):
                 if href not in href_records:
                     href_records[href] = row
                 else:
-                    # If we already have a record for this href, keep the most recent one
-                    existing_date = href_records[href]['parsed_date']
-                    current_date = row['parsed_date']
+                    # If we already have a record for this href, keep the one with the most recent update_date
+                    existing_date = href_records[href].get('update_date', href_records[href].get('parsed_date', ''))
+                    current_date = row.get('update_date', row.get('parsed_date', ''))
                     if current_date > existing_date:
                         href_records[href] = row
 
@@ -35,12 +35,17 @@ def load_parsed_movies_history(history_file, phase=None):
                 torrent_types_str = row.get('torrent_type', 'no_subtitle')
                 torrent_types = [t.strip() for t in torrent_types_str.split(',') if t.strip()]
 
+                # Handle backward compatibility for old format (parsed_date)
+                create_date = row.get('create_date', row.get('parsed_date', ''))
+                update_date = row.get('update_date', row.get('parsed_date', ''))
+
                 if phase is None:
                     # Load all records (for general checking)
                     history[href] = {
                         'phase': row['phase'],
                         'video_code': row['video_code'],
-                        'parsed_date': row['parsed_date'],
+                        'create_date': create_date,
+                        'update_date': update_date,
                         'torrent_types': torrent_types
                     }
                 elif phase == 1:
@@ -49,7 +54,8 @@ def load_parsed_movies_history(history_file, phase=None):
                         history[href] = {
                             'phase': row['phase'],
                             'video_code': row['video_code'],
-                            'parsed_date': row['parsed_date'],
+                            'create_date': create_date,
+                            'update_date': update_date,
                             'torrent_types': torrent_types
                         }
                 elif phase == 2:
@@ -57,7 +63,8 @@ def load_parsed_movies_history(history_file, phase=None):
                     history[href] = {
                         'phase': row['phase'],
                         'video_code': row['video_code'],
-                        'parsed_date': row['parsed_date'],
+                        'create_date': create_date,
+                        'update_date': update_date,
                         'torrent_types': torrent_types
                     }
 
@@ -66,8 +73,20 @@ def load_parsed_movies_history(history_file, phase=None):
                 logger.info(f"Found {len(records) - len(href_records)} duplicate records, cleaning up history file")
                 cleanup_history_file(history_file, href_records)
 
-            logger.info(
-                f"Loaded {len(history)} previously parsed movies from history for phase {phase if phase else 'all'}")
+            # Count records by phase for detailed logging
+            phase_counts = {}
+            for record in history.values():
+                record_phase = record['phase']
+                phase_counts[record_phase] = phase_counts.get(record_phase, 0) + 1
+
+            if phase is None:
+                # Log detailed breakdown for all phases
+                phase_details = ", ".join([f"phase {p}: {c}" for p, c in sorted(phase_counts.items())])
+                logger.info(f"Loaded {len(history)} previously parsed movies from history ({phase_details})")
+            else:
+                # Log specific phase info
+                phase_details = ", ".join([f"phase {p}: {c}" for p, c in sorted(phase_counts.items())])
+                logger.info(f"Loaded {len(history)} previously parsed movies from history for phase {phase} ({phase_details})")
         except Exception as e:
             logger.error(f"Error loading parsed movies history: {e}")
     else:
@@ -79,15 +98,23 @@ def load_parsed_movies_history(history_file, phase=None):
 def cleanup_history_file(history_file, href_records):
     """Clean up history file by removing duplicate records and keeping only the most recent for each href"""
     try:
-        # Sort records by parsed_date (most recent first)
-        sorted_records = sorted(href_records.values(), key=lambda x: x['parsed_date'], reverse=True)
+        # Sort records by update_date (most recent first), with backward compatibility
+        def get_update_date(record):
+            return record.get('update_date', record.get('parsed_date', ''))
+        
+        sorted_records = sorted(href_records.values(), key=lambda x: get_update_date(x), reverse=True)
 
         # Write cleaned records back to file
         with open(history_file, 'w', newline='', encoding='utf-8-sig') as f:
-            fieldnames = ['href', 'phase', 'video_code', 'parsed_date', 'torrent_type']
+            fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 'torrent_type']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for record in sorted_records:
+                # Handle backward compatibility for old format
+                if 'create_date' not in record and 'parsed_date' in record:
+                    record['create_date'] = record['parsed_date']
+                if 'update_date' not in record and 'parsed_date' in record:
+                    record['update_date'] = record['parsed_date']
                 writer.writerow(record)
 
         logger.info(f"Cleaned up history file: removed duplicates, kept {len(sorted_records)} unique records")
@@ -111,18 +138,26 @@ def maintain_history_limit(history_file, max_records=1000):
 
         # If we have more than max_records, remove oldest
         if len(records) > max_records:
-            # Sort by parsed_date to find oldest records
-            records.sort(key=lambda x: x['parsed_date'])
+            # Sort by update_date to find oldest records, with backward compatibility
+            def get_update_date(record):
+                return record.get('update_date', record.get('parsed_date', ''))
+            
+            records.sort(key=lambda x: get_update_date(x))
 
             # Keep only the newest max_records
             records = records[-max_records:]
 
             # Rewrite the file with remaining records
             with open(history_file, 'w', newline='', encoding='utf-8-sig') as f:
-                fieldnames = ['href', 'phase', 'video_code', 'parsed_date', 'torrent_type']
+                fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 'torrent_type']
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 for record in records:
+                    # Handle backward compatibility for old format
+                    if 'create_date' not in record and 'parsed_date' in record:
+                        record['create_date'] = record['parsed_date']
+                    if 'update_date' not in record and 'parsed_date' in record:
+                        record['update_date'] = record['parsed_date']
                     writer.writerow(record)
 
             logger.info(f"Maintained history limit: kept {len(records)} newest records, removed oldest entries")
@@ -132,7 +167,7 @@ def maintain_history_limit(history_file, max_records=1000):
 
 
 def save_parsed_movie_to_history(history_file, href, phase, video_code, torrent_types=None):
-    """Save a parsed movie to the history CSV file, updating existing records"""
+    """Save a parsed movie to the history CSV file, updating existing records with new torrent types"""
 
     if torrent_types is None:
         torrent_types = ['no_subtitle']
@@ -146,6 +181,8 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, torrent_
     records = []
     file_exists = os.path.exists(history_file)
     existing_count = 0
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    updated_record = None
 
     if file_exists:
         try:
@@ -154,14 +191,29 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, torrent_
                 for row in reader:
                     if row['href'] == href:
                         existing_count += 1
-                        # Skip this record - we'll replace it with the new one
-                        continue
-                    records.append(row)
+                        # Update existing record with new torrent types and update_date
+                        existing_torrent_types = row.get('torrent_type', '').split(',')
+                        existing_torrent_types = [t.strip() for t in existing_torrent_types if t.strip()]
+                        
+                        # Merge existing and new torrent types
+                        all_torrent_types = list(set(existing_torrent_types + torrent_types))
+                        all_torrent_types.sort()
+                        
+                        # Update the record
+                        row['torrent_type'] = ','.join(all_torrent_types)
+                        row['update_date'] = current_time
+                        row['phase'] = phase  # Update phase if needed
+                        
+                        # Store the updated record separately to move it to first position
+                        updated_record = row.copy()
+                        logger.debug(f"Updated existing record for {href} with new torrent types: {torrent_types}")
+                    else:
+                        records.append(row)
 
             if existing_count > 1:
-                logger.warning(f"Found {existing_count} existing records for {href}, removing all and adding new one")
+                logger.warning(f"Found {existing_count} existing records for {href}, keeping the updated one")
             elif existing_count == 1:
-                logger.debug(f"Replacing existing record for {href}")
+                logger.debug(f"Updated existing record for {href}")
             else:
                 logger.debug(f"Adding new record for {href}")
 
@@ -169,30 +221,33 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, torrent_
             logger.error(f"Error reading existing history: {e}")
             records = []
 
-    # Add new record at the beginning (most recent)
-    new_record = {
-        'href': href,
-        'phase': phase,
-        'video_code': video_code,
-        'parsed_date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        'torrent_type': torrent_types_str
-    }
-    records.insert(0, new_record)
+    # Add new record if it doesn't exist
+    if existing_count == 0:
+        new_record = {
+            'href': href,
+            'phase': phase,
+            'video_code': video_code,
+            'create_date': current_time,
+            'update_date': current_time,
+            'torrent_type': torrent_types_str
+        }
+        records.insert(0, new_record)
+        logger.debug(f"Added new record for {href} with torrent types: {torrent_types_str}")
+    else:
+        # Move updated record to first position
+        if updated_record:
+            records.insert(0, updated_record)
 
     # Write all records back to file
     try:
         with open(history_file, 'w', newline='', encoding='utf-8-sig') as f:
-            fieldnames = ['href', 'phase', 'video_code', 'parsed_date', 'torrent_type']
+            fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 'torrent_type']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for record in records:
                 writer.writerow(record)
 
-        # Maintain history limit after adding new record
-        # maintain_history_limit(history_file)  # DISABLED: No longer limiting history size
-
-        logger.debug(
-            f"Updated history for {href} with torrent types: {torrent_types_str} (total records: {len(records)})")
+        logger.debug(f"Updated history for {href} with torrent types: {torrent_types_str} (total records: {len(records)})")
 
     except Exception as e:
         logger.error(f"Error saving to parsed movies history: {e}")
@@ -340,3 +395,136 @@ def should_process_movie(href, history_data, phase, magnet_links):
             return False, history_torrent_types
 
     return False, history_torrent_types 
+
+
+def check_torrent_in_history(history_file, href, torrent_type):
+    """
+    Check if the specified torrent is already in the history record
+    
+    Args:
+        history_file: History file path
+        href: Video link
+        torrent_type: Torrent type (hacked_subtitle, hacked_no_subtitle, subtitle, no_subtitle)
+    
+    Returns:
+        bool: Returns True if torrent is in history and contains the specified type, False otherwise
+    """
+    if not os.path.exists(history_file):
+        return False
+    
+    try:
+        with open(history_file, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row['href'] == href:
+                    # Check if torrent_type field contains the specified type
+                    recorded_types = row.get('torrent_type', '').split(',')
+                    recorded_types = [t.strip() for t in recorded_types if t.strip()]
+                    return torrent_type in recorded_types
+        return False
+    except Exception as e:
+        logger.error(f"Error checking torrent in history: {e}")
+        return False
+
+
+def add_downloaded_indicator_to_csv(csv_file, history_file):
+    """
+    Add downloaded indicators to torrents in CSV file
+    For already downloaded torrents, only keep [DOWNLOADED] in the column (remove magnet link)
+    Args:
+        csv_file: Daily report CSV file path
+        history_file: History file path
+    Returns:
+        bool: Whether the operation was successful
+    """
+    if not os.path.exists(csv_file):
+        logger.error(f"CSV file not found: {csv_file}")
+        return False
+    
+    try:
+        # Read CSV file
+        with open(csv_file, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+        
+        # Check and add indicators
+        modified = False
+        for row in rows:
+            href = row['href']
+            
+            # Check each torrent type column
+            torrent_columns = ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']
+            
+            for column in torrent_columns:
+                if row.get(column) and row[column].strip():
+                    # Check if this torrent is already in history
+                    if check_torrent_in_history(history_file, href, column):
+                        # Only keep [DOWNLOADED] in the column
+                        if row[column].strip() != '[DOWNLOADED]':
+                            row[column] = '[DOWNLOADED]'
+                            modified = True
+                            logger.debug(f"Set downloaded indicator only for {href} - {column}")
+        
+        # If file was modified, write back to file
+        if modified:
+            with open(csv_file, 'w', newline='', encoding='utf-8-sig') as f:
+                fieldnames = reader.fieldnames or []
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                for row in rows:
+                    writer.writerow(row)
+            
+            logger.info(f"Added downloaded indicators to {csv_file}")
+            return True
+        else:
+            logger.info(f"No downloaded torrents found in {csv_file}")
+            return True
+            
+    except Exception as e:
+        logger.error(f"Error adding downloaded indicators to CSV: {e}")
+        return False
+
+
+def is_downloaded_torrent(torrent_content):
+    """
+    Check if torrent content contains downloaded indicator
+    
+    Args:
+        torrent_content: Torrent content string
+    
+    Returns:
+        bool: Returns True if contains downloaded indicator, False otherwise
+    """
+    return torrent_content.strip().startswith("[DOWNLOADED]") 
+
+
+def mark_torrent_as_downloaded(history_file, href, video_code, torrent_type):
+    """
+    Mark a specific torrent type as downloaded in history
+    
+    Args:
+        history_file: History file path
+        href: Video link
+        video_code: Video code
+        torrent_type: Torrent type to mark as downloaded
+    
+    Returns:
+        bool: Whether the operation was successful
+    """
+    try:
+        # Use the existing save function to update history
+        # This will add the torrent type to the history record
+        save_parsed_movie_to_history(
+            history_file, 
+            href, 
+            "2",  # Phase 2 for qBittorrent uploads
+            video_code, 
+            [torrent_type]
+        )
+        
+        logger.debug(f"Marked {torrent_type} as downloaded for {video_code} ({href})")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error marking torrent as downloaded: {e}")
+        return False 

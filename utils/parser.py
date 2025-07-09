@@ -6,10 +6,12 @@ from bs4.element import Tag
 
 # Import configuration
 try:
-    from config import DETAIL_PAGE_SLEEP
+    from config import DETAIL_PAGE_SLEEP, PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS
 except ImportError:
-    # Fallback value if config.py doesn't exist
+    # Fallback values if config.py doesn't exist
     DETAIL_PAGE_SLEEP = 5
+    PHASE2_MIN_RATE = 4.0
+    PHASE2_MIN_COMMENTS = 80
 
 logger = logging.getLogger(__name__)
 
@@ -163,12 +165,12 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                             if comment_match:
                                 comment_number = comment_match.group(1)
                     
-                    # Filter phase 2 entries: comment number > 80 and rate > 4
+                    # Filter phase 2 entries using configurable thresholds
                     try:
                         comment_num = int(comment_number) if comment_number else 0
                         rate_num = float(rate) if rate else 0
                         
-                        if comment_num > 80 and rate_num > 4:
+                        if comment_num > PHASE2_MIN_COMMENTS and rate_num > PHASE2_MIN_RATE:
                             logger.debug(f"[Page {page_num}] Found entry (filter disabled): {video_code} ({href}) - Rate: {rate}, Comments: {comment_number}")
                             
                             results.append({
@@ -217,12 +219,12 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                                 if comment_match:
                                     comment_number = comment_match.group(1)
                         
-                        # Filter phase 2 entries: comment number > 80 and rate > 4
+                        # Filter phase 2 entries using configurable thresholds
                         try:
                             comment_num = int(comment_number) if comment_number else 0
                             rate_num = float(rate) if rate else 0
                             
-                            if comment_num > 80 and rate_num > 4:
+                            if comment_num > PHASE2_MIN_COMMENTS and rate_num > PHASE2_MIN_RATE:
                                 logger.debug(f"[Page {page_num}] Found entry: {video_code} ({href}) - Rate: {rate}, Comments: {comment_number}")
                                 
                                 results.append({
