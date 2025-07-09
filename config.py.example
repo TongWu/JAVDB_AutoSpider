@@ -32,6 +32,7 @@ QB_PASSWORD = 'your_qbittorrent_password'
 
 # Torrent settings
 TORRENT_CATEGORY = 'JavDB'  # Category for all JavDB torrents
+TORRENT_CATEGORY_ADHOC = 'Ad Hoc'  # Category for adhoc mode torrents
 TORRENT_SAVE_PATH = ''  # Leave empty for default path
 AUTO_START = True  # Set to False to add torrents in paused state
 SKIP_CHECKING = False  # Set to True to skip hash checking
@@ -76,6 +77,10 @@ JAVDB_SESSION_COOKIE = 'your_javdb_session_cookie_value_here'
 DETAIL_PAGE_SLEEP = 5  # Sleep time before parsing detail pages to avoid DDoS protection
 PAGE_SLEEP = 2  # Sleep time between pages
 MOVIE_SLEEP = 1  # Sleep time between movies
+
+# Phase 2 filtering criteria
+PHASE2_MIN_RATE = 4.0  # Minimum rating score for phase 2 entries
+PHASE2_MIN_COMMENTS = 80  # Minimum comment count for phase 2 entries
 
 # =============================================================================
 # LOGGING CONFIGURATION
