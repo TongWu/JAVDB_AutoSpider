@@ -194,7 +194,7 @@ def should_include_torrent_in_csv(href, history_data, magnet_links):
 
 
 def create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet_links, history_data):
-    """Create CSV row with torrent categories, marking downloaded ones with [DOWNLOADED]"""
+    """Create CSV row with torrent categories, marking downloaded ones with [DOWNLOADED PREVIOUSLY]"""
     if not history_data or href not in history_data:
         # New movie, apply preference rules to current magnet links
         row = {
@@ -278,24 +278,24 @@ def create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet
         row['size_no_subtitle'] = magnet_links['size_no_subtitle']
         logger.debug(f"Adding missing no_subtitle torrent for {entry['video_code']}")
 
-    # Add [DOWNLOADED] markers for torrent types that already exist in history
+    # Add [DOWNLOADED PREVIOUSLY] markers for torrent types that already exist in history
     if 'hacked_subtitle' in history_torrent_types and magnet_links['hacked_subtitle']:
-        row['hacked_subtitle'] = '[DOWNLOADED]'
+        row['hacked_subtitle'] = '[DOWNLOADED PREVIOUSLY]'
         row['size_hacked_subtitle'] = magnet_links['size_hacked_subtitle']
         logger.debug(f"Marking hacked_subtitle as downloaded for {entry['video_code']}")
     
     if 'hacked_no_subtitle' in history_torrent_types and magnet_links['hacked_no_subtitle']:
-        row['hacked_no_subtitle'] = '[DOWNLOADED]'
+        row['hacked_no_subtitle'] = '[DOWNLOADED PREVIOUSLY]'
         row['size_hacked_no_subtitle'] = magnet_links['size_hacked_no_subtitle']
         logger.debug(f"Marking hacked_no_subtitle as downloaded for {entry['video_code']}")
     
     if 'subtitle' in history_torrent_types and magnet_links['subtitle']:
-        row['subtitle'] = '[DOWNLOADED]'
+        row['subtitle'] = '[DOWNLOADED PREVIOUSLY]'
         row['size_subtitle'] = magnet_links['size_subtitle']
         logger.debug(f"Marking subtitle as downloaded for {entry['video_code']}")
     
     if 'no_subtitle' in history_torrent_types and magnet_links['no_subtitle']:
-        row['no_subtitle'] = '[DOWNLOADED]'
+        row['no_subtitle'] = '[DOWNLOADED PREVIOUSLY]'
         row['size_no_subtitle'] = magnet_links['size_no_subtitle']
         logger.debug(f"Marking no_subtitle as downloaded for {entry['video_code']}")
 

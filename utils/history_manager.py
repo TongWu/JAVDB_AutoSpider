@@ -430,7 +430,7 @@ def check_torrent_in_history(history_file, href, torrent_type):
 def add_downloaded_indicator_to_csv(csv_file, history_file):
     """
     Add downloaded indicators to torrents in CSV file
-    For already downloaded torrents, only keep [DOWNLOADED] in the column (remove magnet link)
+    For already downloaded torrents, only keep [DOWNLOADED PREVIOUSLY] in the column (remove magnet link)
     Args:
         csv_file: Daily report CSV file path
         history_file: History file path
@@ -459,9 +459,9 @@ def add_downloaded_indicator_to_csv(csv_file, history_file):
                 if row.get(column) and row[column].strip():
                     # Check if this torrent is already in history
                     if check_torrent_in_history(history_file, href, column):
-                        # Only keep [DOWNLOADED] in the column
-                        if row[column].strip() != '[DOWNLOADED]':
-                            row[column] = '[DOWNLOADED]'
+                        # Only keep DOWNLOADED PREVIOUSLY in the column
+                        if row[column].strip() != '[DOWNLOADED PREVIOUSLY]':
+                            row[column] = '[DOWNLOADED PREVIOUSLY]'
                             modified = True
                             logger.debug(f"Set downloaded indicator only for {href} - {column}")
         
@@ -495,7 +495,7 @@ def is_downloaded_torrent(torrent_content):
     Returns:
         bool: Returns True if contains downloaded indicator, False otherwise
     """
-    return torrent_content.strip().startswith("[DOWNLOADED]") 
+    return torrent_content.strip().startswith("[DOWNLOADED PREVIOUSLY]") 
 
 
 def mark_torrent_as_downloaded(history_file, href, video_code, torrent_type):
