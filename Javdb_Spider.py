@@ -23,7 +23,7 @@ try:
         BASE_URL, START_PAGE, END_PAGE,
         DAILY_REPORT_DIR, AD_HOC_DIR, PARSED_MOVIES_CSV,
         SPIDER_LOG_FILE, LOG_LEVEL, DETAIL_PAGE_SLEEP, PAGE_SLEEP, MOVIE_SLEEP,
-        JAVDB_SESSION_COOKIE
+        JAVDB_SESSION_COOKIE, PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS
     )
 except ImportError:
     # Fallback values if config.py doesn't exist
@@ -39,6 +39,8 @@ except ImportError:
     PAGE_SLEEP = 2
     MOVIE_SLEEP = 1
     JAVDB_SESSION_COOKIE = None
+    PHASE2_MIN_RATE = 4.0
+    PHASE2_MIN_COMMENTS = 80
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
@@ -163,7 +165,7 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
     write_header = not os.path.exists(csv_path) or not append_mode
     
     mode = 'a' if append_mode else 'w'
-    logger.info(f"[FINISH] Writing results to {csv_path} (mode: {mode})")
+    logger.debug(f"[FINISH] Writing results to {csv_path} (mode: {mode})")
     
     with open(csv_path, mode, newline='', encoding='utf-8-sig') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -192,7 +194,7 @@ def should_include_torrent_in_csv(href, history_data, magnet_links):
 
 
 def create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet_links, history_data):
-    """Create CSV row only with torrent categories that don't exist in history, applying preference rules"""
+    """Create CSV row with torrent categories, marking downloaded ones with [DOWNLOADED]"""
     if not history_data or href not in history_data:
         # New movie, apply preference rules to current magnet links
         row = {
@@ -255,7 +257,7 @@ def create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet
         'size_no_subtitle': ''
     }
 
-    # Only add torrents that are missing from history
+    # Add torrents that are missing from history (normal magnet links)
     if 'hacked_subtitle' in missing_types and magnet_links['hacked_subtitle']:
         row['hacked_subtitle'] = magnet_links['hacked_subtitle']
         row['size_hacked_subtitle'] = magnet_links['size_hacked_subtitle']
@@ -275,6 +277,27 @@ def create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet
         row['no_subtitle'] = magnet_links['no_subtitle']
         row['size_no_subtitle'] = magnet_links['size_no_subtitle']
         logger.debug(f"Adding missing no_subtitle torrent for {entry['video_code']}")
+
+    # Add [DOWNLOADED] markers for torrent types that already exist in history
+    if 'hacked_subtitle' in history_torrent_types and magnet_links['hacked_subtitle']:
+        row['hacked_subtitle'] = '[DOWNLOADED]'
+        row['size_hacked_subtitle'] = magnet_links['size_hacked_subtitle']
+        logger.debug(f"Marking hacked_subtitle as downloaded for {entry['video_code']}")
+    
+    if 'hacked_no_subtitle' in history_torrent_types and magnet_links['hacked_no_subtitle']:
+        row['hacked_no_subtitle'] = '[DOWNLOADED]'
+        row['size_hacked_no_subtitle'] = magnet_links['size_hacked_no_subtitle']
+        logger.debug(f"Marking hacked_no_subtitle as downloaded for {entry['video_code']}")
+    
+    if 'subtitle' in history_torrent_types and magnet_links['subtitle']:
+        row['subtitle'] = '[DOWNLOADED]'
+        row['size_subtitle'] = magnet_links['size_subtitle']
+        logger.debug(f"Marking subtitle as downloaded for {entry['video_code']}")
+    
+    if 'no_subtitle' in history_torrent_types and magnet_links['no_subtitle']:
+        row['no_subtitle'] = '[DOWNLOADED]'
+        row['size_no_subtitle'] = magnet_links['size_no_subtitle']
+        logger.debug(f"Marking no_subtitle as downloaded for {entry['video_code']}")
 
     return row
 
@@ -574,7 +597,7 @@ def main():
     # Phase 2: Collect entries with only "今日新種"/"昨日新種" tag (filtered by quality)
     if phase_mode in ['2', 'all']:
         logger.info("=" * 50)
-        logger.info("PHASE 2: Processing entries with only today/yesterday tag (rate > 4, comments > 80)")
+        logger.info(f"PHASE 2: Processing entries with only today/yesterday tag (rate > {PHASE2_MIN_RATE}, comments > {PHASE2_MIN_COMMENTS})")
         logger.info("=" * 50)
 
         all_index_results_phase2 = []

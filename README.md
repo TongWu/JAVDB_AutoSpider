@@ -3,7 +3,7 @@
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/TongWu/JAVDB_AutoSpider)
 ![JadvDB Daily Ingestion](https://cronitor.io/badges/9uDCq6/production/qJMA3fMzsCxqf9S3tKJ0BxkfoBk.svg)
 
-A comprehensive Python automation system for extracting torrent links from javdb.com and automatically adding them to qBittorrent. The system includes intelligent history tracking, git integration, and automated pipeline execution.
+A comprehensive Python automation system for extracting torrent links from javdb.com and automatically adding them to qBittorrent. The system includes intelligent history tracking, git integration, automated pipeline execution, and duplicate download prevention.
 
 ## Features
 
@@ -28,8 +28,18 @@ A comprehensive Python automation system for extracting torrent links from javdb
 - Automatically reads current date's CSV file
 - Connects to qBittorrent via Web UI API
 - Adds torrents with proper categorization and settings
+- **Dual Mode Support**: 
+  - **Daily Mode**: Uses "JavDB" category for regular daily reports
+  - **Ad Hoc Mode**: Uses "Ad Hoc" category for custom URL scraping results
 - Comprehensive logging and progress tracking
 - Detailed summary reports
+
+### Duplicate Download Prevention
+- **Automatic Downloaded Detection**: Automatically identifies which torrents have been downloaded by checking the history CSV file
+- **Download Indicators**: Adds `[DOWNLOADED]` prefix to downloaded torrents in daily report CSV files
+- **Skip Duplicate Downloads**: qBittorrent uploader automatically skips torrents with `[DOWNLOADED]` indicators
+- **Multiple Torrent Type Support**: Supports four types: hacked_subtitle, hacked_no_subtitle, subtitle, no_subtitle
+- **Enhanced History Tracking**: Tracks create_date (first discovery) and update_date (latest modification) for each movie
 
 ### Git Integration & Pipeline
 - Automated git commit and push functionality
@@ -60,7 +70,11 @@ python Javdb_Spider.py
 
 **Run the qBittorrent uploader:**
 ```bash
+# Daily mode (default)
 python qbtorrent_uploader.py
+
+# Ad hoc mode (for custom URL scraping results)
+python qbtorrent_uploader.py --mode adhoc
 ```
 
 ### Command-Line Arguments
@@ -168,7 +182,8 @@ QB_HOST = 'your_qbittorrent_ip'
 QB_PORT = 'your_qbittorrent_port'
 QB_USERNAME = 'your_qbittorrent_username'
 QB_PASSWORD = 'your_qbittorrent_password'
-TORRENT_CATEGORY = 'JavDB'
+TORRENT_CATEGORY = 'JavDB'  # Category for daily mode torrents
+TORRENT_CATEGORY_ADHOC = 'Ad Hoc'  # Category for adhoc mode torrents
 TORRENT_SAVE_PATH = ''
 AUTO_START = True
 SKIP_CHECKING = False
@@ -245,7 +260,8 @@ The spider generates CSV files with the following columns:
 - `size_hacked_subtitle`, `size_hacked_no_subtitle`, `size_subtitle`, `size_no_subtitle`: Corresponding sizes
 
 ### File Locations
-- **CSV files**: `Daily Report/Javdb_TodayTitle_YYYYMMDD.csv`
+- **Daily Report CSV files**: `Daily Report/Javdb_TodayTitle_YYYYMMDD.csv`
+- **Ad Hoc CSV files**: `Ad Hoc/Javdb_TodayTitle_YYYYMMDD.csv`
 - **History file**: `Daily Report/parsed_movies_history.csv`
 - **Log files**: `logs/` directory
   - `Javdb_Spider.log`
@@ -263,13 +279,105 @@ The spider includes an intelligent history system that tracks which torrent type
 
 ### Processing Rules
 - **Phase 1**: Processes movies with missing torrent types based on preferences
-- **Phase 2**: Only processes movies that can be upgraded from `no_subtitle` to `hacked_no_subtitle`
+- **Phase 2**: Only processes movies that can be upgraded from `no_subtitle` to `hacked_no_subtitle` or meet quality criteria
 - **New Movies**: Always processed regardless of history
+
+### Phase 2 Quality Filtering
+Phase 2 includes configurable quality filtering based on user ratings and comment counts:
+- **Minimum Rating**: Configurable via `PHASE2_MIN_RATE` (default: 4.0)
+- **Minimum Comments**: Configurable via `PHASE2_MIN_COMMENTS` (default: 80)
+- **Purpose**: Ensures only high-quality content is processed in phase 2
 
 ### Preference Rules
 - **Hacked Category**: Always prefer `hacked_subtitle` over `hacked_no_subtitle`
 - **Subtitle Category**: Always prefer `subtitle` over `no_subtitle`
 - **Complete Collection Goal**: Each movie should have both categories represented
+
+## Downloaded Indicator Feature
+
+The system includes an advanced duplicate download prevention feature that automatically marks downloaded torrents and skips them in future runs.
+
+### Feature Overview
+
+This feature implements automatic marking of downloaded torrents in daily reports and skips these downloaded torrents in the qBittorrent uploader to avoid duplicate downloads. The system also includes enhanced history tracking with create and update timestamps.
+
+### Feature Characteristics
+
+1. **Automatic Detection of Downloaded Torrents**: Automatically identifies which torrents have been downloaded by checking the history CSV file
+2. **Add Indicators**: Adds `[DOWNLOADED]` prefix to downloaded torrents in daily report CSV files
+3. **Skip Duplicate Downloads**: qBittorrent uploader automatically skips torrents with `[DOWNLOADED]` indicators
+4. **Support Multiple Torrent Types**: Supports four types: hacked_subtitle, hacked_no_subtitle, subtitle, no_subtitle
+5. **Enhanced History Tracking**: Tracks create_date (first discovery) and update_date (latest modification) for each movie
+
+### Enhanced History Format
+
+The history CSV file now uses an enhanced format:
+
+**Old Format:**
+```
+href,phase,video_code,parsed_date,torrent_type
+```
+
+**New Format:**
+```
+href,phase,video_code,create_date,update_date,torrent_type
+```
+
+- `create_date`: When the movie was first discovered and logged
+- `update_date`: When the movie was last updated with new torrent types
+- Backward compatibility is maintained for existing files
+
+### Workflow
+
+1. **Daily Report Generation**: Spider generates daily report CSV file
+2. **History Check**: Uploader checks history CSV file when starting
+3. **Add Indicators**: Add `[DOWNLOADED]` prefix to downloaded torrents
+4. **Skip Processing**: Skip torrents with indicators when reading CSV
+5. **Upload New Torrents**: Only upload torrents that haven't been downloaded
+6. **Update History**: When new torrent types are found, update_date is modified
+
+### Example Output
+
+**CSV Before Modification:**
+```
+href,video_code,hacked_subtitle,subtitle
+/v/mOJnXY,IPZZ-574,magnet:?xt=...,magnet:?xt=...
+```
+
+**CSV After Modification:**
+```
+href,video_code,hacked_subtitle,subtitle
+/v/mOJnXY,IPZZ-574,[DOWNLOADED] magnet:?xt=...,[DOWNLOADED] magnet:?xt=...
+```
+
+**History File Format:**
+```
+href,phase,video_code,create_date,update_date,torrent_type
+/v/mOJnXY,1,IPZZ-574,2025-07-09 20:00:57,2025-07-09 20:05:30,"hacked_subtitle,subtitle"
+```
+
+**Uploader Log:**
+```
+2025-07-09 22:09:23,182 - INFO - Adding downloaded indicators to CSV file...
+2025-07-09 22:09:23,183 - INFO - Added downloaded indicators to Daily Report/Javdb_TodayTitle_20250709.csv
+2025-07-09 22:09:23,183 - INFO - Found 0 torrent links in Daily Report/Javdb_TodayTitle_20250709.csv
+2025-07-09 22:09:23,183 - INFO - Skipped 20 already downloaded torrents
+```
+
+### Important Notes
+
+1. **History File Dependency**: Feature depends on `Daily Report/parsed_movies_history.csv` file
+2. **Indicator Format**: Downloaded indicator format is `[DOWNLOADED] ` (note the space)
+3. **Backward Compatibility**: If history file doesn't exist, feature will gracefully degrade without affecting normal use
+4. **Performance Optimization**: History check uses efficient CSV reading, won't significantly impact performance
+5. **Timestamp Tracking**: create_date remains constant while update_date changes with each modification
+6. **Torrent Type Merging**: When updating existing records, new torrent types are merged with existing ones
+
+### Migration
+
+The system automatically handles migration from the old format (`parsed_date`) to the new format (`create_date`, `update_date`). Existing files are automatically converted with backward compatibility.
+
+This feature ensures system stability and efficiency, avoiding duplicate downloads while maintaining comprehensive history tracking with enhanced timestamp management.
 
 ## Logging
 
@@ -302,6 +410,12 @@ Progress tracking includes:
 - **Authentication failed**: Verify username and token/password
 - **Repository not found**: Check repository URL and access permissions
 - **Branch issues**: Ensure the branch exists in your repository
+
+**Downloaded Indicator Issues:**
+- **Indicators not added**: Check if history file exists and has correct format
+- **Uploader skipping too many torrents**: Check if history file contains outdated records
+- **Import errors**: Ensure `utils/history_manager.py` file exists
+- **History format issues**: Ensure history file has correct column structure with backward compatibility
 
 ### Debug Mode
 

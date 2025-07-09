@@ -10,7 +10,7 @@ import sys
 try:
     from config import (
         QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD,
-        TORRENT_CATEGORY, TORRENT_SAVE_PATH, AUTO_START, SKIP_CHECKING,
+        TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC, TORRENT_SAVE_PATH, AUTO_START, SKIP_CHECKING,
         REQUEST_TIMEOUT, DELAY_BETWEEN_ADDITIONS,
         UPLOADER_LOG_FILE, DAILY_REPORT_DIR, AD_HOC_DIR
     )
@@ -22,6 +22,7 @@ except ImportError:
     QB_PASSWORD = 'your_qbittorrent_password'
     
     TORRENT_CATEGORY = 'JavDB'
+    TORRENT_CATEGORY_ADHOC = 'Ad Hoc'
     TORRENT_SAVE_PATH = ''
     AUTO_START = True
     SKIP_CHECKING = False
@@ -32,6 +33,15 @@ except ImportError:
     UPLOADER_LOG_FILE = 'logs/qbtorrent_uploader.log'
     DAILY_REPORT_DIR = 'Daily Report'
     AD_HOC_DIR = 'Ad Hoc'
+
+# Import history manager functions
+try:
+    from utils.history_manager import is_downloaded_torrent
+except ImportError:
+    # Fallback function if import fails
+    def is_downloaded_torrent(torrent_content):
+        """Check if torrent content contains downloaded indicator"""
+        return torrent_content.strip().startswith("[DOWNLOADED]")
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
@@ -59,9 +69,10 @@ def get_csv_filename(mode='daily'):
     current_date = datetime.now().strftime("%Y%m%d")
     if mode == 'adhoc':
         folder = AD_HOC_DIR
+        return os.path.join(folder, f'Javdb_TodayTitle_{current_date}.csv')
     else:
         folder = DAILY_REPORT_DIR
-    return os.path.join(folder, f'Javdb_TodayTitle_{current_date}.csv')
+        return os.path.join(folder, f'Javdb_TodayTitle_{current_date}.csv')
 
 def test_qbittorrent_connection():
     """Test if qBittorrent is accessible"""
@@ -102,15 +113,18 @@ def login_to_qbittorrent(session):
         logger.error(f"Login error: {e}")
         return False
 
-def add_torrent_to_qbittorrent(session, magnet_link, title):
+def add_torrent_to_qbittorrent(session, magnet_link, title, mode='daily'):
     """Add a torrent to qBittorrent"""
     add_url = f'{QB_BASE_URL}/api/v2/torrents/add'
+    
+    # Choose category based on mode
+    category = TORRENT_CATEGORY_ADHOC if mode == 'adhoc' else TORRENT_CATEGORY
     
     # Prepare the data for adding torrent
     torrent_data = {
         'urls': magnet_link,
         'name': title,
-        'category': TORRENT_CATEGORY,
+        'category': category,
         'autoTMM': 'true',
         'savepath': TORRENT_SAVE_PATH,
         'downloadPath': '',
@@ -122,11 +136,11 @@ def add_torrent_to_qbittorrent(session, magnet_link, title):
     }
     
     try:
-        logger.debug(f"Adding torrent: {title}")
+        logger.debug(f"Adding torrent: {title} with category: {category}")
         response = session.post(add_url, data=torrent_data, timeout=REQUEST_TIMEOUT)
         
         if response.status_code == 200:
-            logger.debug(f"Successfully added torrent: {title}")
+            logger.debug(f"Successfully added torrent: {title} to category: {category}")
             return True
         else:
             logger.error(f"Failed to add torrent '{title}' with status code: {response.status_code}")
@@ -137,8 +151,9 @@ def add_torrent_to_qbittorrent(session, magnet_link, title):
         return False
 
 def read_csv_file(filename):
-    """Read the CSV file and extract all magnet links"""
+    """Read the CSV file and extract all magnet links, skipping downloaded torrents"""
     torrents = []
+    skipped_count = 0
     
     if not os.path.exists(filename):
         logger.error(f"CSV file not found: {filename}")
@@ -150,40 +165,69 @@ def read_csv_file(filename):
             reader = csv.DictReader(f)
             
             for row in reader:
-                # Extract magnet links from all four columns
+                href = row.get('href', '')
+                video_code = row.get('video_code', '')
+                
+                # Extract magnet links from all four columns, skipping downloaded ones
                 if row.get('hacked_subtitle') and row['hacked_subtitle'].strip():
+                    if is_downloaded_torrent(row['hacked_subtitle']):
+                        logger.debug(f"Skipping downloaded torrent: {video_code} [Hacked+Subtitle]")
+                        skipped_count += 1
+                        continue
                     torrents.append({
                         'magnet': row['hacked_subtitle'].strip(),
-                        'title': f"{row['video_code']} [破解+字幕]",
+                        'title': f"{video_code} [Hacked+Subtitle]",
                         'page': row.get('page', 'N/A'),
-                        'type': 'hacked_subtitle'
+                        'type': 'hacked_subtitle',
+                        'href': href,
+                        'video_code': video_code
                     })
                 
                 if row.get('hacked_no_subtitle') and row['hacked_no_subtitle'].strip():
+                    if is_downloaded_torrent(row['hacked_no_subtitle']):
+                        logger.debug(f"Skipping downloaded torrent: {video_code} [Hacked-NoSubtitle]")
+                        skipped_count += 1
+                        continue
                     torrents.append({
                         'magnet': row['hacked_no_subtitle'].strip(),
-                        'title': f"{row['video_code']} [破解无字幕]",
+                        'title': f"{video_code} [Hacked-NoSubtitle]",
                         'page': row.get('page', 'N/A'),
-                        'type': 'hacked_no_subtitle'
+                        'type': 'hacked_no_subtitle',
+                        'href': href,
+                        'video_code': video_code
                     })
                 
                 if row.get('subtitle') and row['subtitle'].strip():
+                    if is_downloaded_torrent(row['subtitle']):
+                        logger.debug(f"Skipping downloaded torrent: {video_code} [Subtitle]")
+                        skipped_count += 1
+                        continue
                     torrents.append({
                         'magnet': row['subtitle'].strip(),
-                        'title': f"{row['video_code']} [字幕]",
+                        'title': f"{video_code} [Subtitle]",
                         'page': row.get('page', 'N/A'),
-                        'type': 'subtitle'
+                        'type': 'subtitle',
+                        'href': href,
+                        'video_code': video_code
                     })
                 
                 if row.get('no_subtitle') and row['no_subtitle'].strip():
+                    if is_downloaded_torrent(row['no_subtitle']):
+                        logger.debug(f"Skipping downloaded torrent: {video_code} [NoSubtitle]")
+                        skipped_count += 1
+                        continue
                     torrents.append({
                         'magnet': row['no_subtitle'].strip(),
-                        'title': f"{row['video_code']} [无字幕]",
+                        'title': f"{video_code} [NoSubtitle]",
                         'page': row.get('page', 'N/A'),
-                        'type': 'no_subtitle'
+                        'type': 'no_subtitle',
+                        'href': href,
+                        'video_code': video_code
                     })
         
         logger.info(f"Found {len(torrents)} torrent links in {filename}")
+        if skipped_count > 0:
+            logger.info(f"Skipped {skipped_count} already downloaded torrents")
         return torrents
         
     except Exception as e:
@@ -222,6 +266,16 @@ def main():
         logger.error("Failed to login to qBittorrent. Please check username and password.")
         return
     
+    # Import history manager functions for updating downloaded status
+    try:
+        from utils.history_manager import mark_torrent_as_downloaded
+        history_file = os.path.join(DAILY_REPORT_DIR, 'parsed_movies_history.csv')
+        logger.info("History manager imported, will update downloaded status")
+    except ImportError:
+        logger.warning("Could not import history manager, downloaded status will not be updated")
+        mark_torrent_as_downloaded = None
+        history_file = None
+    
     # Add torrents to qBittorrent
     hacked_subtitle_count = 0
     hacked_no_subtitle_count = 0
@@ -235,9 +289,9 @@ def main():
     for i, torrent in enumerate(torrents, 1):
         logger.info(f"[{i}/{total_torrents}] Adding: {torrent['title']}")
         
-        success = add_torrent_to_qbittorrent(session, torrent['magnet'], torrent['title'])
+        success = add_torrent_to_qbittorrent(session, torrent['magnet'], torrent['title'], mode)
         
-        if success:
+        if success:            
             if torrent['type'] == 'hacked_subtitle':
                 hacked_subtitle_count += 1
             elif torrent['type'] == 'hacked_no_subtitle':
