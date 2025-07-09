@@ -1,118 +1,102 @@
-2025-07-09 23:27:19,370 - INFO - Starting JavDB spider...
-2025-07-09 23:27:19,370 - INFO - Arguments: start_page=1, end_page=20, phase=all
-2025-07-09 23:27:19,370 - INFO - Validating history file integrity...
-2025-07-09 23:27:19,371 - INFO - Loaded 207 previously parsed movies from history for phase 1 (phase 1: 207)
-2025-07-09 23:27:19,372 - INFO - Loaded 399 previously parsed movies from history (phase 1: 207, phase 2: 192)
-2025-07-09 23:27:19,372 - INFO - ==================================================
-2025-07-09 23:27:19,372 - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-07-09 23:27:19,372 - INFO - ==================================================
-2025-07-09 23:27:20,315 - INFO - [Page 1] Found 0 entries for phase 1
-2025-07-09 23:27:23,539 - INFO - [Page 2] Found 11 entries for phase 1
-2025-07-09 23:27:26,113 - INFO - [Page 3] Found 0 entries for phase 1
-2025-07-09 23:27:28,657 - INFO - [Page 4] Found 17 entries for phase 1
-2025-07-09 23:27:31,509 - INFO - [Page 5] Found 3 entries for phase 1
-2025-07-09 23:27:34,402 - INFO - [Page 6] Found 0 entries for phase 1
-2025-07-09 23:27:37,086 - INFO - [Page 7] Found 0 entries for phase 1
-2025-07-09 23:27:39,726 - INFO - [Page 8] Found 0 entries for phase 1
-2025-07-09 23:27:42,523 - INFO - [Page 9] Found 0 entries for phase 1
-2025-07-09 23:27:45,550 - INFO - [Page 10] Found 0 entries for phase 1
-2025-07-09 23:27:48,094 - INFO - [Page 11] Found 0 entries for phase 1
-2025-07-09 23:27:50,744 - INFO - [Page 12] Found 0 entries for phase 1
-2025-07-09 23:27:53,558 - INFO - [Page 13] Found 0 entries for phase 1
-2025-07-09 23:27:56,139 - INFO - [Page 14] Found 0 entries for phase 1
-2025-07-09 23:27:58,780 - INFO - [Page 15] Found 0 entries for phase 1
-2025-07-09 23:28:01,831 - INFO - [Page 16] Found 0 entries for phase 1
-2025-07-09 23:28:04,957 - INFO - [Page 17] Found 0 entries for phase 1
-2025-07-09 23:28:07,669 - INFO - [Page 18] Found 0 entries for phase 1
-2025-07-09 23:28:10,494 - INFO - [Page 19] Found 0 entries for phase 1
-2025-07-09 23:28:13,341 - INFO - [Page 20] Found 0 entries for phase 1
-2025-07-09 23:28:18,642 - INFO - [1/31] [Page 2] Processing IPZZ-574
-2025-07-09 23:28:25,194 - INFO - [2/31] [Page 2] Processing IPZZ-575
-2025-07-09 23:28:31,687 - INFO - [3/31] [Page 2] Processing IPZZ-599
-2025-07-09 23:28:38,141 - INFO - [4/31] [Page 2] Processing IPZZ-601
-2025-07-09 23:28:44,612 - INFO - [5/31] [Page 2] Processing IPZZ-602
-2025-07-09 23:28:51,075 - INFO - [6/31] [Page 2] Processing IPZZ-604
-2025-07-09 23:28:57,579 - INFO - [7/31] [Page 2] Processing SONE-758
-2025-07-09 23:29:04,041 - INFO - [8/31] [Page 2] Processing SONE-795
-2025-07-09 23:29:10,507 - INFO - [9/31] [Page 2] Processing SONE-798
-2025-07-09 23:29:16,969 - INFO - [10/31] [Page 2] Processing SONE-804
-2025-07-09 23:29:23,419 - INFO - [11/31] [Page 2] Processing SONE-805
-2025-07-09 23:29:29,942 - INFO - [12/31] [Page 4] Processing IPZ-166
-2025-07-09 23:29:35,480 - INFO - [13/31] [Page 4] Processing IPZ-700
-2025-07-09 23:29:40,962 - INFO - [14/31] [Page 4] Processing IPZ-826
-2025-07-09 23:29:46,411 - INFO - [15/31] [Page 4] Processing JUFE-583
-2025-07-09 23:29:51,877 - INFO - [16/31] [Page 4] Processing JUL-142
-2025-07-09 23:29:57,324 - INFO - [17/31] [Page 4] Processing JUL-300
-2025-07-09 23:30:02,779 - INFO - [18/31] [Page 4] Processing JUR-197
-2025-07-09 23:30:08,243 - INFO - [19/31] [Page 4] Processing DVEH-054
-2025-07-09 23:30:13,708 - INFO - [20/31] [Page 4] Processing DVEH-056
-2025-07-09 23:30:19,140 - INFO - [21/31] [Page 4] Processing EUUD-065
-2025-07-09 23:30:24,703 - INFO - [22/31] [Page 4] Processing EUUD-066
-2025-07-09 23:30:30,151 - INFO - [23/31] [Page 4] Processing EUUD-067
-2025-07-09 23:30:35,644 - INFO - [24/31] [Page 4] Processing FERA-200
-2025-07-09 23:30:41,111 - INFO - [25/31] [Page 4] Processing FOCS-257
-2025-07-09 23:30:46,557 - INFO - [26/31] [Page 4] Processing FPRE-183
-2025-07-09 23:30:51,993 - INFO - [27/31] [Page 4] Processing FPRE-184
-2025-07-09 23:30:57,462 - INFO - [28/31] [Page 4] Processing FTHTD-094
-2025-07-09 23:31:02,930 - INFO - [29/31] [Page 5] Processing MIDV-206
-2025-07-09 23:31:08,402 - INFO - [30/31] [Page 5] Processing MIDV-228
-2025-07-09 23:31:13,907 - INFO - [31/31] [Page 5] Processing MIDV-247
-2025-07-09 23:31:13,908 - INFO - Phase 1 completed: 11 entries processed
-2025-07-09 23:31:13,908 - INFO - ==================================================
-2025-07-09 23:31:13,908 - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 80)
-2025-07-09 23:31:13,908 - INFO - ==================================================
-2025-07-09 23:31:18,340 - INFO - [Page 1] Found 3 entries for phase 2
-2025-07-09 23:31:24,788 - INFO - [Page 2] Found 5 entries for phase 2
-2025-07-09 23:31:39,029 - ERROR - Error fetching https://javdb.com/?page=3: 500 Server Error: Internal Server Error for url: https://javdb.com/?page=3
-2025-07-09 23:31:39,030 - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
-2025-07-09 23:31:51,293 - ERROR - Error fetching https://javdb.com/?page=4: 500 Server Error: Internal Server Error for url: https://javdb.com/?page=4
-2025-07-09 23:31:51,294 - INFO - [Page 4] no movie list found (page fetch failed or does not exist)
-2025-07-09 23:32:03,807 - ERROR - Error fetching https://javdb.com/?page=5: 500 Server Error: Internal Server Error for url: https://javdb.com/?page=5
-2025-07-09 23:32:03,807 - INFO - [Page 5] no movie list found (page fetch failed or does not exist)
-2025-07-09 23:32:03,807 - INFO - [Page 5] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
-2025-07-09 23:32:09,258 - INFO - [1/8] [Page 1] Processing MIUM-1223
-2025-07-09 23:32:14,711 - INFO - [2/8] [Page 1] Processing AKDL-332
-2025-07-09 23:32:20,200 - INFO - [3/8] [Page 1] Processing MFCW-053
-2025-07-09 23:32:26,811 - INFO - [4/8] [Page 2] Processing JUVR-234
-2025-07-09 23:32:33,362 - INFO - [5/8] [Page 2] Processing KNAM-056
-2025-07-09 23:32:39,828 - INFO - [6/8] [Page 2] Processing MANX-014
-2025-07-09 23:32:46,273 - INFO - [7/8] [Page 2] Processing JUR-380
-2025-07-09 23:32:52,731 - INFO - [8/8] [Page 2] Processing JAC-218
-2025-07-09 23:32:53,737 - INFO - Phase 2 completed: 6 entries processed
-2025-07-09 23:32:53,737 - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20250709.csv
-2025-07-09 23:32:53,737 - INFO - ==================================================
-2025-07-09 23:32:53,737 - INFO - SUMMARY REPORT
-2025-07-09 23:32:53,737 - INFO - ==================================================
-2025-07-09 23:32:53,737 - INFO - Pages processed: 1 to 20
-2025-07-09 23:32:53,737 - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-07-09 23:32:53,737 - INFO - ==============================
-2025-07-09 23:32:53,737 - INFO - PHASE 1 SUMMARY
-2025-07-09 23:32:53,737 - INFO - ==============================
-2025-07-09 23:32:53,738 - INFO - Phase 1 entries found: 11
-2025-07-09 23:32:53,738 - INFO -   - Subtitle torrents: 11 (100.0%)
-2025-07-09 23:32:53,738 - INFO -   - Hacked subtitle torrents: 2 (18.2%)
-2025-07-09 23:32:53,738 - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
-2025-07-09 23:32:53,738 - INFO -   - No-subtitle torrents: 0 (0.0%)
-2025-07-09 23:32:53,738 - INFO - ==============================
-2025-07-09 23:32:53,738 - INFO - PHASE 2 SUMMARY
-2025-07-09 23:32:53,738 - INFO - ==============================
-2025-07-09 23:32:53,738 - INFO - Phase 2 entries found: 6
-2025-07-09 23:32:53,738 - INFO -   - Subtitle torrents: 0 (0.0%)
-2025-07-09 23:32:53,738 - INFO -   - Hacked subtitle torrents: 1 (16.7%)
-2025-07-09 23:32:53,738 - INFO -   - Hacked no-subtitle torrents: 3 (50.0%)
-2025-07-09 23:32:53,739 - INFO -   - No-subtitle torrents: 6 (100.0%)
-2025-07-09 23:32:53,739 - INFO - ==============================
-2025-07-09 23:32:53,739 - INFO - OVERALL SUMMARY
-2025-07-09 23:32:53,739 - INFO - ==============================
-2025-07-09 23:32:53,739 - INFO - Total entries found: 17
-2025-07-09 23:32:53,739 - INFO - Successfully processed: 17
-2025-07-09 23:32:53,739 - INFO - Skipped already parsed in this session: 39
-2025-07-09 23:32:53,739 - INFO - Skipped already parsed in previous runs: 207
-2025-07-09 23:32:53,740 - INFO - Current parsed links in memory: 39
-2025-07-09 23:32:53,740 - INFO - Overall subtitle torrents: 11 (64.7%)
-2025-07-09 23:32:53,740 - INFO - Overall hacked subtitle torrents: 3 (17.6%)
-2025-07-09 23:32:53,740 - INFO - Overall hacked no-subtitle torrents: 3 (17.6%)
-2025-07-09 23:32:53,740 - INFO - Overall no-subtitle torrents: 6 (35.3%)
-2025-07-09 23:32:53,740 - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20250709.csv
-2025-07-09 23:32:53,740 - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-07-09 23:32:53,740 - INFO - ==================================================
+2025-07-09 23:45:24,837 - INFO - Starting JavDB spider...
+2025-07-09 23:45:24,837 - INFO - Arguments: start_page=1, end_page=20, phase=all
+2025-07-09 23:45:24,837 - INFO - Validating history file integrity...
+2025-07-09 23:45:24,838 - INFO - Loaded 207 previously parsed movies from history for phase 1 (phase 1: 207)
+2025-07-09 23:45:24,839 - INFO - Loaded 399 previously parsed movies from history (phase 1: 207, phase 2: 192)
+2025-07-09 23:45:24,839 - INFO - ==================================================
+2025-07-09 23:45:24,839 - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-07-09 23:45:24,839 - INFO - ==================================================
+2025-07-09 23:45:32,949 - INFO - [Page 1] Found 0 entries for phase 1
+2025-07-09 23:45:39,399 - INFO - [Page 2] Found 11 entries for phase 1
+2025-07-09 23:45:53,627 - ERROR - Error fetching https://javdb.com/?page=3: 500 Server Error: Internal Server Error for url: https://javdb.com/?page=3
+2025-07-09 23:45:53,627 - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
+2025-07-09 23:46:05,875 - ERROR - Error fetching https://javdb.com/?page=4: 500 Server Error: Internal Server Error for url: https://javdb.com/?page=4
+2025-07-09 23:46:05,876 - INFO - [Page 4] no movie list found (page fetch failed or does not exist)
+2025-07-09 23:46:09,493 - INFO - [Page 5] Found 3 entries for phase 1
+2025-07-09 23:46:23,747 - ERROR - Error fetching https://javdb.com/?page=6: 500 Server Error: Internal Server Error for url: https://javdb.com/?page=6
+2025-07-09 23:46:23,747 - INFO - [Page 6] no movie list found (page fetch failed or does not exist)
+2025-07-09 23:46:35,930 - INFO - [Page 7] Found 0 entries for phase 1
+2025-07-09 23:46:42,049 - INFO - [Page 8] Found 0 entries for phase 1
+2025-07-09 23:46:52,003 - INFO - [Page 9] Found 0 entries for phase 1
+2025-07-09 23:47:06,238 - ERROR - Error fetching https://javdb.com/?page=10: 500 Server Error: Internal Server Error for url: https://javdb.com/?page=10
+2025-07-09 23:47:06,239 - INFO - [Page 10] no movie list found (page fetch failed or does not exist)
+2025-07-09 23:47:18,455 - ERROR - Error fetching https://javdb.com/?page=11: 500 Server Error: Internal Server Error for url: https://javdb.com/?page=11
+2025-07-09 23:47:18,455 - INFO - [Page 11] no movie list found (page fetch failed or does not exist)
+2025-07-09 23:47:18,455 - INFO - [Page 11] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
+2025-07-09 23:47:24,133 - INFO - [1/14] [Page 2] Processing IPZZ-574
+2025-07-09 23:47:30,583 - INFO - [2/14] [Page 2] Processing IPZZ-575
+2025-07-09 23:47:37,060 - INFO - [3/14] [Page 2] Processing IPZZ-599
+2025-07-09 23:47:43,532 - INFO - [4/14] [Page 2] Processing IPZZ-601
+2025-07-09 23:47:50,015 - INFO - [5/14] [Page 2] Processing IPZZ-602
+2025-07-09 23:47:56,476 - INFO - [6/14] [Page 2] Processing IPZZ-604
+2025-07-09 23:48:02,946 - INFO - [7/14] [Page 2] Processing SONE-758
+2025-07-09 23:48:09,416 - INFO - [8/14] [Page 2] Processing SONE-795
+2025-07-09 23:48:15,900 - INFO - [9/14] [Page 2] Processing SONE-798
+2025-07-09 23:48:22,372 - INFO - [10/14] [Page 2] Processing SONE-804
+2025-07-09 23:48:28,854 - INFO - [11/14] [Page 2] Processing SONE-805
+2025-07-09 23:48:35,335 - INFO - [12/14] [Page 5] Processing MIDV-206
+2025-07-09 23:48:40,799 - INFO - [13/14] [Page 5] Processing MIDV-228
+2025-07-09 23:48:46,299 - INFO - [14/14] [Page 5] Processing MIDV-247
+2025-07-09 23:48:46,299 - INFO - Phase 1 completed: 11 entries processed
+2025-07-09 23:48:46,299 - INFO - ==================================================
+2025-07-09 23:48:46,299 - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 80)
+2025-07-09 23:48:46,299 - INFO - ==================================================
+2025-07-09 23:48:58,527 - ERROR - Error fetching https://javdb.com/?page=1: 500 Server Error: Internal Server Error for url: https://javdb.com/?page=1
+2025-07-09 23:48:58,527 - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
+2025-07-09 23:49:02,406 - INFO - [Page 2] Found 5 entries for phase 2
+2025-07-09 23:49:16,639 - INFO - [Page 3] Found 5 entries for phase 2
+2025-07-09 23:49:30,886 - ERROR - Error fetching https://javdb.com/?page=4: 500 Server Error: Internal Server Error for url: https://javdb.com/?page=4
+2025-07-09 23:49:30,886 - INFO - [Page 4] no movie list found (page fetch failed or does not exist)
+2025-07-09 23:49:43,128 - ERROR - Error fetching https://javdb.com/?page=5: 500 Server Error: Internal Server Error for url: https://javdb.com/?page=5
+2025-07-09 23:49:43,129 - INFO - [Page 5] no movie list found (page fetch failed or does not exist)
+2025-07-09 23:49:55,368 - ERROR - Error fetching https://javdb.com/?page=6: 500 Server Error: Internal Server Error for url: https://javdb.com/?page=6
+2025-07-09 23:49:55,368 - INFO - [Page 6] no movie list found (page fetch failed or does not exist)
+2025-07-09 23:49:55,368 - INFO - [Page 6] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
+2025-07-09 23:50:00,832 - INFO - [1/10] [Page 2] Processing JUVR-234
+2025-07-09 23:50:07,340 - INFO - [2/10] [Page 2] Processing KNAM-056
+2025-07-09 23:50:13,797 - INFO - [3/10] [Page 2] Processing MANX-014
+2025-07-09 23:50:20,481 - INFO - [4/10] [Page 2] Processing JUR-380
+2025-07-09 23:50:27,050 - INFO - [5/10] [Page 2] Processing JAC-218
+2025-07-09 23:50:33,539 - INFO - [6/10] [Page 3] Processing PJAB-012
+2025-07-09 23:50:40,001 - INFO - [7/10] [Page 3] Processing GNSZ-001
+2025-07-09 23:50:46,473 - INFO - [8/10] [Page 3] Processing AKDL-331
+2025-07-09 23:50:52,940 - INFO - [9/10] [Page 3] Processing MIUM-1239
+2025-07-09 23:50:58,476 - INFO - [10/10] [Page 3] Processing GVH-757
+2025-07-09 23:50:59,484 - INFO - Phase 2 completed: 9 entries processed
+2025-07-09 23:50:59,484 - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20250709.csv
+2025-07-09 23:50:59,484 - INFO - ==================================================
+2025-07-09 23:50:59,484 - INFO - SUMMARY REPORT
+2025-07-09 23:50:59,484 - INFO - ==================================================
+2025-07-09 23:50:59,485 - INFO - Pages processed: 1 to 20
+2025-07-09 23:50:59,485 - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-07-09 23:50:59,485 - INFO - ==============================
+2025-07-09 23:50:59,485 - INFO - PHASE 1 SUMMARY
+2025-07-09 23:50:59,485 - INFO - ==============================
+2025-07-09 23:50:59,486 - INFO - Phase 1 entries found: 11
+2025-07-09 23:50:59,486 - INFO -   - Subtitle torrents: 11 (100.0%)
+2025-07-09 23:50:59,486 - INFO -   - Hacked subtitle torrents: 2 (18.2%)
+2025-07-09 23:50:59,486 - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
+2025-07-09 23:50:59,486 - INFO -   - No-subtitle torrents: 0 (0.0%)
+2025-07-09 23:50:59,486 - INFO - ==============================
+2025-07-09 23:50:59,486 - INFO - PHASE 2 SUMMARY
+2025-07-09 23:50:59,486 - INFO - ==============================
+2025-07-09 23:50:59,486 - INFO - Phase 2 entries found: 9
+2025-07-09 23:50:59,486 - INFO -   - Subtitle torrents: 0 (0.0%)
+2025-07-09 23:50:59,487 - INFO -   - Hacked subtitle torrents: 1 (11.1%)
+2025-07-09 23:50:59,487 - INFO -   - Hacked no-subtitle torrents: 3 (33.3%)
+2025-07-09 23:50:59,487 - INFO -   - No-subtitle torrents: 9 (100.0%)
+2025-07-09 23:50:59,487 - INFO - ==============================
+2025-07-09 23:50:59,487 - INFO - OVERALL SUMMARY
+2025-07-09 23:50:59,487 - INFO - ==============================
+2025-07-09 23:50:59,487 - INFO - Total entries found: 20
+2025-07-09 23:50:59,487 - INFO - Successfully processed: 20
+2025-07-09 23:50:59,487 - INFO - Skipped already parsed in this session: 24
+2025-07-09 23:50:59,487 - INFO - Skipped already parsed in previous runs: 207
+2025-07-09 23:50:59,488 - INFO - Current parsed links in memory: 24
+2025-07-09 23:50:59,488 - INFO - Overall subtitle torrents: 11 (55.0%)
+2025-07-09 23:50:59,488 - INFO - Overall hacked subtitle torrents: 3 (15.0%)
+2025-07-09 23:50:59,488 - INFO - Overall hacked no-subtitle torrents: 3 (15.0%)
+2025-07-09 23:50:59,488 - INFO - Overall no-subtitle torrents: 9 (45.0%)
+2025-07-09 23:50:59,488 - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20250709.csv
+2025-07-09 23:50:59,488 - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-07-09 23:50:59,488 - INFO - ==================================================
