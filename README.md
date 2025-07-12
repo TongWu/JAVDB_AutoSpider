@@ -311,7 +311,7 @@ This feature implements automatic marking of downloaded torrents in daily report
 
 ### Enhanced History Format
 
-The history CSV file now uses an enhanced format:
+The history CSV file now uses an enhanced format with individual columns for each torrent type:
 
 **Old Format:**
 ```
@@ -320,11 +320,15 @@ href,phase,video_code,parsed_date,torrent_type
 
 **New Format:**
 ```
-href,phase,video_code,create_date,update_date,torrent_type
+href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle
 ```
 
 - `create_date`: When the movie was first discovered and logged
 - `update_date`: When the movie was last updated with new torrent types
+- `hacked_subtitle`: Download date for hacked version with subtitles (empty if not downloaded)
+- `hacked_no_subtitle`: Download date for hacked version without subtitles (empty if not downloaded)
+- `subtitle`: Download date for subtitle version (empty if not downloaded)
+- `no_subtitle`: Download date for regular version (empty if not downloaded)
 - Backward compatibility is maintained for existing files
 
 ### Workflow
@@ -352,8 +356,8 @@ href,video_code,hacked_subtitle,subtitle
 
 **History File Format:**
 ```
-href,phase,video_code,create_date,update_date,torrent_type
-/v/mOJnXY,1,IPZZ-574,2025-07-09 20:00:57,2025-07-09 20:05:30,"hacked_subtitle,subtitle"
+href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle
+/v/mOJnXY,1,IPZZ-574,2025-07-09 20:00:57,2025-07-09 20:05:30,2025-07-09 20:05:30,,2025-07-09 20:05:30,
 ```
 
 **Uploader Log:**
