@@ -1,7 +1,88 @@
-2025-07-12 16:33:59,390 - INFO - Starting qBittorrent uploader...
-2025-07-12 16:33:59,390 - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250712.csv
-2025-07-12 16:33:59,391 - INFO - Found 62 torrent links in Daily Report/Javdb_TodayTitle_20250712.csv
-2025-07-12 16:33:59,391 - INFO - Skipped 4 already downloaded torrents
-2025-07-12 16:33:59,391 - INFO - Attempting to login to qBittorrent at http://your_qbittorrent_ip:your_qbittorrent_port
-2025-07-12 16:33:59,391 - ERROR - Login error: Failed to parse: http://your_qbittorrent_ip:your_qbittorrent_port/api/v2/auth/login
-2025-07-12 16:33:59,391 - ERROR - Failed to login to qBittorrent. Please check username and password.
+2025-07-12 20:10:05,195 - INFO - Starting qBittorrent uploader...
+2025-07-12 20:10:05,195 - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250712.csv
+2025-07-12 20:10:05,196 - INFO - Found 67 torrent links in Daily Report/Javdb_TodayTitle_20250712.csv
+2025-07-12 20:10:05,196 - INFO - Skipped 6 already downloaded torrents
+2025-07-12 20:10:05,196 - INFO - Attempting to login to qBittorrent at http://192.168.1.2:12301
+2025-07-12 20:10:05,364 - INFO - Successfully logged in to qBittorrent
+2025-07-12 20:10:05,364 - INFO - History manager imported, will update downloaded status
+2025-07-12 20:10:05,364 - INFO - Starting to add 67 torrents to qBittorrent...
+2025-07-12 20:10:05,364 - INFO - [1/67] Adding: MIAB-502 [Hacked-NoSubtitle]
+2025-07-12 20:10:06,369 - INFO - [2/67] Adding: MIAB-502 [Subtitle]
+2025-07-12 20:10:07,371 - INFO - [3/67] Adding: MIDA-194 [Hacked-NoSubtitle]
+2025-07-12 20:10:08,373 - INFO - [4/67] Adding: MIDA-194 [Subtitle]
+2025-07-12 20:10:09,375 - INFO - [5/67] Adding: MIDA-201 [Hacked+Subtitle]
+2025-07-12 20:10:10,377 - INFO - [6/67] Adding: MIDA-201 [Subtitle]
+2025-07-12 20:10:11,379 - INFO - [7/67] Adding: MIDA-204 [Hacked-NoSubtitle]
+2025-07-12 20:10:12,381 - INFO - [8/67] Adding: MIDA-204 [Subtitle]
+2025-07-12 20:10:13,383 - INFO - [9/67] Adding: MIDV-267 [Hacked+Subtitle]
+2025-07-12 20:10:14,385 - INFO - [10/67] Adding: MIDV-267 [Subtitle]
+2025-07-12 20:10:15,387 - INFO - [11/67] Adding: MIDV-278 [Hacked+Subtitle]
+2025-07-12 20:10:16,389 - INFO - [12/67] Adding: MIDV-278 [Subtitle]
+2025-07-12 20:10:17,391 - INFO - [13/67] Adding: MIDV-290 [Hacked-NoSubtitle]
+2025-07-12 20:10:18,395 - INFO - [14/67] Adding: MIDV-290 [Subtitle]
+2025-07-12 20:10:19,397 - INFO - [15/67] Adding: MIDV-305 [Hacked+Subtitle]
+2025-07-12 20:10:20,399 - INFO - [16/67] Adding: MIDV-305 [NoSubtitle]
+2025-07-12 20:10:21,403 - INFO - [17/67] Adding: MIDV-316 [Hacked-NoSubtitle]
+2025-07-12 20:10:22,404 - INFO - [18/67] Adding: MIDV-316 [Subtitle]
+2025-07-12 20:10:23,406 - INFO - [19/67] Adding: DASS-690 [Subtitle]
+2025-07-12 20:10:24,408 - INFO - [20/67] Adding: DASS-692 [Subtitle]
+2025-07-12 20:10:25,410 - INFO - [21/67] Adding: IPSE-013 [Subtitle]
+2025-07-12 20:10:26,411 - INFO - [22/67] Adding: IPSE-016 [Subtitle]
+2025-07-12 20:10:27,413 - INFO - [23/67] Adding: IPZZ-605 [Subtitle]
+2025-07-12 20:10:28,415 - INFO - [24/67] Adding: IPZZ-613 [Hacked+Subtitle]
+2025-07-12 20:10:29,417 - INFO - [25/67] Adding: JRZE-246 [Subtitle]
+2025-07-12 20:10:30,419 - INFO - [26/67] Adding: JRZE-249 [Subtitle]
+2025-07-12 20:10:31,421 - INFO - [27/67] Adding: JUFE-591 [Subtitle]
+2025-07-12 20:10:32,423 - INFO - [28/67] Adding: JUR-414 [Hacked+Subtitle]
+2025-07-12 20:10:33,425 - INFO - [29/67] Adding: JUR-430 [Subtitle]
+2025-07-12 20:10:34,426 - INFO - [30/67] Adding: JUR-436 [Subtitle]
+2025-07-12 20:10:35,428 - INFO - [31/67] Adding: PRED-784 [NoSubtitle]
+2025-07-12 20:10:36,430 - INFO - [32/67] Adding: EBWH-242 [NoSubtitle]
+2025-07-12 20:10:37,432 - INFO - [33/67] Adding: FPRE-187 [NoSubtitle]
+2025-07-12 20:10:38,433 - INFO - [34/67] Adding: MFYD-030 [NoSubtitle]
+2025-07-12 20:10:39,435 - INFO - [35/67] Adding: MIAB-501 [Hacked-NoSubtitle]
+2025-07-12 20:10:40,437 - INFO - [36/67] Adding: MIAB-501 [NoSubtitle]
+2025-07-12 20:10:41,439 - INFO - [37/67] Adding: JUR-443 [Hacked+Subtitle]
+2025-07-12 20:10:42,441 - INFO - [38/67] Adding: PRED-781 [NoSubtitle]
+2025-07-12 20:10:43,443 - INFO - [39/67] Adding: PRED-786 [NoSubtitle]
+2025-07-12 20:10:44,444 - INFO - [40/67] Adding: PRED-790 [NoSubtitle]
+2025-07-12 20:10:45,446 - INFO - [41/67] Adding: FPRE-186 [NoSubtitle]
+2025-07-12 20:10:46,448 - INFO - [42/67] Adding: MIAB-506 [NoSubtitle]
+2025-07-12 20:10:47,450 - INFO - [43/67] Adding: PPPE-351 [NoSubtitle]
+2025-07-12 20:10:48,452 - INFO - [44/67] Adding: MIDA-240 [NoSubtitle]
+2025-07-12 20:10:49,454 - INFO - [45/67] Adding: PRED-782 [NoSubtitle]
+2025-07-12 20:10:50,455 - INFO - [46/67] Adding: MFYD-029 [NoSubtitle]
+2025-07-12 20:10:51,458 - INFO - [47/67] Adding: VENX-328 [NoSubtitle]
+2025-07-12 20:10:52,459 - INFO - [48/67] Adding: PRED-783 [NoSubtitle]
+2025-07-12 20:10:53,461 - INFO - [49/67] Adding: FPRE-185 [NoSubtitle]
+2025-07-12 20:10:54,463 - INFO - [50/67] Adding: PPPE-355 [NoSubtitle]
+2025-07-12 20:10:55,464 - INFO - [51/67] Adding: MFYD-024 [NoSubtitle]
+2025-07-12 20:10:56,466 - INFO - [52/67] Adding: MIKR-026 [NoSubtitle]
+2025-07-12 20:10:57,468 - INFO - [53/67] Adding: MIDA-235 [NoSubtitle]
+2025-07-12 20:10:58,470 - INFO - [54/67] Adding: MIDA-248 [NoSubtitle]
+2025-07-12 20:10:59,472 - INFO - [55/67] Adding: HJMO-685 [NoSubtitle]
+2025-07-12 20:11:00,474 - INFO - [56/67] Adding: HMN-720 [NoSubtitle]
+2025-07-12 20:11:01,476 - INFO - [57/67] Adding: MIDA-244 [NoSubtitle]
+2025-07-12 20:11:02,478 - INFO - [58/67] Adding: MIDA-228 [NoSubtitle]
+2025-07-12 20:11:03,479 - INFO - [59/67] Adding: PPPE-362 [NoSubtitle]
+2025-07-12 20:11:04,481 - INFO - [60/67] Adding: NHDTC-078 [NoSubtitle]
+2025-07-12 20:11:05,482 - INFO - [61/67] Adding: EYAN-203 [NoSubtitle]
+2025-07-12 20:11:06,484 - INFO - [62/67] Adding: MFYD-028 [NoSubtitle]
+2025-07-12 20:11:07,486 - INFO - [63/67] Adding: HUBLK-056 [NoSubtitle]
+2025-07-12 20:11:08,488 - INFO - [64/67] Adding: FPRE-190 [NoSubtitle]
+2025-07-12 20:11:09,490 - INFO - [65/67] Adding: MIDA-238 [NoSubtitle]
+2025-07-12 20:11:10,492 - INFO - [66/67] Adding: MIDA-237 [NoSubtitle]
+2025-07-12 20:11:11,494 - INFO - [67/67] Adding: HNDS-182 [NoSubtitle]
+2025-07-12 20:11:12,496 - INFO - ==================================================
+2025-07-12 20:11:12,496 - INFO - UPLOAD SUMMARY
+2025-07-12 20:11:12,496 - INFO - ==================================================
+2025-07-12 20:11:12,496 - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250712.csv
+2025-07-12 20:11:12,496 - INFO - Total torrents found: 67
+2025-07-12 20:11:12,496 - INFO - Successfully added: 67
+2025-07-12 20:11:12,496 - INFO -   - Hacked subtitle torrents: 7
+2025-07-12 20:11:12,496 - INFO -   - Hacked no subtitle torrents: 6
+2025-07-12 20:11:12,496 - INFO -   - Subtitle torrents: 18
+2025-07-12 20:11:12,496 - INFO -   - No subtitle torrents: 36
+2025-07-12 20:11:12,496 - INFO - Failed to add: 0
+2025-07-12 20:11:12,497 - INFO - Success rate: 100.0%
+2025-07-12 20:11:12,497 - INFO - ==================================================
