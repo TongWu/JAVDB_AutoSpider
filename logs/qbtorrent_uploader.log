@@ -1,7 +1,7 @@
-2025-07-11 20:06:55,968 - INFO - Starting qBittorrent uploader...
-2025-07-11 20:06:55,968 - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250711.csv
-2025-07-11 20:06:55,968 - INFO - Found 40 torrent links in Daily Report/Javdb_TodayTitle_20250711.csv
-2025-07-11 20:06:55,968 - INFO - Skipped 2 already downloaded torrents
-2025-07-11 20:06:55,969 - INFO - Attempting to login to qBittorrent at http://your_qbittorrent_ip:your_qbittorrent_port
-2025-07-11 20:06:55,969 - ERROR - Login error: Failed to parse: http://your_qbittorrent_ip:your_qbittorrent_port/api/v2/auth/login
-2025-07-11 20:06:55,969 - ERROR - Failed to login to qBittorrent. Please check username and password.
+2025-07-12 16:33:59,390 - INFO - Starting qBittorrent uploader...
+2025-07-12 16:33:59,390 - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250712.csv
+2025-07-12 16:33:59,391 - INFO - Found 62 torrent links in Daily Report/Javdb_TodayTitle_20250712.csv
+2025-07-12 16:33:59,391 - INFO - Skipped 4 already downloaded torrents
+2025-07-12 16:33:59,391 - INFO - Attempting to login to qBittorrent at http://your_qbittorrent_ip:your_qbittorrent_port
+2025-07-12 16:33:59,391 - ERROR - Login error: Failed to parse: http://your_qbittorrent_ip:your_qbittorrent_port/api/v2/auth/login
+2025-07-12 16:33:59,391 - ERROR - Failed to login to qBittorrent. Please check username and password.
