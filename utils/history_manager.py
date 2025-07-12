@@ -31,13 +31,22 @@ def load_parsed_movies_history(history_file, phase=None):
 
             # Now process the deduplicated records
             for href, row in href_records.items():
-                # Parse torrent types from comma-separated string
-                torrent_types_str = row.get('torrent_type', 'no_subtitle')
-                torrent_types = [t.strip() for t in torrent_types_str.split(',') if t.strip()]
-
                 # Handle backward compatibility for old format (parsed_date)
                 create_date = row.get('create_date', row.get('parsed_date', ''))
                 update_date = row.get('update_date', row.get('parsed_date', ''))
+
+                # Parse torrent types from new format (individual columns) or old format (comma-separated string)
+                torrent_types = []
+                if 'torrent_type' in row:
+                    # Old format: comma-separated string
+                    torrent_types_str = row.get('torrent_type', 'no_subtitle')
+                    torrent_types = [t.strip() for t in torrent_types_str.split(',') if t.strip()]
+                else:
+                    # New format: individual columns
+                    torrent_categories = ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']
+                    for category in torrent_categories:
+                        if row.get(category) and row[category].strip():
+                            torrent_types.append(category)
 
                 if phase is None:
                     # Load all records (for general checking)
@@ -46,7 +55,11 @@ def load_parsed_movies_history(history_file, phase=None):
                         'video_code': row['video_code'],
                         'create_date': create_date,
                         'update_date': update_date,
-                        'torrent_types': torrent_types
+                        'torrent_types': torrent_types,
+                        'hacked_subtitle': row.get('hacked_subtitle', ''),
+                        'hacked_no_subtitle': row.get('hacked_no_subtitle', ''),
+                        'subtitle': row.get('subtitle', ''),
+                        'no_subtitle': row.get('no_subtitle', '')
                     }
                 elif phase == 1:
                     # For phase 1, ignore records that were processed in phase 2
@@ -56,7 +69,11 @@ def load_parsed_movies_history(history_file, phase=None):
                             'video_code': row['video_code'],
                             'create_date': create_date,
                             'update_date': update_date,
-                            'torrent_types': torrent_types
+                            'torrent_types': torrent_types,
+                            'hacked_subtitle': row.get('hacked_subtitle', ''),
+                            'hacked_no_subtitle': row.get('hacked_no_subtitle', ''),
+                            'subtitle': row.get('subtitle', ''),
+                            'no_subtitle': row.get('no_subtitle', '')
                         }
                 elif phase == 2:
                     # For phase 2, load all history records (same as phase 1)
@@ -65,7 +82,11 @@ def load_parsed_movies_history(history_file, phase=None):
                         'video_code': row['video_code'],
                         'create_date': create_date,
                         'update_date': update_date,
-                        'torrent_types': torrent_types
+                        'torrent_types': torrent_types,
+                        'hacked_subtitle': row.get('hacked_subtitle', ''),
+                        'hacked_no_subtitle': row.get('hacked_no_subtitle', ''),
+                        'subtitle': row.get('subtitle', ''),
+                        'no_subtitle': row.get('no_subtitle', '')
                     }
 
             # If we found duplicates, clean up the file
@@ -104,9 +125,10 @@ def cleanup_history_file(history_file, href_records):
         
         sorted_records = sorted(href_records.values(), key=lambda x: get_update_date(x), reverse=True)
 
-        # Write cleaned records back to file
+        # Write cleaned records back to file with new format
         with open(history_file, 'w', newline='', encoding='utf-8-sig') as f:
-            fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 'torrent_type']
+            fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 
+                         'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for record in sorted_records:
@@ -115,6 +137,24 @@ def cleanup_history_file(history_file, href_records):
                     record['create_date'] = record['parsed_date']
                 if 'update_date' not in record and 'parsed_date' in record:
                     record['update_date'] = record['parsed_date']
+                
+                # Convert old torrent_type format to new individual columns
+                if 'torrent_type' in record and 'hacked_subtitle' not in record:
+                    torrent_types_str = record.get('torrent_type', '')
+                    torrent_types = [t.strip() for t in torrent_types_str.split(',') if t.strip()]
+                    current_time = record.get('update_date', '')
+                    
+                    # Set download dates for existing torrent types
+                    for category in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
+                        if category in torrent_types:
+                            record[category] = current_time
+                        else:
+                            record[category] = ''
+                
+                # Remove old torrent_type column
+                if 'torrent_type' in record:
+                    del record['torrent_type']
+                
                 writer.writerow(record)
 
         logger.info(f"Cleaned up history file: removed duplicates, kept {len(sorted_records)} unique records")
@@ -149,7 +189,8 @@ def maintain_history_limit(history_file, max_records=1000):
 
             # Rewrite the file with remaining records
             with open(history_file, 'w', newline='', encoding='utf-8-sig') as f:
-                fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 'torrent_type']
+                fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 
+                             'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 for record in records:
@@ -158,6 +199,24 @@ def maintain_history_limit(history_file, max_records=1000):
                         record['create_date'] = record['parsed_date']
                     if 'update_date' not in record and 'parsed_date' in record:
                         record['update_date'] = record['parsed_date']
+                    
+                    # Convert old torrent_type format to new individual columns
+                    if 'torrent_type' in record and 'hacked_subtitle' not in record:
+                        torrent_types_str = record.get('torrent_type', '')
+                        torrent_types = [t.strip() for t in torrent_types_str.split(',') if t.strip()]
+                        current_time = record.get('update_date', '')
+                        
+                        # Set download dates for existing torrent types
+                        for category in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
+                            if category in torrent_types:
+                                record[category] = current_time
+                            else:
+                                record[category] = ''
+                    
+                    # Remove old torrent_type column
+                    if 'torrent_type' in record:
+                        del record['torrent_type']
+                    
                     writer.writerow(record)
 
             logger.info(f"Maintained history limit: kept {len(records)} newest records, removed oldest entries")
@@ -174,9 +233,6 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, torrent_
     elif isinstance(torrent_types, str):
         torrent_types = [torrent_types]
 
-    # Convert list to comma-separated string for storage
-    torrent_types_str = ','.join(sorted(set(torrent_types)))  # Remove duplicates and sort
-
     # Read existing records
     records = []
     file_exists = os.path.exists(history_file)
@@ -191,18 +247,29 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, torrent_
                 for row in reader:
                     if row['href'] == href:
                         existing_count += 1
-                        # Update existing record with new torrent types and update_date
-                        existing_torrent_types = row.get('torrent_type', '').split(',')
-                        existing_torrent_types = [t.strip() for t in existing_torrent_types if t.strip()]
                         
-                        # Merge existing and new torrent types
-                        all_torrent_types = list(set(existing_torrent_types + torrent_types))
-                        all_torrent_types.sort()
-                        
-                        # Update the record
-                        row['torrent_type'] = ','.join(all_torrent_types)
-                        row['update_date'] = current_time
-                        row['phase'] = phase  # Update phase if needed
+                        # Handle both old and new formats
+                        if 'torrent_type' in row:
+                            # Old format: update torrent_type column
+                            existing_torrent_types = row.get('torrent_type', '').split(',')
+                            existing_torrent_types = [t.strip() for t in existing_torrent_types if t.strip()]
+                            
+                            # Merge existing and new torrent types
+                            all_torrent_types = list(set(existing_torrent_types + torrent_types))
+                            all_torrent_types.sort()
+                            
+                            # Update the record
+                            row['torrent_type'] = ','.join(all_torrent_types)
+                            row['update_date'] = current_time
+                            row['phase'] = phase
+                        else:
+                            # New format: update individual columns
+                            for torrent_type in torrent_types:
+                                if torrent_type in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
+                                    row[torrent_type] = current_time
+                            
+                            row['update_date'] = current_time
+                            row['phase'] = phase
                         
                         # Store the updated record separately to move it to first position
                         updated_record = row.copy()
@@ -229,10 +296,19 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, torrent_
             'video_code': video_code,
             'create_date': current_time,
             'update_date': current_time,
-            'torrent_type': torrent_types_str
+            'hacked_subtitle': '',
+            'hacked_no_subtitle': '',
+            'subtitle': '',
+            'no_subtitle': ''
         }
+        
+        # Set download dates for the torrent types
+        for torrent_type in torrent_types:
+            if torrent_type in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
+                new_record[torrent_type] = current_time
+        
         records.insert(0, new_record)
-        logger.debug(f"Added new record for {href} with torrent types: {torrent_types_str}")
+        logger.debug(f"Added new record for {href} with torrent types: {torrent_types}")
     else:
         # Move updated record to first position
         if updated_record:
@@ -241,22 +317,37 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, torrent_
     # Write all records back to file
     try:
         with open(history_file, 'w', newline='', encoding='utf-8-sig') as f:
-            fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 'torrent_type']
+            fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 
+                         'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for record in records:
+                # Handle old format conversion
+                if 'torrent_type' in record:
+                    torrent_types_str = record.get('torrent_type', '')
+                    torrent_types = [t.strip() for t in torrent_types_str.split(',') if t.strip()]
+                    current_time = record.get('update_date', '')
+                    
+                    # Set download dates for existing torrent types
+                    for category in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
+                        if category in torrent_types:
+                            record[category] = current_time
+                        else:
+                            record[category] = ''
+                    
+                    # Remove old torrent_type column
+                    del record['torrent_type']
+                
                 writer.writerow(record)
 
-        logger.debug(f"Updated history for {href} with torrent types: {torrent_types_str} (total records: {len(records)})")
-
+        logger.debug(f"Updated history for {href} with torrent types: {torrent_types} (total records: {len(records)})")
     except Exception as e:
-        logger.error(f"Error saving to parsed movies history: {e}")
+        logger.error(f"Error writing to history file: {e}")
 
 
 def validate_history_file(history_file):
-    """Validate history file integrity and check for duplicates"""
+    """Validate and fix history file format"""
     if not os.path.exists(history_file):
-        logger.info("History file does not exist")
         return True
 
     try:
@@ -264,22 +355,55 @@ def validate_history_file(history_file):
             reader = csv.DictReader(f)
             records = list(reader)
 
-        # Check for duplicates
-        href_count = {}
+        # Check if file needs conversion from old format
+        needs_conversion = False
         for record in records:
-            href = record['href']
-            href_count[href] = href_count.get(href, 0) + 1
+            if 'torrent_type' in record and 'hacked_subtitle' not in record:
+                needs_conversion = True
+                break
 
-        duplicates = {href: count for href, count in href_count.items() if count > 1}
+        if needs_conversion:
+            logger.info("Converting history file from old format to new format")
+            
+            # Convert records to new format
+            converted_records = []
+            for record in records:
+                # Handle backward compatibility for old format
+                if 'create_date' not in record and 'parsed_date' in record:
+                    record['create_date'] = record['parsed_date']
+                if 'update_date' not in record and 'parsed_date' in record:
+                    record['update_date'] = record['parsed_date']
+                
+                # Convert old torrent_type format to new individual columns
+                if 'torrent_type' in record:
+                    torrent_types_str = record.get('torrent_type', '')
+                    torrent_types = [t.strip() for t in torrent_types_str.split(',') if t.strip()]
+                    current_time = record.get('update_date', '')
+                    
+                    # Set download dates for existing torrent types
+                    for category in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
+                        if category in torrent_types:
+                            record[category] = current_time
+                        else:
+                            record[category] = ''
+                    
+                    # Remove old torrent_type column
+                    del record['torrent_type']
+                
+                converted_records.append(record)
 
-        if duplicates:
-            logger.warning(f"Found {len(duplicates)} hrefs with duplicate records:")
-            for href, count in duplicates.items():
-                logger.warning(f"  {href}: {count} records")
-            return False
-        else:
-            logger.debug(f"History file validation passed: {len(records)} unique records")
-            return True
+            # Write converted records back to file
+            with open(history_file, 'w', newline='', encoding='utf-8-sig') as f:
+                fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 
+                             'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                for record in converted_records:
+                    writer.writerow(record)
+
+            logger.info("Successfully converted history file to new format")
+
+        return True
 
     except Exception as e:
         logger.error(f"Error validating history file: {e}")
@@ -287,48 +411,36 @@ def validate_history_file(history_file):
 
 
 def determine_torrent_types(magnet_links):
-    """Determine all available torrent types based on available magnet links, applying preference rules"""
-    has_subtitle = bool(magnet_links.get('subtitle', '').strip())
-    has_hacked_subtitle = bool(magnet_links.get('hacked_subtitle', '').strip())
-    has_hacked_no_subtitle = bool(magnet_links.get('hacked_no_subtitle', '').strip())
-    has_no_subtitle = bool(magnet_links.get('no_subtitle', '').strip())
-
+    """Determine torrent types from magnet links dictionary"""
     torrent_types = []
-
-    # Apply preference rules when determining torrent types
-
-    # Rule 1: If subtitle is available, ignore no_subtitle
-    if has_subtitle:
-        torrent_types.append('subtitle')
-        # Don't add no_subtitle when subtitle is available
-    elif has_no_subtitle:
-        torrent_types.append('no_subtitle')
-
-    # Rule 2: If hacked_subtitle is available, ignore hacked_no_subtitle
-    if has_hacked_subtitle:
+    
+    # Check each torrent category in the magnet_links dictionary
+    if magnet_links.get('hacked_subtitle', '').strip():
         torrent_types.append('hacked_subtitle')
-        # Don't add hacked_no_subtitle when hacked_subtitle is available
-    elif has_hacked_no_subtitle:
+    
+    if magnet_links.get('hacked_no_subtitle', '').strip():
         torrent_types.append('hacked_no_subtitle')
-
-    # If no torrents found, default to no_subtitle
-    if not torrent_types:
+    
+    if magnet_links.get('subtitle', '').strip():
+        torrent_types.append('subtitle')
+    
+    if magnet_links.get('no_subtitle', '').strip():
         torrent_types.append('no_subtitle')
-
-    return torrent_types
+    
+    # Remove duplicates and sort
+    return sorted(list(set(torrent_types)))
 
 
 def determine_torrent_type(magnet_links):
-    """Determine the primary torrent type based on available magnet links (for backward compatibility)"""
+    """Legacy function - use determine_torrent_types instead"""
     types = determine_torrent_types(magnet_links)
     return types[0] if types else 'no_subtitle'
 
 
 def get_missing_torrent_types(history_torrent_types, current_torrent_types):
-    """Return the preferred types (hacked_subtitle, subtitle) that are missing, applying preference rules."""
+    """Get missing torrent types that should be searched for"""
     missing_types = []
 
-    # Check what we have in history vs what's currently available
     has_hacked_subtitle_in_history = 'hacked_subtitle' in history_torrent_types
     has_hacked_no_subtitle_in_history = 'hacked_no_subtitle' in history_torrent_types
     has_subtitle_in_history = 'subtitle' in history_torrent_types
@@ -417,10 +529,14 @@ def check_torrent_in_history(history_file, href, torrent_type):
             reader = csv.DictReader(f)
             for row in reader:
                 if row['href'] == href:
-                    # Check if torrent_type field contains the specified type
-                    recorded_types = row.get('torrent_type', '').split(',')
-                    recorded_types = [t.strip() for t in recorded_types if t.strip()]
-                    return torrent_type in recorded_types
+                    # Check if torrent_type field contains the specified type (old format)
+                    if 'torrent_type' in row:
+                        recorded_types = row.get('torrent_type', '').split(',')
+                        recorded_types = [t.strip() for t in recorded_types if t.strip()]
+                        return torrent_type in recorded_types
+                    else:
+                        # New format: check individual column
+                        return row.get(torrent_type, '').strip() != ''
         return False
     except Exception as e:
         logger.error(f"Error checking torrent in history: {e}")
