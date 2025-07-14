@@ -1,61 +1,55 @@
-2025-07-13 20:10:47,894 - INFO - Starting qBittorrent uploader...
-2025-07-13 20:10:47,894 - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250713.csv
-2025-07-13 20:10:47,894 - INFO - Found 40 torrent links in Daily Report/Javdb_TodayTitle_20250713.csv
-2025-07-13 20:10:47,894 - INFO - Skipped 5 already downloaded torrents
-2025-07-13 20:10:47,894 - INFO - Attempting to login to qBittorrent at http://192.168.1.2:12301
-2025-07-13 20:10:48,044 - INFO - Successfully logged in to qBittorrent
-2025-07-13 20:10:48,044 - INFO - History manager imported, will update downloaded status
-2025-07-13 20:10:48,044 - INFO - Starting to add 40 torrents to qBittorrent...
-2025-07-13 20:10:48,044 - INFO - [1/40] Adding: MIDV-324 [Hacked+Subtitle]
-2025-07-13 20:10:49,050 - INFO - [2/40] Adding: MIDV-324 [Subtitle]
-2025-07-13 20:10:50,051 - INFO - [3/40] Adding: MIDV-325 [Hacked-NoSubtitle]
-2025-07-13 20:10:51,053 - INFO - [4/40] Adding: MIDV-325 [Subtitle]
-2025-07-13 20:10:52,056 - INFO - [5/40] Adding: MIDV-614 [Hacked+Subtitle]
-2025-07-13 20:10:53,058 - INFO - [6/40] Adding: MIDV-614 [Subtitle]
-2025-07-13 20:10:54,060 - INFO - [7/40] Adding: DASS-692 [Hacked+Subtitle]
-2025-07-13 20:10:55,062 - INFO - [8/40] Adding: REAL-918 [Subtitle]
-2025-07-13 20:10:56,064 - INFO - [9/40] Adding: ROE-368 [Subtitle]
-2025-07-13 20:10:57,066 - INFO - [10/40] Adding: ROE-377 [Subtitle]
-2025-07-13 20:10:58,069 - INFO - [11/40] Adding: ROYD-243 [Subtitle]
-2025-07-13 20:10:59,071 - INFO - [12/40] Adding: ROYD-244 [Subtitle]
-2025-07-13 20:11:00,073 - INFO - [13/40] Adding: ROYD-245 [Subtitle]
-2025-07-13 20:11:01,076 - INFO - [14/40] Adding: ROYD-246 [Subtitle]
-2025-07-13 20:11:02,079 - INFO - [15/40] Adding: ROYD-247 [Subtitle]
-2025-07-13 20:11:03,081 - INFO - [16/40] Adding: ROYD-248 [Subtitle]
-2025-07-13 20:11:04,084 - INFO - [17/40] Adding: ROYD-252 [Subtitle]
-2025-07-13 20:11:05,086 - INFO - [18/40] Adding: DANDY-899 [NoSubtitle]
-2025-07-13 20:11:06,089 - INFO - [19/40] Adding: MIRD-258 [Hacked-NoSubtitle]
-2025-07-13 20:11:07,091 - INFO - [20/40] Adding: MIRD-258 [NoSubtitle]
-2025-07-13 20:11:08,093 - INFO - [21/40] Adding: MMYM-074 [Hacked-NoSubtitle]
-2025-07-13 20:11:09,095 - INFO - [22/40] Adding: MMYM-074 [NoSubtitle]
-2025-07-13 20:11:10,097 - INFO - [23/40] Adding: MRFK-004 [Hacked-NoSubtitle]
-2025-07-13 20:11:11,099 - INFO - [24/40] Adding: MRFK-004 [NoSubtitle]
-2025-07-13 20:11:12,103 - INFO - [25/40] Adding: DASS-704 [Hacked+Subtitle]
-2025-07-13 20:11:13,105 - INFO - [26/40] Adding: MIDA-234 [Hacked+Subtitle]
-2025-07-13 20:11:14,107 - INFO - [27/40] Adding: MIDA-241 [Hacked+Subtitle]
-2025-07-13 20:11:15,108 - INFO - [28/40] Adding: MIAB-497 [NoSubtitle]
-2025-07-13 20:11:16,110 - INFO - [29/40] Adding: MVSD-657 [NoSubtitle]
-2025-07-13 20:11:17,112 - INFO - [30/40] Adding: PPPE-357 [NoSubtitle]
-2025-07-13 20:11:18,114 - INFO - [31/40] Adding: GOJU-292 [NoSubtitle]
-2025-07-13 20:11:19,117 - INFO - [32/40] Adding: SW-1009 [NoSubtitle]
-2025-07-13 20:11:20,119 - INFO - [33/40] Adding: BLK-664 [NoSubtitle]
-2025-07-13 20:11:21,121 - INFO - [34/40] Adding: EBWH-230 [NoSubtitle]
-2025-07-13 20:11:22,123 - INFO - [35/40] Adding: EBWH-249 [NoSubtitle]
-2025-07-13 20:11:23,124 - INFO - [36/40] Adding: MIBB-058 [NoSubtitle]
-2025-07-13 20:11:24,126 - INFO - [37/40] Adding: MUKC-098 [NoSubtitle]
-2025-07-13 20:11:25,128 - INFO - [38/40] Adding: BLK-655 [NoSubtitle]
-2025-07-13 20:11:26,130 - INFO - [39/40] Adding: EBWH-237 [NoSubtitle]
-2025-07-13 20:11:27,132 - INFO - [40/40] Adding: EBWH-250 [NoSubtitle]
-2025-07-13 20:11:28,135 - INFO - ==================================================
-2025-07-13 20:11:28,135 - INFO - UPLOAD SUMMARY
-2025-07-13 20:11:28,135 - INFO - ==================================================
-2025-07-13 20:11:28,135 - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250713.csv
-2025-07-13 20:11:28,135 - INFO - Total torrents found: 40
-2025-07-13 20:11:28,135 - INFO - Successfully added: 40
-2025-07-13 20:11:28,135 - INFO -   - Hacked subtitle torrents: 6
-2025-07-13 20:11:28,135 - INFO -   - Hacked no subtitle torrents: 4
-2025-07-13 20:11:28,136 - INFO -   - Subtitle torrents: 13
-2025-07-13 20:11:28,136 - INFO -   - No subtitle torrents: 17
-2025-07-13 20:11:28,136 - INFO - Failed to add: 0
-2025-07-13 20:11:28,136 - INFO - Success rate: 100.0%
-2025-07-13 20:11:28,136 - INFO - ==================================================
+2025-07-14 20:07:53,893 - INFO - Starting qBittorrent uploader...
+2025-07-14 20:07:53,893 - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250714.csv
+2025-07-14 20:07:53,894 - INFO - Found 34 torrent links in Daily Report/Javdb_TodayTitle_20250714.csv
+2025-07-14 20:07:53,894 - INFO - Skipped 4 already downloaded torrents
+2025-07-14 20:07:53,894 - INFO - Attempting to login to qBittorrent at http://192.168.1.2:12301
+2025-07-14 20:07:54,053 - INFO - Successfully logged in to qBittorrent
+2025-07-14 20:07:54,053 - INFO - History manager imported, will update downloaded status
+2025-07-14 20:07:54,053 - INFO - Starting to add 34 torrents to qBittorrent...
+2025-07-14 20:07:54,053 - INFO - [1/34] Adding: MVSD-517 [Hacked-NoSubtitle]
+2025-07-14 20:07:55,058 - INFO - [2/34] Adding: MVSD-517 [Subtitle]
+2025-07-14 20:07:56,061 - INFO - [3/34] Adding: NGOD-018 [Hacked+Subtitle]
+2025-07-14 20:07:57,063 - INFO - [4/34] Adding: NGOD-018 [Subtitle]
+2025-07-14 20:07:58,065 - INFO - [5/34] Adding: ALDN-479 [Subtitle]
+2025-07-14 20:07:59,067 - INFO - [6/34] Adding: ALDN-482 [Subtitle]
+2025-07-14 20:08:00,069 - INFO - [7/34] Adding: ALDN-483 [Subtitle]
+2025-07-14 20:08:01,071 - INFO - [8/34] Adding: DASS-702 [Subtitle]
+2025-07-14 20:08:02,073 - INFO - [9/34] Adding: DVAJ-694 [Subtitle]
+2025-07-14 20:08:03,075 - INFO - [10/34] Adding: JUR-443 [Hacked+Subtitle]
+2025-07-14 20:08:04,077 - INFO - [11/34] Adding: JUR-443 [Subtitle]
+2025-07-14 20:08:05,080 - INFO - [12/34] Adding: MKMP-651 [Subtitle]
+2025-07-14 20:08:06,081 - INFO - [13/34] Adding: NACR-980 [Subtitle]
+2025-07-14 20:08:07,083 - INFO - [14/34] Adding: NSFS-396 [Subtitle]
+2025-07-14 20:08:08,086 - INFO - [15/34] Adding: NSFS-397 [Subtitle]
+2025-07-14 20:08:09,088 - INFO - [16/34] Adding: PGD-444 [Hacked+Subtitle]
+2025-07-14 20:08:10,090 - INFO - [17/34] Adding: PGD-444 [Subtitle]
+2025-07-14 20:08:11,092 - INFO - [18/34] Adding: SONE-795 [Hacked+Subtitle]
+2025-07-14 20:08:12,094 - INFO - [19/34] Adding: SONE-729 [NoSubtitle]
+2025-07-14 20:08:13,097 - INFO - [20/34] Adding: MVSD-645 [Hacked-NoSubtitle]
+2025-07-14 20:08:14,100 - INFO - [21/34] Adding: MVSD-645 [NoSubtitle]
+2025-07-14 20:08:15,110 - INFO - [22/34] Adding: MXGS-1385 [Hacked-NoSubtitle]
+2025-07-14 20:08:16,113 - INFO - [23/34] Adding: MXGS-1385 [NoSubtitle]
+2025-07-14 20:08:17,115 - INFO - [24/34] Adding: NACR-947 [Hacked-NoSubtitle]
+2025-07-14 20:08:18,117 - INFO - [25/34] Adding: NACR-947 [NoSubtitle]
+2025-07-14 20:08:19,119 - INFO - [26/34] Adding: NHDTB-938 [Hacked-NoSubtitle]
+2025-07-14 20:08:20,121 - INFO - [27/34] Adding: NHDTB-938 [NoSubtitle]
+2025-07-14 20:08:21,123 - INFO - [28/34] Adding: NHDTC-067 [Hacked-NoSubtitle]
+2025-07-14 20:08:22,126 - INFO - [29/34] Adding: NHDTC-067 [NoSubtitle]
+2025-07-14 20:08:23,129 - INFO - [30/34] Adding: SNIS-495 [Hacked+Subtitle]
+2025-07-14 20:08:24,131 - INFO - [31/34] Adding: SNIS-495 [NoSubtitle]
+2025-07-14 20:08:25,133 - INFO - [32/34] Adding: MANX-011 [NoSubtitle]
+2025-07-14 20:08:26,134 - INFO - [33/34] Adding: MIUM-1241 [NoSubtitle]
+2025-07-14 20:08:27,136 - INFO - [34/34] Adding: BLK-661 [NoSubtitle]
+2025-07-14 20:08:28,138 - INFO - ==================================================
+2025-07-14 20:08:28,138 - INFO - UPLOAD SUMMARY
+2025-07-14 20:08:28,138 - INFO - ==================================================
+2025-07-14 20:08:28,138 - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250714.csv
+2025-07-14 20:08:28,138 - INFO - Total torrents found: 34
+2025-07-14 20:08:28,138 - INFO - Successfully added: 34
+2025-07-14 20:08:28,138 - INFO -   - Hacked subtitle torrents: 5
+2025-07-14 20:08:28,138 - INFO -   - Hacked no subtitle torrents: 6
+2025-07-14 20:08:28,138 - INFO -   - Subtitle torrents: 13
+2025-07-14 20:08:28,138 - INFO -   - No subtitle torrents: 10
+2025-07-14 20:08:28,139 - INFO - Failed to add: 0
+2025-07-14 20:08:28,139 - INFO - Success rate: 100.0%
+2025-07-14 20:08:28,139 - INFO - ==================================================
