@@ -1,145 +1,138 @@
-2025-07-15 20:00:01,891 - INFO - Starting JavDB spider...
-2025-07-15 20:00:01,891 - INFO - Arguments: start_page=1, end_page=20, phase=all
-2025-07-15 20:00:01,891 - INFO - Validating history file integrity...
-2025-07-15 20:00:01,893 - INFO - Loaded 288 previously parsed movies from history for phase 1 (phase 1: 288)
-2025-07-15 20:00:01,896 - INFO - Loaded 556 previously parsed movies from history (phase 1: 288, phase 2: 268)
-2025-07-15 20:00:01,896 - INFO - ==================================================
-2025-07-15 20:00:01,896 - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-07-15 20:00:01,897 - INFO - ==================================================
-2025-07-15 20:00:02,681 - INFO - [Page 1] Found 0 entries for phase 1
-2025-07-15 20:00:05,220 - INFO - [Page 2] Found 11 entries for phase 1
-2025-07-15 20:00:07,769 - INFO - [Page 3] Found 0 entries for phase 1
-2025-07-15 20:00:10,350 - INFO - [Page 4] Found 8 entries for phase 1
-2025-07-15 20:00:12,878 - INFO - [Page 5] Found 6 entries for phase 1
-2025-07-15 20:00:15,416 - INFO - [Page 6] Found 0 entries for phase 1
-2025-07-15 20:00:17,961 - INFO - [Page 7] Found 0 entries for phase 1
-2025-07-15 20:00:20,516 - INFO - [Page 8] Found 0 entries for phase 1
-2025-07-15 20:00:23,090 - INFO - [Page 9] Found 0 entries for phase 1
-2025-07-15 20:00:25,656 - INFO - [Page 10] Found 0 entries for phase 1
-2025-07-15 20:00:28,216 - INFO - [Page 11] Found 0 entries for phase 1
-2025-07-15 20:00:30,759 - INFO - [Page 12] Found 0 entries for phase 1
-2025-07-15 20:00:33,320 - INFO - [Page 13] Found 0 entries for phase 1
-2025-07-15 20:00:35,896 - INFO - [Page 14] Found 0 entries for phase 1
-2025-07-15 20:00:38,506 - INFO - [Page 15] Found 0 entries for phase 1
-2025-07-15 20:00:41,094 - INFO - [Page 16] Found 0 entries for phase 1
-2025-07-15 20:00:43,700 - INFO - [Page 17] Found 0 entries for phase 1
-2025-07-15 20:00:46,306 - INFO - [Page 18] Found 0 entries for phase 1
-2025-07-15 20:00:49,062 - INFO - [Page 19] Found 0 entries for phase 1
-2025-07-15 20:00:51,723 - INFO - [Page 20] Found 0 entries for phase 1
-2025-07-15 20:00:57,255 - INFO - [1/25] [Page 2] Processing OKP-060
-2025-07-15 20:01:03,775 - INFO - [2/25] [Page 2] Processing DLDSS-414
-2025-07-15 20:01:10,246 - INFO - [3/25] [Page 2] Processing JRZE-252
-2025-07-15 20:01:16,742 - INFO - [4/25] [Page 2] Processing JURA-148
-2025-07-15 20:01:23,248 - INFO - [5/25] [Page 2] Processing NACR-978
-2025-07-15 20:01:29,740 - INFO - [6/25] [Page 2] Processing NACR-981
-2025-07-15 20:01:36,206 - INFO - [7/25] [Page 2] Processing NACR-984
-2025-07-15 20:01:42,751 - INFO - [8/25] [Page 2] Processing REAL-921
-2025-07-15 20:01:49,249 - INFO - [9/25] [Page 2] Processing REAL-922
-2025-07-15 20:01:55,820 - INFO - [10/25] [Page 2] Processing REAL-923
-2025-07-15 20:02:02,318 - INFO - [11/25] [Page 2] Processing SCOP-879
-2025-07-15 20:02:08,814 - INFO - [12/25] [Page 4] Processing MVSD-517
-2025-07-15 20:02:14,332 - INFO - [13/25] [Page 4] Processing NGOD-018
-2025-07-15 20:02:19,803 - INFO - [14/25] [Page 4] Processing ALDN-479
-2025-07-15 20:02:25,303 - INFO - [15/25] [Page 4] Processing ALDN-482
-2025-07-15 20:02:30,781 - INFO - [16/25] [Page 4] Processing ALDN-483
-2025-07-15 20:02:36,259 - INFO - [17/25] [Page 4] Processing DASS-702
-2025-07-15 20:02:41,774 - INFO - [18/25] [Page 4] Processing DVAJ-694
-2025-07-15 20:02:47,291 - INFO - [19/25] [Page 4] Processing JUR-443
-2025-07-15 20:02:52,772 - INFO - [20/25] [Page 5] Processing MKMP-651
-2025-07-15 20:02:58,274 - INFO - [21/25] [Page 5] Processing NACR-980
-2025-07-15 20:03:03,781 - INFO - [22/25] [Page 5] Processing NSFS-396
-2025-07-15 20:03:09,272 - INFO - [23/25] [Page 5] Processing NSFS-397
-2025-07-15 20:03:14,773 - INFO - [24/25] [Page 5] Processing PGD-444
-2025-07-15 20:03:20,255 - INFO - [25/25] [Page 5] Processing SONE-795
-2025-07-15 20:03:20,255 - INFO - Phase 1 completed: 11 entries processed
-2025-07-15 20:03:20,255 - INFO - ==================================================
-2025-07-15 20:03:20,255 - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 80)
-2025-07-15 20:03:20,255 - INFO - ==================================================
-2025-07-15 20:03:20,785 - INFO - [Page 1] Found 5 entries for phase 2
-2025-07-15 20:03:23,327 - INFO - [Page 2] Found 5 entries for phase 2
-2025-07-15 20:03:25,889 - INFO - [Page 3] Found 5 entries for phase 2
-2025-07-15 20:03:28,404 - INFO - [Page 4] Found 7 entries for phase 2
-2025-07-15 20:03:30,933 - INFO - [Page 5] Found 8 entries for phase 2
-2025-07-15 20:03:33,516 - INFO - [Page 6] Found 0 entries for phase 2
-2025-07-15 20:03:36,050 - INFO - [Page 7] Found 0 entries for phase 2
-2025-07-15 20:03:38,604 - INFO - [Page 8] Found 0 entries for phase 2
-2025-07-15 20:03:41,176 - INFO - [Page 9] Found 0 entries for phase 2
-2025-07-15 20:03:43,747 - INFO - [Page 10] Found 0 entries for phase 2
-2025-07-15 20:03:46,352 - INFO - [Page 11] Found 0 entries for phase 2
-2025-07-15 20:03:48,953 - INFO - [Page 12] Found 0 entries for phase 2
-2025-07-15 20:03:51,518 - INFO - [Page 13] Found 0 entries for phase 2
-2025-07-15 20:03:54,098 - INFO - [Page 14] Found 0 entries for phase 2
-2025-07-15 20:03:56,671 - INFO - [Page 15] Found 0 entries for phase 2
-2025-07-15 20:03:59,245 - INFO - [Page 16] Found 0 entries for phase 2
-2025-07-15 20:04:01,839 - INFO - [Page 17] Found 0 entries for phase 2
-2025-07-15 20:04:04,510 - INFO - [Page 18] Found 0 entries for phase 2
-2025-07-15 20:04:07,080 - INFO - [Page 19] Found 0 entries for phase 2
-2025-07-15 20:04:09,664 - INFO - [Page 20] Found 0 entries for phase 2
-2025-07-15 20:04:14,970 - INFO - [1/30] [Page 1] Processing GTAXD-076
-2025-07-15 20:04:21,468 - INFO - [2/30] [Page 1] Processing LUXU-1839
-2025-07-15 20:04:27,949 - INFO - [3/30] [Page 1] Processing OFJE-431
-2025-07-15 20:04:34,447 - INFO - [4/30] [Page 1] Processing OFJE-555
-2025-07-15 20:04:40,952 - INFO - [5/30] [Page 1] Processing OKP-058
-2025-07-15 20:04:47,462 - INFO - [6/30] [Page 2] Processing PGD-286
-2025-07-15 20:04:53,975 - INFO - [7/30] [Page 2] Processing PGD-666
-2025-07-15 20:05:00,471 - INFO - [8/30] [Page 2] Processing ABF-244
-2025-07-15 20:05:06,977 - INFO - [9/30] [Page 2] Processing MIDE-974
-2025-07-15 20:05:13,503 - INFO - [10/30] [Page 2] Processing PRED-785
-2025-07-15 20:05:19,999 - INFO - [11/30] [Page 3] Processing NMSL-010
-2025-07-15 20:05:26,467 - INFO - [12/30] [Page 3] Processing MOON-044
-2025-07-15 20:05:31,958 - INFO - [13/30] [Page 3] Processing MUDR-335
-2025-07-15 20:05:38,464 - INFO - [14/30] [Page 3] Processing SONE-729
-2025-07-15 20:05:43,973 - INFO - [15/30] [Page 3] Processing EYAN-203
-2025-07-15 20:05:49,441 - INFO - [16/30] [Page 4] Processing BLK-662
-2025-07-15 20:05:55,948 - INFO - [17/30] [Page 4] Processing MVSD-645
-2025-07-15 20:06:02,435 - INFO - [18/30] [Page 4] Processing MXGS-1384
-2025-07-15 20:06:08,913 - INFO - [19/30] [Page 4] Processing MXGS-1385
-2025-07-15 20:06:15,416 - INFO - [20/30] [Page 4] Processing NACR-947
-2025-07-15 20:06:21,902 - INFO - [21/30] [Page 4] Processing NHDTB-938
-2025-07-15 20:06:28,367 - INFO - [22/30] [Page 4] Processing NHDTC-067
-2025-07-15 20:06:34,895 - INFO - [23/30] [Page 5] Processing SNIS-495
-2025-07-15 20:06:40,417 - INFO - [24/30] [Page 5] Processing EBWH-230
-2025-07-15 20:06:46,087 - INFO - [25/30] [Page 5] Processing MANX-011
-2025-07-15 20:06:51,574 - INFO - [26/30] [Page 5] Processing MIAB-497
-2025-07-15 20:06:57,033 - INFO - [27/30] [Page 5] Processing MIAB-506
-2025-07-15 20:07:02,531 - INFO - [28/30] [Page 5] Processing MVSD-657
-2025-07-15 20:07:08,005 - INFO - [29/30] [Page 5] Processing MCKT-018
-2025-07-15 20:07:14,494 - INFO - [30/30] [Page 5] Processing PPPE-355
-2025-07-15 20:07:14,494 - INFO - Phase 2 completed: 20 entries processed
-2025-07-15 20:07:14,494 - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20250715.csv
-2025-07-15 20:07:14,495 - INFO - ==================================================
-2025-07-15 20:07:14,495 - INFO - SUMMARY REPORT
-2025-07-15 20:07:14,495 - INFO - ==================================================
-2025-07-15 20:07:14,495 - INFO - Pages processed: 1 to 20
-2025-07-15 20:07:14,495 - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-07-15 20:07:14,495 - INFO - ==============================
-2025-07-15 20:07:14,495 - INFO - PHASE 1 SUMMARY
-2025-07-15 20:07:14,495 - INFO - ==============================
-2025-07-15 20:07:14,495 - INFO - Phase 1 entries found: 11
-2025-07-15 20:07:14,495 - INFO -   - Subtitle torrents: 11 (100.0%)
-2025-07-15 20:07:14,495 - INFO -   - Hacked subtitle torrents: 0 (0.0%)
-2025-07-15 20:07:14,495 - INFO -   - Hacked no-subtitle torrents: 1 (9.1%)
-2025-07-15 20:07:14,495 - INFO -   - No-subtitle torrents: 0 (0.0%)
-2025-07-15 20:07:14,495 - INFO - ==============================
-2025-07-15 20:07:14,495 - INFO - PHASE 2 SUMMARY
-2025-07-15 20:07:14,495 - INFO - ==============================
-2025-07-15 20:07:14,495 - INFO - Phase 2 entries found: 20
-2025-07-15 20:07:14,495 - INFO -   - Subtitle torrents: 0 (0.0%)
-2025-07-15 20:07:14,495 - INFO -   - Hacked subtitle torrents: 3 (15.0%)
-2025-07-15 20:07:14,495 - INFO -   - Hacked no-subtitle torrents: 11 (55.0%)
-2025-07-15 20:07:14,495 - INFO -   - No-subtitle torrents: 20 (100.0%)
-2025-07-15 20:07:14,495 - INFO - ==============================
-2025-07-15 20:07:14,496 - INFO - OVERALL SUMMARY
-2025-07-15 20:07:14,496 - INFO - ==============================
-2025-07-15 20:07:14,496 - INFO - Total entries found: 31
-2025-07-15 20:07:14,496 - INFO - Successfully processed: 31
-2025-07-15 20:07:14,496 - INFO - Skipped already parsed in this session: 55
-2025-07-15 20:07:14,496 - INFO - Skipped already parsed in previous runs: 288
-2025-07-15 20:07:14,496 - INFO - Current parsed links in memory: 55
-2025-07-15 20:07:14,496 - INFO - Overall subtitle torrents: 11 (35.5%)
-2025-07-15 20:07:14,496 - INFO - Overall hacked subtitle torrents: 3 (9.7%)
-2025-07-15 20:07:14,496 - INFO - Overall hacked no-subtitle torrents: 12 (38.7%)
-2025-07-15 20:07:14,496 - INFO - Overall no-subtitle torrents: 20 (64.5%)
-2025-07-15 20:07:14,496 - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20250715.csv
-2025-07-15 20:07:14,496 - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-07-15 20:07:14,496 - INFO - ==================================================
+2025-07-16 20:00:01,739 - INFO - Starting JavDB spider...
+2025-07-16 20:00:01,739 - INFO - Arguments: start_page=1, end_page=20, phase=all
+2025-07-16 20:00:01,740 - INFO - Validating history file integrity...
+2025-07-16 20:00:01,743 - INFO - Loaded 299 previously parsed movies from history for phase 1 (phase 1: 299)
+2025-07-16 20:00:01,745 - INFO - Loaded 579 previously parsed movies from history (phase 1: 299, phase 2: 280)
+2025-07-16 20:00:01,745 - INFO - ==================================================
+2025-07-16 20:00:01,745 - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-07-16 20:00:01,745 - INFO - ==================================================
+2025-07-16 20:00:02,346 - INFO - [Page 1] Found 10 entries for phase 1
+2025-07-16 20:00:04,889 - INFO - [Page 2] Found 6 entries for phase 1
+2025-07-16 20:00:07,417 - INFO - [Page 3] Found 11 entries for phase 1
+2025-07-16 20:00:09,951 - INFO - [Page 4] Found 0 entries for phase 1
+2025-07-16 20:00:12,539 - INFO - [Page 5] Found 0 entries for phase 1
+2025-07-16 20:00:15,082 - INFO - [Page 6] Found 0 entries for phase 1
+2025-07-16 20:00:17,657 - INFO - [Page 7] Found 0 entries for phase 1
+2025-07-16 20:00:20,200 - INFO - [Page 8] Found 0 entries for phase 1
+2025-07-16 20:00:22,789 - INFO - [Page 9] Found 0 entries for phase 1
+2025-07-16 20:00:25,364 - INFO - [Page 10] Found 0 entries for phase 1
+2025-07-16 20:00:28,077 - INFO - [Page 11] Found 0 entries for phase 1
+2025-07-16 20:00:30,656 - INFO - [Page 12] Found 0 entries for phase 1
+2025-07-16 20:00:33,297 - INFO - [Page 13] Found 0 entries for phase 1
+2025-07-16 20:00:35,873 - INFO - [Page 14] Found 0 entries for phase 1
+2025-07-16 20:00:38,441 - INFO - [Page 15] Found 0 entries for phase 1
+2025-07-16 20:00:41,021 - INFO - [Page 16] Found 0 entries for phase 1
+2025-07-16 20:00:43,578 - INFO - [Page 17] Found 0 entries for phase 1
+2025-07-16 20:00:46,212 - INFO - [Page 18] Found 0 entries for phase 1
+2025-07-16 20:00:48,755 - INFO - [Page 19] Found 0 entries for phase 1
+2025-07-16 20:00:51,341 - INFO - [Page 20] Found 0 entries for phase 1
+2025-07-16 20:00:56,704 - INFO - [1/27] [Page 1] Processing PGD-777
+2025-07-16 20:01:03,173 - INFO - [2/27] [Page 1] Processing PPPE-346
+2025-07-16 20:01:09,650 - INFO - [3/27] [Page 1] Processing PPPE-348
+2025-07-16 20:01:16,169 - INFO - [4/27] [Page 1] Processing PRED-772
+2025-07-16 20:01:22,664 - INFO - [5/27] [Page 1] Processing PRED-773
+2025-07-16 20:01:29,148 - INFO - [6/27] [Page 1] Processing ABF-246
+2025-07-16 20:01:35,635 - INFO - [7/27] [Page 1] Processing CWPBD-22
+2025-07-16 20:01:42,093 - INFO - [8/27] [Page 1] Processing DLDSS-409
+2025-07-16 20:01:48,565 - INFO - [9/27] [Page 1] Processing HMN-713
+2025-07-16 20:01:55,031 - INFO - [10/27] [Page 1] Processing HMN-720
+2025-07-16 20:02:01,560 - INFO - [11/27] [Page 2] Processing MIAB-497
+2025-07-16 20:02:08,065 - INFO - [12/27] [Page 2] Processing MIDA-234
+2025-07-16 20:02:14,555 - INFO - [13/27] [Page 2] Processing MIDA-237
+2025-07-16 20:02:21,106 - INFO - [14/27] [Page 2] Processing MIDA-240
+2025-07-16 20:02:27,630 - INFO - [15/27] [Page 2] Processing MIDA-244
+2025-07-16 20:02:34,111 - INFO - [16/27] [Page 2] Processing MIDA-248
+2025-07-16 20:02:40,567 - INFO - [17/27] [Page 3] Processing OKP-060
+2025-07-16 20:02:46,099 - INFO - [18/27] [Page 3] Processing DLDSS-414
+2025-07-16 20:02:51,596 - INFO - [19/27] [Page 3] Processing JRZE-252
+2025-07-16 20:02:57,112 - INFO - [20/27] [Page 3] Processing JURA-148
+2025-07-16 20:03:02,565 - INFO - [21/27] [Page 3] Processing NACR-978
+2025-07-16 20:03:08,039 - INFO - [22/27] [Page 3] Processing NACR-981
+2025-07-16 20:03:13,536 - INFO - [23/27] [Page 3] Processing NACR-984
+2025-07-16 20:03:19,001 - INFO - [24/27] [Page 3] Processing REAL-921
+2025-07-16 20:03:24,486 - INFO - [25/27] [Page 3] Processing REAL-922
+2025-07-16 20:03:29,954 - INFO - [26/27] [Page 3] Processing REAL-923
+2025-07-16 20:03:35,421 - INFO - [27/27] [Page 3] Processing SCOP-879
+2025-07-16 20:03:35,421 - INFO - Phase 1 completed: 16 entries processed
+2025-07-16 20:03:35,421 - INFO - ==================================================
+2025-07-16 20:03:35,421 - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 80)
+2025-07-16 20:03:35,421 - INFO - ==================================================
+2025-07-16 20:03:35,973 - INFO - [Page 1] Found 4 entries for phase 2
+2025-07-16 20:03:38,513 - INFO - [Page 2] Found 5 entries for phase 2
+2025-07-16 20:03:41,075 - INFO - [Page 3] Found 11 entries for phase 2
+2025-07-16 20:03:43,619 - INFO - [Page 4] Found 1 entries for phase 2
+2025-07-16 20:03:46,142 - INFO - [Page 5] Found 0 entries for phase 2
+2025-07-16 20:03:48,688 - INFO - [Page 6] Found 0 entries for phase 2
+2025-07-16 20:03:51,259 - INFO - [Page 7] Found 0 entries for phase 2
+2025-07-16 20:03:53,839 - INFO - [Page 8] Found 0 entries for phase 2
+2025-07-16 20:03:56,428 - INFO - [Page 9] Found 0 entries for phase 2
+2025-07-16 20:03:58,996 - INFO - [Page 10] Found 0 entries for phase 2
+2025-07-16 20:04:01,590 - INFO - [Page 11] Found 0 entries for phase 2
+2025-07-16 20:04:04,169 - INFO - [Page 12] Found 0 entries for phase 2
+2025-07-16 20:04:06,828 - INFO - [Page 13] Found 0 entries for phase 2
+2025-07-16 20:04:09,471 - INFO - [Page 14] Found 0 entries for phase 2
+2025-07-16 20:04:12,048 - INFO - [Page 15] Found 0 entries for phase 2
+2025-07-16 20:04:14,626 - INFO - [Page 16] Found 0 entries for phase 2
+2025-07-16 20:04:17,218 - INFO - [Page 17] Found 0 entries for phase 2
+2025-07-16 20:04:19,830 - INFO - [Page 18] Found 0 entries for phase 2
+2025-07-16 20:04:22,430 - INFO - [Page 19] Found 0 entries for phase 2
+2025-07-16 20:04:25,016 - INFO - [Page 20] Found 0 entries for phase 2
+2025-07-16 20:04:30,340 - INFO - [1/21] [Page 1] Processing CRNX-227
+2025-07-16 20:04:36,835 - INFO - [2/21] [Page 1] Processing PGD-707
+2025-07-16 20:04:43,334 - INFO - [3/21] [Page 1] Processing PPPE-344
+2025-07-16 20:04:50,062 - INFO - [4/21] [Page 1] Processing PRED-769
+2025-07-16 20:04:56,548 - INFO - [5/21] [Page 2] Processing SW-1009
+2025-07-16 20:05:02,055 - INFO - [6/21] [Page 2] Processing LUXU-1839
+2025-07-16 20:05:07,641 - INFO - [7/21] [Page 2] Processing NHDTC-079
+2025-07-16 20:05:14,117 - INFO - [8/21] [Page 2] Processing SDDE-755
+2025-07-16 20:05:20,593 - INFO - [9/21] [Page 2] Processing START-378
+2025-07-16 20:05:27,063 - INFO - [10/21] [Page 3] Processing GTAXD-076
+2025-07-16 20:05:32,589 - INFO - [11/21] [Page 3] Processing MIUM-1198
+2025-07-16 20:05:39,068 - INFO - [12/21] [Page 3] Processing OFJE-431
+2025-07-16 20:05:45,591 - INFO - [13/21] [Page 3] Processing OFJE-555
+2025-07-16 20:05:52,089 - INFO - [14/21] [Page 3] Processing OKP-058
+2025-07-16 20:05:58,568 - INFO - [15/21] [Page 3] Processing OKP-059
+2025-07-16 20:06:05,052 - INFO - [16/21] [Page 3] Processing PGD-286
+2025-07-16 20:06:11,565 - INFO - [17/21] [Page 3] Processing PGD-666
+2025-07-16 20:06:18,040 - INFO - [18/21] [Page 3] Processing ABF-244
+2025-07-16 20:06:23,512 - INFO - [19/21] [Page 3] Processing MIDE-974
+2025-07-16 20:06:28,998 - INFO - [20/21] [Page 3] Processing PRED-785
+2025-07-16 20:06:34,554 - INFO - [21/21] [Page 4] Processing NMSL-010
+2025-07-16 20:06:34,554 - INFO - Phase 2 completed: 14 entries processed
+2025-07-16 20:06:34,554 - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20250716.csv
+2025-07-16 20:06:34,554 - INFO - ==================================================
+2025-07-16 20:06:34,554 - INFO - SUMMARY REPORT
+2025-07-16 20:06:34,554 - INFO - ==================================================
+2025-07-16 20:06:34,554 - INFO - Pages processed: 1 to 20
+2025-07-16 20:06:34,554 - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-07-16 20:06:34,554 - INFO - ==============================
+2025-07-16 20:06:34,554 - INFO - PHASE 1 SUMMARY
+2025-07-16 20:06:34,554 - INFO - ==============================
+2025-07-16 20:06:34,554 - INFO - Phase 1 entries found: 16
+2025-07-16 20:06:34,554 - INFO -   - Subtitle torrents: 16 (100.0%)
+2025-07-16 20:06:34,554 - INFO -   - Hacked subtitle torrents: 4 (25.0%)
+2025-07-16 20:06:34,554 - INFO -   - Hacked no-subtitle torrents: 4 (25.0%)
+2025-07-16 20:06:34,554 - INFO -   - No-subtitle torrents: 0 (0.0%)
+2025-07-16 20:06:34,554 - INFO - ==============================
+2025-07-16 20:06:34,554 - INFO - PHASE 2 SUMMARY
+2025-07-16 20:06:34,554 - INFO - ==============================
+2025-07-16 20:06:34,554 - INFO - Phase 2 entries found: 14
+2025-07-16 20:06:34,554 - INFO -   - Subtitle torrents: 0 (0.0%)
+2025-07-16 20:06:34,554 - INFO -   - Hacked subtitle torrents: 1 (7.1%)
+2025-07-16 20:06:34,554 - INFO -   - Hacked no-subtitle torrents: 8 (57.1%)
+2025-07-16 20:06:34,554 - INFO -   - No-subtitle torrents: 14 (100.0%)
+2025-07-16 20:06:34,554 - INFO - ==============================
+2025-07-16 20:06:34,554 - INFO - OVERALL SUMMARY
+2025-07-16 20:06:34,554 - INFO - ==============================
+2025-07-16 20:06:34,554 - INFO - Total entries found: 30
+2025-07-16 20:06:34,555 - INFO - Successfully processed: 30
+2025-07-16 20:06:34,555 - INFO - Skipped already parsed in this session: 48
+2025-07-16 20:06:34,555 - INFO - Skipped already parsed in previous runs: 299
+2025-07-16 20:06:34,555 - INFO - Current parsed links in memory: 48
+2025-07-16 20:06:34,555 - INFO - Overall subtitle torrents: 16 (53.3%)
+2025-07-16 20:06:34,555 - INFO - Overall hacked subtitle torrents: 5 (16.7%)
+2025-07-16 20:06:34,555 - INFO - Overall hacked no-subtitle torrents: 12 (40.0%)
+2025-07-16 20:06:34,555 - INFO - Overall no-subtitle torrents: 14 (46.7%)
+2025-07-16 20:06:34,555 - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20250716.csv
+2025-07-16 20:06:34,555 - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-07-16 20:06:34,555 - INFO - ==================================================
