@@ -1,5 +1,65 @@
-2025-07-18 21:39:03,372 - INFO - Starting qBittorrent uploader...
-2025-07-18 21:39:03,372 - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250718.csv
-2025-07-18 21:39:03,372 - ERROR - CSV file not found: Daily Report/Javdb_TodayTitle_20250718.csv
-2025-07-18 21:39:03,372 - INFO - Make sure you have run the spider script first to generate the CSV file
-2025-07-18 21:39:03,372 - WARNING - No torrent links found in CSV file
+2025-07-18 21:52:14,075 - INFO - Starting qBittorrent uploader...
+2025-07-18 21:52:14,075 - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250718.csv
+2025-07-18 21:52:14,076 - INFO - Found 44 torrent links in Daily Report/Javdb_TodayTitle_20250718.csv
+2025-07-18 21:52:14,076 - INFO - Skipped 4 already downloaded torrents
+2025-07-18 21:52:14,076 - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-07-18 21:52:14,314 - INFO - Successfully logged in to qBittorrent
+2025-07-18 21:52:14,315 - INFO - History manager imported, will update downloaded status
+2025-07-18 21:52:14,315 - INFO - Starting to add 44 torrents to qBittorrent...
+2025-07-18 21:52:14,315 - INFO - [1/44] Adding: SHKD-737 [Hacked-NoSubtitle]
+2025-07-18 21:52:15,358 - INFO - [2/44] Adding: SHKD-737 [Subtitle]
+2025-07-18 21:52:16,414 - INFO - [3/44] Adding: SONE-139 [Hacked+Subtitle]
+2025-07-18 21:52:17,475 - INFO - [4/44] Adding: SONE-139 [Subtitle]
+2025-07-18 21:52:18,512 - INFO - [5/44] Adding: SSIS-399 [Hacked-NoSubtitle]
+2025-07-18 21:52:19,592 - INFO - [6/44] Adding: SSIS-399 [Subtitle]
+2025-07-18 21:52:20,635 - INFO - [7/44] Adding: MIDA-248 [Hacked+Subtitle]
+2025-07-18 21:52:21,676 - INFO - [8/44] Adding: MUDR-328 [Subtitle]
+2025-07-18 21:52:22,718 - INFO - [9/44] Adding: MUDR-329 [Subtitle]
+2025-07-18 21:52:23,807 - INFO - [10/44] Adding: MUKC-094 [Subtitle]
+2025-07-18 21:52:24,856 - INFO - [11/44] Adding: MUKC-098 [Subtitle]
+2025-07-18 21:52:25,920 - INFO - [12/44] Adding: MUKD-540 [Subtitle]
+2025-07-18 21:52:27,016 - INFO - [13/44] Adding: MUKD-542 [Subtitle]
+2025-07-18 21:52:28,076 - INFO - [14/44] Adding: MUKD-543 [Subtitle]
+2025-07-18 21:52:29,134 - INFO - [15/44] Adding: MUKD-545 [Subtitle]
+2025-07-18 21:52:30,170 - INFO - [16/44] Adding: MVSD-647 [Subtitle]
+2025-07-18 21:52:31,209 - INFO - [17/44] Adding: MVSD-657 [Subtitle]
+2025-07-18 21:52:32,264 - INFO - [18/44] Adding: JUR-416 [NoSubtitle]
+2025-07-18 21:52:33,336 - INFO - [19/44] Adding: JUR-389 [NoSubtitle]
+2025-07-18 21:52:34,420 - INFO - [20/44] Adding: DASS-688 [NoSubtitle]
+2025-07-18 21:52:35,471 - INFO - [21/44] Adding: KBR-028 [NoSubtitle]
+2025-07-18 21:52:36,518 - INFO - [22/44] Adding: IDBD-970 [NoSubtitle]
+2025-07-18 21:52:37,566 - INFO - [23/44] Adding: SONE-785 [NoSubtitle]
+2025-07-18 21:52:38,619 - INFO - [24/44] Adding: SONE-819 [NoSubtitle]
+2025-07-18 21:52:39,676 - INFO - [25/44] Adding: ACHJ-067 [NoSubtitle]
+2025-07-18 21:52:40,771 - INFO - [26/44] Adding: DASS-696 [NoSubtitle]
+2025-07-18 21:52:41,827 - INFO - [27/44] Adding: SONE-852 [NoSubtitle]
+2025-07-18 21:52:42,888 - INFO - [28/44] Adding: SONE-770 [NoSubtitle]
+2025-07-18 21:52:43,959 - INFO - [29/44] Adding: JUR-402 [NoSubtitle]
+2025-07-18 21:52:45,020 - INFO - [30/44] Adding: JUR-378 [NoSubtitle]
+2025-07-18 21:52:46,080 - INFO - [31/44] Adding: SONE-788 [NoSubtitle]
+2025-07-18 21:52:47,135 - INFO - [32/44] Adding: DASS-662 [NoSubtitle]
+2025-07-18 21:52:48,194 - INFO - [33/44] Adding: SONE-566 [NoSubtitle]
+2025-07-18 21:52:49,257 - INFO - [34/44] Adding: SGKI-055 [Hacked-NoSubtitle]
+2025-07-18 21:52:50,300 - INFO - [35/44] Adding: SGKI-055 [NoSubtitle]
+2025-07-18 21:52:51,378 - INFO - [36/44] Adding: SNIS-045 [Hacked-NoSubtitle]
+2025-07-18 21:52:52,439 - INFO - [37/44] Adding: SNIS-045 [NoSubtitle]
+2025-07-18 21:52:53,512 - INFO - [38/44] Adding: SNIS-067 [Hacked-NoSubtitle]
+2025-07-18 21:52:54,552 - INFO - [39/44] Adding: SNIS-067 [NoSubtitle]
+2025-07-18 21:52:55,599 - INFO - [40/44] Adding: MIMK-200 [Hacked+Subtitle]
+2025-07-18 21:52:56,656 - INFO - [41/44] Adding: PRED-781 [Hacked+Subtitle]
+2025-07-18 21:52:57,719 - INFO - [42/44] Adding: PKPD-374 [NoSubtitle]
+2025-07-18 21:52:58,777 - INFO - [43/44] Adding: KNB-370 [NoSubtitle]
+2025-07-18 21:52:59,873 - INFO - [44/44] Adding: AQMB-039 [NoSubtitle]
+2025-07-18 21:53:00,930 - INFO - ==================================================
+2025-07-18 21:53:00,930 - INFO - UPLOAD SUMMARY
+2025-07-18 21:53:00,930 - INFO - ==================================================
+2025-07-18 21:53:00,930 - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250718.csv
+2025-07-18 21:53:00,931 - INFO - Total torrents found: 44
+2025-07-18 21:53:00,931 - INFO - Successfully added: 44
+2025-07-18 21:53:00,931 - INFO -   - Hacked subtitle torrents: 4
+2025-07-18 21:53:00,931 - INFO -   - Hacked no subtitle torrents: 5
+2025-07-18 21:53:00,931 - INFO -   - Subtitle torrents: 13
+2025-07-18 21:53:00,931 - INFO -   - No subtitle torrents: 22
+2025-07-18 21:53:00,931 - INFO - Failed to add: 0
+2025-07-18 21:53:00,931 - INFO - Success rate: 100.0%
+2025-07-18 21:53:00,931 - INFO - ==================================================
