@@ -1,54 +1,54 @@
-2025-07-18 21:36:10,860 - INFO - Starting JavDB spider...
-2025-07-18 21:36:10,860 - INFO - Arguments: start_page=1, end_page=20, phase=all
-2025-07-18 21:36:10,860 - INFO - Validating history file integrity...
-2025-07-18 21:36:10,862 - INFO - Loaded 326 previously parsed movies from history for phase 1 (phase 1: 326)
-2025-07-18 21:36:10,863 - INFO - Loaded 605 previously parsed movies from history (phase 1: 326, phase 2: 279)
-2025-07-18 21:36:10,863 - INFO - ==================================================
-2025-07-18 21:36:10,863 - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-07-18 21:36:10,863 - INFO - ==================================================
-2025-07-18 21:36:10,870 - ERROR - Error fetching https://javdb.com/?page=1: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=1 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x10678c590>: Failed to resolve 'javdb.com' ([Errno 8] nodename nor servname provided, or not known)"))
-2025-07-18 21:36:10,870 - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
-2025-07-18 21:36:10,872 - ERROR - Error fetching https://javdb.com/?page=2: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=2 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x106682ad0>: Failed to resolve 'javdb.com' ([Errno 8] nodename nor servname provided, or not known)"))
-2025-07-18 21:36:10,872 - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
-2025-07-18 21:36:10,873 - ERROR - Error fetching https://javdb.com/?page=3: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=3 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x106683110>: Failed to resolve 'javdb.com' ([Errno 8] nodename nor servname provided, or not known)"))
-2025-07-18 21:36:10,873 - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
-2025-07-18 21:36:10,873 - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
-2025-07-18 21:36:10,873 - INFO - Phase 1 completed: 0 entries processed
-2025-07-18 21:36:10,873 - INFO - ==================================================
-2025-07-18 21:36:10,873 - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 80)
-2025-07-18 21:36:10,873 - INFO - ==================================================
-2025-07-18 21:36:10,874 - ERROR - Error fetching https://javdb.com/?page=1: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=1 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x106683390>: Failed to resolve 'javdb.com' ([Errno 8] nodename nor servname provided, or not known)"))
-2025-07-18 21:36:10,874 - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
-2025-07-18 21:36:10,875 - ERROR - Error fetching https://javdb.com/?page=2: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=2 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x106683750>: Failed to resolve 'javdb.com' ([Errno 8] nodename nor servname provided, or not known)"))
-2025-07-18 21:36:10,875 - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
-2025-07-18 21:36:10,876 - ERROR - Error fetching https://javdb.com/?page=3: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=3 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x106683b10>: Failed to resolve 'javdb.com' ([Errno 8] nodename nor servname provided, or not known)"))
-2025-07-18 21:36:10,876 - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
-2025-07-18 21:36:10,876 - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
-2025-07-18 21:36:10,876 - INFO - Phase 2 completed: 0 entries processed
-2025-07-18 21:36:10,876 - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20250718.csv
-2025-07-18 21:36:10,876 - INFO - ==================================================
-2025-07-18 21:36:10,876 - INFO - SUMMARY REPORT
-2025-07-18 21:36:10,876 - INFO - ==================================================
-2025-07-18 21:36:10,876 - INFO - Pages processed: 1 to 20
-2025-07-18 21:36:10,876 - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-07-18 21:36:10,876 - INFO - ==============================
-2025-07-18 21:36:10,876 - INFO - PHASE 1 SUMMARY
-2025-07-18 21:36:10,876 - INFO - ==============================
-2025-07-18 21:36:10,876 - INFO - Phase 1 entries found: 0
-2025-07-18 21:36:10,876 - INFO -   - No entries found in Phase 1
-2025-07-18 21:36:10,876 - INFO - ==============================
-2025-07-18 21:36:10,876 - INFO - PHASE 2 SUMMARY
-2025-07-18 21:36:10,876 - INFO - ==============================
-2025-07-18 21:36:10,876 - INFO - Phase 2 entries found: 0
-2025-07-18 21:36:10,876 - INFO -   - No entries found in Phase 2
-2025-07-18 21:36:10,876 - INFO - ==============================
-2025-07-18 21:36:10,876 - INFO - OVERALL SUMMARY
-2025-07-18 21:36:10,876 - INFO - ==============================
-2025-07-18 21:36:10,876 - INFO - Total entries found: 0
-2025-07-18 21:36:10,876 - INFO - Successfully processed: 0
-2025-07-18 21:36:10,876 - INFO - Skipped already parsed in this session: 0
-2025-07-18 21:36:10,876 - INFO - Skipped already parsed in previous runs: 326
-2025-07-18 21:36:10,876 - INFO - Current parsed links in memory: 0
-2025-07-18 21:36:10,876 - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20250718.csv
-2025-07-18 21:36:10,876 - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-07-18 21:36:10,876 - INFO - ==================================================
+2025-07-18 21:36:11,948 - INFO - Starting JavDB spider...
+2025-07-18 21:36:11,948 - INFO - Arguments: start_page=1, end_page=20, phase=all
+2025-07-18 21:36:11,948 - INFO - Validating history file integrity...
+2025-07-18 21:36:11,950 - INFO - Loaded 326 previously parsed movies from history for phase 1 (phase 1: 326)
+2025-07-18 21:36:11,951 - INFO - Loaded 605 previously parsed movies from history (phase 1: 326, phase 2: 279)
+2025-07-18 21:36:11,951 - INFO - ==================================================
+2025-07-18 21:36:11,951 - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-07-18 21:36:11,951 - INFO - ==================================================
+2025-07-18 21:36:11,959 - ERROR - Error fetching https://javdb.com/?page=1: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=1 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x10777c590>: Failed to resolve 'javdb.com' ([Errno 8] nodename nor servname provided, or not known)"))
+2025-07-18 21:36:11,959 - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
+2025-07-18 21:36:11,961 - ERROR - Error fetching https://javdb.com/?page=2: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=2 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x107682ad0>: Failed to resolve 'javdb.com' ([Errno 8] nodename nor servname provided, or not known)"))
+2025-07-18 21:36:11,961 - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
+2025-07-18 21:36:11,962 - ERROR - Error fetching https://javdb.com/?page=3: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=3 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x107683110>: Failed to resolve 'javdb.com' ([Errno 8] nodename nor servname provided, or not known)"))
+2025-07-18 21:36:11,962 - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
+2025-07-18 21:36:11,962 - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
+2025-07-18 21:36:11,962 - INFO - Phase 1 completed: 0 entries processed
+2025-07-18 21:36:11,962 - INFO - ==================================================
+2025-07-18 21:36:11,962 - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 80)
+2025-07-18 21:36:11,962 - INFO - ==================================================
+2025-07-18 21:36:11,965 - ERROR - Error fetching https://javdb.com/?page=1: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=1 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x107683390>: Failed to resolve 'javdb.com' ([Errno 8] nodename nor servname provided, or not known)"))
+2025-07-18 21:36:11,966 - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
+2025-07-18 21:36:11,967 - ERROR - Error fetching https://javdb.com/?page=2: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=2 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x107683750>: Failed to resolve 'javdb.com' ([Errno 8] nodename nor servname provided, or not known)"))
+2025-07-18 21:36:11,967 - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
+2025-07-18 21:36:11,969 - ERROR - Error fetching https://javdb.com/?page=3: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=3 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x107683b10>: Failed to resolve 'javdb.com' ([Errno 8] nodename nor servname provided, or not known)"))
+2025-07-18 21:36:11,969 - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
+2025-07-18 21:36:11,969 - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
+2025-07-18 21:36:11,969 - INFO - Phase 2 completed: 0 entries processed
+2025-07-18 21:36:11,969 - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20250718.csv
+2025-07-18 21:36:11,969 - INFO - ==================================================
+2025-07-18 21:36:11,969 - INFO - SUMMARY REPORT
+2025-07-18 21:36:11,969 - INFO - ==================================================
+2025-07-18 21:36:11,969 - INFO - Pages processed: 1 to 20
+2025-07-18 21:36:11,969 - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-07-18 21:36:11,969 - INFO - ==============================
+2025-07-18 21:36:11,969 - INFO - PHASE 1 SUMMARY
+2025-07-18 21:36:11,969 - INFO - ==============================
+2025-07-18 21:36:11,969 - INFO - Phase 1 entries found: 0
+2025-07-18 21:36:11,969 - INFO -   - No entries found in Phase 1
+2025-07-18 21:36:11,969 - INFO - ==============================
+2025-07-18 21:36:11,969 - INFO - PHASE 2 SUMMARY
+2025-07-18 21:36:11,969 - INFO - ==============================
+2025-07-18 21:36:11,969 - INFO - Phase 2 entries found: 0
+2025-07-18 21:36:11,969 - INFO -   - No entries found in Phase 2
+2025-07-18 21:36:11,969 - INFO - ==============================
+2025-07-18 21:36:11,969 - INFO - OVERALL SUMMARY
+2025-07-18 21:36:11,969 - INFO - ==============================
+2025-07-18 21:36:11,969 - INFO - Total entries found: 0
+2025-07-18 21:36:11,969 - INFO - Successfully processed: 0
+2025-07-18 21:36:11,969 - INFO - Skipped already parsed in this session: 0
+2025-07-18 21:36:11,969 - INFO - Skipped already parsed in previous runs: 326
+2025-07-18 21:36:11,969 - INFO - Current parsed links in memory: 0
+2025-07-18 21:36:11,969 - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20250718.csv
+2025-07-18 21:36:11,969 - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-07-18 21:36:11,969 - INFO - ==================================================
