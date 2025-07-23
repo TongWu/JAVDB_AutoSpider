@@ -1,49 +1,51 @@
-2025-07-22 20:49:14,316 - INFO - Starting qBittorrent uploader...
-2025-07-22 20:49:14,316 - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250722.csv
-2025-07-22 20:49:14,316 - INFO - Found 28 torrent links in Daily Report/Javdb_TodayTitle_20250722.csv
-2025-07-22 20:49:14,316 - INFO - Skipped 3 already downloaded torrents
-2025-07-22 20:49:14,316 - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-07-22 20:49:14,552 - INFO - Successfully logged in to qBittorrent
-2025-07-22 20:49:14,552 - INFO - History manager imported, will update downloaded status
-2025-07-22 20:49:14,553 - INFO - Starting to add 28 torrents to qBittorrent...
-2025-07-22 20:49:14,553 - INFO - [1/28] Adding: ALDN-482 [Hacked-NoSubtitle]
-2025-07-22 20:49:15,608 - INFO - [2/28] Adding: ATID-456 [Hacked-NoSubtitle]
-2025-07-22 20:49:16,656 - INFO - [3/28] Adding: ATID-456 [Subtitle]
-2025-07-22 20:49:17,705 - INFO - [4/28] Adding: ATID-557 [Hacked-NoSubtitle]
-2025-07-22 20:49:18,776 - INFO - [5/28] Adding: ATID-557 [Subtitle]
-2025-07-22 20:49:19,813 - INFO - [6/28] Adding: ATID-613 [Hacked-NoSubtitle]
-2025-07-22 20:49:20,872 - INFO - [7/28] Adding: ATID-613 [Subtitle]
-2025-07-22 20:49:21,924 - INFO - [8/28] Adding: DLDSS-415 [Subtitle]
-2025-07-22 20:49:22,977 - INFO - [9/28] Adding: MKMP-637 [Subtitle]
-2025-07-22 20:49:24,053 - INFO - [10/28] Adding: MKMP-638 [Subtitle]
-2025-07-22 20:49:25,123 - INFO - [11/28] Adding: MKMP-639 [Subtitle]
-2025-07-22 20:49:26,175 - INFO - [12/28] Adding: MKMP-643 [Subtitle]
-2025-07-22 20:49:27,262 - INFO - [13/28] Adding: MKMP-645 [Subtitle]
-2025-07-22 20:49:28,305 - INFO - [14/28] Adding: MKMP-649 [Subtitle]
-2025-07-22 20:49:29,366 - INFO - [15/28] Adding: MKMP-652 [Subtitle]
-2025-07-22 20:49:30,433 - INFO - [16/28] Adding: MKON-114 [Subtitle]
-2025-07-22 20:49:31,497 - INFO - [17/28] Adding: MMUS-099 [Subtitle]
-2025-07-22 20:49:32,555 - INFO - [18/28] Adding: WANZ-135 [Hacked+Subtitle]
-2025-07-22 20:49:33,690 - INFO - [19/28] Adding: WANZ-135 [Subtitle]
-2025-07-22 20:49:34,752 - INFO - [20/28] Adding: MISM-392 [NoSubtitle]
-2025-07-22 20:49:35,803 - INFO - [21/28] Adding: AMBI-209 [Hacked-NoSubtitle]
-2025-07-22 20:49:36,865 - INFO - [22/28] Adding: AMBI-209 [NoSubtitle]
-2025-07-22 20:49:37,904 - INFO - [23/28] Adding: AVSA-388 [Hacked-NoSubtitle]
-2025-07-22 20:49:38,952 - INFO - [24/28] Adding: SHKD-554 [Hacked+Subtitle]
-2025-07-22 20:49:40,007 - INFO - [25/28] Adding: SHKD-554 [NoSubtitle]
-2025-07-22 20:49:41,069 - INFO - [26/28] Adding: MIUM-1261 [NoSubtitle]
-2025-07-22 20:49:42,124 - INFO - [27/28] Adding: EKDV-787 [NoSubtitle]
-2025-07-22 20:49:43,174 - INFO - [28/28] Adding: FLAV-399 [NoSubtitle]
-2025-07-22 20:49:44,242 - INFO - ==================================================
-2025-07-22 20:49:44,242 - INFO - UPLOAD SUMMARY
-2025-07-22 20:49:44,242 - INFO - ==================================================
-2025-07-22 20:49:44,242 - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250722.csv
-2025-07-22 20:49:44,242 - INFO - Total torrents found: 28
-2025-07-22 20:49:44,242 - INFO - Successfully added: 28
-2025-07-22 20:49:44,243 - INFO -   - Hacked subtitle torrents: 2
-2025-07-22 20:49:44,243 - INFO -   - Hacked no subtitle torrents: 6
-2025-07-22 20:49:44,243 - INFO -   - Subtitle torrents: 14
-2025-07-22 20:49:44,243 - INFO -   - No subtitle torrents: 6
-2025-07-22 20:49:44,243 - INFO - Failed to add: 0
-2025-07-22 20:49:44,243 - INFO - Success rate: 100.0%
-2025-07-22 20:49:44,243 - INFO - ==================================================
+2025-07-23 22:05:23,284 - INFO - Starting qBittorrent uploader...
+2025-07-23 22:05:23,284 - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250723.csv
+2025-07-23 22:05:23,284 - INFO - Found 30 torrent links in Daily Report/Javdb_TodayTitle_20250723.csv
+2025-07-23 22:05:23,284 - INFO - Skipped 5 already downloaded torrents
+2025-07-23 22:05:23,284 - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-07-23 22:05:23,523 - INFO - Successfully logged in to qBittorrent
+2025-07-23 22:05:23,523 - INFO - History manager imported, will update downloaded status
+2025-07-23 22:05:23,523 - INFO - Starting to add 30 torrents to qBittorrent...
+2025-07-23 22:05:23,523 - INFO - [1/30] Adding: SONE-566 [Subtitle]
+2025-07-23 22:05:24,569 - INFO - [2/30] Adding: SONE-770 [Hacked+Subtitle]
+2025-07-23 22:05:25,618 - INFO - [3/30] Adding: SONE-770 [Subtitle]
+2025-07-23 22:05:26,687 - INFO - [4/30] Adding: SONE-784 [Subtitle]
+2025-07-23 22:05:27,743 - INFO - [5/30] Adding: SONE-785 [Hacked+Subtitle]
+2025-07-23 22:05:28,781 - INFO - [6/30] Adding: SONE-785 [Subtitle]
+2025-07-23 22:05:29,837 - INFO - [7/30] Adding: SONE-789 [Subtitle]
+2025-07-23 22:05:30,882 - INFO - [8/30] Adding: SONE-813 [Subtitle]
+2025-07-23 22:05:31,944 - INFO - [9/30] Adding: SONE-814 [Hacked+Subtitle]
+2025-07-23 22:05:32,992 - INFO - [10/30] Adding: SONE-814 [Subtitle]
+2025-07-23 22:05:34,036 - INFO - [11/30] Adding: SONE-815 [Subtitle]
+2025-07-23 22:05:35,088 - INFO - [12/30] Adding: SONE-820 [Subtitle]
+2025-07-23 22:05:36,144 - INFO - [13/30] Adding: CEMD-705 [Hacked-NoSubtitle]
+2025-07-23 22:05:37,207 - INFO - [14/30] Adding: CEMD-705 [NoSubtitle]
+2025-07-23 22:05:38,250 - INFO - [15/30] Adding: CEMD-706 [Hacked-NoSubtitle]
+2025-07-23 22:05:39,305 - INFO - [16/30] Adding: CEMD-706 [NoSubtitle]
+2025-07-23 22:05:40,340 - INFO - [17/30] Adding: DASS-652 [Hacked-NoSubtitle]
+2025-07-23 22:05:41,425 - INFO - [18/30] Adding: DASS-652 [NoSubtitle]
+2025-07-23 22:05:42,473 - INFO - [19/30] Adding: DASS-657 [Hacked-NoSubtitle]
+2025-07-23 22:05:43,512 - INFO - [20/30] Adding: DASS-679 [Hacked-NoSubtitle]
+2025-07-23 22:05:44,578 - INFO - [21/30] Adding: DASS-682 [Hacked-NoSubtitle]
+2025-07-23 22:05:45,619 - INFO - [22/30] Adding: MAAN-1081 [NoSubtitle]
+2025-07-23 22:05:46,664 - INFO - [23/30] Adding: BANK-211 [NoSubtitle]
+2025-07-23 22:05:47,735 - INFO - [24/30] Adding: FNS-071 [NoSubtitle]
+2025-07-23 22:05:48,798 - INFO - [25/30] Adding: FNS-072 [NoSubtitle]
+2025-07-23 22:05:49,851 - INFO - [26/30] Adding: START-367 [NoSubtitle]
+2025-07-23 22:05:50,910 - INFO - [27/30] Adding: START-374 [NoSubtitle]
+2025-07-23 22:05:51,971 - INFO - [28/30] Adding: START-386 [NoSubtitle]
+2025-07-23 22:05:53,014 - INFO - [29/30] Adding: START-350 [NoSubtitle]
+2025-07-23 22:05:54,064 - INFO - [30/30] Adding: RCTD-679 [NoSubtitle]
+2025-07-23 22:05:55,105 - INFO - ==================================================
+2025-07-23 22:05:55,106 - INFO - UPLOAD SUMMARY
+2025-07-23 22:05:55,106 - INFO - ==================================================
+2025-07-23 22:05:55,106 - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250723.csv
+2025-07-23 22:05:55,106 - INFO - Total torrents found: 30
+2025-07-23 22:05:55,106 - INFO - Successfully added: 30
+2025-07-23 22:05:55,106 - INFO -   - Hacked subtitle torrents: 3
+2025-07-23 22:05:55,107 - INFO -   - Hacked no subtitle torrents: 6
+2025-07-23 22:05:55,107 - INFO -   - Subtitle torrents: 9
+2025-07-23 22:05:55,107 - INFO -   - No subtitle torrents: 12
+2025-07-23 22:05:55,107 - INFO - Failed to add: 0
+2025-07-23 22:05:55,107 - INFO - Success rate: 100.0%
+2025-07-23 22:05:55,107 - INFO - ==================================================
