@@ -45,15 +45,9 @@ except ImportError:
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
 # Configure logging
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL),
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(SPIDER_LOG_FILE, mode='w', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+from utils.logging_config import setup_logging, get_logger
+setup_logging(SPIDER_LOG_FILE, LOG_LEVEL)
+logger = get_logger(__name__)
 
 # Global set to track parsed links
 parsed_links = set()
@@ -101,7 +95,7 @@ def ensure_daily_report_dir():
 
 
 def get_page(url, session=None, use_cookie=False):
-    """Fetch a webpage with proper headers"""
+    """Fetch a webpage with proper headers and age verification bypass"""
     if session is None:
         session = requests.Session()
 
@@ -109,7 +103,7 @@ def get_page(url, session=None, use_cookie=False):
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
         'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Encoding': 'gzip, deflate',  # 移除br压缩
         'Connection': 'keep-alive',
         'Upgrade-Insecure-Requests': '1',
         'Sec-Fetch-Dest': 'document',
@@ -128,7 +122,44 @@ def get_page(url, session=None, use_cookie=False):
         response = session.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         logger.debug(f"Successfully fetched URL: {url}")
-        return response.text
+        
+        html_content = response.text
+        
+        # Check for age verification modal and bypass if needed
+        soup = BeautifulSoup(html_content, 'html.parser')
+        age_modal = soup.find('div', class_='modal is-active over18-modal')
+        
+        if age_modal:
+            logger.debug("Age verification modal detected, attempting to bypass...")
+            
+            # Find age verification link
+            age_links = age_modal.find_all('a', href=True)
+            for link in age_links:
+                if 'over18' in link.get('href', ''):
+                    age_url = urljoin(BASE_URL, link.get('href'))
+                    logger.debug(f"Found age verification link: {age_url}")
+                    
+                    # Access age verification link
+                    age_response = session.get(age_url, headers=headers, timeout=30)
+                    if age_response.status_code == 200:
+                        logger.debug("Successfully bypassed age verification")
+                        # Re-fetch the original page
+                        final_response = session.get(url, headers=headers, timeout=30)
+                        if final_response.status_code == 200:
+                            return final_response.text
+                        else:
+                            logger.warning(f"Failed to get final page after age verification: {final_response.status_code}")
+                            return final_response.text
+                    else:
+                        logger.warning(f"Failed to bypass age verification: {age_response.status_code}")
+                        break
+            
+            logger.warning("Could not find or access age verification link")
+        else:
+            logger.debug("No age verification modal detected")
+        
+        return html_content
+        
     except requests.RequestException as e:
         logger.error(f"Error fetching {url}: {e}")
         return None
