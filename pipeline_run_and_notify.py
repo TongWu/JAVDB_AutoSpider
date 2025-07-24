@@ -17,7 +17,7 @@ try:
         GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH,
         SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO,
         PIPELINE_LOG_FILE, SPIDER_LOG_FILE, UPLOADER_LOG_FILE,
-        DAILY_REPORT_DIR, AD_HOC_DIR
+        DAILY_REPORT_DIR, AD_HOC_DIR, LOG_LEVEL
     )
 except ImportError:
     # Fallback values if config.py doesn't exist
@@ -42,15 +42,9 @@ except ImportError:
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
 # --- LOGGING SETUP ---
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(message)s',
-    handlers=[
-        logging.FileHandler(PIPELINE_LOG_FILE, encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+from utils.logging_config import setup_logging, get_logger
+setup_logging(PIPELINE_LOG_FILE, LOG_LEVEL)
+logger = get_logger(__name__)
 
 # --- FILE PATHS ---
 today_str = datetime.now().strftime('%Y%m%d')
