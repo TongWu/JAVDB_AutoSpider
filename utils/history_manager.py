@@ -3,7 +3,15 @@ import os
 import logging
 from datetime import datetime
 
-logger = logging.getLogger(__name__)
+# Import configuration
+try:
+    from config import LOG_LEVEL
+except ImportError:
+    # Fallback value if config.py doesn't exist
+    LOG_LEVEL = 'INFO'
+
+from .logging_config import get_logger
+logger = get_logger(__name__)
 
 
 def load_parsed_movies_history(history_file, phase=None):

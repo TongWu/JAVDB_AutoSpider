@@ -12,7 +12,7 @@ try:
         QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD,
         TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC, TORRENT_SAVE_PATH, AUTO_START, SKIP_CHECKING,
         REQUEST_TIMEOUT, DELAY_BETWEEN_ADDITIONS,
-        UPLOADER_LOG_FILE, DAILY_REPORT_DIR, AD_HOC_DIR
+        UPLOADER_LOG_FILE, DAILY_REPORT_DIR, AD_HOC_DIR, LOG_LEVEL
     )
 except ImportError:
     # Fallback values if config.py doesn't exist
@@ -33,6 +33,7 @@ except ImportError:
     UPLOADER_LOG_FILE = 'logs/qbtorrent_uploader.log'
     DAILY_REPORT_DIR = 'Daily Report'
     AD_HOC_DIR = 'Ad Hoc'
+    LOG_LEVEL = 'INFO'
 
 # Import history manager functions
 try:
@@ -46,15 +47,9 @@ except ImportError:
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(UPLOADER_LOG_FILE, mode='w', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+from utils.logging_config import setup_logging, get_logger
+setup_logging(UPLOADER_LOG_FILE, LOG_LEVEL)
+logger = get_logger(__name__)
 
 # qBittorrent configuration
 QB_BASE_URL = f'http://{QB_HOST}:{QB_PORT}'
