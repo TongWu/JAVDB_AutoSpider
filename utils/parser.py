@@ -6,24 +6,72 @@ from bs4.element import Tag
 
 # Import configuration
 try:
-    from config import DETAIL_PAGE_SLEEP, PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS
+    from config import DETAIL_PAGE_SLEEP, PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS, LOG_LEVEL
 except ImportError:
     # Fallback values if config.py doesn't exist
     DETAIL_PAGE_SLEEP = 5
     PHASE2_MIN_RATE = 4.0
     PHASE2_MIN_COMMENTS = 80
+    LOG_LEVEL = 'INFO'
 
-logger = logging.getLogger(__name__)
+from .logging_config import get_logger
+logger = get_logger(__name__)
+
+def extract_video_code(a):
+    """Extract video code from movie item with improved robustness"""
+    video_title_div = a.find('div', class_='video-title')
+    if video_title_div:
+        # Try to extract video code from <strong> tag first (most reliable)
+        strong_tag = video_title_div.find('strong')
+        if strong_tag:
+            video_code = strong_tag.get_text(strip=True)
+            logger.debug(f"Extracted video code from <strong> tag: {video_code}")
+            return video_code
+        else:
+            # Fallback to full text
+            video_code = video_title_div.get_text(strip=True)
+            logger.debug(f"Extracted video code from full text: {video_code}")
+            return video_code
+    logger.warning("No video-title div found")
+    return ''
 
 def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=False):
     """Parse the index page to extract entries with required tags"""
     soup = BeautifulSoup(html_content, 'html.parser')
     results = []
     
+    # Check for age verification modal and log it
+    age_modal = soup.find('div', class_='modal is-active over18-modal')
+    if age_modal:
+        logger.debug(f'[Page {page_num}] Age verification modal detected, but continuing with parsing')
+    else:
+        logger.debug(f'[Page {page_num}] No age verification modal found')
+    
     movie_list = soup.find('div', class_='movie-list h cols-4 vcols-8')
     if not movie_list:
         logger.warning(f'[Page {page_num}] No movie list found!')
+        
+        # Add more detailed debugging information
+        logger.debug(f'[Page {page_num}] HTML content length: {len(html_content)}')
+        title_tag = soup.find('title')
+        page_title = title_tag.get_text() if title_tag else "No title"
+        logger.debug(f'[Page {page_num}] Page title: {page_title}')
+        
+        # Look for all div elements to see if there are other possible containers
+        all_divs = soup.find_all('div')
+        movie_related_divs = []
+        for div in all_divs:
+            classes = div.get('class', [])
+            if any('movie' in str(c).lower() or 'list' in str(c).lower() for c in classes):
+                movie_related_divs.append(div)
+        
+        logger.debug(f'[Page {page_num}] Found {len(movie_related_divs)} divs with movie/list related classes')
+        for i, div in enumerate(movie_related_divs[:5]):  # Only show first 5
+            logger.debug(f'[Page {page_num}] Div {i+1} classes: {div.get("class")}')
+        
         return results
+    
+    logger.debug(f"[Page {page_num}] Found movie list container")
     
     logger.debug(f"[Page {page_num}] Parsing index page for phase {phase}...")
     if disable_new_releases_filter:
@@ -52,8 +100,7 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                 has_subtitle = ('含中字磁鏈' in tags or '含中字磁链' in tags or 'CnSub DL' in tags)
                 if has_subtitle:
                     href = a.get('href', '')
-                    video_code = a.find('div', class_='video-title')
-                    video_code = video_code.get_text(strip=True) if video_code else ''
+                    video_code = extract_video_code(a)
                     
                     # Extract rating information
                     rate = ''
@@ -95,8 +142,7 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                     ('CnSub DL' in tags and ('Today' in tags or 'Yesterday' in tags))):
                     
                     href = a.get('href', '')
-                    video_code = a.find('div', class_='video-title')
-                    video_code = video_code.get_text(strip=True) if video_code else ''
+                    video_code = extract_video_code(a)
                     
                     # Extract rating information
                     rate = ''
@@ -139,8 +185,7 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                 # Skip if it has subtitle tag (already processed in phase 1)
                 if not (('含中字磁鏈' in tags or '含中字磁链' in tags or 'CnSub DL' in tags)):
                     href = a.get('href', '')
-                    video_code = a.find('div', class_='video-title')
-                    video_code = video_code.get_text(strip=True) if video_code else ''
+                    video_code = extract_video_code(a)
                     
                     # Extract rating information
                     rate = ''
@@ -193,8 +238,7 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                     # Skip if it also has subtitle tag (already processed in phase 1)
                     if not (('含中字磁鏈' in tags or '含中字磁链' in tags or 'CnSub DL' in tags)):
                         href = a.get('href', '')
-                        video_code = a.find('div', class_='video-title')
-                        video_code = video_code.get_text(strip=True) if video_code else ''
+                        video_code = extract_video_code(a)
                         
                         # Extract rating information
                         rate = ''
