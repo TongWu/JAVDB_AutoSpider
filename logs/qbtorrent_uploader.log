@@ -1,39 +1,5 @@
-2025-07-24 22:41:42,120 - INFO - Starting qBittorrent uploader...
-2025-07-24 22:41:42,120 - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250724.csv
-2025-07-24 22:41:42,120 - INFO - Found 18 torrent links in Daily Report/Javdb_TodayTitle_20250724.csv
-2025-07-24 22:41:42,120 - INFO - Skipped 11 already downloaded torrents
-2025-07-24 22:41:42,120 - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-07-24 22:41:42,355 - INFO - Successfully logged in to qBittorrent
-2025-07-24 22:41:42,355 - INFO - History manager imported, will update downloaded status
-2025-07-24 22:41:42,356 - INFO - Starting to add 18 torrents to qBittorrent...
-2025-07-24 22:41:42,356 - INFO - [1/18] Adding: DLDSS-409 [Hacked-NoSubtitle]
-2025-07-24 22:41:43,414 - INFO - [2/18] Adding: JUR-399 [Subtitle]
-2025-07-24 22:41:44,469 - INFO - [3/18] Adding: JUR-404 [Subtitle]
-2025-07-24 22:41:45,527 - INFO - [4/18] Adding: JUR-406 [Hacked+Subtitle]
-2025-07-24 22:41:46,588 - INFO - [5/18] Adding: JUR-406 [Subtitle]
-2025-07-24 22:41:47,639 - INFO - [6/18] Adding: JUR-410 [Subtitle]
-2025-07-24 22:41:48,691 - INFO - [7/18] Adding: JUR-412 [Subtitle]
-2025-07-24 22:41:49,753 - INFO - [8/18] Adding: JUR-442 [Subtitle]
-2025-07-24 22:41:50,813 - INFO - [9/18] Adding: SONE-566 [Hacked+Subtitle]
-2025-07-24 22:41:51,872 - INFO - [10/18] Adding: SONE-823 [Subtitle]
-2025-07-24 22:41:52,953 - INFO - [11/18] Adding: SGKI-056 [NoSubtitle]
-2025-07-24 22:41:54,007 - INFO - [12/18] Adding: DASS-695 [Hacked-NoSubtitle]
-2025-07-24 22:41:55,047 - INFO - [13/18] Adding: DRPT-091 [Hacked-NoSubtitle]
-2025-07-24 22:41:56,085 - INFO - [14/18] Adding: DSVR-1738 [Hacked-NoSubtitle]
-2025-07-24 22:41:57,147 - INFO - [15/18] Adding: DSVR-1738 [NoSubtitle]
-2025-07-24 22:41:58,203 - INFO - [16/18] Adding: SONE-821 [Hacked+Subtitle]
-2025-07-24 22:41:59,242 - INFO - [17/18] Adding: PA0-009 [NoSubtitle]
-2025-07-24 22:42:00,285 - INFO - [18/18] Adding: START-344 [NoSubtitle]
-2025-07-24 22:42:01,336 - INFO - ==================================================
-2025-07-24 22:42:01,336 - INFO - UPLOAD SUMMARY
-2025-07-24 22:42:01,336 - INFO - ==================================================
-2025-07-24 22:42:01,336 - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250724.csv
-2025-07-24 22:42:01,337 - INFO - Total torrents found: 18
-2025-07-24 22:42:01,337 - INFO - Successfully added: 18
-2025-07-24 22:42:01,337 - INFO -   - Hacked subtitle torrents: 3
-2025-07-24 22:42:01,337 - INFO -   - Hacked no subtitle torrents: 4
-2025-07-24 22:42:01,337 - INFO -   - Subtitle torrents: 7
-2025-07-24 22:42:01,337 - INFO -   - No subtitle torrents: 4
-2025-07-24 22:42:01,337 - INFO - Failed to add: 0
-2025-07-24 22:42:01,337 - INFO - Success rate: 100.0%
-2025-07-24 22:42:01,337 - INFO - ==================================================
+2025-07-25 00:07:59,009 - INFO - Starting qBittorrent uploader...
+2025-07-25 00:07:59,009 - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250725.csv
+2025-07-25 00:07:59,009 - INFO - Found 0 torrent links in Daily Report/Javdb_TodayTitle_20250725.csv
+2025-07-25 00:07:59,009 - INFO - Skipped 3 already downloaded torrents
+2025-07-25 00:07:59,009 - WARNING - No torrent links found in CSV file
