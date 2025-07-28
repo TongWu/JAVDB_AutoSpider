@@ -614,7 +614,7 @@ def main():
                 
                 # Save to parsed movies history AFTER writing to CSV (only if new torrents found)
                 if use_history_for_saving and not dry_run and not ignore_history:
-                    save_parsed_movie_to_history(history_file, href, 1, video_code, all_torrent_types)
+                    save_parsed_movie_to_history(history_file, href, 1, video_code, magnet_links)
             else:
                 logger.debug(
                     f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipped CSV entry - all torrent categories already in history")
@@ -769,7 +769,7 @@ def main():
                 
                 # Save to parsed movies history AFTER writing to CSV (only if new torrents found)
                 if use_history_for_saving and not dry_run and not ignore_history:
-                    save_parsed_movie_to_history(history_file, href, 2, video_code, all_torrent_types)
+                    save_parsed_movie_to_history(history_file, href, 2, video_code, magnet_links)
             else:
                 logger.debug(
                     f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipped CSV entry - all torrent categories already in history")
