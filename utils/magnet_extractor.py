@@ -1,6 +1,11 @@
 import logging
-
-logger = logging.getLogger(__name__)
+from utils.logging_config import get_logger, setup_logging
+try:
+    from config import LOG_LEVEL
+except ImportError:
+    LOG_LEVEL = 'INFO'
+setup_logging(log_level=LOG_LEVEL)
+logger = get_logger(__name__)
 
 def extract_magnets(magnets, index=None):
     """Extract magnet links based on categories"""
@@ -20,7 +25,7 @@ def extract_magnets(magnets, index=None):
     # Extract subtitle magnets (current magnet_字幕 logic)
     subtitle_magnets = []
     for m in magnets:
-        if any('字幕' in tag for tag in m['tags']):
+        if any('字幕' in tag or 'Subtitle' in tag for tag in m['tags']):
             # Exclude torrents with ".无码破解" in name (these belong to hacked category)
             if '.无码破解' not in m['name']:
                 subtitle_magnets.append(m)
