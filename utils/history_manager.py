@@ -10,7 +10,8 @@ except ImportError:
     # Fallback value if config.py doesn't exist
     LOG_LEVEL = 'INFO'
 
-from .logging_config import get_logger
+from utils.logging_config import get_logger, setup_logging
+setup_logging(log_level=LOG_LEVEL)
 logger = get_logger(__name__)
 
 
@@ -50,11 +51,20 @@ def load_parsed_movies_history(history_file, phase=None):
                     torrent_types_str = row.get('torrent_type', 'no_subtitle')
                     torrent_types = [t.strip() for t in torrent_types_str.split(',') if t.strip()]
                 else:
-                    # New format: individual columns
+                    # New format: individual columns - check if magnet links exist (with or without date format)
                     torrent_categories = ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']
                     for category in torrent_categories:
-                        if row.get(category) and row[category].strip():
-                            torrent_types.append(category)
+                        magnet_content = row.get(category, '').strip()
+                        if magnet_content:
+                            # Check if it's in [YYYY-MM-DD]magnet_link format or just magnet link
+                            if magnet_content.startswith('[') and ']' in magnet_content:
+                                # Extract magnet link from [YYYY-MM-DD]magnet_link format
+                                magnet_link = magnet_content.split(']', 1)[1]
+                                if magnet_link.startswith('magnet:'):
+                                    torrent_types.append(category)
+                            elif magnet_content.startswith('magnet:'):
+                                # Direct magnet link format
+                                torrent_types.append(category)
 
                 if phase is None:
                     # Load all records (for general checking)
@@ -150,12 +160,11 @@ def cleanup_history_file(history_file, href_records):
                 if 'torrent_type' in record and 'hacked_subtitle' not in record:
                     torrent_types_str = record.get('torrent_type', '')
                     torrent_types = [t.strip() for t in torrent_types_str.split(',') if t.strip()]
-                    current_time = record.get('update_date', '')
                     
-                    # Set download dates for existing torrent types
+                    # Set magnet links for existing torrent types (empty for old format)
                     for category in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
                         if category in torrent_types:
-                            record[category] = current_time
+                            record[category] = ''  # Empty magnet link for old format
                         else:
                             record[category] = ''
                 
@@ -212,12 +221,11 @@ def maintain_history_limit(history_file, max_records=1000):
                     if 'torrent_type' in record and 'hacked_subtitle' not in record:
                         torrent_types_str = record.get('torrent_type', '')
                         torrent_types = [t.strip() for t in torrent_types_str.split(',') if t.strip()]
-                        current_time = record.get('update_date', '')
                         
-                        # Set download dates for existing torrent types
+                        # Set magnet links for existing torrent types (empty for old format)
                         for category in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
                             if category in torrent_types:
-                                record[category] = current_time
+                                record[category] = ''  # Empty magnet link for old format
                             else:
                                 record[category] = ''
                     
@@ -233,19 +241,24 @@ def maintain_history_limit(history_file, max_records=1000):
         logger.error(f"Error maintaining history limit: {e}")
 
 
-def save_parsed_movie_to_history(history_file, href, phase, video_code, torrent_types=None):
-    """Save a parsed movie to the history CSV file, updating existing records with new torrent types"""
+def save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_links=None):
+    """Save a parsed movie to the history CSV file, updating existing records with new magnet links"""
 
-    if torrent_types is None:
-        torrent_types = ['no_subtitle']
-    elif isinstance(torrent_types, str):
-        torrent_types = [torrent_types]
+    if magnet_links is None:
+        magnet_links = {'no_subtitle': ''}
+    elif isinstance(magnet_links, list):
+        # Convert list of torrent types to magnet_links dict
+        magnet_links_dict = {}
+        for torrent_type in magnet_links:
+            magnet_links_dict[torrent_type] = ''
+        magnet_links = magnet_links_dict
 
     # Read existing records
     records = []
     file_exists = os.path.exists(history_file)
     existing_count = 0
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    current_date = datetime.now().strftime("%Y-%m-%d")
     updated_record = None
 
     if file_exists:
@@ -263,7 +276,7 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, torrent_
                             existing_torrent_types = [t.strip() for t in existing_torrent_types if t.strip()]
                             
                             # Merge existing and new torrent types
-                            all_torrent_types = list(set(existing_torrent_types + torrent_types))
+                            all_torrent_types = list(set(existing_torrent_types + list(magnet_links.keys())))
                             all_torrent_types.sort()
                             
                             # Update the record
@@ -271,17 +284,21 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, torrent_
                             row['update_date'] = current_time
                             row['phase'] = phase
                         else:
-                            # New format: update individual columns
-                            for torrent_type in torrent_types:
+                            # New format: update individual columns with magnet links
+                            for torrent_type, magnet_link in magnet_links.items():
                                 if torrent_type in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
-                                    row[torrent_type] = current_time
+                                    # Store magnet link with date format: [YYYY-MM-DD]magnet_link
+                                    if magnet_link:
+                                        row[torrent_type] = f"[{current_date}]{magnet_link}"
+                                    else:
+                                        row[torrent_type] = ''
                             
                             row['update_date'] = current_time
                             row['phase'] = phase
                         
                         # Store the updated record separately to move it to first position
                         updated_record = row.copy()
-                        logger.debug(f"Updated existing record for {href} with new torrent types: {torrent_types}")
+                        logger.debug(f"Updated existing record for {href} with new magnet links: {list(magnet_links.keys())}")
                     else:
                         records.append(row)
 
@@ -310,13 +327,16 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, torrent_
             'no_subtitle': ''
         }
         
-        # Set download dates for the torrent types
-        for torrent_type in torrent_types:
+        # Set magnet links for the torrent types with date format
+        for torrent_type, magnet_link in magnet_links.items():
             if torrent_type in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
-                new_record[torrent_type] = current_time
+                if magnet_link:
+                    new_record[torrent_type] = f"[{current_date}]{magnet_link}"
+                else:
+                    new_record[torrent_type] = ''
         
         records.insert(0, new_record)
-        logger.debug(f"Added new record for {href} with torrent types: {torrent_types}")
+        logger.debug(f"Added new record for {href} with magnet links: {list(magnet_links.keys())}")
     else:
         # Move updated record to first position
         if updated_record:
@@ -334,12 +354,11 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, torrent_
                 if 'torrent_type' in record:
                     torrent_types_str = record.get('torrent_type', '')
                     torrent_types = [t.strip() for t in torrent_types_str.split(',') if t.strip()]
-                    current_time = record.get('update_date', '')
                     
-                    # Set download dates for existing torrent types
+                    # Set magnet links for existing torrent types (empty for old format)
                     for category in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
                         if category in torrent_types:
-                            record[category] = current_time
+                            record[category] = ''  # Empty magnet link for old format
                         else:
                             record[category] = ''
                     
@@ -348,7 +367,7 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, torrent_
                 
                 writer.writerow(record)
 
-        logger.debug(f"Updated history for {href} with torrent types: {torrent_types} (total records: {len(records)})")
+        logger.debug(f"Updated history for {href} with magnet links: {list(magnet_links.keys())} (total records: {len(records)})")
     except Exception as e:
         logger.error(f"Error writing to history file: {e}")
 
@@ -386,12 +405,11 @@ def validate_history_file(history_file):
                 if 'torrent_type' in record:
                     torrent_types_str = record.get('torrent_type', '')
                     torrent_types = [t.strip() for t in torrent_types_str.split(',') if t.strip()]
-                    current_time = record.get('update_date', '')
                     
-                    # Set download dates for existing torrent types
+                    # Set magnet links for existing torrent types (empty for old format)
                     for category in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
                         if category in torrent_types:
-                            record[category] = current_time
+                            record[category] = ''  # Empty magnet link for old format
                         else:
                             record[category] = ''
                     
@@ -543,8 +561,18 @@ def check_torrent_in_history(history_file, href, torrent_type):
                         recorded_types = [t.strip() for t in recorded_types if t.strip()]
                         return torrent_type in recorded_types
                     else:
-                        # New format: check individual column
-                        return row.get(torrent_type, '').strip() != ''
+                        # New format: check individual column for magnet link (with or without date format)
+                        magnet_content = row.get(torrent_type, '').strip()
+                        if magnet_content:
+                            # Check if it's in [YYYY-MM-DD]magnet_link format or just magnet link
+                            if magnet_content.startswith('[') and ']' in magnet_content:
+                                # Extract magnet link from [YYYY-MM-DD]magnet_link format
+                                magnet_link = magnet_content.split(']', 1)[1]
+                                return magnet_link.startswith('magnet:')
+                            elif magnet_content.startswith('magnet:'):
+                                # Direct magnet link format
+                                return True
+                        return False
         return False
     except Exception as e:
         logger.error(f"Error checking torrent in history: {e}")
@@ -637,13 +665,13 @@ def mark_torrent_as_downloaded(history_file, href, video_code, torrent_type):
     """
     try:
         # Use the existing save function to update history
-        # This will add the torrent type to the history record
+        # This will add the torrent type to the history record with empty magnet link
         save_parsed_movie_to_history(
             history_file, 
             href, 
             "2",  # Phase 2 for qBittorrent uploads
             video_code, 
-            [torrent_type]
+            {torrent_type: ''}  # Empty magnet link for downloaded torrents
         )
         
         logger.debug(f"Marked {torrent_type} as downloaded for {video_code} ({href})")
