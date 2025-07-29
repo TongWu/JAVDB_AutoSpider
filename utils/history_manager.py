@@ -285,16 +285,51 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_l
                             row['phase'] = phase
                         else:
                             # New format: update individual columns with magnet links
-                            for torrent_type, magnet_link in magnet_links.items():
+                            filtered_links = {}
+                            # hacked_subtitle > hacked_no_subtitle
+                            if magnet_links.get('hacked_subtitle'):
+                                filtered_links['hacked_subtitle'] = magnet_links['hacked_subtitle']
+                                filtered_links['hacked_no_subtitle'] = ''
+                            else:
+                                filtered_links['hacked_subtitle'] = ''
+                                filtered_links['hacked_no_subtitle'] = magnet_links.get('hacked_no_subtitle', '')
+                            # subtitle > no_subtitle
+                            if magnet_links.get('subtitle'):
+                                filtered_links['subtitle'] = magnet_links['subtitle']
+                                filtered_links['no_subtitle'] = ''
+                            else:
+                                filtered_links['subtitle'] = ''
+                                filtered_links['no_subtitle'] = magnet_links.get('no_subtitle', '')
+
+                            for torrent_type, magnet_link in filtered_links.items():
                                 if torrent_type in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
-                                    # Store magnet link with date format: [YYYY-MM-DD]magnet_link
+                                    old_content = row.get(torrent_type, '').strip()
+                                    old_date = None
+                                    if old_content.startswith('[') and ']' in old_content:
+                                        try:
+                                            old_date = old_content[1:old_content.index(']')]
+                                        except Exception:
+                                            old_date = None
                                     if magnet_link:
-                                        row[torrent_type] = f"[{current_date}]{magnet_link}"
-                                    else:
-                                        row[torrent_type] = ''
+                                        if old_date:
+                                            try:
+                                                old_dt = datetime.strptime(old_date, "%Y-%m-%d")
+                                                new_dt = datetime.strptime(current_date, "%Y-%m-%d")
+                                                if new_dt > old_dt:
+                                                    row[torrent_type] = f"[{current_date}]{magnet_link}"
+                                            except Exception:
+                                                row[torrent_type] = f"[{current_date}]{magnet_link}"
+                                        else:
+                                            row[torrent_type] = f"[{current_date}]{magnet_link}"
                             
                             row['update_date'] = current_time
                             row['phase'] = phase
+                        
+                        # 清理逻辑：优先级高的有内容时，清空优先级低的
+                        if row.get('hacked_subtitle', '').strip():
+                            row['hacked_no_subtitle'] = ''
+                        if row.get('subtitle', '').strip():
+                            row['no_subtitle'] = ''
                         
                         # Store the updated record separately to move it to first position
                         updated_record = row.copy()
@@ -334,6 +369,12 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_l
                     new_record[torrent_type] = f"[{current_date}]{magnet_link}"
                 else:
                     new_record[torrent_type] = ''
+        
+        # Cleaning logic: when the higher priority has content, clear the lower priority
+        if new_record.get('hacked_subtitle', '').strip():
+            new_record['hacked_no_subtitle'] = ''
+        if new_record.get('subtitle', '').strip():
+            new_record['no_subtitle'] = ''
         
         records.insert(0, new_record)
         logger.debug(f"Added new record for {href} with magnet links: {list(magnet_links.keys())}")
