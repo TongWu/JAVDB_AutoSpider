@@ -66,11 +66,11 @@ def extract_magnets(magnets, index=None):
     hacked_no_subtitle_magnets = []
     
     for m in magnets:
-        # Check for hacked_subtitle: -UC in torrent link
-        if '-UC' in m['name']:
+        # Check for hacked_subtitle: -UC or -C.无码破解 in torrent link
+        if '-UC' in m['name'] or '-CU' in m['name'] or '-C.无码破解' in m['name'] or '-U-C' in m['name'] or '-C-U' in m['name']:
             hacked_subtitle_magnets.append(m)
         # Check for hacked_no_subtitle: -U.torrent or -U.无码破解 in torrent link
-        elif '-U.torrent' in m['name'] or '-U.无码破解' in m['name']:
+        elif '-U' in m['name'] or '.无码破解' in m['name']:
             hacked_no_subtitle_magnets.append(m)
     
     # Select best hacked_subtitle if available
@@ -128,7 +128,7 @@ def extract_magnets(magnets, index=None):
     for m in magnets:
         # Skip if it's already categorized as subtitle or hacked
         is_subtitle = any('字幕' in tag for tag in m['tags']) and '.无码破解' not in m['name']
-        is_hacked = '-UC' in m['name'] or '-U.torrent' in m['name'] or '-U.无码破解' in m['name']
+        is_hacked = '-UC' in m['name'] or '-U' in m['name'] or '.无码破解' in m['name']
         
         if not is_subtitle and not is_hacked:
             is_4k = '-4k' in m['name'].lower() or '4k' in m['name'].lower()
