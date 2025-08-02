@@ -1,171 +1,290 @@
-2025-08-01 19:30:59,945 - __main__ - INFO - Starting qBittorrent uploader...
-2025-08-01 19:30:59,945 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250801.csv
-2025-08-01 19:30:59,946 - __main__ - DEBUG - Skipping downloaded torrent: MKMP-649 [Subtitle]
-2025-08-01 19:30:59,946 - __main__ - DEBUG - Skipping downloaded torrent: NACR-984 [Subtitle]
-2025-08-01 19:30:59,946 - __main__ - DEBUG - Skipping downloaded torrent: ABF-251 [NoSubtitle]
-2025-08-01 19:30:59,946 - __main__ - DEBUG - Skipping downloaded torrent: MADV-592 [Hacked-NoSubtitle]
-2025-08-01 19:30:59,946 - __main__ - INFO - Found 36 torrent links in Daily Report/Javdb_TodayTitle_20250801.csv
-2025-08-01 19:30:59,946 - __main__ - INFO - Skipped 4 already downloaded torrents
-2025-08-01 19:30:59,946 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-08-01 19:30:59,951 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 101.100.165.240:12301
-2025-08-01 19:31:00,175 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/auth/login HTTP/1.1" 200 3
-2025-08-01 19:31:00,175 - __main__ - INFO - Successfully logged in to qBittorrent
-2025-08-01 19:31:00,175 - __main__ - INFO - History manager imported, will update downloaded status
-2025-08-01 19:31:00,175 - __main__ - INFO - Starting to add 36 torrents to qBittorrent...
-2025-08-01 19:31:00,175 - __main__ - INFO - [1/36] Adding: MIAA-321 [Hacked-NoSubtitle]
-2025-08-01 19:31:00,175 - __main__ - DEBUG - Adding torrent: MIAA-321 [Hacked-NoSubtitle] with category: JavDB
-2025-08-01 19:31:00,212 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:00,212 - __main__ - DEBUG - Successfully added torrent: MIAA-321 [Hacked-NoSubtitle] to category: JavDB
-2025-08-01 19:31:01,223 - __main__ - INFO - [2/36] Adding: MIAA-321 [Subtitle]
-2025-08-01 19:31:01,223 - __main__ - DEBUG - Adding torrent: MIAA-321 [Subtitle] with category: JavDB
-2025-08-01 19:31:01,272 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:01,274 - __main__ - DEBUG - Successfully added torrent: MIAA-321 [Subtitle] to category: JavDB
-2025-08-01 19:31:02,284 - __main__ - INFO - [3/36] Adding: MIDE-076 [Hacked-NoSubtitle]
-2025-08-01 19:31:02,284 - __main__ - DEBUG - Adding torrent: MIDE-076 [Hacked-NoSubtitle] with category: JavDB
-2025-08-01 19:31:02,338 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:02,338 - __main__ - DEBUG - Successfully added torrent: MIDE-076 [Hacked-NoSubtitle] to category: JavDB
-2025-08-01 19:31:03,347 - __main__ - INFO - [4/36] Adding: MIDE-076 [Subtitle]
-2025-08-01 19:31:03,348 - __main__ - DEBUG - Adding torrent: MIDE-076 [Subtitle] with category: JavDB
-2025-08-01 19:31:03,412 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:03,412 - __main__ - DEBUG - Successfully added torrent: MIDE-076 [Subtitle] to category: JavDB
-2025-08-01 19:31:04,414 - __main__ - INFO - [5/36] Adding: MKMP-649 [Hacked-NoSubtitle]
-2025-08-01 19:31:04,414 - __main__ - DEBUG - Adding torrent: MKMP-649 [Hacked-NoSubtitle] with category: JavDB
-2025-08-01 19:31:04,453 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:04,453 - __main__ - DEBUG - Successfully added torrent: MKMP-649 [Hacked-NoSubtitle] to category: JavDB
-2025-08-01 19:31:05,463 - __main__ - INFO - [6/36] Adding: NACR-984 [Hacked-NoSubtitle]
-2025-08-01 19:31:05,464 - __main__ - DEBUG - Adding torrent: NACR-984 [Hacked-NoSubtitle] with category: JavDB
-2025-08-01 19:31:05,511 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:05,512 - __main__ - DEBUG - Successfully added torrent: NACR-984 [Hacked-NoSubtitle] to category: JavDB
-2025-08-01 19:31:06,520 - __main__ - INFO - [7/36] Adding: ABF-251 [Subtitle]
-2025-08-01 19:31:06,521 - __main__ - DEBUG - Adding torrent: ABF-251 [Subtitle] with category: JavDB
-2025-08-01 19:31:06,570 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:06,570 - __main__ - DEBUG - Successfully added torrent: ABF-251 [Subtitle] to category: JavDB
-2025-08-01 19:31:07,572 - __main__ - INFO - [8/36] Adding: CWPBD-37 [Subtitle]
-2025-08-01 19:31:07,573 - __main__ - DEBUG - Adding torrent: CWPBD-37 [Subtitle] with category: JavDB
-2025-08-01 19:31:07,629 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:07,629 - __main__ - DEBUG - Successfully added torrent: CWPBD-37 [Subtitle] to category: JavDB
-2025-08-01 19:31:08,635 - __main__ - INFO - [9/36] Adding: DLDSS-410 [Subtitle]
-2025-08-01 19:31:08,635 - __main__ - DEBUG - Adding torrent: DLDSS-410 [Subtitle] with category: JavDB
-2025-08-01 19:31:08,691 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:08,691 - __main__ - DEBUG - Successfully added torrent: DLDSS-410 [Subtitle] to category: JavDB
-2025-08-01 19:31:09,701 - __main__ - INFO - [10/36] Adding: DLDSS-411 [Subtitle]
-2025-08-01 19:31:09,701 - __main__ - DEBUG - Adding torrent: DLDSS-411 [Subtitle] with category: JavDB
-2025-08-01 19:31:09,749 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:09,749 - __main__ - DEBUG - Successfully added torrent: DLDSS-411 [Subtitle] to category: JavDB
-2025-08-01 19:31:10,752 - __main__ - INFO - [11/36] Adding: FNS-042 [Subtitle]
-2025-08-01 19:31:10,752 - __main__ - DEBUG - Adding torrent: FNS-042 [Subtitle] with category: JavDB
-2025-08-01 19:31:10,792 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:10,793 - __main__ - DEBUG - Successfully added torrent: FNS-042 [Subtitle] to category: JavDB
-2025-08-01 19:31:11,802 - __main__ - INFO - [12/36] Adding: FNS-064 [Subtitle]
-2025-08-01 19:31:11,802 - __main__ - DEBUG - Adding torrent: FNS-064 [Subtitle] with category: JavDB
-2025-08-01 19:31:11,842 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:11,842 - __main__ - DEBUG - Successfully added torrent: FNS-064 [Subtitle] to category: JavDB
-2025-08-01 19:31:12,844 - __main__ - INFO - [13/36] Adding: FNS-067 [Subtitle]
-2025-08-01 19:31:12,844 - __main__ - DEBUG - Adding torrent: FNS-067 [Subtitle] with category: JavDB
-2025-08-01 19:31:12,893 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:12,894 - __main__ - DEBUG - Successfully added torrent: FNS-067 [Subtitle] to category: JavDB
-2025-08-01 19:31:13,901 - __main__ - INFO - [14/36] Adding: FNS-069 [Subtitle]
-2025-08-01 19:31:13,901 - __main__ - DEBUG - Adding torrent: FNS-069 [Subtitle] with category: JavDB
-2025-08-01 19:31:13,953 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:13,953 - __main__ - DEBUG - Successfully added torrent: FNS-069 [Subtitle] to category: JavDB
-2025-08-01 19:31:14,955 - __main__ - INFO - [15/36] Adding: FNS-072 [Subtitle]
-2025-08-01 19:31:14,955 - __main__ - DEBUG - Adding torrent: FNS-072 [Subtitle] with category: JavDB
-2025-08-01 19:31:15,010 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:15,011 - __main__ - DEBUG - Successfully added torrent: FNS-072 [Subtitle] to category: JavDB
-2025-08-01 19:31:16,019 - __main__ - INFO - [16/36] Adding: FNS-075 [Subtitle]
-2025-08-01 19:31:16,019 - __main__ - DEBUG - Adding torrent: FNS-075 [Subtitle] with category: JavDB
-2025-08-01 19:31:16,097 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:16,098 - __main__ - DEBUG - Successfully added torrent: FNS-075 [Subtitle] to category: JavDB
-2025-08-01 19:31:17,108 - __main__ - INFO - [17/36] Adding: JURA-150 [Subtitle]
-2025-08-01 19:31:17,108 - __main__ - DEBUG - Adding torrent: JURA-150 [Subtitle] with category: JavDB
-2025-08-01 19:31:17,158 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:17,159 - __main__ - DEBUG - Successfully added torrent: JURA-150 [Subtitle] to category: JavDB
-2025-08-01 19:31:18,169 - __main__ - INFO - [18/36] Adding: PGD-742 [Hacked+Subtitle]
-2025-08-01 19:31:18,169 - __main__ - DEBUG - Adding torrent: PGD-742 [Hacked+Subtitle] with category: JavDB
-2025-08-01 19:31:18,229 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:18,229 - __main__ - DEBUG - Successfully added torrent: PGD-742 [Hacked+Subtitle] to category: JavDB
-2025-08-01 19:31:19,238 - __main__ - INFO - [19/36] Adding: PGD-742 [Subtitle]
-2025-08-01 19:31:19,239 - __main__ - DEBUG - Adding torrent: PGD-742 [Subtitle] with category: JavDB
-2025-08-01 19:31:19,336 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:19,337 - __main__ - DEBUG - Successfully added torrent: PGD-742 [Subtitle] to category: JavDB
-2025-08-01 19:31:20,337 - __main__ - INFO - [20/36] Adding: ADN-712 [NoSubtitle]
-2025-08-01 19:31:20,337 - __main__ - DEBUG - Adding torrent: ADN-712 [NoSubtitle] with category: JavDB
-2025-08-01 19:31:20,372 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:20,372 - __main__ - DEBUG - Successfully added torrent: ADN-712 [NoSubtitle] to category: JavDB
-2025-08-01 19:31:21,380 - __main__ - INFO - [21/36] Adding: ATID-639 [NoSubtitle]
-2025-08-01 19:31:21,382 - __main__ - DEBUG - Adding torrent: ATID-639 [NoSubtitle] with category: JavDB
-2025-08-01 19:31:21,419 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:21,420 - __main__ - DEBUG - Successfully added torrent: ATID-639 [NoSubtitle] to category: JavDB
-2025-08-01 19:31:22,430 - __main__ - INFO - [22/36] Adding: MIDA-257 [NoSubtitle]
-2025-08-01 19:31:22,430 - __main__ - DEBUG - Adding torrent: MIDA-257 [NoSubtitle] with category: JavDB
-2025-08-01 19:31:22,470 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:22,471 - __main__ - DEBUG - Successfully added torrent: MIDA-257 [NoSubtitle] to category: JavDB
-2025-08-01 19:31:23,476 - __main__ - INFO - [23/36] Adding: MIRD-259 [NoSubtitle]
-2025-08-01 19:31:23,476 - __main__ - DEBUG - Adding torrent: MIRD-259 [NoSubtitle] with category: JavDB
-2025-08-01 19:31:23,520 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:23,520 - __main__ - DEBUG - Successfully added torrent: MIRD-259 [NoSubtitle] to category: JavDB
-2025-08-01 19:31:24,530 - __main__ - INFO - [24/36] Adding: MIAB-521 [NoSubtitle]
-2025-08-01 19:31:24,530 - __main__ - DEBUG - Adding torrent: MIAB-521 [NoSubtitle] with category: JavDB
-2025-08-01 19:31:24,589 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:24,589 - __main__ - DEBUG - Successfully added torrent: MIAB-521 [NoSubtitle] to category: JavDB
-2025-08-01 19:31:25,599 - __main__ - INFO - [25/36] Adding: DVMM-275 [NoSubtitle]
-2025-08-01 19:31:25,601 - __main__ - DEBUG - Adding torrent: DVMM-275 [NoSubtitle] with category: JavDB
-2025-08-01 19:31:25,668 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:25,669 - __main__ - DEBUG - Successfully added torrent: DVMM-275 [NoSubtitle] to category: JavDB
-2025-08-01 19:31:26,676 - __main__ - INFO - [26/36] Adding: WAAA-550 [NoSubtitle]
-2025-08-01 19:31:26,676 - __main__ - DEBUG - Adding torrent: WAAA-550 [NoSubtitle] with category: JavDB
-2025-08-01 19:31:26,730 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:26,730 - __main__ - DEBUG - Successfully added torrent: WAAA-550 [NoSubtitle] to category: JavDB
-2025-08-01 19:31:27,739 - __main__ - INFO - [27/36] Adding: MADV-593 [Hacked-NoSubtitle]
-2025-08-01 19:31:27,740 - __main__ - DEBUG - Adding torrent: MADV-593 [Hacked-NoSubtitle] with category: JavDB
-2025-08-01 19:31:27,791 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:27,791 - __main__ - DEBUG - Successfully added torrent: MADV-593 [Hacked-NoSubtitle] to category: JavDB
-2025-08-01 19:31:28,798 - __main__ - INFO - [28/36] Adding: MADV-593 [NoSubtitle]
-2025-08-01 19:31:28,799 - __main__ - DEBUG - Adding torrent: MADV-593 [NoSubtitle] with category: JavDB
-2025-08-01 19:31:28,848 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:28,848 - __main__ - DEBUG - Successfully added torrent: MADV-593 [NoSubtitle] to category: JavDB
-2025-08-01 19:31:29,850 - __main__ - INFO - [29/36] Adding: MDBK-379 [Hacked-NoSubtitle]
-2025-08-01 19:31:29,851 - __main__ - DEBUG - Adding torrent: MDBK-379 [Hacked-NoSubtitle] with category: JavDB
-2025-08-01 19:31:29,909 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:29,910 - __main__ - DEBUG - Successfully added torrent: MDBK-379 [Hacked-NoSubtitle] to category: JavDB
-2025-08-01 19:31:30,920 - __main__ - INFO - [30/36] Adding: MDBK-379 [NoSubtitle]
-2025-08-01 19:31:30,920 - __main__ - DEBUG - Adding torrent: MDBK-379 [NoSubtitle] with category: JavDB
-2025-08-01 19:31:30,979 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:30,979 - __main__ - DEBUG - Successfully added torrent: MDBK-379 [NoSubtitle] to category: JavDB
-2025-08-01 19:31:31,988 - __main__ - INFO - [31/36] Adding: RBD-628 [Hacked+Subtitle]
-2025-08-01 19:31:31,988 - __main__ - DEBUG - Adding torrent: RBD-628 [Hacked+Subtitle] with category: JavDB
-2025-08-01 19:31:32,042 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:32,042 - __main__ - DEBUG - Successfully added torrent: RBD-628 [Hacked+Subtitle] to category: JavDB
-2025-08-01 19:31:33,045 - __main__ - INFO - [32/36] Adding: RBD-628 [NoSubtitle]
-2025-08-01 19:31:33,045 - __main__ - DEBUG - Adding torrent: RBD-628 [NoSubtitle] with category: JavDB
-2025-08-01 19:31:33,100 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:33,100 - __main__ - DEBUG - Successfully added torrent: RBD-628 [NoSubtitle] to category: JavDB
-2025-08-01 19:31:34,103 - __main__ - INFO - [33/36] Adding: CAWD-868 [NoSubtitle]
-2025-08-01 19:31:34,103 - __main__ - DEBUG - Adding torrent: CAWD-868 [NoSubtitle] with category: JavDB
-2025-08-01 19:31:34,163 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:34,164 - __main__ - DEBUG - Successfully added torrent: CAWD-868 [NoSubtitle] to category: JavDB
-2025-08-01 19:31:35,172 - __main__ - INFO - [34/36] Adding: WAAA-552 [NoSubtitle]
-2025-08-01 19:31:35,174 - __main__ - DEBUG - Adding torrent: WAAA-552 [NoSubtitle] with category: JavDB
-2025-08-01 19:31:35,231 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:35,232 - __main__ - DEBUG - Successfully added torrent: WAAA-552 [NoSubtitle] to category: JavDB
-2025-08-01 19:31:36,242 - __main__ - INFO - [35/36] Adding: CAWD-848 [NoSubtitle]
-2025-08-01 19:31:36,242 - __main__ - DEBUG - Adding torrent: CAWD-848 [NoSubtitle] with category: JavDB
-2025-08-01 19:31:36,292 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:36,293 - __main__ - DEBUG - Successfully added torrent: CAWD-848 [NoSubtitle] to category: JavDB
-2025-08-01 19:31:37,304 - __main__ - INFO - [36/36] Adding: TEN-060 [NoSubtitle]
-2025-08-01 19:31:37,305 - __main__ - DEBUG - Adding torrent: TEN-060 [NoSubtitle] with category: JavDB
-2025-08-01 19:31:37,351 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-01 19:31:37,351 - __main__ - DEBUG - Successfully added torrent: TEN-060 [NoSubtitle] to category: JavDB
-2025-08-01 19:31:38,359 - __main__ - INFO - ==================================================
-2025-08-01 19:31:38,359 - __main__ - INFO - UPLOAD SUMMARY
-2025-08-01 19:31:38,359 - __main__ - INFO - ==================================================
-2025-08-01 19:31:38,359 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250801.csv
-2025-08-01 19:31:38,359 - __main__ - INFO - Total torrents found: 36
-2025-08-01 19:31:38,360 - __main__ - INFO - Successfully added: 36
-2025-08-01 19:31:38,360 - __main__ - INFO -   - Hacked subtitle torrents: 2
-2025-08-01 19:31:38,360 - __main__ - INFO -   - Hacked no subtitle torrents: 6
-2025-08-01 19:31:38,360 - __main__ - INFO -   - Subtitle torrents: 14
-2025-08-01 19:31:38,360 - __main__ - INFO -   - No subtitle torrents: 14
-2025-08-01 19:31:38,360 - __main__ - INFO - Failed to add: 0
-2025-08-01 19:31:38,360 - __main__ - INFO - Success rate: 100.0%
-2025-08-01 19:31:38,360 - __main__ - INFO - ==================================================
+2025-08-02 22:44:49,435 - __main__ - INFO - Starting qBittorrent uploader...
+2025-08-02 22:44:49,436 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250802.csv
+2025-08-02 22:44:49,436 - __main__ - DEBUG - Skipping downloaded torrent: NSFS-396 [Subtitle]
+2025-08-02 22:44:49,436 - __main__ - DEBUG - Skipping downloaded torrent: ABF-251 [Subtitle]
+2025-08-02 22:44:49,436 - __main__ - DEBUG - Skipping downloaded torrent: OFES-026 [NoSubtitle]
+2025-08-02 22:44:49,436 - __main__ - DEBUG - Skipping downloaded torrent: START-350 [NoSubtitle]
+2025-08-02 22:44:49,436 - __main__ - DEBUG - Skipping downloaded torrent: START-367 [NoSubtitle]
+2025-08-02 22:44:49,436 - __main__ - DEBUG - Skipping downloaded torrent: MADV-593 [Hacked-NoSubtitle]
+2025-08-02 22:44:49,436 - __main__ - DEBUG - Skipping downloaded torrent: MDBK-379 [Hacked-NoSubtitle]
+2025-08-02 22:44:49,436 - __main__ - INFO - Found 65 torrent links in Daily Report/Javdb_TodayTitle_20250802.csv
+2025-08-02 22:44:49,436 - __main__ - INFO - Skipped 7 already downloaded torrents
+2025-08-02 22:44:49,436 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-08-02 22:44:49,442 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 101.100.165.240:12301
+2025-08-02 22:44:49,608 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/auth/login HTTP/1.1" 200 3
+2025-08-02 22:44:49,608 - __main__ - INFO - Successfully logged in to qBittorrent
+2025-08-02 22:44:49,608 - __main__ - INFO - History manager imported, will update downloaded status
+2025-08-02 22:44:49,608 - __main__ - INFO - Starting to add 65 torrents to qBittorrent...
+2025-08-02 22:44:49,608 - __main__ - INFO - [1/65] Adding: NHDTA-725 [Hacked-NoSubtitle]
+2025-08-02 22:44:49,608 - __main__ - DEBUG - Adding torrent: NHDTA-725 [Hacked-NoSubtitle] with category: JavDB
+2025-08-02 22:44:49,614 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:44:49,614 - __main__ - DEBUG - Successfully added torrent: NHDTA-725 [Hacked-NoSubtitle] to category: JavDB
+2025-08-02 22:44:50,619 - __main__ - INFO - [2/65] Adding: NHDTA-725 [Subtitle]
+2025-08-02 22:44:50,619 - __main__ - DEBUG - Adding torrent: NHDTA-725 [Subtitle] with category: JavDB
+2025-08-02 22:44:50,622 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:44:50,623 - __main__ - DEBUG - Successfully added torrent: NHDTA-725 [Subtitle] to category: JavDB
+2025-08-02 22:44:51,627 - __main__ - INFO - [3/65] Adding: NSFS-396 [Hacked-NoSubtitle]
+2025-08-02 22:44:51,628 - __main__ - DEBUG - Adding torrent: NSFS-396 [Hacked-NoSubtitle] with category: JavDB
+2025-08-02 22:44:51,631 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:44:51,631 - __main__ - DEBUG - Successfully added torrent: NSFS-396 [Hacked-NoSubtitle] to category: JavDB
+2025-08-02 22:44:52,636 - __main__ - INFO - [4/65] Adding: ABF-251 [Hacked+Subtitle]
+2025-08-02 22:44:52,636 - __main__ - DEBUG - Adding torrent: ABF-251 [Hacked+Subtitle] with category: JavDB
+2025-08-02 22:44:52,639 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:44:52,639 - __main__ - DEBUG - Successfully added torrent: ABF-251 [Hacked+Subtitle] to category: JavDB
+2025-08-02 22:44:53,644 - __main__ - INFO - [5/65] Adding: BIJN-275 [Subtitle]
+2025-08-02 22:44:53,644 - __main__ - DEBUG - Adding torrent: BIJN-275 [Subtitle] with category: JavDB
+2025-08-02 22:44:53,647 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:44:53,647 - __main__ - DEBUG - Successfully added torrent: BIJN-275 [Subtitle] to category: JavDB
+2025-08-02 22:44:54,651 - __main__ - INFO - [6/65] Adding: BLK-655 [Subtitle]
+2025-08-02 22:44:54,651 - __main__ - DEBUG - Adding torrent: BLK-655 [Subtitle] with category: JavDB
+2025-08-02 22:44:54,655 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:44:54,655 - __main__ - DEBUG - Successfully added torrent: BLK-655 [Subtitle] to category: JavDB
+2025-08-02 22:44:55,659 - __main__ - INFO - [7/65] Adding: DASS-688 [Subtitle]
+2025-08-02 22:44:55,659 - __main__ - DEBUG - Adding torrent: DASS-688 [Subtitle] with category: JavDB
+2025-08-02 22:44:55,662 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:44:55,662 - __main__ - DEBUG - Successfully added torrent: DASS-688 [Subtitle] to category: JavDB
+2025-08-02 22:44:56,663 - __main__ - INFO - [8/65] Adding: DASS-713 [Subtitle]
+2025-08-02 22:44:56,663 - __main__ - DEBUG - Adding torrent: DASS-713 [Subtitle] with category: JavDB
+2025-08-02 22:44:56,667 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:44:56,667 - __main__ - DEBUG - Successfully added torrent: DASS-713 [Subtitle] to category: JavDB
+2025-08-02 22:44:57,669 - __main__ - INFO - [9/65] Adding: DEAB-004 [Subtitle]
+2025-08-02 22:44:57,670 - __main__ - DEBUG - Adding torrent: DEAB-004 [Subtitle] with category: JavDB
+2025-08-02 22:44:57,672 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:44:57,673 - __main__ - DEBUG - Successfully added torrent: DEAB-004 [Subtitle] to category: JavDB
+2025-08-02 22:44:58,676 - __main__ - INFO - [10/65] Adding: DFE-102 [Subtitle]
+2025-08-02 22:44:58,676 - __main__ - DEBUG - Adding torrent: DFE-102 [Subtitle] with category: JavDB
+2025-08-02 22:44:58,681 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:44:58,681 - __main__ - DEBUG - Successfully added torrent: DFE-102 [Subtitle] to category: JavDB
+2025-08-02 22:44:59,683 - __main__ - INFO - [11/65] Adding: DVMM-245 [Subtitle]
+2025-08-02 22:44:59,683 - __main__ - DEBUG - Adding torrent: DVMM-245 [Subtitle] with category: JavDB
+2025-08-02 22:44:59,685 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:44:59,685 - __main__ - DEBUG - Successfully added torrent: DVMM-245 [Subtitle] to category: JavDB
+2025-08-02 22:45:00,690 - __main__ - INFO - [12/65] Adding: DVMM-251 [Subtitle]
+2025-08-02 22:45:00,690 - __main__ - DEBUG - Adding torrent: DVMM-251 [Subtitle] with category: JavDB
+2025-08-02 22:45:00,695 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:00,695 - __main__ - DEBUG - Successfully added torrent: DVMM-251 [Subtitle] to category: JavDB
+2025-08-02 22:45:01,700 - __main__ - INFO - [13/65] Adding: DVMM-262 [Subtitle]
+2025-08-02 22:45:01,701 - __main__ - DEBUG - Adding torrent: DVMM-262 [Subtitle] with category: JavDB
+2025-08-02 22:45:01,703 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:01,704 - __main__ - DEBUG - Successfully added torrent: DVMM-262 [Subtitle] to category: JavDB
+2025-08-02 22:45:02,707 - __main__ - INFO - [14/65] Adding: DVRT-057 [Subtitle]
+2025-08-02 22:45:02,707 - __main__ - DEBUG - Adding torrent: DVRT-057 [Subtitle] with category: JavDB
+2025-08-02 22:45:02,710 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:02,711 - __main__ - DEBUG - Successfully added torrent: DVRT-057 [Subtitle] to category: JavDB
+2025-08-02 22:45:03,712 - __main__ - INFO - [15/65] Adding: PGD-711 [Hacked+Subtitle]
+2025-08-02 22:45:03,712 - __main__ - DEBUG - Adding torrent: PGD-711 [Hacked+Subtitle] with category: JavDB
+2025-08-02 22:45:03,714 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:03,715 - __main__ - DEBUG - Successfully added torrent: PGD-711 [Hacked+Subtitle] to category: JavDB
+2025-08-02 22:45:04,717 - __main__ - INFO - [16/65] Adding: PGD-711 [Subtitle]
+2025-08-02 22:45:04,717 - __main__ - DEBUG - Adding torrent: PGD-711 [Subtitle] with category: JavDB
+2025-08-02 22:45:04,720 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:04,720 - __main__ - DEBUG - Successfully added torrent: PGD-711 [Subtitle] to category: JavDB
+2025-08-02 22:45:05,722 - __main__ - INFO - [17/65] Adding: LULU-392 [NoSubtitle]
+2025-08-02 22:45:05,722 - __main__ - DEBUG - Adding torrent: LULU-392 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:05,725 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:05,725 - __main__ - DEBUG - Successfully added torrent: LULU-392 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:06,729 - __main__ - INFO - [18/65] Adding: HR-011 [NoSubtitle]
+2025-08-02 22:45:06,729 - __main__ - DEBUG - Adding torrent: HR-011 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:06,732 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:06,732 - __main__ - DEBUG - Successfully added torrent: HR-011 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:07,737 - __main__ - INFO - [19/65] Adding: WAAA-553 [NoSubtitle]
+2025-08-02 22:45:07,738 - __main__ - DEBUG - Adding torrent: WAAA-553 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:07,741 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:07,741 - __main__ - DEBUG - Successfully added torrent: WAAA-553 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:08,741 - __main__ - INFO - [20/65] Adding: MIMK-232 [NoSubtitle]
+2025-08-02 22:45:08,741 - __main__ - DEBUG - Adding torrent: MIMK-232 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:08,744 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:08,744 - __main__ - DEBUG - Successfully added torrent: MIMK-232 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:09,749 - __main__ - INFO - [21/65] Adding: ADN-709 [NoSubtitle]
+2025-08-02 22:45:09,750 - __main__ - DEBUG - Adding torrent: ADN-709 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:09,753 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:09,753 - __main__ - DEBUG - Successfully added torrent: ADN-709 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:10,757 - __main__ - INFO - [22/65] Adding: MIDA-269 [NoSubtitle]
+2025-08-02 22:45:10,757 - __main__ - DEBUG - Adding torrent: MIDA-269 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:10,761 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:10,761 - __main__ - DEBUG - Successfully added torrent: MIDA-269 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:11,761 - __main__ - INFO - [23/65] Adding: ADN-711 [NoSubtitle]
+2025-08-02 22:45:11,761 - __main__ - DEBUG - Adding torrent: ADN-711 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:11,765 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:11,765 - __main__ - DEBUG - Successfully added torrent: ADN-711 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:12,771 - __main__ - INFO - [24/65] Adding: CAWD-853 [NoSubtitle]
+2025-08-02 22:45:12,771 - __main__ - DEBUG - Adding torrent: CAWD-853 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:12,773 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:12,774 - __main__ - DEBUG - Successfully added torrent: CAWD-853 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:13,779 - __main__ - INFO - [25/65] Adding: CLUB-878 [NoSubtitle]
+2025-08-02 22:45:13,779 - __main__ - DEBUG - Adding torrent: CLUB-878 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:13,782 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:13,782 - __main__ - DEBUG - Successfully added torrent: CLUB-878 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:14,786 - __main__ - INFO - [26/65] Adding: WAAA-546 [NoSubtitle]
+2025-08-02 22:45:14,786 - __main__ - DEBUG - Adding torrent: WAAA-546 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:14,789 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:14,790 - __main__ - DEBUG - Successfully added torrent: WAAA-546 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:15,791 - __main__ - INFO - [27/65] Adding: MIDA-260 [NoSubtitle]
+2025-08-02 22:45:15,791 - __main__ - DEBUG - Adding torrent: MIDA-260 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:15,795 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:15,795 - __main__ - DEBUG - Successfully added torrent: MIDA-260 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:16,798 - __main__ - INFO - [28/65] Adding: MIDA-262 [NoSubtitle]
+2025-08-02 22:45:16,799 - __main__ - DEBUG - Adding torrent: MIDA-262 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:16,801 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:16,802 - __main__ - DEBUG - Successfully added torrent: MIDA-262 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:17,804 - __main__ - INFO - [29/65] Adding: BMW-339 [NoSubtitle]
+2025-08-02 22:45:17,804 - __main__ - DEBUG - Adding torrent: BMW-339 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:17,808 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:17,808 - __main__ - DEBUG - Successfully added torrent: BMW-339 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:18,811 - __main__ - INFO - [30/65] Adding: MIKR-029 [NoSubtitle]
+2025-08-02 22:45:18,811 - __main__ - DEBUG - Adding torrent: MIKR-029 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:18,814 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:18,814 - __main__ - DEBUG - Successfully added torrent: MIKR-029 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:19,819 - __main__ - INFO - [31/65] Adding: NHDTA-667 [Hacked-NoSubtitle]
+2025-08-02 22:45:19,820 - __main__ - DEBUG - Adding torrent: NHDTA-667 [Hacked-NoSubtitle] with category: JavDB
+2025-08-02 22:45:19,823 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:19,823 - __main__ - DEBUG - Successfully added torrent: NHDTA-667 [Hacked-NoSubtitle] to category: JavDB
+2025-08-02 22:45:20,824 - __main__ - INFO - [32/65] Adding: NHDTA-667 [NoSubtitle]
+2025-08-02 22:45:20,825 - __main__ - DEBUG - Adding torrent: NHDTA-667 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:20,827 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:20,828 - __main__ - DEBUG - Successfully added torrent: NHDTA-667 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:21,833 - __main__ - INFO - [33/65] Adding: NKKD-353 [Hacked-NoSubtitle]
+2025-08-02 22:45:21,833 - __main__ - DEBUG - Adding torrent: NKKD-353 [Hacked-NoSubtitle] with category: JavDB
+2025-08-02 22:45:21,836 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:21,836 - __main__ - DEBUG - Successfully added torrent: NKKD-353 [Hacked-NoSubtitle] to category: JavDB
+2025-08-02 22:45:22,839 - __main__ - INFO - [34/65] Adding: NKKD-353 [NoSubtitle]
+2025-08-02 22:45:22,839 - __main__ - DEBUG - Adding torrent: NKKD-353 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:22,842 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:22,842 - __main__ - DEBUG - Successfully added torrent: NKKD-353 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:23,843 - __main__ - INFO - [35/65] Adding: OFES-026 [Hacked+Subtitle]
+2025-08-02 22:45:23,844 - __main__ - DEBUG - Adding torrent: OFES-026 [Hacked+Subtitle] with category: JavDB
+2025-08-02 22:45:23,846 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:23,846 - __main__ - DEBUG - Successfully added torrent: OFES-026 [Hacked+Subtitle] to category: JavDB
+2025-08-02 22:45:24,851 - __main__ - INFO - [36/65] Adding: ADN-719 [NoSubtitle]
+2025-08-02 22:45:24,851 - __main__ - DEBUG - Adding torrent: ADN-719 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:24,854 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:24,855 - __main__ - DEBUG - Successfully added torrent: ADN-719 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:25,857 - __main__ - INFO - [37/65] Adding: CAWD-865 [NoSubtitle]
+2025-08-02 22:45:25,857 - __main__ - DEBUG - Adding torrent: CAWD-865 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:25,860 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:25,860 - __main__ - DEBUG - Successfully added torrent: CAWD-865 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:26,865 - __main__ - INFO - [38/65] Adding: MIDA-258 [NoSubtitle]
+2025-08-02 22:45:26,865 - __main__ - DEBUG - Adding torrent: MIDA-258 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:26,868 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:26,868 - __main__ - DEBUG - Successfully added torrent: MIDA-258 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:27,870 - __main__ - INFO - [39/65] Adding: CAWD-863 [NoSubtitle]
+2025-08-02 22:45:27,870 - __main__ - DEBUG - Adding torrent: CAWD-863 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:27,873 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:27,873 - __main__ - DEBUG - Successfully added torrent: CAWD-863 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:28,878 - __main__ - INFO - [40/65] Adding: SAME-195 [NoSubtitle]
+2025-08-02 22:45:28,878 - __main__ - DEBUG - Adding torrent: SAME-195 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:28,881 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:28,881 - __main__ - DEBUG - Successfully added torrent: SAME-195 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:29,884 - __main__ - INFO - [41/65] Adding: MIDA-256 [NoSubtitle]
+2025-08-02 22:45:29,884 - __main__ - DEBUG - Adding torrent: MIDA-256 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:29,887 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:29,887 - __main__ - DEBUG - Successfully added torrent: MIDA-256 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:30,891 - __main__ - INFO - [42/65] Adding: MIKR-024 [NoSubtitle]
+2025-08-02 22:45:30,891 - __main__ - DEBUG - Adding torrent: MIKR-024 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:30,894 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:30,894 - __main__ - DEBUG - Successfully added torrent: MIKR-024 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:31,900 - __main__ - INFO - [43/65] Adding: START-350 [Hacked-NoSubtitle]
+2025-08-02 22:45:31,900 - __main__ - DEBUG - Adding torrent: START-350 [Hacked-NoSubtitle] with category: JavDB
+2025-08-02 22:45:31,903 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:31,904 - __main__ - DEBUG - Successfully added torrent: START-350 [Hacked-NoSubtitle] to category: JavDB
+2025-08-02 22:45:32,908 - __main__ - INFO - [44/65] Adding: START-367 [Hacked-NoSubtitle]
+2025-08-02 22:45:32,908 - __main__ - DEBUG - Adding torrent: START-367 [Hacked-NoSubtitle] with category: JavDB
+2025-08-02 22:45:32,911 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:32,911 - __main__ - DEBUG - Successfully added torrent: START-367 [Hacked-NoSubtitle] to category: JavDB
+2025-08-02 22:45:33,912 - __main__ - INFO - [45/65] Adding: START-379 [NoSubtitle]
+2025-08-02 22:45:33,912 - __main__ - DEBUG - Adding torrent: START-379 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:33,915 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:33,916 - __main__ - DEBUG - Successfully added torrent: START-379 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:34,919 - __main__ - INFO - [46/65] Adding: FOCS-264 [NoSubtitle]
+2025-08-02 22:45:34,919 - __main__ - DEBUG - Adding torrent: FOCS-264 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:34,922 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:34,922 - __main__ - DEBUG - Successfully added torrent: FOCS-264 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:35,924 - __main__ - INFO - [47/65] Adding: SAME-192 [NoSubtitle]
+2025-08-02 22:45:35,925 - __main__ - DEBUG - Adding torrent: SAME-192 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:35,929 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:35,929 - __main__ - DEBUG - Successfully added torrent: SAME-192 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:36,930 - __main__ - INFO - [48/65] Adding: MIDA-261 [NoSubtitle]
+2025-08-02 22:45:36,931 - __main__ - DEBUG - Adding torrent: MIDA-261 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:36,933 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:36,933 - __main__ - DEBUG - Successfully added torrent: MIDA-261 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:37,939 - __main__ - INFO - [49/65] Adding: SVDVD-968 [NoSubtitle]
+2025-08-02 22:45:37,939 - __main__ - DEBUG - Adding torrent: SVDVD-968 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:37,941 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:37,941 - __main__ - DEBUG - Successfully added torrent: SVDVD-968 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:38,943 - __main__ - INFO - [50/65] Adding: SDNM-520 [NoSubtitle]
+2025-08-02 22:45:38,944 - __main__ - DEBUG - Adding torrent: SDNM-520 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:38,947 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:38,947 - __main__ - DEBUG - Successfully added torrent: SDNM-520 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:39,951 - __main__ - INFO - [51/65] Adding: FNS-066 [NoSubtitle]
+2025-08-02 22:45:39,951 - __main__ - DEBUG - Adding torrent: FNS-066 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:39,954 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:39,955 - __main__ - DEBUG - Successfully added torrent: FNS-066 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:40,959 - __main__ - INFO - [52/65] Adding: FTHTD-108 [NoSubtitle]
+2025-08-02 22:45:40,959 - __main__ - DEBUG - Adding torrent: FTHTD-108 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:40,962 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:40,963 - __main__ - DEBUG - Successfully added torrent: FTHTD-108 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:41,967 - __main__ - INFO - [53/65] Adding: IENF-412 [NoSubtitle]
+2025-08-02 22:45:41,967 - __main__ - DEBUG - Adding torrent: IENF-412 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:41,970 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:41,970 - __main__ - DEBUG - Successfully added torrent: IENF-412 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:42,974 - __main__ - INFO - [54/65] Adding: DLDSS-417 [NoSubtitle]
+2025-08-02 22:45:42,975 - __main__ - DEBUG - Adding torrent: DLDSS-417 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:42,979 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:42,979 - __main__ - DEBUG - Successfully added torrent: DLDSS-417 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:43,984 - __main__ - INFO - [55/65] Adding: DLDSS-420 [NoSubtitle]
+2025-08-02 22:45:43,984 - __main__ - DEBUG - Adding torrent: DLDSS-420 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:43,987 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:43,987 - __main__ - DEBUG - Successfully added torrent: DLDSS-420 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:44,988 - __main__ - INFO - [56/65] Adding: SODS-065 [NoSubtitle]
+2025-08-02 22:45:44,988 - __main__ - DEBUG - Adding torrent: SODS-065 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:44,993 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:44,993 - __main__ - DEBUG - Successfully added torrent: SODS-065 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:45,998 - __main__ - INFO - [57/65] Adding: NPJS-214 [NoSubtitle]
+2025-08-02 22:45:45,999 - __main__ - DEBUG - Adding torrent: NPJS-214 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:46,001 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:46,001 - __main__ - DEBUG - Successfully added torrent: NPJS-214 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:47,007 - __main__ - INFO - [58/65] Adding: WAAA-560 [NoSubtitle]
+2025-08-02 22:45:47,007 - __main__ - DEBUG - Adding torrent: WAAA-560 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:47,010 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:47,011 - __main__ - DEBUG - Successfully added torrent: WAAA-560 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:48,016 - __main__ - INFO - [59/65] Adding: LULU-391 [NoSubtitle]
+2025-08-02 22:45:48,016 - __main__ - DEBUG - Adding torrent: LULU-391 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:48,019 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:48,019 - __main__ - DEBUG - Successfully added torrent: LULU-391 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:49,023 - __main__ - INFO - [60/65] Adding: MIDA-263 [NoSubtitle]
+2025-08-02 22:45:49,023 - __main__ - DEBUG - Adding torrent: MIDA-263 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:49,026 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:49,026 - __main__ - DEBUG - Successfully added torrent: MIDA-263 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:50,032 - __main__ - INFO - [61/65] Adding: CAWD-861 [NoSubtitle]
+2025-08-02 22:45:50,032 - __main__ - DEBUG - Adding torrent: CAWD-861 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:50,035 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:50,035 - __main__ - DEBUG - Successfully added torrent: CAWD-861 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:51,041 - __main__ - INFO - [62/65] Adding: MIAB-503 [NoSubtitle]
+2025-08-02 22:45:51,041 - __main__ - DEBUG - Adding torrent: MIAB-503 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:51,044 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:51,044 - __main__ - DEBUG - Successfully added torrent: MIAB-503 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:52,049 - __main__ - INFO - [63/65] Adding: MEYD-302 [Hacked-NoSubtitle]
+2025-08-02 22:45:52,049 - __main__ - DEBUG - Adding torrent: MEYD-302 [Hacked-NoSubtitle] with category: JavDB
+2025-08-02 22:45:52,053 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:52,053 - __main__ - DEBUG - Successfully added torrent: MEYD-302 [Hacked-NoSubtitle] to category: JavDB
+2025-08-02 22:45:53,054 - __main__ - INFO - [64/65] Adding: MEYD-302 [NoSubtitle]
+2025-08-02 22:45:53,055 - __main__ - DEBUG - Adding torrent: MEYD-302 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:53,057 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:53,057 - __main__ - DEBUG - Successfully added torrent: MEYD-302 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:54,058 - __main__ - INFO - [65/65] Adding: JUNY-159 [NoSubtitle]
+2025-08-02 22:45:54,058 - __main__ - DEBUG - Adding torrent: JUNY-159 [NoSubtitle] with category: JavDB
+2025-08-02 22:45:54,062 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-02 22:45:54,063 - __main__ - DEBUG - Successfully added torrent: JUNY-159 [NoSubtitle] to category: JavDB
+2025-08-02 22:45:55,063 - __main__ - INFO - ==================================================
+2025-08-02 22:45:55,064 - __main__ - INFO - UPLOAD SUMMARY
+2025-08-02 22:45:55,064 - __main__ - INFO - ==================================================
+2025-08-02 22:45:55,064 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250802.csv
+2025-08-02 22:45:55,064 - __main__ - INFO - Total torrents found: 65
+2025-08-02 22:45:55,064 - __main__ - INFO - Successfully added: 65
+2025-08-02 22:45:55,064 - __main__ - INFO -   - Hacked subtitle torrents: 3
+2025-08-02 22:45:55,065 - __main__ - INFO -   - Hacked no subtitle torrents: 7
+2025-08-02 22:45:55,065 - __main__ - INFO -   - Subtitle torrents: 12
+2025-08-02 22:45:55,065 - __main__ - INFO -   - No subtitle torrents: 43
+2025-08-02 22:45:55,065 - __main__ - INFO - Failed to add: 0
+2025-08-02 22:45:55,065 - __main__ - INFO - Success rate: 100.0%
+2025-08-02 22:45:55,065 - __main__ - INFO - ==================================================
