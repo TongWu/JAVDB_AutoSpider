@@ -11,7 +11,7 @@ except ImportError:
     # Fallback values if config.py doesn't exist
     DETAIL_PAGE_SLEEP = 5
     PHASE2_MIN_RATE = 4.0
-    PHASE2_MIN_COMMENTS = 80
+    PHASE2_MIN_COMMENTS = 100
     LOG_LEVEL = 'INFO'
 
 from utils.logging_config import get_logger, setup_logging
@@ -216,7 +216,7 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                         comment_num = int(comment_number) if comment_number else 0
                         rate_num = float(rate) if rate else 0
                         
-                        if comment_num > PHASE2_MIN_COMMENTS and rate_num > PHASE2_MIN_RATE:
+                        if comment_num >= PHASE2_MIN_COMMENTS and rate_num >= PHASE2_MIN_RATE:
                             logger.debug(f"[Page {page_num}] Found entry (filter disabled): {video_code} ({href}) - Rate: {rate}, Comments: {comment_number}")
                             
                             results.append({
