@@ -1,3 +1,4 @@
 __pycache__/
 test_history_integrity.py
 config.py
+.idea/
