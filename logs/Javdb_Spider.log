@@ -1,192 +1,166 @@
-2025-08-02 22:32:29,954 - __main__ - INFO - Starting JavDB spider...
-2025-08-02 22:32:29,955 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
-2025-08-02 22:32:29,955 - __main__ - INFO - Validating history file integrity...
-2025-08-02 22:32:29,958 - utils.history_manager - INFO - Loaded 509 previously parsed movies from history for phase 1 (phase 1: 509)
-2025-08-02 22:32:29,961 - utils.history_manager - INFO - Loaded 900 previously parsed movies from history (phase 1: 509, phase 2: 391)
-2025-08-02 22:32:29,961 - __main__ - INFO - ==================================================
-2025-08-02 22:32:29,961 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-08-02 22:32:29,961 - __main__ - INFO - ==================================================
-2025-08-02 22:32:32,371 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
-2025-08-02 22:32:35,018 - utils.parser - INFO - [Page 2] Found 0 entries for phase 1
-2025-08-02 22:32:37,668 - utils.parser - INFO - [Page 3] Found 0 entries for phase 1
-2025-08-02 22:32:40,324 - utils.parser - INFO - [Page 4] Found 14 entries for phase 1
-2025-08-02 22:32:42,975 - utils.parser - INFO - [Page 5] Found 0 entries for phase 1
-2025-08-02 22:32:45,642 - utils.parser - INFO - [Page 6] Found 0 entries for phase 1
-2025-08-02 22:32:48,326 - utils.parser - INFO - [Page 7] Found 3 entries for phase 1
-2025-08-02 22:32:51,000 - utils.parser - INFO - [Page 8] Found 12 entries for phase 1
-2025-08-02 22:32:53,651 - utils.parser - INFO - [Page 9] Found 0 entries for phase 1
-2025-08-02 22:32:56,347 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
-2025-08-02 22:32:59,116 - utils.parser - INFO - [Page 11] Found 0 entries for phase 1
-2025-08-02 22:33:01,777 - utils.parser - INFO - [Page 12] Found 0 entries for phase 1
-2025-08-02 22:33:04,461 - utils.parser - INFO - [Page 13] Found 0 entries for phase 1
-2025-08-02 22:33:07,148 - utils.parser - INFO - [Page 14] Found 0 entries for phase 1
-2025-08-02 22:33:09,809 - utils.parser - INFO - [Page 15] Found 0 entries for phase 1
-2025-08-02 22:33:12,478 - utils.parser - INFO - [Page 16] Found 0 entries for phase 1
-2025-08-02 22:33:15,146 - utils.parser - INFO - [Page 17] Found 0 entries for phase 1
-2025-08-02 22:33:17,830 - utils.parser - INFO - [Page 18] Found 0 entries for phase 1
-2025-08-02 22:33:20,568 - utils.parser - INFO - [Page 19] Found 0 entries for phase 1
-2025-08-02 22:33:23,239 - utils.parser - INFO - [Page 20] Found 0 entries for phase 1
-2025-08-02 22:33:28,868 - __main__ - INFO - [1/29] [Page 4] Processing NHDTA-725
-2025-08-02 22:33:35,523 - __main__ - INFO - [2/29] [Page 4] Processing NSFS-396
-2025-08-02 22:33:42,149 - __main__ - INFO - [3/29] [Page 4] Processing ABF-251
-2025-08-02 22:33:48,742 - __main__ - INFO - [4/29] [Page 4] Processing BIJN-275
-2025-08-02 22:33:55,371 - __main__ - INFO - [5/29] [Page 4] Processing BLK-655
-2025-08-02 22:34:01,977 - __main__ - INFO - [6/29] [Page 4] Processing DASS-688
-2025-08-02 22:34:08,604 - __main__ - INFO - [7/29] [Page 4] Processing DASS-713
-2025-08-02 22:34:15,212 - __main__ - INFO - [8/29] [Page 4] Processing DEAB-004
-2025-08-02 22:34:21,836 - __main__ - INFO - [9/29] [Page 4] Processing DFE-102
-2025-08-02 22:34:28,440 - __main__ - INFO - [10/29] [Page 4] Processing DVMM-245
-2025-08-02 22:34:35,058 - __main__ - INFO - [11/29] [Page 4] Processing DVMM-251
-2025-08-02 22:34:41,654 - __main__ - INFO - [12/29] [Page 4] Processing DVMM-262
-2025-08-02 22:34:48,267 - __main__ - INFO - [13/29] [Page 4] Processing DVRT-057
-2025-08-02 22:34:54,875 - __main__ - INFO - [14/29] [Page 4] Processing PGD-711
-2025-08-02 22:35:01,477 - __main__ - INFO - [15/29] [Page 7] Processing FNS-067
-2025-08-02 22:35:07,134 - __main__ - INFO - [16/29] [Page 7] Processing FNS-069
-2025-08-02 22:35:12,757 - __main__ - INFO - [17/29] [Page 7] Processing FNS-072
-2025-08-02 22:35:18,441 - __main__ - INFO - [18/29] [Page 8] Processing MIAA-321
-2025-08-02 22:35:24,038 - __main__ - INFO - [19/29] [Page 8] Processing MIDE-076
-2025-08-02 22:35:29,618 - __main__ - INFO - [20/29] [Page 8] Processing MKMP-649
-2025-08-02 22:35:35,224 - __main__ - INFO - [21/29] [Page 8] Processing NACR-984
-2025-08-02 22:35:40,866 - __main__ - INFO - [22/29] [Page 8] Processing CWPBD-37
-2025-08-02 22:35:46,489 - __main__ - INFO - [23/29] [Page 8] Processing DLDSS-410
-2025-08-02 22:35:52,082 - __main__ - INFO - [24/29] [Page 8] Processing DLDSS-411
-2025-08-02 22:35:57,670 - __main__ - INFO - [25/29] [Page 8] Processing FNS-042
-2025-08-02 22:36:03,259 - __main__ - INFO - [26/29] [Page 8] Processing FNS-064
-2025-08-02 22:36:08,865 - __main__ - INFO - [27/29] [Page 8] Processing FNS-075
-2025-08-02 22:36:14,469 - __main__ - INFO - [28/29] [Page 8] Processing JURA-150
-2025-08-02 22:36:20,076 - __main__ - INFO - [29/29] [Page 8] Processing PGD-742
-2025-08-02 22:36:20,076 - __main__ - INFO - Phase 1 completed: 14 entries processed
-2025-08-02 22:36:20,076 - __main__ - INFO - ==================================================
-2025-08-02 22:36:20,076 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 80)
-2025-08-02 22:36:20,076 - __main__ - INFO - ==================================================
-2025-08-02 22:36:20,707 - utils.parser - INFO - [Page 1] Found 2 entries for phase 2
-2025-08-02 22:36:23,337 - utils.parser - INFO - [Page 2] Found 6 entries for phase 2
-2025-08-02 22:36:25,985 - utils.parser - INFO - [Page 3] Found 9 entries for phase 2
-2025-08-02 22:36:28,657 - utils.parser - INFO - [Page 4] Found 7 entries for phase 2
-2025-08-02 22:36:31,305 - utils.parser - INFO - [Page 5] Found 4 entries for phase 2
-2025-08-02 22:36:33,937 - utils.parser - INFO - [Page 6] Found 15 entries for phase 2
-2025-08-02 22:36:36,581 - utils.parser - INFO - [Page 7] Found 18 entries for phase 2
-2025-08-02 22:36:39,205 - utils.parser - INFO - [Page 8] Found 10 entries for phase 2
-2025-08-02 22:36:41,873 - utils.parser - INFO - [Page 9] Found 2 entries for phase 2
-2025-08-02 22:36:44,564 - utils.parser - INFO - [Page 10] Found 0 entries for phase 2
-2025-08-02 22:36:47,207 - utils.parser - INFO - [Page 11] Found 0 entries for phase 2
-2025-08-02 22:36:49,886 - utils.parser - INFO - [Page 12] Found 0 entries for phase 2
-2025-08-02 22:36:52,544 - utils.parser - INFO - [Page 13] Found 0 entries for phase 2
-2025-08-02 22:36:55,240 - utils.parser - INFO - [Page 14] Found 0 entries for phase 2
-2025-08-02 22:36:57,964 - utils.parser - INFO - [Page 15] Found 0 entries for phase 2
-2025-08-02 22:37:00,621 - utils.parser - INFO - [Page 16] Found 0 entries for phase 2
-2025-08-02 22:37:03,298 - utils.parser - INFO - [Page 17] Found 0 entries for phase 2
-2025-08-02 22:37:05,999 - utils.parser - INFO - [Page 18] Found 0 entries for phase 2
-2025-08-02 22:37:08,730 - utils.parser - INFO - [Page 19] Found 0 entries for phase 2
-2025-08-02 22:37:11,380 - utils.parser - INFO - [Page 20] Found 0 entries for phase 2
-2025-08-02 22:37:17,008 - __main__ - INFO - [1/73] [Page 1] Processing ADN-712
-2025-08-02 22:37:22,667 - __main__ - INFO - [2/73] [Page 1] Processing LULU-392
-2025-08-02 22:37:29,260 - __main__ - INFO - [3/73] [Page 2] Processing HR-011
-2025-08-02 22:37:35,847 - __main__ - INFO - [4/73] [Page 2] Processing WAAA-552
-2025-08-02 22:37:41,457 - __main__ - INFO - [5/73] [Page 2] Processing WAAA-553
-2025-08-02 22:37:48,228 - __main__ - INFO - [6/73] [Page 2] Processing MIMK-232
-2025-08-02 22:37:54,843 - __main__ - INFO - [7/73] [Page 2] Processing FTHTD-119
-2025-08-02 22:38:00,427 - __main__ - INFO - [8/73] [Page 2] Processing ADN-709
-2025-08-02 22:38:07,063 - __main__ - INFO - [9/73] [Page 3] Processing MIDA-269
-2025-08-02 22:38:13,656 - __main__ - INFO - [10/73] [Page 3] Processing ADN-711
-2025-08-02 22:38:20,274 - __main__ - INFO - [11/73] [Page 3] Processing CAWD-853
-2025-08-02 22:38:26,878 - __main__ - INFO - [12/73] [Page 3] Processing CLUB-878
-2025-08-02 22:38:33,557 - __main__ - INFO - [13/73] [Page 3] Processing DVMM-275
-2025-08-02 22:38:39,171 - __main__ - INFO - [14/73] [Page 3] Processing WAAA-546
-2025-08-02 22:38:45,820 - __main__ - INFO - [15/73] [Page 3] Processing WAAA-550
-2025-08-02 22:38:51,411 - __main__ - INFO - [16/73] [Page 3] Processing MIDA-257
-2025-08-02 22:38:57,034 - __main__ - INFO - [17/73] [Page 3] Processing MIDA-260
-2025-08-02 22:39:03,634 - __main__ - INFO - [18/73] [Page 4] Processing MIDA-262
-2025-08-02 22:39:10,266 - __main__ - INFO - [19/73] [Page 4] Processing BMW-339
-2025-08-02 22:39:16,874 - __main__ - INFO - [20/73] [Page 4] Processing CAWD-848
-2025-08-02 22:39:22,465 - __main__ - INFO - [21/73] [Page 4] Processing MIKR-029
-2025-08-02 22:39:29,066 - __main__ - INFO - [22/73] [Page 4] Processing NHDTA-667
-2025-08-02 22:39:35,695 - __main__ - INFO - [23/73] [Page 4] Processing NKKD-353
-2025-08-02 22:39:42,291 - __main__ - INFO - [24/73] [Page 4] Processing OFES-026
-2025-08-02 22:39:48,916 - __main__ - INFO - [25/73] [Page 5] Processing ADN-719
-2025-08-02 22:39:55,545 - __main__ - INFO - [26/73] [Page 5] Processing CAWD-865
-2025-08-02 22:40:02,122 - __main__ - INFO - [27/73] [Page 5] Processing MIDA-258
-2025-08-02 22:40:08,734 - __main__ - INFO - [28/73] [Page 5] Processing CAWD-863
-2025-08-02 22:40:15,367 - __main__ - INFO - [29/73] [Page 6] Processing SAME-195
-2025-08-02 22:40:21,990 - __main__ - INFO - [30/73] [Page 6] Processing MIDA-256
-2025-08-02 22:40:28,583 - __main__ - INFO - [31/73] [Page 6] Processing MIKR-024
-2025-08-02 22:40:35,181 - __main__ - INFO - [32/73] [Page 6] Processing START-386
-2025-08-02 22:40:40,806 - __main__ - INFO - [33/73] [Page 6] Processing START-350
-2025-08-02 22:40:47,396 - __main__ - INFO - [34/73] [Page 6] Processing START-374
-2025-08-02 22:40:52,983 - __main__ - INFO - [35/73] [Page 6] Processing START-367
-2025-08-02 22:40:59,597 - __main__ - INFO - [36/73] [Page 6] Processing START-379
-2025-08-02 22:41:06,261 - __main__ - INFO - [37/73] [Page 6] Processing FNS-071
-2025-08-02 22:41:11,869 - __main__ - INFO - [38/73] [Page 6] Processing FOCS-264
-2025-08-02 22:41:18,455 - __main__ - INFO - [39/73] [Page 6] Processing CAWD-868
-2025-08-02 22:41:24,034 - __main__ - INFO - [40/73] [Page 6] Processing SAME-192
-2025-08-02 22:41:30,630 - __main__ - INFO - [41/73] [Page 6] Processing MIDA-261
-2025-08-02 22:41:37,229 - __main__ - INFO - [42/73] [Page 6] Processing MIAB-521
-2025-08-02 22:41:42,808 - __main__ - INFO - [43/73] [Page 6] Processing SVDVD-968
-2025-08-02 22:41:49,414 - __main__ - INFO - [44/73] [Page 7] Processing SDNM-520
-2025-08-02 22:41:56,014 - __main__ - INFO - [45/73] [Page 7] Processing START-378
-2025-08-02 22:42:01,628 - __main__ - INFO - [46/73] [Page 7] Processing FNS-066
-2025-08-02 22:42:08,239 - __main__ - INFO - [47/73] [Page 7] Processing FTHTD-108
-2025-08-02 22:42:14,874 - __main__ - INFO - [48/73] [Page 7] Processing FTHTD-109
-2025-08-02 22:42:20,457 - __main__ - INFO - [49/73] [Page 7] Processing IENF-412
-2025-08-02 22:42:27,091 - __main__ - INFO - [50/73] [Page 7] Processing DLDSS-417
-2025-08-02 22:42:33,698 - __main__ - INFO - [51/73] [Page 7] Processing DLDSS-420
-2025-08-02 22:42:40,318 - __main__ - INFO - [52/73] [Page 7] Processing DLDSS-421
-2025-08-02 22:42:45,933 - __main__ - INFO - [53/73] [Page 7] Processing START-388
-2025-08-02 22:42:51,547 - __main__ - INFO - [54/73] [Page 7] Processing SODS-065
-2025-08-02 22:42:58,166 - __main__ - INFO - [55/73] [Page 7] Processing SDJS-317
-2025-08-02 22:43:03,801 - __main__ - INFO - [56/73] [Page 7] Processing START-380
-2025-08-02 22:43:09,387 - __main__ - INFO - [57/73] [Page 7] Processing START-375
-2025-08-02 22:43:15,011 - __main__ - INFO - [58/73] [Page 7] Processing START-369
-2025-08-02 22:43:20,585 - __main__ - INFO - [59/73] [Page 7] Processing NPJS-214
-2025-08-02 22:43:27,176 - __main__ - INFO - [60/73] [Page 7] Processing WAAA-560
-2025-08-02 22:43:33,857 - __main__ - INFO - [61/73] [Page 7] Processing MIRD-259
-2025-08-02 22:43:39,607 - __main__ - INFO - [62/73] [Page 8] Processing ATID-639
-2025-08-02 22:43:45,165 - __main__ - INFO - [63/73] [Page 8] Processing LULU-391
-2025-08-02 22:43:51,818 - __main__ - INFO - [64/73] [Page 8] Processing MIDA-263
-2025-08-02 22:43:58,473 - __main__ - INFO - [65/73] [Page 8] Processing CAWD-861
-2025-08-02 22:44:05,071 - __main__ - INFO - [66/73] [Page 8] Processing MIAB-503
-2025-08-02 22:44:11,665 - __main__ - INFO - [67/73] [Page 8] Processing ABF-254
-2025-08-02 22:44:17,240 - __main__ - INFO - [68/73] [Page 8] Processing MADV-593
-2025-08-02 22:44:23,850 - __main__ - INFO - [69/73] [Page 8] Processing MDBK-379
-2025-08-02 22:44:30,435 - __main__ - INFO - [70/73] [Page 8] Processing MEYD-302
-2025-08-02 22:44:37,072 - __main__ - INFO - [71/73] [Page 8] Processing RBD-628
-2025-08-02 22:44:42,673 - __main__ - INFO - [72/73] [Page 9] Processing JUNY-159
-2025-08-02 22:44:49,267 - __main__ - INFO - [73/73] [Page 9] Processing ABF-253
-2025-08-02 22:44:49,267 - __main__ - INFO - Phase 2 completed: 48 entries processed
-2025-08-02 22:44:49,267 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20250802.csv
-2025-08-02 22:44:49,267 - __main__ - INFO - ==================================================
-2025-08-02 22:44:49,267 - __main__ - INFO - SUMMARY REPORT
-2025-08-02 22:44:49,267 - __main__ - INFO - ==================================================
-2025-08-02 22:44:49,267 - __main__ - INFO - Pages processed: 1 to 20
-2025-08-02 22:44:49,267 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-08-02 22:44:49,267 - __main__ - INFO - ==============================
-2025-08-02 22:44:49,267 - __main__ - INFO - PHASE 1 SUMMARY
-2025-08-02 22:44:49,267 - __main__ - INFO - ==============================
-2025-08-02 22:44:49,267 - __main__ - INFO - Phase 1 entries found: 14
-2025-08-02 22:44:49,267 - __main__ - INFO -   - Subtitle torrents: 14 (100.0%)
-2025-08-02 22:44:49,267 - __main__ - INFO -   - Hacked subtitle torrents: 2 (14.3%)
-2025-08-02 22:44:49,267 - __main__ - INFO -   - Hacked no-subtitle torrents: 2 (14.3%)
-2025-08-02 22:44:49,267 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
-2025-08-02 22:44:49,267 - __main__ - INFO - ==============================
-2025-08-02 22:44:49,267 - __main__ - INFO - PHASE 2 SUMMARY
-2025-08-02 22:44:49,267 - __main__ - INFO - ==============================
-2025-08-02 22:44:49,267 - __main__ - INFO - Phase 2 entries found: 48
-2025-08-02 22:44:49,267 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
-2025-08-02 22:44:49,267 - __main__ - INFO -   - Hacked subtitle torrents: 1 (2.1%)
-2025-08-02 22:44:49,268 - __main__ - INFO -   - Hacked no-subtitle torrents: 7 (14.6%)
-2025-08-02 22:44:49,268 - __main__ - INFO -   - No-subtitle torrents: 48 (100.0%)
-2025-08-02 22:44:49,268 - __main__ - INFO - ==============================
-2025-08-02 22:44:49,268 - __main__ - INFO - OVERALL SUMMARY
-2025-08-02 22:44:49,268 - __main__ - INFO - ==============================
-2025-08-02 22:44:49,268 - __main__ - INFO - Total entries found: 62
-2025-08-02 22:44:49,268 - __main__ - INFO - Successfully processed: 62
-2025-08-02 22:44:49,268 - __main__ - INFO - Skipped already parsed in this session: 102
-2025-08-02 22:44:49,268 - __main__ - INFO - Skipped already parsed in previous runs: 509
-2025-08-02 22:44:49,268 - __main__ - INFO - Current parsed links in memory: 102
-2025-08-02 22:44:49,268 - __main__ - INFO - Overall subtitle torrents: 14 (22.6%)
-2025-08-02 22:44:49,268 - __main__ - INFO - Overall hacked subtitle torrents: 3 (4.8%)
-2025-08-02 22:44:49,268 - __main__ - INFO - Overall hacked no-subtitle torrents: 9 (14.5%)
-2025-08-02 22:44:49,268 - __main__ - INFO - Overall no-subtitle torrents: 48 (77.4%)
-2025-08-02 22:44:49,268 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20250802.csv
-2025-08-02 22:44:49,268 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-08-02 22:44:49,268 - __main__ - INFO - ==================================================
+2025-08-03 01:12:00,082 - __main__ - INFO - Starting JavDB spider...
+2025-08-03 01:12:00,082 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
+2025-08-03 01:12:00,082 - __main__ - INFO - Validating history file integrity...
+2025-08-03 01:12:00,088 - utils.history_manager - INFO - Loaded 521 previously parsed movies from history for phase 1 (phase 1: 521)
+2025-08-03 01:12:00,092 - utils.history_manager - INFO - Loaded 953 previously parsed movies from history (phase 1: 521, phase 2: 432)
+2025-08-03 01:12:00,092 - __main__ - INFO - ==================================================
+2025-08-03 01:12:00,093 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-08-03 01:12:00,093 - __main__ - INFO - ==================================================
+2025-08-03 01:12:02,646 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
+2025-08-03 01:12:05,303 - utils.parser - INFO - [Page 2] Found 0 entries for phase 1
+2025-08-03 01:12:07,934 - utils.parser - INFO - [Page 3] Found 0 entries for phase 1
+2025-08-03 01:12:10,565 - utils.parser - INFO - [Page 4] Found 4 entries for phase 1
+2025-08-03 01:12:13,194 - utils.parser - INFO - [Page 5] Found 10 entries for phase 1
+2025-08-03 01:12:15,855 - utils.parser - INFO - [Page 6] Found 0 entries for phase 1
+2025-08-03 01:12:18,507 - utils.parser - INFO - [Page 7] Found 3 entries for phase 1
+2025-08-03 01:12:21,182 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
+2025-08-03 01:12:23,830 - utils.parser - INFO - [Page 9] Found 0 entries for phase 1
+2025-08-03 01:12:26,480 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
+2025-08-03 01:12:29,158 - utils.parser - INFO - [Page 11] Found 0 entries for phase 1
+2025-08-03 01:12:31,822 - utils.parser - INFO - [Page 12] Found 0 entries for phase 1
+2025-08-03 01:12:34,563 - utils.parser - INFO - [Page 13] Found 0 entries for phase 1
+2025-08-03 01:12:37,267 - utils.parser - INFO - [Page 14] Found 0 entries for phase 1
+2025-08-03 01:12:39,927 - utils.parser - INFO - [Page 15] Found 0 entries for phase 1
+2025-08-03 01:12:42,594 - utils.parser - INFO - [Page 16] Found 0 entries for phase 1
+2025-08-03 01:12:45,303 - utils.parser - INFO - [Page 17] Found 0 entries for phase 1
+2025-08-03 01:12:47,931 - utils.parser - INFO - [Page 18] Found 0 entries for phase 1
+2025-08-03 01:12:50,662 - utils.parser - INFO - [Page 19] Found 0 entries for phase 1
+2025-08-03 01:12:53,336 - utils.parser - INFO - [Page 20] Found 0 entries for phase 1
+2025-08-03 01:12:58,908 - __main__ - INFO - [1/17] [Page 4] Processing NHDTA-725
+2025-08-03 01:13:04,515 - __main__ - INFO - [2/17] [Page 4] Processing NSFS-396
+2025-08-03 01:13:10,126 - __main__ - INFO - [3/17] [Page 4] Processing ABF-251
+2025-08-03 01:13:15,694 - __main__ - INFO - [4/17] [Page 4] Processing BIJN-275
+2025-08-03 01:13:21,403 - __main__ - INFO - [5/17] [Page 5] Processing BLK-655
+2025-08-03 01:13:26,955 - __main__ - INFO - [6/17] [Page 5] Processing DASS-688
+2025-08-03 01:13:32,629 - __main__ - INFO - [7/17] [Page 5] Processing DASS-713
+2025-08-03 01:13:38,185 - __main__ - INFO - [8/17] [Page 5] Processing DEAB-004
+2025-08-03 01:13:43,754 - __main__ - INFO - [9/17] [Page 5] Processing DFE-102
+2025-08-03 01:13:49,321 - __main__ - INFO - [10/17] [Page 5] Processing DVMM-245
+2025-08-03 01:13:54,887 - __main__ - INFO - [11/17] [Page 5] Processing DVMM-251
+2025-08-03 01:14:00,501 - __main__ - INFO - [12/17] [Page 5] Processing DVMM-262
+2025-08-03 01:14:06,090 - __main__ - INFO - [13/17] [Page 5] Processing DVRT-057
+2025-08-03 01:14:11,669 - __main__ - INFO - [14/17] [Page 5] Processing PGD-711
+2025-08-03 01:14:17,212 - __main__ - INFO - [15/17] [Page 7] Processing FNS-067
+2025-08-03 01:14:22,873 - __main__ - INFO - [16/17] [Page 7] Processing FNS-069
+2025-08-03 01:14:28,449 - __main__ - INFO - [17/17] [Page 7] Processing FNS-072
+2025-08-03 01:14:28,449 - __main__ - INFO - Phase 1 completed: 0 entries processed
+2025-08-03 01:14:28,449 - __main__ - INFO - ==================================================
+2025-08-03 01:14:28,449 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 80)
+2025-08-03 01:14:28,449 - __main__ - INFO - ==================================================
+2025-08-03 01:14:29,082 - utils.parser - INFO - [Page 1] Found 4 entries for phase 2
+2025-08-03 01:14:31,750 - utils.parser - INFO - [Page 2] Found 7 entries for phase 2
+2025-08-03 01:14:34,411 - utils.parser - INFO - [Page 3] Found 3 entries for phase 2
+2025-08-03 01:14:37,017 - utils.parser - INFO - [Page 4] Found 12 entries for phase 2
+2025-08-03 01:14:39,682 - utils.parser - INFO - [Page 5] Found 3 entries for phase 2
+2025-08-03 01:14:42,353 - utils.parser - INFO - [Page 6] Found 11 entries for phase 2
+2025-08-03 01:14:44,965 - utils.parser - INFO - [Page 7] Found 22 entries for phase 2
+2025-08-03 01:14:47,610 - utils.parser - INFO - [Page 8] Found 0 entries for phase 2
+2025-08-03 01:14:50,229 - utils.parser - INFO - [Page 9] Found 0 entries for phase 2
+2025-08-03 01:14:52,953 - utils.parser - INFO - [Page 10] Found 0 entries for phase 2
+2025-08-03 01:14:55,674 - utils.parser - INFO - [Page 11] Found 0 entries for phase 2
+2025-08-03 01:14:58,399 - utils.parser - INFO - [Page 12] Found 0 entries for phase 2
+2025-08-03 01:15:01,124 - utils.parser - INFO - [Page 13] Found 0 entries for phase 2
+2025-08-03 01:15:03,800 - utils.parser - INFO - [Page 14] Found 0 entries for phase 2
+2025-08-03 01:15:06,448 - utils.parser - INFO - [Page 15] Found 0 entries for phase 2
+2025-08-03 01:15:09,081 - utils.parser - INFO - [Page 16] Found 0 entries for phase 2
+2025-08-03 01:15:11,734 - utils.parser - INFO - [Page 17] Found 0 entries for phase 2
+2025-08-03 01:15:14,652 - utils.parser - INFO - [Page 18] Found 0 entries for phase 2
+2025-08-03 01:15:17,312 - utils.parser - INFO - [Page 19] Found 0 entries for phase 2
+2025-08-03 01:15:19,996 - utils.parser - INFO - [Page 20] Found 0 entries for phase 2
+2025-08-03 01:15:25,551 - __main__ - INFO - [1/62] [Page 1] Processing CAWD-853
+2025-08-03 01:15:31,196 - __main__ - INFO - [2/62] [Page 1] Processing JUNY-159
+2025-08-03 01:15:36,753 - __main__ - INFO - [3/62] [Page 1] Processing MIDA-264
+2025-08-03 01:15:43,335 - __main__ - INFO - [4/62] [Page 1] Processing MIKR-024
+2025-08-03 01:15:48,866 - __main__ - INFO - [5/62] [Page 2] Processing ADN-712
+2025-08-03 01:15:54,440 - __main__ - INFO - [6/62] [Page 2] Processing LULU-392
+2025-08-03 01:16:00,005 - __main__ - INFO - [7/62] [Page 2] Processing HR-011
+2025-08-03 01:16:05,552 - __main__ - INFO - [8/62] [Page 2] Processing WAAA-552
+2025-08-03 01:16:11,118 - __main__ - INFO - [9/62] [Page 2] Processing WAAA-553
+2025-08-03 01:16:16,700 - __main__ - INFO - [10/62] [Page 2] Processing MIMK-232
+2025-08-03 01:16:22,250 - __main__ - INFO - [11/62] [Page 2] Processing FTHTD-119
+2025-08-03 01:16:27,831 - __main__ - INFO - [12/62] [Page 3] Processing ADN-709
+2025-08-03 01:16:33,424 - __main__ - INFO - [13/62] [Page 3] Processing MIDA-269
+2025-08-03 01:16:39,018 - __main__ - INFO - [14/62] [Page 3] Processing ADN-711
+2025-08-03 01:16:44,546 - __main__ - INFO - [15/62] [Page 4] Processing CLUB-878
+2025-08-03 01:16:50,164 - __main__ - INFO - [16/62] [Page 4] Processing DVMM-275
+2025-08-03 01:16:55,725 - __main__ - INFO - [17/62] [Page 4] Processing WAAA-546
+2025-08-03 01:17:01,286 - __main__ - INFO - [18/62] [Page 4] Processing WAAA-550
+2025-08-03 01:17:06,841 - __main__ - INFO - [19/62] [Page 4] Processing MIDA-257
+2025-08-03 01:17:12,535 - __main__ - INFO - [20/62] [Page 4] Processing MIDA-260
+2025-08-03 01:17:18,084 - __main__ - INFO - [21/62] [Page 4] Processing MIDA-262
+2025-08-03 01:17:23,634 - __main__ - INFO - [22/62] [Page 4] Processing BMW-339
+2025-08-03 01:17:29,184 - __main__ - INFO - [23/62] [Page 4] Processing CAWD-848
+2025-08-03 01:17:34,750 - __main__ - INFO - [24/62] [Page 4] Processing MIKR-029
+2025-08-03 01:17:40,373 - __main__ - INFO - [25/62] [Page 4] Processing NHDTA-667
+2025-08-03 01:17:47,078 - __main__ - INFO - [26/62] [Page 4] Processing NKKD-353
+2025-08-03 01:17:53,737 - __main__ - INFO - [27/62] [Page 5] Processing OFES-026
+2025-08-03 01:17:59,399 - __main__ - INFO - [28/62] [Page 5] Processing ADN-719
+2025-08-03 01:18:04,955 - __main__ - INFO - [29/62] [Page 5] Processing CAWD-865
+2025-08-03 01:18:10,525 - __main__ - INFO - [30/62] [Page 6] Processing WAAA-559
+2025-08-03 01:18:17,102 - __main__ - INFO - [31/62] [Page 6] Processing MIDA-258
+2025-08-03 01:18:22,717 - __main__ - INFO - [32/62] [Page 6] Processing CAWD-863
+2025-08-03 01:18:28,287 - __main__ - INFO - [33/62] [Page 6] Processing SAME-195
+2025-08-03 01:18:33,894 - __main__ - INFO - [34/62] [Page 6] Processing MIDA-256
+2025-08-03 01:18:39,549 - __main__ - INFO - [35/62] [Page 6] Processing START-386
+2025-08-03 01:18:45,170 - __main__ - INFO - [36/62] [Page 6] Processing START-350
+2025-08-03 01:18:51,800 - __main__ - INFO - [37/62] [Page 6] Processing START-374
+2025-08-03 01:18:57,415 - __main__ - INFO - [38/62] [Page 6] Processing START-367
+2025-08-03 01:19:04,039 - __main__ - INFO - [39/62] [Page 6] Processing START-379
+2025-08-03 01:19:09,635 - __main__ - INFO - [40/62] [Page 6] Processing FNS-071
+2025-08-03 01:19:15,341 - __main__ - INFO - [41/62] [Page 7] Processing FOCS-264
+2025-08-03 01:19:20,908 - __main__ - INFO - [42/62] [Page 7] Processing CAWD-868
+2025-08-03 01:19:26,468 - __main__ - INFO - [43/62] [Page 7] Processing SAME-192
+2025-08-03 01:19:32,016 - __main__ - INFO - [44/62] [Page 7] Processing MIDA-261
+2025-08-03 01:19:37,583 - __main__ - INFO - [45/62] [Page 7] Processing MIAB-521
+2025-08-03 01:19:43,183 - __main__ - INFO - [46/62] [Page 7] Processing SVDVD-968
+2025-08-03 01:19:48,732 - __main__ - INFO - [47/62] [Page 7] Processing SDNM-520
+2025-08-03 01:19:54,300 - __main__ - INFO - [48/62] [Page 7] Processing START-378
+2025-08-03 01:19:59,896 - __main__ - INFO - [49/62] [Page 7] Processing FNS-066
+2025-08-03 01:20:05,495 - __main__ - INFO - [50/62] [Page 7] Processing FTHTD-108
+2025-08-03 01:20:11,055 - __main__ - INFO - [51/62] [Page 7] Processing FTHTD-109
+2025-08-03 01:20:16,594 - __main__ - INFO - [52/62] [Page 7] Processing IENF-412
+2025-08-03 01:20:22,141 - __main__ - INFO - [53/62] [Page 7] Processing FNS-058
+2025-08-03 01:20:28,716 - __main__ - INFO - [54/62] [Page 7] Processing DLDSS-417
+2025-08-03 01:20:34,375 - __main__ - INFO - [55/62] [Page 7] Processing DLDSS-420
+2025-08-03 01:20:40,004 - __main__ - INFO - [56/62] [Page 7] Processing DLDSS-421
+2025-08-03 01:20:45,555 - __main__ - INFO - [57/62] [Page 7] Processing START-388
+2025-08-03 01:20:51,119 - __main__ - INFO - [58/62] [Page 7] Processing SODS-065
+2025-08-03 01:20:56,655 - __main__ - INFO - [59/62] [Page 7] Processing SDJS-317
+2025-08-03 01:21:02,247 - __main__ - INFO - [60/62] [Page 7] Processing START-380
+2025-08-03 01:21:07,889 - __main__ - INFO - [61/62] [Page 7] Processing START-375
+2025-08-03 01:21:13,455 - __main__ - INFO - [62/62] [Page 7] Processing START-369
+2025-08-03 01:21:13,455 - __main__ - INFO - Phase 2 completed: 7 entries processed
+2025-08-03 01:21:13,455 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20250803.csv
+2025-08-03 01:21:13,455 - __main__ - INFO - ==================================================
+2025-08-03 01:21:13,456 - __main__ - INFO - SUMMARY REPORT
+2025-08-03 01:21:13,456 - __main__ - INFO - ==================================================
+2025-08-03 01:21:13,456 - __main__ - INFO - Pages processed: 1 to 20
+2025-08-03 01:21:13,456 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-08-03 01:21:13,456 - __main__ - INFO - ==============================
+2025-08-03 01:21:13,456 - __main__ - INFO - PHASE 1 SUMMARY
+2025-08-03 01:21:13,456 - __main__ - INFO - ==============================
+2025-08-03 01:21:13,456 - __main__ - INFO - Phase 1 entries found: 0
+2025-08-03 01:21:13,456 - __main__ - INFO -   - No entries found in Phase 1
+2025-08-03 01:21:13,456 - __main__ - INFO - ==============================
+2025-08-03 01:21:13,456 - __main__ - INFO - PHASE 2 SUMMARY
+2025-08-03 01:21:13,456 - __main__ - INFO - ==============================
+2025-08-03 01:21:13,456 - __main__ - INFO - Phase 2 entries found: 7
+2025-08-03 01:21:13,456 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
+2025-08-03 01:21:13,456 - __main__ - INFO -   - Hacked subtitle torrents: 0 (0.0%)
+2025-08-03 01:21:13,456 - __main__ - INFO -   - Hacked no-subtitle torrents: 4 (57.1%)
+2025-08-03 01:21:13,456 - __main__ - INFO -   - No-subtitle torrents: 7 (100.0%)
+2025-08-03 01:21:13,456 - __main__ - INFO - ==============================
+2025-08-03 01:21:13,456 - __main__ - INFO - OVERALL SUMMARY
+2025-08-03 01:21:13,456 - __main__ - INFO - ==============================
+2025-08-03 01:21:13,456 - __main__ - INFO - Total entries found: 7
+2025-08-03 01:21:13,456 - __main__ - INFO - Successfully processed: 7
+2025-08-03 01:21:13,456 - __main__ - INFO - Skipped already parsed in this session: 79
+2025-08-03 01:21:13,456 - __main__ - INFO - Skipped already parsed in previous runs: 521
+2025-08-03 01:21:13,456 - __main__ - INFO - Current parsed links in memory: 79
+2025-08-03 01:21:13,456 - __main__ - INFO - Overall subtitle torrents: 0 (0.0%)
+2025-08-03 01:21:13,456 - __main__ - INFO - Overall hacked subtitle torrents: 0 (0.0%)
+2025-08-03 01:21:13,456 - __main__ - INFO - Overall hacked no-subtitle torrents: 4 (57.1%)
+2025-08-03 01:21:13,456 - __main__ - INFO - Overall no-subtitle torrents: 7 (100.0%)
+2025-08-03 01:21:13,456 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20250803.csv
+2025-08-03 01:21:13,456 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-08-03 01:21:13,456 - __main__ - INFO - ==================================================
