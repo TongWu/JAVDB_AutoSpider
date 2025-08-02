@@ -599,10 +599,12 @@ def main():
             # Override the title with video_code
             row['video_code'] = video_code
 
-            # Only add row if it contains new torrent categories
+            # Only add row if it contains new torrent categories (excluding already downloaded ones)
             has_new_torrents = any([
-                row['hacked_subtitle'], row['hacked_no_subtitle'],
-                row['subtitle'], row['no_subtitle']
+                row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
+                row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
+                row['subtitle'] and row['subtitle'] != '[DOWNLOADED PREVIOUSLY]',
+                row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]'
             ])
 
             if has_new_torrents:
@@ -614,7 +616,19 @@ def main():
                 
                 # Save to parsed movies history AFTER writing to CSV (only if new torrents found)
                 if use_history_for_saving and not dry_run and not ignore_history:
-                    save_parsed_movie_to_history(history_file, href, 1, video_code, magnet_links)
+                    # Only save new magnet links to history (exclude already downloaded ones)
+                    new_magnet_links = {}
+                    if row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
+                        new_magnet_links['hacked_subtitle'] = magnet_links.get('hacked_subtitle', '')
+                    if row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
+                        new_magnet_links['hacked_no_subtitle'] = magnet_links.get('hacked_no_subtitle', '')
+                    if row['subtitle'] and row['subtitle'] != '[DOWNLOADED PREVIOUSLY]':
+                        new_magnet_links['subtitle'] = magnet_links.get('subtitle', '')
+                    if row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
+                        new_magnet_links['no_subtitle'] = magnet_links.get('no_subtitle', '')
+                    
+                    if new_magnet_links:  # Only save if there are actually new magnet links
+                        save_parsed_movie_to_history(history_file, href, 1, video_code, new_magnet_links)
             else:
                 logger.debug(
                     f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipped CSV entry - all torrent categories already in history")
@@ -754,10 +768,12 @@ def main():
             # Override the title with video_code
             row['video_code'] = video_code
 
-            # Only add row if it contains new torrent categories
+            # Only add row if it contains new torrent categories (excluding already downloaded ones)
             has_new_torrents = any([
-                row['hacked_subtitle'], row['hacked_no_subtitle'],
-                row['subtitle'], row['no_subtitle']
+                row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
+                row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
+                row['subtitle'] and row['subtitle'] != '[DOWNLOADED PREVIOUSLY]',
+                row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]'
             ])
 
             if has_new_torrents:
@@ -769,7 +785,19 @@ def main():
                 
                 # Save to parsed movies history AFTER writing to CSV (only if new torrents found)
                 if use_history_for_saving and not dry_run and not ignore_history:
-                    save_parsed_movie_to_history(history_file, href, 2, video_code, magnet_links)
+                    # Only save new magnet links to history (exclude already downloaded ones)
+                    new_magnet_links = {}
+                    if row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
+                        new_magnet_links['hacked_subtitle'] = magnet_links.get('hacked_subtitle', '')
+                    if row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
+                        new_magnet_links['hacked_no_subtitle'] = magnet_links.get('hacked_no_subtitle', '')
+                    if row['subtitle'] and row['subtitle'] != '[DOWNLOADED PREVIOUSLY]':
+                        new_magnet_links['subtitle'] = magnet_links.get('subtitle', '')
+                    if row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
+                        new_magnet_links['no_subtitle'] = magnet_links.get('no_subtitle', '')
+                    
+                    if new_magnet_links:  # Only save if there are actually new magnet links
+                        save_parsed_movie_to_history(history_file, href, 2, video_code, new_magnet_links)
             else:
                 logger.debug(
                     f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipped CSV entry - all torrent categories already in history")
