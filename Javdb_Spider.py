@@ -40,7 +40,7 @@ except ImportError:
     MOVIE_SLEEP = 1
     JAVDB_SESSION_COOKIE = None
     PHASE2_MIN_RATE = 4.0
-    PHASE2_MIN_COMMENTS = 80
+    PHASE2_MIN_COMMENTS = 100
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
