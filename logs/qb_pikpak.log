@@ -1,0 +1,34 @@
+2025-08-03 01:11:59,908 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20250803.csv
+2025-08-03 01:11:59,908 - __main__ - INFO - ============================================================
+2025-08-03 01:11:59,908 - __main__ - INFO - STARTING JAVDB PIPELINE
+2025-08-03 01:11:59,908 - __main__ - INFO - MODE: Daily
+2025-08-03 01:11:59,908 - __main__ - INFO - ============================================================
+2025-08-03 01:11:59,908 - __main__ - INFO - Step 1: Running JavDB Spider...
+2025-08-03 01:11:59,908 - __main__ - INFO - Running: python3 Javdb_Spider.py
+2025-08-03 01:21:13,477 - __main__ - INFO - ✓ JavDB Spider completed successfully
+2025-08-03 01:21:13,477 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
+2025-08-03 01:21:13,477 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode daily
+2025-08-03 01:21:16,990 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
+2025-08-03 01:21:16,990 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
+2025-08-03 01:21:16,990 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False
+2025-08-03 01:21:16,990 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-07-31)
+2025-08-03 01:21:16,996 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 101.100.165.240:12301
+2025-08-03 01:21:17,274 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/auth/login HTTP/1.1" 200 3
+2025-08-03 01:21:17,275 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
+2025-08-03 01:21:17,290 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "GET /api/v2/torrents/info?category=JavDB&filter=downloading HTTP/1.1" 200 6645
+2025-08-03 01:21:17,291 - pikpak_bridge - INFO - Found 28 torrents in category JavDB
+2025-08-03 01:21:17,291 - pikpak_bridge - INFO - Filtered 0 torrents older than 3 days
+2025-08-03 01:21:17,291 - pikpak_bridge - INFO - No torrents to process.
+2025-08-03 01:21:17,291 - __main__ - INFO - PikPak Bridge completed successfully
+2025-08-03 01:21:17,291 - __main__ - INFO - ✓ PikPak Bridge completed successfully
+2025-08-03 01:21:17,291 - __main__ - INFO - ============================================================
+2025-08-03 01:21:17,291 - __main__ - INFO - PIPELINE COMPLETED SUCCESSFULLY
+2025-08-03 01:21:17,291 - __main__ - INFO - ============================================================
+2025-08-03 01:21:17,293 - __main__ - INFO - Connecting to SMTP server...
+2025-08-03 01:21:20,722 - __main__ - INFO - Email sent successfully.
+2025-08-03 01:21:20,723 - __main__ - INFO - Final commit for pipeline log...
+2025-08-03 01:21:20,724 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
+2025-08-03 01:21:20,759 - __main__ - INFO - Pulling latest changes from remote repository...
+2025-08-03 01:21:21,368 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
+2025-08-03 01:21:21,368 - __main__ - INFO - Adding files to git...
+2025-08-03 01:21:21,439 - __main__ - INFO - Commit changes for pipeline_log
