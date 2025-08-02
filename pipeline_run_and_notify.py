@@ -17,7 +17,8 @@ try:
         GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH,
         SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO,
         PIPELINE_LOG_FILE, SPIDER_LOG_FILE, UPLOADER_LOG_FILE,
-        DAILY_REPORT_DIR, AD_HOC_DIR, LOG_LEVEL
+        DAILY_REPORT_DIR, AD_HOC_DIR, LOG_LEVEL,
+        PIKPAK_LOG_FILE
     )
 except ImportError:
     # Fallback values if config.py doesn't exist
@@ -38,6 +39,9 @@ except ImportError:
     UPLOADER_LOG_FILE = 'logs/qbtorrent_uploader.log'
     DAILY_REPORT_DIR = 'Daily Report'
     AD_HOC_DIR = 'Ad Hoc'
+    
+    # PikPak bridge fallback values
+    PIKPAK_LOG_FILE = 'logs/pikpak_bridge.log'
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
@@ -45,6 +49,9 @@ os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 from utils.logging_config import setup_logging, get_logger
 setup_logging(PIPELINE_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
+
+# Import PikPak bridge functionality
+from pikpak_bridge import pikpak_bridge
 
 # --- FILE PATHS ---
 today_str = datetime.now().strftime('%Y%m%d')
@@ -135,8 +142,19 @@ def run_script(script_path, args=None):
     if return_code != 0:
         logger.error(f'Script {script_path} failed with return code {return_code}')
         raise RuntimeError(f'Script {script_path} failed with return code {return_code}')
-
+    
     return ''.join(output_lines)
+
+
+def run_pikpak_bridge(days=3, dry_run=False):
+    """Run PikPak Bridge to handle old torrents"""
+    try:
+        logger.info(f"Running PikPak Bridge with {days} days threshold, dry_run={dry_run}")
+        pikpak_bridge(days, dry_run)
+        logger.info("PikPak Bridge completed successfully")
+    except Exception as e:
+        logger.error(f"PikPak Bridge failed: {e}")
+        raise
 
 
 def get_log_summary(log_path, lines=200):
@@ -313,6 +331,11 @@ def main():
         run_script('qbtorrent_uploader.py', uploader_args)
         logger.info("✓ qBittorrent Uploader completed successfully")
 
+        # 3. Run PikPak Bridge to handle old torrents
+        logger.info("Step 3: Running PikPak Bridge to clean up old torrents...")
+        run_pikpak_bridge(days=3, dry_run=args.dry_run)
+        logger.info("✓ PikPak Bridge completed successfully")
+
         pipeline_success = True
         logger.info("=" * 60)
         logger.info("PIPELINE COMPLETED SUCCESSFULLY")
@@ -331,14 +354,17 @@ def main():
         # Pipeline succeeded - send detailed report with attachments
         spider_summary = get_log_summary(SPIDER_LOG_FILE, lines=35)
         uploader_summary = get_log_summary(UPLOADER_LOG_FILE, lines=13)
+        pikpak_summary = get_log_summary(PIKPAK_LOG_FILE, lines=9)
         body = f"""
-JavDB Spider and qBittorrent Uploader Pipeline Completed Successfully.
+JavDB Spider, qBittorrent Uploader, and PikPak Bridge Pipeline Completed Successfully.
 --- JavDB Spider Summary ---
 {spider_summary}
 --- qBittorrent Uploader Summary ---
 {uploader_summary}
+--- PikPak Bridge Summary ---
+{pikpak_summary}
 """
-        attachments = [csv_path, SPIDER_LOG_FILE, UPLOADER_LOG_FILE, PIPELINE_LOG_FILE]
+        attachments = [csv_path, SPIDER_LOG_FILE, UPLOADER_LOG_FILE, PIKPAK_LOG_FILE, PIPELINE_LOG_FILE]
         try:
             send_email(
                 subject=f'JavDB Pipeline Report {today_str} - SUCCESS',
