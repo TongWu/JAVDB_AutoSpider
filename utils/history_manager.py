@@ -125,7 +125,7 @@ def load_parsed_movies_history(history_file, phase=None):
             else:
                 # Log specific phase info
                 phase_details = ", ".join([f"phase {p}: {c}" for p, c in sorted(phase_counts.items())])
-                logger.info(f"Loaded {len(history)} previously parsed movies from history for phase {phase} ({phase_details})")
+                # logger.info(f"Loaded {len(history)} previously parsed movies from history for phase {phase} ({phase_details})")
         except Exception as e:
             logger.error(f"Error loading parsed movies history: {e}")
     else:
