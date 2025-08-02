@@ -52,7 +52,11 @@ def setup_logging(log_file=None, log_level=None):
         file_handler.setLevel(numeric_level)
         file_handler.setFormatter(formatter)
         root_logger.addHandler(file_handler)
-    
+
+    # Silence noisy third-party loggers
+    logging.getLogger("httpx").setLevel(logging.INFO)
+    logging.getLogger("httpcore").setLevel(logging.INFO)
+
     return root_logger
 
 def get_logger(name):
