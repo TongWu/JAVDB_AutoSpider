@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import requests
 from pikpakapi import PikPakApi
 
-from config import QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD, PIKPAK_EMAIL, PIKPAK_PASSWORD, PIKPAK_LOG_FILE, DAILY_REPORT_DIR
+from config import QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD, PIKPAK_EMAIL, PIKPAK_PASSWORD, PIKPAK_LOG_FILE, DAILY_REPORT_DIR, TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC
 from utils.logging_config import setup_logging, get_logger
 
 # --------------------------
@@ -15,7 +15,8 @@ from utils.logging_config import setup_logging, get_logger
 setup_logging(log_file=PIKPAK_LOG_FILE)
 logger = get_logger(__name__)
 
-CATEGORY = "JavDB"
+# Categories to process (from config)
+CATEGORIES = [TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC]
 PIKPAK_HISTORY_FILE = os.path.join(DAILY_REPORT_DIR, "pikpak_bridge_history.csv")
 
 
@@ -43,6 +44,18 @@ class QBittorrentClient:
                                 params={"category": category, "filter": "downloading"})
         resp.raise_for_status()
         return resp.json()
+    
+    def get_torrents_multiple_categories(self, categories):
+        """Get torrents from multiple categories"""
+        all_torrents = []
+        for category in categories:
+            try:
+                torrents = self.get_torrents(category)
+                logger.debug(f"Found {len(torrents)} torrents in category '{category}'")
+                all_torrents.extend(torrents)
+            except Exception as e:
+                logger.warning(f"Failed to get torrents from category '{category}': {e}")
+        return all_torrents
 
     def delete_torrents(self, hashes, delete_files=True):
         resp = self.session.post(f"{self.base_url}/api/v2/torrents/delete", data={
@@ -97,7 +110,7 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
     
     with open(PIKPAK_HISTORY_FILE, 'a', newline='', encoding='utf-8-sig') as f:
         fieldnames = [
-            'torrent_hash', 'torrent_name', 'magnet_uri', 'added_to_qb_date', 
+            'torrent_hash', 'torrent_name', 'category', 'magnet_uri', 'added_to_qb_date', 
             'deleted_from_qb_date', 'uploaded_to_pikpak_date', 'transfer_status', 'error_message'
         ]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -108,6 +121,7 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
         record = {
             'torrent_hash': torrent_info['hash'],
             'torrent_name': torrent_info['name'],
+            'category': torrent_info.get('category', 'Unknown'),
             'magnet_uri': torrent_info['magnet_uri'],
             'added_to_qb_date': datetime.fromtimestamp(torrent_info['added_on']).strftime("%Y-%m-%d %H:%M:%S"),
             'deleted_from_qb_date': current_time if transfer_status in ['success', 'failed_but_deleted'] else '',
@@ -128,8 +142,8 @@ def pikpak_bridge(days, dry_run):
     logger.info(f"Processing torrents older than {days} days (before {cutoff_date})")
 
     qb = QBittorrentClient(f"http://{QB_HOST}:{QB_PORT}", QB_USERNAME, QB_PASSWORD)
-    torrents = qb.get_torrents(CATEGORY)
-    logger.info(f"Found {len(torrents)} torrents in category {CATEGORY}")
+    torrents = qb.get_torrents_multiple_categories(CATEGORIES)
+    logger.info(f"Found {len(torrents)} torrents across categories {CATEGORIES}")
 
     old_torrents = [t for t in torrents if datetime.fromtimestamp(t['added_on']).date() <= cutoff_date]
     logger.info(f"Filtered {len(old_torrents)} torrents older than {days} days")
@@ -143,12 +157,23 @@ def pikpak_bridge(days, dry_run):
         for torrent in old_torrents:
             logger.info(f"[Dry-Run] {torrent['name']} (added: {datetime.fromtimestamp(torrent['added_on']).strftime('%Y-%m-%d %H:%M:%S')})")
         
-        # Dry-run summary
+        # Dry-run summary with category breakdown
+        category_counts = {}
+        for torrent in old_torrents:
+            category = torrent.get('category', 'Unknown')
+            category_counts[category] = category_counts.get(category, 0) + 1
+        
         logger.info("")
         logger.info("=" * 60)
         logger.info("PIKPAK BRIDGE DRY-RUN SUMMARY")
         logger.info("=" * 60)
+        logger.info(f"Categories found: {list(category_counts.keys())}")
         logger.info(f"Total torrents found (older than {days} days): {len(old_torrents)}")
+        
+        # Per-category breakdown
+        for category, count in category_counts.items():
+            logger.info(f"Category '{category}': {count} torrents would be processed")
+        
         logger.info(f"Would be uploaded to PikPak: {len(old_torrents)}")
         logger.info(f"Would be deleted from qBittorrent: {len(old_torrents)}")
         logger.info("")
@@ -198,13 +223,30 @@ def pikpak_bridge(days, dry_run):
     successful_count = len(successfully_transferred)
     failed_count = len(failed_transfers)
     
+    # Category breakdown
+    category_stats = {}
+    for torrent in old_torrents:
+        category = torrent.get('category', 'Unknown')
+        if category not in category_stats:
+            category_stats[category] = {'total': 0, 'successful': 0, 'failed': 0}
+        category_stats[category]['total'] += 1
+        
+        if torrent in successfully_transferred:
+            category_stats[category]['successful'] += 1
+        elif any(torrent == t[0] for t in failed_transfers):
+            category_stats[category]['failed'] += 1
+    
     logger.info("=" * 60)
     logger.info("PIKPAK BRIDGE TRANSFER SUMMARY")
     logger.info("=" * 60)
+    logger.info(f"Processed categories: {list(category_stats.keys())}")
     logger.info(f"Total torrents found (older than {days} days): {total_processed}")
-    logger.info(f"Successfully uploaded to PikPak: {successful_count}")
-    logger.info(f"Successfully deleted from qBittorrent: {successful_count}")
-    logger.info(f"Failed transfers: {failed_count}")
+    
+    # Per-category stats
+    for category, stats in category_stats.items():
+        logger.info(f"Category '{category}': {stats['total']} total, {stats['successful']} successful, {stats['failed']} failed")
+    
+    logger.info(f"Overall: {successful_count} successful, {failed_count} failed")
     
     if successful_count > 0:
         logger.info(f"Success rate: {(successful_count/total_processed)*100:.1f}%")
