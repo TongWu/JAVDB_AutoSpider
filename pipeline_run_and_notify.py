@@ -354,7 +354,7 @@ def main():
         # Pipeline succeeded - send detailed report with attachments
         spider_summary = get_log_summary(SPIDER_LOG_FILE, lines=35)
         uploader_summary = get_log_summary(UPLOADER_LOG_FILE, lines=13)
-        pikpak_summary = get_log_summary(PIKPAK_LOG_FILE, lines=9)
+        pikpak_summary = get_log_summary(PIKPAK_LOG_FILE, lines=10)
         body = f"""
 JavDB Spider, qBittorrent Uploader, and PikPak Bridge Pipeline Completed Successfully.
 --- JavDB Spider Summary ---
