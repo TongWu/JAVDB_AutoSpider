@@ -1,37 +1,89 @@
-2025-08-04 19:00:01,627 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20250804.csv
-2025-08-04 19:00:01,627 - __main__ - INFO - ============================================================
-2025-08-04 19:00:01,627 - __main__ - INFO - STARTING JAVDB PIPELINE
-2025-08-04 19:00:01,627 - __main__ - INFO - MODE: Daily
-2025-08-04 19:00:01,627 - __main__ - INFO - ============================================================
-2025-08-04 19:00:01,627 - __main__ - INFO - Step 1: Running JavDB Spider...
-2025-08-04 19:00:01,627 - __main__ - INFO - Running: python3 Javdb_Spider.py
-2025-08-04 19:06:08,206 - __main__ - INFO - ✓ JavDB Spider completed successfully
-2025-08-04 19:06:08,206 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
-2025-08-04 19:06:08,206 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode daily
-2025-08-04 19:06:34,555 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
-2025-08-04 19:06:34,555 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
-2025-08-04 19:06:34,555 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False
-2025-08-04 19:06:34,555 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-08-01)
-2025-08-04 19:06:34,556 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 101.100.165.240:12301
-2025-08-04 19:06:34,710 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/auth/login HTTP/1.1" 200 3
-2025-08-04 19:06:34,710 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
-2025-08-04 19:06:34,724 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "GET /api/v2/torrents/info?category=Daily+Ingestion&filter=downloading HTTP/1.1" 200 4637
-2025-08-04 19:06:34,724 - pikpak_bridge - DEBUG - Found 31 torrents in category 'Daily Ingestion'
-2025-08-04 19:06:34,726 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "GET /api/v2/torrents/info?category=Ad+Hoc&filter=downloading HTTP/1.1" 200 2
-2025-08-04 19:06:34,726 - pikpak_bridge - DEBUG - Found 0 torrents in category 'Ad Hoc'
-2025-08-04 19:06:34,726 - pikpak_bridge - INFO - Found 31 torrents across categories ['Daily Ingestion', 'Ad Hoc']
-2025-08-04 19:06:34,726 - pikpak_bridge - INFO - Filtered 0 torrents older than 3 days
-2025-08-04 19:06:34,726 - pikpak_bridge - INFO - No torrents to process.
-2025-08-04 19:06:34,726 - __main__ - INFO - PikPak Bridge completed successfully
-2025-08-04 19:06:34,726 - __main__ - INFO - ✓ PikPak Bridge completed successfully
-2025-08-04 19:06:34,726 - __main__ - INFO - ============================================================
-2025-08-04 19:06:34,726 - __main__ - INFO - PIPELINE COMPLETED SUCCESSFULLY
-2025-08-04 19:06:34,726 - __main__ - INFO - ============================================================
-2025-08-04 19:06:34,730 - __main__ - INFO - Connecting to SMTP server...
-2025-08-04 19:06:40,280 - __main__ - INFO - Email sent successfully.
-2025-08-04 19:06:40,280 - __main__ - INFO - Final commit for pipeline log...
-2025-08-04 19:06:40,280 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
-2025-08-04 19:06:40,284 - __main__ - INFO - Pulling latest changes from remote repository...
-2025-08-04 19:06:40,866 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
-2025-08-04 19:06:40,867 - __main__ - INFO - Adding files to git...
-2025-08-04 19:06:40,879 - __main__ - INFO - Commit changes for pipeline_log
+2025-08-05 19:00:01,840 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20250805.csv
+2025-08-05 19:00:01,841 - __main__ - INFO - ============================================================
+2025-08-05 19:00:01,841 - __main__ - INFO - STARTING JAVDB PIPELINE
+2025-08-05 19:00:01,841 - __main__ - INFO - MODE: Daily
+2025-08-05 19:00:01,841 - __main__ - INFO - ============================================================
+2025-08-05 19:00:01,841 - __main__ - INFO - Step 1: Running JavDB Spider...
+2025-08-05 19:00:01,841 - __main__ - INFO - Running: python3 Javdb_Spider.py
+2025-08-05 19:00:03,202 - __main__ - INFO - ✓ JavDB Spider completed successfully
+2025-08-05 19:00:03,203 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
+2025-08-05 19:00:03,203 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode daily
+2025-08-05 19:00:03,292 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
+2025-08-05 19:00:03,292 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
+2025-08-05 19:00:03,292 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False
+2025-08-05 19:00:03,292 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-08-02)
+2025-08-05 19:00:03,293 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 101.100.165.240:12301
+2025-08-05 19:00:03,525 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/auth/login HTTP/1.1" 200 3
+2025-08-05 19:00:03,525 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
+2025-08-05 19:00:03,532 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "GET /api/v2/torrents/info?category=Daily+Ingestion&filter=downloading HTTP/1.1" 200 3123
+2025-08-05 19:00:03,533 - pikpak_bridge - DEBUG - Found 11 torrents in category 'Daily Ingestion'
+2025-08-05 19:00:03,534 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "GET /api/v2/torrents/info?category=Ad+Hoc&filter=downloading HTTP/1.1" 200 2
+2025-08-05 19:00:03,535 - pikpak_bridge - DEBUG - Found 0 torrents in category 'Ad Hoc'
+2025-08-05 19:00:03,535 - pikpak_bridge - INFO - Found 11 torrents across categories ['Daily Ingestion', 'Ad Hoc']
+2025-08-05 19:00:03,535 - pikpak_bridge - INFO - Filtered 3 torrents older than 3 days
+2025-08-05 19:00:03,535 - pikpak_bridge - INFO - Processing torrent: [javdb.com][thz.tw]NHDTA-667.1080p.torrent
+2025-08-05 19:00:03,535 - asyncio - DEBUG - Using selector: EpollSelector
+2025-08-05 19:00:03,652 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
+2025-08-05 19:00:03,792 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
+2025-08-05 19:00:03,813 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
+2025-08-05 19:00:03,973 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-08-05 19:00:03,974 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:2ce5da16e10d5867f3e31ce4d443584a4e937340&dn=%5Bjavdb.com%5D%5Bthz.tw%5DNHDTA-667.1080p.torrent&xl=7146119484
+2025-08-05 19:00:03,975 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com][thz.tw]NHDTA-667.1080p.torrent
+2025-08-05 19:00:03,987 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com][thz.tw]NHDTA-667.1080p.torrent - success
+2025-08-05 19:00:03,990 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/delete HTTP/1.1" 200 0
+2025-08-05 19:00:03,991 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
+2025-08-05 19:00:03,991 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com][thz.tw]NHDTA-667.1080p.torrent
+2025-08-05 19:00:03,991 - pikpak_bridge - INFO - Processing torrent: [javdb.com]NHDTA-725R
+2025-08-05 19:00:03,991 - asyncio - DEBUG - Using selector: EpollSelector
+2025-08-05 19:00:04,037 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
+2025-08-05 19:00:04,167 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
+2025-08-05 19:00:04,186 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
+2025-08-05 19:00:04,433 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-08-05 19:00:04,433 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:00f8b123a4afb502667061526c4c095cece6fad7&dn=%5Bjavdb.com%5DNHDTA-725R&xl=1147025198
+2025-08-05 19:00:04,434 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]NHDTA-725R
+2025-08-05 19:00:04,434 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]NHDTA-725R - success
+2025-08-05 19:00:04,436 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/delete HTTP/1.1" 200 0
+2025-08-05 19:00:04,436 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
+2025-08-05 19:00:04,436 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]NHDTA-725R
+2025-08-05 19:00:04,436 - pikpak_bridge - INFO - Processing torrent: [javdb.com]olo@SIS001@meyd-302
+2025-08-05 19:00:04,436 - asyncio - DEBUG - Using selector: EpollSelector
+2025-08-05 19:00:04,478 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
+2025-08-05 19:00:04,589 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
+2025-08-05 19:00:04,611 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
+2025-08-05 19:00:04,775 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-08-05 19:00:04,775 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:2b89ace8faa4126231d8f9c55fd2f35edb7a9bdd&dn=%5Bjavdb.com%5Dolo%40SIS001%40meyd-302&xl=1200741029
+2025-08-05 19:00:04,777 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]olo@SIS001@meyd-302
+2025-08-05 19:00:04,777 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]olo@SIS001@meyd-302 - success
+2025-08-05 19:00:04,780 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/delete HTTP/1.1" 200 0
+2025-08-05 19:00:04,780 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
+2025-08-05 19:00:04,781 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]olo@SIS001@meyd-302
+2025-08-05 19:00:04,781 - pikpak_bridge - INFO - ============================================================
+2025-08-05 19:00:04,781 - pikpak_bridge - INFO - PIKPAK BRIDGE TRANSFER SUMMARY
+2025-08-05 19:00:04,781 - pikpak_bridge - INFO - ============================================================
+2025-08-05 19:00:04,781 - pikpak_bridge - INFO - Processed categories: ['Daily Ingestion']
+2025-08-05 19:00:04,781 - pikpak_bridge - INFO - Total torrents found (older than 3 days): 3
+2025-08-05 19:00:04,781 - pikpak_bridge - INFO - Category 'Daily Ingestion': 3 total, 3 successful, 0 failed
+2025-08-05 19:00:04,781 - pikpak_bridge - INFO - Overall: 3 successful, 0 failed
+2025-08-05 19:00:04,781 - pikpak_bridge - INFO - Success rate: 100.0%
+2025-08-05 19:00:04,781 - pikpak_bridge - INFO - 
+2025-08-05 19:00:04,781 - pikpak_bridge - INFO - ✓ Successfully transferred torrents:
+2025-08-05 19:00:04,781 - pikpak_bridge - INFO -   - [javdb.com][thz.tw]NHDTA-667.1080p.torrent
+2025-08-05 19:00:04,781 - pikpak_bridge - INFO -   - [javdb.com]NHDTA-725R
+2025-08-05 19:00:04,781 - pikpak_bridge - INFO -   - [javdb.com]olo@SIS001@meyd-302
+2025-08-05 19:00:04,781 - pikpak_bridge - INFO - 
+2025-08-05 19:00:04,781 - pikpak_bridge - INFO - PikPak transfer history saved to: Daily Report/pikpak_bridge_history.csv
+2025-08-05 19:00:04,781 - pikpak_bridge - INFO - ============================================================
+2025-08-05 19:00:04,781 - __main__ - INFO - PikPak Bridge completed successfully
+2025-08-05 19:00:04,781 - __main__ - INFO - ✓ PikPak Bridge completed successfully
+2025-08-05 19:00:04,781 - __main__ - INFO - ============================================================
+2025-08-05 19:00:04,781 - __main__ - INFO - PIPELINE COMPLETED SUCCESSFULLY
+2025-08-05 19:00:04,781 - __main__ - INFO - ============================================================
+2025-08-05 19:00:04,783 - __main__ - WARNING - Attachment not found: Daily Report/Javdb_TodayTitle_20250805.csv
+2025-08-05 19:00:04,788 - __main__ - INFO - Connecting to SMTP server...
+2025-08-05 19:00:08,477 - __main__ - INFO - Email sent successfully.
+2025-08-05 19:00:08,477 - __main__ - INFO - Final commit for pipeline log...
+2025-08-05 19:00:08,478 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
+2025-08-05 19:00:08,494 - __main__ - INFO - Pulling latest changes from remote repository...
+2025-08-05 19:00:09,107 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
+2025-08-05 19:00:09,107 - __main__ - INFO - Adding files to git...
+2025-08-05 19:00:09,115 - __main__ - INFO - Commit changes for pipeline_log
