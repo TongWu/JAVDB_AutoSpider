@@ -1,121 +1,89 @@
-2025-08-05 21:16:02,231 - __main__ - INFO - Starting qBittorrent uploader...
-2025-08-05 21:16:02,231 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250805.csv
-2025-08-05 21:16:02,232 - __main__ - DEBUG - Skipping downloaded torrent: ROE-377 [Subtitle]
-2025-08-05 21:16:02,232 - __main__ - DEBUG - Skipping downloaded torrent: SONE-753 [Subtitle]
-2025-08-05 21:16:02,232 - __main__ - INFO - Found 24 torrent links in Daily Report/Javdb_TodayTitle_20250805.csv
-2025-08-05 21:16:02,232 - __main__ - INFO - Skipped 2 already downloaded torrents
-2025-08-05 21:16:02,232 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-08-05 21:16:02,239 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 101.100.165.240:12301
-2025-08-05 21:16:02,458 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/auth/login HTTP/1.1" 200 3
-2025-08-05 21:16:02,459 - __main__ - INFO - Successfully logged in to qBittorrent
-2025-08-05 21:16:02,459 - __main__ - INFO - History manager imported, will update downloaded status
-2025-08-05 21:16:02,459 - __main__ - INFO - Starting to add 24 torrents to qBittorrent...
-2025-08-05 21:16:02,460 - __main__ - INFO - [1/24] Adding: CLUB-877 [Subtitle]
-2025-08-05 21:16:02,460 - __main__ - DEBUG - Adding torrent: CLUB-877 [Subtitle] with category: Daily Ingestion
-2025-08-05 21:16:02,494 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:02,494 - __main__ - DEBUG - Successfully added torrent: CLUB-877 [Subtitle] to category: Daily Ingestion
-2025-08-05 21:16:03,502 - __main__ - INFO - [2/24] Adding: CWPBD-40 [Subtitle]
-2025-08-05 21:16:03,502 - __main__ - DEBUG - Adding torrent: CWPBD-40 [Subtitle] with category: Daily Ingestion
-2025-08-05 21:16:03,548 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:03,548 - __main__ - DEBUG - Successfully added torrent: CWPBD-40 [Subtitle] to category: Daily Ingestion
-2025-08-05 21:16:04,552 - __main__ - INFO - [3/24] Adding: HSODA-073 [Subtitle]
-2025-08-05 21:16:04,552 - __main__ - DEBUG - Adding torrent: HSODA-073 [Subtitle] with category: Daily Ingestion
-2025-08-05 21:16:04,594 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:04,594 - __main__ - DEBUG - Successfully added torrent: HSODA-073 [Subtitle] to category: Daily Ingestion
-2025-08-05 21:16:05,600 - __main__ - INFO - [4/24] Adding: IPZZ-383 [Hacked-NoSubtitle]
-2025-08-05 21:16:05,600 - __main__ - DEBUG - Adding torrent: IPZZ-383 [Hacked-NoSubtitle] with category: Daily Ingestion
-2025-08-05 21:16:05,630 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 6
-2025-08-05 21:16:05,630 - __main__ - DEBUG - Successfully added torrent: IPZZ-383 [Hacked-NoSubtitle] to category: Daily Ingestion
-2025-08-05 21:16:06,640 - __main__ - INFO - [5/24] Adding: IPZZ-383 [Subtitle]
-2025-08-05 21:16:06,641 - __main__ - DEBUG - Adding torrent: IPZZ-383 [Subtitle] with category: Daily Ingestion
-2025-08-05 21:16:06,682 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:06,683 - __main__ - DEBUG - Successfully added torrent: IPZZ-383 [Subtitle] to category: Daily Ingestion
-2025-08-05 21:16:07,687 - __main__ - INFO - [6/24] Adding: IPZZ-600 [Hacked-NoSubtitle]
-2025-08-05 21:16:07,687 - __main__ - DEBUG - Adding torrent: IPZZ-600 [Hacked-NoSubtitle] with category: Daily Ingestion
-2025-08-05 21:16:07,729 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 6
-2025-08-05 21:16:07,729 - __main__ - DEBUG - Successfully added torrent: IPZZ-600 [Hacked-NoSubtitle] to category: Daily Ingestion
-2025-08-05 21:16:08,735 - __main__ - INFO - [7/24] Adding: IPZZ-600 [Subtitle]
-2025-08-05 21:16:08,735 - __main__ - DEBUG - Adding torrent: IPZZ-600 [Subtitle] with category: Daily Ingestion
-2025-08-05 21:16:08,772 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:08,773 - __main__ - DEBUG - Successfully added torrent: IPZZ-600 [Subtitle] to category: Daily Ingestion
-2025-08-05 21:16:09,773 - __main__ - INFO - [8/24] Adding: LULU-383 [Subtitle]
-2025-08-05 21:16:09,773 - __main__ - DEBUG - Adding torrent: LULU-383 [Subtitle] with category: Daily Ingestion
-2025-08-05 21:16:09,829 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:09,829 - __main__ - DEBUG - Successfully added torrent: LULU-383 [Subtitle] to category: Daily Ingestion
-2025-08-05 21:16:10,837 - __main__ - INFO - [9/24] Adding: PGD-746 [Hacked+Subtitle]
-2025-08-05 21:16:10,838 - __main__ - DEBUG - Adding torrent: PGD-746 [Hacked+Subtitle] with category: Daily Ingestion
-2025-08-05 21:16:10,884 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:10,884 - __main__ - DEBUG - Successfully added torrent: PGD-746 [Hacked+Subtitle] to category: Daily Ingestion
-2025-08-05 21:16:11,893 - __main__ - INFO - [10/24] Adding: PGD-746 [Subtitle]
-2025-08-05 21:16:11,893 - __main__ - DEBUG - Adding torrent: PGD-746 [Subtitle] with category: Daily Ingestion
-2025-08-05 21:16:11,933 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:11,933 - __main__ - DEBUG - Successfully added torrent: PGD-746 [Subtitle] to category: Daily Ingestion
-2025-08-05 21:16:12,942 - __main__ - INFO - [11/24] Adding: SDAM-144 [Subtitle]
-2025-08-05 21:16:12,942 - __main__ - DEBUG - Adding torrent: SDAM-144 [Subtitle] with category: Daily Ingestion
-2025-08-05 21:16:12,993 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:12,994 - __main__ - DEBUG - Successfully added torrent: SDAM-144 [Subtitle] to category: Daily Ingestion
-2025-08-05 21:16:14,002 - __main__ - INFO - [12/24] Adding: SDJS-318 [Subtitle]
-2025-08-05 21:16:14,002 - __main__ - DEBUG - Adding torrent: SDJS-318 [Subtitle] with category: Daily Ingestion
-2025-08-05 21:16:14,051 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:14,052 - __main__ - DEBUG - Successfully added torrent: SDJS-318 [Subtitle] to category: Daily Ingestion
-2025-08-05 21:16:15,059 - __main__ - INFO - [13/24] Adding: SQTE-617 [Subtitle]
-2025-08-05 21:16:15,059 - __main__ - DEBUG - Adding torrent: SQTE-617 [Subtitle] with category: Daily Ingestion
-2025-08-05 21:16:15,104 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:15,104 - __main__ - DEBUG - Successfully added torrent: SQTE-617 [Subtitle] to category: Daily Ingestion
-2025-08-05 21:16:16,106 - __main__ - INFO - [14/24] Adding: START-319 [Subtitle]
-2025-08-05 21:16:16,106 - __main__ - DEBUG - Adding torrent: START-319 [Subtitle] with category: Daily Ingestion
-2025-08-05 21:16:16,214 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:16,214 - __main__ - DEBUG - Successfully added torrent: START-319 [Subtitle] to category: Daily Ingestion
-2025-08-05 21:16:17,214 - __main__ - INFO - [15/24] Adding: START-338 [Subtitle]
-2025-08-05 21:16:17,214 - __main__ - DEBUG - Adding torrent: START-338 [Subtitle] with category: Daily Ingestion
-2025-08-05 21:16:17,261 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:17,262 - __main__ - DEBUG - Successfully added torrent: START-338 [Subtitle] to category: Daily Ingestion
-2025-08-05 21:16:18,272 - __main__ - INFO - [16/24] Adding: ROE-377 [Hacked-NoSubtitle]
-2025-08-05 21:16:18,272 - __main__ - DEBUG - Adding torrent: ROE-377 [Hacked-NoSubtitle] with category: Daily Ingestion
-2025-08-05 21:16:18,312 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:18,312 - __main__ - DEBUG - Successfully added torrent: ROE-377 [Hacked-NoSubtitle] to category: Daily Ingestion
-2025-08-05 21:16:19,316 - __main__ - INFO - [17/24] Adding: SDDE-720 [Hacked-NoSubtitle]
-2025-08-05 21:16:19,316 - __main__ - DEBUG - Adding torrent: SDDE-720 [Hacked-NoSubtitle] with category: Daily Ingestion
-2025-08-05 21:16:19,388 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:19,389 - __main__ - DEBUG - Successfully added torrent: SDDE-720 [Hacked-NoSubtitle] to category: Daily Ingestion
-2025-08-05 21:16:20,390 - __main__ - INFO - [18/24] Adding: SDDE-720 [Subtitle]
-2025-08-05 21:16:20,390 - __main__ - DEBUG - Adding torrent: SDDE-720 [Subtitle] with category: Daily Ingestion
-2025-08-05 21:16:20,433 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:20,434 - __main__ - DEBUG - Successfully added torrent: SDDE-720 [Subtitle] to category: Daily Ingestion
-2025-08-05 21:16:21,441 - __main__ - INFO - [19/24] Adding: SNIS-197 [Hacked+Subtitle]
-2025-08-05 21:16:21,441 - __main__ - DEBUG - Adding torrent: SNIS-197 [Hacked+Subtitle] with category: Daily Ingestion
-2025-08-05 21:16:21,509 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:21,509 - __main__ - DEBUG - Successfully added torrent: SNIS-197 [Hacked+Subtitle] to category: Daily Ingestion
-2025-08-05 21:16:22,515 - __main__ - INFO - [20/24] Adding: SNIS-197 [Subtitle]
-2025-08-05 21:16:22,515 - __main__ - DEBUG - Adding torrent: SNIS-197 [Subtitle] with category: Daily Ingestion
-2025-08-05 21:16:22,579 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:22,579 - __main__ - DEBUG - Successfully added torrent: SNIS-197 [Subtitle] to category: Daily Ingestion
-2025-08-05 21:16:23,582 - __main__ - INFO - [21/24] Adding: SONE-753 [Hacked-NoSubtitle]
-2025-08-05 21:16:23,583 - __main__ - DEBUG - Adding torrent: SONE-753 [Hacked-NoSubtitle] with category: Daily Ingestion
-2025-08-05 21:16:23,617 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:23,617 - __main__ - DEBUG - Successfully added torrent: SONE-753 [Hacked-NoSubtitle] to category: Daily Ingestion
-2025-08-05 21:16:24,620 - __main__ - INFO - [22/24] Adding: SDNM-514 [Hacked-NoSubtitle]
-2025-08-05 21:16:24,621 - __main__ - DEBUG - Adding torrent: SDNM-514 [Hacked-NoSubtitle] with category: Daily Ingestion
-2025-08-05 21:16:24,692 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:24,693 - __main__ - DEBUG - Successfully added torrent: SDNM-514 [Hacked-NoSubtitle] to category: Daily Ingestion
-2025-08-05 21:16:25,695 - __main__ - INFO - [23/24] Adding: SDNM-514 [NoSubtitle]
-2025-08-05 21:16:25,696 - __main__ - DEBUG - Adding torrent: SDNM-514 [NoSubtitle] with category: Daily Ingestion
-2025-08-05 21:16:25,733 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:25,734 - __main__ - DEBUG - Successfully added torrent: SDNM-514 [NoSubtitle] to category: Daily Ingestion
-2025-08-05 21:16:26,738 - __main__ - INFO - [24/24] Adding: SOAN-117 [NoSubtitle]
-2025-08-05 21:16:26,738 - __main__ - DEBUG - Adding torrent: SOAN-117 [NoSubtitle] with category: Daily Ingestion
-2025-08-05 21:16:26,789 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-05 21:16:26,789 - __main__ - DEBUG - Successfully added torrent: SOAN-117 [NoSubtitle] to category: Daily Ingestion
-2025-08-05 21:16:27,795 - __main__ - INFO - ==================================================
-2025-08-05 21:16:27,795 - __main__ - INFO - UPLOAD SUMMARY
-2025-08-05 21:16:27,795 - __main__ - INFO - ==================================================
-2025-08-05 21:16:27,795 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250805.csv
-2025-08-05 21:16:27,795 - __main__ - INFO - Total torrents found: 24
-2025-08-05 21:16:27,796 - __main__ - INFO - Successfully added: 24
-2025-08-05 21:16:27,796 - __main__ - INFO -   - Hacked subtitle torrents: 2
-2025-08-05 21:16:27,796 - __main__ - INFO -   - Hacked no subtitle torrents: 6
-2025-08-05 21:16:27,796 - __main__ - INFO -   - Subtitle torrents: 14
-2025-08-05 21:16:27,796 - __main__ - INFO -   - No subtitle torrents: 2
-2025-08-05 21:16:27,796 - __main__ - INFO - Failed to add: 0
-2025-08-05 21:16:27,796 - __main__ - INFO - Success rate: 100.0%
-2025-08-05 21:16:27,796 - __main__ - INFO - ==================================================
+2025-08-06 19:29:22,236 - __main__ - INFO - Starting qBittorrent uploader...
+2025-08-06 19:29:22,236 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250806.csv
+2025-08-06 19:29:22,236 - __main__ - DEBUG - Skipping downloaded torrent: SONE-798 [Subtitle]
+2025-08-06 19:29:22,236 - __main__ - DEBUG - Skipping downloaded torrent: SONE-802 [Subtitle]
+2025-08-06 19:29:22,236 - __main__ - DEBUG - Skipping downloaded torrent: SONE-780 [NoSubtitle]
+2025-08-06 19:29:22,236 - __main__ - DEBUG - Skipping downloaded torrent: SONE-786 [NoSubtitle]
+2025-08-06 19:29:22,236 - __main__ - DEBUG - Skipping downloaded torrent: SONE-796 [NoSubtitle]
+2025-08-06 19:29:22,236 - __main__ - DEBUG - Skipping downloaded torrent: SONE-800 [NoSubtitle]
+2025-08-06 19:29:22,236 - __main__ - INFO - Found 15 torrent links in Daily Report/Javdb_TodayTitle_20250806.csv
+2025-08-06 19:29:22,236 - __main__ - INFO - Skipped 6 already downloaded torrents
+2025-08-06 19:29:22,236 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-08-06 19:29:22,241 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 101.100.165.240:12301
+2025-08-06 19:29:22,469 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/auth/login HTTP/1.1" 200 3
+2025-08-06 19:29:22,469 - __main__ - INFO - Successfully logged in to qBittorrent
+2025-08-06 19:29:22,469 - __main__ - INFO - History manager imported, will update downloaded status
+2025-08-06 19:29:22,469 - __main__ - INFO - Starting to add 15 torrents to qBittorrent...
+2025-08-06 19:29:22,469 - __main__ - INFO - [1/15] Adding: SONE-798 [Hacked-NoSubtitle]
+2025-08-06 19:29:22,469 - __main__ - DEBUG - Adding torrent: SONE-798 [Hacked-NoSubtitle] with category: Daily Ingestion
+2025-08-06 19:29:22,519 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-06 19:29:22,519 - __main__ - DEBUG - Successfully added torrent: SONE-798 [Hacked-NoSubtitle] to category: Daily Ingestion
+2025-08-06 19:29:23,529 - __main__ - INFO - [2/15] Adding: SONE-802 [Hacked-NoSubtitle]
+2025-08-06 19:29:23,530 - __main__ - DEBUG - Adding torrent: SONE-802 [Hacked-NoSubtitle] with category: Daily Ingestion
+2025-08-06 19:29:23,592 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-06 19:29:23,592 - __main__ - DEBUG - Successfully added torrent: SONE-802 [Hacked-NoSubtitle] to category: Daily Ingestion
+2025-08-06 19:29:24,593 - __main__ - INFO - [3/15] Adding: ATID-639 [Subtitle]
+2025-08-06 19:29:24,594 - __main__ - DEBUG - Adding torrent: ATID-639 [Subtitle] with category: Daily Ingestion
+2025-08-06 19:29:24,651 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-06 19:29:24,652 - __main__ - DEBUG - Successfully added torrent: ATID-639 [Subtitle] to category: Daily Ingestion
+2025-08-06 19:29:25,661 - __main__ - INFO - [4/15] Adding: CAWD-853 [Subtitle]
+2025-08-06 19:29:25,661 - __main__ - DEBUG - Adding torrent: CAWD-853 [Subtitle] with category: Daily Ingestion
+2025-08-06 19:29:25,710 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-06 19:29:25,710 - __main__ - DEBUG - Successfully added torrent: CAWD-853 [Subtitle] to category: Daily Ingestion
+2025-08-06 19:29:26,720 - __main__ - INFO - [5/15] Adding: CAWD-861 [Subtitle]
+2025-08-06 19:29:26,721 - __main__ - DEBUG - Adding torrent: CAWD-861 [Subtitle] with category: Daily Ingestion
+2025-08-06 19:29:26,780 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-06 19:29:26,780 - __main__ - DEBUG - Successfully added torrent: CAWD-861 [Subtitle] to category: Daily Ingestion
+2025-08-06 19:29:27,790 - __main__ - INFO - [6/15] Adding: CWPBD-41 [Subtitle]
+2025-08-06 19:29:27,790 - __main__ - DEBUG - Adding torrent: CWPBD-41 [Subtitle] with category: Daily Ingestion
+2025-08-06 19:29:27,832 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-06 19:29:27,832 - __main__ - DEBUG - Successfully added torrent: CWPBD-41 [Subtitle] to category: Daily Ingestion
+2025-08-06 19:29:28,838 - __main__ - INFO - [7/15] Adding: JUR-304 [Hacked+Subtitle]
+2025-08-06 19:29:28,838 - __main__ - DEBUG - Adding torrent: JUR-304 [Hacked+Subtitle] with category: Daily Ingestion
+2025-08-06 19:29:28,890 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-06 19:29:28,890 - __main__ - DEBUG - Successfully added torrent: JUR-304 [Hacked+Subtitle] to category: Daily Ingestion
+2025-08-06 19:29:29,897 - __main__ - INFO - [8/15] Adding: JUR-304 [Subtitle]
+2025-08-06 19:29:29,898 - __main__ - DEBUG - Adding torrent: JUR-304 [Subtitle] with category: Daily Ingestion
+2025-08-06 19:29:29,944 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-06 19:29:29,945 - __main__ - DEBUG - Successfully added torrent: JUR-304 [Subtitle] to category: Daily Ingestion
+2025-08-06 19:29:30,954 - __main__ - INFO - [9/15] Adding: MIAB-526 [Subtitle]
+2025-08-06 19:29:30,955 - __main__ - DEBUG - Adding torrent: MIAB-526 [Subtitle] with category: Daily Ingestion
+2025-08-06 19:29:31,014 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-06 19:29:31,015 - __main__ - DEBUG - Successfully added torrent: MIAB-526 [Subtitle] to category: Daily Ingestion
+2025-08-06 19:29:32,021 - __main__ - INFO - [10/15] Adding: MIDV-207 [Hacked+Subtitle]
+2025-08-06 19:29:32,022 - __main__ - DEBUG - Adding torrent: MIDV-207 [Hacked+Subtitle] with category: Daily Ingestion
+2025-08-06 19:29:32,088 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-06 19:29:32,088 - __main__ - DEBUG - Successfully added torrent: MIDV-207 [Hacked+Subtitle] to category: Daily Ingestion
+2025-08-06 19:29:33,091 - __main__ - INFO - [11/15] Adding: MIDV-207 [Subtitle]
+2025-08-06 19:29:33,091 - __main__ - DEBUG - Adding torrent: MIDV-207 [Subtitle] with category: Daily Ingestion
+2025-08-06 19:29:33,176 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-06 19:29:33,177 - __main__ - DEBUG - Successfully added torrent: MIDV-207 [Subtitle] to category: Daily Ingestion
+2025-08-06 19:29:34,185 - __main__ - INFO - [12/15] Adding: SONE-780 [Hacked-NoSubtitle]
+2025-08-06 19:29:34,185 - __main__ - DEBUG - Adding torrent: SONE-780 [Hacked-NoSubtitle] with category: Daily Ingestion
+2025-08-06 19:29:34,219 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-06 19:29:34,220 - __main__ - DEBUG - Successfully added torrent: SONE-780 [Hacked-NoSubtitle] to category: Daily Ingestion
+2025-08-06 19:29:35,229 - __main__ - INFO - [13/15] Adding: SONE-786 [Hacked-NoSubtitle]
+2025-08-06 19:29:35,229 - __main__ - DEBUG - Adding torrent: SONE-786 [Hacked-NoSubtitle] with category: Daily Ingestion
+2025-08-06 19:29:35,294 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-06 19:29:35,294 - __main__ - DEBUG - Successfully added torrent: SONE-786 [Hacked-NoSubtitle] to category: Daily Ingestion
+2025-08-06 19:29:36,304 - __main__ - INFO - [14/15] Adding: SONE-796 [Hacked-NoSubtitle]
+2025-08-06 19:29:36,304 - __main__ - DEBUG - Adding torrent: SONE-796 [Hacked-NoSubtitle] with category: Daily Ingestion
+2025-08-06 19:29:36,350 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-06 19:29:36,350 - __main__ - DEBUG - Successfully added torrent: SONE-796 [Hacked-NoSubtitle] to category: Daily Ingestion
+2025-08-06 19:29:37,355 - __main__ - INFO - [15/15] Adding: SONE-800 [Hacked-NoSubtitle]
+2025-08-06 19:29:37,356 - __main__ - DEBUG - Adding torrent: SONE-800 [Hacked-NoSubtitle] with category: Daily Ingestion
+2025-08-06 19:29:37,412 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
+2025-08-06 19:29:37,414 - __main__ - DEBUG - Successfully added torrent: SONE-800 [Hacked-NoSubtitle] to category: Daily Ingestion
+2025-08-06 19:29:38,421 - __main__ - INFO - ==================================================
+2025-08-06 19:29:38,421 - __main__ - INFO - UPLOAD SUMMARY
+2025-08-06 19:29:38,422 - __main__ - INFO - ==================================================
+2025-08-06 19:29:38,422 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250806.csv
+2025-08-06 19:29:38,422 - __main__ - INFO - Total torrents found: 15
+2025-08-06 19:29:38,422 - __main__ - INFO - Successfully added: 15
+2025-08-06 19:29:38,422 - __main__ - INFO -   - Hacked subtitle torrents: 2
+2025-08-06 19:29:38,422 - __main__ - INFO -   - Hacked no subtitle torrents: 6
+2025-08-06 19:29:38,422 - __main__ - INFO -   - Subtitle torrents: 7
+2025-08-06 19:29:38,422 - __main__ - INFO -   - No subtitle torrents: 0
+2025-08-06 19:29:38,422 - __main__ - INFO - Failed to add: 0
+2025-08-06 19:29:38,422 - __main__ - INFO - Success rate: 100.0%
+2025-08-06 19:29:38,422 - __main__ - INFO - ==================================================
