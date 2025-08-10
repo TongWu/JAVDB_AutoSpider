@@ -99,6 +99,15 @@ UPLOADER_LOG_FILE = 'logs/qbtorrent_uploader.log'
 PIPELINE_LOG_FILE = 'logs/pipeline_run_and_notify.log'
 
 # =============================================================================
+# PARSING CONFIGURATION
+# =============================================================================
+
+# Whether to ignore today/yesterday release tags and parse all entries with subtitles
+# If True: Parse all entries with subtitle tags regardless of release date tags
+# If False: Only parse entries that have both subtitle tags AND today/yesterday tags
+IGNORE_RELEASE_DATE_FILTER = False
+
+# =============================================================================
 # FILE PATHS
 # =============================================================================
 
