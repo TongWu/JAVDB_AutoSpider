@@ -1,117 +1,108 @@
-2025-08-07 20:19:21,245 - __main__ - INFO - Starting qBittorrent uploader...
-2025-08-07 20:19:21,245 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250807.csv
-2025-08-07 20:19:21,246 - __main__ - DEBUG - Skipping downloaded torrent: SONE-805 [Subtitle]
-2025-08-07 20:19:21,246 - __main__ - DEBUG - Skipping downloaded torrent: SONE-807 [Subtitle]
-2025-08-07 20:19:21,246 - __main__ - DEBUG - Skipping downloaded torrent: SONE-808 [Subtitle]
-2025-08-07 20:19:21,246 - __main__ - DEBUG - Skipping downloaded torrent: ATID-639 [Subtitle]
-2025-08-07 20:19:21,246 - __main__ - DEBUG - Skipping downloaded torrent: CAWD-853 [Subtitle]
-2025-08-07 20:19:21,246 - __main__ - DEBUG - Skipping downloaded torrent: ADN-711 [NoSubtitle]
-2025-08-07 20:19:21,246 - __main__ - INFO - Found 22 torrent links in Daily Report/Javdb_TodayTitle_20250807.csv
-2025-08-07 20:19:21,246 - __main__ - INFO - Skipped 6 already downloaded torrents
-2025-08-07 20:19:21,246 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-08-07 20:19:21,252 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 101.100.165.240:12301
-2025-08-07 20:19:21,470 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/auth/login HTTP/1.1" 200 3
-2025-08-07 20:19:21,471 - __main__ - INFO - Successfully logged in to qBittorrent
-2025-08-07 20:19:21,472 - __main__ - INFO - History manager imported, will update downloaded status
-2025-08-07 20:19:21,472 - __main__ - INFO - Starting to add 22 torrents to qBittorrent...
-2025-08-07 20:19:21,472 - __main__ - INFO - [1/22] Adding: SONE-805 [Hacked-NoSubtitle]
-2025-08-07 20:19:21,472 - __main__ - DEBUG - Adding torrent: SONE-805 [Hacked-NoSubtitle] with category: Daily Ingestion
-2025-08-07 20:19:21,515 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:21,515 - __main__ - DEBUG - Successfully added torrent: SONE-805 [Hacked-NoSubtitle] to category: Daily Ingestion
-2025-08-07 20:19:22,521 - __main__ - INFO - [2/22] Adding: SONE-807 [Hacked-NoSubtitle]
-2025-08-07 20:19:22,521 - __main__ - DEBUG - Adding torrent: SONE-807 [Hacked-NoSubtitle] with category: Daily Ingestion
-2025-08-07 20:19:22,570 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:22,570 - __main__ - DEBUG - Successfully added torrent: SONE-807 [Hacked-NoSubtitle] to category: Daily Ingestion
-2025-08-07 20:19:23,574 - __main__ - INFO - [3/22] Adding: SONE-808 [Hacked-NoSubtitle]
-2025-08-07 20:19:23,574 - __main__ - DEBUG - Adding torrent: SONE-808 [Hacked-NoSubtitle] with category: Daily Ingestion
-2025-08-07 20:19:23,610 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:23,610 - __main__ - DEBUG - Successfully added torrent: SONE-808 [Hacked-NoSubtitle] to category: Daily Ingestion
-2025-08-07 20:19:24,613 - __main__ - INFO - [4/22] Adding: SUPD-077 [Hacked+Subtitle]
-2025-08-07 20:19:24,613 - __main__ - DEBUG - Adding torrent: SUPD-077 [Hacked+Subtitle] with category: Daily Ingestion
-2025-08-07 20:19:24,650 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:24,650 - __main__ - DEBUG - Successfully added torrent: SUPD-077 [Hacked+Subtitle] to category: Daily Ingestion
-2025-08-07 20:19:25,651 - __main__ - INFO - [5/22] Adding: SUPD-077 [NoSubtitle]
-2025-08-07 20:19:25,651 - __main__ - DEBUG - Adding torrent: SUPD-077 [NoSubtitle] with category: Daily Ingestion
-2025-08-07 20:19:25,697 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:25,697 - __main__ - DEBUG - Successfully added torrent: SUPD-077 [NoSubtitle] to category: Daily Ingestion
-2025-08-07 20:19:26,702 - __main__ - INFO - [6/22] Adding: URE-124 [Hacked-NoSubtitle]
-2025-08-07 20:19:26,702 - __main__ - DEBUG - Adding torrent: URE-124 [Hacked-NoSubtitle] with category: Daily Ingestion
-2025-08-07 20:19:26,744 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:26,744 - __main__ - DEBUG - Successfully added torrent: URE-124 [Hacked-NoSubtitle] to category: Daily Ingestion
-2025-08-07 20:19:27,749 - __main__ - INFO - [7/22] Adding: URE-124 [Subtitle]
-2025-08-07 20:19:27,749 - __main__ - DEBUG - Adding torrent: URE-124 [Subtitle] with category: Daily Ingestion
-2025-08-07 20:19:27,804 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:27,805 - __main__ - DEBUG - Successfully added torrent: URE-124 [Subtitle] to category: Daily Ingestion
-2025-08-07 20:19:28,808 - __main__ - INFO - [8/22] Adding: ADN-713 [Subtitle]
-2025-08-07 20:19:28,808 - __main__ - DEBUG - Adding torrent: ADN-713 [Subtitle] with category: Daily Ingestion
-2025-08-07 20:19:28,857 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:28,857 - __main__ - DEBUG - Successfully added torrent: ADN-713 [Subtitle] to category: Daily Ingestion
-2025-08-07 20:19:29,862 - __main__ - INFO - [9/22] Adding: ATID-639 [Hacked+Subtitle]
-2025-08-07 20:19:29,862 - __main__ - DEBUG - Adding torrent: ATID-639 [Hacked+Subtitle] with category: Daily Ingestion
-2025-08-07 20:19:29,894 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:29,894 - __main__ - DEBUG - Successfully added torrent: ATID-639 [Hacked+Subtitle] to category: Daily Ingestion
-2025-08-07 20:19:30,896 - __main__ - INFO - [10/22] Adding: CAWD-848 [Subtitle]
-2025-08-07 20:19:30,897 - __main__ - DEBUG - Adding torrent: CAWD-848 [Subtitle] with category: Daily Ingestion
-2025-08-07 20:19:30,937 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:30,937 - __main__ - DEBUG - Successfully added torrent: CAWD-848 [Subtitle] to category: Daily Ingestion
-2025-08-07 20:19:31,938 - __main__ - INFO - [11/22] Adding: CAWD-853 [Hacked+Subtitle]
-2025-08-07 20:19:31,938 - __main__ - DEBUG - Adding torrent: CAWD-853 [Hacked+Subtitle] with category: Daily Ingestion
-2025-08-07 20:19:31,993 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:31,993 - __main__ - DEBUG - Successfully added torrent: CAWD-853 [Hacked+Subtitle] to category: Daily Ingestion
-2025-08-07 20:19:32,995 - __main__ - INFO - [12/22] Adding: CAWD-863 [Subtitle]
-2025-08-07 20:19:32,995 - __main__ - DEBUG - Adding torrent: CAWD-863 [Subtitle] with category: Daily Ingestion
-2025-08-07 20:19:33,055 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:33,056 - __main__ - DEBUG - Successfully added torrent: CAWD-863 [Subtitle] to category: Daily Ingestion
-2025-08-07 20:19:34,061 - __main__ - INFO - [13/22] Adding: CAWD-864 [Subtitle]
-2025-08-07 20:19:34,061 - __main__ - DEBUG - Adding torrent: CAWD-864 [Subtitle] with category: Daily Ingestion
-2025-08-07 20:19:34,110 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:34,110 - __main__ - DEBUG - Successfully added torrent: CAWD-864 [Subtitle] to category: Daily Ingestion
-2025-08-07 20:19:35,111 - __main__ - INFO - [14/22] Adding: CWPBD-42 [Subtitle]
-2025-08-07 20:19:35,111 - __main__ - DEBUG - Adding torrent: CWPBD-42 [Subtitle] with category: Daily Ingestion
-2025-08-07 20:19:35,152 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:35,153 - __main__ - DEBUG - Successfully added torrent: CWPBD-42 [Subtitle] to category: Daily Ingestion
-2025-08-07 20:19:36,158 - __main__ - INFO - [15/22] Adding: MIDA-258 [Subtitle]
-2025-08-07 20:19:36,158 - __main__ - DEBUG - Adding torrent: MIDA-258 [Subtitle] with category: Daily Ingestion
-2025-08-07 20:19:36,211 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:36,211 - __main__ - DEBUG - Successfully added torrent: MIDA-258 [Subtitle] to category: Daily Ingestion
-2025-08-07 20:19:37,216 - __main__ - INFO - [16/22] Adding: MIDA-260 [Subtitle]
-2025-08-07 20:19:37,216 - __main__ - DEBUG - Adding torrent: MIDA-260 [Subtitle] with category: Daily Ingestion
-2025-08-07 20:19:37,297 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:37,297 - __main__ - DEBUG - Successfully added torrent: MIDA-260 [Subtitle] to category: Daily Ingestion
-2025-08-07 20:19:38,302 - __main__ - INFO - [17/22] Adding: MIDA-261 [Subtitle]
-2025-08-07 20:19:38,302 - __main__ - DEBUG - Adding torrent: MIDA-261 [Subtitle] with category: Daily Ingestion
-2025-08-07 20:19:38,371 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:38,371 - __main__ - DEBUG - Successfully added torrent: MIDA-261 [Subtitle] to category: Daily Ingestion
-2025-08-07 20:19:39,374 - __main__ - INFO - [18/22] Adding: MIDA-264 [Subtitle]
-2025-08-07 20:19:39,374 - __main__ - DEBUG - Adding torrent: MIDA-264 [Subtitle] with category: Daily Ingestion
-2025-08-07 20:19:39,415 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:39,415 - __main__ - DEBUG - Successfully added torrent: MIDA-264 [Subtitle] to category: Daily Ingestion
-2025-08-07 20:19:40,420 - __main__ - INFO - [19/22] Adding: MIDA-268 [Subtitle]
-2025-08-07 20:19:40,420 - __main__ - DEBUG - Adding torrent: MIDA-268 [Subtitle] with category: Daily Ingestion
-2025-08-07 20:19:40,491 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:40,491 - __main__ - DEBUG - Successfully added torrent: MIDA-268 [Subtitle] to category: Daily Ingestion
-2025-08-07 20:19:41,491 - __main__ - INFO - [20/22] Adding: MIDA-269 [Subtitle]
-2025-08-07 20:19:41,491 - __main__ - DEBUG - Adding torrent: MIDA-269 [Subtitle] with category: Daily Ingestion
-2025-08-07 20:19:41,536 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:41,537 - __main__ - DEBUG - Successfully added torrent: MIDA-269 [Subtitle] to category: Daily Ingestion
-2025-08-07 20:19:42,539 - __main__ - INFO - [21/22] Adding: ADN-711 [Hacked+Subtitle]
-2025-08-07 20:19:42,539 - __main__ - DEBUG - Adding torrent: ADN-711 [Hacked+Subtitle] with category: Daily Ingestion
-2025-08-07 20:19:42,600 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:42,600 - __main__ - DEBUG - Successfully added torrent: ADN-711 [Hacked+Subtitle] to category: Daily Ingestion
-2025-08-07 20:19:43,602 - __main__ - INFO - [22/22] Adding: MMKS-032 [NoSubtitle]
-2025-08-07 20:19:43,602 - __main__ - DEBUG - Adding torrent: MMKS-032 [NoSubtitle] with category: Daily Ingestion
-2025-08-07 20:19:43,696 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-08-07 20:19:43,696 - __main__ - DEBUG - Successfully added torrent: MMKS-032 [NoSubtitle] to category: Daily Ingestion
-2025-08-07 20:19:44,697 - __main__ - INFO - ==================================================
-2025-08-07 20:19:44,697 - __main__ - INFO - UPLOAD SUMMARY
-2025-08-07 20:19:44,697 - __main__ - INFO - ==================================================
-2025-08-07 20:19:44,697 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250807.csv
-2025-08-07 20:19:44,697 - __main__ - INFO - Total torrents found: 22
-2025-08-07 20:19:44,697 - __main__ - INFO - Successfully added: 22
-2025-08-07 20:19:44,697 - __main__ - INFO -   - Hacked subtitle torrents: 4
-2025-08-07 20:19:44,697 - __main__ - INFO -   - Hacked no subtitle torrents: 4
-2025-08-07 20:19:44,697 - __main__ - INFO -   - Subtitle torrents: 12
-2025-08-07 20:19:44,697 - __main__ - INFO -   - No subtitle torrents: 2
-2025-08-07 20:19:44,697 - __main__ - INFO - Failed to add: 0
-2025-08-07 20:19:44,697 - __main__ - INFO - Success rate: 100.0%
-2025-08-07 20:19:44,697 - __main__ - INFO - ==================================================
+2025-08-10 14:14:30,408 - __main__ - INFO - Starting qBittorrent uploader...
+2025-08-10 14:14:30,410 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250810.csv
+2025-08-10 14:14:30,410 - __main__ - INFO - Found 87 torrent links in Daily Report/Javdb_TodayTitle_20250810.csv
+2025-08-10 14:14:30,410 - __main__ - INFO - Skipped 7 already downloaded torrents
+2025-08-10 14:14:30,410 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-08-10 14:14:30,636 - __main__ - INFO - Successfully logged in to qBittorrent
+2025-08-10 14:14:30,636 - __main__ - INFO - History manager imported, will update downloaded status
+2025-08-10 14:14:30,636 - __main__ - INFO - Starting to add 87 torrents to qBittorrent...
+2025-08-10 14:14:30,636 - __main__ - INFO - [1/87] Adding: CAWD-243 [Hacked-NoSubtitle]
+2025-08-10 14:14:31,681 - __main__ - INFO - [2/87] Adding: CAWD-243 [Subtitle]
+2025-08-10 14:14:32,980 - __main__ - INFO - [3/87] Adding: CEAD-146 [Hacked-NoSubtitle]
+2025-08-10 14:14:34,017 - __main__ - INFO - [4/87] Adding: CEAD-146 [Subtitle]
+2025-08-10 14:14:35,063 - __main__ - INFO - [5/87] Adding: MIMK-232 [Subtitle]
+2025-08-10 14:14:36,112 - __main__ - INFO - [6/87] Adding: MIRD-259 [Subtitle]
+2025-08-10 14:14:37,159 - __main__ - INFO - [7/87] Adding: MOOR-042 [Subtitle]
+2025-08-10 14:14:38,370 - __main__ - INFO - [8/87] Adding: NPJS-187 [Subtitle]
+2025-08-10 14:14:39,415 - __main__ - INFO - [9/87] Adding: NPJS-206 [Subtitle]
+2025-08-10 14:14:41,033 - __main__ - INFO - [10/87] Adding: RBK-110 [Subtitle]
+2025-08-10 14:14:42,078 - __main__ - INFO - [11/87] Adding: SONE-800 [Hacked+Subtitle]
+2025-08-10 14:14:43,123 - __main__ - INFO - [12/87] Adding: SONE-800 [Subtitle]
+2025-08-10 14:14:44,161 - __main__ - INFO - [13/87] Adding: VEC-717 [Subtitle]
+2025-08-10 14:14:45,210 - __main__ - INFO - [14/87] Adding: VEC-718 [Subtitle]
+2025-08-10 14:14:47,546 - __main__ - INFO - [15/87] Adding: VENX-332 [Subtitle]
+2025-08-10 14:14:48,598 - __main__ - INFO - [16/87] Adding: VOD-046 [Subtitle]
+2025-08-10 14:14:49,640 - __main__ - INFO - [17/87] Adding: ADN-025 [Hacked-NoSubtitle]
+2025-08-10 14:14:50,689 - __main__ - INFO - [18/87] Adding: ADN-025 [Subtitle]
+2025-08-10 14:14:51,739 - __main__ - INFO - [19/87] Adding: ADN-062 [Hacked-NoSubtitle]
+2025-08-10 14:14:52,942 - __main__ - INFO - [20/87] Adding: ADN-062 [Subtitle]
+2025-08-10 14:14:53,991 - __main__ - INFO - [21/87] Adding: ADN-639 [Hacked-NoSubtitle]
+2025-08-10 14:14:56,831 - __main__ - INFO - [22/87] Adding: ADN-639 [Subtitle]
+2025-08-10 14:14:57,874 - __main__ - INFO - [23/87] Adding: ADN-647 [Hacked-NoSubtitle]
+2025-08-10 14:14:58,930 - __main__ - INFO - [24/87] Adding: ADN-647 [Subtitle]
+2025-08-10 14:14:59,972 - __main__ - INFO - [25/87] Adding: ALDN-484 [Hacked-NoSubtitle]
+2025-08-10 14:15:01,615 - __main__ - INFO - [26/87] Adding: ALDN-488 [Hacked-NoSubtitle]
+2025-08-10 14:15:02,659 - __main__ - INFO - [27/87] Adding: ABF-235 [Hacked+Subtitle]
+2025-08-10 14:15:03,702 - __main__ - INFO - [28/87] Adding: DASS-704 [Hacked+Subtitle]
+2025-08-10 14:15:04,766 - __main__ - INFO - [29/87] Adding: DASS-704 [Subtitle]
+2025-08-10 14:15:05,819 - __main__ - INFO - [30/87] Adding: IPZZ-557 [Hacked-NoSubtitle]
+2025-08-10 14:15:06,872 - __main__ - INFO - [31/87] Adding: IPZZ-557 [Subtitle]
+2025-08-10 14:15:07,906 - __main__ - INFO - [32/87] Adding: IPZZ-596 [Hacked-NoSubtitle]
+2025-08-10 14:15:08,949 - __main__ - INFO - [33/87] Adding: IPZZ-596 [Subtitle]
+2025-08-10 14:15:09,998 - __main__ - INFO - [34/87] Adding: NGOD-274 [Hacked-NoSubtitle]
+2025-08-10 14:15:11,041 - __main__ - INFO - [35/87] Adding: NGOD-274 [Subtitle]
+2025-08-10 14:15:12,087 - __main__ - INFO - [36/87] Adding: SAME-176 [Subtitle]
+2025-08-10 14:15:13,133 - __main__ - INFO - [37/87] Adding: START-345 [Hacked-NoSubtitle]
+2025-08-10 14:15:14,183 - __main__ - INFO - [38/87] Adding: START-345 [Subtitle]
+2025-08-10 14:15:15,245 - __main__ - INFO - [39/87] Adding: START-352 [Hacked-NoSubtitle]
+2025-08-10 14:15:16,289 - __main__ - INFO - [40/87] Adding: START-352 [Subtitle]
+2025-08-10 14:15:17,342 - __main__ - INFO - [41/87] Adding: START-365 [Subtitle]
+2025-08-10 14:15:18,398 - __main__ - INFO - [42/87] Adding: START-380 [Hacked+Subtitle]
+2025-08-10 14:15:19,439 - __main__ - INFO - [43/87] Adding: START-380 [Subtitle]
+2025-08-10 14:15:20,490 - __main__ - INFO - [44/87] Adding: WAAA-547 [Subtitle]
+2025-08-10 14:15:21,530 - __main__ - INFO - [45/87] Adding: WAAA-559 [Subtitle]
+2025-08-10 14:15:22,567 - __main__ - INFO - [46/87] Adding: ABF-255 [NoSubtitle]
+2025-08-10 14:15:23,610 - __main__ - INFO - [47/87] Adding: NMSL-014 [NoSubtitle]
+2025-08-10 14:15:24,656 - __main__ - INFO - [48/87] Adding: JUR-391 [NoSubtitle]
+2025-08-10 14:15:25,696 - __main__ - INFO - [49/87] Adding: ROE-392 [NoSubtitle]
+2025-08-10 14:15:26,738 - __main__ - INFO - [50/87] Adding: AVSA-377 [Hacked-NoSubtitle]
+2025-08-10 14:15:27,776 - __main__ - INFO - [51/87] Adding: AVSA-377 [NoSubtitle]
+2025-08-10 14:15:28,820 - __main__ - INFO - [52/87] Adding: AVSA-389 [Hacked-NoSubtitle]
+2025-08-10 14:15:29,871 - __main__ - INFO - [53/87] Adding: BBAN-008 [Hacked-NoSubtitle]
+2025-08-10 14:15:30,931 - __main__ - INFO - [54/87] Adding: BBAN-008 [NoSubtitle]
+2025-08-10 14:15:31,976 - __main__ - INFO - [55/87] Adding: BLB-026 [Hacked-NoSubtitle]
+2025-08-10 14:15:33,017 - __main__ - INFO - [56/87] Adding: CEAD-696 [Hacked-NoSubtitle]
+2025-08-10 14:15:34,212 - __main__ - INFO - [57/87] Adding: CEAD-696 [NoSubtitle]
+2025-08-10 14:15:35,261 - __main__ - INFO - [58/87] Adding: ABF-253 [Hacked+Subtitle]
+2025-08-10 14:15:36,300 - __main__ - INFO - [59/87] Adding: JUR-238 [Hacked+Subtitle]
+2025-08-10 14:15:37,350 - __main__ - INFO - [60/87] Adding: JUR-238 [NoSubtitle]
+2025-08-10 14:15:38,407 - __main__ - INFO - [61/87] Adding: DAZD-252 [NoSubtitle]
+2025-08-10 14:15:39,659 - __main__ - INFO - [62/87] Adding: IPZZ-641 [NoSubtitle]
+2025-08-10 14:15:40,718 - __main__ - INFO - [63/87] Adding: SONE-870 [NoSubtitle]
+2025-08-10 14:15:43,818 - __main__ - INFO - [64/87] Adding: SONE-837 [NoSubtitle]
+2025-08-10 14:15:44,863 - __main__ - INFO - [65/87] Adding: JUR-390 [NoSubtitle]
+2025-08-10 14:15:45,920 - __main__ - INFO - [66/87] Adding: IPZZ-597 [NoSubtitle]
+2025-08-10 14:15:46,966 - __main__ - INFO - [67/87] Adding: JUR-423 [NoSubtitle]
+2025-08-10 14:15:48,011 - __main__ - INFO - [68/87] Adding: HUBLK-055 [NoSubtitle]
+2025-08-10 14:15:49,104 - __main__ - INFO - [69/87] Adding: IPZZ-669 [NoSubtitle]
+2025-08-10 14:15:50,148 - __main__ - INFO - [70/87] Adding: REAL-929 [NoSubtitle]
+2025-08-10 14:15:51,198 - __main__ - INFO - [71/87] Adding: IPZZ-631 [NoSubtitle]
+2025-08-10 14:15:52,247 - __main__ - INFO - [72/87] Adding: JUR-446 [NoSubtitle]
+2025-08-10 14:15:53,404 - __main__ - INFO - [73/87] Adding: IPZZ-644 [NoSubtitle]
+2025-08-10 14:15:54,447 - __main__ - INFO - [74/87] Adding: IPZZ-667 [NoSubtitle]
+2025-08-10 14:15:55,492 - __main__ - INFO - [75/87] Adding: IPZZ-690 [NoSubtitle]
+2025-08-10 14:15:56,538 - __main__ - INFO - [76/87] Adding: ANAV-007 [Hacked-NoSubtitle]
+2025-08-10 14:15:57,578 - __main__ - INFO - [77/87] Adding: ANAV-007 [NoSubtitle]
+2025-08-10 14:15:58,633 - __main__ - INFO - [78/87] Adding: JUR-334 [Hacked+Subtitle]
+2025-08-10 14:15:59,674 - __main__ - INFO - [79/87] Adding: IPZZ-630 [NoSubtitle]
+2025-08-10 14:16:01,155 - __main__ - INFO - [80/87] Adding: JUR-472 [NoSubtitle]
+2025-08-10 14:16:02,222 - __main__ - INFO - [81/87] Adding: NAMH-039 [NoSubtitle]
+2025-08-10 14:16:03,688 - __main__ - INFO - [82/87] Adding: IPZZ-623 [NoSubtitle]
+2025-08-10 14:16:04,741 - __main__ - INFO - [83/87] Adding: JUR-419 [NoSubtitle]
+2025-08-10 14:16:05,796 - __main__ - INFO - [84/87] Adding: IPZZ-635 [NoSubtitle]
+2025-08-10 14:16:06,839 - __main__ - INFO - [85/87] Adding: JUR-444 [NoSubtitle]
+2025-08-10 14:16:07,892 - __main__ - INFO - [86/87] Adding: JUR-450 [NoSubtitle]
+2025-08-10 14:16:08,940 - __main__ - INFO - [87/87] Adding: IPZZ-633 [NoSubtitle]
+2025-08-10 14:16:09,987 - __main__ - INFO - ==================================================
+2025-08-10 14:16:09,987 - __main__ - INFO - UPLOAD SUMMARY
+2025-08-10 14:16:09,987 - __main__ - INFO - ==================================================
+2025-08-10 14:16:09,987 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250810.csv
+2025-08-10 14:16:09,987 - __main__ - INFO - Total torrents found: 87
+2025-08-10 14:16:09,987 - __main__ - INFO - Successfully added: 87
+2025-08-10 14:16:09,987 - __main__ - INFO -   - Hacked subtitle torrents: 7
+2025-08-10 14:16:09,988 - __main__ - INFO -   - Hacked no subtitle torrents: 19
+2025-08-10 14:16:09,988 - __main__ - INFO -   - Subtitle torrents: 28
+2025-08-10 14:16:09,988 - __main__ - INFO -   - No subtitle torrents: 33
+2025-08-10 14:16:09,988 - __main__ - INFO - Failed to add: 0
+2025-08-10 14:16:09,988 - __main__ - INFO - Success rate: 100.0%
+2025-08-10 14:16:09,988 - __main__ - INFO - ==================================================
