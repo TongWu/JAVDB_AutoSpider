@@ -1,53 +1,135 @@
-2025-08-11 19:00:01,792 - __main__ - INFO - Starting JavDB spider...
-2025-08-11 19:00:01,792 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
-2025-08-11 19:00:01,792 - __main__ - INFO - Validating history file integrity...
-2025-08-11 19:00:01,803 - utils.history_manager - INFO - Loaded 1280 previously parsed movies from history (phase 1: 622, phase 2: 658)
-2025-08-11 19:00:01,804 - __main__ - INFO - ==================================================
-2025-08-11 19:00:01,804 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-08-11 19:00:01,804 - __main__ - INFO - ==================================================
-2025-08-11 19:00:07,246 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 403 Client Error: Forbidden for url: https://javdb.com/?page=1
-2025-08-11 19:00:07,246 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
-2025-08-11 19:00:07,448 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 403 Client Error: Forbidden for url: https://javdb.com/?page=2
-2025-08-11 19:00:07,448 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
-2025-08-11 19:00:07,655 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 403 Client Error: Forbidden for url: https://javdb.com/?page=3
-2025-08-11 19:00:07,655 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
-2025-08-11 19:00:07,655 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
-2025-08-11 19:00:07,655 - __main__ - INFO - Phase 1 completed: 0 entries processed
-2025-08-11 19:00:07,655 - __main__ - INFO - ==================================================
-2025-08-11 19:00:07,655 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-08-11 19:00:07,655 - __main__ - INFO - ==================================================
-2025-08-11 19:00:07,859 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 403 Client Error: Forbidden for url: https://javdb.com/?page=1
-2025-08-11 19:00:07,859 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
-2025-08-11 19:00:08,062 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 403 Client Error: Forbidden for url: https://javdb.com/?page=2
-2025-08-11 19:00:08,062 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
-2025-08-11 19:00:08,264 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 403 Client Error: Forbidden for url: https://javdb.com/?page=3
-2025-08-11 19:00:08,264 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
-2025-08-11 19:00:08,264 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
-2025-08-11 19:00:08,264 - __main__ - INFO - Phase 2 completed: 0 entries processed
-2025-08-11 19:00:08,264 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20250811.csv
-2025-08-11 19:00:08,264 - __main__ - INFO - ==================================================
-2025-08-11 19:00:08,264 - __main__ - INFO - SUMMARY REPORT
-2025-08-11 19:00:08,264 - __main__ - INFO - ==================================================
-2025-08-11 19:00:08,264 - __main__ - INFO - Pages processed: 1 to 20
-2025-08-11 19:00:08,264 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-08-11 19:00:08,264 - __main__ - INFO - ==============================
-2025-08-11 19:00:08,264 - __main__ - INFO - PHASE 1 SUMMARY
-2025-08-11 19:00:08,264 - __main__ - INFO - ==============================
-2025-08-11 19:00:08,264 - __main__ - INFO - Phase 1 entries found: 0
-2025-08-11 19:00:08,264 - __main__ - INFO -   - No entries found in Phase 1
-2025-08-11 19:00:08,264 - __main__ - INFO - ==============================
-2025-08-11 19:00:08,264 - __main__ - INFO - PHASE 2 SUMMARY
-2025-08-11 19:00:08,264 - __main__ - INFO - ==============================
-2025-08-11 19:00:08,264 - __main__ - INFO - Phase 2 entries found: 0
-2025-08-11 19:00:08,265 - __main__ - INFO -   - No entries found in Phase 2
-2025-08-11 19:00:08,265 - __main__ - INFO - ==============================
-2025-08-11 19:00:08,265 - __main__ - INFO - OVERALL SUMMARY
-2025-08-11 19:00:08,265 - __main__ - INFO - ==============================
-2025-08-11 19:00:08,265 - __main__ - INFO - Total entries found: 0
-2025-08-11 19:00:08,265 - __main__ - INFO - Successfully processed: 0
-2025-08-11 19:00:08,265 - __main__ - INFO - Skipped already parsed in this session: 0
-2025-08-11 19:00:08,265 - __main__ - INFO - Skipped already parsed in previous runs: 622
-2025-08-11 19:00:08,265 - __main__ - INFO - Current parsed links in memory: 0
-2025-08-11 19:00:08,265 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20250811.csv
-2025-08-11 19:00:08,265 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-08-11 19:00:08,265 - __main__ - INFO - ==================================================
+2025-08-12 19:00:01,892 - __main__ - INFO - Starting JavDB spider...
+2025-08-12 19:00:01,892 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
+2025-08-12 19:00:01,892 - __main__ - INFO - Validating history file integrity...
+2025-08-12 19:00:01,901 - utils.history_manager - INFO - Loaded 1280 previously parsed movies from history (phase 1: 622, phase 2: 658)
+2025-08-12 19:00:01,901 - __main__ - INFO - ==================================================
+2025-08-12 19:00:01,901 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-08-12 19:00:01,901 - __main__ - INFO - ==================================================
+2025-08-12 19:00:03,234 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
+2025-08-12 19:00:05,764 - utils.parser - INFO - [Page 2] Found 14 entries for phase 1
+2025-08-12 19:00:08,078 - utils.parser - INFO - [Page 3] Found 0 entries for phase 1
+2025-08-12 19:00:10,652 - utils.parser - INFO - [Page 4] Found 11 entries for phase 1
+2025-08-12 19:00:13,170 - utils.parser - INFO - [Page 5] Found 1 entries for phase 1
+2025-08-12 19:00:15,719 - utils.parser - INFO - [Page 6] Found 0 entries for phase 1
+2025-08-12 19:00:18,497 - utils.parser - INFO - [Page 7] Found 0 entries for phase 1
+2025-08-12 19:00:21,028 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
+2025-08-12 19:00:23,638 - utils.parser - INFO - [Page 9] Found 0 entries for phase 1
+2025-08-12 19:00:26,204 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
+2025-08-12 19:00:28,812 - utils.parser - INFO - [Page 11] Found 0 entries for phase 1
+2025-08-12 19:00:31,341 - utils.parser - INFO - [Page 12] Found 0 entries for phase 1
+2025-08-12 19:00:33,895 - utils.parser - INFO - [Page 13] Found 0 entries for phase 1
+2025-08-12 19:00:36,423 - utils.parser - INFO - [Page 14] Found 0 entries for phase 1
+2025-08-12 19:00:38,956 - utils.parser - INFO - [Page 15] Found 0 entries for phase 1
+2025-08-12 19:00:41,546 - utils.parser - INFO - [Page 16] Found 0 entries for phase 1
+2025-08-12 19:00:44,105 - utils.parser - INFO - [Page 17] Found 0 entries for phase 1
+2025-08-12 19:00:46,675 - utils.parser - INFO - [Page 18] Found 0 entries for phase 1
+2025-08-12 19:00:49,263 - utils.parser - INFO - [Page 19] Found 0 entries for phase 1
+2025-08-12 19:00:51,814 - utils.parser - INFO - [Page 20] Found 0 entries for phase 1
+2025-08-12 19:00:57,096 - __main__ - INFO - [1/26] [Page 2] Processing DASS-374
+2025-08-12 19:01:03,611 - __main__ - INFO - [2/26] [Page 2] Processing DASS-688
+2025-08-12 19:01:10,107 - __main__ - INFO - [3/26] [Page 2] Processing CWPBD-46
+2025-08-12 19:01:16,592 - __main__ - INFO - [4/26] [Page 2] Processing DDB-234
+2025-08-12 19:01:23,054 - __main__ - INFO - [5/26] [Page 2] Processing HAWA-359
+2025-08-12 19:01:29,526 - __main__ - INFO - [6/26] [Page 2] Processing HAWA-360
+2025-08-12 19:01:36,026 - __main__ - INFO - [7/26] [Page 2] Processing HBAD-704
+2025-08-12 19:01:42,522 - __main__ - INFO - [8/26] [Page 2] Processing HBAD-705
+2025-08-12 19:01:48,994 - __main__ - INFO - [9/26] [Page 2] Processing HBAD-706
+2025-08-12 19:01:55,471 - __main__ - INFO - [10/26] [Page 2] Processing HBAD-709
+2025-08-12 19:02:01,964 - __main__ - INFO - [11/26] [Page 2] Processing HBAD-710
+2025-08-12 19:02:08,488 - __main__ - INFO - [12/26] [Page 2] Processing HBAD-711
+2025-08-12 19:02:15,014 - __main__ - INFO - [13/26] [Page 2] Processing HDKA-318
+2025-08-12 19:02:21,483 - __main__ - INFO - [14/26] [Page 2] Processing HDKA-320
+2025-08-12 19:02:27,981 - __main__ - INFO - [15/26] [Page 4] Processing CWPBD-45
+2025-08-12 19:02:34,479 - __main__ - INFO - [16/26] [Page 4] Processing HNTRZ-011
+2025-08-12 19:02:41,029 - __main__ - INFO - [17/26] [Page 4] Processing HNTRZ-012
+2025-08-12 19:02:47,508 - __main__ - INFO - [18/26] [Page 4] Processing HNTRZ-013
+2025-08-12 19:02:54,095 - __main__ - INFO - [19/26] [Page 4] Processing HNTRZ-014
+2025-08-12 19:03:00,583 - __main__ - INFO - [20/26] [Page 4] Processing HNTRZ-016
+2025-08-12 19:03:07,056 - __main__ - INFO - [21/26] [Page 4] Processing HNTRZ-020
+2025-08-12 19:03:13,556 - __main__ - INFO - [22/26] [Page 4] Processing HODV-21977
+2025-08-12 19:03:20,053 - __main__ - INFO - [23/26] [Page 4] Processing HODV-21979
+2025-08-12 19:03:26,553 - __main__ - INFO - [24/26] [Page 4] Processing HODV-21987
+2025-08-12 19:03:33,023 - __main__ - INFO - [25/26] [Page 4] Processing HODV-21989
+2025-08-12 19:03:39,509 - __main__ - INFO - [26/26] [Page 5] Processing MIAD-724
+2025-08-12 19:03:40,515 - __main__ - INFO - Phase 1 completed: 26 entries processed
+2025-08-12 19:03:40,515 - __main__ - INFO - ==================================================
+2025-08-12 19:03:40,515 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-08-12 19:03:40,515 - __main__ - INFO - ==================================================
+2025-08-12 19:03:41,032 - utils.parser - INFO - [Page 1] Found 7 entries for phase 2
+2025-08-12 19:03:43,545 - utils.parser - INFO - [Page 2] Found 7 entries for phase 2
+2025-08-12 19:03:46,069 - utils.parser - INFO - [Page 3] Found 0 entries for phase 2
+2025-08-12 19:03:48,637 - utils.parser - INFO - [Page 4] Found 5 entries for phase 2
+2025-08-12 19:03:51,195 - utils.parser - INFO - [Page 5] Found 1 entries for phase 2
+2025-08-12 19:03:53,718 - utils.parser - INFO - [Page 6] Found 0 entries for phase 2
+2025-08-12 19:03:56,259 - utils.parser - INFO - [Page 7] Found 0 entries for phase 2
+2025-08-12 19:03:58,835 - utils.parser - INFO - [Page 8] Found 0 entries for phase 2
+2025-08-12 19:04:01,402 - utils.parser - INFO - [Page 9] Found 0 entries for phase 2
+2025-08-12 19:04:03,961 - utils.parser - INFO - [Page 10] Found 0 entries for phase 2
+2025-08-12 19:04:06,507 - utils.parser - INFO - [Page 11] Found 0 entries for phase 2
+2025-08-12 19:04:09,058 - utils.parser - INFO - [Page 12] Found 0 entries for phase 2
+2025-08-12 19:04:11,616 - utils.parser - INFO - [Page 13] Found 0 entries for phase 2
+2025-08-12 19:04:14,143 - utils.parser - INFO - [Page 14] Found 0 entries for phase 2
+2025-08-12 19:04:16,705 - utils.parser - INFO - [Page 15] Found 0 entries for phase 2
+2025-08-12 19:04:19,272 - utils.parser - INFO - [Page 16] Found 0 entries for phase 2
+2025-08-12 19:04:21,798 - utils.parser - INFO - [Page 17] Found 0 entries for phase 2
+2025-08-12 19:04:24,338 - utils.parser - INFO - [Page 18] Found 0 entries for phase 2
+2025-08-12 19:04:26,871 - utils.parser - INFO - [Page 19] Found 0 entries for phase 2
+2025-08-12 19:04:29,468 - utils.parser - INFO - [Page 20] Found 0 entries for phase 2
+2025-08-12 19:04:34,959 - __main__ - INFO - [1/20] [Page 1] Processing MNSE-059
+2025-08-12 19:04:41,429 - __main__ - INFO - [2/20] [Page 1] Processing DASS-687
+2025-08-12 19:04:46,893 - __main__ - INFO - [3/20] [Page 1] Processing JUR-471
+2025-08-12 19:04:53,361 - __main__ - INFO - [4/20] [Page 1] Processing ROE-392
+2025-08-12 19:04:58,840 - __main__ - INFO - [5/20] [Page 1] Processing MFCW-055
+2025-08-12 19:05:05,319 - __main__ - INFO - [6/20] [Page 1] Processing SMOK-019
+2025-08-12 19:05:11,817 - __main__ - INFO - [7/20] [Page 1] Processing CRNX-230
+2025-08-12 19:05:18,311 - __main__ - INFO - [8/20] [Page 2] Processing DASS-375
+2025-08-12 19:05:24,795 - __main__ - INFO - [9/20] [Page 2] Processing DASS-412
+2025-08-12 19:05:31,331 - __main__ - INFO - [10/20] [Page 2] Processing DASS-653
+2025-08-12 19:05:37,861 - __main__ - INFO - [11/20] [Page 2] Processing DASS-696
+2025-08-12 19:05:44,346 - __main__ - INFO - [12/20] [Page 2] Processing DASS-703
+2025-08-12 19:05:50,831 - __main__ - INFO - [13/20] [Page 2] Processing JUR-444
+2025-08-12 19:05:57,322 - __main__ - INFO - [14/20] [Page 2] Processing SONE-791
+2025-08-12 19:06:03,836 - __main__ - INFO - [15/20] [Page 4] Processing MAAN-1096
+2025-08-12 19:06:10,328 - __main__ - INFO - [16/20] [Page 4] Processing CESD-056
+2025-08-12 19:06:16,803 - __main__ - INFO - [17/20] [Page 4] Processing CJOD-413
+2025-08-12 19:06:23,347 - __main__ - INFO - [18/20] [Page 4] Processing CLOT-033
+2025-08-12 19:06:29,823 - __main__ - INFO - [19/20] [Page 4] Processing CLUB-809
+2025-08-12 19:06:36,326 - __main__ - INFO - [20/20] [Page 5] Processing SONE-037
+2025-08-12 19:06:37,330 - __main__ - INFO - Phase 2 completed: 18 entries processed
+2025-08-12 19:06:37,330 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20250812.csv
+2025-08-12 19:06:37,330 - __main__ - INFO - ==================================================
+2025-08-12 19:06:37,330 - __main__ - INFO - SUMMARY REPORT
+2025-08-12 19:06:37,330 - __main__ - INFO - ==================================================
+2025-08-12 19:06:37,330 - __main__ - INFO - Pages processed: 1 to 20
+2025-08-12 19:06:37,331 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-08-12 19:06:37,331 - __main__ - INFO - ==============================
+2025-08-12 19:06:37,331 - __main__ - INFO - PHASE 1 SUMMARY
+2025-08-12 19:06:37,331 - __main__ - INFO - ==============================
+2025-08-12 19:06:37,331 - __main__ - INFO - Phase 1 entries found: 26
+2025-08-12 19:06:37,331 - __main__ - INFO -   - Subtitle torrents: 26 (100.0%)
+2025-08-12 19:06:37,331 - __main__ - INFO -   - Hacked subtitle torrents: 2 (7.7%)
+2025-08-12 19:06:37,331 - __main__ - INFO -   - Hacked no-subtitle torrents: 3 (11.5%)
+2025-08-12 19:06:37,331 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
+2025-08-12 19:06:37,331 - __main__ - INFO - ==============================
+2025-08-12 19:06:37,331 - __main__ - INFO - PHASE 2 SUMMARY
+2025-08-12 19:06:37,331 - __main__ - INFO - ==============================
+2025-08-12 19:06:37,331 - __main__ - INFO - Phase 2 entries found: 18
+2025-08-12 19:06:37,331 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
+2025-08-12 19:06:37,331 - __main__ - INFO -   - Hacked subtitle torrents: 3 (16.7%)
+2025-08-12 19:06:37,331 - __main__ - INFO -   - Hacked no-subtitle torrents: 10 (55.6%)
+2025-08-12 19:06:37,331 - __main__ - INFO -   - No-subtitle torrents: 18 (100.0%)
+2025-08-12 19:06:37,331 - __main__ - INFO - ==============================
+2025-08-12 19:06:37,331 - __main__ - INFO - OVERALL SUMMARY
+2025-08-12 19:06:37,331 - __main__ - INFO - ==============================
+2025-08-12 19:06:37,331 - __main__ - INFO - Total entries found: 44
+2025-08-12 19:06:37,331 - __main__ - INFO - Successfully processed: 44
+2025-08-12 19:06:37,331 - __main__ - INFO - Skipped already parsed in this session: 46
+2025-08-12 19:06:37,331 - __main__ - INFO - Skipped already parsed in previous runs: 622
+2025-08-12 19:06:37,331 - __main__ - INFO - Current parsed links in memory: 46
+2025-08-12 19:06:37,331 - __main__ - INFO - Overall subtitle torrents: 26 (59.1%)
+2025-08-12 19:06:37,331 - __main__ - INFO - Overall hacked subtitle torrents: 5 (11.4%)
+2025-08-12 19:06:37,331 - __main__ - INFO - Overall hacked no-subtitle torrents: 13 (29.5%)
+2025-08-12 19:06:37,331 - __main__ - INFO - Overall no-subtitle torrents: 18 (40.9%)
+2025-08-12 19:06:37,331 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20250812.csv
+2025-08-12 19:06:37,331 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-08-12 19:06:37,331 - __main__ - INFO - ==================================================
