@@ -2,11 +2,18 @@ import asyncio
 import argparse
 import csv
 import os
+import time
 from datetime import datetime, timedelta
 import requests
 from pikpakapi import PikPakApi
 
 from config import QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD, PIKPAK_EMAIL, PIKPAK_PASSWORD, PIKPAK_LOG_FILE, DAILY_REPORT_DIR, TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC
+
+# Import PikPak delay configuration with fallback
+try:
+    from config import PIKPAK_REQUEST_DELAY
+except ImportError:
+    PIKPAK_REQUEST_DELAY = 3  # Default 3 seconds if not configured
 from utils.logging_config import setup_logging, get_logger
 
 # --------------------------
@@ -70,29 +77,59 @@ class QBittorrentClient:
 # --------------------------
 # PikPak API (using pikpakapi)
 # --------------------------
-async def process_pikpak(magnets, email, password):
+async def process_pikpak_batch(magnets, email, password, delay_between_requests=3):
+    """
+    Process PikPak offline downloads in batch with delay between requests to avoid rate limiting
+    
+    Args:
+        magnets: List of magnet URIs to download
+        email: PikPak email
+        password: PikPak password
+        delay_between_requests: Delay in seconds between each download request (default: 3)
+    """
+    if not magnets:
+        return [], []
+        
     client = PikPakApi(username=email, password=password)
     await client.login()
     await client.refresh_access_token()
 
-    tasks = []
-    for magnet in magnets:
-        tasks.append(client.offline_download(magnet))
-
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    
     success_magnets = []
     failed_magnets = []
     
-    for magnet, result in zip(magnets, results):
-        if isinstance(result, Exception):
-            logger.error(f"Failed to add magnet: {magnet}, Error: {result}")
-            failed_magnets.append((magnet, str(result)))
-        else:
-            logger.info(f"Added magnet to PikPak: {magnet}")
-            success_magnets.append(magnet)
+    logger.info(f"Starting batch upload of {len(magnets)} torrents to PikPak...")
     
+    for i, magnet in enumerate(magnets):
+        try:
+            logger.info(f"Processing magnet {i+1}/{len(magnets)}: {magnet[:100]}...")
+            result = await client.offline_download(magnet)
+            
+            logger.info(f"Successfully added magnet to PikPak: {magnet[:100]}...")
+            success_magnets.append(magnet)
+            
+            # Add delay between requests (except for the last one)
+            if i < len(magnets) - 1:
+                logger.debug(f"Waiting {delay_between_requests} seconds before next request...")
+                await asyncio.sleep(delay_between_requests)
+                
+        except Exception as e:
+            logger.error(f"Failed to add magnet: {magnet[:100]}..., Error: {e}")
+            failed_magnets.append((magnet, str(e)))
+            
+            # Still add delay even after failed requests to be respectful
+            if i < len(magnets) - 1:
+                logger.debug(f"Waiting {delay_between_requests} seconds before next request...")
+                await asyncio.sleep(delay_between_requests)
+    
+    logger.info(f"Batch upload completed: {len(success_magnets)} successful, {len(failed_magnets)} failed")
     return success_magnets, failed_magnets
+
+
+async def process_pikpak_single(magnet, email, password):
+    """
+    Process a single PikPak offline download (for backward compatibility)
+    """
+    return await process_pikpak_batch([magnet], email, password)
 
 
 # --------------------------
@@ -137,7 +174,7 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
 # --------------------------
 # Main Logic
 # --------------------------
-def pikpak_bridge(days, dry_run):
+def pikpak_bridge(days, dry_run, batch_mode=True):
     cutoff_date = (datetime.now() - timedelta(days=days)).date()
     logger.info(f"Processing torrents older than {days} days (before {cutoff_date})")
 
@@ -181,20 +218,27 @@ def pikpak_bridge(days, dry_run):
         logger.info("=" * 60)
         return
     
-    # Process each torrent individually for better error handling and history tracking
     successfully_transferred = []
     failed_transfers = []
     
-    for torrent in old_torrents:
-        logger.info(f"Processing torrent: {torrent['name']}")
+    if batch_mode:
+        logger.info("Using batch mode: uploading all torrents in one session")
+        
+        # Collect all magnet URIs for batch processing
+        magnets_to_upload = [torrent['magnet_uri'] for torrent in old_torrents]
+        torrent_by_magnet = {torrent['magnet_uri']: torrent for torrent in old_torrents}
+        
+        logger.info(f"Starting batch upload of {len(magnets_to_upload)} torrents to PikPak...")
         
         try:
-            # Try to upload to PikPak first
+            # Batch upload all magnets to PikPak
             success_magnets, failed_magnets = asyncio.run(
-                process_pikpak([torrent['magnet_uri']], PIKPAK_EMAIL, PIKPAK_PASSWORD)
+                process_pikpak_batch(magnets_to_upload, PIKPAK_EMAIL, PIKPAK_PASSWORD, delay_between_requests=PIKPAK_REQUEST_DELAY)
             )
             
-            if success_magnets:  # Upload successful
+            # Process successful uploads
+            for magnet in success_magnets:
+                torrent = torrent_by_magnet[magnet]
                 logger.info(f"Successfully uploaded to PikPak: {torrent['name']}")
                 save_to_pikpak_history(torrent, 'success')
                 
@@ -206,17 +250,62 @@ def pikpak_bridge(days, dry_run):
                 except Exception as delete_error:
                     logger.error(f"Failed to delete from qBittorrent after successful PikPak upload: {torrent['name']}, Error: {delete_error}")
                     save_to_pikpak_history(torrent, 'failed_but_deleted', str(delete_error))
-                    
-            else:  # Upload failed
-                error_msg = failed_magnets[0][1] if failed_magnets else "Unknown error"
+            
+            # Process failed uploads
+            for magnet, error_msg in failed_magnets:
+                torrent = torrent_by_magnet[magnet]
                 logger.error(f"Failed to upload to PikPak: {torrent['name']}, Error: {error_msg}")
                 save_to_pikpak_history(torrent, 'failed', error_msg)
                 failed_transfers.append((torrent, error_msg))
                 
         except Exception as e:
-            logger.error(f"Unexpected error processing torrent {torrent['name']}: {e}")
-            save_to_pikpak_history(torrent, 'failed', str(e))
-            failed_transfers.append((torrent, str(e)))
+            logger.error(f"Unexpected error during batch processing: {e}")
+            # If batch processing fails completely, mark all as failed
+            failed_transfers = [(torrent, str(e)) for torrent in old_torrents]
+            successfully_transferred = []
+            for torrent in old_torrents:
+                save_to_pikpak_history(torrent, 'failed', str(e))
+    else:
+        logger.info("Using individual mode: processing each torrent separately")
+        
+        # Process each torrent individually (original logic)
+        for torrent in old_torrents:
+            logger.info(f"Processing torrent: {torrent['name']}")
+            
+            try:
+                # Try to upload to PikPak first (with configurable delay between requests)
+                success_magnets, failed_magnets = asyncio.run(
+                    process_pikpak_single(torrent['magnet_uri'], PIKPAK_EMAIL, PIKPAK_PASSWORD)
+                )
+                
+                if success_magnets:  # Upload successful
+                    logger.info(f"Successfully uploaded to PikPak: {torrent['name']}")
+                    save_to_pikpak_history(torrent, 'success')
+                    
+                    # Now safe to delete from qBittorrent
+                    try:
+                        qb.delete_torrents([torrent['hash']], delete_files=True)
+                        logger.info(f"Successfully deleted from qBittorrent: {torrent['name']}")
+                        successfully_transferred.append(torrent)
+                    except Exception as delete_error:
+                        logger.error(f"Failed to delete from qBittorrent after successful PikPak upload: {torrent['name']}, Error: {delete_error}")
+                        save_to_pikpak_history(torrent, 'failed_but_deleted', str(delete_error))
+                        
+                else:  # Upload failed
+                    error_msg = failed_magnets[0][1] if failed_magnets else "Unknown error"
+                    logger.error(f"Failed to upload to PikPak: {torrent['name']}, Error: {error_msg}")
+                    save_to_pikpak_history(torrent, 'failed', error_msg)
+                    failed_transfers.append((torrent, error_msg))
+                    
+            except Exception as e:
+                logger.error(f"Unexpected error processing torrent {torrent['name']}: {e}")
+                save_to_pikpak_history(torrent, 'failed', str(e))
+                failed_transfers.append((torrent, str(e)))
+            
+            # Add a small delay between processing different torrents to be respectful
+            if torrent != old_torrents[-1]:  # Don't sleep after the last torrent
+                logger.debug(f"Waiting {PIKPAK_REQUEST_DELAY} seconds before processing next torrent...")
+                time.sleep(PIKPAK_REQUEST_DELAY)
     
     # Detailed Summary
     total_processed = len(old_torrents)
@@ -269,9 +358,13 @@ def pikpak_bridge(days, dry_run):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="PikPak Bridge - Transfer torrents from qBittorrent to PikPak")
     parser.add_argument("--days", type=int, default=3, help="Filter torrents older than N days")
     parser.add_argument("--dry-run", action="store_true", help="Test mode: no delete or PikPak add")
+    parser.add_argument("--individual", action="store_true", help="Process torrents individually instead of batch mode (default: batch mode)")
     args = parser.parse_args()
 
-    pikpak_bridge(args.days, args.dry_run)
+    # Default to batch mode unless --individual is specified
+    batch_mode = not args.individual
+    
+    pikpak_bridge(args.days, args.dry_run, batch_mode)
