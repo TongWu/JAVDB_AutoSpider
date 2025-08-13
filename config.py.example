@@ -124,3 +124,7 @@ PARSED_MOVIES_CSV = 'parsed_movies_history.csv'
 PIKPAK_EMAIL = "wutong07163@gmail.com"
 PIKPAK_PASSWORD = "No.25_Aminor"
 PIKPAK_LOG_FILE = "logs/qb_pikpak.log"
+
+# Delay between PikPak offline download requests (in seconds)
+# This helps avoid rate limiting when processing multiple torrents
+PIKPAK_REQUEST_DELAY = 3

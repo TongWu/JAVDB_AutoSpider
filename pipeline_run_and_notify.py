@@ -146,11 +146,12 @@ def run_script(script_path, args=None):
     return ''.join(output_lines)
 
 
-def run_pikpak_bridge(days=3, dry_run=False):
+def run_pikpak_bridge(days=3, dry_run=False, batch_mode=True):
     """Run PikPak Bridge to handle old torrents"""
     try:
-        logger.info(f"Running PikPak Bridge with {days} days threshold, dry_run={dry_run}")
-        pikpak_bridge(days, dry_run)
+        mode_str = "batch mode" if batch_mode else "individual mode"
+        logger.info(f"Running PikPak Bridge with {days} days threshold, dry_run={dry_run}, using {mode_str}")
+        pikpak_bridge(days, dry_run, batch_mode)
         logger.info("PikPak Bridge completed successfully")
     except Exception as e:
         logger.error(f"PikPak Bridge failed: {e}")
@@ -267,6 +268,8 @@ def parse_arguments():
     parser.add_argument('--phase', choices=['1', '2', 'all'], help='Which phase to run: 1 (subtitle+today), 2 (today only), all (default)')
     parser.add_argument('--output-file', type=str, help='Specify output CSV file name')
     parser.add_argument('--dry-run', action='store_true', help='Print items that would be written without changing CSV file')
+    # PikPak Bridge arguments
+    parser.add_argument('--pikpak-individual', action='store_true', help='Use individual mode for PikPak Bridge instead of batch mode')
     return parser.parse_args()
 
 
@@ -332,8 +335,9 @@ def main():
         logger.info("✓ qBittorrent Uploader completed successfully")
 
         # 3. Run PikPak Bridge to handle old torrents
+        batch_mode = not args.pikpak_individual  # Default to batch mode unless --pikpak-individual is specified
         logger.info("Step 3: Running PikPak Bridge to clean up old torrents...")
-        run_pikpak_bridge(days=3, dry_run=args.dry_run)
+        run_pikpak_bridge(days=3, dry_run=args.dry_run, batch_mode=batch_mode)
         logger.info("✓ PikPak Bridge completed successfully")
 
         pipeline_success = True
