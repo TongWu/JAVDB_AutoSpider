@@ -1,794 +1,203 @@
-2025-08-13 19:00:01,379 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20250813.csv
-2025-08-13 19:00:01,379 - __main__ - INFO - ============================================================
-2025-08-13 19:00:01,379 - __main__ - INFO - STARTING JAVDB PIPELINE
-2025-08-13 19:00:01,379 - __main__ - INFO - MODE: Daily
-2025-08-13 19:00:01,379 - __main__ - INFO - ============================================================
-2025-08-13 19:00:01,379 - __main__ - INFO - Step 1: Running JavDB Spider...
-2025-08-13 19:00:01,379 - __main__ - INFO - Running: python3 Javdb_Spider.py
-2025-08-13 19:06:29,230 - __main__ - INFO - ✓ JavDB Spider completed successfully
-2025-08-13 19:06:29,230 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
-2025-08-13 19:06:29,230 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode daily
-2025-08-13 19:06:52,527 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
-2025-08-13 19:06:52,527 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
-2025-08-13 19:06:52,527 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False
-2025-08-13 19:06:52,527 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-08-10)
-2025-08-13 19:06:52,679 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
-2025-08-13 19:06:52,733 - pikpak_bridge - INFO - Found 137 torrents across categories ['Daily Ingestion', 'Ad Hoc']
-2025-08-13 19:06:52,733 - pikpak_bridge - INFO - Filtered 104 torrents older than 3 days
-2025-08-13 19:06:52,733 - pikpak_bridge - INFO - Processing torrent: [javdb.com]ROYD-242
-2025-08-13 19:06:52,822 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:52,935 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:52,952 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:53,148 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:53,148 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:7fa2d5063da3c2c251e73c9640992dacd9c7ffa9&dn=%5Bjavdb.com%5DROYD-242&xl=6460513310
-2025-08-13 19:06:53,149 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]ROYD-242
-2025-08-13 19:06:53,149 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]ROYD-242 - success
-2025-08-13 19:06:53,151 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:53,151 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]ROYD-242
-2025-08-13 19:06:53,151 - pikpak_bridge - INFO - Processing torrent: [javdb.com]JUR-299.[4K]@R90s
-2025-08-13 19:06:53,187 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:53,288 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:53,305 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:53,481 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:53,482 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:af3bbeb08f066b29bfdbe89e58076d11465ec050&dn=%5Bjavdb.com%5DJUR-299.%5B4K%5D%40R90s&xl=21210151097
-2025-08-13 19:06:53,482 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]JUR-299.[4K]@R90s
-2025-08-13 19:06:53,482 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]JUR-299.[4K]@R90s - success
-2025-08-13 19:06:53,485 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:53,485 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]JUR-299.[4K]@R90s
-2025-08-13 19:06:53,485 - pikpak_bridge - INFO - Processing torrent: [javdb.com]FOCS-249
-2025-08-13 19:06:53,521 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:53,636 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:53,679 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:53,816 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:53,816 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:4f1038bddf24d22941f8f799322bf0183d3da857&dn=%5Bjavdb.com%5DFOCS-249&xl=1159686302
-2025-08-13 19:06:53,817 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]FOCS-249
-2025-08-13 19:06:53,817 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]FOCS-249 - success
-2025-08-13 19:06:53,819 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:53,819 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]FOCS-249
-2025-08-13 19:06:53,819 - pikpak_bridge - INFO - Processing torrent: [javdb.com]EBWH-215-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】
-2025-08-13 19:06:53,853 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:53,979 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:53,998 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:54,076 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:54,076 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:db7e55cbfd9fbb7fad015d80134ab78bea0bc20b&dn=%5Bjavdb.com%5DEBWH-215-U%E3%80%90%E6%88%90%E4%BA%BA%E6%8A%96%E9%9F%B3-%E9%BB%91%E6%96%99-%E6%8D%A2%E5%A6%BB-%E7%9B%B4%E6%92%AD-%E6%89%8B%E6%9C%BA%E6%90%9Cbs98.top%E3%80%91%E3%80%90%E5%86%85%E9%99%84%E7%99%BE%E5%BA%A6%E4%BA%91%E3%80%91&xl=1437057106
-2025-08-13 19:06:54,076 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]EBWH-215-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】
-2025-08-13 19:06:54,076 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]EBWH-215-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】 - success
-2025-08-13 19:06:54,079 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:54,079 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]EBWH-215-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】
-2025-08-13 19:06:54,079 - pikpak_bridge - INFO - Processing torrent: [javdb.com]NHDTC-059
-2025-08-13 19:06:54,113 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:54,212 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:54,230 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:54,337 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:54,337 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:375c94809bdd530340b1f86cc4f03c0fe33eaad0&dn=%5Bjavdb.com%5DNHDTC-059&xl=1818382582
-2025-08-13 19:06:54,338 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]NHDTC-059
-2025-08-13 19:06:54,338 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]NHDTC-059 - success
-2025-08-13 19:06:54,339 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:54,339 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]NHDTC-059
-2025-08-13 19:06:54,339 - pikpak_bridge - INFO - Processing torrent: [javdb.com]MIAB-491
-2025-08-13 19:06:54,373 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:54,491 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:54,511 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:54,608 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:54,608 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:c9d537f08f1a05f625aad560ec5fc103ea4af066&dn=%5Bjavdb.com%5DMIAB-491&xl=1207959670
-2025-08-13 19:06:54,608 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]MIAB-491
-2025-08-13 19:06:54,609 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIAB-491 - success
-2025-08-13 19:06:54,611 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:54,611 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]MIAB-491
-2025-08-13 19:06:54,611 - pikpak_bridge - INFO - Processing torrent: [javdb.com]BBTU-101
-2025-08-13 19:06:54,647 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:54,745 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:54,763 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:54,878 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:54,878 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:d4b087e3a7ac8ed739b49a91c3aecda4a4000480&dn=%5Bjavdb.com%5DBBTU-101&xl=2597520649
-2025-08-13 19:06:54,878 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]BBTU-101
-2025-08-13 19:06:54,878 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]BBTU-101 - success
-2025-08-13 19:06:54,880 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:54,880 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]BBTU-101
-2025-08-13 19:06:54,880 - pikpak_bridge - INFO - Processing torrent: [javdb.com]SONE-734
-2025-08-13 19:06:54,913 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:55,016 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:55,034 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:55,107 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:55,107 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:924764291dfdb8368a1fc74955b3a49cd32fb8c6&dn=%5Bjavdb.com%5DSONE-734&xl=10932647892
-2025-08-13 19:06:55,108 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]SONE-734
-2025-08-13 19:06:55,108 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]SONE-734 - success
-2025-08-13 19:06:55,110 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:55,110 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]SONE-734
-2025-08-13 19:06:55,110 - pikpak_bridge - INFO - Processing torrent: [javdb.com]MISM-388
-2025-08-13 19:06:55,143 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:55,285 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:55,316 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:55,452 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:55,452 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:ffea0ffab0772245241ef3cdcadf5486d50bb6c3&dn=%5Bjavdb.com%5DMISM-388&xl=1252186720
-2025-08-13 19:06:55,453 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]MISM-388
-2025-08-13 19:06:55,453 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MISM-388 - success
-2025-08-13 19:06:55,455 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:55,455 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]MISM-388
-2025-08-13 19:06:55,455 - pikpak_bridge - INFO - Processing torrent: [javdb.com]DANDY-982.[4K]@R90s
-2025-08-13 19:06:55,488 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:55,600 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:55,614 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:55,838 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:55,838 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:d0bd74fb2f0006388e77f022d7bddc15aa3ae71f&dn=%5Bjavdb.com%5DDANDY-982.%5B4K%5D%40R90s&xl=19165121880
-2025-08-13 19:06:55,839 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]DANDY-982.[4K]@R90s
-2025-08-13 19:06:55,839 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]DANDY-982.[4K]@R90s - success
-2025-08-13 19:06:55,841 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:55,841 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]DANDY-982.[4K]@R90s
-2025-08-13 19:06:55,841 - pikpak_bridge - INFO - Processing torrent: [javdb.com]ZRK-002
-2025-08-13 19:06:55,878 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:55,988 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:56,007 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:56,148 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:56,148 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:aa5861ccfef96892e02f5f1c9a363c95a0995f26&dn=%5Bjavdb.com%5DZRK-002&xl=1282144015
-2025-08-13 19:06:56,149 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]ZRK-002
-2025-08-13 19:06:56,149 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]ZRK-002 - success
-2025-08-13 19:06:56,151 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:56,151 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]ZRK-002
-2025-08-13 19:06:56,151 - pikpak_bridge - INFO - Processing torrent: [javdb.com]NACR-960
-2025-08-13 19:06:56,190 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:56,297 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:56,312 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:56,478 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:56,478 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:e47eb0f7c1cc07bc0e06335e79d44b4ca5efb6e1&dn=%5Bjavdb.com%5DNACR-960&xl=1256751730
-2025-08-13 19:06:56,478 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]NACR-960
-2025-08-13 19:06:56,479 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]NACR-960 - success
-2025-08-13 19:06:56,481 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:56,481 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]NACR-960
-2025-08-13 19:06:56,481 - pikpak_bridge - INFO - Processing torrent: [javdb.com]NPJS-192
-2025-08-13 19:06:56,515 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:56,624 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:56,642 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:56,771 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:56,771 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:3906a68d869e1c866995aa9f2192cadd0da95f4d&dn=%5Bjavdb.com%5DNPJS-192&xl=2440162681
-2025-08-13 19:06:56,771 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]NPJS-192
-2025-08-13 19:06:56,772 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]NPJS-192 - success
-2025-08-13 19:06:56,774 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:56,774 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]NPJS-192
-2025-08-13 19:06:56,774 - pikpak_bridge - INFO - Processing torrent: [javdb.com]HUNTC-273
-2025-08-13 19:06:56,808 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:56,912 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:56,961 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:57,124 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:57,125 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:34aa70dc547fae79928589497034f03e39689d71&dn=%5Bjavdb.com%5DHUNTC-273&xl=4061047696
-2025-08-13 19:06:57,125 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]HUNTC-273
-2025-08-13 19:06:57,125 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]HUNTC-273 - success
-2025-08-13 19:06:57,127 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:57,127 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]HUNTC-273
-2025-08-13 19:06:57,127 - pikpak_bridge - INFO - Processing torrent: [javdb.com]dnjr-141
-2025-08-13 19:06:57,161 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:57,281 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:57,303 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:57,413 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:57,413 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:c97770c03439049cc5519317ba238b79837597d4&dn=%5Bjavdb.com%5Ddnjr-141&xl=5844899819
-2025-08-13 19:06:57,414 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]dnjr-141
-2025-08-13 19:06:57,414 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]dnjr-141 - success
-2025-08-13 19:06:57,416 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:57,416 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]dnjr-141
-2025-08-13 19:06:57,416 - pikpak_bridge - INFO - Processing torrent: [javdb.com]smok-015
-2025-08-13 19:06:57,447 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:57,551 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:57,567 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:57,740 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:57,740 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:949e0c8b3b015bcc3ee72c08fd620163e3f4f91b&dn=%5Bjavdb.com%5Dsmok-015&xl=7228696979
-2025-08-13 19:06:57,740 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]smok-015
-2025-08-13 19:06:57,741 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]smok-015 - success
-2025-08-13 19:06:57,742 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:57,742 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]smok-015
-2025-08-13 19:06:57,742 - pikpak_bridge - INFO - Processing torrent: [javdb.com]FTHTD-098
-2025-08-13 19:06:57,775 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:57,901 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:57,920 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:58,055 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:58,056 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:e6c71546aaa195fe3bd884a605782d64b32d7dab&dn=%5Bjavdb.com%5DFTHTD-098&xl=1364786802
-2025-08-13 19:06:58,056 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]FTHTD-098
-2025-08-13 19:06:58,056 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]FTHTD-098 - success
-2025-08-13 19:06:58,058 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:58,058 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]FTHTD-098
-2025-08-13 19:06:58,058 - pikpak_bridge - INFO - Processing torrent: [javdb.com]cead-696
-2025-08-13 19:06:58,092 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:58,202 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:58,221 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:58,331 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:58,331 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:9be190a10143b71affac08abd291cbd07e9a12c2&dn=%5Bjavdb.com%5Dcead-696&xl=6599868629
-2025-08-13 19:06:58,332 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]cead-696
-2025-08-13 19:06:58,332 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]cead-696 - success
-2025-08-13 19:06:58,333 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:58,334 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]cead-696
-2025-08-13 19:06:58,334 - pikpak_bridge - INFO - Processing torrent: [javdb.com]NAMH-031
-2025-08-13 19:06:58,367 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:58,472 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:58,488 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:58,627 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:58,627 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:0b7c13aaa1c05374a1a61981c092afc548985559&dn=%5Bjavdb.com%5DNAMH-031&xl=1070609992
-2025-08-13 19:06:58,627 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]NAMH-031
-2025-08-13 19:06:58,627 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]NAMH-031 - success
-2025-08-13 19:06:58,629 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:58,629 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]NAMH-031
-2025-08-13 19:06:58,629 - pikpak_bridge - INFO - Processing torrent: [javdb.com]XVSR-817
-2025-08-13 19:06:58,666 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:58,782 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:58,798 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:58,871 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:58,872 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:8dcfb96c45167abb61f0e56c6be6549ab62ee089&dn=%5Bjavdb.com%5DXVSR-817&xl=2967237021
-2025-08-13 19:06:58,872 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]XVSR-817
-2025-08-13 19:06:58,872 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]XVSR-817 - success
-2025-08-13 19:06:58,874 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:58,874 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]XVSR-817
-2025-08-13 19:06:58,874 - pikpak_bridge - INFO - Processing torrent: [javdb.com]FTKD-024
-2025-08-13 19:06:58,907 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:59,007 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:59,025 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:59,211 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:59,211 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:e2c76d3ac25b1c7cd7c15aad0a28994a08c28d7a&dn=%5Bjavdb.com%5DFTKD-024&xl=4590099921
-2025-08-13 19:06:59,212 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]FTKD-024
-2025-08-13 19:06:59,212 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]FTKD-024 - success
-2025-08-13 19:06:59,214 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:59,214 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]FTKD-024
-2025-08-13 19:06:59,214 - pikpak_bridge - INFO - Processing torrent: [javdb.com]ASEX-002
-2025-08-13 19:06:59,247 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:06:59,346 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:06:59,368 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:06:59,448 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:06:59,448 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:88fc0023c16272c306a4332c7f7cf4fa9b02b719&dn=%5Bjavdb.com%5DASEX-002&xl=1335722414
-2025-08-13 19:06:59,448 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]ASEX-002
-2025-08-13 19:06:59,448 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]ASEX-002 - success
-2025-08-13 19:06:59,450 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:06:59,450 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]ASEX-002
-2025-08-13 19:06:59,450 - pikpak_bridge - INFO - Processing torrent: [javdb.com]JYMA-082
-2025-08-13 19:06:59,482 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:00,403 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:07:00,422 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:07:00,528 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:07:00,528 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:5943838ebb6eb37de75debe98d7f7397f8c55ba4&dn=%5Bjavdb.com%5DJYMA-082
-2025-08-13 19:07:00,529 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]JYMA-082
-2025-08-13 19:07:00,529 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]JYMA-082 - success
-2025-08-13 19:07:00,530 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:07:00,530 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]JYMA-082
-2025-08-13 19:07:00,530 - pikpak_bridge - INFO - Processing torrent: [javdb.com]CEMD-685
-2025-08-13 19:07:00,560 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:00,684 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:07:00,705 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:07:00,827 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:07:00,827 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:50afbcf310a3dd46a33b1549c7cfdae89e03cd0a&dn=%5Bjavdb.com%5DCEMD-685&xl=3487787037
-2025-08-13 19:07:00,827 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]CEMD-685
-2025-08-13 19:07:00,827 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]CEMD-685 - success
-2025-08-13 19:07:00,829 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:07:00,829 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]CEMD-685
-2025-08-13 19:07:00,829 - pikpak_bridge - INFO - Processing torrent: [javdb.com]ROYD-240
-2025-08-13 19:07:00,863 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:00,985 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-08-13 19:07:01,005 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-08-13 19:07:01,086 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-08-13 19:07:01,086 - pikpak_bridge - INFO - Added magnet to PikPak: magnet:?xt=urn:btih:cfc85e3fd651c85459b0264a38592aea880ea27c&dn=%5Bjavdb.com%5DROYD-240&xl=9063540959
-2025-08-13 19:07:01,087 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]ROYD-240
-2025-08-13 19:07:01,087 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]ROYD-240 - success
-2025-08-13 19:07:01,088 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-08-13 19:07:01,088 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]ROYD-240
-2025-08-13 19:07:01,088 - pikpak_bridge - INFO - Processing torrent: [javdb.com]FJIN-078
-2025-08-13 19:07:01,119 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:01,133 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:01,133 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]FJIN-078: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:01,134 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]FJIN-078 - failed
-2025-08-13 19:07:01,134 - pikpak_bridge - INFO - Processing torrent: [javdb.com]EBWH-220-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】
-2025-08-13 19:07:01,168 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:01,178 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:01,179 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]EBWH-220-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:01,179 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]EBWH-220-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】 - failed
-2025-08-13 19:07:01,179 - pikpak_bridge - INFO - Processing torrent: [javdb.com]NAMH-034
-2025-08-13 19:07:01,214 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:01,223 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:01,224 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]NAMH-034: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:01,224 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]NAMH-034 - failed
-2025-08-13 19:07:01,224 - pikpak_bridge - INFO - Processing torrent: [javdb.com]KIT-010
-2025-08-13 19:07:01,255 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:01,265 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:01,266 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]KIT-010: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:01,266 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]KIT-010 - failed
-2025-08-13 19:07:01,266 - pikpak_bridge - INFO - Processing torrent: [javdb.com]BABD-020
-2025-08-13 19:07:01,302 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:01,310 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:01,311 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]BABD-020: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:01,311 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]BABD-020 - failed
-2025-08-13 19:07:01,311 - pikpak_bridge - INFO - Processing torrent: [javdb.com]第一會所新片@SIS001@PPPE-334
-2025-08-13 19:07:01,349 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:01,359 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:01,360 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]第一會所新片@SIS001@PPPE-334: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:01,360 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]第一會所新片@SIS001@PPPE-334 - failed
-2025-08-13 19:07:01,360 - pikpak_bridge - INFO - Processing torrent: [javdb.com]ABP-673.torrent
-2025-08-13 19:07:01,396 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:01,409 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:01,410 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]ABP-673.torrent: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:01,410 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]ABP-673.torrent - failed
-2025-08-13 19:07:01,410 - pikpak_bridge - INFO - Processing torrent: [javdb.com]第一會所新片@SIS001@SODS-068
-2025-08-13 19:07:01,447 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:01,458 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:01,458 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]第一會所新片@SIS001@SODS-068: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:01,459 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]第一會所新片@SIS001@SODS-068 - failed
-2025-08-13 19:07:01,459 - pikpak_bridge - INFO - Processing torrent: [javdb.com]SAN-354
-2025-08-13 19:07:01,495 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:01,505 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:01,506 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]SAN-354: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:01,506 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]SAN-354 - failed
-2025-08-13 19:07:01,506 - pikpak_bridge - INFO - Processing torrent: [javdb.com]NECO-003
-2025-08-13 19:07:01,540 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:01,553 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:01,553 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]NECO-003: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:01,554 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]NECO-003 - failed
-2025-08-13 19:07:01,554 - pikpak_bridge - INFO - Processing torrent: [javdb.com]fstu-008
-2025-08-13 19:07:01,588 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:01,600 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:01,600 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]fstu-008: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:01,600 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]fstu-008 - failed
-2025-08-13 19:07:01,600 - pikpak_bridge - INFO - Processing torrent: [javdb.com]SGKI-048
-2025-08-13 19:07:01,636 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:01,647 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:01,647 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]SGKI-048: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:01,648 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]SGKI-048 - failed
-2025-08-13 19:07:01,648 - pikpak_bridge - INFO - Processing torrent: [javdb.com]adn-010-C.torrent
-2025-08-13 19:07:01,683 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:01,693 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:01,694 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]adn-010-C.torrent: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:01,694 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]adn-010-C.torrent - failed
-2025-08-13 19:07:01,694 - pikpak_bridge - INFO - Processing torrent: [javdb.com]DIGI-253
-2025-08-13 19:07:01,731 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:01,741 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:01,742 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]DIGI-253: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:01,742 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]DIGI-253 - failed
-2025-08-13 19:07:01,742 - pikpak_bridge - INFO - Processing torrent: [javdb.com]JUR-317.[4K]@R90s
-2025-08-13 19:07:01,781 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:01,792 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:01,792 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]JUR-317.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:01,792 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]JUR-317.[4K]@R90s - failed
-2025-08-13 19:07:01,792 - pikpak_bridge - INFO - Processing torrent: [javdb.com]STSK-178-HD
-2025-08-13 19:07:06,830 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:06,840 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:06,841 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]STSK-178-HD: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:06,841 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]STSK-178-HD - failed
-2025-08-13 19:07:06,841 - pikpak_bridge - INFO - Processing torrent: [javdb.com]NACR-956
-2025-08-13 19:07:06,879 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:06,893 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:06,894 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]NACR-956: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:06,894 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]NACR-956 - failed
-2025-08-13 19:07:06,894 - pikpak_bridge - INFO - Processing torrent: [javdb.com]BAB-159
-2025-08-13 19:07:06,932 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:06,942 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:06,943 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]BAB-159: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:06,943 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]BAB-159 - failed
-2025-08-13 19:07:06,943 - pikpak_bridge - INFO - Processing torrent: [javdb.com]MIDA-145
-2025-08-13 19:07:06,978 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:06,988 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:06,988 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]MIDA-145: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:06,988 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIDA-145 - failed
-2025-08-13 19:07:06,988 - pikpak_bridge - INFO - Processing torrent: [javdb.com]MFYD-001.[4K]@R90s
-2025-08-13 19:07:07,023 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:07,033 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:07,033 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]MFYD-001.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:07,034 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MFYD-001.[4K]@R90s - failed
-2025-08-13 19:07:07,034 - pikpak_bridge - INFO - Processing torrent: [javdb.com]RBK-113
-2025-08-13 19:07:07,069 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:07,079 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:07,080 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]RBK-113: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:07,080 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]RBK-113 - failed
-2025-08-13 19:07:07,080 - pikpak_bridge - INFO - Processing torrent: [javdb.com]MUKD-531 โทมิ คานาตะ [Ai ลบเซ็นเซอร์]
-2025-08-13 19:07:07,118 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:07,128 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:07,128 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]MUKD-531 โทมิ คานาตะ [Ai ลบเซ็นเซอร์]: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:07,128 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MUKD-531 โทมิ คานาตะ [Ai ลบเซ็นเซอร์] - failed
-2025-08-13 19:07:07,128 - pikpak_bridge - INFO - Processing torrent: [javdb.com]AQSH-124
-2025-08-13 19:07:07,164 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:07,175 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:07,175 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]AQSH-124: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:07,175 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]AQSH-124 - failed
-2025-08-13 19:07:07,175 - pikpak_bridge - INFO - Processing torrent: [javdb.com]MIAB-414
-2025-08-13 19:07:07,210 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:07,221 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:07,222 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]MIAB-414: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:07,222 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIAB-414 - failed
-2025-08-13 19:07:07,222 - pikpak_bridge - INFO - Processing torrent: [javdb.com]KTB-096
-2025-08-13 19:07:12,263 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:12,274 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:12,275 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]KTB-096: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:12,275 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]KTB-096 - failed
-2025-08-13 19:07:12,275 - pikpak_bridge - INFO - Processing torrent: [javdb.com]JUR-238.[4K]@R90s
-2025-08-13 19:07:12,312 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:12,322 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:12,322 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]JUR-238.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:12,322 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]JUR-238.[4K]@R90s - failed
-2025-08-13 19:07:12,322 - pikpak_bridge - INFO - Processing torrent: [javdb.com]MBDD-2145
-2025-08-13 19:07:12,352 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:12,363 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:12,364 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]MBDD-2145: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:12,364 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MBDD-2145 - failed
-2025-08-13 19:07:12,364 - pikpak_bridge - INFO - Processing torrent: [javdb.com]JUR-302.[4K]@R90s
-2025-08-13 19:07:12,397 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:12,407 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:12,408 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]JUR-302.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:12,408 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]JUR-302.[4K]@R90s - failed
-2025-08-13 19:07:12,408 - pikpak_bridge - INFO - Processing torrent: [javdb.com]MIAB-357
-2025-08-13 19:07:12,441 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:12,452 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:12,453 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]MIAB-357: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:12,453 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIAB-357 - failed
-2025-08-13 19:07:12,453 - pikpak_bridge - INFO - Processing torrent: [javdb.com]fkou-001
-2025-08-13 19:07:12,490 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:12,503 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:12,504 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]fkou-001: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:12,504 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]fkou-001 - failed
-2025-08-13 19:07:12,504 - pikpak_bridge - INFO - Processing torrent: [javdb.com]GVH-746
-2025-08-13 19:07:12,534 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:12,544 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:12,545 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]GVH-746: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:12,545 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]GVH-746 - failed
-2025-08-13 19:07:12,545 - pikpak_bridge - INFO - Processing torrent: [javdb.com]cemd-686
-2025-08-13 19:07:12,578 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:12,590 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:12,590 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]cemd-686: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:12,590 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]cemd-686 - failed
-2025-08-13 19:07:12,590 - pikpak_bridge - INFO - Processing torrent: [javdb.com]DANDY-960.[4K]@R90s
-2025-08-13 19:07:12,620 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:12,631 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:12,632 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]DANDY-960.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:12,632 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]DANDY-960.[4K]@R90s - failed
-2025-08-13 19:07:12,632 - pikpak_bridge - INFO - Processing torrent: [javdb.com]ymdd-452
-2025-08-13 19:07:12,671 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:12,684 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:12,684 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]ymdd-452: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:12,685 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]ymdd-452 - failed
-2025-08-13 19:07:12,685 - pikpak_bridge - INFO - Processing torrent: [javdb.com]SPLT-002
-2025-08-13 19:07:12,719 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:12,730 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:12,731 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]SPLT-002: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:12,731 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]SPLT-002 - failed
-2025-08-13 19:07:12,731 - pikpak_bridge - INFO - Processing torrent: [javdb.com]YMDD-448
-2025-08-13 19:07:17,772 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:17,786 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:17,786 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]YMDD-448: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:17,786 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]YMDD-448 - failed
-2025-08-13 19:07:17,786 - pikpak_bridge - INFO - Processing torrent: [javdb.com]XVSR-814
-2025-08-13 19:07:17,822 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:17,832 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:17,832 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]XVSR-814: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:17,832 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]XVSR-814 - failed
-2025-08-13 19:07:17,832 - pikpak_bridge - INFO - Processing torrent: [javdb.com]jur-327
-2025-08-13 19:07:17,874 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:17,885 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:17,886 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]jur-327: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:17,886 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]jur-327 - failed
-2025-08-13 19:07:17,886 - pikpak_bridge - INFO - Processing torrent: [javdb.com]BOKO-024 4K Hikaru Miyanishi 宮西ひかる
-2025-08-13 19:07:17,920 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:17,932 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:17,933 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]BOKO-024 4K Hikaru Miyanishi 宮西ひかる: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:17,933 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]BOKO-024 4K Hikaru Miyanishi 宮西ひかる - failed
-2025-08-13 19:07:17,933 - pikpak_bridge - INFO - Processing torrent: [javdb.com]sora-600
-2025-08-13 19:07:17,973 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:17,986 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:17,987 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]sora-600: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:17,987 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]sora-600 - failed
-2025-08-13 19:07:17,987 - pikpak_bridge - INFO - Processing torrent: [javdb.com]JYMA-083
-2025-08-13 19:07:18,022 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:18,036 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:18,037 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]JYMA-083: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:18,038 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]JYMA-083 - failed
-2025-08-13 19:07:18,038 - pikpak_bridge - INFO - Processing torrent: [javdb.com]BBAN-008.桜井あゆ.椎名ゆなと桜井あゆの旅ビアン
-2025-08-13 19:07:18,073 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:18,083 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:18,083 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]BBAN-008.桜井あゆ.椎名ゆなと桜井あゆの旅ビアン: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:18,083 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]BBAN-008.桜井あゆ.椎名ゆなと桜井あゆの旅ビアン - failed
-2025-08-13 19:07:18,083 - pikpak_bridge - INFO - Processing torrent: [javdb.com]DOCD-062
-2025-08-13 19:07:18,117 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:18,128 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:18,129 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]DOCD-062: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:18,129 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]DOCD-062 - failed
-2025-08-13 19:07:18,129 - pikpak_bridge - INFO - Processing torrent: [javdb.com]mudr-319
-2025-08-13 19:07:18,164 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:18,177 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:18,178 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]mudr-319: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:18,178 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]mudr-319 - failed
-2025-08-13 19:07:18,178 - pikpak_bridge - INFO - Processing torrent: [javdb.com]HHED-064
-2025-08-13 19:07:18,211 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:18,222 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:18,223 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]HHED-064: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:18,223 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]HHED-064 - failed
-2025-08-13 19:07:18,223 - pikpak_bridge - INFO - Processing torrent: [javdb.com]FLAV-393
-2025-08-13 19:07:18,255 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:18,269 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:18,270 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]FLAV-393: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:18,270 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]FLAV-393 - failed
-2025-08-13 19:07:18,270 - pikpak_bridge - INFO - Processing torrent: [javdb.com]MIST-472
-2025-08-13 19:07:18,302 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:18,314 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:18,315 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]MIST-472: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:18,315 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIST-472 - failed
-2025-08-13 19:07:18,315 - pikpak_bridge - INFO - Processing torrent: [javdb.com]SQTE-611-4K
-2025-08-13 19:07:18,347 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:18,360 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:18,360 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]SQTE-611-4K: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:18,360 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]SQTE-611-4K - failed
-2025-08-13 19:07:18,360 - pikpak_bridge - INFO - Processing torrent: [javdb.com]EBWH-228-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】
-2025-08-13 19:07:18,399 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:18,411 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:18,411 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]EBWH-228-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:18,411 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]EBWH-228-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】 - failed
-2025-08-13 19:07:18,411 - pikpak_bridge - INFO - Processing torrent: [javdb.com]ncyf-042
-2025-08-13 19:07:18,451 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:18,463 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:18,463 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]ncyf-042: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:18,463 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]ncyf-042 - failed
-2025-08-13 19:07:18,463 - pikpak_bridge - INFO - Processing torrent: [javdb.com]HOKS-198.[4K]@R90s
-2025-08-13 19:07:18,501 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:18,513 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:18,514 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]HOKS-198.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:18,514 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]HOKS-198.[4K]@R90s - failed
-2025-08-13 19:07:18,514 - pikpak_bridge - INFO - Processing torrent: [javdb.com]UFD-077.[4K]@R90s
-2025-08-13 19:07:18,549 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:18,560 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:18,560 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]UFD-077.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:18,561 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]UFD-077.[4K]@R90s - failed
-2025-08-13 19:07:18,561 - pikpak_bridge - INFO - Processing torrent: [javdb.com]CJOB-181
-2025-08-13 19:07:18,597 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:18,610 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:18,611 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]CJOB-181: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:18,611 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]CJOB-181 - failed
-2025-08-13 19:07:18,611 - pikpak_bridge - INFO - Processing torrent: [javdb.com]JUR-337.[4K]@R90s
-2025-08-13 19:07:18,659 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:18,676 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:18,677 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]JUR-337.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:18,677 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]JUR-337.[4K]@R90s - failed
-2025-08-13 19:07:18,677 - pikpak_bridge - INFO - Processing torrent: [javdb.com]HAWA-345
-2025-08-13 19:07:18,714 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:18,724 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:18,724 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]HAWA-345: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:18,724 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]HAWA-345 - failed
-2025-08-13 19:07:18,724 - pikpak_bridge - INFO - Processing torrent: [javdb.com]-CAWD243C
-2025-08-13 19:07:23,766 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:23,779 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:23,780 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]-CAWD243C: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:23,780 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]-CAWD243C - failed
-2025-08-13 19:07:23,781 - pikpak_bridge - INFO - Processing torrent: [javdb.com]JUR-283
-2025-08-13 19:07:23,822 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:23,834 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:23,835 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]JUR-283: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:23,835 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]JUR-283 - failed
-2025-08-13 19:07:23,835 - pikpak_bridge - INFO - Processing torrent: [javdb.com]APGH-037.mp4
-2025-08-13 19:07:23,877 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:23,889 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:23,890 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]APGH-037.mp4: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:23,890 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]APGH-037.mp4 - failed
-2025-08-13 19:07:23,890 - pikpak_bridge - INFO - Processing torrent: [javdb.com]ANTW-001
-2025-08-13 19:07:23,929 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:23,941 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:23,942 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]ANTW-001: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:23,942 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]ANTW-001 - failed
-2025-08-13 19:07:23,942 - pikpak_bridge - INFO - Processing torrent: [javdb.com]MIDA-184
-2025-08-13 19:07:23,980 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:23,994 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:23,995 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]MIDA-184: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:23,995 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIDA-184 - failed
-2025-08-13 19:07:23,995 - pikpak_bridge - INFO - Processing torrent: [javdb.com]DRPT-089
-2025-08-13 19:07:24,027 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:24,038 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:24,038 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]DRPT-089: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:24,038 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]DRPT-089 - failed
-2025-08-13 19:07:24,038 - pikpak_bridge - INFO - Processing torrent: [javdb.com]KSBJ-382-FHD
-2025-08-13 19:07:24,075 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:24,087 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:24,088 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]KSBJ-382-FHD: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:24,088 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]KSBJ-382-FHD - failed
-2025-08-13 19:07:24,088 - pikpak_bridge - INFO - Processing torrent: [javdb.com]MANX-012
-2025-08-13 19:07:24,121 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:24,130 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:24,130 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]MANX-012: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:24,130 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MANX-012 - failed
-2025-08-13 19:07:24,130 - pikpak_bridge - INFO - Processing torrent: [javdb.com]MISM-382
-2025-08-13 19:07:24,163 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:24,173 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:24,174 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]MISM-382: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:24,174 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MISM-382 - failed
-2025-08-13 19:07:24,174 - pikpak_bridge - INFO - Processing torrent: [javdb.com]fthtd-118
-2025-08-13 19:07:24,206 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:24,217 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:24,218 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]fthtd-118: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:24,218 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]fthtd-118 - failed
-2025-08-13 19:07:24,218 - pikpak_bridge - INFO - Processing torrent: [javdb.com]MFYD-009.[4K]@R90s
-2025-08-13 19:07:24,256 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:24,271 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:24,272 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]MFYD-009.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:24,272 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MFYD-009.[4K]@R90s - failed
-2025-08-13 19:07:24,272 - pikpak_bridge - INFO - Processing torrent: [javdb.com]XVSR-818
-2025-08-13 19:07:24,309 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:24,323 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:24,323 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]XVSR-818: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:24,324 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]XVSR-818 - failed
-2025-08-13 19:07:24,324 - pikpak_bridge - INFO - Processing torrent: [javdb.com]BMW-334
-2025-08-13 19:07:24,360 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:24,371 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:24,372 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]BMW-334: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:24,372 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]BMW-334 - failed
-2025-08-13 19:07:24,372 - pikpak_bridge - INFO - Processing torrent: [javdb.com]EBWH-220
-2025-08-13 19:07:24,407 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:24,417 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:24,418 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]EBWH-220: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:24,418 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]EBWH-220 - failed
-2025-08-13 19:07:24,418 - pikpak_bridge - INFO - Processing torrent: [javdb.com]PKPD-368
-2025-08-13 19:07:24,451 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:24,463 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:24,464 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]PKPD-368: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:24,464 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]PKPD-368 - failed
-2025-08-13 19:07:24,464 - pikpak_bridge - INFO - Processing torrent: [javdb.com]FJIN-077
-2025-08-13 19:07:24,500 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:24,512 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:24,513 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]FJIN-077: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:24,513 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]FJIN-077 - failed
-2025-08-13 19:07:24,513 - pikpak_bridge - INFO - Processing torrent: [javdb.com]miab-480
-2025-08-13 19:07:24,546 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:24,557 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:24,558 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]miab-480: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:24,558 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]miab-480 - failed
-2025-08-13 19:07:24,558 - pikpak_bridge - INFO - Processing torrent: [javdb.com]AGAV-139
-2025-08-13 19:07:24,593 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:24,605 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:24,605 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]AGAV-139: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:24,605 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]AGAV-139 - failed
-2025-08-13 19:07:24,605 - pikpak_bridge - INFO - Processing torrent: [javdb.com]第一會所新片@SIS001@EBWH-227
-2025-08-13 19:07:29,645 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:29,656 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:29,656 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]第一會所新片@SIS001@EBWH-227: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,656 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]第一會所新片@SIS001@EBWH-227 - failed
-2025-08-13 19:07:29,656 - pikpak_bridge - INFO - Processing torrent: [javdb.com]SW-1002
-2025-08-13 19:07:29,689 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:29,700 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:29,700 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]SW-1002: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,700 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]SW-1002 - failed
-2025-08-13 19:07:29,700 - pikpak_bridge - INFO - Processing torrent: [javdb.com]KTB-097
-2025-08-13 19:07:29,732 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:29,742 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:29,743 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]KTB-097: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,743 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]KTB-097 - failed
-2025-08-13 19:07:29,743 - pikpak_bridge - INFO - Processing torrent: [javdb.com]HUNTC-350
-2025-08-13 19:07:29,776 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:29,787 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:29,787 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]HUNTC-350: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,788 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]HUNTC-350 - failed
-2025-08-13 19:07:29,788 - pikpak_bridge - INFO - Processing torrent: [javdb.com]MIKR-013
-2025-08-13 19:07:29,819 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:29,833 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:29,834 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]MIKR-013: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,834 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIKR-013 - failed
-2025-08-13 19:07:29,834 - pikpak_bridge - INFO - Processing torrent: [javdb.com]MUKC-095
-2025-08-13 19:07:29,868 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-13 19:07:29,882 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-13 19:07:29,883 - pikpak_bridge - ERROR - Unexpected error processing torrent [javdb.com]MUKC-095: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MUKC-095 - failed
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO - ============================================================
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO - PIKPAK BRIDGE TRANSFER SUMMARY
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO - ============================================================
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO - Processed categories: ['Daily Ingestion']
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO - Total torrents found (older than 3 days): 104
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO - Category 'Daily Ingestion': 104 total, 25 successful, 79 failed
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO - Overall: 25 successful, 79 failed
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO - Success rate: 24.0%
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO - 
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO - ✓ Successfully transferred torrents:
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]ROYD-242
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]JUR-299.[4K]@R90s
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]FOCS-249
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]EBWH-215-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]NHDTC-059
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]MIAB-491
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]BBTU-101
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]SONE-734
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]MISM-388
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]DANDY-982.[4K]@R90s
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]ZRK-002
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]NACR-960
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]NPJS-192
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]HUNTC-273
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]dnjr-141
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]smok-015
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]FTHTD-098
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]cead-696
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]NAMH-031
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]XVSR-817
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]FTKD-024
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]ASEX-002
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]JYMA-082
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]CEMD-685
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO -   - [javdb.com]ROYD-240
-2025-08-13 19:07:29,883 - pikpak_bridge - INFO - 
-2025-08-13 19:07:29,883 - pikpak_bridge - WARNING - ✗ Failed transfers:
-2025-08-13 19:07:29,883 - pikpak_bridge - WARNING -   - [javdb.com]FJIN-078: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,883 - pikpak_bridge - WARNING -   - [javdb.com]EBWH-220-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,883 - pikpak_bridge - WARNING -   - [javdb.com]NAMH-034: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,883 - pikpak_bridge - WARNING -   - [javdb.com]KIT-010: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,883 - pikpak_bridge - WARNING -   - [javdb.com]BABD-020: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,883 - pikpak_bridge - WARNING -   - [javdb.com]第一會所新片@SIS001@PPPE-334: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]ABP-673.torrent: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]第一會所新片@SIS001@SODS-068: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]SAN-354: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]NECO-003: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]fstu-008: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]SGKI-048: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]adn-010-C.torrent: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]DIGI-253: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]JUR-317.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]STSK-178-HD: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]NACR-956: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]BAB-159: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]MIDA-145: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]MFYD-001.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]RBK-113: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]MUKD-531 โทมิ คานาตะ [Ai ลบเซ็นเซอร์]: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]AQSH-124: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]MIAB-414: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]KTB-096: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]JUR-238.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]MBDD-2145: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]JUR-302.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]MIAB-357: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]fkou-001: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]GVH-746: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]cemd-686: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]DANDY-960.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]ymdd-452: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]SPLT-002: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]YMDD-448: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]XVSR-814: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]jur-327: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]BOKO-024 4K Hikaru Miyanishi 宮西ひかる: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]sora-600: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]JYMA-083: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]BBAN-008.桜井あゆ.椎名ゆなと桜井あゆの旅ビアン: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]DOCD-062: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]mudr-319: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]HHED-064: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]FLAV-393: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]MIST-472: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]SQTE-611-4K: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]EBWH-228-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]ncyf-042: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]HOKS-198.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]UFD-077.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]CJOB-181: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]JUR-337.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]HAWA-345: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]-CAWD243C: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]JUR-283: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]APGH-037.mp4: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]ANTW-001: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]MIDA-184: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]DRPT-089: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]KSBJ-382-FHD: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]MANX-012: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]MISM-382: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]fthtd-118: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]MFYD-009.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]XVSR-818: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]BMW-334: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]EBWH-220: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]PKPD-368: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]FJIN-077: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]miab-480: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]AGAV-139: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]第一會所新片@SIS001@EBWH-227: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]SW-1002: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]KTB-097: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]HUNTC-350: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]MIKR-013: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - WARNING -   - [javdb.com]MUKC-095: Aborted - Your operation is too frequent, please try again later
-2025-08-13 19:07:29,884 - pikpak_bridge - INFO - 
-2025-08-13 19:07:29,884 - pikpak_bridge - INFO - PikPak transfer history saved to: Daily Report/pikpak_bridge_history.csv
-2025-08-13 19:07:29,884 - pikpak_bridge - INFO - ============================================================
-2025-08-13 19:07:29,884 - __main__ - INFO - PikPak Bridge completed successfully
-2025-08-13 19:07:29,884 - __main__ - INFO - ✓ PikPak Bridge completed successfully
-2025-08-13 19:07:29,884 - __main__ - INFO - ============================================================
-2025-08-13 19:07:29,884 - __main__ - INFO - PIPELINE COMPLETED SUCCESSFULLY
-2025-08-13 19:07:29,884 - __main__ - INFO - ============================================================
-2025-08-13 19:07:29,887 - __main__ - INFO - Connecting to SMTP server...
-2025-08-13 19:07:34,308 - __main__ - INFO - Email sent successfully.
-2025-08-13 19:07:34,308 - __main__ - INFO - Final commit for pipeline log...
-2025-08-13 19:07:34,309 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
-2025-08-13 19:07:34,325 - __main__ - INFO - Pulling latest changes from remote repository...
-2025-08-13 19:07:34,919 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
-2025-08-13 19:07:34,919 - __main__ - INFO - Adding files to git...
-2025-08-13 19:07:34,934 - __main__ - INFO - Commit changes for pipeline_log
+2025-08-14 19:00:01,528 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20250814.csv
+2025-08-14 19:00:01,528 - __main__ - INFO - ============================================================
+2025-08-14 19:00:01,528 - __main__ - INFO - STARTING JAVDB PIPELINE
+2025-08-14 19:00:01,528 - __main__ - INFO - MODE: Daily
+2025-08-14 19:00:01,528 - __main__ - INFO - ============================================================
+2025-08-14 19:00:01,528 - __main__ - INFO - Step 1: Running JavDB Spider...
+2025-08-14 19:00:01,528 - __main__ - INFO - Running: python3 Javdb_Spider.py
+2025-08-14 19:05:06,179 - __main__ - INFO - ✓ JavDB Spider completed successfully
+2025-08-14 19:05:06,179 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
+2025-08-14 19:05:06,179 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode daily
+2025-08-14 19:05:26,455 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
+2025-08-14 19:05:26,455 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
+2025-08-14 19:05:26,455 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
+2025-08-14 19:05:26,455 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-08-11)
+2025-08-14 19:05:26,605 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
+2025-08-14 19:05:26,639 - pikpak_bridge - INFO - Found 102 torrents across categories ['Daily Ingestion', 'Ad Hoc']
+2025-08-14 19:05:26,639 - pikpak_bridge - INFO - Filtered 78 torrents older than 3 days
+2025-08-14 19:05:26,639 - pikpak_bridge - INFO - Using batch mode: uploading all torrents in one session
+2025-08-14 19:05:26,639 - pikpak_bridge - INFO - Starting batch upload of 78 torrents to PikPak...
+2025-08-14 19:05:26,700 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
+2025-08-14 19:05:26,714 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
+2025-08-14 19:05:26,715 - pikpak_bridge - ERROR - Unexpected error during batch processing: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]FJIN-078 - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]EBWH-220-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】 - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]NAMH-034 - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]KIT-010 - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]第一會所新片@SIS001@PPPE-334 - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]ABP-673.torrent - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]第一會所新片@SIS001@SODS-068 - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]SAN-354 - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]NECO-003 - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]fstu-008 - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]SGKI-048 - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]adn-010-C.torrent - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]DIGI-253 - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]JUR-317.[4K]@R90s - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]STSK-178-HD - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]NACR-956 - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]BAB-159 - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIDA-145 - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]RBK-113 - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MUKD-531 โทมิ คานาตะ [Ai ลบเซ็นเซอร์] - failed
+2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]AQSH-124 - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIAB-414 - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]KTB-096 - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]miad-724-C.torrent - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]JUR-238.[4K]@R90s - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MBDD-2145 - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIAB-357 - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]fkou-001 - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]GVH-746 - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]cemd-686 - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]SONE-037-uncensored-HD - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]DANDY-960.[4K]@R90s - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]ymdd-452 - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]SPLT-002 - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]YMDD-448 - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]XVSR-814 - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]jur-327 - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]BOKO-024 4K Hikaru Miyanishi 宮西ひかる - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]sora-600 - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]CESD-056.椎名優奈.自慰快楽パラノイド4 椎名ゆな - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]JYMA-083 - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]BBAN-008.桜井あゆ.椎名ゆなと桜井あゆの旅ビアン - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]DOCD-062 - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]mudr-319 - failed
+2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]HHED-064 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]FLAV-393 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]CJOD-413 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIST-472 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]EBWH-228-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]ncyf-042 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]HOKS-198.[4K]@R90s - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]JUR-337.[4K]@R90s - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]HAWA-345 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]-CAWD243C - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]JUR-283 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]APGH-037.mp4 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]ANTW-001 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIDA-184 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]DRPT-089 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]CLUB-809 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]KSBJ-382-FHD - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MANX-012 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MISM-382 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]fthtd-118 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MFYD-009.[4K]@R90s - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]XVSR-818 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]BMW-334 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]EBWH-220 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]PKPD-368 - failed
+2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]FJIN-077 - failed
+2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]miab-480 - failed
+2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]AGAV-139 - failed
+2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]第一會所新片@SIS001@EBWH-227 - failed
+2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]SW-1002 - failed
+2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]KTB-097 - failed
+2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]HUNTC-350 - failed
+2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIKR-013 - failed
+2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MUKC-095 - failed
+2025-08-14 19:05:26,719 - pikpak_bridge - INFO - ============================================================
+2025-08-14 19:05:26,719 - pikpak_bridge - INFO - PIKPAK BRIDGE TRANSFER SUMMARY
+2025-08-14 19:05:26,719 - pikpak_bridge - INFO - ============================================================
+2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Processed categories: ['Daily Ingestion']
+2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Total torrents found (older than 3 days): 78
+2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Category 'Daily Ingestion': 78 total, 0 successful, 78 failed
+2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Overall: 0 successful, 78 failed
+2025-08-14 19:05:26,719 - pikpak_bridge - INFO - 
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING - ✗ Failed transfers:
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]FJIN-078: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]EBWH-220-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]NAMH-034: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]KIT-010: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]第一會所新片@SIS001@PPPE-334: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]ABP-673.torrent: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]第一會所新片@SIS001@SODS-068: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]SAN-354: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]NECO-003: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]fstu-008: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]SGKI-048: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]adn-010-C.torrent: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]DIGI-253: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]JUR-317.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]STSK-178-HD: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]NACR-956: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]BAB-159: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]MIDA-145: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]RBK-113: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]MUKD-531 โทมิ คานาตะ [Ai ลบเซ็นเซอร์]: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]AQSH-124: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]MIAB-414: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]KTB-096: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]miad-724-C.torrent: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]JUR-238.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]MBDD-2145: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]MIAB-357: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]fkou-001: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]GVH-746: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]cemd-686: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]SONE-037-uncensored-HD: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]DANDY-960.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]ymdd-452: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]SPLT-002: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]YMDD-448: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]XVSR-814: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]jur-327: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]BOKO-024 4K Hikaru Miyanishi 宮西ひかる: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]sora-600: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]CESD-056.椎名優奈.自慰快楽パラノイド4 椎名ゆな: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]JYMA-083: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]BBAN-008.桜井あゆ.椎名ゆなと桜井あゆの旅ビアン: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]DOCD-062: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]mudr-319: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]HHED-064: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]FLAV-393: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]CJOD-413: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]MIST-472: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]EBWH-228-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]ncyf-042: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]HOKS-198.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]JUR-337.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]HAWA-345: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]-CAWD243C: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]JUR-283: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]APGH-037.mp4: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]ANTW-001: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]MIDA-184: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]DRPT-089: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]CLUB-809: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]KSBJ-382-FHD: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]MANX-012: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]MISM-382: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]fthtd-118: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]MFYD-009.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]XVSR-818: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]BMW-334: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]EBWH-220: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]PKPD-368: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]FJIN-077: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]miab-480: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]AGAV-139: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]第一會所新片@SIS001@EBWH-227: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]SW-1002: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]KTB-097: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]HUNTC-350: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]MIKR-013: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]MUKC-095: Aborted - Your operation is too frequent, please try again later
+2025-08-14 19:05:26,720 - pikpak_bridge - INFO - 
+2025-08-14 19:05:26,720 - pikpak_bridge - INFO - PikPak transfer history saved to: Daily Report/pikpak_bridge_history.csv
+2025-08-14 19:05:26,720 - pikpak_bridge - INFO - ============================================================
+2025-08-14 19:05:26,720 - __main__ - INFO - PikPak Bridge completed successfully
+2025-08-14 19:05:26,720 - __main__ - INFO - ✓ PikPak Bridge completed successfully
+2025-08-14 19:05:26,720 - __main__ - INFO - ============================================================
+2025-08-14 19:05:26,720 - __main__ - INFO - PIPELINE COMPLETED SUCCESSFULLY
+2025-08-14 19:05:26,720 - __main__ - INFO - ============================================================
+2025-08-14 19:05:26,722 - __main__ - INFO - Connecting to SMTP server...
+2025-08-14 19:05:30,152 - __main__ - INFO - Email sent successfully.
+2025-08-14 19:05:30,152 - __main__ - INFO - Final commit for pipeline log...
+2025-08-14 19:05:30,153 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
+2025-08-14 19:05:30,155 - __main__ - INFO - Pulling latest changes from remote repository...
+2025-08-14 19:05:30,725 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
+2025-08-14 19:05:30,725 - __main__ - INFO - Adding files to git...
+2025-08-14 19:05:30,746 - __main__ - INFO - Commit changes for pipeline_log
