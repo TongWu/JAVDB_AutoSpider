@@ -335,10 +335,10 @@ def main():
         logger.info("✓ qBittorrent Uploader completed successfully")
 
         # 3. Run PikPak Bridge to handle old torrents
-        batch_mode = not args.pikpak_individual  # Default to batch mode unless --pikpak-individual is specified
-        logger.info("Step 3: Running PikPak Bridge to clean up old torrents...")
-        run_pikpak_bridge(days=3, dry_run=args.dry_run, batch_mode=batch_mode)
-        logger.info("✓ PikPak Bridge completed successfully")
+        # batch_mode = not args.pikpak_individual  # Default to batch mode unless --pikpak-individual is specified
+        # logger.info("Step 3: Running PikPak Bridge to clean up old torrents...")
+        # run_pikpak_bridge(days=3, dry_run=args.dry_run, batch_mode=batch_mode)
+        # logger.info("✓ PikPak Bridge completed successfully")
 
         pipeline_success = True
         logger.info("=" * 60)
