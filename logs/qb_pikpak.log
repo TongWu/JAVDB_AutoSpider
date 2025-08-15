@@ -1,203 +1,31 @@
-2025-08-14 19:00:01,528 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20250814.csv
-2025-08-14 19:00:01,528 - __main__ - INFO - ============================================================
-2025-08-14 19:00:01,528 - __main__ - INFO - STARTING JAVDB PIPELINE
-2025-08-14 19:00:01,528 - __main__ - INFO - MODE: Daily
-2025-08-14 19:00:01,528 - __main__ - INFO - ============================================================
-2025-08-14 19:00:01,528 - __main__ - INFO - Step 1: Running JavDB Spider...
-2025-08-14 19:00:01,528 - __main__ - INFO - Running: python3 Javdb_Spider.py
-2025-08-14 19:05:06,179 - __main__ - INFO - ✓ JavDB Spider completed successfully
-2025-08-14 19:05:06,179 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
-2025-08-14 19:05:06,179 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode daily
-2025-08-14 19:05:26,455 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
-2025-08-14 19:05:26,455 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
-2025-08-14 19:05:26,455 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
-2025-08-14 19:05:26,455 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-08-11)
-2025-08-14 19:05:26,605 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
-2025-08-14 19:05:26,639 - pikpak_bridge - INFO - Found 102 torrents across categories ['Daily Ingestion', 'Ad Hoc']
-2025-08-14 19:05:26,639 - pikpak_bridge - INFO - Filtered 78 torrents older than 3 days
-2025-08-14 19:05:26,639 - pikpak_bridge - INFO - Using batch mode: uploading all torrents in one session
-2025-08-14 19:05:26,639 - pikpak_bridge - INFO - Starting batch upload of 78 torrents to PikPak...
-2025-08-14 19:05:26,700 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-08-14 19:05:26,714 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 400 Bad Request"
-2025-08-14 19:05:26,715 - pikpak_bridge - ERROR - Unexpected error during batch processing: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]FJIN-078 - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]EBWH-220-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】 - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]NAMH-034 - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]KIT-010 - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]第一會所新片@SIS001@PPPE-334 - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]ABP-673.torrent - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]第一會所新片@SIS001@SODS-068 - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]SAN-354 - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]NECO-003 - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]fstu-008 - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]SGKI-048 - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]adn-010-C.torrent - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]DIGI-253 - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]JUR-317.[4K]@R90s - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]STSK-178-HD - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]NACR-956 - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]BAB-159 - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIDA-145 - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]RBK-113 - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MUKD-531 โทมิ คานาตะ [Ai ลบเซ็นเซอร์] - failed
-2025-08-14 19:05:26,716 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]AQSH-124 - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIAB-414 - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]KTB-096 - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]miad-724-C.torrent - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]JUR-238.[4K]@R90s - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MBDD-2145 - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIAB-357 - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]fkou-001 - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]GVH-746 - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]cemd-686 - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]SONE-037-uncensored-HD - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]DANDY-960.[4K]@R90s - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]ymdd-452 - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]SPLT-002 - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]YMDD-448 - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]XVSR-814 - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]jur-327 - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]BOKO-024 4K Hikaru Miyanishi 宮西ひかる - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]sora-600 - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]CESD-056.椎名優奈.自慰快楽パラノイド4 椎名ゆな - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]JYMA-083 - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]BBAN-008.桜井あゆ.椎名ゆなと桜井あゆの旅ビアン - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]DOCD-062 - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]mudr-319 - failed
-2025-08-14 19:05:26,717 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]HHED-064 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]FLAV-393 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]CJOD-413 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIST-472 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]EBWH-228-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]ncyf-042 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]HOKS-198.[4K]@R90s - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]JUR-337.[4K]@R90s - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]HAWA-345 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]-CAWD243C - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]JUR-283 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]APGH-037.mp4 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]ANTW-001 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIDA-184 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]DRPT-089 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]CLUB-809 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]KSBJ-382-FHD - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MANX-012 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MISM-382 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]fthtd-118 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MFYD-009.[4K]@R90s - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]XVSR-818 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]BMW-334 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]EBWH-220 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]PKPD-368 - failed
-2025-08-14 19:05:26,718 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]FJIN-077 - failed
-2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]miab-480 - failed
-2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]AGAV-139 - failed
-2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]第一會所新片@SIS001@EBWH-227 - failed
-2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]SW-1002 - failed
-2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]KTB-097 - failed
-2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]HUNTC-350 - failed
-2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MIKR-013 - failed
-2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]MUKC-095 - failed
-2025-08-14 19:05:26,719 - pikpak_bridge - INFO - ============================================================
-2025-08-14 19:05:26,719 - pikpak_bridge - INFO - PIKPAK BRIDGE TRANSFER SUMMARY
-2025-08-14 19:05:26,719 - pikpak_bridge - INFO - ============================================================
-2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Processed categories: ['Daily Ingestion']
-2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Total torrents found (older than 3 days): 78
-2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Category 'Daily Ingestion': 78 total, 0 successful, 78 failed
-2025-08-14 19:05:26,719 - pikpak_bridge - INFO - Overall: 0 successful, 78 failed
-2025-08-14 19:05:26,719 - pikpak_bridge - INFO - 
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING - ✗ Failed transfers:
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]FJIN-078: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]EBWH-220-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]NAMH-034: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]KIT-010: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]第一會所新片@SIS001@PPPE-334: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]ABP-673.torrent: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]第一會所新片@SIS001@SODS-068: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]SAN-354: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]NECO-003: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]fstu-008: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]SGKI-048: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]adn-010-C.torrent: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]DIGI-253: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]JUR-317.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]STSK-178-HD: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]NACR-956: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]BAB-159: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]MIDA-145: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]RBK-113: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]MUKD-531 โทมิ คานาตะ [Ai ลบเซ็นเซอร์]: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]AQSH-124: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]MIAB-414: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]KTB-096: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]miad-724-C.torrent: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]JUR-238.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]MBDD-2145: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,719 - pikpak_bridge - WARNING -   - [javdb.com]MIAB-357: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]fkou-001: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]GVH-746: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]cemd-686: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]SONE-037-uncensored-HD: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]DANDY-960.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]ymdd-452: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]SPLT-002: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]YMDD-448: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]XVSR-814: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]jur-327: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]BOKO-024 4K Hikaru Miyanishi 宮西ひかる: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]sora-600: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]CESD-056.椎名優奈.自慰快楽パラノイド4 椎名ゆな: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]JYMA-083: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]BBAN-008.桜井あゆ.椎名ゆなと桜井あゆの旅ビアン: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]DOCD-062: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]mudr-319: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]HHED-064: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]FLAV-393: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]CJOD-413: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]MIST-472: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]EBWH-228-U【成人抖音-黑料-换妻-直播-手机搜bs98.top】【内附百度云】: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]ncyf-042: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]HOKS-198.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]JUR-337.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]HAWA-345: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]-CAWD243C: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]JUR-283: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]APGH-037.mp4: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]ANTW-001: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]MIDA-184: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]DRPT-089: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]CLUB-809: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]KSBJ-382-FHD: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]MANX-012: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]MISM-382: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]fthtd-118: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]MFYD-009.[4K]@R90s: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]XVSR-818: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]BMW-334: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]EBWH-220: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]PKPD-368: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]FJIN-077: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]miab-480: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]AGAV-139: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]第一會所新片@SIS001@EBWH-227: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]SW-1002: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]KTB-097: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]HUNTC-350: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]MIKR-013: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - WARNING -   - [javdb.com]MUKC-095: Aborted - Your operation is too frequent, please try again later
-2025-08-14 19:05:26,720 - pikpak_bridge - INFO - 
-2025-08-14 19:05:26,720 - pikpak_bridge - INFO - PikPak transfer history saved to: Daily Report/pikpak_bridge_history.csv
-2025-08-14 19:05:26,720 - pikpak_bridge - INFO - ============================================================
-2025-08-14 19:05:26,720 - __main__ - INFO - PikPak Bridge completed successfully
-2025-08-14 19:05:26,720 - __main__ - INFO - ✓ PikPak Bridge completed successfully
-2025-08-14 19:05:26,720 - __main__ - INFO - ============================================================
-2025-08-14 19:05:26,720 - __main__ - INFO - PIPELINE COMPLETED SUCCESSFULLY
-2025-08-14 19:05:26,720 - __main__ - INFO - ============================================================
-2025-08-14 19:05:26,722 - __main__ - INFO - Connecting to SMTP server...
-2025-08-14 19:05:30,152 - __main__ - INFO - Email sent successfully.
-2025-08-14 19:05:30,152 - __main__ - INFO - Final commit for pipeline log...
-2025-08-14 19:05:30,153 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
-2025-08-14 19:05:30,155 - __main__ - INFO - Pulling latest changes from remote repository...
-2025-08-14 19:05:30,725 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
-2025-08-14 19:05:30,725 - __main__ - INFO - Adding files to git...
-2025-08-14 19:05:30,746 - __main__ - INFO - Commit changes for pipeline_log
+2025-08-15 19:00:02,043 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20250815.csv
+2025-08-15 19:00:02,043 - __main__ - INFO - ============================================================
+2025-08-15 19:00:02,043 - __main__ - INFO - STARTING JAVDB PIPELINE
+2025-08-15 19:00:02,043 - __main__ - INFO - MODE: Daily
+2025-08-15 19:00:02,043 - __main__ - INFO - ============================================================
+2025-08-15 19:00:02,043 - __main__ - INFO - Step 1: Running JavDB Spider...
+2025-08-15 19:00:02,043 - __main__ - INFO - Running: python3 Javdb_Spider.py
+2025-08-15 19:06:25,775 - __main__ - INFO - ✓ JavDB Spider completed successfully
+2025-08-15 19:06:25,775 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
+2025-08-15 19:06:25,775 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode daily
+2025-08-15 19:06:59,089 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
+2025-08-15 19:06:59,089 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
+2025-08-15 19:06:59,089 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
+2025-08-15 19:06:59,089 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-08-12)
+2025-08-15 19:06:59,238 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
+2025-08-15 19:06:59,250 - pikpak_bridge - INFO - Found 34 torrents across categories ['Daily Ingestion', 'Ad Hoc']
+2025-08-15 19:06:59,250 - pikpak_bridge - INFO - Filtered 0 torrents older than 3 days
+2025-08-15 19:06:59,250 - pikpak_bridge - INFO - No torrents to process.
+2025-08-15 19:06:59,250 - __main__ - INFO - PikPak Bridge completed successfully
+2025-08-15 19:06:59,250 - __main__ - INFO - ✓ PikPak Bridge completed successfully
+2025-08-15 19:06:59,250 - __main__ - INFO - ============================================================
+2025-08-15 19:06:59,250 - __main__ - INFO - PIPELINE COMPLETED SUCCESSFULLY
+2025-08-15 19:06:59,250 - __main__ - INFO - ============================================================
+2025-08-15 19:06:59,251 - __main__ - INFO - Connecting to SMTP server...
+2025-08-15 19:07:02,776 - __main__ - INFO - Email sent successfully.
+2025-08-15 19:07:02,776 - __main__ - INFO - Final commit for pipeline log...
+2025-08-15 19:07:02,776 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
+2025-08-15 19:07:02,789 - __main__ - INFO - Pulling latest changes from remote repository...
+2025-08-15 19:07:03,357 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
+2025-08-15 19:07:03,357 - __main__ - INFO - Adding files to git...
+2025-08-15 19:07:03,378 - __main__ - INFO - Commit changes for pipeline_log
