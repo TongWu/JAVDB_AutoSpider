@@ -1,5 +1,61 @@
-2025-08-23 19:00:03,598 - __main__ - INFO - Starting qBittorrent uploader...
-2025-08-23 19:00:03,599 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250823.csv
-2025-08-23 19:00:03,599 - __main__ - ERROR - CSV file not found: Daily Report/Javdb_TodayTitle_20250823.csv
-2025-08-23 19:00:03,599 - __main__ - INFO - Make sure you have run the spider script first to generate the CSV file
-2025-08-23 19:00:03,599 - __main__ - WARNING - No torrent links found in CSV file
+2025-08-23 21:48:42,231 - __main__ - INFO - Starting qBittorrent uploader...
+2025-08-23 21:48:42,231 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250823.csv
+2025-08-23 21:48:42,231 - __main__ - INFO - Found 41 torrent links in Daily Report/Javdb_TodayTitle_20250823.csv
+2025-08-23 21:48:42,231 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-08-23 21:48:42,478 - __main__ - INFO - Successfully logged in to qBittorrent
+2025-08-23 21:48:42,478 - __main__ - INFO - History manager imported, will update downloaded status
+2025-08-23 21:48:42,479 - __main__ - INFO - Starting to add 41 torrents to qBittorrent...
+2025-08-23 21:48:42,479 - __main__ - INFO - [1/41] Adding: PPPD-121 [Hacked-NoSubtitle]
+2025-08-23 21:48:43,552 - __main__ - INFO - [2/41] Adding: PPPD-121 [Subtitle]
+2025-08-23 21:48:44,599 - __main__ - INFO - [3/41] Adding: PRST-004 [Hacked-NoSubtitle]
+2025-08-23 21:48:45,658 - __main__ - INFO - [4/41] Adding: PRST-004 [Subtitle]
+2025-08-23 21:48:46,705 - __main__ - INFO - [5/41] Adding: RBD-331 [Hacked-NoSubtitle]
+2025-08-23 21:48:47,762 - __main__ - INFO - [6/41] Adding: RBD-331 [Subtitle]
+2025-08-23 21:48:48,812 - __main__ - INFO - [7/41] Adding: RCT-402 [Hacked-NoSubtitle]
+2025-08-23 21:48:49,862 - __main__ - INFO - [8/41] Adding: RCT-402 [Subtitle]
+2025-08-23 21:48:50,914 - __main__ - INFO - [9/41] Adding: MUDR-331 [Subtitle]
+2025-08-23 21:48:51,967 - __main__ - INFO - [10/41] Adding: MUDR-332 [Subtitle]
+2025-08-23 21:48:53,023 - __main__ - INFO - [11/41] Adding: MVSD-656 [Subtitle]
+2025-08-23 21:48:54,068 - __main__ - INFO - [12/41] Adding: NACR-993 [Subtitle]
+2025-08-23 21:48:55,119 - __main__ - INFO - [13/41] Adding: NACR-996 [Subtitle]
+2025-08-23 21:48:56,164 - __main__ - INFO - [14/41] Adding: NACR-997 [Subtitle]
+2025-08-23 21:48:57,214 - __main__ - INFO - [15/41] Adding: NACR-998 [Subtitle]
+2025-08-23 21:48:58,264 - __main__ - INFO - [16/41] Adding: NACR-999 [Subtitle]
+2025-08-23 21:48:59,313 - __main__ - INFO - [17/41] Adding: NSFS-404 [Subtitle]
+2025-08-23 21:49:00,355 - __main__ - INFO - [18/41] Adding: NSFS-405 [Subtitle]
+2025-08-23 21:49:01,404 - __main__ - INFO - [19/41] Adding: PRED-806 [Hacked+Subtitle]
+2025-08-23 21:49:02,454 - __main__ - INFO - [20/41] Adding: PRED-806 [Subtitle]
+2025-08-23 21:49:03,514 - __main__ - INFO - [21/41] Adding: MIDA-292 [Hacked+Subtitle]
+2025-08-23 21:49:04,570 - __main__ - INFO - [22/41] Adding: MIDA-292 [Subtitle]
+2025-08-23 21:49:05,617 - __main__ - INFO - [23/41] Adding: MIDA-293 [Subtitle]
+2025-08-23 21:49:06,655 - __main__ - INFO - [24/41] Adding: MIDA-294 [Subtitle]
+2025-08-23 21:49:07,701 - __main__ - INFO - [25/41] Adding: MIDA-296 [Subtitle]
+2025-08-23 21:49:08,753 - __main__ - INFO - [26/41] Adding: MVSD-652 [Hacked+Subtitle]
+2025-08-23 21:49:09,795 - __main__ - INFO - [27/41] Adding: MVSD-652 [Subtitle]
+2025-08-23 21:49:10,827 - __main__ - INFO - [28/41] Adding: MVSD-653 [Subtitle]
+2025-08-23 21:49:11,895 - __main__ - INFO - [29/41] Adding: PPPE-356 [Subtitle]
+2025-08-23 21:49:12,953 - __main__ - INFO - [30/41] Adding: PPPE-359 [Subtitle]
+2025-08-23 21:49:14,002 - __main__ - INFO - [31/41] Adding: PPPE-361 [Subtitle]
+2025-08-23 21:49:15,059 - __main__ - INFO - [32/41] Adding: MISM-397 [NoSubtitle]
+2025-08-23 21:49:16,109 - __main__ - INFO - [33/41] Adding: ROE-379 [NoSubtitle]
+2025-08-23 21:49:17,168 - __main__ - INFO - [34/41] Adding: CJOD-472 [NoSubtitle]
+2025-08-23 21:49:18,230 - __main__ - INFO - [35/41] Adding: DASS-715 [NoSubtitle]
+2025-08-23 21:49:19,279 - __main__ - INFO - [36/41] Adding: SONE-861 [NoSubtitle]
+2025-08-23 21:49:20,341 - __main__ - INFO - [37/41] Adding: SONE-864 [NoSubtitle]
+2025-08-23 21:49:21,389 - __main__ - INFO - [38/41] Adding: SONE-865 [NoSubtitle]
+2025-08-23 21:49:22,447 - __main__ - INFO - [39/41] Adding: SONE-878 [NoSubtitle]
+2025-08-23 21:49:23,503 - __main__ - INFO - [40/41] Adding: HODV-21993 [NoSubtitle]
+2025-08-23 21:49:24,568 - __main__ - INFO - [41/41] Adding: SONE-854 [NoSubtitle]
+2025-08-23 21:49:25,619 - __main__ - INFO - ==================================================
+2025-08-23 21:49:25,619 - __main__ - INFO - UPLOAD SUMMARY
+2025-08-23 21:49:25,619 - __main__ - INFO - ==================================================
+2025-08-23 21:49:25,619 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250823.csv
+2025-08-23 21:49:25,619 - __main__ - INFO - Total torrents found: 41
+2025-08-23 21:49:25,619 - __main__ - INFO - Successfully added: 41
+2025-08-23 21:49:25,619 - __main__ - INFO -   - Hacked subtitle torrents: 3
+2025-08-23 21:49:25,619 - __main__ - INFO -   - Hacked no subtitle torrents: 4
+2025-08-23 21:49:25,619 - __main__ - INFO -   - Subtitle torrents: 24
+2025-08-23 21:49:25,619 - __main__ - INFO -   - No subtitle torrents: 10
+2025-08-23 21:49:25,619 - __main__ - INFO - Failed to add: 0
+2025-08-23 21:49:25,619 - __main__ - INFO - Success rate: 100.0%
+2025-08-23 21:49:25,619 - __main__ - INFO - ==================================================
