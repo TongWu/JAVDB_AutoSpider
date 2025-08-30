@@ -1,57 +1,55 @@
-2025-08-30 16:36:50,014 - __main__ - INFO - Starting qBittorrent uploader...
-2025-08-30 16:36:50,014 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250830.csv
-2025-08-30 16:36:50,014 - __main__ - INFO - Found 36 torrent links in Daily Report/Javdb_TodayTitle_20250830.csv
-2025-08-30 16:36:50,014 - __main__ - INFO - Skipped 1 already downloaded torrents
-2025-08-30 16:36:50,015 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-08-30 16:36:50,315 - __main__ - INFO - Successfully logged in to qBittorrent
-2025-08-30 16:36:50,316 - __main__ - INFO - History manager imported, will update downloaded status
-2025-08-30 16:36:50,316 - __main__ - INFO - Starting to add 36 torrents to qBittorrent...
-2025-08-30 16:36:50,316 - __main__ - INFO - [1/36] Adding: SSIS-395 [Hacked+Subtitle]
-2025-08-30 16:36:51,326 - __main__ - INFO - [2/36] Adding: SSIS-395 [Subtitle]
-2025-08-30 16:36:52,328 - __main__ - INFO - [3/36] Adding: SSPD-144 [Hacked-NoSubtitle]
-2025-08-30 16:36:53,330 - __main__ - INFO - [4/36] Adding: SSPD-144 [Subtitle]
-2025-08-30 16:36:54,333 - __main__ - INFO - [5/36] Adding: STAR-556 [Hacked-NoSubtitle]
-2025-08-30 16:36:55,336 - __main__ - INFO - [6/36] Adding: STAR-556 [Subtitle]
-2025-08-30 16:36:56,339 - __main__ - INFO - [7/36] Adding: STARS-110 [Hacked-NoSubtitle]
-2025-08-30 16:36:57,341 - __main__ - INFO - [8/36] Adding: STARS-110 [Subtitle]
-2025-08-30 16:36:58,344 - __main__ - INFO - [9/36] Adding: STARS-400 [Hacked-NoSubtitle]
-2025-08-30 16:36:59,346 - __main__ - INFO - [10/36] Adding: STARS-400 [Subtitle]
-2025-08-30 16:37:00,354 - __main__ - INFO - [11/36] Adding: STARS-676 [Hacked-NoSubtitle]
-2025-08-30 16:37:01,357 - __main__ - INFO - [12/36] Adding: STARS-676 [Subtitle]
-2025-08-30 16:37:02,359 - __main__ - INFO - [13/36] Adding: STARS-998 [Hacked+Subtitle]
-2025-08-30 16:37:03,362 - __main__ - INFO - [14/36] Adding: STARS-998 [Subtitle]
-2025-08-30 16:37:04,364 - __main__ - INFO - [15/36] Adding: ABF-260 [Hacked+Subtitle]
-2025-08-30 16:37:05,366 - __main__ - INFO - [16/36] Adding: ABF-260 [Subtitle]
-2025-08-30 16:37:06,369 - __main__ - INFO - [17/36] Adding: APNS-380 [Subtitle]
-2025-08-30 16:37:07,371 - __main__ - INFO - [18/36] Adding: APNS-381 [Subtitle]
-2025-08-30 16:37:08,373 - __main__ - INFO - [19/36] Adding: DANDY-986 [Subtitle]
-2025-08-30 16:37:09,376 - __main__ - INFO - [20/36] Adding: DVAJ-702 [Subtitle]
-2025-08-30 16:37:10,378 - __main__ - INFO - [21/36] Adding: DVAJ-703 [Subtitle]
-2025-08-30 16:37:11,380 - __main__ - INFO - [22/36] Adding: DVAJ-704 [Subtitle]
-2025-08-30 16:37:12,383 - __main__ - INFO - [23/36] Adding: HMN-719 [Subtitle]
-2025-08-30 16:37:13,385 - __main__ - INFO - [24/36] Adding: HMN-729 [Subtitle]
-2025-08-30 16:37:14,388 - __main__ - INFO - [25/36] Adding: SONE-854 [Hacked+Subtitle]
-2025-08-30 16:37:15,390 - __main__ - INFO - [26/36] Adding: MIDA-271 [NoSubtitle]
-2025-08-30 16:37:16,392 - __main__ - INFO - [27/36] Adding: MIMK-233 [NoSubtitle]
-2025-08-30 16:37:17,394 - __main__ - INFO - [28/36] Adding: LULU-397 [NoSubtitle]
-2025-08-30 16:37:18,396 - __main__ - INFO - [29/36] Adding: RBK-121 [NoSubtitle]
-2025-08-30 16:37:19,399 - __main__ - INFO - [30/36] Adding: SAME-198 [NoSubtitle]
-2025-08-30 16:37:20,402 - __main__ - INFO - [31/36] Adding: UFD-079 [NoSubtitle]
-2025-08-30 16:37:21,404 - __main__ - INFO - [32/36] Adding: WAAA-561 [NoSubtitle]
-2025-08-30 16:37:22,406 - __main__ - INFO - [33/36] Adding: WAAA-576 [NoSubtitle]
-2025-08-30 16:37:23,408 - __main__ - INFO - [34/36] Adding: STARS-708 [Hacked-NoSubtitle]
-2025-08-30 16:37:24,411 - __main__ - INFO - [35/36] Adding: STARS-708 [NoSubtitle]
-2025-08-30 16:37:25,413 - __main__ - INFO - [36/36] Adding: JUFE-589 [NoSubtitle]
-2025-08-30 16:37:26,416 - __main__ - INFO - ==================================================
-2025-08-30 16:37:26,416 - __main__ - INFO - UPLOAD SUMMARY
-2025-08-30 16:37:26,416 - __main__ - INFO - ==================================================
-2025-08-30 16:37:26,416 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250830.csv
-2025-08-30 16:37:26,416 - __main__ - INFO - Total torrents found: 36
-2025-08-30 16:37:26,416 - __main__ - INFO - Successfully added: 36
-2025-08-30 16:37:26,416 - __main__ - INFO -   - Hacked subtitle torrents: 4
-2025-08-30 16:37:26,416 - __main__ - INFO -   - Hacked no subtitle torrents: 6
-2025-08-30 16:37:26,416 - __main__ - INFO -   - Subtitle torrents: 16
-2025-08-30 16:37:26,416 - __main__ - INFO -   - No subtitle torrents: 10
-2025-08-30 16:37:26,416 - __main__ - INFO - Failed to add: 0
-2025-08-30 16:37:26,416 - __main__ - INFO - Success rate: 100.0%
-2025-08-30 16:37:26,416 - __main__ - INFO - ==================================================
+2025-08-30 17:26:42,041 - __main__ - INFO - Starting qBittorrent uploader...
+2025-08-30 17:26:42,041 - __main__ - INFO - Looking for CSV file: Ad Hoc/Javdb_TodayTitle_20250830.csv
+2025-08-30 17:26:42,041 - __main__ - INFO - Found 35 torrent links in Ad Hoc/Javdb_TodayTitle_20250830.csv
+2025-08-30 17:26:42,041 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-08-30 17:26:42,209 - __main__ - INFO - Successfully logged in to qBittorrent
+2025-08-30 17:26:42,209 - __main__ - INFO - History manager imported, will update downloaded status
+2025-08-30 17:26:42,209 - __main__ - INFO - Starting to add 35 torrents to qBittorrent...
+2025-08-30 17:26:42,209 - __main__ - INFO - [1/35] Adding: SORA-298 [Subtitle]
+2025-08-30 17:26:43,216 - __main__ - INFO - [2/35] Adding: SORA-233 [Subtitle]
+2025-08-30 17:26:44,218 - __main__ - INFO - [3/35] Adding: SORA-606 [NoSubtitle]
+2025-08-30 17:26:45,220 - __main__ - INFO - [4/35] Adding: SORA-602 [NoSubtitle]
+2025-08-30 17:26:46,223 - __main__ - INFO - [5/35] Adding: SORA-595 [NoSubtitle]
+2025-08-30 17:26:47,225 - __main__ - INFO - [6/35] Adding: SORA-592 [NoSubtitle]
+2025-08-30 17:26:48,227 - __main__ - INFO - [7/35] Adding: SORA-583 [NoSubtitle]
+2025-08-30 17:26:49,229 - __main__ - INFO - [8/35] Adding: SORA-578 [NoSubtitle]
+2025-08-30 17:26:50,231 - __main__ - INFO - [9/35] Adding: SORA-574 [Hacked-NoSubtitle]
+2025-08-30 17:26:51,233 - __main__ - INFO - [10/35] Adding: SORA-574 [NoSubtitle]
+2025-08-30 17:26:52,236 - __main__ - INFO - [11/35] Adding: SORA-560 [NoSubtitle]
+2025-08-30 17:26:53,238 - __main__ - INFO - [12/35] Adding: SORA-554 [NoSubtitle]
+2025-08-30 17:26:54,240 - __main__ - INFO - [13/35] Adding: SORA-547 [NoSubtitle]
+2025-08-30 17:26:55,242 - __main__ - INFO - [14/35] Adding: SORA-540 [NoSubtitle]
+2025-08-30 17:26:56,245 - __main__ - INFO - [15/35] Adding: SORA-525 [NoSubtitle]
+2025-08-30 17:26:57,247 - __main__ - INFO - [16/35] Adding: SOAN-103 [NoSubtitle]
+2025-08-30 17:26:58,249 - __main__ - INFO - [17/35] Adding: SORA-514 [Hacked-NoSubtitle]
+2025-08-30 17:26:59,251 - __main__ - INFO - [18/35] Adding: SORA-514 [NoSubtitle]
+2025-08-30 17:27:00,253 - __main__ - INFO - [19/35] Adding: SORA-510 [NoSubtitle]
+2025-08-30 17:27:01,256 - __main__ - INFO - [20/35] Adding: SORA-504 [Hacked-NoSubtitle]
+2025-08-30 17:27:02,259 - __main__ - INFO - [21/35] Adding: SORA-504 [NoSubtitle]
+2025-08-30 17:27:03,261 - __main__ - INFO - [22/35] Adding: SORA-490 [NoSubtitle]
+2025-08-30 17:27:04,263 - __main__ - INFO - [23/35] Adding: SORA-472 [NoSubtitle]
+2025-08-30 17:27:05,265 - __main__ - INFO - [24/35] Adding: SORA-378 [NoSubtitle]
+2025-08-30 17:27:06,268 - __main__ - INFO - [25/35] Adding: SORA-365 [NoSubtitle]
+2025-08-30 17:27:07,270 - __main__ - INFO - [26/35] Adding: SORA-354 [NoSubtitle]
+2025-08-30 17:27:08,272 - __main__ - INFO - [27/35] Adding: SORA-341 [NoSubtitle]
+2025-08-30 17:27:09,274 - __main__ - INFO - [28/35] Adding: SORA-330 [NoSubtitle]
+2025-08-30 17:27:10,277 - __main__ - INFO - [29/35] Adding: SORA-319 [NoSubtitle]
+2025-08-30 17:27:11,280 - __main__ - INFO - [30/35] Adding: SORA-309 [NoSubtitle]
+2025-08-30 17:27:12,282 - __main__ - INFO - [31/35] Adding: SORA-288 [NoSubtitle]
+2025-08-30 17:27:13,284 - __main__ - INFO - [32/35] Adding: SORA-276 [NoSubtitle]
+2025-08-30 17:27:14,287 - __main__ - INFO - [33/35] Adding: SORA-240 [NoSubtitle]
+2025-08-30 17:27:15,289 - __main__ - INFO - [34/35] Adding: SORA-223 [NoSubtitle]
+2025-08-30 17:27:16,293 - __main__ - INFO - [35/35] Adding: SORA-202 [NoSubtitle]
+2025-08-30 17:27:17,295 - __main__ - INFO - ==================================================
+2025-08-30 17:27:17,295 - __main__ - INFO - UPLOAD SUMMARY
+2025-08-30 17:27:17,295 - __main__ - INFO - ==================================================
+2025-08-30 17:27:17,295 - __main__ - INFO - CSV file: Ad Hoc/Javdb_TodayTitle_20250830.csv
+2025-08-30 17:27:17,295 - __main__ - INFO - Total torrents found: 35
+2025-08-30 17:27:17,295 - __main__ - INFO - Successfully added: 35
+2025-08-30 17:27:17,295 - __main__ - INFO -   - Hacked subtitle torrents: 0
+2025-08-30 17:27:17,295 - __main__ - INFO -   - Hacked no subtitle torrents: 3
+2025-08-30 17:27:17,295 - __main__ - INFO -   - Subtitle torrents: 2
+2025-08-30 17:27:17,295 - __main__ - INFO -   - No subtitle torrents: 30
+2025-08-30 17:27:17,295 - __main__ - INFO - Failed to add: 0
+2025-08-30 17:27:17,295 - __main__ - INFO - Success rate: 100.0%
+2025-08-30 17:27:17,295 - __main__ - INFO - ==================================================
