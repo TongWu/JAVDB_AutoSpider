@@ -1,58 +1,31 @@
-2025-09-05 19:00:02,141 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20250905.csv
-2025-09-05 19:00:02,141 - __main__ - INFO - ============================================================
-2025-09-05 19:00:02,141 - __main__ - INFO - STARTING JAVDB PIPELINE
-2025-09-05 19:00:02,141 - __main__ - INFO - MODE: Daily
-2025-09-05 19:00:02,141 - __main__ - INFO - ============================================================
-2025-09-05 19:00:02,141 - __main__ - INFO - Step 1: Running JavDB Spider...
-2025-09-05 19:00:02,141 - __main__ - INFO - Running: python3 Javdb_Spider.py
-2025-09-05 19:06:56,507 - __main__ - INFO - ✓ JavDB Spider completed successfully
-2025-09-05 19:06:56,507 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
-2025-09-05 19:06:56,507 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode daily
-2025-09-05 19:07:18,806 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
-2025-09-05 19:07:18,806 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
-2025-09-05 19:07:18,806 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
-2025-09-05 19:07:18,806 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-09-02)
-2025-09-05 19:07:18,954 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
-2025-09-05 19:07:18,963 - pikpak_bridge - INFO - Found 23 torrents across categories ['Daily Ingestion', 'Ad Hoc']
-2025-09-05 19:07:18,963 - pikpak_bridge - INFO - Filtered 1 torrents older than 3 days
-2025-09-05 19:07:18,963 - pikpak_bridge - INFO - Using batch mode: uploading all torrents in one session
-2025-09-05 19:07:18,963 - pikpak_bridge - INFO - Starting batch upload of 1 torrents to PikPak...
-2025-09-05 19:07:19,060 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-09-05 19:07:19,170 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-09-05 19:07:19,188 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-09-05 19:07:19,189 - pikpak_bridge - INFO - Starting batch upload of 1 torrents to PikPak...
-2025-09-05 19:07:19,189 - pikpak_bridge - INFO - Processing magnet 1/1: magnet:?xt=urn:btih:71ae3ba045bfe6a767e2833076b8ed1acf0896e0&dn=%5Bjavdb.com%5Dbbtu-032-C.torrent&xl...
-2025-09-05 19:07:19,443 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-09-05 19:07:19,443 - pikpak_bridge - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:71ae3ba045bfe6a767e2833076b8ed1acf0896e0&dn=%5Bjavdb.com%5Dbbtu-032-C.torrent&xl...
-2025-09-05 19:07:19,443 - pikpak_bridge - INFO - Batch upload completed: 1 successful, 0 failed
-2025-09-05 19:07:19,444 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]bbtu-032-C.torrent
-2025-09-05 19:07:19,444 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]bbtu-032-C.torrent - success
-2025-09-05 19:07:19,458 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-09-05 19:07:19,458 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]bbtu-032-C.torrent
-2025-09-05 19:07:19,458 - pikpak_bridge - INFO - ============================================================
-2025-09-05 19:07:19,458 - pikpak_bridge - INFO - PIKPAK BRIDGE TRANSFER SUMMARY
-2025-09-05 19:07:19,458 - pikpak_bridge - INFO - ============================================================
-2025-09-05 19:07:19,458 - pikpak_bridge - INFO - Processed categories: ['Daily Ingestion']
-2025-09-05 19:07:19,458 - pikpak_bridge - INFO - Total torrents found (older than 3 days): 1
-2025-09-05 19:07:19,458 - pikpak_bridge - INFO - Category 'Daily Ingestion': 1 total, 1 successful, 0 failed
-2025-09-05 19:07:19,458 - pikpak_bridge - INFO - Overall: 1 successful, 0 failed
-2025-09-05 19:07:19,458 - pikpak_bridge - INFO - Success rate: 100.0%
-2025-09-05 19:07:19,458 - pikpak_bridge - INFO - 
-2025-09-05 19:07:19,458 - pikpak_bridge - INFO - ✓ Successfully transferred torrents:
-2025-09-05 19:07:19,458 - pikpak_bridge - INFO -   - [javdb.com]bbtu-032-C.torrent
-2025-09-05 19:07:19,458 - pikpak_bridge - INFO - 
-2025-09-05 19:07:19,458 - pikpak_bridge - INFO - PikPak transfer history saved to: Daily Report/pikpak_bridge_history.csv
-2025-09-05 19:07:19,458 - pikpak_bridge - INFO - ============================================================
-2025-09-05 19:07:19,458 - __main__ - INFO - PikPak Bridge completed successfully
-2025-09-05 19:07:19,458 - __main__ - INFO - ✓ PikPak Bridge completed successfully
-2025-09-05 19:07:19,458 - __main__ - INFO - ============================================================
-2025-09-05 19:07:19,458 - __main__ - INFO - PIPELINE COMPLETED SUCCESSFULLY
-2025-09-05 19:07:19,458 - __main__ - INFO - ============================================================
-2025-09-05 19:07:19,461 - __main__ - INFO - Connecting to SMTP server...
-2025-09-05 19:07:22,788 - __main__ - INFO - Email sent successfully.
-2025-09-05 19:07:22,788 - __main__ - INFO - Final commit for pipeline log...
-2025-09-05 19:07:22,788 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
-2025-09-05 19:07:22,807 - __main__ - INFO - Pulling latest changes from remote repository...
-2025-09-05 19:07:23,395 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
-2025-09-05 19:07:23,395 - __main__ - INFO - Adding files to git...
-2025-09-05 19:07:23,410 - __main__ - INFO - Commit changes for pipeline_log
+2025-09-06 19:00:02,185 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20250906.csv
+2025-09-06 19:00:02,185 - __main__ - INFO - ============================================================
+2025-09-06 19:00:02,185 - __main__ - INFO - STARTING JAVDB PIPELINE
+2025-09-06 19:00:02,185 - __main__ - INFO - MODE: Daily
+2025-09-06 19:00:02,185 - __main__ - INFO - ============================================================
+2025-09-06 19:00:02,185 - __main__ - INFO - Step 1: Running JavDB Spider...
+2025-09-06 19:00:02,185 - __main__ - INFO - Running: python3 Javdb_Spider.py
+2025-09-06 19:04:07,311 - __main__ - INFO - ✓ JavDB Spider completed successfully
+2025-09-06 19:04:07,312 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
+2025-09-06 19:04:07,312 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode daily
+2025-09-06 19:04:30,611 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
+2025-09-06 19:04:30,611 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
+2025-09-06 19:04:30,611 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
+2025-09-06 19:04:30,611 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-09-03)
+2025-09-06 19:04:30,761 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
+2025-09-06 19:04:30,770 - pikpak_bridge - INFO - Found 23 torrents across categories ['Daily Ingestion', 'Ad Hoc']
+2025-09-06 19:04:30,770 - pikpak_bridge - INFO - Filtered 0 torrents older than 3 days
+2025-09-06 19:04:30,770 - pikpak_bridge - INFO - No torrents to process.
+2025-09-06 19:04:30,770 - __main__ - INFO - PikPak Bridge completed successfully
+2025-09-06 19:04:30,771 - __main__ - INFO - ✓ PikPak Bridge completed successfully
+2025-09-06 19:04:30,771 - __main__ - INFO - ============================================================
+2025-09-06 19:04:30,771 - __main__ - INFO - PIPELINE COMPLETED SUCCESSFULLY
+2025-09-06 19:04:30,771 - __main__ - INFO - ============================================================
+2025-09-06 19:04:30,772 - __main__ - INFO - Connecting to SMTP server...
+2025-09-06 19:04:34,223 - __main__ - INFO - Email sent successfully.
+2025-09-06 19:04:34,223 - __main__ - INFO - Final commit for pipeline log...
+2025-09-06 19:04:34,224 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
+2025-09-06 19:04:34,239 - __main__ - INFO - Pulling latest changes from remote repository...
+2025-09-06 19:04:34,854 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
+2025-09-06 19:04:34,854 - __main__ - INFO - Adding files to git...
+2025-09-06 19:04:34,868 - __main__ - INFO - Commit changes for pipeline_log
