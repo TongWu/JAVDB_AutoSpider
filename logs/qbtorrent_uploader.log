@@ -1,50 +1,55 @@
-2025-09-16 19:07:04,059 - __main__ - INFO - Starting qBittorrent uploader...
-2025-09-16 19:07:04,059 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250916.csv
-2025-09-16 19:07:04,060 - __main__ - INFO - Found 29 torrent links in Daily Report/Javdb_TodayTitle_20250916.csv
-2025-09-16 19:07:04,060 - __main__ - INFO - Skipped 3 already downloaded torrents
-2025-09-16 19:07:04,060 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-09-16 19:07:04,211 - __main__ - INFO - Successfully logged in to qBittorrent
-2025-09-16 19:07:04,211 - __main__ - INFO - History manager imported, will update downloaded status
-2025-09-16 19:07:04,211 - __main__ - INFO - Starting to add 29 torrents to qBittorrent...
-2025-09-16 19:07:04,211 - __main__ - INFO - [1/29] Adding: SONE-604 [Hacked+Subtitle]
-2025-09-16 19:07:05,215 - __main__ - INFO - [2/29] Adding: SONE-604 [Subtitle]
-2025-09-16 19:07:06,218 - __main__ - INFO - [3/29] Adding: SSIS-561 [Hacked-NoSubtitle]
-2025-09-16 19:07:07,220 - __main__ - INFO - [4/29] Adding: SSIS-561 [Subtitle]
-2025-09-16 19:07:08,223 - __main__ - INFO - [5/29] Adding: ALDN-502 [Subtitle]
-2025-09-16 19:07:09,225 - __main__ - INFO - [6/29] Adding: ALDN-503 [Subtitle]
-2025-09-16 19:07:10,228 - __main__ - INFO - [7/29] Adding: ALDN-504 [Subtitle]
-2025-09-16 19:07:11,230 - __main__ - INFO - [8/29] Adding: DVAJ-705 [Subtitle]
-2025-09-16 19:07:12,233 - __main__ - INFO - [9/29] Adding: DVAJ-706 [Subtitle]
-2025-09-16 19:07:13,236 - __main__ - INFO - [10/29] Adding: JUR-428 [Subtitle]
-2025-09-16 19:07:14,238 - __main__ - INFO - [11/29] Adding: SDNM-516 [Subtitle]
-2025-09-16 19:07:15,240 - __main__ - INFO - [12/29] Adding: START-361 [Subtitle]
-2025-09-16 19:07:16,243 - __main__ - INFO - [13/29] Adding: START-378 [Subtitle]
-2025-09-16 19:07:17,246 - __main__ - INFO - [14/29] Adding: START-381 [Subtitle]
-2025-09-16 19:07:18,248 - __main__ - INFO - [15/29] Adding: START-418 [Hacked+Subtitle]
-2025-09-16 19:07:19,251 - __main__ - INFO - [16/29] Adding: SONE-512 [Hacked-NoSubtitle]
-2025-09-16 19:07:20,253 - __main__ - INFO - [17/29] Adding: SONE-512 [NoSubtitle]
-2025-09-16 19:07:21,256 - __main__ - INFO - [18/29] Adding: SOON-005 [Hacked-NoSubtitle]
-2025-09-16 19:07:22,258 - __main__ - INFO - [19/29] Adding: SQDE-018 [Hacked-NoSubtitle]
-2025-09-16 19:07:23,261 - __main__ - INFO - [20/29] Adding: SQDE-018 [NoSubtitle]
-2025-09-16 19:07:24,263 - __main__ - INFO - [21/29] Adding: SQTE-623 [Hacked-NoSubtitle]
-2025-09-16 19:07:25,266 - __main__ - INFO - [22/29] Adding: SQTE-623 [NoSubtitle]
-2025-09-16 19:07:26,268 - __main__ - INFO - [23/29] Adding: SYKH-153 [Hacked-NoSubtitle]
-2025-09-16 19:07:27,271 - __main__ - INFO - [24/29] Adding: SYKH-153 [NoSubtitle]
-2025-09-16 19:07:28,273 - __main__ - INFO - [25/29] Adding: ABF-267 [Hacked+Subtitle]
-2025-09-16 19:07:29,276 - __main__ - INFO - [26/29] Adding: BF-304 [Hacked+Subtitle]
-2025-09-16 19:07:30,278 - __main__ - INFO - [27/29] Adding: BF-304 [NoSubtitle]
-2025-09-16 19:07:31,281 - __main__ - INFO - [28/29] Adding: MIDA-323 [NoSubtitle]
-2025-09-16 19:07:32,283 - __main__ - INFO - [29/29] Adding: FSTU-014 [NoSubtitle]
-2025-09-16 19:07:33,290 - __main__ - INFO - ==================================================
-2025-09-16 19:07:33,290 - __main__ - INFO - UPLOAD SUMMARY
-2025-09-16 19:07:33,290 - __main__ - INFO - ==================================================
-2025-09-16 19:07:33,290 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250916.csv
-2025-09-16 19:07:33,290 - __main__ - INFO - Total torrents found: 29
-2025-09-16 19:07:33,290 - __main__ - INFO - Successfully added: 29
-2025-09-16 19:07:33,290 - __main__ - INFO -   - Hacked subtitle torrents: 4
-2025-09-16 19:07:33,290 - __main__ - INFO -   - Hacked no subtitle torrents: 6
-2025-09-16 19:07:33,290 - __main__ - INFO -   - Subtitle torrents: 12
-2025-09-16 19:07:33,290 - __main__ - INFO -   - No subtitle torrents: 7
-2025-09-16 19:07:33,290 - __main__ - INFO - Failed to add: 0
-2025-09-16 19:07:33,290 - __main__ - INFO - Success rate: 100.0%
-2025-09-16 19:07:33,290 - __main__ - INFO - ==================================================
+2025-09-17 19:06:40,813 - __main__ - INFO - Starting qBittorrent uploader...
+2025-09-17 19:06:40,813 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250917.csv
+2025-09-17 19:06:40,813 - __main__ - INFO - Found 34 torrent links in Daily Report/Javdb_TodayTitle_20250917.csv
+2025-09-17 19:06:40,813 - __main__ - INFO - Skipped 3 already downloaded torrents
+2025-09-17 19:06:40,813 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-09-17 19:06:40,968 - __main__ - INFO - Successfully logged in to qBittorrent
+2025-09-17 19:06:40,968 - __main__ - INFO - History manager imported, will update downloaded status
+2025-09-17 19:06:40,968 - __main__ - INFO - Starting to add 34 torrents to qBittorrent...
+2025-09-17 19:06:40,968 - __main__ - INFO - [1/34] Adding: TEAM-093 [Hacked+Subtitle]
+2025-09-17 19:06:41,974 - __main__ - INFO - [2/34] Adding: TEAM-093 [Subtitle]
+2025-09-17 19:06:42,977 - __main__ - INFO - [3/34] Adding: VEMA-240 [Hacked-NoSubtitle]
+2025-09-17 19:06:43,979 - __main__ - INFO - [4/34] Adding: YRH-052 [Hacked-NoSubtitle]
+2025-09-17 19:06:44,983 - __main__ - INFO - [5/34] Adding: YRH-052 [Subtitle]
+2025-09-17 19:06:45,985 - __main__ - INFO - [6/34] Adding: ALDN-505 [Subtitle]
+2025-09-17 19:06:46,988 - __main__ - INFO - [7/34] Adding: HMN-721 [Subtitle]
+2025-09-17 19:06:47,990 - __main__ - INFO - [8/34] Adding: HMN-733 [Hacked+Subtitle]
+2025-09-17 19:06:48,993 - __main__ - INFO - [9/34] Adding: HMN-733 [Subtitle]
+2025-09-17 19:06:49,996 - __main__ - INFO - [10/34] Adding: HMN-734 [Subtitle]
+2025-09-17 19:06:50,999 - __main__ - INFO - [11/34] Adding: HMN-735 [Subtitle]
+2025-09-17 19:06:52,002 - __main__ - INFO - [12/34] Adding: MIAB-541 [Subtitle]
+2025-09-17 19:06:53,005 - __main__ - INFO - [13/34] Adding: MIDA-319 [Hacked+Subtitle]
+2025-09-17 19:06:54,007 - __main__ - INFO - [14/34] Adding: MIDA-319 [Subtitle]
+2025-09-17 19:06:55,009 - __main__ - INFO - [15/34] Adding: MIDA-320 [Subtitle]
+2025-09-17 19:06:56,011 - __main__ - INFO - [16/34] Adding: MIDA-324 [Subtitle]
+2025-09-17 19:06:57,014 - __main__ - INFO - [17/34] Adding: MIDA-325 [Hacked+Subtitle]
+2025-09-17 19:06:58,017 - __main__ - INFO - [18/34] Adding: MIDA-325 [Subtitle]
+2025-09-17 19:06:59,019 - __main__ - INFO - [19/34] Adding: IPVR-328 [NoSubtitle]
+2025-09-17 19:07:00,022 - __main__ - INFO - [20/34] Adding: DCV-286 [NoSubtitle]
+2025-09-17 19:07:01,025 - __main__ - INFO - [21/34] Adding: TIKB-206 [Hacked-NoSubtitle]
+2025-09-17 19:07:02,028 - __main__ - INFO - [22/34] Adding: WANZ-832 [Hacked-NoSubtitle]
+2025-09-17 19:07:03,031 - __main__ - INFO - [23/34] Adding: WANZ-832 [NoSubtitle]
+2025-09-17 19:07:04,033 - __main__ - INFO - [24/34] Adding: WSS-207 [Hacked-NoSubtitle]
+2025-09-17 19:07:05,035 - __main__ - INFO - [25/34] Adding: WSS-207 [NoSubtitle]
+2025-09-17 19:07:06,038 - __main__ - INFO - [26/34] Adding: YRH-097 [Hacked-NoSubtitle]
+2025-09-17 19:07:07,040 - __main__ - INFO - [27/34] Adding: YRH-097 [NoSubtitle]
+2025-09-17 19:07:08,043 - __main__ - INFO - [28/34] Adding: MIDA-500 [Hacked+Subtitle]
+2025-09-17 19:07:09,045 - __main__ - INFO - [29/34] Adding: MIKR-037 [Hacked+Subtitle]
+2025-09-17 19:07:10,047 - __main__ - INFO - [30/34] Adding: MIKR-037 [NoSubtitle]
+2025-09-17 19:07:11,050 - __main__ - INFO - [31/34] Adding: EBVR-114 [NoSubtitle]
+2025-09-17 19:07:12,052 - __main__ - INFO - [32/34] Adding: MIAB-525 [NoSubtitle]
+2025-09-17 19:07:13,055 - __main__ - INFO - [33/34] Adding: START-370 [NoSubtitle]
+2025-09-17 19:07:14,057 - __main__ - INFO - [34/34] Adding: START-419 [NoSubtitle]
+2025-09-17 19:07:15,060 - __main__ - INFO - ==================================================
+2025-09-17 19:07:15,060 - __main__ - INFO - UPLOAD SUMMARY
+2025-09-17 19:07:15,060 - __main__ - INFO - ==================================================
+2025-09-17 19:07:15,060 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250917.csv
+2025-09-17 19:07:15,060 - __main__ - INFO - Total torrents found: 34
+2025-09-17 19:07:15,060 - __main__ - INFO - Successfully added: 34
+2025-09-17 19:07:15,060 - __main__ - INFO -   - Hacked subtitle torrents: 6
+2025-09-17 19:07:15,060 - __main__ - INFO -   - Hacked no subtitle torrents: 6
+2025-09-17 19:07:15,060 - __main__ - INFO -   - Subtitle torrents: 12
+2025-09-17 19:07:15,060 - __main__ - INFO -   - No subtitle torrents: 10
+2025-09-17 19:07:15,060 - __main__ - INFO - Failed to add: 0
+2025-09-17 19:07:15,060 - __main__ - INFO - Success rate: 100.0%
+2025-09-17 19:07:15,060 - __main__ - INFO - ==================================================
