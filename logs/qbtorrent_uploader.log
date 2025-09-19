@@ -1,51 +1,7 @@
-2025-09-18 19:06:35,797 - __main__ - INFO - Starting qBittorrent uploader...
-2025-09-18 19:06:35,798 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250918.csv
-2025-09-18 19:06:35,798 - __main__ - INFO - Found 30 torrent links in Daily Report/Javdb_TodayTitle_20250918.csv
-2025-09-18 19:06:35,798 - __main__ - INFO - Skipped 4 already downloaded torrents
-2025-09-18 19:06:35,798 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-09-18 19:06:35,954 - __main__ - INFO - Successfully logged in to qBittorrent
-2025-09-18 19:06:35,954 - __main__ - INFO - History manager imported, will update downloaded status
-2025-09-18 19:06:35,954 - __main__ - INFO - Starting to add 30 torrents to qBittorrent...
-2025-09-18 19:06:35,954 - __main__ - INFO - [1/30] Adding: ADN-382 [Hacked-NoSubtitle]
-2025-09-18 19:06:36,960 - __main__ - INFO - [2/30] Adding: ADN-382 [Subtitle]
-2025-09-18 19:06:37,963 - __main__ - INFO - [3/30] Adding: ADN-383 [Hacked-NoSubtitle]
-2025-09-18 19:06:38,966 - __main__ - INFO - [4/30] Adding: ADN-383 [Subtitle]
-2025-09-18 19:06:39,969 - __main__ - INFO - [5/30] Adding: ADN-699 [Hacked-NoSubtitle]
-2025-09-18 19:06:40,971 - __main__ - INFO - [6/30] Adding: ADN-701 [Hacked-NoSubtitle]
-2025-09-18 19:06:41,974 - __main__ - INFO - [7/30] Adding: HMN-732 [Subtitle]
-2025-09-18 19:06:42,977 - __main__ - INFO - [8/30] Adding: HMN-745 [Subtitle]
-2025-09-18 19:06:43,979 - __main__ - INFO - [9/30] Adding: MIDA-321 [Subtitle]
-2025-09-18 19:06:44,982 - __main__ - INFO - [10/30] Adding: MIDA-322 [Subtitle]
-2025-09-18 19:06:45,984 - __main__ - INFO - [11/30] Adding: MIDA-323 [Subtitle]
-2025-09-18 19:06:46,987 - __main__ - INFO - [12/30] Adding: MIDA-324 [Hacked+Subtitle]
-2025-09-18 19:06:47,989 - __main__ - INFO - [13/30] Adding: MIDA-327 [Subtitle]
-2025-09-18 19:06:48,992 - __main__ - INFO - [14/30] Adding: MIDA-328 [Subtitle]
-2025-09-18 19:06:49,995 - __main__ - INFO - [15/30] Adding: MIDA-330 [Subtitle]
-2025-09-18 19:06:50,998 - __main__ - INFO - [16/30] Adding: MIDA-331 [Subtitle]
-2025-09-18 19:06:52,001 - __main__ - INFO - [17/30] Adding: MIDA-500 [Hacked+Subtitle]
-2025-09-18 19:06:53,004 - __main__ - INFO - [18/30] Adding: MIDA-500 [Subtitle]
-2025-09-18 19:06:54,007 - __main__ - INFO - [19/30] Adding: ATID-633 [Hacked-NoSubtitle]
-2025-09-18 19:06:55,009 - __main__ - INFO - [20/30] Adding: ATID-633 [NoSubtitle]
-2025-09-18 19:06:56,012 - __main__ - INFO - [21/30] Adding: ABF-266 [Hacked+Subtitle]
-2025-09-18 19:06:57,015 - __main__ - INFO - [22/30] Adding: ABF-266 [NoSubtitle]
-2025-09-18 19:06:58,017 - __main__ - INFO - [23/30] Adding: START-388 [Hacked+Subtitle]
-2025-09-18 19:06:59,020 - __main__ - INFO - [24/30] Adding: AKDL-342 [NoSubtitle]
-2025-09-18 19:07:00,023 - __main__ - INFO - [25/30] Adding: BDSR-540 [NoSubtitle]
-2025-09-18 19:07:01,026 - __main__ - INFO - [26/30] Adding: MRFK-009 [NoSubtitle]
-2025-09-18 19:07:02,028 - __main__ - INFO - [27/30] Adding: TIKB-205 [Hacked-NoSubtitle]
-2025-09-18 19:07:03,032 - __main__ - INFO - [28/30] Adding: TIKB-205 [NoSubtitle]
-2025-09-18 19:07:04,034 - __main__ - INFO - [29/30] Adding: VENU-245 [Hacked-NoSubtitle]
-2025-09-18 19:07:05,037 - __main__ - INFO - [30/30] Adding: VENU-245 [NoSubtitle]
-2025-09-18 19:07:06,039 - __main__ - INFO - ==================================================
-2025-09-18 19:07:06,039 - __main__ - INFO - UPLOAD SUMMARY
-2025-09-18 19:07:06,039 - __main__ - INFO - ==================================================
-2025-09-18 19:07:06,039 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250918.csv
-2025-09-18 19:07:06,039 - __main__ - INFO - Total torrents found: 30
-2025-09-18 19:07:06,039 - __main__ - INFO - Successfully added: 30
-2025-09-18 19:07:06,039 - __main__ - INFO -   - Hacked subtitle torrents: 4
-2025-09-18 19:07:06,039 - __main__ - INFO -   - Hacked no subtitle torrents: 7
-2025-09-18 19:07:06,039 - __main__ - INFO -   - Subtitle torrents: 12
-2025-09-18 19:07:06,039 - __main__ - INFO -   - No subtitle torrents: 7
-2025-09-18 19:07:06,039 - __main__ - INFO - Failed to add: 0
-2025-09-18 19:07:06,039 - __main__ - INFO - Success rate: 100.0%
-2025-09-18 19:07:06,039 - __main__ - INFO - ==================================================
+2025-09-19 19:07:47,125 - __main__ - INFO - Starting qBittorrent uploader...
+2025-09-19 19:07:47,125 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250919.csv
+2025-09-19 19:07:47,125 - __main__ - INFO - Found 30 torrent links in Daily Report/Javdb_TodayTitle_20250919.csv
+2025-09-19 19:07:47,125 - __main__ - INFO - Skipped 6 already downloaded torrents
+2025-09-19 19:07:47,125 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-09-19 19:07:50,231 - __main__ - ERROR - Login error: HTTPConnectionPool(host='101.100.165.240', port=12301): Max retries exceeded with url: /api/v2/auth/login (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x733d01bad340>: Failed to establish a new connection: [Errno 113] No route to host'))
+2025-09-19 19:07:50,231 - __main__ - ERROR - Failed to login to qBittorrent. Please check username and password.
