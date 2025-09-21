@@ -1,7 +1,58 @@
-2025-09-20 19:10:35,923 - __main__ - INFO - Starting qBittorrent uploader...
-2025-09-20 19:10:35,923 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250920.csv
-2025-09-20 19:10:35,923 - __main__ - INFO - Found 40 torrent links in Daily Report/Javdb_TodayTitle_20250920.csv
-2025-09-20 19:10:35,923 - __main__ - INFO - Skipped 3 already downloaded torrents
-2025-09-20 19:10:35,923 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-09-20 19:10:38,949 - __main__ - ERROR - Login error: HTTPConnectionPool(host='101.100.165.240', port=12301): Max retries exceeded with url: /api/v2/auth/login (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x74df2b1137a0>: Failed to establish a new connection: [Errno 113] No route to host'))
-2025-09-20 19:10:38,949 - __main__ - ERROR - Failed to login to qBittorrent. Please check username and password.
+2025-09-21 19:09:48,846 - __main__ - INFO - Starting qBittorrent uploader...
+2025-09-21 19:09:48,846 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20250921.csv
+2025-09-21 19:09:48,846 - __main__ - INFO - Found 37 torrent links in Daily Report/Javdb_TodayTitle_20250921.csv
+2025-09-21 19:09:48,846 - __main__ - INFO - Skipped 1 already downloaded torrents
+2025-09-21 19:09:48,846 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-09-21 19:09:48,997 - __main__ - INFO - Successfully logged in to qBittorrent
+2025-09-21 19:09:48,997 - __main__ - INFO - History manager imported, will update downloaded status
+2025-09-21 19:09:48,997 - __main__ - INFO - Starting to add 37 torrents to qBittorrent...
+2025-09-21 19:09:48,998 - __main__ - INFO - [1/37] Adding: EBOD-741 [Hacked-NoSubtitle]
+2025-09-21 19:09:50,000 - __main__ - INFO - [2/37] Adding: EBOD-741 [Subtitle]
+2025-09-21 19:09:51,002 - __main__ - INFO - [3/37] Adding: JUX-469 [Hacked+Subtitle]
+2025-09-21 19:09:52,005 - __main__ - INFO - [4/37] Adding: JUX-469 [Subtitle]
+2025-09-21 19:09:53,007 - __main__ - INFO - [5/37] Adding: MEYD-017 [Hacked+Subtitle]
+2025-09-21 19:09:54,010 - __main__ - INFO - [6/37] Adding: MEYD-017 [Subtitle]
+2025-09-21 19:09:55,013 - __main__ - INFO - [7/37] Adding: VEC-728 [Subtitle]
+2025-09-21 19:09:56,015 - __main__ - INFO - [8/37] Adding: VEC-729 [Subtitle]
+2025-09-21 19:09:57,018 - __main__ - INFO - [9/37] Adding: VEMA-241 [Subtitle]
+2025-09-21 19:09:58,020 - __main__ - INFO - [10/37] Adding: VEMA-242 [Subtitle]
+2025-09-21 19:09:59,023 - __main__ - INFO - [11/37] Adding: VEMA-243 [Subtitle]
+2025-09-21 19:10:00,026 - __main__ - INFO - [12/37] Adding: VENX-336 [Subtitle]
+2025-09-21 19:10:01,029 - __main__ - INFO - [13/37] Adding: VENX-338 [Subtitle]
+2025-09-21 19:10:02,031 - __main__ - INFO - [14/37] Adding: XVSR-834 [Subtitle]
+2025-09-21 19:10:03,033 - __main__ - INFO - [15/37] Adding: XVSR-835 [Subtitle]
+2025-09-21 19:10:04,036 - __main__ - INFO - [16/37] Adding: XVSR-836 [Subtitle]
+2025-09-21 19:10:05,038 - __main__ - INFO - [17/37] Adding: DASS-734 [NoSubtitle]
+2025-09-21 19:10:06,041 - __main__ - INFO - [18/37] Adding: NAMH-042 [NoSubtitle]
+2025-09-21 19:10:07,044 - __main__ - INFO - [19/37] Adding: UZU-032 [NoSubtitle]
+2025-09-21 19:10:08,046 - __main__ - INFO - [20/37] Adding: OAE-291 [NoSubtitle]
+2025-09-21 19:10:09,048 - __main__ - INFO - [21/37] Adding: DVDMS-981 [Hacked-NoSubtitle]
+2025-09-21 19:10:10,051 - __main__ - INFO - [22/37] Adding: DVDMS-981 [NoSubtitle]
+2025-09-21 19:10:11,053 - __main__ - INFO - [23/37] Adding: DVEH-062 [Hacked-NoSubtitle]
+2025-09-21 19:10:12,056 - __main__ - INFO - [24/37] Adding: DVEH-062 [NoSubtitle]
+2025-09-21 19:10:13,059 - __main__ - INFO - [25/37] Adding: DVMM-285 [Hacked-NoSubtitle]
+2025-09-21 19:10:14,062 - __main__ - INFO - [26/37] Adding: DVMM-285 [NoSubtitle]
+2025-09-21 19:10:15,065 - __main__ - INFO - [27/37] Adding: FJIN-093 [Hacked-NoSubtitle]
+2025-09-21 19:10:16,067 - __main__ - INFO - [28/37] Adding: FJIN-093 [NoSubtitle]
+2025-09-21 19:10:17,070 - __main__ - INFO - [29/37] Adding: FPRE-193 [Hacked-NoSubtitle]
+2025-09-21 19:10:18,073 - __main__ - INFO - [30/37] Adding: FPRE-193 [NoSubtitle]
+2025-09-21 19:10:19,075 - __main__ - INFO - [31/37] Adding: SONE-917 [Hacked+Subtitle]
+2025-09-21 19:10:20,077 - __main__ - INFO - [32/37] Adding: MKON-116 [NoSubtitle]
+2025-09-21 19:10:21,080 - __main__ - INFO - [33/37] Adding: ROE-402 [NoSubtitle]
+2025-09-21 19:10:22,082 - __main__ - INFO - [34/37] Adding: MISM-403 [NoSubtitle]
+2025-09-21 19:10:23,085 - __main__ - INFO - [35/37] Adding: REAL-935 [NoSubtitle]
+2025-09-21 19:10:24,087 - __main__ - INFO - [36/37] Adding: HMN-738 [NoSubtitle]
+2025-09-21 19:10:25,091 - __main__ - INFO - [37/37] Adding: ROYD-265 [NoSubtitle]
+2025-09-21 19:10:26,093 - __main__ - INFO - ==================================================
+2025-09-21 19:10:26,093 - __main__ - INFO - UPLOAD SUMMARY
+2025-09-21 19:10:26,093 - __main__ - INFO - ==================================================
+2025-09-21 19:10:26,093 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20250921.csv
+2025-09-21 19:10:26,093 - __main__ - INFO - Total torrents found: 37
+2025-09-21 19:10:26,093 - __main__ - INFO - Successfully added: 37
+2025-09-21 19:10:26,093 - __main__ - INFO -   - Hacked subtitle torrents: 3
+2025-09-21 19:10:26,093 - __main__ - INFO -   - Hacked no subtitle torrents: 6
+2025-09-21 19:10:26,093 - __main__ - INFO -   - Subtitle torrents: 13
+2025-09-21 19:10:26,093 - __main__ - INFO -   - No subtitle torrents: 15
+2025-09-21 19:10:26,093 - __main__ - INFO - Failed to add: 0
+2025-09-21 19:10:26,093 - __main__ - INFO - Success rate: 100.0%
+2025-09-21 19:10:26,093 - __main__ - INFO - ==================================================
