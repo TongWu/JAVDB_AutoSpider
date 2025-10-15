@@ -1,141 +1,134 @@
-2025-10-14 19:00:01,429 - __main__ - INFO - Starting JavDB spider...
-2025-10-14 19:00:01,429 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
-2025-10-14 19:00:01,429 - __main__ - INFO - Validating history file integrity...
-2025-10-14 19:00:01,447 - utils.history_manager - INFO - Loaded 2764 previously parsed movies from history (phase 1: 1579, phase 2: 1185)
-2025-10-14 19:00:01,447 - __main__ - INFO - ==================================================
-2025-10-14 19:00:01,447 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-10-14 19:00:01,447 - __main__ - INFO - ==================================================
-2025-10-14 19:00:03,160 - utils.parser - INFO - [Page 1] Found 9 entries for phase 1
-2025-10-14 19:00:05,663 - utils.parser - INFO - [Page 2] Found 5 entries for phase 1
-2025-10-14 19:00:08,176 - utils.parser - INFO - [Page 3] Found 8 entries for phase 1
-2025-10-14 19:00:10,688 - utils.parser - INFO - [Page 4] Found 8 entries for phase 1
-2025-10-14 19:00:13,226 - utils.parser - INFO - [Page 5] Found 0 entries for phase 1
-2025-10-14 19:00:15,735 - utils.parser - INFO - [Page 6] Found 0 entries for phase 1
-2025-10-14 19:00:18,259 - utils.parser - INFO - [Page 7] Found 0 entries for phase 1
-2025-10-14 19:00:20,799 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
-2025-10-14 19:00:23,629 - utils.parser - INFO - [Page 9] Found 0 entries for phase 1
-2025-10-14 19:00:26,194 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
-2025-10-14 19:00:28,776 - utils.parser - INFO - [Page 11] Found 0 entries for phase 1
-2025-10-14 19:00:31,353 - utils.parser - INFO - [Page 12] Found 0 entries for phase 1
-2025-10-14 19:00:33,896 - utils.parser - INFO - [Page 13] Found 0 entries for phase 1
-2025-10-14 19:00:36,405 - utils.parser - INFO - [Page 14] Found 0 entries for phase 1
-2025-10-14 19:00:39,101 - utils.parser - INFO - [Page 15] Found 0 entries for phase 1
-2025-10-14 19:00:41,633 - utils.parser - INFO - [Page 16] Found 0 entries for phase 1
-2025-10-14 19:00:44,172 - utils.parser - INFO - [Page 17] Found 0 entries for phase 1
-2025-10-14 19:00:46,716 - utils.parser - INFO - [Page 18] Found 0 entries for phase 1
-2025-10-14 19:00:49,431 - utils.parser - INFO - [Page 19] Found 0 entries for phase 1
-2025-10-14 19:00:51,960 - utils.parser - INFO - [Page 20] Found 0 entries for phase 1
-2025-10-14 19:00:57,409 - __main__ - INFO - [1/30] [Page 1] Processing HMN-737
-2025-10-14 19:01:02,857 - __main__ - INFO - [2/30] [Page 1] Processing HMN-738
-2025-10-14 19:01:08,320 - __main__ - INFO - [3/30] [Page 1] Processing IPX-177
-2025-10-14 19:01:14,801 - __main__ - INFO - [4/30] [Page 1] Processing VAGU-284
-2025-10-14 19:01:21,279 - __main__ - INFO - [5/30] [Page 1] Processing VEC-730
-2025-10-14 19:01:27,724 - __main__ - INFO - [6/30] [Page 1] Processing VEC-731
-2025-10-14 19:01:34,168 - __main__ - INFO - [7/30] [Page 1] Processing VENX-339
-2025-10-14 19:01:40,630 - __main__ - INFO - [8/30] [Page 1] Processing VOD-047
-2025-10-14 19:01:47,078 - __main__ - INFO - [9/30] [Page 1] Processing WAAA-565
-2025-10-14 19:01:53,536 - __main__ - INFO - [10/30] [Page 2] Processing WAAA-569
-2025-10-14 19:01:59,993 - __main__ - INFO - [11/30] [Page 2] Processing WAAA-570
-2025-10-14 19:02:06,438 - __main__ - INFO - [12/30] [Page 2] Processing WAAA-574
-2025-10-14 19:02:12,886 - __main__ - INFO - [13/30] [Page 2] Processing WAAA-575
-2025-10-14 19:02:19,465 - __main__ - INFO - [14/30] [Page 2] Processing WAAA-599
-2025-10-14 19:02:25,917 - __main__ - INFO - [15/30] [Page 3] Processing FNS-110
-2025-10-14 19:02:31,337 - __main__ - INFO - [16/30] [Page 3] Processing FOCS-272
-2025-10-14 19:02:36,783 - __main__ - INFO - [17/30] [Page 3] Processing FPRE-149
-2025-10-14 19:02:42,224 - __main__ - INFO - [18/30] [Page 3] Processing CAWD-871
-2025-10-14 19:02:47,637 - __main__ - INFO - [19/30] [Page 3] Processing CAWD-877
-2025-10-14 19:02:53,050 - __main__ - INFO - [20/30] [Page 3] Processing CAWD-879
-2025-10-14 19:02:58,477 - __main__ - INFO - [21/30] [Page 3] Processing CAWD-883
-2025-10-14 19:03:03,922 - __main__ - INFO - [22/30] [Page 3] Processing CAWD-884
-2025-10-14 19:03:09,375 - __main__ - INFO - [23/30] [Page 4] Processing CAWD-885
-2025-10-14 19:03:14,817 - __main__ - INFO - [24/30] [Page 4] Processing CKCK-013
-2025-10-14 19:03:20,264 - __main__ - INFO - [25/30] [Page 4] Processing CKCK-015
-2025-10-14 19:03:25,696 - __main__ - INFO - [26/30] [Page 4] Processing CKCK-018
-2025-10-14 19:03:31,125 - __main__ - INFO - [27/30] [Page 4] Processing CLUB-880
-2025-10-14 19:03:36,551 - __main__ - INFO - [28/30] [Page 4] Processing CLUB-882
-2025-10-14 19:03:42,008 - __main__ - INFO - [29/30] [Page 4] Processing START-395
-2025-10-14 19:03:47,490 - __main__ - INFO - [30/30] [Page 4] Processing START-402
-2025-10-14 19:03:47,490 - __main__ - INFO - Phase 1 completed: 12 entries processed
-2025-10-14 19:03:47,490 - __main__ - INFO - ==================================================
-2025-10-14 19:03:47,490 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-10-14 19:03:47,490 - __main__ - INFO - ==================================================
-2025-10-14 19:03:47,962 - utils.parser - INFO - [Page 1] Found 9 entries for phase 2
-2025-10-14 19:03:50,476 - utils.parser - INFO - [Page 2] Found 3 entries for phase 2
-2025-10-14 19:03:52,981 - utils.parser - INFO - [Page 3] Found 6 entries for phase 2
-2025-10-14 19:03:55,511 - utils.parser - INFO - [Page 4] Found 1 entries for phase 2
-2025-10-14 19:03:58,066 - utils.parser - INFO - [Page 5] Found 3 entries for phase 2
-2025-10-14 19:04:00,552 - utils.parser - INFO - [Page 6] Found 0 entries for phase 2
-2025-10-14 19:04:03,124 - utils.parser - INFO - [Page 7] Found 0 entries for phase 2
-2025-10-14 19:04:05,629 - utils.parser - INFO - [Page 8] Found 0 entries for phase 2
-2025-10-14 19:04:08,142 - utils.parser - INFO - [Page 9] Found 0 entries for phase 2
-2025-10-14 19:04:10,701 - utils.parser - INFO - [Page 10] Found 0 entries for phase 2
-2025-10-14 19:04:13,279 - utils.parser - INFO - [Page 11] Found 0 entries for phase 2
-2025-10-14 19:04:15,832 - utils.parser - INFO - [Page 12] Found 0 entries for phase 2
-2025-10-14 19:04:18,357 - utils.parser - INFO - [Page 13] Found 0 entries for phase 2
-2025-10-14 19:04:20,889 - utils.parser - INFO - [Page 14] Found 0 entries for phase 2
-2025-10-14 19:04:23,466 - utils.parser - INFO - [Page 15] Found 0 entries for phase 2
-2025-10-14 19:04:25,985 - utils.parser - INFO - [Page 16] Found 0 entries for phase 2
-2025-10-14 19:04:28,497 - utils.parser - INFO - [Page 17] Found 0 entries for phase 2
-2025-10-14 19:04:31,021 - utils.parser - INFO - [Page 18] Found 0 entries for phase 2
-2025-10-14 19:04:33,571 - utils.parser - INFO - [Page 19] Found 0 entries for phase 2
-2025-10-14 19:04:36,119 - utils.parser - INFO - [Page 20] Found 0 entries for phase 2
-2025-10-14 19:04:41,569 - __main__ - INFO - [1/22] [Page 1] Processing GVH-782
-2025-10-14 19:04:48,000 - __main__ - INFO - [2/22] [Page 1] Processing HALT-070
-2025-10-14 19:04:54,574 - __main__ - INFO - [3/22] [Page 1] Processing HAWA-365
-2025-10-14 19:05:01,094 - __main__ - INFO - [4/22] [Page 1] Processing HFD-106
-2025-10-14 19:05:07,541 - __main__ - INFO - [5/22] [Page 1] Processing HMN-674
-2025-10-14 19:05:13,984 - __main__ - INFO - [6/22] [Page 1] Processing HMN-677
-2025-10-14 19:05:20,439 - __main__ - INFO - [7/22] [Page 1] Processing HMN-724
-2025-10-14 19:05:26,887 - __main__ - INFO - [8/22] [Page 1] Processing JUR-477
-2025-10-14 19:05:33,343 - __main__ - INFO - [9/22] [Page 1] Processing START-187
-2025-10-14 19:05:39,801 - __main__ - INFO - [10/22] [Page 2] Processing TKOU-020
-2025-10-14 19:05:46,253 - __main__ - INFO - [11/22] [Page 2] Processing BDST-083
-2025-10-14 19:05:52,700 - __main__ - INFO - [12/22] [Page 2] Processing ACHJ-071
-2025-10-14 19:05:58,184 - __main__ - INFO - [13/22] [Page 3] Processing IPZZ-681
-2025-10-14 19:06:03,609 - __main__ - INFO - [14/22] [Page 3] Processing RKI-727
-2025-10-14 19:06:09,059 - __main__ - INFO - [15/22] [Page 3] Processing EKW-054
-2025-10-14 19:06:15,498 - __main__ - INFO - [16/22] [Page 3] Processing FLAV-404
-2025-10-14 19:06:21,953 - __main__ - INFO - [17/22] [Page 3] Processing FNS-099
-2025-10-14 19:06:28,375 - __main__ - INFO - [18/22] [Page 3] Processing FNS-101
-2025-10-14 19:06:34,876 - __main__ - INFO - [19/22] [Page 4] Processing SONE-912
-2025-10-14 19:06:40,317 - __main__ - INFO - [20/22] [Page 5] Processing DNJR-148
-2025-10-14 19:06:45,797 - __main__ - INFO - [21/22] [Page 5] Processing JUR-485
-2025-10-14 19:06:51,241 - __main__ - INFO - [22/22] [Page 5] Processing SONE-971
-2025-10-14 19:06:51,241 - __main__ - INFO - Phase 2 completed: 11 entries processed
-2025-10-14 19:06:51,241 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251014.csv
-2025-10-14 19:06:51,241 - __main__ - INFO - ==================================================
-2025-10-14 19:06:51,241 - __main__ - INFO - SUMMARY REPORT
-2025-10-14 19:06:51,241 - __main__ - INFO - ==================================================
-2025-10-14 19:06:51,241 - __main__ - INFO - Pages processed: 1 to 20
-2025-10-14 19:06:51,241 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-10-14 19:06:51,241 - __main__ - INFO - ==============================
-2025-10-14 19:06:51,241 - __main__ - INFO - PHASE 1 SUMMARY
-2025-10-14 19:06:51,241 - __main__ - INFO - ==============================
-2025-10-14 19:06:51,241 - __main__ - INFO - Phase 1 entries found: 12
-2025-10-14 19:06:51,241 - __main__ - INFO -   - Subtitle torrents: 12 (100.0%)
-2025-10-14 19:06:51,241 - __main__ - INFO -   - Hacked subtitle torrents: 2 (16.7%)
-2025-10-14 19:06:51,241 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
-2025-10-14 19:06:51,241 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
-2025-10-14 19:06:51,241 - __main__ - INFO - ==============================
-2025-10-14 19:06:51,241 - __main__ - INFO - PHASE 2 SUMMARY
-2025-10-14 19:06:51,241 - __main__ - INFO - ==============================
-2025-10-14 19:06:51,241 - __main__ - INFO - Phase 2 entries found: 11
-2025-10-14 19:06:51,241 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
-2025-10-14 19:06:51,241 - __main__ - INFO -   - Hacked subtitle torrents: 2 (18.2%)
-2025-10-14 19:06:51,241 - __main__ - INFO -   - Hacked no-subtitle torrents: 7 (63.6%)
-2025-10-14 19:06:51,241 - __main__ - INFO -   - No-subtitle torrents: 11 (100.0%)
-2025-10-14 19:06:51,242 - __main__ - INFO - ==============================
-2025-10-14 19:06:51,242 - __main__ - INFO - OVERALL SUMMARY
-2025-10-14 19:06:51,242 - __main__ - INFO - ==============================
-2025-10-14 19:06:51,242 - __main__ - INFO - Total entries found: 23
-2025-10-14 19:06:51,242 - __main__ - INFO - Successfully processed: 23
-2025-10-14 19:06:51,242 - __main__ - INFO - Skipped already parsed in this session: 52
-2025-10-14 19:06:51,242 - __main__ - INFO - Skipped already parsed in previous runs: 1579
-2025-10-14 19:06:51,242 - __main__ - INFO - Current parsed links in memory: 52
-2025-10-14 19:06:51,242 - __main__ - INFO - Overall subtitle torrents: 12 (52.2%)
-2025-10-14 19:06:51,242 - __main__ - INFO - Overall hacked subtitle torrents: 4 (17.4%)
-2025-10-14 19:06:51,242 - __main__ - INFO - Overall hacked no-subtitle torrents: 7 (30.4%)
-2025-10-14 19:06:51,242 - __main__ - INFO - Overall no-subtitle torrents: 11 (47.8%)
-2025-10-14 19:06:51,242 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251014.csv
-2025-10-14 19:06:51,242 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-10-14 19:06:51,242 - __main__ - INFO - ==================================================
+2025-10-15 19:00:01,695 - __main__ - INFO - Starting JavDB spider...
+2025-10-15 19:00:01,695 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
+2025-10-15 19:00:01,695 - __main__ - INFO - Validating history file integrity...
+2025-10-15 19:00:01,715 - utils.history_manager - INFO - Loaded 2784 previously parsed movies from history (phase 1: 1591, phase 2: 1193)
+2025-10-15 19:00:01,716 - __main__ - INFO - ==================================================
+2025-10-15 19:00:01,716 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-10-15 19:00:01,716 - __main__ - INFO - ==================================================
+2025-10-15 19:00:03,668 - utils.parser - INFO - [Page 1] Found 3 entries for phase 1
+2025-10-15 19:00:06,167 - utils.parser - INFO - [Page 2] Found 0 entries for phase 1
+2025-10-15 19:00:08,672 - utils.parser - INFO - [Page 3] Found 2 entries for phase 1
+2025-10-15 19:00:11,171 - utils.parser - INFO - [Page 4] Found 12 entries for phase 1
+2025-10-15 19:00:13,686 - utils.parser - INFO - [Page 5] Found 0 entries for phase 1
+2025-10-15 19:00:16,186 - utils.parser - INFO - [Page 6] Found 0 entries for phase 1
+2025-10-15 19:00:18,698 - utils.parser - INFO - [Page 7] Found 0 entries for phase 1
+2025-10-15 19:00:21,196 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
+2025-10-15 19:00:23,716 - utils.parser - INFO - [Page 9] Found 0 entries for phase 1
+2025-10-15 19:00:26,264 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
+2025-10-15 19:00:28,873 - utils.parser - INFO - [Page 11] Found 0 entries for phase 1
+2025-10-15 19:00:31,391 - utils.parser - INFO - [Page 12] Found 0 entries for phase 1
+2025-10-15 19:00:33,901 - utils.parser - INFO - [Page 13] Found 0 entries for phase 1
+2025-10-15 19:00:36,420 - utils.parser - INFO - [Page 14] Found 0 entries for phase 1
+2025-10-15 19:00:39,010 - utils.parser - INFO - [Page 15] Found 0 entries for phase 1
+2025-10-15 19:00:41,550 - utils.parser - INFO - [Page 16] Found 0 entries for phase 1
+2025-10-15 19:00:44,071 - utils.parser - INFO - [Page 17] Found 0 entries for phase 1
+2025-10-15 19:00:46,782 - utils.parser - INFO - [Page 18] Found 0 entries for phase 1
+2025-10-15 19:00:49,376 - utils.parser - INFO - [Page 19] Found 0 entries for phase 1
+2025-10-15 19:00:51,959 - utils.parser - INFO - [Page 20] Found 0 entries for phase 1
+2025-10-15 19:00:57,429 - __main__ - INFO - [1/17] [Page 1] Processing HMN-739
+2025-10-15 19:01:03,887 - __main__ - INFO - [2/17] [Page 1] Processing HNTRZ-022
+2025-10-15 19:01:10,349 - __main__ - INFO - [3/17] [Page 1] Processing HTMS-022
+2025-10-15 19:01:17,016 - __main__ - INFO - [4/17] [Page 3] Processing HMN-737
+2025-10-15 19:01:22,272 - __main__ - INFO - [5/17] [Page 3] Processing HMN-738
+2025-10-15 19:01:27,714 - __main__ - INFO - [6/17] [Page 4] Processing IPX-177
+2025-10-15 19:01:33,163 - __main__ - INFO - [7/17] [Page 4] Processing VAGU-284
+2025-10-15 19:01:38,607 - __main__ - INFO - [8/17] [Page 4] Processing VEC-730
+2025-10-15 19:01:44,042 - __main__ - INFO - [9/17] [Page 4] Processing VEC-731
+2025-10-15 19:01:49,545 - __main__ - INFO - [10/17] [Page 4] Processing VENX-339
+2025-10-15 19:01:55,007 - __main__ - INFO - [11/17] [Page 4] Processing VOD-047
+2025-10-15 19:02:00,445 - __main__ - INFO - [12/17] [Page 4] Processing WAAA-565
+2025-10-15 19:02:05,891 - __main__ - INFO - [13/17] [Page 4] Processing WAAA-569
+2025-10-15 19:02:11,339 - __main__ - INFO - [14/17] [Page 4] Processing WAAA-570
+2025-10-15 19:02:16,783 - __main__ - INFO - [15/17] [Page 4] Processing WAAA-574
+2025-10-15 19:02:22,228 - __main__ - INFO - [16/17] [Page 4] Processing WAAA-575
+2025-10-15 19:02:27,726 - __main__ - INFO - [17/17] [Page 4] Processing WAAA-599
+2025-10-15 19:02:27,726 - __main__ - INFO - Phase 1 completed: 3 entries processed
+2025-10-15 19:02:27,726 - __main__ - INFO - ==================================================
+2025-10-15 19:02:27,726 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-10-15 19:02:27,726 - __main__ - INFO - ==================================================
+2025-10-15 19:02:28,233 - utils.parser - INFO - [Page 1] Found 2 entries for phase 2
+2025-10-15 19:02:30,735 - utils.parser - INFO - [Page 2] Found 13 entries for phase 2
+2025-10-15 19:02:33,073 - utils.parser - INFO - [Page 3] Found 5 entries for phase 2
+2025-10-15 19:02:35,551 - utils.parser - INFO - [Page 4] Found 8 entries for phase 2
+2025-10-15 19:02:38,082 - utils.parser - INFO - [Page 5] Found 0 entries for phase 2
+2025-10-15 19:02:40,641 - utils.parser - INFO - [Page 6] Found 0 entries for phase 2
+2025-10-15 19:02:43,160 - utils.parser - INFO - [Page 7] Found 0 entries for phase 2
+2025-10-15 19:02:45,659 - utils.parser - INFO - [Page 8] Found 0 entries for phase 2
+2025-10-15 19:02:48,191 - utils.parser - INFO - [Page 9] Found 0 entries for phase 2
+2025-10-15 19:02:50,681 - utils.parser - INFO - [Page 10] Found 0 entries for phase 2
+2025-10-15 19:02:53,232 - utils.parser - INFO - [Page 11] Found 0 entries for phase 2
+2025-10-15 19:02:55,755 - utils.parser - INFO - [Page 12] Found 0 entries for phase 2
+2025-10-15 19:02:58,301 - utils.parser - INFO - [Page 13] Found 0 entries for phase 2
+2025-10-15 19:03:00,811 - utils.parser - INFO - [Page 14] Found 0 entries for phase 2
+2025-10-15 19:03:03,362 - utils.parser - INFO - [Page 15] Found 0 entries for phase 2
+2025-10-15 19:03:05,875 - utils.parser - INFO - [Page 16] Found 0 entries for phase 2
+2025-10-15 19:03:08,406 - utils.parser - INFO - [Page 17] Found 0 entries for phase 2
+2025-10-15 19:03:10,919 - utils.parser - INFO - [Page 18] Found 0 entries for phase 2
+2025-10-15 19:03:13,470 - utils.parser - INFO - [Page 19] Found 0 entries for phase 2
+2025-10-15 19:03:16,014 - utils.parser - INFO - [Page 20] Found 0 entries for phase 2
+2025-10-15 19:03:21,312 - __main__ - INFO - [1/28] [Page 1] Processing IPZZ-671
+2025-10-15 19:03:27,784 - __main__ - INFO - [2/28] [Page 1] Processing IPZZ-672
+2025-10-15 19:03:33,272 - __main__ - INFO - [3/28] [Page 2] Processing IPZZ-673
+2025-10-15 19:03:39,892 - __main__ - INFO - [4/28] [Page 2] Processing IPZZ-674
+2025-10-15 19:03:46,349 - __main__ - INFO - [5/28] [Page 2] Processing IPZZ-676
+2025-10-15 19:03:52,820 - __main__ - INFO - [6/28] [Page 2] Processing IPZZ-677
+2025-10-15 19:03:58,282 - __main__ - INFO - [7/28] [Page 2] Processing IPZZ-679
+2025-10-15 19:04:03,714 - __main__ - INFO - [8/28] [Page 2] Processing JUR-501
+2025-10-15 19:04:09,164 - __main__ - INFO - [9/28] [Page 2] Processing JUR-502
+2025-10-15 19:04:14,450 - __main__ - INFO - [10/28] [Page 2] Processing JUR-506
+2025-10-15 19:04:19,898 - __main__ - INFO - [11/28] [Page 2] Processing JUR-552
+2025-10-15 19:04:26,342 - __main__ - INFO - [12/28] [Page 2] Processing MLA-249
+2025-10-15 19:04:32,798 - __main__ - INFO - [13/28] [Page 2] Processing NAMH-044
+2025-10-15 19:04:39,255 - __main__ - INFO - [14/28] [Page 2] Processing MIUM-1264
+2025-10-15 19:04:45,705 - __main__ - INFO - [15/28] [Page 2] Processing BBAN-551
+2025-10-15 19:04:52,154 - __main__ - INFO - [16/28] [Page 3] Processing AVSA-401
+2025-10-15 19:04:57,607 - __main__ - INFO - [17/28] [Page 3] Processing BONY-162
+2025-10-15 19:05:04,090 - __main__ - INFO - [18/28] [Page 3] Processing LUXU-1858
+2025-10-15 19:05:10,541 - __main__ - INFO - [19/28] [Page 3] Processing GVH-782
+2025-10-15 19:05:16,997 - __main__ - INFO - [20/28] [Page 3] Processing HALT-070
+2025-10-15 19:05:23,475 - __main__ - INFO - [21/28] [Page 4] Processing HAWA-365
+2025-10-15 19:05:29,980 - __main__ - INFO - [22/28] [Page 4] Processing HFD-106
+2025-10-15 19:05:36,424 - __main__ - INFO - [23/28] [Page 4] Processing HMN-674
+2025-10-15 19:05:42,924 - __main__ - INFO - [24/28] [Page 4] Processing HMN-677
+2025-10-15 19:05:49,373 - __main__ - INFO - [25/28] [Page 4] Processing HMN-724
+2025-10-15 19:05:55,814 - __main__ - INFO - [26/28] [Page 4] Processing JUR-477
+2025-10-15 19:06:01,263 - __main__ - INFO - [27/28] [Page 4] Processing START-187
+2025-10-15 19:06:06,697 - __main__ - INFO - [28/28] [Page 4] Processing TKOU-020
+2025-10-15 19:06:06,697 - __main__ - INFO - Phase 2 completed: 11 entries processed
+2025-10-15 19:06:06,697 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251015.csv
+2025-10-15 19:06:06,697 - __main__ - INFO - ==================================================
+2025-10-15 19:06:06,697 - __main__ - INFO - SUMMARY REPORT
+2025-10-15 19:06:06,697 - __main__ - INFO - ==================================================
+2025-10-15 19:06:06,697 - __main__ - INFO - Pages processed: 1 to 20
+2025-10-15 19:06:06,697 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-10-15 19:06:06,697 - __main__ - INFO - ==============================
+2025-10-15 19:06:06,697 - __main__ - INFO - PHASE 1 SUMMARY
+2025-10-15 19:06:06,697 - __main__ - INFO - ==============================
+2025-10-15 19:06:06,697 - __main__ - INFO - Phase 1 entries found: 3
+2025-10-15 19:06:06,697 - __main__ - INFO -   - Subtitle torrents: 3 (100.0%)
+2025-10-15 19:06:06,697 - __main__ - INFO -   - Hacked subtitle torrents: 0 (0.0%)
+2025-10-15 19:06:06,697 - __main__ - INFO -   - Hacked no-subtitle torrents: 3 (100.0%)
+2025-10-15 19:06:06,697 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
+2025-10-15 19:06:06,697 - __main__ - INFO - ==============================
+2025-10-15 19:06:06,697 - __main__ - INFO - PHASE 2 SUMMARY
+2025-10-15 19:06:06,697 - __main__ - INFO - ==============================
+2025-10-15 19:06:06,697 - __main__ - INFO - Phase 2 entries found: 11
+2025-10-15 19:06:06,697 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
+2025-10-15 19:06:06,697 - __main__ - INFO -   - Hacked subtitle torrents: 3 (27.3%)
+2025-10-15 19:06:06,697 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
+2025-10-15 19:06:06,697 - __main__ - INFO -   - No-subtitle torrents: 11 (100.0%)
+2025-10-15 19:06:06,697 - __main__ - INFO - ==============================
+2025-10-15 19:06:06,697 - __main__ - INFO - OVERALL SUMMARY
+2025-10-15 19:06:06,697 - __main__ - INFO - ==============================
+2025-10-15 19:06:06,697 - __main__ - INFO - Total entries found: 14
+2025-10-15 19:06:06,697 - __main__ - INFO - Successfully processed: 14
+2025-10-15 19:06:06,697 - __main__ - INFO - Skipped already parsed in this session: 45
+2025-10-15 19:06:06,697 - __main__ - INFO - Skipped already parsed in previous runs: 1591
+2025-10-15 19:06:06,697 - __main__ - INFO - Current parsed links in memory: 45
+2025-10-15 19:06:06,697 - __main__ - INFO - Overall subtitle torrents: 3 (21.4%)
+2025-10-15 19:06:06,697 - __main__ - INFO - Overall hacked subtitle torrents: 3 (21.4%)
+2025-10-15 19:06:06,697 - __main__ - INFO - Overall hacked no-subtitle torrents: 3 (21.4%)
+2025-10-15 19:06:06,697 - __main__ - INFO - Overall no-subtitle torrents: 11 (78.6%)
+2025-10-15 19:06:06,697 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251015.csv
+2025-10-15 19:06:06,697 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-10-15 19:06:06,697 - __main__ - INFO - ==================================================
