@@ -1,53 +1,37 @@
-2025-10-14 19:06:51,325 - __main__ - INFO - Starting qBittorrent uploader...
-2025-10-14 19:06:51,325 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251014.csv
-2025-10-14 19:06:51,325 - __main__ - INFO - Found 32 torrent links in Daily Report/Javdb_TodayTitle_20251014.csv
-2025-10-14 19:06:51,325 - __main__ - INFO - Skipped 2 already downloaded torrents
-2025-10-14 19:06:51,325 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-10-14 19:06:51,484 - __main__ - INFO - Successfully logged in to qBittorrent
-2025-10-14 19:06:51,484 - __main__ - INFO - History manager imported, will update downloaded status
-2025-10-14 19:06:51,484 - __main__ - INFO - Starting to add 32 torrents to qBittorrent...
-2025-10-14 19:06:51,484 - __main__ - INFO - [1/32] Adding: IPX-177 [Hacked+Subtitle]
-2025-10-14 19:06:52,493 - __main__ - INFO - [2/32] Adding: IPX-177 [Subtitle]
-2025-10-14 19:06:53,496 - __main__ - INFO - [3/32] Adding: VAGU-284 [Subtitle]
-2025-10-14 19:06:54,499 - __main__ - INFO - [4/32] Adding: VEC-730 [Subtitle]
-2025-10-14 19:06:55,502 - __main__ - INFO - [5/32] Adding: VEC-731 [Subtitle]
-2025-10-14 19:06:56,505 - __main__ - INFO - [6/32] Adding: VENX-339 [Subtitle]
-2025-10-14 19:06:57,507 - __main__ - INFO - [7/32] Adding: VOD-047 [Subtitle]
-2025-10-14 19:06:58,509 - __main__ - INFO - [8/32] Adding: WAAA-565 [Hacked+Subtitle]
-2025-10-14 19:06:59,512 - __main__ - INFO - [9/32] Adding: WAAA-565 [Subtitle]
-2025-10-14 19:07:00,515 - __main__ - INFO - [10/32] Adding: WAAA-569 [Subtitle]
-2025-10-14 19:07:01,517 - __main__ - INFO - [11/32] Adding: WAAA-570 [Subtitle]
-2025-10-14 19:07:02,520 - __main__ - INFO - [12/32] Adding: WAAA-574 [Subtitle]
-2025-10-14 19:07:03,523 - __main__ - INFO - [13/32] Adding: WAAA-575 [Subtitle]
-2025-10-14 19:07:04,525 - __main__ - INFO - [14/32] Adding: WAAA-599 [Subtitle]
-2025-10-14 19:07:05,528 - __main__ - INFO - [15/32] Adding: GVH-782 [Hacked-NoSubtitle]
-2025-10-14 19:07:06,530 - __main__ - INFO - [16/32] Adding: GVH-782 [NoSubtitle]
-2025-10-14 19:07:07,533 - __main__ - INFO - [17/32] Adding: HALT-070 [Hacked-NoSubtitle]
-2025-10-14 19:07:08,535 - __main__ - INFO - [18/32] Adding: HAWA-365 [Hacked-NoSubtitle]
-2025-10-14 19:07:09,538 - __main__ - INFO - [19/32] Adding: HAWA-365 [NoSubtitle]
-2025-10-14 19:07:10,541 - __main__ - INFO - [20/32] Adding: HFD-106 [Hacked-NoSubtitle]
-2025-10-14 19:07:11,544 - __main__ - INFO - [21/32] Adding: HFD-106 [NoSubtitle]
-2025-10-14 19:07:12,547 - __main__ - INFO - [22/32] Adding: HMN-674 [Hacked-NoSubtitle]
-2025-10-14 19:07:13,550 - __main__ - INFO - [23/32] Adding: HMN-674 [NoSubtitle]
-2025-10-14 19:07:14,553 - __main__ - INFO - [24/32] Adding: HMN-677 [Hacked-NoSubtitle]
-2025-10-14 19:07:15,556 - __main__ - INFO - [25/32] Adding: HMN-677 [NoSubtitle]
-2025-10-14 19:07:16,558 - __main__ - INFO - [26/32] Adding: HMN-724 [Hacked-NoSubtitle]
-2025-10-14 19:07:17,561 - __main__ - INFO - [27/32] Adding: HMN-724 [NoSubtitle]
-2025-10-14 19:07:18,563 - __main__ - INFO - [28/32] Adding: JUR-477 [Hacked+Subtitle]
-2025-10-14 19:07:19,566 - __main__ - INFO - [29/32] Adding: START-187 [Hacked+Subtitle]
-2025-10-14 19:07:20,569 - __main__ - INFO - [30/32] Adding: START-187 [NoSubtitle]
-2025-10-14 19:07:21,571 - __main__ - INFO - [31/32] Adding: TKOU-020 [NoSubtitle]
-2025-10-14 19:07:22,573 - __main__ - INFO - [32/32] Adding: BDST-083 [NoSubtitle]
-2025-10-14 19:07:23,575 - __main__ - INFO - ==================================================
-2025-10-14 19:07:23,576 - __main__ - INFO - UPLOAD SUMMARY
-2025-10-14 19:07:23,576 - __main__ - INFO - ==================================================
-2025-10-14 19:07:23,576 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251014.csv
-2025-10-14 19:07:23,576 - __main__ - INFO - Total torrents found: 32
-2025-10-14 19:07:23,576 - __main__ - INFO - Successfully added: 32
-2025-10-14 19:07:23,576 - __main__ - INFO -   - Hacked subtitle torrents: 4
-2025-10-14 19:07:23,576 - __main__ - INFO -   - Hacked no subtitle torrents: 7
-2025-10-14 19:07:23,576 - __main__ - INFO -   - Subtitle torrents: 12
-2025-10-14 19:07:23,576 - __main__ - INFO -   - No subtitle torrents: 9
-2025-10-14 19:07:23,576 - __main__ - INFO - Failed to add: 0
-2025-10-14 19:07:23,576 - __main__ - INFO - Success rate: 100.0%
-2025-10-14 19:07:23,576 - __main__ - INFO - ==================================================
+2025-10-15 19:06:06,819 - __main__ - INFO - Starting qBittorrent uploader...
+2025-10-15 19:06:06,819 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251015.csv
+2025-10-15 19:06:06,819 - __main__ - INFO - Found 16 torrent links in Daily Report/Javdb_TodayTitle_20251015.csv
+2025-10-15 19:06:06,819 - __main__ - INFO - Skipped 4 already downloaded torrents
+2025-10-15 19:06:06,819 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-10-15 19:06:06,975 - __main__ - INFO - Successfully logged in to qBittorrent
+2025-10-15 19:06:06,975 - __main__ - INFO - History manager imported, will update downloaded status
+2025-10-15 19:06:06,976 - __main__ - INFO - Starting to add 16 torrents to qBittorrent...
+2025-10-15 19:06:06,976 - __main__ - INFO - [1/16] Adding: HMN-739 [Hacked-NoSubtitle]
+2025-10-15 19:06:07,979 - __main__ - INFO - [2/16] Adding: HNTRZ-022 [Hacked-NoSubtitle]
+2025-10-15 19:06:08,982 - __main__ - INFO - [3/16] Adding: HTMS-022 [Hacked-NoSubtitle]
+2025-10-15 19:06:09,985 - __main__ - INFO - [4/16] Adding: HTMS-022 [Subtitle]
+2025-10-15 19:06:10,988 - __main__ - INFO - [5/16] Adding: IPZZ-671 [Hacked+Subtitle]
+2025-10-15 19:06:11,993 - __main__ - INFO - [6/16] Adding: IPZZ-671 [NoSubtitle]
+2025-10-15 19:06:12,997 - __main__ - INFO - [7/16] Adding: IPZZ-673 [Hacked+Subtitle]
+2025-10-15 19:06:14,000 - __main__ - INFO - [8/16] Adding: IPZZ-674 [Hacked+Subtitle]
+2025-10-15 19:06:15,003 - __main__ - INFO - [9/16] Adding: IPZZ-676 [NoSubtitle]
+2025-10-15 19:06:16,005 - __main__ - INFO - [10/16] Adding: JUR-552 [NoSubtitle]
+2025-10-15 19:06:17,008 - __main__ - INFO - [11/16] Adding: MLA-249 [NoSubtitle]
+2025-10-15 19:06:18,011 - __main__ - INFO - [12/16] Adding: NAMH-044 [NoSubtitle]
+2025-10-15 19:06:19,014 - __main__ - INFO - [13/16] Adding: MIUM-1264 [NoSubtitle]
+2025-10-15 19:06:20,017 - __main__ - INFO - [14/16] Adding: BBAN-551 [NoSubtitle]
+2025-10-15 19:06:21,020 - __main__ - INFO - [15/16] Adding: BONY-162 [NoSubtitle]
+2025-10-15 19:06:22,023 - __main__ - INFO - [16/16] Adding: LUXU-1858 [NoSubtitle]
+2025-10-15 19:06:23,027 - __main__ - INFO - ==================================================
+2025-10-15 19:06:23,027 - __main__ - INFO - UPLOAD SUMMARY
+2025-10-15 19:06:23,027 - __main__ - INFO - ==================================================
+2025-10-15 19:06:23,027 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251015.csv
+2025-10-15 19:06:23,027 - __main__ - INFO - Total torrents found: 16
+2025-10-15 19:06:23,027 - __main__ - INFO - Successfully added: 16
+2025-10-15 19:06:23,027 - __main__ - INFO -   - Hacked subtitle torrents: 3
+2025-10-15 19:06:23,027 - __main__ - INFO -   - Hacked no subtitle torrents: 3
+2025-10-15 19:06:23,027 - __main__ - INFO -   - Subtitle torrents: 1
+2025-10-15 19:06:23,027 - __main__ - INFO -   - No subtitle torrents: 9
+2025-10-15 19:06:23,027 - __main__ - INFO - Failed to add: 0
+2025-10-15 19:06:23,027 - __main__ - INFO - Success rate: 100.0%
+2025-10-15 19:06:23,027 - __main__ - INFO - ==================================================
