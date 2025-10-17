@@ -1,66 +1,82 @@
-2025-10-16 19:00:02,017 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20251016.csv
-2025-10-16 19:00:02,017 - __main__ - INFO - ============================================================
-2025-10-16 19:00:02,017 - __main__ - INFO - STARTING JAVDB PIPELINE
-2025-10-16 19:00:02,017 - __main__ - INFO - MODE: Daily
-2025-10-16 19:00:02,017 - __main__ - INFO - ============================================================
-2025-10-16 19:00:02,017 - __main__ - INFO - Step 1: Running JavDB Spider...
-2025-10-16 19:00:02,017 - __main__ - INFO - Running: python3 Javdb_Spider.py
-2025-10-16 19:05:29,372 - __main__ - INFO - ✓ JavDB Spider completed successfully
-2025-10-16 19:05:29,372 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
-2025-10-16 19:05:29,372 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode daily
-2025-10-16 19:05:55,704 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
-2025-10-16 19:05:55,705 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
-2025-10-16 19:05:55,705 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
-2025-10-16 19:05:55,705 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-10-13)
-2025-10-16 19:05:55,853 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
-2025-10-16 19:05:55,867 - pikpak_bridge - INFO - Found 34 torrents across categories ['Daily Ingestion', 'Ad Hoc']
-2025-10-16 19:05:55,867 - pikpak_bridge - INFO - Filtered 2 torrents older than 3 days
-2025-10-16 19:05:55,867 - pikpak_bridge - INFO - Using batch mode: uploading all torrents in one session
-2025-10-16 19:05:55,867 - pikpak_bridge - INFO - Starting batch upload of 2 torrents to PikPak...
-2025-10-16 19:05:55,959 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
-2025-10-16 19:05:56,062 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
-2025-10-16 19:05:56,082 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
-2025-10-16 19:05:56,082 - pikpak_bridge - INFO - Starting batch upload of 2 torrents to PikPak...
-2025-10-16 19:05:56,082 - pikpak_bridge - INFO - Processing magnet 1/2: magnet:?xt=urn:btih:0cee3ddb4cef5bd6019f299a239a5efd072e2433&dn=%5Bjavdb.com%5D%E7%AC%AC%E4%B8%80%E6...
-2025-10-16 19:05:56,395 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-10-16 19:05:56,396 - pikpak_bridge - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:0cee3ddb4cef5bd6019f299a239a5efd072e2433&dn=%5Bjavdb.com%5D%E7%AC%AC%E4%B8%80%E6...
-2025-10-16 19:05:59,399 - pikpak_bridge - INFO - Processing magnet 2/2: magnet:?xt=urn:btih:13fe76f3dcc19dff1de385b54d2bded585128d98&dn=%5Bjavdb.com%5DEKW054&xl=5087353514...
-2025-10-16 19:05:59,564 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
-2025-10-16 19:05:59,565 - pikpak_bridge - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:13fe76f3dcc19dff1de385b54d2bded585128d98&dn=%5Bjavdb.com%5DEKW054&xl=5087353514...
-2025-10-16 19:05:59,565 - pikpak_bridge - INFO - Batch upload completed: 2 successful, 0 failed
-2025-10-16 19:05:59,566 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]第一會所新片@SIS001@FNS-099
-2025-10-16 19:05:59,566 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]第一會所新片@SIS001@FNS-099 - success
-2025-10-16 19:05:59,570 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-10-16 19:05:59,570 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]第一會所新片@SIS001@FNS-099
-2025-10-16 19:05:59,570 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]EKW054
-2025-10-16 19:05:59,570 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]EKW054 - success
-2025-10-16 19:05:59,572 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
-2025-10-16 19:05:59,572 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]EKW054
-2025-10-16 19:05:59,572 - pikpak_bridge - INFO - ============================================================
-2025-10-16 19:05:59,572 - pikpak_bridge - INFO - PIKPAK BRIDGE TRANSFER SUMMARY
-2025-10-16 19:05:59,572 - pikpak_bridge - INFO - ============================================================
-2025-10-16 19:05:59,572 - pikpak_bridge - INFO - Processed categories: ['Daily Ingestion']
-2025-10-16 19:05:59,572 - pikpak_bridge - INFO - Total torrents found (older than 3 days): 2
-2025-10-16 19:05:59,572 - pikpak_bridge - INFO - Category 'Daily Ingestion': 2 total, 2 successful, 0 failed
-2025-10-16 19:05:59,572 - pikpak_bridge - INFO - Overall: 2 successful, 0 failed
-2025-10-16 19:05:59,572 - pikpak_bridge - INFO - Success rate: 100.0%
-2025-10-16 19:05:59,572 - pikpak_bridge - INFO - 
-2025-10-16 19:05:59,572 - pikpak_bridge - INFO - ✓ Successfully transferred torrents:
-2025-10-16 19:05:59,572 - pikpak_bridge - INFO -   - [javdb.com]第一會所新片@SIS001@FNS-099
-2025-10-16 19:05:59,572 - pikpak_bridge - INFO -   - [javdb.com]EKW054
-2025-10-16 19:05:59,572 - pikpak_bridge - INFO - 
-2025-10-16 19:05:59,572 - pikpak_bridge - INFO - PikPak transfer history saved to: Daily Report/pikpak_bridge_history.csv
-2025-10-16 19:05:59,572 - pikpak_bridge - INFO - ============================================================
-2025-10-16 19:05:59,572 - __main__ - INFO - PikPak Bridge completed successfully
-2025-10-16 19:05:59,572 - __main__ - INFO - ✓ PikPak Bridge completed successfully
-2025-10-16 19:05:59,572 - __main__ - INFO - ============================================================
-2025-10-16 19:05:59,572 - __main__ - INFO - PIPELINE COMPLETED SUCCESSFULLY
-2025-10-16 19:05:59,572 - __main__ - INFO - ============================================================
-2025-10-16 19:05:59,576 - __main__ - INFO - Connecting to SMTP server...
-2025-10-16 19:06:02,868 - __main__ - INFO - Email sent successfully.
-2025-10-16 19:06:02,868 - __main__ - INFO - Final commit for pipeline log...
-2025-10-16 19:06:02,868 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
-2025-10-16 19:06:02,887 - __main__ - INFO - Pulling latest changes from remote repository...
-2025-10-16 19:06:03,484 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
-2025-10-16 19:06:03,484 - __main__ - INFO - Adding files to git...
-2025-10-16 19:06:03,506 - __main__ - INFO - Commit changes for pipeline_log
+2025-10-17 19:00:01,856 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20251017.csv
+2025-10-17 19:00:01,856 - __main__ - INFO - ============================================================
+2025-10-17 19:00:01,856 - __main__ - INFO - STARTING JAVDB PIPELINE
+2025-10-17 19:00:01,856 - __main__ - INFO - MODE: Daily
+2025-10-17 19:00:01,856 - __main__ - INFO - ============================================================
+2025-10-17 19:00:01,856 - __main__ - INFO - Step 1: Running JavDB Spider...
+2025-10-17 19:00:01,856 - __main__ - INFO - Running: python3 Javdb_Spider.py
+2025-10-17 19:07:43,791 - __main__ - INFO - ✓ JavDB Spider completed successfully
+2025-10-17 19:07:43,792 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
+2025-10-17 19:07:43,792 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode daily
+2025-10-17 19:08:28,179 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
+2025-10-17 19:08:28,179 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
+2025-10-17 19:08:28,179 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
+2025-10-17 19:08:28,179 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-10-14)
+2025-10-17 19:08:28,329 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
+2025-10-17 19:08:28,347 - pikpak_bridge - INFO - Found 51 torrents across categories ['Daily Ingestion', 'Ad Hoc']
+2025-10-17 19:08:28,347 - pikpak_bridge - INFO - Filtered 4 torrents older than 3 days
+2025-10-17 19:08:28,347 - pikpak_bridge - INFO - Using batch mode: uploading all torrents in one session
+2025-10-17 19:08:28,347 - pikpak_bridge - INFO - Starting batch upload of 4 torrents to PikPak...
+2025-10-17 19:08:28,439 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
+2025-10-17 19:08:28,557 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
+2025-10-17 19:08:28,572 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
+2025-10-17 19:08:28,572 - pikpak_bridge - INFO - Starting batch upload of 4 torrents to PikPak...
+2025-10-17 19:08:28,572 - pikpak_bridge - INFO - Processing magnet 1/4: magnet:?xt=urn:btih:703eceb6da8c851205f813fcf4df1d82a7f0509e&dn=%5Bjavdb.com%5D664.%28DREAM_TICKET%2...
+2025-10-17 19:08:28,854 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-10-17 19:08:28,854 - pikpak_bridge - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:703eceb6da8c851205f813fcf4df1d82a7f0509e&dn=%5Bjavdb.com%5D664.%28DREAM_TICKET%2...
+2025-10-17 19:08:31,857 - pikpak_bridge - INFO - Processing magnet 2/4: magnet:?xt=urn:btih:0384307ab3cdebf609925cf7594051f21aa6c8ec&dn=%5Bjavdb.com%5Dgvh-782&xl=7327610228...
+2025-10-17 19:08:31,993 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-10-17 19:08:31,994 - pikpak_bridge - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:0384307ab3cdebf609925cf7594051f21aa6c8ec&dn=%5Bjavdb.com%5Dgvh-782&xl=7327610228...
+2025-10-17 19:08:34,997 - pikpak_bridge - INFO - Processing magnet 3/4: magnet:?xt=urn:btih:6b55fb1651e0898bd663cc48dc503ae37743815c&dn=%5Bjavdb.com%5DHMN-677&xl=2072073385...
+2025-10-17 19:08:35,261 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-10-17 19:08:35,262 - pikpak_bridge - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:6b55fb1651e0898bd663cc48dc503ae37743815c&dn=%5Bjavdb.com%5DHMN-677&xl=2072073385...
+2025-10-17 19:08:38,265 - pikpak_bridge - INFO - Processing magnet 4/4: magnet:?xt=urn:btih:346032795f78baff8a199f6e930f25ea7c1ef903&dn=%5Bjavdb.com%5Dstart-187-4k&xl=11028...
+2025-10-17 19:08:38,380 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-10-17 19:08:38,381 - pikpak_bridge - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:346032795f78baff8a199f6e930f25ea7c1ef903&dn=%5Bjavdb.com%5Dstart-187-4k&xl=11028...
+2025-10-17 19:08:38,381 - pikpak_bridge - INFO - Batch upload completed: 4 successful, 0 failed
+2025-10-17 19:08:38,381 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]664.(DREAM_TICKET)(HFD-106)昼間っから憧れのスチュワーデスと性交_フライト前に着衣挿入_4時間_1
+2025-10-17 19:08:38,382 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]664.(DREAM_TICKET)(HFD-106)昼間っから憧れのスチュワーデスと性交_フライト前に着衣挿入_4時間_1 - success
+2025-10-17 19:08:38,397 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
+2025-10-17 19:08:38,397 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]664.(DREAM_TICKET)(HFD-106)昼間っから憧れのスチュワーデスと性交_フライト前に着衣挿入_4時間_1
+2025-10-17 19:08:38,397 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]gvh-782
+2025-10-17 19:08:38,397 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]gvh-782 - success
+2025-10-17 19:08:38,399 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
+2025-10-17 19:08:38,399 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]gvh-782
+2025-10-17 19:08:38,399 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]HMN-677
+2025-10-17 19:08:38,399 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]HMN-677 - success
+2025-10-17 19:08:38,402 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
+2025-10-17 19:08:38,402 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]HMN-677
+2025-10-17 19:08:38,402 - pikpak_bridge - INFO - Successfully uploaded to PikPak: [javdb.com]start-187-4k
+2025-10-17 19:08:38,402 - pikpak_bridge - INFO - Saved to PikPak history: [javdb.com]start-187-4k - success
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO - Deleted 1 torrents from qBittorrent.
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO - Successfully deleted from qBittorrent: [javdb.com]start-187-4k
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO - ============================================================
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO - PIKPAK BRIDGE TRANSFER SUMMARY
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO - ============================================================
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO - Processed categories: ['Daily Ingestion']
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO - Total torrents found (older than 3 days): 4
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO - Category 'Daily Ingestion': 4 total, 4 successful, 0 failed
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO - Overall: 4 successful, 0 failed
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO - Success rate: 100.0%
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO - 
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO - ✓ Successfully transferred torrents:
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO -   - [javdb.com]664.(DREAM_TICKET)(HFD-106)昼間っから憧れのスチュワーデスと性交_フライト前に着衣挿入_4時間_1
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO -   - [javdb.com]gvh-782
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO -   - [javdb.com]HMN-677
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO -   - [javdb.com]start-187-4k
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO - 
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO - PikPak transfer history saved to: Daily Report/pikpak_bridge_history.csv
+2025-10-17 19:08:38,404 - pikpak_bridge - INFO - ============================================================
+2025-10-17 19:08:38,404 - __main__ - INFO - PikPak Bridge completed successfully
+2025-10-17 19:08:38,404 - __main__ - INFO - ✓ PikPak Bridge completed successfully
+2025-10-17 19:08:38,404 - __main__ - INFO - ============================================================
+2025-10-17 19:08:38,404 - __main__ - INFO - PIPELINE COMPLETED SUCCESSFULLY
+2025-10-17 19:08:38,404 - __main__ - INFO - ============================================================
+2025-10-17 19:08:38,408 - __main__ - INFO - Connecting to SMTP server...
+2025-10-17 19:08:42,298 - __main__ - INFO - Email sent successfully.
+2025-10-17 19:08:42,298 - __main__ - INFO - Final commit for pipeline log...
+2025-10-17 19:08:42,299 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
+2025-10-17 19:08:42,316 - __main__ - INFO - Pulling latest changes from remote repository...
+2025-10-17 19:08:42,919 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
+2025-10-17 19:08:42,919 - __main__ - INFO - Adding files to git...
+2025-10-17 19:08:42,941 - __main__ - INFO - Commit changes for pipeline_log
