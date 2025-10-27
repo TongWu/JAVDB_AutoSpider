@@ -268,6 +268,7 @@ def parse_arguments():
     parser.add_argument('--phase', choices=['1', '2', 'all'], help='Which phase to run: 1 (subtitle+today), 2 (today only), all (default)')
     parser.add_argument('--output-file', type=str, help='Specify output CSV file name')
     parser.add_argument('--dry-run', action='store_true', help='Print items that would be written without changing CSV file')
+    parser.add_argument('--ignore-release-date', action='store_true', help='Ignore today/yesterday tags and download all entries matching phase criteria (subtitle for phase1, quality for phase2)')
     # PikPak Bridge arguments
     parser.add_argument('--pikpak-individual', action='store_true', help='Use individual mode for PikPak Bridge instead of batch mode')
     return parser.parse_args()
@@ -305,6 +306,8 @@ def main():
         spider_args.extend(['--output-file', args.output_file])
     if args.dry_run:
         spider_args.append('--dry-run')
+    if args.ignore_release_date:
+        spider_args.append('--ignore-release-date')
 
     # Build arguments for qbtorrent_uploader
     uploader_args = []

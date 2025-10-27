@@ -84,6 +84,9 @@ def parse_arguments():
     parser.add_argument('--phase', choices=['1', '2', 'all'], default='all',
                         help='Which phase to run: 1 (subtitle+today), 2 (today only), all (default)')
 
+    parser.add_argument('--ignore-release-date', action='store_true',
+                        help='Ignore today/yesterday tags and download all entries matching phase criteria (subtitle for phase1, quality for phase2)')
+
     return parser.parse_args()
 
 
@@ -387,6 +390,7 @@ def main():
     dry_run = args.dry_run
     ignore_history = args.ignore_history
     parse_all = args.all
+    ignore_release_date = args.ignore_release_date
 
     # Determine output directory and filename
     if args.url:
@@ -416,6 +420,8 @@ def main():
         logger.info("IGNORE HISTORY: Will scrape all pages without checking history")
     if parse_all:
         logger.info("PARSE ALL MODE: Will continue until empty page is found")
+    if ignore_release_date:
+        logger.info("IGNORE RELEASE DATE: Will process all entries regardless of today/yesterday tags")
 
     # Ensure Daily Report directory exists
     ensure_daily_report_dir()
@@ -497,8 +503,9 @@ def main():
                 continue
 
             # Parse index page for phase 1
+            # Disable new releases filter if: 1) custom URL is used, or 2) ignore_release_date flag is set
             page_results = parse_index(index_html, page_num, phase=1,
-                                       disable_new_releases_filter=custom_url is not None)
+                                       disable_new_releases_filter=(custom_url is not None or ignore_release_date))
 
             if len(page_results) == 0:
                 # Check if this is due to "No movie list found!" (page structure issue)
@@ -666,8 +673,9 @@ def main():
                 continue
 
             # Parse index page for phase 2
+            # Disable new releases filter if: 1) custom URL is used, or 2) ignore_release_date flag is set
             page_results = parse_index(index_html, page_num, phase=2,
-                                       disable_new_releases_filter=custom_url is not None)
+                                       disable_new_releases_filter=(custom_url is not None or ignore_release_date))
 
             if len(page_results) == 0:
                 # Check if this is due to "No movie list found!" (page structure issue)

@@ -115,6 +115,9 @@ python Javdb_Spider.py --ignore-history
 
 # Custom URL scraping (creates "Ad Hoc" directory)
 python Javdb_Spider.py --url "https://javdb.com/?vft=2"
+
+# Ignore today/yesterday release date tags and process all matching entries
+python Javdb_Spider.py --ignore-release-date
 ```
 
 #### Complete Examples
@@ -130,6 +133,12 @@ python Javdb_Spider.py --url "https://javdb.com/?vft=2" --output-file custom_res
 
 # Phase 1 only with custom page range
 python Javdb_Spider.py --phase 1 --start-page 5 --end-page 15
+
+# Download all subtitle entries regardless of release date
+python Javdb_Spider.py --ignore-release-date --phase 1
+
+# Download all high-quality entries regardless of release date
+python Javdb_Spider.py --ignore-release-date --phase 2 --start-page 1 --end-page 10
 ```
 
 #### Argument Reference
@@ -144,21 +153,34 @@ python Javdb_Spider.py --phase 1 --start-page 5 --end-page 15
 | `--ignore-history` | Skip history checking | False | `--ignore-history` |
 | `--url` | Custom URL to scrape | None | `--url "https://javdb.com/?vft=2"` |
 | `--phase` | Phase to run (1/2/all) | all | `--phase 1` |
+| `--ignore-release-date` | Ignore today/yesterday tags | False | `--ignore-release-date` |
 
 ### Automated Pipeline
 
 **Run the complete workflow:**
 ```bash
+# Basic pipeline run
 python pipeline_run_and_notify.py
+
+# Pipeline with custom arguments (passed to Javdb_Spider)
+python pipeline_run_and_notify.py --start-page 1 --end-page 5
+
+# Pipeline ignoring release date tags
+python pipeline_run_and_notify.py --ignore-release-date --phase 1
+
+# Pipeline with custom URL
+python pipeline_run_and_notify.py --url "https://javdb.com/actors/EvkJ"
 ```
 
 The pipeline will:
-1. Run the JavDB Spider to extract data
+1. Run the JavDB Spider to extract data (with provided arguments)
 2. Commit spider results to GitHub immediately
 3. Run the qBittorrent Uploader to add torrents
 4. Commit uploader results to GitHub immediately
 5. Perform final commit and push to GitHub
 6. Send email notifications with results
+
+**Note**: The pipeline accepts the same arguments as `Javdb_Spider.py` and passes them through automatically.
 
 ## Configuration
 
@@ -206,6 +228,13 @@ EMAIL_TO = 'your_email@gmail.com'
 START_PAGE = 1
 END_PAGE = 20
 BASE_URL = 'https://javdb.com'
+
+# Phase 2 filtering criteria
+PHASE2_MIN_RATE = 4.0  # Minimum rating score for phase 2 entries
+PHASE2_MIN_COMMENTS = 80  # Minimum comment count for phase 2 entries
+
+# Release date filter
+IGNORE_RELEASE_DATE_FILTER = False  # Set True to ignore today/yesterday tags
 
 # =============================================================================
 # LOGGING CONFIGURATION
@@ -292,6 +321,31 @@ Phase 2 includes configurable quality filtering based on user ratings and commen
 - **Hacked Category**: Always prefer `hacked_subtitle` over `hacked_no_subtitle`
 - **Subtitle Category**: Always prefer `subtitle` over `no_subtitle`
 - **Complete Collection Goal**: Each movie should have both categories represented
+
+### Release Date Filtering
+
+By default, the spider filters entries based on release date tags ("今日新種" or "昨日新種"). You can override this behavior in two ways:
+
+#### Command-Line Argument (Recommended)
+```bash
+# Ignore release date tags for a single run
+python Javdb_Spider.py --ignore-release-date
+
+# Or via pipeline
+python pipeline_run_and_notify.py --ignore-release-date
+```
+
+#### Configuration File
+Set `IGNORE_RELEASE_DATE_FILTER = True` in `config.py` to permanently ignore release date tags.
+
+**Behavior with `--ignore-release-date` or `IGNORE_RELEASE_DATE_FILTER = True`:**
+- **Phase 1**: Downloads ALL entries with subtitle tags, regardless of release date
+- **Phase 2**: Downloads ALL entries meeting quality criteria (rate > 4.0, comments > 80), regardless of release date
+
+This is useful when:
+- You want to backfill your collection with older content
+- You're scraping a custom URL (like an actor's page) where release date is not relevant
+- You want to download everything matching the quality criteria
 
 ## Downloaded Indicator Feature
 
