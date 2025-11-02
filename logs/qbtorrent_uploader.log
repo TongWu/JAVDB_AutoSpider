@@ -1,5 +1,61 @@
-2025-11-02 19:00:03,547 - __main__ - INFO - Starting qBittorrent uploader...
-2025-11-02 19:00:03,548 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251102.csv
-2025-11-02 19:00:03,549 - __main__ - ERROR - CSV file not found: Daily Report/Javdb_TodayTitle_20251102.csv
-2025-11-02 19:00:03,549 - __main__ - INFO - Make sure you have run the spider script first to generate the CSV file
-2025-11-02 19:00:03,549 - __main__ - WARNING - No torrent links found in CSV file
+2025-11-02 20:14:54,120 - __main__ - INFO - Starting qBittorrent uploader...
+2025-11-02 20:14:54,120 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251102.csv
+2025-11-02 20:14:54,120 - __main__ - INFO - Found 40 torrent links in Daily Report/Javdb_TodayTitle_20251102.csv
+2025-11-02 20:14:54,120 - __main__ - INFO - Skipped 1 already downloaded torrents
+2025-11-02 20:14:54,120 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-11-02 20:14:54,318 - __main__ - INFO - Successfully logged in to qBittorrent
+2025-11-02 20:14:54,320 - __main__ - INFO - History manager imported, will update downloaded status
+2025-11-02 20:14:54,322 - __main__ - INFO - Starting to add 40 torrents to qBittorrent...
+2025-11-02 20:14:54,323 - __main__ - INFO - [1/40] Adding: ALDN-513 [Subtitle]
+2025-11-02 20:14:55,364 - __main__ - INFO - [2/40] Adding: JUR-496 [Subtitle]
+2025-11-02 20:14:56,409 - __main__ - INFO - [3/40] Adding: JUR-499 [Subtitle]
+2025-11-02 20:14:57,436 - __main__ - INFO - [4/40] Adding: JUR-505 [Hacked+Subtitle]
+2025-11-02 20:14:58,465 - __main__ - INFO - [5/40] Adding: JUR-505 [Subtitle]
+2025-11-02 20:14:59,597 - __main__ - INFO - [6/40] Adding: JUR-507 [Hacked+Subtitle]
+2025-11-02 20:15:00,634 - __main__ - INFO - [7/40] Adding: JUR-507 [Subtitle]
+2025-11-02 20:15:01,681 - __main__ - INFO - [8/40] Adding: JUR-510 [Subtitle]
+2025-11-02 20:15:02,717 - __main__ - INFO - [9/40] Adding: JUR-517 [Subtitle]
+2025-11-02 20:15:03,751 - __main__ - INFO - [10/40] Adding: JUR-572 [Subtitle]
+2025-11-02 20:15:04,800 - __main__ - INFO - [11/40] Adding: MIGD-725 [Hacked+Subtitle]
+2025-11-02 20:15:05,841 - __main__ - INFO - [12/40] Adding: MIGD-725 [Subtitle]
+2025-11-02 20:15:06,876 - __main__ - INFO - [13/40] Adding: blackedraw.18.12.20 [Subtitle]
+2025-11-02 20:15:07,924 - __main__ - INFO - [14/40] Adding: SAME-211 [NoSubtitle]
+2025-11-02 20:15:08,966 - __main__ - INFO - [15/40] Adding: LULU-407 [NoSubtitle]
+2025-11-02 20:15:10,002 - __main__ - INFO - [16/40] Adding: RBK-124 [NoSubtitle]
+2025-11-02 20:15:11,043 - __main__ - INFO - [17/40] Adding: MIDA-393 [NoSubtitle]
+2025-11-02 20:15:12,094 - __main__ - INFO - [18/40] Adding: YMDD-470 [NoSubtitle]
+2025-11-02 20:15:13,138 - __main__ - INFO - [19/40] Adding: MIUM-1299 [NoSubtitle]
+2025-11-02 20:15:14,174 - __main__ - INFO - [20/40] Adding: SAME-205 [NoSubtitle]
+2025-11-02 20:15:15,321 - __main__ - INFO - [21/40] Adding: KTB-104 [NoSubtitle]
+2025-11-02 20:15:16,361 - __main__ - INFO - [22/40] Adding: ADN-731 [Hacked+Subtitle]
+2025-11-02 20:15:17,403 - __main__ - INFO - [23/40] Adding: ADN-731 [NoSubtitle]
+2025-11-02 20:15:18,439 - __main__ - INFO - [24/40] Adding: MIDA-356 [Hacked+Subtitle]
+2025-11-02 20:15:19,465 - __main__ - INFO - [25/40] Adding: MIDD-750 [Hacked+Subtitle]
+2025-11-02 20:15:20,500 - __main__ - INFO - [26/40] Adding: MIDD-750 [NoSubtitle]
+2025-11-02 20:15:21,535 - __main__ - INFO - [27/40] Adding: MIDA-345 [Hacked+Subtitle]
+2025-11-02 20:15:22,575 - __main__ - INFO - [28/40] Adding: MIDA-345 [NoSubtitle]
+2025-11-02 20:15:23,605 - __main__ - INFO - [29/40] Adding: NIMA-064 [NoSubtitle]
+2025-11-02 20:15:24,647 - __main__ - INFO - [30/40] Adding: VDD-198 [NoSubtitle]
+2025-11-02 20:15:25,685 - __main__ - INFO - [31/40] Adding: SORA-616 [NoSubtitle]
+2025-11-02 20:15:26,732 - __main__ - INFO - [32/40] Adding: MIKR-057 [NoSubtitle]
+2025-11-02 20:15:27,774 - __main__ - INFO - [33/40] Adding: MIDA-383 [NoSubtitle]
+2025-11-02 20:15:28,828 - __main__ - INFO - [34/40] Adding: MIDA-381 [NoSubtitle]
+2025-11-02 20:15:29,882 - __main__ - INFO - [35/40] Adding: NMSL-025 [NoSubtitle]
+2025-11-02 20:15:30,913 - __main__ - INFO - [36/40] Adding: MIDA-394 [NoSubtitle]
+2025-11-02 20:15:31,986 - __main__ - INFO - [37/40] Adding: SMOK-024 [NoSubtitle]
+2025-11-02 20:15:33,032 - __main__ - INFO - [38/40] Adding: WAAA-579 [NoSubtitle]
+2025-11-02 20:15:34,104 - __main__ - INFO - [39/40] Adding: DLDSS-437 [NoSubtitle]
+2025-11-02 20:15:35,168 - __main__ - INFO - [40/40] Adding: LULU-408 [NoSubtitle]
+2025-11-02 20:15:36,247 - __main__ - INFO - ==================================================
+2025-11-02 20:15:36,247 - __main__ - INFO - UPLOAD SUMMARY
+2025-11-02 20:15:36,248 - __main__ - INFO - ==================================================
+2025-11-02 20:15:36,248 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251102.csv
+2025-11-02 20:15:36,248 - __main__ - INFO - Total torrents found: 40
+2025-11-02 20:15:36,248 - __main__ - INFO - Successfully added: 40
+2025-11-02 20:15:36,248 - __main__ - INFO -   - Hacked subtitle torrents: 7
+2025-11-02 20:15:36,248 - __main__ - INFO -   - Hacked no subtitle torrents: 0
+2025-11-02 20:15:36,248 - __main__ - INFO -   - Subtitle torrents: 10
+2025-11-02 20:15:36,248 - __main__ - INFO -   - No subtitle torrents: 23
+2025-11-02 20:15:36,248 - __main__ - INFO - Failed to add: 0
+2025-11-02 20:15:36,248 - __main__ - INFO - Success rate: 100.0%
+2025-11-02 20:15:36,248 - __main__ - INFO - ==================================================
