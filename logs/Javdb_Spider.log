@@ -1,207 +1,204 @@
-2025-11-04 16:02:56,518 - __main__ - INFO - Starting JavDB spider...
-2025-11-04 16:02:56,518 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
-2025-11-04 16:02:56,518 - __main__ - INFO - Custom URL: https://javdb.com/actors/rPrR
-2025-11-04 16:02:56,518 - __main__ - INFO - AD HOC MODE: Will process all entries (no history checking) but record to history
-2025-11-04 16:02:56,518 - __main__ - INFO - ==================================================
-2025-11-04 16:02:56,518 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-11-04 16:02:56,518 - __main__ - INFO - ==================================================
-2025-11-04 16:02:58,459 - utils.parser - INFO - [Page 12025-11-04 16:19:18,999 - __main__ - INFO - ✓ JavDB Spider completed successfully
-2025-11-04 16:19:18,999 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
-2025-11-04 16:19:18,999 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode adhoc
-2025-11-04 16:29:27,111 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
-2025-11-04 16:29:27,111 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
-2025-11-04 16:29:27,111 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
-2025-11-04 16:29:27,111 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-11-01)
-2025-11-04 16:29:27,324 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
-2025-11-04 16:29:27,630 - pikpak_bridge - INFO - Found 567 torrents across categories ['Daily Ingestion', 'Ad Hoc']
-2025-11-04 16:29:27,631 - pikpak_bridge - INFO - Filtered 0 torrents older than 3 days
-2025-11-04 16:29:27,631 - pikpak_bridge - INFO - No torrents to process.
-2025-11-04 16:29:27,632 - __main__ - INFO - PikPak Bridge completed successfully
-2025-11-04 16:29:27,632 - __main__ - INFO - ✓ PikPak Bridge completed successfully
-2025-11-04 16:29:27,632 - __main__ - INFO - ============================================================
-2025-11-04 16:29:27,632 - __main__ - INFO - PIPELINE COMPLETED SUCCESSFULLY
-2025-11-04 16:29:27,632 - __main__ - INFO - ============================================================
-2025-11-04 16:29:27,634 - __main__ - WARNING - Attachment not found: Ad Hoc/Javdb_AdHoc_actors_rPrR_20251104.csv
-2025-11-04 16:29:27,639 - __main__ - INFO - Connecting to SMTP server...
-2025-11-04 16:29:31,508 - __main__ - INFO - Email sent successfully.
-2025-11-04 16:29:31,508 - __main__ - INFO - Final commit for pipeline log...
-2025-11-04 16:29:31,509 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
-2025-11-04 16:29:31,559 - __main__ - INFO - Pulling latest changes from remote repository...
-2025-11-04 16:29:32,356 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
-2025-11-04 16:29:32,356 - __main__ - INFO - Adding files to git...
-2025-11-04 16:29:32,432 - __main__ - INFO - Commit changes for pipeline_log
-] Processing FSDSS-892
-2025-11-04 16:04:31,105 - __main__ - INFO - [9/71] [Page 1] Processing FSDSS-871
-2025-11-04 16:04:38,830 - __main__ - INFO - [10/71] [Page 1] Processing FSDSS-868
-2025-11-04 16:04:46,286 - __main__ - INFO - [11/71] [Page 1] Processing FSDSS-825
-2025-11-04 16:04:53,770 - __main__ - INFO - [12/71] [Page 1] Processing FSDSS-806
-2025-11-04 16:05:01,253 - __main__ - INFO - [13/71] [Page 2] Processing FSDSS-784
-2025-11-04 16:05:08,779 - __main__ - INFO - [14/71] [Page 2] Processing FSDSS-770
-2025-11-04 16:05:16,500 - __main__ - INFO - [15/71] [Page 2] Processing FSDSS-733
-2025-11-04 16:05:23,977 - __main__ - INFO - [16/71] [Page 2] Processing FSDSS-692
-2025-11-04 16:05:31,630 - __main__ - INFO - [17/71] [Page 2] Processing FSDSS-659
-2025-11-04 16:05:39,084 - __main__ - INFO - [18/71] [Page 2] Processing FSDSS-646
-2025-11-04 16:05:46,577 - __main__ - INFO - [19/71] [Page 2] Processing FSDSS-634
-2025-11-04 16:05:53,918 - __main__ - INFO - [20/71] [Page 2] Processing FSDSS-589
-2025-11-04 16:06:01,404 - __main__ - INFO - [21/71] [Page 2] Processing FSDSS-576
-2025-11-04 16:06:08,907 - __main__ - INFO - [22/71] [Page 2] Processing FSDSS-563
-2025-11-04 16:06:16,475 - __main__ - INFO - [23/71] [Page 2] Processing FSDSS-550
-2025-11-04 16:06:24,010 - __main__ - INFO - [24/71] [Page 2] Processing FSDSS-533
-2025-11-04 16:06:31,520 - __main__ - INFO - [25/71] [Page 2] Processing FSDSS-517
-2025-11-04 16:06:39,112 - __main__ - INFO - [26/71] [Page 2] Processing FSDSS-489
-2025-11-04 16:06:46,600 - __main__ - INFO - [27/71] [Page 3] Processing FSDSS-425
-2025-11-04 16:06:54,102 - __main__ - INFO - [28/71] [Page 3] Processing FSDSS-410
-2025-11-04 16:07:01,597 - __main__ - INFO - [29/71] [Page 3] Processing FSDSS-377
-2025-11-04 16:07:09,072 - __main__ - INFO - [30/71] [Page 3] Processing FSDSS-352
-2025-11-04 16:07:16,582 - __main__ - INFO - [31/71] [Page 3] Processing FSDSS-305
-2025-11-04 16:07:24,331 - __main__ - INFO - [32/71] [Page 3] Processing FSDSS-290
-2025-11-04 16:07:32,085 - __main__ - INFO - [33/71] [Page 3] Processing FSDSS-260
-2025-11-04 16:07:40,051 - __main__ - INFO - [34/71] [Page 3] Processing FSDSS-238
-2025-11-04 16:07:47,813 - __main__ - INFO - [35/71] [Page 3] Processing FSDSS-217
-2025-11-04 16:07:55,622 - __main__ - INFO - [36/71] [Page 3] Processing FSDSS-202
-2025-11-04 16:08:03,325 - __main__ - INFO - [37/71] [Page 3] Processing FSDSS-185
-2025-11-04 16:08:11,069 - __main__ - INFO - [38/71] [Page 3] Processing FSDSS-164
-2025-11-04 16:08:18,771 - __main__ - INFO - [39/71] [Page 3] Processing FSDSS-139
-2025-11-04 16:08:26,501 - __main__ - INFO - [40/71] [Page 3] Processing FSDSS-121
-2025-11-04 16:08:34,172 - __main__ - INFO - [41/71] [Page 4] Processing FSDSS-114
-2025-11-04 16:08:41,639 - __main__ - INFO - [42/71] [Page 4] Processing FSDSS-099
-2025-11-04 16:08:49,155 - __main__ - INFO - [43/71] [Page 4] Processing FSDSS-083
-2025-11-04 16:08:56,623 - __main__ - INFO - [44/71] [Page 4] Processing FSDSS-070
-2025-11-04 16:09:04,042 - __main__ - INFO - [45/71] [Page 4] Processing FSDSS-054
-2025-11-04 16:09:11,542 - __main__ - INFO - [46/71] [Page 4] Processing FSDSS-041
-2025-11-04 16:09:19,017 - __main__ - INFO - [47/71] [Page 4] Processing FSDSS-031
-2025-11-04 16:09:26,520 - __main__ - INFO - [48/71] [Page 4] Processing FSDSS-022
-2025-11-04 16:09:33,999 - __main__ - INFO - [49/71] [Page 4] Processing SSNI-678
-2025-11-04 16:09:41,528 - __main__ - INFO - [50/71] [Page 4] Processing SSNI-688
-2025-11-04 16:09:49,015 - __main__ - INFO - [51/71] [Page 4] Processing SSNI-648
-2025-11-04 16:09:56,472 - __main__ - INFO - [52/71] [Page 4] Processing SSNI-622
-2025-11-04 16:10:03,942 - __main__ - INFO - [53/71] [Page 4] Processing SSNI-594
-2025-11-04 16:10:11,411 - __main__ - INFO - [54/71] [Page 4] Processing SSNI-570
-2025-11-04 16:10:18,889 - __main__ - INFO - [55/71] [Page 4] Processing SSNI-547
-2025-11-04 16:10:26,383 - __main__ - INFO - [56/71] [Page 4] Processing SSNI-521
-2025-11-04 16:10:33,856 - __main__ - INFO - [57/71] [Page 4] Processing SSNI-498
-2025-11-04 16:10:41,299 - __main__ - INFO - [58/71] [Page 4] Processing SSNI-477
-2025-11-04 16:10:48,728 - __main__ - INFO - [59/71] [Page 4] Processing SSNI-457
-2025-11-04 16:10:56,197 - __main__ - INFO - [60/71] [Page 4] Processing SSNI-437
-2025-11-04 16:11:03,707 - __main__ - INFO - [61/71] [Page 5] Processing SSNI-372
-2025-11-04 16:11:11,167 - __main__ - INFO - [62/71] [Page 5] Processing SSNI-378
-2025-11-04 16:11:18,588 - __main__ - INFO - [63/71] [Page 5] Processing SSNI-329
-2025-11-04 16:11:26,062 - __main__ - INFO - [64/71] [Page 5] Processing SSNI-307
-2025-11-04 16:11:33,526 - __main__ - INFO - [65/71] [Page 5] Processing SSNI-275
-2025-11-04 16:11:41,001 - __main__ - INFO - [66/71] [Page 5] Processing SSNI-249
-2025-11-04 16:11:48,469 - __main__ - INFO - [67/71] [Page 5] Processing SSNI-199
-2025-11-04 16:11:55,898 - __main__ - INFO - [68/71] [Page 5] Processing SSNI-173
-2025-11-04 16:12:03,361 - __main__ - INFO - [69/71] [Page 5] Processing SSNI-073
-2025-11-04 16:12:10,862 - __main__ - INFO - [70/71] [Page 5] Processing SSNI-027
-2025-11-04 16:12:18,292 - __main__ - INFO - [71/71] [Page 5] Processing AVOP-303
-2025-11-04 16:12:19,318 - __main__ - INFO - Phase 1 completed: 71 entries processed
-2025-11-04 16:12:19,318 - __main__ - INFO - ==================================================
-2025-11-04 16:12:19,318 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-11-04 16:12:19,318 - __main__ - INFO - ==================================================
-2025-11-04 16:12:21,181 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
-2025-11-04 16:12:21,184 - utils.parser - INFO - [Page 1] Found 7 entries for phase 2
-2025-11-04 16:12:24,986 - utils.parser - INFO - [Page 2] New releases filter disabled - will process all entries
-2025-11-04 16:12:24,990 - utils.parser - INFO - [Page 2] Found 13 entries for phase 2
-2025-11-04 16:12:28,982 - utils.parser - INFO - [Page 3] New releases filter disabled - will process all entries
-2025-11-04 16:12:28,986 - utils.parser - INFO - [Page 3] Found 16 entries for phase 2
-2025-11-04 16:12:32,797 - utils.parser - INFO - [Page 4] New releases filter disabled - will process all entries
-2025-11-04 16:12:32,800 - utils.parser - INFO - [Page 4] Found 7 entries for phase 2
-2025-11-04 16:12:36,482 - utils.parser - INFO - [Page 5] New releases filter disabled - will process all entries
-2025-11-04 16:12:36,484 - utils.parser - INFO - [Page 5] Found 9 entries for phase 2
-2025-11-04 16:12:39,893 - utils.parser - WARNING - [Page 6] No movie list found!
-2025-11-04 16:12:39,899 - __main__ - INFO - [Page 6] No movie list found in HTML structure (page structure issue)
-2025-11-04 16:12:43,311 - utils.parser - WARNING - [Page 7] No movie list found!
-2025-11-04 16:12:43,318 - __main__ - INFO - [Page 7] No movie list found in HTML structure (page structure issue)
-2025-11-04 16:12:46,543 - utils.parser - WARNING - [Page 8] No movie list found!
-2025-11-04 16:12:46,553 - __main__ - INFO - [Page 8] No movie list found in HTML structure (page structure issue)
-2025-11-04 16:12:46,553 - __main__ - INFO - [Page 8] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
-2025-11-04 16:12:53,318 - __main__ - INFO - [1/52] [Page 1] Processing FNS-132
-2025-11-04 16:13:01,058 - __main__ - INFO - [2/52] [Page 1] Processing FNS-089
-2025-11-04 16:13:08,829 - __main__ - INFO - [3/52] [Page 1] Processing FCDSS-105
-2025-11-04 16:13:16,484 - __main__ - INFO - [4/52] [Page 1] Processing FNS-040
-2025-11-04 16:13:24,237 - __main__ - INFO - [5/52] [Page 1] Processing FSDSS-947
-2025-11-04 16:13:32,006 - __main__ - INFO - [6/52] [Page 1] Processing FCDSS-087
-2025-11-04 16:13:39,736 - __main__ - INFO - [7/52] [Page 1] Processing FCDSS-085
-2025-11-04 16:13:47,487 - __main__ - INFO - [8/52] [Page 2] Processing FSDSS-757
-2025-11-04 16:13:55,175 - __main__ - INFO - [9/52] [Page 2] Processing FSDSS-799
-2025-11-04 16:14:03,024 - __main__ - INFO - [10/52] [Page 2] Processing FSDSS-719
-2025-11-04 16:14:10,459 - __main__ - INFO - [11/52] [Page 2] Processing FSDSS-703
-2025-11-04 16:14:17,973 - __main__ - INFO - [12/52] [Page 2] Processing FSDSS-672
-2025-11-04 16:14:25,431 - __main__ - INFO - [13/52] [Page 2] Processing FCDSS-060
-2025-11-04 16:14:32,860 - __main__ - INFO - [14/52] [Page 2] Processing FCDSS-058
-2025-11-04 16:14:40,380 - __main__ - INFO - [15/52] [Page 2] Processing FCDSS-047
-2025-11-04 16:14:47,816 - __main__ - INFO - [16/52] [Page 2] Processing FCDSS-046
-2025-11-04 16:14:55,455 - __main__ - INFO - [17/52] [Page 2] Processing FSDSS-501
-2025-11-04 16:15:02,910 - __main__ - INFO - [18/52] [Page 2] Processing FCDSS-038
-2025-11-04 16:15:10,336 - __main__ - INFO - [19/52] [Page 2] Processing FSDSS-473
-2025-11-04 16:15:17,735 - __main__ - INFO - [20/52] [Page 2] Processing FCDSS-036
-2025-11-04 16:15:24,967 - __main__ - INFO - [21/52] [Page 3] Processing FSDSS-457
-2025-11-04 16:15:32,244 - __main__ - INFO - [22/52] [Page 3] Processing FCDSS-034
-2025-11-04 16:15:39,699 - __main__ - INFO - [23/52] [Page 3] Processing FSDSS-440
-2025-11-04 16:15:47,341 - __main__ - INFO - [24/52] [Page 3] Processing FCDSS-030
-2025-11-04 16:15:54,818 - __main__ - INFO - [25/52] [Page 3] Processing FCDSS-029
-2025-11-04 16:16:02,281 - __main__ - INFO - [26/52] [Page 3] Processing FSDSS-394
-2025-11-04 16:16:09,724 - __main__ - INFO - [27/52] [Page 3] Processing FCDSS-026
-2025-11-04 16:16:17,223 - __main__ - INFO - [28/52] [Page 3] Processing FSDSS-366
-2025-11-04 16:16:24,707 - __main__ - INFO - [29/52] [Page 3] Processing OFJE-349
-2025-11-04 16:16:32,183 - __main__ - INFO - [30/52] [Page 3] Processing FCDSS-022
-2025-11-04 16:16:39,700 - __main__ - INFO - [31/52] [Page 3] Processing FSDSS-336
-2025-11-04 16:16:47,196 - __main__ - INFO - [32/52] [Page 3] Processing FSDSS-321
-2025-11-04 16:16:54,694 - __main__ - INFO - [33/52] [Page 3] Processing OFJE-327
-2025-11-04 16:17:02,245 - __main__ - INFO - [34/52] [Page 3] Processing FSDSS-275
-2025-11-04 16:17:09,708 - __main__ - INFO - [35/52] [Page 3] Processing OFJE-294
-2025-11-04 16:17:17,153 - __main__ - INFO - [36/52] [Page 3] Processing OFJE-286
-2025-11-04 16:17:24,487 - __main__ - INFO - [37/52] [Page 4] Processing OFJE-256
-2025-11-04 16:17:31,850 - __main__ - INFO - [38/52] [Page 4] Processing OFJE-249
-2025-11-04 16:17:39,257 - __main__ - INFO - [39/52] [Page 4] Processing OFJE-241
-2025-11-04 16:17:46,634 - __main__ - INFO - [40/52] [Page 4] Processing OFJE-239
-2025-11-04 16:17:54,528 - __main__ - INFO - [41/52] [Page 4] Processing OFJE-235
-2025-11-04 16:18:02,221 - __main__ - INFO - [42/52] [Page 4] Processing OFJE-229
-2025-11-04 16:18:09,942 - __main__ - INFO - [43/52] [Page 4] Processing OFJE-217
-2025-11-04 16:18:17,704 - __main__ - INFO - [44/52] [Page 5] Processing SSNI-414
-2025-11-04 16:18:25,256 - __main__ - INFO - [45/52] [Page 5] Processing OFJE-185
-2025-11-04 16:18:32,953 - __main__ - INFO - [46/52] [Page 5] Processing SSNI-394
-2025-11-04 16:18:40,467 - __main__ - INFO - [47/52] [Page 5] Processing SIVR-036
-2025-11-04 16:18:47,963 - __main__ - INFO - [48/52] [Page 5] Processing SSNI-351
-2025-11-04 16:18:55,437 - __main__ - INFO - [49/52] [Page 5] Processing SSNI-224
-2025-11-04 16:19:02,919 - __main__ - INFO - [50/52] [Page 5] Processing SSNI-122
-2025-11-04 16:19:10,233 - __main__ - INFO - [51/52] [Page 5] Processing SSNI-096
-2025-11-04 16:19:17,906 - __main__ - INFO - [52/52] [Page 5] Processing SSNI-050
-2025-11-04 16:19:18,935 - __main__ - INFO - Phase 2 completed: 52 entries processed
-2025-11-04 16:19:18,935 - __main__ - INFO - CSV file written incrementally to: Ad Hoc/Javdb_TodayTitle_20251104.csv
-2025-11-04 16:19:18,936 - __main__ - INFO - ==================================================
-2025-11-04 16:19:18,936 - __main__ - INFO - SUMMARY REPORT
-2025-11-04 16:19:18,936 - __main__ - INFO - ==================================================
-2025-11-04 16:19:18,936 - __main__ - INFO - Pages processed: 1 to 20
-2025-11-04 16:19:18,936 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-11-04 16:19:18,936 - __main__ - INFO - ==============================
-2025-11-04 16:19:18,936 - __main__ - INFO - PHASE 1 SUMMARY
-2025-11-04 16:19:18,936 - __main__ - INFO - ==============================
-2025-11-04 16:19:18,936 - __main__ - INFO - Phase 1 entries found: 71
-2025-11-04 16:19:18,936 - __main__ - INFO -   - Subtitle torrents: 71 (100.0%)
-2025-11-04 16:19:18,936 - __main__ - INFO -   - Hacked subtitle torrents: 1 (1.4%)
-2025-11-04 16:19:18,936 - __main__ - INFO -   - Hacked no-subtitle torrents: 5 (7.0%)
-2025-11-04 16:19:18,936 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
-2025-11-04 16:19:18,936 - __main__ - INFO - ==============================
-2025-11-04 16:19:18,936 - __main__ - INFO - PHASE 2 SUMMARY
-2025-11-04 16:19:18,936 - __main__ - INFO - ==============================
-2025-11-04 16:19:18,936 - __main__ - INFO - Phase 2 entries found: 52
-2025-11-04 16:19:18,937 - __main__ - INFO -   - Subtitle torrents: 2 (3.8%)
-2025-11-04 16:19:18,937 - __main__ - INFO -   - Hacked subtitle torrents: 0 (0.0%)
-2025-11-04 16:19:18,937 - __main__ - INFO -   - Hacked no-subtitle torrents: 3 (5.8%)
-2025-11-04 16:19:18,937 - __main__ - INFO -   - No-subtitle torrents: 50 (96.2%)
-2025-11-04 16:19:18,937 - __main__ - INFO - ==============================
-2025-11-04 16:19:18,937 - __main__ - INFO - OVERALL SUMMARY
-2025-11-04 16:19:18,937 - __main__ - INFO - ==============================
-2025-11-04 16:19:18,937 - __main__ - INFO - Total entries found: 123
-2025-11-04 16:19:18,937 - __main__ - INFO - Successfully processed: 123
-2025-11-04 16:19:18,937 - __main__ - INFO - Skipped already parsed in this session: 123
-2025-11-04 16:19:18,937 - __main__ - INFO - Ad hoc mode: No history checking performed
-2025-11-04 16:19:18,937 - __main__ - INFO - Current parsed links in memory: 123
-2025-11-04 16:19:18,937 - __main__ - INFO - Overall subtitle torrents: 73 (59.3%)
-2025-11-04 16:19:18,937 - __main__ - INFO - Overall hacked subtitle torrents: 1 (0.8%)
-2025-11-04 16:19:18,937 - __main__ - INFO - Overall hacked no-subtitle torrents: 8 (6.5%)
-2025-11-04 16:19:18,937 - __main__ - INFO - Overall no-subtitle torrents: 50 (40.7%)
-2025-11-04 16:19:18,937 - __main__ - INFO - Results saved to: Ad Hoc/Javdb_TodayTitle_20251104.csv
-2025-11-04 16:19:18,937 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-11-04 16:19:18,937 - __main__ - INFO - ==================================================
+2025-11-04 16:31:29,666 - __main__ - INFO - Starting JavDB spider...
+2025-11-04 16:31:29,667 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
+2025-11-04 16:31:29,667 - __main__ - INFO - Custom URL: https://javdb.com/actors/RAnD
+2025-11-04 16:31:29,667 - __main__ - INFO - AD HOC MODE: Will process all entries (no history checking) but record to history
+2025-11-04 16:31:29,667 - __main__ - INFO - ==================================================
+2025-11-04 16:31:29,667 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-11-04 16:31:29,667 - __main__ - INFO - ==================================================
+2025-11-04 16:31:31,188 - utils.parser - INFO - [Page 12025-11-04 16:46:47,987 - __main__ - INFO - ✓ JavDB Spider completed successfully
+2025-11-04 16:46:47,988 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
+2025-11-04 16:46:47,988 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode adhoc
+2025-11-04 16:59:49,166 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
+2025-11-04 16:59:49,166 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
+2025-11-04 16:59:49,166 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
+2025-11-04 16:59:49,166 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-11-01)
+2025-11-04 16:59:49,439 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
+2025-11-04 16:59:50,002 - pikpak_bridge - INFO - Found 723 torrents across categories ['Daily Ingestion', 'Ad Hoc']
+2025-11-04 16:59:50,003 - pikpak_bridge - INFO - Filtered 0 torrents older than 3 days
+2025-11-04 16:59:50,003 - pikpak_bridge - INFO - No torrents to process.
+2025-11-04 16:59:50,004 - __main__ - INFO - PikPak Bridge completed successfully
+2025-11-04 16:59:50,004 - __main__ - INFO - ✓ PikPak Bridge completed successfully
+2025-11-04 16:59:50,004 - __main__ - INFO - ============================================================
+2025-11-04 16:59:50,004 - __main__ - INFO - PIPELINE COMPLETED SUCCESSFULLY
+2025-11-04 16:59:50,004 - __main__ - INFO - ============================================================
+2025-11-04 16:59:50,008 - __main__ - WARNING - Attachment not found: Ad Hoc/Javdb_AdHoc_actors_RAnD_20251104.csv
+2025-11-04 16:59:50,012 - __main__ - INFO - Connecting to SMTP server...
+2025-11-04 16:59:54,000 - __main__ - INFO - Email sent successfully.
+2025-11-04 16:59:54,001 - __main__ - INFO - Final commit for pipeline log...
+2025-11-04 16:59:54,001 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
+2025-11-04 16:59:54,046 - __main__ - INFO - Pulling latest changes from remote repository...
+2025-11-04 16:59:54,818 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
+2025-11-04 16:59:54,818 - __main__ - INFO - Adding files to git...
+2025-11-04 16:59:54,901 - __main__ - INFO - Commit changes for pipeline_log
+42 - __main__ - INFO - [6/67] [Page 2] Processing IPX-998
+2025-11-04 16:32:51,916 - __main__ - INFO - [7/67] [Page 2] Processing IPX-973
+2025-11-04 16:32:59,645 - __main__ - INFO - [8/67] [Page 2] Processing IPX-956
+2025-11-04 16:33:07,344 - __main__ - INFO - [9/67] [Page 2] Processing IPX-939
+2025-11-04 16:33:14,646 - __main__ - INFO - [10/67] [Page 2] Processing IPX-922
+2025-11-04 16:33:22,015 - __main__ - INFO - [11/67] [Page 2] Processing IPX-906
+2025-11-04 16:33:29,817 - __main__ - INFO - [12/67] [Page 2] Processing TKIPX-889
+2025-11-04 16:33:37,248 - __main__ - INFO - [13/67] [Page 2] Processing IPX-889
+2025-11-04 16:33:44,684 - __main__ - INFO - [14/67] [Page 2] Processing IPX-873
+2025-11-04 16:33:52,177 - __main__ - INFO - [15/67] [Page 2] Processing IPX-857
+2025-11-04 16:33:59,612 - __main__ - INFO - [16/67] [Page 2] Processing IPX-838
+2025-11-04 16:34:07,097 - __main__ - INFO - [17/67] [Page 2] Processing IPX-819
+2025-11-04 16:34:14,589 - __main__ - INFO - [18/67] [Page 3] Processing IPX-801
+2025-11-04 16:34:22,017 - __main__ - INFO - [19/67] [Page 3] Processing IPX-784
+2025-11-04 16:34:29,462 - __main__ - INFO - [20/67] [Page 3] Processing IPX-766
+2025-11-04 16:34:36,898 - __main__ - INFO - [21/67] [Page 3] Processing IPX-750
+2025-11-04 16:34:44,321 - __main__ - INFO - [22/67] [Page 3] Processing IPX-732
+2025-11-04 16:34:51,921 - __main__ - INFO - [23/67] [Page 3] Processing IPX-714
+2025-11-04 16:34:59,571 - __main__ - INFO - [24/67] [Page 3] Processing IPX-697
+2025-11-04 16:35:07,103 - __main__ - INFO - [25/67] [Page 3] Processing IPX-680
+2025-11-04 16:35:14,529 - __main__ - INFO - [26/67] [Page 3] Processing IPX-666
+2025-11-04 16:35:22,026 - __main__ - INFO - [27/67] [Page 3] Processing IPX-649
+2025-11-04 16:35:29,479 - __main__ - INFO - [28/67] [Page 3] Processing PFES-012
+2025-11-04 16:35:36,911 - __main__ - INFO - [29/67] [Page 3] Processing IPX-620
+2025-11-04 16:35:44,348 - __main__ - INFO - [30/67] [Page 4] Processing IPX-604
+2025-11-04 16:35:51,807 - __main__ - INFO - [31/67] [Page 4] Processing IPX-588
+2025-11-04 16:35:59,481 - __main__ - INFO - [32/67] [Page 4] Processing IPVR-088
+2025-11-04 16:36:06,944 - __main__ - INFO - [33/67] [Page 4] Processing IPX-571
+2025-11-04 16:36:14,403 - __main__ - INFO - [34/67] [Page 4] Processing IPX-557
+2025-11-04 16:36:21,870 - __main__ - INFO - [35/67] [Page 4] Processing IDBD-992
+2025-11-04 16:36:29,318 - __main__ - INFO - [36/67] [Page 4] Processing IPX-543
+2025-11-04 16:36:36,986 - __main__ - INFO - [37/67] [Page 4] Processing IPX-494
+2025-11-04 16:36:44,426 - __main__ - INFO - [38/67] [Page 4] Processing IPX-402
+2025-11-04 16:36:51,929 - __main__ - INFO - [39/67] [Page 4] Processing IPX-387
+2025-11-04 16:36:59,355 - __main__ - INFO - [40/67] [Page 5] Processing IPX-372
+2025-11-04 16:37:06,840 - __main__ - INFO - [41/67] [Page 5] Processing IPX-358
+2025-11-04 16:37:14,358 - __main__ - INFO - [42/67] [Page 5] Processing IPX-342
+2025-11-04 16:37:22,044 - __main__ - INFO - [43/67] [Page 5] Processing IPX-246
+2025-11-04 16:37:29,702 - __main__ - INFO - [44/67] [Page 5] Processing IPX-219
+2025-11-04 16:37:37,456 - __main__ - INFO - [45/67] [Page 5] Processing IPX-203
+2025-11-04 16:37:45,212 - __main__ - INFO - [46/67] [Page 5] Processing IPX-193
+2025-11-04 16:37:52,898 - __main__ - INFO - [47/67] [Page 5] Processing IPX-177
+2025-11-04 16:38:00,630 - __main__ - INFO - [48/67] [Page 5] Processing IPX-159
+2025-11-04 16:38:08,332 - __main__ - INFO - [49/67] [Page 5] Processing IPX-146
+2025-11-04 16:38:15,983 - __main__ - INFO - [50/67] [Page 5] Processing IPX-118
+2025-11-04 16:38:23,675 - __main__ - INFO - [51/67] [Page 5] Processing IPX-104
+2025-11-04 16:38:31,377 - __main__ - INFO - [52/67] [Page 5] Processing IPX-091
+2025-11-04 16:38:38,844 - __main__ - INFO - [53/67] [Page 5] Processing IPX-075
+2025-11-04 16:38:46,368 - __main__ - INFO - [54/67] [Page 5] Processing IPX-058
+2025-11-04 16:38:53,805 - __main__ - INFO - [55/67] [Page 5] Processing IPX-034
+2025-11-04 16:39:01,232 - __main__ - INFO - [56/67] [Page 5] Processing IPX-018
+2025-11-04 16:39:08,692 - __main__ - INFO - [57/67] [Page 6] Processing IPZ-979
+2025-11-04 16:39:16,044 - __main__ - INFO - [58/67] [Page 6] Processing IPZ-964
+2025-11-04 16:39:23,613 - __main__ - INFO - [59/67] [Page 6] Processing IPZ-947
+2025-11-04 16:39:31,122 - __main__ - INFO - [60/67] [Page 6] Processing IPZ-931
+2025-11-04 16:39:38,590 - __main__ - INFO - [61/67] [Page 6] Processing IPZ-910
+2025-11-04 16:39:46,049 - __main__ - INFO - [62/67] [Page 6] Processing IPZ-891
+2025-11-04 16:39:53,523 - __main__ - INFO - [63/67] [Page 6] Processing IPZ-875
+2025-11-04 16:40:01,265 - __main__ - INFO - [64/67] [Page 6] Processing IPZ-860
+2025-11-04 16:40:08,711 - __main__ - INFO - [65/67] [Page 6] Processing IPZ-844
+2025-11-04 16:40:16,222 - __main__ - INFO - [66/67] [Page 6] Processing IPZ-828
+2025-11-04 16:40:23,701 - __main__ - INFO - [67/67] [Page 6] Processing AVOP-201
+2025-11-04 16:40:24,731 - __main__ - INFO - Phase 1 completed: 67 entries processed
+2025-11-04 16:40:24,732 - __main__ - INFO - ==================================================
+2025-11-04 16:40:24,732 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-11-04 16:40:24,732 - __main__ - INFO - ==================================================
+2025-11-04 16:40:26,478 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
+2025-11-04 16:40:26,480 - utils.parser - INFO - [Page 1] Found 7 entries for phase 2
+2025-11-04 16:40:30,231 - utils.parser - INFO - [Page 2] New releases filter disabled - will process all entries
+2025-11-04 16:40:30,238 - utils.parser - INFO - [Page 2] Found 8 entries for phase 2
+2025-11-04 16:40:34,159 - utils.parser - INFO - [Page 3] New releases filter disabled - will process all entries
+2025-11-04 16:40:34,162 - utils.parser - INFO - [Page 3] Found 9 entries for phase 2
+2025-11-04 16:40:37,963 - utils.parser - INFO - [Page 4] New releases filter disabled - will process all entries
+2025-11-04 16:40:37,967 - utils.parser - INFO - [Page 4] Found 13 entries for phase 2
+2025-11-04 16:40:41,879 - utils.parser - INFO - [Page 5] New releases filter disabled - will process all entries
+2025-11-04 16:40:41,883 - utils.parser - INFO - [Page 5] Found 10 entries for phase 2
+2025-11-04 16:40:45,453 - utils.parser - INFO - [Page 6] New releases filter disabled - will process all entries
+2025-11-04 16:40:45,455 - utils.parser - INFO - [Page 6] Found 0 entries for phase 2
+2025-11-04 16:40:48,877 - utils.parser - WARNING - [Page 7] No movie list found!
+2025-11-04 16:40:48,889 - __main__ - INFO - [Page 7] No movie list found in HTML structure (page structure issue)
+2025-11-04 16:40:52,312 - utils.parser - WARNING - [Page 8] No movie list found!
+2025-11-04 16:40:52,328 - __main__ - INFO - [Page 8] No movie list found in HTML structure (page structure issue)
+2025-11-04 16:40:55,740 - utils.parser - WARNING - [Page 9] No movie list found!
+2025-11-04 16:40:55,759 - __main__ - INFO - [Page 9] No movie list found in HTML structure (page structure issue)
+2025-11-04 16:40:55,759 - __main__ - INFO - [Page 9] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
+2025-11-04 16:41:02,155 - __main__ - INFO - [1/47] [Page 1] Processing IDBD-958
+2025-11-04 16:41:09,628 - __main__ - INFO - [2/47] [Page 1] Processing IDBD-940
+2025-11-04 16:41:17,082 - __main__ - INFO - [3/47] [Page 1] Processing OFJE-550
+2025-11-04 16:41:24,523 - __main__ - INFO - [4/47] [Page 1] Processing IDBD-905
+2025-11-04 16:41:31,976 - __main__ - INFO - [5/47] [Page 1] Processing IPVR-226
+2025-11-04 16:41:39,446 - __main__ - INFO - [6/47] [Page 1] Processing IPVR-214
+2025-11-04 16:41:46,921 - __main__ - INFO - [7/47] [Page 1] Processing IPVR-210
+2025-11-04 16:41:54,368 - __main__ - INFO - [8/47] [Page 2] Processing IPZZ-079
+2025-11-04 16:42:01,812 - __main__ - INFO - [9/47] [Page 2] Processing IPVR-201
+2025-11-04 16:42:09,294 - __main__ - INFO - [10/47] [Page 2] Processing IPVR-192
+2025-11-04 16:42:16,792 - __main__ - INFO - [11/47] [Page 2] Processing IPVR-185
+2025-11-04 16:42:24,447 - utils.magnet_extractor - WARNING - [P2-12] No suitable magnet found
+2025-11-04 16:42:24,447 - __main__ - INFO - [12/47] [Page 2] Processing IDBD-869
+2025-11-04 16:42:32,046 - utils.magnet_extractor - WARNING - [P2-13] No suitable magnet found
+2025-11-04 16:42:32,047 - __main__ - INFO - [13/47] [Page 2] Processing TKIPX-873
+2025-11-04 16:42:39,690 - __main__ - INFO - [14/47] [Page 2] Processing IPVR-175
+2025-11-04 16:42:47,351 - __main__ - INFO - [15/47] [Page 2] Processing IPVR-167
+2025-11-04 16:42:55,007 - __main__ - INFO - [16/47] [Page 3] Processing IPVR-159
+2025-11-04 16:43:02,685 - __main__ - INFO - [17/47] [Page 3] Processing IPVR-147
+2025-11-04 16:43:10,375 - __main__ - INFO - [18/47] [Page 3] Processing IDBD-850
+2025-11-04 16:43:18,059 - __main__ - INFO - [19/47] [Page 3] Processing IPVR-137
+2025-11-04 16:43:25,806 - __main__ - INFO - [20/47] [Page 3] Processing IPVR-128
+2025-11-04 16:43:33,671 - __main__ - INFO - [21/47] [Page 3] Processing IPVR-120
+2025-11-04 16:43:41,118 - __main__ - INFO - [22/47] [Page 3] Processing IPVR-105
+2025-11-04 16:43:48,543 - __main__ - INFO - [23/47] [Page 3] Processing IDBD-838
+2025-11-04 16:43:55,991 - __main__ - INFO - [24/47] [Page 3] Processing IDBD-836
+2025-11-04 16:44:03,452 - __main__ - INFO - [25/47] [Page 4] Processing IPVR-095
+2025-11-04 16:44:10,923 - __main__ - INFO - [26/47] [Page 4] Processing IDBD-990
+2025-11-04 16:44:18,393 - __main__ - INFO - [27/47] [Page 4] Processing REBD-513
+2025-11-04 16:44:25,872 - __main__ - INFO - [28/47] [Page 4] Processing IDBD-823
+2025-11-04 16:44:33,335 - __main__ - INFO - [29/47] [Page 4] Processing IDBD-821
+2025-11-04 16:44:40,767 - __main__ - INFO - [30/47] [Page 4] Processing IDBD-819
+2025-11-04 16:44:48,206 - __main__ - INFO - [31/47] [Page 4] Processing IPVR-065
+2025-11-04 16:44:55,661 - __main__ - INFO - [32/47] [Page 4] Processing IDBD-816
+2025-11-04 16:45:03,106 - __main__ - INFO - [33/47] [Page 4] Processing IPVR-057
+2025-11-04 16:45:10,210 - __main__ - INFO - [34/47] [Page 4] Processing OAE-194
+2025-11-04 16:45:17,654 - __main__ - INFO - [35/47] [Page 4] Processing IPVR-048
+2025-11-04 16:45:25,158 - __main__ - INFO - [36/47] [Page 4] Processing IDBD-809
+2025-11-04 16:45:32,611 - __main__ - INFO - [37/47] [Page 4] Processing IDBD-807
+2025-11-04 16:45:39,869 - __main__ - INFO - [38/47] [Page 5] Processing IPVR-043
+2025-11-04 16:45:47,395 - __main__ - INFO - [39/47] [Page 5] Processing OAE-188
+2025-11-04 16:45:54,940 - __main__ - INFO - [40/47] [Page 5] Processing IPX-273
+2025-11-04 16:46:02,389 - __main__ - INFO - [41/47] [Page 5] Processing IPX-258
+2025-11-04 16:46:09,910 - __main__ - INFO - [42/47] [Page 5] Processing IPX-232
+2025-11-04 16:46:17,322 - __main__ - INFO - [43/47] [Page 5] Processing IPVR-012
+2025-11-04 16:46:24,834 - __main__ - INFO - [44/47] [Page 5] Processing EHM-017
+2025-11-04 16:46:32,297 - __main__ - INFO - [45/47] [Page 5] Processing IPVR-009
+2025-11-04 16:46:39,406 - __main__ - INFO - [46/47] [Page 5] Processing HIGH-229
+2025-11-04 16:46:46,915 - __main__ - INFO - [47/47] [Page 5] Processing IPX-002
+2025-11-04 16:46:47,941 - __main__ - INFO - Phase 2 completed: 45 entries processed
+2025-11-04 16:46:47,941 - __main__ - INFO - CSV file written incrementally to: Ad Hoc/Javdb_TodayTitle_20251104.csv
+2025-11-04 16:46:47,942 - __main__ - INFO - ==================================================
+2025-11-04 16:46:47,942 - __main__ - INFO - SUMMARY REPORT
+2025-11-04 16:46:47,942 - __main__ - INFO - ==================================================
+2025-11-04 16:46:47,942 - __main__ - INFO - Pages processed: 1 to 20
+2025-11-04 16:46:47,942 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-11-04 16:46:47,942 - __main__ - INFO - ==============================
+2025-11-04 16:46:47,942 - __main__ - INFO - PHASE 1 SUMMARY
+2025-11-04 16:46:47,942 - __main__ - INFO - ==============================
+2025-11-04 16:46:47,942 - __main__ - INFO - Phase 1 entries found: 67
+2025-11-04 16:46:47,942 - __main__ - INFO -   - Subtitle torrents: 66 (98.5%)
+2025-11-04 16:46:47,942 - __main__ - INFO -   - Hacked subtitle torrents: 42 (62.7%)
+2025-11-04 16:46:47,942 - __main__ - INFO -   - Hacked no-subtitle torrents: 9 (13.4%)
+2025-11-04 16:46:47,942 - __main__ - INFO -   - No-subtitle torrents: 1 (1.5%)
+2025-11-04 16:46:47,942 - __main__ - INFO - ==============================
+2025-11-04 16:46:47,942 - __main__ - INFO - PHASE 2 SUMMARY
+2025-11-04 16:46:47,942 - __main__ - INFO - ==============================
+2025-11-04 16:46:47,943 - __main__ - INFO - Phase 2 entries found: 45
+2025-11-04 16:46:47,943 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
+2025-11-04 16:46:47,943 - __main__ - INFO -   - Hacked subtitle torrents: 0 (0.0%)
+2025-11-04 16:46:47,943 - __main__ - INFO -   - Hacked no-subtitle torrents: 4 (8.9%)
+2025-11-04 16:46:47,943 - __main__ - INFO -   - No-subtitle torrents: 45 (100.0%)
+2025-11-04 16:46:47,943 - __main__ - INFO - ==============================
+2025-11-04 16:46:47,943 - __main__ - INFO - OVERALL SUMMARY
+2025-11-04 16:46:47,943 - __main__ - INFO - ==============================
+2025-11-04 16:46:47,943 - __main__ - INFO - Total entries found: 112
+2025-11-04 16:46:47,943 - __main__ - INFO - Successfully processed: 112
+2025-11-04 16:46:47,943 - __main__ - INFO - Skipped already parsed in this session: 114
+2025-11-04 16:46:47,943 - __main__ - INFO - Ad hoc mode: No history checking performed
+2025-11-04 16:46:47,943 - __main__ - INFO - Current parsed links in memory: 114
+2025-11-04 16:46:47,943 - __main__ - INFO - Overall subtitle torrents: 66 (58.9%)
+2025-11-04 16:46:47,943 - __main__ - INFO - Overall hacked subtitle torrents: 42 (37.5%)
+2025-11-04 16:46:47,943 - __main__ - INFO - Overall hacked no-subtitle torrents: 13 (11.6%)
+2025-11-04 16:46:47,943 - __main__ - INFO - Overall no-subtitle torrents: 46 (41.1%)
+2025-11-04 16:46:47,943 - __main__ - INFO - Results saved to: Ad Hoc/Javdb_TodayTitle_20251104.csv
+2025-11-04 16:46:47,943 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-11-04 16:46:47,943 - __main__ - INFO - ==================================================
