@@ -1,53 +1,259 @@
-2025-11-08 19:00:02,025 - __main__ - INFO - Starting JavDB spider...
-2025-11-08 19:00:02,025 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
-2025-11-08 19:00:02,025 - __main__ - INFO - Validating history file integrity...
-2025-11-08 19:00:02,051 - utils.history_manager - INFO - Loaded 3067 previously parsed movies from history (phase : 3, phase 1: 1774, phase 2: 1290)
-2025-11-08 19:00:02,051 - __main__ - INFO - ==================================================
-2025-11-08 19:00:02,051 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-11-08 19:00:02,051 - __main__ - INFO - ==================================================
-2025-11-08 19:00:02,653 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 403 Client Error: Forbidden for url: https://javdb.com/?page=1
-2025-11-08 19:00:02,653 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
-2025-11-08 19:00:02,856 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 403 Client Error: Forbidden for url: https://javdb.com/?page=2
-2025-11-08 19:00:02,856 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
-2025-11-08 19:00:03,057 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 403 Client Error: Forbidden for url: https://javdb.com/?page=3
-2025-11-08 19:00:03,057 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
-2025-11-08 19:00:03,057 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
-2025-11-08 19:00:03,057 - __main__ - INFO - Phase 1 completed: 0 entries processed
-2025-11-08 19:00:03,057 - __main__ - INFO - ==================================================
-2025-11-08 19:00:03,057 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-11-08 19:00:03,057 - __main__ - INFO - ==================================================
-2025-11-08 19:00:03,258 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 403 Client Error: Forbidden for url: https://javdb.com/?page=1
-2025-11-08 19:00:03,258 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
-2025-11-08 19:00:03,459 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 403 Client Error: Forbidden for url: https://javdb.com/?page=2
-2025-11-08 19:00:03,459 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
-2025-11-08 19:00:03,659 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 403 Client Error: Forbidden for url: https://javdb.com/?page=3
-2025-11-08 19:00:03,660 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
-2025-11-08 19:00:03,660 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
-2025-11-08 19:00:03,660 - __main__ - INFO - Phase 2 completed: 0 entries processed
-2025-11-08 19:00:03,660 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251108.csv
-2025-11-08 19:00:03,660 - __main__ - INFO - ==================================================
-2025-11-08 19:00:03,660 - __main__ - INFO - SUMMARY REPORT
-2025-11-08 19:00:03,660 - __main__ - INFO - ==================================================
-2025-11-08 19:00:03,660 - __main__ - INFO - Pages processed: 1 to 20
-2025-11-08 19:00:03,660 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-11-08 19:00:03,660 - __main__ - INFO - ==============================
-2025-11-08 19:00:03,660 - __main__ - INFO - PHASE 1 SUMMARY
-2025-11-08 19:00:03,660 - __main__ - INFO - ==============================
-2025-11-08 19:00:03,660 - __main__ - INFO - Phase 1 entries found: 0
-2025-11-08 19:00:03,660 - __main__ - INFO -   - No entries found in Phase 1
-2025-11-08 19:00:03,660 - __main__ - INFO - ==============================
-2025-11-08 19:00:03,660 - __main__ - INFO - PHASE 2 SUMMARY
-2025-11-08 19:00:03,660 - __main__ - INFO - ==============================
-2025-11-08 19:00:03,660 - __main__ - INFO - Phase 2 entries found: 0
-2025-11-08 19:00:03,660 - __main__ - INFO -   - No entries found in Phase 2
-2025-11-08 19:00:03,660 - __main__ - INFO - ==============================
-2025-11-08 19:00:03,660 - __main__ - INFO - OVERALL SUMMARY
-2025-11-08 19:00:03,660 - __main__ - INFO - ==============================
-2025-11-08 19:00:03,660 - __main__ - INFO - Total entries found: 0
-2025-11-08 19:00:03,660 - __main__ - INFO - Successfully processed: 0
-2025-11-08 19:00:03,660 - __main__ - INFO - Skipped already parsed in this session: 0
-2025-11-08 19:00:03,660 - __main__ - INFO - Skipped already parsed in previous runs: 1777
-2025-11-08 19:00:03,660 - __main__ - INFO - Current parsed links in memory: 0
-2025-11-08 19:00:03,660 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251108.csv
-2025-11-08 19:00:03,660 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-11-08 19:00:03,660 - __main__ - INFO - ==================================================
+2025-11-09 19:00:01,640 - __main__ - INFO - Starting JavDB spider...
+2025-11-09 19:00:01,640 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
+2025-11-09 19:00:01,640 - __main__ - INFO - Validating history file integrity...
+2025-11-09 19:00:01,665 - utils.history_manager - INFO - Loaded 3067 previously parsed movies from history (phase : 3, phase 1: 1774, phase 2: 1290)
+2025-11-09 19:00:01,666 - __main__ - INFO - ==================================================
+2025-11-09 19:00:01,666 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-11-09 19:00:01,666 - __main__ - INFO - ==================================================
+2025-11-09 19:00:03,434 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
+2025-11-09 19:00:05,986 - utils.parser - INFO - [Page 2] Found 10 entries for phase 1
+2025-11-09 19:00:08,498 - utils.parser - INFO - [Page 3] Found 0 entries for phase 1
+2025-11-09 19:00:11,024 - utils.parser - INFO - [Page 4] Found 0 entries for phase 1
+2025-11-09 19:00:13,564 - utils.parser - INFO - [Page 5] Found 13 entries for phase 1
+2025-11-09 19:00:16,125 - utils.parser - INFO - [Page 6] Found 0 entries for phase 1
+2025-11-09 19:00:18,667 - utils.parser - INFO - [Page 7] Found 0 entries for phase 1
+2025-11-09 19:00:21,231 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
+2025-11-09 19:00:23,802 - utils.parser - INFO - [Page 9] Found 0 entries for phase 1
+2025-11-09 19:00:26,390 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
+2025-11-09 19:00:28,777 - utils.parser - INFO - [Page 11] Found 0 entries for phase 1
+2025-11-09 19:00:31,356 - utils.parser - INFO - [Page 12] Found 0 entries for phase 1
+2025-11-09 19:00:33,919 - utils.parser - INFO - [Page 13] Found 0 entries for phase 1
+2025-11-09 19:00:36,676 - utils.parser - INFO - [Page 14] Found 0 entries for phase 1
+2025-11-09 19:00:39,208 - utils.parser - INFO - [Page 15] Found 0 entries for phase 1
+2025-11-09 19:00:41,572 - utils.parser - INFO - [Page 16] Found 0 entries for phase 1
+2025-11-09 19:00:44,143 - utils.parser - INFO - [Page 17] Found 0 entries for phase 1
+2025-11-09 19:00:46,732 - utils.parser - INFO - [Page 18] Found 0 entries for phase 1
+2025-11-09 19:00:49,289 - utils.parser - INFO - [Page 19] Found 0 entries for phase 1
+2025-11-09 19:00:51,718 - utils.parser - INFO - [Page 20] Found 0 entries for phase 1
+2025-11-09 19:00:57,032 - __main__ - INFO - [1/23] [Page 2] Processing CAWD-887
+2025-11-09 19:01:03,510 - __main__ - INFO - [2/23] [Page 2] Processing CAWD-888
+2025-11-09 19:01:10,186 - __main__ - INFO - [3/23] [Page 2] Processing CAWD-889
+2025-11-09 19:01:16,650 - __main__ - INFO - [4/23] [Page 2] Processing CAWD-891
+2025-11-09 19:01:23,107 - __main__ - INFO - [5/23] [Page 2] Processing CAWD-892
+2025-11-09 19:01:29,569 - __main__ - INFO - [6/23] [Page 2] Processing CJOD-473
+2025-11-09 19:01:36,056 - __main__ - INFO - [7/23] [Page 2] Processing CJOD-480
+2025-11-09 19:01:42,533 - __main__ - INFO - [8/23] [Page 2] Processing CJOD-482
+2025-11-09 19:01:49,005 - __main__ - INFO - [9/23] [Page 2] Processing CJOD-489
+2025-11-09 19:01:55,471 - __main__ - INFO - [10/23] [Page 2] Processing START-405
+2025-11-09 19:02:00,919 - __main__ - INFO - [11/23] [Page 5] Processing REAL-937
+2025-11-09 19:02:07,411 - __main__ - INFO - [12/23] [Page 5] Processing REAL-945
+2025-11-09 19:02:13,909 - __main__ - INFO - [13/23] [Page 5] Processing ROE-394
+2025-11-09 19:02:20,371 - __main__ - INFO - [14/23] [Page 5] Processing ROE-406
+2025-11-09 19:02:26,842 - __main__ - INFO - [15/23] [Page 5] Processing ROE-411
+2025-11-09 19:02:33,320 - __main__ - INFO - [16/23] [Page 5] Processing ROE-412
+2025-11-09 19:02:39,792 - __main__ - INFO - [17/23] [Page 5] Processing ROYD-268
+2025-11-09 19:02:46,252 - __main__ - INFO - [18/23] [Page 5] Processing ROYD-271
+2025-11-09 19:02:52,718 - __main__ - INFO - [19/23] [Page 5] Processing ROYD-274
+2025-11-09 19:02:59,229 - __main__ - INFO - [20/23] [Page 5] Processing STARS-642
+2025-11-09 19:03:05,826 - __main__ - INFO - [21/23] [Page 5] Processing STARS-701
+2025-11-09 19:03:12,349 - __main__ - INFO - [22/23] [Page 5] Processing STARS-703
+2025-11-09 19:03:18,828 - __main__ - INFO - [23/23] [Page 5] Processing START-169
+2025-11-09 19:03:19,842 - __main__ - INFO - Phase 1 completed: 22 entries processed
+2025-11-09 19:03:19,842 - __main__ - INFO - ==================================================
+2025-11-09 19:03:19,842 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-11-09 19:03:19,842 - __main__ - INFO - ==================================================
+2025-11-09 19:03:20,350 - utils.parser - INFO - [Page 1] Found 3 entries for phase 2
+2025-11-09 19:03:22,697 - utils.parser - INFO - [Page 2] Found 5 entries for phase 2
+2025-11-09 19:03:25,206 - utils.parser - INFO - [Page 3] Found 4 entries for phase 2
+2025-11-09 19:03:27,761 - utils.parser - INFO - [Page 4] Found 10 entries for phase 2
+2025-11-09 19:03:30,276 - utils.parser - INFO - [Page 5] Found 8 entries for phase 2
+2025-11-09 19:03:32,815 - utils.parser - INFO - [Page 6] Found 18 entries for phase 2
+2025-11-09 19:03:35,343 - utils.parser - INFO - [Page 7] Found 9 entries for phase 2
+2025-11-09 19:03:37,874 - utils.parser - INFO - [Page 8] Found 0 entries for phase 2
+2025-11-09 19:03:40,446 - utils.parser - INFO - [Page 9] Found 0 entries for phase 2
+2025-11-09 19:03:42,983 - utils.parser - INFO - [Page 10] Found 0 entries for phase 2
+2025-11-09 19:03:45,529 - utils.parser - INFO - [Page 11] Found 0 entries for phase 2
+2025-11-09 19:03:48,075 - utils.parser - INFO - [Page 12] Found 0 entries for phase 2
+2025-11-09 19:03:50,642 - utils.parser - INFO - [Page 13] Found 0 entries for phase 2
+2025-11-09 19:03:53,179 - utils.parser - INFO - [Page 14] Found 0 entries for phase 2
+2025-11-09 19:03:55,810 - utils.parser - INFO - [Page 15] Found 0 entries for phase 2
+2025-11-09 19:03:58,460 - utils.parser - INFO - [Page 16] Found 0 entries for phase 2
+2025-11-09 19:04:01,060 - utils.parser - INFO - [Page 17] Found 0 entries for phase 2
+2025-11-09 19:04:03,617 - utils.parser - INFO - [Page 18] Found 0 entries for phase 2
+2025-11-09 19:04:06,227 - utils.parser - INFO - [Page 19] Found 0 entries for phase 2
+2025-11-09 19:04:08,825 - utils.parser - INFO - [Page 20] Found 0 entries for phase 2
+2025-11-09 19:04:14,309 - __main__ - INFO - [1/57] [Page 1] Processing DASS-728
+2025-11-09 19:04:20,792 - __main__ - INFO - [2/57] [Page 1] Processing DASS-775
+2025-11-09 19:04:27,269 - __main__ - INFO - [3/57] [Page 1] Processing SONE-976
+2025-11-09 19:04:33,754 - __main__ - INFO - [4/57] [Page 2] Processing JUR-504
+2025-11-09 19:04:40,216 - __main__ - INFO - [5/57] [Page 2] Processing START-449
+2025-11-09 19:04:46,694 - __main__ - INFO - [6/57] [Page 2] Processing SONE-979
+2025-11-09 19:04:53,188 - __main__ - INFO - [7/57] [Page 2] Processing NMSL-026
+2025-11-09 19:04:59,662 - __main__ - INFO - [8/57] [Page 2] Processing AVSA-407
+2025-11-09 19:05:06,112 - __main__ - INFO - [9/57] [Page 3] Processing NHDTC-13104
+2025-11-09 19:05:12,584 - __main__ - INFO - [10/57] [Page 3] Processing DASS-806
+2025-11-09 19:05:19,051 - __main__ - INFO - [11/57] [Page 3] Processing MIUM-1279
+2025-11-09 19:05:25,517 - __main__ - INFO - [12/57] [Page 3] Processing IPZZ-709
+2025-11-09 19:05:31,967 - __main__ - INFO - [13/57] [Page 4] Processing RKI-712
+2025-11-09 19:05:38,462 - __main__ - INFO - [14/57] [Page 4] Processing ROE-422
+2025-11-09 19:05:44,926 - __main__ - INFO - [15/57] [Page 4] Processing HUNTC-417
+2025-11-09 19:05:51,389 - __main__ - INFO - [16/57] [Page 4] Processing IPZZ-697
+2025-11-09 19:05:57,869 - __main__ - INFO - [17/57] [Page 4] Processing JUR-528
+2025-11-09 19:06:04,522 - __main__ - INFO - [18/57] [Page 4] Processing FWAY-084
+2025-11-09 19:06:10,982 - __main__ - INFO - [19/57] [Page 4] Processing JUR-053
+2025-11-09 19:06:17,451 - __main__ - INFO - [20/57] [Page 4] Processing ACHJ-074
+2025-11-09 19:06:23,963 - __main__ - INFO - [21/57] [Page 4] Processing RKI-728
+2025-11-09 19:06:30,443 - __main__ - INFO - [22/57] [Page 4] Processing ROE-387
+2025-11-09 19:06:36,926 - __main__ - INFO - [23/57] [Page 5] Processing HSODA-093
+2025-11-09 19:06:43,384 - __main__ - INFO - [24/57] [Page 5] Processing IPZZ-710
+2025-11-09 19:06:49,848 - __main__ - INFO - [25/57] [Page 5] Processing JUR-511
+2025-11-09 19:06:56,328 - __main__ - INFO - [26/57] [Page 5] Processing JUR-539
+2025-11-09 19:07:02,811 - __main__ - INFO - [27/57] [Page 5] Processing SONE-987
+2025-11-09 19:07:09,024 - utils.parser - WARNING - [P2-28] No copy button found for video code
+2025-11-09 19:07:09,025 - utils.parser - WARNING - [P2-28] No magnets content found in detail page
+2025-11-09 19:07:09,025 - utils.magnet_extractor - WARNING - [P2-28] No suitable magnet found
+2025-11-09 19:07:09,025 - __main__ - INFO - [28/57] [Page 5] Processing 
+2025-11-09 19:07:15,228 - utils.parser - WARNING - [P2-29] No copy button found for video code
+2025-11-09 19:07:15,228 - utils.parser - WARNING - [P2-29] No magnets content found in detail page
+2025-11-09 19:07:15,228 - utils.magnet_extractor - WARNING - [P2-29] No suitable magnet found
+2025-11-09 19:07:15,228 - __main__ - INFO - [29/57] [Page 5] Processing 
+2025-11-09 19:07:21,431 - utils.parser - WARNING - [P2-30] No copy button found for video code
+2025-11-09 19:07:21,432 - utils.parser - WARNING - [P2-30] No magnets content found in detail page
+2025-11-09 19:07:21,432 - utils.magnet_extractor - WARNING - [P2-30] No suitable magnet found
+2025-11-09 19:07:21,432 - __main__ - INFO - [30/57] [Page 5] Processing 
+2025-11-09 19:07:27,635 - utils.parser - WARNING - [P2-31] No copy button found for video code
+2025-11-09 19:07:27,635 - utils.parser - WARNING - [P2-31] No magnets content found in detail page
+2025-11-09 19:07:27,635 - utils.magnet_extractor - WARNING - [P2-31] No suitable magnet found
+2025-11-09 19:07:27,635 - __main__ - INFO - [31/57] [Page 6] Processing 
+2025-11-09 19:07:33,842 - utils.parser - WARNING - [P2-32] No copy button found for video code
+2025-11-09 19:07:33,842 - utils.parser - WARNING - [P2-32] No magnets content found in detail page
+2025-11-09 19:07:33,842 - utils.magnet_extractor - WARNING - [P2-32] No suitable magnet found
+2025-11-09 19:07:33,842 - __main__ - INFO - [32/57] [Page 6] Processing 
+2025-11-09 19:07:40,049 - utils.parser - WARNING - [P2-33] No copy button found for video code
+2025-11-09 19:07:40,050 - utils.parser - WARNING - [P2-33] No magnets content found in detail page
+2025-11-09 19:07:40,050 - utils.magnet_extractor - WARNING - [P2-33] No suitable magnet found
+2025-11-09 19:07:40,050 - __main__ - INFO - [33/57] [Page 6] Processing 
+2025-11-09 19:07:46,251 - utils.parser - WARNING - [P2-34] No copy button found for video code
+2025-11-09 19:07:46,251 - utils.parser - WARNING - [P2-34] No magnets content found in detail page
+2025-11-09 19:07:46,251 - utils.magnet_extractor - WARNING - [P2-34] No suitable magnet found
+2025-11-09 19:07:46,251 - __main__ - INFO - [34/57] [Page 6] Processing 
+2025-11-09 19:07:52,453 - utils.parser - WARNING - [P2-35] No copy button found for video code
+2025-11-09 19:07:52,453 - utils.parser - WARNING - [P2-35] No magnets content found in detail page
+2025-11-09 19:07:52,454 - utils.magnet_extractor - WARNING - [P2-35] No suitable magnet found
+2025-11-09 19:07:52,454 - __main__ - INFO - [35/57] [Page 6] Processing 
+2025-11-09 19:07:58,656 - utils.parser - WARNING - [P2-36] No copy button found for video code
+2025-11-09 19:07:58,657 - utils.parser - WARNING - [P2-36] No magnets content found in detail page
+2025-11-09 19:07:58,657 - utils.magnet_extractor - WARNING - [P2-36] No suitable magnet found
+2025-11-09 19:07:58,657 - __main__ - INFO - [36/57] [Page 6] Processing 
+2025-11-09 19:08:04,862 - utils.parser - WARNING - [P2-37] No copy button found for video code
+2025-11-09 19:08:04,862 - utils.parser - WARNING - [P2-37] No magnets content found in detail page
+2025-11-09 19:08:04,862 - utils.magnet_extractor - WARNING - [P2-37] No suitable magnet found
+2025-11-09 19:08:04,862 - __main__ - INFO - [37/57] [Page 6] Processing 
+2025-11-09 19:08:11,065 - utils.parser - WARNING - [P2-38] No copy button found for video code
+2025-11-09 19:08:11,066 - utils.parser - WARNING - [P2-38] No magnets content found in detail page
+2025-11-09 19:08:11,066 - utils.magnet_extractor - WARNING - [P2-38] No suitable magnet found
+2025-11-09 19:08:11,066 - __main__ - INFO - [38/57] [Page 6] Processing 
+2025-11-09 19:08:17,456 - utils.parser - WARNING - [P2-39] No copy button found for video code
+2025-11-09 19:08:17,456 - utils.parser - WARNING - [P2-39] No magnets content found in detail page
+2025-11-09 19:08:17,456 - utils.magnet_extractor - WARNING - [P2-39] No suitable magnet found
+2025-11-09 19:08:17,457 - __main__ - INFO - [39/57] [Page 6] Processing 
+2025-11-09 19:08:23,659 - utils.parser - WARNING - [P2-40] No copy button found for video code
+2025-11-09 19:08:23,659 - utils.parser - WARNING - [P2-40] No magnets content found in detail page
+2025-11-09 19:08:23,659 - utils.magnet_extractor - WARNING - [P2-40] No suitable magnet found
+2025-11-09 19:08:23,659 - __main__ - INFO - [40/57] [Page 6] Processing 
+2025-11-09 19:08:30,051 - utils.parser - WARNING - [P2-41] No copy button found for video code
+2025-11-09 19:08:30,051 - utils.parser - WARNING - [P2-41] No magnets content found in detail page
+2025-11-09 19:08:30,051 - utils.magnet_extractor - WARNING - [P2-41] No suitable magnet found
+2025-11-09 19:08:30,051 - __main__ - INFO - [41/57] [Page 6] Processing 
+2025-11-09 19:08:36,254 - utils.parser - WARNING - [P2-42] No copy button found for video code
+2025-11-09 19:08:36,254 - utils.parser - WARNING - [P2-42] No magnets content found in detail page
+2025-11-09 19:08:36,254 - utils.magnet_extractor - WARNING - [P2-42] No suitable magnet found
+2025-11-09 19:08:36,254 - __main__ - INFO - [42/57] [Page 6] Processing 
+2025-11-09 19:08:42,644 - utils.parser - WARNING - [P2-43] No copy button found for video code
+2025-11-09 19:08:42,645 - utils.parser - WARNING - [P2-43] No magnets content found in detail page
+2025-11-09 19:08:42,645 - utils.magnet_extractor - WARNING - [P2-43] No suitable magnet found
+2025-11-09 19:08:42,645 - __main__ - INFO - [43/57] [Page 6] Processing 
+2025-11-09 19:08:48,848 - utils.parser - WARNING - [P2-44] No copy button found for video code
+2025-11-09 19:08:48,848 - utils.parser - WARNING - [P2-44] No magnets content found in detail page
+2025-11-09 19:08:48,848 - utils.magnet_extractor - WARNING - [P2-44] No suitable magnet found
+2025-11-09 19:08:48,849 - __main__ - INFO - [44/57] [Page 6] Processing 
+2025-11-09 19:08:55,052 - utils.parser - WARNING - [P2-45] No copy button found for video code
+2025-11-09 19:08:55,052 - utils.parser - WARNING - [P2-45] No magnets content found in detail page
+2025-11-09 19:08:55,052 - utils.magnet_extractor - WARNING - [P2-45] No suitable magnet found
+2025-11-09 19:08:55,052 - __main__ - INFO - [45/57] [Page 6] Processing 
+2025-11-09 19:09:01,254 - utils.parser - WARNING - [P2-46] No copy button found for video code
+2025-11-09 19:09:01,255 - utils.parser - WARNING - [P2-46] No magnets content found in detail page
+2025-11-09 19:09:01,255 - utils.magnet_extractor - WARNING - [P2-46] No suitable magnet found
+2025-11-09 19:09:01,255 - __main__ - INFO - [46/57] [Page 6] Processing 
+2025-11-09 19:09:07,459 - utils.parser - WARNING - [P2-47] No copy button found for video code
+2025-11-09 19:09:07,459 - utils.parser - WARNING - [P2-47] No magnets content found in detail page
+2025-11-09 19:09:07,459 - utils.magnet_extractor - WARNING - [P2-47] No suitable magnet found
+2025-11-09 19:09:07,459 - __main__ - INFO - [47/57] [Page 6] Processing 
+2025-11-09 19:09:13,662 - utils.parser - WARNING - [P2-48] No copy button found for video code
+2025-11-09 19:09:13,662 - utils.parser - WARNING - [P2-48] No magnets content found in detail page
+2025-11-09 19:09:13,662 - utils.magnet_extractor - WARNING - [P2-48] No suitable magnet found
+2025-11-09 19:09:13,662 - __main__ - INFO - [48/57] [Page 6] Processing 
+2025-11-09 19:09:19,868 - utils.parser - WARNING - [P2-49] No copy button found for video code
+2025-11-09 19:09:19,869 - utils.parser - WARNING - [P2-49] No magnets content found in detail page
+2025-11-09 19:09:19,869 - utils.magnet_extractor - WARNING - [P2-49] No suitable magnet found
+2025-11-09 19:09:19,869 - __main__ - INFO - [49/57] [Page 7] Processing 
+2025-11-09 19:09:26,073 - utils.parser - WARNING - [P2-50] No copy button found for video code
+2025-11-09 19:09:26,073 - utils.parser - WARNING - [P2-50] No magnets content found in detail page
+2025-11-09 19:09:26,073 - utils.magnet_extractor - WARNING - [P2-50] No suitable magnet found
+2025-11-09 19:09:26,073 - __main__ - INFO - [50/57] [Page 7] Processing 
+2025-11-09 19:09:32,276 - utils.parser - WARNING - [P2-51] No copy button found for video code
+2025-11-09 19:09:32,276 - utils.parser - WARNING - [P2-51] No magnets content found in detail page
+2025-11-09 19:09:32,276 - utils.magnet_extractor - WARNING - [P2-51] No suitable magnet found
+2025-11-09 19:09:32,277 - __main__ - INFO - [51/57] [Page 7] Processing 
+2025-11-09 19:09:38,482 - utils.parser - WARNING - [P2-52] No copy button found for video code
+2025-11-09 19:09:38,482 - utils.parser - WARNING - [P2-52] No magnets content found in detail page
+2025-11-09 19:09:38,482 - utils.magnet_extractor - WARNING - [P2-52] No suitable magnet found
+2025-11-09 19:09:38,482 - __main__ - INFO - [52/57] [Page 7] Processing 
+2025-11-09 19:09:44,686 - utils.parser - WARNING - [P2-53] No copy button found for video code
+2025-11-09 19:09:44,686 - utils.parser - WARNING - [P2-53] No magnets content found in detail page
+2025-11-09 19:09:44,686 - utils.magnet_extractor - WARNING - [P2-53] No suitable magnet found
+2025-11-09 19:09:44,686 - __main__ - INFO - [53/57] [Page 7] Processing 
+2025-11-09 19:09:50,889 - utils.parser - WARNING - [P2-54] No copy button found for video code
+2025-11-09 19:09:50,890 - utils.parser - WARNING - [P2-54] No magnets content found in detail page
+2025-11-09 19:09:50,890 - utils.magnet_extractor - WARNING - [P2-54] No suitable magnet found
+2025-11-09 19:09:50,890 - __main__ - INFO - [54/57] [Page 7] Processing 
+2025-11-09 19:09:57,094 - utils.parser - WARNING - [P2-55] No copy button found for video code
+2025-11-09 19:09:57,095 - utils.parser - WARNING - [P2-55] No magnets content found in detail page
+2025-11-09 19:09:57,095 - utils.magnet_extractor - WARNING - [P2-55] No suitable magnet found
+2025-11-09 19:09:57,095 - __main__ - INFO - [55/57] [Page 7] Processing 
+2025-11-09 19:10:03,299 - utils.parser - WARNING - [P2-56] No copy button found for video code
+2025-11-09 19:10:03,299 - utils.parser - WARNING - [P2-56] No magnets content found in detail page
+2025-11-09 19:10:03,299 - utils.magnet_extractor - WARNING - [P2-56] No suitable magnet found
+2025-11-09 19:10:03,299 - __main__ - INFO - [56/57] [Page 7] Processing 
+2025-11-09 19:10:09,502 - utils.parser - WARNING - [P2-57] No copy button found for video code
+2025-11-09 19:10:09,502 - utils.parser - WARNING - [P2-57] No magnets content found in detail page
+2025-11-09 19:10:09,502 - utils.magnet_extractor - WARNING - [P2-57] No suitable magnet found
+2025-11-09 19:10:09,502 - __main__ - INFO - [57/57] [Page 7] Processing 
+2025-11-09 19:10:10,503 - __main__ - INFO - Phase 2 completed: 27 entries processed
+2025-11-09 19:10:10,503 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251109.csv
+2025-11-09 19:10:10,503 - __main__ - INFO - ==================================================
+2025-11-09 19:10:10,503 - __main__ - INFO - SUMMARY REPORT
+2025-11-09 19:10:10,503 - __main__ - INFO - ==================================================
+2025-11-09 19:10:10,503 - __main__ - INFO - Pages processed: 1 to 20
+2025-11-09 19:10:10,503 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-11-09 19:10:10,503 - __main__ - INFO - ==============================
+2025-11-09 19:10:10,503 - __main__ - INFO - PHASE 1 SUMMARY
+2025-11-09 19:10:10,503 - __main__ - INFO - ==============================
+2025-11-09 19:10:10,503 - __main__ - INFO - Phase 1 entries found: 22
+2025-11-09 19:10:10,503 - __main__ - INFO -   - Subtitle torrents: 22 (100.0%)
+2025-11-09 19:10:10,503 - __main__ - INFO -   - Hacked subtitle torrents: 4 (18.2%)
+2025-11-09 19:10:10,503 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
+2025-11-09 19:10:10,503 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
+2025-11-09 19:10:10,503 - __main__ - INFO - ==============================
+2025-11-09 19:10:10,503 - __main__ - INFO - PHASE 2 SUMMARY
+2025-11-09 19:10:10,503 - __main__ - INFO - ==============================
+2025-11-09 19:10:10,503 - __main__ - INFO - Phase 2 entries found: 27
+2025-11-09 19:10:10,503 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
+2025-11-09 19:10:10,503 - __main__ - INFO -   - Hacked subtitle torrents: 3 (11.1%)
+2025-11-09 19:10:10,503 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
+2025-11-09 19:10:10,503 - __main__ - INFO -   - No-subtitle torrents: 27 (100.0%)
+2025-11-09 19:10:10,503 - __main__ - INFO - ==============================
+2025-11-09 19:10:10,503 - __main__ - INFO - OVERALL SUMMARY
+2025-11-09 19:10:10,503 - __main__ - INFO - ==============================
+2025-11-09 19:10:10,503 - __main__ - INFO - Total entries found: 49
+2025-11-09 19:10:10,503 - __main__ - INFO - Successfully processed: 49
+2025-11-09 19:10:10,503 - __main__ - INFO - Skipped already parsed in this session: 80
+2025-11-09 19:10:10,503 - __main__ - INFO - Skipped already parsed in previous runs: 1777
+2025-11-09 19:10:10,503 - __main__ - INFO - Current parsed links in memory: 80
+2025-11-09 19:10:10,503 - __main__ - INFO - Overall subtitle torrents: 22 (44.9%)
+2025-11-09 19:10:10,503 - __main__ - INFO - Overall hacked subtitle torrents: 7 (14.3%)
+2025-11-09 19:10:10,503 - __main__ - INFO - Overall hacked no-subtitle torrents: 0 (0.0%)
+2025-11-09 19:10:10,503 - __main__ - INFO - Overall no-subtitle torrents: 27 (55.1%)
+2025-11-09 19:10:10,503 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251109.csv
+2025-11-09 19:10:10,503 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-11-09 19:10:10,503 - __main__ - INFO - ==================================================
