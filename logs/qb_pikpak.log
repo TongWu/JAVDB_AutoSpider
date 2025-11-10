@@ -64,3 +64,5 @@
 2025-11-10 19:06:51,682 - __main__ - WARNING - Pull failed (this might be normal for new repos): Command ['git', 'pull', 'https://tongwu:ghp_***MASKED***@github.com/TongWu/JAVDB_AutoSpider.git', 'main'] returned non-zero exit status 128
 2025-11-10 19:06:51,682 - __main__ - INFO - Adding files to git...
 2025-11-10 19:06:51,704 - __main__ - INFO - Commit changes for pipeline_log
+2025-11-10 19:06:52,304 - __main__ - ERROR - Git operation failed: Command ['git', 'push', 'https://tongwu:ghp_***MASKED***@github.com/TongWu/JAVDB_AutoSpider.git', 'main'] returned non-zero exit status 1
+2025-11-10 19:06:52,304 - __main__ - ERROR - Command output: No output available
