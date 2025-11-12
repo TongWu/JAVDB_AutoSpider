@@ -1,41 +1,42 @@
-2025-11-11 19:05:43,506 - __main__ - INFO - Starting qBittorrent uploader...
-2025-11-11 19:05:43,506 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251111.csv
-2025-11-11 19:05:43,506 - __main__ - INFO - Found 20 torrent links in Daily Report/Javdb_TodayTitle_20251111.csv
-2025-11-11 19:05:43,506 - __main__ - INFO - Skipped 2 already downloaded torrents
-2025-11-11 19:05:43,506 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-11-11 19:05:43,666 - __main__ - INFO - Successfully logged in to qBittorrent
-2025-11-11 19:05:43,666 - __main__ - INFO - History manager imported, will update downloaded status
-2025-11-11 19:05:43,666 - __main__ - INFO - Starting to add 20 torrents to qBittorrent...
-2025-11-11 19:05:43,666 - __main__ - INFO - [1/20] Adding: CKCK-014 [Subtitle]
-2025-11-11 19:05:44,670 - __main__ - INFO - [2/20] Adding: CKCK-022 [Subtitle]
-2025-11-11 19:05:45,673 - __main__ - INFO - [3/20] Adding: CKCK-024 [Subtitle]
-2025-11-11 19:05:46,676 - __main__ - INFO - [4/20] Adding: CLUB-886 [Subtitle]
-2025-11-11 19:05:47,679 - __main__ - INFO - [5/20] Adding: CLUB-888 [Subtitle]
-2025-11-11 19:05:48,682 - __main__ - INFO - [6/20] Adding: DLDSS-436 [Subtitle]
-2025-11-11 19:05:49,685 - __main__ - INFO - [7/20] Adding: DLDSS-438 [Subtitle]
-2025-11-11 19:05:50,688 - __main__ - INFO - [8/20] Adding: DLDSS-440 [Subtitle]
-2025-11-11 19:05:51,691 - __main__ - INFO - [9/20] Adding: DLDSS-442 [Subtitle]
-2025-11-11 19:05:52,697 - __main__ - INFO - [10/20] Adding: START-306 [Hacked+Subtitle]
-2025-11-11 19:05:53,699 - __main__ - INFO - [11/20] Adding: START-306 [Subtitle]
-2025-11-11 19:05:54,702 - __main__ - INFO - [12/20] Adding: CLOT-035 [NoSubtitle]
-2025-11-11 19:05:55,705 - __main__ - INFO - [13/20] Adding: ABF-283 [Hacked+Subtitle]
-2025-11-11 19:05:56,707 - __main__ - INFO - [14/20] Adding: KBR-032 [Hacked+Subtitle]
-2025-11-11 19:05:57,709 - __main__ - INFO - [15/20] Adding: START-255 [Hacked+Subtitle]
-2025-11-11 19:05:58,712 - __main__ - INFO - [16/20] Adding: START-255 [NoSubtitle]
-2025-11-11 19:05:59,716 - __main__ - INFO - [17/20] Adding: IPZZ-698 [Hacked+Subtitle]
-2025-11-11 19:06:00,719 - __main__ - INFO - [18/20] Adding: MVG-143 [NoSubtitle]
-2025-11-11 19:06:01,722 - __main__ - INFO - [19/20] Adding: MKMP-685 [NoSubtitle]
-2025-11-11 19:06:02,724 - __main__ - INFO - [20/20] Adding: MVG-144 [NoSubtitle]
-2025-11-11 19:06:03,727 - __main__ - INFO - ==================================================
-2025-11-11 19:06:03,727 - __main__ - INFO - UPLOAD SUMMARY
-2025-11-11 19:06:03,728 - __main__ - INFO - ==================================================
-2025-11-11 19:06:03,728 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251111.csv
-2025-11-11 19:06:03,728 - __main__ - INFO - Total torrents found: 20
-2025-11-11 19:06:03,728 - __main__ - INFO - Successfully added: 20
-2025-11-11 19:06:03,728 - __main__ - INFO -   - Hacked subtitle torrents: 5
-2025-11-11 19:06:03,728 - __main__ - INFO -   - Hacked no subtitle torrents: 0
-2025-11-11 19:06:03,728 - __main__ - INFO -   - Subtitle torrents: 10
-2025-11-11 19:06:03,728 - __main__ - INFO -   - No subtitle torrents: 5
-2025-11-11 19:06:03,728 - __main__ - INFO - Failed to add: 0
-2025-11-11 19:06:03,728 - __main__ - INFO - Success rate: 100.0%
-2025-11-11 19:06:03,728 - __main__ - INFO - ==================================================
+2025-11-12 19:05:08,303 - __main__ - INFO - Starting qBittorrent uploader...
+2025-11-12 19:05:08,303 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251112.csv
+2025-11-12 19:05:08,304 - __main__ - INFO - Found 21 torrent links in Daily Report/Javdb_TodayTitle_20251112.csv
+2025-11-12 19:05:08,304 - __main__ - INFO - Skipped 2 already downloaded torrents
+2025-11-12 19:05:08,304 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-11-12 19:05:08,458 - __main__ - INFO - Successfully logged in to qBittorrent
+2025-11-12 19:05:08,458 - __main__ - INFO - History manager imported, will update downloaded status
+2025-11-12 19:05:08,458 - __main__ - INFO - Starting to add 21 torrents to qBittorrent...
+2025-11-12 19:05:08,458 - __main__ - INFO - [1/21] Adding: ABF-276 [Hacked+Subtitle]
+2025-11-12 19:05:09,463 - __main__ - INFO - [2/21] Adding: ADN-733 [Hacked+Subtitle]
+2025-11-12 19:05:10,465 - __main__ - INFO - [3/21] Adding: ALDN-519 [Subtitle]
+2025-11-12 19:05:11,469 - __main__ - INFO - [4/21] Adding: DASS-735 [Subtitle]
+2025-11-12 19:05:12,472 - __main__ - INFO - [5/21] Adding: DASS-769 [Subtitle]
+2025-11-12 19:05:13,475 - __main__ - INFO - [6/21] Adding: DASS-805 [Hacked+Subtitle]
+2025-11-12 19:05:14,478 - __main__ - INFO - [7/21] Adding: DASS-805 [Subtitle]
+2025-11-12 19:05:15,481 - __main__ - INFO - [8/21] Adding: IPZZ-698 [Hacked+Subtitle]
+2025-11-12 19:05:16,484 - __main__ - INFO - [9/21] Adding: IPZZ-698 [Subtitle]
+2025-11-12 19:05:17,487 - __main__ - INFO - [10/21] Adding: JUR-053 [Subtitle]
+2025-11-12 19:05:18,490 - __main__ - INFO - [11/21] Adding: JUR-056 [Subtitle]
+2025-11-12 19:05:19,493 - __main__ - INFO - [12/21] Adding: JUR-511 [Subtitle]
+2025-11-12 19:05:20,496 - __main__ - INFO - [13/21] Adding: JUR-521 [Subtitle]
+2025-11-12 19:05:21,499 - __main__ - INFO - [14/21] Adding: STARS-734 [Hacked+Subtitle]
+2025-11-12 19:05:22,502 - __main__ - INFO - [15/21] Adding: STARS-734 [Subtitle]
+2025-11-12 19:05:23,505 - __main__ - INFO - [16/21] Adding: STARS-766 [Hacked+Subtitle]
+2025-11-12 19:05:24,508 - __main__ - INFO - [17/21] Adding: STARS-766 [Subtitle]
+2025-11-12 19:05:25,511 - __main__ - INFO - [18/21] Adding: START-443 [NoSubtitle]
+2025-11-12 19:05:26,514 - __main__ - INFO - [19/21] Adding: SWEET-042 [NoSubtitle]
+2025-11-12 19:05:27,516 - __main__ - INFO - [20/21] Adding: SWEET-043 [NoSubtitle]
+2025-11-12 19:05:28,519 - __main__ - INFO - [21/21] Adding: URKK-119 [NoSubtitle]
+2025-11-12 19:05:29,523 - __main__ - INFO - ==================================================
+2025-11-12 19:05:29,523 - __main__ - INFO - UPLOAD SUMMARY
+2025-11-12 19:05:29,523 - __main__ - INFO - ==================================================
+2025-11-12 19:05:29,523 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251112.csv
+2025-11-12 19:05:29,523 - __main__ - INFO - Total torrents found: 21
+2025-11-12 19:05:29,523 - __main__ - INFO - Successfully added: 21
+2025-11-12 19:05:29,523 - __main__ - INFO -   - Hacked subtitle torrents: 6
+2025-11-12 19:05:29,523 - __main__ - INFO -   - Hacked no subtitle torrents: 0
+2025-11-12 19:05:29,523 - __main__ - INFO -   - Subtitle torrents: 11
+2025-11-12 19:05:29,523 - __main__ - INFO -   - No subtitle torrents: 4
+2025-11-12 19:05:29,523 - __main__ - INFO - Failed to add: 0
+2025-11-12 19:05:29,523 - __main__ - INFO - Success rate: 100.0%
+2025-11-12 19:05:29,523 - __main__ - INFO - ==================================================
