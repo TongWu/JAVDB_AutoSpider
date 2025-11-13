@@ -1,42 +1,6 @@
-2025-11-12 19:05:08,303 - __main__ - INFO - Starting qBittorrent uploader...
-2025-11-12 19:05:08,303 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251112.csv
-2025-11-12 19:05:08,304 - __main__ - INFO - Found 21 torrent links in Daily Report/Javdb_TodayTitle_20251112.csv
-2025-11-12 19:05:08,304 - __main__ - INFO - Skipped 2 already downloaded torrents
-2025-11-12 19:05:08,304 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-11-12 19:05:08,458 - __main__ - INFO - Successfully logged in to qBittorrent
-2025-11-12 19:05:08,458 - __main__ - INFO - History manager imported, will update downloaded status
-2025-11-12 19:05:08,458 - __main__ - INFO - Starting to add 21 torrents to qBittorrent...
-2025-11-12 19:05:08,458 - __main__ - INFO - [1/21] Adding: ABF-276 [Hacked+Subtitle]
-2025-11-12 19:05:09,463 - __main__ - INFO - [2/21] Adding: ADN-733 [Hacked+Subtitle]
-2025-11-12 19:05:10,465 - __main__ - INFO - [3/21] Adding: ALDN-519 [Subtitle]
-2025-11-12 19:05:11,469 - __main__ - INFO - [4/21] Adding: DASS-735 [Subtitle]
-2025-11-12 19:05:12,472 - __main__ - INFO - [5/21] Adding: DASS-769 [Subtitle]
-2025-11-12 19:05:13,475 - __main__ - INFO - [6/21] Adding: DASS-805 [Hacked+Subtitle]
-2025-11-12 19:05:14,478 - __main__ - INFO - [7/21] Adding: DASS-805 [Subtitle]
-2025-11-12 19:05:15,481 - __main__ - INFO - [8/21] Adding: IPZZ-698 [Hacked+Subtitle]
-2025-11-12 19:05:16,484 - __main__ - INFO - [9/21] Adding: IPZZ-698 [Subtitle]
-2025-11-12 19:05:17,487 - __main__ - INFO - [10/21] Adding: JUR-053 [Subtitle]
-2025-11-12 19:05:18,490 - __main__ - INFO - [11/21] Adding: JUR-056 [Subtitle]
-2025-11-12 19:05:19,493 - __main__ - INFO - [12/21] Adding: JUR-511 [Subtitle]
-2025-11-12 19:05:20,496 - __main__ - INFO - [13/21] Adding: JUR-521 [Subtitle]
-2025-11-12 19:05:21,499 - __main__ - INFO - [14/21] Adding: STARS-734 [Hacked+Subtitle]
-2025-11-12 19:05:22,502 - __main__ - INFO - [15/21] Adding: STARS-734 [Subtitle]
-2025-11-12 19:05:23,505 - __main__ - INFO - [16/21] Adding: STARS-766 [Hacked+Subtitle]
-2025-11-12 19:05:24,508 - __main__ - INFO - [17/21] Adding: STARS-766 [Subtitle]
-2025-11-12 19:05:25,511 - __main__ - INFO - [18/21] Adding: START-443 [NoSubtitle]
-2025-11-12 19:05:26,514 - __main__ - INFO - [19/21] Adding: SWEET-042 [NoSubtitle]
-2025-11-12 19:05:27,516 - __main__ - INFO - [20/21] Adding: SWEET-043 [NoSubtitle]
-2025-11-12 19:05:28,519 - __main__ - INFO - [21/21] Adding: URKK-119 [NoSubtitle]
-2025-11-12 19:05:29,523 - __main__ - INFO - ==================================================
-2025-11-12 19:05:29,523 - __main__ - INFO - UPLOAD SUMMARY
-2025-11-12 19:05:29,523 - __main__ - INFO - ==================================================
-2025-11-12 19:05:29,523 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251112.csv
-2025-11-12 19:05:29,523 - __main__ - INFO - Total torrents found: 21
-2025-11-12 19:05:29,523 - __main__ - INFO - Successfully added: 21
-2025-11-12 19:05:29,523 - __main__ - INFO -   - Hacked subtitle torrents: 6
-2025-11-12 19:05:29,523 - __main__ - INFO -   - Hacked no subtitle torrents: 0
-2025-11-12 19:05:29,523 - __main__ - INFO -   - Subtitle torrents: 11
-2025-11-12 19:05:29,523 - __main__ - INFO -   - No subtitle torrents: 4
-2025-11-12 19:05:29,523 - __main__ - INFO - Failed to add: 0
-2025-11-12 19:05:29,523 - __main__ - INFO - Success rate: 100.0%
-2025-11-12 19:05:29,523 - __main__ - INFO - ==================================================
+2025-11-13 19:05:07,297 - __main__ - INFO - Starting qBittorrent uploader...
+2025-11-13 19:05:07,297 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251113.csv
+2025-11-13 19:05:07,297 - __main__ - INFO - Found 21 torrent links in Daily Report/Javdb_TodayTitle_20251113.csv
+2025-11-13 19:05:07,297 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-11-13 19:05:10,397 - __main__ - ERROR - Login error: HTTPConnectionPool(host='101.100.165.240', port=12301): Max retries exceeded with url: /api/v2/auth/login (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x777d66c188f0>: Failed to establish a new connection: [Errno 113] No route to host'))
+2025-11-13 19:05:10,397 - __main__ - ERROR - Failed to login to qBittorrent. Please check username and password.
