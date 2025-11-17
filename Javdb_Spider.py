@@ -400,8 +400,8 @@ def main():
             logger.info(f"Created directory: {output_dir}")
         output_csv = args.output_file if args.output_file else OUTPUT_CSV
         csv_path = os.path.join(output_dir, output_csv)
-        use_history_for_loading = False  # Don't check history for ad hoc mode
-        use_history_for_saving = True    # But still record to history
+        use_history_for_loading = True   # Check history for ad hoc mode (changed from False)
+        use_history_for_saving = True    # Record to history for ad hoc mode
     else:
         output_dir = DAILY_REPORT_DIR
         output_csv = args.output_file if args.output_file else OUTPUT_CSV
@@ -413,7 +413,10 @@ def main():
     logger.info(f"Arguments: start_page={start_page}, end_page={end_page}, phase={phase_mode}")
     if custom_url:
         logger.info(f"Custom URL: {custom_url}")
-        logger.info("AD HOC MODE: Will process all entries (no history checking) but record to history")
+        if ignore_history:
+            logger.info("AD HOC MODE: Will process all entries (ignoring history)")
+        else:
+            logger.info("AD HOC MODE: Will skip entries already in history (use --ignore-history to override)")
     if dry_run:
         logger.info("DRY RUN MODE: No CSV file will be written")
     if ignore_history:
@@ -886,8 +889,8 @@ def main():
     logger.info(f"Skipped already parsed in this session: {len(parsed_links)}")
     if use_history_for_loading and not ignore_history:
         logger.info(f"Skipped already parsed in previous runs: {len(parsed_movies_history_phase1)}")
-    elif custom_url:
-        logger.info("Ad hoc mode: No history checking performed")
+    elif ignore_history:
+        logger.info("History checking was disabled (--ignore-history)")
     logger.info(f"Current parsed links in memory: {len(parsed_links)}")
 
     # Overall torrent statistics
