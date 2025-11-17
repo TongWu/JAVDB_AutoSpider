@@ -24,13 +24,27 @@ A comprehensive Python automation system for extracting torrent links from javdb
   3. U无码破解 (-U.无码破解.torrent)
   4. U (-U.torrent) - Lowest priority
 
+### Dual Mode Support
+The spider operates in two modes:
+
+#### Daily Mode (Default)
+- Uses base URL: `https://javdb.com/?vft=2`
+- Saves results to `Daily Report/` directory
+- Checks history by default to avoid re-downloading
+- Uses "JavDB" category in qBittorrent
+
+#### Ad Hoc Mode (Custom URL)
+- Activated with `--url` parameter for custom URLs (actors, tags, etc.)
+- Saves results to `Ad Hoc/` directory
+- **Now checks history by default** to skip already downloaded entries
+- Use `--ignore-history` to re-download everything
+- Uses "Ad Hoc" category in qBittorrent
+- Example: `python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ"`
+
 ### qBittorrent Integration
 - Automatically reads current date's CSV file
 - Connects to qBittorrent via Web UI API
 - Adds torrents with proper categorization and settings
-- **Dual Mode Support**: 
-  - **Daily Mode**: Uses "JavDB" category for regular daily reports
-  - **Ad Hoc Mode**: Uses "Ad Hoc" category for custom URL scraping results
 - Comprehensive logging and progress tracking
 - Detailed summary reports
 
@@ -110,11 +124,14 @@ python Javdb_Spider.py --phase all
 
 #### History Control
 ```bash
-# Ignore history file and scrape all pages
+# Ignore history file and scrape all pages (for both daily and ad hoc modes)
 python Javdb_Spider.py --ignore-history
 
-# Custom URL scraping (creates "Ad Hoc" directory)
+# Custom URL scraping (creates "Ad Hoc" directory, checks history by default)
 python Javdb_Spider.py --url "https://javdb.com/?vft=2"
+
+# Custom URL scraping, ignoring history to re-download everything
+python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --ignore-history
 
 # Ignore today/yesterday release date tags and process all matching entries
 python Javdb_Spider.py --ignore-release-date
@@ -139,6 +156,12 @@ python Javdb_Spider.py --ignore-release-date --phase 1
 
 # Download all high-quality entries regardless of release date
 python Javdb_Spider.py --ignore-release-date --phase 2 --start-page 1 --end-page 10
+
+# Ad hoc mode: Download specific actor's movies (skips already downloaded)
+python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --ignore-release-date
+
+# Ad hoc mode: Re-download everything from an actor (ignores history)
+python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --ignore-history --ignore-release-date
 ```
 
 #### Argument Reference
@@ -150,8 +173,8 @@ python Javdb_Spider.py --ignore-release-date --phase 2 --start-page 1 --end-page
 | `--start-page` | Starting page number | 1 | `--start-page 5` |
 | `--end-page` | Ending page number | 20 | `--end-page 10` |
 | `--all` | Parse until empty page | False | `--all` |
-| `--ignore-history` | Skip history checking | False | `--ignore-history` |
-| `--url` | Custom URL to scrape | None | `--url "https://javdb.com/?vft=2"` |
+| `--ignore-history` | Skip history checking (both daily & ad hoc) | False | `--ignore-history` |
+| `--url` | Custom URL to scrape (enables ad hoc mode) | None | `--url "https://javdb.com/?vft=2"` |
 | `--phase` | Phase to run (1/2/all) | all | `--phase 1` |
 | `--ignore-release-date` | Ignore today/yesterday tags | False | `--ignore-release-date` |
 
