@@ -1,57 +1,43 @@
-2025-11-16 19:08:42,043 - __main__ - INFO - Starting qBittorrent uploader...
-2025-11-16 19:08:42,043 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251116.csv
-2025-11-16 19:08:42,044 - __main__ - INFO - Found 37 torrent links in Daily Report/Javdb_TodayTitle_20251116.csv
-2025-11-16 19:08:42,044 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-11-16 19:08:42,230 - __main__ - INFO - Successfully logged in to qBittorrent
-2025-11-16 19:08:42,230 - __main__ - INFO - History manager imported, will update downloaded status
-2025-11-16 19:08:42,230 - __main__ - INFO - Starting to add 37 torrents to qBittorrent...
-2025-11-16 19:08:42,230 - __main__ - INFO - [1/37] Adding: JUR-477 [Hacked+Subtitle]
-2025-11-16 19:08:43,235 - __main__ - INFO - [2/37] Adding: JUR-477 [Subtitle]
-2025-11-16 19:08:44,238 - __main__ - INFO - [3/37] Adding: JUR-514 [Subtitle]
-2025-11-16 19:08:45,240 - __main__ - INFO - [4/37] Adding: JUR-524 [Hacked+Subtitle]
-2025-11-16 19:08:46,243 - __main__ - INFO - [5/37] Adding: JUR-524 [Subtitle]
-2025-11-16 19:08:47,245 - __main__ - INFO - [6/37] Adding: JUR-534 [Subtitle]
-2025-11-16 19:08:48,247 - __main__ - INFO - [7/37] Adding: REAL-948 [Subtitle]
-2025-11-16 19:08:49,249 - __main__ - INFO - [8/37] Adding: ROE-417 [Subtitle]
-2025-11-16 19:08:50,252 - __main__ - INFO - [9/37] Adding: ROE-418 [Subtitle]
-2025-11-16 19:08:51,255 - __main__ - INFO - [10/37] Adding: ROE-420 [Subtitle]
-2025-11-16 19:08:52,257 - __main__ - INFO - [11/37] Adding: ROE-422 [Subtitle]
-2025-11-16 19:08:53,260 - __main__ - INFO - [12/37] Adding: STARS-852 [Hacked+Subtitle]
-2025-11-16 19:08:54,262 - __main__ - INFO - [13/37] Adding: STARS-852 [Subtitle]
-2025-11-16 19:08:55,265 - __main__ - INFO - [14/37] Adding: STARS-866 [Hacked+Subtitle]
-2025-11-16 19:08:56,268 - __main__ - INFO - [15/37] Adding: STARS-866 [Subtitle]
-2025-11-16 19:08:57,270 - __main__ - INFO - [16/37] Adding: STARS-964 [Hacked+Subtitle]
-2025-11-16 19:08:58,273 - __main__ - INFO - [17/37] Adding: STARS-964 [Subtitle]
-2025-11-16 19:08:59,275 - __main__ - INFO - [18/37] Adding: DDFF-045 [NoSubtitle]
-2025-11-16 19:09:00,277 - __main__ - INFO - [19/37] Adding: MXGS-1406 [NoSubtitle]
-2025-11-16 19:09:01,279 - __main__ - INFO - [20/37] Adding: SDHS-044 [Hacked+Subtitle]
-2025-11-16 19:09:02,282 - __main__ - INFO - [21/37] Adding: SDHS-044 [NoSubtitle]
-2025-11-16 19:09:03,284 - __main__ - INFO - [22/37] Adding: MIKR-052 [NoSubtitle]
-2025-11-16 19:09:04,287 - __main__ - INFO - [23/37] Adding: PRED-819 [NoSubtitle]
-2025-11-16 19:09:05,289 - __main__ - INFO - [24/37] Adding: MIDA-404 [NoSubtitle]
-2025-11-16 19:09:06,292 - __main__ - INFO - [25/37] Adding: MIKR-050 [NoSubtitle]
-2025-11-16 19:09:07,294 - __main__ - INFO - [26/37] Adding: NIMA-065 [NoSubtitle]
-2025-11-16 19:09:08,296 - __main__ - INFO - [27/37] Adding: NMSL-027 [NoSubtitle]
-2025-11-16 19:09:09,298 - __main__ - INFO - [28/37] Adding: GVH-797 [NoSubtitle]
-2025-11-16 19:09:10,300 - __main__ - INFO - [29/37] Adding: HALT-073 [NoSubtitle]
-2025-11-16 19:09:11,303 - __main__ - INFO - [30/37] Adding: SYKH-165 [NoSubtitle]
-2025-11-16 19:09:12,305 - __main__ - INFO - [31/37] Adding: MIMK-252 [NoSubtitle]
-2025-11-16 19:09:13,307 - __main__ - INFO - [32/37] Adding: MMBF-004 [NoSubtitle]
-2025-11-16 19:09:14,310 - __main__ - INFO - [33/37] Adding: MUDR-346 [NoSubtitle]
-2025-11-16 19:09:15,312 - __main__ - INFO - [34/37] Adding: MIDA-390 [NoSubtitle]
-2025-11-16 19:09:16,314 - __main__ - INFO - [35/37] Adding: MFYD-073 [NoSubtitle]
-2025-11-16 19:09:17,316 - __main__ - INFO - [36/37] Adding: MFYD-078 [NoSubtitle]
-2025-11-16 19:09:18,320 - __main__ - INFO - [37/37] Adding: FPRE-204 [NoSubtitle]
-2025-11-16 19:09:19,322 - __main__ - INFO - ==================================================
-2025-11-16 19:09:19,322 - __main__ - INFO - UPLOAD SUMMARY
-2025-11-16 19:09:19,322 - __main__ - INFO - ==================================================
-2025-11-16 19:09:19,322 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251116.csv
-2025-11-16 19:09:19,322 - __main__ - INFO - Total torrents found: 37
-2025-11-16 19:09:19,322 - __main__ - INFO - Successfully added: 37
-2025-11-16 19:09:19,322 - __main__ - INFO -   - Hacked subtitle torrents: 6
-2025-11-16 19:09:19,322 - __main__ - INFO -   - Hacked no subtitle torrents: 0
-2025-11-16 19:09:19,322 - __main__ - INFO -   - Subtitle torrents: 12
-2025-11-16 19:09:19,322 - __main__ - INFO -   - No subtitle torrents: 19
-2025-11-16 19:09:19,323 - __main__ - INFO - Failed to add: 0
-2025-11-16 19:09:19,323 - __main__ - INFO - Success rate: 100.0%
-2025-11-16 19:09:19,323 - __main__ - INFO - ==================================================
+2025-11-17 19:06:50,736 - __main__ - INFO - Starting qBittorrent uploader...
+2025-11-17 19:06:50,736 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251117.csv
+2025-11-17 19:06:50,737 - __main__ - INFO - Found 22 torrent links in Daily Report/Javdb_TodayTitle_20251117.csv
+2025-11-17 19:06:50,737 - __main__ - INFO - Skipped 3 already downloaded torrents
+2025-11-17 19:06:50,737 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-11-17 19:06:50,906 - __main__ - INFO - Successfully logged in to qBittorrent
+2025-11-17 19:06:50,906 - __main__ - INFO - History manager imported, will update downloaded status
+2025-11-17 19:06:50,906 - __main__ - INFO - Starting to add 22 torrents to qBittorrent...
+2025-11-17 19:06:50,906 - __main__ - INFO - [1/22] Adding: CAWD-876 [Hacked+Subtitle]
+2025-11-17 19:06:51,911 - __main__ - INFO - [2/22] Adding: CAWD-876 [Subtitle]
+2025-11-17 19:06:52,914 - __main__ - INFO - [3/22] Adding: FNS-101 [Hacked-NoSubtitle]
+2025-11-17 19:06:53,916 - __main__ - INFO - [4/22] Adding: FNS-101 [Subtitle]
+2025-11-17 19:06:54,919 - __main__ - INFO - [5/22] Adding: FNS-102 [Subtitle]
+2025-11-17 19:06:55,921 - __main__ - INFO - [6/22] Adding: FNS-105 [Subtitle]
+2025-11-17 19:06:56,923 - __main__ - INFO - [7/22] Adding: FNS-113 [Subtitle]
+2025-11-17 19:06:57,925 - __main__ - INFO - [8/22] Adding: FOCS-278 [Subtitle]
+2025-11-17 19:06:58,928 - __main__ - INFO - [9/22] Adding: FOCS-279 [Subtitle]
+2025-11-17 19:06:59,930 - __main__ - INFO - [10/22] Adding: FOCS-280 [Subtitle]
+2025-11-17 19:07:00,932 - __main__ - INFO - [11/22] Adding: IPZZ-697 [Hacked+Subtitle]
+2025-11-17 19:07:01,935 - __main__ - INFO - [12/22] Adding: IPZZ-079 [Hacked+Subtitle]
+2025-11-17 19:07:02,938 - __main__ - INFO - [13/22] Adding: IPZZ-588 [Hacked+Subtitle]
+2025-11-17 19:07:03,940 - __main__ - INFO - [14/22] Adding: IPZZ-588 [NoSubtitle]
+2025-11-17 19:07:04,942 - __main__ - INFO - [15/22] Adding: MIKR-051 [Hacked+Subtitle]
+2025-11-17 19:07:05,944 - __main__ - INFO - [16/22] Adding: TIKB-210 [NoSubtitle]
+2025-11-17 19:07:06,947 - __main__ - INFO - [17/22] Adding: FLAV-407 [NoSubtitle]
+2025-11-17 19:07:07,949 - __main__ - INFO - [18/22] Adding: PRIN-053 [NoSubtitle]
+2025-11-17 19:07:08,952 - __main__ - INFO - [19/22] Adding: HMN-748 [NoSubtitle]
+2025-11-17 19:07:09,954 - __main__ - INFO - [20/22] Adding: MUKD-559 [NoSubtitle]
+2025-11-17 19:07:10,957 - __main__ - INFO - [21/22] Adding: EBWH-289 [NoSubtitle]
+2025-11-17 19:07:11,960 - __main__ - INFO - [22/22] Adding: GVH-798 [NoSubtitle]
+2025-11-17 19:07:12,962 - __main__ - INFO - ==================================================
+2025-11-17 19:07:12,962 - __main__ - INFO - UPLOAD SUMMARY
+2025-11-17 19:07:12,962 - __main__ - INFO - ==================================================
+2025-11-17 19:07:12,962 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251117.csv
+2025-11-17 19:07:12,962 - __main__ - INFO - Total torrents found: 22
+2025-11-17 19:07:12,962 - __main__ - INFO - Successfully added: 22
+2025-11-17 19:07:12,962 - __main__ - INFO -   - Hacked subtitle torrents: 5
+2025-11-17 19:07:12,962 - __main__ - INFO -   - Hacked no subtitle torrents: 1
+2025-11-17 19:07:12,962 - __main__ - INFO -   - Subtitle torrents: 8
+2025-11-17 19:07:12,962 - __main__ - INFO -   - No subtitle torrents: 8
+2025-11-17 19:07:12,962 - __main__ - INFO - Failed to add: 0
+2025-11-17 19:07:12,962 - __main__ - INFO - Success rate: 100.0%
+2025-11-17 19:07:12,962 - __main__ - INFO - ==================================================
