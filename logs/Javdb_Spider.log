@@ -83,3 +83,223 @@
 2025-11-18 22:54:22,100 - __main__ - INFO - [5/22] [Page 1] Processing START-420
 2025-11-18 22:54:23,836 - __main__ - WARNING - Failed to bypass age verification: 403
 2025-11-18 22:54:23,836 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:54:28,849 - __main__ - INFO - [6/22] [Page 1] Processing START-421
+2025-11-18 22:54:30,765 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:54:30,765 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:54:35,777 - __main__ - INFO - [7/22] [Page 1] Processing START-431
+2025-11-18 22:54:37,459 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:54:37,459 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:54:42,471 - __main__ - INFO - [8/22] [Page 1] Processing START-435
+2025-11-18 22:54:44,237 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:54:44,237 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:54:49,256 - __main__ - INFO - [9/22] [Page 1] Processing START-437
+2025-11-18 22:54:50,918 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:54:50,918 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:54:55,938 - __main__ - INFO - [10/22] [Page 1] Processing START-440
+2025-11-18 22:54:57,689 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:54:57,689 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:55:02,704 - __main__ - INFO - [11/22] [Page 1] Processing START-448
+2025-11-18 22:55:04,383 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:55:04,383 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:55:09,396 - __main__ - INFO - [12/22] [Page 1] Processing START-449
+2025-11-18 22:55:11,081 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:55:11,081 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:55:16,099 - __main__ - INFO - [13/22] [Page 2] Processing CAWD-876
+2025-11-18 22:55:16,788 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:55:16,788 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:55:21,802 - __main__ - INFO - [14/22] [Page 2] Processing FNS-101
+2025-11-18 22:55:22,494 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:55:22,494 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:55:27,515 - __main__ - INFO - [15/22] [Page 3] Processing FNS-102
+2025-11-18 22:55:28,201 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:55:28,201 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:55:33,234 - __main__ - INFO - [16/22] [Page 3] Processing FNS-105
+2025-11-18 22:55:33,881 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:55:33,882 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:55:38,895 - __main__ - INFO - [17/22] [Page 3] Processing FNS-113
+2025-11-18 22:55:39,529 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:55:39,529 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:55:44,558 - __main__ - INFO - [18/22] [Page 3] Processing FOCS-278
+2025-11-18 22:55:45,200 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:55:45,200 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:55:50,230 - __main__ - INFO - [19/22] [Page 3] Processing FOCS-279
+2025-11-18 22:55:51,001 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:55:51,003 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:55:56,033 - __main__ - INFO - [20/22] [Page 3] Processing FOCS-280
+2025-11-18 22:55:56,816 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:55:56,816 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:01,838 - __main__ - INFO - [21/22] [Page 3] Processing IPZZ-477
+2025-11-18 22:56:02,543 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:02,543 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:07,572 - __main__ - INFO - [22/22] [Page 3] Processing IPZZ-697
+2025-11-18 22:56:07,572 - __main__ - INFO - Phase 1 completed: 12 entries processed
+2025-11-18 22:56:07,572 - __main__ - INFO - ==================================================
+2025-11-18 22:56:07,572 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-11-18 22:56:07,572 - __main__ - INFO - ==================================================
+2025-11-18 22:56:08,293 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:08,294 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:08,321 - utils.parser - INFO - [Page 1] Found 4 entries for phase 2
+2025-11-18 22:56:10,892 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:10,892 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:10,915 - utils.parser - INFO - [Page 2] Found 7 entries for phase 2
+2025-11-18 22:56:13,620 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:13,620 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:13,643 - utils.parser - INFO - [Page 3] Found 6 entries for phase 2
+2025-11-18 22:56:16,467 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:16,468 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:16,492 - utils.parser - INFO - [Page 4] Found 2 entries for phase 2
+2025-11-18 22:56:19,306 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:19,307 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:19,326 - utils.parser - INFO - [Page 5] Found 0 entries for phase 2
+2025-11-18 22:56:22,004 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:22,004 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:22,023 - utils.parser - INFO - [Page 6] Found 0 entries for phase 2
+2025-11-18 22:56:24,754 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:24,758 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:24,779 - utils.parser - INFO - [Page 7] Found 0 entries for phase 2
+2025-11-18 22:56:27,495 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:27,496 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:27,518 - utils.parser - INFO - [Page 8] Found 0 entries for phase 2
+2025-11-18 22:56:30,251 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:30,251 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:30,276 - utils.parser - INFO - [Page 9] Found 0 entries for phase 2
+2025-11-18 22:56:33,165 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:33,165 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:33,191 - utils.parser - INFO - [Page 10] Found 0 entries for phase 2
+2025-11-18 22:56:36,015 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:36,015 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:36,046 - utils.parser - INFO - [Page 11] Found 0 entries for phase 2
+2025-11-18 22:56:38,803 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:38,803 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:38,830 - utils.parser - INFO - [Page 12] Found 0 entries for phase 2
+2025-11-18 22:56:41,772 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:41,772 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:41,789 - utils.parser - INFO - [Page 13] Found 0 entries for phase 2
+2025-11-18 22:56:44,571 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:44,572 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:44,598 - utils.parser - INFO - [Page 14] Found 0 entries for phase 2
+2025-11-18 22:56:47,311 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:47,311 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:47,325 - utils.parser - INFO - [Page 15] Found 0 entries for phase 2
+2025-11-18 22:56:50,314 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:50,314 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:50,333 - utils.parser - INFO - [Page 16] Found 0 entries for phase 2
+2025-11-18 22:56:53,237 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:53,237 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:53,259 - utils.parser - INFO - [Page 17] Found 0 entries for phase 2
+2025-11-18 22:56:55,999 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:55,999 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:56,024 - utils.parser - INFO - [Page 18] Found 0 entries for phase 2
+2025-11-18 22:56:59,036 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:56:59,037 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:56:59,066 - utils.parser - INFO - [Page 19] Found 0 entries for phase 2
+2025-11-18 22:57:01,774 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:57:01,775 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:57:01,790 - utils.parser - INFO - [Page 20] Found 0 entries for phase 2
+2025-11-18 22:57:02,494 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:57:02,494 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:57:07,521 - __main__ - INFO - [1/19] [Page 1] Processing ABF-186
+2025-11-18 22:57:09,438 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:57:09,439 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:57:14,465 - __main__ - INFO - [2/19] [Page 1] Processing JUFE-590
+2025-11-18 22:57:15,967 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:57:15,967 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:57:20,983 - __main__ - INFO - [3/19] [Page 1] Processing MIDA-406
+2025-11-18 22:57:22,660 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:57:22,660 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:57:27,675 - __main__ - INFO - [4/19] [Page 1] Processing EBWH-289
+2025-11-18 22:57:28,288 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:57:28,289 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:57:33,306 - __main__ - INFO - [5/19] [Page 2] Processing JNT-111
+2025-11-18 22:57:34,986 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:57:34,986 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:57:40,006 - __main__ - INFO - [6/19] [Page 2] Processing SIRO-5569
+2025-11-18 22:57:41,818 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:57:41,818 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:57:46,829 - __main__ - INFO - [7/19] [Page 2] Processing MIUM-1320
+2025-11-18 22:57:53,063 - utils.parser - WARNING - [P2-8] No copy button found for video code
+2025-11-18 22:57:53,064 - utils.parser - WARNING - [P2-8] No magnets content found in detail page
+2025-11-18 22:57:53,064 - utils.magnet_extractor - WARNING - [P2-8] No suitable magnet found
+2025-11-18 22:57:53,064 - __main__ - INFO - [8/19] [Page 2] Processing 
+2025-11-18 22:57:58,264 - utils.parser - WARNING - [P2-9] No copy button found for video code
+2025-11-18 22:57:58,264 - utils.parser - WARNING - [P2-9] No magnets content found in detail page
+2025-11-18 22:57:58,264 - utils.magnet_extractor - WARNING - [P2-9] No suitable magnet found
+2025-11-18 22:57:58,264 - __main__ - INFO - [9/19] [Page 2] Processing 
+2025-11-18 22:58:04,480 - utils.parser - WARNING - [P2-10] No copy button found for video code
+2025-11-18 22:58:04,481 - utils.parser - WARNING - [P2-10] No magnets content found in detail page
+2025-11-18 22:58:04,481 - utils.magnet_extractor - WARNING - [P2-10] No suitable magnet found
+2025-11-18 22:58:04,482 - __main__ - INFO - [10/19] [Page 2] Processing 
+2025-11-18 22:58:10,695 - utils.parser - WARNING - [P2-11] No copy button found for video code
+2025-11-18 22:58:10,696 - utils.parser - WARNING - [P2-11] No magnets content found in detail page
+2025-11-18 22:58:10,696 - utils.magnet_extractor - WARNING - [P2-11] No suitable magnet found
+2025-11-18 22:58:10,696 - __main__ - INFO - [11/19] [Page 2] Processing 
+2025-11-18 22:58:16,912 - utils.parser - WARNING - [P2-12] No copy button found for video code
+2025-11-18 22:58:16,912 - utils.parser - WARNING - [P2-12] No magnets content found in detail page
+2025-11-18 22:58:16,912 - utils.magnet_extractor - WARNING - [P2-12] No suitable magnet found
+2025-11-18 22:58:16,912 - __main__ - INFO - [12/19] [Page 3] Processing 
+2025-11-18 22:58:22,133 - utils.parser - WARNING - [P2-13] No copy button found for video code
+2025-11-18 22:58:22,139 - utils.parser - WARNING - [P2-13] No magnets content found in detail page
+2025-11-18 22:58:22,139 - utils.magnet_extractor - WARNING - [P2-13] No suitable magnet found
+2025-11-18 22:58:22,139 - __main__ - INFO - [13/19] [Page 3] Processing 
+2025-11-18 22:58:27,341 - utils.parser - WARNING - [P2-14] No copy button found for video code
+2025-11-18 22:58:27,342 - utils.parser - WARNING - [P2-14] No magnets content found in detail page
+2025-11-18 22:58:27,342 - utils.magnet_extractor - WARNING - [P2-14] No suitable magnet found
+2025-11-18 22:58:27,342 - __main__ - INFO - [14/19] [Page 3] Processing 
+2025-11-18 22:58:32,545 - utils.parser - WARNING - [P2-15] No copy button found for video code
+2025-11-18 22:58:32,545 - utils.parser - WARNING - [P2-15] No magnets content found in detail page
+2025-11-18 22:58:32,545 - utils.magnet_extractor - WARNING - [P2-15] No suitable magnet found
+2025-11-18 22:58:32,545 - __main__ - INFO - [15/19] [Page 3] Processing 
+2025-11-18 22:58:37,758 - utils.parser - WARNING - [P2-16] No copy button found for video code
+2025-11-18 22:58:37,759 - utils.parser - WARNING - [P2-16] No magnets content found in detail page
+2025-11-18 22:58:37,759 - utils.magnet_extractor - WARNING - [P2-16] No suitable magnet found
+2025-11-18 22:58:37,759 - __main__ - INFO - [16/19] [Page 3] Processing 
+2025-11-18 22:58:42,965 - utils.parser - WARNING - [P2-17] No copy button found for video code
+2025-11-18 22:58:42,966 - utils.parser - WARNING - [P2-17] No magnets content found in detail page
+2025-11-18 22:58:42,966 - utils.magnet_extractor - WARNING - [P2-17] No suitable magnet found
+2025-11-18 22:58:42,966 - __main__ - INFO - [17/19] [Page 3] Processing 
+2025-11-18 22:58:49,197 - utils.parser - WARNING - [P2-18] No copy button found for video code
+2025-11-18 22:58:49,197 - utils.parser - WARNING - [P2-18] No magnets content found in detail page
+2025-11-18 22:58:49,198 - utils.magnet_extractor - WARNING - [P2-18] No suitable magnet found
+2025-11-18 22:58:49,198 - __main__ - INFO - [18/19] [Page 4] Processing 
+2025-11-18 22:58:54,405 - utils.parser - WARNING - [P2-19] No copy button found for video code
+2025-11-18 22:58:54,406 - utils.parser - WARNING - [P2-19] No magnets content found in detail page
+2025-11-18 22:58:54,406 - utils.magnet_extractor - WARNING - [P2-19] No suitable magnet found
+2025-11-18 22:58:54,406 - __main__ - INFO - [19/19] [Page 4] Processing 
+2025-11-18 22:58:54,406 - __main__ - INFO - Phase 2 completed: 6 entries processed
+2025-11-18 22:58:54,406 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251118.csv
+2025-11-18 22:58:54,406 - __main__ - INFO - ==================================================
+2025-11-18 22:58:54,406 - __main__ - INFO - SUMMARY REPORT
+2025-11-18 22:58:54,406 - __main__ - INFO - ==================================================
+2025-11-18 22:58:54,406 - __main__ - INFO - Pages processed: 1 to 20
+2025-11-18 22:58:54,406 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-11-18 22:58:54,406 - __main__ - INFO - ==============================
+2025-11-18 22:58:54,406 - __main__ - INFO - PHASE 1 SUMMARY
+2025-11-18 22:58:54,406 - __main__ - INFO - ==============================
+2025-11-18 22:58:54,406 - __main__ - INFO - Phase 1 entries found: 12
+2025-11-18 22:58:54,406 - __main__ - INFO -   - Subtitle torrents: 12 (100.0%)
+2025-11-18 22:58:54,406 - __main__ - INFO -   - Hacked subtitle torrents: 3 (25.0%)
+2025-11-18 22:58:54,406 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
+2025-11-18 22:58:54,406 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
+2025-11-18 22:58:54,406 - __main__ - INFO - ==============================
+2025-11-18 22:58:54,406 - __main__ - INFO - PHASE 2 SUMMARY
+2025-11-18 22:58:54,406 - __main__ - INFO - ==============================
+2025-11-18 22:58:54,406 - __main__ - INFO - Phase 2 entries found: 6
+2025-11-18 22:58:54,406 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
+2025-11-18 22:58:54,406 - __main__ - INFO -   - Hacked subtitle torrents: 3 (50.0%)
+2025-11-18 22:58:54,406 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
+2025-11-18 22:58:54,406 - __main__ - INFO -   - No-subtitle torrents: 6 (100.0%)
+2025-11-18 22:58:54,407 - __main__ - INFO - ==============================
+2025-11-18 22:58:54,407 - __main__ - INFO - OVERALL SUMMARY
+2025-11-18 22:58:54,407 - __main__ - INFO - ==============================
+2025-11-18 22:58:54,407 - __main__ - INFO - Total entries found: 18
+2025-11-18 22:58:54,407 - __main__ - INFO - Successfully processed: 18
+2025-11-18 22:58:54,407 - __main__ - INFO - Skipped already parsed in this session: 41
+2025-11-18 22:58:54,407 - __main__ - INFO - Skipped already parsed in previous runs: 3125
+2025-11-18 22:58:54,407 - __main__ - INFO - Current parsed links in memory: 41
+2025-11-18 22:58:54,407 - __main__ - INFO - Overall subtitle torrents: 12 (66.7%)
+2025-11-18 22:58:54,407 - __main__ - INFO - Overall hacked subtitle torrents: 6 (33.3%)
+2025-11-18 22:58:54,407 - __main__ - INFO - Overall hacked no-subtitle torrents: 0 (0.0%)
+2025-11-18 22:58:54,407 - __main__ - INFO - Overall no-subtitle torrents: 6 (33.3%)
+2025-11-18 22:58:54,407 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251118.csv
+2025-11-18 22:58:54,407 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-11-18 22:58:54,407 - __main__ - INFO - ==================================================
