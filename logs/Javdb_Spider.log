@@ -1,54 +1,85 @@
-2025-11-18 22:48:59,653 - __main__ - INFO - Starting JavDB spider...
-2025-11-18 22:48:59,653 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
-2025-11-18 22:48:59,653 - __main__ - INFO - PROXY ENABLED: Using proxy for modules ['spider_index', 'spider_detail'] (HTTP=http://tedwu:No.25_Aminor@150.230.4.50:12300, HTTPS=http://tedwu:No.25_Aminor@150.230.4.50:12300)
-2025-11-18 22:48:59,653 - __main__ - INFO - Validating history file integrity...
-2025-11-18 22:48:59,687 - utils.history_manager - INFO - Loaded 5208 previously parsed movies from history (phase 1: 3125, phase 2: 2083)
-2025-11-18 22:48:59,688 - __main__ - INFO - ==================================================
-2025-11-18 22:48:59,688 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-11-18 22:48:59,688 - __main__ - INFO - ==================================================
-2025-11-18 22:49:01,286 - utils.parser - WARNING - [Page 1] No movie list found!
-2025-11-18 22:49:01,287 - __main__ - INFO - [Page 1] No movie list found in HTML structure (page structure issue)
-2025-11-18 22:49:03,732 - utils.parser - WARNING - [Page 2] No movie list found!
-2025-11-18 22:49:03,733 - __main__ - INFO - [Page 2] No movie list found in HTML structure (page structure issue)
-2025-11-18 22:49:06,168 - utils.parser - WARNING - [Page 3] No movie list found!
-2025-11-18 22:49:06,169 - __main__ - INFO - [Page 3] No movie list found in HTML structure (page structure issue)
-2025-11-18 22:49:06,169 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
-2025-11-18 22:49:06,169 - __main__ - INFO - Phase 1 completed: 0 entries processed
-2025-11-18 22:49:06,170 - __main__ - INFO - ==================================================
-2025-11-18 22:49:06,170 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-11-18 22:49:06,170 - __main__ - INFO - ==================================================
-2025-11-18 22:49:06,597 - utils.parser - WARNING - [Page 1] No movie list found!
-2025-11-18 22:49:06,598 - __main__ - INFO - [Page 1] No movie list found in HTML structure (page structure issue)
-2025-11-18 22:49:09,034 - utils.parser - WARNING - [Page 2] No movie list found!
-2025-11-18 22:49:09,035 - __main__ - INFO - [Page 2] No movie list found in HTML structure (page structure issue)
-2025-11-18 22:49:11,476 - utils.parser - WARNING - [Page 3] No movie list found!
-2025-11-18 22:49:11,476 - __main__ - INFO - [Page 3] No movie list found in HTML structure (page structure issue)
-2025-11-18 22:49:11,476 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
-2025-11-18 22:49:11,476 - __main__ - INFO - Phase 2 completed: 0 entries processed
-2025-11-18 22:49:11,476 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251118.csv
-2025-11-18 22:49:11,477 - __main__ - INFO - ==================================================
-2025-11-18 22:49:11,477 - __main__ - INFO - SUMMARY REPORT
-2025-11-18 22:49:11,477 - __main__ - INFO - ==================================================
-2025-11-18 22:49:11,477 - __main__ - INFO - Pages processed: 1 to 20
-2025-11-18 22:49:11,477 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-11-18 22:49:11,477 - __main__ - INFO - ==============================
-2025-11-18 22:49:11,477 - __main__ - INFO - PHASE 1 SUMMARY
-2025-11-18 22:49:11,477 - __main__ - INFO - ==============================
-2025-11-18 22:49:11,477 - __main__ - INFO - Phase 1 entries found: 0
-2025-11-18 22:49:11,477 - __main__ - INFO -   - No entries found in Phase 1
-2025-11-18 22:49:11,477 - __main__ - INFO - ==============================
-2025-11-18 22:49:11,477 - __main__ - INFO - PHASE 2 SUMMARY
-2025-11-18 22:49:11,477 - __main__ - INFO - ==============================
-2025-11-18 22:49:11,477 - __main__ - INFO - Phase 2 entries found: 0
-2025-11-18 22:49:11,477 - __main__ - INFO -   - No entries found in Phase 2
-2025-11-18 22:49:11,477 - __main__ - INFO - ==============================
-2025-11-18 22:49:11,477 - __main__ - INFO - OVERALL SUMMARY
-2025-11-18 22:49:11,477 - __main__ - INFO - ==============================
-2025-11-18 22:49:11,477 - __main__ - INFO - Total entries found: 0
-2025-11-18 22:49:11,477 - __main__ - INFO - Successfully processed: 0
-2025-11-18 22:49:11,477 - __main__ - INFO - Skipped already parsed in this session: 0
-2025-11-18 22:49:11,477 - __main__ - INFO - Skipped already parsed in previous runs: 3125
-2025-11-18 22:49:11,477 - __main__ - INFO - Current parsed links in memory: 0
-2025-11-18 22:49:11,477 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251118.csv
-2025-11-18 22:49:11,477 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-11-18 22:49:11,477 - __main__ - INFO - ==================================================
+2025-11-18 22:52:56,020 - __main__ - INFO - Starting JavDB spider...
+2025-11-18 22:52:56,020 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
+2025-11-18 22:52:56,020 - __main__ - INFO - PROXY ENABLED: Using proxy for modules ['spider_index', 'spider_detail'] (HTTP=http://tedwu:No.25_Aminor@138.2.91.170:12300, HTTPS=http://tedwu:No.25_Aminor@138.2.91.170:12300)
+2025-11-18 22:52:56,020 - __main__ - INFO - Validating history file integrity...
+2025-11-18 22:52:56,055 - utils.history_manager - INFO - Loaded 5208 previously parsed movies from history (phase 1: 3125, phase 2: 2083)
+2025-11-18 22:52:56,055 - __main__ - INFO - ==================================================
+2025-11-18 22:52:56,055 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-11-18 22:52:56,055 - __main__ - INFO - ==================================================
+2025-11-18 22:52:56,950 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:52:56,950 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:52:56,966 - utils.parser - INFO - [Page 1] Found 12 entries for phase 1
+2025-11-18 22:52:59,696 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:52:59,696 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:52:59,715 - utils.parser - INFO - [Page 2] Found 2 entries for phase 1
+2025-11-18 22:53:02,407 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:02,407 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:02,424 - utils.parser - INFO - [Page 3] Found 8 entries for phase 1
+2025-11-18 22:53:05,157 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:05,157 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:05,178 - utils.parser - INFO - [Page 4] Found 0 entries for phase 1
+2025-11-18 22:53:07,948 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:07,949 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:07,974 - utils.parser - INFO - [Page 5] Found 0 entries for phase 1
+2025-11-18 22:53:10,661 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:10,661 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:10,677 - utils.parser - INFO - [Page 6] Found 0 entries for phase 1
+2025-11-18 22:53:13,421 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:13,423 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:13,444 - utils.parser - INFO - [Page 7] Found 0 entries for phase 1
+2025-11-18 22:53:16,161 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:16,161 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:16,180 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
+2025-11-18 22:53:18,893 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:18,894 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:18,915 - utils.parser - INFO - [Page 9] Found 0 entries for phase 1
+2025-11-18 22:53:21,766 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:21,767 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:21,781 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
+2025-11-18 22:53:24,517 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:24,518 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:24,534 - utils.parser - INFO - [Page 11] Found 0 entries for phase 1
+2025-11-18 22:53:27,321 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:27,322 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:27,345 - utils.parser - INFO - [Page 12] Found 0 entries for phase 1
+2025-11-18 22:53:30,041 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:30,041 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:30,053 - utils.parser - INFO - [Page 13] Found 0 entries for phase 1
+2025-11-18 22:53:32,797 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:32,797 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:32,821 - utils.parser - INFO - [Page 14] Found 0 entries for phase 1
+2025-11-18 22:53:35,553 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:35,553 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:35,572 - utils.parser - INFO - [Page 15] Found 0 entries for phase 1
+2025-11-18 22:53:38,334 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:38,334 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:38,358 - utils.parser - INFO - [Page 16] Found 0 entries for phase 1
+2025-11-18 22:53:41,112 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:41,112 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:41,138 - utils.parser - INFO - [Page 17] Found 0 entries for phase 1
+2025-11-18 22:53:43,916 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:43,917 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:43,942 - utils.parser - INFO - [Page 18] Found 0 entries for phase 1
+2025-11-18 22:53:46,666 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:46,666 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:46,680 - utils.parser - INFO - [Page 19] Found 0 entries for phase 1
+2025-11-18 22:53:49,376 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:49,376 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:49,397 - utils.parser - INFO - [Page 20] Found 0 entries for phase 1
+2025-11-18 22:53:50,065 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:50,065 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:53:55,092 - __main__ - INFO - [1/22] [Page 1] Processing SDDE-711
+2025-11-18 22:53:56,824 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:53:56,824 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:54:01,851 - __main__ - INFO - [2/22] [Page 1] Processing STARS-801
+2025-11-18 22:54:03,526 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:54:03,526 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:54:08,541 - __main__ - INFO - [3/22] [Page 1] Processing START-384
+2025-11-18 22:54:10,220 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:54:10,221 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:54:15,239 - __main__ - INFO - [4/22] [Page 1] Processing START-415
+2025-11-18 22:54:17,079 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:54:17,079 - __main__ - WARNING - Could not find or access age verification link
+2025-11-18 22:54:22,100 - __main__ - INFO - [5/22] [Page 1] Processing START-420
+2025-11-18 22:54:23,836 - __main__ - WARNING - Failed to bypass age verification: 403
+2025-11-18 22:54:23,836 - __main__ - WARNING - Could not find or access age verification link
