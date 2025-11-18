@@ -1,6 +1,6 @@
-2025-11-18 21:11:18,710 - __main__ - INFO - Starting qBittorrent uploader...
-2025-11-18 21:11:18,710 - __main__ - INFO - PROXY flag set but qbittorrent module not in PROXY_MODULES
-2025-11-18 21:11:18,710 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251118.csv
-2025-11-18 21:11:18,710 - __main__ - ERROR - CSV file not found: Daily Report/Javdb_TodayTitle_20251118.csv
-2025-11-18 21:11:18,710 - __main__ - INFO - Make sure you have run the spider script first to generate the CSV file
-2025-11-18 21:11:18,710 - __main__ - WARNING - No torrent links found in CSV file
+2025-11-18 22:47:54,065 - __main__ - INFO - Starting qBittorrent uploader...
+2025-11-18 22:47:54,065 - __main__ - INFO - PROXY flag set but qbittorrent module not in PROXY_MODULES
+2025-11-18 22:47:54,065 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251118.csv
+2025-11-18 22:47:54,065 - __main__ - ERROR - CSV file not found: Daily Report/Javdb_TodayTitle_20251118.csv
+2025-11-18 22:47:54,065 - __main__ - INFO - Make sure you have run the spider script first to generate the CSV file
+2025-11-18 22:47:54,065 - __main__ - WARNING - No torrent links found in CSV file

@@ -23,7 +23,8 @@ try:
         BASE_URL, START_PAGE, END_PAGE,
         DAILY_REPORT_DIR, AD_HOC_DIR, PARSED_MOVIES_CSV,
         SPIDER_LOG_FILE, LOG_LEVEL, DETAIL_PAGE_SLEEP, PAGE_SLEEP, MOVIE_SLEEP,
-        JAVDB_SESSION_COOKIE, PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS
+        JAVDB_SESSION_COOKIE, PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS,
+        PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES
     )
 except ImportError:
     # Fallback values if config.py doesn't exist
@@ -41,6 +42,9 @@ except ImportError:
     JAVDB_SESSION_COOKIE = None
     PHASE2_MIN_RATE = 4.0
     PHASE2_MIN_COMMENTS = 100
+    PROXY_HTTP = None
+    PROXY_HTTPS = None
+    PROXY_MODULES = ['all']
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
@@ -87,6 +91,9 @@ def parse_arguments():
     parser.add_argument('--ignore-release-date', action='store_true',
                         help='Ignore today/yesterday tags and download all entries matching phase criteria (subtitle for phase1, quality for phase2)')
 
+    parser.add_argument('--use-proxy', action='store_true',
+                        help='Enable proxy for all HTTP requests (proxy settings from config.py)')
+
     return parser.parse_args()
 
 
@@ -97,8 +104,43 @@ def ensure_daily_report_dir():
         logger.info(f"Created directory: {DAILY_REPORT_DIR}")
 
 
-def get_page(url, session=None, use_cookie=False):
-    """Fetch a webpage with proper headers and age verification bypass"""
+def should_use_proxy_for_module(module_name, use_proxy_flag):
+    """
+    Check if a specific module should use proxy based on configuration
+    
+    Args:
+        module_name: Name of the module ('spider_index', 'spider_detail', 'spider_age_verification')
+        use_proxy_flag: Whether --use-proxy flag is enabled
+    
+    Returns:
+        bool: True if the module should use proxy, False otherwise
+    """
+    if not use_proxy_flag:
+        return False
+    
+    if not PROXY_MODULES:
+        # Empty list means no modules use proxy
+        return False
+    
+    if 'all' in PROXY_MODULES:
+        # 'all' means all modules use proxy
+        return True
+    
+    # Check if specific module is in the list
+    return module_name in PROXY_MODULES
+
+
+def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='unknown'):
+    """
+    Fetch a webpage with proper headers and age verification bypass
+    
+    Args:
+        url: URL to fetch
+        session: requests.Session object for connection reuse
+        use_cookie: Whether to add session cookie
+        use_proxy: Whether --use-proxy flag is enabled
+        module_name: Module name for proxy control ('spider_index', 'spider_detail', 'spider_age_verification')
+    """
     if session is None:
         session = requests.Session()
 
@@ -120,9 +162,23 @@ def get_page(url, session=None, use_cookie=False):
     if use_cookie and JAVDB_SESSION_COOKIE:
         headers['Cookie'] = f'_jdb_session={JAVDB_SESSION_COOKIE}'
 
+    # Configure proxy if enabled and module is configured to use proxy
+    proxies = None
+    if should_use_proxy_for_module(module_name, use_proxy) and (PROXY_HTTP or PROXY_HTTPS):
+        proxies = {}
+        if PROXY_HTTP:
+            proxies['http'] = PROXY_HTTP
+        if PROXY_HTTPS:
+            proxies['https'] = PROXY_HTTPS
+        logger.debug(f"[{module_name}] Using proxy: {proxies}")
+    elif use_proxy:
+        logger.debug(f"[{module_name}] Proxy disabled for this module")
+
     try:
         logger.debug(f"Fetching URL: {url}")
-        response = session.get(url, headers=headers, timeout=30)
+        if proxies:
+            logger.debug(f"Using proxies: {proxies}")
+        response = session.get(url, headers=headers, proxies=proxies, timeout=30)
         response.raise_for_status()
         logger.debug(f"Successfully fetched URL: {url}")
         
@@ -135,6 +191,18 @@ def get_page(url, session=None, use_cookie=False):
         if age_modal:
             logger.debug("Age verification modal detected, attempting to bypass...")
             
+            # Configure proxy for age verification (can be different from main request)
+            age_proxies = None
+            if should_use_proxy_for_module('spider_age_verification', use_proxy) and (PROXY_HTTP or PROXY_HTTPS):
+                age_proxies = {}
+                if PROXY_HTTP:
+                    age_proxies['http'] = PROXY_HTTP
+                if PROXY_HTTPS:
+                    age_proxies['https'] = PROXY_HTTPS
+                logger.debug(f"[spider_age_verification] Using proxy: {age_proxies}")
+            elif use_proxy:
+                logger.debug(f"[spider_age_verification] Proxy disabled for this module")
+            
             # Find age verification link
             age_links = age_modal.find_all('a', href=True)
             for link in age_links:
@@ -143,11 +211,11 @@ def get_page(url, session=None, use_cookie=False):
                     logger.debug(f"Found age verification link: {age_url}")
                     
                     # Access age verification link
-                    age_response = session.get(age_url, headers=headers, timeout=30)
+                    age_response = session.get(age_url, headers=headers, proxies=age_proxies, timeout=30)
                     if age_response.status_code == 200:
                         logger.debug("Successfully bypassed age verification")
                         # Re-fetch the original page
-                        final_response = session.get(url, headers=headers, timeout=30)
+                        final_response = session.get(url, headers=headers, proxies=age_proxies, timeout=30)
                         if final_response.status_code == 200:
                             return final_response.text
                         else:
@@ -391,6 +459,7 @@ def main():
     ignore_history = args.ignore_history
     parse_all = args.all
     ignore_release_date = args.ignore_release_date
+    use_proxy = args.use_proxy
 
     # Determine output directory and filename
     if args.url:
@@ -425,6 +494,23 @@ def main():
         logger.info("PARSE ALL MODE: Will continue until empty page is found")
     if ignore_release_date:
         logger.info("IGNORE RELEASE DATE: Will process all entries regardless of today/yesterday tags")
+    if use_proxy:
+        if PROXY_HTTP or PROXY_HTTPS:
+            proxy_info = []
+            if PROXY_HTTP:
+                proxy_info.append(f"HTTP={PROXY_HTTP}")
+            if PROXY_HTTPS:
+                proxy_info.append(f"HTTPS={PROXY_HTTPS}")
+            
+            # Show which modules will use proxy
+            if not PROXY_MODULES:
+                logger.warning("PROXY ENABLED: But PROXY_MODULES is empty - no modules will use proxy")
+            elif 'all' in PROXY_MODULES:
+                logger.info(f"PROXY ENABLED: Using proxy for ALL modules ({', '.join(proxy_info)})")
+            else:
+                logger.info(f"PROXY ENABLED: Using proxy for modules {PROXY_MODULES} ({', '.join(proxy_info)})")
+        else:
+            logger.warning("PROXY ENABLED: But no proxy configured in config.py")
 
     # Ensure Daily Report directory exists
     ensure_daily_report_dir()
@@ -495,7 +581,7 @@ def main():
             logger.debug(f"[Page {page_num}] Fetching: {page_url}")
 
             # Fetch index page
-            index_html = get_page(page_url, session, use_cookie=custom_url is not None)
+            index_html = get_page(page_url, session, use_cookie=custom_url is not None, use_proxy=use_proxy, module_name='spider_index')
             if not index_html:
                 logger.info(f"[Page {page_num}] no movie list found (page fetch failed or does not exist)")
                 consecutive_empty_pages += 1
@@ -564,7 +650,7 @@ def main():
             detail_url = urljoin(BASE_URL, href)
 
             # Fetch detail page
-            detail_html = get_page(detail_url, session, use_cookie=custom_url is not None)
+            detail_html = get_page(detail_url, session, use_cookie=custom_url is not None, use_proxy=use_proxy, module_name='spider_detail')
             if not detail_html:
                 logger.error(f"[{i}/{total_entries_phase1}] [Page {page_num}] Failed to fetch detail page")
                 continue
@@ -665,7 +751,7 @@ def main():
             logger.debug(f"[Page {page_num}] Fetching for phase 2: {page_url}")
 
             # Fetch index page
-            index_html = get_page(page_url, session, use_cookie=custom_url is not None)
+            index_html = get_page(page_url, session, use_cookie=custom_url is not None, use_proxy=use_proxy, module_name='spider_index')
             if not index_html:
                 logger.info(f"[Page {page_num}] no movie list found (page fetch failed or does not exist)")
                 consecutive_empty_pages += 1
@@ -734,7 +820,7 @@ def main():
             detail_url = urljoin(BASE_URL, href)
 
             # Fetch detail page
-            detail_html = get_page(detail_url, session, use_cookie=custom_url is not None)
+            detail_html = get_page(detail_url, session, use_cookie=custom_url is not None, use_proxy=use_proxy, module_name='spider_detail')
             if not detail_html:
                 logger.error(f"[{i}/{total_entries_phase2}] [Page {page_num}] Failed to fetch detail page")
                 continue
