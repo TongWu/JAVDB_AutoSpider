@@ -5,3 +5,32 @@
 2025-11-18 22:52:55,903 - __main__ - INFO - ============================================================
 2025-11-18 22:52:55,903 - __main__ - INFO - Step 1: Running JavDB Spider...
 2025-11-18 22:52:55,903 - __main__ - INFO - Running: python3 Javdb_Spider.py --use-proxy
+2025-11-18 22:58:54,446 - __main__ - INFO - ✓ JavDB Spider completed successfully
+2025-11-18 22:58:54,446 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
+2025-11-18 22:58:54,447 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode daily --use-proxy
+2025-11-18 22:59:17,969 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
+2025-11-18 22:59:17,969 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
+2025-11-18 22:59:17,969 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
+2025-11-18 22:59:17,969 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-11-15)
+2025-11-18 22:59:17,969 - pikpak_bridge - INFO - PROXY flag set but pikpak module not in PROXY_MODULES
+2025-11-18 22:59:18,148 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
+2025-11-18 22:59:18,166 - pikpak_bridge - INFO - Found 24 torrents across categories ['Daily Ingestion', 'Ad Hoc']
+2025-11-18 22:59:18,166 - pikpak_bridge - INFO - Filtered 0 torrents older than 3 days
+2025-11-18 22:59:18,166 - pikpak_bridge - INFO - No torrents to process.
+2025-11-18 22:59:18,166 - __main__ - INFO - PikPak Bridge completed successfully
+2025-11-18 22:59:18,166 - __main__ - INFO - ✓ PikPak Bridge completed successfully
+2025-11-18 22:59:18,166 - __main__ - INFO - ============================================================
+2025-11-18 22:59:18,166 - __main__ - INFO - PIPELINE COMPLETED
+2025-11-18 22:59:18,166 - __main__ - INFO - ============================================================
+2025-11-18 22:59:18,166 - __main__ - INFO - Analyzing logs for critical errors...
+2025-11-18 22:59:18,167 - __main__ - INFO - ============================================================
+2025-11-18 22:59:18,167 - __main__ - INFO - PIPELINE COMPLETED SUCCESSFULLY - NO CRITICAL ERRORS
+2025-11-18 22:59:18,167 - __main__ - INFO - ============================================================
+2025-11-18 22:59:18,169 - __main__ - INFO - Connecting to SMTP server...
+2025-11-18 22:59:21,720 - __main__ - INFO - Email sent successfully.
+2025-11-18 22:59:21,720 - __main__ - INFO - Final commit for pipeline log...
+2025-11-18 22:59:21,720 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
+2025-11-18 22:59:21,750 - __main__ - INFO - Pulling latest changes from remote repository...
+2025-11-18 22:59:22,353 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
+2025-11-18 22:59:22,354 - __main__ - INFO - Adding files to git...
+2025-11-18 22:59:22,418 - __main__ - INFO - Commit changes for pipeline_log
