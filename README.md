@@ -89,6 +89,30 @@ python qbtorrent_uploader.py
 
 # Ad hoc mode (for custom URL scraping results)
 python qbtorrent_uploader.py --mode adhoc
+
+# Use proxy for qBittorrent API requests
+python qbtorrent_uploader.py --use-proxy
+```
+
+**Run the PikPak bridge (transfer old torrents from qBittorrent to PikPak):**
+```bash
+# Default: process torrents older than 3 days in batch mode
+python pikpak_bridge.py
+
+# Custom days threshold
+python pikpak_bridge.py --days 7
+
+# Dry run mode (test without actual transfers)
+python pikpak_bridge.py --dry-run
+
+# Individual mode (process torrents one by one instead of batch)
+python pikpak_bridge.py --individual
+
+# Use proxy for qBittorrent API requests
+python pikpak_bridge.py --use-proxy
+
+# Combine options
+python pikpak_bridge.py --days 5 --dry-run --use-proxy
 ```
 
 ### Command-Line Arguments
@@ -203,6 +227,12 @@ python pipeline_run_and_notify.py --ignore-release-date --phase 1
 
 # Pipeline with custom URL
 python pipeline_run_and_notify.py --url "https://javdb.com/actors/EvkJ"
+
+# Pipeline with proxy enabled
+python pipeline_run_and_notify.py --use-proxy
+
+# Pipeline with PikPak individual mode (process torrents one by one)
+python pipeline_run_and_notify.py --pikpak-individual
 ```
 
 The pipeline will:
@@ -210,11 +240,12 @@ The pipeline will:
 2. Commit spider results to GitHub immediately
 3. Run the qBittorrent Uploader to add torrents
 4. Commit uploader results to GitHub immediately
-5. Perform final commit and push to GitHub
-6. **Analyze logs for critical errors**
-7. Send email notifications with appropriate status
+5. Run PikPak Bridge to handle old torrents (batch mode by default, individual mode with `--pikpak-individual`)
+6. Perform final commit and push to GitHub
+7. **Analyze logs for critical errors**
+8. Send email notifications with appropriate status
 
-**Note**: The pipeline accepts the same arguments as `Javdb_Spider.py` and passes them through automatically.
+**Note**: The pipeline accepts the same arguments as `Javdb_Spider.py` and passes them through automatically. Additional pipeline-specific arguments include `--pikpak-individual` for PikPak Bridge mode control.
 
 #### Intelligent Error Detection
 
@@ -448,13 +479,19 @@ PROXY_MODULES = ['all']  # Enable for all modules
 
 **2. Enable proxy with command-line flag:**
 ```bash
-# Enable proxy for a single run
+# Enable proxy for spider
 python Javdb_Spider.py --use-proxy
+
+# Enable proxy for qBittorrent uploader
+python qbtorrent_uploader.py --use-proxy
+
+# Enable proxy for PikPak bridge
+python pikpak_bridge.py --use-proxy
 
 # Combine with other options
 python Javdb_Spider.py --use-proxy --url "https://javdb.com/actors/EvkJ"
 
-# Via pipeline
+# Via pipeline (enables proxy for all components)
 python pipeline_run_and_notify.py --use-proxy
 ```
 

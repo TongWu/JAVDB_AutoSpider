@@ -411,9 +411,10 @@ if __name__ == "__main__":
     parser.add_argument("--days", type=int, default=3, help="Filter torrents older than N days")
     parser.add_argument("--dry-run", action="store_true", help="Test mode: no delete or PikPak add")
     parser.add_argument("--individual", action="store_true", help="Process torrents individually instead of batch mode (default: batch mode)")
+    parser.add_argument("--use-proxy", action="store_true", help="Enable proxy for qBittorrent API requests (proxy settings from config.py)")
     args = parser.parse_args()
 
     # Default to batch mode unless --individual is specified
     batch_mode = not args.individual
     
-    pikpak_bridge(args.days, args.dry_run, batch_mode)
+    pikpak_bridge(args.days, args.dry_run, batch_mode, args.use_proxy)
