@@ -449,7 +449,39 @@ This is useful when:
 
 ### Proxy Support
 
-The spider supports HTTP/HTTPS/SOCKS5 proxies for accessing JavDB. This is useful if:
+The system supports both **single proxy** and **proxy pool** modes for improved reliability:
+
+#### Proxy Pool Mode (✨ NEW - Recommended)
+
+Configure multiple proxies for automatic failover:
+- **Automatic Switching**: When one proxy fails, automatically switches to another
+- **Passive Health Checking**: Only marks proxies as failed on actual failures (no active probing)
+- **Cooldown Mechanism**: Failed proxies are temporarily disabled to allow recovery
+- **Statistics Tracking**: Detailed success rates and usage statistics for each proxy
+- **Perfect for JavDB**: Respects strict rate limiting while providing redundancy
+
+See [PROXY_POOL_GUIDE.md](PROXY_POOL_GUIDE.md) for detailed configuration and usage guide.
+
+**Quick Setup:**
+```python
+# In config.py
+PROXY_MODE = 'pool'
+PROXY_POOL = [
+    {'name': 'Proxy-1', 'http': 'http://127.0.0.1:7890', 'https': 'http://127.0.0.1:7890'},
+    {'name': 'Proxy-2', 'http': 'http://127.0.0.1:7891', 'https': 'http://127.0.0.1:7891'},
+]
+PROXY_POOL_COOLDOWN_SECONDS = 300  # 5 minutes cooldown
+PROXY_POOL_MAX_FAILURES = 3  # Max failures before cooldown
+```
+
+Then run with `--use-proxy` flag:
+```bash
+python Javdb_Spider.py --use-proxy
+```
+
+#### Single Proxy Mode (Legacy)
+
+The spider also supports traditional single proxy configuration for HTTP/HTTPS/SOCKS5 proxies. This is useful if:
 - JavDB is geo-restricted in your region
 - You need to route traffic through a specific network
 - You want to use a VPN or proxy service

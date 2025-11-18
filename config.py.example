@@ -61,8 +61,24 @@ EMAIL_TO = 'your_email@gmail.com'
 # PROXY CONFIGURATION
 # =============================================================================
 
-# Proxy settings (optional)
-# Leave empty or set to None to disable proxy
+# PROXY MODE SELECTION
+# Choose between single proxy or proxy pool
+# Options:
+#   'single' - Use only the first proxy (main proxy) from PROXY_POOL
+#   'pool'   - Use proxy pool with automatic failover (recommended for better reliability)
+PROXY_MODE = 'single'
+
+# =============================================================================
+# UNIFIED PROXY CONFIGURATION
+# =============================================================================
+
+# Proxy pool - List of proxies for use in both single and pool modes
+# 
+# IMPORTANT: 
+#   - In 'single' mode: Only the FIRST proxy is used (main proxy)
+#   - In 'pool' mode: All proxies are used with automatic failover
+#
+# Each proxy should be a dictionary with 'http', 'https', and optional 'name' keys
 # Supported formats:
 #   HTTP: 'http://proxy.example.com:8080'
 #   HTTPS: 'https://proxy.example.com:8080'
@@ -85,18 +101,53 @@ EMAIL_TO = 'your_email@gmail.com'
 #
 # Example: password "My@Pass!" should be "My%40Pass%21"
 # You can use Python to encode: from urllib.parse import quote; print(quote("My@Pass!", safe=''))
-PROXY_HTTP = None  # HTTP proxy URL
-PROXY_HTTPS = None  # HTTPS proxy URL
 
-# Example configurations:
-# PROXY_HTTP = 'http://127.0.0.1:7890'
-# PROXY_HTTPS = 'http://127.0.0.1:7890'
-# Or use SOCKS5:
-# PROXY_HTTP = 'socks5://127.0.0.1:1080'
-# PROXY_HTTPS = 'socks5://127.0.0.1:1080'
-# With authentication (password with special chars encoded):
-# PROXY_HTTP = 'http://username:My%40Pass%21@proxy.example.com:8080'
-# PROXY_HTTPS = 'http://username:My%40Pass%21@proxy.example.com:8080'
+PROXY_POOL = [
+    # Main proxy (used in both single and pool modes)
+    {
+        'name': 'Main-Proxy',
+        'http': 'http://127.0.0.1:7890',
+        'https': 'http://127.0.0.1:7890'
+    },
+    # Backup proxy 1 (only used in pool mode)
+    {
+        'name': 'Backup-Proxy-1',
+        'http': 'http://127.0.0.1:7891',
+        'https': 'http://127.0.0.1:7891'
+    },
+    # Backup proxy 2 (only used in pool mode)
+    # {
+    #     'name': 'Backup-Proxy-2',
+    #     'http': 'http://127.0.0.1:7892',
+    #     'https': 'http://127.0.0.1:7892'
+    # },
+    # Example with authentication (password with special chars encoded)
+    # {
+    #     'name': 'Auth-Proxy',
+    #     'http': 'http://username:My%40Pass%21@proxy.example.com:8080',
+    #     'https': 'http://username:My%40Pass%21@proxy.example.com:8080'
+    # },
+    # Example SOCKS5 proxy (requires: pip install requests[socks])
+    # {
+    #     'name': 'SOCKS5-Proxy',
+    #     'http': 'socks5://127.0.0.1:1080',
+    #     'https': 'socks5://127.0.0.1:1080'
+    # },
+]
+
+# Proxy pool behavior settings (only applies when PROXY_MODE = 'pool')
+# IMPORTANT: JavDB bans IPs for 7 days, so cooldown is set to 8 days (691200 seconds)
+# Ban records are persistent across runs and stored in logs/proxy_bans.csv
+PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 days (691200 seconds)
+PROXY_POOL_MAX_FAILURES = 3  # Max consecutive failures before putting proxy in cooldown
+
+# =============================================================================
+# LEGACY PROXY CONFIGURATION (DEPRECATED - for backward compatibility only)
+# =============================================================================
+# These settings are deprecated. Please use PROXY_POOL above instead.
+# If set, these will override the first entry in PROXY_POOL for backward compatibility.
+PROXY_HTTP = None  # Deprecated: Use PROXY_POOL instead
+PROXY_HTTPS = None  # Deprecated: Use PROXY_POOL instead
 
 # Proxy modules control (which parts of the script use proxy when --use-proxy is enabled)
 # Available modules:
