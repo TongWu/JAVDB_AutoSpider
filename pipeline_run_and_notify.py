@@ -213,8 +213,8 @@ def analyze_spider_log(log_path):
                 phase1_errors += 1
             elif current_phase == 2:
                 phase2_errors += 1
-        elif 'Successfully' in line or 'Found' in line and 'entries' in line:
-            # Reset errors if we see success
+        elif ('Successfully fetched URL' in line) or ('Found' in line and 'entries' in line):
+            # Reset errors if we see successful page fetch or found entries
             if current_phase == 1:
                 phase1_errors = 0
             elif current_phase == 2:
@@ -267,7 +267,7 @@ def analyze_uploader_log(log_path):
             return True, f"Cannot access qBittorrent: {pattern}"
     
     # Check if we attempted to add torrents but all failed
-    if 'Starting to add' in log_content and 'failed_count' in log_content:
+    if 'Starting to add' in log_content and 'Failed to add:' in log_content:
         import re
         match = re.search(r'Successfully added: (\d+)', log_content)
         if match and int(match.group(1)) == 0:
@@ -485,7 +485,8 @@ def main():
 
         # 3. Run PikPak Bridge to handle old torrents
         logger.info("Step 3: Running PikPak Bridge to clean up old torrents...")
-        run_pikpak_bridge(days=3, dry_run=args.dry_run, use_proxy=args.use_proxy)
+        batch_mode = not args.pikpak_individual
+        run_pikpak_bridge(days=3, dry_run=args.dry_run, batch_mode=batch_mode, use_proxy=args.use_proxy)
         logger.info("✓ PikPak Bridge completed successfully")
 
         pipeline_success = True
