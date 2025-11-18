@@ -14,6 +14,14 @@ try:
     from config import PIKPAK_REQUEST_DELAY
 except ImportError:
     PIKPAK_REQUEST_DELAY = 3  # Default 3 seconds if not configured
+
+# Import proxy configuration with fallback
+try:
+    from config import PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES
+except ImportError:
+    PROXY_HTTP = None
+    PROXY_HTTPS = None
+    PROXY_MODULES = ['all']
 from utils.logging_config import setup_logging, get_logger
 
 # --------------------------
@@ -28,19 +36,50 @@ PIKPAK_HISTORY_FILE = os.path.join(DAILY_REPORT_DIR, "pikpak_bridge_history.csv"
 
 
 # --------------------------
+# Proxy Helper Functions
+# --------------------------
+def should_use_proxy_for_module(module_name, use_proxy_flag):
+    """Check if a specific module should use proxy based on configuration"""
+    if not use_proxy_flag:
+        return False
+    if not PROXY_MODULES:
+        return False
+    if 'all' in PROXY_MODULES:
+        return True
+    return module_name in PROXY_MODULES
+
+
+def get_proxies_dict(module_name, use_proxy_flag):
+    """Get proxies dictionary for requests if module should use proxy"""
+    if not should_use_proxy_for_module(module_name, use_proxy_flag):
+        return None
+    if not (PROXY_HTTP or PROXY_HTTPS):
+        return None
+    proxies = {}
+    if PROXY_HTTP:
+        proxies['http'] = PROXY_HTTP
+    if PROXY_HTTPS:
+        proxies['https'] = PROXY_HTTPS
+    logger.debug(f"[{module_name}] Using proxy: {proxies}")
+    return proxies
+
+
+# --------------------------
 # qBittorrent Client
 # --------------------------
 class QBittorrentClient:
-    def __init__(self, base_url, username, password):
+    def __init__(self, base_url, username, password, use_proxy=False):
         self.base_url = base_url.rstrip('/')
         self.session = requests.Session()
+        self.use_proxy = use_proxy
+        self.proxies = get_proxies_dict('pikpak', use_proxy)
         self.login(username, password)
 
     def login(self, username, password):
         resp = self.session.post(f"{self.base_url}/api/v2/auth/login", data={
             'username': username,
             'password': password
-        })
+        }, proxies=self.proxies)
         if resp.status_code != 200 or resp.text != 'Ok.':
             logger.error(f"qBittorrent login failed: {resp.text}")
             raise Exception(f"Failed to login qBittorrent: {resp.text}")
@@ -48,7 +87,8 @@ class QBittorrentClient:
 
     def get_torrents(self, category):
         resp = self.session.get(f"{self.base_url}/api/v2/torrents/info",
-                                params={"category": category, "filter": "downloading"})
+                                params={"category": category, "filter": "downloading"},
+                                proxies=self.proxies)
         resp.raise_for_status()
         return resp.json()
     
@@ -68,7 +108,7 @@ class QBittorrentClient:
         resp = self.session.post(f"{self.base_url}/api/v2/torrents/delete", data={
             'hashes': '|'.join(hashes),
             'deleteFiles': 'true' if delete_files else 'false'
-        })
+        }, proxies=self.proxies)
         resp.raise_for_status()
         logger.info(f"Deleted {len(hashes)} torrents from qBittorrent.")
         return True
@@ -174,11 +214,20 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
 # --------------------------
 # Main Logic
 # --------------------------
-def pikpak_bridge(days, dry_run, batch_mode=True):
+def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False):
     cutoff_date = (datetime.now() - timedelta(days=days)).date()
     logger.info(f"Processing torrents older than {days} days (before {cutoff_date})")
+    
+    if use_proxy:
+        if PROXY_HTTP or PROXY_HTTPS:
+            if should_use_proxy_for_module('pikpak', use_proxy):
+                logger.info(f"PROXY ENABLED for PikPak bridge: Using proxy")
+            else:
+                logger.info("PROXY flag set but pikpak module not in PROXY_MODULES")
+        else:
+            logger.warning("PROXY ENABLED: But no proxy configured in config.py")
 
-    qb = QBittorrentClient(f"http://{QB_HOST}:{QB_PORT}", QB_USERNAME, QB_PASSWORD)
+    qb = QBittorrentClient(f"http://{QB_HOST}:{QB_PORT}", QB_USERNAME, QB_PASSWORD, use_proxy)
     torrents = qb.get_torrents_multiple_categories(CATEGORIES)
     logger.info(f"Found {len(torrents)} torrents across categories {CATEGORIES}")
 

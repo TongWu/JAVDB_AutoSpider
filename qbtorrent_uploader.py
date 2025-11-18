@@ -12,7 +12,8 @@ try:
         QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD,
         TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC, TORRENT_SAVE_PATH, AUTO_START, SKIP_CHECKING,
         REQUEST_TIMEOUT, DELAY_BETWEEN_ADDITIONS,
-        UPLOADER_LOG_FILE, DAILY_REPORT_DIR, AD_HOC_DIR, LOG_LEVEL
+        UPLOADER_LOG_FILE, DAILY_REPORT_DIR, AD_HOC_DIR, LOG_LEVEL,
+        PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES
     )
 except ImportError:
     # Fallback values if config.py doesn't exist
@@ -34,6 +35,9 @@ except ImportError:
     DAILY_REPORT_DIR = 'Daily Report'
     AD_HOC_DIR = 'Ad Hoc'
     LOG_LEVEL = 'INFO'
+    PROXY_HTTP = None
+    PROXY_HTTPS = None
+    PROXY_MODULES = ['all']
 
 # Import history manager functions
 try:
@@ -57,7 +61,58 @@ QB_BASE_URL = f'http://{QB_HOST}:{QB_PORT}'
 def parse_arguments():
     parser = argparse.ArgumentParser(description='qBittorrent Uploader')
     parser.add_argument('--mode', choices=['adhoc', 'daily'], default='daily', help='Upload mode: adhoc (Ad Hoc folder) or daily (Daily Report folder)')
+    parser.add_argument('--use-proxy', action='store_true', help='Enable proxy for qBittorrent API requests (proxy settings from config.py)')
     return parser.parse_args()
+
+
+def should_use_proxy_for_module(module_name, use_proxy_flag):
+    """
+    Check if a specific module should use proxy based on configuration
+    
+    Args:
+        module_name: Name of the module ('qbittorrent')
+        use_proxy_flag: Whether --use-proxy flag is enabled
+    
+    Returns:
+        bool: True if the module should use proxy, False otherwise
+    """
+    if not use_proxy_flag:
+        return False
+    
+    if not PROXY_MODULES:
+        return False
+    
+    if 'all' in PROXY_MODULES:
+        return True
+    
+    return module_name in PROXY_MODULES
+
+
+def get_proxies_dict(module_name, use_proxy_flag):
+    """
+    Get proxies dictionary for requests if module should use proxy
+    
+    Args:
+        module_name: Name of the module
+        use_proxy_flag: Whether --use-proxy flag is enabled
+    
+    Returns:
+        dict or None: Proxies dictionary for requests, or None
+    """
+    if not should_use_proxy_for_module(module_name, use_proxy_flag):
+        return None
+    
+    if not (PROXY_HTTP or PROXY_HTTPS):
+        return None
+    
+    proxies = {}
+    if PROXY_HTTP:
+        proxies['http'] = PROXY_HTTP
+    if PROXY_HTTPS:
+        proxies['https'] = PROXY_HTTPS
+    
+    logger.debug(f"[{module_name}] Using proxy: {proxies}")
+    return proxies
 
 def get_csv_filename(mode='daily'):
     """Get the CSV filename for current date and mode"""
@@ -69,11 +124,12 @@ def get_csv_filename(mode='daily'):
         folder = DAILY_REPORT_DIR
         return os.path.join(folder, f'Javdb_TodayTitle_{current_date}.csv')
 
-def test_qbittorrent_connection():
+def test_qbittorrent_connection(use_proxy=False):
     """Test if qBittorrent is accessible"""
     try:
+        proxies = get_proxies_dict('qbittorrent', use_proxy)
         logger.info(f"Testing connection to qBittorrent at {QB_BASE_URL}")
-        response = requests.get(f'{QB_BASE_URL}/api/v2/app/version', timeout=10)
+        response = requests.get(f'{QB_BASE_URL}/api/v2/app/version', timeout=10, proxies=proxies)
         if response.status_code == 200 or response.status_code == 403:
             logger.info("qBittorrent is accessible")
             return True
@@ -84,7 +140,7 @@ def test_qbittorrent_connection():
         logger.error(f"Cannot connect to qBittorrent: {e}")
         return False
 
-def login_to_qbittorrent(session):
+def login_to_qbittorrent(session, use_proxy=False):
     """Login to qBittorrent web UI"""
     login_url = f'{QB_BASE_URL}/api/v2/auth/login'
     login_data = {
@@ -92,9 +148,11 @@ def login_to_qbittorrent(session):
         'password': QB_PASSWORD
     }
     
+    proxies = get_proxies_dict('qbittorrent', use_proxy)
+    
     try:
         logger.info(f"Attempting to login to qBittorrent at {QB_BASE_URL}")
-        response = session.post(login_url, data=login_data, timeout=REQUEST_TIMEOUT)
+        response = session.post(login_url, data=login_data, timeout=REQUEST_TIMEOUT, proxies=proxies)
         
         if response.status_code == 200:
             logger.info("Successfully logged in to qBittorrent")
@@ -108,7 +166,7 @@ def login_to_qbittorrent(session):
         logger.error(f"Login error: {e}")
         return False
 
-def add_torrent_to_qbittorrent(session, magnet_link, title, mode='daily'):
+def add_torrent_to_qbittorrent(session, magnet_link, title, mode='daily', use_proxy=False):
     """Add a torrent to qBittorrent"""
     add_url = f'{QB_BASE_URL}/api/v2/torrents/add'
     
@@ -130,9 +188,11 @@ def add_torrent_to_qbittorrent(session, magnet_link, title, mode='daily'):
         'addPaused': str(not AUTO_START).lower()
     }
     
+    proxies = get_proxies_dict('qbittorrent', use_proxy)
+    
     try:
         logger.debug(f"Adding torrent: {title} with category: {category}")
-        response = session.post(add_url, data=torrent_data, timeout=REQUEST_TIMEOUT)
+        response = session.post(add_url, data=torrent_data, timeout=REQUEST_TIMEOUT, proxies=proxies)
         
         if response.status_code == 200:
             logger.debug(f"Successfully added torrent: {title} to category: {category}")
@@ -232,10 +292,20 @@ def read_csv_file(filename):
 def main():
     args = parse_arguments()
     mode = args.mode
+    use_proxy = args.use_proxy
     logger.info("Starting qBittorrent uploader...")
     
+    if use_proxy:
+        if PROXY_HTTP or PROXY_HTTPS:
+            if should_use_proxy_for_module('qbittorrent', use_proxy):
+                logger.info(f"PROXY ENABLED for qBittorrent: Using proxy")
+            else:
+                logger.info("PROXY flag set but qbittorrent module not in PROXY_MODULES")
+        else:
+            logger.warning("PROXY ENABLED: But no proxy configured in config.py")
+    
     # Test qBittorrent connection first
-    # if not test_qbittorrent_connection():
+    # if not test_qbittorrent_connection(use_proxy):
     #     logger.error("Cannot connect to qBittorrent. Please check:")
     #     logger.error("1. qBittorrent is running")
     #     logger.error("2. Web UI is enabled")
@@ -257,7 +327,7 @@ def main():
     session = requests.Session()
     
     # Login to qBittorrent
-    if not login_to_qbittorrent(session):
+    if not login_to_qbittorrent(session, use_proxy):
         logger.error("Failed to login to qBittorrent. Please check username and password.")
         return
     
@@ -284,7 +354,7 @@ def main():
     for i, torrent in enumerate(torrents, 1):
         logger.info(f"[{i}/{total_torrents}] Adding: {torrent['title']}")
         
-        success = add_torrent_to_qbittorrent(session, torrent['magnet'], torrent['title'], mode)
+        success = add_torrent_to_qbittorrent(session, torrent['magnet'], torrent['title'], mode, use_proxy)
         
         if success:            
             if torrent['type'] == 'hacked_subtitle':

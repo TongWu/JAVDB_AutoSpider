@@ -135,6 +135,9 @@ python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --ignore-history
 
 # Ignore today/yesterday release date tags and process all matching entries
 python Javdb_Spider.py --ignore-release-date
+
+# Use proxy for all HTTP requests
+python Javdb_Spider.py --use-proxy
 ```
 
 #### Complete Examples
@@ -162,6 +165,12 @@ python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --ignore-release-da
 
 # Ad hoc mode: Re-download everything from an actor (ignores history)
 python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --ignore-history --ignore-release-date
+
+# Use proxy to access JavDB (useful for geo-restricted regions)
+python Javdb_Spider.py --use-proxy --start-page 1 --end-page 5
+
+# Combine multiple options: proxy + custom URL + ignore release date
+python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --use-proxy --ignore-release-date
 ```
 
 #### Argument Reference
@@ -177,6 +186,7 @@ python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --ignore-history --
 | `--url` | Custom URL to scrape (enables ad hoc mode) | None | `--url "https://javdb.com/?vft=2"` |
 | `--phase` | Phase to run (1/2/all) | all | `--phase 1` |
 | `--ignore-release-date` | Ignore today/yesterday tags | False | `--ignore-release-date` |
+| `--use-proxy` | Enable proxy from config.py | False | `--use-proxy` |
 
 ### Automated Pipeline
 
@@ -201,9 +211,29 @@ The pipeline will:
 3. Run the qBittorrent Uploader to add torrents
 4. Commit uploader results to GitHub immediately
 5. Perform final commit and push to GitHub
-6. Send email notifications with results
+6. **Analyze logs for critical errors**
+7. Send email notifications with appropriate status
 
 **Note**: The pipeline accepts the same arguments as `Javdb_Spider.py` and passes them through automatically.
+
+#### Intelligent Error Detection
+
+The pipeline now includes sophisticated error analysis that distinguishes between:
+
+**Critical Errors (email marked as FAILED):**
+- Cannot access JavDB main site (all pages fail)
+- Cannot connect to qBittorrent
+- Cannot login to qBittorrent
+- All torrent additions failed
+- Network completely unreachable
+
+**Non-Critical Errors (email marked as SUCCESS):**
+- Some specific JavDB pages failed (but main site accessible)
+- Some individual torrents failed to add (but qBittorrent accessible)
+- PikPak API issues (PikPak service problem, not infrastructure)
+- No new torrents found (expected behavior)
+
+This ensures you only get FAILED emails when there's a real infrastructure problem that needs attention, not just when there's no new content or minor issues.
 
 ## Configuration
 
@@ -244,6 +274,22 @@ SMTP_USER = 'your_email@gmail.com'
 SMTP_PASSWORD = 'your_email_password_or_app_password'
 EMAIL_FROM = 'your_email@gmail.com'
 EMAIL_TO = 'your_email@gmail.com'
+
+# =============================================================================
+# PROXY CONFIGURATION (Optional)
+# =============================================================================
+PROXY_HTTP = None  # HTTP proxy URL (e.g., 'http://127.0.0.1:7890')
+PROXY_HTTPS = None  # HTTPS proxy URL (e.g., 'http://127.0.0.1:7890')
+
+# Example configurations:
+# PROXY_HTTP = 'http://127.0.0.1:7890'
+# PROXY_HTTPS = 'http://127.0.0.1:7890'
+# Or use SOCKS5:
+# PROXY_HTTP = 'socks5://127.0.0.1:1080'
+# PROXY_HTTPS = 'socks5://127.0.0.1:1080'
+
+# Modular proxy control - which parts use proxy when --use-proxy is enabled
+PROXY_MODULES = ['all']  # 'all' or list of: 'spider_index', 'spider_detail', 'spider_age_verification'
 
 # =============================================================================
 # SPIDER CONFIGURATION
@@ -369,6 +415,147 @@ This is useful when:
 - You want to backfill your collection with older content
 - You're scraping a custom URL (like an actor's page) where release date is not relevant
 - You want to download everything matching the quality criteria
+
+### Proxy Support
+
+The spider supports HTTP/HTTPS/SOCKS5 proxies for accessing JavDB. This is useful if:
+- JavDB is geo-restricted in your region
+- You need to route traffic through a specific network
+- You want to use a VPN or proxy service
+
+#### Setup
+
+**1. Configure proxy in `config.py`:**
+```python
+# HTTP/HTTPS proxy
+PROXY_HTTP = 'http://127.0.0.1:7890'
+PROXY_HTTPS = 'http://127.0.0.1:7890'
+
+# Or SOCKS5 proxy
+PROXY_HTTP = 'socks5://127.0.0.1:1080'
+PROXY_HTTPS = 'socks5://127.0.0.1:1080'
+
+# With authentication
+PROXY_HTTP = 'http://username:password@proxy.example.com:8080'
+PROXY_HTTPS = 'http://username:password@proxy.example.com:8080'
+
+# Control which modules use proxy (modular control)
+PROXY_MODULES = ['all']  # Enable for all modules
+# PROXY_MODULES = ['spider_index', 'spider_detail']  # Only index and detail pages
+# PROXY_MODULES = ['spider_detail']  # Only detail pages
+# PROXY_MODULES = []  # Disable for all modules
+```
+
+**2. Enable proxy with command-line flag:**
+```bash
+# Enable proxy for a single run
+python Javdb_Spider.py --use-proxy
+
+# Combine with other options
+python Javdb_Spider.py --use-proxy --url "https://javdb.com/actors/EvkJ"
+
+# Via pipeline
+python pipeline_run_and_notify.py --use-proxy
+```
+
+**Note:** 
+- Proxy is **disabled by default**. You must use `--use-proxy` to enable it.
+- If `--use-proxy` is set but no proxy is configured in `config.py`, a warning will be logged.
+- You can control which parts of the spider use proxy via `PROXY_MODULES` configuration.
+
+#### Modular Proxy Control
+
+The `PROXY_MODULES` setting allows fine-grained control over which parts use proxy:
+
+| Module | Description | Use Case |
+|--------|-------------|----------|
+| `spider_index` | Index/listing pages | Use proxy to access main listing pages |
+| `spider_detail` | Movie detail pages | Use proxy for individual movie pages |
+| `spider_age_verification` | Age verification bypass | Use proxy for age verification requests |
+| `qbittorrent` | qBittorrent Web UI API | Use proxy for qBittorrent API requests |
+| `pikpak` | PikPak bridge qBittorrent API | Use proxy for PikPak bridge operations |
+| `all` | All modules | Use proxy for everything (default) |
+
+**Examples:**
+```python
+# Use proxy for everything
+PROXY_MODULES = ['all']
+
+# Only use proxy for detail pages (save bandwidth on index pages)
+PROXY_MODULES = ['spider_detail']
+
+# Use proxy for index and detail, but not age verification
+PROXY_MODULES = ['spider_index', 'spider_detail']
+
+# Only use proxy for qBittorrent and PikPak, not spider
+PROXY_MODULES = ['qbittorrent', 'pikpak']
+
+# Use proxy for spider only, not qBittorrent/PikPak
+PROXY_MODULES = ['spider_index', 'spider_detail', 'spider_age_verification']
+
+# Disable proxy for all modules (even if --use-proxy is set)
+PROXY_MODULES = []
+```
+
+**Common Scenarios:**
+- **Geo-restricted JavDB only**: `PROXY_MODULES = ['spider_index', 'spider_detail', 'spider_age_verification']`
+- **Local qBittorrent behind firewall**: `PROXY_MODULES = ['qbittorrent', 'pikpak']`
+- **Everything through proxy**: `PROXY_MODULES = ['all']`
+
+#### Supported Proxy Types
+- **HTTP**: `http://proxy.example.com:8080`
+- **HTTPS**: `https://proxy.example.com:8080`
+- **SOCKS5**: `socks5://proxy.example.com:1080` (requires `requests[socks]` package)
+
+#### Installing SOCKS5 Support
+If you want to use SOCKS5 proxy, install the additional dependency:
+```bash
+pip install requests[socks]
+```
+
+#### Troubleshooting Proxy Issues
+
+**Error: 500 Internal Server Error**
+- Check if proxy server is running and accessible
+- Verify proxy credentials (username/password)
+- If password contains special characters, URL-encode them:
+  ```python
+  from urllib.parse import quote
+  password = "My@Pass!"
+  encoded = quote(password, safe='')
+  print(encoded)  # Output: My%40Pass%21
+  ```
+- Test proxy manually:
+  ```bash
+  curl -x http://username:password@proxy:port https://javdb.com
+  ```
+
+**Error: Connection refused or timeout**
+- Check if proxy server is running: `telnet proxy_ip proxy_port`
+- Verify firewall rules allow connection to proxy
+- Check if proxy requires authentication
+
+**Proxy works but downloads fail**
+- Some proxies don't support magnet links or torrents
+- Try different proxy or use direct connection for qBittorrent/PikPak:
+  ```python
+  PROXY_MODULES = ['spider_index', 'spider_detail', 'spider_age_verification']
+  ```
+
+**Password with special characters**
+Common special characters that need URL encoding:
+- `@` → `%40`
+- `:` → `%3A` (only in password, not after `@`)
+- `/` → `%2F`
+- `?` → `%3F`
+- `#` → `%23`
+- `&` → `%26`
+- `=` → `%3D`
+- `+` → `%2B`
+- Space → `%20`
+- `!` → `%21`
+
+Example: `http://user:My@Pass!123@proxy:8080` becomes `http://user:My%40Pass%21123@proxy:8080`
 
 ## Downloaded Indicator Feature
 
