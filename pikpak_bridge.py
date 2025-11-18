@@ -72,17 +72,17 @@ def get_proxies_dict(module_name, use_proxy_flag):
     if not should_use_proxy_for_module(module_name, use_proxy_flag):
         return None
     
-    # Try proxy pool first
-    if PROXY_MODE == 'pool' and global_proxy_pool is not None:
+    # Try proxy pool first (both pool and single modes)
+    if PROXY_MODE in ('pool', 'single') and global_proxy_pool is not None:
         proxies = global_proxy_pool.get_current_proxy()
         if proxies:
             proxy_name = global_proxy_pool.get_current_proxy_name()
-            logger.debug(f"[{module_name}] Using proxy pool - Current proxy: {proxy_name}")
+            logger.debug(f"[{module_name}] Using proxy mode '{PROXY_MODE}' - Current proxy: {proxy_name}")
         else:
-            logger.warning(f"[{module_name}] Proxy pool enabled but no proxy available")
+            logger.warning(f"[{module_name}] Proxy mode '{PROXY_MODE}' enabled but no proxy available")
         return proxies
     
-    # Fallback to single proxy
+    # Fallback to legacy PROXY_HTTP/PROXY_HTTPS
     if not (PROXY_HTTP or PROXY_HTTPS):
         return None
     proxies = {}
