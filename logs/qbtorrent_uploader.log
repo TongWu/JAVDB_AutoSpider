@@ -1,43 +1,5 @@
-2025-11-17 19:06:50,736 - __main__ - INFO - Starting qBittorrent uploader...
-2025-11-17 19:06:50,736 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251117.csv
-2025-11-17 19:06:50,737 - __main__ - INFO - Found 22 torrent links in Daily Report/Javdb_TodayTitle_20251117.csv
-2025-11-17 19:06:50,737 - __main__ - INFO - Skipped 3 already downloaded torrents
-2025-11-17 19:06:50,737 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-11-17 19:06:50,906 - __main__ - INFO - Successfully logged in to qBittorrent
-2025-11-17 19:06:50,906 - __main__ - INFO - History manager imported, will update downloaded status
-2025-11-17 19:06:50,906 - __main__ - INFO - Starting to add 22 torrents to qBittorrent...
-2025-11-17 19:06:50,906 - __main__ - INFO - [1/22] Adding: CAWD-876 [Hacked+Subtitle]
-2025-11-17 19:06:51,911 - __main__ - INFO - [2/22] Adding: CAWD-876 [Subtitle]
-2025-11-17 19:06:52,914 - __main__ - INFO - [3/22] Adding: FNS-101 [Hacked-NoSubtitle]
-2025-11-17 19:06:53,916 - __main__ - INFO - [4/22] Adding: FNS-101 [Subtitle]
-2025-11-17 19:06:54,919 - __main__ - INFO - [5/22] Adding: FNS-102 [Subtitle]
-2025-11-17 19:06:55,921 - __main__ - INFO - [6/22] Adding: FNS-105 [Subtitle]
-2025-11-17 19:06:56,923 - __main__ - INFO - [7/22] Adding: FNS-113 [Subtitle]
-2025-11-17 19:06:57,925 - __main__ - INFO - [8/22] Adding: FOCS-278 [Subtitle]
-2025-11-17 19:06:58,928 - __main__ - INFO - [9/22] Adding: FOCS-279 [Subtitle]
-2025-11-17 19:06:59,930 - __main__ - INFO - [10/22] Adding: FOCS-280 [Subtitle]
-2025-11-17 19:07:00,932 - __main__ - INFO - [11/22] Adding: IPZZ-697 [Hacked+Subtitle]
-2025-11-17 19:07:01,935 - __main__ - INFO - [12/22] Adding: IPZZ-079 [Hacked+Subtitle]
-2025-11-17 19:07:02,938 - __main__ - INFO - [13/22] Adding: IPZZ-588 [Hacked+Subtitle]
-2025-11-17 19:07:03,940 - __main__ - INFO - [14/22] Adding: IPZZ-588 [NoSubtitle]
-2025-11-17 19:07:04,942 - __main__ - INFO - [15/22] Adding: MIKR-051 [Hacked+Subtitle]
-2025-11-17 19:07:05,944 - __main__ - INFO - [16/22] Adding: TIKB-210 [NoSubtitle]
-2025-11-17 19:07:06,947 - __main__ - INFO - [17/22] Adding: FLAV-407 [NoSubtitle]
-2025-11-17 19:07:07,949 - __main__ - INFO - [18/22] Adding: PRIN-053 [NoSubtitle]
-2025-11-17 19:07:08,952 - __main__ - INFO - [19/22] Adding: HMN-748 [NoSubtitle]
-2025-11-17 19:07:09,954 - __main__ - INFO - [20/22] Adding: MUKD-559 [NoSubtitle]
-2025-11-17 19:07:10,957 - __main__ - INFO - [21/22] Adding: EBWH-289 [NoSubtitle]
-2025-11-17 19:07:11,960 - __main__ - INFO - [22/22] Adding: GVH-798 [NoSubtitle]
-2025-11-17 19:07:12,962 - __main__ - INFO - ==================================================
-2025-11-17 19:07:12,962 - __main__ - INFO - UPLOAD SUMMARY
-2025-11-17 19:07:12,962 - __main__ - INFO - ==================================================
-2025-11-17 19:07:12,962 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251117.csv
-2025-11-17 19:07:12,962 - __main__ - INFO - Total torrents found: 22
-2025-11-17 19:07:12,962 - __main__ - INFO - Successfully added: 22
-2025-11-17 19:07:12,962 - __main__ - INFO -   - Hacked subtitle torrents: 5
-2025-11-17 19:07:12,962 - __main__ - INFO -   - Hacked no subtitle torrents: 1
-2025-11-17 19:07:12,962 - __main__ - INFO -   - Subtitle torrents: 8
-2025-11-17 19:07:12,962 - __main__ - INFO -   - No subtitle torrents: 8
-2025-11-17 19:07:12,962 - __main__ - INFO - Failed to add: 0
-2025-11-17 19:07:12,962 - __main__ - INFO - Success rate: 100.0%
-2025-11-17 19:07:12,962 - __main__ - INFO - ==================================================
+2025-11-18 19:00:02,842 - __main__ - INFO - Starting qBittorrent uploader...
+2025-11-18 19:00:02,842 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251118.csv
+2025-11-18 19:00:02,842 - __main__ - ERROR - CSV file not found: Daily Report/Javdb_TodayTitle_20251118.csv
+2025-11-18 19:00:02,842 - __main__ - INFO - Make sure you have run the spider script first to generate the CSV file
+2025-11-18 19:00:02,842 - __main__ - WARNING - No torrent links found in CSV file
