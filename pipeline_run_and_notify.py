@@ -305,6 +305,18 @@ def analyze_pikpak_log(log_path):
     return False, None
 
 
+def get_proxy_ban_summary():
+    """Get proxy ban summary for email notification"""
+    try:
+        from utils.proxy_ban_manager import get_ban_manager
+        ban_manager = get_ban_manager()
+        # Include IP information in email
+        return ban_manager.get_ban_summary(include_ip=True)
+    except Exception as e:
+        logger.warning(f"Failed to get proxy ban summary: {e}")
+        return "Proxy ban information not available."
+
+
 def send_email(subject, body, attachments=None):
     msg = EmailMessage()
     msg['Subject'] = subject
@@ -541,8 +553,13 @@ def main():
         spider_summary = get_log_summary(SPIDER_LOG_FILE, lines=35)
         uploader_summary = get_log_summary(UPLOADER_LOG_FILE, lines=13)
         pikpak_summary = get_log_summary(PIKPAK_LOG_FILE, lines=10)
+        ban_summary = get_proxy_ban_summary()
         body = f"""
 JavDB Spider, qBittorrent Uploader, and PikPak Bridge Pipeline Completed Successfully.
+
+--- Proxy Ban Status ---
+{ban_summary}
+
 --- JavDB Spider Summary ---
 {spider_summary}
 --- qBittorrent Uploader Summary ---
@@ -566,6 +583,7 @@ JavDB Spider, qBittorrent Uploader, and PikPak Bridge Pipeline Completed Success
         spider_summary = get_log_summary(SPIDER_LOG_FILE, lines=35)
         uploader_summary = get_log_summary(UPLOADER_LOG_FILE, lines=13)
         pikpak_summary = get_log_summary(PIKPAK_LOG_FILE, lines=10)
+        ban_summary = get_proxy_ban_summary()
         
         body = f"""
 JavDB Pipeline Failed - Critical Errors Detected
@@ -576,6 +594,9 @@ CRITICAL ERRORS:
 {error_details}
 
 Please check the detailed logs below for more information.
+
+--- Proxy Ban Status ---
+{ban_summary}
 
 --- JavDB Spider Summary ---
 {spider_summary}
