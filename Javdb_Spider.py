@@ -219,13 +219,13 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
                         if final_response.status_code == 200:
                             return final_response.text
                         else:
-                            logger.warning(f"Failed to get final page after age verification: {final_response.status_code}")
+                            logger.debug(f"Failed to get final page after age verification: {final_response.status_code}")
                             return final_response.text
                     else:
-                        logger.warning(f"Failed to bypass age verification: {age_response.status_code}")
+                        logger.debug(f"Failed to bypass age verification: {age_response.status_code}")
                         break
             
-            logger.warning("Could not find or access age verification link")
+            logger.debug("Could not find or access age verification link")
         else:
             logger.debug("No age verification modal detected")
         
