@@ -146,12 +146,12 @@ def run_script(script_path, args=None):
     return ''.join(output_lines)
 
 
-def run_pikpak_bridge(days=3, dry_run=False, batch_mode=True):
+def run_pikpak_bridge(days=3, dry_run=False, batch_mode=True, use_proxy=False):
     """Run PikPak Bridge to handle old torrents"""
     try:
         mode_str = "batch mode" if batch_mode else "individual mode"
         logger.info(f"Running PikPak Bridge with {days} days threshold, dry_run={dry_run}, using {mode_str}")
-        pikpak_bridge(days, dry_run, batch_mode)
+        pikpak_bridge(days, dry_run, batch_mode, use_proxy)
         logger.info("PikPak Bridge completed successfully")
     except Exception as e:
         logger.error(f"PikPak Bridge failed: {e}")
@@ -164,6 +164,145 @@ def get_log_summary(log_path, lines=200):
     with open(log_path, 'r', encoding='utf-8') as f:
         log_lines = f.readlines()
     return ''.join(log_lines[-lines:])
+
+
+def analyze_spider_log(log_path):
+    """
+    Analyze spider log to detect critical errors
+    Returns: (is_critical_error, error_message)
+    """
+    if not os.path.exists(log_path):
+        return True, "Spider log file not found"
+    
+    with open(log_path, 'r', encoding='utf-8') as f:
+        log_content = f.read()
+    
+    import re
+    
+    # First check if we got any results at all
+    total_entries_match = re.search(r'Total entries found: (\d+)', log_content)
+    if total_entries_match:
+        total_entries = int(total_entries_match.group(1))
+        if total_entries > 0:
+            # We successfully got some entries, so JavDB is accessible
+            return False, None
+    
+    # Check if we successfully processed any pages
+    if 'Successfully fetched URL:' in log_content:
+        # We fetched at least some pages successfully
+        return False, None
+    
+    # Count consecutive fetch errors at the start of each phase
+    phase1_errors = 0
+    phase2_errors = 0
+    current_phase = None
+    
+    lines = log_content.split('\n')
+    for line in lines:
+        # Detect phase changes
+        if 'PHASE 1:' in line:
+            current_phase = 1
+        elif 'PHASE 2:' in line:
+            current_phase = 2
+        elif 'OVERALL SUMMARY' in line:
+            break
+        
+        # Count errors
+        if 'Error fetching' in line and '500 Server Error' in line:
+            if current_phase == 1:
+                phase1_errors += 1
+            elif current_phase == 2:
+                phase2_errors += 1
+        elif 'Successfully' in line or 'Found' in line and 'entries' in line:
+            # Reset errors if we see success
+            if current_phase == 1:
+                phase1_errors = 0
+            elif current_phase == 2:
+                phase2_errors = 0
+    
+    # If both phases have consistent errors at the start, main site is unreachable
+    if phase1_errors >= 3 and phase2_errors >= 3:
+        return True, "Cannot access JavDB main site - all pages failed with 500 errors (check proxy configuration)"
+    
+    # Check for other critical network errors
+    critical_patterns = [
+        ("Cannot connect to JavDB", "Cannot connect to JavDB"),
+        ("Connection refused", "Connection refused to JavDB"),
+        ("Connection timeout", "Connection timeout to JavDB"),
+        ("Network is unreachable", "Network unreachable"),
+        ("Max retries exceeded", "Max retries exceeded"),
+    ]
+    
+    for pattern, message in critical_patterns:
+        if pattern in log_content:
+            # Check if it's a widespread issue or just specific pages
+            error_count = log_content.count(pattern)
+            if error_count >= 3:
+                return True, f"Critical network error: {message}"
+    
+    return False, None
+
+
+def analyze_uploader_log(log_path):
+    """
+    Analyze uploader log to detect critical errors
+    Returns: (is_critical_error, error_message)
+    """
+    if not os.path.exists(log_path):
+        return True, "Uploader log file not found"
+    
+    with open(log_path, 'r', encoding='utf-8') as f:
+        log_content = f.read()
+    
+    # Critical errors for qBittorrent uploader
+    critical_patterns = [
+        "Cannot connect to qBittorrent",
+        "Failed to login to qBittorrent",
+        "Connection refused",
+        "Network is unreachable"
+    ]
+    
+    for pattern in critical_patterns:
+        if pattern in log_content:
+            return True, f"Cannot access qBittorrent: {pattern}"
+    
+    # Check if we attempted to add torrents but all failed
+    if 'Starting to add' in log_content and 'failed_count' in log_content:
+        import re
+        match = re.search(r'Successfully added: (\d+)', log_content)
+        if match and int(match.group(1)) == 0:
+            failed_match = re.search(r'Failed to add: (\d+)', log_content)
+            if failed_match and int(failed_match.group(1)) > 0:
+                return True, "All torrent additions failed"
+    
+    return False, None
+
+
+def analyze_pikpak_log(log_path):
+    """
+    Analyze PikPak log to detect critical errors
+    Returns: (is_critical_error, error_message)
+    """
+    if not os.path.exists(log_path):
+        # PikPak is optional, so missing log is not critical
+        return False, None
+    
+    with open(log_path, 'r', encoding='utf-8') as f:
+        log_content = f.read()
+    
+    # Critical errors for PikPak
+    critical_patterns = [
+        "qBittorrent login failed",
+        "Failed to login qBittorrent",
+        "Connection refused"
+    ]
+    
+    for pattern in critical_patterns:
+        if pattern in log_content:
+            return True, f"Cannot access qBittorrent in PikPak bridge: {pattern}"
+    
+    # PikPak API errors are not critical (PikPak service issue, not our setup)
+    return False, None
 
 
 def send_email(subject, body, attachments=None):
@@ -269,6 +408,7 @@ def parse_arguments():
     parser.add_argument('--output-file', type=str, help='Specify output CSV file name')
     parser.add_argument('--dry-run', action='store_true', help='Print items that would be written without changing CSV file')
     parser.add_argument('--ignore-release-date', action='store_true', help='Ignore today/yesterday tags and download all entries matching phase criteria (subtitle for phase1, quality for phase2)')
+    parser.add_argument('--use-proxy', action='store_true', help='Enable proxy for all HTTP requests (proxy settings from config.py)')
     # PikPak Bridge arguments
     parser.add_argument('--pikpak-individual', action='store_true', help='Use individual mode for PikPak Bridge instead of batch mode')
     return parser.parse_args()
@@ -308,6 +448,8 @@ def main():
         spider_args.append('--dry-run')
     if args.ignore_release_date:
         spider_args.append('--ignore-release-date')
+    if args.use_proxy:
+        spider_args.append('--use-proxy')
 
     # Build arguments for qbtorrent_uploader
     uploader_args = []
@@ -315,8 +457,12 @@ def main():
         uploader_args.extend(['--mode', 'adhoc'])
     else:
         uploader_args.extend(['--mode', 'daily'])
+    if args.use_proxy:
+        uploader_args.append('--use-proxy')
 
     pipeline_success = False
+    pipeline_errors = []
+    
     try:
         logger.info("=" * 60)
         logger.info("STARTING JAVDB PIPELINE")
@@ -339,24 +485,57 @@ def main():
 
         # 3. Run PikPak Bridge to handle old torrents
         logger.info("Step 3: Running PikPak Bridge to clean up old torrents...")
-        run_pikpak_bridge(days=3, dry_run=args.dry_run)
+        run_pikpak_bridge(days=3, dry_run=args.dry_run, use_proxy=args.use_proxy)
         logger.info("✓ PikPak Bridge completed successfully")
 
         pipeline_success = True
         logger.info("=" * 60)
-        logger.info("PIPELINE COMPLETED SUCCESSFULLY")
+        logger.info("PIPELINE COMPLETED")
         logger.info("=" * 60)
 
     except Exception as e:
         logger.error("=" * 60)
-        logger.error("PIPELINE FAILED")
+        logger.error("PIPELINE EXECUTION ERROR")
         logger.error("=" * 60)
         logger.error(f'Error: {e}')
         pipeline_success = False
+        pipeline_errors.append(f"Pipeline execution error: {e}")
 
-    # Send email based on pipeline result
+    # Analyze logs for critical errors even if pipeline "succeeded"
+    logger.info("Analyzing logs for critical errors...")
+    
+    spider_critical, spider_error = analyze_spider_log(SPIDER_LOG_FILE)
+    if spider_critical:
+        logger.error(f"CRITICAL ERROR in Spider: {spider_error}")
+        pipeline_errors.append(f"Spider: {spider_error}")
+    
+    uploader_critical, uploader_error = analyze_uploader_log(UPLOADER_LOG_FILE)
+    if uploader_critical:
+        logger.error(f"CRITICAL ERROR in Uploader: {uploader_error}")
+        pipeline_errors.append(f"Uploader: {uploader_error}")
+    
+    pikpak_critical, pikpak_error = analyze_pikpak_log(PIKPAK_LOG_FILE)
+    if pikpak_critical:
+        logger.error(f"CRITICAL ERROR in PikPak: {pikpak_error}")
+        pipeline_errors.append(f"PikPak: {pikpak_error}")
+    
+    # Determine final status
+    has_critical_errors = len(pipeline_errors) > 0
+    
+    if has_critical_errors:
+        logger.error("=" * 60)
+        logger.error("PIPELINE FAILED - CRITICAL ERRORS DETECTED")
+        logger.error("=" * 60)
+        for error in pipeline_errors:
+            logger.error(f"  - {error}")
+    else:
+        logger.info("=" * 60)
+        logger.info("PIPELINE COMPLETED SUCCESSFULLY - NO CRITICAL ERRORS")
+        logger.info("=" * 60)
+
+    # Send email based on actual pipeline status
     today_str = datetime.now().strftime('%Y%m%d')
-    if pipeline_success:
+    if not has_critical_errors:
         # Pipeline succeeded - send detailed report with attachments
         spider_summary = get_log_summary(SPIDER_LOG_FILE, lines=35)
         uploader_summary = get_log_summary(UPLOADER_LOG_FILE, lines=13)
@@ -380,18 +559,37 @@ JavDB Spider, qBittorrent Uploader, and PikPak Bridge Pipeline Completed Success
         except Exception as e:
             logger.error(f'Failed to send success email: {e}')
     else:
-        # Pipeline failed - send simple failure notification
+        # Pipeline failed - send detailed failure notification
+        error_details = "\n".join([f"  - {error}" for error in pipeline_errors])
+        
+        spider_summary = get_log_summary(SPIDER_LOG_FILE, lines=35)
+        uploader_summary = get_log_summary(UPLOADER_LOG_FILE, lines=13)
+        pikpak_summary = get_log_summary(PIKPAK_LOG_FILE, lines=10)
+        
         body = f"""
-JavDB Pipeline Failed
-The pipeline encountered an error and could not complete successfully.
-Please check the logs for more details.
+JavDB Pipeline Failed - Critical Errors Detected
+
 Error occurred at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+CRITICAL ERRORS:
+{error_details}
+
+Please check the detailed logs below for more information.
+
+--- JavDB Spider Summary ---
+{spider_summary}
+
+--- qBittorrent Uploader Summary ---
+{uploader_summary}
+
+--- PikPak Bridge Summary ---
+{pikpak_summary}
 """
         try:
             send_email(
                 subject=f'JavDB Pipeline Report {today_str} - FAILED',
                 body=body,
-                attachments=[PIPELINE_LOG_FILE]  # Include pipeline log for debugging
+                attachments=[SPIDER_LOG_FILE, UPLOADER_LOG_FILE, PIKPAK_LOG_FILE, PIPELINE_LOG_FILE]
             )
         except Exception as e:
             logger.error(f'Failed to send failure email: {e}')

@@ -58,6 +58,66 @@ EMAIL_FROM = 'your_email@gmail.com'
 EMAIL_TO = 'your_email@gmail.com'
 
 # =============================================================================
+# PROXY CONFIGURATION
+# =============================================================================
+
+# Proxy settings (optional)
+# Leave empty or set to None to disable proxy
+# Supported formats:
+#   HTTP: 'http://proxy.example.com:8080'
+#   HTTPS: 'https://proxy.example.com:8080'
+#   SOCKS5: 'socks5://proxy.example.com:1080'
+#   With auth: 'http://username:password@proxy.example.com:8080'
+#
+# IMPORTANT: If your password contains special characters, you need to URL-encode them:
+#   Space     -> %20
+#   !         -> %21
+#   #         -> %23
+#   $         -> %24
+#   %         -> %25
+#   &         -> %26
+#   @         -> %40
+#   :         -> %3A (only in password, not after @)
+#   /         -> %2F
+#   ?         -> %3F
+#   =         -> %3D
+#   +         -> %2B
+#
+# Example: password "My@Pass!" should be "My%40Pass%21"
+# You can use Python to encode: from urllib.parse import quote; print(quote("My@Pass!", safe=''))
+PROXY_HTTP = None  # HTTP proxy URL
+PROXY_HTTPS = None  # HTTPS proxy URL
+
+# Example configurations:
+# PROXY_HTTP = 'http://127.0.0.1:7890'
+# PROXY_HTTPS = 'http://127.0.0.1:7890'
+# Or use SOCKS5:
+# PROXY_HTTP = 'socks5://127.0.0.1:1080'
+# PROXY_HTTPS = 'socks5://127.0.0.1:1080'
+# With authentication (password with special chars encoded):
+# PROXY_HTTP = 'http://username:My%40Pass%21@proxy.example.com:8080'
+# PROXY_HTTPS = 'http://username:My%40Pass%21@proxy.example.com:8080'
+
+# Proxy modules control (which parts of the script use proxy when --use-proxy is enabled)
+# Available modules:
+#   'spider_index'  - Index page fetching (main listing pages)
+#   'spider_detail' - Detail page fetching (individual movie pages)
+#   'spider_age_verification' - Age verification bypass requests
+#   'qbittorrent'   - qBittorrent Web UI API requests
+#   'pikpak'        - PikPak bridge qBittorrent API requests
+# Add module names to the list to enable proxy for those modules
+# Leave empty list [] to disable proxy for all modules
+# Use ['all'] to enable proxy for all modules
+PROXY_MODULES = ['all']
+
+# Example configurations:
+# PROXY_MODULES = ['all']  # Enable proxy for all modules (default)
+# PROXY_MODULES = ['spider_index', 'spider_detail']  # Only spider, not qBittorrent/PikPak
+# PROXY_MODULES = ['spider_detail', 'qbittorrent']  # Detail pages and qBittorrent
+# PROXY_MODULES = ['qbittorrent', 'pikpak']  # Only qBittorrent and PikPak, not spider
+# PROXY_MODULES = []  # Disable proxy for all modules (even if --use-proxy is set)
+
+# =============================================================================
 # SPIDER CONFIGURATION
 # =============================================================================
 
