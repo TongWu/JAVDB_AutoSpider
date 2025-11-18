@@ -6,6 +6,7 @@ import logging
 import os
 import argparse
 import sys
+from typing import Optional
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 from urllib.parse import urljoin
@@ -46,12 +47,27 @@ except ImportError:
     PROXY_HTTPS = None
     PROXY_MODULES = ['all']
 
+# Import proxy pool configuration (with fallback)
+try:
+    from config import PROXY_MODE, PROXY_POOL, PROXY_POOL_COOLDOWN_SECONDS, PROXY_POOL_MAX_FAILURES
+except ImportError:
+    PROXY_MODE = 'single'
+    PROXY_POOL = []
+    PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 days (691200 seconds)
+    PROXY_POOL_MAX_FAILURES = 3
+
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
 # Configure logging
 from utils.logging_config import setup_logging, get_logger
 setup_logging(SPIDER_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
+
+# Import proxy pool
+from utils.proxy_pool import ProxyPool, create_proxy_pool_from_config
+
+# Global proxy pool instance (will be initialized in main)
+global_proxy_pool: Optional[ProxyPool] = None
 
 # Global set to track parsed links
 parsed_links = set()
@@ -130,9 +146,9 @@ def should_use_proxy_for_module(module_name, use_proxy_flag):
     return module_name in PROXY_MODULES
 
 
-def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='unknown'):
+def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='unknown', max_retries=3):
     """
-    Fetch a webpage with proper headers and age verification bypass
+    Fetch a webpage with proper headers, age verification bypass, and proxy pool support
     
     Args:
         url: URL to fetch
@@ -140,7 +156,10 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
         use_cookie: Whether to add session cookie
         use_proxy: Whether --use-proxy flag is enabled
         module_name: Module name for proxy control ('spider_index', 'spider_detail', 'spider_age_verification')
+        max_retries: Maximum number of retries with different proxies (only for proxy pool mode)
     """
+    global global_proxy_pool
+    
     if session is None:
         session = requests.Session()
 
@@ -162,78 +181,124 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
     if use_cookie and JAVDB_SESSION_COOKIE:
         headers['Cookie'] = f'_jdb_session={JAVDB_SESSION_COOKIE}'
 
-    # Configure proxy if enabled and module is configured to use proxy
+    # Determine proxy configuration based on mode
     proxies = None
-    if should_use_proxy_for_module(module_name, use_proxy) and (PROXY_HTTP or PROXY_HTTPS):
-        proxies = {}
-        if PROXY_HTTP:
-            proxies['http'] = PROXY_HTTP
-        if PROXY_HTTPS:
-            proxies['https'] = PROXY_HTTPS
-        logger.debug(f"[{module_name}] Using proxy: {proxies}")
+    use_proxy_pool_mode = False
+    
+    if should_use_proxy_for_module(module_name, use_proxy):
+        if PROXY_MODE == 'pool' and global_proxy_pool is not None:
+            # Use proxy pool with automatic failover
+            use_proxy_pool_mode = True
+            proxies = global_proxy_pool.get_current_proxy()
+            if proxies:
+                proxy_name = global_proxy_pool.get_current_proxy_name()
+                logger.debug(f"[{module_name}] Using proxy pool - Current proxy: {proxy_name}")
+            else:
+                logger.warning(f"[{module_name}] Proxy pool enabled but no proxy available")
+        elif PROXY_MODE == 'single' and global_proxy_pool is not None:
+            # Use single proxy mode - only use first proxy from pool
+            proxies = global_proxy_pool.get_current_proxy()
+            if proxies:
+                proxy_name = global_proxy_pool.get_current_proxy_name()
+                logger.debug(f"[{module_name}] Using single proxy mode - Main proxy: {proxy_name}")
+            else:
+                logger.warning(f"[{module_name}] Single proxy mode enabled but no proxy configured")
+        elif PROXY_HTTP or PROXY_HTTPS:
+            # Fallback to legacy PROXY_HTTP/PROXY_HTTPS configuration
+            proxies = {}
+            if PROXY_HTTP:
+                proxies['http'] = PROXY_HTTP
+            if PROXY_HTTPS:
+                proxies['https'] = PROXY_HTTPS
+            logger.debug(f"[{module_name}] Using legacy proxy configuration: {proxies}")
     elif use_proxy:
         logger.debug(f"[{module_name}] Proxy disabled for this module")
 
-    try:
-        logger.debug(f"Fetching URL: {url}")
-        if proxies:
-            logger.debug(f"Using proxies: {proxies}")
-        response = session.get(url, headers=headers, proxies=proxies, timeout=30)
-        response.raise_for_status()
-        logger.debug(f"Successfully fetched URL: {url}")
-        
-        html_content = response.text
-        
-        # Check for age verification modal and bypass if needed
-        soup = BeautifulSoup(html_content, 'html.parser')
-        age_modal = soup.find('div', class_='modal is-active over18-modal')
-        
-        if age_modal:
-            logger.debug("Age verification modal detected, attempting to bypass...")
+    # Retry logic for proxy pool mode
+    retry_count = 0
+    while retry_count < max_retries:
+        try:
+            logger.debug(f"Fetching URL: {url} (attempt {retry_count + 1}/{max_retries})")
+            if proxies:
+                logger.debug(f"Using proxies: {proxies}")
             
-            # Configure proxy for age verification (can be different from main request)
-            age_proxies = None
-            if should_use_proxy_for_module('spider_age_verification', use_proxy) and (PROXY_HTTP or PROXY_HTTPS):
-                age_proxies = {}
-                if PROXY_HTTP:
-                    age_proxies['http'] = PROXY_HTTP
-                if PROXY_HTTPS:
-                    age_proxies['https'] = PROXY_HTTPS
-                logger.debug(f"[spider_age_verification] Using proxy: {age_proxies}")
-            elif use_proxy:
-                logger.debug(f"[spider_age_verification] Proxy disabled for this module")
+            response = session.get(url, headers=headers, proxies=proxies, timeout=30)
+            response.raise_for_status()
+            logger.debug(f"Successfully fetched URL: {url}")
             
-            # Find age verification link
-            age_links = age_modal.find_all('a', href=True)
-            for link in age_links:
-                if 'over18' in link.get('href', ''):
-                    age_url = urljoin(BASE_URL, link.get('href'))
-                    logger.debug(f"Found age verification link: {age_url}")
-                    
-                    # Access age verification link
-                    age_response = session.get(age_url, headers=headers, proxies=age_proxies, timeout=30)
-                    if age_response.status_code == 200:
-                        logger.debug("Successfully bypassed age verification")
-                        # Re-fetch the original page
-                        final_response = session.get(url, headers=headers, proxies=age_proxies, timeout=30)
-                        if final_response.status_code == 200:
-                            return final_response.text
+            # Mark proxy as successful if using proxy pool
+            if use_proxy_pool_mode and global_proxy_pool is not None:
+                global_proxy_pool.mark_success()
+            
+            html_content = response.text
+            
+            # Check for age verification modal and bypass if needed
+            soup = BeautifulSoup(html_content, 'html.parser')
+            age_modal = soup.find('div', class_='modal is-active over18-modal')
+            
+            if age_modal:
+                logger.debug("Age verification modal detected, attempting to bypass...")
+                
+                # Configure proxy for age verification
+                age_proxies = None
+                if should_use_proxy_for_module('spider_age_verification', use_proxy):
+                    if PROXY_MODE == 'pool' and global_proxy_pool is not None:
+                        age_proxies = global_proxy_pool.get_current_proxy()
+                    elif PROXY_HTTP or PROXY_HTTPS:
+                        age_proxies = {}
+                        if PROXY_HTTP:
+                            age_proxies['http'] = PROXY_HTTP
+                        if PROXY_HTTPS:
+                            age_proxies['https'] = PROXY_HTTPS
+                
+                # Find age verification link
+                age_links = age_modal.find_all('a', href=True)
+                for link in age_links:
+                    if 'over18' in link.get('href', ''):
+                        age_url = urljoin(BASE_URL, link.get('href'))
+                        logger.debug(f"Found age verification link: {age_url}")
+                        
+                        # Access age verification link
+                        age_response = session.get(age_url, headers=headers, proxies=age_proxies, timeout=30)
+                        if age_response.status_code == 200:
+                            logger.debug("Successfully bypassed age verification")
+                            # Re-fetch the original page
+                            final_response = session.get(url, headers=headers, proxies=age_proxies, timeout=30)
+                            if final_response.status_code == 200:
+                                return final_response.text
+                            else:
+                                logger.debug(f"Failed to get final page after age verification: {final_response.status_code}")
+                                return final_response.text
                         else:
-                            logger.debug(f"Failed to get final page after age verification: {final_response.status_code}")
-                            return final_response.text
-                    else:
-                        logger.debug(f"Failed to bypass age verification: {age_response.status_code}")
-                        break
+                            logger.debug(f"Failed to bypass age verification: {age_response.status_code}")
+                            break
+                
+                logger.debug("Could not find or access age verification link")
+            else:
+                logger.debug("No age verification modal detected")
             
-            logger.debug("Could not find or access age verification link")
-        else:
-            logger.debug("No age verification modal detected")
-        
-        return html_content
-        
-    except requests.RequestException as e:
-        logger.error(f"Error fetching {url}: {e}")
-        return None
+            return html_content
+            
+        except requests.RequestException as e:
+            logger.error(f"Error fetching {url}: {e}")
+            
+            # If using proxy pool, try to switch to another proxy
+            if use_proxy_pool_mode and global_proxy_pool is not None and retry_count < max_retries - 1:
+                switched = global_proxy_pool.mark_failure_and_switch()
+                if switched:
+                    proxies = global_proxy_pool.get_current_proxy()
+                    proxy_name = global_proxy_pool.get_current_proxy_name()
+                    logger.info(f"[{module_name}] Switched to proxy: {proxy_name}, retrying...")
+                    retry_count += 1
+                    continue
+                else:
+                    logger.error(f"[{module_name}] Failed to switch proxy, no more proxies available")
+                    break
+            else:
+                # Single proxy mode or last retry - just fail
+                break
+                
+    return None
 
 
 def get_page_url(page_num, phase=1, custom_url=None):
@@ -447,6 +512,8 @@ def generate_output_csv_name(custom_url=None):
 
 
 def main():
+    global global_proxy_pool
+    
     # Parse command line arguments
     args = parse_arguments()
 
@@ -460,6 +527,47 @@ def main():
     parse_all = args.all
     ignore_release_date = args.ignore_release_date
     use_proxy = args.use_proxy
+    
+    # Initialize proxy pool if proxy is enabled
+    if use_proxy:
+        # Check if we have PROXY_POOL configuration
+        if PROXY_POOL and len(PROXY_POOL) > 0:
+            if PROXY_MODE == 'pool':
+                # Full proxy pool mode with automatic failover
+                logger.info(f"Initializing proxy pool with {len(PROXY_POOL)} proxies...")
+                global_proxy_pool = create_proxy_pool_from_config(
+                    PROXY_POOL,
+                    cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
+                    max_failures=PROXY_POOL_MAX_FAILURES
+                )
+                logger.info(f"Proxy pool initialized successfully")
+                logger.info(f"Cooldown: {PROXY_POOL_COOLDOWN_SECONDS}s, Max failures before cooldown: {PROXY_POOL_MAX_FAILURES}")
+            elif PROXY_MODE == 'single':
+                # Single proxy mode - only use first proxy from pool
+                logger.info(f"Initializing single proxy mode (using first proxy from pool)...")
+                global_proxy_pool = create_proxy_pool_from_config(
+                    [PROXY_POOL[0]],  # Only use first proxy
+                    cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
+                    max_failures=PROXY_POOL_MAX_FAILURES
+                )
+                logger.info(f"Single proxy initialized: {PROXY_POOL[0].get('name', 'Main-Proxy')}")
+        # Fallback to legacy PROXY_HTTP/PROXY_HTTPS if no PROXY_POOL configured
+        elif PROXY_HTTP or PROXY_HTTPS:
+            logger.info("Using legacy PROXY_HTTP/PROXY_HTTPS configuration")
+            # Create a temporary proxy pool entry for consistency
+            legacy_proxy = {
+                'name': 'Legacy-Proxy',
+                'http': PROXY_HTTP,
+                'https': PROXY_HTTPS
+            }
+            global_proxy_pool = create_proxy_pool_from_config(
+                [legacy_proxy],
+                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
+                max_failures=PROXY_POOL_MAX_FAILURES
+            )
+        else:
+            logger.warning("Proxy enabled but no proxy configuration found (neither PROXY_POOL nor PROXY_HTTP/PROXY_HTTPS)")
+            global_proxy_pool = None
 
     # Determine output directory and filename
     if args.url:
@@ -495,20 +603,26 @@ def main():
     if ignore_release_date:
         logger.info("IGNORE RELEASE DATE: Will process all entries regardless of today/yesterday tags")
     if use_proxy:
-        if PROXY_HTTP or PROXY_HTTPS:
-            proxy_info = []
-            if PROXY_HTTP:
-                proxy_info.append(f"HTTP={PROXY_HTTP}")
-            if PROXY_HTTPS:
-                proxy_info.append(f"HTTPS={PROXY_HTTPS}")
+        if global_proxy_pool is not None:
+            stats = global_proxy_pool.get_statistics()
+            
+            if PROXY_MODE == 'pool':
+                # Full proxy pool mode
+                logger.info(f"PROXY POOL MODE: {stats['total_proxies']} proxies configured with automatic failover")
+            elif PROXY_MODE == 'single':
+                # Single proxy mode (using first proxy from pool)
+                logger.info(f"SINGLE PROXY MODE: Using main proxy only (no automatic failover)")
+                if stats['total_proxies'] > 0:
+                    main_proxy_name = stats['proxies'][0]['name']
+                    logger.info(f"Main proxy: {main_proxy_name}")
             
             # Show which modules will use proxy
             if not PROXY_MODULES:
                 logger.warning("PROXY ENABLED: But PROXY_MODULES is empty - no modules will use proxy")
             elif 'all' in PROXY_MODULES:
-                logger.info(f"PROXY ENABLED: Using proxy for ALL modules ({', '.join(proxy_info)})")
+                logger.info(f"PROXY ENABLED: Using proxy for ALL modules")
             else:
-                logger.info(f"PROXY ENABLED: Using proxy for modules {PROXY_MODULES} ({', '.join(proxy_info)})")
+                logger.info(f"PROXY ENABLED: Using proxy for modules {PROXY_MODULES}")
         else:
             logger.warning("PROXY ENABLED: But no proxy configured in config.py")
 
@@ -1000,6 +1114,20 @@ def main():
         if use_history_for_saving:
             logger.info(f"History saved to: {os.path.join(DAILY_REPORT_DIR, PARSED_MOVIES_CSV)}")
     logger.info("=" * 50)
+    
+    # Log proxy pool statistics if using proxy pool
+    if use_proxy and PROXY_MODE == 'pool' and global_proxy_pool is not None:
+        logger.info("")
+        global_proxy_pool.log_statistics(level=logging.INFO)
+        
+        # Log ban summary (without IP for logs)
+        logger.info("")
+        logger.info("=" * 50)
+        logger.info("PROXY BAN STATUS")
+        logger.info("=" * 50)
+        ban_summary = global_proxy_pool.get_ban_summary(include_ip=False)
+        logger.info(ban_summary)
+        logger.info("=" * 50)
 
 
 if __name__ == '__main__':

@@ -22,6 +22,16 @@ except ImportError:
     PROXY_HTTP = None
     PROXY_HTTPS = None
     PROXY_MODULES = ['all']
+
+# Import proxy pool configuration (with fallback)
+try:
+    from config import PROXY_MODE, PROXY_POOL, PROXY_POOL_COOLDOWN_SECONDS, PROXY_POOL_MAX_FAILURES
+except ImportError:
+    PROXY_MODE = 'single'
+    PROXY_POOL = []
+    PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 days (691200 seconds)
+    PROXY_POOL_MAX_FAILURES = 3
+
 from utils.logging_config import setup_logging, get_logger
 
 # --------------------------
@@ -29,6 +39,12 @@ from utils.logging_config import setup_logging, get_logger
 # --------------------------
 setup_logging(log_file=PIKPAK_LOG_FILE)
 logger = get_logger(__name__)
+
+# Import proxy pool
+from utils.proxy_pool import ProxyPool, create_proxy_pool_from_config
+
+# Global proxy pool instance
+global_proxy_pool = None
 
 # Categories to process (from config)
 CATEGORIES = [TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC]
@@ -51,8 +67,22 @@ def should_use_proxy_for_module(module_name, use_proxy_flag):
 
 def get_proxies_dict(module_name, use_proxy_flag):
     """Get proxies dictionary for requests if module should use proxy"""
+    global global_proxy_pool
+    
     if not should_use_proxy_for_module(module_name, use_proxy_flag):
         return None
+    
+    # Try proxy pool first
+    if PROXY_MODE == 'pool' and global_proxy_pool is not None:
+        proxies = global_proxy_pool.get_current_proxy()
+        if proxies:
+            proxy_name = global_proxy_pool.get_current_proxy_name()
+            logger.debug(f"[{module_name}] Using proxy pool - Current proxy: {proxy_name}")
+        else:
+            logger.warning(f"[{module_name}] Proxy pool enabled but no proxy available")
+        return proxies
+    
+    # Fallback to single proxy
     if not (PROXY_HTTP or PROXY_HTTPS):
         return None
     proxies = {}
@@ -60,7 +90,7 @@ def get_proxies_dict(module_name, use_proxy_flag):
         proxies['http'] = PROXY_HTTP
     if PROXY_HTTPS:
         proxies['https'] = PROXY_HTTPS
-    logger.debug(f"[{module_name}] Using proxy: {proxies}")
+    logger.debug(f"[{module_name}] Using single proxy: {proxies}")
     return proxies
 
 
@@ -215,17 +245,63 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
 # Main Logic
 # --------------------------
 def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False):
+    global global_proxy_pool
+    
     cutoff_date = (datetime.now() - timedelta(days=days)).date()
     logger.info(f"Processing torrents older than {days} days (before {cutoff_date})")
     
+    # Initialize proxy pool if proxy is enabled
     if use_proxy:
-        if PROXY_HTTP or PROXY_HTTPS:
-            if should_use_proxy_for_module('pikpak', use_proxy):
-                logger.info(f"PROXY ENABLED for PikPak bridge: Using proxy")
-            else:
-                logger.info("PROXY flag set but pikpak module not in PROXY_MODULES")
+        # Check if we have PROXY_POOL configuration
+        if PROXY_POOL and len(PROXY_POOL) > 0:
+            if PROXY_MODE == 'pool':
+                # Full proxy pool mode with automatic failover
+                logger.info(f"Initializing proxy pool with {len(PROXY_POOL)} proxies...")
+                global_proxy_pool = create_proxy_pool_from_config(
+                    PROXY_POOL,
+                    cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
+                    max_failures=PROXY_POOL_MAX_FAILURES
+                )
+                logger.info(f"Proxy pool initialized successfully")
+            elif PROXY_MODE == 'single':
+                # Single proxy mode - only use first proxy from pool
+                logger.info(f"Initializing single proxy mode (using first proxy from pool)...")
+                global_proxy_pool = create_proxy_pool_from_config(
+                    [PROXY_POOL[0]],  # Only use first proxy
+                    cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
+                    max_failures=PROXY_POOL_MAX_FAILURES
+                )
+                logger.info(f"Single proxy initialized: {PROXY_POOL[0].get('name', 'Main-Proxy')}")
+        # Fallback to legacy PROXY_HTTP/PROXY_HTTPS if no PROXY_POOL configured
+        elif PROXY_HTTP or PROXY_HTTPS:
+            logger.info("Using legacy PROXY_HTTP/PROXY_HTTPS configuration")
+            legacy_proxy = {
+                'name': 'Legacy-Proxy',
+                'http': PROXY_HTTP,
+                'https': PROXY_HTTPS
+            }
+            global_proxy_pool = create_proxy_pool_from_config(
+                [legacy_proxy],
+                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
+                max_failures=PROXY_POOL_MAX_FAILURES
+            )
         else:
-            logger.warning("PROXY ENABLED: But no proxy configured in config.py")
+            logger.warning("Proxy enabled but no proxy configuration found")
+            global_proxy_pool = None
+    
+    if use_proxy:
+        if global_proxy_pool is not None:
+            stats = global_proxy_pool.get_statistics()
+            
+            if PROXY_MODE == 'pool':
+                logger.info(f"PROXY POOL MODE for PikPak bridge: {stats['total_proxies']} proxies with automatic failover")
+            elif PROXY_MODE == 'single':
+                logger.info(f"SINGLE PROXY MODE for PikPak bridge: Using main proxy only")
+                if stats['total_proxies'] > 0:
+                    main_proxy_name = stats['proxies'][0]['name']
+                    logger.info(f"Main proxy: {main_proxy_name}")
+        else:
+            logger.warning("PROXY ENABLED: But no proxy configured")
 
     qb = QBittorrentClient(f"http://{QB_HOST}:{QB_PORT}", QB_USERNAME, QB_PASSWORD, use_proxy)
     torrents = qb.get_torrents_multiple_categories(CATEGORIES)
