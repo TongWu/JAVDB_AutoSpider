@@ -72,7 +72,8 @@ class ProxyBanManager:
         self._load_ban_records()
         
         # Clean up expired bans
-        self._cleanup_expired_bans()
+        with self.lock:
+            self._cleanup_expired_bans()
     
     def _load_ban_records(self):
         """Load ban records from CSV file"""
@@ -111,17 +112,17 @@ class ProxyBanManager:
             logger.error(f"Error saving ban records: {e}")
     
     def _cleanup_expired_bans(self):
-        """Remove expired ban records"""
-        with self.lock:
-            expired = [name for name, record in self.banned_proxies.items() 
-                      if not record.is_still_banned()]
-            
-            for proxy_name in expired:
-                del self.banned_proxies[proxy_name]
-                logger.info(f"Removed expired ban record for proxy '{proxy_name}'")
-            
-            if expired:
-                self._save_ban_records()
+        """Remove expired ban records (must be called with lock held)"""
+        # Note: This method assumes the caller already holds self.lock
+        expired = [name for name, record in self.banned_proxies.items() 
+                  if not record.is_still_banned()]
+        
+        for proxy_name in expired:
+            del self.banned_proxies[proxy_name]
+            logger.info(f"Removed expired ban record for proxy '{proxy_name}'")
+        
+        if expired:
+            self._save_ban_records()
     
     def is_proxy_banned(self, proxy_name: str) -> bool:
         """Check if a proxy is currently banned"""
