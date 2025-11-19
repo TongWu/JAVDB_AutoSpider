@@ -207,8 +207,8 @@ def analyze_spider_log(log_path):
         elif 'OVERALL SUMMARY' in line:
             break
         
-        # Count errors
-        if 'Error fetching' in line and '500 Server Error' in line:
+        # Count errors (both 403 Forbidden and 500 Server Error)
+        if 'Error fetching' in line and ('403 Client Error: Forbidden' in line or '500 Server Error' in line):
             if current_phase == 1:
                 phase1_errors += 1
             elif current_phase == 2:
@@ -222,7 +222,11 @@ def analyze_spider_log(log_path):
     
     # If both phases have consistent errors at the start, main site is unreachable
     if phase1_errors >= 3 and phase2_errors >= 3:
-        return True, "Cannot access JavDB main site - all pages failed with 500 errors (check proxy configuration)"
+        # Determine error type
+        if '403 Client Error: Forbidden' in log_content:
+            return True, "Cannot access JavDB - 403 Forbidden (proxy blocked or requires authentication)"
+        else:
+            return True, "Cannot access JavDB main site - all pages failed with 500 errors (check proxy configuration)"
     
     # Check for other critical network errors
     critical_patterns = [
@@ -570,7 +574,7 @@ JavDB Spider, qBittorrent Uploader, and PikPak Bridge Pipeline Completed Success
         attachments = [csv_path, SPIDER_LOG_FILE, UPLOADER_LOG_FILE, PIKPAK_LOG_FILE, PIPELINE_LOG_FILE]
         try:
             send_email(
-                subject=f'JavDB Pipeline Report {today_str} - SUCCESS',
+                subject=f'✓ SUCCESS - JavDB Pipeline Report {today_str}',
                 body=body,
                 attachments=attachments
             )
@@ -609,7 +613,7 @@ Please check the detailed logs below for more information.
 """
         try:
             send_email(
-                subject=f'JavDB Pipeline Report {today_str} - FAILED',
+                subject=f'✗ FAILED - JavDB Pipeline Report {today_str}',
                 body=body,
                 attachments=[SPIDER_LOG_FILE, UPLOADER_LOG_FILE, PIKPAK_LOG_FILE, PIPELINE_LOG_FILE]
             )
