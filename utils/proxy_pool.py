@@ -25,6 +25,59 @@ from .proxy_ban_manager import get_ban_manager, ProxyBanManager
 logger = logging.getLogger(__name__)
 
 
+def mask_proxy_url(url: Optional[str]) -> str:
+    """
+    Mask sensitive information (username/password/IP) in proxy URL for logging
+    
+    Args:
+        url: Proxy URL that may contain credentials and IP
+        
+    Returns:
+        Masked URL with credentials and IP middle parts hidden
+        
+    Examples:
+        http://user:pass@123.45.67.89:8080 -> http://***:***@123.xxx.xxx.89:8080
+        http://123.45.67.89:8080 -> http://123.xxx.xxx.89:8080
+        http://proxy.example.com:8080 -> http://proxy.example.com:8080
+        None -> 'None'
+    """
+    if not url:
+        return 'None'
+    
+    try:
+        import re
+        
+        protocol = ''
+        host_port = url
+        credentials_masked = False
+        
+        # Extract protocol
+        if '://' in url:
+            protocol, host_port = url.split('://', 1)
+            protocol += '://'
+        
+        # Check if URL contains credentials (username:password@)
+        if '@' in host_port:
+            creds, host_port = host_port.split('@', 1)
+            protocol += '***:***@'
+            credentials_masked = True
+        
+        # Mask IP address (mask middle two octets)
+        # Match IPv4 pattern: xxx.xxx.xxx.xxx
+        ip_pattern = r'(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})'
+        
+        def mask_ip(match):
+            return f"{match.group(1)}.xxx.xxx.{match.group(4)}"
+        
+        host_port_masked = re.sub(ip_pattern, mask_ip, host_port)
+        
+        return protocol + host_port_masked
+        
+    except Exception:
+        # If anything goes wrong, return a safe default
+        return '[proxy URL masked]'
+
+
 @dataclass
 class ProxyInfo:
     """Information about a single proxy"""
@@ -136,7 +189,10 @@ class ProxyPool:
         )
         
         self.proxies.append(proxy_info)
-        logger.info(f"Added proxy '{name}' to pool (HTTP: {http_url}, HTTPS: {https_url})")
+        # Mask sensitive credentials in log output
+        masked_http = mask_proxy_url(http_url)
+        masked_https = mask_proxy_url(https_url)
+        logger.info(f"Added proxy '{name}' to pool (HTTP: {masked_http}, HTTPS: {masked_https})")
         
     def add_proxies_from_list(self, proxy_list: List[Dict]) -> None:
         """
