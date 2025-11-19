@@ -1,53 +1,53 @@
-2025-11-19 19:57:58,066 - __main__ - INFO - Starting JavDB spider...
-2025-11-19 19:57:58,066 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
-2025-11-19 19:57:58,066 - __main__ - INFO - Validating history file integrity...
-2025-11-19 19:57:58,101 - utils.history_manager - INFO - Loaded 5219 previously parsed movies from history (phase 1: 3137, phase 2: 2082)
-2025-11-19 19:57:58,102 - __main__ - INFO - ==================================================
-2025-11-19 19:57:58,102 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-11-19 19:57:58,102 - __main__ - INFO - ==================================================
-2025-11-19 19:57:58,390 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 403 Client Error: Forbidden for url: https://javdb.com/?page=1
-2025-11-19 19:57:58,390 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
-2025-11-19 19:57:58,598 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 403 Client Error: Forbidden for url: https://javdb.com/?page=2
-2025-11-19 19:57:58,598 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
-2025-11-19 19:57:58,798 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 403 Client Error: Forbidden for url: https://javdb.com/?page=3
-2025-11-19 19:57:58,798 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
-2025-11-19 19:57:58,798 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
-2025-11-19 19:57:58,798 - __main__ - INFO - Phase 1 completed: 0 entries processed
-2025-11-19 19:57:58,798 - __main__ - INFO - ==================================================
-2025-11-19 19:57:58,798 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-11-19 19:57:58,799 - __main__ - INFO - ==================================================
-2025-11-19 19:57:59,070 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 403 Client Error: Forbidden for url: https://javdb.com/?page=1
-2025-11-19 19:57:59,070 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
-2025-11-19 19:57:59,275 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 403 Client Error: Forbidden for url: https://javdb.com/?page=2
-2025-11-19 19:57:59,275 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
-2025-11-19 19:57:59,471 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 403 Client Error: Forbidden for url: https://javdb.com/?page=3
-2025-11-19 19:57:59,471 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
-2025-11-19 19:57:59,471 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
-2025-11-19 19:57:59,471 - __main__ - INFO - Phase 2 completed: 0 entries processed
-2025-11-19 19:57:59,471 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251119.csv
-2025-11-19 19:57:59,471 - __main__ - INFO - ==================================================
-2025-11-19 19:57:59,471 - __main__ - INFO - SUMMARY REPORT
-2025-11-19 19:57:59,471 - __main__ - INFO - ==================================================
-2025-11-19 19:57:59,471 - __main__ - INFO - Pages processed: 1 to 20
-2025-11-19 19:57:59,471 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-11-19 19:57:59,471 - __main__ - INFO - ==============================
-2025-11-19 19:57:59,471 - __main__ - INFO - PHASE 1 SUMMARY
-2025-11-19 19:57:59,471 - __main__ - INFO - ==============================
-2025-11-19 19:57:59,471 - __main__ - INFO - Phase 1 entries found: 0
-2025-11-19 19:57:59,471 - __main__ - INFO -   - No entries found in Phase 1
-2025-11-19 19:57:59,472 - __main__ - INFO - ==============================
-2025-11-19 19:57:59,472 - __main__ - INFO - PHASE 2 SUMMARY
-2025-11-19 19:57:59,472 - __main__ - INFO - ==============================
-2025-11-19 19:57:59,472 - __main__ - INFO - Phase 2 entries found: 0
-2025-11-19 19:57:59,472 - __main__ - INFO -   - No entries found in Phase 2
-2025-11-19 19:57:59,472 - __main__ - INFO - ==============================
-2025-11-19 19:57:59,472 - __main__ - INFO - OVERALL SUMMARY
-2025-11-19 19:57:59,472 - __main__ - INFO - ==============================
-2025-11-19 19:57:59,472 - __main__ - INFO - Total entries found: 0
-2025-11-19 19:57:59,472 - __main__ - INFO - Successfully processed: 0
-2025-11-19 19:57:59,472 - __main__ - INFO - Skipped already parsed in this session: 0
-2025-11-19 19:57:59,472 - __main__ - INFO - Skipped already parsed in previous runs: 3137
-2025-11-19 19:57:59,472 - __main__ - INFO - Current parsed links in memory: 0
-2025-11-19 19:57:59,472 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251119.csv
-2025-11-19 19:57:59,472 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-11-19 19:57:59,472 - __main__ - INFO - ==================================================
+2025-11-19 19:59:44,923 - __main__ - INFO - Starting JavDB spider...
+2025-11-19 19:59:44,923 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
+2025-11-19 19:59:44,923 - __main__ - INFO - Validating history file integrity...
+2025-11-19 19:59:44,957 - utils.history_manager - INFO - Loaded 5219 previously parsed movies from history (phase 1: 3137, phase 2: 2082)
+2025-11-19 19:59:44,958 - __main__ - INFO - ==================================================
+2025-11-19 19:59:44,958 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-11-19 19:59:44,958 - __main__ - INFO - ==================================================
+2025-11-19 19:59:45,184 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 403 Client Error: Forbidden for url: https://javdb.com/?page=1
+2025-11-19 19:59:45,185 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
+2025-11-19 19:59:45,387 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 403 Client Error: Forbidden for url: https://javdb.com/?page=2
+2025-11-19 19:59:45,387 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
+2025-11-19 19:59:45,587 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 403 Client Error: Forbidden for url: https://javdb.com/?page=3
+2025-11-19 19:59:45,587 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
+2025-11-19 19:59:45,587 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
+2025-11-19 19:59:45,587 - __main__ - INFO - Phase 1 completed: 0 entries processed
+2025-11-19 19:59:45,587 - __main__ - INFO - ==================================================
+2025-11-19 19:59:45,587 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-11-19 19:59:45,587 - __main__ - INFO - ==================================================
+2025-11-19 19:59:45,777 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 403 Client Error: Forbidden for url: https://javdb.com/?page=1
+2025-11-19 19:59:45,777 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
+2025-11-19 19:59:45,970 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 403 Client Error: Forbidden for url: https://javdb.com/?page=2
+2025-11-19 19:59:45,970 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
+2025-11-19 19:59:46,163 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 403 Client Error: Forbidden for url: https://javdb.com/?page=3
+2025-11-19 19:59:46,163 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
+2025-11-19 19:59:46,163 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
+2025-11-19 19:59:46,163 - __main__ - INFO - Phase 2 completed: 0 entries processed
+2025-11-19 19:59:46,163 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251119.csv
+2025-11-19 19:59:46,163 - __main__ - INFO - ==================================================
+2025-11-19 19:59:46,163 - __main__ - INFO - SUMMARY REPORT
+2025-11-19 19:59:46,163 - __main__ - INFO - ==================================================
+2025-11-19 19:59:46,163 - __main__ - INFO - Pages processed: 1 to 20
+2025-11-19 19:59:46,163 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-11-19 19:59:46,163 - __main__ - INFO - ==============================
+2025-11-19 19:59:46,163 - __main__ - INFO - PHASE 1 SUMMARY
+2025-11-19 19:59:46,163 - __main__ - INFO - ==============================
+2025-11-19 19:59:46,163 - __main__ - INFO - Phase 1 entries found: 0
+2025-11-19 19:59:46,164 - __main__ - INFO -   - No entries found in Phase 1
+2025-11-19 19:59:46,164 - __main__ - INFO - ==============================
+2025-11-19 19:59:46,164 - __main__ - INFO - PHASE 2 SUMMARY
+2025-11-19 19:59:46,164 - __main__ - INFO - ==============================
+2025-11-19 19:59:46,164 - __main__ - INFO - Phase 2 entries found: 0
+2025-11-19 19:59:46,164 - __main__ - INFO -   - No entries found in Phase 2
+2025-11-19 19:59:46,164 - __main__ - INFO - ==============================
+2025-11-19 19:59:46,164 - __main__ - INFO - OVERALL SUMMARY
+2025-11-19 19:59:46,164 - __main__ - INFO - ==============================
+2025-11-19 19:59:46,164 - __main__ - INFO - Total entries found: 0
+2025-11-19 19:59:46,164 - __main__ - INFO - Successfully processed: 0
+2025-11-19 19:59:46,164 - __main__ - INFO - Skipped already parsed in this session: 0
+2025-11-19 19:59:46,164 - __main__ - INFO - Skipped already parsed in previous runs: 3137
+2025-11-19 19:59:46,164 - __main__ - INFO - Current parsed links in memory: 0
+2025-11-19 19:59:46,164 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251119.csv
+2025-11-19 19:59:46,164 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-11-19 19:59:46,164 - __main__ - INFO - ==================================================
