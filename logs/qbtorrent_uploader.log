@@ -1,52 +1,47 @@
-2025-11-23 19:07:55,654 - __main__ - INFO - Starting qBittorrent uploader...
-2025-11-23 19:07:55,654 - __main__ - INFO - Initializing single proxy mode (using first proxy from pool)...
-2025-11-23 19:07:55,654 - utils.proxy_ban_manager - INFO - No existing ban log found at logs/proxy_bans.csv
-2025-11-23 19:07:55,655 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
-2025-11-23 19:07:55,655 - __main__ - INFO - Single proxy initialized: Singapore-ARM1
-2025-11-23 19:07:55,655 - __main__ - INFO - SINGLE PROXY MODE for qBittorrent: Using main proxy only
-2025-11-23 19:07:55,655 - __main__ - INFO - Main proxy: Singapore-ARM1
-2025-11-23 19:07:55,655 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251123.csv
-2025-11-23 19:07:55,655 - __main__ - INFO - Found 25 torrent links in Daily Report/Javdb_TodayTitle_20251123.csv
-2025-11-23 19:07:55,655 - __main__ - INFO - Skipped 4 already downloaded torrents
-2025-11-23 19:07:55,655 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-11-23 19:07:55,812 - __main__ - INFO - Successfully logged in to qBittorrent
-2025-11-23 19:07:55,812 - __main__ - INFO - History manager imported, will update downloaded status
-2025-11-23 19:07:55,812 - __main__ - INFO - Starting to add 25 torrents to qBittorrent...
-2025-11-23 19:07:55,812 - __main__ - INFO - [1/25] Adding: IPX-598 [Hacked+Subtitle]
-2025-11-23 19:07:56,817 - __main__ - INFO - [2/25] Adding: IPX-614 [Hacked+Subtitle]
-2025-11-23 19:07:57,819 - __main__ - INFO - [3/25] Adding: IPX-629 [Hacked+Subtitle]
-2025-11-23 19:07:58,822 - __main__ - INFO - [4/25] Adding: SCOP-883 [Subtitle]
-2025-11-23 19:07:59,825 - __main__ - INFO - [5/25] Adding: SCOP-887 [Subtitle]
-2025-11-23 19:08:00,828 - __main__ - INFO - [6/25] Adding: WAAA-578 [Subtitle]
-2025-11-23 19:08:01,830 - __main__ - INFO - [7/25] Adding: WAAA-579 [Subtitle]
-2025-11-23 19:08:02,833 - __main__ - INFO - [8/25] Adding: WAAA-580 [Subtitle]
-2025-11-23 19:08:03,836 - __main__ - INFO - [9/25] Adding: WAAA-581 [Subtitle]
-2025-11-23 19:08:04,838 - __main__ - INFO - [10/25] Adding: WAAA-583 [Subtitle]
-2025-11-23 19:08:05,841 - __main__ - INFO - [11/25] Adding: WAAA-584 [Subtitle]
-2025-11-23 19:08:06,843 - __main__ - INFO - [12/25] Adding: WAAA-585 [Subtitle]
-2025-11-23 19:08:07,846 - __main__ - INFO - [13/25] Adding: REAL-953 [NoSubtitle]
-2025-11-23 19:08:08,848 - __main__ - INFO - [14/25] Adding: CJOD-479 [NoSubtitle]
-2025-11-23 19:08:09,851 - __main__ - INFO - [15/25] Adding: DASS-810 [NoSubtitle]
-2025-11-23 19:08:10,853 - __main__ - INFO - [16/25] Adding: MVG-146 [NoSubtitle]
-2025-11-23 19:08:11,855 - __main__ - INFO - [17/25] Adding: UZU-034 [NoSubtitle]
-2025-11-23 19:08:12,858 - __main__ - INFO - [18/25] Adding: DASS-800 [Hacked+Subtitle]
-2025-11-23 19:08:13,861 - __main__ - INFO - [19/25] Adding: MISM-410 [NoSubtitle]
-2025-11-23 19:08:14,864 - __main__ - INFO - [20/25] Adding: AVSA-409 [NoSubtitle]
-2025-11-23 19:08:15,867 - __main__ - INFO - [21/25] Adding: YMDS-239 [NoSubtitle]
-2025-11-23 19:08:16,870 - __main__ - INFO - [22/25] Adding: JUR-560 [NoSubtitle]
-2025-11-23 19:08:17,873 - __main__ - INFO - [23/25] Adding: HUBLK-058 [NoSubtitle]
-2025-11-23 19:08:18,876 - __main__ - INFO - [24/25] Adding: JUR-515 [NoSubtitle]
-2025-11-23 19:08:19,879 - __main__ - INFO - [25/25] Adding: LUCY-021 [NoSubtitle]
-2025-11-23 19:08:20,881 - __main__ - INFO - ==================================================
-2025-11-23 19:08:20,881 - __main__ - INFO - UPLOAD SUMMARY
-2025-11-23 19:08:20,881 - __main__ - INFO - ==================================================
-2025-11-23 19:08:20,881 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251123.csv
-2025-11-23 19:08:20,881 - __main__ - INFO - Total torrents found: 25
-2025-11-23 19:08:20,881 - __main__ - INFO - Successfully added: 25
-2025-11-23 19:08:20,881 - __main__ - INFO -   - Hacked subtitle torrents: 4
-2025-11-23 19:08:20,881 - __main__ - INFO -   - Hacked no subtitle torrents: 0
-2025-11-23 19:08:20,881 - __main__ - INFO -   - Subtitle torrents: 9
-2025-11-23 19:08:20,881 - __main__ - INFO -   - No subtitle torrents: 12
-2025-11-23 19:08:20,881 - __main__ - INFO - Failed to add: 0
-2025-11-23 19:08:20,881 - __main__ - INFO - Success rate: 100.0%
-2025-11-23 19:08:20,881 - __main__ - INFO - ==================================================
+2025-11-24 19:05:59,253 - __main__ - INFO - Starting qBittorrent uploader...
+2025-11-24 19:05:59,253 - __main__ - INFO - Initializing single proxy mode (using first proxy from pool)...
+2025-11-24 19:05:59,253 - utils.proxy_ban_manager - INFO - No existing ban log found at logs/proxy_bans.csv
+2025-11-24 19:05:59,253 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
+2025-11-24 19:05:59,253 - __main__ - INFO - Single proxy initialized: Singapore-ARM1
+2025-11-24 19:05:59,253 - __main__ - INFO - SINGLE PROXY MODE for qBittorrent: Using main proxy only
+2025-11-24 19:05:59,253 - __main__ - INFO - Main proxy: Singapore-ARM1
+2025-11-24 19:05:59,253 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251124.csv
+2025-11-24 19:05:59,253 - __main__ - INFO - Found 20 torrent links in Daily Report/Javdb_TodayTitle_20251124.csv
+2025-11-24 19:05:59,253 - __main__ - INFO - Skipped 5 already downloaded torrents
+2025-11-24 19:05:59,253 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-11-24 19:05:59,412 - __main__ - INFO - Successfully logged in to qBittorrent
+2025-11-24 19:05:59,412 - __main__ - INFO - History manager imported, will update downloaded status
+2025-11-24 19:05:59,412 - __main__ - INFO - Starting to add 20 torrents to qBittorrent...
+2025-11-24 19:05:59,412 - __main__ - INFO - [1/20] Adding: IPX-643 [Hacked+Subtitle]
+2025-11-24 19:06:00,417 - __main__ - INFO - [2/20] Adding: IPX-660 [Hacked+Subtitle]
+2025-11-24 19:06:01,420 - __main__ - INFO - [3/20] Adding: IPX-675 [Hacked+Subtitle]
+2025-11-24 19:06:02,422 - __main__ - INFO - [4/20] Adding: VEC-734 [Subtitle]
+2025-11-24 19:06:03,425 - __main__ - INFO - [5/20] Adding: VEC-735 [Subtitle]
+2025-11-24 19:06:04,427 - __main__ - INFO - [6/20] Adding: VEC-736 [Subtitle]
+2025-11-24 19:06:05,429 - __main__ - INFO - [7/20] Adding: VEC-737 [Subtitle]
+2025-11-24 19:06:06,432 - __main__ - INFO - [8/20] Adding: VEC-739 [Subtitle]
+2025-11-24 19:06:07,434 - __main__ - INFO - [9/20] Adding: VEC-740 [Subtitle]
+2025-11-24 19:06:08,437 - __main__ - INFO - [10/20] Adding: VEC-742 [Subtitle]
+2025-11-24 19:06:09,439 - __main__ - INFO - [11/20] Adding: VEC-743 [Subtitle]
+2025-11-24 19:06:10,442 - __main__ - INFO - [12/20] Adding: VEMA-244 [Subtitle]
+2025-11-24 19:06:11,444 - __main__ - INFO - [13/20] Adding: VEMA-246 [Subtitle]
+2025-11-24 19:06:12,447 - __main__ - INFO - [14/20] Adding: JUR-541 [Hacked+Subtitle]
+2025-11-24 19:06:13,450 - __main__ - INFO - [15/20] Adding: HMN-763 [Hacked+Subtitle]
+2025-11-24 19:06:14,452 - __main__ - INFO - [16/20] Adding: BLOR-282 [NoSubtitle]
+2025-11-24 19:06:15,454 - __main__ - INFO - [17/20] Adding: JUR-549 [NoSubtitle]
+2025-11-24 19:06:16,456 - __main__ - INFO - [18/20] Adding: JUMS-150 [NoSubtitle]
+2025-11-24 19:06:17,459 - __main__ - INFO - [19/20] Adding: NSFS-433 [NoSubtitle]
+2025-11-24 19:06:18,462 - __main__ - INFO - [20/20] Adding: MADM-210 [NoSubtitle]
+2025-11-24 19:06:19,464 - __main__ - INFO - ==================================================
+2025-11-24 19:06:19,464 - __main__ - INFO - UPLOAD SUMMARY
+2025-11-24 19:06:19,464 - __main__ - INFO - ==================================================
+2025-11-24 19:06:19,464 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251124.csv
+2025-11-24 19:06:19,464 - __main__ - INFO - Total torrents found: 20
+2025-11-24 19:06:19,464 - __main__ - INFO - Successfully added: 20
+2025-11-24 19:06:19,464 - __main__ - INFO -   - Hacked subtitle torrents: 5
+2025-11-24 19:06:19,464 - __main__ - INFO -   - Hacked no subtitle torrents: 0
+2025-11-24 19:06:19,464 - __main__ - INFO -   - Subtitle torrents: 10
+2025-11-24 19:06:19,464 - __main__ - INFO -   - No subtitle torrents: 5
+2025-11-24 19:06:19,464 - __main__ - INFO - Failed to add: 0
+2025-11-24 19:06:19,464 - __main__ - INFO - Success rate: 100.0%
+2025-11-24 19:06:19,464 - __main__ - INFO - ==================================================
