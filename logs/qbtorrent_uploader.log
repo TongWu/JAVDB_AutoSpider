@@ -1,12 +1,5 @@
-2025-11-28 01:13:36,817 - __main__ - INFO - Starting qBittorrent uploader...
-2025-11-28 01:13:36,817 - __main__ - INFO - Initializing proxy pool with 3 proxies...
-2025-11-28 01:13:36,817 - utils.proxy_ban_manager - INFO - Loaded 3 ban records from logs/proxy_bans.csv
-2025-11-28 01:13:36,817 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' is currently banned, skipping
-2025-11-28 01:13:36,817 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' is currently banned, skipping
-2025-11-28 01:13:36,817 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
-2025-11-28 01:13:36,817 - __main__ - INFO - Proxy pool initialized successfully
-2025-11-28 01:13:36,817 - __main__ - INFO - PROXY POOL MODE for qBittorrent: 0 proxies with automatic failover
-2025-11-28 01:13:36,817 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251128.csv
-2025-11-28 01:13:36,818 - __main__ - ERROR - CSV file not found: Daily Report/Javdb_TodayTitle_20251128.csv
-2025-11-28 01:13:36,818 - __main__ - INFO - Make sure you have run the spider script first to generate the CSV file
-2025-11-28 01:13:36,818 - __main__ - WARNING - No torrent links found in CSV file
+2025-11-28 01:14:17,744 - __main__ - INFO - Starting qBittorrent uploader...
+2025-11-28 01:14:17,744 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251128.csv
+2025-11-28 01:14:17,744 - __main__ - ERROR - CSV file not found: Daily Report/Javdb_TodayTitle_20251128.csv
+2025-11-28 01:14:17,744 - __main__ - INFO - Make sure you have run the spider script first to generate the CSV file
+2025-11-28 01:14:17,744 - __main__ - WARNING - No torrent links found in CSV file

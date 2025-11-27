@@ -1,149 +1,53 @@
-2025-11-28 01:13:35,793 - __main__ - INFO - Initializing proxy pool with 3 proxies...
-2025-11-28 01:13:35,795 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-11-28 01:13:35,795 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' is currently banned, skipping
-2025-11-28 01:13:35,795 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-11-28 01:13:35,795 - utils.proxy_pool - INFO - Added proxy 'Miraculous Fortress' to pool (HTTP: http://***:***@139.xxx.xxx.231:12300, HTTPS: http://***:***@139.xxx.xxx.231:12300)
-2025-11-28 01:13:35,795 - __main__ - INFO - Proxy pool initialized successfully
-2025-11-28 01:13:35,795 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
-2025-11-28 01:13:35,795 - __main__ - INFO - Starting JavDB spider...
-2025-11-28 01:13:35,795 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
-2025-11-28 01:13:35,795 - __main__ - INFO - PROXY POOL MODE: 2 proxies configured with automatic failover
-2025-11-28 01:13:35,795 - __main__ - INFO - PROXY ENABLED: Using proxy for modules ['spider_index', 'spider_detail']
-2025-11-28 01:13:35,795 - __main__ - INFO - Validating history file integrity...
-2025-11-28 01:13:35,829 - utils.history_manager - INFO - Loaded 5343 previously parsed movies from history (phase 1: 3217, phase 2: 2126)
-2025-11-28 01:13:35,829 - __main__ - INFO - ==================================================
-2025-11-28 01:13:35,829 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-11-28 01:13:35,829 - __main__ - INFO - ==================================================
-2025-11-28 01:13:35,945 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 403 Client Error: Forbidden for url: https://javdb.com/?page=1
-2025-11-28 01:13:35,945 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
-2025-11-28 01:13:35,945 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Miraculous Fortress'
-2025-11-28 01:13:35,945 - __main__ - INFO - [spider_index] Switched to proxy: Miraculous Fortress, retrying...
-2025-11-28 01:13:35,950 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=1 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x72aa18752240>: Failed to establish a new connection: [Errno 111] Connection refused')))
-2025-11-28 01:13:35,950 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (1/3)
-2025-11-28 01:13:35,950 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM2'
-2025-11-28 01:13:35,950 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM2, retrying...
-2025-11-28 01:13:36,046 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 403 Client Error: Forbidden for url: https://javdb.com/?page=1
-2025-11-28 01:13:36,046 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
-2025-11-28 01:13:36,168 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 403 Client Error: Forbidden for url: https://javdb.com/?page=2
-2025-11-28 01:13:36,169 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (2/3)
-2025-11-28 01:13:36,169 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Miraculous Fortress'
-2025-11-28 01:13:36,169 - __main__ - INFO - [spider_index] Switched to proxy: Miraculous Fortress, retrying...
-2025-11-28 01:13:36,173 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=2 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x72aa187530b0>: Failed to establish a new connection: [Errno 111] Connection refused')))
-2025-11-28 01:13:36,173 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (2/3)
-2025-11-28 01:13:36,173 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM2'
-2025-11-28 01:13:36,173 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM2, retrying...
-2025-11-28 01:13:36,290 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 403 Client Error: Forbidden for url: https://javdb.com/?page=2
-2025-11-28 01:13:36,290 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
-2025-11-28 01:13:36,398 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 403 Client Error: Forbidden for url: https://javdb.com/?page=3
-2025-11-28 01:13:36,398 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (3/3)
-2025-11-28 01:13:36,398 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Miraculous Fortress'
-2025-11-28 01:13:36,398 - __main__ - INFO - [spider_index] Switched to proxy: Miraculous Fortress, retrying...
-2025-11-28 01:13:36,402 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x72aa18753bf0>: Failed to establish a new connection: [Errno 111] Connection refused')))
-2025-11-28 01:13:36,402 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (3/3)
-2025-11-28 01:13:36,402 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM2'
-2025-11-28 01:13:36,402 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM2, retrying...
-2025-11-28 01:13:36,513 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 403 Client Error: Forbidden for url: https://javdb.com/?page=3
-2025-11-28 01:13:36,514 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
-2025-11-28 01:13:36,514 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
-2025-11-28 01:13:36,514 - __main__ - INFO - Phase 1 completed: 0 entries processed
-2025-11-28 01:13:36,514 - __main__ - INFO - ==================================================
-2025-11-28 01:13:36,514 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-11-28 01:13:36,514 - __main__ - INFO - ==================================================
-2025-11-28 01:13:36,622 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 403 Client Error: Forbidden for url: https://javdb.com/?page=1
-2025-11-28 01:13:36,622 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM2' banned until 2025-12-05 01:13:36 (7 days)
-2025-11-28 01:13:36,622 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' reached 4 failures, putting in cooldown for 691200s (8 days)
-2025-11-28 01:13:36,622 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Miraculous Fortress'
-2025-11-28 01:13:36,622 - __main__ - INFO - [spider_index] Switched to proxy: Miraculous Fortress, retrying...
-2025-11-28 01:13:36,627 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=1 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x72aa18ad0770>: Failed to establish a new connection: [Errno 111] Connection refused')))
-2025-11-28 01:13:36,627 - utils.proxy_ban_manager - WARNING - Proxy 'Miraculous Fortress' banned until 2025-12-05 01:13:36 (7 days)
-2025-11-28 01:13:36,627 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' reached 4 failures, putting in cooldown for 691200s (8 days)
-2025-11-28 01:13:36,627 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
-2025-11-28 01:13:36,627 - __main__ - ERROR - [spider_index] Failed to switch proxy, no more proxies available
-2025-11-28 01:13:36,627 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
-2025-11-28 01:13:36,627 - utils.proxy_pool - WARNING - All proxies are unavailable or in cooldown
-2025-11-28 01:13:36,627 - __main__ - WARNING - [spider_index] Proxy mode 'pool' enabled but no proxy available
-2025-11-28 01:13:36,694 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 403 Client Error: Forbidden for url: https://javdb.com/?page=2
-2025-11-28 01:13:36,694 - utils.proxy_ban_manager - WARNING - Proxy 'Miraculous Fortress' is already in ban period, not updating
-2025-11-28 01:13:36,694 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' reached 5 failures, putting in cooldown for 691200s (8 days)
-2025-11-28 01:13:36,694 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
-2025-11-28 01:13:36,694 - __main__ - ERROR - [spider_index] Failed to switch proxy, no more proxies available
-2025-11-28 01:13:36,694 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
-2025-11-28 01:13:36,694 - utils.proxy_pool - WARNING - All proxies are unavailable or in cooldown
-2025-11-28 01:13:36,694 - __main__ - WARNING - [spider_index] Proxy mode 'pool' enabled but no proxy available
-2025-11-28 01:13:36,741 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 403 Client Error: Forbidden for url: https://javdb.com/?page=3
-2025-11-28 01:13:36,741 - utils.proxy_ban_manager - WARNING - Proxy 'Miraculous Fortress' is already in ban period, not updating
-2025-11-28 01:13:36,741 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' reached 6 failures, putting in cooldown for 691200s (8 days)
-2025-11-28 01:13:36,741 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
-2025-11-28 01:13:36,741 - __main__ - ERROR - [spider_index] Failed to switch proxy, no more proxies available
-2025-11-28 01:13:36,741 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
-2025-11-28 01:13:36,741 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
-2025-11-28 01:13:36,741 - __main__ - INFO - Phase 2 completed: 0 entries processed
-2025-11-28 01:13:36,741 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251128.csv
-2025-11-28 01:13:36,741 - __main__ - INFO - ==================================================
-2025-11-28 01:13:36,741 - __main__ - INFO - SUMMARY REPORT
-2025-11-28 01:13:36,741 - __main__ - INFO - ==================================================
-2025-11-28 01:13:36,741 - __main__ - INFO - Pages processed: 1 to 20
-2025-11-28 01:13:36,741 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-11-28 01:13:36,741 - __main__ - INFO - ==============================
-2025-11-28 01:13:36,741 - __main__ - INFO - PHASE 1 SUMMARY
-2025-11-28 01:13:36,741 - __main__ - INFO - ==============================
-2025-11-28 01:13:36,741 - __main__ - INFO - Phase 1 entries found: 0
-2025-11-28 01:13:36,741 - __main__ - INFO -   - No entries found in Phase 1
-2025-11-28 01:13:36,741 - __main__ - INFO - ==============================
-2025-11-28 01:13:36,741 - __main__ - INFO - PHASE 2 SUMMARY
-2025-11-28 01:13:36,741 - __main__ - INFO - ==============================
-2025-11-28 01:13:36,741 - __main__ - INFO - Phase 2 entries found: 0
-2025-11-28 01:13:36,741 - __main__ - INFO -   - No entries found in Phase 2
-2025-11-28 01:13:36,741 - __main__ - INFO - ==============================
-2025-11-28 01:13:36,741 - __main__ - INFO - OVERALL SUMMARY
-2025-11-28 01:13:36,741 - __main__ - INFO - ==============================
-2025-11-28 01:13:36,741 - __main__ - INFO - Total entries found: 0
-2025-11-28 01:13:36,741 - __main__ - INFO - Successfully processed: 0
-2025-11-28 01:13:36,741 - __main__ - INFO - Skipped already parsed in this session: 0
-2025-11-28 01:13:36,741 - __main__ - INFO - Skipped already parsed in previous runs: 3217
-2025-11-28 01:13:36,741 - __main__ - INFO - Current parsed links in memory: 0
-2025-11-28 01:13:36,741 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251128.csv
-2025-11-28 01:13:36,741 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-11-28 01:13:36,741 - __main__ - INFO - ==================================================
-2025-11-28 01:13:36,741 - __main__ - INFO - 
-2025-11-28 01:13:36,741 - utils.proxy_pool - INFO - ==================================================
-2025-11-28 01:13:36,741 - utils.proxy_pool - INFO - PROXY POOL STATISTICS
-2025-11-28 01:13:36,741 - utils.proxy_pool - INFO - ==================================================
-2025-11-28 01:13:36,741 - utils.proxy_pool - INFO - Total proxies: 2
-2025-11-28 01:13:36,741 - utils.proxy_pool - INFO - Available proxies: 0
-2025-11-28 01:13:36,742 - utils.proxy_pool - INFO - In cooldown: 2
-2025-11-28 01:13:36,742 - utils.proxy_pool - INFO - No-proxy mode: False
-2025-11-28 01:13:36,742 - utils.proxy_pool - INFO - 
-2025-11-28 01:13:36,742 - utils.proxy_pool - INFO - Individual proxy statistics:
-2025-11-28 01:13:36,742 - utils.proxy_pool - INFO -   [Standby (Cooldown: 691199s)] Singapore-ARM2:
-2025-11-28 01:13:36,742 - utils.proxy_pool - INFO -     - Total requests: 4
-2025-11-28 01:13:36,742 - utils.proxy_pool - INFO -     - Success rate: 0.0%
-2025-11-28 01:13:36,742 - utils.proxy_pool - INFO -     - Consecutive failures: 4
-2025-11-28 01:13:36,742 - utils.proxy_pool - INFO -     - Last success: Never
-2025-11-28 01:13:36,742 - utils.proxy_pool - INFO -     - Last failure: 2025-11-28 01:13:36
-2025-11-28 01:13:36,742 - utils.proxy_pool - INFO -   [ACTIVE (Cooldown: 691199s)] Miraculous Fortress:
-2025-11-28 01:13:36,742 - utils.proxy_pool - INFO -     - Total requests: 6
-2025-11-28 01:13:36,742 - utils.proxy_pool - INFO -     - Success rate: 0.0%
-2025-11-28 01:13:36,742 - utils.proxy_pool - INFO -     - Consecutive failures: 6
-2025-11-28 01:13:36,742 - utils.proxy_pool - INFO -     - Last success: Never
-2025-11-28 01:13:36,742 - utils.proxy_pool - INFO -     - Last failure: 2025-11-28 01:13:36
-2025-11-28 01:13:36,742 - utils.proxy_pool - INFO - ==================================================
-2025-11-28 01:13:36,742 - __main__ - INFO - 
-2025-11-28 01:13:36,742 - __main__ - INFO - ==================================================
-2025-11-28 01:13:36,742 - __main__ - INFO - PROXY BAN STATUS
-2025-11-28 01:13:36,742 - __main__ - INFO - ==================================================
-2025-11-28 01:13:36,742 - __main__ - INFO - Currently banned proxies: 3
-
-  - Singapore-ARM1:
-    Banned at: 2025-11-27 19:00:02
-    Will unban: 2025-12-04 19:00:02
-    Time remaining: 6 days 17 hours
-  - Singapore-ARM2:
-    Banned at: 2025-11-28 01:13:36
-    Will unban: 2025-12-05 01:13:36
-    Time remaining: 6 days 23 hours
-  - Miraculous Fortress:
-    Banned at: 2025-11-28 01:13:36
-    Will unban: 2025-12-05 01:13:36
-    Time remaining: 6 days 23 hours
-2025-11-28 01:13:36,742 - __main__ - INFO - ==================================================
+2025-11-28 01:14:16,872 - __main__ - INFO - Starting JavDB spider...
+2025-11-28 01:14:16,872 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
+2025-11-28 01:14:16,872 - __main__ - INFO - Validating history file integrity...
+2025-11-28 01:14:16,905 - utils.history_manager - INFO - Loaded 5343 previously parsed movies from history (phase 1: 3217, phase 2: 2126)
+2025-11-28 01:14:16,906 - __main__ - INFO - ==================================================
+2025-11-28 01:14:16,906 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-11-28 01:14:16,906 - __main__ - INFO - ==================================================
+2025-11-28 01:14:16,954 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 403 Client Error: Forbidden for url: https://javdb.com/?page=1
+2025-11-28 01:14:16,954 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
+2025-11-28 01:14:16,996 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 403 Client Error: Forbidden for url: https://javdb.com/?page=2
+2025-11-28 01:14:16,997 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
+2025-11-28 01:14:17,041 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 403 Client Error: Forbidden for url: https://javdb.com/?page=3
+2025-11-28 01:14:17,041 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
+2025-11-28 01:14:17,041 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
+2025-11-28 01:14:17,041 - __main__ - INFO - Phase 1 completed: 0 entries processed
+2025-11-28 01:14:17,041 - __main__ - INFO - ==================================================
+2025-11-28 01:14:17,041 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-11-28 01:14:17,041 - __main__ - INFO - ==================================================
+2025-11-28 01:14:17,570 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 403 Client Error: Forbidden for url: https://javdb.com/?page=1
+2025-11-28 01:14:17,570 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
+2025-11-28 01:14:17,626 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 403 Client Error: Forbidden for url: https://javdb.com/?page=2
+2025-11-28 01:14:17,627 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
+2025-11-28 01:14:17,673 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 403 Client Error: Forbidden for url: https://javdb.com/?page=3
+2025-11-28 01:14:17,673 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
+2025-11-28 01:14:17,673 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
+2025-11-28 01:14:17,673 - __main__ - INFO - Phase 2 completed: 0 entries processed
+2025-11-28 01:14:17,673 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251128.csv
+2025-11-28 01:14:17,673 - __main__ - INFO - ==================================================
+2025-11-28 01:14:17,673 - __main__ - INFO - SUMMARY REPORT
+2025-11-28 01:14:17,673 - __main__ - INFO - ==================================================
+2025-11-28 01:14:17,673 - __main__ - INFO - Pages processed: 1 to 20
+2025-11-28 01:14:17,673 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-11-28 01:14:17,673 - __main__ - INFO - ==============================
+2025-11-28 01:14:17,673 - __main__ - INFO - PHASE 1 SUMMARY
+2025-11-28 01:14:17,673 - __main__ - INFO - ==============================
+2025-11-28 01:14:17,673 - __main__ - INFO - Phase 1 entries found: 0
+2025-11-28 01:14:17,673 - __main__ - INFO -   - No entries found in Phase 1
+2025-11-28 01:14:17,673 - __main__ - INFO - ==============================
+2025-11-28 01:14:17,673 - __main__ - INFO - PHASE 2 SUMMARY
+2025-11-28 01:14:17,673 - __main__ - INFO - ==============================
+2025-11-28 01:14:17,673 - __main__ - INFO - Phase 2 entries found: 0
+2025-11-28 01:14:17,673 - __main__ - INFO -   - No entries found in Phase 2
+2025-11-28 01:14:17,673 - __main__ - INFO - ==============================
+2025-11-28 01:14:17,673 - __main__ - INFO - OVERALL SUMMARY
+2025-11-28 01:14:17,673 - __main__ - INFO - ==============================
+2025-11-28 01:14:17,673 - __main__ - INFO - Total entries found: 0
+2025-11-28 01:14:17,673 - __main__ - INFO - Successfully processed: 0
+2025-11-28 01:14:17,673 - __main__ - INFO - Skipped already parsed in this session: 0
+2025-11-28 01:14:17,673 - __main__ - INFO - Skipped already parsed in previous runs: 3217
+2025-11-28 01:14:17,673 - __main__ - INFO - Current parsed links in memory: 0
+2025-11-28 01:14:17,673 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251128.csv
+2025-11-28 01:14:17,673 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-11-28 01:14:17,673 - __main__ - INFO - ==================================================
