@@ -1,152 +1,128 @@
-2025-11-26 19:00:02,252 - __main__ - INFO - Initializing single proxy mode (using first proxy from pool)...
-2025-11-26 19:00:02,252 - utils.proxy_ban_manager - INFO - No existing ban log found at logs/proxy_bans.csv
-2025-11-26 19:00:02,252 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
-2025-11-26 19:00:02,252 - __main__ - INFO - Single proxy initialized: Singapore-ARM1
-2025-11-26 19:00:02,252 - __main__ - INFO - Starting JavDB spider...
-2025-11-26 19:00:02,252 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
-2025-11-26 19:00:02,252 - __main__ - INFO - SINGLE PROXY MODE: Using main proxy only (no automatic failover)
-2025-11-26 19:00:02,252 - __main__ - INFO - Main proxy: Singapore-ARM1
-2025-11-26 19:00:02,253 - __main__ - INFO - PROXY ENABLED: Using proxy for modules ['spider_index', 'spider_detail']
-2025-11-26 19:00:02,253 - __main__ - INFO - Validating history file integrity...
-2025-11-26 19:00:02,293 - utils.history_manager - INFO - Loaded 5335 previously parsed movies from history (phase 1: 3208, phase 2: 2127)
-2025-11-26 19:00:02,294 - __main__ - INFO - ==================================================
-2025-11-26 19:00:02,294 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-11-26 19:00:02,294 - __main__ - INFO - ==================================================
-2025-11-26 19:00:03,884 - utils.parser - INFO - [Page 1] Found 10 entries for phase 1
-2025-11-26 19:00:06,580 - utils.parser - INFO - [Page 2] Found 5 entries for phase 1
-2025-11-26 19:00:09,143 - utils.parser - INFO - [Page 3] Found 8 entries for phase 1
-2025-11-26 19:00:11,607 - utils.parser - INFO - [Page 4] Found 0 entries for phase 1
-2025-11-26 19:00:14,104 - utils.parser - INFO - [Page 5] Found 0 entries for phase 1
-2025-11-26 19:00:16,639 - utils.parser - INFO - [Page 6] Found 0 entries for phase 1
-2025-11-26 19:00:19,221 - utils.parser - INFO - [Page 7] Found 0 entries for phase 1
-2025-11-26 19:00:21,779 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
-2025-11-26 19:00:24,313 - utils.parser - INFO - [Page 9] Found 0 entries for phase 1
-2025-11-26 19:00:26,877 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
-2025-11-26 19:00:29,396 - utils.parser - INFO - [Page 11] Found 0 entries for phase 1
-2025-11-26 19:00:31,943 - utils.parser - INFO - [Page 12] Found 0 entries for phase 1
-2025-11-26 19:00:34,477 - utils.parser - INFO - [Page 13] Found 0 entries for phase 1
-2025-11-26 19:00:37,037 - utils.parser - INFO - [Page 14] Found 0 entries for phase 1
-2025-11-26 19:00:39,562 - utils.parser - INFO - [Page 15] Found 0 entries for phase 1
-2025-11-26 19:00:42,144 - utils.parser - INFO - [Page 16] Found 0 entries for phase 1
-2025-11-26 19:00:44,690 - utils.parser - INFO - [Page 17] Found 0 entries for phase 1
-2025-11-26 19:00:47,269 - utils.parser - INFO - [Page 18] Found 0 entries for phase 1
-2025-11-26 19:00:49,814 - utils.parser - INFO - [Page 19] Found 0 entries for phase 1
-2025-11-26 19:00:52,335 - utils.parser - INFO - [Page 20] Found 0 entries for phase 1
-2025-11-26 19:00:57,821 - __main__ - INFO - [1/23] [Page 1] Processing FSDSS-259
-2025-11-26 19:01:04,288 - __main__ - INFO - [2/23] [Page 1] Processing JUR-050
-2025-11-26 19:01:10,773 - __main__ - INFO - [3/23] [Page 1] Processing JUR-054
-2025-11-26 19:01:17,276 - __main__ - INFO - [4/23] [Page 1] Processing JUR-462
-2025-11-26 19:01:23,732 - __main__ - INFO - [5/23] [Page 1] Processing JUR-512
-2025-11-26 19:01:30,224 - __main__ - INFO - [6/23] [Page 1] Processing JUR-515
-2025-11-26 19:01:36,698 - __main__ - INFO - [7/23] [Page 1] Processing JUR-541
-2025-11-26 19:01:43,200 - __main__ - INFO - [8/23] [Page 1] Processing JUR-542
-2025-11-26 19:01:49,705 - __main__ - INFO - [9/23] [Page 1] Processing JUR-543
-2025-11-26 19:01:56,197 - __main__ - INFO - [10/23] [Page 1] Processing JUR-560
-2025-11-26 19:02:02,699 - __main__ - INFO - [11/23] [Page 2] Processing DASS-566
-2025-11-26 19:02:08,161 - __main__ - INFO - [12/23] [Page 2] Processing MIDA-278
-2025-11-26 19:02:13,596 - __main__ - INFO - [13/23] [Page 2] Processing MIDA-290
-2025-11-26 19:02:19,058 - __main__ - INFO - [14/23] [Page 2] Processing PPPE-367
-2025-11-26 19:02:24,500 - __main__ - INFO - [15/23] [Page 2] Processing PPPE-370
-2025-11-26 19:02:29,774 - __main__ - INFO - [16/23] [Page 3] Processing PPPE-374
-2025-11-26 19:02:35,246 - __main__ - INFO - [17/23] [Page 3] Processing PPPE-375
-2025-11-26 19:02:40,728 - __main__ - INFO - [18/23] [Page 3] Processing PPPE-378
-2025-11-26 19:02:46,184 - __main__ - INFO - [19/23] [Page 3] Processing PPPE-380
-2025-11-26 19:02:51,629 - __main__ - INFO - [20/23] [Page 3] Processing PPPE-381
-2025-11-26 19:02:57,093 - __main__ - INFO - [21/23] [Page 3] Processing PPPE-382
-2025-11-26 19:03:02,526 - __main__ - INFO - [22/23] [Page 3] Processing RKI-724
-2025-11-26 19:03:08,004 - __main__ - INFO - [23/23] [Page 3] Processing IPVR-317
-2025-11-26 19:03:08,005 - __main__ - INFO - Phase 1 completed: 10 entries processed
-2025-11-26 19:03:08,005 - __main__ - INFO - ==================================================
-2025-11-26 19:03:08,005 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-11-26 19:03:08,005 - __main__ - INFO - ==================================================
-2025-11-26 19:03:08,504 - utils.parser - INFO - [Page 1] Found 4 entries for phase 2
-2025-11-26 19:03:11,008 - utils.parser - INFO - [Page 2] Found 3 entries for phase 2
-2025-11-26 19:03:13,528 - utils.parser - INFO - [Page 3] Found 3 entries for phase 2
-2025-11-26 19:03:16,055 - utils.parser - INFO - [Page 4] Found 0 entries for phase 2
-2025-11-26 19:03:18,618 - utils.parser - INFO - [Page 5] Found 0 entries for phase 2
-2025-11-26 19:03:21,397 - utils.parser - INFO - [Page 6] Found 0 entries for phase 2
-2025-11-26 19:03:23,917 - utils.parser - INFO - [Page 7] Found 0 entries for phase 2
-2025-11-26 19:03:26,464 - utils.parser - INFO - [Page 8] Found 0 entries for phase 2
-2025-11-26 19:03:29,014 - utils.parser - INFO - [Page 9] Found 0 entries for phase 2
-2025-11-26 19:03:31,568 - utils.parser - INFO - [Page 10] Found 0 entries for phase 2
-2025-11-26 19:03:34,095 - utils.parser - INFO - [Page 11] Found 0 entries for phase 2
-2025-11-26 19:03:36,664 - utils.parser - INFO - [Page 12] Found 0 entries for phase 2
-2025-11-26 19:03:39,218 - utils.parser - INFO - [Page 13] Found 0 entries for phase 2
-2025-11-26 19:03:41,774 - utils.parser - INFO - [Page 14] Found 0 entries for phase 2
-2025-11-26 19:03:44,303 - utils.parser - INFO - [Page 15] Found 0 entries for phase 2
-2025-11-26 19:03:46,823 - utils.parser - INFO - [Page 16] Found 0 entries for phase 2
-2025-11-26 19:03:49,417 - utils.parser - INFO - [Page 17] Found 0 entries for phase 2
-2025-11-26 19:03:51,954 - utils.parser - INFO - [Page 18] Found 0 entries for phase 2
-2025-11-26 19:03:54,504 - utils.parser - INFO - [Page 19] Found 0 entries for phase 2
-2025-11-26 19:03:57,068 - utils.parser - INFO - [Page 20] Found 0 entries for phase 2
-2025-11-26 19:04:02,573 - __main__ - INFO - [1/10] [Page 1] Processing AGAV-153
-2025-11-26 19:04:09,041 - __main__ - INFO - [2/10] [Page 1] Processing START-463
-2025-11-26 19:04:15,507 - __main__ - INFO - [3/10] [Page 1] Processing JUR-558
-2025-11-26 19:04:21,972 - __main__ - INFO - [4/10] [Page 1] Processing SNOS-005
-2025-11-26 19:04:28,442 - __main__ - INFO - [5/10] [Page 2] Processing LUXU-1862
-2025-11-26 19:04:34,946 - __main__ - INFO - [6/10] [Page 2] Processing MSAJ-019
-2025-11-26 19:04:40,377 - __main__ - INFO - [7/10] [Page 2] Processing CJOD-486
-2025-11-26 19:04:45,812 - __main__ - INFO - [8/10] [Page 3] Processing KAMEF-108
-2025-11-26 19:04:51,275 - __main__ - INFO - [9/10] [Page 3] Processing MADV-611
-2025-11-26 19:04:57,753 - __main__ - INFO - [10/10] [Page 3] Processing HUBLK-058
-2025-11-26 19:04:57,753 - __main__ - INFO - Phase 2 completed: 6 entries processed
-2025-11-26 19:04:57,753 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251126.csv
-2025-11-26 19:04:57,753 - __main__ - INFO - ==================================================
-2025-11-26 19:04:57,753 - __main__ - INFO - SUMMARY REPORT
-2025-11-26 19:04:57,753 - __main__ - INFO - ==================================================
-2025-11-26 19:04:57,753 - __main__ - INFO - Pages processed: 1 to 20
-2025-11-26 19:04:57,753 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-11-26 19:04:57,753 - __main__ - INFO - ==============================
-2025-11-26 19:04:57,753 - __main__ - INFO - PHASE 1 SUMMARY
-2025-11-26 19:04:57,753 - __main__ - INFO - ==============================
-2025-11-26 19:04:57,753 - __main__ - INFO - Phase 1 entries found: 10
-2025-11-26 19:04:57,753 - __main__ - INFO -   - Subtitle torrents: 10 (100.0%)
-2025-11-26 19:04:57,753 - __main__ - INFO -   - Hacked subtitle torrents: 4 (40.0%)
-2025-11-26 19:04:57,753 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
-2025-11-26 19:04:57,753 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
-2025-11-26 19:04:57,753 - __main__ - INFO - ==============================
-2025-11-26 19:04:57,753 - __main__ - INFO - PHASE 2 SUMMARY
-2025-11-26 19:04:57,753 - __main__ - INFO - ==============================
-2025-11-26 19:04:57,753 - __main__ - INFO - Phase 2 entries found: 6
-2025-11-26 19:04:57,753 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
-2025-11-26 19:04:57,753 - __main__ - INFO -   - Hacked subtitle torrents: 2 (33.3%)
-2025-11-26 19:04:57,753 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
-2025-11-26 19:04:57,753 - __main__ - INFO -   - No-subtitle torrents: 6 (100.0%)
-2025-11-26 19:04:57,753 - __main__ - INFO - ==============================
-2025-11-26 19:04:57,753 - __main__ - INFO - OVERALL SUMMARY
-2025-11-26 19:04:57,753 - __main__ - INFO - ==============================
-2025-11-26 19:04:57,753 - __main__ - INFO - Total entries found: 16
-2025-11-26 19:04:57,753 - __main__ - INFO - Successfully processed: 16
-2025-11-26 19:04:57,753 - __main__ - INFO - Skipped already parsed in this session: 33
-2025-11-26 19:04:57,753 - __main__ - INFO - Skipped already parsed in previous runs: 3208
-2025-11-26 19:04:57,753 - __main__ - INFO - Current parsed links in memory: 33
-2025-11-26 19:04:57,753 - __main__ - INFO - Overall subtitle torrents: 10 (62.5%)
-2025-11-26 19:04:57,753 - __main__ - INFO - Overall hacked subtitle torrents: 6 (37.5%)
-2025-11-26 19:04:57,753 - __main__ - INFO - Overall hacked no-subtitle torrents: 0 (0.0%)
-2025-11-26 19:04:57,753 - __main__ - INFO - Overall no-subtitle torrents: 6 (37.5%)
-2025-11-26 19:04:57,753 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251126.csv
-2025-11-26 19:04:57,754 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-11-26 19:04:57,754 - __main__ - INFO - ==================================================
-2025-11-26 19:04:57,754 - __main__ - INFO - 
-2025-11-26 19:04:57,754 - utils.proxy_pool - INFO - ==================================================
-2025-11-26 19:04:57,754 - utils.proxy_pool - INFO - PROXY POOL STATISTICS
-2025-11-26 19:04:57,754 - utils.proxy_pool - INFO - ==================================================
-2025-11-26 19:04:57,754 - utils.proxy_pool - INFO - Total proxies: 1
-2025-11-26 19:04:57,754 - utils.proxy_pool - INFO - Available proxies: 1
-2025-11-26 19:04:57,754 - utils.proxy_pool - INFO - In cooldown: 0
-2025-11-26 19:04:57,754 - utils.proxy_pool - INFO - No-proxy mode: False
-2025-11-26 19:04:57,754 - utils.proxy_pool - INFO - 
-2025-11-26 19:04:57,754 - utils.proxy_pool - INFO - Individual proxy statistics:
-2025-11-26 19:04:57,754 - utils.proxy_pool - INFO -   [ACTIVE] Singapore-ARM1:
-2025-11-26 19:04:57,754 - utils.proxy_pool - INFO -     - Total requests: 73
-2025-11-26 19:04:57,754 - utils.proxy_pool - INFO -     - Success rate: 100.0%
-2025-11-26 19:04:57,754 - utils.proxy_pool - INFO -     - Consecutive failures: 0
-2025-11-26 19:04:57,754 - utils.proxy_pool - INFO -     - Last success: 2025-11-26 19:04:52
-2025-11-26 19:04:57,754 - utils.proxy_pool - INFO -     - Last failure: Never
-2025-11-26 19:04:57,754 - utils.proxy_pool - INFO - ==================================================
-2025-11-26 19:04:57,754 - __main__ - INFO - 
-2025-11-26 19:04:57,754 - __main__ - INFO - ==================================================
-2025-11-26 19:04:57,754 - __main__ - INFO - PROXY BAN STATUS
-2025-11-26 19:04:57,754 - __main__ - INFO - ==================================================
-2025-11-26 19:04:57,754 - __main__ - INFO - No proxies currently banned.
-2025-11-26 19:04:57,754 - __main__ - INFO - ==================================================
+2025-11-27 19:00:01,618 - __main__ - INFO - Initializing single proxy mode (using first proxy from pool)...
+2025-11-27 19:00:01,618 - utils.proxy_ban_manager - INFO - No existing ban log found at logs/proxy_bans.csv
+2025-11-27 19:00:01,618 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
+2025-11-27 19:00:01,618 - __main__ - INFO - Single proxy initialized: Singapore-ARM1
+2025-11-27 19:00:01,618 - __main__ - INFO - Starting JavDB spider...
+2025-11-27 19:00:01,618 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
+2025-11-27 19:00:01,618 - __main__ - INFO - SINGLE PROXY MODE: Using main proxy only (no automatic failover)
+2025-11-27 19:00:01,618 - __main__ - INFO - Main proxy: Singapore-ARM1
+2025-11-27 19:00:01,618 - __main__ - INFO - PROXY ENABLED: Using proxy for modules ['spider_index', 'spider_detail']
+2025-11-27 19:00:01,618 - __main__ - INFO - Validating history file integrity...
+2025-11-27 19:00:01,671 - utils.history_manager - INFO - Loaded 5343 previously parsed movies from history (phase 1: 3217, phase 2: 2126)
+2025-11-27 19:00:01,671 - __main__ - INFO - ==================================================
+2025-11-27 19:00:01,671 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-11-27 19:00:01,671 - __main__ - INFO - ==================================================
+2025-11-27 19:00:01,969 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 403 Client Error: Forbidden for url: https://javdb.com/?page=1
+2025-11-27 19:00:01,969 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
+2025-11-27 19:00:01,969 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-11-27 19:00:01,969 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-11-27 19:00:02,074 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 403 Client Error: Forbidden for url: https://javdb.com/?page=1
+2025-11-27 19:00:02,074 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
+2025-11-27 19:00:02,074 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-11-27 19:00:02,075 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-11-27 19:00:02,194 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 403 Client Error: Forbidden for url: https://javdb.com/?page=1
+2025-11-27 19:00:02,194 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
+2025-11-27 19:00:02,316 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 403 Client Error: Forbidden for url: https://javdb.com/?page=2
+2025-11-27 19:00:02,316 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (3/3)
+2025-11-27 19:00:02,316 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-11-27 19:00:02,316 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-11-27 19:00:02,430 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 403 Client Error: Forbidden for url: https://javdb.com/?page=2
+2025-11-27 19:00:02,430 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' banned until 2025-12-04 19:00:02 (7 days)
+2025-11-27 19:00:02,443 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 4 failures, putting in cooldown for 691200s (8 days)
+2025-11-27 19:00:02,443 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
+2025-11-27 19:00:02,443 - __main__ - ERROR - [spider_index] Failed to switch proxy, no more proxies available
+2025-11-27 19:00:02,443 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
+2025-11-27 19:00:02,443 - utils.proxy_pool - WARNING - All proxies are unavailable or in cooldown
+2025-11-27 19:00:02,443 - __main__ - WARNING - [spider_index] Proxy mode 'single' enabled but no proxy available
+2025-11-27 19:00:02,506 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 403 Client Error: Forbidden for url: https://javdb.com/?page=3
+2025-11-27 19:00:02,506 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' is already in ban period, not updating
+2025-11-27 19:00:02,506 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 5 failures, putting in cooldown for 691200s (8 days)
+2025-11-27 19:00:02,506 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
+2025-11-27 19:00:02,506 - __main__ - ERROR - [spider_index] Failed to switch proxy, no more proxies available
+2025-11-27 19:00:02,506 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
+2025-11-27 19:00:02,506 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
+2025-11-27 19:00:02,506 - __main__ - INFO - Phase 1 completed: 0 entries processed
+2025-11-27 19:00:02,506 - __main__ - INFO - ==================================================
+2025-11-27 19:00:02,506 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-11-27 19:00:02,506 - __main__ - INFO - ==================================================
+2025-11-27 19:00:02,506 - utils.proxy_pool - WARNING - All proxies are unavailable or in cooldown
+2025-11-27 19:00:02,506 - __main__ - WARNING - [spider_index] Proxy mode 'single' enabled but no proxy available
+2025-11-27 19:00:02,559 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 403 Client Error: Forbidden for url: https://javdb.com/?page=1
+2025-11-27 19:00:02,560 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' is already in ban period, not updating
+2025-11-27 19:00:02,560 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 6 failures, putting in cooldown for 691200s (8 days)
+2025-11-27 19:00:02,560 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
+2025-11-27 19:00:02,560 - __main__ - ERROR - [spider_index] Failed to switch proxy, no more proxies available
+2025-11-27 19:00:02,560 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
+2025-11-27 19:00:02,560 - utils.proxy_pool - WARNING - All proxies are unavailable or in cooldown
+2025-11-27 19:00:02,560 - __main__ - WARNING - [spider_index] Proxy mode 'single' enabled but no proxy available
+2025-11-27 19:00:02,630 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 403 Client Error: Forbidden for url: https://javdb.com/?page=2
+2025-11-27 19:00:02,630 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' is already in ban period, not updating
+2025-11-27 19:00:02,630 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 7 failures, putting in cooldown for 691200s (8 days)
+2025-11-27 19:00:02,630 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
+2025-11-27 19:00:02,630 - __main__ - ERROR - [spider_index] Failed to switch proxy, no more proxies available
+2025-11-27 19:00:02,630 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
+2025-11-27 19:00:02,630 - utils.proxy_pool - WARNING - All proxies are unavailable or in cooldown
+2025-11-27 19:00:02,630 - __main__ - WARNING - [spider_index] Proxy mode 'single' enabled but no proxy available
+2025-11-27 19:00:02,678 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 403 Client Error: Forbidden for url: https://javdb.com/?page=3
+2025-11-27 19:00:02,678 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' is already in ban period, not updating
+2025-11-27 19:00:02,678 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 8 failures, putting in cooldown for 691200s (8 days)
+2025-11-27 19:00:02,678 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
+2025-11-27 19:00:02,678 - __main__ - ERROR - [spider_index] Failed to switch proxy, no more proxies available
+2025-11-27 19:00:02,678 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
+2025-11-27 19:00:02,678 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
+2025-11-27 19:00:02,678 - __main__ - INFO - Phase 2 completed: 0 entries processed
+2025-11-27 19:00:02,678 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251127.csv
+2025-11-27 19:00:02,678 - __main__ - INFO - ==================================================
+2025-11-27 19:00:02,678 - __main__ - INFO - SUMMARY REPORT
+2025-11-27 19:00:02,678 - __main__ - INFO - ==================================================
+2025-11-27 19:00:02,678 - __main__ - INFO - Pages processed: 1 to 20
+2025-11-27 19:00:02,678 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-11-27 19:00:02,678 - __main__ - INFO - ==============================
+2025-11-27 19:00:02,678 - __main__ - INFO - PHASE 1 SUMMARY
+2025-11-27 19:00:02,678 - __main__ - INFO - ==============================
+2025-11-27 19:00:02,678 - __main__ - INFO - Phase 1 entries found: 0
+2025-11-27 19:00:02,678 - __main__ - INFO -   - No entries found in Phase 1
+2025-11-27 19:00:02,678 - __main__ - INFO - ==============================
+2025-11-27 19:00:02,678 - __main__ - INFO - PHASE 2 SUMMARY
+2025-11-27 19:00:02,678 - __main__ - INFO - ==============================
+2025-11-27 19:00:02,678 - __main__ - INFO - Phase 2 entries found: 0
+2025-11-27 19:00:02,678 - __main__ - INFO -   - No entries found in Phase 2
+2025-11-27 19:00:02,678 - __main__ - INFO - ==============================
+2025-11-27 19:00:02,678 - __main__ - INFO - OVERALL SUMMARY
+2025-11-27 19:00:02,678 - __main__ - INFO - ==============================
+2025-11-27 19:00:02,678 - __main__ - INFO - Total entries found: 0
+2025-11-27 19:00:02,678 - __main__ - INFO - Successfully processed: 0
+2025-11-27 19:00:02,678 - __main__ - INFO - Skipped already parsed in this session: 0
+2025-11-27 19:00:02,678 - __main__ - INFO - Skipped already parsed in previous runs: 3217
+2025-11-27 19:00:02,678 - __main__ - INFO - Current parsed links in memory: 0
+2025-11-27 19:00:02,678 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251127.csv
+2025-11-27 19:00:02,678 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-11-27 19:00:02,678 - __main__ - INFO - ==================================================
+2025-11-27 19:00:02,678 - __main__ - INFO - 
+2025-11-27 19:00:02,678 - utils.proxy_pool - INFO - ==================================================
+2025-11-27 19:00:02,678 - utils.proxy_pool - INFO - PROXY POOL STATISTICS
+2025-11-27 19:00:02,678 - utils.proxy_pool - INFO - ==================================================
+2025-11-27 19:00:02,679 - utils.proxy_pool - INFO - Total proxies: 1
+2025-11-27 19:00:02,679 - utils.proxy_pool - INFO - Available proxies: 0
+2025-11-27 19:00:02,679 - utils.proxy_pool - INFO - In cooldown: 1
+2025-11-27 19:00:02,679 - utils.proxy_pool - INFO - No-proxy mode: False
+2025-11-27 19:00:02,679 - utils.proxy_pool - INFO - 
+2025-11-27 19:00:02,679 - utils.proxy_pool - INFO - Individual proxy statistics:
+2025-11-27 19:00:02,679 - utils.proxy_pool - INFO -   [ACTIVE (Cooldown: 691199s)] Singapore-ARM1:
+2025-11-27 19:00:02,679 - utils.proxy_pool - INFO -     - Total requests: 8
+2025-11-27 19:00:02,679 - utils.proxy_pool - INFO -     - Success rate: 0.0%
+2025-11-27 19:00:02,679 - utils.proxy_pool - INFO -     - Consecutive failures: 8
+2025-11-27 19:00:02,679 - utils.proxy_pool - INFO -     - Last success: Never
+2025-11-27 19:00:02,679 - utils.proxy_pool - INFO -     - Last failure: 2025-11-27 19:00:02
+2025-11-27 19:00:02,679 - utils.proxy_pool - INFO - ==================================================
+2025-11-27 19:00:02,679 - __main__ - INFO - 
+2025-11-27 19:00:02,679 - __main__ - INFO - ==================================================
+2025-11-27 19:00:02,679 - __main__ - INFO - PROXY BAN STATUS
+2025-11-27 19:00:02,679 - __main__ - INFO - ==================================================
+2025-11-27 19:00:02,679 - __main__ - INFO - Currently banned proxies: 1
+
+  - Singapore-ARM1:
+    Banned at: 2025-11-27 19:00:02
+    Will unban: 2025-12-04 19:00:02
+    Time remaining: 6 days 23 hours
+2025-11-27 19:00:02,679 - __main__ - INFO - ==================================================
