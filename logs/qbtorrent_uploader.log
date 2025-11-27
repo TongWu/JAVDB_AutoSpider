@@ -1,5 +1,5 @@
-2025-11-28 01:14:17,744 - __main__ - INFO - Starting qBittorrent uploader...
-2025-11-28 01:14:17,744 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251128.csv
-2025-11-28 01:14:17,744 - __main__ - ERROR - CSV file not found: Daily Report/Javdb_TodayTitle_20251128.csv
-2025-11-28 01:14:17,744 - __main__ - INFO - Make sure you have run the spider script first to generate the CSV file
-2025-11-28 01:14:17,744 - __main__ - WARNING - No torrent links found in CSV file
+2025-11-28 01:33:52,997 - __main__ - INFO - Starting qBittorrent uploader...
+2025-11-28 01:33:52,997 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251128.csv
+2025-11-28 01:33:52,997 - __main__ - ERROR - CSV file not found: Daily Report/Javdb_TodayTitle_20251128.csv
+2025-11-28 01:33:52,997 - __main__ - INFO - Make sure you have run the spider script first to generate the CSV file
+2025-11-28 01:33:52,997 - __main__ - WARNING - No torrent links found in CSV file
