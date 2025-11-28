@@ -6,10 +6,10 @@ import logging
 import os
 import argparse
 import sys
-from typing import Optional
+from typing import Optional, Dict, Any
 from bs4 import BeautifulSoup
 from bs4.element import Tag
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from datetime import datetime
 
 # Import utility functions
@@ -47,6 +47,13 @@ except ImportError:
     PROXY_HTTPS = None
     PROXY_MODULES = ['all']
 
+# Import CloudFlare bypass configuration (with fallback)
+try:
+    from config import CF_BYPASS_SERVICE_PORT, CF_BYPASS_API_VERSION
+except ImportError:
+    CF_BYPASS_SERVICE_PORT = 8000
+    CF_BYPASS_API_VERSION = 'v2'
+
 # Import proxy pool configuration (with fallback)
 try:
     from config import PROXY_MODE, PROXY_POOL, PROXY_POOL_COOLDOWN_SECONDS, PROXY_POOL_MAX_FAILURES
@@ -68,6 +75,9 @@ from utils.proxy_pool import ProxyPool, create_proxy_pool_from_config
 
 # Global proxy pool instance (will be initialized in main)
 global_proxy_pool: Optional[ProxyPool] = None
+
+# Global Cloudflare bypass data (cookies and user-agent from CF bypass service)
+cf_bypass_data: Optional[Dict[str, Any]] = None
 
 # Global set to track parsed links
 parsed_links = set()
@@ -110,6 +120,9 @@ def parse_arguments():
     parser.add_argument('--use-proxy', action='store_true',
                         help='Enable proxy for all HTTP requests (proxy settings from config.py)')
 
+    parser.add_argument('--use-cf-bypass', action='store_true',
+                        help='Use CloudFlare5sBypass service to get cf_clearance cookie (service must be running)')
+
     return parser.parse_args()
 
 
@@ -146,9 +159,138 @@ def should_use_proxy_for_module(module_name, use_proxy_flag):
     return module_name in PROXY_MODULES
 
 
-def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='unknown', max_retries=3):
+def extract_ip_from_proxy_url(proxy_url: str) -> Optional[str]:
     """
-    Fetch a webpage with proper headers, age verification bypass, and proxy pool support
+    Extract IP address or hostname from a proxy URL.
+    
+    Args:
+        proxy_url: Proxy URL (e.g., 'http://user:pass@192.168.1.1:8080')
+    
+    Returns:
+        IP address or hostname, or None if extraction fails
+    """
+    try:
+        parsed = urlparse(proxy_url)
+        return parsed.hostname
+    except Exception as e:
+        logger.warning(f"Failed to extract IP from proxy URL: {e}")
+        return None
+
+
+def get_cf_bypass_service_url(proxy_ip: Optional[str] = None) -> str:
+    """
+    Get the CF bypass service URL based on proxy configuration.
+    
+    Args:
+        proxy_ip: IP address of the proxy server (if using proxy pool)
+    
+    Returns:
+        CF bypass service URL
+        - Without proxy: http://localhost:{CF_BYPASS_SERVICE_PORT}
+        - With proxy: http://{proxy_ip}:{CF_BYPASS_SERVICE_PORT}
+    """
+    if proxy_ip:
+        return f"http://{proxy_ip}:{CF_BYPASS_SERVICE_PORT}"
+    else:
+        return f"http://localhost:{CF_BYPASS_SERVICE_PORT}"
+
+
+def get_cf_bypass_cookies(target_url: str, service_url: str) -> Optional[Dict[str, Any]]:
+    """
+    Get Cloudflare bypass cookies from CloudFlare5sBypass service.
+    
+    Service repository: https://github.com/dairoot/CloudFlare5sBypass
+    
+    Args:
+        target_url: The URL to bypass Cloudflare protection for
+        service_url: The CF bypass service URL to call
+    
+    Returns:
+        Dict with 'user_agent' and 'cookies' if successful, None otherwise
+    """
+    try:
+        api_endpoint = f"{service_url}/cloudflare5s/bypass-{CF_BYPASS_API_VERSION}"
+        
+        # Note: No proxy_server in payload - the service runs on the same machine as the proxy
+        payload = {'url': target_url}
+        
+        logger.info(f"[CF Bypass] Requesting bypass for {target_url}")
+        logger.info(f"[CF Bypass] Service endpoint: {api_endpoint}")
+        
+        response = requests.post(api_endpoint, json=payload, timeout=180)
+        response.raise_for_status()
+        
+        result = response.json()
+        
+        if 'user_agent' in result and 'cookies' in result:
+            logger.info(f"[CF Bypass] Successfully obtained cf_clearance cookie")
+            return result
+        else:
+            logger.error(f"[CF Bypass] Invalid response format: {result}")
+            return None
+            
+    except requests.exceptions.ConnectionError:
+        logger.error(f"[CF Bypass] Cannot connect to bypass service at {service_url}")
+        logger.error(f"[CF Bypass] Make sure the service is running on the target machine")
+        logger.error(f"[CF Bypass] Deploy from: https://github.com/dairoot/CloudFlare5sBypass")
+        return None
+    except requests.exceptions.Timeout:
+        logger.error(f"[CF Bypass] Timeout waiting for bypass service (this can take up to 3 minutes)")
+        return None
+    except Exception as e:
+        logger.error(f"[CF Bypass] Error getting bypass cookies: {e}")
+        return None
+
+
+def init_cf_bypass(use_proxy: bool = False) -> bool:
+    """
+    Initialize Cloudflare bypass by obtaining cf_clearance cookie.
+    
+    The service URL is dynamically generated:
+    - Without proxy: http://localhost:{CF_BYPASS_SERVICE_PORT}
+    - With proxy pool: http://{PROXY_IP}:{CF_BYPASS_SERVICE_PORT}
+    
+    Args:
+        use_proxy: Whether proxy is enabled (determines which service to call)
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    global cf_bypass_data, global_proxy_pool
+    
+    logger.info("Initializing Cloudflare bypass...")
+    
+    # Determine the CF bypass service URL
+    proxy_ip = None
+    if use_proxy and global_proxy_pool is not None:
+        # Get current proxy from pool
+        current_proxy = global_proxy_pool.get_current_proxy()
+        if current_proxy:
+            # Extract IP from proxy URL (use https proxy URL)
+            proxy_url = current_proxy.get('https') or current_proxy.get('http')
+            if proxy_url:
+                proxy_ip = extract_ip_from_proxy_url(proxy_url)
+                proxy_name = global_proxy_pool.get_current_proxy_name()
+                logger.info(f"[CF Bypass] Using proxy server: {proxy_name} (IP: {proxy_ip})")
+    
+    service_url = get_cf_bypass_service_url(proxy_ip)
+    logger.info(f"[CF Bypass] Service URL: {service_url}")
+    
+    # Get bypass cookies for the base URL
+    cf_bypass_data = get_cf_bypass_cookies(BASE_URL, service_url)
+    
+    if cf_bypass_data:
+        logger.info("[CF Bypass] Cloudflare bypass initialized successfully")
+        return True
+    else:
+        logger.error("[CF Bypass] Failed to initialize Cloudflare bypass")
+        return False
+
+
+def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='unknown', max_retries=3, use_cf_bypass=False):
+    """
+    Fetch a webpage with proper headers, age verification bypass, and proxy pool support.
+    Uses requests with Cloudflare bypass cookies from CloudFlare5sBypass service.
     
     Args:
         url: URL to fetch
@@ -157,14 +299,21 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
         use_proxy: Whether --use-proxy flag is enabled
         module_name: Module name for proxy control ('spider_index', 'spider_detail', 'spider_age_verification')
         max_retries: Maximum number of retries with different proxies (only for proxy pool mode)
+        use_cf_bypass: Whether to use Cloudflare bypass cookies (REQUIRED for bypassing Cloudflare)
     """
-    global global_proxy_pool
+    global global_proxy_pool, cf_bypass_data
     
     if session is None:
         session = requests.Session()
 
+    # Use user-agent from CF bypass if available, otherwise use default
+    user_agent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    if use_cf_bypass and cf_bypass_data and 'user_agent' in cf_bypass_data:
+        user_agent = cf_bypass_data['user_agent']
+        logger.debug(f"[CF Bypass] Using bypass user-agent")
+    
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': user_agent,
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
         'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8',
         'Accept-Encoding': 'gzip, deflate',  # 移除br压缩
@@ -177,9 +326,21 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
         'Cache-Control': 'max-age=0',
     }
     
-    # Only add cookie if use_cookie is True and JAVDB_SESSION_COOKIE is configured
+    # Build cookie string
+    cookie_parts = []
+    
+    # Add CF bypass cookies if available and enabled
+    if use_cf_bypass and cf_bypass_data and 'cookies' in cf_bypass_data:
+        for cookie_name, cookie_value in cf_bypass_data['cookies'].items():
+            cookie_parts.append(f"{cookie_name}={cookie_value}")
+        logger.debug(f"[CF Bypass] Using bypass cookies: {list(cf_bypass_data['cookies'].keys())}")
+    
+    # Add JAVDB session cookie if configured
     if use_cookie and JAVDB_SESSION_COOKIE:
-        headers['Cookie'] = f'_jdb_session={JAVDB_SESSION_COOKIE}'
+        cookie_parts.append(f'_jdb_session={JAVDB_SESSION_COOKIE}')
+    
+    if cookie_parts:
+        headers['Cookie'] = '; '.join(cookie_parts)
 
     # Determine proxy configuration based on mode
     proxies = None
@@ -507,7 +668,7 @@ def generate_output_csv_name(custom_url=None):
 
 
 def main():
-    global global_proxy_pool
+    global global_proxy_pool, cf_bypass_data
     
     # Parse command line arguments
     args = parse_arguments()
@@ -522,6 +683,7 @@ def main():
     parse_all = args.all
     ignore_release_date = args.ignore_release_date
     use_proxy = args.use_proxy
+    use_cf_bypass = args.use_cf_bypass
     
     # Initialize proxy pool if proxy is enabled
     if use_proxy:
@@ -597,6 +759,13 @@ def main():
         logger.info("PARSE ALL MODE: Will continue until empty page is found")
     if ignore_release_date:
         logger.info("IGNORE RELEASE DATE: Will process all entries regardless of today/yesterday tags")
+    if use_cf_bypass:
+        logger.info("CF BYPASS MODE: Using CloudFlare5sBypass service for cf_clearance cookie")
+        logger.info(f"CF Bypass service port: {CF_BYPASS_SERVICE_PORT}")
+        logger.info(f"CF Bypass API version: {CF_BYPASS_API_VERSION}")
+        if not init_cf_bypass(use_proxy=use_proxy):
+            logger.error("Failed to initialize CF bypass. Requests may fail with 403.")
+            use_cf_bypass = False
     if use_proxy:
         if global_proxy_pool is not None:
             stats = global_proxy_pool.get_statistics()
@@ -657,8 +826,9 @@ def main():
                 f.write('href,phase,video_code,parsed_date,torrent_type\n')
             logger.info(f"Created new history file for ad hoc mode: {history_file}")
 
-    # Create session for connection reuse
+    # Create requests session for connection reuse
     session = requests.Session()
+    logger.info("Initialized requests session")
 
     all_index_results = []
     rows = []
@@ -690,7 +860,7 @@ def main():
             logger.debug(f"[Page {page_num}] Fetching: {page_url}")
 
             # Fetch index page
-            index_html = get_page(page_url, session, use_cookie=custom_url is not None, use_proxy=use_proxy, module_name='spider_index')
+            index_html = get_page(page_url, session, use_cookie=custom_url is not None, use_proxy=use_proxy, module_name='spider_index', use_cf_bypass=use_cf_bypass)
             if not index_html:
                 logger.info(f"[Page {page_num}] no movie list found (page fetch failed or does not exist)")
                 consecutive_empty_pages += 1
@@ -759,7 +929,7 @@ def main():
             detail_url = urljoin(BASE_URL, href)
 
             # Fetch detail page
-            detail_html = get_page(detail_url, session, use_cookie=custom_url is not None, use_proxy=use_proxy, module_name='spider_detail')
+            detail_html = get_page(detail_url, session, use_cookie=custom_url is not None, use_proxy=use_proxy, module_name='spider_detail', use_cf_bypass=use_cf_bypass)
             if not detail_html:
                 logger.error(f"[{i}/{total_entries_phase1}] [Page {page_num}] Failed to fetch detail page")
                 continue
@@ -860,7 +1030,7 @@ def main():
             logger.debug(f"[Page {page_num}] Fetching for phase 2: {page_url}")
 
             # Fetch index page
-            index_html = get_page(page_url, session, use_cookie=custom_url is not None, use_proxy=use_proxy, module_name='spider_index')
+            index_html = get_page(page_url, session, use_cookie=custom_url is not None, use_proxy=use_proxy, module_name='spider_index', use_cf_bypass=use_cf_bypass)
             if not index_html:
                 logger.info(f"[Page {page_num}] no movie list found (page fetch failed or does not exist)")
                 consecutive_empty_pages += 1
@@ -929,7 +1099,7 @@ def main():
             detail_url = urljoin(BASE_URL, href)
 
             # Fetch detail page
-            detail_html = get_page(detail_url, session, use_cookie=custom_url is not None, use_proxy=use_proxy, module_name='spider_detail')
+            detail_html = get_page(detail_url, session, use_cookie=custom_url is not None, use_proxy=use_proxy, module_name='spider_detail', use_cf_bypass=use_cf_bypass)
             if not detail_html:
                 logger.error(f"[{i}/{total_entries_phase2}] [Page {page_num}] Failed to fetch detail page")
                 continue
@@ -1123,6 +1293,8 @@ def main():
         ban_summary = global_proxy_pool.get_ban_summary(include_ip=False)
         logger.info(ban_summary)
         logger.info("=" * 50)
+    
+    # Close browser if it was used
 
 
 if __name__ == '__main__':
