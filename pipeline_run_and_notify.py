@@ -425,6 +425,7 @@ def parse_arguments():
     parser.add_argument('--dry-run', action='store_true', help='Print items that would be written without changing CSV file')
     parser.add_argument('--ignore-release-date', action='store_true', help='Ignore today/yesterday tags and download all entries matching phase criteria (subtitle for phase1, quality for phase2)')
     parser.add_argument('--use-proxy', action='store_true', help='Enable proxy for all HTTP requests (proxy settings from config.py)')
+    parser.add_argument('--use-cf-bypass', action='store_true', help='Use CloudFlare5sBypass service to bypass Cloudflare protection')
     # PikPak Bridge arguments
     parser.add_argument('--pikpak-individual', action='store_true', help='Use individual mode for PikPak Bridge instead of batch mode')
     return parser.parse_args()
@@ -466,6 +467,8 @@ def main():
         spider_args.append('--ignore-release-date')
     if args.use_proxy:
         spider_args.append('--use-proxy')
+    if args.use_cf_bypass:
+        spider_args.append('--use-cf-bypass')
 
     # Build arguments for qbtorrent_uploader
     uploader_args = []
