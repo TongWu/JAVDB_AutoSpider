@@ -1,57 +1,57 @@
-2025-11-28 16:13:56,663 - __main__ - INFO - Starting JavDB spider...
-2025-11-28 16:13:56,664 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
-2025-11-28 16:13:56,664 - __main__ - INFO - CF BYPASS MODE: Using CloudflareBypassForScraping Request Mirroring
-2025-11-28 16:13:56,664 - __main__ - INFO - CF Bypass service port: 8001
-2025-11-28 16:13:56,664 - __main__ - INFO - CF Bypass service URL: http://localhost:8001 (localhost)
-2025-11-28 16:13:56,664 - __main__ - INFO - Validating history file integrity...
-2025-11-28 16:13:56,695 - utils.history_manager - INFO - Loaded 5343 previously parsed movies from history (phase 1: 3217, phase 2: 2126)
-2025-11-28 16:13:56,695 - __main__ - INFO - Initialized requests session
-2025-11-28 16:13:56,695 - __main__ - INFO - ==================================================
-2025-11-28 16:13:56,695 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-11-28 16:13:56,695 - __main__ - INFO - ==================================================
-2025-11-28 16:13:56,697 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
-2025-11-28 16:13:56,697 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
-2025-11-28 16:13:56,697 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
-2025-11-28 16:13:56,697 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
-2025-11-28 16:13:56,698 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
-2025-11-28 16:13:56,698 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
-2025-11-28 16:13:56,698 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
-2025-11-28 16:13:56,698 - __main__ - INFO - Phase 1 completed: 0 entries processed
-2025-11-28 16:13:56,698 - __main__ - INFO - ==================================================
-2025-11-28 16:13:56,698 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-11-28 16:13:56,698 - __main__ - INFO - ==================================================
-2025-11-28 16:13:56,698 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
-2025-11-28 16:13:56,698 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
-2025-11-28 16:13:56,698 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
-2025-11-28 16:13:56,699 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
-2025-11-28 16:13:56,699 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
-2025-11-28 16:13:56,699 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
-2025-11-28 16:13:56,699 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
-2025-11-28 16:13:56,699 - __main__ - INFO - Phase 2 completed: 0 entries processed
-2025-11-28 16:13:56,699 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251128.csv
-2025-11-28 16:13:56,699 - __main__ - INFO - ==================================================
-2025-11-28 16:13:56,699 - __main__ - INFO - SUMMARY REPORT
-2025-11-28 16:13:56,699 - __main__ - INFO - ==================================================
-2025-11-28 16:13:56,699 - __main__ - INFO - Pages processed: 1 to 20
-2025-11-28 16:13:56,699 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-11-28 16:13:56,699 - __main__ - INFO - ==============================
-2025-11-28 16:13:56,699 - __main__ - INFO - PHASE 1 SUMMARY
-2025-11-28 16:13:56,699 - __main__ - INFO - ==============================
-2025-11-28 16:13:56,699 - __main__ - INFO - Phase 1 entries found: 0
-2025-11-28 16:13:56,699 - __main__ - INFO -   - No entries found in Phase 1
-2025-11-28 16:13:56,699 - __main__ - INFO - ==============================
-2025-11-28 16:13:56,699 - __main__ - INFO - PHASE 2 SUMMARY
-2025-11-28 16:13:56,699 - __main__ - INFO - ==============================
-2025-11-28 16:13:56,699 - __main__ - INFO - Phase 2 entries found: 0
-2025-11-28 16:13:56,699 - __main__ - INFO -   - No entries found in Phase 2
-2025-11-28 16:13:56,699 - __main__ - INFO - ==============================
-2025-11-28 16:13:56,699 - __main__ - INFO - OVERALL SUMMARY
-2025-11-28 16:13:56,699 - __main__ - INFO - ==============================
-2025-11-28 16:13:56,699 - __main__ - INFO - Total entries found: 0
-2025-11-28 16:13:56,699 - __main__ - INFO - Successfully processed: 0
-2025-11-28 16:13:56,699 - __main__ - INFO - Skipped already parsed in this session: 0
-2025-11-28 16:13:56,699 - __main__ - INFO - Skipped already parsed in previous runs: 3217
-2025-11-28 16:13:56,699 - __main__ - INFO - Current parsed links in memory: 0
-2025-11-28 16:13:56,699 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251128.csv
-2025-11-28 16:13:56,699 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-11-28 16:13:56,699 - __main__ - INFO - ==================================================
+2025-11-28 16:17:11,074 - __main__ - INFO - Starting JavDB spider...
+2025-11-28 16:17:11,074 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
+2025-11-28 16:17:11,074 - __main__ - INFO - CF BYPASS MODE: Using CloudflareBypassForScraping Request Mirroring
+2025-11-28 16:17:11,074 - __main__ - INFO - CF Bypass service port: 8001
+2025-11-28 16:17:11,074 - __main__ - INFO - CF Bypass service URL: http://localhost:8001 (localhost)
+2025-11-28 16:17:11,074 - __main__ - INFO - Validating history file integrity...
+2025-11-28 16:17:11,105 - utils.history_manager - INFO - Loaded 5343 previously parsed movies from history (phase 1: 3217, phase 2: 2126)
+2025-11-28 16:17:11,105 - __main__ - INFO - Initialized requests session
+2025-11-28 16:17:11,105 - __main__ - INFO - ==================================================
+2025-11-28 16:17:11,105 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-11-28 16:17:11,105 - __main__ - INFO - ==================================================
+2025-11-28 16:17:11,106 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPConnectionPool(host='localhost', port=8001): Max retries exceeded with url: /?page=1 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x70d1d1b63b60>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-11-28 16:17:11,106 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
+2025-11-28 16:17:11,106 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: HTTPConnectionPool(host='localhost', port=8001): Max retries exceeded with url: /?page=2 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x70d1cfd1eb40>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-11-28 16:17:11,106 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
+2025-11-28 16:17:11,107 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: HTTPConnectionPool(host='localhost', port=8001): Max retries exceeded with url: /?page=3 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x70d1cfd1ef90>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-11-28 16:17:11,107 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
+2025-11-28 16:17:11,107 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
+2025-11-28 16:17:11,107 - __main__ - INFO - Phase 1 completed: 0 entries processed
+2025-11-28 16:17:11,107 - __main__ - INFO - ==================================================
+2025-11-28 16:17:11,107 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-11-28 16:17:11,107 - __main__ - INFO - ==================================================
+2025-11-28 16:17:11,107 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPConnectionPool(host='localhost', port=8001): Max retries exceeded with url: /?page=1 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x70d1cfd1f1d0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-11-28 16:17:11,107 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
+2025-11-28 16:17:11,107 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: HTTPConnectionPool(host='localhost', port=8001): Max retries exceeded with url: /?page=2 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x70d1cfd1f500>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-11-28 16:17:11,107 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
+2025-11-28 16:17:11,108 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: HTTPConnectionPool(host='localhost', port=8001): Max retries exceeded with url: /?page=3 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x70d1cfd1f830>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-11-28 16:17:11,108 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
+2025-11-28 16:17:11,108 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
+2025-11-28 16:17:11,108 - __main__ - INFO - Phase 2 completed: 0 entries processed
+2025-11-28 16:17:11,108 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251128.csv
+2025-11-28 16:17:11,108 - __main__ - INFO - ==================================================
+2025-11-28 16:17:11,108 - __main__ - INFO - SUMMARY REPORT
+2025-11-28 16:17:11,108 - __main__ - INFO - ==================================================
+2025-11-28 16:17:11,108 - __main__ - INFO - Pages processed: 1 to 20
+2025-11-28 16:17:11,108 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-11-28 16:17:11,108 - __main__ - INFO - ==============================
+2025-11-28 16:17:11,108 - __main__ - INFO - PHASE 1 SUMMARY
+2025-11-28 16:17:11,108 - __main__ - INFO - ==============================
+2025-11-28 16:17:11,108 - __main__ - INFO - Phase 1 entries found: 0
+2025-11-28 16:17:11,108 - __main__ - INFO -   - No entries found in Phase 1
+2025-11-28 16:17:11,108 - __main__ - INFO - ==============================
+2025-11-28 16:17:11,108 - __main__ - INFO - PHASE 2 SUMMARY
+2025-11-28 16:17:11,108 - __main__ - INFO - ==============================
+2025-11-28 16:17:11,108 - __main__ - INFO - Phase 2 entries found: 0
+2025-11-28 16:17:11,108 - __main__ - INFO -   - No entries found in Phase 2
+2025-11-28 16:17:11,108 - __main__ - INFO - ==============================
+2025-11-28 16:17:11,108 - __main__ - INFO - OVERALL SUMMARY
+2025-11-28 16:17:11,108 - __main__ - INFO - ==============================
+2025-11-28 16:17:11,108 - __main__ - INFO - Total entries found: 0
+2025-11-28 16:17:11,108 - __main__ - INFO - Successfully processed: 0
+2025-11-28 16:17:11,108 - __main__ - INFO - Skipped already parsed in this session: 0
+2025-11-28 16:17:11,108 - __main__ - INFO - Skipped already parsed in previous runs: 3217
+2025-11-28 16:17:11,108 - __main__ - INFO - Current parsed links in memory: 0
+2025-11-28 16:17:11,108 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251128.csv
+2025-11-28 16:17:11,108 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-11-28 16:17:11,108 - __main__ - INFO - ==================================================
