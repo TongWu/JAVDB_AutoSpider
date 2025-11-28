@@ -1,57 +1,114 @@
-2025-11-28 16:17:11,074 - __main__ - INFO - Starting JavDB spider...
-2025-11-28 16:17:11,074 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
-2025-11-28 16:17:11,074 - __main__ - INFO - CF BYPASS MODE: Using CloudflareBypassForScraping Request Mirroring
-2025-11-28 16:17:11,074 - __main__ - INFO - CF Bypass service port: 8001
-2025-11-28 16:17:11,074 - __main__ - INFO - CF Bypass service URL: http://localhost:8001 (localhost)
-2025-11-28 16:17:11,074 - __main__ - INFO - Validating history file integrity...
-2025-11-28 16:17:11,105 - utils.history_manager - INFO - Loaded 5343 previously parsed movies from history (phase 1: 3217, phase 2: 2126)
-2025-11-28 16:17:11,105 - __main__ - INFO - Initialized requests session
-2025-11-28 16:17:11,105 - __main__ - INFO - ==================================================
-2025-11-28 16:17:11,105 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-11-28 16:17:11,105 - __main__ - INFO - ==================================================
-2025-11-28 16:17:11,106 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPConnectionPool(host='localhost', port=8001): Max retries exceeded with url: /?page=1 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x70d1d1b63b60>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2025-11-28 16:17:11,106 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
-2025-11-28 16:17:11,106 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: HTTPConnectionPool(host='localhost', port=8001): Max retries exceeded with url: /?page=2 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x70d1cfd1eb40>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2025-11-28 16:17:11,106 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
-2025-11-28 16:17:11,107 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: HTTPConnectionPool(host='localhost', port=8001): Max retries exceeded with url: /?page=3 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x70d1cfd1ef90>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2025-11-28 16:17:11,107 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
-2025-11-28 16:17:11,107 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
-2025-11-28 16:17:11,107 - __main__ - INFO - Phase 1 completed: 0 entries processed
-2025-11-28 16:17:11,107 - __main__ - INFO - ==================================================
-2025-11-28 16:17:11,107 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-11-28 16:17:11,107 - __main__ - INFO - ==================================================
-2025-11-28 16:17:11,107 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPConnectionPool(host='localhost', port=8001): Max retries exceeded with url: /?page=1 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x70d1cfd1f1d0>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2025-11-28 16:17:11,107 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
-2025-11-28 16:17:11,107 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: HTTPConnectionPool(host='localhost', port=8001): Max retries exceeded with url: /?page=2 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x70d1cfd1f500>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2025-11-28 16:17:11,107 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
-2025-11-28 16:17:11,108 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: HTTPConnectionPool(host='localhost', port=8001): Max retries exceeded with url: /?page=3 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x70d1cfd1f830>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2025-11-28 16:17:11,108 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
-2025-11-28 16:17:11,108 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
-2025-11-28 16:17:11,108 - __main__ - INFO - Phase 2 completed: 0 entries processed
-2025-11-28 16:17:11,108 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251128.csv
-2025-11-28 16:17:11,108 - __main__ - INFO - ==================================================
-2025-11-28 16:17:11,108 - __main__ - INFO - SUMMARY REPORT
-2025-11-28 16:17:11,108 - __main__ - INFO - ==================================================
-2025-11-28 16:17:11,108 - __main__ - INFO - Pages processed: 1 to 20
-2025-11-28 16:17:11,108 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-11-28 16:17:11,108 - __main__ - INFO - ==============================
-2025-11-28 16:17:11,108 - __main__ - INFO - PHASE 1 SUMMARY
-2025-11-28 16:17:11,108 - __main__ - INFO - ==============================
-2025-11-28 16:17:11,108 - __main__ - INFO - Phase 1 entries found: 0
-2025-11-28 16:17:11,108 - __main__ - INFO -   - No entries found in Phase 1
-2025-11-28 16:17:11,108 - __main__ - INFO - ==============================
-2025-11-28 16:17:11,108 - __main__ - INFO - PHASE 2 SUMMARY
-2025-11-28 16:17:11,108 - __main__ - INFO - ==============================
-2025-11-28 16:17:11,108 - __main__ - INFO - Phase 2 entries found: 0
-2025-11-28 16:17:11,108 - __main__ - INFO -   - No entries found in Phase 2
-2025-11-28 16:17:11,108 - __main__ - INFO - ==============================
-2025-11-28 16:17:11,108 - __main__ - INFO - OVERALL SUMMARY
-2025-11-28 16:17:11,108 - __main__ - INFO - ==============================
-2025-11-28 16:17:11,108 - __main__ - INFO - Total entries found: 0
-2025-11-28 16:17:11,108 - __main__ - INFO - Successfully processed: 0
-2025-11-28 16:17:11,108 - __main__ - INFO - Skipped already parsed in this session: 0
-2025-11-28 16:17:11,108 - __main__ - INFO - Skipped already parsed in previous runs: 3217
-2025-11-28 16:17:11,108 - __main__ - INFO - Current parsed links in memory: 0
-2025-11-28 16:17:11,108 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251128.csv
-2025-11-28 16:17:11,108 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-11-28 16:17:11,108 - __main__ - INFO - ==================================================
+2025-11-28 16:17:44,515 - __main__ - INFO - Starting JavDB spider...
+2025-11-28 16:17:44,515 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
+2025-11-28 16:17:44,515 - __main__ - INFO - CF BYPASS MODE: Using CloudflareBypassForScraping Request Mirroring
+2025-11-28 16:17:44,515 - __main__ - INFO - CF Bypass service port: 8000
+2025-11-28 16:17:44,515 - __main__ - INFO - CF Bypass service URL: http://localhost:8000 (localhost)
+2025-11-28 16:17:44,515 - __main__ - INFO - Validating history file integrity...
+2025-11-28 16:17:44,546 - utils.history_manager - INFO - Loaded 5343 previously parsed movies from history (phase 1: 3217, phase 2: 2126)
+2025-11-28 16:17:44,546 - __main__ - INFO - Initialized requests session
+2025-11-28 16:17:44,546 - __main__ - INFO - ==================================================
+2025-11-28 16:17:44,546 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-11-28 16:17:44,546 - __main__ - INFO - ==================================================
+2025-11-28 16:18:04,015 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
+2025-11-28 16:18:06,612 - utils.parser - INFO - [Page 2] Found 5 entries for phase 1
+2025-11-28 16:18:09,210 - utils.parser - INFO - [Page 3] Found 7 entries for phase 1
+2025-11-28 16:18:11,821 - utils.parser - INFO - [Page 4] Found 0 entries for phase 1
+2025-11-28 16:18:14,430 - utils.parser - INFO - [Page 5] Found 3 entries for phase 1
+2025-11-28 16:18:17,046 - utils.parser - INFO - [Page 6] Found 9 entries for phase 1
+2025-11-28 16:18:19,623 - utils.parser - INFO - [Page 7] Found 0 entries for phase 1
+2025-11-28 16:18:22,191 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
+2025-11-28 16:18:24,768 - utils.parser - INFO - [Page 9] Found 0 entries for phase 1
+2025-11-28 16:18:27,349 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
+2025-11-28 16:18:29,994 - utils.parser - INFO - [Page 11] Found 0 entries for phase 1
+2025-11-28 16:18:32,554 - utils.parser - INFO - [Page 12] Found 0 entries for phase 1
+2025-11-28 16:18:35,159 - utils.parser - INFO - [Page 13] Found 0 entries for phase 1
+2025-11-28 16:18:37,820 - utils.parser - INFO - [Page 14] Found 0 entries for phase 1
+2025-11-28 16:18:40,243 - utils.parser - INFO - [Page 15] Found 0 entries for phase 1
+2025-11-28 16:18:42,823 - utils.parser - INFO - [Page 16] Found 0 entries for phase 1
+2025-11-28 16:18:45,445 - utils.parser - INFO - [Page 17] Found 0 entries for phase 1
+2025-11-28 16:18:48,065 - utils.parser - INFO - [Page 18] Found 0 entries for phase 1
+2025-11-28 16:18:50,693 - utils.parser - INFO - [Page 19] Found 0 entries for phase 1
+2025-11-28 16:18:53,105 - utils.parser - INFO - [Page 20] Found 0 entries for phase 1
+2025-11-28 16:18:58,862 - __main__ - INFO - [1/24] [Page 2] Processing ALDN-524
+2025-11-28 16:19:05,440 - __main__ - INFO - [2/24] [Page 2] Processing ALDN-525
+2025-11-28 16:19:12,003 - __main__ - INFO - [3/24] [Page 2] Processing ALDN-526
+2025-11-28 16:19:18,681 - __main__ - INFO - [4/24] [Page 2] Processing ALDN-527
+2025-11-28 16:19:25,267 - __main__ - INFO - [5/24] [Page 2] Processing CJOD-479
+2025-11-28 16:19:31,884 - __main__ - INFO - [6/24] [Page 3] Processing CJOD-483
+2025-11-28 16:19:38,438 - __main__ - INFO - [7/24] [Page 3] Processing CJOD-486
+2025-11-28 16:19:45,021 - __main__ - INFO - [8/24] [Page 3] Processing CJOD-488
+2025-11-28 16:19:51,600 - __main__ - INFO - [9/24] [Page 3] Processing CJOD-492
+2025-11-28 16:19:58,168 - __main__ - INFO - [10/24] [Page 3] Processing MIDV-032
+2025-11-28 16:20:04,772 - __main__ - INFO - [11/24] [Page 3] Processing MIDV-250
+2025-11-28 16:20:11,356 - __main__ - INFO - [12/24] [Page 3] Processing MIDV-269
+2025-11-28 16:20:17,916 - __main__ - INFO - [13/24] [Page 5] Processing NSFS-035
+2025-11-28 16:20:24,487 - __main__ - INFO - [14/24] [Page 5] Processing NSFS-067
+2025-11-28 16:20:31,070 - __main__ - INFO - [15/24] [Page 5] Processing HMN-743
+2025-11-28 16:20:37,649 - __main__ - INFO - [16/24] [Page 6] Processing HMN-762
+2025-11-28 16:20:44,238 - __main__ - INFO - [17/24] [Page 6] Processing HMN-763
+2025-11-28 16:20:50,773 - __main__ - INFO - [18/24] [Page 6] Processing JUR-497
+2025-11-28 16:20:57,384 - __main__ - INFO - [19/24] [Page 6] Processing JUR-544
+2025-11-28 16:21:03,933 - __main__ - INFO - [20/24] [Page 6] Processing JUR-546
+2025-11-28 16:21:10,658 - __main__ - INFO - [21/24] [Page 6] Processing JUR-549
+2025-11-28 16:21:17,235 - __main__ - INFO - [22/24] [Page 6] Processing JUR-558
+2025-11-28 16:21:24,002 - __main__ - INFO - [23/24] [Page 6] Processing JUR-571
+2025-11-28 16:21:30,624 - __main__ - INFO - [24/24] [Page 6] Processing MIDE-201
+2025-11-28 16:21:31,664 - __main__ - INFO - Phase 1 completed: 24 entries processed
+2025-11-28 16:21:31,664 - __main__ - INFO - ==================================================
+2025-11-28 16:21:31,664 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-11-28 16:21:31,664 - __main__ - INFO - ==================================================
+2025-11-28 16:21:32,208 - utils.parser - INFO - [Page 1] Found 0 entries for phase 2
+2025-11-28 16:21:34,791 - utils.parser - INFO - [Page 2] Found 0 entries for phase 2
+2025-11-28 16:21:37,364 - utils.parser - INFO - [Page 3] Found 0 entries for phase 2
+2025-11-28 16:21:39,949 - utils.parser - INFO - [Page 4] Found 0 entries for phase 2
+2025-11-28 16:21:42,552 - utils.parser - INFO - [Page 5] Found 0 entries for phase 2
+2025-11-28 16:21:45,246 - utils.parser - INFO - [Page 6] Found 0 entries for phase 2
+2025-11-28 16:21:47,836 - utils.parser - INFO - [Page 7] Found 0 entries for phase 2
+2025-11-28 16:21:50,392 - utils.parser - INFO - [Page 8] Found 0 entries for phase 2
+2025-11-28 16:21:53,015 - utils.parser - INFO - [Page 9] Found 0 entries for phase 2
+2025-11-28 16:21:55,625 - utils.parser - INFO - [Page 10] Found 0 entries for phase 2
+2025-11-28 16:21:58,229 - utils.parser - INFO - [Page 11] Found 0 entries for phase 2
+2025-11-28 16:22:00,802 - utils.parser - INFO - [Page 12] Found 0 entries for phase 2
+2025-11-28 16:22:03,420 - utils.parser - INFO - [Page 13] Found 0 entries for phase 2
+2025-11-28 16:22:06,140 - utils.parser - INFO - [Page 14] Found 0 entries for phase 2
+2025-11-28 16:22:08,748 - utils.parser - INFO - [Page 15] Found 0 entries for phase 2
+2025-11-28 16:22:11,302 - utils.parser - INFO - [Page 16] Found 0 entries for phase 2
+2025-11-28 16:22:13,926 - utils.parser - INFO - [Page 17] Found 0 entries for phase 2
+2025-11-28 16:22:16,481 - utils.parser - INFO - [Page 18] Found 0 entries for phase 2
+2025-11-28 16:22:19,085 - utils.parser - INFO - [Page 19] Found 0 entries for phase 2
+2025-11-28 16:22:21,673 - utils.parser - INFO - [Page 20] Found 0 entries for phase 2
+2025-11-28 16:22:21,688 - __main__ - INFO - Phase 2 completed: 0 entries processed
+2025-11-28 16:22:21,689 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251128.csv
+2025-11-28 16:22:21,689 - __main__ - INFO - ==================================================
+2025-11-28 16:22:21,689 - __main__ - INFO - SUMMARY REPORT
+2025-11-28 16:22:21,689 - __main__ - INFO - ==================================================
+2025-11-28 16:22:21,689 - __main__ - INFO - Pages processed: 1 to 20
+2025-11-28 16:22:21,689 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-11-28 16:22:21,689 - __main__ - INFO - ==============================
+2025-11-28 16:22:21,689 - __main__ - INFO - PHASE 1 SUMMARY
+2025-11-28 16:22:21,689 - __main__ - INFO - ==============================
+2025-11-28 16:22:21,689 - __main__ - INFO - Phase 1 entries found: 24
+2025-11-28 16:22:21,689 - __main__ - INFO -   - Subtitle torrents: 24 (100.0%)
+2025-11-28 16:22:21,689 - __main__ - INFO -   - Hacked subtitle torrents: 7 (29.2%)
+2025-11-28 16:22:21,689 - __main__ - INFO -   - Hacked no-subtitle torrents: 2 (8.3%)
+2025-11-28 16:22:21,689 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
+2025-11-28 16:22:21,689 - __main__ - INFO - ==============================
+2025-11-28 16:22:21,689 - __main__ - INFO - PHASE 2 SUMMARY
+2025-11-28 16:22:21,689 - __main__ - INFO - ==============================
+2025-11-28 16:22:21,689 - __main__ - INFO - Phase 2 entries found: 0
+2025-11-28 16:22:21,689 - __main__ - INFO -   - No entries found in Phase 2
+2025-11-28 16:22:21,689 - __main__ - INFO - ==============================
+2025-11-28 16:22:21,689 - __main__ - INFO - OVERALL SUMMARY
+2025-11-28 16:22:21,689 - __main__ - INFO - ==============================
+2025-11-28 16:22:21,689 - __main__ - INFO - Total entries found: 24
+2025-11-28 16:22:21,689 - __main__ - INFO - Successfully processed: 24
+2025-11-28 16:22:21,689 - __main__ - INFO - Skipped already parsed in this session: 24
+2025-11-28 16:22:21,689 - __main__ - INFO - Skipped already parsed in previous runs: 3217
+2025-11-28 16:22:21,689 - __main__ - INFO - Current parsed links in memory: 24
+2025-11-28 16:22:21,689 - __main__ - INFO - Overall subtitle torrents: 24 (100.0%)
+2025-11-28 16:22:21,689 - __main__ - INFO - Overall hacked subtitle torrents: 7 (29.2%)
+2025-11-28 16:22:21,689 - __main__ - INFO - Overall hacked no-subtitle torrents: 2 (8.3%)
+2025-11-28 16:22:21,689 - __main__ - INFO - Overall no-subtitle torrents: 0 (0.0%)
+2025-11-28 16:22:21,689 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251128.csv
+2025-11-28 16:22:21,689 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-11-28 16:22:21,689 - __main__ - INFO - ==================================================
