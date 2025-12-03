@@ -1,12 +1,12 @@
-2025-12-02 19:00:21,756 - __main__ - INFO - Starting qBittorrent uploader...
-2025-12-02 19:00:21,756 - __main__ - INFO - Initializing proxy pool with 3 proxies...
-2025-12-02 19:00:21,756 - utils.proxy_ban_manager - INFO - No existing ban log found at logs/proxy_bans.csv
-2025-12-02 19:00:21,756 - utils.proxy_pool - INFO - Added proxy 'Miraculous Fortress' to pool (HTTP: http://***:***@139.xxx.xxx.231:12300, HTTPS: http://***:***@139.xxx.xxx.231:12300)
-2025-12-02 19:00:21,756 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
-2025-12-02 19:00:21,756 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-02 19:00:21,756 - __main__ - INFO - Proxy pool initialized successfully
-2025-12-02 19:00:21,756 - __main__ - INFO - PROXY POOL MODE for qBittorrent: 3 proxies with automatic failover
-2025-12-02 19:00:21,756 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251202.csv
-2025-12-02 19:00:21,756 - __main__ - ERROR - CSV file not found: Daily Report/Javdb_TodayTitle_20251202.csv
-2025-12-02 19:00:21,756 - __main__ - INFO - Make sure you have run the spider script first to generate the CSV file
-2025-12-02 19:00:21,756 - __main__ - WARNING - No torrent links found in CSV file
+2025-12-03 19:00:23,618 - __main__ - INFO - Starting qBittorrent uploader...
+2025-12-03 19:00:23,618 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-03 19:00:23,618 - utils.proxy_ban_manager - INFO - No existing ban log found at logs/proxy_bans.csv
+2025-12-03 19:00:23,618 - utils.proxy_pool - INFO - Added proxy 'Miraculous Fortress' to pool (HTTP: http://***:***@139.xxx.xxx.231:12300, HTTPS: http://***:***@139.xxx.xxx.231:12300)
+2025-12-03 19:00:23,619 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
+2025-12-03 19:00:23,619 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-03 19:00:23,619 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-03 19:00:23,619 - __main__ - INFO - PROXY POOL MODE for qBittorrent: 3 proxies with automatic failover
+2025-12-03 19:00:23,619 - __main__ - INFO - Looking for CSV file: Daily Report/Javdb_TodayTitle_20251203.csv
+2025-12-03 19:00:23,619 - __main__ - ERROR - CSV file not found: Daily Report/Javdb_TodayTitle_20251203.csv
+2025-12-03 19:00:23,619 - __main__ - INFO - Make sure you have run the spider script first to generate the CSV file
+2025-12-03 19:00:23,619 - __main__ - WARNING - No torrent links found in CSV file
