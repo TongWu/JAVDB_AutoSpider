@@ -1,251 +1,637 @@
-2025-12-06 21:20:49,971 - __main__ - INFO - Initializing proxy pool with 3 proxies...
-2025-12-06 21:20:49,971 - utils.proxy_ban_manager - INFO - No existing ban log found at logs/proxy_bans.csv
-2025-12-06 21:20:49,971 - utils.proxy_pool - INFO - Added proxy 'Miraculous Fortress' to pool (HTTP: http://***:***@139.xxx.xxx.231:12300, HTTPS: http://***:***@139.xxx.xxx.231:12300)
-2025-12-06 21:20:49,971 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
-2025-12-06 21:20:49,971 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-06 21:20:49,971 - __main__ - INFO - Proxy pool initialized successfully
-2025-12-06 21:20:49,971 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
-2025-12-06 21:20:49,971 - __main__ - INFO - Starting JavDB spider...
-2025-12-06 21:20:49,971 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
-2025-12-06 21:20:49,971 - __main__ - INFO - PROXY POOL MODE: 3 proxies configured with automatic failover
-2025-12-06 21:20:49,971 - __main__ - INFO - PROXY ENABLED: Using proxy for modules ['spider_index', 'spider_detail']
-2025-12-06 21:20:49,971 - __main__ - INFO - Validating history file integrity...
-2025-12-06 21:20:50,006 - utils.history_manager - INFO - Loaded 5373 previously parsed movies from history (phase 1: 3264, phase 2: 2109)
-2025-12-06 21:20:50,006 - __main__ - INFO - Initialized requests session
-2025-12-06 21:20:50,006 - __main__ - INFO - ==================================================
-2025-12-06 21:20:50,006 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-12-06 21:20:50,006 - __main__ - INFO - ==================================================
-2025-12-06 21:20:50,010 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=1 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x786f6a3168d0>: Failed to establish a new connection: [Errno 111] Connection refused')))
-2025-12-06 21:20:50,010 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (1/3)
-2025-12-06 21:20:50,010 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
-2025-12-06 21:20:50,010 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-06 21:20:51,824 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
-2025-12-06 21:20:54,328 - utils.parser - INFO - [Page 2] Found 0 entries for phase 1
-2025-12-06 21:20:56,891 - utils.parser - INFO - [Page 3] Found 11 entries for phase 1
-2025-12-06 21:20:59,425 - utils.parser - INFO - [Page 4] Found 4 entries for phase 1
-2025-12-06 21:21:01,914 - utils.parser - INFO - [Page 5] Found 0 entries for phase 1
-2025-12-06 21:21:04,497 - utils.parser - INFO - [Page 6] Found 7 entries for phase 1
-2025-12-06 21:21:06,995 - utils.parser - INFO - [Page 7] Found 8 entries for phase 1
-2025-12-06 21:21:09,488 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
-2025-12-06 21:21:12,021 - utils.parser - INFO - [Page 9] Found 0 entries for phase 1
-2025-12-06 21:21:14,573 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
-2025-12-06 21:21:17,107 - utils.parser - INFO - [Page 11] Found 0 entries for phase 1
-2025-12-06 21:21:19,630 - utils.parser - INFO - [Page 12] Found 0 entries for phase 1
-2025-12-06 21:21:22,189 - utils.parser - INFO - [Page 13] Found 0 entries for phase 1
-2025-12-06 21:21:24,727 - utils.parser - INFO - [Page 14] Found 0 entries for phase 1
-2025-12-06 21:21:27,261 - utils.parser - INFO - [Page 15] Found 0 entries for phase 1
-2025-12-06 21:21:29,817 - utils.parser - INFO - [Page 16] Found 0 entries for phase 1
-2025-12-06 21:21:32,347 - utils.parser - INFO - [Page 17] Found 0 entries for phase 1
-2025-12-06 21:21:34,855 - utils.parser - INFO - [Page 18] Found 0 entries for phase 1
-2025-12-06 21:21:37,512 - utils.parser - INFO - [Page 19] Found 0 entries for phase 1
-2025-12-06 21:21:40,076 - utils.parser - INFO - [Page 20] Found 0 entries for phase 1
-2025-12-06 21:21:45,557 - __main__ - INFO - [1/30] [Page 3] Processing CAWD-890
-2025-12-06 21:21:52,050 - __main__ - INFO - [2/30] [Page 3] Processing CAWD-895
-2025-12-06 21:21:58,551 - __main__ - INFO - [3/30] [Page 3] Processing CAWD-901
-2025-12-06 21:22:05,030 - __main__ - INFO - [4/30] [Page 3] Processing CAWD-903
-2025-12-06 21:22:11,510 - __main__ - INFO - [5/30] [Page 3] Processing CAWD-904
-2025-12-06 21:22:17,993 - __main__ - INFO - [6/30] [Page 3] Processing CEAD-696
-2025-12-06 21:22:24,470 - __main__ - INFO - [7/30] [Page 3] Processing CLOT-034
-2025-12-06 21:22:30,980 - __main__ - INFO - [8/30] [Page 3] Processing CLUB-893
-2025-12-06 21:22:37,444 - __main__ - INFO - [9/30] [Page 3] Processing CLUB-894
-2025-12-06 21:22:44,045 - __main__ - INFO - [10/30] [Page 3] Processing START-046
-2025-12-06 21:22:50,526 - __main__ - INFO - [11/30] [Page 3] Processing START-053
-2025-12-06 21:22:57,037 - __main__ - INFO - [12/30] [Page 4] Processing START-070
-2025-12-06 21:23:03,513 - __main__ - INFO - [13/30] [Page 4] Processing START-090
-2025-12-06 21:23:09,994 - __main__ - INFO - [14/30] [Page 4] Processing blackedraw.18.02.16
-2025-12-06 21:23:16,534 - __main__ - INFO - [15/30] [Page 4] Processing blackedraw.18.03.08
-2025-12-06 21:23:23,009 - __main__ - INFO - [16/30] [Page 6] Processing ADN-676
-2025-12-06 21:23:29,501 - __main__ - INFO - [17/30] [Page 6] Processing ADN-707
-2025-12-06 21:23:35,979 - __main__ - INFO - [18/30] [Page 6] Processing ADN-725
-2025-12-06 21:23:42,493 - __main__ - INFO - [19/30] [Page 6] Processing ADN-729
-2025-12-06 21:23:48,962 - __main__ - INFO - [20/30] [Page 6] Processing ADN-735
-2025-12-06 21:23:55,445 - __main__ - INFO - [21/30] [Page 6] Processing ADN-739
-2025-12-06 21:24:01,922 - __main__ - INFO - [22/30] [Page 6] Processing ADN-740
-2025-12-06 21:24:08,438 - __main__ - INFO - [23/30] [Page 7] Processing ADN-749
-2025-12-06 21:24:14,920 - __main__ - INFO - [24/30] [Page 7] Processing ATID-652
-2025-12-06 21:24:21,494 - __main__ - INFO - [25/30] [Page 7] Processing SSNI-992
-2025-12-06 21:24:27,968 - __main__ - INFO - [26/30] [Page 7] Processing STARS-508
-2025-12-06 21:24:34,496 - __main__ - INFO - [27/30] [Page 7] Processing START-008
-2025-12-06 21:24:40,986 - __main__ - INFO - [28/30] [Page 7] Processing START-039
-2025-12-06 21:24:47,494 - __main__ - INFO - [29/30] [Page 7] Processing blackedraw.18.02.06
-2025-12-06 21:24:53,969 - __main__ - INFO - [30/30] [Page 7] Processing blackedraw.18.02.11
-2025-12-06 21:24:54,996 - __main__ - INFO - Phase 1 completed: 30 entries processed
-2025-12-06 21:24:54,996 - __main__ - INFO - ==================================================
-2025-12-06 21:24:54,996 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-12-06 21:24:54,996 - __main__ - INFO - ==================================================
-2025-12-06 21:24:55,503 - utils.parser - INFO - [Page 1] Found 4 entries for phase 2
-2025-12-06 21:24:57,992 - utils.parser - INFO - [Page 2] Found 6 entries for phase 2
-2025-12-06 21:25:00,599 - utils.parser - INFO - [Page 3] Found 3 entries for phase 2
-2025-12-06 21:25:03,200 - utils.parser - INFO - [Page 4] Found 7 entries for phase 2
-2025-12-06 21:25:05,733 - utils.parser - INFO - [Page 5] Found 10 entries for phase 2
-2025-12-06 21:25:08,266 - utils.parser - INFO - [Page 6] Found 9 entries for phase 2
-2025-12-06 21:25:10,801 - utils.parser - INFO - [Page 7] Found 4 entries for phase 2
-2025-12-06 21:25:13,323 - utils.parser - INFO - [Page 8] Found 1 entries for phase 2
-2025-12-06 21:25:15,880 - utils.parser - INFO - [Page 9] Found 0 entries for phase 2
-2025-12-06 21:25:18,411 - utils.parser - INFO - [Page 10] Found 0 entries for phase 2
-2025-12-06 21:25:21,190 - utils.parser - INFO - [Page 11] Found 0 entries for phase 2
-2025-12-06 21:25:23,739 - utils.parser - INFO - [Page 12] Found 0 entries for phase 2
-2025-12-06 21:25:26,283 - utils.parser - INFO - [Page 13] Found 0 entries for phase 2
-2025-12-06 21:25:28,822 - utils.parser - INFO - [Page 14] Found 0 entries for phase 2
-2025-12-06 21:25:31,357 - utils.parser - INFO - [Page 15] Found 0 entries for phase 2
-2025-12-06 21:25:33,866 - utils.parser - INFO - [Page 16] Found 0 entries for phase 2
-2025-12-06 21:25:36,433 - utils.parser - INFO - [Page 17] Found 0 entries for phase 2
-2025-12-06 21:25:38,963 - utils.parser - INFO - [Page 18] Found 0 entries for phase 2
-2025-12-06 21:25:41,527 - utils.parser - INFO - [Page 19] Found 0 entries for phase 2
-2025-12-06 21:25:44,080 - utils.parser - INFO - [Page 20] Found 0 entries for phase 2
-2025-12-06 21:25:49,533 - __main__ - INFO - [1/44] [Page 1] Processing DASS-820
-2025-12-06 21:25:55,995 - __main__ - INFO - [2/44] [Page 1] Processing JUR-547
-2025-12-06 21:26:02,489 - __main__ - INFO - [3/44] [Page 1] Processing JUR-554
-2025-12-06 21:26:09,186 - __main__ - INFO - [4/44] [Page 1] Processing JUR-566
-2025-12-06 21:26:15,484 - __main__ - INFO - [5/44] [Page 2] Processing SNOS-008
-2025-12-06 21:26:21,940 - __main__ - INFO - [6/44] [Page 2] Processing SNOS-022
-2025-12-06 21:26:28,417 - __main__ - INFO - [7/44] [Page 2] Processing IPZZ-727
-2025-12-06 21:26:34,924 - __main__ - INFO - [8/44] [Page 2] Processing IPZZ-730
-2025-12-06 21:26:41,400 - __main__ - INFO - [9/44] [Page 2] Processing IPZZ-744
-2025-12-06 21:26:47,906 - __main__ - INFO - [10/44] [Page 2] Processing SNOS-014
-2025-12-06 21:26:54,391 - __main__ - INFO - [11/44] [Page 3] Processing IPZZ-718
-2025-12-06 21:27:00,876 - __main__ - INFO - [12/44] [Page 3] Processing NGOD-305
-2025-12-06 21:27:07,375 - __main__ - INFO - [13/44] [Page 3] Processing DOKS-653
-2025-12-06 21:27:13,855 - __main__ - INFO - [14/44] [Page 4] Processing SONE-991
-2025-12-06 21:27:20,331 - __main__ - INFO - [15/44] [Page 4] Processing DASS-770
-2025-12-06 21:27:26,803 - __main__ - INFO - [16/44] [Page 4] Processing JUR-562
-2025-12-06 21:27:33,284 - __main__ - INFO - [17/44] [Page 4] Processing DASS-812
-2025-12-06 21:27:39,770 - __main__ - INFO - [18/44] [Page 4] Processing JUR-530
-2025-12-06 21:27:46,278 - __main__ - INFO - [19/44] [Page 4] Processing JUR-548
-2025-12-06 21:27:52,766 - __main__ - INFO - [20/44] [Page 4] Processing IPZZ-756
-2025-12-06 21:27:59,225 - __main__ - INFO - [21/44] [Page 5] Processing SNOS-040
-2025-12-06 21:28:05,703 - __main__ - INFO - [22/44] [Page 5] Processing JUR-531
-2025-12-06 21:28:12,174 - __main__ - INFO - [23/44] [Page 5] Processing JUR-538
-2025-12-06 21:28:18,680 - __main__ - INFO - [24/44] [Page 5] Processing ROE-393
-2025-12-06 21:28:25,217 - __main__ - INFO - [25/44] [Page 5] Processing IPZZ-719
-2025-12-06 21:28:31,674 - __main__ - INFO - [26/44] [Page 5] Processing SNOS-006
-2025-12-06 21:28:38,135 - __main__ - INFO - [27/44] [Page 5] Processing DASS-777
-2025-12-06 21:28:44,606 - __main__ - INFO - [28/44] [Page 5] Processing ROE-428
-2025-12-06 21:28:51,098 - __main__ - INFO - [29/44] [Page 5] Processing SONE-992
-2025-12-06 21:28:57,631 - __main__ - INFO - [30/44] [Page 5] Processing IPZZ-729
-2025-12-06 21:29:04,115 - __main__ - INFO - [31/44] [Page 6] Processing RKI-732
-2025-12-06 21:29:10,343 - utils.parser - WARNING - [P2-32] No copy button found for video code
-2025-12-06 21:29:10,343 - utils.parser - WARNING - [P2-32] No magnets content found in detail page
-2025-12-06 21:29:10,343 - utils.magnet_extractor - WARNING - [P2-32] No suitable magnet found
-2025-12-06 21:29:10,343 - __main__ - INFO - [32/44] [Page 6] Processing 
-2025-12-06 21:29:16,545 - utils.parser - WARNING - [P2-33] No copy button found for video code
-2025-12-06 21:29:16,545 - utils.parser - WARNING - [P2-33] No magnets content found in detail page
-2025-12-06 21:29:16,545 - utils.magnet_extractor - WARNING - [P2-33] No suitable magnet found
-2025-12-06 21:29:16,545 - __main__ - INFO - [33/44] [Page 6] Processing 
-2025-12-06 21:29:22,747 - utils.parser - WARNING - [P2-34] No copy button found for video code
-2025-12-06 21:29:22,747 - utils.parser - WARNING - [P2-34] No magnets content found in detail page
-2025-12-06 21:29:22,747 - utils.magnet_extractor - WARNING - [P2-34] No suitable magnet found
-2025-12-06 21:29:22,747 - __main__ - INFO - [34/44] [Page 6] Processing 
-2025-12-06 21:29:28,966 - utils.parser - WARNING - [P2-35] No copy button found for video code
-2025-12-06 21:29:28,966 - utils.parser - WARNING - [P2-35] No magnets content found in detail page
-2025-12-06 21:29:28,966 - utils.magnet_extractor - WARNING - [P2-35] No suitable magnet found
-2025-12-06 21:29:28,966 - __main__ - INFO - [35/44] [Page 6] Processing 
-2025-12-06 21:29:35,159 - utils.parser - WARNING - [P2-36] No copy button found for video code
-2025-12-06 21:29:35,159 - utils.parser - WARNING - [P2-36] No magnets content found in detail page
-2025-12-06 21:29:35,159 - utils.magnet_extractor - WARNING - [P2-36] No suitable magnet found
-2025-12-06 21:29:35,159 - __main__ - INFO - [36/44] [Page 6] Processing 
-2025-12-06 21:29:41,354 - utils.parser - WARNING - [P2-37] No copy button found for video code
-2025-12-06 21:29:41,354 - utils.parser - WARNING - [P2-37] No magnets content found in detail page
-2025-12-06 21:29:41,354 - utils.magnet_extractor - WARNING - [P2-37] No suitable magnet found
-2025-12-06 21:29:41,354 - __main__ - INFO - [37/44] [Page 6] Processing 
-2025-12-06 21:29:47,560 - utils.parser - WARNING - [P2-38] No copy button found for video code
-2025-12-06 21:29:47,560 - utils.parser - WARNING - [P2-38] No magnets content found in detail page
-2025-12-06 21:29:47,560 - utils.magnet_extractor - WARNING - [P2-38] No suitable magnet found
-2025-12-06 21:29:47,560 - __main__ - INFO - [38/44] [Page 6] Processing 
-2025-12-06 21:29:53,763 - utils.parser - WARNING - [P2-39] No copy button found for video code
-2025-12-06 21:29:53,763 - utils.parser - WARNING - [P2-39] No magnets content found in detail page
-2025-12-06 21:29:53,763 - utils.magnet_extractor - WARNING - [P2-39] No suitable magnet found
-2025-12-06 21:29:53,763 - __main__ - INFO - [39/44] [Page 6] Processing 
-2025-12-06 21:29:59,958 - utils.parser - WARNING - [P2-40] No copy button found for video code
-2025-12-06 21:29:59,958 - utils.parser - WARNING - [P2-40] No magnets content found in detail page
-2025-12-06 21:29:59,958 - utils.magnet_extractor - WARNING - [P2-40] No suitable magnet found
-2025-12-06 21:29:59,958 - __main__ - INFO - [40/44] [Page 7] Processing 
-2025-12-06 21:30:06,165 - utils.parser - WARNING - [P2-41] No copy button found for video code
-2025-12-06 21:30:06,165 - utils.parser - WARNING - [P2-41] No magnets content found in detail page
-2025-12-06 21:30:06,165 - utils.magnet_extractor - WARNING - [P2-41] No suitable magnet found
-2025-12-06 21:30:06,166 - __main__ - INFO - [41/44] [Page 7] Processing 
-2025-12-06 21:30:12,370 - utils.parser - WARNING - [P2-42] No copy button found for video code
-2025-12-06 21:30:12,370 - utils.parser - WARNING - [P2-42] No magnets content found in detail page
-2025-12-06 21:30:12,370 - utils.magnet_extractor - WARNING - [P2-42] No suitable magnet found
-2025-12-06 21:30:12,370 - __main__ - INFO - [42/44] [Page 7] Processing 
-2025-12-06 21:30:18,768 - utils.parser - WARNING - [P2-43] No copy button found for video code
-2025-12-06 21:30:18,768 - utils.parser - WARNING - [P2-43] No magnets content found in detail page
-2025-12-06 21:30:18,768 - utils.magnet_extractor - WARNING - [P2-43] No suitable magnet found
-2025-12-06 21:30:18,768 - __main__ - INFO - [43/44] [Page 7] Processing 
-2025-12-06 21:30:24,976 - utils.parser - WARNING - [P2-44] No copy button found for video code
-2025-12-06 21:30:24,976 - utils.parser - WARNING - [P2-44] No magnets content found in detail page
-2025-12-06 21:30:24,976 - utils.magnet_extractor - WARNING - [P2-44] No suitable magnet found
-2025-12-06 21:30:24,976 - __main__ - INFO - [44/44] [Page 8] Processing 
-2025-12-06 21:30:25,976 - __main__ - INFO - Phase 2 completed: 31 entries processed
-2025-12-06 21:30:25,976 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251206.csv
-2025-12-06 21:30:25,977 - __main__ - INFO - ==================================================
-2025-12-06 21:30:25,977 - __main__ - INFO - SUMMARY REPORT
-2025-12-06 21:30:25,977 - __main__ - INFO - ==================================================
-2025-12-06 21:30:25,977 - __main__ - INFO - Pages processed: 1 to 20
-2025-12-06 21:30:25,977 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-12-06 21:30:25,977 - __main__ - INFO - ==============================
-2025-12-06 21:30:25,977 - __main__ - INFO - PHASE 1 SUMMARY
-2025-12-06 21:30:25,977 - __main__ - INFO - ==============================
-2025-12-06 21:30:25,977 - __main__ - INFO - Phase 1 entries found: 30
-2025-12-06 21:30:25,977 - __main__ - INFO -   - Subtitle torrents: 29 (96.7%)
-2025-12-06 21:30:25,977 - __main__ - INFO -   - Hacked subtitle torrents: 10 (33.3%)
-2025-12-06 21:30:25,977 - __main__ - INFO -   - Hacked no-subtitle torrents: 1 (3.3%)
-2025-12-06 21:30:25,977 - __main__ - INFO -   - No-subtitle torrents: 1 (3.3%)
-2025-12-06 21:30:25,977 - __main__ - INFO - ==============================
-2025-12-06 21:30:25,977 - __main__ - INFO - PHASE 2 SUMMARY
-2025-12-06 21:30:25,977 - __main__ - INFO - ==============================
-2025-12-06 21:30:25,977 - __main__ - INFO - Phase 2 entries found: 31
-2025-12-06 21:30:25,977 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
-2025-12-06 21:30:25,977 - __main__ - INFO -   - Hacked subtitle torrents: 1 (3.2%)
-2025-12-06 21:30:25,977 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
-2025-12-06 21:30:25,977 - __main__ - INFO -   - No-subtitle torrents: 31 (100.0%)
-2025-12-06 21:30:25,977 - __main__ - INFO - ==============================
-2025-12-06 21:30:25,977 - __main__ - INFO - OVERALL SUMMARY
-2025-12-06 21:30:25,977 - __main__ - INFO - ==============================
-2025-12-06 21:30:25,977 - __main__ - INFO - Total entries found: 61
-2025-12-06 21:30:25,977 - __main__ - INFO - Successfully processed: 61
-2025-12-06 21:30:25,977 - __main__ - INFO - Skipped already parsed in this session: 74
-2025-12-06 21:30:25,977 - __main__ - INFO - Skipped already parsed in previous runs: 3264
-2025-12-06 21:30:25,977 - __main__ - INFO - Current parsed links in memory: 74
-2025-12-06 21:30:25,977 - __main__ - INFO - Overall subtitle torrents: 29 (47.5%)
-2025-12-06 21:30:25,977 - __main__ - INFO - Overall hacked subtitle torrents: 11 (18.0%)
-2025-12-06 21:30:25,977 - __main__ - INFO - Overall hacked no-subtitle torrents: 1 (1.6%)
-2025-12-06 21:30:25,977 - __main__ - INFO - Overall no-subtitle torrents: 32 (52.5%)
-2025-12-06 21:30:25,977 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251206.csv
-2025-12-06 21:30:25,977 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-12-06 21:30:25,977 - __main__ - INFO - ==================================================
-2025-12-06 21:30:25,977 - __main__ - INFO - 
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO - ==================================================
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO - PROXY POOL STATISTICS
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO - ==================================================
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO - Total proxies: 3
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO - Available proxies: 3
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO - In cooldown: 0
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO - No-proxy mode: False
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO - 
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO - Individual proxy statistics:
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO -   [Standby] Miraculous Fortress:
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO -     - Total requests: 1
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO -     - Success rate: 0.0%
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO -     - Consecutive failures: 1
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO -     - Last success: Never
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO -     - Last failure: 2025-12-06 21:20:50
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO -   [ACTIVE] Singapore-ARM1:
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO -     - Total requests: 114
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO -     - Success rate: 100.0%
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO -     - Consecutive failures: 0
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO -     - Last success: 2025-12-06 21:30:19
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO -     - Last failure: Never
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO -   [Standby] Singapore-ARM2:
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO -     - Total requests: 0
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO -     - Success rate: 0.0%
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO -     - Consecutive failures: 0
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO -     - Last success: Never
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO -     - Last failure: Never
-2025-12-06 21:30:25,977 - utils.proxy_pool - INFO - ==================================================
-2025-12-06 21:30:25,977 - __main__ - INFO - 
-2025-12-06 21:30:25,977 - __main__ - INFO - ==================================================
-2025-12-06 21:30:25,977 - __main__ - INFO - PROXY BAN STATUS
-2025-12-06 21:30:25,977 - __main__ - INFO - ==================================================
-2025-12-06 21:30:25,977 - __main__ - INFO - No proxies currently banned.
-2025-12-06 21:30:25,977 - __main__ - INFO - ==================================================
+2025-12-06 22:47:28,846 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-06 22:47:28,846 - utils.proxy_ban_manager - INFO - No existing ban log found at logs/proxy_bans.csv
+2025-12-06 22:47:28,846 - utils.proxy_pool - INFO - Added proxy 'Miraculous Fortress' to pool (HTTP: http://***:***@139.xxx.xxx.231:12300, HTTPS: http://***:***@139.xxx.xxx.231:12300)
+2025-12-06 22:47:28,846 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
+2025-12-06 22:47:28,846 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-06 22:47:28,846 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-06 22:47:28,846 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
+2025-12-06 22:47:28,846 - __main__ - INFO - Starting JavDB spider...
+2025-12-06 22:47:28,846 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
+2025-12-06 22:47:28,846 - __main__ - INFO - IGNORE RELEASE DATE: Will process all entries regardless of today/yesterday tags
+2025-12-06 22:47:28,846 - __main__ - INFO - PROXY POOL MODE: 3 proxies configured with automatic failover
+2025-12-06 22:47:28,846 - __main__ - INFO - PROXY ENABLED: Using proxy for modules ['spider_index', 'spider_detail']
+2025-12-06 22:47:28,846 - __main__ - INFO - Validating history file integrity...
+2025-12-06 22:47:28,880 - utils.history_manager - INFO - Loaded 5433 previously parsed movies from history (phase 1: 3294, phase 2: 2139)
+2025-12-06 22:47:28,880 - __main__ - INFO - Initialized requests session
+2025-12-06 22:47:28,880 - __main__ - INFO - ==================================================
+2025-12-06 22:47:28,880 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-12-06 22:47:28,880 - __main__ - INFO - ==================================================
+2025-12-06 22:47:28,884 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=1 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7c602780b3b0>: Failed to establish a new connection: [Errno 111] Connection refused')))
+2025-12-06 22:47:28,884 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (1/3)
+2025-12-06 22:47:28,884 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
+2025-12-06 22:47:28,885 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-06 22:47:30,409 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
+2025-12-06 22:47:30,410 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
+2025-12-06 22:47:32,921 - utils.parser - INFO - [Page 2] New releases filter disabled - will process all entries
+2025-12-06 22:47:32,922 - utils.parser - INFO - [Page 2] Found 0 entries for phase 1
+2025-12-06 22:47:35,504 - utils.parser - INFO - [Page 3] New releases filter disabled - will process all entries
+2025-12-06 22:47:35,506 - utils.parser - INFO - [Page 3] Found 11 entries for phase 1
+2025-12-06 22:47:38,006 - utils.parser - INFO - [Page 4] New releases filter disabled - will process all entries
+2025-12-06 22:47:38,007 - utils.parser - INFO - [Page 4] Found 4 entries for phase 1
+2025-12-06 22:47:40,545 - utils.parser - INFO - [Page 5] New releases filter disabled - will process all entries
+2025-12-06 22:47:40,546 - utils.parser - INFO - [Page 5] Found 0 entries for phase 1
+2025-12-06 22:47:43,118 - utils.parser - INFO - [Page 6] New releases filter disabled - will process all entries
+2025-12-06 22:47:43,120 - utils.parser - INFO - [Page 6] Found 7 entries for phase 1
+2025-12-06 22:47:45,641 - utils.parser - INFO - [Page 7] New releases filter disabled - will process all entries
+2025-12-06 22:47:45,644 - utils.parser - INFO - [Page 7] Found 8 entries for phase 1
+2025-12-06 22:47:48,169 - utils.parser - INFO - [Page 8] New releases filter disabled - will process all entries
+2025-12-06 22:47:48,170 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
+2025-12-06 22:47:50,724 - utils.parser - INFO - [Page 9] New releases filter disabled - will process all entries
+2025-12-06 22:47:50,726 - utils.parser - INFO - [Page 9] Found 15 entries for phase 1
+2025-12-06 22:47:53,232 - utils.parser - INFO - [Page 10] New releases filter disabled - will process all entries
+2025-12-06 22:47:53,233 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
+2025-12-06 22:47:55,848 - utils.parser - INFO - [Page 11] New releases filter disabled - will process all entries
+2025-12-06 22:47:55,850 - utils.parser - INFO - [Page 11] Found 11 entries for phase 1
+2025-12-06 22:47:58,381 - utils.parser - INFO - [Page 12] New releases filter disabled - will process all entries
+2025-12-06 22:47:58,383 - utils.parser - INFO - [Page 12] Found 1 entries for phase 1
+2025-12-06 22:48:00,723 - utils.parser - INFO - [Page 13] New releases filter disabled - will process all entries
+2025-12-06 22:48:00,725 - utils.parser - INFO - [Page 13] Found 14 entries for phase 1
+2025-12-06 22:48:03,286 - utils.parser - INFO - [Page 14] New releases filter disabled - will process all entries
+2025-12-06 22:48:03,289 - utils.parser - INFO - [Page 14] Found 9 entries for phase 1
+2025-12-06 22:48:05,873 - utils.parser - INFO - [Page 15] New releases filter disabled - will process all entries
+2025-12-06 22:48:05,875 - utils.parser - INFO - [Page 15] Found 0 entries for phase 1
+2025-12-06 22:48:08,434 - utils.parser - INFO - [Page 16] New releases filter disabled - will process all entries
+2025-12-06 22:48:08,437 - utils.parser - INFO - [Page 16] Found 11 entries for phase 1
+2025-12-06 22:48:11,021 - utils.parser - INFO - [Page 17] New releases filter disabled - will process all entries
+2025-12-06 22:48:11,022 - utils.parser - INFO - [Page 17] Found 3 entries for phase 1
+2025-12-06 22:48:13,566 - utils.parser - INFO - [Page 18] New releases filter disabled - will process all entries
+2025-12-06 22:48:13,568 - utils.parser - INFO - [Page 18] Found 14 entries for phase 1
+2025-12-06 22:48:16,096 - utils.parser - INFO - [Page 19] New releases filter disabled - will process all entries
+2025-12-06 22:48:16,098 - utils.parser - INFO - [Page 19] Found 0 entries for phase 1
+2025-12-06 22:48:18,636 - utils.parser - INFO - [Page 20] New releases filter disabled - will process all entries
+2025-12-06 22:48:18,638 - utils.parser - INFO - [Page 20] Found 12 entries for phase 1
+2025-12-06 22:48:24,123 - __main__ - INFO - [1/120] [Page 3] Processing CAWD-890
+2025-12-06 22:48:29,607 - __main__ - INFO - [2/120] [Page 3] Processing CAWD-895
+2025-12-06 22:48:35,076 - __main__ - INFO - [3/120] [Page 3] Processing CAWD-901
+2025-12-06 22:48:40,548 - __main__ - INFO - [4/120] [Page 3] Processing CAWD-903
+2025-12-06 22:48:46,013 - __main__ - INFO - [5/120] [Page 3] Processing CAWD-904
+2025-12-06 22:48:51,489 - __main__ - INFO - [6/120] [Page 3] Processing CEAD-696
+2025-12-06 22:48:56,952 - __main__ - INFO - [7/120] [Page 3] Processing CLOT-034
+2025-12-06 22:49:02,395 - __main__ - INFO - [8/120] [Page 3] Processing CLUB-893
+2025-12-06 22:49:07,807 - __main__ - INFO - [9/120] [Page 3] Processing CLUB-894
+2025-12-06 22:49:13,246 - __main__ - INFO - [10/120] [Page 3] Processing START-046
+2025-12-06 22:49:18,692 - __main__ - INFO - [11/120] [Page 3] Processing START-053
+2025-12-06 22:49:24,140 - __main__ - INFO - [12/120] [Page 4] Processing START-070
+2025-12-06 22:49:29,565 - __main__ - INFO - [13/120] [Page 4] Processing START-090
+2025-12-06 22:49:35,024 - __main__ - INFO - [14/120] [Page 4] Processing blackedraw.18.02.16
+2025-12-06 22:49:40,452 - __main__ - INFO - [15/120] [Page 4] Processing blackedraw.18.03.08
+2025-12-06 22:49:45,919 - __main__ - INFO - [16/120] [Page 6] Processing ADN-676
+2025-12-06 22:49:51,356 - __main__ - INFO - [17/120] [Page 6] Processing ADN-707
+2025-12-06 22:49:56,773 - __main__ - INFO - [18/120] [Page 6] Processing ADN-725
+2025-12-06 22:50:02,245 - __main__ - INFO - [19/120] [Page 6] Processing ADN-729
+2025-12-06 22:50:07,523 - __main__ - INFO - [20/120] [Page 6] Processing ADN-735
+2025-12-06 22:50:12,965 - __main__ - INFO - [21/120] [Page 6] Processing ADN-739
+2025-12-06 22:50:18,425 - __main__ - INFO - [22/120] [Page 6] Processing ADN-740
+2025-12-06 22:50:23,915 - __main__ - INFO - [23/120] [Page 7] Processing ADN-749
+2025-12-06 22:50:29,488 - __main__ - INFO - [24/120] [Page 7] Processing ATID-652
+2025-12-06 22:50:35,000 - __main__ - INFO - [25/120] [Page 7] Processing SSNI-992
+2025-12-06 22:50:40,446 - __main__ - INFO - [26/120] [Page 7] Processing STARS-508
+2025-12-06 22:50:45,938 - __main__ - INFO - [27/120] [Page 7] Processing START-008
+2025-12-06 22:50:51,396 - __main__ - INFO - [28/120] [Page 7] Processing START-039
+2025-12-06 22:50:56,873 - __main__ - INFO - [29/120] [Page 7] Processing blackedraw.18.02.06
+2025-12-06 22:51:02,383 - __main__ - INFO - [30/120] [Page 7] Processing blackedraw.18.02.11
+2025-12-06 22:51:09,282 - __main__ - INFO - [31/120] [Page 9] Processing MIAB-578
+2025-12-06 22:51:15,814 - __main__ - INFO - [32/120] [Page 9] Processing MIDA-387
+2025-12-06 22:51:22,281 - __main__ - INFO - [33/120] [Page 9] Processing MIDA-410
+2025-12-06 22:51:28,766 - __main__ - INFO - [34/120] [Page 9] Processing MIDA-420
+2025-12-06 22:51:35,277 - __main__ - INFO - [35/120] [Page 9] Processing MIDA-424
+2025-12-06 22:51:41,815 - __main__ - INFO - [36/120] [Page 9] Processing MIDA-426
+2025-12-06 22:51:48,288 - __main__ - INFO - [37/120] [Page 9] Processing MIDA-428
+2025-12-06 22:51:54,787 - __main__ - INFO - [38/120] [Page 9] Processing MIDA-431
+2025-12-06 22:52:01,278 - __main__ - INFO - [39/120] [Page 9] Processing MIDA-461
+2025-12-06 22:52:07,769 - __main__ - INFO - [40/120] [Page 9] Processing SONE-563
+2025-12-06 22:52:13,236 - __main__ - INFO - [41/120] [Page 9] Processing SONE-687
+2025-12-06 22:52:18,760 - __main__ - INFO - [42/120] [Page 9] Processing SSIS-361
+2025-12-06 22:52:24,214 - __main__ - INFO - [43/120] [Page 9] Processing SSIS-387
+2025-12-06 22:52:29,685 - __main__ - INFO - [44/120] [Page 9] Processing blackedraw.17.11.08
+2025-12-06 22:52:36,161 - __main__ - INFO - [45/120] [Page 9] Processing blackedraw.18.02.01
+2025-12-06 22:52:42,637 - __main__ - INFO - [46/120] [Page 11] Processing ABF-287
+2025-12-06 22:52:49,206 - __main__ - INFO - [47/120] [Page 11] Processing ABF-290
+2025-12-06 22:52:55,747 - __main__ - INFO - [48/120] [Page 11] Processing ABF-292
+2025-12-06 22:53:02,240 - __main__ - INFO - [49/120] [Page 11] Processing ACHJ-074
+2025-12-06 22:53:08,742 - __main__ - INFO - [50/120] [Page 11] Processing ADN-746
+2025-12-06 22:53:15,226 - __main__ - INFO - [51/120] [Page 11] Processing ALDN-528
+2025-12-06 22:53:21,462 - utils.parser - WARNING - [52] No copy button found for video code
+2025-12-06 22:53:21,462 - utils.parser - WARNING - [52] No magnets content found in detail page
+2025-12-06 22:53:21,462 - utils.magnet_extractor - WARNING - [52] No suitable magnet found
+2025-12-06 22:53:21,462 - __main__ - INFO - [52/120] [Page 11] Processing 
+2025-12-06 22:53:27,675 - utils.parser - WARNING - [53] No copy button found for video code
+2025-12-06 22:53:27,675 - utils.parser - WARNING - [53] No magnets content found in detail page
+2025-12-06 22:53:27,675 - utils.magnet_extractor - WARNING - [53] No suitable magnet found
+2025-12-06 22:53:27,675 - __main__ - INFO - [53/120] [Page 11] Processing 
+2025-12-06 22:53:33,887 - utils.parser - WARNING - [54] No copy button found for video code
+2025-12-06 22:53:33,888 - utils.parser - WARNING - [54] No magnets content found in detail page
+2025-12-06 22:53:33,888 - utils.magnet_extractor - WARNING - [54] No suitable magnet found
+2025-12-06 22:53:33,888 - __main__ - INFO - [54/120] [Page 11] Processing 
+2025-12-06 22:53:40,269 - utils.parser - WARNING - [55] No copy button found for video code
+2025-12-06 22:53:40,270 - utils.parser - WARNING - [55] No magnets content found in detail page
+2025-12-06 22:53:40,270 - utils.magnet_extractor - WARNING - [55] No suitable magnet found
+2025-12-06 22:53:40,270 - __main__ - INFO - [55/120] [Page 11] Processing 
+2025-12-06 22:53:46,461 - utils.parser - WARNING - [56] No copy button found for video code
+2025-12-06 22:53:46,461 - utils.parser - WARNING - [56] No magnets content found in detail page
+2025-12-06 22:53:46,461 - utils.magnet_extractor - WARNING - [56] No suitable magnet found
+2025-12-06 22:53:46,461 - __main__ - INFO - [56/120] [Page 11] Processing 
+2025-12-06 22:53:52,662 - utils.parser - WARNING - [57] No copy button found for video code
+2025-12-06 22:53:52,662 - utils.parser - WARNING - [57] No magnets content found in detail page
+2025-12-06 22:53:52,662 - utils.magnet_extractor - WARNING - [57] No suitable magnet found
+2025-12-06 22:53:52,662 - __main__ - INFO - [57/120] [Page 12] Processing 
+2025-12-06 22:53:57,872 - utils.parser - WARNING - [58] No copy button found for video code
+2025-12-06 22:53:57,872 - utils.parser - WARNING - [58] No magnets content found in detail page
+2025-12-06 22:53:57,874 - utils.magnet_extractor - WARNING - [58] No suitable magnet found
+2025-12-06 22:53:57,874 - __main__ - INFO - [58/120] [Page 13] Processing 
+2025-12-06 22:54:04,081 - utils.parser - WARNING - [59] No copy button found for video code
+2025-12-06 22:54:04,081 - utils.parser - WARNING - [59] No magnets content found in detail page
+2025-12-06 22:54:04,081 - utils.magnet_extractor - WARNING - [59] No suitable magnet found
+2025-12-06 22:54:04,081 - __main__ - INFO - [59/120] [Page 13] Processing 
+2025-12-06 22:54:10,279 - utils.parser - WARNING - [60] No copy button found for video code
+2025-12-06 22:54:10,279 - utils.parser - WARNING - [60] No magnets content found in detail page
+2025-12-06 22:54:10,279 - utils.magnet_extractor - WARNING - [60] No suitable magnet found
+2025-12-06 22:54:10,279 - __main__ - INFO - [60/120] [Page 13] Processing 
+2025-12-06 22:54:16,477 - utils.parser - WARNING - [61] No copy button found for video code
+2025-12-06 22:54:16,477 - utils.parser - WARNING - [61] No magnets content found in detail page
+2025-12-06 22:54:16,477 - utils.magnet_extractor - WARNING - [61] No suitable magnet found
+2025-12-06 22:54:16,477 - __main__ - INFO - [61/120] [Page 13] Processing 
+2025-12-06 22:54:22,673 - utils.parser - WARNING - [62] No copy button found for video code
+2025-12-06 22:54:22,673 - utils.parser - WARNING - [62] No magnets content found in detail page
+2025-12-06 22:54:22,673 - utils.magnet_extractor - WARNING - [62] No suitable magnet found
+2025-12-06 22:54:22,673 - __main__ - INFO - [62/120] [Page 13] Processing 
+2025-12-06 22:54:28,872 - utils.parser - WARNING - [63] No copy button found for video code
+2025-12-06 22:54:28,872 - utils.parser - WARNING - [63] No magnets content found in detail page
+2025-12-06 22:54:28,872 - utils.magnet_extractor - WARNING - [63] No suitable magnet found
+2025-12-06 22:54:28,872 - __main__ - INFO - [63/120] [Page 13] Processing 
+2025-12-06 22:54:35,082 - utils.parser - WARNING - [64] No copy button found for video code
+2025-12-06 22:54:35,082 - utils.parser - WARNING - [64] No magnets content found in detail page
+2025-12-06 22:54:35,082 - utils.magnet_extractor - WARNING - [64] No suitable magnet found
+2025-12-06 22:54:35,082 - __main__ - INFO - [64/120] [Page 13] Processing 
+2025-12-06 22:54:41,289 - utils.parser - WARNING - [65] No copy button found for video code
+2025-12-06 22:54:41,289 - utils.parser - WARNING - [65] No magnets content found in detail page
+2025-12-06 22:54:41,289 - utils.magnet_extractor - WARNING - [65] No suitable magnet found
+2025-12-06 22:54:41,289 - __main__ - INFO - [65/120] [Page 13] Processing 
+2025-12-06 22:54:47,502 - utils.parser - WARNING - [66] No copy button found for video code
+2025-12-06 22:54:47,502 - utils.parser - WARNING - [66] No magnets content found in detail page
+2025-12-06 22:54:47,502 - utils.magnet_extractor - WARNING - [66] No suitable magnet found
+2025-12-06 22:54:47,502 - __main__ - INFO - [66/120] [Page 13] Processing 
+2025-12-06 22:54:53,702 - utils.parser - WARNING - [67] No copy button found for video code
+2025-12-06 22:54:53,702 - utils.parser - WARNING - [67] No magnets content found in detail page
+2025-12-06 22:54:53,702 - utils.magnet_extractor - WARNING - [67] No suitable magnet found
+2025-12-06 22:54:53,702 - __main__ - INFO - [67/120] [Page 13] Processing 
+2025-12-06 22:54:58,912 - utils.parser - WARNING - [68] No copy button found for video code
+2025-12-06 22:54:58,912 - utils.parser - WARNING - [68] No magnets content found in detail page
+2025-12-06 22:54:58,912 - utils.magnet_extractor - WARNING - [68] No suitable magnet found
+2025-12-06 22:54:58,912 - __main__ - INFO - [68/120] [Page 13] Processing 
+2025-12-06 22:55:04,116 - utils.parser - WARNING - [69] No copy button found for video code
+2025-12-06 22:55:04,116 - utils.parser - WARNING - [69] No magnets content found in detail page
+2025-12-06 22:55:04,116 - utils.magnet_extractor - WARNING - [69] No suitable magnet found
+2025-12-06 22:55:04,116 - __main__ - INFO - [69/120] [Page 13] Processing 
+2025-12-06 22:55:09,321 - utils.parser - WARNING - [70] No copy button found for video code
+2025-12-06 22:55:09,321 - utils.parser - WARNING - [70] No magnets content found in detail page
+2025-12-06 22:55:09,321 - utils.magnet_extractor - WARNING - [70] No suitable magnet found
+2025-12-06 22:55:09,321 - __main__ - INFO - [70/120] [Page 13] Processing 
+2025-12-06 22:55:14,524 - utils.parser - WARNING - [71] No copy button found for video code
+2025-12-06 22:55:14,524 - utils.parser - WARNING - [71] No magnets content found in detail page
+2025-12-06 22:55:14,524 - utils.magnet_extractor - WARNING - [71] No suitable magnet found
+2025-12-06 22:55:14,524 - __main__ - INFO - [71/120] [Page 13] Processing 
+2025-12-06 22:55:19,893 - utils.parser - WARNING - [72] No copy button found for video code
+2025-12-06 22:55:19,893 - utils.parser - WARNING - [72] No magnets content found in detail page
+2025-12-06 22:55:19,893 - utils.magnet_extractor - WARNING - [72] No suitable magnet found
+2025-12-06 22:55:19,893 - __main__ - INFO - [72/120] [Page 14] Processing 
+2025-12-06 22:55:26,103 - utils.parser - WARNING - [73] No copy button found for video code
+2025-12-06 22:55:26,103 - utils.parser - WARNING - [73] No magnets content found in detail page
+2025-12-06 22:55:26,103 - utils.magnet_extractor - WARNING - [73] No suitable magnet found
+2025-12-06 22:55:26,103 - __main__ - INFO - [73/120] [Page 14] Processing 
+2025-12-06 22:55:32,298 - utils.parser - WARNING - [74] No copy button found for video code
+2025-12-06 22:55:32,298 - utils.parser - WARNING - [74] No magnets content found in detail page
+2025-12-06 22:55:32,298 - utils.magnet_extractor - WARNING - [74] No suitable magnet found
+2025-12-06 22:55:32,298 - __main__ - INFO - [74/120] [Page 14] Processing 
+2025-12-06 22:55:38,503 - utils.parser - WARNING - [75] No copy button found for video code
+2025-12-06 22:55:38,503 - utils.parser - WARNING - [75] No magnets content found in detail page
+2025-12-06 22:55:38,503 - utils.magnet_extractor - WARNING - [75] No suitable magnet found
+2025-12-06 22:55:38,503 - __main__ - INFO - [75/120] [Page 14] Processing 
+2025-12-06 22:55:44,699 - utils.parser - WARNING - [76] No copy button found for video code
+2025-12-06 22:55:44,700 - utils.parser - WARNING - [76] No magnets content found in detail page
+2025-12-06 22:55:44,700 - utils.magnet_extractor - WARNING - [76] No suitable magnet found
+2025-12-06 22:55:44,700 - __main__ - INFO - [76/120] [Page 14] Processing 
+2025-12-06 22:55:50,906 - utils.parser - WARNING - [77] No copy button found for video code
+2025-12-06 22:55:50,906 - utils.parser - WARNING - [77] No magnets content found in detail page
+2025-12-06 22:55:50,906 - utils.magnet_extractor - WARNING - [77] No suitable magnet found
+2025-12-06 22:55:50,906 - __main__ - INFO - [77/120] [Page 14] Processing 
+2025-12-06 22:55:57,117 - utils.parser - WARNING - [78] No copy button found for video code
+2025-12-06 22:55:57,117 - utils.parser - WARNING - [78] No magnets content found in detail page
+2025-12-06 22:55:57,117 - utils.magnet_extractor - WARNING - [78] No suitable magnet found
+2025-12-06 22:55:57,117 - __main__ - INFO - [78/120] [Page 14] Processing 
+2025-12-06 22:56:03,325 - utils.parser - WARNING - [79] No copy button found for video code
+2025-12-06 22:56:03,325 - utils.parser - WARNING - [79] No magnets content found in detail page
+2025-12-06 22:56:03,325 - utils.magnet_extractor - WARNING - [79] No suitable magnet found
+2025-12-06 22:56:03,325 - __main__ - INFO - [79/120] [Page 14] Processing 
+2025-12-06 22:56:09,536 - utils.parser - WARNING - [80] No copy button found for video code
+2025-12-06 22:56:09,536 - utils.parser - WARNING - [80] No magnets content found in detail page
+2025-12-06 22:56:09,536 - utils.magnet_extractor - WARNING - [80] No suitable magnet found
+2025-12-06 22:56:09,536 - __main__ - INFO - [80/120] [Page 14] Processing 
+2025-12-06 22:56:15,746 - utils.parser - WARNING - [81] No copy button found for video code
+2025-12-06 22:56:15,746 - utils.parser - WARNING - [81] No magnets content found in detail page
+2025-12-06 22:56:15,746 - utils.magnet_extractor - WARNING - [81] No suitable magnet found
+2025-12-06 22:56:15,746 - __main__ - INFO - [81/120] [Page 16] Processing 
+2025-12-06 22:56:20,949 - utils.parser - WARNING - [82] No copy button found for video code
+2025-12-06 22:56:20,949 - utils.parser - WARNING - [82] No magnets content found in detail page
+2025-12-06 22:56:20,949 - utils.magnet_extractor - WARNING - [82] No suitable magnet found
+2025-12-06 22:56:20,949 - __main__ - INFO - [82/120] [Page 16] Processing 
+2025-12-06 22:56:26,154 - utils.parser - WARNING - [83] No copy button found for video code
+2025-12-06 22:56:26,154 - utils.parser - WARNING - [83] No magnets content found in detail page
+2025-12-06 22:56:26,155 - utils.magnet_extractor - WARNING - [83] No suitable magnet found
+2025-12-06 22:56:26,155 - __main__ - INFO - [83/120] [Page 16] Processing 
+2025-12-06 22:56:31,349 - utils.parser - WARNING - [84] No copy button found for video code
+2025-12-06 22:56:31,349 - utils.parser - WARNING - [84] No magnets content found in detail page
+2025-12-06 22:56:31,349 - utils.magnet_extractor - WARNING - [84] No suitable magnet found
+2025-12-06 22:56:31,349 - __main__ - INFO - [84/120] [Page 16] Processing 
+2025-12-06 22:56:36,572 - utils.parser - WARNING - [85] No copy button found for video code
+2025-12-06 22:56:36,573 - utils.parser - WARNING - [85] No magnets content found in detail page
+2025-12-06 22:56:36,573 - utils.magnet_extractor - WARNING - [85] No suitable magnet found
+2025-12-06 22:56:36,573 - __main__ - INFO - [85/120] [Page 16] Processing 
+2025-12-06 22:56:41,778 - utils.parser - WARNING - [86] No copy button found for video code
+2025-12-06 22:56:41,778 - utils.parser - WARNING - [86] No magnets content found in detail page
+2025-12-06 22:56:41,778 - utils.magnet_extractor - WARNING - [86] No suitable magnet found
+2025-12-06 22:56:41,778 - __main__ - INFO - [86/120] [Page 16] Processing 
+2025-12-06 22:56:46,988 - utils.parser - WARNING - [87] No copy button found for video code
+2025-12-06 22:56:46,988 - utils.parser - WARNING - [87] No magnets content found in detail page
+2025-12-06 22:56:46,988 - utils.magnet_extractor - WARNING - [87] No suitable magnet found
+2025-12-06 22:56:46,988 - __main__ - INFO - [87/120] [Page 16] Processing 
+2025-12-06 22:56:52,190 - utils.parser - WARNING - [88] No copy button found for video code
+2025-12-06 22:56:52,190 - utils.parser - WARNING - [88] No magnets content found in detail page
+2025-12-06 22:56:52,190 - utils.magnet_extractor - WARNING - [88] No suitable magnet found
+2025-12-06 22:56:52,190 - __main__ - INFO - [88/120] [Page 16] Processing 
+2025-12-06 22:56:57,398 - utils.parser - WARNING - [89] No copy button found for video code
+2025-12-06 22:56:57,399 - utils.parser - WARNING - [89] No magnets content found in detail page
+2025-12-06 22:56:57,399 - utils.magnet_extractor - WARNING - [89] No suitable magnet found
+2025-12-06 22:56:57,399 - __main__ - INFO - [89/120] [Page 16] Processing 
+2025-12-06 22:57:02,608 - utils.parser - WARNING - [90] No copy button found for video code
+2025-12-06 22:57:02,609 - utils.parser - WARNING - [90] No magnets content found in detail page
+2025-12-06 22:57:02,609 - utils.magnet_extractor - WARNING - [90] No suitable magnet found
+2025-12-06 22:57:02,609 - __main__ - INFO - [90/120] [Page 16] Processing 
+2025-12-06 22:57:07,823 - utils.parser - WARNING - [91] No copy button found for video code
+2025-12-06 22:57:07,823 - utils.parser - WARNING - [91] No magnets content found in detail page
+2025-12-06 22:57:07,823 - utils.magnet_extractor - WARNING - [91] No suitable magnet found
+2025-12-06 22:57:07,823 - __main__ - INFO - [91/120] [Page 16] Processing 
+2025-12-06 22:57:13,033 - utils.parser - WARNING - [92] No copy button found for video code
+2025-12-06 22:57:13,033 - utils.parser - WARNING - [92] No magnets content found in detail page
+2025-12-06 22:57:13,033 - utils.magnet_extractor - WARNING - [92] No suitable magnet found
+2025-12-06 22:57:13,033 - __main__ - INFO - [92/120] [Page 17] Processing 
+2025-12-06 22:57:18,244 - utils.parser - WARNING - [93] No copy button found for video code
+2025-12-06 22:57:18,245 - utils.parser - WARNING - [93] No magnets content found in detail page
+2025-12-06 22:57:18,245 - utils.magnet_extractor - WARNING - [93] No suitable magnet found
+2025-12-06 22:57:18,245 - __main__ - INFO - [93/120] [Page 17] Processing 
+2025-12-06 22:57:23,454 - utils.parser - WARNING - [94] No copy button found for video code
+2025-12-06 22:57:23,454 - utils.parser - WARNING - [94] No magnets content found in detail page
+2025-12-06 22:57:23,454 - utils.magnet_extractor - WARNING - [94] No suitable magnet found
+2025-12-06 22:57:23,454 - __main__ - INFO - [94/120] [Page 17] Processing 
+2025-12-06 22:57:28,659 - utils.parser - WARNING - [95] No copy button found for video code
+2025-12-06 22:57:28,659 - utils.parser - WARNING - [95] No magnets content found in detail page
+2025-12-06 22:57:28,659 - utils.magnet_extractor - WARNING - [95] No suitable magnet found
+2025-12-06 22:57:28,659 - __main__ - INFO - [95/120] [Page 18] Processing 
+2025-12-06 22:57:34,055 - utils.parser - WARNING - [96] No copy button found for video code
+2025-12-06 22:57:34,055 - utils.parser - WARNING - [96] No magnets content found in detail page
+2025-12-06 22:57:34,055 - utils.magnet_extractor - WARNING - [96] No suitable magnet found
+2025-12-06 22:57:34,055 - __main__ - INFO - [96/120] [Page 18] Processing 
+2025-12-06 22:57:39,256 - utils.parser - WARNING - [97] No copy button found for video code
+2025-12-06 22:57:39,256 - utils.parser - WARNING - [97] No magnets content found in detail page
+2025-12-06 22:57:39,256 - utils.magnet_extractor - WARNING - [97] No suitable magnet found
+2025-12-06 22:57:39,256 - __main__ - INFO - [97/120] [Page 18] Processing 
+2025-12-06 22:57:44,466 - utils.parser - WARNING - [98] No copy button found for video code
+2025-12-06 22:57:44,467 - utils.parser - WARNING - [98] No magnets content found in detail page
+2025-12-06 22:57:44,467 - utils.magnet_extractor - WARNING - [98] No suitable magnet found
+2025-12-06 22:57:44,467 - __main__ - INFO - [98/120] [Page 18] Processing 
+2025-12-06 22:57:49,682 - utils.parser - WARNING - [99] No copy button found for video code
+2025-12-06 22:57:49,682 - utils.parser - WARNING - [99] No magnets content found in detail page
+2025-12-06 22:57:49,682 - utils.magnet_extractor - WARNING - [99] No suitable magnet found
+2025-12-06 22:57:49,682 - __main__ - INFO - [99/120] [Page 18] Processing 
+2025-12-06 22:57:54,885 - utils.parser - WARNING - [100] No copy button found for video code
+2025-12-06 22:57:54,885 - utils.parser - WARNING - [100] No magnets content found in detail page
+2025-12-06 22:57:54,885 - utils.magnet_extractor - WARNING - [100] No suitable magnet found
+2025-12-06 22:57:54,885 - __main__ - INFO - [100/120] [Page 18] Processing 
+2025-12-06 22:58:00,086 - utils.parser - WARNING - [101] No copy button found for video code
+2025-12-06 22:58:00,086 - utils.parser - WARNING - [101] No magnets content found in detail page
+2025-12-06 22:58:00,086 - utils.magnet_extractor - WARNING - [101] No suitable magnet found
+2025-12-06 22:58:00,086 - __main__ - INFO - [101/120] [Page 18] Processing 
+2025-12-06 22:58:05,463 - utils.parser - WARNING - [102] No copy button found for video code
+2025-12-06 22:58:05,463 - utils.parser - WARNING - [102] No magnets content found in detail page
+2025-12-06 22:58:05,463 - utils.magnet_extractor - WARNING - [102] No suitable magnet found
+2025-12-06 22:58:05,463 - __main__ - INFO - [102/120] [Page 18] Processing 
+2025-12-06 22:58:10,671 - utils.parser - WARNING - [103] No copy button found for video code
+2025-12-06 22:58:10,672 - utils.parser - WARNING - [103] No magnets content found in detail page
+2025-12-06 22:58:10,672 - utils.magnet_extractor - WARNING - [103] No suitable magnet found
+2025-12-06 22:58:10,672 - __main__ - INFO - [103/120] [Page 18] Processing 
+2025-12-06 22:58:15,865 - utils.parser - WARNING - [104] No copy button found for video code
+2025-12-06 22:58:15,865 - utils.parser - WARNING - [104] No magnets content found in detail page
+2025-12-06 22:58:15,865 - utils.magnet_extractor - WARNING - [104] No suitable magnet found
+2025-12-06 22:58:15,865 - __main__ - INFO - [104/120] [Page 18] Processing 
+2025-12-06 22:58:21,057 - utils.parser - WARNING - [105] No copy button found for video code
+2025-12-06 22:58:21,057 - utils.parser - WARNING - [105] No magnets content found in detail page
+2025-12-06 22:58:21,057 - utils.magnet_extractor - WARNING - [105] No suitable magnet found
+2025-12-06 22:58:21,057 - __main__ - INFO - [105/120] [Page 18] Processing 
+2025-12-06 22:58:26,258 - utils.parser - WARNING - [106] No copy button found for video code
+2025-12-06 22:58:26,258 - utils.parser - WARNING - [106] No magnets content found in detail page
+2025-12-06 22:58:26,258 - utils.magnet_extractor - WARNING - [106] No suitable magnet found
+2025-12-06 22:58:26,258 - __main__ - INFO - [106/120] [Page 18] Processing 
+2025-12-06 22:58:31,458 - utils.parser - WARNING - [107] No copy button found for video code
+2025-12-06 22:58:31,458 - utils.parser - WARNING - [107] No magnets content found in detail page
+2025-12-06 22:58:31,458 - utils.magnet_extractor - WARNING - [107] No suitable magnet found
+2025-12-06 22:58:31,458 - __main__ - INFO - [107/120] [Page 18] Processing 
+2025-12-06 22:58:36,658 - utils.parser - WARNING - [108] No copy button found for video code
+2025-12-06 22:58:36,658 - utils.parser - WARNING - [108] No magnets content found in detail page
+2025-12-06 22:58:36,658 - utils.magnet_extractor - WARNING - [108] No suitable magnet found
+2025-12-06 22:58:36,658 - __main__ - INFO - [108/120] [Page 18] Processing 
+2025-12-06 22:58:41,852 - utils.parser - WARNING - [109] No copy button found for video code
+2025-12-06 22:58:41,852 - utils.parser - WARNING - [109] No magnets content found in detail page
+2025-12-06 22:58:41,852 - utils.magnet_extractor - WARNING - [109] No suitable magnet found
+2025-12-06 22:58:41,852 - __main__ - INFO - [109/120] [Page 20] Processing 
+2025-12-06 22:58:47,055 - utils.parser - WARNING - [110] No copy button found for video code
+2025-12-06 22:58:47,055 - utils.parser - WARNING - [110] No magnets content found in detail page
+2025-12-06 22:58:47,055 - utils.magnet_extractor - WARNING - [110] No suitable magnet found
+2025-12-06 22:58:47,055 - __main__ - INFO - [110/120] [Page 20] Processing 
+2025-12-06 22:58:52,255 - utils.parser - WARNING - [111] No copy button found for video code
+2025-12-06 22:58:52,255 - utils.parser - WARNING - [111] No magnets content found in detail page
+2025-12-06 22:58:52,255 - utils.magnet_extractor - WARNING - [111] No suitable magnet found
+2025-12-06 22:58:52,255 - __main__ - INFO - [111/120] [Page 20] Processing 
+2025-12-06 22:58:57,457 - utils.parser - WARNING - [112] No copy button found for video code
+2025-12-06 22:58:57,457 - utils.parser - WARNING - [112] No magnets content found in detail page
+2025-12-06 22:58:57,457 - utils.magnet_extractor - WARNING - [112] No suitable magnet found
+2025-12-06 22:58:57,457 - __main__ - INFO - [112/120] [Page 20] Processing 
+2025-12-06 22:59:02,657 - utils.parser - WARNING - [113] No copy button found for video code
+2025-12-06 22:59:02,658 - utils.parser - WARNING - [113] No magnets content found in detail page
+2025-12-06 22:59:02,658 - utils.magnet_extractor - WARNING - [113] No suitable magnet found
+2025-12-06 22:59:02,658 - __main__ - INFO - [113/120] [Page 20] Processing 
+2025-12-06 22:59:07,859 - utils.parser - WARNING - [114] No copy button found for video code
+2025-12-06 22:59:07,859 - utils.parser - WARNING - [114] No magnets content found in detail page
+2025-12-06 22:59:07,859 - utils.magnet_extractor - WARNING - [114] No suitable magnet found
+2025-12-06 22:59:07,859 - __main__ - INFO - [114/120] [Page 20] Processing 
+2025-12-06 22:59:13,063 - utils.parser - WARNING - [115] No copy button found for video code
+2025-12-06 22:59:13,063 - utils.parser - WARNING - [115] No magnets content found in detail page
+2025-12-06 22:59:13,063 - utils.magnet_extractor - WARNING - [115] No suitable magnet found
+2025-12-06 22:59:13,063 - __main__ - INFO - [115/120] [Page 20] Processing 
+2025-12-06 22:59:18,267 - utils.parser - WARNING - [116] No copy button found for video code
+2025-12-06 22:59:18,267 - utils.parser - WARNING - [116] No magnets content found in detail page
+2025-12-06 22:59:18,267 - utils.magnet_extractor - WARNING - [116] No suitable magnet found
+2025-12-06 22:59:18,267 - __main__ - INFO - [116/120] [Page 20] Processing 
+2025-12-06 22:59:23,469 - utils.parser - WARNING - [117] No copy button found for video code
+2025-12-06 22:59:23,469 - utils.parser - WARNING - [117] No magnets content found in detail page
+2025-12-06 22:59:23,469 - utils.magnet_extractor - WARNING - [117] No suitable magnet found
+2025-12-06 22:59:23,469 - __main__ - INFO - [117/120] [Page 20] Processing 
+2025-12-06 22:59:28,668 - utils.parser - WARNING - [118] No copy button found for video code
+2025-12-06 22:59:28,668 - utils.parser - WARNING - [118] No magnets content found in detail page
+2025-12-06 22:59:28,668 - utils.magnet_extractor - WARNING - [118] No suitable magnet found
+2025-12-06 22:59:28,668 - __main__ - INFO - [118/120] [Page 20] Processing 
+2025-12-06 22:59:33,870 - utils.parser - WARNING - [119] No copy button found for video code
+2025-12-06 22:59:33,870 - utils.parser - WARNING - [119] No magnets content found in detail page
+2025-12-06 22:59:33,870 - utils.magnet_extractor - WARNING - [119] No suitable magnet found
+2025-12-06 22:59:33,870 - __main__ - INFO - [119/120] [Page 20] Processing 
+2025-12-06 22:59:39,070 - utils.parser - WARNING - [120] No copy button found for video code
+2025-12-06 22:59:39,070 - utils.parser - WARNING - [120] No magnets content found in detail page
+2025-12-06 22:59:39,070 - utils.magnet_extractor - WARNING - [120] No suitable magnet found
+2025-12-06 22:59:39,070 - __main__ - INFO - [120/120] [Page 20] Processing 
+2025-12-06 22:59:39,070 - __main__ - INFO - Phase 1 completed: 17 entries processed
+2025-12-06 22:59:39,070 - __main__ - INFO - ==================================================
+2025-12-06 22:59:39,070 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-12-06 22:59:39,070 - __main__ - INFO - ==================================================
+2025-12-06 22:59:39,260 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-06 22:59:39,462 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /?page=1 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c6026619670>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-12-06 22:59:39,462 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
+2025-12-06 22:59:39,462 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
+2025-12-06 22:59:39,462 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM2, retrying...
+2025-12-06 22:59:39,476 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=1
+2025-12-06 22:59:39,476 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
+2025-12-06 22:59:39,476 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Miraculous Fortress'
+2025-12-06 22:59:39,476 - __main__ - INFO - [spider_index] Switched to proxy: Miraculous Fortress, retrying...
+2025-12-06 22:59:39,479 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPConnectionPool(host='139.99.124.231', port=12300): Max retries exceeded with url: http://138.2.91.170:8000/?page=1 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c60265e2090>: Failed to establish a new connection: [Errno 111] Connection refused')))
+2025-12-06 22:59:39,479 - __main__ - WARNING - [Page 1] Proxy 'Singapore-ARM1' failed both Direct and CF modes. Marking BANNED and switching...
+2025-12-06 22:59:39,479 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (2/3)
+2025-12-06 22:59:39,479 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
+2025-12-06 22:59:39,479 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
+2025-12-06 22:59:39,479 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
+2025-12-06 22:59:39,479 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (2/3)
+2025-12-06 22:59:39,479 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Miraculous Fortress'
+2025-12-06 22:59:39,483 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=1 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7c602661a720>: Failed to establish a new connection: [Errno 111] Connection refused')))
+2025-12-06 22:59:39,483 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (3/3)
+2025-12-06 22:59:39,483 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
+2025-12-06 22:59:39,483 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-06 22:59:39,687 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /?page=1 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c60265e1130>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-12-06 22:59:39,687 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
+2025-12-06 22:59:39,687 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
+2025-12-06 22:59:39,687 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM2, retrying...
+2025-12-06 22:59:39,694 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=1
+2025-12-06 22:59:39,694 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (3/3)
+2025-12-06 22:59:39,694 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Miraculous Fortress'
+2025-12-06 22:59:39,694 - __main__ - INFO - [spider_index] Switched to proxy: Miraculous Fortress, retrying...
+2025-12-06 22:59:39,698 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPConnectionPool(host='139.99.124.231', port=12300): Max retries exceeded with url: http://138.2.91.170:8000/?page=1 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c60265e04d0>: Failed to establish a new connection: [Errno 111] Connection refused')))
+2025-12-06 22:59:39,698 - __main__ - WARNING - [Page 1] Proxy 'Miraculous Fortress' failed both Direct and CF modes. Marking BANNED and switching...
+2025-12-06 22:59:39,698 - utils.proxy_ban_manager - WARNING - Proxy 'Miraculous Fortress' banned until 2025-12-13 22:59:39 (7 days)
+2025-12-06 22:59:39,698 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' reached 4 failures, putting in cooldown for 691200s (8 days)
+2025-12-06 22:59:39,698 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
+2025-12-06 22:59:39,698 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
+2025-12-06 22:59:39,698 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
+2025-12-06 22:59:39,698 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM2' banned until 2025-12-13 22:59:39 (7 days)
+2025-12-06 22:59:39,698 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' reached 4 failures, putting in cooldown for 691200s (8 days)
+2025-12-06 22:59:39,698 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Singapore-ARM1'
+2025-12-06 22:59:39,898 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /?page=1 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c6026619640>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-12-06 22:59:39,898 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
+2025-12-06 22:59:39,898 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-06 22:59:39,898 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-06 22:59:39,905 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=1
+2025-12-06 22:59:39,905 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
+2025-12-06 22:59:39,905 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-06 22:59:39,905 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-06 22:59:39,910 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=1
+2025-12-06 22:59:39,910 - __main__ - ERROR - [Page 1] All proxy attempts exhausted.
+2025-12-06 22:59:39,910 - __main__ - WARNING - [Page 1] No movie list found after all fallback attempts
+2025-12-06 22:59:40,113 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-06 22:59:40,318 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /?page=2 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c6026eea390>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-12-06 22:59:40,318 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
+2025-12-06 22:59:40,318 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-06 22:59:40,318 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-06 22:59:40,324 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=2
+2025-12-06 22:59:40,324 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
+2025-12-06 22:59:40,324 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-06 22:59:40,324 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-06 22:59:40,329 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=2
+2025-12-06 22:59:40,330 - __main__ - WARNING - [Page 2] Proxy 'Singapore-ARM1' failed both Direct and CF modes. Marking BANNED and switching...
+2025-12-06 22:59:40,330 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (3/3)
+2025-12-06 22:59:40,330 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-06 22:59:40,330 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' banned until 2025-12-13 22:59:40 (7 days)
+2025-12-06 22:59:40,330 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 4 failures, putting in cooldown for 691200s (8 days)
+2025-12-06 22:59:40,330 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
+2025-12-06 22:59:40,330 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' is already in ban period, not updating
+2025-12-06 22:59:40,330 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 5 failures, putting in cooldown for 691200s (8 days)
+2025-12-06 22:59:40,330 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
+2025-12-06 22:59:40,330 - utils.proxy_pool - WARNING - All proxies are unavailable or in cooldown
+2025-12-06 22:59:40,330 - __main__ - WARNING - [spider_index] Proxy mode 'pool' enabled but no proxy available
+2025-12-06 22:59:40,690 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /?page=2 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c6026eebe60>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-12-06 22:59:40,690 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
+2025-12-06 22:59:40,691 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-06 22:59:40,691 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-06 22:59:40,697 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=2
+2025-12-06 22:59:40,697 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
+2025-12-06 22:59:40,697 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-06 22:59:40,697 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-06 22:59:40,702 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=2
+2025-12-06 22:59:40,702 - __main__ - WARNING - [Page 2] Proxy 'Singapore-ARM1' failed both Direct and CF modes. Marking BANNED and switching...
+2025-12-06 22:59:40,702 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (3/3)
+2025-12-06 22:59:40,702 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-06 22:59:40,702 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' is already in ban period, not updating
+2025-12-06 22:59:40,702 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 4 failures, putting in cooldown for 691200s (8 days)
+2025-12-06 22:59:40,702 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
+2025-12-06 22:59:40,702 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' is already in ban period, not updating
+2025-12-06 22:59:40,702 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 5 failures, putting in cooldown for 691200s (8 days)
+2025-12-06 22:59:40,702 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
+2025-12-06 22:59:40,702 - utils.proxy_pool - WARNING - All proxies are unavailable or in cooldown
+2025-12-06 22:59:40,702 - __main__ - WARNING - [spider_index] Proxy mode 'pool' enabled but no proxy available
+2025-12-06 22:59:40,938 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /?page=2 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c60265e1cd0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-12-06 22:59:40,938 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
+2025-12-06 22:59:40,938 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-06 22:59:40,938 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-06 22:59:40,943 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=2
+2025-12-06 22:59:40,944 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
+2025-12-06 22:59:40,944 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-06 22:59:40,944 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-06 22:59:40,949 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=2
+2025-12-06 22:59:40,949 - __main__ - ERROR - [Page 2] All proxy attempts exhausted.
+2025-12-06 22:59:40,949 - __main__ - WARNING - [Page 2] No movie list found after all fallback attempts
+2025-12-06 22:59:41,147 - __main__ - WARNING - [Page 3] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-06 22:59:41,374 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /?page=3 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c6026ee8170>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-12-06 22:59:41,374 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
+2025-12-06 22:59:41,374 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-06 22:59:41,374 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-06 22:59:41,380 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=3
+2025-12-06 22:59:41,380 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
+2025-12-06 22:59:41,380 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-06 22:59:41,380 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-06 22:59:41,386 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=3
+2025-12-06 22:59:41,386 - __main__ - WARNING - [Page 3] Proxy 'Singapore-ARM1' failed both Direct and CF modes. Marking BANNED and switching...
+2025-12-06 22:59:41,386 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (3/3)
+2025-12-06 22:59:41,386 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-06 22:59:41,386 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' is already in ban period, not updating
+2025-12-06 22:59:41,386 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 4 failures, putting in cooldown for 691200s (8 days)
+2025-12-06 22:59:41,386 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
+2025-12-06 22:59:41,386 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' is already in ban period, not updating
+2025-12-06 22:59:41,386 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 5 failures, putting in cooldown for 691200s (8 days)
+2025-12-06 22:59:41,386 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
+2025-12-06 22:59:41,386 - utils.proxy_pool - WARNING - All proxies are unavailable or in cooldown
+2025-12-06 22:59:41,386 - __main__ - WARNING - [spider_index] Proxy mode 'pool' enabled but no proxy available
+2025-12-06 22:59:41,603 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /?page=3 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c60265e0830>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-12-06 22:59:41,604 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
+2025-12-06 22:59:41,604 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-06 22:59:41,604 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-06 22:59:41,610 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=3
+2025-12-06 22:59:41,610 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
+2025-12-06 22:59:41,610 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-06 22:59:41,610 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-06 22:59:41,616 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=3
+2025-12-06 22:59:41,616 - __main__ - WARNING - [Page 3] Proxy 'Singapore-ARM1' failed both Direct and CF modes. Marking BANNED and switching...
+2025-12-06 22:59:41,616 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (3/3)
+2025-12-06 22:59:41,616 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-06 22:59:41,616 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' is already in ban period, not updating
+2025-12-06 22:59:41,616 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 4 failures, putting in cooldown for 691200s (8 days)
+2025-12-06 22:59:41,616 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
+2025-12-06 22:59:41,616 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' is already in ban period, not updating
+2025-12-06 22:59:41,616 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 5 failures, putting in cooldown for 691200s (8 days)
+2025-12-06 22:59:41,616 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
+2025-12-06 22:59:41,616 - utils.proxy_pool - WARNING - All proxies are unavailable or in cooldown
+2025-12-06 22:59:41,616 - __main__ - WARNING - [spider_index] Proxy mode 'pool' enabled but no proxy available
+2025-12-06 22:59:41,814 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /?page=3 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c60265e3440>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-12-06 22:59:41,814 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
+2025-12-06 22:59:41,814 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-06 22:59:41,814 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-06 22:59:41,820 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=3
+2025-12-06 22:59:41,820 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
+2025-12-06 22:59:41,820 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-06 22:59:41,820 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-06 22:59:41,825 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=3
+2025-12-06 22:59:41,825 - __main__ - ERROR - [Page 3] All proxy attempts exhausted.
+2025-12-06 22:59:41,825 - __main__ - WARNING - [Page 3] No movie list found after all fallback attempts
+2025-12-06 22:59:41,825 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
+2025-12-06 22:59:41,825 - __main__ - INFO - Phase 2 completed: 0 entries processed
+2025-12-06 22:59:41,825 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251206.csv
+2025-12-06 22:59:41,825 - __main__ - INFO - ==================================================
+2025-12-06 22:59:41,825 - __main__ - INFO - SUMMARY REPORT
+2025-12-06 22:59:41,825 - __main__ - INFO - ==================================================
+2025-12-06 22:59:41,825 - __main__ - INFO - Pages processed: 1 to 20
+2025-12-06 22:59:41,825 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-12-06 22:59:41,826 - __main__ - INFO - ==============================
+2025-12-06 22:59:41,826 - __main__ - INFO - PHASE 1 SUMMARY
+2025-12-06 22:59:41,826 - __main__ - INFO - ==============================
+2025-12-06 22:59:41,826 - __main__ - INFO - Phase 1 entries found: 17
+2025-12-06 22:59:41,826 - __main__ - INFO -   - Subtitle torrents: 17 (100.0%)
+2025-12-06 22:59:41,826 - __main__ - INFO -   - Hacked subtitle torrents: 8 (47.1%)
+2025-12-06 22:59:41,826 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
+2025-12-06 22:59:41,826 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
+2025-12-06 22:59:41,826 - __main__ - INFO - ==============================
+2025-12-06 22:59:41,826 - __main__ - INFO - PHASE 2 SUMMARY
+2025-12-06 22:59:41,826 - __main__ - INFO - ==============================
+2025-12-06 22:59:41,826 - __main__ - INFO - Phase 2 entries found: 0
+2025-12-06 22:59:41,826 - __main__ - INFO -   - No entries found in Phase 2
+2025-12-06 22:59:41,826 - __main__ - INFO - ==============================
+2025-12-06 22:59:41,826 - __main__ - INFO - OVERALL SUMMARY
+2025-12-06 22:59:41,826 - __main__ - INFO - ==============================
+2025-12-06 22:59:41,826 - __main__ - INFO - Total entries found: 17
+2025-12-06 22:59:41,826 - __main__ - INFO - Successfully processed: 17
+2025-12-06 22:59:41,826 - __main__ - INFO - Skipped already parsed in this session: 120
+2025-12-06 22:59:41,826 - __main__ - INFO - Skipped already parsed in previous runs: 3294
+2025-12-06 22:59:41,826 - __main__ - INFO - Current parsed links in memory: 120
+2025-12-06 22:59:41,826 - __main__ - INFO - Overall subtitle torrents: 17 (100.0%)
+2025-12-06 22:59:41,826 - __main__ - INFO - Overall hacked subtitle torrents: 8 (47.1%)
+2025-12-06 22:59:41,826 - __main__ - INFO - Overall hacked no-subtitle torrents: 0 (0.0%)
+2025-12-06 22:59:41,826 - __main__ - INFO - Overall no-subtitle torrents: 0 (0.0%)
+2025-12-06 22:59:41,826 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251206.csv
+2025-12-06 22:59:41,826 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-12-06 22:59:41,826 - __main__ - INFO - ==================================================
+2025-12-06 22:59:41,826 - __main__ - INFO - 
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - ==================================================
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - PROXY POOL STATISTICS
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - ==================================================
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - Total proxies: 3
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - Available proxies: 1
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - In cooldown: 2
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - No-proxy mode: False
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - 
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - Individual proxy statistics:
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -   [Standby (Cooldown: 691197s)] Miraculous Fortress:
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Total requests: 4
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Success rate: 0.0%
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Consecutive failures: 4
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Last success: Never
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Last failure: 2025-12-06 22:59:39
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -   [ACTIVE] Singapore-ARM1:
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Total requests: 182
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Success rate: 83.5%
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Consecutive failures: 2
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Last success: 2025-12-06 22:59:41
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Last failure: 2025-12-06 22:59:41
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -   [Standby (Cooldown: 691197s)] Singapore-ARM2:
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Total requests: 4
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Success rate: 0.0%
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Consecutive failures: 4
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Last success: Never
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Last failure: 2025-12-06 22:59:39
+2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - ==================================================
+2025-12-06 22:59:41,826 - __main__ - INFO - 
+2025-12-06 22:59:41,826 - __main__ - INFO - ==================================================
+2025-12-06 22:59:41,826 - __main__ - INFO - PROXY BAN STATUS
+2025-12-06 22:59:41,826 - __main__ - INFO - ==================================================
+2025-12-06 22:59:41,827 - __main__ - INFO - Currently banned proxies: 3
+
+  - Miraculous Fortress:
+    Banned at: 2025-12-06 22:59:39
+    Will unban: 2025-12-13 22:59:39
+    Time remaining: 6 days 23 hours
+  - Singapore-ARM2:
+    Banned at: 2025-12-06 22:59:39
+    Will unban: 2025-12-13 22:59:39
+    Time remaining: 6 days 23 hours
+  - Singapore-ARM1:
+    Banned at: 2025-12-06 22:59:40
+    Will unban: 2025-12-13 22:59:40
+    Time remaining: 6 days 23 hours
+2025-12-06 22:59:41,827 - __main__ - INFO - ==================================================
+2025-12-06 22:59:41,827 - __main__ - ERROR - ==================================================
+2025-12-06 22:59:41,827 - __main__ - ERROR - CRITICAL: PROXY BAN DETECTED DURING THIS RUN
+2025-12-06 22:59:41,827 - __main__ - ERROR - ==================================================
+2025-12-06 22:59:41,827 - __main__ - ERROR - One or more proxies were marked as BANNED due to failure to retrieve movie list.
+2025-12-06 22:59:41,827 - __main__ - ERROR - This indicates the proxy IP may be blocked by JavDB.
+2025-12-06 22:59:41,827 - __main__ - ERROR - Please check proxy ban status and consider using different proxies.
