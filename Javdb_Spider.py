@@ -396,6 +396,134 @@ def get_page_url(page_num, phase=1, custom_url=None):
         return f'{BASE_URL}&page={page_num}'
 
 
+def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use_cf_bypass, page_num):
+    """
+    Fetch index page with smart multi-level fallback mechanism.
+    
+    Fallback Hierarchy:
+    1. Initial Attempt: Use provided settings (e.g. No Proxy, No CF).
+    2. Local CF Fallback: If Direct failed, try Local CF Bypass.
+    3. Proxy Pool Iteration: If Local failed (IP banned?), iterate through proxies.
+       For each proxy:
+       a. Try Direct Proxy (No CF)
+       b. Try Proxy + CF Bypass
+       c. If both fail, mark proxy as BANNED and switch to next.
+    
+    Args:
+        page_url: URL to fetch
+        session: requests.Session object
+        use_cookie: Whether to use session cookie
+        use_proxy: Whether proxy is currently enabled
+        use_cf_bypass: Whether CF bypass is currently enabled
+        page_num: Current page number (for logging)
+    
+    Returns:
+        tuple: (html_content, has_movie_list, proxy_was_banned, effective_use_proxy, effective_use_cf_bypass)
+            - html_content: The HTML content (None if failed)
+            - has_movie_list: True if movie list found
+            - proxy_was_banned: True if a proxy was banned during fetch
+            - effective_use_proxy: The proxy setting that eventually worked
+            - effective_use_cf_bypass: The CF bypass setting that eventually worked
+    """
+    global global_proxy_pool
+    
+    proxy_was_banned = False
+    last_failed_html = None  # Store HTML from failed attempts
+    
+    # --- Helper function to attempt fetch and validate ---
+    def try_fetch(u_proxy, u_cf, context_msg):
+        nonlocal last_failed_html
+        logger.debug(f"[Page {page_num}] {context_msg}...")
+        try:
+            html = get_page(page_url, session, use_cookie=use_cookie,
+                            use_proxy=u_proxy, module_name='spider_index',
+                            use_cf_bypass=u_cf)
+            if html:
+                soup = BeautifulSoup(html, 'html.parser')
+                movie_list = soup.find('div', class_='movie-list h cols-4 vcols-8')
+                if movie_list:
+                    logger.debug(f"[Page {page_num}] Success: {context_msg}")
+                    return html, True
+                else:
+                    # Fetched HTML but validation failed (no movie list)
+                    # Store it as potential return value if all fallbacks fail
+                    last_failed_html = html
+                    logger.debug(f"[Page {page_num}] Validation failed (no movie list): {context_msg}")
+        except Exception as e:
+            logger.debug(f"[Page {page_num}] Failed {context_msg}: {e}")
+        return None, False
+
+    # --- Phase 0: Initial Attempt (User Config) ---
+    current_proxy_name = global_proxy_pool.get_current_proxy_name() if (use_proxy and global_proxy_pool) else "None"
+    html, success = try_fetch(use_proxy, use_cf_bypass, 
+                              f"Initial attempt (Proxy={use_proxy}, CF={use_cf_bypass}, Node={current_proxy_name})")
+    if success:
+        return html, True, False, use_proxy, use_cf_bypass
+
+    logger.warning(f"[Page {page_num}] Initial attempt failed. Starting smart fallback mechanism...")
+
+    # --- Phase 1: Local CF Fallback (Only if we started with No Proxy & No CF) ---
+    if not use_proxy and not use_cf_bypass:
+        html, success = try_fetch(False, True, "Fallback Phase 1: Local CF Bypass (No Proxy)")
+        if success:
+            logger.info(f"[Page {page_num}] Local CF Bypass succeeded. Switching mode to: use_cf_bypass=True")
+            return html, True, False, False, True
+        logger.warning(f"[Page {page_num}] Local CF Bypass failed. Assuming local IP banned. Switching to Proxy Pool...")
+
+    # --- Phase 2: Proxy Pool Iteration ---
+    if global_proxy_pool is None:
+        logger.error(f"[Page {page_num}] Fallback failed: No proxy pool configured")
+        # Return last failed HTML if we have it, otherwise None
+        return last_failed_html, False, False, use_proxy, use_cf_bypass
+
+    # If we weren't using proxy, start using it now
+    if not use_proxy:
+        # If we are just switching to proxy mode, ensure we start with a fresh/valid proxy if possible
+        # (The current one might be random if we haven't used it yet)
+        pass 
+
+    # We will try up to N switches (coverage of the pool)
+    # If using Single mode, we only have 1 try.
+    max_switches = len(global_proxy_pool.proxies) if PROXY_MODE == 'pool' else 1
+    # Limit max switches to avoid infinite loops if pool is huge, e.g. 10
+    max_switches = min(max_switches, 10) 
+    
+    attempts = 0
+    while attempts < max_switches:
+        current_proxy_name = global_proxy_pool.get_current_proxy_name()
+        
+        # Sub-step 2.1: Try Direct Proxy (No CF)
+        # User requested sequence: "依次是不使用cloudflare bypass和使用bypass"
+        html, success = try_fetch(True, False, f"Fallback Phase 2: Proxy Direct (Node={current_proxy_name})")
+        if success:
+            logger.info(f"[Page {page_num}] Proxy Direct succeeded. Switching mode to: use_proxy=True, use_cf_bypass=False")
+            return html, True, proxy_was_banned, True, False
+            
+        # Sub-step 2.2: Try Proxy + CF Bypass
+        html, success = try_fetch(True, True, f"Fallback Phase 2: Proxy + CF Bypass (Node={current_proxy_name})")
+        if success:
+            logger.info(f"[Page {page_num}] Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True")
+            return html, True, proxy_was_banned, True, True
+
+        # If both failed for this proxy, mark it as banned
+        attempts += 1
+        if attempts < max_switches and PROXY_MODE == 'pool':
+            logger.warning(f"[Page {page_num}] Proxy '{current_proxy_name}' failed both Direct and CF modes. Marking BANNED and switching...")
+            # Mark failure multiple times to trigger cooldown
+            for _ in range(PROXY_POOL_MAX_FAILURES):
+                global_proxy_pool.mark_failure_and_switch()
+            proxy_was_banned = True
+        else:
+            if PROXY_MODE == 'single':
+                logger.error(f"[Page {page_num}] Single proxy mode failed. Cannot switch.")
+            else:
+                logger.error(f"[Page {page_num}] All proxy attempts exhausted.")
+            break
+
+    # Return the last HTML content we fetched (even if validation failed), or None if all fetches failed completely
+    return last_failed_html, False, proxy_was_banned, use_proxy, use_cf_bypass
+
+
 def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
     """Write results to CSV file or print if dry-run"""
     if dry_run:
@@ -608,46 +736,46 @@ def main():
     use_proxy = args.use_proxy
     use_cf_bypass = args.use_cf_bypass
     
-    # Initialize proxy pool if proxy is enabled
-    if use_proxy:
-        # Check if we have PROXY_POOL configuration
-        if PROXY_POOL and len(PROXY_POOL) > 0:
-            if PROXY_MODE == 'pool':
-                # Full proxy pool mode with automatic failover
-                logger.info(f"Initializing proxy pool with {len(PROXY_POOL)} proxies...")
-                global_proxy_pool = create_proxy_pool_from_config(
-                    PROXY_POOL,
-                    cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
-                    max_failures=PROXY_POOL_MAX_FAILURES
-                )
-                logger.info(f"Proxy pool initialized successfully")
-                logger.info(f"Cooldown: {PROXY_POOL_COOLDOWN_SECONDS}s, Max failures before cooldown: {PROXY_POOL_MAX_FAILURES}")
-            elif PROXY_MODE == 'single':
-                # Single proxy mode - only use first proxy from pool
-                logger.info(f"Initializing single proxy mode (using first proxy from pool)...")
-                global_proxy_pool = create_proxy_pool_from_config(
-                    [PROXY_POOL[0]],  # Only use first proxy
-                    cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
-                    max_failures=PROXY_POOL_MAX_FAILURES
-                )
-                logger.info(f"Single proxy initialized: {PROXY_POOL[0].get('name', 'Main-Proxy')}")
-        # Fallback to legacy PROXY_HTTP/PROXY_HTTPS if no PROXY_POOL configured
-        elif PROXY_HTTP or PROXY_HTTPS:
-            logger.info("Using legacy PROXY_HTTP/PROXY_HTTPS configuration")
-            # Create a temporary proxy pool entry for consistency
-            legacy_proxy = {
-                'name': 'Legacy-Proxy',
-                'http': PROXY_HTTP,
-                'https': PROXY_HTTPS
-            }
+    # Initialize proxy pool (always initialize if configured, even if not enabled by default)
+    # This allows automatic fallback to proxy if direct connection fails
+    if PROXY_POOL and len(PROXY_POOL) > 0:
+        if PROXY_MODE == 'pool':
+            # Full proxy pool mode with automatic failover
+            logger.info(f"Initializing proxy pool with {len(PROXY_POOL)} proxies...")
             global_proxy_pool = create_proxy_pool_from_config(
-                [legacy_proxy],
+                PROXY_POOL,
                 cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
                 max_failures=PROXY_POOL_MAX_FAILURES
             )
-        else:
+            logger.info(f"Proxy pool initialized successfully")
+            logger.info(f"Cooldown: {PROXY_POOL_COOLDOWN_SECONDS}s, Max failures before cooldown: {PROXY_POOL_MAX_FAILURES}")
+        elif PROXY_MODE == 'single':
+            # Single proxy mode - only use first proxy from pool
+            logger.info(f"Initializing single proxy mode (using first proxy from pool)...")
+            global_proxy_pool = create_proxy_pool_from_config(
+                [PROXY_POOL[0]],  # Only use first proxy
+                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
+                max_failures=PROXY_POOL_MAX_FAILURES
+            )
+            logger.info(f"Single proxy initialized: {PROXY_POOL[0].get('name', 'Main-Proxy')}")
+    # Fallback to legacy PROXY_HTTP/PROXY_HTTPS if no PROXY_POOL configured
+    elif PROXY_HTTP or PROXY_HTTPS:
+        logger.info("Using legacy PROXY_HTTP/PROXY_HTTPS configuration")
+        # Create a temporary proxy pool entry for consistency
+        legacy_proxy = {
+            'name': 'Legacy-Proxy',
+            'http': PROXY_HTTP,
+            'https': PROXY_HTTPS
+        }
+        global_proxy_pool = create_proxy_pool_from_config(
+            [legacy_proxy],
+            cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
+            max_failures=PROXY_POOL_MAX_FAILURES
+        )
+    else:
+        if use_proxy:
             logger.warning("Proxy enabled but no proxy configuration found (neither PROXY_POOL nor PROXY_HTTP/PROXY_HTTPS)")
-            global_proxy_pool = None
+        global_proxy_pool = None
 
     # Determine output directory and filename
     if args.url:
@@ -776,6 +904,10 @@ def main():
     
     # Tolerance mechanism configuration
     max_consecutive_empty = 3    # Maximum tolerance for consecutive empty pages
+    
+    # Track if any proxy was banned during the entire run (initialize before phases)
+    any_proxy_banned = False
+    any_proxy_banned_phase2 = False
 
     # Phase 1: Collect entries with both "含中字磁鏈" and "今日新種"/"昨日新種" tags
     if phase_mode in ['1', 'all']:
@@ -790,10 +922,36 @@ def main():
             page_url = get_page_url(page_num, phase=1, custom_url=custom_url)
             logger.debug(f"[Page {page_num}] Fetching: {page_url}")
 
-            # Fetch index page
-            index_html = get_page(page_url, session, use_cookie=custom_url is not None, use_proxy=use_proxy, module_name='spider_index', use_cf_bypass=use_cf_bypass)
+            # Fetch index page with fallback mechanism
+            index_html, has_movie_list, proxy_was_banned, effective_use_proxy, effective_use_cf_bypass = fetch_index_page_with_fallback(
+                page_url, session, 
+                use_cookie=custom_url is not None, 
+                use_proxy=use_proxy, 
+                use_cf_bypass=use_cf_bypass,
+                page_num=page_num
+            )
+            
+            # Update global settings if fallback changed them (to be persistent for next pages/details)
+            if has_movie_list and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass):
+                logger.info(f"Updating session settings based on successful fallback: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}")
+                use_proxy = effective_use_proxy
+                use_cf_bypass = effective_use_cf_bypass
+            
+            if proxy_was_banned:
+                any_proxy_banned = True
+            
             if not index_html:
                 logger.info(f"[Page {page_num}] no movie list found (page fetch failed or does not exist)")
+                consecutive_empty_pages += 1
+                if consecutive_empty_pages >= max_consecutive_empty:
+                    logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping phase 1")
+                    break
+                page_num += 1
+                continue
+            
+            if not has_movie_list:
+                # Fallback mechanism exhausted but still no movie list
+                logger.warning(f"[Page {page_num}] No movie list found after all fallback attempts")
                 consecutive_empty_pages += 1
                 if consecutive_empty_pages >= max_consecutive_empty:
                     logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping phase 1")
@@ -807,23 +965,9 @@ def main():
                                        disable_new_releases_filter=(custom_url is not None or ignore_release_date))
 
             if len(page_results) == 0:
-                # Check if this is due to "No movie list found!" (page structure issue)
-                # or due to no eligible entries (normal filtering)
-                # We can't directly check the log, but we can infer from the HTML structure
-                soup = BeautifulSoup(index_html, 'html.parser')
-                movie_list = soup.find('div', class_='movie-list h cols-4 vcols-8')
-                
-                if not movie_list:
-                    # No movie list found in HTML - this is a page structure issue
-                    logger.info(f"[Page {page_num}] No movie list found in HTML structure (page structure issue)")
-                    consecutive_empty_pages += 1
-                    if consecutive_empty_pages >= max_consecutive_empty:
-                        logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping phase 1")
-                        break
-                else:
-                    # Movie list exists but no eligible entries found (normal filtering)
-                    logger.debug(f"[Page {page_num}] found 0 entries for phase 1 (page has content but no eligible entries)")
-                    # Don't increment consecutive_empty_pages here - the page has content, just no eligible entries
+                # Movie list exists but no eligible entries found (normal filtering)
+                logger.debug(f"[Page {page_num}] found 0 entries for phase 1 (page has content but no eligible entries)")
+                # Don't increment consecutive_empty_pages here - the page has content, just no eligible entries
             else:
                 all_index_results.extend(page_results)
                 consecutive_empty_pages = 0  # Reset counter when we find results
@@ -960,10 +1104,36 @@ def main():
             page_url = get_page_url(page_num, phase=2, custom_url=custom_url)
             logger.debug(f"[Page {page_num}] Fetching for phase 2: {page_url}")
 
-            # Fetch index page
-            index_html = get_page(page_url, session, use_cookie=custom_url is not None, use_proxy=use_proxy, module_name='spider_index', use_cf_bypass=use_cf_bypass)
+            # Fetch index page with fallback mechanism
+            index_html, has_movie_list, proxy_was_banned, effective_use_proxy, effective_use_cf_bypass = fetch_index_page_with_fallback(
+                page_url, session, 
+                use_cookie=custom_url is not None, 
+                use_proxy=use_proxy, 
+                use_cf_bypass=use_cf_bypass,
+                page_num=page_num
+            )
+            
+            # Update global settings if fallback changed them
+            if has_movie_list and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass):
+                logger.info(f"Updating session settings based on successful fallback: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}")
+                use_proxy = effective_use_proxy
+                use_cf_bypass = effective_use_cf_bypass
+            
+            if proxy_was_banned:
+                any_proxy_banned_phase2 = True
+            
             if not index_html:
                 logger.info(f"[Page {page_num}] no movie list found (page fetch failed or does not exist)")
+                consecutive_empty_pages += 1
+                if consecutive_empty_pages >= max_consecutive_empty:
+                    logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping phase 2")
+                    break
+                page_num += 1
+                continue
+            
+            if not has_movie_list:
+                # Fallback mechanism exhausted but still no movie list
+                logger.warning(f"[Page {page_num}] No movie list found after all fallback attempts")
                 consecutive_empty_pages += 1
                 if consecutive_empty_pages >= max_consecutive_empty:
                     logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping phase 2")
@@ -977,23 +1147,9 @@ def main():
                                        disable_new_releases_filter=(custom_url is not None or ignore_release_date))
 
             if len(page_results) == 0:
-                # Check if this is due to "No movie list found!" (page structure issue)
-                # or due to no eligible entries (normal filtering)
-                # We can't directly check the log, but we can infer from the HTML structure
-                soup = BeautifulSoup(index_html, 'html.parser')
-                movie_list = soup.find('div', class_='movie-list h cols-4 vcols-8')
-                
-                if not movie_list:
-                    # No movie list found in HTML - this is a page structure issue
-                    logger.info(f"[Page {page_num}] No movie list found in HTML structure (page structure issue)")
-                    consecutive_empty_pages += 1
-                    if consecutive_empty_pages >= max_consecutive_empty:
-                        logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping phase 2")
-                        break
-                else:
-                    # Movie list exists but no eligible entries found (normal filtering)
-                    logger.debug(f"[Page {page_num}] found 0 entries for phase 2 (page has content but no eligible entries)")
-                    # Don't increment consecutive_empty_pages here - the page has content, just no eligible entries
+                # Movie list exists but no eligible entries found (normal filtering)
+                logger.debug(f"[Page {page_num}] found 0 entries for phase 2 (page has content but no eligible entries)")
+                # Don't increment consecutive_empty_pages here - the page has content, just no eligible entries
             else:
                 all_index_results_phase2.extend(page_results)
                 consecutive_empty_pages = 0  # Reset counter when we find results
@@ -1225,7 +1381,31 @@ def main():
         logger.info(ban_summary)
         logger.info("=" * 50)
     
-    # Close browser if it was used
+    # Check for critical failures and exit with appropriate code
+    # Track if any proxy was banned during the entire run
+    proxies_were_banned = False
+    if phase_mode in ['1', 'all']:
+        proxies_were_banned = proxies_were_banned or any_proxy_banned
+    if phase_mode in ['2', 'all']:
+        proxies_were_banned = proxies_were_banned or any_proxy_banned_phase2
+    
+    if proxies_were_banned:
+        logger.error("=" * 50)
+        logger.error("CRITICAL: PROXY BAN DETECTED DURING THIS RUN")
+        logger.error("=" * 50)
+        logger.error("One or more proxies were marked as BANNED due to failure to retrieve movie list.")
+        logger.error("This indicates the proxy IP may be blocked by JavDB.")
+        logger.error("Please check proxy ban status and consider using different proxies.")
+        sys.exit(2)  # Exit code 2 indicates proxy ban
+    
+    # Check if we got any results at all (might indicate all proxies are banned)
+    if len(rows) == 0 and use_proxy and use_cf_bypass:
+        # No results with proxy + CF bypass might indicate issues
+        logger.warning("=" * 50)
+        logger.warning("WARNING: No entries found while using proxy and CF bypass")
+        logger.warning("=" * 50)
+        logger.warning("This might indicate proxy issues or CF bypass service problems.")
+        # Don't exit with error - it's possible there are legitimately no new entries
 
 
 if __name__ == '__main__':
