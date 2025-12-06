@@ -179,6 +179,21 @@ def analyze_spider_log(log_path):
     
     import re
     
+    # Check for explicit proxy ban detection (highest priority)
+    if 'CRITICAL: PROXY BAN DETECTED DURING THIS RUN' in log_content:
+        return True, "Proxy ban detected - one or more proxies were blocked by JavDB"
+    
+    # Check for fallback mechanism failures (no movie list after all retries)
+    fallback_failures = log_content.count('No movie list found after all fallback attempts')
+    if fallback_failures >= 3:
+        return True, f"CF bypass and proxy fallback failed - movie list not found on {fallback_failures} pages"
+    
+    # Check for proxy being marked as banned during fetch
+    # Matches the log message: "Proxy '...' failed both Direct and CF modes. Marking BANNED and switching..."
+    proxy_ban_markers = log_content.count('Marking BANNED and switching')
+    if proxy_ban_markers > 0:
+        return True, f"Proxy marked as banned during fetch ({proxy_ban_markers} times) - proxy IP may be blocked"
+    
     # First check if we got any results at all
     total_entries_match = re.search(r'Total entries found: (\d+)', log_content)
     if total_entries_match:
@@ -191,6 +206,13 @@ def analyze_spider_log(log_path):
     if 'Successfully fetched URL:' in log_content:
         # We fetched at least some pages successfully
         return False, None
+    
+    # Check for movie list issues (phase structure problems)
+    # Search case-insensitively to catch both "No movie list found" and "no movie list found"
+    no_movie_list_count = len(re.findall(r'no movie list found', log_content, re.IGNORECASE))
+    if no_movie_list_count >= 3:
+        # Multiple pages had no movie list - likely a proxy/CF issue
+        return True, f"Cannot retrieve movie list from JavDB - {no_movie_list_count} pages failed (check CF bypass service or proxy)"
     
     # Count consecutive fetch errors at the start of each phase
     phase1_errors = 0
