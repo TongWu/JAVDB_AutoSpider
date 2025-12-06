@@ -1,637 +1,886 @@
-2025-12-06 22:47:28,846 - __main__ - INFO - Initializing proxy pool with 3 proxies...
-2025-12-06 22:47:28,846 - utils.proxy_ban_manager - INFO - No existing ban log found at logs/proxy_bans.csv
-2025-12-06 22:47:28,846 - utils.proxy_pool - INFO - Added proxy 'Miraculous Fortress' to pool (HTTP: http://***:***@139.xxx.xxx.231:12300, HTTPS: http://***:***@139.xxx.xxx.231:12300)
-2025-12-06 22:47:28,846 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
-2025-12-06 22:47:28,846 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-06 22:47:28,846 - __main__ - INFO - Proxy pool initialized successfully
-2025-12-06 22:47:28,846 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
-2025-12-06 22:47:28,846 - __main__ - INFO - Starting JavDB spider...
-2025-12-06 22:47:28,846 - __main__ - INFO - Arguments: start_page=1, end_page=20, phase=all
-2025-12-06 22:47:28,846 - __main__ - INFO - IGNORE RELEASE DATE: Will process all entries regardless of today/yesterday tags
-2025-12-06 22:47:28,846 - __main__ - INFO - PROXY POOL MODE: 3 proxies configured with automatic failover
-2025-12-06 22:47:28,846 - __main__ - INFO - PROXY ENABLED: Using proxy for modules ['spider_index', 'spider_detail']
-2025-12-06 22:47:28,846 - __main__ - INFO - Validating history file integrity...
-2025-12-06 22:47:28,880 - utils.history_manager - INFO - Loaded 5433 previously parsed movies from history (phase 1: 3294, phase 2: 2139)
-2025-12-06 22:47:28,880 - __main__ - INFO - Initialized requests session
-2025-12-06 22:47:28,880 - __main__ - INFO - ==================================================
-2025-12-06 22:47:28,880 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-12-06 22:47:28,880 - __main__ - INFO - ==================================================
-2025-12-06 22:47:28,884 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=1 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7c602780b3b0>: Failed to establish a new connection: [Errno 111] Connection refused')))
-2025-12-06 22:47:28,884 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (1/3)
-2025-12-06 22:47:28,884 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
-2025-12-06 22:47:28,885 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-06 22:47:30,409 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
-2025-12-06 22:47:30,410 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
-2025-12-06 22:47:32,921 - utils.parser - INFO - [Page 2] New releases filter disabled - will process all entries
-2025-12-06 22:47:32,922 - utils.parser - INFO - [Page 2] Found 0 entries for phase 1
-2025-12-06 22:47:35,504 - utils.parser - INFO - [Page 3] New releases filter disabled - will process all entries
-2025-12-06 22:47:35,506 - utils.parser - INFO - [Page 3] Found 11 entries for phase 1
-2025-12-06 22:47:38,006 - utils.parser - INFO - [Page 4] New releases filter disabled - will process all entries
-2025-12-06 22:47:38,007 - utils.parser - INFO - [Page 4] Found 4 entries for phase 1
-2025-12-06 22:47:40,545 - utils.parser - INFO - [Page 5] New releases filter disabled - will process all entries
-2025-12-06 22:47:40,546 - utils.parser - INFO - [Page 5] Found 0 entries for phase 1
-2025-12-06 22:47:43,118 - utils.parser - INFO - [Page 6] New releases filter disabled - will process all entries
-2025-12-06 22:47:43,120 - utils.parser - INFO - [Page 6] Found 7 entries for phase 1
-2025-12-06 22:47:45,641 - utils.parser - INFO - [Page 7] New releases filter disabled - will process all entries
-2025-12-06 22:47:45,644 - utils.parser - INFO - [Page 7] Found 8 entries for phase 1
-2025-12-06 22:47:48,169 - utils.parser - INFO - [Page 8] New releases filter disabled - will process all entries
-2025-12-06 22:47:48,170 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
-2025-12-06 22:47:50,724 - utils.parser - INFO - [Page 9] New releases filter disabled - will process all entries
-2025-12-06 22:47:50,726 - utils.parser - INFO - [Page 9] Found 15 entries for phase 1
-2025-12-06 22:47:53,232 - utils.parser - INFO - [Page 10] New releases filter disabled - will process all entries
-2025-12-06 22:47:53,233 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
-2025-12-06 22:47:55,848 - utils.parser - INFO - [Page 11] New releases filter disabled - will process all entries
-2025-12-06 22:47:55,850 - utils.parser - INFO - [Page 11] Found 11 entries for phase 1
-2025-12-06 22:47:58,381 - utils.parser - INFO - [Page 12] New releases filter disabled - will process all entries
-2025-12-06 22:47:58,383 - utils.parser - INFO - [Page 12] Found 1 entries for phase 1
-2025-12-06 22:48:00,723 - utils.parser - INFO - [Page 13] New releases filter disabled - will process all entries
-2025-12-06 22:48:00,725 - utils.parser - INFO - [Page 13] Found 14 entries for phase 1
-2025-12-06 22:48:03,286 - utils.parser - INFO - [Page 14] New releases filter disabled - will process all entries
-2025-12-06 22:48:03,289 - utils.parser - INFO - [Page 14] Found 9 entries for phase 1
-2025-12-06 22:48:05,873 - utils.parser - INFO - [Page 15] New releases filter disabled - will process all entries
-2025-12-06 22:48:05,875 - utils.parser - INFO - [Page 15] Found 0 entries for phase 1
-2025-12-06 22:48:08,434 - utils.parser - INFO - [Page 16] New releases filter disabled - will process all entries
-2025-12-06 22:48:08,437 - utils.parser - INFO - [Page 16] Found 11 entries for phase 1
-2025-12-06 22:48:11,021 - utils.parser - INFO - [Page 17] New releases filter disabled - will process all entries
-2025-12-06 22:48:11,022 - utils.parser - INFO - [Page 17] Found 3 entries for phase 1
-2025-12-06 22:48:13,566 - utils.parser - INFO - [Page 18] New releases filter disabled - will process all entries
-2025-12-06 22:48:13,568 - utils.parser - INFO - [Page 18] Found 14 entries for phase 1
-2025-12-06 22:48:16,096 - utils.parser - INFO - [Page 19] New releases filter disabled - will process all entries
-2025-12-06 22:48:16,098 - utils.parser - INFO - [Page 19] Found 0 entries for phase 1
-2025-12-06 22:48:18,636 - utils.parser - INFO - [Page 20] New releases filter disabled - will process all entries
-2025-12-06 22:48:18,638 - utils.parser - INFO - [Page 20] Found 12 entries for phase 1
-2025-12-06 22:48:24,123 - __main__ - INFO - [1/120] [Page 3] Processing CAWD-890
-2025-12-06 22:48:29,607 - __main__ - INFO - [2/120] [Page 3] Processing CAWD-895
-2025-12-06 22:48:35,076 - __main__ - INFO - [3/120] [Page 3] Processing CAWD-901
-2025-12-06 22:48:40,548 - __main__ - INFO - [4/120] [Page 3] Processing CAWD-903
-2025-12-06 22:48:46,013 - __main__ - INFO - [5/120] [Page 3] Processing CAWD-904
-2025-12-06 22:48:51,489 - __main__ - INFO - [6/120] [Page 3] Processing CEAD-696
-2025-12-06 22:48:56,952 - __main__ - INFO - [7/120] [Page 3] Processing CLOT-034
-2025-12-06 22:49:02,395 - __main__ - INFO - [8/120] [Page 3] Processing CLUB-893
-2025-12-06 22:49:07,807 - __main__ - INFO - [9/120] [Page 3] Processing CLUB-894
-2025-12-06 22:49:13,246 - __main__ - INFO - [10/120] [Page 3] Processing START-046
-2025-12-06 22:49:18,692 - __main__ - INFO - [11/120] [Page 3] Processing START-053
-2025-12-06 22:49:24,140 - __main__ - INFO - [12/120] [Page 4] Processing START-070
-2025-12-06 22:49:29,565 - __main__ - INFO - [13/120] [Page 4] Processing START-090
-2025-12-06 22:49:35,024 - __main__ - INFO - [14/120] [Page 4] Processing blackedraw.18.02.16
-2025-12-06 22:49:40,452 - __main__ - INFO - [15/120] [Page 4] Processing blackedraw.18.03.08
-2025-12-06 22:49:45,919 - __main__ - INFO - [16/120] [Page 6] Processing ADN-676
-2025-12-06 22:49:51,356 - __main__ - INFO - [17/120] [Page 6] Processing ADN-707
-2025-12-06 22:49:56,773 - __main__ - INFO - [18/120] [Page 6] Processing ADN-725
-2025-12-06 22:50:02,245 - __main__ - INFO - [19/120] [Page 6] Processing ADN-729
-2025-12-06 22:50:07,523 - __main__ - INFO - [20/120] [Page 6] Processing ADN-735
-2025-12-06 22:50:12,965 - __main__ - INFO - [21/120] [Page 6] Processing ADN-739
-2025-12-06 22:50:18,425 - __main__ - INFO - [22/120] [Page 6] Processing ADN-740
-2025-12-06 22:50:23,915 - __main__ - INFO - [23/120] [Page 7] Processing ADN-749
-2025-12-06 22:50:29,488 - __main__ - INFO - [24/120] [Page 7] Processing ATID-652
-2025-12-06 22:50:35,000 - __main__ - INFO - [25/120] [Page 7] Processing SSNI-992
-2025-12-06 22:50:40,446 - __main__ - INFO - [26/120] [Page 7] Processing STARS-508
-2025-12-06 22:50:45,938 - __main__ - INFO - [27/120] [Page 7] Processing START-008
-2025-12-06 22:50:51,396 - __main__ - INFO - [28/120] [Page 7] Processing START-039
-2025-12-06 22:50:56,873 - __main__ - INFO - [29/120] [Page 7] Processing blackedraw.18.02.06
-2025-12-06 22:51:02,383 - __main__ - INFO - [30/120] [Page 7] Processing blackedraw.18.02.11
-2025-12-06 22:51:09,282 - __main__ - INFO - [31/120] [Page 9] Processing MIAB-578
-2025-12-06 22:51:15,814 - __main__ - INFO - [32/120] [Page 9] Processing MIDA-387
-2025-12-06 22:51:22,281 - __main__ - INFO - [33/120] [Page 9] Processing MIDA-410
-2025-12-06 22:51:28,766 - __main__ - INFO - [34/120] [Page 9] Processing MIDA-420
-2025-12-06 22:51:35,277 - __main__ - INFO - [35/120] [Page 9] Processing MIDA-424
-2025-12-06 22:51:41,815 - __main__ - INFO - [36/120] [Page 9] Processing MIDA-426
-2025-12-06 22:51:48,288 - __main__ - INFO - [37/120] [Page 9] Processing MIDA-428
-2025-12-06 22:51:54,787 - __main__ - INFO - [38/120] [Page 9] Processing MIDA-431
-2025-12-06 22:52:01,278 - __main__ - INFO - [39/120] [Page 9] Processing MIDA-461
-2025-12-06 22:52:07,769 - __main__ - INFO - [40/120] [Page 9] Processing SONE-563
-2025-12-06 22:52:13,236 - __main__ - INFO - [41/120] [Page 9] Processing SONE-687
-2025-12-06 22:52:18,760 - __main__ - INFO - [42/120] [Page 9] Processing SSIS-361
-2025-12-06 22:52:24,214 - __main__ - INFO - [43/120] [Page 9] Processing SSIS-387
-2025-12-06 22:52:29,685 - __main__ - INFO - [44/120] [Page 9] Processing blackedraw.17.11.08
-2025-12-06 22:52:36,161 - __main__ - INFO - [45/120] [Page 9] Processing blackedraw.18.02.01
-2025-12-06 22:52:42,637 - __main__ - INFO - [46/120] [Page 11] Processing ABF-287
-2025-12-06 22:52:49,206 - __main__ - INFO - [47/120] [Page 11] Processing ABF-290
-2025-12-06 22:52:55,747 - __main__ - INFO - [48/120] [Page 11] Processing ABF-292
-2025-12-06 22:53:02,240 - __main__ - INFO - [49/120] [Page 11] Processing ACHJ-074
-2025-12-06 22:53:08,742 - __main__ - INFO - [50/120] [Page 11] Processing ADN-746
-2025-12-06 22:53:15,226 - __main__ - INFO - [51/120] [Page 11] Processing ALDN-528
-2025-12-06 22:53:21,462 - utils.parser - WARNING - [52] No copy button found for video code
-2025-12-06 22:53:21,462 - utils.parser - WARNING - [52] No magnets content found in detail page
-2025-12-06 22:53:21,462 - utils.magnet_extractor - WARNING - [52] No suitable magnet found
-2025-12-06 22:53:21,462 - __main__ - INFO - [52/120] [Page 11] Processing 
-2025-12-06 22:53:27,675 - utils.parser - WARNING - [53] No copy button found for video code
-2025-12-06 22:53:27,675 - utils.parser - WARNING - [53] No magnets content found in detail page
-2025-12-06 22:53:27,675 - utils.magnet_extractor - WARNING - [53] No suitable magnet found
-2025-12-06 22:53:27,675 - __main__ - INFO - [53/120] [Page 11] Processing 
-2025-12-06 22:53:33,887 - utils.parser - WARNING - [54] No copy button found for video code
-2025-12-06 22:53:33,888 - utils.parser - WARNING - [54] No magnets content found in detail page
-2025-12-06 22:53:33,888 - utils.magnet_extractor - WARNING - [54] No suitable magnet found
-2025-12-06 22:53:33,888 - __main__ - INFO - [54/120] [Page 11] Processing 
-2025-12-06 22:53:40,269 - utils.parser - WARNING - [55] No copy button found for video code
-2025-12-06 22:53:40,270 - utils.parser - WARNING - [55] No magnets content found in detail page
-2025-12-06 22:53:40,270 - utils.magnet_extractor - WARNING - [55] No suitable magnet found
-2025-12-06 22:53:40,270 - __main__ - INFO - [55/120] [Page 11] Processing 
-2025-12-06 22:53:46,461 - utils.parser - WARNING - [56] No copy button found for video code
-2025-12-06 22:53:46,461 - utils.parser - WARNING - [56] No magnets content found in detail page
-2025-12-06 22:53:46,461 - utils.magnet_extractor - WARNING - [56] No suitable magnet found
-2025-12-06 22:53:46,461 - __main__ - INFO - [56/120] [Page 11] Processing 
-2025-12-06 22:53:52,662 - utils.parser - WARNING - [57] No copy button found for video code
-2025-12-06 22:53:52,662 - utils.parser - WARNING - [57] No magnets content found in detail page
-2025-12-06 22:53:52,662 - utils.magnet_extractor - WARNING - [57] No suitable magnet found
-2025-12-06 22:53:52,662 - __main__ - INFO - [57/120] [Page 12] Processing 
-2025-12-06 22:53:57,872 - utils.parser - WARNING - [58] No copy button found for video code
-2025-12-06 22:53:57,872 - utils.parser - WARNING - [58] No magnets content found in detail page
-2025-12-06 22:53:57,874 - utils.magnet_extractor - WARNING - [58] No suitable magnet found
-2025-12-06 22:53:57,874 - __main__ - INFO - [58/120] [Page 13] Processing 
-2025-12-06 22:54:04,081 - utils.parser - WARNING - [59] No copy button found for video code
-2025-12-06 22:54:04,081 - utils.parser - WARNING - [59] No magnets content found in detail page
-2025-12-06 22:54:04,081 - utils.magnet_extractor - WARNING - [59] No suitable magnet found
-2025-12-06 22:54:04,081 - __main__ - INFO - [59/120] [Page 13] Processing 
-2025-12-06 22:54:10,279 - utils.parser - WARNING - [60] No copy button found for video code
-2025-12-06 22:54:10,279 - utils.parser - WARNING - [60] No magnets content found in detail page
-2025-12-06 22:54:10,279 - utils.magnet_extractor - WARNING - [60] No suitable magnet found
-2025-12-06 22:54:10,279 - __main__ - INFO - [60/120] [Page 13] Processing 
-2025-12-06 22:54:16,477 - utils.parser - WARNING - [61] No copy button found for video code
-2025-12-06 22:54:16,477 - utils.parser - WARNING - [61] No magnets content found in detail page
-2025-12-06 22:54:16,477 - utils.magnet_extractor - WARNING - [61] No suitable magnet found
-2025-12-06 22:54:16,477 - __main__ - INFO - [61/120] [Page 13] Processing 
-2025-12-06 22:54:22,673 - utils.parser - WARNING - [62] No copy button found for video code
-2025-12-06 22:54:22,673 - utils.parser - WARNING - [62] No magnets content found in detail page
-2025-12-06 22:54:22,673 - utils.magnet_extractor - WARNING - [62] No suitable magnet found
-2025-12-06 22:54:22,673 - __main__ - INFO - [62/120] [Page 13] Processing 
-2025-12-06 22:54:28,872 - utils.parser - WARNING - [63] No copy button found for video code
-2025-12-06 22:54:28,872 - utils.parser - WARNING - [63] No magnets content found in detail page
-2025-12-06 22:54:28,872 - utils.magnet_extractor - WARNING - [63] No suitable magnet found
-2025-12-06 22:54:28,872 - __main__ - INFO - [63/120] [Page 13] Processing 
-2025-12-06 22:54:35,082 - utils.parser - WARNING - [64] No copy button found for video code
-2025-12-06 22:54:35,082 - utils.parser - WARNING - [64] No magnets content found in detail page
-2025-12-06 22:54:35,082 - utils.magnet_extractor - WARNING - [64] No suitable magnet found
-2025-12-06 22:54:35,082 - __main__ - INFO - [64/120] [Page 13] Processing 
-2025-12-06 22:54:41,289 - utils.parser - WARNING - [65] No copy button found for video code
-2025-12-06 22:54:41,289 - utils.parser - WARNING - [65] No magnets content found in detail page
-2025-12-06 22:54:41,289 - utils.magnet_extractor - WARNING - [65] No suitable magnet found
-2025-12-06 22:54:41,289 - __main__ - INFO - [65/120] [Page 13] Processing 
-2025-12-06 22:54:47,502 - utils.parser - WARNING - [66] No copy button found for video code
-2025-12-06 22:54:47,502 - utils.parser - WARNING - [66] No magnets content found in detail page
-2025-12-06 22:54:47,502 - utils.magnet_extractor - WARNING - [66] No suitable magnet found
-2025-12-06 22:54:47,502 - __main__ - INFO - [66/120] [Page 13] Processing 
-2025-12-06 22:54:53,702 - utils.parser - WARNING - [67] No copy button found for video code
-2025-12-06 22:54:53,702 - utils.parser - WARNING - [67] No magnets content found in detail page
-2025-12-06 22:54:53,702 - utils.magnet_extractor - WARNING - [67] No suitable magnet found
-2025-12-06 22:54:53,702 - __main__ - INFO - [67/120] [Page 13] Processing 
-2025-12-06 22:54:58,912 - utils.parser - WARNING - [68] No copy button found for video code
-2025-12-06 22:54:58,912 - utils.parser - WARNING - [68] No magnets content found in detail page
-2025-12-06 22:54:58,912 - utils.magnet_extractor - WARNING - [68] No suitable magnet found
-2025-12-06 22:54:58,912 - __main__ - INFO - [68/120] [Page 13] Processing 
-2025-12-06 22:55:04,116 - utils.parser - WARNING - [69] No copy button found for video code
-2025-12-06 22:55:04,116 - utils.parser - WARNING - [69] No magnets content found in detail page
-2025-12-06 22:55:04,116 - utils.magnet_extractor - WARNING - [69] No suitable magnet found
-2025-12-06 22:55:04,116 - __main__ - INFO - [69/120] [Page 13] Processing 
-2025-12-06 22:55:09,321 - utils.parser - WARNING - [70] No copy button found for video code
-2025-12-06 22:55:09,321 - utils.parser - WARNING - [70] No magnets content found in detail page
-2025-12-06 22:55:09,321 - utils.magnet_extractor - WARNING - [70] No suitable magnet found
-2025-12-06 22:55:09,321 - __main__ - INFO - [70/120] [Page 13] Processing 
-2025-12-06 22:55:14,524 - utils.parser - WARNING - [71] No copy button found for video code
-2025-12-06 22:55:14,524 - utils.parser - WARNING - [71] No magnets content found in detail page
-2025-12-06 22:55:14,524 - utils.magnet_extractor - WARNING - [71] No suitable magnet found
-2025-12-06 22:55:14,524 - __main__ - INFO - [71/120] [Page 13] Processing 
-2025-12-06 22:55:19,893 - utils.parser - WARNING - [72] No copy button found for video code
-2025-12-06 22:55:19,893 - utils.parser - WARNING - [72] No magnets content found in detail page
-2025-12-06 22:55:19,893 - utils.magnet_extractor - WARNING - [72] No suitable magnet found
-2025-12-06 22:55:19,893 - __main__ - INFO - [72/120] [Page 14] Processing 
-2025-12-06 22:55:26,103 - utils.parser - WARNING - [73] No copy button found for video code
-2025-12-06 22:55:26,103 - utils.parser - WARNING - [73] No magnets content found in detail page
-2025-12-06 22:55:26,103 - utils.magnet_extractor - WARNING - [73] No suitable magnet found
-2025-12-06 22:55:26,103 - __main__ - INFO - [73/120] [Page 14] Processing 
-2025-12-06 22:55:32,298 - utils.parser - WARNING - [74] No copy button found for video code
-2025-12-06 22:55:32,298 - utils.parser - WARNING - [74] No magnets content found in detail page
-2025-12-06 22:55:32,298 - utils.magnet_extractor - WARNING - [74] No suitable magnet found
-2025-12-06 22:55:32,298 - __main__ - INFO - [74/120] [Page 14] Processing 
-2025-12-06 22:55:38,503 - utils.parser - WARNING - [75] No copy button found for video code
-2025-12-06 22:55:38,503 - utils.parser - WARNING - [75] No magnets content found in detail page
-2025-12-06 22:55:38,503 - utils.magnet_extractor - WARNING - [75] No suitable magnet found
-2025-12-06 22:55:38,503 - __main__ - INFO - [75/120] [Page 14] Processing 
-2025-12-06 22:55:44,699 - utils.parser - WARNING - [76] No copy button found for video code
-2025-12-06 22:55:44,700 - utils.parser - WARNING - [76] No magnets content found in detail page
-2025-12-06 22:55:44,700 - utils.magnet_extractor - WARNING - [76] No suitable magnet found
-2025-12-06 22:55:44,700 - __main__ - INFO - [76/120] [Page 14] Processing 
-2025-12-06 22:55:50,906 - utils.parser - WARNING - [77] No copy button found for video code
-2025-12-06 22:55:50,906 - utils.parser - WARNING - [77] No magnets content found in detail page
-2025-12-06 22:55:50,906 - utils.magnet_extractor - WARNING - [77] No suitable magnet found
-2025-12-06 22:55:50,906 - __main__ - INFO - [77/120] [Page 14] Processing 
-2025-12-06 22:55:57,117 - utils.parser - WARNING - [78] No copy button found for video code
-2025-12-06 22:55:57,117 - utils.parser - WARNING - [78] No magnets content found in detail page
-2025-12-06 22:55:57,117 - utils.magnet_extractor - WARNING - [78] No suitable magnet found
-2025-12-06 22:55:57,117 - __main__ - INFO - [78/120] [Page 14] Processing 
-2025-12-06 22:56:03,325 - utils.parser - WARNING - [79] No copy button found for video code
-2025-12-06 22:56:03,325 - utils.parser - WARNING - [79] No magnets content found in detail page
-2025-12-06 22:56:03,325 - utils.magnet_extractor - WARNING - [79] No suitable magnet found
-2025-12-06 22:56:03,325 - __main__ - INFO - [79/120] [Page 14] Processing 
-2025-12-06 22:56:09,536 - utils.parser - WARNING - [80] No copy button found for video code
-2025-12-06 22:56:09,536 - utils.parser - WARNING - [80] No magnets content found in detail page
-2025-12-06 22:56:09,536 - utils.magnet_extractor - WARNING - [80] No suitable magnet found
-2025-12-06 22:56:09,536 - __main__ - INFO - [80/120] [Page 14] Processing 
-2025-12-06 22:56:15,746 - utils.parser - WARNING - [81] No copy button found for video code
-2025-12-06 22:56:15,746 - utils.parser - WARNING - [81] No magnets content found in detail page
-2025-12-06 22:56:15,746 - utils.magnet_extractor - WARNING - [81] No suitable magnet found
-2025-12-06 22:56:15,746 - __main__ - INFO - [81/120] [Page 16] Processing 
-2025-12-06 22:56:20,949 - utils.parser - WARNING - [82] No copy button found for video code
-2025-12-06 22:56:20,949 - utils.parser - WARNING - [82] No magnets content found in detail page
-2025-12-06 22:56:20,949 - utils.magnet_extractor - WARNING - [82] No suitable magnet found
-2025-12-06 22:56:20,949 - __main__ - INFO - [82/120] [Page 16] Processing 
-2025-12-06 22:56:26,154 - utils.parser - WARNING - [83] No copy button found for video code
-2025-12-06 22:56:26,154 - utils.parser - WARNING - [83] No magnets content found in detail page
-2025-12-06 22:56:26,155 - utils.magnet_extractor - WARNING - [83] No suitable magnet found
-2025-12-06 22:56:26,155 - __main__ - INFO - [83/120] [Page 16] Processing 
-2025-12-06 22:56:31,349 - utils.parser - WARNING - [84] No copy button found for video code
-2025-12-06 22:56:31,349 - utils.parser - WARNING - [84] No magnets content found in detail page
-2025-12-06 22:56:31,349 - utils.magnet_extractor - WARNING - [84] No suitable magnet found
-2025-12-06 22:56:31,349 - __main__ - INFO - [84/120] [Page 16] Processing 
-2025-12-06 22:56:36,572 - utils.parser - WARNING - [85] No copy button found for video code
-2025-12-06 22:56:36,573 - utils.parser - WARNING - [85] No magnets content found in detail page
-2025-12-06 22:56:36,573 - utils.magnet_extractor - WARNING - [85] No suitable magnet found
-2025-12-06 22:56:36,573 - __main__ - INFO - [85/120] [Page 16] Processing 
-2025-12-06 22:56:41,778 - utils.parser - WARNING - [86] No copy button found for video code
-2025-12-06 22:56:41,778 - utils.parser - WARNING - [86] No magnets content found in detail page
-2025-12-06 22:56:41,778 - utils.magnet_extractor - WARNING - [86] No suitable magnet found
-2025-12-06 22:56:41,778 - __main__ - INFO - [86/120] [Page 16] Processing 
-2025-12-06 22:56:46,988 - utils.parser - WARNING - [87] No copy button found for video code
-2025-12-06 22:56:46,988 - utils.parser - WARNING - [87] No magnets content found in detail page
-2025-12-06 22:56:46,988 - utils.magnet_extractor - WARNING - [87] No suitable magnet found
-2025-12-06 22:56:46,988 - __main__ - INFO - [87/120] [Page 16] Processing 
-2025-12-06 22:56:52,190 - utils.parser - WARNING - [88] No copy button found for video code
-2025-12-06 22:56:52,190 - utils.parser - WARNING - [88] No magnets content found in detail page
-2025-12-06 22:56:52,190 - utils.magnet_extractor - WARNING - [88] No suitable magnet found
-2025-12-06 22:56:52,190 - __main__ - INFO - [88/120] [Page 16] Processing 
-2025-12-06 22:56:57,398 - utils.parser - WARNING - [89] No copy button found for video code
-2025-12-06 22:56:57,399 - utils.parser - WARNING - [89] No magnets content found in detail page
-2025-12-06 22:56:57,399 - utils.magnet_extractor - WARNING - [89] No suitable magnet found
-2025-12-06 22:56:57,399 - __main__ - INFO - [89/120] [Page 16] Processing 
-2025-12-06 22:57:02,608 - utils.parser - WARNING - [90] No copy button found for video code
-2025-12-06 22:57:02,609 - utils.parser - WARNING - [90] No magnets content found in detail page
-2025-12-06 22:57:02,609 - utils.magnet_extractor - WARNING - [90] No suitable magnet found
-2025-12-06 22:57:02,609 - __main__ - INFO - [90/120] [Page 16] Processing 
-2025-12-06 22:57:07,823 - utils.parser - WARNING - [91] No copy button found for video code
-2025-12-06 22:57:07,823 - utils.parser - WARNING - [91] No magnets content found in detail page
-2025-12-06 22:57:07,823 - utils.magnet_extractor - WARNING - [91] No suitable magnet found
-2025-12-06 22:57:07,823 - __main__ - INFO - [91/120] [Page 16] Processing 
-2025-12-06 22:57:13,033 - utils.parser - WARNING - [92] No copy button found for video code
-2025-12-06 22:57:13,033 - utils.parser - WARNING - [92] No magnets content found in detail page
-2025-12-06 22:57:13,033 - utils.magnet_extractor - WARNING - [92] No suitable magnet found
-2025-12-06 22:57:13,033 - __main__ - INFO - [92/120] [Page 17] Processing 
-2025-12-06 22:57:18,244 - utils.parser - WARNING - [93] No copy button found for video code
-2025-12-06 22:57:18,245 - utils.parser - WARNING - [93] No magnets content found in detail page
-2025-12-06 22:57:18,245 - utils.magnet_extractor - WARNING - [93] No suitable magnet found
-2025-12-06 22:57:18,245 - __main__ - INFO - [93/120] [Page 17] Processing 
-2025-12-06 22:57:23,454 - utils.parser - WARNING - [94] No copy button found for video code
-2025-12-06 22:57:23,454 - utils.parser - WARNING - [94] No magnets content found in detail page
-2025-12-06 22:57:23,454 - utils.magnet_extractor - WARNING - [94] No suitable magnet found
-2025-12-06 22:57:23,454 - __main__ - INFO - [94/120] [Page 17] Processing 
-2025-12-06 22:57:28,659 - utils.parser - WARNING - [95] No copy button found for video code
-2025-12-06 22:57:28,659 - utils.parser - WARNING - [95] No magnets content found in detail page
-2025-12-06 22:57:28,659 - utils.magnet_extractor - WARNING - [95] No suitable magnet found
-2025-12-06 22:57:28,659 - __main__ - INFO - [95/120] [Page 18] Processing 
-2025-12-06 22:57:34,055 - utils.parser - WARNING - [96] No copy button found for video code
-2025-12-06 22:57:34,055 - utils.parser - WARNING - [96] No magnets content found in detail page
-2025-12-06 22:57:34,055 - utils.magnet_extractor - WARNING - [96] No suitable magnet found
-2025-12-06 22:57:34,055 - __main__ - INFO - [96/120] [Page 18] Processing 
-2025-12-06 22:57:39,256 - utils.parser - WARNING - [97] No copy button found for video code
-2025-12-06 22:57:39,256 - utils.parser - WARNING - [97] No magnets content found in detail page
-2025-12-06 22:57:39,256 - utils.magnet_extractor - WARNING - [97] No suitable magnet found
-2025-12-06 22:57:39,256 - __main__ - INFO - [97/120] [Page 18] Processing 
-2025-12-06 22:57:44,466 - utils.parser - WARNING - [98] No copy button found for video code
-2025-12-06 22:57:44,467 - utils.parser - WARNING - [98] No magnets content found in detail page
-2025-12-06 22:57:44,467 - utils.magnet_extractor - WARNING - [98] No suitable magnet found
-2025-12-06 22:57:44,467 - __main__ - INFO - [98/120] [Page 18] Processing 
-2025-12-06 22:57:49,682 - utils.parser - WARNING - [99] No copy button found for video code
-2025-12-06 22:57:49,682 - utils.parser - WARNING - [99] No magnets content found in detail page
-2025-12-06 22:57:49,682 - utils.magnet_extractor - WARNING - [99] No suitable magnet found
-2025-12-06 22:57:49,682 - __main__ - INFO - [99/120] [Page 18] Processing 
-2025-12-06 22:57:54,885 - utils.parser - WARNING - [100] No copy button found for video code
-2025-12-06 22:57:54,885 - utils.parser - WARNING - [100] No magnets content found in detail page
-2025-12-06 22:57:54,885 - utils.magnet_extractor - WARNING - [100] No suitable magnet found
-2025-12-06 22:57:54,885 - __main__ - INFO - [100/120] [Page 18] Processing 
-2025-12-06 22:58:00,086 - utils.parser - WARNING - [101] No copy button found for video code
-2025-12-06 22:58:00,086 - utils.parser - WARNING - [101] No magnets content found in detail page
-2025-12-06 22:58:00,086 - utils.magnet_extractor - WARNING - [101] No suitable magnet found
-2025-12-06 22:58:00,086 - __main__ - INFO - [101/120] [Page 18] Processing 
-2025-12-06 22:58:05,463 - utils.parser - WARNING - [102] No copy button found for video code
-2025-12-06 22:58:05,463 - utils.parser - WARNING - [102] No magnets content found in detail page
-2025-12-06 22:58:05,463 - utils.magnet_extractor - WARNING - [102] No suitable magnet found
-2025-12-06 22:58:05,463 - __main__ - INFO - [102/120] [Page 18] Processing 
-2025-12-06 22:58:10,671 - utils.parser - WARNING - [103] No copy button found for video code
-2025-12-06 22:58:10,672 - utils.parser - WARNING - [103] No magnets content found in detail page
-2025-12-06 22:58:10,672 - utils.magnet_extractor - WARNING - [103] No suitable magnet found
-2025-12-06 22:58:10,672 - __main__ - INFO - [103/120] [Page 18] Processing 
-2025-12-06 22:58:15,865 - utils.parser - WARNING - [104] No copy button found for video code
-2025-12-06 22:58:15,865 - utils.parser - WARNING - [104] No magnets content found in detail page
-2025-12-06 22:58:15,865 - utils.magnet_extractor - WARNING - [104] No suitable magnet found
-2025-12-06 22:58:15,865 - __main__ - INFO - [104/120] [Page 18] Processing 
-2025-12-06 22:58:21,057 - utils.parser - WARNING - [105] No copy button found for video code
-2025-12-06 22:58:21,057 - utils.parser - WARNING - [105] No magnets content found in detail page
-2025-12-06 22:58:21,057 - utils.magnet_extractor - WARNING - [105] No suitable magnet found
-2025-12-06 22:58:21,057 - __main__ - INFO - [105/120] [Page 18] Processing 
-2025-12-06 22:58:26,258 - utils.parser - WARNING - [106] No copy button found for video code
-2025-12-06 22:58:26,258 - utils.parser - WARNING - [106] No magnets content found in detail page
-2025-12-06 22:58:26,258 - utils.magnet_extractor - WARNING - [106] No suitable magnet found
-2025-12-06 22:58:26,258 - __main__ - INFO - [106/120] [Page 18] Processing 
-2025-12-06 22:58:31,458 - utils.parser - WARNING - [107] No copy button found for video code
-2025-12-06 22:58:31,458 - utils.parser - WARNING - [107] No magnets content found in detail page
-2025-12-06 22:58:31,458 - utils.magnet_extractor - WARNING - [107] No suitable magnet found
-2025-12-06 22:58:31,458 - __main__ - INFO - [107/120] [Page 18] Processing 
-2025-12-06 22:58:36,658 - utils.parser - WARNING - [108] No copy button found for video code
-2025-12-06 22:58:36,658 - utils.parser - WARNING - [108] No magnets content found in detail page
-2025-12-06 22:58:36,658 - utils.magnet_extractor - WARNING - [108] No suitable magnet found
-2025-12-06 22:58:36,658 - __main__ - INFO - [108/120] [Page 18] Processing 
-2025-12-06 22:58:41,852 - utils.parser - WARNING - [109] No copy button found for video code
-2025-12-06 22:58:41,852 - utils.parser - WARNING - [109] No magnets content found in detail page
-2025-12-06 22:58:41,852 - utils.magnet_extractor - WARNING - [109] No suitable magnet found
-2025-12-06 22:58:41,852 - __main__ - INFO - [109/120] [Page 20] Processing 
-2025-12-06 22:58:47,055 - utils.parser - WARNING - [110] No copy button found for video code
-2025-12-06 22:58:47,055 - utils.parser - WARNING - [110] No magnets content found in detail page
-2025-12-06 22:58:47,055 - utils.magnet_extractor - WARNING - [110] No suitable magnet found
-2025-12-06 22:58:47,055 - __main__ - INFO - [110/120] [Page 20] Processing 
-2025-12-06 22:58:52,255 - utils.parser - WARNING - [111] No copy button found for video code
-2025-12-06 22:58:52,255 - utils.parser - WARNING - [111] No magnets content found in detail page
-2025-12-06 22:58:52,255 - utils.magnet_extractor - WARNING - [111] No suitable magnet found
-2025-12-06 22:58:52,255 - __main__ - INFO - [111/120] [Page 20] Processing 
-2025-12-06 22:58:57,457 - utils.parser - WARNING - [112] No copy button found for video code
-2025-12-06 22:58:57,457 - utils.parser - WARNING - [112] No magnets content found in detail page
-2025-12-06 22:58:57,457 - utils.magnet_extractor - WARNING - [112] No suitable magnet found
-2025-12-06 22:58:57,457 - __main__ - INFO - [112/120] [Page 20] Processing 
-2025-12-06 22:59:02,657 - utils.parser - WARNING - [113] No copy button found for video code
-2025-12-06 22:59:02,658 - utils.parser - WARNING - [113] No magnets content found in detail page
-2025-12-06 22:59:02,658 - utils.magnet_extractor - WARNING - [113] No suitable magnet found
-2025-12-06 22:59:02,658 - __main__ - INFO - [113/120] [Page 20] Processing 
-2025-12-06 22:59:07,859 - utils.parser - WARNING - [114] No copy button found for video code
-2025-12-06 22:59:07,859 - utils.parser - WARNING - [114] No magnets content found in detail page
-2025-12-06 22:59:07,859 - utils.magnet_extractor - WARNING - [114] No suitable magnet found
-2025-12-06 22:59:07,859 - __main__ - INFO - [114/120] [Page 20] Processing 
-2025-12-06 22:59:13,063 - utils.parser - WARNING - [115] No copy button found for video code
-2025-12-06 22:59:13,063 - utils.parser - WARNING - [115] No magnets content found in detail page
-2025-12-06 22:59:13,063 - utils.magnet_extractor - WARNING - [115] No suitable magnet found
-2025-12-06 22:59:13,063 - __main__ - INFO - [115/120] [Page 20] Processing 
-2025-12-06 22:59:18,267 - utils.parser - WARNING - [116] No copy button found for video code
-2025-12-06 22:59:18,267 - utils.parser - WARNING - [116] No magnets content found in detail page
-2025-12-06 22:59:18,267 - utils.magnet_extractor - WARNING - [116] No suitable magnet found
-2025-12-06 22:59:18,267 - __main__ - INFO - [116/120] [Page 20] Processing 
-2025-12-06 22:59:23,469 - utils.parser - WARNING - [117] No copy button found for video code
-2025-12-06 22:59:23,469 - utils.parser - WARNING - [117] No magnets content found in detail page
-2025-12-06 22:59:23,469 - utils.magnet_extractor - WARNING - [117] No suitable magnet found
-2025-12-06 22:59:23,469 - __main__ - INFO - [117/120] [Page 20] Processing 
-2025-12-06 22:59:28,668 - utils.parser - WARNING - [118] No copy button found for video code
-2025-12-06 22:59:28,668 - utils.parser - WARNING - [118] No magnets content found in detail page
-2025-12-06 22:59:28,668 - utils.magnet_extractor - WARNING - [118] No suitable magnet found
-2025-12-06 22:59:28,668 - __main__ - INFO - [118/120] [Page 20] Processing 
-2025-12-06 22:59:33,870 - utils.parser - WARNING - [119] No copy button found for video code
-2025-12-06 22:59:33,870 - utils.parser - WARNING - [119] No magnets content found in detail page
-2025-12-06 22:59:33,870 - utils.magnet_extractor - WARNING - [119] No suitable magnet found
-2025-12-06 22:59:33,870 - __main__ - INFO - [119/120] [Page 20] Processing 
-2025-12-06 22:59:39,070 - utils.parser - WARNING - [120] No copy button found for video code
-2025-12-06 22:59:39,070 - utils.parser - WARNING - [120] No magnets content found in detail page
-2025-12-06 22:59:39,070 - utils.magnet_extractor - WARNING - [120] No suitable magnet found
-2025-12-06 22:59:39,070 - __main__ - INFO - [120/120] [Page 20] Processing 
-2025-12-06 22:59:39,070 - __main__ - INFO - Phase 1 completed: 17 entries processed
-2025-12-06 22:59:39,070 - __main__ - INFO - ==================================================
-2025-12-06 22:59:39,070 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-12-06 22:59:39,070 - __main__ - INFO - ==================================================
-2025-12-06 22:59:39,260 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-06 22:59:39,462 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /?page=1 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c6026619670>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2025-12-06 22:59:39,462 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-06 22:59:39,462 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
-2025-12-06 22:59:39,462 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM2, retrying...
-2025-12-06 22:59:39,476 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=1
-2025-12-06 22:59:39,476 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
-2025-12-06 22:59:39,476 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Miraculous Fortress'
-2025-12-06 22:59:39,476 - __main__ - INFO - [spider_index] Switched to proxy: Miraculous Fortress, retrying...
-2025-12-06 22:59:39,479 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPConnectionPool(host='139.99.124.231', port=12300): Max retries exceeded with url: http://138.2.91.170:8000/?page=1 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c60265e2090>: Failed to establish a new connection: [Errno 111] Connection refused')))
-2025-12-06 22:59:39,479 - __main__ - WARNING - [Page 1] Proxy 'Singapore-ARM1' failed both Direct and CF modes. Marking BANNED and switching...
-2025-12-06 22:59:39,479 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (2/3)
-2025-12-06 22:59:39,479 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
-2025-12-06 22:59:39,479 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
-2025-12-06 22:59:39,479 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
-2025-12-06 22:59:39,479 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (2/3)
-2025-12-06 22:59:39,479 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Miraculous Fortress'
-2025-12-06 22:59:39,483 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=1 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7c602661a720>: Failed to establish a new connection: [Errno 111] Connection refused')))
-2025-12-06 22:59:39,483 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (3/3)
-2025-12-06 22:59:39,483 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
-2025-12-06 22:59:39,483 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-06 22:59:39,687 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /?page=1 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c60265e1130>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2025-12-06 22:59:39,687 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-06 22:59:39,687 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
-2025-12-06 22:59:39,687 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM2, retrying...
-2025-12-06 22:59:39,694 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=1
-2025-12-06 22:59:39,694 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (3/3)
-2025-12-06 22:59:39,694 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Miraculous Fortress'
-2025-12-06 22:59:39,694 - __main__ - INFO - [spider_index] Switched to proxy: Miraculous Fortress, retrying...
-2025-12-06 22:59:39,698 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPConnectionPool(host='139.99.124.231', port=12300): Max retries exceeded with url: http://138.2.91.170:8000/?page=1 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c60265e04d0>: Failed to establish a new connection: [Errno 111] Connection refused')))
-2025-12-06 22:59:39,698 - __main__ - WARNING - [Page 1] Proxy 'Miraculous Fortress' failed both Direct and CF modes. Marking BANNED and switching...
-2025-12-06 22:59:39,698 - utils.proxy_ban_manager - WARNING - Proxy 'Miraculous Fortress' banned until 2025-12-13 22:59:39 (7 days)
-2025-12-06 22:59:39,698 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' reached 4 failures, putting in cooldown for 691200s (8 days)
-2025-12-06 22:59:39,698 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
-2025-12-06 22:59:39,698 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
-2025-12-06 22:59:39,698 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
-2025-12-06 22:59:39,698 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM2' banned until 2025-12-13 22:59:39 (7 days)
-2025-12-06 22:59:39,698 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' reached 4 failures, putting in cooldown for 691200s (8 days)
-2025-12-06 22:59:39,698 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Singapore-ARM1'
-2025-12-06 22:59:39,898 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /?page=1 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c6026619640>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2025-12-06 22:59:39,898 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-06 22:59:39,898 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
-2025-12-06 22:59:39,898 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-06 22:59:39,905 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=1
-2025-12-06 22:59:39,905 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
-2025-12-06 22:59:39,905 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
-2025-12-06 22:59:39,905 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-06 22:59:39,910 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=1
-2025-12-06 22:59:39,910 - __main__ - ERROR - [Page 1] All proxy attempts exhausted.
-2025-12-06 22:59:39,910 - __main__ - WARNING - [Page 1] No movie list found after all fallback attempts
-2025-12-06 22:59:40,113 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-06 22:59:40,318 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /?page=2 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c6026eea390>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2025-12-06 22:59:40,318 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-06 22:59:40,318 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
-2025-12-06 22:59:40,318 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-06 22:59:40,324 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=2
-2025-12-06 22:59:40,324 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
-2025-12-06 22:59:40,324 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
-2025-12-06 22:59:40,324 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-06 22:59:40,329 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=2
-2025-12-06 22:59:40,330 - __main__ - WARNING - [Page 2] Proxy 'Singapore-ARM1' failed both Direct and CF modes. Marking BANNED and switching...
-2025-12-06 22:59:40,330 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (3/3)
-2025-12-06 22:59:40,330 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
-2025-12-06 22:59:40,330 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' banned until 2025-12-13 22:59:40 (7 days)
-2025-12-06 22:59:40,330 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 4 failures, putting in cooldown for 691200s (8 days)
-2025-12-06 22:59:40,330 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
-2025-12-06 22:59:40,330 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' is already in ban period, not updating
-2025-12-06 22:59:40,330 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 5 failures, putting in cooldown for 691200s (8 days)
-2025-12-06 22:59:40,330 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
-2025-12-06 22:59:40,330 - utils.proxy_pool - WARNING - All proxies are unavailable or in cooldown
-2025-12-06 22:59:40,330 - __main__ - WARNING - [spider_index] Proxy mode 'pool' enabled but no proxy available
-2025-12-06 22:59:40,690 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /?page=2 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c6026eebe60>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2025-12-06 22:59:40,690 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-06 22:59:40,691 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
-2025-12-06 22:59:40,691 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-06 22:59:40,697 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=2
-2025-12-06 22:59:40,697 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
-2025-12-06 22:59:40,697 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
-2025-12-06 22:59:40,697 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-06 22:59:40,702 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=2
-2025-12-06 22:59:40,702 - __main__ - WARNING - [Page 2] Proxy 'Singapore-ARM1' failed both Direct and CF modes. Marking BANNED and switching...
-2025-12-06 22:59:40,702 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (3/3)
-2025-12-06 22:59:40,702 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
-2025-12-06 22:59:40,702 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' is already in ban period, not updating
-2025-12-06 22:59:40,702 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 4 failures, putting in cooldown for 691200s (8 days)
-2025-12-06 22:59:40,702 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
-2025-12-06 22:59:40,702 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' is already in ban period, not updating
-2025-12-06 22:59:40,702 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 5 failures, putting in cooldown for 691200s (8 days)
-2025-12-06 22:59:40,702 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
-2025-12-06 22:59:40,702 - utils.proxy_pool - WARNING - All proxies are unavailable or in cooldown
-2025-12-06 22:59:40,702 - __main__ - WARNING - [spider_index] Proxy mode 'pool' enabled but no proxy available
-2025-12-06 22:59:40,938 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /?page=2 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c60265e1cd0>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2025-12-06 22:59:40,938 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-06 22:59:40,938 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
-2025-12-06 22:59:40,938 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-06 22:59:40,943 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=2
-2025-12-06 22:59:40,944 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
-2025-12-06 22:59:40,944 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
-2025-12-06 22:59:40,944 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-06 22:59:40,949 - __main__ - ERROR - Error fetching https://javdb.com/?page=2: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=2
-2025-12-06 22:59:40,949 - __main__ - ERROR - [Page 2] All proxy attempts exhausted.
-2025-12-06 22:59:40,949 - __main__ - WARNING - [Page 2] No movie list found after all fallback attempts
-2025-12-06 22:59:41,147 - __main__ - WARNING - [Page 3] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-06 22:59:41,374 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /?page=3 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c6026ee8170>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2025-12-06 22:59:41,374 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-06 22:59:41,374 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
-2025-12-06 22:59:41,374 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-06 22:59:41,380 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=3
-2025-12-06 22:59:41,380 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
-2025-12-06 22:59:41,380 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
-2025-12-06 22:59:41,380 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-06 22:59:41,386 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=3
-2025-12-06 22:59:41,386 - __main__ - WARNING - [Page 3] Proxy 'Singapore-ARM1' failed both Direct and CF modes. Marking BANNED and switching...
-2025-12-06 22:59:41,386 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (3/3)
-2025-12-06 22:59:41,386 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
-2025-12-06 22:59:41,386 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' is already in ban period, not updating
-2025-12-06 22:59:41,386 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 4 failures, putting in cooldown for 691200s (8 days)
-2025-12-06 22:59:41,386 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
-2025-12-06 22:59:41,386 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' is already in ban period, not updating
-2025-12-06 22:59:41,386 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 5 failures, putting in cooldown for 691200s (8 days)
-2025-12-06 22:59:41,386 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
-2025-12-06 22:59:41,386 - utils.proxy_pool - WARNING - All proxies are unavailable or in cooldown
-2025-12-06 22:59:41,386 - __main__ - WARNING - [spider_index] Proxy mode 'pool' enabled but no proxy available
-2025-12-06 22:59:41,603 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /?page=3 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c60265e0830>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2025-12-06 22:59:41,604 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-06 22:59:41,604 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
-2025-12-06 22:59:41,604 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-06 22:59:41,610 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=3
-2025-12-06 22:59:41,610 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
-2025-12-06 22:59:41,610 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
-2025-12-06 22:59:41,610 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-06 22:59:41,616 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=3
-2025-12-06 22:59:41,616 - __main__ - WARNING - [Page 3] Proxy 'Singapore-ARM1' failed both Direct and CF modes. Marking BANNED and switching...
-2025-12-06 22:59:41,616 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (3/3)
-2025-12-06 22:59:41,616 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
-2025-12-06 22:59:41,616 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' is already in ban period, not updating
-2025-12-06 22:59:41,616 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 4 failures, putting in cooldown for 691200s (8 days)
-2025-12-06 22:59:41,616 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
-2025-12-06 22:59:41,616 - utils.proxy_ban_manager - WARNING - Proxy 'Singapore-ARM1' is already in ban period, not updating
-2025-12-06 22:59:41,616 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' reached 5 failures, putting in cooldown for 691200s (8 days)
-2025-12-06 22:59:41,616 - utils.proxy_pool - ERROR - Failed to switch proxy: all proxies are unavailable
-2025-12-06 22:59:41,616 - utils.proxy_pool - WARNING - All proxies are unavailable or in cooldown
-2025-12-06 22:59:41,616 - __main__ - WARNING - [spider_index] Proxy mode 'pool' enabled but no proxy available
-2025-12-06 22:59:41,814 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /?page=3 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c60265e3440>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2025-12-06 22:59:41,814 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-06 22:59:41,814 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
-2025-12-06 22:59:41,814 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-06 22:59:41,820 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=3
-2025-12-06 22:59:41,820 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
-2025-12-06 22:59:41,820 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
-2025-12-06 22:59:41,820 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-06 22:59:41,825 - __main__ - ERROR - Error fetching https://javdb.com/?page=3: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/?page=3
-2025-12-06 22:59:41,825 - __main__ - ERROR - [Page 3] All proxy attempts exhausted.
-2025-12-06 22:59:41,825 - __main__ - WARNING - [Page 3] No movie list found after all fallback attempts
-2025-12-06 22:59:41,825 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
-2025-12-06 22:59:41,825 - __main__ - INFO - Phase 2 completed: 0 entries processed
-2025-12-06 22:59:41,825 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251206.csv
-2025-12-06 22:59:41,825 - __main__ - INFO - ==================================================
-2025-12-06 22:59:41,825 - __main__ - INFO - SUMMARY REPORT
-2025-12-06 22:59:41,825 - __main__ - INFO - ==================================================
-2025-12-06 22:59:41,825 - __main__ - INFO - Pages processed: 1 to 20
-2025-12-06 22:59:41,825 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-12-06 22:59:41,826 - __main__ - INFO - ==============================
-2025-12-06 22:59:41,826 - __main__ - INFO - PHASE 1 SUMMARY
-2025-12-06 22:59:41,826 - __main__ - INFO - ==============================
-2025-12-06 22:59:41,826 - __main__ - INFO - Phase 1 entries found: 17
-2025-12-06 22:59:41,826 - __main__ - INFO -   - Subtitle torrents: 17 (100.0%)
-2025-12-06 22:59:41,826 - __main__ - INFO -   - Hacked subtitle torrents: 8 (47.1%)
-2025-12-06 22:59:41,826 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
-2025-12-06 22:59:41,826 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
-2025-12-06 22:59:41,826 - __main__ - INFO - ==============================
-2025-12-06 22:59:41,826 - __main__ - INFO - PHASE 2 SUMMARY
-2025-12-06 22:59:41,826 - __main__ - INFO - ==============================
-2025-12-06 22:59:41,826 - __main__ - INFO - Phase 2 entries found: 0
-2025-12-06 22:59:41,826 - __main__ - INFO -   - No entries found in Phase 2
-2025-12-06 22:59:41,826 - __main__ - INFO - ==============================
-2025-12-06 22:59:41,826 - __main__ - INFO - OVERALL SUMMARY
-2025-12-06 22:59:41,826 - __main__ - INFO - ==============================
-2025-12-06 22:59:41,826 - __main__ - INFO - Total entries found: 17
-2025-12-06 22:59:41,826 - __main__ - INFO - Successfully processed: 17
-2025-12-06 22:59:41,826 - __main__ - INFO - Skipped already parsed in this session: 120
-2025-12-06 22:59:41,826 - __main__ - INFO - Skipped already parsed in previous runs: 3294
-2025-12-06 22:59:41,826 - __main__ - INFO - Current parsed links in memory: 120
-2025-12-06 22:59:41,826 - __main__ - INFO - Overall subtitle torrents: 17 (100.0%)
-2025-12-06 22:59:41,826 - __main__ - INFO - Overall hacked subtitle torrents: 8 (47.1%)
-2025-12-06 22:59:41,826 - __main__ - INFO - Overall hacked no-subtitle torrents: 0 (0.0%)
-2025-12-06 22:59:41,826 - __main__ - INFO - Overall no-subtitle torrents: 0 (0.0%)
-2025-12-06 22:59:41,826 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251206.csv
-2025-12-06 22:59:41,826 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-12-06 22:59:41,826 - __main__ - INFO - ==================================================
-2025-12-06 22:59:41,826 - __main__ - INFO - 
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - ==================================================
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - PROXY POOL STATISTICS
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - ==================================================
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - Total proxies: 3
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - Available proxies: 1
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - In cooldown: 2
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - No-proxy mode: False
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - 
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - Individual proxy statistics:
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -   [Standby (Cooldown: 691197s)] Miraculous Fortress:
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Total requests: 4
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Success rate: 0.0%
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Consecutive failures: 4
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Last success: Never
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Last failure: 2025-12-06 22:59:39
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -   [ACTIVE] Singapore-ARM1:
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Total requests: 182
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Success rate: 83.5%
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Consecutive failures: 2
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Last success: 2025-12-06 22:59:41
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Last failure: 2025-12-06 22:59:41
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -   [Standby (Cooldown: 691197s)] Singapore-ARM2:
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Total requests: 4
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Success rate: 0.0%
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Consecutive failures: 4
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Last success: Never
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO -     - Last failure: 2025-12-06 22:59:39
-2025-12-06 22:59:41,826 - utils.proxy_pool - INFO - ==================================================
-2025-12-06 22:59:41,826 - __main__ - INFO - 
-2025-12-06 22:59:41,826 - __main__ - INFO - ==================================================
-2025-12-06 22:59:41,826 - __main__ - INFO - PROXY BAN STATUS
-2025-12-06 22:59:41,826 - __main__ - INFO - ==================================================
-2025-12-06 22:59:41,827 - __main__ - INFO - Currently banned proxies: 3
-
-  - Miraculous Fortress:
-    Banned at: 2025-12-06 22:59:39
-    Will unban: 2025-12-13 22:59:39
-    Time remaining: 6 days 23 hours
-  - Singapore-ARM2:
-    Banned at: 2025-12-06 22:59:39
-    Will unban: 2025-12-13 22:59:39
-    Time remaining: 6 days 23 hours
-  - Singapore-ARM1:
-    Banned at: 2025-12-06 22:59:40
-    Will unban: 2025-12-13 22:59:40
-    Time remaining: 6 days 23 hours
-2025-12-06 22:59:41,827 - __main__ - INFO - ==================================================
-2025-12-06 22:59:41,827 - __main__ - ERROR - ==================================================
-2025-12-06 22:59:41,827 - __main__ - ERROR - CRITICAL: PROXY BAN DETECTED DURING THIS RUN
-2025-12-06 22:59:41,827 - __main__ - ERROR - ==================================================
-2025-12-06 22:59:41,827 - __main__ - ERROR - One or more proxies were marked as BANNED due to failure to retrieve movie list.
-2025-12-06 22:59:41,827 - __main__ - ERROR - This indicates the proxy IP may be blocked by JavDB.
-2025-12-06 22:59:41,827 - __main__ - ERROR - Please check proxy ban status and consider using different proxies.
+2025-12-06 23:13:20,032 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-06 23:13:20,032 - utils.proxy_ban_manager - INFO - Loaded 0 ban records from logs/proxy_bans.csv
+2025-12-06 23:13:20,032 - utils.proxy_pool - INFO - Added proxy 'Miraculous Fortress' to pool (HTTP: http://***:***@139.xxx.xxx.231:12300, HTTPS: http://***:***@139.xxx.xxx.231:12300)
+2025-12-06 23:13:20,033 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
+2025-12-06 23:13:20,033 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-06 23:13:20,033 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-06 23:13:20,033 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
+2025-12-06 23:13:20,033 - __main__ - INFO - Starting JavDB spider...
+2025-12-06 23:13:20,033 - __main__ - INFO - Arguments: start_page=1, end_page=40, phase=all
+2025-12-06 23:13:20,033 - __main__ - INFO - IGNORE RELEASE DATE: Will process all entries regardless of today/yesterday tags
+2025-12-06 23:13:20,033 - __main__ - INFO - Validating history file integrity...
+2025-12-06 23:13:20,067 - utils.history_manager - INFO - Loaded 5448 previously parsed movies from history (phase 1: 3311, phase 2: 2137)
+2025-12-06 23:13:20,067 - __main__ - INFO - Initialized requests session
+2025-12-06 23:13:20,067 - __main__ - INFO - ==================================================
+2025-12-06 23:13:20,067 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-12-06 23:13:20,067 - __main__ - INFO - ==================================================
+2025-12-06 23:13:21,413 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
+2025-12-06 23:13:21,414 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
+2025-12-06 23:13:26,992 - utils.parser - INFO - [Page 2] New releases filter disabled - will process all entries
+2025-12-06 23:13:26,994 - utils.parser - INFO - [Page 2] Found 0 entries for phase 1
+2025-12-06 23:13:32,586 - utils.parser - INFO - [Page 3] New releases filter disabled - will process all entries
+2025-12-06 23:13:32,588 - utils.parser - INFO - [Page 3] Found 11 entries for phase 1
+2025-12-06 23:13:38,204 - utils.parser - INFO - [Page 4] New releases filter disabled - will process all entries
+2025-12-06 23:13:38,206 - utils.parser - INFO - [Page 4] Found 4 entries for phase 1
+2025-12-06 23:13:43,893 - utils.parser - INFO - [Page 5] New releases filter disabled - will process all entries
+2025-12-06 23:13:43,894 - utils.parser - INFO - [Page 5] Found 0 entries for phase 1
+2025-12-06 23:13:49,703 - utils.parser - INFO - [Page 6] New releases filter disabled - will process all entries
+2025-12-06 23:13:49,705 - utils.parser - INFO - [Page 6] Found 7 entries for phase 1
+2025-12-06 23:13:55,233 - utils.parser - INFO - [Page 7] New releases filter disabled - will process all entries
+2025-12-06 23:13:55,235 - utils.parser - INFO - [Page 7] Found 8 entries for phase 1
+2025-12-06 23:14:00,831 - utils.parser - INFO - [Page 8] New releases filter disabled - will process all entries
+2025-12-06 23:14:00,832 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
+2025-12-06 23:14:06,468 - utils.parser - INFO - [Page 9] New releases filter disabled - will process all entries
+2025-12-06 23:14:06,470 - utils.parser - INFO - [Page 9] Found 15 entries for phase 1
+2025-12-06 23:14:11,993 - utils.parser - INFO - [Page 10] New releases filter disabled - will process all entries
+2025-12-06 23:14:11,994 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
+2025-12-06 23:14:17,553 - utils.parser - INFO - [Page 11] New releases filter disabled - will process all entries
+2025-12-06 23:14:17,555 - utils.parser - INFO - [Page 11] Found 11 entries for phase 1
+2025-12-06 23:14:23,146 - utils.parser - INFO - [Page 12] New releases filter disabled - will process all entries
+2025-12-06 23:14:23,148 - utils.parser - INFO - [Page 12] Found 1 entries for phase 1
+2025-12-06 23:14:28,774 - utils.parser - INFO - [Page 13] New releases filter disabled - will process all entries
+2025-12-06 23:14:28,776 - utils.parser - INFO - [Page 13] Found 14 entries for phase 1
+2025-12-06 23:14:34,334 - utils.parser - INFO - [Page 14] New releases filter disabled - will process all entries
+2025-12-06 23:14:34,337 - utils.parser - INFO - [Page 14] Found 9 entries for phase 1
+2025-12-06 23:14:40,178 - utils.parser - INFO - [Page 15] New releases filter disabled - will process all entries
+2025-12-06 23:14:40,179 - utils.parser - INFO - [Page 15] Found 0 entries for phase 1
+2025-12-06 23:14:45,709 - utils.parser - INFO - [Page 16] New releases filter disabled - will process all entries
+2025-12-06 23:14:45,711 - utils.parser - INFO - [Page 16] Found 11 entries for phase 1
+2025-12-06 23:14:51,255 - utils.parser - INFO - [Page 17] New releases filter disabled - will process all entries
+2025-12-06 23:14:51,256 - utils.parser - INFO - [Page 17] Found 3 entries for phase 1
+2025-12-06 23:14:56,829 - utils.parser - INFO - [Page 18] New releases filter disabled - will process all entries
+2025-12-06 23:14:56,831 - utils.parser - INFO - [Page 18] Found 14 entries for phase 1
+2025-12-06 23:15:02,343 - utils.parser - INFO - [Page 19] New releases filter disabled - will process all entries
+2025-12-06 23:15:02,345 - utils.parser - INFO - [Page 19] Found 0 entries for phase 1
+2025-12-06 23:15:08,098 - utils.parser - INFO - [Page 20] New releases filter disabled - will process all entries
+2025-12-06 23:15:08,100 - utils.parser - INFO - [Page 20] Found 12 entries for phase 1
+2025-12-06 23:15:13,652 - utils.parser - INFO - [Page 21] New releases filter disabled - will process all entries
+2025-12-06 23:15:13,654 - utils.parser - INFO - [Page 21] Found 0 entries for phase 1
+2025-12-06 23:15:19,224 - utils.parser - INFO - [Page 22] New releases filter disabled - will process all entries
+2025-12-06 23:15:19,226 - utils.parser - INFO - [Page 22] Found 12 entries for phase 1
+2025-12-06 23:15:24,742 - utils.parser - INFO - [Page 23] New releases filter disabled - will process all entries
+2025-12-06 23:15:24,744 - utils.parser - INFO - [Page 23] Found 10 entries for phase 1
+2025-12-06 23:15:30,272 - utils.parser - INFO - [Page 24] New releases filter disabled - will process all entries
+2025-12-06 23:15:30,274 - utils.parser - INFO - [Page 24] Found 12 entries for phase 1
+2025-12-06 23:15:35,813 - utils.parser - INFO - [Page 25] New releases filter disabled - will process all entries
+2025-12-06 23:15:35,815 - utils.parser - INFO - [Page 25] Found 13 entries for phase 1
+2025-12-06 23:15:41,333 - utils.parser - INFO - [Page 26] New releases filter disabled - will process all entries
+2025-12-06 23:15:41,335 - utils.parser - INFO - [Page 26] Found 12 entries for phase 1
+2025-12-06 23:15:46,897 - utils.parser - INFO - [Page 27] New releases filter disabled - will process all entries
+2025-12-06 23:15:46,899 - utils.parser - INFO - [Page 27] Found 0 entries for phase 1
+2025-12-06 23:15:52,469 - utils.parser - INFO - [Page 28] New releases filter disabled - will process all entries
+2025-12-06 23:15:52,471 - utils.parser - INFO - [Page 28] Found 13 entries for phase 1
+2025-12-06 23:15:57,882 - utils.parser - INFO - [Page 29] New releases filter disabled - will process all entries
+2025-12-06 23:15:57,883 - utils.parser - INFO - [Page 29] Found 0 entries for phase 1
+2025-12-06 23:16:03,573 - utils.parser - INFO - [Page 30] New releases filter disabled - will process all entries
+2025-12-06 23:16:03,574 - utils.parser - INFO - [Page 30] Found 11 entries for phase 1
+2025-12-06 23:16:09,138 - utils.parser - INFO - [Page 31] New releases filter disabled - will process all entries
+2025-12-06 23:16:09,139 - utils.parser - INFO - [Page 31] Found 11 entries for phase 1
+2025-12-06 23:16:14,890 - utils.parser - INFO - [Page 32] New releases filter disabled - will process all entries
+2025-12-06 23:16:14,892 - utils.parser - INFO - [Page 32] Found 10 entries for phase 1
+2025-12-06 23:16:20,637 - utils.parser - INFO - [Page 33] New releases filter disabled - will process all entries
+2025-12-06 23:16:20,639 - utils.parser - INFO - [Page 33] Found 12 entries for phase 1
+2025-12-06 23:16:26,256 - utils.parser - INFO - [Page 34] New releases filter disabled - will process all entries
+2025-12-06 23:16:26,258 - utils.parser - INFO - [Page 34] Found 10 entries for phase 1
+2025-12-06 23:16:31,805 - utils.parser - INFO - [Page 35] New releases filter disabled - will process all entries
+2025-12-06 23:16:31,807 - utils.parser - INFO - [Page 35] Found 0 entries for phase 1
+2025-12-06 23:16:37,387 - utils.parser - INFO - [Page 36] New releases filter disabled - will process all entries
+2025-12-06 23:16:37,390 - utils.parser - INFO - [Page 36] Found 12 entries for phase 1
+2025-12-06 23:16:43,105 - utils.parser - INFO - [Page 37] New releases filter disabled - will process all entries
+2025-12-06 23:16:43,106 - utils.parser - INFO - [Page 37] Found 2 entries for phase 1
+2025-12-06 23:16:48,625 - utils.parser - INFO - [Page 38] New releases filter disabled - will process all entries
+2025-12-06 23:16:48,627 - utils.parser - INFO - [Page 38] Found 9 entries for phase 1
+2025-12-06 23:16:54,205 - utils.parser - INFO - [Page 39] New releases filter disabled - will process all entries
+2025-12-06 23:16:54,207 - utils.parser - INFO - [Page 39] Found 12 entries for phase 1
+2025-12-06 23:16:59,756 - utils.parser - INFO - [Page 40] New releases filter disabled - will process all entries
+2025-12-06 23:16:59,758 - utils.parser - INFO - [Page 40] Found 10 entries for phase 1
+2025-12-06 23:17:10,335 - __main__ - INFO - [1/291] [Page 3] Processing CAWD-890
+2025-12-06 23:17:20,857 - __main__ - INFO - [2/291] [Page 3] Processing CAWD-895
+2025-12-06 23:17:31,287 - __main__ - INFO - [3/291] [Page 3] Processing CAWD-901
+2025-12-06 23:17:41,712 - __main__ - INFO - [4/291] [Page 3] Processing CAWD-903
+2025-12-06 23:17:52,180 - __main__ - INFO - [5/291] [Page 3] Processing CAWD-904
+2025-12-06 23:18:02,736 - __main__ - INFO - [6/291] [Page 3] Processing CEAD-696
+2025-12-06 23:18:13,190 - __main__ - INFO - [7/291] [Page 3] Processing CLOT-034
+2025-12-06 23:18:23,640 - __main__ - INFO - [8/291] [Page 3] Processing CLUB-893
+2025-12-06 23:18:34,161 - __main__ - INFO - [9/291] [Page 3] Processing CLUB-894
+2025-12-06 23:18:44,616 - __main__ - INFO - [10/291] [Page 3] Processing START-046
+2025-12-06 23:18:55,124 - __main__ - INFO - [11/291] [Page 3] Processing START-053
+2025-12-06 23:19:05,567 - __main__ - INFO - [12/291] [Page 4] Processing START-070
+2025-12-06 23:19:16,018 - __main__ - INFO - [13/291] [Page 4] Processing START-090
+2025-12-06 23:19:26,481 - __main__ - INFO - [14/291] [Page 4] Processing blackedraw.18.02.16
+2025-12-06 23:19:36,940 - __main__ - INFO - [15/291] [Page 4] Processing blackedraw.18.03.08
+2025-12-06 23:19:47,416 - __main__ - INFO - [16/291] [Page 6] Processing ADN-676
+2025-12-06 23:19:57,854 - __main__ - INFO - [17/291] [Page 6] Processing ADN-707
+2025-12-06 23:20:08,389 - __main__ - INFO - [18/291] [Page 6] Processing ADN-725
+2025-12-06 23:20:18,871 - __main__ - INFO - [19/291] [Page 6] Processing ADN-729
+2025-12-06 23:20:29,344 - __main__ - INFO - [20/291] [Page 6] Processing ADN-735
+2025-12-06 23:20:39,869 - __main__ - INFO - [21/291] [Page 6] Processing ADN-739
+2025-12-06 23:20:50,310 - __main__ - INFO - [22/291] [Page 6] Processing ADN-740
+2025-12-06 23:21:00,768 - __main__ - INFO - [23/291] [Page 7] Processing ADN-749
+2025-12-06 23:21:11,213 - __main__ - INFO - [24/291] [Page 7] Processing ATID-652
+2025-12-06 23:21:21,739 - __main__ - INFO - [25/291] [Page 7] Processing SSNI-992
+2025-12-06 23:21:32,207 - __main__ - INFO - [26/291] [Page 7] Processing STARS-508
+2025-12-06 23:21:42,727 - __main__ - INFO - [27/291] [Page 7] Processing START-008
+2025-12-06 23:21:53,223 - __main__ - INFO - [28/291] [Page 7] Processing START-039
+2025-12-06 23:22:03,705 - __main__ - INFO - [29/291] [Page 7] Processing blackedraw.18.02.06
+2025-12-06 23:22:14,176 - __main__ - INFO - [30/291] [Page 7] Processing blackedraw.18.02.11
+2025-12-06 23:22:24,648 - __main__ - INFO - [31/291] [Page 9] Processing MIAB-578
+2025-12-06 23:22:35,104 - __main__ - INFO - [32/291] [Page 9] Processing MIDA-387
+2025-12-06 23:22:45,739 - __main__ - INFO - [33/291] [Page 9] Processing MIDA-410
+2025-12-06 23:22:56,186 - __main__ - INFO - [34/291] [Page 9] Processing MIDA-420
+2025-12-06 23:23:06,625 - __main__ - INFO - [35/291] [Page 9] Processing MIDA-424
+2025-12-06 23:23:17,056 - __main__ - INFO - [36/291] [Page 9] Processing MIDA-426
+2025-12-06 23:23:27,512 - __main__ - INFO - [37/291] [Page 9] Processing MIDA-428
+2025-12-06 23:23:37,973 - __main__ - INFO - [38/291] [Page 9] Processing MIDA-431
+2025-12-06 23:23:48,414 - __main__ - INFO - [39/291] [Page 9] Processing MIDA-461
+2025-12-06 23:23:58,947 - __main__ - INFO - [40/291] [Page 9] Processing SONE-563
+2025-12-06 23:24:09,398 - __main__ - INFO - [41/291] [Page 9] Processing SONE-687
+2025-12-06 23:24:19,900 - __main__ - INFO - [42/291] [Page 9] Processing SSIS-361
+2025-12-06 23:24:30,406 - __main__ - INFO - [43/291] [Page 9] Processing SSIS-387
+2025-12-06 23:24:40,952 - __main__ - INFO - [44/291] [Page 9] Processing blackedraw.17.11.08
+2025-12-06 23:24:51,431 - __main__ - INFO - [45/291] [Page 9] Processing blackedraw.18.02.01
+2025-12-06 23:25:01,927 - __main__ - INFO - [46/291] [Page 11] Processing ABF-287
+2025-12-06 23:25:12,402 - __main__ - INFO - [47/291] [Page 11] Processing ABF-290
+2025-12-06 23:25:22,851 - __main__ - INFO - [48/291] [Page 11] Processing ABF-292
+2025-12-06 23:25:33,312 - __main__ - INFO - [49/291] [Page 11] Processing ACHJ-074
+2025-12-06 23:25:43,820 - __main__ - INFO - [50/291] [Page 11] Processing ADN-746
+2025-12-06 23:25:54,302 - __main__ - INFO - [51/291] [Page 11] Processing ALDN-528
+2025-12-06 23:26:04,756 - __main__ - INFO - [52/291] [Page 11] Processing ALDN-529
+2025-12-06 23:26:20,217 - __main__ - INFO - [53/291] [Page 11] Processing ALDN-530
+2025-12-06 23:26:35,706 - __main__ - INFO - [54/291] [Page 11] Processing ALDN-531
+2025-12-06 23:26:51,178 - __main__ - INFO - [55/291] [Page 11] Processing blackedraw.17.10.19
+2025-12-06 23:27:06,647 - __main__ - INFO - [56/291] [Page 11] Processing blackedraw.17.10.24
+2025-12-06 23:27:22,193 - __main__ - INFO - [57/291] [Page 12] Processing IPVR-317
+2025-12-06 23:27:32,665 - __main__ - INFO - [58/291] [Page 13] Processing ACHJ-076
+2025-12-06 23:27:48,154 - __main__ - INFO - [59/291] [Page 13] Processing APNS-386
+2025-12-06 23:28:03,647 - __main__ - INFO - [60/291] [Page 13] Processing AVSA-401
+2025-12-06 23:28:19,199 - __main__ - INFO - [61/291] [Page 13] Processing AVSA-402
+2025-12-06 23:28:34,793 - __main__ - INFO - [62/291] [Page 13] Processing AVSA-403
+2025-12-06 23:28:50,319 - __main__ - INFO - [63/291] [Page 13] Processing BLB-025
+2025-12-06 23:29:05,856 - __main__ - INFO - [64/291] [Page 13] Processing BLK-670
+2025-12-06 23:29:21,328 - __main__ - INFO - [65/291] [Page 13] Processing BLK-671
+2025-12-06 23:29:36,853 - __main__ - INFO - [66/291] [Page 13] Processing BLK-675
+2025-12-06 23:29:52,368 - __main__ - INFO - [67/291] [Page 13] Processing SONE-405
+2025-12-06 23:30:02,840 - __main__ - INFO - [68/291] [Page 13] Processing SONE-454
+2025-12-06 23:30:13,330 - __main__ - INFO - [69/291] [Page 13] Processing SONE-499
+2025-12-06 23:30:23,815 - __main__ - INFO - [70/291] [Page 13] Processing SONE-543
+2025-12-06 23:30:34,130 - __main__ - INFO - [71/291] [Page 13] Processing SONE-561
+2025-12-06 23:30:44,780 - __main__ - INFO - [72/291] [Page 14] Processing VENX-342
+2025-12-06 23:31:00,348 - __main__ - INFO - [73/291] [Page 14] Processing VENX-343
+2025-12-06 23:31:15,845 - __main__ - INFO - [74/291] [Page 14] Processing VENX-344
+2025-12-06 23:31:31,455 - __main__ - INFO - [75/291] [Page 14] Processing VENX-345
+2025-12-06 23:31:46,970 - __main__ - INFO - [76/291] [Page 14] Processing VENX-346
+2025-12-06 23:32:02,452 - __main__ - INFO - [77/291] [Page 14] Processing VENX-347
+2025-12-06 23:32:17,941 - __main__ - INFO - [78/291] [Page 14] Processing VENX-349
+2025-12-06 23:32:33,482 - __main__ - INFO - [79/291] [Page 14] Processing VENX-351
+2025-12-06 23:32:48,980 - __main__ - INFO - [80/291] [Page 14] Processing VOD-048
+2025-12-06 23:33:04,519 - __main__ - INFO - [81/291] [Page 16] Processing SCOP-889
+2025-12-06 23:33:14,979 - __main__ - INFO - [82/291] [Page 16] Processing SNOS-001
+2025-12-06 23:33:25,413 - __main__ - INFO - [83/291] [Page 16] Processing SNOS-003
+2025-12-06 23:33:35,870 - __main__ - INFO - [84/291] [Page 16] Processing SNOS-005
+2025-12-06 23:33:46,140 - __main__ - INFO - [85/291] [Page 16] Processing SNOS-018
+2025-12-06 23:33:56,606 - __main__ - INFO - [86/291] [Page 16] Processing SODS-065
+2025-12-06 23:34:07,055 - __main__ - INFO - [87/291] [Page 16] Processing SONE-153
+2025-12-06 23:34:17,847 - __main__ - INFO - [88/291] [Page 16] Processing SONE-200
+2025-12-06 23:34:28,315 - __main__ - INFO - [89/291] [Page 16] Processing SONE-360
+2025-12-06 23:34:38,755 - __main__ - INFO - [90/291] [Page 16] Processing SONE-998
+2025-12-06 23:34:49,246 - __main__ - INFO - [91/291] [Page 16] Processing START-429
+2025-12-06 23:34:59,723 - __main__ - INFO - [92/291] [Page 17] Processing START-432
+2025-12-06 23:35:10,227 - __main__ - INFO - [93/291] [Page 17] Processing blackedraw.17.09.24
+2025-12-06 23:35:20,725 - __main__ - INFO - [94/291] [Page 17] Processing blackedraw.17.10.09
+2025-12-06 23:35:31,208 - __main__ - INFO - [95/291] [Page 18] Processing MIDV-287
+2025-12-06 23:35:41,674 - __main__ - INFO - [96/291] [Page 18] Processing MIDV-786
+2025-12-06 23:35:52,152 - __main__ - INFO - [97/291] [Page 18] Processing PRED-139
+2025-12-06 23:36:02,636 - __main__ - INFO - [98/291] [Page 18] Processing PRED-696
+2025-12-06 23:36:13,112 - __main__ - INFO - [99/291] [Page 18] Processing SNOS-002
+2025-12-06 23:36:23,409 - __main__ - INFO - [100/291] [Page 18] Processing SNOS-060
+2025-12-06 23:36:33,912 - __main__ - INFO - [101/291] [Page 18] Processing SONE-908
+2025-12-06 23:36:44,398 - __main__ - INFO - [102/291] [Page 18] Processing SONE-959
+2025-12-06 23:36:54,915 - __main__ - INFO - [103/291] [Page 18] Processing SONE-960
+2025-12-06 23:37:05,372 - __main__ - INFO - [104/291] [Page 18] Processing SONE-961
+2025-12-06 23:37:16,029 - __main__ - INFO - [105/291] [Page 18] Processing SONE-983
+2025-12-06 23:37:26,683 - __main__ - INFO - [106/291] [Page 18] Processing SONE-985
+2025-12-06 23:37:37,119 - __main__ - INFO - [107/291] [Page 18] Processing SONE-988
+2025-12-06 23:37:47,761 - __main__ - INFO - [108/291] [Page 18] Processing blackedraw.17.09.19
+2025-12-06 23:37:58,023 - __main__ - INFO - [109/291] [Page 20] Processing ALDN-524
+2025-12-06 23:38:08,476 - __main__ - INFO - [110/291] [Page 20] Processing ALDN-525
+2025-12-06 23:38:18,920 - __main__ - INFO - [111/291] [Page 20] Processing ALDN-526
+2025-12-06 23:38:29,441 - __main__ - INFO - [112/291] [Page 20] Processing ALDN-527
+2025-12-06 23:38:39,884 - __main__ - INFO - [113/291] [Page 20] Processing CJOD-479
+2025-12-06 23:38:50,371 - __main__ - INFO - [114/291] [Page 20] Processing CJOD-483
+2025-12-06 23:39:00,896 - __main__ - INFO - [115/291] [Page 20] Processing CJOD-486
+2025-12-06 23:39:11,337 - __main__ - INFO - [116/291] [Page 20] Processing CJOD-488
+2025-12-06 23:39:21,784 - __main__ - INFO - [117/291] [Page 20] Processing CJOD-492
+2025-12-06 23:39:32,225 - __main__ - INFO - [118/291] [Page 20] Processing MIDV-032
+2025-12-06 23:39:42,697 - __main__ - INFO - [119/291] [Page 20] Processing MIDV-250
+2025-12-06 23:39:53,260 - __main__ - INFO - [120/291] [Page 20] Processing MIDV-269
+2025-12-06 23:40:03,729 - __main__ - INFO - [121/291] [Page 22] Processing NSFS-035
+2025-12-06 23:40:14,248 - __main__ - INFO - [122/291] [Page 22] Processing NSFS-067
+2025-12-06 23:40:24,721 - __main__ - INFO - [123/291] [Page 22] Processing HMN-743
+2025-12-06 23:40:35,497 - __main__ - INFO - [124/291] [Page 22] Processing HMN-762
+2025-12-06 23:40:45,951 - __main__ - INFO - [125/291] [Page 22] Processing HMN-763
+2025-12-06 23:40:56,250 - __main__ - INFO - [126/291] [Page 22] Processing JUR-497
+2025-12-06 23:41:06,817 - __main__ - INFO - [127/291] [Page 22] Processing JUR-544
+2025-12-06 23:41:17,332 - __main__ - INFO - [128/291] [Page 22] Processing JUR-546
+2025-12-06 23:41:27,769 - __main__ - INFO - [129/291] [Page 22] Processing JUR-549
+2025-12-06 23:41:38,231 - __main__ - INFO - [130/291] [Page 22] Processing JUR-558
+2025-12-06 23:41:48,504 - __main__ - INFO - [131/291] [Page 22] Processing JUR-571
+2025-12-06 23:41:58,992 - __main__ - INFO - [132/291] [Page 22] Processing MIDE-201
+2025-12-06 23:42:09,530 - __main__ - INFO - [133/291] [Page 23] Processing FSDSS-259
+2025-12-06 23:42:20,083 - __main__ - INFO - [134/291] [Page 23] Processing JUR-050
+2025-12-06 23:42:30,563 - __main__ - INFO - [135/291] [Page 23] Processing JUR-054
+2025-12-06 23:42:41,062 - __main__ - INFO - [136/291] [Page 23] Processing JUR-462
+2025-12-06 23:42:51,532 - __main__ - INFO - [137/291] [Page 23] Processing JUR-512
+2025-12-06 23:43:01,991 - __main__ - INFO - [138/291] [Page 23] Processing JUR-515
+2025-12-06 23:43:12,478 - __main__ - INFO - [139/291] [Page 23] Processing JUR-541
+2025-12-06 23:43:22,929 - __main__ - INFO - [140/291] [Page 23] Processing JUR-542
+2025-12-06 23:43:33,405 - __main__ - INFO - [141/291] [Page 23] Processing JUR-543
+2025-12-06 23:43:43,896 - __main__ - INFO - [142/291] [Page 23] Processing JUR-560
+2025-12-06 23:43:54,382 - __main__ - INFO - [143/291] [Page 24] Processing DASS-566
+2025-12-06 23:44:04,837 - __main__ - INFO - [144/291] [Page 24] Processing MIDA-278
+2025-12-06 23:44:15,333 - __main__ - INFO - [145/291] [Page 24] Processing MIDA-290
+2025-12-06 23:44:25,862 - __main__ - INFO - [146/291] [Page 24] Processing PPPE-367
+2025-12-06 23:44:36,138 - __main__ - INFO - [147/291] [Page 24] Processing PPPE-370
+2025-12-06 23:44:46,808 - __main__ - INFO - [148/291] [Page 24] Processing PPPE-374
+2025-12-06 23:44:57,263 - __main__ - INFO - [149/291] [Page 24] Processing PPPE-375
+2025-12-06 23:45:07,713 - __main__ - INFO - [150/291] [Page 24] Processing PPPE-378
+2025-12-06 23:45:18,158 - __main__ - INFO - [151/291] [Page 24] Processing PPPE-380
+2025-12-06 23:45:28,579 - __main__ - INFO - [152/291] [Page 24] Processing PPPE-381
+2025-12-06 23:45:39,008 - __main__ - INFO - [153/291] [Page 24] Processing PPPE-382
+2025-12-06 23:45:49,469 - __main__ - INFO - [154/291] [Page 24] Processing RKI-724
+2025-12-06 23:45:59,926 - __main__ - INFO - [155/291] [Page 25] Processing IPX-643
+2025-12-06 23:46:10,385 - __main__ - INFO - [156/291] [Page 25] Processing IPX-660
+2025-12-06 23:46:20,877 - __main__ - INFO - [157/291] [Page 25] Processing IPX-675
+2025-12-06 23:46:31,352 - __main__ - INFO - [158/291] [Page 25] Processing VEC-734
+2025-12-06 23:46:42,001 - __main__ - INFO - [159/291] [Page 25] Processing VEC-735
+2025-12-06 23:46:52,454 - __main__ - INFO - [160/291] [Page 25] Processing VEC-736
+2025-12-06 23:47:02,990 - __main__ - INFO - [161/291] [Page 25] Processing VEC-737
+2025-12-06 23:47:13,456 - __main__ - INFO - [162/291] [Page 25] Processing VEC-739
+2025-12-06 23:47:23,935 - __main__ - INFO - [163/291] [Page 25] Processing VEC-740
+2025-12-06 23:47:34,469 - __main__ - INFO - [164/291] [Page 25] Processing VEC-742
+2025-12-06 23:47:44,999 - __main__ - INFO - [165/291] [Page 25] Processing VEC-743
+2025-12-06 23:47:55,499 - __main__ - INFO - [166/291] [Page 25] Processing VEMA-244
+2025-12-06 23:48:05,969 - __main__ - INFO - [167/291] [Page 25] Processing VEMA-246
+2025-12-06 23:48:16,525 - __main__ - INFO - [168/291] [Page 26] Processing IPX-598
+2025-12-06 23:48:26,999 - __main__ - INFO - [169/291] [Page 26] Processing IPX-614
+2025-12-06 23:48:37,474 - __main__ - INFO - [170/291] [Page 26] Processing IPX-629
+2025-12-06 23:48:47,966 - __main__ - INFO - [171/291] [Page 26] Processing SCOP-883
+2025-12-06 23:48:58,435 - __main__ - INFO - [172/291] [Page 26] Processing SCOP-887
+2025-12-06 23:49:08,988 - __main__ - INFO - [173/291] [Page 26] Processing WAAA-578
+2025-12-06 23:49:19,426 - __main__ - INFO - [174/291] [Page 26] Processing WAAA-579
+2025-12-06 23:49:29,944 - __main__ - INFO - [175/291] [Page 26] Processing WAAA-580
+2025-12-06 23:49:40,439 - __main__ - INFO - [176/291] [Page 26] Processing WAAA-581
+2025-12-06 23:49:50,902 - __main__ - INFO - [177/291] [Page 26] Processing WAAA-583
+2025-12-06 23:50:01,393 - __main__ - INFO - [178/291] [Page 26] Processing WAAA-584
+2025-12-06 23:50:11,964 - __main__ - INFO - [179/291] [Page 26] Processing WAAA-585
+2025-12-06 23:50:22,419 - __main__ - INFO - [180/291] [Page 28] Processing ABF-286
+2025-12-06 23:50:32,906 - __main__ - INFO - [181/291] [Page 28] Processing ABP-852
+2025-12-06 23:50:43,370 - __main__ - INFO - [182/291] [Page 28] Processing ATID-399
+2025-12-06 23:50:53,842 - __main__ - INFO - [183/291] [Page 28] Processing FCDSS-105
+2025-12-06 23:51:04,299 - __main__ - INFO - [184/291] [Page 28] Processing IPZZ-699
+2025-12-06 23:51:14,803 - __main__ - INFO - [185/291] [Page 28] Processing JUR-545
+2025-12-06 23:51:25,327 - __main__ - INFO - [186/291] [Page 28] Processing SAME-199
+2025-12-06 23:51:35,831 - __main__ - INFO - [187/291] [Page 28] Processing SAME-204
+2025-12-06 23:51:46,322 - __main__ - INFO - [188/291] [Page 28] Processing SAME-205
+2025-12-06 23:51:56,780 - __main__ - INFO - [189/291] [Page 28] Processing SAME-207
+2025-12-06 23:52:07,234 - __main__ - INFO - [190/291] [Page 28] Processing START-397
+2025-12-06 23:52:17,707 - __main__ - INFO - [191/291] [Page 28] Processing START-433
+2025-12-06 23:52:28,196 - __main__ - INFO - [192/291] [Page 28] Processing START-443
+2025-12-06 23:52:38,694 - __main__ - INFO - [193/291] [Page 30] Processing ABF-278
+2025-12-06 23:52:49,163 - __main__ - INFO - [194/291] [Page 30] Processing ABF-279
+2025-12-06 23:52:59,836 - __main__ - INFO - [195/291] [Page 30] Processing MIAB-558
+2025-12-06 23:53:10,379 - __main__ - INFO - [196/291] [Page 30] Processing MIAB-572
+2025-12-06 23:53:21,117 - __main__ - INFO - [197/291] [Page 30] Processing MIAB-573
+2025-12-06 23:53:31,603 - __main__ - INFO - [198/291] [Page 30] Processing MIAB-586
+2025-12-06 23:53:42,330 - __main__ - INFO - [199/291] [Page 30] Processing MIDA-385
+2025-12-06 23:53:52,801 - __main__ - INFO - [200/291] [Page 30] Processing MIDA-390
+2025-12-06 23:54:03,295 - __main__ - INFO - [201/291] [Page 30] Processing SNIS-632
+2025-12-06 23:54:13,829 - __main__ - INFO - [202/291] [Page 30] Processing SNIS-648
+2025-12-06 23:54:24,556 - __main__ - INFO - [203/291] [Page 30] Processing SNIS-679
+2025-12-06 23:54:35,016 - __main__ - INFO - [204/291] [Page 31] Processing MIDA-400
+2025-12-06 23:54:45,511 - __main__ - INFO - [205/291] [Page 31] Processing MIDA-402
+2025-12-06 23:54:55,954 - __main__ - INFO - [206/291] [Page 31] Processing MIDA-406
+2025-12-06 23:55:06,395 - __main__ - INFO - [207/291] [Page 31] Processing MIDA-408
+2025-12-06 23:55:16,835 - __main__ - INFO - [208/291] [Page 31] Processing MIDA-409
+2025-12-06 23:55:27,401 - __main__ - INFO - [209/291] [Page 31] Processing MIDA-411
+2025-12-06 23:55:37,865 - __main__ - INFO - [210/291] [Page 31] Processing MIDA-412
+2025-12-06 23:55:48,383 - __main__ - INFO - [211/291] [Page 31] Processing MIDA-413
+2025-12-06 23:55:58,823 - __main__ - INFO - [212/291] [Page 31] Processing MIDA-414
+2025-12-06 23:56:09,373 - __main__ - INFO - [213/291] [Page 31] Processing STARS-979
+2025-12-06 23:56:19,992 - __main__ - INFO - [214/291] [Page 31] Processing START-006
+2025-12-06 23:56:30,460 - __main__ - INFO - [215/291] [Page 32] Processing HMN-748
+2025-12-06 23:56:40,903 - __main__ - INFO - [216/291] [Page 32] Processing HMN-758
+2025-12-06 23:56:51,355 - __main__ - INFO - [217/291] [Page 32] Processing HMN-759
+2025-12-06 23:57:02,059 - __main__ - INFO - [218/291] [Page 32] Processing HMN-760
+2025-12-06 23:57:12,531 - __main__ - INFO - [219/291] [Page 32] Processing HMN-761
+2025-12-06 23:57:23,015 - __main__ - INFO - [220/291] [Page 32] Processing HMN-764
+2025-12-06 23:57:33,476 - __main__ - INFO - [221/291] [Page 32] Processing HMN-778
+2025-12-06 23:57:43,935 - __main__ - INFO - [222/291] [Page 32] Processing IPZZ-722
+2025-12-06 23:57:54,408 - __main__ - INFO - [223/291] [Page 32] Processing STARS-947
+2025-12-06 23:58:04,866 - __main__ - INFO - [224/291] [Page 32] Processing START-385
+2025-12-06 23:58:15,358 - __main__ - INFO - [225/291] [Page 33] Processing SDDE-711
+2025-12-06 23:58:25,878 - __main__ - INFO - [226/291] [Page 33] Processing STARS-801
+2025-12-06 23:58:36,353 - __main__ - INFO - [227/291] [Page 33] Processing START-384
+2025-12-06 23:58:47,096 - __main__ - INFO - [228/291] [Page 33] Processing START-415
+2025-12-06 23:58:57,977 - __main__ - INFO - [229/291] [Page 33] Processing START-420
+2025-12-06 23:59:08,434 - __main__ - INFO - [230/291] [Page 33] Processing START-421
+2025-12-06 23:59:18,932 - __main__ - INFO - [231/291] [Page 33] Processing START-431
+2025-12-06 23:59:29,402 - __main__ - INFO - [232/291] [Page 33] Processing START-435
+2025-12-06 23:59:39,874 - __main__ - INFO - [233/291] [Page 33] Processing START-437
+2025-12-06 23:59:50,374 - __main__ - INFO - [234/291] [Page 33] Processing START-440
+2025-12-07 00:00:00,851 - __main__ - INFO - [235/291] [Page 33] Processing START-448
+2025-12-07 00:00:11,352 - __main__ - INFO - [236/291] [Page 33] Processing START-449
+2025-12-07 00:00:22,187 - __main__ - INFO - [237/291] [Page 34] Processing CAWD-876
+2025-12-07 00:00:32,700 - __main__ - INFO - [238/291] [Page 34] Processing FNS-101
+2025-12-07 00:00:43,503 - __main__ - INFO - [239/291] [Page 34] Processing FNS-102
+2025-12-07 00:00:53,980 - __main__ - INFO - [240/291] [Page 34] Processing FNS-105
+2025-12-07 00:01:04,482 - __main__ - INFO - [241/291] [Page 34] Processing FNS-113
+2025-12-07 00:01:14,953 - __main__ - INFO - [242/291] [Page 34] Processing FOCS-278
+2025-12-07 00:01:25,524 - __main__ - INFO - [243/291] [Page 34] Processing FOCS-279
+2025-12-07 00:01:35,960 - __main__ - INFO - [244/291] [Page 34] Processing FOCS-280
+2025-12-07 00:01:46,459 - __main__ - INFO - [245/291] [Page 34] Processing IPZZ-477
+2025-12-07 00:01:56,943 - __main__ - INFO - [246/291] [Page 34] Processing IPZZ-697
+2025-12-07 00:02:07,419 - __main__ - INFO - [247/291] [Page 36] Processing JUR-477
+2025-12-07 00:02:17,939 - __main__ - INFO - [248/291] [Page 36] Processing JUR-514
+2025-12-07 00:02:28,485 - __main__ - INFO - [249/291] [Page 36] Processing JUR-524
+2025-12-07 00:02:38,964 - __main__ - INFO - [250/291] [Page 36] Processing JUR-534
+2025-12-07 00:02:49,663 - __main__ - INFO - [251/291] [Page 36] Processing REAL-948
+2025-12-07 00:03:00,130 - __main__ - INFO - [252/291] [Page 36] Processing ROE-417
+2025-12-07 00:03:10,695 - __main__ - INFO - [253/291] [Page 36] Processing ROE-418
+2025-12-07 00:03:21,187 - __main__ - INFO - [254/291] [Page 36] Processing ROE-420
+2025-12-07 00:03:31,649 - __main__ - INFO - [255/291] [Page 36] Processing ROE-422
+2025-12-07 00:03:42,180 - __main__ - INFO - [256/291] [Page 36] Processing STARS-852
+2025-12-07 00:03:52,633 - __main__ - INFO - [257/291] [Page 36] Processing STARS-866
+2025-12-07 00:04:03,095 - __main__ - INFO - [258/291] [Page 36] Processing STARS-964
+2025-12-07 00:04:13,549 - __main__ - INFO - [259/291] [Page 37] Processing JUR-536
+2025-12-07 00:04:24,009 - __main__ - INFO - [260/291] [Page 37] Processing JUR-539
+2025-12-07 00:04:34,518 - __main__ - INFO - [261/291] [Page 38] Processing JUR-540
+2025-12-07 00:04:44,954 - __main__ - INFO - [262/291] [Page 38] Processing JUR-555
+2025-12-07 00:04:55,458 - __main__ - INFO - [263/291] [Page 38] Processing SONE-976
+2025-12-07 00:05:05,945 - __main__ - INFO - [264/291] [Page 38] Processing SONE-979
+2025-12-07 00:05:16,543 - __main__ - INFO - [265/291] [Page 38] Processing SONE-993
+2025-12-07 00:05:27,081 - __main__ - INFO - [266/291] [Page 38] Processing SONE-995
+2025-12-07 00:05:37,565 - __main__ - INFO - [267/291] [Page 38] Processing STARS-894
+2025-12-07 00:05:47,850 - __main__ - INFO - [268/291] [Page 38] Processing STARS-896
+2025-12-07 00:05:58,382 - __main__ - INFO - [269/291] [Page 38] Processing STARS-923
+2025-12-07 00:06:08,858 - __main__ - INFO - [270/291] [Page 39] Processing ALDN-515
+2025-12-07 00:06:19,360 - __main__ - INFO - [271/291] [Page 39] Processing DASS-775
+2025-12-07 00:06:29,799 - __main__ - INFO - [272/291] [Page 39] Processing DASS-806
+2025-12-07 00:06:40,253 - __main__ - INFO - [273/291] [Page 39] Processing DASS-808
+2025-12-07 00:06:50,708 - __main__ - INFO - [274/291] [Page 39] Processing DASS-815
+2025-12-07 00:07:01,182 - __main__ - INFO - [275/291] [Page 39] Processing IPZZ-709
+2025-12-07 00:07:11,643 - __main__ - INFO - [276/291] [Page 39] Processing IPZZ-724
+2025-12-07 00:07:22,109 - __main__ - INFO - [277/291] [Page 39] Processing IPZZ-725
+2025-12-07 00:07:32,621 - __main__ - INFO - [278/291] [Page 39] Processing SONE-934
+2025-12-07 00:07:43,066 - __main__ - INFO - [279/291] [Page 39] Processing SONE-954
+2025-12-07 00:07:53,510 - __main__ - INFO - [280/291] [Page 39] Processing SONE-968
+2025-12-07 00:08:04,024 - __main__ - INFO - [281/291] [Page 39] Processing STARS-599
+2025-12-07 00:08:14,696 - __main__ - INFO - [282/291] [Page 40] Processing FOCS-282
+2025-12-07 00:08:25,160 - __main__ - INFO - [283/291] [Page 40] Processing IPZZ-687
+2025-12-07 00:08:36,077 - __main__ - INFO - [284/291] [Page 40] Processing IPZZ-704
+2025-12-07 00:08:46,735 - __main__ - INFO - [285/291] [Page 40] Processing IPZZ-708
+2025-12-07 00:08:57,296 - __main__ - INFO - [286/291] [Page 40] Processing IPZZ-710
+2025-12-07 00:09:07,753 - __main__ - INFO - [287/291] [Page 40] Processing IPZZ-738
+2025-12-07 00:09:18,261 - __main__ - INFO - [288/291] [Page 40] Processing STARS-725
+2025-12-07 00:09:28,727 - __main__ - INFO - [289/291] [Page 40] Processing STARS-766
+2025-12-07 00:09:39,186 - __main__ - INFO - [290/291] [Page 40] Processing STARS-778
+2025-12-07 00:09:49,701 - __main__ - INFO - [291/291] [Page 40] Processing STARS-804
+2025-12-07 00:09:49,702 - __main__ - INFO - Phase 1 completed: 23 entries processed
+2025-12-07 00:09:49,702 - __main__ - INFO - ==================================================
+2025-12-07 00:09:49,704 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-12-07 00:09:49,704 - __main__ - INFO - ==================================================
+2025-12-07 00:09:50,269 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
+2025-12-07 00:09:50,272 - utils.parser - INFO - [Page 1] Found 11 entries for phase 2
+2025-12-07 00:09:55,852 - utils.parser - INFO - [Page 2] New releases filter disabled - will process all entries
+2025-12-07 00:09:55,856 - utils.parser - INFO - [Page 2] Found 3 entries for phase 2
+2025-12-07 00:10:01,396 - utils.parser - INFO - [Page 3] New releases filter disabled - will process all entries
+2025-12-07 00:10:01,399 - utils.parser - INFO - [Page 3] Found 6 entries for phase 2
+2025-12-07 00:10:06,984 - utils.parser - INFO - [Page 4] New releases filter disabled - will process all entries
+2025-12-07 00:10:06,987 - utils.parser - INFO - [Page 4] Found 4 entries for phase 2
+2025-12-07 00:10:12,530 - utils.parser - INFO - [Page 5] New releases filter disabled - will process all entries
+2025-12-07 00:10:12,534 - utils.parser - INFO - [Page 5] Found 8 entries for phase 2
+2025-12-07 00:10:18,311 - utils.parser - INFO - [Page 6] New releases filter disabled - will process all entries
+2025-12-07 00:10:18,314 - utils.parser - INFO - [Page 6] Found 10 entries for phase 2
+2025-12-07 00:10:23,907 - utils.parser - INFO - [Page 7] New releases filter disabled - will process all entries
+2025-12-07 00:10:23,909 - utils.parser - INFO - [Page 7] Found 3 entries for phase 2
+2025-12-07 00:10:29,510 - utils.parser - INFO - [Page 8] New releases filter disabled - will process all entries
+2025-12-07 00:10:29,513 - utils.parser - INFO - [Page 8] Found 5 entries for phase 2
+2025-12-07 00:10:35,080 - utils.parser - INFO - [Page 9] New releases filter disabled - will process all entries
+2025-12-07 00:10:35,083 - utils.parser - INFO - [Page 9] Found 2 entries for phase 2
+2025-12-07 00:10:40,583 - utils.parser - INFO - [Page 10] New releases filter disabled - will process all entries
+2025-12-07 00:10:40,586 - utils.parser - INFO - [Page 10] Found 4 entries for phase 2
+2025-12-07 00:10:46,139 - utils.parser - INFO - [Page 11] New releases filter disabled - will process all entries
+2025-12-07 00:10:46,142 - utils.parser - INFO - [Page 11] Found 6 entries for phase 2
+2025-12-07 00:10:51,747 - utils.parser - INFO - [Page 12] New releases filter disabled - will process all entries
+2025-12-07 00:10:51,750 - utils.parser - INFO - [Page 12] Found 4 entries for phase 2
+2025-12-07 00:10:57,297 - utils.parser - INFO - [Page 13] New releases filter disabled - will process all entries
+2025-12-07 00:10:57,300 - utils.parser - INFO - [Page 13] Found 4 entries for phase 2
+2025-12-07 00:11:02,875 - utils.parser - INFO - [Page 14] New releases filter disabled - will process all entries
+2025-12-07 00:11:02,878 - utils.parser - INFO - [Page 14] Found 9 entries for phase 2
+2025-12-07 00:11:08,472 - utils.parser - INFO - [Page 15] New releases filter disabled - will process all entries
+2025-12-07 00:11:08,475 - utils.parser - INFO - [Page 15] Found 9 entries for phase 2
+2025-12-07 00:11:14,067 - utils.parser - INFO - [Page 16] New releases filter disabled - will process all entries
+2025-12-07 00:11:14,069 - utils.parser - INFO - [Page 16] Found 9 entries for phase 2
+2025-12-07 00:11:19,484 - utils.parser - INFO - [Page 17] New releases filter disabled - will process all entries
+2025-12-07 00:11:19,487 - utils.parser - INFO - [Page 17] Found 8 entries for phase 2
+2025-12-07 00:11:25,053 - utils.parser - INFO - [Page 18] New releases filter disabled - will process all entries
+2025-12-07 00:11:25,055 - utils.parser - INFO - [Page 18] Found 11 entries for phase 2
+2025-12-07 00:11:30,576 - utils.parser - INFO - [Page 19] New releases filter disabled - will process all entries
+2025-12-07 00:11:30,579 - utils.parser - INFO - [Page 19] Found 20 entries for phase 2
+2025-12-07 00:11:36,160 - utils.parser - INFO - [Page 20] New releases filter disabled - will process all entries
+2025-12-07 00:11:36,163 - utils.parser - INFO - [Page 20] Found 18 entries for phase 2
+2025-12-07 00:11:41,687 - utils.parser - INFO - [Page 21] New releases filter disabled - will process all entries
+2025-12-07 00:11:41,690 - utils.parser - INFO - [Page 21] Found 18 entries for phase 2
+2025-12-07 00:11:47,261 - utils.parser - INFO - [Page 22] New releases filter disabled - will process all entries
+2025-12-07 00:11:47,264 - utils.parser - INFO - [Page 22] Found 9 entries for phase 2
+2025-12-07 00:11:52,806 - utils.parser - INFO - [Page 23] New releases filter disabled - will process all entries
+2025-12-07 00:11:52,809 - utils.parser - INFO - [Page 23] Found 3 entries for phase 2
+2025-12-07 00:11:58,415 - utils.parser - INFO - [Page 24] New releases filter disabled - will process all entries
+2025-12-07 00:11:58,418 - utils.parser - INFO - [Page 24] Found 5 entries for phase 2
+2025-12-07 00:12:03,992 - utils.parser - INFO - [Page 25] New releases filter disabled - will process all entries
+2025-12-07 00:12:03,994 - utils.parser - INFO - [Page 25] Found 2 entries for phase 2
+2025-12-07 00:12:09,498 - utils.parser - INFO - [Page 26] New releases filter disabled - will process all entries
+2025-12-07 00:12:09,501 - utils.parser - INFO - [Page 26] Found 12 entries for phase 2
+2025-12-07 00:12:15,043 - utils.parser - INFO - [Page 27] New releases filter disabled - will process all entries
+2025-12-07 00:12:15,046 - utils.parser - INFO - [Page 27] Found 7 entries for phase 2
+2025-12-07 00:12:20,655 - utils.parser - INFO - [Page 28] New releases filter disabled - will process all entries
+2025-12-07 00:12:20,657 - utils.parser - INFO - [Page 28] Found 13 entries for phase 2
+2025-12-07 00:12:26,258 - utils.parser - INFO - [Page 29] New releases filter disabled - will process all entries
+2025-12-07 00:12:26,261 - utils.parser - INFO - [Page 29] Found 9 entries for phase 2
+2025-12-07 00:12:31,859 - utils.parser - INFO - [Page 30] New releases filter disabled - will process all entries
+2025-12-07 00:12:31,861 - utils.parser - INFO - [Page 30] Found 12 entries for phase 2
+2025-12-07 00:12:37,385 - utils.parser - INFO - [Page 31] New releases filter disabled - will process all entries
+2025-12-07 00:12:37,387 - utils.parser - INFO - [Page 31] Found 7 entries for phase 2
+2025-12-07 00:12:42,938 - utils.parser - INFO - [Page 32] New releases filter disabled - will process all entries
+2025-12-07 00:12:42,940 - utils.parser - INFO - [Page 32] Found 8 entries for phase 2
+2025-12-07 00:12:48,521 - utils.parser - INFO - [Page 33] New releases filter disabled - will process all entries
+2025-12-07 00:12:48,524 - utils.parser - INFO - [Page 33] Found 10 entries for phase 2
+2025-12-07 00:12:54,127 - utils.parser - INFO - [Page 34] New releases filter disabled - will process all entries
+2025-12-07 00:12:54,130 - utils.parser - INFO - [Page 34] Found 15 entries for phase 2
+2025-12-07 00:12:59,736 - utils.parser - INFO - [Page 35] New releases filter disabled - will process all entries
+2025-12-07 00:12:59,739 - utils.parser - INFO - [Page 35] Found 13 entries for phase 2
+2025-12-07 00:13:05,531 - utils.parser - INFO - [Page 36] New releases filter disabled - will process all entries
+2025-12-07 00:13:05,533 - utils.parser - INFO - [Page 36] Found 10 entries for phase 2
+2025-12-07 00:13:11,104 - utils.parser - INFO - [Page 37] New releases filter disabled - will process all entries
+2025-12-07 00:13:11,106 - utils.parser - INFO - [Page 37] Found 24 entries for phase 2
+2025-12-07 00:13:16,639 - utils.parser - INFO - [Page 38] New releases filter disabled - will process all entries
+2025-12-07 00:13:16,642 - utils.parser - INFO - [Page 38] Found 16 entries for phase 2
+2025-12-07 00:13:22,152 - utils.parser - INFO - [Page 39] New releases filter disabled - will process all entries
+2025-12-07 00:13:22,154 - utils.parser - INFO - [Page 39] Found 15 entries for phase 2
+2025-12-07 00:13:27,698 - utils.parser - INFO - [Page 40] New releases filter disabled - will process all entries
+2025-12-07 00:13:27,701 - utils.parser - INFO - [Page 40] Found 12 entries for phase 2
+2025-12-07 00:13:38,446 - __main__ - INFO - [1/374] [Page 1] Processing DASS-777
+2025-12-07 00:13:48,950 - __main__ - INFO - [2/374] [Page 1] Processing JUR-529
+2025-12-07 00:14:04,548 - __main__ - INFO - [3/374] [Page 1] Processing JUR-554
+2025-12-07 00:14:15,142 - __main__ - INFO - [4/374] [Page 1] Processing ROE-393
+2025-12-07 00:14:25,622 - __main__ - INFO - [5/374] [Page 1] Processing IPZZ-751
+2025-12-07 00:14:42,463 - __main__ - INFO - [6/374] [Page 1] Processing SNOS-008
+2025-12-07 00:14:52,958 - __main__ - INFO - [7/374] [Page 1] Processing SONE-986
+2025-12-07 00:15:08,435 - __main__ - INFO - [8/374] [Page 1] Processing JUR-579
+2025-12-07 00:15:23,959 - __main__ - INFO - [9/374] [Page 1] Processing RKI-732
+2025-12-07 00:15:34,537 - __main__ - INFO - [10/374] [Page 1] Processing SNOS-006
+2025-12-07 00:15:44,997 - __main__ - INFO - [11/374] [Page 1] Processing NMSL-002
+2025-12-07 00:16:00,475 - __main__ - INFO - [12/374] [Page 2] Processing DASS-820
+2025-12-07 00:16:11,017 - __main__ - INFO - [13/374] [Page 2] Processing JUR-547
+2025-12-07 00:16:21,494 - __main__ - INFO - [14/374] [Page 2] Processing JUR-566
+2025-12-07 00:16:31,936 - __main__ - INFO - [15/374] [Page 3] Processing SNOS-022
+2025-12-07 00:16:42,745 - __main__ - INFO - [16/374] [Page 3] Processing IPZZ-727
+2025-12-07 00:16:53,260 - __main__ - INFO - [17/374] [Page 3] Processing IPZZ-730
+2025-12-07 00:17:03,764 - __main__ - INFO - [18/374] [Page 3] Processing IPZZ-744
+2025-12-07 00:17:14,226 - __main__ - INFO - [19/374] [Page 3] Processing SNOS-014
+2025-12-07 00:17:24,784 - __main__ - INFO - [20/374] [Page 3] Processing SNOS-045
+2025-12-07 00:17:40,283 - __main__ - INFO - [21/374] [Page 4] Processing IPZZ-718
+2025-12-07 00:17:50,755 - __main__ - INFO - [22/374] [Page 4] Processing NGOD-305
+2025-12-07 00:18:01,045 - __main__ - INFO - [23/374] [Page 4] Processing DOKS-653
+2025-12-07 00:18:11,368 - __main__ - INFO - [24/374] [Page 4] Processing SONE-991
+2025-12-07 00:18:21,823 - __main__ - INFO - [25/374] [Page 5] Processing DASS-770
+2025-12-07 00:18:32,269 - __main__ - INFO - [26/374] [Page 5] Processing JUR-513
+2025-12-07 00:18:47,795 - __main__ - INFO - [27/374] [Page 5] Processing JUR-562
+2025-12-07 00:18:58,285 - __main__ - INFO - [28/374] [Page 5] Processing DASS-812
+2025-12-07 00:19:08,756 - __main__ - INFO - [29/374] [Page 5] Processing JUR-530
+2025-12-07 00:19:19,237 - __main__ - INFO - [30/374] [Page 5] Processing JUR-548
+2025-12-07 00:19:29,573 - __main__ - INFO - [31/374] [Page 5] Processing IPZZ-756
+2025-12-07 00:19:40,030 - __main__ - INFO - [32/374] [Page 5] Processing SNOS-040
+2025-12-07 00:19:50,312 - __main__ - INFO - [33/374] [Page 6] Processing JUR-531
+2025-12-07 00:20:00,888 - __main__ - INFO - [34/374] [Page 6] Processing JUR-538
+2025-12-07 00:20:11,328 - __main__ - INFO - [35/374] [Page 6] Processing IPZZ-719
+2025-12-07 00:20:21,869 - __main__ - INFO - [36/374] [Page 6] Processing ROE-428
+2025-12-07 00:20:32,488 - __main__ - INFO - [37/374] [Page 6] Processing SONE-992
+2025-12-07 00:20:43,172 - __main__ - INFO - [38/374] [Page 6] Processing IPZZ-729
+2025-12-07 00:20:53,713 - __main__ - INFO - [39/374] [Page 6] Processing ABF-293
+2025-12-07 00:21:09,177 - __main__ - INFO - [40/374] [Page 6] Processing DASS-737
+2025-12-07 00:21:24,759 - __main__ - INFO - [41/374] [Page 6] Processing DASS-827
+2025-12-07 00:21:40,266 - __main__ - INFO - [42/374] [Page 6] Processing IPZZ-740
+2025-12-07 00:21:55,934 - __main__ - INFO - [43/374] [Page 7] Processing IPZZ-717
+2025-12-07 00:22:11,424 - __main__ - INFO - [44/374] [Page 7] Processing JUR-584
+2025-12-07 00:22:26,936 - __main__ - INFO - [45/374] [Page 7] Processing IPZZ-752
+2025-12-07 00:22:42,406 - __main__ - INFO - [46/374] [Page 8] Processing DANDYA-014
+2025-12-07 00:22:57,947 - __main__ - INFO - [47/374] [Page 8] Processing FCT-202
+2025-12-07 00:23:13,530 - __main__ - INFO - [48/374] [Page 8] Processing MILK-269
+2025-12-07 00:23:29,091 - __main__ - INFO - [49/374] [Page 8] Processing STSK-201
+2025-12-07 00:23:44,603 - __main__ - INFO - [50/374] [Page 8] Processing NHDTC-136
+2025-12-07 00:24:00,077 - __main__ - INFO - [51/374] [Page 9] Processing JUMS-150
+2025-12-07 00:24:10,554 - __main__ - INFO - [52/374] [Page 9] Processing START-464
+2025-12-07 00:24:26,039 - __main__ - INFO - [53/374] [Page 10] Processing COGM-090
+2025-12-07 00:24:41,503 - __main__ - INFO - [54/374] [Page 10] Processing JERA-014
+2025-12-07 00:24:56,974 - __main__ - INFO - [55/374] [Page 10] Processing FTKD-031
+2025-12-07 00:25:12,441 - __main__ - INFO - [56/374] [Page 10] Processing HWKR-003
+2025-12-07 00:25:27,915 - __main__ - INFO - [57/374] [Page 11] Processing DOKS-657
+2025-12-07 00:25:43,372 - __main__ - INFO - [58/374] [Page 11] Processing SDJS-342
+2025-12-07 00:25:58,866 - __main__ - INFO - [59/374] [Page 11] Processing START-426
+2025-12-07 00:26:14,369 - __main__ - INFO - [60/374] [Page 11] Processing START-447
+2025-12-07 00:26:29,825 - utils.parser - WARNING - [P2-61] No copy button found for video code
+2025-12-07 00:26:29,825 - utils.parser - WARNING - [P2-61] No magnets content found in detail page
+2025-12-07 00:26:29,825 - utils.magnet_extractor - WARNING - [P2-61] No suitable magnet found
+2025-12-07 00:26:29,825 - __main__ - INFO - [61/374] [Page 11] Processing 
+2025-12-07 00:26:45,262 - __main__ - INFO - [62/374] [Page 11] Processing MIUM-1141
+2025-12-07 00:27:00,719 - __main__ - INFO - [63/374] [Page 12] Processing SORA-618
+2025-12-07 00:27:16,265 - __main__ - INFO - [64/374] [Page 12] Processing FTHTD-141
+2025-12-07 00:27:31,793 - __main__ - INFO - [65/374] [Page 12] Processing LUXU-1864
+2025-12-07 00:27:47,246 - __main__ - INFO - [66/374] [Page 12] Processing XVSR-849
+2025-12-07 00:28:02,725 - __main__ - INFO - [67/374] [Page 13] Processing KAMEF-108
+2025-12-07 00:28:13,342 - __main__ - INFO - [68/374] [Page 13] Processing DJN-029
+2025-12-07 00:28:28,805 - __main__ - INFO - [69/374] [Page 13] Processing JNT-112
+2025-12-07 00:28:44,380 - __main__ - INFO - [70/374] [Page 13] Processing DLDSS-444
+2025-12-07 00:28:59,874 - __main__ - INFO - [71/374] [Page 14] Processing MIDA-435
+2025-12-07 00:29:15,417 - __main__ - INFO - [72/374] [Page 14] Processing STCV-582
+2025-12-07 00:29:30,909 - __main__ - INFO - [73/374] [Page 14] Processing IMJO-003
+2025-12-07 00:29:46,585 - __main__ - INFO - [74/374] [Page 14] Processing LULU-412
+2025-12-07 00:30:02,077 - __main__ - INFO - [75/374] [Page 14] Processing JJDA-066
+2025-12-07 00:30:17,648 - __main__ - INFO - [76/374] [Page 14] Processing LULU-410
+2025-12-07 00:30:32,943 - __main__ - INFO - [77/374] [Page 14] Processing MIAB-589
+2025-12-07 00:30:48,436 - __main__ - INFO - [78/374] [Page 14] Processing MIKR-055
+2025-12-07 00:31:03,945 - __main__ - INFO - [79/374] [Page 14] Processing NMSL-028
+2025-12-07 00:31:19,466 - __main__ - INFO - [80/374] [Page 15] Processing ATID-636
+2025-12-07 00:31:34,970 - __main__ - INFO - [81/374] [Page 15] Processing SOAN-121
+2025-12-07 00:31:50,474 - __main__ - INFO - [82/374] [Page 15] Processing YMDD-474
+2025-12-07 00:32:06,015 - __main__ - INFO - [83/374] [Page 15] Processing FTHTD-152
+2025-12-07 00:32:21,484 - __main__ - INFO - [84/374] [Page 15] Processing TANF-033
+2025-12-07 00:32:36,787 - __main__ - INFO - [85/374] [Page 15] Processing CAWD-905
+2025-12-07 00:32:52,263 - __main__ - INFO - [86/374] [Page 15] Processing MOON-051
+2025-12-07 00:33:07,974 - __main__ - INFO - [87/374] [Page 15] Processing SMOK-026
+2025-12-07 00:33:23,823 - __main__ - INFO - [88/374] [Page 15] Processing DRPT-100
+2025-12-07 00:33:39,293 - __main__ - INFO - [89/374] [Page 16] Processing FJIN-109
+2025-12-07 00:33:54,615 - __main__ - INFO - [90/374] [Page 16] Processing GVH-800
+2025-12-07 00:34:10,093 - __main__ - INFO - [91/374] [Page 16] Processing SORA-621
+2025-12-07 00:34:25,594 - __main__ - INFO - [92/374] [Page 16] Processing DNJR-149
+2025-12-07 00:34:41,085 - __main__ - INFO - [93/374] [Page 16] Processing WAAA-591
+2025-12-07 00:34:56,821 - __main__ - INFO - [94/374] [Page 16] Processing XVSR-852
+2025-12-07 00:35:12,441 - __main__ - INFO - [95/374] [Page 16] Processing BAB-176
+2025-12-07 00:35:23,125 - __main__ - INFO - [96/374] [Page 16] Processing UFD-081
+2025-12-07 00:35:38,614 - __main__ - INFO - [97/374] [Page 16] Processing XVSR-851
+2025-12-07 00:35:49,108 - __main__ - INFO - [98/374] [Page 17] Processing XVSR-848
+2025-12-07 00:36:04,614 - __main__ - INFO - [99/374] [Page 17] Processing MIDA-422
+2025-12-07 00:36:20,103 - __main__ - INFO - [100/374] [Page 17] Processing HNVR-162
+2025-12-07 00:36:35,576 - __main__ - INFO - [101/374] [Page 17] Processing MIKR-058
+2025-12-07 00:36:51,051 - __main__ - INFO - [102/374] [Page 17] Processing YMDD-472
+2025-12-07 00:37:06,515 - __main__ - INFO - [103/374] [Page 17] Processing SORA-620
+2025-12-07 00:37:22,058 - __main__ - INFO - [104/374] [Page 17] Processing MIKR-054
+2025-12-07 00:37:37,527 - __main__ - INFO - [105/374] [Page 17] Processing WAAA-598
+2025-12-07 00:37:53,149 - __main__ - INFO - [106/374] [Page 18] Processing HODV-22018
+2025-12-07 00:38:08,608 - __main__ - INFO - [107/374] [Page 18] Processing FOCS-286
+2025-12-07 00:38:24,096 - __main__ - INFO - [108/374] [Page 18] Processing DVEH-070
+2025-12-07 00:38:39,620 - __main__ - INFO - [109/374] [Page 18] Processing DVMM-322
+2025-12-07 00:38:55,147 - __main__ - INFO - [110/374] [Page 18] Processing MIDA-429
+2025-12-07 00:39:10,616 - __main__ - INFO - [111/374] [Page 18] Processing SAME-188
+2025-12-07 00:39:26,107 - __main__ - INFO - [112/374] [Page 18] Processing CAWD-898
+2025-12-07 00:39:41,577 - __main__ - INFO - [113/374] [Page 18] Processing MIAB-597
+2025-12-07 00:39:57,116 - __main__ - INFO - [114/374] [Page 18] Processing LULU-411
+2025-12-07 00:40:12,930 - __main__ - INFO - [115/374] [Page 18] Processing SAME-166
+2025-12-07 00:40:28,469 - __main__ - INFO - [116/374] [Page 18] Processing HODV-22019
+2025-12-07 00:40:43,926 - __main__ - INFO - [117/374] [Page 19] Processing DVMM-323
+2025-12-07 00:40:59,449 - __main__ - INFO - [118/374] [Page 19] Processing MIMK-251
+2025-12-07 00:41:14,965 - __main__ - INFO - [119/374] [Page 19] Processing SAME-194
+2025-12-07 00:41:30,532 - __main__ - INFO - [120/374] [Page 19] Processing SAME-214
+2025-12-07 00:41:46,017 - __main__ - INFO - [121/374] [Page 19] Processing WAAA-594
+2025-12-07 00:42:01,537 - __main__ - INFO - [122/374] [Page 19] Processing MIDA-438
+2025-12-07 00:42:17,042 - __main__ - INFO - [123/374] [Page 19] Processing CAWD-897
+2025-12-07 00:42:32,615 - __main__ - INFO - [124/374] [Page 19] Processing MIDA-433
+2025-12-07 00:42:48,077 - __main__ - INFO - [125/374] [Page 19] Processing WAAA-596
+2025-12-07 00:43:03,548 - __main__ - INFO - [126/374] [Page 19] Processing LUXU-1862
+2025-12-07 00:43:13,992 - __main__ - INFO - [127/374] [Page 19] Processing WAAA-549
+2025-12-07 00:43:29,531 - __main__ - INFO - [128/374] [Page 19] Processing YUJ-051
+2025-12-07 00:43:45,009 - __main__ - INFO - [129/374] [Page 19] Processing CAWD-913
+2025-12-07 00:44:00,620 - __main__ - INFO - [130/374] [Page 19] Processing MANX-023
+2025-12-07 00:44:16,144 - __main__ - INFO - [131/374] [Page 19] Processing MIDA-427
+2025-12-07 00:44:31,700 - __main__ - INFO - [132/374] [Page 19] Processing WAAA-593
+2025-12-07 00:44:47,203 - __main__ - INFO - [133/374] [Page 19] Processing GANA-3287
+2025-12-07 00:45:02,680 - __main__ - INFO - [134/374] [Page 19] Processing MIAB-576
+2025-12-07 00:45:18,153 - __main__ - INFO - [135/374] [Page 19] Processing MIMK-263
+2025-12-07 00:45:33,640 - __main__ - INFO - [136/374] [Page 19] Processing FPRE-210
+2025-12-07 00:45:49,107 - __main__ - INFO - [137/374] [Page 20] Processing MIMK-261
+2025-12-07 00:46:04,599 - __main__ - INFO - [138/374] [Page 20] Processing WAAA-595
+2025-12-07 00:46:20,068 - __main__ - INFO - [139/374] [Page 20] Processing FTHTD-143
+2025-12-07 00:46:35,534 - __main__ - INFO - [140/374] [Page 20] Processing FTHTD-162
+2025-12-07 00:46:51,018 - __main__ - INFO - [141/374] [Page 20] Processing PFT-007
+2025-12-07 00:47:06,705 - __main__ - INFO - [142/374] [Page 20] Processing NAMH-047
+2025-12-07 00:47:22,249 - __main__ - INFO - [143/374] [Page 20] Processing FNS-136
+2025-12-07 00:47:37,885 - __main__ - INFO - [144/374] [Page 20] Processing FNS-137
+2025-12-07 00:47:53,411 - __main__ - INFO - [145/374] [Page 20] Processing FNS-134
+2025-12-07 00:48:08,898 - __main__ - INFO - [146/374] [Page 20] Processing FNS-118
+2025-12-07 00:48:24,420 - __main__ - INFO - [147/374] [Page 20] Processing FNS-133
+2025-12-07 00:48:39,968 - __main__ - INFO - [148/374] [Page 20] Processing FNS-114
+2025-12-07 00:48:55,446 - __main__ - INFO - [149/374] [Page 20] Processing FNS-116
+2025-12-07 00:49:10,932 - __main__ - INFO - [150/374] [Page 20] Processing DLDSS-446
+2025-12-07 00:49:26,457 - __main__ - INFO - [151/374] [Page 20] Processing MIRD-267
+2025-12-07 00:49:41,938 - __main__ - INFO - [152/374] [Page 20] Processing CAWD-911
+2025-12-07 00:49:57,439 - __main__ - INFO - [153/374] [Page 20] Processing JUFE-602
+2025-12-07 00:50:12,897 - __main__ - INFO - [154/374] [Page 20] Processing MNGS-026
+2025-12-07 00:50:28,408 - __main__ - INFO - [155/374] [Page 21] Processing MIDE-419
+2025-12-07 00:50:44,055 - __main__ - INFO - [156/374] [Page 21] Processing STCVS-035
+2025-12-07 00:50:59,582 - __main__ - INFO - [157/374] [Page 21] Processing IPVR-340
+2025-12-07 00:51:15,071 - __main__ - INFO - [158/374] [Page 21] Processing FSBK-018
+2025-12-07 00:51:30,635 - __main__ - INFO - [159/374] [Page 21] Processing KNAM-084
+2025-12-07 00:51:46,113 - __main__ - INFO - [160/374] [Page 21] Processing SDJS-343
+2025-12-07 00:51:56,570 - __main__ - INFO - [161/374] [Page 21] Processing START-455
+2025-12-07 00:52:12,113 - __main__ - INFO - [162/374] [Page 21] Processing START-459
+2025-12-07 00:52:22,548 - __main__ - INFO - [163/374] [Page 21] Processing START-445
+2025-12-07 00:52:33,025 - __main__ - INFO - [164/374] [Page 21] Processing START-444
+2025-12-07 00:52:48,364 - __main__ - INFO - [165/374] [Page 21] Processing START-454
+2025-12-07 00:52:58,833 - __main__ - INFO - [166/374] [Page 21] Processing SDAM-153
+2025-12-07 00:53:14,340 - __main__ - INFO - [167/374] [Page 21] Processing SDDE-760
+2025-12-07 00:53:29,856 - __main__ - INFO - [168/374] [Page 21] Processing SDJS-335
+2025-12-07 00:53:45,341 - __main__ - INFO - [169/374] [Page 21] Processing START-456
+2025-12-07 00:54:00,873 - __main__ - INFO - [170/374] [Page 21] Processing START-463
+2025-12-07 00:54:11,332 - __main__ - INFO - [171/374] [Page 21] Processing START-470
+2025-12-07 00:54:26,821 - __main__ - INFO - [172/374] [Page 21] Processing KUSE-037
+2025-12-07 00:54:42,323 - __main__ - INFO - [173/374] [Page 22] Processing START-430
+2025-12-07 00:54:57,822 - __main__ - INFO - [174/374] [Page 22] Processing START-446
+2025-12-07 00:55:13,312 - __main__ - INFO - [175/374] [Page 22] Processing 3DSVR-1861
+2025-12-07 00:55:28,796 - __main__ - INFO - [176/374] [Page 22] Processing MSAJ-019
+2025-12-07 00:55:39,263 - __main__ - INFO - [177/374] [Page 22] Processing NAMH-046
+2025-12-07 00:55:54,554 - __main__ - INFO - [178/374] [Page 22] Processing NMSL-024
+2025-12-07 00:56:10,082 - __main__ - INFO - [179/374] [Page 22] Processing NSFS-425
+2025-12-07 00:56:25,641 - __main__ - INFO - [180/374] [Page 22] Processing NSFS-426
+2025-12-07 00:56:41,137 - __main__ - INFO - [181/374] [Page 22] Processing OLM-247
+2025-12-07 00:56:56,619 - __main__ - INFO - [182/374] [Page 23] Processing UMSO-618
+2025-12-07 00:57:12,107 - __main__ - INFO - [183/374] [Page 23] Processing AGAV-153
+2025-12-07 00:57:22,567 - __main__ - INFO - [184/374] [Page 23] Processing RCTD-700
+2025-12-07 00:57:38,075 - __main__ - INFO - [185/374] [Page 24] Processing HNTRZ-028
+2025-12-07 00:57:53,557 - __main__ - INFO - [186/374] [Page 24] Processing SPLT-003
+2025-12-07 00:58:09,176 - __main__ - INFO - [187/374] [Page 24] Processing ENKI-089
+2025-12-07 00:58:24,834 - __main__ - INFO - [188/374] [Page 24] Processing IPBZ-017
+2025-12-07 00:58:40,327 - __main__ - INFO - [189/374] [Page 24] Processing MADV-611
+2025-12-07 00:58:50,769 - __main__ - INFO - [190/374] [Page 25] Processing HUBLK-058
+2025-12-07 00:59:01,232 - __main__ - INFO - [191/374] [Page 25] Processing ONSG-099
+2025-12-07 00:59:11,680 - __main__ - INFO - [192/374] [Page 26] Processing UZU-034
+2025-12-07 00:59:22,101 - __main__ - INFO - [193/374] [Page 26] Processing BLOR-282
+2025-12-07 00:59:32,622 - __main__ - INFO - [194/374] [Page 26] Processing MBDD-2159
+2025-12-07 00:59:48,207 - __main__ - INFO - [195/374] [Page 26] Processing APGH-048
+2025-12-07 01:00:03,693 - __main__ - INFO - [196/374] [Page 26] Processing REAL-953
+2025-12-07 01:00:13,993 - __main__ - INFO - [197/374] [Page 26] Processing GQN-006
+2025-12-07 01:00:29,546 - __main__ - INFO - [198/374] [Page 26] Processing DASS-810
+2025-12-07 01:00:40,042 - __main__ - INFO - [199/374] [Page 26] Processing MKMP-687
+2025-12-07 01:00:55,555 - __main__ - INFO - [200/374] [Page 26] Processing NSFS-432
+2025-12-07 01:01:11,105 - __main__ - INFO - [201/374] [Page 26] Processing MVG-146
+2025-12-07 01:01:21,603 - __main__ - INFO - [202/374] [Page 26] Processing HMN-766
+2025-12-07 01:01:36,892 - __main__ - INFO - [203/374] [Page 26] Processing JUR-537
+2025-12-07 01:01:52,405 - __main__ - INFO - [204/374] [Page 27] Processing DASS-800
+2025-12-07 01:02:02,901 - __main__ - INFO - [205/374] [Page 27] Processing MISM-410
+2025-12-07 01:02:13,346 - __main__ - INFO - [206/374] [Page 27] Processing REAL-954
+2025-12-07 01:02:28,810 - __main__ - INFO - [207/374] [Page 27] Processing AVSA-409
+2025-12-07 01:02:39,345 - __main__ - INFO - [208/374] [Page 27] Processing MADM-210
+2025-12-07 01:02:49,770 - __main__ - INFO - [209/374] [Page 27] Processing MOND-301
+2025-12-07 01:03:05,272 - __main__ - INFO - [210/374] [Page 27] Processing ROE-419
+2025-12-07 01:03:20,879 - __main__ - INFO - [211/374] [Page 28] Processing NACT-045
+2025-12-07 01:03:36,356 - __main__ - INFO - [212/374] [Page 28] Processing JYMA-095
+2025-12-07 01:03:51,816 - __main__ - INFO - [213/374] [Page 28] Processing YMDS-239
+2025-12-07 01:04:02,253 - __main__ - INFO - [214/374] [Page 28] Processing MKMP-686
+2025-12-07 01:04:17,764 - __main__ - INFO - [215/374] [Page 28] Processing MKMP-688
+2025-12-07 01:04:33,308 - __main__ - INFO - [216/374] [Page 28] Processing SONE-994
+2025-12-07 01:04:43,783 - __main__ - INFO - [217/374] [Page 28] Processing AVSA-408
+2025-12-07 01:04:59,270 - __main__ - INFO - [218/374] [Page 28] Processing NHDTC-130
+2025-12-07 01:05:09,738 - __main__ - INFO - [219/374] [Page 28] Processing SNOS-007
+2025-12-07 01:05:20,247 - __main__ - INFO - [220/374] [Page 28] Processing SNOS-013
+2025-12-07 01:05:30,738 - __main__ - INFO - [221/374] [Page 28] Processing LUCY-021
+2025-12-07 01:05:41,200 - __main__ - INFO - [222/374] [Page 28] Processing MISM-409
+2025-12-07 01:05:56,711 - __main__ - INFO - [223/374] [Page 28] Processing MIDA-361
+2025-12-07 01:06:07,167 - __main__ - INFO - [224/374] [Page 29] Processing JUR-553
+2025-12-07 01:06:17,631 - __main__ - INFO - [225/374] [Page 29] Processing DASS-816
+2025-12-07 01:06:28,064 - __main__ - INFO - [226/374] [Page 29] Processing DASS-822
+2025-12-07 01:06:43,571 - __main__ - INFO - [227/374] [Page 29] Processing FOCS-284
+2025-12-07 01:06:59,061 - __main__ - INFO - [228/374] [Page 29] Processing ROE-410
+2025-12-07 01:07:14,540 - __main__ - INFO - [229/374] [Page 29] Processing ACHJ-075
+2025-12-07 01:07:25,002 - __main__ - INFO - [230/374] [Page 29] Processing FJIN-109a
+2025-12-07 01:07:40,487 - __main__ - INFO - [231/374] [Page 29] Processing TPPN-267
+2025-12-07 01:07:55,976 - __main__ - INFO - [232/374] [Page 29] Processing MISM-415
+2025-12-07 01:08:06,484 - __main__ - INFO - [233/374] [Page 30] Processing FCT-197
+2025-12-07 01:08:21,948 - __main__ - INFO - [234/374] [Page 30] Processing JUR-550
+2025-12-07 01:08:32,449 - __main__ - INFO - [235/374] [Page 30] Processing JYMA-094
+2025-12-07 01:08:42,951 - __main__ - INFO - [236/374] [Page 30] Processing MISM-414
+2025-12-07 01:08:58,465 - __main__ - INFO - [237/374] [Page 30] Processing ROYD-273
+2025-12-07 01:09:13,967 - __main__ - INFO - [238/374] [Page 30] Processing ROYD-276
+2025-12-07 01:09:29,506 - __main__ - INFO - [239/374] [Page 30] Processing NACT-043
+2025-12-07 01:09:45,029 - __main__ - INFO - [240/374] [Page 30] Processing DASS-780
+2025-12-07 01:10:00,785 - __main__ - INFO - [241/374] [Page 30] Processing NAMH-048
+2025-12-07 01:10:16,285 - __main__ - INFO - [242/374] [Page 30] Processing START-023
+2025-12-07 01:10:26,728 - __main__ - INFO - [243/374] [Page 30] Processing IPVR-339
+2025-12-07 01:10:42,196 - __main__ - INFO - [244/374] [Page 30] Processing ABF-289
+2025-12-07 01:10:52,854 - __main__ - INFO - [245/374] [Page 31] Processing RCTD-698
+2025-12-07 01:11:08,515 - __main__ - INFO - [246/374] [Page 31] Processing RCTD-703
+2025-12-07 01:11:24,004 - __main__ - INFO - [247/374] [Page 31] Processing OFSD-047
+2025-12-07 01:11:39,520 - __main__ - INFO - [248/374] [Page 31] Processing KBR-033
+2025-12-07 01:11:49,983 - __main__ - INFO - [249/374] [Page 31] Processing MIMK-256
+2025-12-07 01:12:00,441 - __main__ - INFO - [250/374] [Page 31] Processing PRED-817
+2025-12-07 01:12:10,910 - __main__ - INFO - [251/374] [Page 31] Processing FCT-191
+2025-12-07 01:12:26,408 - __main__ - INFO - [252/374] [Page 32] Processing 3DSVR-1860
+2025-12-07 01:12:41,907 - __main__ - INFO - [253/374] [Page 32] Processing NHDTC-131
+2025-12-07 01:12:52,354 - __main__ - INFO - [254/374] [Page 32] Processing HOWS-015
+2025-12-07 01:13:07,828 - __main__ - INFO - [255/374] [Page 32] Processing SGKI-066
+2025-12-07 01:13:18,298 - __main__ - INFO - [256/374] [Page 32] Processing NIMA-066
+2025-12-07 01:13:28,735 - __main__ - INFO - [257/374] [Page 32] Processing T-38049
+2025-12-07 01:13:44,315 - __main__ - INFO - [258/374] [Page 32] Processing SIMO-010
+2025-12-07 01:13:54,820 - __main__ - INFO - [259/374] [Page 32] Processing JNT-111
+2025-12-07 01:14:05,303 - __main__ - INFO - [260/374] [Page 33] Processing MVSD-662
+2025-12-07 01:14:15,759 - __main__ - INFO - [261/374] [Page 33] Processing PRED-820
+2025-12-07 01:14:26,402 - __main__ - INFO - [262/374] [Page 33] Processing SKMJ-685
+2025-12-07 01:14:41,892 - __main__ - INFO - [263/374] [Page 33] Processing BANK-223
+2025-12-07 01:14:57,371 - __main__ - INFO - [264/374] [Page 33] Processing ABF-186
+2025-12-07 01:15:07,846 - __main__ - INFO - [265/374] [Page 33] Processing JUFE-590
+2025-12-07 01:15:18,337 - __main__ - INFO - [266/374] [Page 33] Processing EBWH-289
+2025-12-07 01:15:28,670 - __main__ - INFO - [267/374] [Page 33] Processing BLK-682
+2025-12-07 01:15:44,471 - __main__ - INFO - [268/374] [Page 33] Processing MUDR-343
+2025-12-07 01:16:00,183 - __main__ - INFO - [269/374] [Page 33] Processing SYKH-164
+2025-12-07 01:16:15,498 - __main__ - INFO - [270/374] [Page 34] Processing BNST-084
+2025-12-07 01:16:30,964 - __main__ - INFO - [271/374] [Page 34] Processing SIRO-5569
+2025-12-07 01:16:41,428 - __main__ - INFO - [272/374] [Page 34] Processing MIUM-1320
+2025-12-07 01:16:51,909 - __main__ - INFO - [273/374] [Page 34] Processing PRIN-053
+2025-12-07 01:17:02,401 - __main__ - INFO - [274/374] [Page 34] Processing MUKD-560
+2025-12-07 01:17:18,022 - __main__ - INFO - [275/374] [Page 34] Processing JERA-012
+2025-12-07 01:17:33,504 - __main__ - INFO - [276/374] [Page 34] Processing T38-048
+2025-12-07 01:17:49,194 - __main__ - INFO - [277/374] [Page 34] Processing IPZZ-079
+2025-12-07 01:17:59,818 - __main__ - INFO - [278/374] [Page 34] Processing IPZZ-588
+2025-12-07 01:18:10,521 - __main__ - INFO - [279/374] [Page 34] Processing MIKR-051
+2025-12-07 01:18:21,146 - __main__ - INFO - [280/374] [Page 34] Processing EROFV-340
+2025-12-07 01:18:36,669 - __main__ - INFO - [281/374] [Page 34] Processing MIUM-1267
+2025-12-07 01:18:52,298 - __main__ - INFO - [282/374] [Page 34] Processing AUKG-638
+2025-12-07 01:19:07,750 - __main__ - INFO - [283/374] [Page 34] Processing TIKB-210
+2025-12-07 01:19:18,292 - __main__ - INFO - [284/374] [Page 34] Processing MIMA-022
+2025-12-07 01:19:33,760 - __main__ - INFO - [285/374] [Page 35] Processing MIAB-580
+2025-12-07 01:19:44,206 - __main__ - INFO - [286/374] [Page 35] Processing PIYO-224
+2025-12-07 01:19:59,679 - __main__ - INFO - [287/374] [Page 35] Processing HRSM-119
+2025-12-07 01:20:15,127 - __main__ - INFO - [288/374] [Page 35] Processing NCYF-048
+2025-12-07 01:20:30,404 - __main__ - INFO - [289/374] [Page 35] Processing BOKO-032
+2025-12-07 01:20:46,059 - __main__ - INFO - [290/374] [Page 35] Processing MXGS-1405
+2025-12-07 01:21:01,613 - __main__ - INFO - [291/374] [Page 35] Processing FLAV-407
+2025-12-07 01:21:12,077 - __main__ - INFO - [292/374] [Page 35] Processing GVH-797
+2025-12-07 01:21:22,344 - __main__ - INFO - [293/374] [Page 35] Processing SOON-008
+2025-12-07 01:21:37,795 - __main__ - INFO - [294/374] [Page 35] Processing PRED-819
+2025-12-07 01:21:48,284 - __main__ - INFO - [295/374] [Page 35] Processing ASEX-007
+2025-12-07 01:22:04,057 - __main__ - INFO - [296/374] [Page 35] Processing MFYD-059
+2025-12-07 01:22:14,523 - __main__ - INFO - [297/374] [Page 35] Processing HAWA-367
+2025-12-07 01:22:30,011 - __main__ - INFO - [298/374] [Page 36] Processing FSTU-018
+2025-12-07 01:22:45,759 - __main__ - INFO - [299/374] [Page 36] Processing MUKD-559
+2025-12-07 01:22:56,262 - __main__ - INFO - [300/374] [Page 36] Processing MFYD-072
+2025-12-07 01:23:11,723 - __main__ - INFO - [301/374] [Page 36] Processing DDFF-045
+2025-12-07 01:23:22,182 - __main__ - INFO - [302/374] [Page 36] Processing TIKB-209
+2025-12-07 01:23:37,650 - __main__ - INFO - [303/374] [Page 36] Processing MXGS-1406
+2025-12-07 01:23:48,128 - __main__ - INFO - [304/374] [Page 36] Processing SDHS-044
+2025-12-07 01:23:58,757 - __main__ - INFO - [305/374] [Page 36] Processing FSTU-017
+2025-12-07 01:24:14,437 - __main__ - INFO - [306/374] [Page 36] Processing MIKR-052
+2025-12-07 01:24:24,923 - __main__ - INFO - [307/374] [Page 36] Processing MUFR-002
+2025-12-07 01:24:40,421 - __main__ - INFO - [308/374] [Page 37] Processing PRED-818
+2025-12-07 01:24:55,924 - __main__ - INFO - [309/374] [Page 37] Processing MIDA-404
+2025-12-07 01:25:06,420 - __main__ - INFO - [310/374] [Page 37] Processing MIKR-050
+2025-12-07 01:25:16,755 - __main__ - INFO - [311/374] [Page 37] Processing MOPT-050
+2025-12-07 01:25:32,232 - __main__ - INFO - [312/374] [Page 37] Processing MUDR-334
+2025-12-07 01:25:47,752 - __main__ - INFO - [313/374] [Page 37] Processing MIAB-587
+2025-12-07 01:26:03,446 - __main__ - INFO - [314/374] [Page 37] Processing MFYD-062
+2025-12-07 01:26:13,878 - __main__ - INFO - [315/374] [Page 37] Processing BBTU-107
+2025-12-07 01:26:29,393 - __main__ - INFO - [316/374] [Page 37] Processing NIMA-065
+2025-12-07 01:26:39,848 - __main__ - INFO - [317/374] [Page 37] Processing NMSL-027
+2025-12-07 01:26:50,299 - __main__ - INFO - [318/374] [Page 37] Processing GVH-798
+2025-12-07 01:27:00,776 - __main__ - INFO - [319/374] [Page 37] Processing HALT-073
+2025-12-07 01:27:11,420 - __main__ - INFO - [320/374] [Page 37] Processing SYKH-165
+2025-12-07 01:27:21,883 - __main__ - INFO - [321/374] [Page 37] Processing MIMK-252
+2025-12-07 01:27:32,368 - __main__ - INFO - [322/374] [Page 37] Processing MMBF-004
+2025-12-07 01:27:42,888 - __main__ - INFO - [323/374] [Page 37] Processing MUDR-346
+2025-12-07 01:27:53,388 - __main__ - INFO - [324/374] [Page 37] Processing MFYD-064
+2025-12-07 01:28:08,915 - __main__ - INFO - [325/374] [Page 37] Processing PRED-812
+2025-12-07 01:28:19,336 - __main__ - INFO - [326/374] [Page 37] Processing EBWH-265
+2025-12-07 01:28:34,865 - __main__ - INFO - [327/374] [Page 37] Processing MFYD-073
+2025-12-07 01:28:45,296 - __main__ - INFO - [328/374] [Page 37] Processing MFYD-078
+2025-12-07 01:28:55,744 - __main__ - INFO - [329/374] [Page 37] Processing JUFE-604
+2025-12-07 01:29:11,224 - __main__ - INFO - [330/374] [Page 37] Processing EBWH-274
+2025-12-07 01:29:26,721 - __main__ - INFO - [331/374] [Page 37] Processing MRSS-176
+2025-12-07 01:29:42,167 - __main__ - INFO - [332/374] [Page 38] Processing AWAW-009
+2025-12-07 01:29:52,616 - __main__ - INFO - [333/374] [Page 38] Processing BLK-676
+2025-12-07 01:30:08,080 - __main__ - INFO - [334/374] [Page 38] Processing BLK-679
+2025-12-07 01:30:23,596 - __main__ - INFO - [335/374] [Page 38] Processing EBWH-277
+2025-12-07 01:30:34,104 - __main__ - INFO - [336/374] [Page 38] Processing EBWH-284
+2025-12-07 01:30:49,600 - __main__ - INFO - [337/374] [Page 38] Processing FPRE-204
+2025-12-07 01:31:00,066 - __main__ - INFO - [338/374] [Page 38] Processing JUFE-606
+2025-12-07 01:31:15,569 - __main__ - INFO - [339/374] [Page 38] Processing IPX-258
+2025-12-07 01:31:26,044 - __main__ - INFO - [340/374] [Page 38] Processing PRED-822
+2025-12-07 01:31:36,707 - __main__ - INFO - [341/374] [Page 38] Processing EBWH-273
+2025-12-07 01:31:47,192 - __main__ - INFO - [342/374] [Page 38] Processing MNGS-017
+2025-12-07 01:31:57,617 - __main__ - INFO - [343/374] [Page 38] Processing MVSD-667
+2025-12-07 01:32:13,075 - __main__ - INFO - [344/374] [Page 38] Processing MIUM-1295
+2025-12-07 01:32:23,544 - __main__ - INFO - [345/374] [Page 38] Processing MFYD-063
+2025-12-07 01:32:34,015 - __main__ - INFO - [346/374] [Page 38] Processing MFYD-066
+2025-12-07 01:32:49,504 - __main__ - INFO - [347/374] [Page 38] Processing MFYD-061
+2025-12-07 01:33:00,004 - __main__ - INFO - [348/374] [Page 39] Processing SVGAL-023
+2025-12-07 01:33:15,505 - __main__ - INFO - [349/374] [Page 39] Processing MGOLD-048
+2025-12-07 01:33:30,988 - __main__ - INFO - [350/374] [Page 39] Processing MGOLD-050
+2025-12-07 01:33:46,452 - __main__ - INFO - [351/374] [Page 39] Processing DLDSS-447
+2025-12-07 01:34:01,901 - __main__ - INFO - [352/374] [Page 39] Processing DLDSS-449
+2025-12-07 01:34:12,354 - __main__ - INFO - [353/374] [Page 39] Processing FNS-115
+2025-12-07 01:34:27,836 - __main__ - INFO - [354/374] [Page 39] Processing DLDSS-443
+2025-12-07 01:34:43,148 - __main__ - INFO - [355/374] [Page 39] Processing DLDSS-445
+2025-12-07 01:34:58,588 - __main__ - INFO - [356/374] [Page 39] Processing PRED-821
+2025-12-07 01:35:09,023 - __main__ - INFO - [357/374] [Page 39] Processing PRED-823
+2025-12-07 01:35:19,523 - __main__ - INFO - [358/374] [Page 39] Processing JUFE-601
+2025-12-07 01:35:34,977 - __main__ - INFO - [359/374] [Page 39] Processing EBWH-282
+2025-12-07 01:35:45,434 - __main__ - INFO - [360/374] [Page 39] Processing EBWH-276
+2025-12-07 01:36:00,911 - __main__ - INFO - [361/374] [Page 39] Processing MIDA-401
+2025-12-07 01:36:16,375 - __main__ - INFO - [362/374] [Page 39] Processing MIMK-254
+2025-12-07 01:36:31,843 - __main__ - INFO - [363/374] [Page 40] Processing START-438
+2025-12-07 01:36:42,318 - __main__ - INFO - [364/374] [Page 40] Processing MGNL-128
+2025-12-07 01:36:57,817 - __main__ - INFO - [365/374] [Page 40] Processing SDJS-339
+2025-12-07 01:37:08,269 - __main__ - INFO - [366/374] [Page 40] Processing START-407
+2025-12-07 01:37:23,725 - __main__ - INFO - [367/374] [Page 40] Processing START-425
+2025-12-07 01:37:34,278 - __main__ - INFO - [368/374] [Page 40] Processing SDJS-338
+2025-12-07 01:37:49,778 - __main__ - INFO - [369/374] [Page 40] Processing SDJS-340
+2025-12-07 01:38:05,263 - __main__ - INFO - [370/374] [Page 40] Processing SDMUA-093
+2025-12-07 01:38:15,727 - __main__ - INFO - [371/374] [Page 40] Processing SDMM-214
+2025-12-07 01:38:31,233 - __main__ - INFO - [372/374] [Page 40] Processing START-457
+2025-12-07 01:38:46,727 - __main__ - INFO - [373/374] [Page 40] Processing START-423
+2025-12-07 01:39:02,206 - __main__ - INFO - [374/374] [Page 40] Processing T38-049
+2025-12-07 01:39:02,206 - __main__ - INFO - Phase 2 completed: 240 entries processed
+2025-12-07 01:39:02,206 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251206.csv
+2025-12-07 01:39:02,206 - __main__ - INFO - ==================================================
+2025-12-07 01:39:02,206 - __main__ - INFO - SUMMARY REPORT
+2025-12-07 01:39:02,206 - __main__ - INFO - ==================================================
+2025-12-07 01:39:02,206 - __main__ - INFO - Pages processed: 1 to 40
+2025-12-07 01:39:02,206 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-12-07 01:39:02,206 - __main__ - INFO - ==============================
+2025-12-07 01:39:02,206 - __main__ - INFO - PHASE 1 SUMMARY
+2025-12-07 01:39:02,206 - __main__ - INFO - ==============================
+2025-12-07 01:39:02,206 - __main__ - INFO - Phase 1 entries found: 23
+2025-12-07 01:39:02,206 - __main__ - INFO -   - Subtitle torrents: 23 (100.0%)
+2025-12-07 01:39:02,206 - __main__ - INFO -   - Hacked subtitle torrents: 0 (0.0%)
+2025-12-07 01:39:02,206 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
+2025-12-07 01:39:02,206 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
+2025-12-07 01:39:02,206 - __main__ - INFO - ==============================
+2025-12-07 01:39:02,206 - __main__ - INFO - PHASE 2 SUMMARY
+2025-12-07 01:39:02,206 - __main__ - INFO - ==============================
+2025-12-07 01:39:02,206 - __main__ - INFO - Phase 2 entries found: 240
+2025-12-07 01:39:02,206 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
+2025-12-07 01:39:02,207 - __main__ - INFO -   - Hacked subtitle torrents: 5 (2.1%)
+2025-12-07 01:39:02,207 - __main__ - INFO -   - Hacked no-subtitle torrents: 4 (1.7%)
+2025-12-07 01:39:02,207 - __main__ - INFO -   - No-subtitle torrents: 240 (100.0%)
+2025-12-07 01:39:02,207 - __main__ - INFO - ==============================
+2025-12-07 01:39:02,207 - __main__ - INFO - OVERALL SUMMARY
+2025-12-07 01:39:02,207 - __main__ - INFO - ==============================
+2025-12-07 01:39:02,207 - __main__ - INFO - Total entries found: 263
+2025-12-07 01:39:02,207 - __main__ - INFO - Successfully processed: 263
+2025-12-07 01:39:02,207 - __main__ - INFO - Skipped already parsed in this session: 665
+2025-12-07 01:39:02,207 - __main__ - INFO - Skipped already parsed in previous runs: 3311
+2025-12-07 01:39:02,207 - __main__ - INFO - Current parsed links in memory: 665
+2025-12-07 01:39:02,207 - __main__ - INFO - Overall subtitle torrents: 23 (8.7%)
+2025-12-07 01:39:02,207 - __main__ - INFO - Overall hacked subtitle torrents: 5 (1.9%)
+2025-12-07 01:39:02,207 - __main__ - INFO - Overall hacked no-subtitle torrents: 4 (1.5%)
+2025-12-07 01:39:02,207 - __main__ - INFO - Overall no-subtitle torrents: 240 (91.3%)
+2025-12-07 01:39:02,207 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251206.csv
+2025-12-07 01:39:02,207 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-12-07 01:39:02,207 - __main__ - INFO - ==================================================
