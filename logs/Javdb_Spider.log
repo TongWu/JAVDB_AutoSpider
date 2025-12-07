@@ -1,886 +1,951 @@
-2025-12-06 23:13:20,032 - __main__ - INFO - Initializing proxy pool with 3 proxies...
-2025-12-06 23:13:20,032 - utils.proxy_ban_manager - INFO - Loaded 0 ban records from logs/proxy_bans.csv
-2025-12-06 23:13:20,032 - utils.proxy_pool - INFO - Added proxy 'Miraculous Fortress' to pool (HTTP: http://***:***@139.xxx.xxx.231:12300, HTTPS: http://***:***@139.xxx.xxx.231:12300)
-2025-12-06 23:13:20,033 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
-2025-12-06 23:13:20,033 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-06 23:13:20,033 - __main__ - INFO - Proxy pool initialized successfully
-2025-12-06 23:13:20,033 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
-2025-12-06 23:13:20,033 - __main__ - INFO - Starting JavDB spider...
-2025-12-06 23:13:20,033 - __main__ - INFO - Arguments: start_page=1, end_page=40, phase=all
-2025-12-06 23:13:20,033 - __main__ - INFO - IGNORE RELEASE DATE: Will process all entries regardless of today/yesterday tags
-2025-12-06 23:13:20,033 - __main__ - INFO - Validating history file integrity...
-2025-12-06 23:13:20,067 - utils.history_manager - INFO - Loaded 5448 previously parsed movies from history (phase 1: 3311, phase 2: 2137)
-2025-12-06 23:13:20,067 - __main__ - INFO - Initialized requests session
-2025-12-06 23:13:20,067 - __main__ - INFO - ==================================================
-2025-12-06 23:13:20,067 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-12-06 23:13:20,067 - __main__ - INFO - ==================================================
-2025-12-06 23:13:21,413 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
-2025-12-06 23:13:21,414 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
-2025-12-06 23:13:26,992 - utils.parser - INFO - [Page 2] New releases filter disabled - will process all entries
-2025-12-06 23:13:26,994 - utils.parser - INFO - [Page 2] Found 0 entries for phase 1
-2025-12-06 23:13:32,586 - utils.parser - INFO - [Page 3] New releases filter disabled - will process all entries
-2025-12-06 23:13:32,588 - utils.parser - INFO - [Page 3] Found 11 entries for phase 1
-2025-12-06 23:13:38,204 - utils.parser - INFO - [Page 4] New releases filter disabled - will process all entries
-2025-12-06 23:13:38,206 - utils.parser - INFO - [Page 4] Found 4 entries for phase 1
-2025-12-06 23:13:43,893 - utils.parser - INFO - [Page 5] New releases filter disabled - will process all entries
-2025-12-06 23:13:43,894 - utils.parser - INFO - [Page 5] Found 0 entries for phase 1
-2025-12-06 23:13:49,703 - utils.parser - INFO - [Page 6] New releases filter disabled - will process all entries
-2025-12-06 23:13:49,705 - utils.parser - INFO - [Page 6] Found 7 entries for phase 1
-2025-12-06 23:13:55,233 - utils.parser - INFO - [Page 7] New releases filter disabled - will process all entries
-2025-12-06 23:13:55,235 - utils.parser - INFO - [Page 7] Found 8 entries for phase 1
-2025-12-06 23:14:00,831 - utils.parser - INFO - [Page 8] New releases filter disabled - will process all entries
-2025-12-06 23:14:00,832 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
-2025-12-06 23:14:06,468 - utils.parser - INFO - [Page 9] New releases filter disabled - will process all entries
-2025-12-06 23:14:06,470 - utils.parser - INFO - [Page 9] Found 15 entries for phase 1
-2025-12-06 23:14:11,993 - utils.parser - INFO - [Page 10] New releases filter disabled - will process all entries
-2025-12-06 23:14:11,994 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
-2025-12-06 23:14:17,553 - utils.parser - INFO - [Page 11] New releases filter disabled - will process all entries
-2025-12-06 23:14:17,555 - utils.parser - INFO - [Page 11] Found 11 entries for phase 1
-2025-12-06 23:14:23,146 - utils.parser - INFO - [Page 12] New releases filter disabled - will process all entries
-2025-12-06 23:14:23,148 - utils.parser - INFO - [Page 12] Found 1 entries for phase 1
-2025-12-06 23:14:28,774 - utils.parser - INFO - [Page 13] New releases filter disabled - will process all entries
-2025-12-06 23:14:28,776 - utils.parser - INFO - [Page 13] Found 14 entries for phase 1
-2025-12-06 23:14:34,334 - utils.parser - INFO - [Page 14] New releases filter disabled - will process all entries
-2025-12-06 23:14:34,337 - utils.parser - INFO - [Page 14] Found 9 entries for phase 1
-2025-12-06 23:14:40,178 - utils.parser - INFO - [Page 15] New releases filter disabled - will process all entries
-2025-12-06 23:14:40,179 - utils.parser - INFO - [Page 15] Found 0 entries for phase 1
-2025-12-06 23:14:45,709 - utils.parser - INFO - [Page 16] New releases filter disabled - will process all entries
-2025-12-06 23:14:45,711 - utils.parser - INFO - [Page 16] Found 11 entries for phase 1
-2025-12-06 23:14:51,255 - utils.parser - INFO - [Page 17] New releases filter disabled - will process all entries
-2025-12-06 23:14:51,256 - utils.parser - INFO - [Page 17] Found 3 entries for phase 1
-2025-12-06 23:14:56,829 - utils.parser - INFO - [Page 18] New releases filter disabled - will process all entries
-2025-12-06 23:14:56,831 - utils.parser - INFO - [Page 18] Found 14 entries for phase 1
-2025-12-06 23:15:02,343 - utils.parser - INFO - [Page 19] New releases filter disabled - will process all entries
-2025-12-06 23:15:02,345 - utils.parser - INFO - [Page 19] Found 0 entries for phase 1
-2025-12-06 23:15:08,098 - utils.parser - INFO - [Page 20] New releases filter disabled - will process all entries
-2025-12-06 23:15:08,100 - utils.parser - INFO - [Page 20] Found 12 entries for phase 1
-2025-12-06 23:15:13,652 - utils.parser - INFO - [Page 21] New releases filter disabled - will process all entries
-2025-12-06 23:15:13,654 - utils.parser - INFO - [Page 21] Found 0 entries for phase 1
-2025-12-06 23:15:19,224 - utils.parser - INFO - [Page 22] New releases filter disabled - will process all entries
-2025-12-06 23:15:19,226 - utils.parser - INFO - [Page 22] Found 12 entries for phase 1
-2025-12-06 23:15:24,742 - utils.parser - INFO - [Page 23] New releases filter disabled - will process all entries
-2025-12-06 23:15:24,744 - utils.parser - INFO - [Page 23] Found 10 entries for phase 1
-2025-12-06 23:15:30,272 - utils.parser - INFO - [Page 24] New releases filter disabled - will process all entries
-2025-12-06 23:15:30,274 - utils.parser - INFO - [Page 24] Found 12 entries for phase 1
-2025-12-06 23:15:35,813 - utils.parser - INFO - [Page 25] New releases filter disabled - will process all entries
-2025-12-06 23:15:35,815 - utils.parser - INFO - [Page 25] Found 13 entries for phase 1
-2025-12-06 23:15:41,333 - utils.parser - INFO - [Page 26] New releases filter disabled - will process all entries
-2025-12-06 23:15:41,335 - utils.parser - INFO - [Page 26] Found 12 entries for phase 1
-2025-12-06 23:15:46,897 - utils.parser - INFO - [Page 27] New releases filter disabled - will process all entries
-2025-12-06 23:15:46,899 - utils.parser - INFO - [Page 27] Found 0 entries for phase 1
-2025-12-06 23:15:52,469 - utils.parser - INFO - [Page 28] New releases filter disabled - will process all entries
-2025-12-06 23:15:52,471 - utils.parser - INFO - [Page 28] Found 13 entries for phase 1
-2025-12-06 23:15:57,882 - utils.parser - INFO - [Page 29] New releases filter disabled - will process all entries
-2025-12-06 23:15:57,883 - utils.parser - INFO - [Page 29] Found 0 entries for phase 1
-2025-12-06 23:16:03,573 - utils.parser - INFO - [Page 30] New releases filter disabled - will process all entries
-2025-12-06 23:16:03,574 - utils.parser - INFO - [Page 30] Found 11 entries for phase 1
-2025-12-06 23:16:09,138 - utils.parser - INFO - [Page 31] New releases filter disabled - will process all entries
-2025-12-06 23:16:09,139 - utils.parser - INFO - [Page 31] Found 11 entries for phase 1
-2025-12-06 23:16:14,890 - utils.parser - INFO - [Page 32] New releases filter disabled - will process all entries
-2025-12-06 23:16:14,892 - utils.parser - INFO - [Page 32] Found 10 entries for phase 1
-2025-12-06 23:16:20,637 - utils.parser - INFO - [Page 33] New releases filter disabled - will process all entries
-2025-12-06 23:16:20,639 - utils.parser - INFO - [Page 33] Found 12 entries for phase 1
-2025-12-06 23:16:26,256 - utils.parser - INFO - [Page 34] New releases filter disabled - will process all entries
-2025-12-06 23:16:26,258 - utils.parser - INFO - [Page 34] Found 10 entries for phase 1
-2025-12-06 23:16:31,805 - utils.parser - INFO - [Page 35] New releases filter disabled - will process all entries
-2025-12-06 23:16:31,807 - utils.parser - INFO - [Page 35] Found 0 entries for phase 1
-2025-12-06 23:16:37,387 - utils.parser - INFO - [Page 36] New releases filter disabled - will process all entries
-2025-12-06 23:16:37,390 - utils.parser - INFO - [Page 36] Found 12 entries for phase 1
-2025-12-06 23:16:43,105 - utils.parser - INFO - [Page 37] New releases filter disabled - will process all entries
-2025-12-06 23:16:43,106 - utils.parser - INFO - [Page 37] Found 2 entries for phase 1
-2025-12-06 23:16:48,625 - utils.parser - INFO - [Page 38] New releases filter disabled - will process all entries
-2025-12-06 23:16:48,627 - utils.parser - INFO - [Page 38] Found 9 entries for phase 1
-2025-12-06 23:16:54,205 - utils.parser - INFO - [Page 39] New releases filter disabled - will process all entries
-2025-12-06 23:16:54,207 - utils.parser - INFO - [Page 39] Found 12 entries for phase 1
-2025-12-06 23:16:59,756 - utils.parser - INFO - [Page 40] New releases filter disabled - will process all entries
-2025-12-06 23:16:59,758 - utils.parser - INFO - [Page 40] Found 10 entries for phase 1
-2025-12-06 23:17:10,335 - __main__ - INFO - [1/291] [Page 3] Processing CAWD-890
-2025-12-06 23:17:20,857 - __main__ - INFO - [2/291] [Page 3] Processing CAWD-895
-2025-12-06 23:17:31,287 - __main__ - INFO - [3/291] [Page 3] Processing CAWD-901
-2025-12-06 23:17:41,712 - __main__ - INFO - [4/291] [Page 3] Processing CAWD-903
-2025-12-06 23:17:52,180 - __main__ - INFO - [5/291] [Page 3] Processing CAWD-904
-2025-12-06 23:18:02,736 - __main__ - INFO - [6/291] [Page 3] Processing CEAD-696
-2025-12-06 23:18:13,190 - __main__ - INFO - [7/291] [Page 3] Processing CLOT-034
-2025-12-06 23:18:23,640 - __main__ - INFO - [8/291] [Page 3] Processing CLUB-893
-2025-12-06 23:18:34,161 - __main__ - INFO - [9/291] [Page 3] Processing CLUB-894
-2025-12-06 23:18:44,616 - __main__ - INFO - [10/291] [Page 3] Processing START-046
-2025-12-06 23:18:55,124 - __main__ - INFO - [11/291] [Page 3] Processing START-053
-2025-12-06 23:19:05,567 - __main__ - INFO - [12/291] [Page 4] Processing START-070
-2025-12-06 23:19:16,018 - __main__ - INFO - [13/291] [Page 4] Processing START-090
-2025-12-06 23:19:26,481 - __main__ - INFO - [14/291] [Page 4] Processing blackedraw.18.02.16
-2025-12-06 23:19:36,940 - __main__ - INFO - [15/291] [Page 4] Processing blackedraw.18.03.08
-2025-12-06 23:19:47,416 - __main__ - INFO - [16/291] [Page 6] Processing ADN-676
-2025-12-06 23:19:57,854 - __main__ - INFO - [17/291] [Page 6] Processing ADN-707
-2025-12-06 23:20:08,389 - __main__ - INFO - [18/291] [Page 6] Processing ADN-725
-2025-12-06 23:20:18,871 - __main__ - INFO - [19/291] [Page 6] Processing ADN-729
-2025-12-06 23:20:29,344 - __main__ - INFO - [20/291] [Page 6] Processing ADN-735
-2025-12-06 23:20:39,869 - __main__ - INFO - [21/291] [Page 6] Processing ADN-739
-2025-12-06 23:20:50,310 - __main__ - INFO - [22/291] [Page 6] Processing ADN-740
-2025-12-06 23:21:00,768 - __main__ - INFO - [23/291] [Page 7] Processing ADN-749
-2025-12-06 23:21:11,213 - __main__ - INFO - [24/291] [Page 7] Processing ATID-652
-2025-12-06 23:21:21,739 - __main__ - INFO - [25/291] [Page 7] Processing SSNI-992
-2025-12-06 23:21:32,207 - __main__ - INFO - [26/291] [Page 7] Processing STARS-508
-2025-12-06 23:21:42,727 - __main__ - INFO - [27/291] [Page 7] Processing START-008
-2025-12-06 23:21:53,223 - __main__ - INFO - [28/291] [Page 7] Processing START-039
-2025-12-06 23:22:03,705 - __main__ - INFO - [29/291] [Page 7] Processing blackedraw.18.02.06
-2025-12-06 23:22:14,176 - __main__ - INFO - [30/291] [Page 7] Processing blackedraw.18.02.11
-2025-12-06 23:22:24,648 - __main__ - INFO - [31/291] [Page 9] Processing MIAB-578
-2025-12-06 23:22:35,104 - __main__ - INFO - [32/291] [Page 9] Processing MIDA-387
-2025-12-06 23:22:45,739 - __main__ - INFO - [33/291] [Page 9] Processing MIDA-410
-2025-12-06 23:22:56,186 - __main__ - INFO - [34/291] [Page 9] Processing MIDA-420
-2025-12-06 23:23:06,625 - __main__ - INFO - [35/291] [Page 9] Processing MIDA-424
-2025-12-06 23:23:17,056 - __main__ - INFO - [36/291] [Page 9] Processing MIDA-426
-2025-12-06 23:23:27,512 - __main__ - INFO - [37/291] [Page 9] Processing MIDA-428
-2025-12-06 23:23:37,973 - __main__ - INFO - [38/291] [Page 9] Processing MIDA-431
-2025-12-06 23:23:48,414 - __main__ - INFO - [39/291] [Page 9] Processing MIDA-461
-2025-12-06 23:23:58,947 - __main__ - INFO - [40/291] [Page 9] Processing SONE-563
-2025-12-06 23:24:09,398 - __main__ - INFO - [41/291] [Page 9] Processing SONE-687
-2025-12-06 23:24:19,900 - __main__ - INFO - [42/291] [Page 9] Processing SSIS-361
-2025-12-06 23:24:30,406 - __main__ - INFO - [43/291] [Page 9] Processing SSIS-387
-2025-12-06 23:24:40,952 - __main__ - INFO - [44/291] [Page 9] Processing blackedraw.17.11.08
-2025-12-06 23:24:51,431 - __main__ - INFO - [45/291] [Page 9] Processing blackedraw.18.02.01
-2025-12-06 23:25:01,927 - __main__ - INFO - [46/291] [Page 11] Processing ABF-287
-2025-12-06 23:25:12,402 - __main__ - INFO - [47/291] [Page 11] Processing ABF-290
-2025-12-06 23:25:22,851 - __main__ - INFO - [48/291] [Page 11] Processing ABF-292
-2025-12-06 23:25:33,312 - __main__ - INFO - [49/291] [Page 11] Processing ACHJ-074
-2025-12-06 23:25:43,820 - __main__ - INFO - [50/291] [Page 11] Processing ADN-746
-2025-12-06 23:25:54,302 - __main__ - INFO - [51/291] [Page 11] Processing ALDN-528
-2025-12-06 23:26:04,756 - __main__ - INFO - [52/291] [Page 11] Processing ALDN-529
-2025-12-06 23:26:20,217 - __main__ - INFO - [53/291] [Page 11] Processing ALDN-530
-2025-12-06 23:26:35,706 - __main__ - INFO - [54/291] [Page 11] Processing ALDN-531
-2025-12-06 23:26:51,178 - __main__ - INFO - [55/291] [Page 11] Processing blackedraw.17.10.19
-2025-12-06 23:27:06,647 - __main__ - INFO - [56/291] [Page 11] Processing blackedraw.17.10.24
-2025-12-06 23:27:22,193 - __main__ - INFO - [57/291] [Page 12] Processing IPVR-317
-2025-12-06 23:27:32,665 - __main__ - INFO - [58/291] [Page 13] Processing ACHJ-076
-2025-12-06 23:27:48,154 - __main__ - INFO - [59/291] [Page 13] Processing APNS-386
-2025-12-06 23:28:03,647 - __main__ - INFO - [60/291] [Page 13] Processing AVSA-401
-2025-12-06 23:28:19,199 - __main__ - INFO - [61/291] [Page 13] Processing AVSA-402
-2025-12-06 23:28:34,793 - __main__ - INFO - [62/291] [Page 13] Processing AVSA-403
-2025-12-06 23:28:50,319 - __main__ - INFO - [63/291] [Page 13] Processing BLB-025
-2025-12-06 23:29:05,856 - __main__ - INFO - [64/291] [Page 13] Processing BLK-670
-2025-12-06 23:29:21,328 - __main__ - INFO - [65/291] [Page 13] Processing BLK-671
-2025-12-06 23:29:36,853 - __main__ - INFO - [66/291] [Page 13] Processing BLK-675
-2025-12-06 23:29:52,368 - __main__ - INFO - [67/291] [Page 13] Processing SONE-405
-2025-12-06 23:30:02,840 - __main__ - INFO - [68/291] [Page 13] Processing SONE-454
-2025-12-06 23:30:13,330 - __main__ - INFO - [69/291] [Page 13] Processing SONE-499
-2025-12-06 23:30:23,815 - __main__ - INFO - [70/291] [Page 13] Processing SONE-543
-2025-12-06 23:30:34,130 - __main__ - INFO - [71/291] [Page 13] Processing SONE-561
-2025-12-06 23:30:44,780 - __main__ - INFO - [72/291] [Page 14] Processing VENX-342
-2025-12-06 23:31:00,348 - __main__ - INFO - [73/291] [Page 14] Processing VENX-343
-2025-12-06 23:31:15,845 - __main__ - INFO - [74/291] [Page 14] Processing VENX-344
-2025-12-06 23:31:31,455 - __main__ - INFO - [75/291] [Page 14] Processing VENX-345
-2025-12-06 23:31:46,970 - __main__ - INFO - [76/291] [Page 14] Processing VENX-346
-2025-12-06 23:32:02,452 - __main__ - INFO - [77/291] [Page 14] Processing VENX-347
-2025-12-06 23:32:17,941 - __main__ - INFO - [78/291] [Page 14] Processing VENX-349
-2025-12-06 23:32:33,482 - __main__ - INFO - [79/291] [Page 14] Processing VENX-351
-2025-12-06 23:32:48,980 - __main__ - INFO - [80/291] [Page 14] Processing VOD-048
-2025-12-06 23:33:04,519 - __main__ - INFO - [81/291] [Page 16] Processing SCOP-889
-2025-12-06 23:33:14,979 - __main__ - INFO - [82/291] [Page 16] Processing SNOS-001
-2025-12-06 23:33:25,413 - __main__ - INFO - [83/291] [Page 16] Processing SNOS-003
-2025-12-06 23:33:35,870 - __main__ - INFO - [84/291] [Page 16] Processing SNOS-005
-2025-12-06 23:33:46,140 - __main__ - INFO - [85/291] [Page 16] Processing SNOS-018
-2025-12-06 23:33:56,606 - __main__ - INFO - [86/291] [Page 16] Processing SODS-065
-2025-12-06 23:34:07,055 - __main__ - INFO - [87/291] [Page 16] Processing SONE-153
-2025-12-06 23:34:17,847 - __main__ - INFO - [88/291] [Page 16] Processing SONE-200
-2025-12-06 23:34:28,315 - __main__ - INFO - [89/291] [Page 16] Processing SONE-360
-2025-12-06 23:34:38,755 - __main__ - INFO - [90/291] [Page 16] Processing SONE-998
-2025-12-06 23:34:49,246 - __main__ - INFO - [91/291] [Page 16] Processing START-429
-2025-12-06 23:34:59,723 - __main__ - INFO - [92/291] [Page 17] Processing START-432
-2025-12-06 23:35:10,227 - __main__ - INFO - [93/291] [Page 17] Processing blackedraw.17.09.24
-2025-12-06 23:35:20,725 - __main__ - INFO - [94/291] [Page 17] Processing blackedraw.17.10.09
-2025-12-06 23:35:31,208 - __main__ - INFO - [95/291] [Page 18] Processing MIDV-287
-2025-12-06 23:35:41,674 - __main__ - INFO - [96/291] [Page 18] Processing MIDV-786
-2025-12-06 23:35:52,152 - __main__ - INFO - [97/291] [Page 18] Processing PRED-139
-2025-12-06 23:36:02,636 - __main__ - INFO - [98/291] [Page 18] Processing PRED-696
-2025-12-06 23:36:13,112 - __main__ - INFO - [99/291] [Page 18] Processing SNOS-002
-2025-12-06 23:36:23,409 - __main__ - INFO - [100/291] [Page 18] Processing SNOS-060
-2025-12-06 23:36:33,912 - __main__ - INFO - [101/291] [Page 18] Processing SONE-908
-2025-12-06 23:36:44,398 - __main__ - INFO - [102/291] [Page 18] Processing SONE-959
-2025-12-06 23:36:54,915 - __main__ - INFO - [103/291] [Page 18] Processing SONE-960
-2025-12-06 23:37:05,372 - __main__ - INFO - [104/291] [Page 18] Processing SONE-961
-2025-12-06 23:37:16,029 - __main__ - INFO - [105/291] [Page 18] Processing SONE-983
-2025-12-06 23:37:26,683 - __main__ - INFO - [106/291] [Page 18] Processing SONE-985
-2025-12-06 23:37:37,119 - __main__ - INFO - [107/291] [Page 18] Processing SONE-988
-2025-12-06 23:37:47,761 - __main__ - INFO - [108/291] [Page 18] Processing blackedraw.17.09.19
-2025-12-06 23:37:58,023 - __main__ - INFO - [109/291] [Page 20] Processing ALDN-524
-2025-12-06 23:38:08,476 - __main__ - INFO - [110/291] [Page 20] Processing ALDN-525
-2025-12-06 23:38:18,920 - __main__ - INFO - [111/291] [Page 20] Processing ALDN-526
-2025-12-06 23:38:29,441 - __main__ - INFO - [112/291] [Page 20] Processing ALDN-527
-2025-12-06 23:38:39,884 - __main__ - INFO - [113/291] [Page 20] Processing CJOD-479
-2025-12-06 23:38:50,371 - __main__ - INFO - [114/291] [Page 20] Processing CJOD-483
-2025-12-06 23:39:00,896 - __main__ - INFO - [115/291] [Page 20] Processing CJOD-486
-2025-12-06 23:39:11,337 - __main__ - INFO - [116/291] [Page 20] Processing CJOD-488
-2025-12-06 23:39:21,784 - __main__ - INFO - [117/291] [Page 20] Processing CJOD-492
-2025-12-06 23:39:32,225 - __main__ - INFO - [118/291] [Page 20] Processing MIDV-032
-2025-12-06 23:39:42,697 - __main__ - INFO - [119/291] [Page 20] Processing MIDV-250
-2025-12-06 23:39:53,260 - __main__ - INFO - [120/291] [Page 20] Processing MIDV-269
-2025-12-06 23:40:03,729 - __main__ - INFO - [121/291] [Page 22] Processing NSFS-035
-2025-12-06 23:40:14,248 - __main__ - INFO - [122/291] [Page 22] Processing NSFS-067
-2025-12-06 23:40:24,721 - __main__ - INFO - [123/291] [Page 22] Processing HMN-743
-2025-12-06 23:40:35,497 - __main__ - INFO - [124/291] [Page 22] Processing HMN-762
-2025-12-06 23:40:45,951 - __main__ - INFO - [125/291] [Page 22] Processing HMN-763
-2025-12-06 23:40:56,250 - __main__ - INFO - [126/291] [Page 22] Processing JUR-497
-2025-12-06 23:41:06,817 - __main__ - INFO - [127/291] [Page 22] Processing JUR-544
-2025-12-06 23:41:17,332 - __main__ - INFO - [128/291] [Page 22] Processing JUR-546
-2025-12-06 23:41:27,769 - __main__ - INFO - [129/291] [Page 22] Processing JUR-549
-2025-12-06 23:41:38,231 - __main__ - INFO - [130/291] [Page 22] Processing JUR-558
-2025-12-06 23:41:48,504 - __main__ - INFO - [131/291] [Page 22] Processing JUR-571
-2025-12-06 23:41:58,992 - __main__ - INFO - [132/291] [Page 22] Processing MIDE-201
-2025-12-06 23:42:09,530 - __main__ - INFO - [133/291] [Page 23] Processing FSDSS-259
-2025-12-06 23:42:20,083 - __main__ - INFO - [134/291] [Page 23] Processing JUR-050
-2025-12-06 23:42:30,563 - __main__ - INFO - [135/291] [Page 23] Processing JUR-054
-2025-12-06 23:42:41,062 - __main__ - INFO - [136/291] [Page 23] Processing JUR-462
-2025-12-06 23:42:51,532 - __main__ - INFO - [137/291] [Page 23] Processing JUR-512
-2025-12-06 23:43:01,991 - __main__ - INFO - [138/291] [Page 23] Processing JUR-515
-2025-12-06 23:43:12,478 - __main__ - INFO - [139/291] [Page 23] Processing JUR-541
-2025-12-06 23:43:22,929 - __main__ - INFO - [140/291] [Page 23] Processing JUR-542
-2025-12-06 23:43:33,405 - __main__ - INFO - [141/291] [Page 23] Processing JUR-543
-2025-12-06 23:43:43,896 - __main__ - INFO - [142/291] [Page 23] Processing JUR-560
-2025-12-06 23:43:54,382 - __main__ - INFO - [143/291] [Page 24] Processing DASS-566
-2025-12-06 23:44:04,837 - __main__ - INFO - [144/291] [Page 24] Processing MIDA-278
-2025-12-06 23:44:15,333 - __main__ - INFO - [145/291] [Page 24] Processing MIDA-290
-2025-12-06 23:44:25,862 - __main__ - INFO - [146/291] [Page 24] Processing PPPE-367
-2025-12-06 23:44:36,138 - __main__ - INFO - [147/291] [Page 24] Processing PPPE-370
-2025-12-06 23:44:46,808 - __main__ - INFO - [148/291] [Page 24] Processing PPPE-374
-2025-12-06 23:44:57,263 - __main__ - INFO - [149/291] [Page 24] Processing PPPE-375
-2025-12-06 23:45:07,713 - __main__ - INFO - [150/291] [Page 24] Processing PPPE-378
-2025-12-06 23:45:18,158 - __main__ - INFO - [151/291] [Page 24] Processing PPPE-380
-2025-12-06 23:45:28,579 - __main__ - INFO - [152/291] [Page 24] Processing PPPE-381
-2025-12-06 23:45:39,008 - __main__ - INFO - [153/291] [Page 24] Processing PPPE-382
-2025-12-06 23:45:49,469 - __main__ - INFO - [154/291] [Page 24] Processing RKI-724
-2025-12-06 23:45:59,926 - __main__ - INFO - [155/291] [Page 25] Processing IPX-643
-2025-12-06 23:46:10,385 - __main__ - INFO - [156/291] [Page 25] Processing IPX-660
-2025-12-06 23:46:20,877 - __main__ - INFO - [157/291] [Page 25] Processing IPX-675
-2025-12-06 23:46:31,352 - __main__ - INFO - [158/291] [Page 25] Processing VEC-734
-2025-12-06 23:46:42,001 - __main__ - INFO - [159/291] [Page 25] Processing VEC-735
-2025-12-06 23:46:52,454 - __main__ - INFO - [160/291] [Page 25] Processing VEC-736
-2025-12-06 23:47:02,990 - __main__ - INFO - [161/291] [Page 25] Processing VEC-737
-2025-12-06 23:47:13,456 - __main__ - INFO - [162/291] [Page 25] Processing VEC-739
-2025-12-06 23:47:23,935 - __main__ - INFO - [163/291] [Page 25] Processing VEC-740
-2025-12-06 23:47:34,469 - __main__ - INFO - [164/291] [Page 25] Processing VEC-742
-2025-12-06 23:47:44,999 - __main__ - INFO - [165/291] [Page 25] Processing VEC-743
-2025-12-06 23:47:55,499 - __main__ - INFO - [166/291] [Page 25] Processing VEMA-244
-2025-12-06 23:48:05,969 - __main__ - INFO - [167/291] [Page 25] Processing VEMA-246
-2025-12-06 23:48:16,525 - __main__ - INFO - [168/291] [Page 26] Processing IPX-598
-2025-12-06 23:48:26,999 - __main__ - INFO - [169/291] [Page 26] Processing IPX-614
-2025-12-06 23:48:37,474 - __main__ - INFO - [170/291] [Page 26] Processing IPX-629
-2025-12-06 23:48:47,966 - __main__ - INFO - [171/291] [Page 26] Processing SCOP-883
-2025-12-06 23:48:58,435 - __main__ - INFO - [172/291] [Page 26] Processing SCOP-887
-2025-12-06 23:49:08,988 - __main__ - INFO - [173/291] [Page 26] Processing WAAA-578
-2025-12-06 23:49:19,426 - __main__ - INFO - [174/291] [Page 26] Processing WAAA-579
-2025-12-06 23:49:29,944 - __main__ - INFO - [175/291] [Page 26] Processing WAAA-580
-2025-12-06 23:49:40,439 - __main__ - INFO - [176/291] [Page 26] Processing WAAA-581
-2025-12-06 23:49:50,902 - __main__ - INFO - [177/291] [Page 26] Processing WAAA-583
-2025-12-06 23:50:01,393 - __main__ - INFO - [178/291] [Page 26] Processing WAAA-584
-2025-12-06 23:50:11,964 - __main__ - INFO - [179/291] [Page 26] Processing WAAA-585
-2025-12-06 23:50:22,419 - __main__ - INFO - [180/291] [Page 28] Processing ABF-286
-2025-12-06 23:50:32,906 - __main__ - INFO - [181/291] [Page 28] Processing ABP-852
-2025-12-06 23:50:43,370 - __main__ - INFO - [182/291] [Page 28] Processing ATID-399
-2025-12-06 23:50:53,842 - __main__ - INFO - [183/291] [Page 28] Processing FCDSS-105
-2025-12-06 23:51:04,299 - __main__ - INFO - [184/291] [Page 28] Processing IPZZ-699
-2025-12-06 23:51:14,803 - __main__ - INFO - [185/291] [Page 28] Processing JUR-545
-2025-12-06 23:51:25,327 - __main__ - INFO - [186/291] [Page 28] Processing SAME-199
-2025-12-06 23:51:35,831 - __main__ - INFO - [187/291] [Page 28] Processing SAME-204
-2025-12-06 23:51:46,322 - __main__ - INFO - [188/291] [Page 28] Processing SAME-205
-2025-12-06 23:51:56,780 - __main__ - INFO - [189/291] [Page 28] Processing SAME-207
-2025-12-06 23:52:07,234 - __main__ - INFO - [190/291] [Page 28] Processing START-397
-2025-12-06 23:52:17,707 - __main__ - INFO - [191/291] [Page 28] Processing START-433
-2025-12-06 23:52:28,196 - __main__ - INFO - [192/291] [Page 28] Processing START-443
-2025-12-06 23:52:38,694 - __main__ - INFO - [193/291] [Page 30] Processing ABF-278
-2025-12-06 23:52:49,163 - __main__ - INFO - [194/291] [Page 30] Processing ABF-279
-2025-12-06 23:52:59,836 - __main__ - INFO - [195/291] [Page 30] Processing MIAB-558
-2025-12-06 23:53:10,379 - __main__ - INFO - [196/291] [Page 30] Processing MIAB-572
-2025-12-06 23:53:21,117 - __main__ - INFO - [197/291] [Page 30] Processing MIAB-573
-2025-12-06 23:53:31,603 - __main__ - INFO - [198/291] [Page 30] Processing MIAB-586
-2025-12-06 23:53:42,330 - __main__ - INFO - [199/291] [Page 30] Processing MIDA-385
-2025-12-06 23:53:52,801 - __main__ - INFO - [200/291] [Page 30] Processing MIDA-390
-2025-12-06 23:54:03,295 - __main__ - INFO - [201/291] [Page 30] Processing SNIS-632
-2025-12-06 23:54:13,829 - __main__ - INFO - [202/291] [Page 30] Processing SNIS-648
-2025-12-06 23:54:24,556 - __main__ - INFO - [203/291] [Page 30] Processing SNIS-679
-2025-12-06 23:54:35,016 - __main__ - INFO - [204/291] [Page 31] Processing MIDA-400
-2025-12-06 23:54:45,511 - __main__ - INFO - [205/291] [Page 31] Processing MIDA-402
-2025-12-06 23:54:55,954 - __main__ - INFO - [206/291] [Page 31] Processing MIDA-406
-2025-12-06 23:55:06,395 - __main__ - INFO - [207/291] [Page 31] Processing MIDA-408
-2025-12-06 23:55:16,835 - __main__ - INFO - [208/291] [Page 31] Processing MIDA-409
-2025-12-06 23:55:27,401 - __main__ - INFO - [209/291] [Page 31] Processing MIDA-411
-2025-12-06 23:55:37,865 - __main__ - INFO - [210/291] [Page 31] Processing MIDA-412
-2025-12-06 23:55:48,383 - __main__ - INFO - [211/291] [Page 31] Processing MIDA-413
-2025-12-06 23:55:58,823 - __main__ - INFO - [212/291] [Page 31] Processing MIDA-414
-2025-12-06 23:56:09,373 - __main__ - INFO - [213/291] [Page 31] Processing STARS-979
-2025-12-06 23:56:19,992 - __main__ - INFO - [214/291] [Page 31] Processing START-006
-2025-12-06 23:56:30,460 - __main__ - INFO - [215/291] [Page 32] Processing HMN-748
-2025-12-06 23:56:40,903 - __main__ - INFO - [216/291] [Page 32] Processing HMN-758
-2025-12-06 23:56:51,355 - __main__ - INFO - [217/291] [Page 32] Processing HMN-759
-2025-12-06 23:57:02,059 - __main__ - INFO - [218/291] [Page 32] Processing HMN-760
-2025-12-06 23:57:12,531 - __main__ - INFO - [219/291] [Page 32] Processing HMN-761
-2025-12-06 23:57:23,015 - __main__ - INFO - [220/291] [Page 32] Processing HMN-764
-2025-12-06 23:57:33,476 - __main__ - INFO - [221/291] [Page 32] Processing HMN-778
-2025-12-06 23:57:43,935 - __main__ - INFO - [222/291] [Page 32] Processing IPZZ-722
-2025-12-06 23:57:54,408 - __main__ - INFO - [223/291] [Page 32] Processing STARS-947
-2025-12-06 23:58:04,866 - __main__ - INFO - [224/291] [Page 32] Processing START-385
-2025-12-06 23:58:15,358 - __main__ - INFO - [225/291] [Page 33] Processing SDDE-711
-2025-12-06 23:58:25,878 - __main__ - INFO - [226/291] [Page 33] Processing STARS-801
-2025-12-06 23:58:36,353 - __main__ - INFO - [227/291] [Page 33] Processing START-384
-2025-12-06 23:58:47,096 - __main__ - INFO - [228/291] [Page 33] Processing START-415
-2025-12-06 23:58:57,977 - __main__ - INFO - [229/291] [Page 33] Processing START-420
-2025-12-06 23:59:08,434 - __main__ - INFO - [230/291] [Page 33] Processing START-421
-2025-12-06 23:59:18,932 - __main__ - INFO - [231/291] [Page 33] Processing START-431
-2025-12-06 23:59:29,402 - __main__ - INFO - [232/291] [Page 33] Processing START-435
-2025-12-06 23:59:39,874 - __main__ - INFO - [233/291] [Page 33] Processing START-437
-2025-12-06 23:59:50,374 - __main__ - INFO - [234/291] [Page 33] Processing START-440
-2025-12-07 00:00:00,851 - __main__ - INFO - [235/291] [Page 33] Processing START-448
-2025-12-07 00:00:11,352 - __main__ - INFO - [236/291] [Page 33] Processing START-449
-2025-12-07 00:00:22,187 - __main__ - INFO - [237/291] [Page 34] Processing CAWD-876
-2025-12-07 00:00:32,700 - __main__ - INFO - [238/291] [Page 34] Processing FNS-101
-2025-12-07 00:00:43,503 - __main__ - INFO - [239/291] [Page 34] Processing FNS-102
-2025-12-07 00:00:53,980 - __main__ - INFO - [240/291] [Page 34] Processing FNS-105
-2025-12-07 00:01:04,482 - __main__ - INFO - [241/291] [Page 34] Processing FNS-113
-2025-12-07 00:01:14,953 - __main__ - INFO - [242/291] [Page 34] Processing FOCS-278
-2025-12-07 00:01:25,524 - __main__ - INFO - [243/291] [Page 34] Processing FOCS-279
-2025-12-07 00:01:35,960 - __main__ - INFO - [244/291] [Page 34] Processing FOCS-280
-2025-12-07 00:01:46,459 - __main__ - INFO - [245/291] [Page 34] Processing IPZZ-477
-2025-12-07 00:01:56,943 - __main__ - INFO - [246/291] [Page 34] Processing IPZZ-697
-2025-12-07 00:02:07,419 - __main__ - INFO - [247/291] [Page 36] Processing JUR-477
-2025-12-07 00:02:17,939 - __main__ - INFO - [248/291] [Page 36] Processing JUR-514
-2025-12-07 00:02:28,485 - __main__ - INFO - [249/291] [Page 36] Processing JUR-524
-2025-12-07 00:02:38,964 - __main__ - INFO - [250/291] [Page 36] Processing JUR-534
-2025-12-07 00:02:49,663 - __main__ - INFO - [251/291] [Page 36] Processing REAL-948
-2025-12-07 00:03:00,130 - __main__ - INFO - [252/291] [Page 36] Processing ROE-417
-2025-12-07 00:03:10,695 - __main__ - INFO - [253/291] [Page 36] Processing ROE-418
-2025-12-07 00:03:21,187 - __main__ - INFO - [254/291] [Page 36] Processing ROE-420
-2025-12-07 00:03:31,649 - __main__ - INFO - [255/291] [Page 36] Processing ROE-422
-2025-12-07 00:03:42,180 - __main__ - INFO - [256/291] [Page 36] Processing STARS-852
-2025-12-07 00:03:52,633 - __main__ - INFO - [257/291] [Page 36] Processing STARS-866
-2025-12-07 00:04:03,095 - __main__ - INFO - [258/291] [Page 36] Processing STARS-964
-2025-12-07 00:04:13,549 - __main__ - INFO - [259/291] [Page 37] Processing JUR-536
-2025-12-07 00:04:24,009 - __main__ - INFO - [260/291] [Page 37] Processing JUR-539
-2025-12-07 00:04:34,518 - __main__ - INFO - [261/291] [Page 38] Processing JUR-540
-2025-12-07 00:04:44,954 - __main__ - INFO - [262/291] [Page 38] Processing JUR-555
-2025-12-07 00:04:55,458 - __main__ - INFO - [263/291] [Page 38] Processing SONE-976
-2025-12-07 00:05:05,945 - __main__ - INFO - [264/291] [Page 38] Processing SONE-979
-2025-12-07 00:05:16,543 - __main__ - INFO - [265/291] [Page 38] Processing SONE-993
-2025-12-07 00:05:27,081 - __main__ - INFO - [266/291] [Page 38] Processing SONE-995
-2025-12-07 00:05:37,565 - __main__ - INFO - [267/291] [Page 38] Processing STARS-894
-2025-12-07 00:05:47,850 - __main__ - INFO - [268/291] [Page 38] Processing STARS-896
-2025-12-07 00:05:58,382 - __main__ - INFO - [269/291] [Page 38] Processing STARS-923
-2025-12-07 00:06:08,858 - __main__ - INFO - [270/291] [Page 39] Processing ALDN-515
-2025-12-07 00:06:19,360 - __main__ - INFO - [271/291] [Page 39] Processing DASS-775
-2025-12-07 00:06:29,799 - __main__ - INFO - [272/291] [Page 39] Processing DASS-806
-2025-12-07 00:06:40,253 - __main__ - INFO - [273/291] [Page 39] Processing DASS-808
-2025-12-07 00:06:50,708 - __main__ - INFO - [274/291] [Page 39] Processing DASS-815
-2025-12-07 00:07:01,182 - __main__ - INFO - [275/291] [Page 39] Processing IPZZ-709
-2025-12-07 00:07:11,643 - __main__ - INFO - [276/291] [Page 39] Processing IPZZ-724
-2025-12-07 00:07:22,109 - __main__ - INFO - [277/291] [Page 39] Processing IPZZ-725
-2025-12-07 00:07:32,621 - __main__ - INFO - [278/291] [Page 39] Processing SONE-934
-2025-12-07 00:07:43,066 - __main__ - INFO - [279/291] [Page 39] Processing SONE-954
-2025-12-07 00:07:53,510 - __main__ - INFO - [280/291] [Page 39] Processing SONE-968
-2025-12-07 00:08:04,024 - __main__ - INFO - [281/291] [Page 39] Processing STARS-599
-2025-12-07 00:08:14,696 - __main__ - INFO - [282/291] [Page 40] Processing FOCS-282
-2025-12-07 00:08:25,160 - __main__ - INFO - [283/291] [Page 40] Processing IPZZ-687
-2025-12-07 00:08:36,077 - __main__ - INFO - [284/291] [Page 40] Processing IPZZ-704
-2025-12-07 00:08:46,735 - __main__ - INFO - [285/291] [Page 40] Processing IPZZ-708
-2025-12-07 00:08:57,296 - __main__ - INFO - [286/291] [Page 40] Processing IPZZ-710
-2025-12-07 00:09:07,753 - __main__ - INFO - [287/291] [Page 40] Processing IPZZ-738
-2025-12-07 00:09:18,261 - __main__ - INFO - [288/291] [Page 40] Processing STARS-725
-2025-12-07 00:09:28,727 - __main__ - INFO - [289/291] [Page 40] Processing STARS-766
-2025-12-07 00:09:39,186 - __main__ - INFO - [290/291] [Page 40] Processing STARS-778
-2025-12-07 00:09:49,701 - __main__ - INFO - [291/291] [Page 40] Processing STARS-804
-2025-12-07 00:09:49,702 - __main__ - INFO - Phase 1 completed: 23 entries processed
-2025-12-07 00:09:49,702 - __main__ - INFO - ==================================================
-2025-12-07 00:09:49,704 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-12-07 00:09:49,704 - __main__ - INFO - ==================================================
-2025-12-07 00:09:50,269 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
-2025-12-07 00:09:50,272 - utils.parser - INFO - [Page 1] Found 11 entries for phase 2
-2025-12-07 00:09:55,852 - utils.parser - INFO - [Page 2] New releases filter disabled - will process all entries
-2025-12-07 00:09:55,856 - utils.parser - INFO - [Page 2] Found 3 entries for phase 2
-2025-12-07 00:10:01,396 - utils.parser - INFO - [Page 3] New releases filter disabled - will process all entries
-2025-12-07 00:10:01,399 - utils.parser - INFO - [Page 3] Found 6 entries for phase 2
-2025-12-07 00:10:06,984 - utils.parser - INFO - [Page 4] New releases filter disabled - will process all entries
-2025-12-07 00:10:06,987 - utils.parser - INFO - [Page 4] Found 4 entries for phase 2
-2025-12-07 00:10:12,530 - utils.parser - INFO - [Page 5] New releases filter disabled - will process all entries
-2025-12-07 00:10:12,534 - utils.parser - INFO - [Page 5] Found 8 entries for phase 2
-2025-12-07 00:10:18,311 - utils.parser - INFO - [Page 6] New releases filter disabled - will process all entries
-2025-12-07 00:10:18,314 - utils.parser - INFO - [Page 6] Found 10 entries for phase 2
-2025-12-07 00:10:23,907 - utils.parser - INFO - [Page 7] New releases filter disabled - will process all entries
-2025-12-07 00:10:23,909 - utils.parser - INFO - [Page 7] Found 3 entries for phase 2
-2025-12-07 00:10:29,510 - utils.parser - INFO - [Page 8] New releases filter disabled - will process all entries
-2025-12-07 00:10:29,513 - utils.parser - INFO - [Page 8] Found 5 entries for phase 2
-2025-12-07 00:10:35,080 - utils.parser - INFO - [Page 9] New releases filter disabled - will process all entries
-2025-12-07 00:10:35,083 - utils.parser - INFO - [Page 9] Found 2 entries for phase 2
-2025-12-07 00:10:40,583 - utils.parser - INFO - [Page 10] New releases filter disabled - will process all entries
-2025-12-07 00:10:40,586 - utils.parser - INFO - [Page 10] Found 4 entries for phase 2
-2025-12-07 00:10:46,139 - utils.parser - INFO - [Page 11] New releases filter disabled - will process all entries
-2025-12-07 00:10:46,142 - utils.parser - INFO - [Page 11] Found 6 entries for phase 2
-2025-12-07 00:10:51,747 - utils.parser - INFO - [Page 12] New releases filter disabled - will process all entries
-2025-12-07 00:10:51,750 - utils.parser - INFO - [Page 12] Found 4 entries for phase 2
-2025-12-07 00:10:57,297 - utils.parser - INFO - [Page 13] New releases filter disabled - will process all entries
-2025-12-07 00:10:57,300 - utils.parser - INFO - [Page 13] Found 4 entries for phase 2
-2025-12-07 00:11:02,875 - utils.parser - INFO - [Page 14] New releases filter disabled - will process all entries
-2025-12-07 00:11:02,878 - utils.parser - INFO - [Page 14] Found 9 entries for phase 2
-2025-12-07 00:11:08,472 - utils.parser - INFO - [Page 15] New releases filter disabled - will process all entries
-2025-12-07 00:11:08,475 - utils.parser - INFO - [Page 15] Found 9 entries for phase 2
-2025-12-07 00:11:14,067 - utils.parser - INFO - [Page 16] New releases filter disabled - will process all entries
-2025-12-07 00:11:14,069 - utils.parser - INFO - [Page 16] Found 9 entries for phase 2
-2025-12-07 00:11:19,484 - utils.parser - INFO - [Page 17] New releases filter disabled - will process all entries
-2025-12-07 00:11:19,487 - utils.parser - INFO - [Page 17] Found 8 entries for phase 2
-2025-12-07 00:11:25,053 - utils.parser - INFO - [Page 18] New releases filter disabled - will process all entries
-2025-12-07 00:11:25,055 - utils.parser - INFO - [Page 18] Found 11 entries for phase 2
-2025-12-07 00:11:30,576 - utils.parser - INFO - [Page 19] New releases filter disabled - will process all entries
-2025-12-07 00:11:30,579 - utils.parser - INFO - [Page 19] Found 20 entries for phase 2
-2025-12-07 00:11:36,160 - utils.parser - INFO - [Page 20] New releases filter disabled - will process all entries
-2025-12-07 00:11:36,163 - utils.parser - INFO - [Page 20] Found 18 entries for phase 2
-2025-12-07 00:11:41,687 - utils.parser - INFO - [Page 21] New releases filter disabled - will process all entries
-2025-12-07 00:11:41,690 - utils.parser - INFO - [Page 21] Found 18 entries for phase 2
-2025-12-07 00:11:47,261 - utils.parser - INFO - [Page 22] New releases filter disabled - will process all entries
-2025-12-07 00:11:47,264 - utils.parser - INFO - [Page 22] Found 9 entries for phase 2
-2025-12-07 00:11:52,806 - utils.parser - INFO - [Page 23] New releases filter disabled - will process all entries
-2025-12-07 00:11:52,809 - utils.parser - INFO - [Page 23] Found 3 entries for phase 2
-2025-12-07 00:11:58,415 - utils.parser - INFO - [Page 24] New releases filter disabled - will process all entries
-2025-12-07 00:11:58,418 - utils.parser - INFO - [Page 24] Found 5 entries for phase 2
-2025-12-07 00:12:03,992 - utils.parser - INFO - [Page 25] New releases filter disabled - will process all entries
-2025-12-07 00:12:03,994 - utils.parser - INFO - [Page 25] Found 2 entries for phase 2
-2025-12-07 00:12:09,498 - utils.parser - INFO - [Page 26] New releases filter disabled - will process all entries
-2025-12-07 00:12:09,501 - utils.parser - INFO - [Page 26] Found 12 entries for phase 2
-2025-12-07 00:12:15,043 - utils.parser - INFO - [Page 27] New releases filter disabled - will process all entries
-2025-12-07 00:12:15,046 - utils.parser - INFO - [Page 27] Found 7 entries for phase 2
-2025-12-07 00:12:20,655 - utils.parser - INFO - [Page 28] New releases filter disabled - will process all entries
-2025-12-07 00:12:20,657 - utils.parser - INFO - [Page 28] Found 13 entries for phase 2
-2025-12-07 00:12:26,258 - utils.parser - INFO - [Page 29] New releases filter disabled - will process all entries
-2025-12-07 00:12:26,261 - utils.parser - INFO - [Page 29] Found 9 entries for phase 2
-2025-12-07 00:12:31,859 - utils.parser - INFO - [Page 30] New releases filter disabled - will process all entries
-2025-12-07 00:12:31,861 - utils.parser - INFO - [Page 30] Found 12 entries for phase 2
-2025-12-07 00:12:37,385 - utils.parser - INFO - [Page 31] New releases filter disabled - will process all entries
-2025-12-07 00:12:37,387 - utils.parser - INFO - [Page 31] Found 7 entries for phase 2
-2025-12-07 00:12:42,938 - utils.parser - INFO - [Page 32] New releases filter disabled - will process all entries
-2025-12-07 00:12:42,940 - utils.parser - INFO - [Page 32] Found 8 entries for phase 2
-2025-12-07 00:12:48,521 - utils.parser - INFO - [Page 33] New releases filter disabled - will process all entries
-2025-12-07 00:12:48,524 - utils.parser - INFO - [Page 33] Found 10 entries for phase 2
-2025-12-07 00:12:54,127 - utils.parser - INFO - [Page 34] New releases filter disabled - will process all entries
-2025-12-07 00:12:54,130 - utils.parser - INFO - [Page 34] Found 15 entries for phase 2
-2025-12-07 00:12:59,736 - utils.parser - INFO - [Page 35] New releases filter disabled - will process all entries
-2025-12-07 00:12:59,739 - utils.parser - INFO - [Page 35] Found 13 entries for phase 2
-2025-12-07 00:13:05,531 - utils.parser - INFO - [Page 36] New releases filter disabled - will process all entries
-2025-12-07 00:13:05,533 - utils.parser - INFO - [Page 36] Found 10 entries for phase 2
-2025-12-07 00:13:11,104 - utils.parser - INFO - [Page 37] New releases filter disabled - will process all entries
-2025-12-07 00:13:11,106 - utils.parser - INFO - [Page 37] Found 24 entries for phase 2
-2025-12-07 00:13:16,639 - utils.parser - INFO - [Page 38] New releases filter disabled - will process all entries
-2025-12-07 00:13:16,642 - utils.parser - INFO - [Page 38] Found 16 entries for phase 2
-2025-12-07 00:13:22,152 - utils.parser - INFO - [Page 39] New releases filter disabled - will process all entries
-2025-12-07 00:13:22,154 - utils.parser - INFO - [Page 39] Found 15 entries for phase 2
-2025-12-07 00:13:27,698 - utils.parser - INFO - [Page 40] New releases filter disabled - will process all entries
-2025-12-07 00:13:27,701 - utils.parser - INFO - [Page 40] Found 12 entries for phase 2
-2025-12-07 00:13:38,446 - __main__ - INFO - [1/374] [Page 1] Processing DASS-777
-2025-12-07 00:13:48,950 - __main__ - INFO - [2/374] [Page 1] Processing JUR-529
-2025-12-07 00:14:04,548 - __main__ - INFO - [3/374] [Page 1] Processing JUR-554
-2025-12-07 00:14:15,142 - __main__ - INFO - [4/374] [Page 1] Processing ROE-393
-2025-12-07 00:14:25,622 - __main__ - INFO - [5/374] [Page 1] Processing IPZZ-751
-2025-12-07 00:14:42,463 - __main__ - INFO - [6/374] [Page 1] Processing SNOS-008
-2025-12-07 00:14:52,958 - __main__ - INFO - [7/374] [Page 1] Processing SONE-986
-2025-12-07 00:15:08,435 - __main__ - INFO - [8/374] [Page 1] Processing JUR-579
-2025-12-07 00:15:23,959 - __main__ - INFO - [9/374] [Page 1] Processing RKI-732
-2025-12-07 00:15:34,537 - __main__ - INFO - [10/374] [Page 1] Processing SNOS-006
-2025-12-07 00:15:44,997 - __main__ - INFO - [11/374] [Page 1] Processing NMSL-002
-2025-12-07 00:16:00,475 - __main__ - INFO - [12/374] [Page 2] Processing DASS-820
-2025-12-07 00:16:11,017 - __main__ - INFO - [13/374] [Page 2] Processing JUR-547
-2025-12-07 00:16:21,494 - __main__ - INFO - [14/374] [Page 2] Processing JUR-566
-2025-12-07 00:16:31,936 - __main__ - INFO - [15/374] [Page 3] Processing SNOS-022
-2025-12-07 00:16:42,745 - __main__ - INFO - [16/374] [Page 3] Processing IPZZ-727
-2025-12-07 00:16:53,260 - __main__ - INFO - [17/374] [Page 3] Processing IPZZ-730
-2025-12-07 00:17:03,764 - __main__ - INFO - [18/374] [Page 3] Processing IPZZ-744
-2025-12-07 00:17:14,226 - __main__ - INFO - [19/374] [Page 3] Processing SNOS-014
-2025-12-07 00:17:24,784 - __main__ - INFO - [20/374] [Page 3] Processing SNOS-045
-2025-12-07 00:17:40,283 - __main__ - INFO - [21/374] [Page 4] Processing IPZZ-718
-2025-12-07 00:17:50,755 - __main__ - INFO - [22/374] [Page 4] Processing NGOD-305
-2025-12-07 00:18:01,045 - __main__ - INFO - [23/374] [Page 4] Processing DOKS-653
-2025-12-07 00:18:11,368 - __main__ - INFO - [24/374] [Page 4] Processing SONE-991
-2025-12-07 00:18:21,823 - __main__ - INFO - [25/374] [Page 5] Processing DASS-770
-2025-12-07 00:18:32,269 - __main__ - INFO - [26/374] [Page 5] Processing JUR-513
-2025-12-07 00:18:47,795 - __main__ - INFO - [27/374] [Page 5] Processing JUR-562
-2025-12-07 00:18:58,285 - __main__ - INFO - [28/374] [Page 5] Processing DASS-812
-2025-12-07 00:19:08,756 - __main__ - INFO - [29/374] [Page 5] Processing JUR-530
-2025-12-07 00:19:19,237 - __main__ - INFO - [30/374] [Page 5] Processing JUR-548
-2025-12-07 00:19:29,573 - __main__ - INFO - [31/374] [Page 5] Processing IPZZ-756
-2025-12-07 00:19:40,030 - __main__ - INFO - [32/374] [Page 5] Processing SNOS-040
-2025-12-07 00:19:50,312 - __main__ - INFO - [33/374] [Page 6] Processing JUR-531
-2025-12-07 00:20:00,888 - __main__ - INFO - [34/374] [Page 6] Processing JUR-538
-2025-12-07 00:20:11,328 - __main__ - INFO - [35/374] [Page 6] Processing IPZZ-719
-2025-12-07 00:20:21,869 - __main__ - INFO - [36/374] [Page 6] Processing ROE-428
-2025-12-07 00:20:32,488 - __main__ - INFO - [37/374] [Page 6] Processing SONE-992
-2025-12-07 00:20:43,172 - __main__ - INFO - [38/374] [Page 6] Processing IPZZ-729
-2025-12-07 00:20:53,713 - __main__ - INFO - [39/374] [Page 6] Processing ABF-293
-2025-12-07 00:21:09,177 - __main__ - INFO - [40/374] [Page 6] Processing DASS-737
-2025-12-07 00:21:24,759 - __main__ - INFO - [41/374] [Page 6] Processing DASS-827
-2025-12-07 00:21:40,266 - __main__ - INFO - [42/374] [Page 6] Processing IPZZ-740
-2025-12-07 00:21:55,934 - __main__ - INFO - [43/374] [Page 7] Processing IPZZ-717
-2025-12-07 00:22:11,424 - __main__ - INFO - [44/374] [Page 7] Processing JUR-584
-2025-12-07 00:22:26,936 - __main__ - INFO - [45/374] [Page 7] Processing IPZZ-752
-2025-12-07 00:22:42,406 - __main__ - INFO - [46/374] [Page 8] Processing DANDYA-014
-2025-12-07 00:22:57,947 - __main__ - INFO - [47/374] [Page 8] Processing FCT-202
-2025-12-07 00:23:13,530 - __main__ - INFO - [48/374] [Page 8] Processing MILK-269
-2025-12-07 00:23:29,091 - __main__ - INFO - [49/374] [Page 8] Processing STSK-201
-2025-12-07 00:23:44,603 - __main__ - INFO - [50/374] [Page 8] Processing NHDTC-136
-2025-12-07 00:24:00,077 - __main__ - INFO - [51/374] [Page 9] Processing JUMS-150
-2025-12-07 00:24:10,554 - __main__ - INFO - [52/374] [Page 9] Processing START-464
-2025-12-07 00:24:26,039 - __main__ - INFO - [53/374] [Page 10] Processing COGM-090
-2025-12-07 00:24:41,503 - __main__ - INFO - [54/374] [Page 10] Processing JERA-014
-2025-12-07 00:24:56,974 - __main__ - INFO - [55/374] [Page 10] Processing FTKD-031
-2025-12-07 00:25:12,441 - __main__ - INFO - [56/374] [Page 10] Processing HWKR-003
-2025-12-07 00:25:27,915 - __main__ - INFO - [57/374] [Page 11] Processing DOKS-657
-2025-12-07 00:25:43,372 - __main__ - INFO - [58/374] [Page 11] Processing SDJS-342
-2025-12-07 00:25:58,866 - __main__ - INFO - [59/374] [Page 11] Processing START-426
-2025-12-07 00:26:14,369 - __main__ - INFO - [60/374] [Page 11] Processing START-447
-2025-12-07 00:26:29,825 - utils.parser - WARNING - [P2-61] No copy button found for video code
-2025-12-07 00:26:29,825 - utils.parser - WARNING - [P2-61] No magnets content found in detail page
-2025-12-07 00:26:29,825 - utils.magnet_extractor - WARNING - [P2-61] No suitable magnet found
-2025-12-07 00:26:29,825 - __main__ - INFO - [61/374] [Page 11] Processing 
-2025-12-07 00:26:45,262 - __main__ - INFO - [62/374] [Page 11] Processing MIUM-1141
-2025-12-07 00:27:00,719 - __main__ - INFO - [63/374] [Page 12] Processing SORA-618
-2025-12-07 00:27:16,265 - __main__ - INFO - [64/374] [Page 12] Processing FTHTD-141
-2025-12-07 00:27:31,793 - __main__ - INFO - [65/374] [Page 12] Processing LUXU-1864
-2025-12-07 00:27:47,246 - __main__ - INFO - [66/374] [Page 12] Processing XVSR-849
-2025-12-07 00:28:02,725 - __main__ - INFO - [67/374] [Page 13] Processing KAMEF-108
-2025-12-07 00:28:13,342 - __main__ - INFO - [68/374] [Page 13] Processing DJN-029
-2025-12-07 00:28:28,805 - __main__ - INFO - [69/374] [Page 13] Processing JNT-112
-2025-12-07 00:28:44,380 - __main__ - INFO - [70/374] [Page 13] Processing DLDSS-444
-2025-12-07 00:28:59,874 - __main__ - INFO - [71/374] [Page 14] Processing MIDA-435
-2025-12-07 00:29:15,417 - __main__ - INFO - [72/374] [Page 14] Processing STCV-582
-2025-12-07 00:29:30,909 - __main__ - INFO - [73/374] [Page 14] Processing IMJO-003
-2025-12-07 00:29:46,585 - __main__ - INFO - [74/374] [Page 14] Processing LULU-412
-2025-12-07 00:30:02,077 - __main__ - INFO - [75/374] [Page 14] Processing JJDA-066
-2025-12-07 00:30:17,648 - __main__ - INFO - [76/374] [Page 14] Processing LULU-410
-2025-12-07 00:30:32,943 - __main__ - INFO - [77/374] [Page 14] Processing MIAB-589
-2025-12-07 00:30:48,436 - __main__ - INFO - [78/374] [Page 14] Processing MIKR-055
-2025-12-07 00:31:03,945 - __main__ - INFO - [79/374] [Page 14] Processing NMSL-028
-2025-12-07 00:31:19,466 - __main__ - INFO - [80/374] [Page 15] Processing ATID-636
-2025-12-07 00:31:34,970 - __main__ - INFO - [81/374] [Page 15] Processing SOAN-121
-2025-12-07 00:31:50,474 - __main__ - INFO - [82/374] [Page 15] Processing YMDD-474
-2025-12-07 00:32:06,015 - __main__ - INFO - [83/374] [Page 15] Processing FTHTD-152
-2025-12-07 00:32:21,484 - __main__ - INFO - [84/374] [Page 15] Processing TANF-033
-2025-12-07 00:32:36,787 - __main__ - INFO - [85/374] [Page 15] Processing CAWD-905
-2025-12-07 00:32:52,263 - __main__ - INFO - [86/374] [Page 15] Processing MOON-051
-2025-12-07 00:33:07,974 - __main__ - INFO - [87/374] [Page 15] Processing SMOK-026
-2025-12-07 00:33:23,823 - __main__ - INFO - [88/374] [Page 15] Processing DRPT-100
-2025-12-07 00:33:39,293 - __main__ - INFO - [89/374] [Page 16] Processing FJIN-109
-2025-12-07 00:33:54,615 - __main__ - INFO - [90/374] [Page 16] Processing GVH-800
-2025-12-07 00:34:10,093 - __main__ - INFO - [91/374] [Page 16] Processing SORA-621
-2025-12-07 00:34:25,594 - __main__ - INFO - [92/374] [Page 16] Processing DNJR-149
-2025-12-07 00:34:41,085 - __main__ - INFO - [93/374] [Page 16] Processing WAAA-591
-2025-12-07 00:34:56,821 - __main__ - INFO - [94/374] [Page 16] Processing XVSR-852
-2025-12-07 00:35:12,441 - __main__ - INFO - [95/374] [Page 16] Processing BAB-176
-2025-12-07 00:35:23,125 - __main__ - INFO - [96/374] [Page 16] Processing UFD-081
-2025-12-07 00:35:38,614 - __main__ - INFO - [97/374] [Page 16] Processing XVSR-851
-2025-12-07 00:35:49,108 - __main__ - INFO - [98/374] [Page 17] Processing XVSR-848
-2025-12-07 00:36:04,614 - __main__ - INFO - [99/374] [Page 17] Processing MIDA-422
-2025-12-07 00:36:20,103 - __main__ - INFO - [100/374] [Page 17] Processing HNVR-162
-2025-12-07 00:36:35,576 - __main__ - INFO - [101/374] [Page 17] Processing MIKR-058
-2025-12-07 00:36:51,051 - __main__ - INFO - [102/374] [Page 17] Processing YMDD-472
-2025-12-07 00:37:06,515 - __main__ - INFO - [103/374] [Page 17] Processing SORA-620
-2025-12-07 00:37:22,058 - __main__ - INFO - [104/374] [Page 17] Processing MIKR-054
-2025-12-07 00:37:37,527 - __main__ - INFO - [105/374] [Page 17] Processing WAAA-598
-2025-12-07 00:37:53,149 - __main__ - INFO - [106/374] [Page 18] Processing HODV-22018
-2025-12-07 00:38:08,608 - __main__ - INFO - [107/374] [Page 18] Processing FOCS-286
-2025-12-07 00:38:24,096 - __main__ - INFO - [108/374] [Page 18] Processing DVEH-070
-2025-12-07 00:38:39,620 - __main__ - INFO - [109/374] [Page 18] Processing DVMM-322
-2025-12-07 00:38:55,147 - __main__ - INFO - [110/374] [Page 18] Processing MIDA-429
-2025-12-07 00:39:10,616 - __main__ - INFO - [111/374] [Page 18] Processing SAME-188
-2025-12-07 00:39:26,107 - __main__ - INFO - [112/374] [Page 18] Processing CAWD-898
-2025-12-07 00:39:41,577 - __main__ - INFO - [113/374] [Page 18] Processing MIAB-597
-2025-12-07 00:39:57,116 - __main__ - INFO - [114/374] [Page 18] Processing LULU-411
-2025-12-07 00:40:12,930 - __main__ - INFO - [115/374] [Page 18] Processing SAME-166
-2025-12-07 00:40:28,469 - __main__ - INFO - [116/374] [Page 18] Processing HODV-22019
-2025-12-07 00:40:43,926 - __main__ - INFO - [117/374] [Page 19] Processing DVMM-323
-2025-12-07 00:40:59,449 - __main__ - INFO - [118/374] [Page 19] Processing MIMK-251
-2025-12-07 00:41:14,965 - __main__ - INFO - [119/374] [Page 19] Processing SAME-194
-2025-12-07 00:41:30,532 - __main__ - INFO - [120/374] [Page 19] Processing SAME-214
-2025-12-07 00:41:46,017 - __main__ - INFO - [121/374] [Page 19] Processing WAAA-594
-2025-12-07 00:42:01,537 - __main__ - INFO - [122/374] [Page 19] Processing MIDA-438
-2025-12-07 00:42:17,042 - __main__ - INFO - [123/374] [Page 19] Processing CAWD-897
-2025-12-07 00:42:32,615 - __main__ - INFO - [124/374] [Page 19] Processing MIDA-433
-2025-12-07 00:42:48,077 - __main__ - INFO - [125/374] [Page 19] Processing WAAA-596
-2025-12-07 00:43:03,548 - __main__ - INFO - [126/374] [Page 19] Processing LUXU-1862
-2025-12-07 00:43:13,992 - __main__ - INFO - [127/374] [Page 19] Processing WAAA-549
-2025-12-07 00:43:29,531 - __main__ - INFO - [128/374] [Page 19] Processing YUJ-051
-2025-12-07 00:43:45,009 - __main__ - INFO - [129/374] [Page 19] Processing CAWD-913
-2025-12-07 00:44:00,620 - __main__ - INFO - [130/374] [Page 19] Processing MANX-023
-2025-12-07 00:44:16,144 - __main__ - INFO - [131/374] [Page 19] Processing MIDA-427
-2025-12-07 00:44:31,700 - __main__ - INFO - [132/374] [Page 19] Processing WAAA-593
-2025-12-07 00:44:47,203 - __main__ - INFO - [133/374] [Page 19] Processing GANA-3287
-2025-12-07 00:45:02,680 - __main__ - INFO - [134/374] [Page 19] Processing MIAB-576
-2025-12-07 00:45:18,153 - __main__ - INFO - [135/374] [Page 19] Processing MIMK-263
-2025-12-07 00:45:33,640 - __main__ - INFO - [136/374] [Page 19] Processing FPRE-210
-2025-12-07 00:45:49,107 - __main__ - INFO - [137/374] [Page 20] Processing MIMK-261
-2025-12-07 00:46:04,599 - __main__ - INFO - [138/374] [Page 20] Processing WAAA-595
-2025-12-07 00:46:20,068 - __main__ - INFO - [139/374] [Page 20] Processing FTHTD-143
-2025-12-07 00:46:35,534 - __main__ - INFO - [140/374] [Page 20] Processing FTHTD-162
-2025-12-07 00:46:51,018 - __main__ - INFO - [141/374] [Page 20] Processing PFT-007
-2025-12-07 00:47:06,705 - __main__ - INFO - [142/374] [Page 20] Processing NAMH-047
-2025-12-07 00:47:22,249 - __main__ - INFO - [143/374] [Page 20] Processing FNS-136
-2025-12-07 00:47:37,885 - __main__ - INFO - [144/374] [Page 20] Processing FNS-137
-2025-12-07 00:47:53,411 - __main__ - INFO - [145/374] [Page 20] Processing FNS-134
-2025-12-07 00:48:08,898 - __main__ - INFO - [146/374] [Page 20] Processing FNS-118
-2025-12-07 00:48:24,420 - __main__ - INFO - [147/374] [Page 20] Processing FNS-133
-2025-12-07 00:48:39,968 - __main__ - INFO - [148/374] [Page 20] Processing FNS-114
-2025-12-07 00:48:55,446 - __main__ - INFO - [149/374] [Page 20] Processing FNS-116
-2025-12-07 00:49:10,932 - __main__ - INFO - [150/374] [Page 20] Processing DLDSS-446
-2025-12-07 00:49:26,457 - __main__ - INFO - [151/374] [Page 20] Processing MIRD-267
-2025-12-07 00:49:41,938 - __main__ - INFO - [152/374] [Page 20] Processing CAWD-911
-2025-12-07 00:49:57,439 - __main__ - INFO - [153/374] [Page 20] Processing JUFE-602
-2025-12-07 00:50:12,897 - __main__ - INFO - [154/374] [Page 20] Processing MNGS-026
-2025-12-07 00:50:28,408 - __main__ - INFO - [155/374] [Page 21] Processing MIDE-419
-2025-12-07 00:50:44,055 - __main__ - INFO - [156/374] [Page 21] Processing STCVS-035
-2025-12-07 00:50:59,582 - __main__ - INFO - [157/374] [Page 21] Processing IPVR-340
-2025-12-07 00:51:15,071 - __main__ - INFO - [158/374] [Page 21] Processing FSBK-018
-2025-12-07 00:51:30,635 - __main__ - INFO - [159/374] [Page 21] Processing KNAM-084
-2025-12-07 00:51:46,113 - __main__ - INFO - [160/374] [Page 21] Processing SDJS-343
-2025-12-07 00:51:56,570 - __main__ - INFO - [161/374] [Page 21] Processing START-455
-2025-12-07 00:52:12,113 - __main__ - INFO - [162/374] [Page 21] Processing START-459
-2025-12-07 00:52:22,548 - __main__ - INFO - [163/374] [Page 21] Processing START-445
-2025-12-07 00:52:33,025 - __main__ - INFO - [164/374] [Page 21] Processing START-444
-2025-12-07 00:52:48,364 - __main__ - INFO - [165/374] [Page 21] Processing START-454
-2025-12-07 00:52:58,833 - __main__ - INFO - [166/374] [Page 21] Processing SDAM-153
-2025-12-07 00:53:14,340 - __main__ - INFO - [167/374] [Page 21] Processing SDDE-760
-2025-12-07 00:53:29,856 - __main__ - INFO - [168/374] [Page 21] Processing SDJS-335
-2025-12-07 00:53:45,341 - __main__ - INFO - [169/374] [Page 21] Processing START-456
-2025-12-07 00:54:00,873 - __main__ - INFO - [170/374] [Page 21] Processing START-463
-2025-12-07 00:54:11,332 - __main__ - INFO - [171/374] [Page 21] Processing START-470
-2025-12-07 00:54:26,821 - __main__ - INFO - [172/374] [Page 21] Processing KUSE-037
-2025-12-07 00:54:42,323 - __main__ - INFO - [173/374] [Page 22] Processing START-430
-2025-12-07 00:54:57,822 - __main__ - INFO - [174/374] [Page 22] Processing START-446
-2025-12-07 00:55:13,312 - __main__ - INFO - [175/374] [Page 22] Processing 3DSVR-1861
-2025-12-07 00:55:28,796 - __main__ - INFO - [176/374] [Page 22] Processing MSAJ-019
-2025-12-07 00:55:39,263 - __main__ - INFO - [177/374] [Page 22] Processing NAMH-046
-2025-12-07 00:55:54,554 - __main__ - INFO - [178/374] [Page 22] Processing NMSL-024
-2025-12-07 00:56:10,082 - __main__ - INFO - [179/374] [Page 22] Processing NSFS-425
-2025-12-07 00:56:25,641 - __main__ - INFO - [180/374] [Page 22] Processing NSFS-426
-2025-12-07 00:56:41,137 - __main__ - INFO - [181/374] [Page 22] Processing OLM-247
-2025-12-07 00:56:56,619 - __main__ - INFO - [182/374] [Page 23] Processing UMSO-618
-2025-12-07 00:57:12,107 - __main__ - INFO - [183/374] [Page 23] Processing AGAV-153
-2025-12-07 00:57:22,567 - __main__ - INFO - [184/374] [Page 23] Processing RCTD-700
-2025-12-07 00:57:38,075 - __main__ - INFO - [185/374] [Page 24] Processing HNTRZ-028
-2025-12-07 00:57:53,557 - __main__ - INFO - [186/374] [Page 24] Processing SPLT-003
-2025-12-07 00:58:09,176 - __main__ - INFO - [187/374] [Page 24] Processing ENKI-089
-2025-12-07 00:58:24,834 - __main__ - INFO - [188/374] [Page 24] Processing IPBZ-017
-2025-12-07 00:58:40,327 - __main__ - INFO - [189/374] [Page 24] Processing MADV-611
-2025-12-07 00:58:50,769 - __main__ - INFO - [190/374] [Page 25] Processing HUBLK-058
-2025-12-07 00:59:01,232 - __main__ - INFO - [191/374] [Page 25] Processing ONSG-099
-2025-12-07 00:59:11,680 - __main__ - INFO - [192/374] [Page 26] Processing UZU-034
-2025-12-07 00:59:22,101 - __main__ - INFO - [193/374] [Page 26] Processing BLOR-282
-2025-12-07 00:59:32,622 - __main__ - INFO - [194/374] [Page 26] Processing MBDD-2159
-2025-12-07 00:59:48,207 - __main__ - INFO - [195/374] [Page 26] Processing APGH-048
-2025-12-07 01:00:03,693 - __main__ - INFO - [196/374] [Page 26] Processing REAL-953
-2025-12-07 01:00:13,993 - __main__ - INFO - [197/374] [Page 26] Processing GQN-006
-2025-12-07 01:00:29,546 - __main__ - INFO - [198/374] [Page 26] Processing DASS-810
-2025-12-07 01:00:40,042 - __main__ - INFO - [199/374] [Page 26] Processing MKMP-687
-2025-12-07 01:00:55,555 - __main__ - INFO - [200/374] [Page 26] Processing NSFS-432
-2025-12-07 01:01:11,105 - __main__ - INFO - [201/374] [Page 26] Processing MVG-146
-2025-12-07 01:01:21,603 - __main__ - INFO - [202/374] [Page 26] Processing HMN-766
-2025-12-07 01:01:36,892 - __main__ - INFO - [203/374] [Page 26] Processing JUR-537
-2025-12-07 01:01:52,405 - __main__ - INFO - [204/374] [Page 27] Processing DASS-800
-2025-12-07 01:02:02,901 - __main__ - INFO - [205/374] [Page 27] Processing MISM-410
-2025-12-07 01:02:13,346 - __main__ - INFO - [206/374] [Page 27] Processing REAL-954
-2025-12-07 01:02:28,810 - __main__ - INFO - [207/374] [Page 27] Processing AVSA-409
-2025-12-07 01:02:39,345 - __main__ - INFO - [208/374] [Page 27] Processing MADM-210
-2025-12-07 01:02:49,770 - __main__ - INFO - [209/374] [Page 27] Processing MOND-301
-2025-12-07 01:03:05,272 - __main__ - INFO - [210/374] [Page 27] Processing ROE-419
-2025-12-07 01:03:20,879 - __main__ - INFO - [211/374] [Page 28] Processing NACT-045
-2025-12-07 01:03:36,356 - __main__ - INFO - [212/374] [Page 28] Processing JYMA-095
-2025-12-07 01:03:51,816 - __main__ - INFO - [213/374] [Page 28] Processing YMDS-239
-2025-12-07 01:04:02,253 - __main__ - INFO - [214/374] [Page 28] Processing MKMP-686
-2025-12-07 01:04:17,764 - __main__ - INFO - [215/374] [Page 28] Processing MKMP-688
-2025-12-07 01:04:33,308 - __main__ - INFO - [216/374] [Page 28] Processing SONE-994
-2025-12-07 01:04:43,783 - __main__ - INFO - [217/374] [Page 28] Processing AVSA-408
-2025-12-07 01:04:59,270 - __main__ - INFO - [218/374] [Page 28] Processing NHDTC-130
-2025-12-07 01:05:09,738 - __main__ - INFO - [219/374] [Page 28] Processing SNOS-007
-2025-12-07 01:05:20,247 - __main__ - INFO - [220/374] [Page 28] Processing SNOS-013
-2025-12-07 01:05:30,738 - __main__ - INFO - [221/374] [Page 28] Processing LUCY-021
-2025-12-07 01:05:41,200 - __main__ - INFO - [222/374] [Page 28] Processing MISM-409
-2025-12-07 01:05:56,711 - __main__ - INFO - [223/374] [Page 28] Processing MIDA-361
-2025-12-07 01:06:07,167 - __main__ - INFO - [224/374] [Page 29] Processing JUR-553
-2025-12-07 01:06:17,631 - __main__ - INFO - [225/374] [Page 29] Processing DASS-816
-2025-12-07 01:06:28,064 - __main__ - INFO - [226/374] [Page 29] Processing DASS-822
-2025-12-07 01:06:43,571 - __main__ - INFO - [227/374] [Page 29] Processing FOCS-284
-2025-12-07 01:06:59,061 - __main__ - INFO - [228/374] [Page 29] Processing ROE-410
-2025-12-07 01:07:14,540 - __main__ - INFO - [229/374] [Page 29] Processing ACHJ-075
-2025-12-07 01:07:25,002 - __main__ - INFO - [230/374] [Page 29] Processing FJIN-109a
-2025-12-07 01:07:40,487 - __main__ - INFO - [231/374] [Page 29] Processing TPPN-267
-2025-12-07 01:07:55,976 - __main__ - INFO - [232/374] [Page 29] Processing MISM-415
-2025-12-07 01:08:06,484 - __main__ - INFO - [233/374] [Page 30] Processing FCT-197
-2025-12-07 01:08:21,948 - __main__ - INFO - [234/374] [Page 30] Processing JUR-550
-2025-12-07 01:08:32,449 - __main__ - INFO - [235/374] [Page 30] Processing JYMA-094
-2025-12-07 01:08:42,951 - __main__ - INFO - [236/374] [Page 30] Processing MISM-414
-2025-12-07 01:08:58,465 - __main__ - INFO - [237/374] [Page 30] Processing ROYD-273
-2025-12-07 01:09:13,967 - __main__ - INFO - [238/374] [Page 30] Processing ROYD-276
-2025-12-07 01:09:29,506 - __main__ - INFO - [239/374] [Page 30] Processing NACT-043
-2025-12-07 01:09:45,029 - __main__ - INFO - [240/374] [Page 30] Processing DASS-780
-2025-12-07 01:10:00,785 - __main__ - INFO - [241/374] [Page 30] Processing NAMH-048
-2025-12-07 01:10:16,285 - __main__ - INFO - [242/374] [Page 30] Processing START-023
-2025-12-07 01:10:26,728 - __main__ - INFO - [243/374] [Page 30] Processing IPVR-339
-2025-12-07 01:10:42,196 - __main__ - INFO - [244/374] [Page 30] Processing ABF-289
-2025-12-07 01:10:52,854 - __main__ - INFO - [245/374] [Page 31] Processing RCTD-698
-2025-12-07 01:11:08,515 - __main__ - INFO - [246/374] [Page 31] Processing RCTD-703
-2025-12-07 01:11:24,004 - __main__ - INFO - [247/374] [Page 31] Processing OFSD-047
-2025-12-07 01:11:39,520 - __main__ - INFO - [248/374] [Page 31] Processing KBR-033
-2025-12-07 01:11:49,983 - __main__ - INFO - [249/374] [Page 31] Processing MIMK-256
-2025-12-07 01:12:00,441 - __main__ - INFO - [250/374] [Page 31] Processing PRED-817
-2025-12-07 01:12:10,910 - __main__ - INFO - [251/374] [Page 31] Processing FCT-191
-2025-12-07 01:12:26,408 - __main__ - INFO - [252/374] [Page 32] Processing 3DSVR-1860
-2025-12-07 01:12:41,907 - __main__ - INFO - [253/374] [Page 32] Processing NHDTC-131
-2025-12-07 01:12:52,354 - __main__ - INFO - [254/374] [Page 32] Processing HOWS-015
-2025-12-07 01:13:07,828 - __main__ - INFO - [255/374] [Page 32] Processing SGKI-066
-2025-12-07 01:13:18,298 - __main__ - INFO - [256/374] [Page 32] Processing NIMA-066
-2025-12-07 01:13:28,735 - __main__ - INFO - [257/374] [Page 32] Processing T-38049
-2025-12-07 01:13:44,315 - __main__ - INFO - [258/374] [Page 32] Processing SIMO-010
-2025-12-07 01:13:54,820 - __main__ - INFO - [259/374] [Page 32] Processing JNT-111
-2025-12-07 01:14:05,303 - __main__ - INFO - [260/374] [Page 33] Processing MVSD-662
-2025-12-07 01:14:15,759 - __main__ - INFO - [261/374] [Page 33] Processing PRED-820
-2025-12-07 01:14:26,402 - __main__ - INFO - [262/374] [Page 33] Processing SKMJ-685
-2025-12-07 01:14:41,892 - __main__ - INFO - [263/374] [Page 33] Processing BANK-223
-2025-12-07 01:14:57,371 - __main__ - INFO - [264/374] [Page 33] Processing ABF-186
-2025-12-07 01:15:07,846 - __main__ - INFO - [265/374] [Page 33] Processing JUFE-590
-2025-12-07 01:15:18,337 - __main__ - INFO - [266/374] [Page 33] Processing EBWH-289
-2025-12-07 01:15:28,670 - __main__ - INFO - [267/374] [Page 33] Processing BLK-682
-2025-12-07 01:15:44,471 - __main__ - INFO - [268/374] [Page 33] Processing MUDR-343
-2025-12-07 01:16:00,183 - __main__ - INFO - [269/374] [Page 33] Processing SYKH-164
-2025-12-07 01:16:15,498 - __main__ - INFO - [270/374] [Page 34] Processing BNST-084
-2025-12-07 01:16:30,964 - __main__ - INFO - [271/374] [Page 34] Processing SIRO-5569
-2025-12-07 01:16:41,428 - __main__ - INFO - [272/374] [Page 34] Processing MIUM-1320
-2025-12-07 01:16:51,909 - __main__ - INFO - [273/374] [Page 34] Processing PRIN-053
-2025-12-07 01:17:02,401 - __main__ - INFO - [274/374] [Page 34] Processing MUKD-560
-2025-12-07 01:17:18,022 - __main__ - INFO - [275/374] [Page 34] Processing JERA-012
-2025-12-07 01:17:33,504 - __main__ - INFO - [276/374] [Page 34] Processing T38-048
-2025-12-07 01:17:49,194 - __main__ - INFO - [277/374] [Page 34] Processing IPZZ-079
-2025-12-07 01:17:59,818 - __main__ - INFO - [278/374] [Page 34] Processing IPZZ-588
-2025-12-07 01:18:10,521 - __main__ - INFO - [279/374] [Page 34] Processing MIKR-051
-2025-12-07 01:18:21,146 - __main__ - INFO - [280/374] [Page 34] Processing EROFV-340
-2025-12-07 01:18:36,669 - __main__ - INFO - [281/374] [Page 34] Processing MIUM-1267
-2025-12-07 01:18:52,298 - __main__ - INFO - [282/374] [Page 34] Processing AUKG-638
-2025-12-07 01:19:07,750 - __main__ - INFO - [283/374] [Page 34] Processing TIKB-210
-2025-12-07 01:19:18,292 - __main__ - INFO - [284/374] [Page 34] Processing MIMA-022
-2025-12-07 01:19:33,760 - __main__ - INFO - [285/374] [Page 35] Processing MIAB-580
-2025-12-07 01:19:44,206 - __main__ - INFO - [286/374] [Page 35] Processing PIYO-224
-2025-12-07 01:19:59,679 - __main__ - INFO - [287/374] [Page 35] Processing HRSM-119
-2025-12-07 01:20:15,127 - __main__ - INFO - [288/374] [Page 35] Processing NCYF-048
-2025-12-07 01:20:30,404 - __main__ - INFO - [289/374] [Page 35] Processing BOKO-032
-2025-12-07 01:20:46,059 - __main__ - INFO - [290/374] [Page 35] Processing MXGS-1405
-2025-12-07 01:21:01,613 - __main__ - INFO - [291/374] [Page 35] Processing FLAV-407
-2025-12-07 01:21:12,077 - __main__ - INFO - [292/374] [Page 35] Processing GVH-797
-2025-12-07 01:21:22,344 - __main__ - INFO - [293/374] [Page 35] Processing SOON-008
-2025-12-07 01:21:37,795 - __main__ - INFO - [294/374] [Page 35] Processing PRED-819
-2025-12-07 01:21:48,284 - __main__ - INFO - [295/374] [Page 35] Processing ASEX-007
-2025-12-07 01:22:04,057 - __main__ - INFO - [296/374] [Page 35] Processing MFYD-059
-2025-12-07 01:22:14,523 - __main__ - INFO - [297/374] [Page 35] Processing HAWA-367
-2025-12-07 01:22:30,011 - __main__ - INFO - [298/374] [Page 36] Processing FSTU-018
-2025-12-07 01:22:45,759 - __main__ - INFO - [299/374] [Page 36] Processing MUKD-559
-2025-12-07 01:22:56,262 - __main__ - INFO - [300/374] [Page 36] Processing MFYD-072
-2025-12-07 01:23:11,723 - __main__ - INFO - [301/374] [Page 36] Processing DDFF-045
-2025-12-07 01:23:22,182 - __main__ - INFO - [302/374] [Page 36] Processing TIKB-209
-2025-12-07 01:23:37,650 - __main__ - INFO - [303/374] [Page 36] Processing MXGS-1406
-2025-12-07 01:23:48,128 - __main__ - INFO - [304/374] [Page 36] Processing SDHS-044
-2025-12-07 01:23:58,757 - __main__ - INFO - [305/374] [Page 36] Processing FSTU-017
-2025-12-07 01:24:14,437 - __main__ - INFO - [306/374] [Page 36] Processing MIKR-052
-2025-12-07 01:24:24,923 - __main__ - INFO - [307/374] [Page 36] Processing MUFR-002
-2025-12-07 01:24:40,421 - __main__ - INFO - [308/374] [Page 37] Processing PRED-818
-2025-12-07 01:24:55,924 - __main__ - INFO - [309/374] [Page 37] Processing MIDA-404
-2025-12-07 01:25:06,420 - __main__ - INFO - [310/374] [Page 37] Processing MIKR-050
-2025-12-07 01:25:16,755 - __main__ - INFO - [311/374] [Page 37] Processing MOPT-050
-2025-12-07 01:25:32,232 - __main__ - INFO - [312/374] [Page 37] Processing MUDR-334
-2025-12-07 01:25:47,752 - __main__ - INFO - [313/374] [Page 37] Processing MIAB-587
-2025-12-07 01:26:03,446 - __main__ - INFO - [314/374] [Page 37] Processing MFYD-062
-2025-12-07 01:26:13,878 - __main__ - INFO - [315/374] [Page 37] Processing BBTU-107
-2025-12-07 01:26:29,393 - __main__ - INFO - [316/374] [Page 37] Processing NIMA-065
-2025-12-07 01:26:39,848 - __main__ - INFO - [317/374] [Page 37] Processing NMSL-027
-2025-12-07 01:26:50,299 - __main__ - INFO - [318/374] [Page 37] Processing GVH-798
-2025-12-07 01:27:00,776 - __main__ - INFO - [319/374] [Page 37] Processing HALT-073
-2025-12-07 01:27:11,420 - __main__ - INFO - [320/374] [Page 37] Processing SYKH-165
-2025-12-07 01:27:21,883 - __main__ - INFO - [321/374] [Page 37] Processing MIMK-252
-2025-12-07 01:27:32,368 - __main__ - INFO - [322/374] [Page 37] Processing MMBF-004
-2025-12-07 01:27:42,888 - __main__ - INFO - [323/374] [Page 37] Processing MUDR-346
-2025-12-07 01:27:53,388 - __main__ - INFO - [324/374] [Page 37] Processing MFYD-064
-2025-12-07 01:28:08,915 - __main__ - INFO - [325/374] [Page 37] Processing PRED-812
-2025-12-07 01:28:19,336 - __main__ - INFO - [326/374] [Page 37] Processing EBWH-265
-2025-12-07 01:28:34,865 - __main__ - INFO - [327/374] [Page 37] Processing MFYD-073
-2025-12-07 01:28:45,296 - __main__ - INFO - [328/374] [Page 37] Processing MFYD-078
-2025-12-07 01:28:55,744 - __main__ - INFO - [329/374] [Page 37] Processing JUFE-604
-2025-12-07 01:29:11,224 - __main__ - INFO - [330/374] [Page 37] Processing EBWH-274
-2025-12-07 01:29:26,721 - __main__ - INFO - [331/374] [Page 37] Processing MRSS-176
-2025-12-07 01:29:42,167 - __main__ - INFO - [332/374] [Page 38] Processing AWAW-009
-2025-12-07 01:29:52,616 - __main__ - INFO - [333/374] [Page 38] Processing BLK-676
-2025-12-07 01:30:08,080 - __main__ - INFO - [334/374] [Page 38] Processing BLK-679
-2025-12-07 01:30:23,596 - __main__ - INFO - [335/374] [Page 38] Processing EBWH-277
-2025-12-07 01:30:34,104 - __main__ - INFO - [336/374] [Page 38] Processing EBWH-284
-2025-12-07 01:30:49,600 - __main__ - INFO - [337/374] [Page 38] Processing FPRE-204
-2025-12-07 01:31:00,066 - __main__ - INFO - [338/374] [Page 38] Processing JUFE-606
-2025-12-07 01:31:15,569 - __main__ - INFO - [339/374] [Page 38] Processing IPX-258
-2025-12-07 01:31:26,044 - __main__ - INFO - [340/374] [Page 38] Processing PRED-822
-2025-12-07 01:31:36,707 - __main__ - INFO - [341/374] [Page 38] Processing EBWH-273
-2025-12-07 01:31:47,192 - __main__ - INFO - [342/374] [Page 38] Processing MNGS-017
-2025-12-07 01:31:57,617 - __main__ - INFO - [343/374] [Page 38] Processing MVSD-667
-2025-12-07 01:32:13,075 - __main__ - INFO - [344/374] [Page 38] Processing MIUM-1295
-2025-12-07 01:32:23,544 - __main__ - INFO - [345/374] [Page 38] Processing MFYD-063
-2025-12-07 01:32:34,015 - __main__ - INFO - [346/374] [Page 38] Processing MFYD-066
-2025-12-07 01:32:49,504 - __main__ - INFO - [347/374] [Page 38] Processing MFYD-061
-2025-12-07 01:33:00,004 - __main__ - INFO - [348/374] [Page 39] Processing SVGAL-023
-2025-12-07 01:33:15,505 - __main__ - INFO - [349/374] [Page 39] Processing MGOLD-048
-2025-12-07 01:33:30,988 - __main__ - INFO - [350/374] [Page 39] Processing MGOLD-050
-2025-12-07 01:33:46,452 - __main__ - INFO - [351/374] [Page 39] Processing DLDSS-447
-2025-12-07 01:34:01,901 - __main__ - INFO - [352/374] [Page 39] Processing DLDSS-449
-2025-12-07 01:34:12,354 - __main__ - INFO - [353/374] [Page 39] Processing FNS-115
-2025-12-07 01:34:27,836 - __main__ - INFO - [354/374] [Page 39] Processing DLDSS-443
-2025-12-07 01:34:43,148 - __main__ - INFO - [355/374] [Page 39] Processing DLDSS-445
-2025-12-07 01:34:58,588 - __main__ - INFO - [356/374] [Page 39] Processing PRED-821
-2025-12-07 01:35:09,023 - __main__ - INFO - [357/374] [Page 39] Processing PRED-823
-2025-12-07 01:35:19,523 - __main__ - INFO - [358/374] [Page 39] Processing JUFE-601
-2025-12-07 01:35:34,977 - __main__ - INFO - [359/374] [Page 39] Processing EBWH-282
-2025-12-07 01:35:45,434 - __main__ - INFO - [360/374] [Page 39] Processing EBWH-276
-2025-12-07 01:36:00,911 - __main__ - INFO - [361/374] [Page 39] Processing MIDA-401
-2025-12-07 01:36:16,375 - __main__ - INFO - [362/374] [Page 39] Processing MIMK-254
-2025-12-07 01:36:31,843 - __main__ - INFO - [363/374] [Page 40] Processing START-438
-2025-12-07 01:36:42,318 - __main__ - INFO - [364/374] [Page 40] Processing MGNL-128
-2025-12-07 01:36:57,817 - __main__ - INFO - [365/374] [Page 40] Processing SDJS-339
-2025-12-07 01:37:08,269 - __main__ - INFO - [366/374] [Page 40] Processing START-407
-2025-12-07 01:37:23,725 - __main__ - INFO - [367/374] [Page 40] Processing START-425
-2025-12-07 01:37:34,278 - __main__ - INFO - [368/374] [Page 40] Processing SDJS-338
-2025-12-07 01:37:49,778 - __main__ - INFO - [369/374] [Page 40] Processing SDJS-340
-2025-12-07 01:38:05,263 - __main__ - INFO - [370/374] [Page 40] Processing SDMUA-093
-2025-12-07 01:38:15,727 - __main__ - INFO - [371/374] [Page 40] Processing SDMM-214
-2025-12-07 01:38:31,233 - __main__ - INFO - [372/374] [Page 40] Processing START-457
-2025-12-07 01:38:46,727 - __main__ - INFO - [373/374] [Page 40] Processing START-423
-2025-12-07 01:39:02,206 - __main__ - INFO - [374/374] [Page 40] Processing T38-049
-2025-12-07 01:39:02,206 - __main__ - INFO - Phase 2 completed: 240 entries processed
-2025-12-07 01:39:02,206 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251206.csv
-2025-12-07 01:39:02,206 - __main__ - INFO - ==================================================
-2025-12-07 01:39:02,206 - __main__ - INFO - SUMMARY REPORT
-2025-12-07 01:39:02,206 - __main__ - INFO - ==================================================
-2025-12-07 01:39:02,206 - __main__ - INFO - Pages processed: 1 to 40
-2025-12-07 01:39:02,206 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-12-07 01:39:02,206 - __main__ - INFO - ==============================
-2025-12-07 01:39:02,206 - __main__ - INFO - PHASE 1 SUMMARY
-2025-12-07 01:39:02,206 - __main__ - INFO - ==============================
-2025-12-07 01:39:02,206 - __main__ - INFO - Phase 1 entries found: 23
-2025-12-07 01:39:02,206 - __main__ - INFO -   - Subtitle torrents: 23 (100.0%)
-2025-12-07 01:39:02,206 - __main__ - INFO -   - Hacked subtitle torrents: 0 (0.0%)
-2025-12-07 01:39:02,206 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
-2025-12-07 01:39:02,206 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
-2025-12-07 01:39:02,206 - __main__ - INFO - ==============================
-2025-12-07 01:39:02,206 - __main__ - INFO - PHASE 2 SUMMARY
-2025-12-07 01:39:02,206 - __main__ - INFO - ==============================
-2025-12-07 01:39:02,206 - __main__ - INFO - Phase 2 entries found: 240
-2025-12-07 01:39:02,206 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
-2025-12-07 01:39:02,207 - __main__ - INFO -   - Hacked subtitle torrents: 5 (2.1%)
-2025-12-07 01:39:02,207 - __main__ - INFO -   - Hacked no-subtitle torrents: 4 (1.7%)
-2025-12-07 01:39:02,207 - __main__ - INFO -   - No-subtitle torrents: 240 (100.0%)
-2025-12-07 01:39:02,207 - __main__ - INFO - ==============================
-2025-12-07 01:39:02,207 - __main__ - INFO - OVERALL SUMMARY
-2025-12-07 01:39:02,207 - __main__ - INFO - ==============================
-2025-12-07 01:39:02,207 - __main__ - INFO - Total entries found: 263
-2025-12-07 01:39:02,207 - __main__ - INFO - Successfully processed: 263
-2025-12-07 01:39:02,207 - __main__ - INFO - Skipped already parsed in this session: 665
-2025-12-07 01:39:02,207 - __main__ - INFO - Skipped already parsed in previous runs: 3311
-2025-12-07 01:39:02,207 - __main__ - INFO - Current parsed links in memory: 665
-2025-12-07 01:39:02,207 - __main__ - INFO - Overall subtitle torrents: 23 (8.7%)
-2025-12-07 01:39:02,207 - __main__ - INFO - Overall hacked subtitle torrents: 5 (1.9%)
-2025-12-07 01:39:02,207 - __main__ - INFO - Overall hacked no-subtitle torrents: 4 (1.5%)
-2025-12-07 01:39:02,207 - __main__ - INFO - Overall no-subtitle torrents: 240 (91.3%)
-2025-12-07 01:39:02,207 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251206.csv
-2025-12-07 01:39:02,207 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-12-07 01:39:02,207 - __main__ - INFO - ==================================================
+2025-12-07 10:51:58,648 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-07 10:51:58,648 - utils.proxy_ban_manager - INFO - Loaded 0 ban records from logs/proxy_bans.csv
+2025-12-07 10:51:58,649 - utils.proxy_pool - INFO - Added proxy 'Miraculous Fortress' to pool (HTTP: http://***:***@139.xxx.xxx.231:12300, HTTPS: http://***:***@139.xxx.xxx.231:12300)
+2025-12-07 10:51:58,649 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
+2025-12-07 10:51:58,649 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-07 10:51:58,649 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-07 10:51:58,649 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
+2025-12-07 10:51:58,649 - __main__ - INFO - Starting JavDB spider...
+2025-12-07 10:51:58,649 - __main__ - INFO - Arguments: start_page=35, end_page=75, phase=all
+2025-12-07 10:51:58,649 - __main__ - INFO - IGNORE RELEASE DATE: Will process all entries regardless of today/yesterday tags
+2025-12-07 10:51:58,649 - __main__ - INFO - Validating history file integrity...
+2025-12-07 10:51:58,687 - utils.history_manager - INFO - Loaded 5708 previously parsed movies from history (phase 1: 3334, phase 2: 2374)
+2025-12-07 10:51:58,687 - __main__ - INFO - Initialized requests session
+2025-12-07 10:51:58,687 - __main__ - INFO - ==================================================
+2025-12-07 10:51:58,687 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-12-07 10:51:58,687 - __main__ - INFO - ==================================================
+2025-12-07 10:52:00,398 - utils.parser - INFO - [Page 35] New releases filter disabled - will process all entries
+2025-12-07 10:52:00,400 - utils.parser - INFO - [Page 35] Found 10 entries for phase 1
+2025-12-07 10:52:05,924 - utils.parser - INFO - [Page 36] New releases filter disabled - will process all entries
+2025-12-07 10:52:05,925 - utils.parser - INFO - [Page 36] Found 0 entries for phase 1
+2025-12-07 10:52:11,461 - utils.parser - INFO - [Page 37] New releases filter disabled - will process all entries
+2025-12-07 10:52:11,463 - utils.parser - INFO - [Page 37] Found 12 entries for phase 1
+2025-12-07 10:52:17,020 - utils.parser - INFO - [Page 38] New releases filter disabled - will process all entries
+2025-12-07 10:52:17,022 - utils.parser - INFO - [Page 38] Found 0 entries for phase 1
+2025-12-07 10:52:22,578 - utils.parser - INFO - [Page 39] New releases filter disabled - will process all entries
+2025-12-07 10:52:22,579 - utils.parser - INFO - [Page 39] Found 11 entries for phase 1
+2025-12-07 10:52:28,122 - utils.parser - INFO - [Page 40] New releases filter disabled - will process all entries
+2025-12-07 10:52:28,124 - utils.parser - INFO - [Page 40] Found 12 entries for phase 1
+2025-12-07 10:52:33,637 - utils.parser - INFO - [Page 41] New releases filter disabled - will process all entries
+2025-12-07 10:52:33,639 - utils.parser - INFO - [Page 41] Found 6 entries for phase 1
+2025-12-07 10:52:39,380 - utils.parser - INFO - [Page 42] New releases filter disabled - will process all entries
+2025-12-07 10:52:39,382 - utils.parser - INFO - [Page 42] Found 17 entries for phase 1
+2025-12-07 10:52:44,968 - utils.parser - INFO - [Page 43] New releases filter disabled - will process all entries
+2025-12-07 10:52:44,969 - utils.parser - INFO - [Page 43] Found 2 entries for phase 1
+2025-12-07 10:52:50,704 - utils.parser - INFO - [Page 44] New releases filter disabled - will process all entries
+2025-12-07 10:52:50,706 - utils.parser - INFO - [Page 44] Found 8 entries for phase 1
+2025-12-07 10:52:56,236 - utils.parser - INFO - [Page 45] New releases filter disabled - will process all entries
+2025-12-07 10:52:56,238 - utils.parser - INFO - [Page 45] Found 9 entries for phase 1
+2025-12-07 10:53:01,994 - utils.parser - INFO - [Page 46] New releases filter disabled - will process all entries
+2025-12-07 10:53:01,996 - utils.parser - INFO - [Page 46] Found 10 entries for phase 1
+2025-12-07 10:53:07,531 - utils.parser - INFO - [Page 47] New releases filter disabled - will process all entries
+2025-12-07 10:53:07,533 - utils.parser - INFO - [Page 47] Found 0 entries for phase 1
+2025-12-07 10:53:13,081 - utils.parser - INFO - [Page 48] New releases filter disabled - will process all entries
+2025-12-07 10:53:13,084 - utils.parser - INFO - [Page 48] Found 13 entries for phase 1
+2025-12-07 10:53:18,616 - utils.parser - INFO - [Page 49] New releases filter disabled - will process all entries
+2025-12-07 10:53:18,617 - utils.parser - INFO - [Page 49] Found 0 entries for phase 1
+2025-12-07 10:53:24,157 - utils.parser - INFO - [Page 50] New releases filter disabled - will process all entries
+2025-12-07 10:53:24,159 - utils.parser - INFO - [Page 50] Found 11 entries for phase 1
+2025-12-07 10:53:29,717 - utils.parser - INFO - [Page 51] New releases filter disabled - will process all entries
+2025-12-07 10:53:29,718 - utils.parser - INFO - [Page 51] Found 0 entries for phase 1
+2025-12-07 10:53:35,257 - utils.parser - INFO - [Page 52] New releases filter disabled - will process all entries
+2025-12-07 10:53:35,259 - utils.parser - INFO - [Page 52] Found 9 entries for phase 1
+2025-12-07 10:53:40,976 - utils.parser - INFO - [Page 53] New releases filter disabled - will process all entries
+2025-12-07 10:53:40,977 - utils.parser - INFO - [Page 53] Found 10 entries for phase 1
+2025-12-07 10:53:46,494 - utils.parser - INFO - [Page 54] New releases filter disabled - will process all entries
+2025-12-07 10:53:46,496 - utils.parser - INFO - [Page 54] Found 9 entries for phase 1
+2025-12-07 10:53:52,083 - utils.parser - INFO - [Page 55] New releases filter disabled - will process all entries
+2025-12-07 10:53:52,085 - utils.parser - INFO - [Page 55] Found 11 entries for phase 1
+2025-12-07 10:53:57,594 - utils.parser - INFO - [Page 56] New releases filter disabled - will process all entries
+2025-12-07 10:53:57,595 - utils.parser - INFO - [Page 56] Found 4 entries for phase 1
+2025-12-07 10:54:03,112 - utils.parser - INFO - [Page 57] New releases filter disabled - will process all entries
+2025-12-07 10:54:03,114 - utils.parser - INFO - [Page 57] Found 8 entries for phase 1
+2025-12-07 10:54:08,649 - utils.parser - INFO - [Page 58] New releases filter disabled - will process all entries
+2025-12-07 10:54:08,651 - utils.parser - INFO - [Page 58] Found 2 entries for phase 1
+2025-12-07 10:54:14,211 - utils.parser - INFO - [Page 59] New releases filter disabled - will process all entries
+2025-12-07 10:54:14,212 - utils.parser - INFO - [Page 59] Found 9 entries for phase 1
+2025-12-07 10:54:19,756 - utils.parser - INFO - [Page 60] New releases filter disabled - will process all entries
+2025-12-07 10:54:19,758 - utils.parser - INFO - [Page 60] Found 0 entries for phase 1
+2025-12-07 10:54:25,556 - utils.parser - INFO - [Page 61] New releases filter disabled - will process all entries
+2025-12-07 10:54:25,558 - utils.parser - INFO - [Page 61] Found 0 entries for phase 1
+2025-12-07 10:54:31,099 - utils.parser - INFO - [Page 62] New releases filter disabled - will process all entries
+2025-12-07 10:54:31,101 - utils.parser - INFO - [Page 62] Found 14 entries for phase 1
+2025-12-07 10:54:36,827 - utils.parser - INFO - [Page 63] New releases filter disabled - will process all entries
+2025-12-07 10:54:36,828 - utils.parser - INFO - [Page 63] Found 7 entries for phase 1
+2025-12-07 10:54:42,456 - utils.parser - INFO - [Page 64] New releases filter disabled - will process all entries
+2025-12-07 10:54:42,457 - utils.parser - INFO - [Page 64] Found 7 entries for phase 1
+2025-12-07 10:54:47,995 - utils.parser - INFO - [Page 65] New releases filter disabled - will process all entries
+2025-12-07 10:54:47,998 - utils.parser - INFO - [Page 65] Found 9 entries for phase 1
+2025-12-07 10:54:53,539 - utils.parser - INFO - [Page 66] New releases filter disabled - will process all entries
+2025-12-07 10:54:53,541 - utils.parser - INFO - [Page 66] Found 13 entries for phase 1
+2025-12-07 10:54:59,126 - utils.parser - INFO - [Page 67] New releases filter disabled - will process all entries
+2025-12-07 10:54:59,128 - utils.parser - INFO - [Page 67] Found 6 entries for phase 1
+2025-12-07 10:55:04,675 - utils.parser - INFO - [Page 68] New releases filter disabled - will process all entries
+2025-12-07 10:55:04,677 - utils.parser - INFO - [Page 68] Found 11 entries for phase 1
+2025-12-07 10:55:10,053 - utils.parser - INFO - [Page 69] New releases filter disabled - will process all entries
+2025-12-07 10:55:10,055 - utils.parser - INFO - [Page 69] Found 14 entries for phase 1
+2025-12-07 10:55:15,642 - utils.parser - INFO - [Page 70] New releases filter disabled - will process all entries
+2025-12-07 10:55:15,644 - utils.parser - INFO - [Page 70] Found 6 entries for phase 1
+2025-12-07 10:55:21,240 - utils.parser - INFO - [Page 71] New releases filter disabled - will process all entries
+2025-12-07 10:55:21,241 - utils.parser - INFO - [Page 71] Found 0 entries for phase 1
+2025-12-07 10:55:26,782 - utils.parser - INFO - [Page 72] New releases filter disabled - will process all entries
+2025-12-07 10:55:26,784 - utils.parser - INFO - [Page 72] Found 15 entries for phase 1
+2025-12-07 10:55:32,345 - utils.parser - INFO - [Page 73] New releases filter disabled - will process all entries
+2025-12-07 10:55:32,347 - utils.parser - INFO - [Page 73] Found 0 entries for phase 1
+2025-12-07 10:55:37,914 - utils.parser - INFO - [Page 74] New releases filter disabled - will process all entries
+2025-12-07 10:55:37,916 - utils.parser - INFO - [Page 74] Found 14 entries for phase 1
+2025-12-07 10:55:43,505 - utils.parser - INFO - [Page 75] New releases filter disabled - will process all entries
+2025-12-07 10:55:43,506 - utils.parser - INFO - [Page 75] Found 6 entries for phase 1
+2025-12-07 10:55:53,946 - __main__ - INFO - [1/305] [Page 35] Processing CAWD-876
+2025-12-07 10:56:04,394 - __main__ - INFO - [2/305] [Page 35] Processing FNS-101
+2025-12-07 10:56:14,848 - __main__ - INFO - [3/305] [Page 35] Processing FNS-102
+2025-12-07 10:56:25,288 - __main__ - INFO - [4/305] [Page 35] Processing FNS-105
+2025-12-07 10:56:35,751 - __main__ - INFO - [5/305] [Page 35] Processing FNS-113
+2025-12-07 10:56:46,202 - __main__ - INFO - [6/305] [Page 35] Processing FOCS-278
+2025-12-07 10:56:56,681 - __main__ - INFO - [7/305] [Page 35] Processing FOCS-279
+2025-12-07 10:57:07,142 - __main__ - INFO - [8/305] [Page 35] Processing FOCS-280
+2025-12-07 10:57:17,611 - __main__ - INFO - [9/305] [Page 35] Processing IPZZ-477
+2025-12-07 10:57:28,070 - __main__ - INFO - [10/305] [Page 35] Processing IPZZ-697
+2025-12-07 10:57:38,535 - __main__ - INFO - [11/305] [Page 37] Processing JUR-477
+2025-12-07 10:57:48,989 - __main__ - INFO - [12/305] [Page 37] Processing JUR-514
+2025-12-07 10:57:59,447 - __main__ - INFO - [13/305] [Page 37] Processing JUR-524
+2025-12-07 10:58:09,946 - __main__ - INFO - [14/305] [Page 37] Processing JUR-534
+2025-12-07 10:58:20,567 - __main__ - INFO - [15/305] [Page 37] Processing REAL-948
+2025-12-07 10:58:30,991 - __main__ - INFO - [16/305] [Page 37] Processing ROE-417
+2025-12-07 10:58:41,431 - __main__ - INFO - [17/305] [Page 37] Processing ROE-418
+2025-12-07 10:58:51,847 - __main__ - INFO - [18/305] [Page 37] Processing ROE-420
+2025-12-07 10:59:02,349 - __main__ - INFO - [19/305] [Page 37] Processing ROE-422
+2025-12-07 10:59:12,798 - __main__ - INFO - [20/305] [Page 37] Processing STARS-852
+2025-12-07 10:59:23,249 - __main__ - INFO - [21/305] [Page 37] Processing STARS-866
+2025-12-07 10:59:33,678 - __main__ - INFO - [22/305] [Page 37] Processing STARS-964
+2025-12-07 10:59:44,108 - __main__ - INFO - [23/305] [Page 39] Processing JUR-536
+2025-12-07 10:59:54,364 - __main__ - INFO - [24/305] [Page 39] Processing JUR-539
+2025-12-07 11:00:04,984 - __main__ - INFO - [25/305] [Page 39] Processing JUR-540
+2025-12-07 11:00:15,409 - __main__ - INFO - [26/305] [Page 39] Processing JUR-555
+2025-12-07 11:00:25,839 - __main__ - INFO - [27/305] [Page 39] Processing SONE-976
+2025-12-07 11:00:36,287 - __main__ - INFO - [28/305] [Page 39] Processing SONE-979
+2025-12-07 11:00:46,745 - __main__ - INFO - [29/305] [Page 39] Processing SONE-993
+2025-12-07 11:00:57,189 - __main__ - INFO - [30/305] [Page 39] Processing SONE-995
+2025-12-07 11:01:07,649 - __main__ - INFO - [31/305] [Page 39] Processing STARS-894
+2025-12-07 11:01:18,265 - __main__ - INFO - [32/305] [Page 39] Processing STARS-896
+2025-12-07 11:01:28,692 - __main__ - INFO - [33/305] [Page 39] Processing STARS-923
+2025-12-07 11:01:39,303 - __main__ - INFO - [34/305] [Page 40] Processing ALDN-515
+2025-12-07 11:01:49,747 - __main__ - INFO - [35/305] [Page 40] Processing DASS-775
+2025-12-07 11:02:00,499 - __main__ - INFO - [36/305] [Page 40] Processing DASS-806
+2025-12-07 11:02:10,929 - __main__ - INFO - [37/305] [Page 40] Processing DASS-808
+2025-12-07 11:02:21,363 - __main__ - INFO - [38/305] [Page 40] Processing DASS-815
+2025-12-07 11:02:31,802 - __main__ - INFO - [39/305] [Page 40] Processing IPZZ-709
+2025-12-07 11:02:42,243 - __main__ - INFO - [40/305] [Page 40] Processing IPZZ-724
+2025-12-07 11:02:52,691 - __main__ - INFO - [41/305] [Page 40] Processing IPZZ-725
+2025-12-07 11:03:03,133 - __main__ - INFO - [42/305] [Page 40] Processing SONE-934
+2025-12-07 11:03:13,601 - __main__ - INFO - [43/305] [Page 40] Processing SONE-954
+2025-12-07 11:03:24,078 - __main__ - INFO - [44/305] [Page 40] Processing SONE-968
+2025-12-07 11:03:34,532 - __main__ - INFO - [45/305] [Page 40] Processing STARS-599
+2025-12-07 11:03:44,978 - __main__ - INFO - [46/305] [Page 41] Processing FOCS-282
+2025-12-07 11:03:55,536 - __main__ - INFO - [47/305] [Page 41] Processing IPZZ-687
+2025-12-07 11:04:05,976 - __main__ - INFO - [48/305] [Page 41] Processing IPZZ-704
+2025-12-07 11:04:16,419 - __main__ - INFO - [49/305] [Page 41] Processing IPZZ-708
+2025-12-07 11:04:26,860 - __main__ - INFO - [50/305] [Page 41] Processing IPZZ-710
+2025-12-07 11:04:37,321 - __main__ - INFO - [51/305] [Page 41] Processing IPZZ-738
+2025-12-07 11:04:47,937 - __main__ - INFO - [52/305] [Page 42] Processing STARS-725
+2025-12-07 11:04:58,378 - __main__ - INFO - [53/305] [Page 42] Processing STARS-766
+2025-12-07 11:05:08,832 - __main__ - INFO - [54/305] [Page 42] Processing STARS-778
+2025-12-07 11:05:19,308 - __main__ - INFO - [55/305] [Page 42] Processing STARS-804
+2025-12-07 11:05:29,742 - __main__ - INFO - [56/305] [Page 42] Processing STARS-818
+2025-12-07 11:05:40,191 - __main__ - INFO - [57/305] [Page 42] Processing ABF-276
+2025-12-07 11:05:50,618 - __main__ - INFO - [58/305] [Page 42] Processing ADN-733
+2025-12-07 11:06:01,229 - __main__ - INFO - [59/305] [Page 42] Processing ALDN-519
+2025-12-07 11:06:11,667 - __main__ - INFO - [60/305] [Page 42] Processing DASS-735
+2025-12-07 11:06:22,113 - __main__ - INFO - [61/305] [Page 42] Processing DASS-769
+2025-12-07 11:06:32,575 - __main__ - INFO - [62/305] [Page 42] Processing DASS-805
+2025-12-07 11:06:43,013 - __main__ - INFO - [63/305] [Page 42] Processing IPZZ-698
+2025-12-07 11:06:53,512 - __main__ - INFO - [64/305] [Page 42] Processing JUR-053
+2025-12-07 11:07:03,982 - __main__ - INFO - [65/305] [Page 42] Processing JUR-056
+2025-12-07 11:07:14,446 - __main__ - INFO - [66/305] [Page 42] Processing JUR-511
+2025-12-07 11:07:24,897 - __main__ - INFO - [67/305] [Page 42] Processing JUR-521
+2025-12-07 11:07:35,571 - __main__ - INFO - [68/305] [Page 42] Processing STARS-734
+2025-12-07 11:07:46,013 - __main__ - INFO - [69/305] [Page 43] Processing CKCK-014
+2025-12-07 11:07:56,476 - __main__ - INFO - [70/305] [Page 43] Processing CKCK-022
+2025-12-07 11:08:07,170 - __main__ - INFO - [71/305] [Page 44] Processing CKCK-024
+2025-12-07 11:08:17,808 - __main__ - INFO - [72/305] [Page 44] Processing CLUB-886
+2025-12-07 11:08:28,223 - __main__ - INFO - [73/305] [Page 44] Processing CLUB-888
+2025-12-07 11:08:38,671 - __main__ - INFO - [74/305] [Page 44] Processing DLDSS-436
+2025-12-07 11:08:49,152 - __main__ - INFO - [75/305] [Page 44] Processing DLDSS-438
+2025-12-07 11:08:59,606 - __main__ - INFO - [76/305] [Page 44] Processing DLDSS-440
+2025-12-07 11:09:10,219 - __main__ - INFO - [77/305] [Page 44] Processing DLDSS-442
+2025-12-07 11:09:20,723 - __main__ - INFO - [78/305] [Page 44] Processing START-306
+2025-12-07 11:09:31,151 - __main__ - INFO - [79/305] [Page 45] Processing ABF-273
+2025-12-07 11:09:41,596 - __main__ - INFO - [80/305] [Page 45] Processing ABF-277
+2025-12-07 11:09:52,035 - __main__ - INFO - [81/305] [Page 45] Processing ADN-722
+2025-12-07 11:10:02,472 - __main__ - INFO - [82/305] [Page 45] Processing ADN-738
+2025-12-07 11:10:12,916 - __main__ - INFO - [83/305] [Page 45] Processing ALDN-518
+2025-12-07 11:10:23,357 - __main__ - INFO - [84/305] [Page 45] Processing ALDN-520
+2025-12-07 11:10:33,790 - __main__ - INFO - [85/305] [Page 45] Processing ALDN-521
+2025-12-07 11:10:44,254 - __main__ - INFO - [86/305] [Page 45] Processing ALDN-522
+2025-12-07 11:10:54,669 - __main__ - INFO - [87/305] [Page 45] Processing ATID-647
+2025-12-07 11:11:05,110 - __main__ - INFO - [88/305] [Page 46] Processing CAWD-887
+2025-12-07 11:11:15,557 - __main__ - INFO - [89/305] [Page 46] Processing CAWD-888
+2025-12-07 11:11:26,005 - __main__ - INFO - [90/305] [Page 46] Processing CAWD-889
+2025-12-07 11:11:36,446 - __main__ - INFO - [91/305] [Page 46] Processing CAWD-891
+2025-12-07 11:11:46,880 - __main__ - INFO - [92/305] [Page 46] Processing CAWD-892
+2025-12-07 11:11:57,347 - __main__ - INFO - [93/305] [Page 46] Processing CJOD-473
+2025-12-07 11:12:07,796 - __main__ - INFO - [94/305] [Page 46] Processing CJOD-480
+2025-12-07 11:12:18,262 - __main__ - INFO - [95/305] [Page 46] Processing CJOD-482
+2025-12-07 11:12:28,716 - __main__ - INFO - [96/305] [Page 46] Processing CJOD-489
+2025-12-07 11:12:39,213 - __main__ - INFO - [97/305] [Page 46] Processing START-405
+2025-12-07 11:12:49,650 - __main__ - INFO - [98/305] [Page 48] Processing REAL-937
+2025-12-07 11:13:00,101 - __main__ - INFO - [99/305] [Page 48] Processing REAL-945
+2025-12-07 11:13:10,554 - __main__ - INFO - [100/305] [Page 48] Processing ROE-394
+2025-12-07 11:13:21,152 - __main__ - INFO - [101/305] [Page 48] Processing ROE-406
+2025-12-07 11:13:31,454 - __main__ - INFO - [102/305] [Page 48] Processing ROE-411
+2025-12-07 11:13:41,907 - __main__ - INFO - [103/305] [Page 48] Processing ROE-412
+2025-12-07 11:13:52,352 - __main__ - INFO - [104/305] [Page 48] Processing ROYD-268
+2025-12-07 11:14:02,804 - __main__ - INFO - [105/305] [Page 48] Processing ROYD-271
+2025-12-07 11:14:13,292 - __main__ - INFO - [106/305] [Page 48] Processing ROYD-274
+2025-12-07 11:14:23,768 - __main__ - INFO - [107/305] [Page 48] Processing STARS-642
+2025-12-07 11:14:34,256 - __main__ - INFO - [108/305] [Page 48] Processing STARS-701
+2025-12-07 11:14:44,698 - __main__ - INFO - [109/305] [Page 48] Processing STARS-703
+2025-12-07 11:14:55,128 - __main__ - INFO - [110/305] [Page 48] Processing START-169
+2025-12-07 11:15:05,575 - __main__ - INFO - [111/305] [Page 50] Processing ABF-272
+2025-12-07 11:15:16,049 - __main__ - INFO - [112/305] [Page 50] Processing ADN-731
+2025-12-07 11:15:26,497 - __main__ - INFO - [113/305] [Page 50] Processing ATID-631
+2025-12-07 11:15:37,025 - __main__ - INFO - [114/305] [Page 50] Processing ATID-651
+2025-12-07 11:15:47,466 - __main__ - INFO - [115/305] [Page 50] Processing JUR-473
+2025-12-07 11:15:57,917 - __main__ - INFO - [116/305] [Page 50] Processing MIAB-548
+2025-12-07 11:16:08,389 - __main__ - INFO - [117/305] [Page 50] Processing MIDA-343
+2025-12-07 11:16:18,636 - __main__ - INFO - [118/305] [Page 50] Processing MIDA-389
+2025-12-07 11:16:29,100 - __main__ - INFO - [119/305] [Page 50] Processing MIDA-391
+2025-12-07 11:16:39,539 - __main__ - INFO - [120/305] [Page 50] Processing STARS-573
+2025-12-07 11:16:49,978 - __main__ - INFO - [121/305] [Page 50] Processing STARS-678
+2025-12-07 11:17:00,432 - __main__ - INFO - [122/305] [Page 52] Processing ADN-702
+2025-12-07 11:17:10,895 - __main__ - INFO - [123/305] [Page 52] Processing MIDA-392
+2025-12-07 11:17:21,366 - __main__ - INFO - [124/305] [Page 52] Processing MIDA-393
+2025-12-07 11:17:31,811 - __main__ - INFO - [125/305] [Page 52] Processing MIDA-396
+2025-12-07 11:17:42,245 - __main__ - INFO - [126/305] [Page 52] Processing MIDA-397
+2025-12-07 11:17:52,685 - __main__ - INFO - [127/305] [Page 52] Processing MIDA-398
+2025-12-07 11:18:03,101 - __main__ - INFO - [128/305] [Page 52] Processing MIFD-682
+2025-12-07 11:18:13,744 - __main__ - INFO - [129/305] [Page 52] Processing SSIS-906
+2025-12-07 11:18:24,206 - __main__ - INFO - [130/305] [Page 52] Processing START-281
+2025-12-07 11:18:34,634 - __main__ - INFO - [131/305] [Page 53] Processing ABF-280
+2025-12-07 11:18:45,111 - __main__ - INFO - [132/305] [Page 53] Processing MIAB-554
+2025-12-07 11:18:55,586 - __main__ - INFO - [133/305] [Page 53] Processing MIAB-559
+2025-12-07 11:19:06,206 - __main__ - INFO - [134/305] [Page 53] Processing MIAB-565
+2025-12-07 11:19:16,685 - __main__ - INFO - [135/305] [Page 53] Processing MIAB-567
+2025-12-07 11:19:27,182 - __main__ - INFO - [136/305] [Page 53] Processing MIAB-575
+2025-12-07 11:19:37,660 - __main__ - INFO - [137/305] [Page 53] Processing MIDA-348
+2025-12-07 11:19:48,091 - __main__ - INFO - [138/305] [Page 53] Processing MIDA-356
+2025-12-07 11:19:58,532 - __main__ - INFO - [139/305] [Page 53] Processing MIDA-388
+2025-12-07 11:20:09,116 - __main__ - INFO - [140/305] [Page 53] Processing SMA-644
+2025-12-07 11:20:19,563 - __main__ - INFO - [141/305] [Page 54] Processing ABF-275
+2025-12-07 11:20:30,002 - __main__ - INFO - [142/305] [Page 54] Processing ACHJ-071
+2025-12-07 11:20:40,440 - __main__ - INFO - [143/305] [Page 54] Processing DASS-739
+2025-12-07 11:20:50,896 - __main__ - INFO - [144/305] [Page 54] Processing DASS-761
+2025-12-07 11:21:01,310 - __main__ - INFO - [145/305] [Page 54] Processing DASS-776
+2025-12-07 11:21:11,783 - __main__ - INFO - [146/305] [Page 54] Processing DASS-797
+2025-12-07 11:21:22,220 - __main__ - INFO - [147/305] [Page 54] Processing DASS-798
+2025-12-07 11:21:32,665 - __main__ - INFO - [148/305] [Page 54] Processing DASS-799
+2025-12-07 11:21:43,090 - __main__ - INFO - [149/305] [Page 54] Processing DASS-809
+2025-12-07 11:21:53,549 - __main__ - INFO - [150/305] [Page 55] Processing SDNM-067
+2025-12-07 11:22:04,032 - __main__ - INFO - [151/305] [Page 55] Processing SDNM-069
+2025-12-07 11:22:14,467 - __main__ - INFO - [152/305] [Page 55] Processing vixen.19.02.23
+2025-12-07 11:22:25,102 - __main__ - INFO - [153/305] [Page 55] Processing IPZZ-662
+2025-12-07 11:22:35,529 - __main__ - INFO - [154/305] [Page 55] Processing MIAB-532
+2025-12-07 11:22:45,967 - __main__ - INFO - [155/305] [Page 55] Processing MIAB-547
+2025-12-07 11:22:56,513 - __main__ - INFO - [156/305] [Page 55] Processing SDNM-061
+2025-12-07 11:23:06,998 - __main__ - INFO - [157/305] [Page 55] Processing SDNM-064
+2025-12-07 11:23:17,457 - __main__ - INFO - [158/305] [Page 55] Processing START-406
+2025-12-07 11:23:28,112 - __main__ - INFO - [159/305] [Page 55] Processing START-409
+2025-12-07 11:23:38,788 - __main__ - INFO - [160/305] [Page 55] Processing START-410
+2025-12-07 11:23:49,215 - __main__ - INFO - [161/305] [Page 56] Processing START-417
+2025-12-07 11:23:59,666 - __main__ - INFO - [162/305] [Page 56] Processing START-436
+2025-12-07 11:24:10,112 - __main__ - INFO - [163/305] [Page 56] Processing blackedraw.20.02.21
+2025-12-07 11:24:20,580 - __main__ - INFO - [164/305] [Page 56] Processing vixen.18.11.20
+2025-12-07 11:24:31,013 - __main__ - INFO - [165/305] [Page 57] Processing ALDN-513
+2025-12-07 11:24:41,425 - __main__ - INFO - [166/305] [Page 57] Processing JUR-496
+2025-12-07 11:24:51,866 - __main__ - INFO - [167/305] [Page 57] Processing JUR-499
+2025-12-07 11:25:02,319 - __main__ - INFO - [168/305] [Page 57] Processing JUR-505
+2025-12-07 11:25:12,749 - __main__ - INFO - [169/305] [Page 57] Processing JUR-507
+2025-12-07 11:25:23,182 - __main__ - INFO - [170/305] [Page 57] Processing JUR-510
+2025-12-07 11:25:33,644 - __main__ - INFO - [171/305] [Page 57] Processing JUR-517
+2025-12-07 11:25:44,071 - __main__ - INFO - [172/305] [Page 57] Processing JUR-572
+2025-12-07 11:25:54,745 - __main__ - INFO - [173/305] [Page 58] Processing MIGD-725
+2025-12-07 11:26:05,181 - __main__ - INFO - [174/305] [Page 58] Processing blackedraw.18.12.20
+2025-12-07 11:26:15,600 - __main__ - INFO - [175/305] [Page 59] Processing JUR-051
+2025-12-07 11:26:26,023 - __main__ - INFO - [176/305] [Page 59] Processing JUR-052
+2025-12-07 11:26:36,473 - __main__ - INFO - [177/305] [Page 59] Processing JUR-349
+2025-12-07 11:26:46,958 - __main__ - INFO - [178/305] [Page 59] Processing JUR-470
+2025-12-07 11:26:57,402 - __main__ - INFO - [179/305] [Page 59] Processing JUR-482
+2025-12-07 11:27:07,847 - __main__ - INFO - [180/305] [Page 59] Processing JUR-483
+2025-12-07 11:27:18,286 - __main__ - INFO - [181/305] [Page 59] Processing JUX-837
+2025-12-07 11:27:28,750 - __main__ - INFO - [182/305] [Page 59] Processing blacked.18.09.12
+2025-12-07 11:27:39,216 - __main__ - INFO - [183/305] [Page 59] Processing blackedraw.20.04.27
+2025-12-07 11:27:49,694 - __main__ - INFO - [184/305] [Page 62] Processing CJOD-018
+2025-12-07 11:28:00,250 - __main__ - INFO - [185/305] [Page 62] Processing GG-100
+2025-12-07 11:28:10,749 - __main__ - INFO - [186/305] [Page 62] Processing GG-106
+2025-12-07 11:28:21,182 - __main__ - INFO - [187/305] [Page 62] Processing HMN-740
+2025-12-07 11:28:31,634 - __main__ - INFO - [188/305] [Page 62] Processing HMN-750
+2025-12-07 11:28:42,067 - __main__ - INFO - [189/305] [Page 62] Processing JUR-522
+2025-12-07 11:28:52,507 - __main__ - INFO - [190/305] [Page 62] Processing JUR-523
+2025-12-07 11:29:02,978 - __main__ - INFO - [191/305] [Page 62] Processing JUR-525
+2025-12-07 11:29:13,421 - __main__ - INFO - [192/305] [Page 62] Processing JUR-526
+2025-12-07 11:29:23,859 - __main__ - INFO - [193/305] [Page 62] Processing JUR-527
+2025-12-07 11:29:34,295 - __main__ - INFO - [194/305] [Page 62] Processing JUR-557
+2025-12-07 11:29:44,779 - __main__ - INFO - [195/305] [Page 62] Processing JUR-559
+2025-12-07 11:29:55,417 - __main__ - INFO - [196/305] [Page 62] Processing blacked.18.03.01
+2025-12-07 11:30:05,851 - __main__ - INFO - [197/305] [Page 62] Processing blackedraw.19.08.05
+2025-12-07 11:30:16,289 - __main__ - INFO - [198/305] [Page 63] Processing SONE-904
+2025-12-07 11:30:26,981 - __main__ - INFO - [199/305] [Page 63] Processing ABP-204
+2025-12-07 11:30:37,428 - __main__ - INFO - [200/305] [Page 63] Processing SONE-817
+2025-12-07 11:30:47,914 - __main__ - INFO - [201/305] [Page 63] Processing SONE-943
+2025-12-07 11:30:58,352 - __main__ - INFO - [202/305] [Page 63] Processing SONE-952
+2025-12-07 11:31:08,789 - __main__ - INFO - [203/305] [Page 63] Processing SONE-953
+2025-12-07 11:31:19,444 - __main__ - INFO - [204/305] [Page 63] Processing SONE-963
+2025-12-07 11:31:30,050 - __main__ - INFO - [205/305] [Page 64] Processing SONE-966
+2025-12-07 11:31:40,523 - __main__ - INFO - [206/305] [Page 64] Processing SONE-970
+2025-12-07 11:31:50,965 - __main__ - INFO - [207/305] [Page 64] Processing SONE-978
+2025-12-07 11:32:01,415 - __main__ - INFO - [208/305] [Page 64] Processing SONE-999
+2025-12-07 11:32:11,871 - __main__ - INFO - [209/305] [Page 64] Processing blacked.17.05.10
+2025-12-07 11:32:22,338 - __main__ - INFO - [210/305] [Page 64] Processing blackedraw.17.09.29
+2025-12-07 11:32:32,791 - __main__ - INFO - [211/305] [Page 64] Processing MDVR-370
+2025-12-07 11:32:43,242 - __main__ - INFO - [212/305] [Page 65] Processing ABP-968
+2025-12-07 11:32:53,719 - __main__ - INFO - [213/305] [Page 65] Processing HMN-751
+2025-12-07 11:33:04,172 - __main__ - INFO - [214/305] [Page 65] Processing HMN-755
+2025-12-07 11:33:14,633 - __main__ - INFO - [215/305] [Page 65] Processing HMN-756
+2025-12-07 11:33:25,073 - __main__ - INFO - [216/305] [Page 65] Processing IPX-146
+2025-12-07 11:33:35,512 - __main__ - INFO - [217/305] [Page 65] Processing SONE-896
+2025-12-07 11:33:45,930 - __main__ - INFO - [218/305] [Page 65] Processing SONE-918
+2025-12-07 11:33:56,437 - __main__ - INFO - [219/305] [Page 65] Processing SONE-940
+2025-12-07 11:34:06,900 - __main__ - INFO - [220/305] [Page 65] Processing SONE-948
+2025-12-07 11:34:17,348 - __main__ - INFO - [221/305] [Page 66] Processing SSIS-469
+2025-12-07 11:34:27,983 - __main__ - INFO - [222/305] [Page 66] Processing SSIS-643
+2025-12-07 11:34:38,414 - __main__ - INFO - [223/305] [Page 66] Processing SSIS-886
+2025-12-07 11:34:48,883 - __main__ - INFO - [224/305] [Page 66] Processing ABP-551
+2025-12-07 11:34:59,349 - __main__ - INFO - [225/305] [Page 66] Processing NACT-023
+2025-12-07 11:35:09,784 - __main__ - INFO - [226/305] [Page 66] Processing NACT-025
+2025-12-07 11:35:20,389 - __main__ - INFO - [227/305] [Page 66] Processing NACT-031
+2025-12-07 11:35:30,808 - __main__ - INFO - [228/305] [Page 66] Processing NACT-032
+2025-12-07 11:35:41,237 - __main__ - INFO - [229/305] [Page 66] Processing NACT-033
+2025-12-07 11:35:51,737 - __main__ - INFO - [230/305] [Page 66] Processing NACT-034
+2025-12-07 11:36:02,197 - __main__ - INFO - [231/305] [Page 66] Processing NACT-035
+2025-12-07 11:36:12,478 - __main__ - INFO - [232/305] [Page 66] Processing WANZ-049
+2025-12-07 11:36:22,971 - __main__ - INFO - [233/305] [Page 66] Processing vixen.19.07.08
+2025-12-07 11:36:33,404 - __main__ - INFO - [234/305] [Page 67] Processing SONE-914
+2025-12-07 11:36:43,852 - __main__ - INFO - [235/305] [Page 67] Processing SONE-915
+2025-12-07 11:36:54,302 - __main__ - INFO - [236/305] [Page 67] Processing SONE-917
+2025-12-07 11:37:04,774 - __main__ - INFO - [237/305] [Page 67] Processing SONE-957
+2025-12-07 11:37:15,199 - __main__ - INFO - [238/305] [Page 67] Processing SONE-962
+2025-12-07 11:37:25,653 - __main__ - INFO - [239/305] [Page 67] Processing SONE-967
+2025-12-07 11:37:36,123 - __main__ - INFO - [240/305] [Page 68] Processing SONE-972
+2025-12-07 11:37:46,691 - __main__ - INFO - [241/305] [Page 68] Processing NPJS-230
+2025-12-07 11:37:57,301 - __main__ - INFO - [242/305] [Page 68] Processing NSFS-412
+2025-12-07 11:38:07,735 - __main__ - INFO - [243/305] [Page 68] Processing NSFS-413
+2025-12-07 11:38:18,202 - __main__ - INFO - [244/305] [Page 68] Processing NSFS-416
+2025-12-07 11:38:28,679 - __main__ - INFO - [245/305] [Page 68] Processing NSFS-417
+2025-12-07 11:38:39,142 - __main__ - INFO - [246/305] [Page 68] Processing NSFS-420
+2025-12-07 11:38:49,817 - __main__ - INFO - [247/305] [Page 68] Processing NSFS-421
+2025-12-07 11:39:00,323 - __main__ - INFO - [248/305] [Page 68] Processing START-229
+2025-12-07 11:39:10,810 - __main__ - INFO - [249/305] [Page 68] Processing START-268
+2025-12-07 11:39:21,271 - __main__ - INFO - [250/305] [Page 68] Processing vixen.19.05.14
+2025-12-07 11:39:31,713 - __main__ - INFO - [251/305] [Page 69] Processing SONE-876
+2025-12-07 11:39:42,431 - __main__ - INFO - [252/305] [Page 69] Processing SONE-880
+2025-12-07 11:39:52,865 - __main__ - INFO - [253/305] [Page 69] Processing SONE-899
+2025-12-07 11:40:03,301 - __main__ - INFO - [254/305] [Page 69] Processing SONE-901
+2025-12-07 11:40:13,771 - __main__ - INFO - [255/305] [Page 69] Processing SONE-902
+2025-12-07 11:40:24,200 - __main__ - INFO - [256/305] [Page 69] Processing SONE-905
+2025-12-07 11:40:34,652 - __main__ - INFO - [257/305] [Page 69] Processing SONE-907
+2025-12-07 11:40:45,132 - __main__ - INFO - [258/305] [Page 69] Processing SONE-909
+2025-12-07 11:40:55,565 - __main__ - INFO - [259/305] [Page 69] Processing SONE-913
+2025-12-07 11:41:06,012 - __main__ - INFO - [260/305] [Page 69] Processing NACT-016
+2025-12-07 11:41:16,463 - __main__ - INFO - [261/305] [Page 69] Processing NACT-020
+2025-12-07 11:41:26,915 - __main__ - INFO - [262/305] [Page 69] Processing NACT-022
+2025-12-07 11:41:37,376 - __main__ - INFO - [263/305] [Page 69] Processing NACT-024
+2025-12-07 11:41:47,968 - __main__ - INFO - [264/305] [Page 69] Processing NACT-026
+2025-12-07 11:41:58,411 - __main__ - INFO - [265/305] [Page 70] Processing NACT-027
+2025-12-07 11:42:08,849 - __main__ - INFO - [266/305] [Page 70] Processing NACT-028
+2025-12-07 11:42:19,276 - __main__ - INFO - [267/305] [Page 70] Processing SONE-481
+2025-12-07 11:42:29,725 - __main__ - INFO - [268/305] [Page 70] Processing SONE-527
+2025-12-07 11:42:40,185 - __main__ - INFO - [269/305] [Page 70] Processing SSIS-242
+2025-12-07 11:42:50,621 - __main__ - INFO - [270/305] [Page 70] Processing vixen.19.01.19
+2025-12-07 11:43:01,087 - __main__ - INFO - [271/305] [Page 72] Processing SNIS-891
+2025-12-07 11:43:11,536 - __main__ - INFO - [272/305] [Page 72] Processing SONE-272
+2025-12-07 11:43:21,990 - __main__ - INFO - [273/305] [Page 72] Processing SONE-860
+2025-12-07 11:43:32,458 - __main__ - INFO - [274/305] [Page 72] Processing ABF-158
+2025-12-07 11:43:42,920 - __main__ - INFO - [275/305] [Page 72] Processing ROYD-262
+2025-12-07 11:43:53,374 - __main__ - INFO - [276/305] [Page 72] Processing ROYD-264
+2025-12-07 11:44:03,807 - __main__ - INFO - [277/305] [Page 72] Processing ROYD-265
+2025-12-07 11:44:14,264 - __main__ - INFO - [278/305] [Page 72] Processing ROYD-266
+2025-12-07 11:44:24,732 - __main__ - INFO - [279/305] [Page 72] Processing ROYD-269
+2025-12-07 11:44:35,160 - __main__ - INFO - [280/305] [Page 72] Processing SAME-171
+2025-12-07 11:44:45,420 - __main__ - INFO - [281/305] [Page 72] Processing SAME-197
+2025-12-07 11:44:55,887 - __main__ - INFO - [282/305] [Page 72] Processing SNIS-519
+2025-12-07 11:45:06,397 - __main__ - INFO - [283/305] [Page 72] Processing SONE-019
+2025-12-07 11:45:16,827 - __main__ - INFO - [284/305] [Page 72] Processing SONE-219
+2025-12-07 11:45:27,260 - __main__ - INFO - [285/305] [Page 72] Processing tushyraw.19.11.10
+2025-12-07 11:45:37,685 - __main__ - INFO - [286/305] [Page 74] Processing REAL-940
+2025-12-07 11:45:48,101 - __main__ - INFO - [287/305] [Page 74] Processing ROE-378
+2025-12-07 11:45:58,531 - __main__ - INFO - [288/305] [Page 74] Processing ROE-399
+2025-12-07 11:46:08,997 - __main__ - INFO - [289/305] [Page 74] Processing ROE-402
+2025-12-07 11:46:19,411 - __main__ - INFO - [290/305] [Page 74] Processing FOCS-275
+2025-12-07 11:46:29,882 - __main__ - INFO - [291/305] [Page 74] Processing FOCS-276
+2025-12-07 11:46:40,328 - __main__ - INFO - [292/305] [Page 74] Processing HMN-742
+2025-12-07 11:46:50,784 - __main__ - INFO - [293/305] [Page 74] Processing HMN-747
+2025-12-07 11:47:01,228 - __main__ - INFO - [294/305] [Page 74] Processing HMN-749
+2025-12-07 11:47:11,692 - __main__ - INFO - [295/305] [Page 74] Processing HMN-754
+2025-12-07 11:47:22,170 - __main__ - INFO - [296/305] [Page 74] Processing HMN-767
+2025-12-07 11:47:32,629 - __main__ - INFO - [297/305] [Page 74] Processing IPX-782
+2025-12-07 11:47:43,065 - __main__ - INFO - [298/305] [Page 74] Processing MIDA-378
+2025-12-07 11:47:53,489 - __main__ - INFO - [299/305] [Page 74] Processing tushyraw.19.06.23
+2025-12-07 11:48:03,983 - __main__ - INFO - [300/305] [Page 75] Processing PPPD-262
+2025-12-07 11:48:19,462 - __main__ - INFO - [301/305] [Page 75] Processing PPPD-268
+2025-12-07 11:48:35,029 - __main__ - INFO - [302/305] [Page 75] Processing PPPD-275
+2025-12-07 11:48:50,541 - __main__ - INFO - [303/305] [Page 75] Processing PRED-715
+2025-12-07 11:49:06,011 - __main__ - INFO - [304/305] [Page 75] Processing REAL-938
+2025-12-07 11:49:21,490 - __main__ - INFO - [305/305] [Page 75] Processing JUC-965
+2025-12-07 11:49:26,516 - __main__ - INFO - Phase 1 completed: 6 entries processed
+2025-12-07 11:49:26,516 - __main__ - INFO - ==================================================
+2025-12-07 11:49:26,516 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-12-07 11:49:26,516 - __main__ - INFO - ==================================================
+2025-12-07 11:49:26,888 - utils.parser - INFO - [Page 35] New releases filter disabled - will process all entries
+2025-12-07 11:49:26,890 - utils.parser - INFO - [Page 35] Found 15 entries for phase 2
+2025-12-07 11:49:32,406 - utils.parser - INFO - [Page 36] New releases filter disabled - will process all entries
+2025-12-07 11:49:32,409 - utils.parser - INFO - [Page 36] Found 12 entries for phase 2
+2025-12-07 11:49:37,938 - utils.parser - INFO - [Page 37] New releases filter disabled - will process all entries
+2025-12-07 11:49:37,940 - utils.parser - INFO - [Page 37] Found 15 entries for phase 2
+2025-12-07 11:49:43,471 - utils.parser - INFO - [Page 38] New releases filter disabled - will process all entries
+2025-12-07 11:49:43,475 - utils.parser - INFO - [Page 38] Found 22 entries for phase 2
+2025-12-07 11:49:49,010 - utils.parser - INFO - [Page 39] New releases filter disabled - will process all entries
+2025-12-07 11:49:49,012 - utils.parser - INFO - [Page 39] Found 16 entries for phase 2
+2025-12-07 11:49:54,568 - utils.parser - INFO - [Page 40] New releases filter disabled - will process all entries
+2025-12-07 11:49:54,570 - utils.parser - INFO - [Page 40] Found 11 entries for phase 2
+2025-12-07 11:50:00,099 - utils.parser - INFO - [Page 41] New releases filter disabled - will process all entries
+2025-12-07 11:50:00,102 - utils.parser - INFO - [Page 41] Found 11 entries for phase 2
+2025-12-07 11:50:05,617 - utils.parser - INFO - [Page 42] New releases filter disabled - will process all entries
+2025-12-07 11:50:05,620 - utils.parser - INFO - [Page 42] Found 5 entries for phase 2
+2025-12-07 11:50:11,218 - utils.parser - INFO - [Page 43] New releases filter disabled - will process all entries
+2025-12-07 11:50:11,221 - utils.parser - INFO - [Page 43] Found 7 entries for phase 2
+2025-12-07 11:50:16,759 - utils.parser - INFO - [Page 44] New releases filter disabled - will process all entries
+2025-12-07 11:50:16,762 - utils.parser - INFO - [Page 44] Found 8 entries for phase 2
+2025-12-07 11:50:22,245 - utils.parser - INFO - [Page 45] New releases filter disabled - will process all entries
+2025-12-07 11:50:22,248 - utils.parser - INFO - [Page 45] Found 10 entries for phase 2
+2025-12-07 11:50:27,783 - utils.parser - INFO - [Page 46] New releases filter disabled - will process all entries
+2025-12-07 11:50:27,786 - utils.parser - INFO - [Page 46] Found 15 entries for phase 2
+2025-12-07 11:50:33,369 - utils.parser - INFO - [Page 47] New releases filter disabled - will process all entries
+2025-12-07 11:50:33,372 - utils.parser - INFO - [Page 47] Found 9 entries for phase 2
+2025-12-07 11:50:38,937 - utils.parser - INFO - [Page 48] New releases filter disabled - will process all entries
+2025-12-07 11:50:38,939 - utils.parser - INFO - [Page 48] Found 15 entries for phase 2
+2025-12-07 11:50:44,298 - utils.parser - INFO - [Page 49] New releases filter disabled - will process all entries
+2025-12-07 11:50:44,302 - utils.parser - INFO - [Page 49] Found 15 entries for phase 2
+2025-12-07 11:50:49,852 - utils.parser - INFO - [Page 50] New releases filter disabled - will process all entries
+2025-12-07 11:50:49,855 - utils.parser - INFO - [Page 50] Found 7 entries for phase 2
+2025-12-07 11:50:55,396 - utils.parser - INFO - [Page 51] New releases filter disabled - will process all entries
+2025-12-07 11:50:55,399 - utils.parser - INFO - [Page 51] Found 5 entries for phase 2
+2025-12-07 11:51:00,982 - utils.parser - INFO - [Page 52] New releases filter disabled - will process all entries
+2025-12-07 11:51:00,985 - utils.parser - INFO - [Page 52] Found 5 entries for phase 2
+2025-12-07 11:51:06,523 - utils.parser - INFO - [Page 53] New releases filter disabled - will process all entries
+2025-12-07 11:51:06,525 - utils.parser - INFO - [Page 53] Found 11 entries for phase 2
+2025-12-07 11:51:12,078 - utils.parser - INFO - [Page 54] New releases filter disabled - will process all entries
+2025-12-07 11:51:12,081 - utils.parser - INFO - [Page 54] Found 5 entries for phase 2
+2025-12-07 11:51:17,651 - utils.parser - INFO - [Page 55] New releases filter disabled - will process all entries
+2025-12-07 11:51:17,654 - utils.parser - INFO - [Page 55] Found 10 entries for phase 2
+2025-12-07 11:51:23,243 - utils.parser - INFO - [Page 56] New releases filter disabled - will process all entries
+2025-12-07 11:51:23,246 - utils.parser - INFO - [Page 56] Found 11 entries for phase 2
+2025-12-07 11:51:28,792 - utils.parser - INFO - [Page 57] New releases filter disabled - will process all entries
+2025-12-07 11:51:28,795 - utils.parser - INFO - [Page 57] Found 11 entries for phase 2
+2025-12-07 11:51:34,317 - utils.parser - INFO - [Page 58] New releases filter disabled - will process all entries
+2025-12-07 11:51:34,320 - utils.parser - INFO - [Page 58] Found 14 entries for phase 2
+2025-12-07 11:51:39,683 - utils.parser - INFO - [Page 59] New releases filter disabled - will process all entries
+2025-12-07 11:51:39,686 - utils.parser - INFO - [Page 59] Found 10 entries for phase 2
+2025-12-07 11:51:45,231 - utils.parser - INFO - [Page 60] New releases filter disabled - will process all entries
+2025-12-07 11:51:45,233 - utils.parser - INFO - [Page 60] Found 11 entries for phase 2
+2025-12-07 11:51:50,768 - utils.parser - INFO - [Page 61] New releases filter disabled - will process all entries
+2025-12-07 11:51:50,771 - utils.parser - INFO - [Page 61] Found 18 entries for phase 2
+2025-12-07 11:51:56,286 - utils.parser - INFO - [Page 62] New releases filter disabled - will process all entries
+2025-12-07 11:51:56,289 - utils.parser - INFO - [Page 62] Found 13 entries for phase 2
+2025-12-07 11:52:01,826 - utils.parser - INFO - [Page 63] New releases filter disabled - will process all entries
+2025-12-07 11:52:01,829 - utils.parser - INFO - [Page 63] Found 5 entries for phase 2
+2025-12-07 11:52:07,406 - utils.parser - INFO - [Page 64] New releases filter disabled - will process all entries
+2025-12-07 11:52:07,409 - utils.parser - INFO - [Page 64] Found 4 entries for phase 2
+2025-12-07 11:52:12,935 - utils.parser - INFO - [Page 65] New releases filter disabled - will process all entries
+2025-12-07 11:52:12,938 - utils.parser - INFO - [Page 65] Found 5 entries for phase 2
+2025-12-07 11:52:18,484 - utils.parser - INFO - [Page 66] New releases filter disabled - will process all entries
+2025-12-07 11:52:18,487 - utils.parser - INFO - [Page 66] Found 11 entries for phase 2
+2025-12-07 11:52:24,029 - utils.parser - INFO - [Page 67] New releases filter disabled - will process all entries
+2025-12-07 11:52:24,032 - utils.parser - INFO - [Page 67] Found 7 entries for phase 2
+2025-12-07 11:52:29,600 - utils.parser - INFO - [Page 68] New releases filter disabled - will process all entries
+2025-12-07 11:52:29,602 - utils.parser - INFO - [Page 68] Found 5 entries for phase 2
+2025-12-07 11:52:35,157 - utils.parser - INFO - [Page 69] New releases filter disabled - will process all entries
+2025-12-07 11:52:35,160 - utils.parser - INFO - [Page 69] Found 9 entries for phase 2
+2025-12-07 11:52:40,722 - utils.parser - INFO - [Page 70] New releases filter disabled - will process all entries
+2025-12-07 11:52:40,725 - utils.parser - INFO - [Page 70] Found 5 entries for phase 2
+2025-12-07 11:52:46,314 - utils.parser - INFO - [Page 71] New releases filter disabled - will process all entries
+2025-12-07 11:52:46,318 - utils.parser - INFO - [Page 71] Found 12 entries for phase 2
+2025-12-07 11:52:51,888 - utils.parser - INFO - [Page 72] New releases filter disabled - will process all entries
+2025-12-07 11:52:51,890 - utils.parser - INFO - [Page 72] Found 10 entries for phase 2
+2025-12-07 11:52:57,431 - utils.parser - INFO - [Page 73] New releases filter disabled - will process all entries
+2025-12-07 11:52:57,435 - utils.parser - INFO - [Page 73] Found 16 entries for phase 2
+2025-12-07 11:53:02,955 - utils.parser - INFO - [Page 74] New releases filter disabled - will process all entries
+2025-12-07 11:53:02,957 - utils.parser - INFO - [Page 74] Found 7 entries for phase 2
+2025-12-07 11:53:08,517 - utils.parser - INFO - [Page 75] New releases filter disabled - will process all entries
+2025-12-07 11:53:08,520 - utils.parser - INFO - [Page 75] Found 8 entries for phase 2
+2025-12-07 11:53:19,015 - __main__ - INFO - [1/421] [Page 35] Processing MUKD-560
+2025-12-07 11:53:29,284 - __main__ - INFO - [2/421] [Page 35] Processing JERA-012
+2025-12-07 11:53:39,715 - __main__ - INFO - [3/421] [Page 35] Processing T38-048
+2025-12-07 11:53:50,154 - __main__ - INFO - [4/421] [Page 35] Processing IPZZ-079
+2025-12-07 11:54:00,617 - __main__ - INFO - [5/421] [Page 35] Processing IPZZ-588
+2025-12-07 11:54:11,037 - __main__ - INFO - [6/421] [Page 35] Processing MIKR-051
+2025-12-07 11:54:21,279 - __main__ - INFO - [7/421] [Page 35] Processing EROFV-340
+2025-12-07 11:54:31,713 - __main__ - INFO - [8/421] [Page 35] Processing MIUM-1267
+2025-12-07 11:54:41,964 - __main__ - INFO - [9/421] [Page 35] Processing AUKG-638
+2025-12-07 11:54:52,393 - __main__ - INFO - [10/421] [Page 35] Processing TIKB-210
+2025-12-07 11:55:02,823 - __main__ - INFO - [11/421] [Page 35] Processing MIMA-022
+2025-12-07 11:55:13,243 - __main__ - INFO - [12/421] [Page 35] Processing MIAB-580
+2025-12-07 11:55:23,672 - __main__ - INFO - [13/421] [Page 35] Processing PIYO-224
+2025-12-07 11:55:34,107 - __main__ - INFO - [14/421] [Page 35] Processing HRSM-119
+2025-12-07 11:55:44,535 - __main__ - INFO - [15/421] [Page 35] Processing NCYF-048
+2025-12-07 11:55:55,002 - __main__ - INFO - [16/421] [Page 36] Processing BOKO-032
+2025-12-07 11:56:05,465 - __main__ - INFO - [17/421] [Page 36] Processing MXGS-1405
+2025-12-07 11:56:15,907 - __main__ - INFO - [18/421] [Page 36] Processing FLAV-407
+2025-12-07 11:56:26,337 - __main__ - INFO - [19/421] [Page 36] Processing GVH-797
+2025-12-07 11:56:36,801 - __main__ - INFO - [20/421] [Page 36] Processing SOON-008
+2025-12-07 11:56:47,242 - __main__ - INFO - [21/421] [Page 36] Processing PRED-819
+2025-12-07 11:56:57,869 - __main__ - INFO - [22/421] [Page 36] Processing ASEX-007
+2025-12-07 11:57:08,348 - __main__ - INFO - [23/421] [Page 36] Processing MFYD-059
+2025-12-07 11:57:18,812 - __main__ - INFO - [24/421] [Page 36] Processing HAWA-367
+2025-12-07 11:57:29,270 - __main__ - INFO - [25/421] [Page 36] Processing FSTU-018
+2025-12-07 11:57:39,708 - __main__ - INFO - [26/421] [Page 36] Processing MUKD-559
+2025-12-07 11:57:50,161 - __main__ - INFO - [27/421] [Page 36] Processing MFYD-072
+2025-12-07 11:58:00,628 - __main__ - INFO - [28/421] [Page 37] Processing DDFF-045
+2025-12-07 11:58:11,076 - __main__ - INFO - [29/421] [Page 37] Processing TIKB-209
+2025-12-07 11:58:21,565 - __main__ - INFO - [30/421] [Page 37] Processing MXGS-1406
+2025-12-07 11:58:32,080 - __main__ - INFO - [31/421] [Page 37] Processing SDHS-044
+2025-12-07 11:58:42,547 - __main__ - INFO - [32/421] [Page 37] Processing FSTU-017
+2025-12-07 11:58:52,994 - __main__ - INFO - [33/421] [Page 37] Processing MIKR-052
+2025-12-07 11:59:03,437 - __main__ - INFO - [34/421] [Page 37] Processing MUFR-002
+2025-12-07 11:59:13,868 - __main__ - INFO - [35/421] [Page 37] Processing PRED-818
+2025-12-07 11:59:24,320 - __main__ - INFO - [36/421] [Page 37] Processing MIDA-404
+2025-12-07 11:59:34,765 - __main__ - INFO - [37/421] [Page 37] Processing MIKR-050
+2025-12-07 11:59:45,219 - __main__ - INFO - [38/421] [Page 37] Processing MOPT-050
+2025-12-07 11:59:55,695 - __main__ - INFO - [39/421] [Page 37] Processing MUDR-334
+2025-12-07 12:00:06,150 - __main__ - INFO - [40/421] [Page 37] Processing MIAB-587
+2025-12-07 12:00:16,595 - __main__ - INFO - [41/421] [Page 37] Processing MFYD-062
+2025-12-07 12:00:27,025 - __main__ - INFO - [42/421] [Page 37] Processing BBTU-107
+2025-12-07 12:00:37,461 - __main__ - INFO - [43/421] [Page 38] Processing NIMA-065
+2025-12-07 12:00:47,932 - __main__ - INFO - [44/421] [Page 38] Processing NMSL-027
+2025-12-07 12:00:58,389 - __main__ - INFO - [45/421] [Page 38] Processing GVH-798
+2025-12-07 12:01:08,833 - __main__ - INFO - [46/421] [Page 38] Processing HALT-073
+2025-12-07 12:01:19,309 - __main__ - INFO - [47/421] [Page 38] Processing SYKH-165
+2025-12-07 12:01:29,757 - __main__ - INFO - [48/421] [Page 38] Processing MIMK-252
+2025-12-07 12:01:40,187 - __main__ - INFO - [49/421] [Page 38] Processing MMBF-004
+2025-12-07 12:01:50,633 - __main__ - INFO - [50/421] [Page 38] Processing MUDR-346
+2025-12-07 12:02:01,093 - __main__ - INFO - [51/421] [Page 38] Processing MFYD-064
+2025-12-07 12:02:11,545 - __main__ - INFO - [52/421] [Page 38] Processing PRED-812
+2025-12-07 12:02:22,090 - __main__ - INFO - [53/421] [Page 38] Processing EBWH-265
+2025-12-07 12:02:32,555 - __main__ - INFO - [54/421] [Page 38] Processing MFYD-073
+2025-12-07 12:02:42,993 - __main__ - INFO - [55/421] [Page 38] Processing MFYD-078
+2025-12-07 12:02:53,427 - __main__ - INFO - [56/421] [Page 38] Processing JUFE-604
+2025-12-07 12:03:03,886 - __main__ - INFO - [57/421] [Page 38] Processing EBWH-274
+2025-12-07 12:03:14,327 - __main__ - INFO - [58/421] [Page 38] Processing MRSS-176
+2025-12-07 12:03:24,932 - __main__ - INFO - [59/421] [Page 38] Processing AWAW-009
+2025-12-07 12:03:35,349 - __main__ - INFO - [60/421] [Page 38] Processing BLK-676
+2025-12-07 12:03:45,820 - __main__ - INFO - [61/421] [Page 38] Processing BLK-679
+2025-12-07 12:03:56,272 - __main__ - INFO - [62/421] [Page 38] Processing EBWH-277
+2025-12-07 12:04:06,731 - __main__ - INFO - [63/421] [Page 38] Processing EBWH-284
+2025-12-07 12:04:17,172 - __main__ - INFO - [64/421] [Page 38] Processing FPRE-204
+2025-12-07 12:04:27,587 - __main__ - INFO - [65/421] [Page 39] Processing JUFE-606
+2025-12-07 12:04:38,030 - __main__ - INFO - [66/421] [Page 39] Processing IPX-258
+2025-12-07 12:04:48,442 - __main__ - INFO - [67/421] [Page 39] Processing PRED-822
+2025-12-07 12:04:58,904 - __main__ - INFO - [68/421] [Page 39] Processing EBWH-273
+2025-12-07 12:05:09,347 - __main__ - INFO - [69/421] [Page 39] Processing MNGS-017
+2025-12-07 12:05:19,901 - __main__ - INFO - [70/421] [Page 39] Processing MVSD-667
+2025-12-07 12:05:30,340 - __main__ - INFO - [71/421] [Page 39] Processing MIUM-1295
+2025-12-07 12:05:40,792 - __main__ - INFO - [72/421] [Page 39] Processing MFYD-063
+2025-12-07 12:05:51,237 - __main__ - INFO - [73/421] [Page 39] Processing MFYD-066
+2025-12-07 12:06:01,693 - __main__ - INFO - [74/421] [Page 39] Processing MFYD-061
+2025-12-07 12:06:12,144 - __main__ - INFO - [75/421] [Page 39] Processing SVGAL-023
+2025-12-07 12:06:22,579 - __main__ - INFO - [76/421] [Page 39] Processing MGOLD-048
+2025-12-07 12:06:33,026 - __main__ - INFO - [77/421] [Page 39] Processing MGOLD-050
+2025-12-07 12:06:43,448 - __main__ - INFO - [78/421] [Page 39] Processing DLDSS-447
+2025-12-07 12:06:53,882 - __main__ - INFO - [79/421] [Page 39] Processing DLDSS-449
+2025-12-07 12:07:04,331 - __main__ - INFO - [80/421] [Page 39] Processing FNS-115
+2025-12-07 12:07:14,789 - __main__ - INFO - [81/421] [Page 40] Processing DLDSS-443
+2025-12-07 12:07:25,234 - __main__ - INFO - [82/421] [Page 40] Processing DLDSS-445
+2025-12-07 12:07:35,682 - __main__ - INFO - [83/421] [Page 40] Processing PRED-821
+2025-12-07 12:07:46,110 - __main__ - INFO - [84/421] [Page 40] Processing PRED-823
+2025-12-07 12:07:56,567 - __main__ - INFO - [85/421] [Page 40] Processing JUFE-601
+2025-12-07 12:08:06,997 - __main__ - INFO - [86/421] [Page 40] Processing EBWH-282
+2025-12-07 12:08:17,415 - __main__ - INFO - [87/421] [Page 40] Processing EBWH-276
+2025-12-07 12:08:27,859 - __main__ - INFO - [88/421] [Page 40] Processing MIDA-401
+2025-12-07 12:08:38,284 - __main__ - INFO - [89/421] [Page 40] Processing MIMK-254
+2025-12-07 12:08:48,742 - __main__ - INFO - [90/421] [Page 40] Processing START-438
+2025-12-07 12:08:59,239 - __main__ - INFO - [91/421] [Page 40] Processing MGNL-128
+2025-12-07 12:09:09,752 - __main__ - INFO - [92/421] [Page 41] Processing SDJS-339
+2025-12-07 12:09:20,206 - __main__ - INFO - [93/421] [Page 41] Processing START-407
+2025-12-07 12:09:30,657 - __main__ - INFO - [94/421] [Page 41] Processing START-425
+2025-12-07 12:09:41,098 - __main__ - INFO - [95/421] [Page 41] Processing SDJS-338
+2025-12-07 12:09:51,528 - __main__ - INFO - [96/421] [Page 41] Processing SDJS-340
+2025-12-07 12:10:01,976 - __main__ - INFO - [97/421] [Page 41] Processing SDMUA-093
+2025-12-07 12:10:12,414 - __main__ - INFO - [98/421] [Page 41] Processing SDMM-214
+2025-12-07 12:10:22,867 - __main__ - INFO - [99/421] [Page 41] Processing START-457
+2025-12-07 12:10:33,172 - __main__ - INFO - [100/421] [Page 41] Processing START-423
+2025-12-07 12:10:43,619 - __main__ - INFO - [101/421] [Page 41] Processing T38-049
+2025-12-07 12:10:54,133 - __main__ - INFO - [102/421] [Page 41] Processing FSBK-017
+2025-12-07 12:11:09,586 - __main__ - INFO - [103/421] [Page 42] Processing BAB-174
+2025-12-07 12:11:25,046 - __main__ - INFO - [104/421] [Page 42] Processing JUR-528
+2025-12-07 12:11:35,463 - __main__ - INFO - [105/421] [Page 42] Processing MDTM-870
+2025-12-07 12:11:50,923 - __main__ - INFO - [106/421] [Page 42] Processing SWEET-042
+2025-12-07 12:12:01,364 - __main__ - INFO - [107/421] [Page 42] Processing SWEET-043
+2025-12-07 12:12:11,808 - __main__ - INFO - [108/421] [Page 43] Processing CEMD-765
+2025-12-07 12:12:22,296 - __main__ - INFO - [109/421] [Page 43] Processing HEZ-840
+2025-12-07 12:12:32,733 - __main__ - INFO - [110/421] [Page 43] Processing GVH-795
+2025-12-07 12:12:43,163 - __main__ - INFO - [111/421] [Page 43] Processing CLOT-035
+2025-12-07 12:12:53,601 - __main__ - INFO - [112/421] [Page 43] Processing QRDA-208
+2025-12-07 12:13:09,069 - __main__ - INFO - [113/421] [Page 43] Processing URKK-119
+2025-12-07 12:13:19,503 - __main__ - INFO - [114/421] [Page 43] Processing ABF-283
+2025-12-07 12:13:29,923 - __main__ - INFO - [115/421] [Page 44] Processing KBR-032
+2025-12-07 12:13:40,345 - __main__ - INFO - [116/421] [Page 44] Processing START-255
+2025-12-07 12:13:50,799 - __main__ - INFO - [117/421] [Page 44] Processing FLAV-408
+2025-12-07 12:14:06,253 - __main__ - INFO - [118/421] [Page 44] Processing AVSA-407
+2025-12-07 12:14:16,846 - __main__ - INFO - [119/421] [Page 44] Processing REAL-950
+2025-12-07 12:14:27,302 - __main__ - INFO - [120/421] [Page 44] Processing BEAF-187
+2025-12-07 12:14:42,743 - __main__ - INFO - [121/421] [Page 44] Processing MVG-143
+2025-12-07 12:14:53,173 - __main__ - INFO - [122/421] [Page 44] Processing HAME-053
+2025-12-07 12:15:03,606 - __main__ - INFO - [123/421] [Page 45] Processing GMEM-139
+2025-12-07 12:15:19,094 - __main__ - INFO - [124/421] [Page 45] Processing PRIN-052
+2025-12-07 12:15:34,534 - __main__ - INFO - [125/421] [Page 45] Processing SONE-930
+2025-12-07 12:15:44,963 - __main__ - INFO - [126/421] [Page 45] Processing SONE-982
+2025-12-07 12:15:55,441 - __main__ - INFO - [127/421] [Page 45] Processing SONE-997
+2025-12-07 12:16:05,875 - __main__ - INFO - [128/421] [Page 45] Processing IENF-417
+2025-12-07 12:16:16,319 - __main__ - INFO - [129/421] [Page 45] Processing DVAJ-715
+2025-12-07 12:16:31,785 - __main__ - INFO - [130/421] [Page 45] Processing MADV-609
+2025-12-07 12:16:42,258 - __main__ - INFO - [131/421] [Page 45] Processing NVH-066
+2025-12-07 12:16:57,726 - __main__ - INFO - [132/421] [Page 45] Processing CEAD-711
+2025-12-07 12:17:13,195 - __main__ - INFO - [133/421] [Page 46] Processing MKMP-685
+2025-12-07 12:17:23,673 - __main__ - INFO - [134/421] [Page 46] Processing NSODN-007
+2025-12-07 12:17:34,107 - __main__ - INFO - [135/421] [Page 46] Processing MVG-144
+2025-12-07 12:17:44,533 - __main__ - INFO - [136/421] [Page 46] Processing NSFS-428
+2025-12-07 12:17:59,973 - __main__ - INFO - [137/421] [Page 46] Processing TPIN-098
+2025-12-07 12:18:15,428 - __main__ - INFO - [138/421] [Page 46] Processing CEMD-764
+2025-12-07 12:18:31,164 - __main__ - INFO - [139/421] [Page 46] Processing GARA-016
+2025-12-07 12:18:41,617 - __main__ - INFO - [140/421] [Page 46] Processing SNAMH-005
+2025-12-07 12:18:57,116 - __main__ - INFO - [141/421] [Page 46] Processing DASS-728
+2025-12-07 12:19:07,556 - __main__ - INFO - [142/421] [Page 46] Processing MKMP-684
+2025-12-07 12:19:17,988 - __main__ - INFO - [143/421] [Page 46] Processing BBAN-563
+2025-12-07 12:19:33,464 - __main__ - INFO - [144/421] [Page 46] Processing MKMP-683
+2025-12-07 12:19:49,098 - __main__ - INFO - [145/421] [Page 46] Processing FAYS-006
+2025-12-07 12:20:04,569 - __main__ - INFO - [146/421] [Page 46] Processing REAL-951
+2025-12-07 12:20:14,991 - __main__ - INFO - [147/421] [Page 46] Processing JUR-504
+2025-12-07 12:20:25,418 - __main__ - INFO - [148/421] [Page 47] Processing DASS-740
+2025-12-07 12:20:40,885 - __main__ - INFO - [149/421] [Page 47] Processing NMSL-026
+2025-12-07 12:20:51,302 - __main__ - INFO - [150/421] [Page 47] Processing ACHJ-070
+2025-12-07 12:21:01,729 - __main__ - INFO - [151/421] [Page 47] Processing RKI-730
+2025-12-07 12:21:17,189 - __main__ - INFO - [152/421] [Page 47] Processing NHDTC-13104
+2025-12-07 12:21:27,619 - __main__ - INFO - [153/421] [Page 47] Processing MIUM-1279
+2025-12-07 12:21:38,051 - __main__ - INFO - [154/421] [Page 47] Processing RKI-712
+2025-12-07 12:21:48,468 - __main__ - INFO - [155/421] [Page 47] Processing ROE-423
+2025-12-07 12:22:03,920 - __main__ - INFO - [156/421] [Page 47] Processing HUNTC-417
+2025-12-07 12:22:14,340 - __main__ - INFO - [157/421] [Page 48] Processing JUR-585
+2025-12-07 12:22:29,816 - __main__ - INFO - [158/421] [Page 48] Processing ABF-285
+2025-12-07 12:22:45,273 - __main__ - INFO - [159/421] [Page 48] Processing FWAY-084
+2025-12-07 12:22:55,731 - __main__ - INFO - [160/421] [Page 48] Processing DASS-741
+2025-12-07 12:23:11,203 - __main__ - INFO - [161/421] [Page 48] Processing NGOD-298
+2025-12-07 12:23:26,678 - __main__ - INFO - [162/421] [Page 48] Processing RKI-728
+2025-12-07 12:23:37,150 - __main__ - INFO - [163/421] [Page 48] Processing ROE-387
+2025-12-07 12:23:47,754 - __main__ - INFO - [164/421] [Page 48] Processing ROE-421
+2025-12-07 12:24:03,074 - __main__ - INFO - [165/421] [Page 48] Processing ROE-424
+2025-12-07 12:24:18,545 - __main__ - INFO - [166/421] [Page 48] Processing VEMA-248
+2025-12-07 12:24:34,009 - __main__ - INFO - [167/421] [Page 48] Processing HSODA-092
+2025-12-07 12:24:49,462 - __main__ - INFO - [168/421] [Page 48] Processing HSODA-093
+2025-12-07 12:24:59,888 - __main__ - INFO - [169/421] [Page 48] Processing SONE-987
+2025-12-07 12:25:10,329 - __main__ - INFO - [170/421] [Page 48] Processing HZGD-321
+2025-12-07 12:25:25,894 - __main__ - INFO - [171/421] [Page 48] Processing SONE-974
+2025-12-07 12:25:41,374 - __main__ - INFO - [172/421] [Page 49] Processing BBAN-561
+2025-12-07 12:25:56,831 - __main__ - INFO - [173/421] [Page 49] Processing IPZZ-675
+2025-12-07 12:26:12,297 - __main__ - INFO - [174/421] [Page 49] Processing IPZZ-707
+2025-12-07 12:26:27,776 - __main__ - INFO - [175/421] [Page 49] Processing DASS-795
+2025-12-07 12:26:43,279 - __main__ - INFO - [176/421] [Page 49] Processing NHDTC-121
+2025-12-07 12:26:58,761 - __main__ - INFO - [177/421] [Page 49] Processing IPZZ-720
+2025-12-07 12:27:14,056 - __main__ - INFO - [178/421] [Page 49] Processing BBAN-559
+2025-12-07 12:27:29,571 - __main__ - INFO - [179/421] [Page 49] Processing HSODA-084
+2025-12-07 12:27:45,233 - __main__ - INFO - [180/421] [Page 49] Processing IPZZ-705
+2025-12-07 12:28:00,747 - __main__ - INFO - [181/421] [Page 49] Processing RKI-731
+2025-12-07 12:28:16,221 - __main__ - INFO - [182/421] [Page 49] Processing IPZZ-723
+2025-12-07 12:28:31,705 - __main__ - INFO - [183/421] [Page 49] Processing SVFLA-012
+2025-12-07 12:28:47,344 - __main__ - INFO - [184/421] [Page 49] Processing GNI-007
+2025-12-07 12:28:57,793 - __main__ - INFO - [185/421] [Page 49] Processing IPZZ-731
+2025-12-07 12:29:13,265 - __main__ - INFO - [186/421] [Page 49] Processing SONE-990
+2025-12-07 12:29:28,766 - __main__ - INFO - [187/421] [Page 50] Processing AARM-321
+2025-12-07 12:29:44,256 - __main__ - INFO - [188/421] [Page 50] Processing STSK-197
+2025-12-07 12:29:59,709 - __main__ - INFO - [189/421] [Page 50] Processing STSK-200
+2025-12-07 12:30:15,174 - __main__ - INFO - [190/421] [Page 50] Processing SW-1025
+2025-12-07 12:30:30,660 - __main__ - INFO - [191/421] [Page 50] Processing UMD-982
+2025-12-07 12:30:46,136 - __main__ - INFO - [192/421] [Page 50] Processing ABF-284
+2025-12-07 12:30:56,598 - __main__ - INFO - [193/421] [Page 50] Processing HBAD-720
+2025-12-07 12:31:12,069 - __main__ - INFO - [194/421] [Page 51] Processing SVVRT-070
+2025-12-07 12:31:27,515 - __main__ - INFO - [195/421] [Page 51] Processing NACT-041
+2025-12-07 12:31:42,973 - __main__ - INFO - [196/421] [Page 51] Processing REBD-982
+2025-12-07 12:31:58,449 - __main__ - INFO - [197/421] [Page 51] Processing MILK-266
+2025-12-07 12:32:13,913 - __main__ - INFO - [198/421] [Page 51] Processing DMOW-224
+2025-12-07 12:32:24,364 - __main__ - INFO - [199/421] [Page 52] Processing JUFE-535
+2025-12-07 12:32:34,808 - __main__ - INFO - [200/421] [Page 52] Processing WAAA-503
+2025-12-07 12:32:45,246 - __main__ - INFO - [201/421] [Page 52] Processing AKDLD-330
+2025-12-07 12:33:00,686 - __main__ - INFO - [202/421] [Page 52] Processing AKDLD-331
+2025-12-07 12:33:11,109 - __main__ - INFO - [203/421] [Page 52] Processing VRKM-1680
+2025-12-07 12:33:26,738 - __main__ - INFO - [204/421] [Page 53] Processing FTHTD-142
+2025-12-07 12:33:37,186 - __main__ - INFO - [205/421] [Page 53] Processing KV-302
+2025-12-07 12:33:52,626 - __main__ - INFO - [206/421] [Page 53] Processing MDON-085
+2025-12-07 12:34:08,110 - __main__ - INFO - [207/421] [Page 53] Processing SGA-002
+2025-12-07 12:34:18,549 - __main__ - INFO - [208/421] [Page 53] Processing SONE-439
+2025-12-07 12:34:28,983 - __main__ - INFO - [209/421] [Page 53] Processing SONE-833
+2025-12-07 12:34:39,434 - __main__ - INFO - [210/421] [Page 53] Processing SAVR-829
+2025-12-07 12:34:54,924 - __main__ - INFO - [211/421] [Page 53] Processing MAAN-1119
+2025-12-07 12:35:10,384 - __main__ - INFO - [212/421] [Page 53] Processing SIRO-5551
+2025-12-07 12:35:25,845 - __main__ - INFO - [213/421] [Page 53] Processing MMKZ-158
+2025-12-07 12:35:41,329 - __main__ - INFO - [214/421] [Page 53] Processing GVH-792
+2025-12-07 12:35:56,807 - __main__ - INFO - [215/421] [Page 54] Processing NMSL-025
+2025-12-07 12:36:07,281 - __main__ - INFO - [216/421] [Page 54] Processing AKDL-349
+2025-12-07 12:36:17,862 - __main__ - INFO - [217/421] [Page 54] Processing MDVR-378
+2025-12-07 12:36:33,320 - __main__ - INFO - [218/421] [Page 54] Processing MFCW-060
+2025-12-07 12:36:43,766 - __main__ - INFO - [219/421] [Page 54] Processing LULU-408
+2025-12-07 12:36:54,220 - __main__ - INFO - [220/421] [Page 55] Processing CXD-017
+2025-12-07 12:37:04,698 - __main__ - INFO - [221/421] [Page 55] Processing KTB-103
+2025-12-07 12:37:15,182 - __main__ - INFO - [222/421] [Page 55] Processing XVSR-847
+2025-12-07 12:37:25,642 - __main__ - INFO - [223/421] [Page 55] Processing SMOK-024
+2025-12-07 12:37:36,067 - __main__ - INFO - [224/421] [Page 55] Processing LULU-407
+2025-12-07 12:37:46,691 - __main__ - INFO - [225/421] [Page 55] Processing NHD-010
+2025-12-07 12:38:02,156 - __main__ - INFO - [226/421] [Page 55] Processing XVSR-845
+2025-12-07 12:38:12,597 - __main__ - INFO - [227/421] [Page 55] Processing YMDD-471
+2025-12-07 12:38:28,075 - __main__ - INFO - [228/421] [Page 55] Processing MMUS-103
+2025-12-07 12:38:43,591 - __main__ - INFO - [229/421] [Page 55] Processing NSPS-485
+2025-12-07 12:38:54,032 - __main__ - INFO - [230/421] [Page 56] Processing MIKR-057
+2025-12-07 12:39:04,466 - __main__ - INFO - [231/421] [Page 56] Processing FJIN-108
+2025-12-07 12:39:19,941 - __main__ - INFO - [232/421] [Page 56] Processing PKPD-394
+2025-12-07 12:39:35,580 - __main__ - INFO - [233/421] [Page 56] Processing URVRSP-500
+2025-12-07 12:39:51,037 - __main__ - INFO - [234/421] [Page 56] Processing GEBB-028
+2025-12-07 12:40:06,527 - __main__ - INFO - [235/421] [Page 56] Processing GVH-793
+2025-12-07 12:40:21,987 - __main__ - INFO - [236/421] [Page 56] Processing FJIN-105
+2025-12-07 12:40:37,271 - __main__ - INFO - [237/421] [Page 56] Processing SQTE-634
+2025-12-07 12:40:52,720 - __main__ - INFO - [238/421] [Page 56] Processing MIZD-495
+2025-12-07 12:41:08,173 - __main__ - INFO - [239/421] [Page 56] Processing XVSR-843
+2025-12-07 12:41:23,653 - __main__ - INFO - [240/421] [Page 56] Processing JERA-026
+2025-12-07 12:41:39,155 - __main__ - INFO - [241/421] [Page 57] Processing SAME-211
+2025-12-07 12:41:49,601 - __main__ - INFO - [242/421] [Page 57] Processing SMOK-025
+2025-12-07 12:42:05,079 - __main__ - INFO - [243/421] [Page 57] Processing SORA-617
+2025-12-07 12:42:20,596 - __main__ - INFO - [244/421] [Page 57] Processing LULU-405
+2025-12-07 12:42:36,083 - __main__ - INFO - [245/421] [Page 57] Processing BMW-345
+2025-12-07 12:42:51,567 - __main__ - INFO - [246/421] [Page 57] Processing WAAA-590
+2025-12-07 12:43:07,026 - __main__ - INFO - [247/421] [Page 57] Processing RBK-124
+2025-12-07 12:43:17,716 - __main__ - INFO - [248/421] [Page 57] Processing YMDD-470
+2025-12-07 12:43:28,161 - __main__ - INFO - [249/421] [Page 57] Processing KTB-104
+2025-12-07 12:43:38,620 - __main__ - INFO - [250/421] [Page 57] Processing SOAN-120
+2025-12-07 12:43:54,091 - __main__ - INFO - [251/421] [Page 57] Processing DFE-108
+2025-12-07 12:44:09,390 - __main__ - INFO - [252/421] [Page 58] Processing MIDD-750
+2025-12-07 12:44:19,827 - __main__ - INFO - [253/421] [Page 58] Processing MIDA-345
+2025-12-07 12:44:30,248 - __main__ - INFO - [254/421] [Page 58] Processing COGM-089
+2025-12-07 12:44:45,935 - __main__ - INFO - [255/421] [Page 58] Processing XVSR-844
+2025-12-07 12:45:01,408 - __main__ - INFO - [256/421] [Page 58] Processing NIMA-064
+2025-12-07 12:45:11,871 - __main__ - INFO - [257/421] [Page 58] Processing VDD-198
+2025-12-07 12:45:22,300 - __main__ - INFO - [258/421] [Page 58] Processing BOBB-448
+2025-12-07 12:45:37,820 - __main__ - INFO - [259/421] [Page 58] Processing YMDD-469
+2025-12-07 12:45:53,274 - __main__ - INFO - [260/421] [Page 58] Processing YMDS-235
+2025-12-07 12:46:08,562 - __main__ - INFO - [261/421] [Page 58] Processing MIDA-383
+2025-12-07 12:46:18,816 - __main__ - INFO - [262/421] [Page 58] Processing MIKR-048
+2025-12-07 12:46:34,452 - __main__ - INFO - [263/421] [Page 58] Processing MOON-048
+2025-12-07 12:46:49,928 - __main__ - INFO - [264/421] [Page 58] Processing FKOU-006
+2025-12-07 12:47:05,365 - __main__ - INFO - [265/421] [Page 58] Processing MIDA-381
+2025-12-07 12:47:15,813 - __main__ - INFO - [266/421] [Page 59] Processing JJDA-065
+2025-12-07 12:47:31,273 - __main__ - INFO - [267/421] [Page 59] Processing CLUB-889
+2025-12-07 12:47:46,719 - __main__ - INFO - [268/421] [Page 59] Processing DVMM-308
+2025-12-07 12:48:02,345 - __main__ - INFO - [269/421] [Page 59] Processing LULU-409
+2025-12-07 12:48:17,840 - __main__ - INFO - [270/421] [Page 59] Processing MNGS-016
+2025-12-07 12:48:28,266 - __main__ - INFO - [271/421] [Page 59] Processing MIDA-394
+2025-12-07 12:48:38,724 - __main__ - INFO - [272/421] [Page 59] Processing DLDSS-437
+2025-12-07 12:48:49,159 - __main__ - INFO - [273/421] [Page 59] Processing HNDS-080
+2025-12-07 12:48:59,613 - __main__ - INFO - [274/421] [Page 59] Processing MEYD-136
+2025-12-07 12:49:10,100 - __main__ - INFO - [275/421] [Page 59] Processing ABF-263
+2025-12-07 12:49:20,571 - __main__ - INFO - [276/421] [Page 60] Processing MAAN-1118
+2025-12-07 12:49:36,059 - __main__ - INFO - [277/421] [Page 60] Processing MIAB-569
+2025-12-07 12:49:46,490 - __main__ - INFO - [278/421] [Page 60] Processing MIKR-047
+2025-12-07 12:49:56,941 - __main__ - INFO - [279/421] [Page 60] Processing MIMK-250
+2025-12-07 12:50:07,410 - __main__ - INFO - [280/421] [Page 60] Processing FOCS-281
+2025-12-07 12:50:22,882 - __main__ - INFO - [281/421] [Page 60] Processing YUJ-047
+2025-12-07 12:50:38,348 - __main__ - INFO - [282/421] [Page 60] Processing YUJ-052
+2025-12-07 12:50:53,842 - __main__ - INFO - [283/421] [Page 60] Processing FOCS-283
+2025-12-07 12:51:09,288 - __main__ - INFO - [284/421] [Page 60] Processing CAWD-886
+2025-12-07 12:51:24,760 - __main__ - INFO - [285/421] [Page 60] Processing YUJ-050
+2025-12-07 12:51:40,205 - __main__ - INFO - [286/421] [Page 60] Processing NHDTC-13103
+2025-12-07 12:51:55,672 - __main__ - INFO - [287/421] [Page 61] Processing SIVR-450
+2025-12-07 12:52:11,154 - __main__ - INFO - [288/421] [Page 61] Processing CAWD-893
+2025-12-07 12:52:26,604 - __main__ - INFO - [289/421] [Page 61] Processing ADN-730
+2025-12-07 12:52:42,051 - __main__ - INFO - [290/421] [Page 61] Processing VEC-738
+2025-12-07 12:52:57,490 - __main__ - INFO - [291/421] [Page 61] Processing DANDYA-006
+2025-12-07 12:53:12,963 - __main__ - INFO - [292/421] [Page 61] Processing FTHTD-138
+2025-12-07 12:53:28,246 - __main__ - INFO - [293/421] [Page 61] Processing FNS-132
+2025-12-07 12:53:38,963 - __main__ - INFO - [294/421] [Page 61] Processing FNS-106
+2025-12-07 12:53:49,423 - __main__ - INFO - [295/421] [Page 61] Processing FNS-107
+2025-12-07 12:53:59,878 - __main__ - INFO - [296/421] [Page 61] Processing FNS-112
+2025-12-07 12:54:10,318 - __main__ - INFO - [297/421] [Page 61] Processing DLDSS-441
+2025-12-07 12:54:25,808 - __main__ - INFO - [298/421] [Page 61] Processing DLDSS-439
+2025-12-07 12:54:41,302 - __main__ - INFO - [299/421] [Page 61] Processing AKDLD-332
+2025-12-07 12:54:56,775 - __main__ - INFO - [300/421] [Page 61] Processing ABF-282
+2025-12-07 12:55:12,265 - __main__ - INFO - [301/421] [Page 61] Processing MIMK-259
+2025-12-07 12:55:27,716 - __main__ - INFO - [302/421] [Page 61] Processing MIUM-1319
+2025-12-07 12:55:43,379 - __main__ - INFO - [303/421] [Page 61] Processing PJAM-047
+2025-12-07 12:55:58,842 - __main__ - INFO - [304/421] [Page 61] Processing RBK-125
+2025-12-07 12:56:14,305 - __main__ - INFO - [305/421] [Page 62] Processing NPJS-234
+2025-12-07 12:56:29,770 - __main__ - INFO - [306/421] [Page 62] Processing HND-275
+2025-12-07 12:56:40,198 - __main__ - INFO - [307/421] [Page 62] Processing HIKR-253
+2025-12-07 12:56:50,627 - __main__ - INFO - [308/421] [Page 62] Processing IENF-420
+2025-12-07 12:57:06,314 - __main__ - INFO - [309/421] [Page 62] Processing SDJS-336
+2025-12-07 12:57:16,736 - __main__ - INFO - [310/421] [Page 62] Processing SGKI-067
+2025-12-07 12:57:27,262 - __main__ - INFO - [311/421] [Page 62] Processing START-422
+2025-12-07 12:57:37,713 - __main__ - INFO - [312/421] [Page 62] Processing START-441
+2025-12-07 12:57:48,150 - __main__ - INFO - [313/421] [Page 62] Processing START-450
+2025-12-07 12:57:58,585 - __main__ - INFO - [314/421] [Page 62] Processing SDMM-213
+2025-12-07 12:58:09,028 - __main__ - INFO - [315/421] [Page 62] Processing SDNM-522
+2025-12-07 12:58:24,487 - __main__ - INFO - [316/421] [Page 62] Processing START-442
+2025-12-07 12:58:34,923 - __main__ - INFO - [317/421] [Page 62] Processing SDJS-330
+2025-12-07 12:58:45,398 - __main__ - INFO - [318/421] [Page 63] Processing CEMD-753
+2025-12-07 12:59:00,874 - __main__ - INFO - [319/421] [Page 63] Processing MFCS-184
+2025-12-07 12:59:16,319 - __main__ - INFO - [320/421] [Page 63] Processing HAME-052
+2025-12-07 12:59:26,745 - __main__ - INFO - [321/421] [Page 63] Processing ADN-705
+2025-12-07 12:59:37,219 - __main__ - INFO - [322/421] [Page 63] Processing JUR-351
+2025-12-07 12:59:47,643 - __main__ - INFO - [323/421] [Page 64] Processing JNT-109
+2025-12-07 12:59:58,071 - __main__ - INFO - [324/421] [Page 64] Processing HAME-051
+2025-12-07 13:00:08,525 - __main__ - INFO - [325/421] [Page 64] Processing GANA-3283
+2025-12-07 13:00:23,980 - __main__ - INFO - [326/421] [Page 64] Processing AVSA-405
+2025-12-07 13:00:39,427 - __main__ - INFO - [327/421] [Page 65] Processing HRSM-117
+2025-12-07 13:00:49,854 - __main__ - INFO - [328/421] [Page 65] Processing SAN-398
+2025-12-07 13:01:05,329 - __main__ - INFO - [329/421] [Page 65] Processing JUBE-034
+2025-12-07 13:01:20,788 - __main__ - INFO - [330/421] [Page 65] Processing AVSW-067
+2025-12-07 13:01:36,265 - __main__ - INFO - [331/421] [Page 65] Processing KWBD-410
+2025-12-07 13:01:52,295 - __main__ - INFO - [332/421] [Page 66] Processing SIMP-006
+2025-12-07 13:02:07,769 - __main__ - INFO - [333/421] [Page 66] Processing SSIS-500
+2025-12-07 13:02:23,214 - __main__ - INFO - [334/421] [Page 66] Processing START-120
+2025-12-07 13:02:38,650 - __main__ - INFO - [335/421] [Page 66] Processing SVCAO-020
+2025-12-07 13:02:54,071 - __main__ - INFO - [336/421] [Page 66] Processing SY-189
+2025-12-07 13:03:09,548 - __main__ - INFO - [337/421] [Page 66] Processing ABF-103
+2025-12-07 13:03:19,995 - __main__ - INFO - [338/421] [Page 66] Processing START-273
+2025-12-07 13:03:30,500 - __main__ - INFO - [339/421] [Page 66] Processing VENU-289
+2025-12-07 13:03:45,989 - __main__ - INFO - [340/421] [Page 66] Processing VENU-309
+2025-12-07 13:04:01,458 - __main__ - INFO - [341/421] [Page 66] Processing FLAV-406
+2025-12-07 13:04:16,926 - __main__ - INFO - [342/421] [Page 66] Processing MAAN-1117
+2025-12-07 13:04:27,386 - __main__ - INFO - [343/421] [Page 67] Processing KNMB-110
+2025-12-07 13:04:42,830 - __main__ - INFO - [344/421] [Page 67] Processing OAE-290
+2025-12-07 13:04:58,298 - __main__ - INFO - [345/421] [Page 67] Processing MKMP-678
+2025-12-07 13:05:08,738 - __main__ - INFO - [346/421] [Page 67] Processing AGMX-242
+2025-12-07 13:05:19,163 - __main__ - INFO - [347/421] [Page 67] Processing ONSG-098
+2025-12-07 13:05:29,609 - __main__ - INFO - [348/421] [Page 67] Processing APGH-046
+2025-12-07 13:05:45,075 - __main__ - INFO - [349/421] [Page 67] Processing SONE-942
+2025-12-07 13:06:00,537 - __main__ - INFO - [350/421] [Page 68] Processing EROFV-336
+2025-12-07 13:06:10,989 - __main__ - INFO - [351/421] [Page 68] Processing REAL-946
+2025-12-07 13:06:21,431 - __main__ - INFO - [352/421] [Page 68] Processing MISM-405
+2025-12-07 13:06:31,688 - __main__ - INFO - [353/421] [Page 68] Processing ROYD-270
+2025-12-07 13:06:47,169 - __main__ - INFO - [354/421] [Page 68] Processing CJOB-192
+2025-12-07 13:07:02,608 - utils.parser - WARNING - [P2-355] No copy button found for video code
+2025-12-07 13:07:02,608 - utils.parser - WARNING - [P2-355] No magnets content found in detail page
+2025-12-07 13:07:02,608 - utils.magnet_extractor - WARNING - [P2-355] No suitable magnet found
+2025-12-07 13:07:02,608 - __main__ - INFO - [355/421] [Page 69] Processing 
+2025-12-07 13:07:18,290 - __main__ - INFO - [356/421] [Page 69] Processing MADV-604
+2025-12-07 13:07:33,605 - __main__ - INFO - [357/421] [Page 69] Processing NSFS-424
+2025-12-07 13:07:49,091 - __main__ - INFO - [358/421] [Page 69] Processing EKDV-796
+2025-12-07 13:07:59,538 - __main__ - INFO - [359/421] [Page 69] Processing MVG-142
+2025-12-07 13:08:15,022 - __main__ - INFO - [360/421] [Page 69] Processing UZU-033
+2025-12-07 13:08:30,490 - __main__ - INFO - [361/421] [Page 69] Processing DASS-778
+2025-12-07 13:08:40,973 - __main__ - INFO - [362/421] [Page 69] Processing SONE-900
+2025-12-07 13:08:51,454 - __main__ - INFO - [363/421] [Page 69] Processing ABF-169
+2025-12-07 13:09:06,963 - __main__ - INFO - [364/421] [Page 70] Processing HUNTC-416
+2025-12-07 13:09:22,428 - __main__ - INFO - [365/421] [Page 70] Processing MKMP-679
+2025-12-07 13:09:37,884 - __main__ - INFO - [366/421] [Page 70] Processing MSAJ-018
+2025-12-07 13:09:53,537 - __main__ - INFO - [367/421] [Page 70] Processing HODV-22011
+2025-12-07 13:10:09,021 - __main__ - INFO - [368/421] [Page 70] Processing HALT-072
+2025-12-07 13:10:24,488 - __main__ - INFO - [369/421] [Page 71] Processing HUNTC-412
+2025-12-07 13:10:39,962 - __main__ - INFO - [370/421] [Page 71] Processing MISM-408
+2025-12-07 13:10:55,428 - __main__ - INFO - [371/421] [Page 71] Processing PRIN-051
+2025-12-07 13:11:10,863 - __main__ - INFO - [372/421] [Page 71] Processing QXSA-001
+2025-12-07 13:11:26,329 - __main__ - INFO - [373/421] [Page 71] Processing REAL-947
+2025-12-07 13:11:41,796 - __main__ - INFO - [374/421] [Page 71] Processing GVH-791
+2025-12-07 13:11:57,248 - __main__ - INFO - [375/421] [Page 71] Processing APNS-389
+2025-12-07 13:12:12,718 - __main__ - INFO - [376/421] [Page 71] Processing AVSA-404
+2025-12-07 13:12:28,178 - __main__ - INFO - [377/421] [Page 71] Processing OAE-292
+2025-12-07 13:12:43,655 - __main__ - INFO - [378/421] [Page 71] Processing HNTRZ-025
+2025-12-07 13:12:59,108 - __main__ - INFO - [379/421] [Page 71] Processing MISM-412
+2025-12-07 13:13:14,554 - __main__ - INFO - [380/421] [Page 71] Processing CEMD-756
+2025-12-07 13:13:29,993 - __main__ - INFO - [381/421] [Page 72] Processing JUR-494
+2025-12-07 13:13:40,427 - __main__ - INFO - [382/421] [Page 72] Processing NHDTC-123
+2025-12-07 13:13:55,945 - __main__ - INFO - [383/421] [Page 72] Processing SONE-866
+2025-12-07 13:14:11,399 - __main__ - INFO - [384/421] [Page 72] Processing SONE-875
+2025-12-07 13:14:26,673 - __main__ - INFO - [385/421] [Page 72] Processing IPTD-982
+2025-12-07 13:14:37,122 - __main__ - INFO - [386/421] [Page 72] Processing SONE-143
+2025-12-07 13:14:47,603 - __main__ - INFO - [387/421] [Page 72] Processing DJN-028
+2025-12-07 13:15:03,149 - __main__ - INFO - [388/421] [Page 72] Processing MISM-413
+2025-12-07 13:15:18,481 - __main__ - INFO - [389/421] [Page 72] Processing MIRD-255
+2025-12-07 13:15:28,910 - __main__ - INFO - [390/421] [Page 72] Processing KV-300
+2025-12-07 13:15:39,378 - __main__ - INFO - [391/421] [Page 73] Processing SONE-996
+2025-12-07 13:15:49,806 - __main__ - INFO - [392/421] [Page 73] Processing SONE-949
+2025-12-07 13:16:00,253 - __main__ - INFO - [393/421] [Page 73] Processing HUNTC-477
+2025-12-07 13:16:15,736 - __main__ - INFO - [394/421] [Page 73] Processing JYMA-092
+2025-12-07 13:16:31,192 - __main__ - INFO - [395/421] [Page 73] Processing FW-013
+2025-12-07 13:16:41,468 - __main__ - INFO - [396/421] [Page 73] Processing NHDTC-118
+2025-12-07 13:16:51,929 - __main__ - INFO - [397/421] [Page 73] Processing DDFF-044
+2025-12-07 13:17:07,406 - __main__ - INFO - [398/421] [Page 73] Processing SONE-975
+2025-12-07 13:17:22,877 - __main__ - INFO - [399/421] [Page 73] Processing SIVR-440
+2025-12-07 13:17:38,340 - __main__ - INFO - [400/421] [Page 73] Processing NHDTC-119
+2025-12-07 13:17:53,826 - __main__ - INFO - [401/421] [Page 73] Processing OFSD-042
+2025-12-07 13:18:09,288 - __main__ - INFO - [402/421] [Page 73] Processing ROE-398
+2025-12-07 13:18:24,791 - __main__ - INFO - [403/421] [Page 73] Processing ROYD-267
+2025-12-07 13:18:40,254 - __main__ - INFO - [404/421] [Page 73] Processing CJOD-481
+2025-12-07 13:18:55,752 - __main__ - INFO - [405/421] [Page 73] Processing DASS-788
+2025-12-07 13:19:11,238 - __main__ - INFO - [406/421] [Page 73] Processing SONE-989
+2025-12-07 13:19:26,784 - __main__ - INFO - [407/421] [Page 74] Processing WAWA-041
+2025-12-07 13:19:42,444 - __main__ - INFO - [408/421] [Page 74] Processing ABF-281
+2025-12-07 13:19:57,907 - __main__ - INFO - [409/421] [Page 74] Processing ROE-401
+2025-12-07 13:20:13,389 - __main__ - INFO - [410/421] [Page 74] Processing BF-304
+2025-12-07 13:20:23,821 - __main__ - INFO - [411/421] [Page 74] Processing MIDA-085
+2025-12-07 13:20:39,282 - __main__ - INFO - [412/421] [Page 74] Processing START-428
+2025-12-07 13:20:54,773 - __main__ - INFO - [413/421] [Page 74] Processing STCVS-033
+2025-12-07 13:21:10,050 - __main__ - INFO - [414/421] [Page 75] Processing AARM-320
+2025-12-07 13:21:25,541 - __main__ - INFO - [415/421] [Page 75] Processing SVCAO-022
+2025-12-07 13:21:35,986 - __main__ - INFO - [416/421] [Page 75] Processing FSTU-016
+2025-12-07 13:21:51,477 - __main__ - INFO - [417/421] [Page 75] Processing PPPD-277
+2025-12-07 13:22:06,976 - __main__ - INFO - [418/421] [Page 75] Processing REAL-860
+2025-12-07 13:22:22,471 - __main__ - INFO - [419/421] [Page 75] Processing REAL-882
+2025-12-07 13:22:38,024 - __main__ - INFO - [420/421] [Page 75] Processing REAL-939
+2025-12-07 13:22:53,472 - __main__ - INFO - [421/421] [Page 75] Processing JUR-038
+2025-12-07 13:22:58,499 - __main__ - INFO - Phase 2 completed: 189 entries processed
+2025-12-07 13:22:58,499 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251207.csv
+2025-12-07 13:22:58,499 - __main__ - INFO - ==================================================
+2025-12-07 13:22:58,499 - __main__ - INFO - SUMMARY REPORT
+2025-12-07 13:22:58,499 - __main__ - INFO - ==================================================
+2025-12-07 13:22:58,499 - __main__ - INFO - Pages processed: 35 to 75
+2025-12-07 13:22:58,499 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-12-07 13:22:58,499 - __main__ - INFO - ==============================
+2025-12-07 13:22:58,499 - __main__ - INFO - PHASE 1 SUMMARY
+2025-12-07 13:22:58,499 - __main__ - INFO - ==============================
+2025-12-07 13:22:58,499 - __main__ - INFO - Phase 1 entries found: 6
+2025-12-07 13:22:58,499 - __main__ - INFO -   - Subtitle torrents: 6 (100.0%)
+2025-12-07 13:22:58,499 - __main__ - INFO -   - Hacked subtitle torrents: 2 (33.3%)
+2025-12-07 13:22:58,499 - __main__ - INFO -   - Hacked no-subtitle torrents: 4 (66.7%)
+2025-12-07 13:22:58,499 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
+2025-12-07 13:22:58,499 - __main__ - INFO - ==============================
+2025-12-07 13:22:58,499 - __main__ - INFO - PHASE 2 SUMMARY
+2025-12-07 13:22:58,499 - __main__ - INFO - ==============================
+2025-12-07 13:22:58,499 - __main__ - INFO - Phase 2 entries found: 189
+2025-12-07 13:22:58,499 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
+2025-12-07 13:22:58,499 - __main__ - INFO -   - Hacked subtitle torrents: 7 (3.7%)
+2025-12-07 13:22:58,499 - __main__ - INFO -   - Hacked no-subtitle torrents: 5 (2.6%)
+2025-12-07 13:22:58,499 - __main__ - INFO -   - No-subtitle torrents: 189 (100.0%)
+2025-12-07 13:22:58,500 - __main__ - INFO - ==============================
+2025-12-07 13:22:58,500 - __main__ - INFO - OVERALL SUMMARY
+2025-12-07 13:22:58,500 - __main__ - INFO - ==============================
+2025-12-07 13:22:58,500 - __main__ - INFO - Total entries found: 195
+2025-12-07 13:22:58,500 - __main__ - INFO - Successfully processed: 195
+2025-12-07 13:22:58,500 - __main__ - INFO - Skipped already parsed in this session: 726
+2025-12-07 13:22:58,500 - __main__ - INFO - Skipped already parsed in previous runs: 3334
+2025-12-07 13:22:58,500 - __main__ - INFO - Current parsed links in memory: 726
+2025-12-07 13:22:58,500 - __main__ - INFO - Overall subtitle torrents: 6 (3.1%)
+2025-12-07 13:22:58,500 - __main__ - INFO - Overall hacked subtitle torrents: 9 (4.6%)
+2025-12-07 13:22:58,500 - __main__ - INFO - Overall hacked no-subtitle torrents: 9 (4.6%)
+2025-12-07 13:22:58,500 - __main__ - INFO - Overall no-subtitle torrents: 189 (96.9%)
+2025-12-07 13:22:58,500 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251207.csv
+2025-12-07 13:22:58,500 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-12-07 13:22:58,500 - __main__ - INFO - ==================================================
