@@ -1,177 +1,356 @@
-2025-12-07 23:33:00,885 - __main__ - INFO - Initializing proxy pool with 3 proxies...
-2025-12-07 23:33:00,886 - utils.proxy_ban_manager - INFO - Loaded 2 ban records from logs/proxy_bans.csv
-2025-12-07 23:33:00,886 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
-2025-12-07 23:33:00,886 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
-2025-12-07 23:33:00,886 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' is currently banned, skipping
-2025-12-07 23:33:00,886 - __main__ - INFO - Proxy pool initialized successfully
-2025-12-07 23:33:00,886 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
-2025-12-07 23:33:00,8862025-12-07 23:33:07,254 - __main__ - INFO - ✓ JavDB Spider completed successfully
-2025-12-07 23:33:07,254 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
-2025-12-07 23:33:07,254 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode adhoc --input-file Javdb_AdHoc_actors_RdEb4_20251207.csv
-2025-12-07 23:33:07,370 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
-2025-12-07 23:33:07,370 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
-2025-12-07 23:33:07,370 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
-2025-12-07 23:33:07,370 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-12-04)
-2025-12-07 23:33:07,377 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 101.100.165.240:12301
-2025-12-07 23:33:08,012 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/auth/login HTTP/1.1" 200 3
-2025-12-07 23:33:08,013 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
-2025-12-07 23:33:08,441 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "GET /api/v2/torrents/info?category=Daily+Ingestion&filter=downloading HTTP/1.1" 200 93934
-2025-12-07 23:33:08,545 - pikpak_bridge - DEBUG - Found 476 torrents in category 'Daily Ingestion'
-2025-12-07 23:33:08,560 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "GET /api/v2/torrents/info?category=Ad+Hoc&filter=downloading HTTP/1.1" 200 2
-2025-12-07 23:33:08,561 - pikpak_bridge - DEBUG - Found 0 torrents in category 'Ad Hoc'
-2025-12-07 23:33:08,561 - pikpak_bridge - INFO - Found 476 torrents across categories ['Daily Ingestion', 'Ad Hoc']
-2025-12-07 23:33:08,561 - pikpak_bridge - INFO - Filtered 0 torrents older than 3 days
-2025-12-07 23:33:08,561 - pikpak_bridge - INFO - No torrents to process.
-2025-12-07 23:33:08,561 - __main__ - INFO - PikPak Bridge completed successfully
-2025-12-07 23:33:08,561 - __main__ - INFO - ✓ PikPak Bridge completed successfully
-2025-12-07 23:33:08,561 - __main__ - INFO - ============================================================
-2025-12-07 23:33:08,561 - __main__ - INFO - PIPELINE COMPLETED
-2025-12-07 23:33:08,562 - __main__ - INFO - ============================================================
-2025-12-07 23:33:08,562 - __main__ - INFO - Analyzing logs for critical errors...
-2025-12-07 23:33:08,562 - __main__ - ERROR - CRITICAL ERROR in Spider: CF bypass and proxy fallback failed - movie list not found on 6 pages
-2025-12-07 23:33:08,562 - __main__ - ERROR - ============================================================
-2025-12-07 23:33:08,562 - __main__ - ERROR - PIPELINE FAILED - CRITICAL ERRORS DETECTED
-2025-12-07 23:33:08,562 - __main__ - ERROR - ============================================================
-2025-12-07 23:33:08,562 - __main__ - ERROR -   - Spider: CF bypass and proxy fallback failed - movie list not found on 6 pages
-2025-12-07 23:33:08,563 - utils.proxy_ban_manager - INFO - Loaded 2 ban records from logs/proxy_bans.csv
-2025-12-07 23:33:08,564 - __main__ - INFO - Connecting to SMTP server...
-2025-12-07 23:33:12,467 - __main__ - INFO - Email sent successfully.
-2025-12-07 23:33:12,467 - __main__ - INFO - Final commit for pipeline log...
-2025-12-07 23:33:12,468 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
-2025-12-07 23:33:12,498 - __main__ - INFO - Pulling latest changes from remote repository...
-2025-12-07 23:33:13,279 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
-2025-12-07 23:33:13,279 - __main__ - INFO - Adding files to git...
-2025-12-07 23:33:13,338 - __main__ - INFO - Commit changes for pipeline_log
-- __main__ - DEBUG - [Page 2] Initial attempt (Proxy=False, CF=False, Node=None)...
-2025-12-07 23:33:02,043 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
-2025-12-07 23:33:02,314 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
-2025-12-07 23:33:02,556 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
-2025-12-07 23:33:02,557 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
-2025-12-07 23:33:02,561 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
-2025-12-07 23:33:02,561 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-07 23:33:02,561 - __main__ - DEBUG - [Page 2] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
-2025-12-07 23:33:02,561 - __main__ - DEBUG - [Page 2] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
-2025-12-07 23:33:02,561 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
-2025-12-07 23:33:02,561 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
-2025-12-07 23:33:02,561 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@138.2.91.170:12300'}
-2025-12-07 23:33:02,790 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
-2025-12-07 23:33:03,125 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
-2025-12-07 23:33:03,125 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
-2025-12-07 23:33:03,125 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
-2025-12-07 23:33:03,131 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
-2025-12-07 23:33:03,131 - __main__ - ERROR - [Page 2] All proxy attempts exhausted.
-2025-12-07 23:33:03,131 - __main__ - WARNING - [Page 2] No movie list found after all fallback attempts
-2025-12-07 23:33:03,131 - __main__ - DEBUG - [Page 3] Fetching: https://javdb.com/actors/RdEb4?page=3
-2025-12-07 23:33:03,131 - __main__ - DEBUG - [Page 3] Initial attempt (Proxy=False, CF=False, Node=None)...
-2025-12-07 23:33:03,131 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
-2025-12-07 23:33:03,334 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
-2025-12-07 23:33:03,612 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
-2025-12-07 23:33:03,612 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
-2025-12-07 23:33:03,616 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
-2025-12-07 23:33:03,616 - __main__ - WARNING - [Page 3] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-07 23:33:03,616 - __main__ - DEBUG - [Page 3] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
-2025-12-07 23:33:03,616 - __main__ - DEBUG - [Page 3] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
-2025-12-07 23:33:03,616 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
-2025-12-07 23:33:03,616 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
-2025-12-07 23:33:03,616 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@138.2.91.170:12300'}
-2025-12-07 23:33:03,984 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
-2025-12-07 23:33:04,210 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
-2025-12-07 23:33:04,210 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
-2025-12-07 23:33:04,210 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
-2025-12-07 23:33:04,214 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
-2025-12-07 23:33:04,214 - __main__ - ERROR - [Page 3] All proxy attempts exhausted.
-2025-12-07 23:33:04,214 - __main__ - WARNING - [Page 3] No movie list found after all fallback attempts
-2025-12-07 23:33:04,214 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
-2025-12-07 23:33:04,214 - __main__ - INFO - Phase 1 completed: 0 entries processed
-2025-12-07 23:33:04,214 - __main__ - INFO - ==================================================
-2025-12-07 23:33:04,214 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-12-07 23:33:04,214 - __main__ - INFO - ==================================================
-2025-12-07 23:33:04,214 - __main__ - DEBUG - [Page 1] Fetching for phase 2: https://javdb.com/actors/RdEb4
-2025-12-07 23:33:04,214 - __main__ - DEBUG - [Page 1] Initial attempt (Proxy=False, CF=False, Node=None)...
-2025-12-07 23:33:04,214 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4 (attempt 1/3)
-2025-12-07 23:33:04,419 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 302 None
-2025-12-07 23:33:04,716 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4 HTTP/1.1" 200 None
-2025-12-07 23:33:04,716 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4
-2025-12-07 23:33:04,720 - __main__ - DEBUG - [Page 1] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
-2025-12-07 23:33:04,720 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-07 23:33:04,720 - __main__ - DEBUG - [Page 1] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
-2025-12-07 23:33:04,720 - __main__ - DEBUG - [Page 1] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
-2025-12-07 23:33:04,720 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
-2025-12-07 23:33:04,720 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4 (attempt 1/3)
-2025-12-07 23:33:04,720 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@138.2.91.170:12300'}
-2025-12-07 23:33:04,948 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 302 None
-2025-12-07 23:33:05,206 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4 HTTP/1.1" 200 None
-2025-12-07 23:33:05,208 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4
-2025-12-07 23:33:05,208 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
-2025-12-07 23:33:05,212 - __main__ - DEBUG - [Page 1] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
-2025-12-07 23:33:05,212 - __main__ - ERROR - [Page 1] All proxy attempts exhausted.
-2025-12-07 23:33:05,212 - __main__ - WARNING - [Page 1] No movie list found after all fallback attempts
-2025-12-07 23:33:05,212 - __main__ - DEBUG - [Page 2] Fetching for phase 2: https://javdb.com/actors/RdEb4?page=2
-2025-12-07 23:33:05,212 - __main__ - DEBUG - [Page 2] Initial attempt (Proxy=False, CF=False, Node=None)...
-2025-12-07 23:33:05,212 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
-2025-12-07 23:33:05,416 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
-2025-12-07 23:33:05,709 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
-2025-12-07 23:33:05,710 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
-2025-12-07 23:33:05,714 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
-2025-12-07 23:33:05,714 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-07 23:33:05,714 - __main__ - DEBUG - [Page 2] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
-2025-12-07 23:33:05,714 - __main__ - DEBUG - [Page 2] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
-2025-12-07 23:33:05,714 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
-2025-12-07 23:33:05,714 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
-2025-12-07 23:33:05,714 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@138.2.91.170:12300'}
-2025-12-07 23:33:05,934 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
-2025-12-07 23:33:06,162 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
-2025-12-07 23:33:06,163 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
-2025-12-07 23:33:06,163 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
-2025-12-07 23:33:06,167 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
-2025-12-07 23:33:06,167 - __main__ - ERROR - [Page 2] All proxy attempts exhausted.
-2025-12-07 23:33:06,167 - __main__ - WARNING - [Page 2] No movie list found after all fallback attempts
-2025-12-07 23:33:06,167 - __main__ - DEBUG - [Page 3] Fetching for phase 2: https://javdb.com/actors/RdEb4?page=3
-2025-12-07 23:33:06,167 - __main__ - DEBUG - [Page 3] Initial attempt (Proxy=False, CF=False, Node=None)...
-2025-12-07 23:33:06,167 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
-2025-12-07 23:33:06,487 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
-2025-12-07 23:33:06,702 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
-2025-12-07 23:33:06,704 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
-2025-12-07 23:33:06,714 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
-2025-12-07 23:33:06,714 - __main__ - WARNING - [Page 3] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-07 23:33:06,714 - __main__ - DEBUG - [Page 3] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
-2025-12-07 23:33:06,714 - __main__ - DEBUG - [Page 3] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
-2025-12-07 23:33:06,714 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
-2025-12-07 23:33:06,714 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
-2025-12-07 23:33:06,714 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@138.2.91.170:12300'}
-2025-12-07 23:33:06,983 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
-2025-12-07 23:33:07,228 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
-2025-12-07 23:33:07,228 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
-2025-12-07 23:33:07,228 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
-2025-12-07 23:33:07,232 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
-2025-12-07 23:33:07,232 - __main__ - ERROR - [Page 3] All proxy attempts exhausted.
-2025-12-07 23:33:07,232 - __main__ - WARNING - [Page 3] No movie list found after all fallback attempts
-2025-12-07 23:33:07,232 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
-2025-12-07 23:33:07,232 - __main__ - INFO - Phase 2 completed: 0 entries processed
-2025-12-07 23:33:07,232 - __main__ - INFO - CSV file written incrementally to: Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
-2025-12-07 23:33:07,232 - __main__ - INFO - ==================================================
-2025-12-07 23:33:07,232 - __main__ - INFO - SUMMARY REPORT
-2025-12-07 23:33:07,232 - __main__ - INFO - ==================================================
-2025-12-07 23:33:07,232 - __main__ - INFO - Pages processed: 1 to 20
-2025-12-07 23:33:07,232 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-12-07 23:33:07,232 - __main__ - INFO - ==============================
-2025-12-07 23:33:07,232 - __main__ - INFO - PHASE 1 SUMMARY
-2025-12-07 23:33:07,232 - __main__ - INFO - ==============================
-2025-12-07 23:33:07,232 - __main__ - INFO - Phase 1 entries found: 0
-2025-12-07 23:33:07,232 - __main__ - INFO -   - No entries found in Phase 1
-2025-12-07 23:33:07,232 - __main__ - INFO - ==============================
-2025-12-07 23:33:07,232 - __main__ - INFO - PHASE 2 SUMMARY
-2025-12-07 23:33:07,232 - __main__ - INFO - ==============================
-2025-12-07 23:33:07,232 - __main__ - INFO - Phase 2 entries found: 0
-2025-12-07 23:33:07,232 - __main__ - INFO -   - No entries found in Phase 2
-2025-12-07 23:33:07,232 - __main__ - INFO - ==============================
-2025-12-07 23:33:07,232 - __main__ - INFO - OVERALL SUMMARY
-2025-12-07 23:33:07,232 - __main__ - INFO - ==============================
-2025-12-07 23:33:07,232 - __main__ - INFO - Total entries found: 0
-2025-12-07 23:33:07,232 - __main__ - INFO - Successfully processed: 0
-2025-12-07 23:33:07,232 - __main__ - INFO - Skipped already parsed in this session: 0
-2025-12-07 23:33:07,232 - __main__ - INFO - Skipped already parsed in previous runs: 3350
-2025-12-07 23:33:07,232 - __main__ - INFO - Current parsed links in memory: 0
-2025-12-07 23:33:07,232 - __main__ - INFO - Results saved to: Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
-2025-12-07 23:33:07,232 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-12-07 23:33:07,232 - __main__ - INFO - ==================================================
+2025-12-07 23:35:01,447 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-07 23:35:01,447 - utils.proxy_ban_manager - INFO - Loaded 2 ban records from logs/proxy_bans.csv
+2025-12-07 23:35:01,447 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
+2025-12-07 23:35:01,447 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-07 23:35:01,447 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' is currently banned, skipping
+2025-12-07 23:35:01,448 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-07 23:35:01,448 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
+2025-12-07 23:35:01,4482025-12-07 23:35:49,478 - __main__ - INFO - ✓ JavDB Spider completed successfully
+2025-12-07 23:35:49,478 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
+2025-12-07 23:35:49,478 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode adhoc --input-file Javdb_AdHoc_actors_RdEb4_20251207.csv
+2025-12-07 23:35:49,589 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
+2025-12-07 23:35:49,589 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
+2025-12-07 23:35:49,589 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
+2025-12-07 23:35:49,589 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-12-04)
+2025-12-07 23:35:49,595 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 101.100.165.240:12301
+2025-12-07 23:35:50,146 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/auth/login HTTP/1.1" 200 3
+2025-12-07 23:35:50,147 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
+2025-12-07 23:35:50,671 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "GET /api/v2/torrents/info?category=Daily+Ingestion&filter=downloading HTTP/1.1" 200 93449
+2025-12-07 23:35:50,693 - pikpak_bridge - DEBUG - Found 474 torrents in category 'Daily Ingestion'
+2025-12-07 23:35:50,719 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "GET /api/v2/torrents/info?category=Ad+Hoc&filter=downloading HTTP/1.1" 200 2
+2025-12-07 23:35:50,720 - pikpak_bridge - DEBUG - Found 0 torrents in category 'Ad Hoc'
+2025-12-07 23:35:50,720 - pikpak_bridge - INFO - Found 474 torrents across categories ['Daily Ingestion', 'Ad Hoc']
+2025-12-07 23:35:50,720 - pikpak_bridge - INFO - Filtered 0 torrents older than 3 days
+2025-12-07 23:35:50,720 - pikpak_bridge - INFO - No torrents to process.
+2025-12-07 23:35:50,721 - __main__ - INFO - PikPak Bridge completed successfully
+2025-12-07 23:35:50,721 - __main__ - INFO - ✓ PikPak Bridge completed successfully
+2025-12-07 23:35:50,721 - __main__ - INFO - ============================================================
+2025-12-07 23:35:50,721 - __main__ - INFO - PIPELINE COMPLETED
+2025-12-07 23:35:50,721 - __main__ - INFO - ============================================================
+2025-12-07 23:35:50,721 - __main__ - INFO - Analyzing logs for critical errors...
+2025-12-07 23:35:50,721 - __main__ - ERROR - CRITICAL ERROR in Spider: CF bypass and proxy fallback failed - movie list not found on 6 pages
+2025-12-07 23:35:50,722 - __main__ - ERROR - ============================================================
+2025-12-07 23:35:50,722 - __main__ - ERROR - PIPELINE FAILED - CRITICAL ERRORS DETECTED
+2025-12-07 23:35:50,722 - __main__ - ERROR - ============================================================
+2025-12-07 23:35:50,722 - __main__ - ERROR -   - Spider: CF bypass and proxy fallback failed - movie list not found on 6 pages
+2025-12-07 23:35:50,724 - utils.proxy_ban_manager - INFO - Loaded 2 ban records from logs/proxy_bans.csv
+2025-12-07 23:35:50,727 - __main__ - INFO - Connecting to SMTP server...
+2025-12-07 23:35:54,206 - __main__ - INFO - Email sent successfully.
+2025-12-07 23:35:54,207 - __main__ - INFO - Final commit for pipeline log...
+2025-12-07 23:35:54,208 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
+2025-12-07 23:35:54,250 - __main__ - INFO - Pulling latest changes from remote repository...
+2025-12-07 23:35:55,006 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
+2025-12-07 23:35:55,006 - __main__ - INFO - Adding files to git...
+2025-12-07 23:35:55,068 - __main__ - INFO - Commit changes for pipeline_log
+://javdb.com/actors/RdEb4 (attempt 1/3)
+2025-12-07 23:35:03,110 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@140.245.123.124:12300'}
+2025-12-07 23:35:03,111 - urllib3.connectionpool - DEBUG - Starting new HTTPS connection (1): javdb.com:443
+2025-12-07 23:35:03,506 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 302 None
+2025-12-07 23:35:03,743 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4 HTTP/1.1" 200 None
+2025-12-07 23:35:03,746 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4
+2025-12-07 23:35:03,747 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:35:03,752 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:35:03,752 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=ntd5y06lpy1kjw0lv0c2y8xs77Zptj4sm1558bwhbzpttdns0zzw78yr5q1xwhm8yAh1f3hrpc2fyqh0v54ql3cb1r83vbnxktpc3y0xdz1x0cs15gs9q5x919tq75qp61
+2025-12-07 23:35:04,008 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=ntd5y06lpy1kjw0lv0c2y8xs77Zptj4sm1558bwhbzpttdns0zzw78yr5q1xwhm8yAh1f3hrpc2fyqh0v54ql3cb1r83vbnxktpc3y0xdz1x0cs15gs9q5x919tq75qp61 HTTP/1.1" 302 None
+2025-12-07 23:35:04,239 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dntd5y06lpy1kjw0lv0c2y8xs77Zptj4sm1558bwhbzpttdns0zzw78yr5q1xwhm8yAh1f3hrpc2fyqh0v54ql3cb1r83vbnxktpc3y0xdz1x0cs15gs9q5x919tq75qp61 HTTP/1.1" 200 None
+2025-12-07 23:35:04,240 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:35:04,458 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 302 None
+2025-12-07 23:35:04,682 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4 HTTP/1.1" 200 None
+2025-12-07 23:35:04,686 - __main__ - DEBUG - [Page 1] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
+2025-12-07 23:35:04,686 - __main__ - DEBUG - [Page 1] Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)...
+2025-12-07 23:35:04,686 - __main__ - DEBUG - [CF Bypass] Request Mirroring: https://javdb.com/actors/RdEb4 -> http://140.245.123.124:8000/actors/RdEb4
+2025-12-07 23:35:04,686 - __main__ - DEBUG - [CF Bypass] x-hostname: javdb.com
+2025-12-07 23:35:04,686 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4 (attempt 1/3)
+2025-12-07 23:35:04,686 - __main__ - DEBUG - [CF Bypass] Actual request to: http://140.245.123.124:8000/actors/RdEb4
+2025-12-07 23:35:04,687 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 140.245.123.124:8000
+2025-12-07 23:35:27,207 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4 HTTP/1.1" 302 648
+2025-12-07 23:35:27,208 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4
+2025-12-07 23:35:27,209 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:35:27,209 - __main__ - DEBUG - No age verification modal detected
+2025-12-07 23:35:27,210 - __main__ - DEBUG - [Page 1] Validation failed (no movie list): Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)
+2025-12-07 23:35:27,210 - __main__ - ERROR - [Page 1] All proxy attempts exhausted.
+2025-12-07 23:35:27,210 - __main__ - WARNING - [Page 1] No movie list found after all fallback attempts
+2025-12-07 23:35:27,211 - __main__ - DEBUG - [Page 2] Fetching: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:35:27,211 - __main__ - DEBUG - [Page 2] Initial attempt (Proxy=False, CF=False, Node=None)...
+2025-12-07 23:35:27,211 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
+2025-12-07 23:35:27,463 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
+2025-12-07 23:35:27,680 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
+2025-12-07 23:35:27,683 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:35:27,694 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:35:27,694 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=6ddzt6kthnbc0rz7tt299xnp82Zb19427kyyld1z6zn2tqsvs68pj0k0Abycq4f0rrkymw1b6nrdh6bvyk9tnps8pbpmAschvkgxyk3rglf50fwj3y7xmr8wfA09sjv4zw9Ayj4bt1hlgAz5s6pgb8mww25
+2025-12-07 23:35:27,913 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=6ddzt6kthnbc0rz7tt299xnp82Zb19427kyyld1z6zn2tqsvs68pj0k0Abycq4f0rrkymw1b6nrdh6bvyk9tnps8pbpmAschvkgxyk3rglf50fwj3y7xmr8wfA09sjv4zw9Ayj4bt1hlgAz5s6pgb8mww25 HTTP/1.1" 302 None
+2025-12-07 23:35:28,144 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3D6ddzt6kthnbc0rz7tt299xnp82Zb19427kyyld1z6zn2tqsvs68pj0k0Abycq4f0rrkymw1b6nrdh6bvyk9tnps8pbpmAschvkgxyk3rglf50fwj3y7xmr8wfA09sjv4zw9Ayj4bt1hlgAz5s6pgb8mww25 HTTP/1.1" 200 None
+2025-12-07 23:35:28,146 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:35:28,352 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
+2025-12-07 23:35:28,595 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
+2025-12-07 23:35:28,608 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
+2025-12-07 23:35:28,609 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-07 23:35:28,609 - __main__ - DEBUG - [Page 2] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
+2025-12-07 23:35:28,609 - __main__ - DEBUG - [Page 2] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
+2025-12-07 23:35:28,609 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
+2025-12-07 23:35:28,609 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
+2025-12-07 23:35:28,609 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@140.245.123.124:12300'}
+2025-12-07 23:35:28,827 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
+2025-12-07 23:35:29,053 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
+2025-12-07 23:35:29,055 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:35:29,056 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:35:29,066 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:35:29,067 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=q8x2msz0rfm4w5s78wmwp4gnzyZcwttwl4r4lrkb1l5vs1clfp0fpkq14qlAspgkqgj0whg29sfvcbvh2wt2fhn4myrxbcblq12y214klh7fffh1n89Actv4bb2wglzyxc1rA06wz3hdc4fg2wvnhh3pjsp
+2025-12-07 23:35:29,271 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=q8x2msz0rfm4w5s78wmwp4gnzyZcwttwl4r4lrkb1l5vs1clfp0fpkq14qlAspgkqgj0whg29sfvcbvh2wt2fhn4myrxbcblq12y214klh7fffh1n89Actv4bb2wglzyxc1rA06wz3hdc4fg2wvnhh3pjsp HTTP/1.1" 302 None
+2025-12-07 23:35:29,490 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dq8x2msz0rfm4w5s78wmwp4gnzyZcwttwl4r4lrkb1l5vs1clfp0fpkq14qlAspgkqgj0whg29sfvcbvh2wt2fhn4myrxbcblq12y214klh7fffh1n89Actv4bb2wglzyxc1rA06wz3hdc4fg2wvnhh3pjsp HTTP/1.1" 200 None
+2025-12-07 23:35:29,493 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:35:29,701 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
+2025-12-07 23:35:29,945 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
+2025-12-07 23:35:29,959 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
+2025-12-07 23:35:29,959 - __main__ - DEBUG - [Page 2] Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)...
+2025-12-07 23:35:29,960 - __main__ - DEBUG - [CF Bypass] Request Mirroring: https://javdb.com/actors/RdEb4?page=2 -> http://140.245.123.124:8000/actors/RdEb4?page=2
+2025-12-07 23:35:29,960 - __main__ - DEBUG - [CF Bypass] x-hostname: javdb.com
+2025-12-07 23:35:29,960 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
+2025-12-07 23:35:29,960 - __main__ - DEBUG - [CF Bypass] Actual request to: http://140.245.123.124:8000/actors/RdEb4?page=2
+2025-12-07 23:35:30,224 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 30593
+2025-12-07 23:35:30,232 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:35:30,232 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:35:30,244 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:35:30,244 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=gzmwwtyl0f3txjfl2g1xq1hfb1Z99jq2tg907Ayy3qgblzyddxxt2vbygg40f85AfjA2dsdps2v3zkq
+2025-12-07 23:35:30,489 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=gzmwwtyl0f3txjfl2g1xq1hfb1Z99jq2tg907Ayy3qgblzyddxxt2vbygg40f85AfjA2dsdps2v3zkq HTTP/1.1" 302 None
+2025-12-07 23:35:30,712 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dgzmwwtyl0f3txjfl2g1xq1hfb1Z99jq2tg907Ayy3qgblzyddxxt2vbygg40f85AfjA2dsdps2v3zkq HTTP/1.1" 200 None
+2025-12-07 23:35:30,714 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:35:30,919 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
+2025-12-07 23:35:31,141 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
+2025-12-07 23:35:31,156 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)
+2025-12-07 23:35:31,156 - __main__ - ERROR - [Page 2] All proxy attempts exhausted.
+2025-12-07 23:35:31,156 - __main__ - WARNING - [Page 2] No movie list found after all fallback attempts
+2025-12-07 23:35:31,156 - __main__ - DEBUG - [Page 3] Fetching: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:35:31,156 - __main__ - DEBUG - [Page 3] Initial attempt (Proxy=False, CF=False, Node=None)...
+2025-12-07 23:35:31,157 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
+2025-12-07 23:35:31,399 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
+2025-12-07 23:35:31,625 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
+2025-12-07 23:35:31,627 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:35:31,638 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:35:31,639 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=v4lfsccm5djrg38jpjlskrvwtmZ23hlczhycbypszdw7nsjfnd4dc8cynpAnh6mgjwd3ck3tnptjdl2jxmd8pspAyyphl1gh8s29qdnq4qtqfpf571t1m5grhvn16z7f5g7q3rf6zl3bnqspf13c9crn863
+2025-12-07 23:35:31,868 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=v4lfsccm5djrg38jpjlskrvwtmZ23hlczhycbypszdw7nsjfnd4dc8cynpAnh6mgjwd3ck3tnptjdl2jxmd8pspAyyphl1gh8s29qdnq4qtqfpf571t1m5grhvn16z7f5g7q3rf6zl3bnqspf13c9crn863 HTTP/1.1" 302 None
+2025-12-07 23:35:32,128 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dv4lfsccm5djrg38jpjlskrvwtmZ23hlczhycbypszdw7nsjfnd4dc8cynpAnh6mgjwd3ck3tnptjdl2jxmd8pspAyyphl1gh8s29qdnq4qtqfpf571t1m5grhvn16z7f5g7q3rf6zl3bnqspf13c9crn863 HTTP/1.1" 200 None
+2025-12-07 23:35:32,131 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:35:32,347 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
+2025-12-07 23:35:32,654 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
+2025-12-07 23:35:32,665 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
+2025-12-07 23:35:32,665 - __main__ - WARNING - [Page 3] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-07 23:35:32,665 - __main__ - DEBUG - [Page 3] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
+2025-12-07 23:35:32,665 - __main__ - DEBUG - [Page 3] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
+2025-12-07 23:35:32,665 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
+2025-12-07 23:35:32,665 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
+2025-12-07 23:35:32,665 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@140.245.123.124:12300'}
+2025-12-07 23:35:32,926 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
+2025-12-07 23:35:33,180 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
+2025-12-07 23:35:33,182 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:35:33,182 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:35:33,201 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:35:33,202 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=vh3c2sww8nmxtjw5zp97plb26qZgmv4mpqbdzh962dttzk3fzj4fsmvsrzgbkpwvfdqnqlrstbsvsp99rqn6n1gjnpkAttfh1z4tAnytfn9n9jzyf67ds60k5tAhlsmykzjvvyymxpwbbgbcwxsxpycspdt
+2025-12-07 23:35:33,423 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=vh3c2sww8nmxtjw5zp97plb26qZgmv4mpqbdzh962dttzk3fzj4fsmvsrzgbkpwvfdqnqlrstbsvsp99rqn6n1gjnpkAttfh1z4tAnytfn9n9jzyf67ds60k5tAhlsmykzjvvyymxpwbbgbcwxsxpycspdt HTTP/1.1" 302 None
+2025-12-07 23:35:33,702 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dvh3c2sww8nmxtjw5zp97plb26qZgmv4mpqbdzh962dttzk3fzj4fsmvsrzgbkpwvfdqnqlrstbsvsp99rqn6n1gjnpkAttfh1z4tAnytfn9n9jzyf67ds60k5tAhlsmykzjvvyymxpwbbgbcwxsxpycspdt HTTP/1.1" 200 None
+2025-12-07 23:35:33,704 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:35:33,924 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
+2025-12-07 23:35:34,255 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
+2025-12-07 23:35:34,261 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
+2025-12-07 23:35:34,261 - __main__ - DEBUG - [Page 3] Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)...
+2025-12-07 23:35:34,261 - __main__ - DEBUG - [CF Bypass] Request Mirroring: https://javdb.com/actors/RdEb4?page=3 -> http://140.245.123.124:8000/actors/RdEb4?page=3
+2025-12-07 23:35:34,261 - __main__ - DEBUG - [CF Bypass] x-hostname: javdb.com
+2025-12-07 23:35:34,261 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
+2025-12-07 23:35:34,261 - __main__ - DEBUG - [CF Bypass] Actual request to: http://140.245.123.124:8000/actors/RdEb4?page=3
+2025-12-07 23:35:34,520 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 30593
+2025-12-07 23:35:34,531 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:35:34,531 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:35:34,548 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:35:34,548 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=nn6xyyj222zwkd48pgyc3ydftAZ5Ak6sftcvrnmj7p9rtpjv16l4xAAflfytbfjpfmzd8j43mhp8bl1
+2025-12-07 23:35:34,782 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=nn6xyyj222zwkd48pgyc3ydftAZ5Ak6sftcvrnmj7p9rtpjv16l4xAAflfytbfjpfmzd8j43mhp8bl1 HTTP/1.1" 302 None
+2025-12-07 23:35:34,998 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dnn6xyyj222zwkd48pgyc3ydftAZ5Ak6sftcvrnmj7p9rtpjv16l4xAAflfytbfjpfmzd8j43mhp8bl1 HTTP/1.1" 200 None
+2025-12-07 23:35:35,001 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:35:35,273 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
+2025-12-07 23:35:35,494 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
+2025-12-07 23:35:35,508 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)
+2025-12-07 23:35:35,508 - __main__ - ERROR - [Page 3] All proxy attempts exhausted.
+2025-12-07 23:35:35,508 - __main__ - WARNING - [Page 3] No movie list found after all fallback attempts
+2025-12-07 23:35:35,508 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
+2025-12-07 23:35:35,508 - __main__ - INFO - Phase 1 completed: 0 entries processed
+2025-12-07 23:35:35,508 - __main__ - INFO - ==================================================
+2025-12-07 23:35:35,508 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-12-07 23:35:35,508 - __main__ - INFO - ==================================================
+2025-12-07 23:35:35,508 - __main__ - DEBUG - [Page 1] Fetching for phase 2: https://javdb.com/actors/RdEb4
+2025-12-07 23:35:35,508 - __main__ - DEBUG - [Page 1] Initial attempt (Proxy=False, CF=False, Node=None)...
+2025-12-07 23:35:35,508 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4 (attempt 1/3)
+2025-12-07 23:35:35,799 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 302 None
+2025-12-07 23:35:36,021 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4 HTTP/1.1" 200 None
+2025-12-07 23:35:36,024 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4
+2025-12-07 23:35:36,034 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:35:36,035 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=z6nt968zh40xxndl0syn8q67z1Zmxthrhkvtp865znbrnz4tqg9ll6wsAtww3zgs6plvlqjtcwdqgl34h3nAtgly86b1npyfwg4Anly93rx2kwsfpspfprjf716xvlghj3
+2025-12-07 23:35:36,322 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=z6nt968zh40xxndl0syn8q67z1Zmxthrhkvtp865znbrnz4tqg9ll6wsAtww3zgs6plvlqjtcwdqgl34h3nAtgly86b1npyfwg4Anly93rx2kwsfpspfprjf716xvlghj3 HTTP/1.1" 302 None
+2025-12-07 23:35:36,576 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dz6nt968zh40xxndl0syn8q67z1Zmxthrhkvtp865znbrnz4tqg9ll6wsAtww3zgs6plvlqjtcwdqgl34h3nAtgly86b1npyfwg4Anly93rx2kwsfpspfprjf716xvlghj3 HTTP/1.1" 200 None
+2025-12-07 23:35:36,578 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:35:36,847 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 302 None
+2025-12-07 23:35:37,082 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4 HTTP/1.1" 200 None
+2025-12-07 23:35:37,088 - __main__ - DEBUG - [Page 1] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
+2025-12-07 23:35:37,088 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-07 23:35:37,088 - __main__ - DEBUG - [Page 1] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
+2025-12-07 23:35:37,088 - __main__ - DEBUG - [Page 1] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
+2025-12-07 23:35:37,088 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
+2025-12-07 23:35:37,088 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4 (attempt 1/3)
+2025-12-07 23:35:37,088 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@140.245.123.124:12300'}
+2025-12-07 23:35:37,371 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 302 None
+2025-12-07 23:35:37,606 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4 HTTP/1.1" 200 None
+2025-12-07 23:35:37,607 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4
+2025-12-07 23:35:37,608 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:35:37,620 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:35:37,620 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=qv0548kt462tc4w5ds58nyy8xAZ25ws27qyzjt8s3252yb621hqtff7jwwrdgzgAd9tkbd0cc0c6pjdpxclk880b5wkrpfkh27wcr5kxgqywdwmwx5bs8j9kjl28ydchny
+2025-12-07 23:35:37,898 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=qv0548kt462tc4w5ds58nyy8xAZ25ws27qyzjt8s3252yb621hqtff7jwwrdgzgAd9tkbd0cc0c6pjdpxclk880b5wkrpfkh27wcr5kxgqywdwmwx5bs8j9kjl28ydchny HTTP/1.1" 302 None
+2025-12-07 23:35:38,124 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dqv0548kt462tc4w5ds58nyy8xAZ25ws27qyzjt8s3252yb621hqtff7jwwrdgzgAd9tkbd0cc0c6pjdpxclk880b5wkrpfkh27wcr5kxgqywdwmwx5bs8j9kjl28ydchny HTTP/1.1" 200 None
+2025-12-07 23:35:38,126 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:35:38,419 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 302 None
+2025-12-07 23:35:38,627 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4 HTTP/1.1" 200 None
+2025-12-07 23:35:38,637 - __main__ - DEBUG - [Page 1] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
+2025-12-07 23:35:38,637 - __main__ - DEBUG - [Page 1] Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)...
+2025-12-07 23:35:38,637 - __main__ - DEBUG - [CF Bypass] Request Mirroring: https://javdb.com/actors/RdEb4 -> http://140.245.123.124:8000/actors/RdEb4
+2025-12-07 23:35:38,637 - __main__ - DEBUG - [CF Bypass] x-hostname: javdb.com
+2025-12-07 23:35:38,637 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4 (attempt 1/3)
+2025-12-07 23:35:38,637 - __main__ - DEBUG - [CF Bypass] Actual request to: http://140.245.123.124:8000/actors/RdEb4
+2025-12-07 23:35:39,136 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4 HTTP/1.1" 200 67586
+2025-12-07 23:35:39,155 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4
+2025-12-07 23:35:39,155 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:35:39,179 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:35:39,180 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=z5hvgqj4xcAb89sgpbgArnw81yZh2w2wg05hsnkn9cshl55A8A7b3
+2025-12-07 23:35:39,468 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=z5hvgqj4xcAb89sgpbgArnw81yZh2w2wg05hsnkn9cshl55A8A7b3 HTTP/1.1" 302 None
+2025-12-07 23:35:39,679 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dz5hvgqj4xcAb89sgpbgArnw81yZh2w2wg05hsnkn9cshl55A8A7b3 HTTP/1.1" 200 None
+2025-12-07 23:35:39,679 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:35:39,992 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 302 None
+2025-12-07 23:35:40,209 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4 HTTP/1.1" 200 None
+2025-12-07 23:35:40,213 - __main__ - DEBUG - [Page 1] Validation failed (no movie list): Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)
+2025-12-07 23:35:40,213 - __main__ - ERROR - [Page 1] All proxy attempts exhausted.
+2025-12-07 23:35:40,213 - __main__ - WARNING - [Page 1] No movie list found after all fallback attempts
+2025-12-07 23:35:40,213 - __main__ - DEBUG - [Page 2] Fetching for phase 2: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:35:40,213 - __main__ - DEBUG - [Page 2] Initial attempt (Proxy=False, CF=False, Node=None)...
+2025-12-07 23:35:40,213 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
+2025-12-07 23:35:40,420 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
+2025-12-07 23:35:41,066 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
+2025-12-07 23:35:41,068 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:35:41,075 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:35:41,075 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=sxtsclqjszqk78y6jtlkn5pnAmZz1xc4z6lx9wsflr7bwmw5jz2dqmz4mt0tnnmdldj942h05k2qjtrnvg4p4msxrxA2ptljpm7d9m01sbbn1c21hpp141b5ng10ls0dl2hfswhcxzl4tr7Az7m8433yv3w
+2025-12-07 23:35:41,285 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=sxtsclqjszqk78y6jtlkn5pnAmZz1xc4z6lx9wsflr7bwmw5jz2dqmz4mt0tnnmdldj942h05k2qjtrnvg4p4msxrxA2ptljpm7d9m01sbbn1c21hpp141b5ng10ls0dl2hfswhcxzl4tr7Az7m8433yv3w HTTP/1.1" 302 None
+2025-12-07 23:35:41,567 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dsxtsclqjszqk78y6jtlkn5pnAmZz1xc4z6lx9wsflr7bwmw5jz2dqmz4mt0tnnmdldj942h05k2qjtrnvg4p4msxrxA2ptljpm7d9m01sbbn1c21hpp141b5ng10ls0dl2hfswhcxzl4tr7Az7m8433yv3w HTTP/1.1" 200 None
+2025-12-07 23:35:41,567 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:35:41,804 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
+2025-12-07 23:35:42,091 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
+2025-12-07 23:35:42,103 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
+2025-12-07 23:35:42,103 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-07 23:35:42,103 - __main__ - DEBUG - [Page 2] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
+2025-12-07 23:35:42,103 - __main__ - DEBUG - [Page 2] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
+2025-12-07 23:35:42,103 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
+2025-12-07 23:35:42,103 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
+2025-12-07 23:35:42,103 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@140.245.123.124:12300'}
+2025-12-07 23:35:42,333 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
+2025-12-07 23:35:42,614 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
+2025-12-07 23:35:42,616 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:35:42,616 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:35:42,626 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:35:42,626 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=kj3wvjcbbA9lmmchc4mdx4cv0AZ8qwwt93gtjwA8qx9hg6b2ygA0tb3vpf6h5xvy297c4h35q4sm3pf4w7rcAhbpdr0gqgmsAw9dxh90zg2n9589kAk9lh4fvf87vzsjvsd42Axrszfxbrk5tlh3ytsqjk5
+2025-12-07 23:35:42,847 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=kj3wvjcbbA9lmmchc4mdx4cv0AZ8qwwt93gtjwA8qx9hg6b2ygA0tb3vpf6h5xvy297c4h35q4sm3pf4w7rcAhbpdr0gqgmsAw9dxh90zg2n9589kAk9lh4fvf87vzsjvsd42Axrszfxbrk5tlh3ytsqjk5 HTTP/1.1" 302 None
+2025-12-07 23:35:43,138 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dkj3wvjcbbA9lmmchc4mdx4cv0AZ8qwwt93gtjwA8qx9hg6b2ygA0tb3vpf6h5xvy297c4h35q4sm3pf4w7rcAhbpdr0gqgmsAw9dxh90zg2n9589kAk9lh4fvf87vzsjvsd42Axrszfxbrk5tlh3ytsqjk5 HTTP/1.1" 200 None
+2025-12-07 23:35:43,139 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:35:43,355 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
+2025-12-07 23:35:43,665 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
+2025-12-07 23:35:43,673 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
+2025-12-07 23:35:43,674 - __main__ - DEBUG - [Page 2] Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)...
+2025-12-07 23:35:43,674 - __main__ - DEBUG - [CF Bypass] Request Mirroring: https://javdb.com/actors/RdEb4?page=2 -> http://140.245.123.124:8000/actors/RdEb4?page=2
+2025-12-07 23:35:43,674 - __main__ - DEBUG - [CF Bypass] x-hostname: javdb.com
+2025-12-07 23:35:43,674 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
+2025-12-07 23:35:43,674 - __main__ - DEBUG - [CF Bypass] Actual request to: http://140.245.123.124:8000/actors/RdEb4?page=2
+2025-12-07 23:35:43,915 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 30593
+2025-12-07 23:35:43,927 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:35:43,930 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:35:43,941 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:35:43,941 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=krl8mm4jdny4p5xyp4zsnbkkh3Zx63l3cxhq3szhdx75338lndzt0r01p8w4wp5vpwx3whtwzmp6Agq
+2025-12-07 23:35:44,187 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=krl8mm4jdny4p5xyp4zsnbkkh3Zx63l3cxhq3szhdx75338lndzt0r01p8w4wp5vpwx3whtwzmp6Agq HTTP/1.1" 302 None
+2025-12-07 23:35:44,411 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dkrl8mm4jdny4p5xyp4zsnbkkh3Zx63l3cxhq3szhdx75338lndzt0r01p8w4wp5vpwx3whtwzmp6Agq HTTP/1.1" 200 None
+2025-12-07 23:35:44,412 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:35:44,710 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
+2025-12-07 23:35:44,929 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
+2025-12-07 23:35:44,942 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)
+2025-12-07 23:35:44,942 - __main__ - ERROR - [Page 2] All proxy attempts exhausted.
+2025-12-07 23:35:44,942 - __main__ - WARNING - [Page 2] No movie list found after all fallback attempts
+2025-12-07 23:35:44,942 - __main__ - DEBUG - [Page 3] Fetching for phase 2: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:35:44,942 - __main__ - DEBUG - [Page 3] Initial attempt (Proxy=False, CF=False, Node=None)...
+2025-12-07 23:35:44,942 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
+2025-12-07 23:35:45,236 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
+2025-12-07 23:35:45,457 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
+2025-12-07 23:35:45,458 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:35:45,462 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:35:45,462 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=lph39wk555Az79bhwhmrvrjp3yZ7kyxk0kh05bs0lqzk4qAm7l4ltl392b2h7r0yw0594027y8x5348wwvfznhb12glAnt94fqz5Abv1fl6rl87y3ln1jf6jj09g7cs72r8wf68r4y3lrldpsAct54m0q78
+2025-12-07 23:35:45,806 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=lph39wk555Az79bhwhmrvrjp3yZ7kyxk0kh05bs0lqzk4qAm7l4ltl392b2h7r0yw0594027y8x5348wwvfznhb12glAnt94fqz5Abv1fl6rl87y3ln1jf6jj09g7cs72r8wf68r4y3lrldpsAct54m0q78 HTTP/1.1" 302 None
+2025-12-07 23:35:46,034 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dlph39wk555Az79bhwhmrvrjp3yZ7kyxk0kh05bs0lqzk4qAm7l4ltl392b2h7r0yw0594027y8x5348wwvfznhb12glAnt94fqz5Abv1fl6rl87y3ln1jf6jj09g7cs72r8wf68r4y3lrldpsAct54m0q78 HTTP/1.1" 200 None
+2025-12-07 23:35:46,037 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:35:46,284 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
+2025-12-07 23:35:46,498 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
+2025-12-07 23:35:46,514 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
+2025-12-07 23:35:46,514 - __main__ - WARNING - [Page 3] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-07 23:35:46,514 - __main__ - DEBUG - [Page 3] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
+2025-12-07 23:35:46,514 - __main__ - DEBUG - [Page 3] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
+2025-12-07 23:35:46,514 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
+2025-12-07 23:35:46,514 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
+2025-12-07 23:35:46,514 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@140.245.123.124:12300'}
+2025-12-07 23:35:46,818 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
+2025-12-07 23:35:47,040 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
+2025-12-07 23:35:47,041 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:35:47,042 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:35:47,050 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:35:47,050 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=h7hgs7s2ndvm08bwjdk1jt97qAZtgrnwrwrj2lwqc2qwh2phg4fwxxkjyy6qz989tfb4m29w29kdm2ty8gbh58A0df1mw9A7xh0rsqfwmyff2rl7npmb66gg2p176j66m99fj6dgx8qzcf5cm6tghqrzpj7
+2025-12-07 23:35:47,334 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=h7hgs7s2ndvm08bwjdk1jt97qAZtgrnwrwrj2lwqc2qwh2phg4fwxxkjyy6qz989tfb4m29w29kdm2ty8gbh58A0df1mw9A7xh0rsqfwmyff2rl7npmb66gg2p176j66m99fj6dgx8qzcf5cm6tghqrzpj7 HTTP/1.1" 302 None
+2025-12-07 23:35:47,587 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dh7hgs7s2ndvm08bwjdk1jt97qAZtgrnwrwrj2lwqc2qwh2phg4fwxxkjyy6qz989tfb4m29w29kdm2ty8gbh58A0df1mw9A7xh0rsqfwmyff2rl7npmb66gg2p176j66m99fj6dgx8qzcf5cm6tghqrzpj7 HTTP/1.1" 200 None
+2025-12-07 23:35:47,589 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:35:47,857 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
+2025-12-07 23:35:48,083 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
+2025-12-07 23:35:48,090 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
+2025-12-07 23:35:48,090 - __main__ - DEBUG - [Page 3] Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)...
+2025-12-07 23:35:48,090 - __main__ - DEBUG - [CF Bypass] Request Mirroring: https://javdb.com/actors/RdEb4?page=3 -> http://140.245.123.124:8000/actors/RdEb4?page=3
+2025-12-07 23:35:48,090 - __main__ - DEBUG - [CF Bypass] x-hostname: javdb.com
+2025-12-07 23:35:48,090 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
+2025-12-07 23:35:48,090 - __main__ - DEBUG - [CF Bypass] Actual request to: http://140.245.123.124:8000/actors/RdEb4?page=3
+2025-12-07 23:35:48,383 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 30593
+2025-12-07 23:35:48,393 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:35:48,393 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:35:48,403 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:35:48,403 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=b39Alrz8v8f53zqh3qn622qmf3Zn9frpwdsbmll0wsxnj6d3k02nh1yyryh9mw6d68p2d0086y05ptq
+2025-12-07 23:35:48,621 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=b39Alrz8v8f53zqh3qn622qmf3Zn9frpwdsbmll0wsxnj6d3k02nh1yyryh9mw6d68p2d0086y05ptq HTTP/1.1" 302 None
+2025-12-07 23:35:48,906 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Db39Alrz8v8f53zqh3qn622qmf3Zn9frpwdsbmll0wsxnj6d3k02nh1yyryh9mw6d68p2d0086y05ptq HTTP/1.1" 200 None
+2025-12-07 23:35:48,909 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:35:49,124 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
+2025-12-07 23:35:49,429 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
+2025-12-07 23:35:49,437 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)
+2025-12-07 23:35:49,437 - __main__ - ERROR - [Page 3] All proxy attempts exhausted.
+2025-12-07 23:35:49,438 - __main__ - WARNING - [Page 3] No movie list found after all fallback attempts
+2025-12-07 23:35:49,438 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
+2025-12-07 23:35:49,438 - __main__ - INFO - Phase 2 completed: 0 entries processed
+2025-12-07 23:35:49,438 - __main__ - INFO - CSV file written incrementally to: Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
+2025-12-07 23:35:49,438 - __main__ - INFO - ==================================================
+2025-12-07 23:35:49,438 - __main__ - INFO - SUMMARY REPORT
+2025-12-07 23:35:49,438 - __main__ - INFO - ==================================================
+2025-12-07 23:35:49,438 - __main__ - INFO - Pages processed: 1 to 20
+2025-12-07 23:35:49,438 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-12-07 23:35:49,438 - __main__ - INFO - ==============================
+2025-12-07 23:35:49,438 - __main__ - INFO - PHASE 1 SUMMARY
+2025-12-07 23:35:49,438 - __main__ - INFO - ==============================
+2025-12-07 23:35:49,438 - __main__ - INFO - Phase 1 entries found: 0
+2025-12-07 23:35:49,438 - __main__ - INFO -   - No entries found in Phase 1
+2025-12-07 23:35:49,438 - __main__ - INFO - ==============================
+2025-12-07 23:35:49,438 - __main__ - INFO - PHASE 2 SUMMARY
+2025-12-07 23:35:49,438 - __main__ - INFO - ==============================
+2025-12-07 23:35:49,438 - __main__ - INFO - Phase 2 entries found: 0
+2025-12-07 23:35:49,438 - __main__ - INFO -   - No entries found in Phase 2
+2025-12-07 23:35:49,438 - __main__ - INFO - ==============================
+2025-12-07 23:35:49,438 - __main__ - INFO - OVERALL SUMMARY
+2025-12-07 23:35:49,438 - __main__ - INFO - ==============================
+2025-12-07 23:35:49,438 - __main__ - INFO - Total entries found: 0
+2025-12-07 23:35:49,438 - __main__ - INFO - Successfully processed: 0
+2025-12-07 23:35:49,438 - __main__ - INFO - Skipped already parsed in this session: 0
+2025-12-07 23:35:49,438 - __main__ - INFO - Skipped already parsed in previous runs: 3350
+2025-12-07 23:35:49,438 - __main__ - INFO - Current parsed links in memory: 0
+2025-12-07 23:35:49,438 - __main__ - INFO - Results saved to: Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
+2025-12-07 23:35:49,438 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-12-07 23:35:49,438 - __main__ - INFO - ==================================================
