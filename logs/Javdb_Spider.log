@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 2025-12-07 23:27:06,980 - __main__ - INFO - Initializing proxy pool with 3 proxies...
 2025-12-07 23:27:06,980 - utils.proxy_ban_manager - INFO - No existing ban log found at logs/proxy_bans.csv
 2025-12-07 23:27:06,981 - utils.proxy_pool - INFO - Added proxy 'Miraculous Fortress' to pool (HTTP: http://***:***@139.xxx.xxx.231:12300, HTTPS: http://***:***@139.xxx.xxx.231:12300)
@@ -41,3 +42,383 @@
 2025-12-07 23:27:11,322 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (3/3)
 2025-12-07 23:27:11,322 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
 2025-12-07 23:27:11,322 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+=======
+<<<<<<< HEAD
+2025-12-07 23:23:05,200 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-07 23:23:05,200 - utils.proxy_ban_manager - INFO - Loaded 2 ban records from logs/proxy_bans.csv
+2025-12-07 23:23:05,200 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
+2025-12-07 23:23:05,200 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
+2025-12-07 23:23:05,201 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' is currently banned, skipping
+2025-12-07 23:23:05,201 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-07 23:23:05,201 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
+2025-12-07 23:23:05,2012025-12-07 23:23:11,539 - __main__ - INFO - ✓ JavDB Spider completed successfully
+2025-12-07 23:23:11,539 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
+2025-12-07 23:23:11,539 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode adhoc --input-file Javdb_AdHoc_actors_RdEb4_20251207.csv
+2025-12-07 23:23:11,648 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
+2025-12-07 23:23:11,648 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
+2025-12-07 23:23:11,648 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
+2025-12-07 23:23:11,648 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-12-04)
+2025-12-07 23:23:11,654 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 101.100.165.240:12301
+2025-12-07 23:23:12,210 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/auth/login HTTP/1.1" 200 3
+2025-12-07 23:23:12,211 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
+2025-12-07 23:23:12,752 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "GET /api/v2/torrents/info?category=Daily+Ingestion&filter=downloading HTTP/1.1" 200 94066
+2025-12-07 23:23:12,774 - pikpak_bridge - DEBUG - Found 476 torrents in category 'Daily Ingestion'
+2025-12-07 23:23:12,781 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "GET /api/v2/torrents/info?category=Ad+Hoc&filter=downloading HTTP/1.1" 200 2
+2025-12-07 23:23:12,782 - pikpak_bridge - DEBUG - Found 0 torrents in category 'Ad Hoc'
+2025-12-07 23:23:12,782 - pikpak_bridge - INFO - Found 476 torrents across categories ['Daily Ingestion', 'Ad Hoc']
+2025-12-07 23:23:12,782 - pikpak_bridge - INFO - Filtered 0 torrents older than 3 days
+2025-12-07 23:23:12,782 - pikpak_bridge - INFO - No torrents to process.
+2025-12-07 23:23:12,783 - __main__ - INFO - PikPak Bridge completed successfully
+2025-12-07 23:23:12,783 - __main__ - INFO - ✓ PikPak Bridge completed successfully
+2025-12-07 23:23:12,783 - __main__ - INFO - ============================================================
+2025-12-07 23:23:12,783 - __main__ - INFO - PIPELINE COMPLETED
+2025-12-07 23:23:12,783 - __main__ - INFO - ============================================================
+2025-12-07 23:23:12,783 - __main__ - INFO - Analyzing logs for critical errors...
+2025-12-07 23:23:12,783 - __main__ - ERROR - CRITICAL ERROR in Spider: CF bypass and proxy fallback failed - movie list not found on 6 pages
+2025-12-07 23:23:12,783 - __main__ - ERROR - ============================================================
+2025-12-07 23:23:12,783 - __main__ - ERROR - PIPELINE FAILED - CRITICAL ERRORS DETECTED
+2025-12-07 23:23:12,783 - __main__ - ERROR - ============================================================
+2025-12-07 23:23:12,783 - __main__ - ERROR -   - Spider: CF bypass and proxy fallback failed - movie list not found on 6 pages
+2025-12-07 23:23:12,785 - utils.proxy_ban_manager - INFO - Loaded 2 ban records from logs/proxy_bans.csv
+2025-12-07 23:23:12,787 - __main__ - INFO - Connecting to SMTP server...
+2025-12-07 23:23:16,166 - __main__ - INFO - Email sent successfully.
+2025-12-07 23:23:16,166 - __main__ - INFO - Final commit for pipeline log...
+2025-12-07 23:23:16,166 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
+2025-12-07 23:23:16,207 - __main__ - INFO - Pulling latest changes from remote repository...
+austed.
+2025-12-07 23:23:06,518 - __main__ - WARNING - [Page 1] No movie list found after all fallback attempts
+2025-12-07 23:23:06,518 - __main__ - DEBUG - [Page 2] Fetching: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:23:06,518 - __main__ - DEBUG - [Page 2] Initial attempt (Proxy=False, CF=False, Node=None)...
+2025-12-07 23:23:06,518 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
+2025-12-07 23:23:06,730 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
+2025-12-07 23:23:06,995 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
+2025-12-07 23:23:06,995 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:23:06,999 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
+2025-12-07 23:23:06,999 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-07 23:23:06,999 - __main__ - DEBUG - [Page 2] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
+2025-12-07 23:23:06,999 - __main__ - DEBUG - [Page 2] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
+2025-12-07 23:23:06,999 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
+2025-12-07 23:23:07,000 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
+2025-12-07 23:23:07,000 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@138.2.91.170:12300'}
+2025-12-07 23:23:07,225 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
+2025-12-07 23:23:07,520 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
+2025-12-07 23:23:07,522 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:23:07,522 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:23:07,536 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
+2025-12-07 23:23:07,536 - __main__ - ERROR - [Page 2] All proxy attempts exhausted.
+2025-12-07 23:23:07,536 - __main__ - WARNING - [Page 2] No movie list found after all fallback attempts
+2025-12-07 23:23:07,536 - __main__ - DEBUG - [Page 3] Fetching: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:23:07,536 - __main__ - DEBUG - [Page 3] Initial attempt (Proxy=False, CF=False, Node=None)...
+2025-12-07 23:23:07,536 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
+2025-12-07 23:23:07,761 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
+2025-12-07 23:23:07,991 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
+2025-12-07 23:23:07,992 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:23:07,998 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
+2025-12-07 23:23:07,998 - __main__ - WARNING - [Page 3] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-07 23:23:07,998 - __main__ - DEBUG - [Page 3] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
+2025-12-07 23:23:07,999 - __main__ - DEBUG - [Page 3] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
+2025-12-07 23:23:07,999 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
+2025-12-07 23:23:07,999 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
+2025-12-07 23:23:07,999 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@138.2.91.170:12300'}
+2025-12-07 23:23:08,349 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
+2025-12-07 23:23:08,605 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
+2025-12-07 23:23:08,606 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:23:08,606 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:23:08,613 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
+2025-12-07 23:23:08,614 - __main__ - ERROR - [Page 3] All proxy attempts exhausted.
+2025-12-07 23:23:08,614 - __main__ - WARNING - [Page 3] No movie list found after all fallback attempts
+2025-12-07 23:23:08,614 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
+2025-12-07 23:23:08,614 - __main__ - INFO - Phase 1 completed: 0 entries processed
+2025-12-07 23:23:08,614 - __main__ - INFO - ==================================================
+2025-12-07 23:23:08,614 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-12-07 23:23:08,614 - __main__ - INFO - ==================================================
+2025-12-07 23:23:08,614 - __main__ - DEBUG - [Page 1] Fetching for phase 2: https://javdb.com/actors/RdEb4
+2025-12-07 23:23:08,614 - __main__ - DEBUG - [Page 1] Initial attempt (Proxy=False, CF=False, Node=None)...
+2025-12-07 23:23:08,614 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4 (attempt 1/3)
+2025-12-07 23:23:08,834 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 302 None
+2025-12-07 23:23:09,051 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4 HTTP/1.1" 200 None
+2025-12-07 23:23:09,052 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4
+2025-12-07 23:23:09,056 - __main__ - DEBUG - [Page 1] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
+2025-12-07 23:23:09,056 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-07 23:23:09,056 - __main__ - DEBUG - [Page 1] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
+2025-12-07 23:23:09,056 - __main__ - DEBUG - [Page 1] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
+2025-12-07 23:23:09,056 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
+2025-12-07 23:23:09,056 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4 (attempt 1/3)
+2025-12-07 23:23:09,056 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@138.2.91.170:12300'}
+2025-12-07 23:23:09,328 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 302 None
+2025-12-07 23:23:09,574 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4 HTTP/1.1" 200 None
+2025-12-07 23:23:09,575 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4
+2025-12-07 23:23:09,575 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:23:09,581 - __main__ - DEBUG - [Page 1] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
+2025-12-07 23:23:09,582 - __main__ - ERROR - [Page 1] All proxy attempts exhausted.
+2025-12-07 23:23:09,582 - __main__ - WARNING - [Page 1] No movie list found after all fallback attempts
+2025-12-07 23:23:09,582 - __main__ - DEBUG - [Page 2] Fetching for phase 2: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:23:09,582 - __main__ - DEBUG - [Page 2] Initial attempt (Proxy=False, CF=False, Node=None)...
+2025-12-07 23:23:09,582 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
+2025-12-07 23:23:09,821 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
+2025-12-07 23:23:10,056 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
+2025-12-07 23:23:10,057 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:23:10,069 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
+2025-12-07 23:23:10,069 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-07 23:23:10,069 - __main__ - DEBUG - [Page 2] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
+2025-12-07 23:23:10,069 - __main__ - DEBUG - [Page 2] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
+2025-12-07 23:23:10,069 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
+2025-12-07 23:23:10,069 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
+2025-12-07 23:23:10,069 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@138.2.91.170:12300'}
+2025-12-07 23:23:10,290 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
+2025-12-07 23:23:10,523 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
+2025-12-07 23:23:10,528 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:23:10,529 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:23:10,540 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
+2025-12-07 23:23:10,540 - __main__ - ERROR - [Page 2] All proxy attempts exhausted.
+2025-12-07 23:23:10,540 - __main__ - WARNING - [Page 2] No movie list found after all fallback attempts
+2025-12-07 23:23:10,540 - __main__ - DEBUG - [Page 3] Fetching for phase 2: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:23:10,540 - __main__ - DEBUG - [Page 3] Initial attempt (Proxy=False, CF=False, Node=None)...
+2025-12-07 23:23:10,540 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
+2025-12-07 23:23:10,775 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
+2025-12-07 23:23:10,997 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
+2025-12-07 23:23:10,998 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:23:11,001 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
+2025-12-07 23:23:11,001 - __main__ - WARNING - [Page 3] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-07 23:23:11,001 - __main__ - DEBUG - [Page 3] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
+2025-12-07 23:23:11,001 - __main__ - DEBUG - [Page 3] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
+2025-12-07 23:23:11,001 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
+2025-12-07 23:23:11,001 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
+2025-12-07 23:23:11,001 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@138.2.91.170:12300'}
+2025-12-07 23:23:11,252 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
+2025-12-07 23:23:11,496 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
+2025-12-07 23:23:11,497 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:23:11,497 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:23:11,508 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
+2025-12-07 23:23:11,508 - __main__ - ERROR - [Page 3] All proxy attempts exhausted.
+2025-12-07 23:23:11,508 - __main__ - WARNING - [Page 3] No movie list found after all fallback attempts
+2025-12-07 23:23:11,508 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
+2025-12-07 23:23:11,508 - __main__ - INFO - Phase 2 completed: 0 entries processed
+2025-12-07 23:23:11,508 - __main__ - INFO - CSV file written incrementally to: Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
+2025-12-07 23:23:11,508 - __main__ - INFO - ==================================================
+2025-12-07 23:23:11,508 - __main__ - INFO - SUMMARY REPORT
+2025-12-07 23:23:11,509 - __main__ - INFO - ==================================================
+2025-12-07 23:23:11,509 - __main__ - INFO - Pages processed: 1 to 20
+2025-12-07 23:23:11,509 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-12-07 23:23:11,509 - __main__ - INFO - ==============================
+2025-12-07 23:23:11,509 - __main__ - INFO - PHASE 1 SUMMARY
+2025-12-07 23:23:11,509 - __main__ - INFO - ==============================
+2025-12-07 23:23:11,509 - __main__ - INFO - Phase 1 entries found: 0
+2025-12-07 23:23:11,509 - __main__ - INFO -   - No entries found in Phase 1
+2025-12-07 23:23:11,509 - __main__ - INFO - ==============================
+2025-12-07 23:23:11,509 - __main__ - INFO - PHASE 2 SUMMARY
+2025-12-07 23:23:11,509 - __main__ - INFO - ==============================
+2025-12-07 23:23:11,509 - __main__ - INFO - Phase 2 entries found: 0
+2025-12-07 23:23:11,509 - __main__ - INFO -   - No entries found in Phase 2
+2025-12-07 23:23:11,509 - __main__ - INFO - ==============================
+2025-12-07 23:23:11,509 - __main__ - INFO - OVERALL SUMMARY
+2025-12-07 23:23:11,509 - __main__ - INFO - ==============================
+2025-12-07 23:23:11,509 - __main__ - INFO - Total entries found: 0
+2025-12-07 23:23:11,509 - __main__ - INFO - Successfully processed: 0
+2025-12-07 23:23:11,509 - __main__ - INFO - Skipped already parsed in this session: 0
+2025-12-07 23:23:11,509 - __main__ - INFO - Skipped already parsed in previous runs: 3339
+2025-12-07 23:23:11,509 - __main__ - INFO - Current parsed links in memory: 0
+2025-12-07 23:23:11,510 - __main__ - INFO - Results saved to: Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
+2025-12-07 23:23:11,510 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-12-07 23:23:11,510 - __main__ - INFO - ==================================================
+=======
+2025-12-07 19:00:01,732 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-07 19:00:01,732 - utils.proxy_ban_manager - INFO - Loaded 0 ban records from logs/proxy_bans.csv
+2025-12-07 19:00:01,733 - utils.proxy_pool - INFO - Added proxy 'Miraculous Fortress' to pool (HTTP: http://***:***@139.xxx.xxx.231:12300, HTTPS: http://***:***@139.xxx.xxx.231:12300)
+2025-12-07 19:00:01,733 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
+2025-12-07 19:00:01,733 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-07 19:00:01,733 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-07 19:00:01,733 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
+2025-12-07 19:00:01,733 - __main__ - INFO - Starting JavDB spider...
+2025-12-07 19:00:01,733 - __main__ - INFO - Arguments: start_page=1, end_page=10, phase=all
+2025-12-07 19:00:01,733 - __main__ - INFO - PROXY POOL MODE: 3 proxies configured with automatic failover
+2025-12-07 19:00:01,733 - __main__ - INFO - PROXY ENABLED: Using proxy for modules ['spider_index', 'spider_detail']
+2025-12-07 19:00:01,733 - __main__ - INFO - Validating history file integrity...
+2025-12-07 19:00:01,796 - utils.history_manager - INFO - Loaded 5901 previously parsed movies from history (phase 1: 3339, phase 2: 2562)
+2025-12-07 19:00:01,797 - __main__ - INFO - Initialized requests session
+2025-12-07 19:00:01,797 - __main__ - INFO - ==================================================
+2025-12-07 19:00:01,797 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-12-07 19:00:01,797 - __main__ - INFO - ==================================================
+2025-12-07 19:00:01,802 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=1 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7d3f29c2c500>: Failed to establish a new connection: [Errno 111] Connection refused')))
+2025-12-07 19:00:01,802 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (1/3)
+2025-12-07 19:00:01,802 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
+2025-12-07 19:00:01,802 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-07 19:00:03,638 - utils.parser - INFO - [Page 1] Found 13 entries for phase 1
+2025-12-07 19:00:09,165 - utils.parser - INFO - [Page 2] Found 0 entries for phase 1
+2025-12-07 19:00:14,691 - utils.parser - INFO - [Page 3] Found 0 entries for phase 1
+2025-12-07 19:00:20,240 - utils.parser - INFO - [Page 4] Found 0 entries for phase 1
+2025-12-07 19:00:25,789 - utils.parser - INFO - [Page 5] Found 0 entries for phase 1
+2025-12-07 19:00:31,333 - utils.parser - INFO - [Page 6] Found 4 entries for phase 1
+2025-12-07 19:00:36,861 - utils.parser - INFO - [Page 7] Found 11 entries for phase 1
+2025-12-07 19:00:42,237 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
+2025-12-07 19:00:47,829 - utils.parser - INFO - [Page 9] Found 0 entries for phase 1
+2025-12-07 19:00:53,351 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
+2025-12-07 19:01:03,654 - __main__ - INFO - [1/28] [Page 1] Processing ABF-105
+2025-12-07 19:01:14,105 - __main__ - INFO - [2/28] [Page 1] Processing ABF-137
+2025-12-07 19:01:24,539 - __main__ - INFO - [3/28] [Page 1] Processing ROE-387
+2025-12-07 19:01:40,065 - __main__ - INFO - [4/28] [Page 1] Processing ROE-410
+2025-12-07 19:01:55,555 - __main__ - INFO - [5/28] [Page 1] Processing ROE-419
+2025-12-07 19:02:11,048 - __main__ - INFO - [6/28] [Page 1] Processing ROE-421
+2025-12-07 19:02:26,520 - __main__ - INFO - [7/28] [Page 1] Processing ROE-423
+2025-12-07 19:02:42,038 - __main__ - INFO - [8/28] [Page 1] Processing SAME-188
+2025-12-07 19:02:57,547 - __main__ - INFO - [9/28] [Page 1] Processing SONE-974
+2025-12-07 19:03:13,057 - __main__ - INFO - [10/28] [Page 1] Processing SONE-987
+2025-12-07 19:03:28,589 - __main__ - INFO - [11/28] [Page 1] Processing SONE-997
+2025-12-07 19:03:44,098 - __main__ - INFO - [12/28] [Page 1] Processing blackedraw.18.03.18
+2025-12-07 19:03:59,616 - __main__ - INFO - [13/28] [Page 1] Processing blackedraw.18.03.23
+2025-12-07 19:04:15,253 - __main__ - INFO - [14/28] [Page 6] Processing CAWD-890
+2025-12-07 19:04:25,716 - __main__ - INFO - [15/28] [Page 6] Processing CAWD-895
+2025-12-07 19:04:36,198 - __main__ - INFO - [16/28] [Page 6] Processing CAWD-901
+2025-12-07 19:04:46,655 - __main__ - INFO - [17/28] [Page 6] Processing CAWD-903
+2025-12-07 19:04:57,133 - __main__ - INFO - [18/28] [Page 7] Processing CAWD-904
+2025-12-07 19:05:07,611 - __main__ - INFO - [19/28] [Page 7] Processing CEAD-696
+2025-12-07 19:05:18,232 - __main__ - INFO - [20/28] [Page 7] Processing CLOT-034
+2025-12-07 19:05:28,793 - __main__ - INFO - [21/28] [Page 7] Processing CLUB-893
+2025-12-07 19:05:39,261 - __main__ - INFO - [22/28] [Page 7] Processing CLUB-894
+2025-12-07 19:05:49,728 - __main__ - INFO - [23/28] [Page 7] Processing START-046
+2025-12-07 19:06:00,210 - __main__ - INFO - [24/28] [Page 7] Processing START-053
+2025-12-07 19:06:10,708 - __main__ - INFO - [25/28] [Page 7] Processing START-070
+2025-12-07 19:06:21,189 - __main__ - INFO - [26/28] [Page 7] Processing START-090
+2025-12-07 19:06:31,829 - __main__ - INFO - [27/28] [Page 7] Processing blackedraw.18.02.16
+2025-12-07 19:06:42,300 - __main__ - INFO - [28/28] [Page 7] Processing blackedraw.18.03.08
+2025-12-07 19:06:42,300 - __main__ - INFO - Phase 1 completed: 11 entries processed
+2025-12-07 19:06:42,300 - __main__ - INFO - ==================================================
+2025-12-07 19:06:42,300 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-12-07 19:06:42,300 - __main__ - INFO - ==================================================
+2025-12-07 19:06:42,890 - utils.parser - INFO - [Page 1] Found 2 entries for phase 2
+2025-12-07 19:06:48,435 - utils.parser - INFO - [Page 2] Found 5 entries for phase 2
+2025-12-07 19:06:54,014 - utils.parser - INFO - [Page 3] Found 5 entries for phase 2
+2025-12-07 19:06:59,586 - utils.parser - INFO - [Page 4] Found 13 entries for phase 2
+2025-12-07 19:07:05,122 - utils.parser - INFO - [Page 5] Found 7 entries for phase 2
+2025-12-07 19:07:10,719 - utils.parser - INFO - [Page 6] Found 9 entries for phase 2
+2025-12-07 19:07:16,303 - utils.parser - INFO - [Page 7] Found 8 entries for phase 2
+2025-12-07 19:07:21,899 - utils.parser - INFO - [Page 8] Found 3 entries for phase 2
+2025-12-07 19:07:27,456 - utils.parser - INFO - [Page 9] Found 0 entries for phase 2
+2025-12-07 19:07:33,002 - utils.parser - INFO - [Page 10] Found 0 entries for phase 2
+2025-12-07 19:07:43,453 - __main__ - INFO - [1/52] [Page 1] Processing IPZZ-751
+2025-12-07 19:07:58,778 - __main__ - INFO - [2/52] [Page 1] Processing DASS-770
+2025-12-07 19:08:09,460 - __main__ - INFO - [3/52] [Page 2] Processing JUR-584
+2025-12-07 19:08:19,905 - __main__ - INFO - [4/52] [Page 2] Processing IPZZ-740
+2025-12-07 19:08:35,384 - __main__ - INFO - [5/52] [Page 2] Processing IPZZ-717
+2025-12-07 19:08:45,921 - __main__ - INFO - [6/52] [Page 2] Processing MIBB-066
+2025-12-07 19:09:01,390 - __main__ - INFO - [7/52] [Page 2] Processing REAL-957
+2025-12-07 19:09:16,893 - __main__ - INFO - [8/52] [Page 3] Processing CEMD-775
+2025-12-07 19:09:32,478 - __main__ - INFO - [9/52] [Page 3] Processing DASS-737
+2025-12-07 19:09:42,952 - __main__ - INFO - [10/52] [Page 3] Processing NGOD-302
+2025-12-07 19:09:58,452 - __main__ - INFO - [11/52] [Page 3] Processing AVSA-412
+2025-12-07 19:10:14,126 - __main__ - INFO - [12/52] [Page 3] Processing JUR-579
+2025-12-07 19:10:24,585 - __main__ - INFO - [13/52] [Page 4] Processing DASS-777
+2025-12-07 19:10:35,083 - __main__ - INFO - [14/52] [Page 4] Processing JUR-529
+2025-12-07 19:10:45,719 - __main__ - INFO - [15/52] [Page 4] Processing JUR-554
+2025-12-07 19:10:56,222 - __main__ - INFO - [16/52] [Page 4] Processing JUR-587
+2025-12-07 19:11:11,692 - __main__ - INFO - [17/52] [Page 4] Processing MKMP-693
+2025-12-07 19:11:27,171 - __main__ - INFO - [18/52] [Page 4] Processing ROE-393
+2025-12-07 19:11:37,651 - __main__ - INFO - [19/52] [Page 4] Processing SNOS-008
+2025-12-07 19:11:48,117 - __main__ - INFO - [20/52] [Page 4] Processing SONE-986
+2025-12-07 19:11:58,384 - __main__ - INFO - [21/52] [Page 4] Processing RKI-732
+2025-12-07 19:12:08,818 - __main__ - INFO - [22/52] [Page 4] Processing SNOS-006
+2025-12-07 19:12:19,116 - __main__ - INFO - [23/52] [Page 4] Processing SNOS-019
+2025-12-07 19:12:34,614 - __main__ - INFO - [24/52] [Page 4] Processing NMSL-002
+2025-12-07 19:12:45,255 - __main__ - INFO - [25/52] [Page 4] Processing NMSL-001
+2025-12-07 19:13:00,744 - __main__ - INFO - [26/52] [Page 5] Processing DASS-820
+2025-12-07 19:13:11,191 - __main__ - INFO - [27/52] [Page 5] Processing JUR-547
+2025-12-07 19:13:21,657 - __main__ - INFO - [28/52] [Page 5] Processing JUR-566
+2025-12-07 19:13:32,317 - __main__ - INFO - [29/52] [Page 5] Processing REAL-958
+2025-12-07 19:13:47,803 - __main__ - INFO - [30/52] [Page 5] Processing SNOS-022
+2025-12-07 19:13:58,246 - __main__ - INFO - [31/52] [Page 5] Processing IPZZ-727
+2025-12-07 19:14:08,714 - __main__ - INFO - [32/52] [Page 5] Processing IPZZ-730
+2025-12-07 19:14:19,175 - __main__ - INFO - [33/52] [Page 6] Processing IPZZ-744
+2025-12-07 19:14:29,627 - __main__ - INFO - [34/52] [Page 6] Processing IPZZ-749
+2025-12-07 19:14:45,121 - __main__ - INFO - [35/52] [Page 6] Processing SNOS-014
+2025-12-07 19:14:55,600 - __main__ - INFO - [36/52] [Page 6] Processing DASS-793
+2025-12-07 19:15:11,099 - __main__ - INFO - [37/52] [Page 6] Processing SNOS-045
+2025-12-07 19:15:21,547 - __main__ - INFO - [38/52] [Page 6] Processing IPZZ-718
+2025-12-07 19:15:32,002 - __main__ - INFO - [39/52] [Page 6] Processing NGOD-305
+2025-12-07 19:15:42,443 - __main__ - INFO - [40/52] [Page 6] Processing DOCZ-005
+2025-12-07 19:15:57,940 - __main__ - INFO - [41/52] [Page 6] Processing DOKS-653
+2025-12-07 19:16:08,407 - __main__ - INFO - [42/52] [Page 7] Processing SONE-991
+2025-12-07 19:16:18,897 - __main__ - INFO - [43/52] [Page 7] Processing JUR-513
+2025-12-07 19:16:29,350 - __main__ - INFO - [44/52] [Page 7] Processing JUR-562
+2025-12-07 19:16:39,836 - __main__ - INFO - [45/52] [Page 7] Processing DASS-812
+2025-12-07 19:16:50,562 - __main__ - INFO - [46/52] [Page 7] Processing JUR-530
+2025-12-07 19:17:00,987 - __main__ - INFO - [47/52] [Page 7] Processing JUR-548
+2025-12-07 19:17:11,455 - __main__ - INFO - [48/52] [Page 7] Processing IPZZ-756
+2025-12-07 19:17:21,907 - __main__ - INFO - [49/52] [Page 7] Processing SNOS-040
+2025-12-07 19:17:32,387 - __main__ - INFO - [50/52] [Page 8] Processing JUR-531
+2025-12-07 19:17:42,818 - __main__ - INFO - [51/52] [Page 8] Processing JUR-538
+2025-12-07 19:17:53,480 - __main__ - INFO - [52/52] [Page 8] Processing IPZZ-719
+2025-12-07 19:17:53,480 - __main__ - INFO - Phase 2 completed: 15 entries processed
+2025-12-07 19:17:53,480 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251207.csv
+2025-12-07 19:17:53,480 - __main__ - INFO - ==================================================
+2025-12-07 19:17:53,480 - __main__ - INFO - SUMMARY REPORT
+2025-12-07 19:17:53,480 - __main__ - INFO - ==================================================
+2025-12-07 19:17:53,480 - __main__ - INFO - Pages processed: 1 to 10
+2025-12-07 19:17:53,480 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-12-07 19:17:53,480 - __main__ - INFO - ==============================
+2025-12-07 19:17:53,480 - __main__ - INFO - PHASE 1 SUMMARY
+2025-12-07 19:17:53,480 - __main__ - INFO - ==============================
+2025-12-07 19:17:53,480 - __main__ - INFO - Phase 1 entries found: 11
+2025-12-07 19:17:53,480 - __main__ - INFO -   - Subtitle torrents: 11 (100.0%)
+2025-12-07 19:17:53,480 - __main__ - INFO -   - Hacked subtitle torrents: 2 (18.2%)
+2025-12-07 19:17:53,480 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
+2025-12-07 19:17:53,480 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
+2025-12-07 19:17:53,480 - __main__ - INFO - ==============================
+2025-12-07 19:17:53,480 - __main__ - INFO - PHASE 2 SUMMARY
+2025-12-07 19:17:53,480 - __main__ - INFO - ==============================
+2025-12-07 19:17:53,480 - __main__ - INFO - Phase 2 entries found: 15
+2025-12-07 19:17:53,480 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
+2025-12-07 19:17:53,480 - __main__ - INFO -   - Hacked subtitle torrents: 2 (13.3%)
+2025-12-07 19:17:53,480 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
+2025-12-07 19:17:53,480 - __main__ - INFO -   - No-subtitle torrents: 15 (100.0%)
+2025-12-07 19:17:53,480 - __main__ - INFO - ==============================
+2025-12-07 19:17:53,480 - __main__ - INFO - OVERALL SUMMARY
+2025-12-07 19:17:53,480 - __main__ - INFO - ==============================
+2025-12-07 19:17:53,480 - __main__ - INFO - Total entries found: 26
+2025-12-07 19:17:53,480 - __main__ - INFO - Successfully processed: 26
+2025-12-07 19:17:53,480 - __main__ - INFO - Skipped already parsed in this session: 80
+2025-12-07 19:17:53,481 - __main__ - INFO - Skipped already parsed in previous runs: 3339
+2025-12-07 19:17:53,481 - __main__ - INFO - Current parsed links in memory: 80
+2025-12-07 19:17:53,481 - __main__ - INFO - Overall subtitle torrents: 11 (42.3%)
+2025-12-07 19:17:53,481 - __main__ - INFO - Overall hacked subtitle torrents: 4 (15.4%)
+2025-12-07 19:17:53,481 - __main__ - INFO - Overall hacked no-subtitle torrents: 0 (0.0%)
+2025-12-07 19:17:53,481 - __main__ - INFO - Overall no-subtitle torrents: 15 (57.7%)
+2025-12-07 19:17:53,481 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251207.csv
+2025-12-07 19:17:53,481 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-12-07 19:17:53,481 - __main__ - INFO - ==================================================
+2025-12-07 19:17:53,481 - __main__ - INFO - 
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO - ==================================================
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO - PROXY POOL STATISTICS
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO - ==================================================
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO - Total proxies: 3
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO - Available proxies: 3
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO - In cooldown: 0
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO - No-proxy mode: False
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO - 
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO - Individual proxy statistics:
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO -   [Standby] Miraculous Fortress:
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO -     - Total requests: 1
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO -     - Success rate: 0.0%
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO -     - Consecutive failures: 1
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO -     - Last success: Never
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO -     - Last failure: 2025-12-07 19:00:01
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO -   [ACTIVE] Singapore-ARM1:
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO -     - Total requests: 100
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO -     - Success rate: 100.0%
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO -     - Consecutive failures: 0
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO -     - Last success: 2025-12-07 19:17:43
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO -     - Last failure: Never
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO -   [Standby] Singapore-ARM2:
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO -     - Total requests: 0
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO -     - Success rate: 0.0%
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO -     - Consecutive failures: 0
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO -     - Last success: Never
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO -     - Last failure: Never
+2025-12-07 19:17:53,481 - utils.proxy_pool - INFO - ==================================================
+2025-12-07 19:17:53,481 - __main__ - INFO - 
+2025-12-07 19:17:53,481 - __main__ - INFO - ==================================================
+2025-12-07 19:17:53,481 - __main__ - INFO - PROXY BAN STATUS
+2025-12-07 19:17:53,481 - __main__ - INFO - ==================================================
+2025-12-07 19:17:53,481 - __main__ - INFO - No proxies currently banned.
+2025-12-07 19:17:53,481 - __main__ - INFO - ==================================================
+>>>>>>> fd9c3c10cfa4c4a382adf3c20438f2f66c050e50
+>>>>>>> bff622b9988191fa22821930166544e69d571727
