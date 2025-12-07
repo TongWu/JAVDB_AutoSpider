@@ -166,6 +166,71 @@ def get_log_summary(log_path, lines=200):
     return ''.join(log_lines[-lines:])
 
 
+def extract_spider_summary(log_path):
+    """
+    Extract relevant summary section from spider log.
+    Specifically looks for 'SUMMARY REPORT' and stops before 'PROXY POOL STATISTICS'.
+    """
+    if not os.path.exists(log_path):
+        return f'Log file not found: {log_path}'
+        
+    try:
+        with open(log_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+        # Find the last occurrence of SUMMARY REPORT
+        summary_start_marker = "SUMMARY REPORT"
+        proxy_stats_marker = "PROXY POOL STATISTICS"
+        
+        start_idx = content.rfind(summary_start_marker)
+        
+        if start_idx != -1:
+            # Find the start of the line containing SUMMARY REPORT (to include the separator line before it)
+            # Go back to find the "=====" line before SUMMARY REPORT
+            separator_search_start = max(0, start_idx - 100)
+            pre_context = content[separator_search_start:start_idx]
+            last_separator = pre_context.rfind("=====")
+            
+            if last_separator != -1:
+                real_start_idx = separator_search_start + last_separator
+                # Back up to the start of that line
+                line_start = content.rfind('\n', 0, real_start_idx)
+                if line_start != -1:
+                    start_idx = line_start + 1
+                else:
+                    start_idx = real_start_idx
+            
+            # Determine end index
+            end_idx = content.find(proxy_stats_marker, start_idx)
+            
+            if end_idx != -1:
+                # Found proxy stats, cut off there
+                # Also remove the separator line before proxy stats if possible
+                separator_search_end = end_idx
+                pre_proxy_context = content[start_idx:separator_search_end]
+                last_separator_before_proxy = pre_proxy_context.rfind("=====")
+                
+                if last_separator_before_proxy != -1:
+                    # Cut before the separator line of Proxy Stats
+                    # Find start of that separator line
+                    sep_line_start = pre_proxy_context.rfind('\n', 0, last_separator_before_proxy)
+                    if sep_line_start != -1:
+                        # Extract content
+                        return content[start_idx : start_idx + sep_line_start + 1]
+                
+                return content[start_idx:end_idx]
+            else:
+                # No proxy stats found, take everything until end
+                return content[start_idx:]
+        
+        # Fallback if no specific summary found
+        return get_log_summary(log_path, lines=50)
+        
+    except Exception as e:
+        logger.warning(f"Failed to extract spider summary: {e}")
+        return get_log_summary(log_path, lines=50)
+
+
 def analyze_spider_log(log_path):
     """
     Analyze spider log to detect critical errors
@@ -457,14 +522,21 @@ def main():
     args = parse_arguments()
     is_adhoc_mode = args.url is not None
     # Determine CSV path based on mode
+    if args.output_file:
+        csv_filename = args.output_file
+    else:
+        if is_adhoc_mode:
+            import Javdb_Spider
+            csv_filename = Javdb_Spider.generate_output_csv_name(args.url)
+        else:
+            today_str = datetime.now().strftime('%Y%m%d')
+            csv_filename = f'Javdb_TodayTitle_{today_str}.csv'
+
     if is_adhoc_mode:
-        import Javdb_Spider
-        csv_filename = Javdb_Spider.generate_output_csv_name(args.url)
         csv_path = os.path.join(AD_HOC_DIR, csv_filename)
         logger.info(f"Ad hoc mode detected. Expected CSV: {csv_path}")
     else:
-        today_str = datetime.now().strftime('%Y%m%d')
-        csv_path = os.path.join('Daily Report', f'Javdb_TodayTitle_{today_str}.csv')
+        csv_path = os.path.join(DAILY_REPORT_DIR, csv_filename)
         logger.info(f"Daily mode. Expected CSV: {csv_path}")
 
     # Build arguments for Javdb_Spider
@@ -481,8 +553,10 @@ def main():
         spider_args.append('--ignore-history')
     if args.phase:
         spider_args.extend(['--phase', args.phase])
-    if args.output_file:
-        spider_args.extend(['--output-file', args.output_file])
+    
+    # Always pass output file explicitly to ensure consistency
+    spider_args.extend(['--output-file', csv_filename])
+        
     if args.dry_run:
         spider_args.append('--dry-run')
     if args.ignore_release_date:
@@ -498,6 +572,10 @@ def main():
         uploader_args.extend(['--mode', 'adhoc'])
     else:
         uploader_args.extend(['--mode', 'daily'])
+    
+    # Pass input file explicitly to ensure it matches Spider's output
+    uploader_args.extend(['--input-file', csv_filename])
+        
     if args.use_proxy:
         uploader_args.append('--use-proxy')
 
@@ -579,7 +657,7 @@ def main():
     today_str = datetime.now().strftime('%Y%m%d')
     if not has_critical_errors:
         # Pipeline succeeded - send detailed report with attachments
-        spider_summary = get_log_summary(SPIDER_LOG_FILE, lines=35)
+        spider_summary = extract_spider_summary(SPIDER_LOG_FILE)
         uploader_summary = get_log_summary(UPLOADER_LOG_FILE, lines=13)
         pikpak_summary = get_log_summary(PIKPAK_LOG_FILE, lines=10)
         ban_summary = get_proxy_ban_summary()
@@ -609,7 +687,7 @@ JavDB Spider, qBittorrent Uploader, and PikPak Bridge Pipeline Completed Success
         # Pipeline failed - send detailed failure notification
         error_details = "\n".join([f"  - {error}" for error in pipeline_errors])
         
-        spider_summary = get_log_summary(SPIDER_LOG_FILE, lines=35)
+        spider_summary = extract_spider_summary(SPIDER_LOG_FILE)
         uploader_summary = get_log_summary(UPLOADER_LOG_FILE, lines=13)
         pikpak_summary = get_log_summary(PIKPAK_LOG_FILE, lines=10)
         ban_summary = get_proxy_ban_summary()
