@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 2025-12-07 23:40:15,539 - __main__ - INFO - Initializing proxy pool with 3 proxies...
 2025-12-07 23:40:15,540 - utils.proxy_ban_manager - INFO - Loaded 2 ban records from logs/proxy_bans.csv
 2025-12-07 23:40:15,540 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
@@ -1201,3 +1202,34 @@ BUG - Extracted video code from <strong> tag: START-404
 2025-12-07 23:44:12,300 - __main__ - INFO - Results saved to: Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
 2025-12-07 23:44:12,301 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
 2025-12-07 23:44:12,301 - __main__ - INFO - ==================================================
+=======
+2025-12-07 23:30:42,413 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-07 23:30:42,415 - utils.proxy_ban_manager - INFO - Loaded 2 ban records from logs/proxy_bans.csv
+2025-12-07 23:30:42,415 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
+2025-12-07 23:30:42,415 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
+2025-12-07 23:30:42,415 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' is currently banned, skipping
+2025-12-07 23:30:42,415 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-07 23:30:42,415 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
+2025-12-07 23:30:42,415 - __main__ - INFO - Starting JavDB spider...
+2025-12-07 23:30:42,415 - __main__ - INFO - Arguments: start_page=1, end_page=10, phase=all
+2025-12-07 23:30:42,415 - __main__ - INFO - Custom URL: https://javdb.com/actors/RdEb4
+2025-12-07 23:30:42,415 - __main__ - INFO - AD HOC MODE: Will skip entries already in history (use --ignore-history to override)
+2025-12-07 23:30:42,415 - __main__ - INFO - Validating history file integrity...
+2025-12-07 23:30:42,475 - utils.history_manager - INFO - Loaded 5916 previously parsed movies from history (phase 1: 3350, phase 2: 2566)
+2025-12-07 23:30:42,476 - __main__ - INFO - Initialized requests session
+2025-12-07 23:30:42,476 - __main__ - INFO - ==================================================
+2025-12-07 23:30:42,476 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-12-07 23:30:42,476 - __main__ - INFO - ==================================================
+2025-12-07 23:30:43,834 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-07 23:30:45,290 - __main__ - ERROR - Error fetching https://javdb.com/actors/RdEb4: HTTPConnectionPool(host='138.2.91.170', port=8000): Max retries exceeded with url: /actors/RdEb4 (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7485da686f00>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-12-07 23:30:45,290 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
+2025-12-07 23:30:45,290 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-07 23:30:45,290 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-07 23:30:45,300 - __main__ - ERROR - Error fetching https://javdb.com/actors/RdEb4: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/actors/RdEb4
+2025-12-07 23:30:45,300 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
+2025-12-07 23:30:45,300 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM1'
+2025-12-07 23:30:45,300 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-07 23:30:45,306 - __main__ - ERROR - Error fetching https://javdb.com/actors/RdEb4: 503 Server Error: Service Unavailable for url: http://138.2.91.170:8000/actors/RdEb4
+2025-12-07 23:30:45,306 - __main__ - ERROR - [Page 1] All proxy attempts exhausted.
+2025-12-07 23:30:45,306 - __main__ - WARNING - [Page 1] No movie list found after all fallback attempts
+>>>>>>> 737bd0e (Update)
