@@ -390,7 +390,7 @@ def get_page_url(page_num, phase=1, custom_url=None):
         return f'{BASE_URL}&page={page_num}'
 
 
-def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use_cf_bypass, page_num):
+def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use_cf_bypass, page_num, is_adhoc_mode=False):
     """
     Fetch index page with smart multi-level fallback mechanism.
     
@@ -401,7 +401,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
        For each proxy:
        a. Try Direct Proxy (No CF)
        b. Try Proxy + CF Bypass
-       c. If both fail, mark proxy as BANNED and switch to next.
+       c. If both fail, mark proxy as BANNED and switch to next (unless in ad hoc mode).
     
     Args:
         page_url: URL to fetch
@@ -410,6 +410,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
         use_proxy: Whether proxy is currently enabled
         use_cf_bypass: Whether CF bypass is currently enabled
         page_num: Current page number (for logging)
+        is_adhoc_mode: If True, don't mark proxies as banned on failure (for custom URLs)
     
     Returns:
         tuple: (html_content, has_movie_list, proxy_was_banned, effective_use_proxy, effective_use_cf_bypass)
@@ -502,14 +503,22 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
             logger.info(f"[Page {page_num}] Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True")
             return html, True, proxy_was_banned, True, True
 
-        # If both failed for this proxy, mark it as banned
+        # If both failed for this proxy, handle based on mode
         attempts += 1
         if attempts < max_switches and PROXY_MODE == 'pool':
-            logger.warning(f"[Page {page_num}] Proxy '{current_proxy_name}' failed both Direct and CF modes. Marking BANNED and switching...")
-            # Mark failure multiple times to trigger cooldown
-            for _ in range(PROXY_POOL_MAX_FAILURES):
-                global_proxy_pool.mark_failure_and_switch()
-            proxy_was_banned = True
+            if is_adhoc_mode:
+                # Ad hoc mode: Don't mark as banned, just switch to next proxy
+                # Failure might be due to page-specific issues (login required, page not found, etc.)
+                logger.warning(f"[Page {page_num}] Proxy '{current_proxy_name}' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)")
+                logger.info(f"[Page {page_num}] Switching to next proxy...")
+                global_proxy_pool.mark_failure_and_switch()  # Single failure mark, no ban
+            else:
+                # Normal mode: Mark as banned after multiple failures
+                logger.warning(f"[Page {page_num}] Proxy '{current_proxy_name}' failed both Direct and CF modes. Marking BANNED and switching...")
+                # Mark failure multiple times to trigger cooldown
+                for _ in range(PROXY_POOL_MAX_FAILURES):
+                    global_proxy_pool.mark_failure_and_switch()
+                proxy_was_banned = True
         else:
             if PROXY_MODE == 'single':
                 logger.error(f"[Page {page_num}] Single proxy mode failed. Cannot switch.")
@@ -925,7 +934,8 @@ def main():
                 use_cookie=custom_url is not None, 
                 use_proxy=use_proxy, 
                 use_cf_bypass=use_cf_bypass,
-                page_num=page_num
+                page_num=page_num,
+                is_adhoc_mode=custom_url is not None  # Don't ban proxies in ad hoc mode
             )
             
             # Update global settings if fallback changed them (to be persistent for next pages/details)
@@ -1107,7 +1117,8 @@ def main():
                 use_cookie=custom_url is not None, 
                 use_proxy=use_proxy, 
                 use_cf_bypass=use_cf_bypass,
-                page_num=page_num
+                page_num=page_num,
+                is_adhoc_mode=custom_url is not None  # Don't ban proxies in ad hoc mode
             )
             
             # Update global settings if fallback changed them
