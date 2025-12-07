@@ -463,12 +463,15 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
     logger.warning(f"[Page {page_num}] Initial attempt failed. Starting smart fallback mechanism...")
 
     # --- Phase 1: Local CF Fallback (Only if we started with No Proxy & No CF) ---
+    # Disabled by default: Don't automatically try CF Bypass if user didn't request it (avoids localhost connection errors)
+    # The user must explicitly provide --use-cf-bypass to enable this feature
     if not use_proxy and not use_cf_bypass:
-        html, success = try_fetch(False, True, "Fallback Phase 1: Local CF Bypass (No Proxy)")
-        if success:
-            logger.info(f"[Page {page_num}] Local CF Bypass succeeded. Switching mode to: use_cf_bypass=True")
-            return html, True, False, False, True
-        logger.warning(f"[Page {page_num}] Local CF Bypass failed. Assuming local IP banned. Switching to Proxy Pool...")
+        logger.debug(f"[Page {page_num}] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...")
+        # html, success = try_fetch(False, True, "Fallback Phase 1: Local CF Bypass (No Proxy)")
+        # if success:
+        #     logger.info(f"[Page {page_num}] Local CF Bypass succeeded. Switching mode to: use_cf_bypass=True")
+        #     return html, True, False, False, True
+        # logger.warning(f"[Page {page_num}] Local CF Bypass failed. Assuming local IP banned. Switching to Proxy Pool...")
 
     # --- Phase 2: Proxy Pool Iteration ---
     if global_proxy_pool is None:
