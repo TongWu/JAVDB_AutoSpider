@@ -318,6 +318,10 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
             if age_modal:
                 logger.debug("Age verification modal detected, attempting to bypass...")
                 
+                # Create clean headers for age verification (without x-hostname if CF bypass is enabled)
+                # Age verification requests go directly to javdb.com, not through CF bypass service
+                age_headers = {k: v for k, v in headers.items() if k != 'x-hostname'}
+                
                 # Find age verification link
                 age_links = age_modal.find_all('a', href=True)
                 for link in age_links:
@@ -326,7 +330,8 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
                         logger.debug(f"Found age verification link: {age_url}")
                         
                         # Access age verification link (use same proxy settings as main request)
-                        age_response = session.get(age_url, headers=headers, proxies=proxies, timeout=30)
+                        # Use age_headers to exclude x-hostname header
+                        age_response = session.get(age_url, headers=age_headers, proxies=proxies, timeout=30)
                         if age_response.status_code == 200:
                             logger.debug("Successfully bypassed age verification")
                             # Re-fetch the original page using the same URL and proxy settings
