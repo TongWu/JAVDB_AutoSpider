@@ -76,6 +76,7 @@ QB_BASE_URL = f'http://{QB_HOST}:{QB_PORT}'
 def parse_arguments():
     parser = argparse.ArgumentParser(description='qBittorrent Uploader')
     parser.add_argument('--mode', choices=['adhoc', 'daily'], default='daily', help='Upload mode: adhoc (Ad Hoc folder) or daily (Daily Report folder)')
+    parser.add_argument('--input-file', type=str, help='Specify input CSV file name (overrides default date-based name)')
     parser.add_argument('--use-proxy', action='store_true', help='Enable proxy for qBittorrent API requests (proxy settings from config.py)')
     return parser.parse_args()
 
@@ -386,9 +387,16 @@ def main():
     #     logger.error("3. Host and port settings in config.py")
     #     return
     
-    # Get CSV filename for current date
-    csv_filename = get_csv_filename(mode)
-    logger.info(f"Looking for CSV file: {csv_filename}")
+    # Get CSV filename
+    if args.input_file:
+        if mode == 'adhoc':
+            csv_filename = os.path.join(AD_HOC_DIR, args.input_file)
+        else:
+            csv_filename = os.path.join(DAILY_REPORT_DIR, args.input_file)
+        logger.info(f"Using specified input file: {csv_filename}")
+    else:
+        csv_filename = get_csv_filename(mode)
+        logger.info(f"Looking for CSV file: {csv_filename}")
     
     # Read torrent links from CSV
     torrents = read_csv_file(csv_filename)
