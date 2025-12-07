@@ -1,356 +1,1203 @@
-2025-12-07 23:35:01,447 - __main__ - INFO - Initializing proxy pool with 3 proxies...
-2025-12-07 23:35:01,447 - utils.proxy_ban_manager - INFO - Loaded 2 ban records from logs/proxy_bans.csv
-2025-12-07 23:35:01,447 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
-2025-12-07 23:35:01,447 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-07 23:35:01,447 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' is currently banned, skipping
-2025-12-07 23:35:01,448 - __main__ - INFO - Proxy pool initialized successfully
-2025-12-07 23:35:01,448 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
-2025-12-07 23:35:01,4482025-12-07 23:35:49,478 - __main__ - INFO - ✓ JavDB Spider completed successfully
-2025-12-07 23:35:49,478 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
-2025-12-07 23:35:49,478 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode adhoc --input-file Javdb_AdHoc_actors_RdEb4_20251207.csv
-2025-12-07 23:35:49,589 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
-2025-12-07 23:35:49,589 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
-2025-12-07 23:35:49,589 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
-2025-12-07 23:35:49,589 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-12-04)
-2025-12-07 23:35:49,595 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 101.100.165.240:12301
-2025-12-07 23:35:50,146 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/auth/login HTTP/1.1" 200 3
-2025-12-07 23:35:50,147 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
-2025-12-07 23:35:50,671 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "GET /api/v2/torrents/info?category=Daily+Ingestion&filter=downloading HTTP/1.1" 200 93449
-2025-12-07 23:35:50,693 - pikpak_bridge - DEBUG - Found 474 torrents in category 'Daily Ingestion'
-2025-12-07 23:35:50,719 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "GET /api/v2/torrents/info?category=Ad+Hoc&filter=downloading HTTP/1.1" 200 2
-2025-12-07 23:35:50,720 - pikpak_bridge - DEBUG - Found 0 torrents in category 'Ad Hoc'
-2025-12-07 23:35:50,720 - pikpak_bridge - INFO - Found 474 torrents across categories ['Daily Ingestion', 'Ad Hoc']
-2025-12-07 23:35:50,720 - pikpak_bridge - INFO - Filtered 0 torrents older than 3 days
-2025-12-07 23:35:50,720 - pikpak_bridge - INFO - No torrents to process.
-2025-12-07 23:35:50,721 - __main__ - INFO - PikPak Bridge completed successfully
-2025-12-07 23:35:50,721 - __main__ - INFO - ✓ PikPak Bridge completed successfully
-2025-12-07 23:35:50,721 - __main__ - INFO - ============================================================
-2025-12-07 23:35:50,721 - __main__ - INFO - PIPELINE COMPLETED
-2025-12-07 23:35:50,721 - __main__ - INFO - ============================================================
-2025-12-07 23:35:50,721 - __main__ - INFO - Analyzing logs for critical errors...
-2025-12-07 23:35:50,721 - __main__ - ERROR - CRITICAL ERROR in Spider: CF bypass and proxy fallback failed - movie list not found on 6 pages
-2025-12-07 23:35:50,722 - __main__ - ERROR - ============================================================
-2025-12-07 23:35:50,722 - __main__ - ERROR - PIPELINE FAILED - CRITICAL ERRORS DETECTED
-2025-12-07 23:35:50,722 - __main__ - ERROR - ============================================================
-2025-12-07 23:35:50,722 - __main__ - ERROR -   - Spider: CF bypass and proxy fallback failed - movie list not found on 6 pages
-2025-12-07 23:35:50,724 - utils.proxy_ban_manager - INFO - Loaded 2 ban records from logs/proxy_bans.csv
-2025-12-07 23:35:50,727 - __main__ - INFO - Connecting to SMTP server...
-2025-12-07 23:35:54,206 - __main__ - INFO - Email sent successfully.
-2025-12-07 23:35:54,207 - __main__ - INFO - Final commit for pipeline log...
-2025-12-07 23:35:54,208 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
-2025-12-07 23:35:54,250 - __main__ - INFO - Pulling latest changes from remote repository...
-2025-12-07 23:35:55,006 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
-2025-12-07 23:35:55,006 - __main__ - INFO - Adding files to git...
-2025-12-07 23:35:55,068 - __main__ - INFO - Commit changes for pipeline_log
-://javdb.com/actors/RdEb4 (attempt 1/3)
-2025-12-07 23:35:03,110 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@140.245.123.124:12300'}
-2025-12-07 23:35:03,111 - urllib3.connectionpool - DEBUG - Starting new HTTPS connection (1): javdb.com:443
-2025-12-07 23:35:03,506 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 302 None
-2025-12-07 23:35:03,743 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4 HTTP/1.1" 200 None
-2025-12-07 23:35:03,746 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4
-2025-12-07 23:35:03,747 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
-2025-12-07 23:35:03,752 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
-2025-12-07 23:35:03,752 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=ntd5y06lpy1kjw0lv0c2y8xs77Zptj4sm1558bwhbzpttdns0zzw78yr5q1xwhm8yAh1f3hrpc2fyqh0v54ql3cb1r83vbnxktpc3y0xdz1x0cs15gs9q5x919tq75qp61
-2025-12-07 23:35:04,008 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=ntd5y06lpy1kjw0lv0c2y8xs77Zptj4sm1558bwhbzpttdns0zzw78yr5q1xwhm8yAh1f3hrpc2fyqh0v54ql3cb1r83vbnxktpc3y0xdz1x0cs15gs9q5x919tq75qp61 HTTP/1.1" 302 None
-2025-12-07 23:35:04,239 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dntd5y06lpy1kjw0lv0c2y8xs77Zptj4sm1558bwhbzpttdns0zzw78yr5q1xwhm8yAh1f3hrpc2fyqh0v54ql3cb1r83vbnxktpc3y0xdz1x0cs15gs9q5x919tq75qp61 HTTP/1.1" 200 None
-2025-12-07 23:35:04,240 - __main__ - DEBUG - Successfully bypassed age verification
-2025-12-07 23:35:04,458 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 302 None
-2025-12-07 23:35:04,682 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4 HTTP/1.1" 200 None
-2025-12-07 23:35:04,686 - __main__ - DEBUG - [Page 1] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
-2025-12-07 23:35:04,686 - __main__ - DEBUG - [Page 1] Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)...
-2025-12-07 23:35:04,686 - __main__ - DEBUG - [CF Bypass] Request Mirroring: https://javdb.com/actors/RdEb4 -> http://140.245.123.124:8000/actors/RdEb4
-2025-12-07 23:35:04,686 - __main__ - DEBUG - [CF Bypass] x-hostname: javdb.com
-2025-12-07 23:35:04,686 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4 (attempt 1/3)
-2025-12-07 23:35:04,686 - __main__ - DEBUG - [CF Bypass] Actual request to: http://140.245.123.124:8000/actors/RdEb4
-2025-12-07 23:35:04,687 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 140.245.123.124:8000
-2025-12-07 23:35:27,207 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4 HTTP/1.1" 302 648
-2025-12-07 23:35:27,208 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4
-2025-12-07 23:35:27,209 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
-2025-12-07 23:35:27,209 - __main__ - DEBUG - No age verification modal detected
-2025-12-07 23:35:27,210 - __main__ - DEBUG - [Page 1] Validation failed (no movie list): Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)
-2025-12-07 23:35:27,210 - __main__ - ERROR - [Page 1] All proxy attempts exhausted.
-2025-12-07 23:35:27,210 - __main__ - WARNING - [Page 1] No movie list found after all fallback attempts
-2025-12-07 23:35:27,211 - __main__ - DEBUG - [Page 2] Fetching: https://javdb.com/actors/RdEb4?page=2
-2025-12-07 23:35:27,211 - __main__ - DEBUG - [Page 2] Initial attempt (Proxy=False, CF=False, Node=None)...
-2025-12-07 23:35:27,211 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
-2025-12-07 23:35:27,463 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
-2025-12-07 23:35:27,680 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
-2025-12-07 23:35:27,683 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
-2025-12-07 23:35:27,694 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
-2025-12-07 23:35:27,694 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=6ddzt6kthnbc0rz7tt299xnp82Zb19427kyyld1z6zn2tqsvs68pj0k0Abycq4f0rrkymw1b6nrdh6bvyk9tnps8pbpmAschvkgxyk3rglf50fwj3y7xmr8wfA09sjv4zw9Ayj4bt1hlgAz5s6pgb8mww25
-2025-12-07 23:35:27,913 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=6ddzt6kthnbc0rz7tt299xnp82Zb19427kyyld1z6zn2tqsvs68pj0k0Abycq4f0rrkymw1b6nrdh6bvyk9tnps8pbpmAschvkgxyk3rglf50fwj3y7xmr8wfA09sjv4zw9Ayj4bt1hlgAz5s6pgb8mww25 HTTP/1.1" 302 None
-2025-12-07 23:35:28,144 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3D6ddzt6kthnbc0rz7tt299xnp82Zb19427kyyld1z6zn2tqsvs68pj0k0Abycq4f0rrkymw1b6nrdh6bvyk9tnps8pbpmAschvkgxyk3rglf50fwj3y7xmr8wfA09sjv4zw9Ayj4bt1hlgAz5s6pgb8mww25 HTTP/1.1" 200 None
-2025-12-07 23:35:28,146 - __main__ - DEBUG - Successfully bypassed age verification
-2025-12-07 23:35:28,352 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
-2025-12-07 23:35:28,595 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
-2025-12-07 23:35:28,608 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
-2025-12-07 23:35:28,609 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-07 23:35:28,609 - __main__ - DEBUG - [Page 2] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
-2025-12-07 23:35:28,609 - __main__ - DEBUG - [Page 2] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
-2025-12-07 23:35:28,609 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
-2025-12-07 23:35:28,609 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
-2025-12-07 23:35:28,609 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@140.245.123.124:12300'}
-2025-12-07 23:35:28,827 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
-2025-12-07 23:35:29,053 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
-2025-12-07 23:35:29,055 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
-2025-12-07 23:35:29,056 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
-2025-12-07 23:35:29,066 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
-2025-12-07 23:35:29,067 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=q8x2msz0rfm4w5s78wmwp4gnzyZcwttwl4r4lrkb1l5vs1clfp0fpkq14qlAspgkqgj0whg29sfvcbvh2wt2fhn4myrxbcblq12y214klh7fffh1n89Actv4bb2wglzyxc1rA06wz3hdc4fg2wvnhh3pjsp
-2025-12-07 23:35:29,271 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=q8x2msz0rfm4w5s78wmwp4gnzyZcwttwl4r4lrkb1l5vs1clfp0fpkq14qlAspgkqgj0whg29sfvcbvh2wt2fhn4myrxbcblq12y214klh7fffh1n89Actv4bb2wglzyxc1rA06wz3hdc4fg2wvnhh3pjsp HTTP/1.1" 302 None
-2025-12-07 23:35:29,490 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dq8x2msz0rfm4w5s78wmwp4gnzyZcwttwl4r4lrkb1l5vs1clfp0fpkq14qlAspgkqgj0whg29sfvcbvh2wt2fhn4myrxbcblq12y214klh7fffh1n89Actv4bb2wglzyxc1rA06wz3hdc4fg2wvnhh3pjsp HTTP/1.1" 200 None
-2025-12-07 23:35:29,493 - __main__ - DEBUG - Successfully bypassed age verification
-2025-12-07 23:35:29,701 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
-2025-12-07 23:35:29,945 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
-2025-12-07 23:35:29,959 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
-2025-12-07 23:35:29,959 - __main__ - DEBUG - [Page 2] Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)...
-2025-12-07 23:35:29,960 - __main__ - DEBUG - [CF Bypass] Request Mirroring: https://javdb.com/actors/RdEb4?page=2 -> http://140.245.123.124:8000/actors/RdEb4?page=2
-2025-12-07 23:35:29,960 - __main__ - DEBUG - [CF Bypass] x-hostname: javdb.com
-2025-12-07 23:35:29,960 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
-2025-12-07 23:35:29,960 - __main__ - DEBUG - [CF Bypass] Actual request to: http://140.245.123.124:8000/actors/RdEb4?page=2
-2025-12-07 23:35:30,224 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 30593
-2025-12-07 23:35:30,232 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
-2025-12-07 23:35:30,232 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
-2025-12-07 23:35:30,244 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
-2025-12-07 23:35:30,244 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=gzmwwtyl0f3txjfl2g1xq1hfb1Z99jq2tg907Ayy3qgblzyddxxt2vbygg40f85AfjA2dsdps2v3zkq
-2025-12-07 23:35:30,489 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=gzmwwtyl0f3txjfl2g1xq1hfb1Z99jq2tg907Ayy3qgblzyddxxt2vbygg40f85AfjA2dsdps2v3zkq HTTP/1.1" 302 None
-2025-12-07 23:35:30,712 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dgzmwwtyl0f3txjfl2g1xq1hfb1Z99jq2tg907Ayy3qgblzyddxxt2vbygg40f85AfjA2dsdps2v3zkq HTTP/1.1" 200 None
-2025-12-07 23:35:30,714 - __main__ - DEBUG - Successfully bypassed age verification
-2025-12-07 23:35:30,919 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
-2025-12-07 23:35:31,141 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
-2025-12-07 23:35:31,156 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)
-2025-12-07 23:35:31,156 - __main__ - ERROR - [Page 2] All proxy attempts exhausted.
-2025-12-07 23:35:31,156 - __main__ - WARNING - [Page 2] No movie list found after all fallback attempts
-2025-12-07 23:35:31,156 - __main__ - DEBUG - [Page 3] Fetching: https://javdb.com/actors/RdEb4?page=3
-2025-12-07 23:35:31,156 - __main__ - DEBUG - [Page 3] Initial attempt (Proxy=False, CF=False, Node=None)...
-2025-12-07 23:35:31,157 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
-2025-12-07 23:35:31,399 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
-2025-12-07 23:35:31,625 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
-2025-12-07 23:35:31,627 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
-2025-12-07 23:35:31,638 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
-2025-12-07 23:35:31,639 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=v4lfsccm5djrg38jpjlskrvwtmZ23hlczhycbypszdw7nsjfnd4dc8cynpAnh6mgjwd3ck3tnptjdl2jxmd8pspAyyphl1gh8s29qdnq4qtqfpf571t1m5grhvn16z7f5g7q3rf6zl3bnqspf13c9crn863
-2025-12-07 23:35:31,868 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=v4lfsccm5djrg38jpjlskrvwtmZ23hlczhycbypszdw7nsjfnd4dc8cynpAnh6mgjwd3ck3tnptjdl2jxmd8pspAyyphl1gh8s29qdnq4qtqfpf571t1m5grhvn16z7f5g7q3rf6zl3bnqspf13c9crn863 HTTP/1.1" 302 None
-2025-12-07 23:35:32,128 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dv4lfsccm5djrg38jpjlskrvwtmZ23hlczhycbypszdw7nsjfnd4dc8cynpAnh6mgjwd3ck3tnptjdl2jxmd8pspAyyphl1gh8s29qdnq4qtqfpf571t1m5grhvn16z7f5g7q3rf6zl3bnqspf13c9crn863 HTTP/1.1" 200 None
-2025-12-07 23:35:32,131 - __main__ - DEBUG - Successfully bypassed age verification
-2025-12-07 23:35:32,347 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
-2025-12-07 23:35:32,654 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
-2025-12-07 23:35:32,665 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
-2025-12-07 23:35:32,665 - __main__ - WARNING - [Page 3] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-07 23:35:32,665 - __main__ - DEBUG - [Page 3] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
-2025-12-07 23:35:32,665 - __main__ - DEBUG - [Page 3] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
-2025-12-07 23:35:32,665 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
-2025-12-07 23:35:32,665 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
-2025-12-07 23:35:32,665 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@140.245.123.124:12300'}
-2025-12-07 23:35:32,926 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
-2025-12-07 23:35:33,180 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
-2025-12-07 23:35:33,182 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
-2025-12-07 23:35:33,182 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
-2025-12-07 23:35:33,201 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
-2025-12-07 23:35:33,202 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=vh3c2sww8nmxtjw5zp97plb26qZgmv4mpqbdzh962dttzk3fzj4fsmvsrzgbkpwvfdqnqlrstbsvsp99rqn6n1gjnpkAttfh1z4tAnytfn9n9jzyf67ds60k5tAhlsmykzjvvyymxpwbbgbcwxsxpycspdt
-2025-12-07 23:35:33,423 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=vh3c2sww8nmxtjw5zp97plb26qZgmv4mpqbdzh962dttzk3fzj4fsmvsrzgbkpwvfdqnqlrstbsvsp99rqn6n1gjnpkAttfh1z4tAnytfn9n9jzyf67ds60k5tAhlsmykzjvvyymxpwbbgbcwxsxpycspdt HTTP/1.1" 302 None
-2025-12-07 23:35:33,702 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dvh3c2sww8nmxtjw5zp97plb26qZgmv4mpqbdzh962dttzk3fzj4fsmvsrzgbkpwvfdqnqlrstbsvsp99rqn6n1gjnpkAttfh1z4tAnytfn9n9jzyf67ds60k5tAhlsmykzjvvyymxpwbbgbcwxsxpycspdt HTTP/1.1" 200 None
-2025-12-07 23:35:33,704 - __main__ - DEBUG - Successfully bypassed age verification
-2025-12-07 23:35:33,924 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
-2025-12-07 23:35:34,255 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
-2025-12-07 23:35:34,261 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
-2025-12-07 23:35:34,261 - __main__ - DEBUG - [Page 3] Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)...
-2025-12-07 23:35:34,261 - __main__ - DEBUG - [CF Bypass] Request Mirroring: https://javdb.com/actors/RdEb4?page=3 -> http://140.245.123.124:8000/actors/RdEb4?page=3
-2025-12-07 23:35:34,261 - __main__ - DEBUG - [CF Bypass] x-hostname: javdb.com
-2025-12-07 23:35:34,261 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
-2025-12-07 23:35:34,261 - __main__ - DEBUG - [CF Bypass] Actual request to: http://140.245.123.124:8000/actors/RdEb4?page=3
-2025-12-07 23:35:34,520 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 30593
-2025-12-07 23:35:34,531 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
-2025-12-07 23:35:34,531 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
-2025-12-07 23:35:34,548 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
-2025-12-07 23:35:34,548 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=nn6xyyj222zwkd48pgyc3ydftAZ5Ak6sftcvrnmj7p9rtpjv16l4xAAflfytbfjpfmzd8j43mhp8bl1
-2025-12-07 23:35:34,782 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=nn6xyyj222zwkd48pgyc3ydftAZ5Ak6sftcvrnmj7p9rtpjv16l4xAAflfytbfjpfmzd8j43mhp8bl1 HTTP/1.1" 302 None
-2025-12-07 23:35:34,998 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dnn6xyyj222zwkd48pgyc3ydftAZ5Ak6sftcvrnmj7p9rtpjv16l4xAAflfytbfjpfmzd8j43mhp8bl1 HTTP/1.1" 200 None
-2025-12-07 23:35:35,001 - __main__ - DEBUG - Successfully bypassed age verification
-2025-12-07 23:35:35,273 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
-2025-12-07 23:35:35,494 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
-2025-12-07 23:35:35,508 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)
-2025-12-07 23:35:35,508 - __main__ - ERROR - [Page 3] All proxy attempts exhausted.
-2025-12-07 23:35:35,508 - __main__ - WARNING - [Page 3] No movie list found after all fallback attempts
-2025-12-07 23:35:35,508 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
-2025-12-07 23:35:35,508 - __main__ - INFO - Phase 1 completed: 0 entries processed
-2025-12-07 23:35:35,508 - __main__ - INFO - ==================================================
-2025-12-07 23:35:35,508 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-12-07 23:35:35,508 - __main__ - INFO - ==================================================
-2025-12-07 23:35:35,508 - __main__ - DEBUG - [Page 1] Fetching for phase 2: https://javdb.com/actors/RdEb4
-2025-12-07 23:35:35,508 - __main__ - DEBUG - [Page 1] Initial attempt (Proxy=False, CF=False, Node=None)...
-2025-12-07 23:35:35,508 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4 (attempt 1/3)
-2025-12-07 23:35:35,799 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 302 None
-2025-12-07 23:35:36,021 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4 HTTP/1.1" 200 None
-2025-12-07 23:35:36,024 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4
-2025-12-07 23:35:36,034 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
-2025-12-07 23:35:36,035 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=z6nt968zh40xxndl0syn8q67z1Zmxthrhkvtp865znbrnz4tqg9ll6wsAtww3zgs6plvlqjtcwdqgl34h3nAtgly86b1npyfwg4Anly93rx2kwsfpspfprjf716xvlghj3
-2025-12-07 23:35:36,322 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=z6nt968zh40xxndl0syn8q67z1Zmxthrhkvtp865znbrnz4tqg9ll6wsAtww3zgs6plvlqjtcwdqgl34h3nAtgly86b1npyfwg4Anly93rx2kwsfpspfprjf716xvlghj3 HTTP/1.1" 302 None
-2025-12-07 23:35:36,576 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dz6nt968zh40xxndl0syn8q67z1Zmxthrhkvtp865znbrnz4tqg9ll6wsAtww3zgs6plvlqjtcwdqgl34h3nAtgly86b1npyfwg4Anly93rx2kwsfpspfprjf716xvlghj3 HTTP/1.1" 200 None
-2025-12-07 23:35:36,578 - __main__ - DEBUG - Successfully bypassed age verification
-2025-12-07 23:35:36,847 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 302 None
-2025-12-07 23:35:37,082 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4 HTTP/1.1" 200 None
-2025-12-07 23:35:37,088 - __main__ - DEBUG - [Page 1] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
-2025-12-07 23:35:37,088 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-07 23:35:37,088 - __main__ - DEBUG - [Page 1] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
-2025-12-07 23:35:37,088 - __main__ - DEBUG - [Page 1] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
-2025-12-07 23:35:37,088 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
-2025-12-07 23:35:37,088 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4 (attempt 1/3)
-2025-12-07 23:35:37,088 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@140.245.123.124:12300'}
-2025-12-07 23:35:37,371 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 302 None
-2025-12-07 23:35:37,606 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4 HTTP/1.1" 200 None
-2025-12-07 23:35:37,607 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4
-2025-12-07 23:35:37,608 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
-2025-12-07 23:35:37,620 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
-2025-12-07 23:35:37,620 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=qv0548kt462tc4w5ds58nyy8xAZ25ws27qyzjt8s3252yb621hqtff7jwwrdgzgAd9tkbd0cc0c6pjdpxclk880b5wkrpfkh27wcr5kxgqywdwmwx5bs8j9kjl28ydchny
-2025-12-07 23:35:37,898 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=qv0548kt462tc4w5ds58nyy8xAZ25ws27qyzjt8s3252yb621hqtff7jwwrdgzgAd9tkbd0cc0c6pjdpxclk880b5wkrpfkh27wcr5kxgqywdwmwx5bs8j9kjl28ydchny HTTP/1.1" 302 None
-2025-12-07 23:35:38,124 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dqv0548kt462tc4w5ds58nyy8xAZ25ws27qyzjt8s3252yb621hqtff7jwwrdgzgAd9tkbd0cc0c6pjdpxclk880b5wkrpfkh27wcr5kxgqywdwmwx5bs8j9kjl28ydchny HTTP/1.1" 200 None
-2025-12-07 23:35:38,126 - __main__ - DEBUG - Successfully bypassed age verification
-2025-12-07 23:35:38,419 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 302 None
-2025-12-07 23:35:38,627 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4 HTTP/1.1" 200 None
-2025-12-07 23:35:38,637 - __main__ - DEBUG - [Page 1] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
-2025-12-07 23:35:38,637 - __main__ - DEBUG - [Page 1] Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)...
-2025-12-07 23:35:38,637 - __main__ - DEBUG - [CF Bypass] Request Mirroring: https://javdb.com/actors/RdEb4 -> http://140.245.123.124:8000/actors/RdEb4
-2025-12-07 23:35:38,637 - __main__ - DEBUG - [CF Bypass] x-hostname: javdb.com
-2025-12-07 23:35:38,637 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4 (attempt 1/3)
-2025-12-07 23:35:38,637 - __main__ - DEBUG - [CF Bypass] Actual request to: http://140.245.123.124:8000/actors/RdEb4
-2025-12-07 23:35:39,136 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4 HTTP/1.1" 200 67586
-2025-12-07 23:35:39,155 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4
-2025-12-07 23:35:39,155 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
-2025-12-07 23:35:39,179 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
-2025-12-07 23:35:39,180 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=z5hvgqj4xcAb89sgpbgArnw81yZh2w2wg05hsnkn9cshl55A8A7b3
-2025-12-07 23:35:39,468 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=z5hvgqj4xcAb89sgpbgArnw81yZh2w2wg05hsnkn9cshl55A8A7b3 HTTP/1.1" 302 None
-2025-12-07 23:35:39,679 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dz5hvgqj4xcAb89sgpbgArnw81yZh2w2wg05hsnkn9cshl55A8A7b3 HTTP/1.1" 200 None
-2025-12-07 23:35:39,679 - __main__ - DEBUG - Successfully bypassed age verification
-2025-12-07 23:35:39,992 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 302 None
-2025-12-07 23:35:40,209 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4 HTTP/1.1" 200 None
-2025-12-07 23:35:40,213 - __main__ - DEBUG - [Page 1] Validation failed (no movie list): Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)
-2025-12-07 23:35:40,213 - __main__ - ERROR - [Page 1] All proxy attempts exhausted.
-2025-12-07 23:35:40,213 - __main__ - WARNING - [Page 1] No movie list found after all fallback attempts
-2025-12-07 23:35:40,213 - __main__ - DEBUG - [Page 2] Fetching for phase 2: https://javdb.com/actors/RdEb4?page=2
-2025-12-07 23:35:40,213 - __main__ - DEBUG - [Page 2] Initial attempt (Proxy=False, CF=False, Node=None)...
-2025-12-07 23:35:40,213 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
-2025-12-07 23:35:40,420 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
-2025-12-07 23:35:41,066 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
-2025-12-07 23:35:41,068 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
-2025-12-07 23:35:41,075 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
-2025-12-07 23:35:41,075 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=sxtsclqjszqk78y6jtlkn5pnAmZz1xc4z6lx9wsflr7bwmw5jz2dqmz4mt0tnnmdldj942h05k2qjtrnvg4p4msxrxA2ptljpm7d9m01sbbn1c21hpp141b5ng10ls0dl2hfswhcxzl4tr7Az7m8433yv3w
-2025-12-07 23:35:41,285 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=sxtsclqjszqk78y6jtlkn5pnAmZz1xc4z6lx9wsflr7bwmw5jz2dqmz4mt0tnnmdldj942h05k2qjtrnvg4p4msxrxA2ptljpm7d9m01sbbn1c21hpp141b5ng10ls0dl2hfswhcxzl4tr7Az7m8433yv3w HTTP/1.1" 302 None
-2025-12-07 23:35:41,567 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dsxtsclqjszqk78y6jtlkn5pnAmZz1xc4z6lx9wsflr7bwmw5jz2dqmz4mt0tnnmdldj942h05k2qjtrnvg4p4msxrxA2ptljpm7d9m01sbbn1c21hpp141b5ng10ls0dl2hfswhcxzl4tr7Az7m8433yv3w HTTP/1.1" 200 None
-2025-12-07 23:35:41,567 - __main__ - DEBUG - Successfully bypassed age verification
-2025-12-07 23:35:41,804 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
-2025-12-07 23:35:42,091 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
-2025-12-07 23:35:42,103 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
-2025-12-07 23:35:42,103 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-07 23:35:42,103 - __main__ - DEBUG - [Page 2] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
-2025-12-07 23:35:42,103 - __main__ - DEBUG - [Page 2] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
-2025-12-07 23:35:42,103 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
-2025-12-07 23:35:42,103 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
-2025-12-07 23:35:42,103 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@140.245.123.124:12300'}
-2025-12-07 23:35:42,333 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
-2025-12-07 23:35:42,614 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
-2025-12-07 23:35:42,616 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
-2025-12-07 23:35:42,616 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
-2025-12-07 23:35:42,626 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
-2025-12-07 23:35:42,626 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=kj3wvjcbbA9lmmchc4mdx4cv0AZ8qwwt93gtjwA8qx9hg6b2ygA0tb3vpf6h5xvy297c4h35q4sm3pf4w7rcAhbpdr0gqgmsAw9dxh90zg2n9589kAk9lh4fvf87vzsjvsd42Axrszfxbrk5tlh3ytsqjk5
-2025-12-07 23:35:42,847 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=kj3wvjcbbA9lmmchc4mdx4cv0AZ8qwwt93gtjwA8qx9hg6b2ygA0tb3vpf6h5xvy297c4h35q4sm3pf4w7rcAhbpdr0gqgmsAw9dxh90zg2n9589kAk9lh4fvf87vzsjvsd42Axrszfxbrk5tlh3ytsqjk5 HTTP/1.1" 302 None
-2025-12-07 23:35:43,138 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dkj3wvjcbbA9lmmchc4mdx4cv0AZ8qwwt93gtjwA8qx9hg6b2ygA0tb3vpf6h5xvy297c4h35q4sm3pf4w7rcAhbpdr0gqgmsAw9dxh90zg2n9589kAk9lh4fvf87vzsjvsd42Axrszfxbrk5tlh3ytsqjk5 HTTP/1.1" 200 None
-2025-12-07 23:35:43,139 - __main__ - DEBUG - Successfully bypassed age verification
-2025-12-07 23:35:43,355 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
-2025-12-07 23:35:43,665 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
-2025-12-07 23:35:43,673 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
-2025-12-07 23:35:43,674 - __main__ - DEBUG - [Page 2] Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)...
-2025-12-07 23:35:43,674 - __main__ - DEBUG - [CF Bypass] Request Mirroring: https://javdb.com/actors/RdEb4?page=2 -> http://140.245.123.124:8000/actors/RdEb4?page=2
-2025-12-07 23:35:43,674 - __main__ - DEBUG - [CF Bypass] x-hostname: javdb.com
-2025-12-07 23:35:43,674 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
-2025-12-07 23:35:43,674 - __main__ - DEBUG - [CF Bypass] Actual request to: http://140.245.123.124:8000/actors/RdEb4?page=2
-2025-12-07 23:35:43,915 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 30593
-2025-12-07 23:35:43,927 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
-2025-12-07 23:35:43,930 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
-2025-12-07 23:35:43,941 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
-2025-12-07 23:35:43,941 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=krl8mm4jdny4p5xyp4zsnbkkh3Zx63l3cxhq3szhdx75338lndzt0r01p8w4wp5vpwx3whtwzmp6Agq
-2025-12-07 23:35:44,187 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=krl8mm4jdny4p5xyp4zsnbkkh3Zx63l3cxhq3szhdx75338lndzt0r01p8w4wp5vpwx3whtwzmp6Agq HTTP/1.1" 302 None
-2025-12-07 23:35:44,411 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dkrl8mm4jdny4p5xyp4zsnbkkh3Zx63l3cxhq3szhdx75338lndzt0r01p8w4wp5vpwx3whtwzmp6Agq HTTP/1.1" 200 None
-2025-12-07 23:35:44,412 - __main__ - DEBUG - Successfully bypassed age verification
-2025-12-07 23:35:44,710 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 302 None
-2025-12-07 23:35:44,929 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D2 HTTP/1.1" 200 None
-2025-12-07 23:35:44,942 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)
-2025-12-07 23:35:44,942 - __main__ - ERROR - [Page 2] All proxy attempts exhausted.
-2025-12-07 23:35:44,942 - __main__ - WARNING - [Page 2] No movie list found after all fallback attempts
-2025-12-07 23:35:44,942 - __main__ - DEBUG - [Page 3] Fetching for phase 2: https://javdb.com/actors/RdEb4?page=3
-2025-12-07 23:35:44,942 - __main__ - DEBUG - [Page 3] Initial attempt (Proxy=False, CF=False, Node=None)...
-2025-12-07 23:35:44,942 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
-2025-12-07 23:35:45,236 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
-2025-12-07 23:35:45,457 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
-2025-12-07 23:35:45,458 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
-2025-12-07 23:35:45,462 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
-2025-12-07 23:35:45,462 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=lph39wk555Az79bhwhmrvrjp3yZ7kyxk0kh05bs0lqzk4qAm7l4ltl392b2h7r0yw0594027y8x5348wwvfznhb12glAnt94fqz5Abv1fl6rl87y3ln1jf6jj09g7cs72r8wf68r4y3lrldpsAct54m0q78
-2025-12-07 23:35:45,806 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=lph39wk555Az79bhwhmrvrjp3yZ7kyxk0kh05bs0lqzk4qAm7l4ltl392b2h7r0yw0594027y8x5348wwvfznhb12glAnt94fqz5Abv1fl6rl87y3ln1jf6jj09g7cs72r8wf68r4y3lrldpsAct54m0q78 HTTP/1.1" 302 None
-2025-12-07 23:35:46,034 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dlph39wk555Az79bhwhmrvrjp3yZ7kyxk0kh05bs0lqzk4qAm7l4ltl392b2h7r0yw0594027y8x5348wwvfznhb12glAnt94fqz5Abv1fl6rl87y3ln1jf6jj09g7cs72r8wf68r4y3lrldpsAct54m0q78 HTTP/1.1" 200 None
-2025-12-07 23:35:46,037 - __main__ - DEBUG - Successfully bypassed age verification
-2025-12-07 23:35:46,284 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
-2025-12-07 23:35:46,498 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
-2025-12-07 23:35:46,514 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
-2025-12-07 23:35:46,514 - __main__ - WARNING - [Page 3] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-07 23:35:46,514 - __main__ - DEBUG - [Page 3] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
-2025-12-07 23:35:46,514 - __main__ - DEBUG - [Page 3] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
-2025-12-07 23:35:46,514 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
-2025-12-07 23:35:46,514 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
-2025-12-07 23:35:46,514 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@140.245.123.124:12300'}
-2025-12-07 23:35:46,818 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
-2025-12-07 23:35:47,040 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
-2025-12-07 23:35:47,041 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
-2025-12-07 23:35:47,042 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
-2025-12-07 23:35:47,050 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
-2025-12-07 23:35:47,050 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=h7hgs7s2ndvm08bwjdk1jt97qAZtgrnwrwrj2lwqc2qwh2phg4fwxxkjyy6qz989tfb4m29w29kdm2ty8gbh58A0df1mw9A7xh0rsqfwmyff2rl7npmb66gg2p176j66m99fj6dgx8qzcf5cm6tghqrzpj7
-2025-12-07 23:35:47,334 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=h7hgs7s2ndvm08bwjdk1jt97qAZtgrnwrwrj2lwqc2qwh2phg4fwxxkjyy6qz989tfb4m29w29kdm2ty8gbh58A0df1mw9A7xh0rsqfwmyff2rl7npmb66gg2p176j66m99fj6dgx8qzcf5cm6tghqrzpj7 HTTP/1.1" 302 None
-2025-12-07 23:35:47,587 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Dh7hgs7s2ndvm08bwjdk1jt97qAZtgrnwrwrj2lwqc2qwh2phg4fwxxkjyy6qz989tfb4m29w29kdm2ty8gbh58A0df1mw9A7xh0rsqfwmyff2rl7npmb66gg2p176j66m99fj6dgx8qzcf5cm6tghqrzpj7 HTTP/1.1" 200 None
-2025-12-07 23:35:47,589 - __main__ - DEBUG - Successfully bypassed age verification
-2025-12-07 23:35:47,857 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
-2025-12-07 23:35:48,083 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
-2025-12-07 23:35:48,090 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
-2025-12-07 23:35:48,090 - __main__ - DEBUG - [Page 3] Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)...
-2025-12-07 23:35:48,090 - __main__ - DEBUG - [CF Bypass] Request Mirroring: https://javdb.com/actors/RdEb4?page=3 -> http://140.245.123.124:8000/actors/RdEb4?page=3
-2025-12-07 23:35:48,090 - __main__ - DEBUG - [CF Bypass] x-hostname: javdb.com
-2025-12-07 23:35:48,090 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
-2025-12-07 23:35:48,090 - __main__ - DEBUG - [CF Bypass] Actual request to: http://140.245.123.124:8000/actors/RdEb4?page=3
-2025-12-07 23:35:48,383 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 30593
-2025-12-07 23:35:48,393 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
-2025-12-07 23:35:48,393 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
-2025-12-07 23:35:48,403 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
-2025-12-07 23:35:48,403 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=b39Alrz8v8f53zqh3qn622qmf3Zn9frpwdsbmll0wsxnj6d3k02nh1yyryh9mw6d68p2d0086y05ptq
-2025-12-07 23:35:48,621 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=b39Alrz8v8f53zqh3qn622qmf3Zn9frpwdsbmll0wsxnj6d3k02nh1yyryh9mw6d68p2d0086y05ptq HTTP/1.1" 302 None
-2025-12-07 23:35:48,906 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Fover18%3Frespond%3D1%26rurl%3Db39Alrz8v8f53zqh3qn622qmf3Zn9frpwdsbmll0wsxnj6d3k02nh1yyryh9mw6d68p2d0086y05ptq HTTP/1.1" 200 None
-2025-12-07 23:35:48,909 - __main__ - DEBUG - Successfully bypassed age verification
-2025-12-07 23:35:49,124 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 302 None
-2025-12-07 23:35:49,429 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /login?return_to_url=https%3A%2F%2Fjavdb.com%2Factors%2FRdEb4%3Fpage%3D3 HTTP/1.1" 200 None
-2025-12-07 23:35:49,437 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)
-2025-12-07 23:35:49,437 - __main__ - ERROR - [Page 3] All proxy attempts exhausted.
-2025-12-07 23:35:49,438 - __main__ - WARNING - [Page 3] No movie list found after all fallback attempts
-2025-12-07 23:35:49,438 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
-2025-12-07 23:35:49,438 - __main__ - INFO - Phase 2 completed: 0 entries processed
-2025-12-07 23:35:49,438 - __main__ - INFO - CSV file written incrementally to: Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
-2025-12-07 23:35:49,438 - __main__ - INFO - ==================================================
-2025-12-07 23:35:49,438 - __main__ - INFO - SUMMARY REPORT
-2025-12-07 23:35:49,438 - __main__ - INFO - ==================================================
-2025-12-07 23:35:49,438 - __main__ - INFO - Pages processed: 1 to 20
-2025-12-07 23:35:49,438 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-12-07 23:35:49,438 - __main__ - INFO - ==============================
-2025-12-07 23:35:49,438 - __main__ - INFO - PHASE 1 SUMMARY
-2025-12-07 23:35:49,438 - __main__ - INFO - ==============================
-2025-12-07 23:35:49,438 - __main__ - INFO - Phase 1 entries found: 0
-2025-12-07 23:35:49,438 - __main__ - INFO -   - No entries found in Phase 1
-2025-12-07 23:35:49,438 - __main__ - INFO - ==============================
-2025-12-07 23:35:49,438 - __main__ - INFO - PHASE 2 SUMMARY
-2025-12-07 23:35:49,438 - __main__ - INFO - ==============================
-2025-12-07 23:35:49,438 - __main__ - INFO - Phase 2 entries found: 0
-2025-12-07 23:35:49,438 - __main__ - INFO -   - No entries found in Phase 2
-2025-12-07 23:35:49,438 - __main__ - INFO - ==============================
-2025-12-07 23:35:49,438 - __main__ - INFO - OVERALL SUMMARY
-2025-12-07 23:35:49,438 - __main__ - INFO - ==============================
-2025-12-07 23:35:49,438 - __main__ - INFO - Total entries found: 0
-2025-12-07 23:35:49,438 - __main__ - INFO - Successfully processed: 0
-2025-12-07 23:35:49,438 - __main__ - INFO - Skipped already parsed in this session: 0
-2025-12-07 23:35:49,438 - __main__ - INFO - Skipped already parsed in previous runs: 3350
-2025-12-07 23:35:49,438 - __main__ - INFO - Current parsed links in memory: 0
-2025-12-07 23:35:49,438 - __main__ - INFO - Results saved to: Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
-2025-12-07 23:35:49,438 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-12-07 23:35:49,438 - __main__ - INFO - ==================================================
+2025-12-07 23:40:15,539 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-07 23:40:15,540 - utils.proxy_ban_manager - INFO - Loaded 2 ban records from logs/proxy_bans.csv
+2025-12-07 23:40:15,540 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
+2025-12-07 23:40:15,540 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-07 23:40:15,540 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' is currently banned, skipping
+2025-12-07 23:40:15,540 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-07 23:40:15,540 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
+2025-12-07 23:40:15,5402025-12-07 23:44:12,331 - __main__ - INFO - ✓ JavDB Spider completed successfully
+2025-12-07 23:44:12,331 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
+2025-12-07 23:44:12,331 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode adhoc --input-file Javdb_AdHoc_actors_RdEb4_20251207.csv
+2025-12-07 23:44:34,972 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
+2025-12-07 23:44:34,973 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
+2025-12-07 23:44:34,973 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
+2025-12-07 23:44:34,973 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-12-04)
+2025-12-07 23:44:34,980 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 101.100.165.240:12301
+2025-12-07 23:44:35,205 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/auth/login HTTP/1.1" 200 3
+2025-12-07 23:44:35,205 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
+2025-12-07 23:44:35,422 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "GET /api/v2/torrents/info?category=Daily+Ingestion&filter=downloading HTTP/1.1" 200 93243
+2025-12-07 23:44:35,439 - pikpak_bridge - DEBUG - Found 471 torrents in category 'Daily Ingestion'
+2025-12-07 23:44:35,456 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "GET /api/v2/torrents/info?category=Ad+Hoc&filter=downloading HTTP/1.1" 200 3346
+2025-12-07 23:44:35,457 - pikpak_bridge - DEBUG - Found 22 torrents in category 'Ad Hoc'
+2025-12-07 23:44:35,457 - pikpak_bridge - INFO - Found 493 torrents across categories ['Daily Ingestion', 'Ad Hoc']
+2025-12-07 23:44:35,457 - pikpak_bridge - INFO - Filtered 0 torrents older than 3 days
+2025-12-07 23:44:35,457 - pikpak_bridge - INFO - No torrents to process.
+2025-12-07 23:44:35,458 - __main__ - INFO - PikPak Bridge completed successfully
+2025-12-07 23:44:35,458 - __main__ - INFO - ✓ PikPak Bridge completed successfully
+2025-12-07 23:44:35,458 - __main__ - INFO - ============================================================
+2025-12-07 23:44:35,458 - __main__ - INFO - PIPELINE COMPLETED
+2025-12-07 23:44:35,458 - __main__ - INFO - ============================================================
+2025-12-07 23:44:35,458 - __main__ - INFO - Analyzing logs for critical errors...
+2025-12-07 23:44:35,458 - __main__ - ERROR - CRITICAL ERROR in Spider: CF bypass and proxy fallback failed - movie list not found on 6 pages
+2025-12-07 23:44:35,458 - __main__ - ERROR - ============================================================
+2025-12-07 23:44:35,458 - __main__ - ERROR - PIPELINE FAILED - CRITICAL ERRORS DETECTED
+2025-12-07 23:44:35,458 - __main__ - ERROR - ============================================================
+2025-12-07 23:44:35,458 - __main__ - ERROR -   - Spider: CF bypass and proxy fallback failed - movie list not found on 6 pages
+2025-12-07 23:44:35,460 - utils.proxy_ban_manager - INFO - Loaded 2 ban records from logs/proxy_bans.csv
+2025-12-07 23:44:35,462 - __main__ - INFO - Connecting to SMTP server...
+2025-12-07 23:44:39,489 - __main__ - INFO - Email sent successfully.
+2025-12-07 23:44:39,490 - __main__ - INFO - Final commit for pipeline log...
+2025-12-07 23:44:39,490 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
+2025-12-07 23:44:39,525 - __main__ - INFO - Pulling latest changes from remote repository...
+2025-12-07 23:44:40,163 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
+2025-12-07 23:44:40,163 - __main__ - INFO - Adding files to git...
+2025-12-07 23:44:40,232 - __main__ - INFO - Commit changes for pipeline_log
+BUG - Extracted video code from <strong> tag: START-404
+2025-12-07 23:40:17,449 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-404 (/v/OXV03D)
+2025-12-07 23:40:17,449 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:40:17,449 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:40:17,449 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:40:17,449 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:40:17,449 - utils.parser - DEBUG - [Page 1] Found tags: []
+2025-12-07 23:40:17,449 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:40:17,449 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:40:17,449 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:40:17,449 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-270
+2025-12-07 23:40:17,449 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-270 (/v/AqbADm)
+2025-12-07 23:40:17,449 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:40:17,449 - utils.parser - DEBUG - [Page 1] Found tags: []
+2025-12-07 23:40:17,449 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:40:17,449 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-227
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-227 (/v/0e5yRX)
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-223
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-223 (/v/P99vZ0)
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-154
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-154 (/v/MbbAVJ)
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-125
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-125 (/v/WwwKWR)
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-056
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-056 (/v/a8kb0g)
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:40:17,450 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-048
+2025-12-07 23:40:17,451 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-048 (/v/82Vegx)
+2025-12-07 23:40:17,451 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:40:17,451 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-020
+2025-12-07 23:40:17,451 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-020 (/v/a8EX83)
+2025-12-07 23:40:17,451 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:40:17,451 - utils.parser - DEBUG - Extracted video code from <strong> tag: STZY-011
+2025-12-07 23:40:17,451 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): STZY-011 (/v/vePqYO)
+2025-12-07 23:40:17,451 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:40:17,451 - utils.parser - INFO - [Page 1] Found 11 entries for phase 1
+2025-12-07 23:40:19,456 - __main__ - DEBUG - [Page 2] Fetching: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:40:19,456 - __main__ - DEBUG - [Page 2] Initial attempt (Proxy=False, CF=False, Node=None)...
+2025-12-07 23:40:19,456 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
+2025-12-07 23:40:19,706 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 None
+2025-12-07 23:40:19,707 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:40:19,711 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:40:19,711 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=wfAjqyxA8fdvkA4xh7t00thdr2Zmb8g51hf86nmq9nxx5k7lp54qA66ftscp77dh588267b4wwhg111
+2025-12-07 23:40:19,999 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=wfAjqyxA8fdvkA4xh7t00thdr2Zmb8g51hf86nmq9nxx5k7lp54qA66ftscp77dh588267b4wwhg111 HTTP/1.1" 302 None
+2025-12-07 23:40:20,287 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 None
+2025-12-07 23:40:20,289 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:40:20,616 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 None
+2025-12-07 23:40:20,619 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:40:20,631 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
+2025-12-07 23:40:20,631 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-07 23:40:20,631 - __main__ - DEBUG - [Page 2] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
+2025-12-07 23:40:20,631 - __main__ - DEBUG - [Page 2] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
+2025-12-07 23:40:20,632 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
+2025-12-07 23:40:20,632 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
+2025-12-07 23:40:20,632 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@140.245.123.124:12300'}
+2025-12-07 23:40:20,633 - urllib3.connectionpool - DEBUG - Starting new HTTPS connection (1): javdb.com:443
+2025-12-07 23:40:20,986 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 None
+2025-12-07 23:40:20,987 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:40:20,987 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:40:20,992 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:40:20,993 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=m7c738mAAn3dgt9xqd173m1ys1Zsrw2c82kqjgbmbhzz04gmvAs24c6pdjsdcmvrgjjvcj68hqb2z51
+2025-12-07 23:40:21,188 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=m7c738mAAn3dgt9xqd173m1ys1Zsrw2c82kqjgbmbhzz04gmvAs24c6pdjsdcmvrgjjvcj68hqb2z51 HTTP/1.1" 302 None
+2025-12-07 23:40:21,758 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 None
+2025-12-07 23:40:21,761 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:40:22,025 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 None
+2025-12-07 23:40:22,027 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:40:22,045 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
+2025-12-07 23:40:22,045 - __main__ - DEBUG - [Page 2] Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)...
+2025-12-07 23:40:22,045 - __main__ - DEBUG - [CF Bypass] Request Mirroring: https://javdb.com/actors/RdEb4?page=2 -> http://140.245.123.124:8000/actors/RdEb4?page=2
+2025-12-07 23:40:22,045 - __main__ - DEBUG - [CF Bypass] x-hostname: javdb.com
+2025-12-07 23:40:22,045 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
+2025-12-07 23:40:22,045 - __main__ - DEBUG - [CF Bypass] Actual request to: http://140.245.123.124:8000/actors/RdEb4?page=2
+2025-12-07 23:40:22,046 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 140.245.123.124:8000
+2025-12-07 23:40:22,328 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 30593
+2025-12-07 23:40:22,338 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:40:22,338 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:40:22,360 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:40:22,360 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=vA80hhx9fzykwckxztp9jkr7fmZ41xkfsbg790zmpxrgfsn77g1ddhlw6v8k9bd3vb7y6l6sw5Ay2dq
+2025-12-07 23:40:22,571 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=vA80hhx9fzykwckxztp9jkr7fmZ41xkfsbg790zmpxrgfsn77g1ddhlw6v8k9bd3vb7y6l6sw5Ay2dq HTTP/1.1" 302 None
+2025-12-07 23:40:22,816 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 None
+2025-12-07 23:40:22,817 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:40:23,061 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 30593
+2025-12-07 23:40:23,071 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:40:23,082 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)
+2025-12-07 23:40:23,082 - __main__ - ERROR - [Page 2] All proxy attempts exhausted.
+2025-12-07 23:40:23,082 - __main__ - WARNING - [Page 2] No movie list found after all fallback attempts
+2025-12-07 23:40:23,082 - __main__ - DEBUG - [Page 3] Fetching: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:40:23,082 - __main__ - DEBUG - [Page 3] Initial attempt (Proxy=False, CF=False, Node=None)...
+2025-12-07 23:40:23,083 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
+2025-12-07 23:40:23,326 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 None
+2025-12-07 23:40:23,327 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:40:23,337 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:40:23,337 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=bkv7tkr1qqxld99jndl82qcvkAZ019b4vkxc9ylsg45y2f7A6k8csb6lgw0n0gvvfcgdnw6fb33j6sq
+2025-12-07 23:40:23,546 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=bkv7tkr1qqxld99jndl82qcvkAZ019b4vkxc9ylsg45y2f7A6k8csb6lgw0n0gvvfcgdnw6fb33j6sq HTTP/1.1" 302 None
+2025-12-07 23:40:23,820 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 None
+2025-12-07 23:40:23,822 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:40:24,164 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 None
+2025-12-07 23:40:24,166 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:40:24,178 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
+2025-12-07 23:40:24,178 - __main__ - WARNING - [Page 3] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-07 23:40:24,178 - __main__ - DEBUG - [Page 3] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
+2025-12-07 23:40:24,178 - __main__ - DEBUG - [Page 3] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
+2025-12-07 23:40:24,178 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
+2025-12-07 23:40:24,178 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
+2025-12-07 23:40:24,178 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@140.245.123.124:12300'}
+2025-12-07 23:40:24,424 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 None
+2025-12-07 23:40:24,425 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:40:24,425 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:40:24,437 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:40:24,437 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=6qmwAx59mj4mqn683c4Arj2sr7Zb6gmpf4nqk94b7267bvzz7z515dsglgzAyhbbkq5s7xq8jg5x7tq
+2025-12-07 23:40:24,648 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=6qmwAx59mj4mqn683c4Arj2sr7Zb6gmpf4nqk94b7267bvzz7z515dsglgzAyhbbkq5s7xq8jg5x7tq HTTP/1.1" 302 None
+2025-12-07 23:40:24,889 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 None
+2025-12-07 23:40:24,890 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:40:25,117 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 None
+2025-12-07 23:40:25,119 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:40:25,126 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
+2025-12-07 23:40:25,126 - __main__ - DEBUG - [Page 3] Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)...
+2025-12-07 23:40:25,126 - __main__ - DEBUG - [CF Bypass] Request Mirroring: https://javdb.com/actors/RdEb4?page=3 -> http://140.245.123.124:8000/actors/RdEb4?page=3
+2025-12-07 23:40:25,126 - __main__ - DEBUG - [CF Bypass] x-hostname: javdb.com
+2025-12-07 23:40:25,126 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
+2025-12-07 23:40:25,126 - __main__ - DEBUG - [CF Bypass] Actual request to: http://140.245.123.124:8000/actors/RdEb4?page=3
+2025-12-07 23:40:25,393 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 30593
+2025-12-07 23:40:25,403 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:40:25,404 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:40:25,422 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:40:25,425 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=5mvrgwdsdg6pzzvnwntj4s9bjmZ9zrd4kz6b3km8rggvdlrp4v1s16hpn1r2c1qpm0kxh0789mptcv1
+2025-12-07 23:40:25,635 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=5mvrgwdsdg6pzzvnwntj4s9bjmZ9zrd4kz6b3km8rggvdlrp4v1s16hpn1r2c1qpm0kxh0789mptcv1 HTTP/1.1" 302 None
+2025-12-07 23:40:25,868 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 None
+2025-12-07 23:40:25,869 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:40:26,123 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 30593
+2025-12-07 23:40:26,132 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:40:26,157 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)
+2025-12-07 23:40:26,157 - __main__ - ERROR - [Page 3] All proxy attempts exhausted.
+2025-12-07 23:40:26,157 - __main__ - WARNING - [Page 3] No movie list found after all fallback attempts
+2025-12-07 23:40:26,157 - __main__ - DEBUG - [Page 4] Fetching: https://javdb.com/actors/RdEb4?page=4
+2025-12-07 23:40:26,157 - __main__ - DEBUG - [Page 4] Initial attempt (Proxy=False, CF=False, Node=None)...
+2025-12-07 23:40:26,157 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=4 (attempt 1/3)
+2025-12-07 23:40:26,518 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=4 HTTP/1.1" 200 None
+2025-12-07 23:40:26,518 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=4
+2025-12-07 23:40:26,522 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:40:26,523 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=3rwqnxlklsm1dx4xnw89t7A7A1Z0gl0q1nnxz70gp4vctpsAl8gxz6m1g3hlgfn0nsl1jtpjn5yq9n1
+2025-12-07 23:40:26,726 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=3rwqnxlklsm1dx4xnw89t7A7A1Z0gl0q1nnxz70gp4vctpsAl8gxz6m1g3hlgfn0nsl1jtpjn5yq9n1 HTTP/1.1" 302 None
+2025-12-07 23:40:26,984 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=4 HTTP/1.1" 200 None
+2025-12-07 23:40:26,986 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:40:27,224 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=4 HTTP/1.1" 200 None
+2025-12-07 23:40:27,225 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:40:27,233 - __main__ - DEBUG - [Page 4] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
+2025-12-07 23:40:27,233 - __main__ - WARNING - [Page 4] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-07 23:40:27,233 - __main__ - DEBUG - [Page 4] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
+2025-12-07 23:40:27,233 - __main__ - DEBUG - [Page 4] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
+2025-12-07 23:40:27,233 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
+2025-12-07 23:40:27,233 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=4 (attempt 1/3)
+2025-12-07 23:40:27,233 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@140.245.123.124:12300'}
+2025-12-07 23:40:27,479 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=4 HTTP/1.1" 200 None
+2025-12-07 23:40:27,480 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=4
+2025-12-07 23:40:27,480 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:40:27,485 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:40:27,485 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=pl1r1cbn9zpnhbwy8rq52gxnl1Zyqxzlwf8npfz4lyhq5276r8nrl5lnbflc9dn869wkswn332sl16q
+2025-12-07 23:40:27,693 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=pl1r1cbn9zpnhbwy8rq52gxnl1Zyqxzlwf8npfz4lyhq5276r8nrl5lnbflc9dn869wkswn332sl16q HTTP/1.1" 302 None
+2025-12-07 23:40:27,943 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=4 HTTP/1.1" 200 None
+2025-12-07 23:40:27,944 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:40:28,178 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=4 HTTP/1.1" 200 None
+2025-12-07 23:40:28,179 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:40:28,193 - __main__ - DEBUG - [Page 4] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
+2025-12-07 23:40:28,193 - __main__ - DEBUG - [Page 4] Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)...
+2025-12-07 23:40:28,193 - __main__ - DEBUG - [CF Bypass] Request Mirroring: https://javdb.com/actors/RdEb4?page=4 -> http://140.245.123.124:8000/actors/RdEb4?page=4
+2025-12-07 23:40:28,193 - __main__ - DEBUG - [CF Bypass] x-hostname: javdb.com
+2025-12-07 23:40:28,193 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=4 (attempt 1/3)
+2025-12-07 23:40:28,193 - __main__ - DEBUG - [CF Bypass] Actual request to: http://140.245.123.124:8000/actors/RdEb4?page=4
+2025-12-07 23:40:28,446 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=4 HTTP/1.1" 200 30593
+2025-12-07 23:40:28,459 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=4
+2025-12-07 23:40:28,460 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:40:28,471 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:40:28,471 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=d1zt3pn3rgA9jt815m053sb5y7Z6mqwmk85drgdftts8qkg4rmwq8z28pqrp1yl1tdhc32At31d90nq
+2025-12-07 23:40:28,708 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=d1zt3pn3rgA9jt815m053sb5y7Z6mqwmk85drgdftts8qkg4rmwq8z28pqrp1yl1tdhc32At31d90nq HTTP/1.1" 302 None
+2025-12-07 23:40:28,972 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=4 HTTP/1.1" 200 None
+2025-12-07 23:40:28,974 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:40:29,310 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=4 HTTP/1.1" 200 30593
+2025-12-07 23:40:29,320 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:40:29,333 - __main__ - DEBUG - [Page 4] Validation failed (no movie list): Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)
+2025-12-07 23:40:29,336 - __main__ - ERROR - [Page 4] All proxy attempts exhausted.
+2025-12-07 23:40:29,336 - __main__ - WARNING - [Page 4] No movie list found after all fallback attempts
+2025-12-07 23:40:29,336 - __main__ - INFO - [Page 4] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
+2025-12-07 23:40:29,336 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/1Aagyw (attempt 1/3)
+2025-12-07 23:40:29,598 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/1Aagyw HTTP/1.1" 200 None
+2025-12-07 23:40:29,776 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/1Aagyw
+2025-12-07 23:40:29,796 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:40:29,797 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=ss2jb7k4nlsvjsld5b40h301tAZh7Atptyvd17bq84v3plpf4grv2
+2025-12-07 23:40:30,001 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=ss2jb7k4nlsvjsld5b40h301tAZh7Atptyvd17bq84v3plpf4grv2 HTTP/1.1" 302 None
+2025-12-07 23:40:30,287 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/1Aagyw HTTP/1.1" 200 None
+2025-12-07 23:40:30,470 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:40:30,741 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/1Aagyw HTTP/1.1" 200 None
+2025-12-07 23:40:30,918 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:40:35,942 - utils.parser - DEBUG - [1] Found video code: START-415
+2025-12-07 23:40:35,943 - utils.parser - DEBUG - [1] Found actor: 彩月七緒
+2025-12-07 23:40:35,945 - utils.parser - DEBUG - [1] Found magnet: START-415-C.torrent with tags: ['高清', '字幕'], size: 6.27GB, time: 2025-11-18
+2025-12-07 23:40:35,945 - utils.parser - DEBUG - [1] Found magnet: START-415.torrent with tags: ['高清'], size: 6.39GB, time: 2025-09-30
+2025-12-07 23:40:35,945 - utils.parser - DEBUG - [1] Found magnet: START-415.mp4 with tags: ['高清'], size: 6.36GB, time: 2025-09-29
+2025-12-07 23:40:35,945 - utils.parser - DEBUG - [1] Found magnet: START-415 with tags: ['高清'], size: 6.37GB, time: 2025-09-29
+2025-12-07 23:40:35,945 - utils.parser - DEBUG - [1] Found magnet: start-415 with tags: ['高清'], size: 6.46GB, time: 2025-09-30
+2025-12-07 23:40:35,945 - utils.parser - DEBUG - [1] Found magnet: START-415 with tags: [], size: 1.60GB, time: 2025-09-30
+2025-12-07 23:40:35,945 - utils.parser - DEBUG - [1] Found 6 magnet links
+2025-12-07 23:40:35,945 - utils.magnet_extractor - DEBUG - [1] Found subtitle magnet: START-415-C.torrent (size: 6.27GB, time: 2025-11-18)
+2025-12-07 23:40:35,945 - utils.magnet_extractor - DEBUG - [1] Found normal magnet for no_subtitle: start-415 (size: 6.46GB, time: 2025-09-30)
+2025-12-07 23:40:35,945 - __main__ - INFO - [1/11] [Page 1] Processing START-415
+2025-12-07 23:40:35,945 - utils.history_manager - DEBUG - Movie /v/1Aagyw: current=['no_subtitle', 'subtitle'], history=['subtitle'], phase=1
+2025-12-07 23:40:35,945 - utils.history_manager - DEBUG - Phase 1: no missing types -> should not process
+2025-12-07 23:40:35,945 - __main__ - DEBUG - [1/11] [Page 1] Should process, missing preferred types: []
+2025-12-07 23:40:35,945 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/OXV03D (attempt 1/3)
+2025-12-07 23:40:36,257 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/OXV03D HTTP/1.1" 200 None
+2025-12-07 23:40:36,427 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/OXV03D
+2025-12-07 23:40:36,439 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:40:36,439 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=n0g97267g0d4pmkh3t92x5gs5mZrjhys4m7z0w1dfhrl84tkvynpm
+2025-12-07 23:40:36,653 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=n0g97267g0d4pmkh3t92x5gs5mZrjhys4m7z0w1dfhrl84tkvynpm HTTP/1.1" 302 None
+2025-12-07 23:40:36,922 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/OXV03D HTTP/1.1" 200 None
+2025-12-07 23:40:37,109 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:40:37,416 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/OXV03D HTTP/1.1" 200 None
+2025-12-07 23:40:37,587 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:40:42,603 - utils.parser - DEBUG - [2] Found video code: START-404
+2025-12-07 23:40:42,604 - utils.parser - DEBUG - [2] Found actor: 彩月七緒
+2025-12-07 23:40:42,605 - utils.parser - DEBUG - [2] Found magnet: START-404-C.torrent with tags: ['高清', '字幕'], size: 5.67GB, time: 2025-09-28
+2025-12-07 23:40:42,605 - utils.parser - DEBUG - [2] Found magnet: START-404.torrent with tags: ['高清'], size: 5.80GB, time: 2025-08-26
+2025-12-07 23:40:42,605 - utils.parser - DEBUG - [2] Found magnet: START-404 with tags: [], size: 5.76GB, time: 2025-08-27
+2025-12-07 23:40:42,605 - utils.parser - DEBUG - [2] Found magnet: START-404.mp4 with tags: ['高清'], size: 5.76GB, time: 2025-08-26
+2025-12-07 23:40:42,605 - utils.parser - DEBUG - [2] Found magnet: start-404 with tags: ['高清'], size: 5.83GB, time: 2025-08-27
+2025-12-07 23:40:42,605 - utils.parser - DEBUG - [2] Found magnet: 第一會所新片@SIS001@START-404 with tags: ['高清'], size: 5.78GB, time: 2025-09-01
+2025-12-07 23:40:42,606 - utils.parser - DEBUG - [2] Found magnet: START-404-AI with tags: ['高清'], size: 3.69GB, time: 2025-09-01
+2025-12-07 23:40:42,606 - utils.parser - DEBUG - [2] Found magnet: START-404 with tags: [], size: 2.60GB, time: 2025-08-28
+2025-12-07 23:40:42,606 - utils.parser - DEBUG - [2] Found magnet: START-404 with tags: [], size: 1.40GB, time: 2025-08-26
+2025-12-07 23:40:42,606 - utils.parser - DEBUG - [2] Found magnet: START-404 with tags: [], size: 1.34GB, time: 2025-08-26
+2025-12-07 23:40:42,606 - utils.parser - DEBUG - [2] Found magnet: START-404爆乳でパツンパツンの隣人のマキシワンピが俺の理性をぶち壊し帰りを待つ嫁を放置して三日三晩汗だく性交に明け暮れた彩月七緒 with tags: [], size: 1.24GB, time: 2025-09-01
+2025-12-07 23:40:42,606 - utils.parser - DEBUG - [2] Found 11 magnet links
+2025-12-07 23:40:42,606 - utils.magnet_extractor - DEBUG - [2] Found subtitle magnet: START-404-C.torrent (size: 5.67GB, time: 2025-09-28)
+2025-12-07 23:40:42,606 - utils.magnet_extractor - DEBUG - [2] Found normal magnet for no_subtitle: 第一會所新片@SIS001@START-404 (size: 5.78GB, time: 2025-09-01)
+2025-12-07 23:40:42,606 - __main__ - INFO - [2/11] [Page 1] Processing START-404
+2025-12-07 23:40:42,606 - utils.history_manager - DEBUG - Movie /v/OXV03D: current=['no_subtitle', 'subtitle'], history=['subtitle'], phase=1
+2025-12-07 23:40:42,606 - utils.history_manager - DEBUG - Phase 1: no missing types -> should not process
+2025-12-07 23:40:42,606 - __main__ - DEBUG - [2/11] [Page 1] Should process, missing preferred types: []
+2025-12-07 23:40:42,606 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/AqbADm (attempt 1/3)
+2025-12-07 23:40:42,856 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/AqbADm HTTP/1.1" 200 None
+2025-12-07 23:40:43,027 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/AqbADm
+2025-12-07 23:40:43,041 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:40:43,041 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=zntj8jldc6qygkAr81Ap73ff7AZr6kgkgjcdkctj3gqzmw3cnxA3m
+2025-12-07 23:40:43,248 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=zntj8jldc6qygkAr81Ap73ff7AZr6kgkgjcdkctj3gqzmw3cnxA3m HTTP/1.1" 302 None
+2025-12-07 23:40:43,502 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/AqbADm HTTP/1.1" 200 None
+2025-12-07 23:40:43,686 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:40:43,948 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/AqbADm HTTP/1.1" 200 None
+2025-12-07 23:40:44,122 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:40:49,141 - utils.parser - DEBUG - [3] Found video code: START-270
+2025-12-07 23:40:49,142 - utils.parser - DEBUG - [3] Found actor: 彩月七緒
+2025-12-07 23:40:49,143 - utils.parser - DEBUG - [3] Found magnet: START-270-C.torrent with tags: ['高清', '字幕'], size: 5.00GB, time: 2025-05-04
+2025-12-07 23:40:49,143 - utils.parser - DEBUG - [3] Found magnet: START-270 with tags: [], size: 5.07GB, time: 2025-02-24
+2025-12-07 23:40:49,143 - utils.parser - DEBUG - [3] Found magnet: START-270.mp4 with tags: ['高清'], size: 5.07GB, time: 2025-02-25
+2025-12-07 23:40:49,143 - utils.parser - DEBUG - [3] Found magnet: start-270 with tags: ['高清'], size: 5.16GB, time: 2025-02-25
+2025-12-07 23:40:49,143 - utils.parser - DEBUG - [3] Found magnet: start-270 with tags: ['高清'], size: 5.10GB, time: 2025-02-25
+2025-12-07 23:40:49,143 - utils.parser - DEBUG - [3] Found magnet: START-270 with tags: ['高清'], size: 5.09GB, time: 2025-02-27
+2025-12-07 23:40:49,143 - utils.parser - DEBUG - [3] Found magnet: START-270 with tags: [], size: 1.32GB, time: 2025-02-25
+2025-12-07 23:40:49,143 - utils.parser - DEBUG - [3] Found 7 magnet links
+2025-12-07 23:40:49,144 - utils.magnet_extractor - DEBUG - [3] Found subtitle magnet: START-270-C.torrent (size: 5.00GB, time: 2025-05-04)
+2025-12-07 23:40:49,144 - utils.magnet_extractor - DEBUG - [3] Found normal magnet for no_subtitle: START-270 (size: 5.09GB, time: 2025-02-27)
+2025-12-07 23:40:49,144 - __main__ - INFO - [3/11] [Page 1] Processing START-270
+2025-12-07 23:40:49,144 - utils.history_manager - DEBUG - New movie /v/AqbADm: should process
+2025-12-07 23:40:49,144 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:40:49,144 - __main__ - DEBUG - [3/11] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:40:49,156 - utils.history_manager - DEBUG - Adding new record for /v/AqbADm
+2025-12-07 23:40:49,156 - utils.history_manager - DEBUG - Added new record for /v/AqbADm with magnet links: ['subtitle']
+2025-12-07 23:40:49,180 - utils.history_manager - DEBUG - Updated history for /v/AqbADm with magnet links: ['subtitle'] (total records: 5917)
+2025-12-07 23:40:50,186 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/0e5yRX (attempt 1/3)
+2025-12-07 23:40:50,490 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/0e5yRX HTTP/1.1" 200 None
+2025-12-07 23:40:50,676 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/0e5yRX
+2025-12-07 23:40:50,695 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:40:50,695 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=l609g7hs0z0g56fsgdxgx8yjm2Zhjzd3p27stm6tg3kt3mvlgzw51
+2025-12-07 23:40:50,912 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=l609g7hs0z0g56fsgdxgx8yjm2Zhjzd3p27stm6tg3kt3mvlgzw51 HTTP/1.1" 302 None
+2025-12-07 23:40:51,145 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/0e5yRX HTTP/1.1" 200 None
+2025-12-07 23:40:51,315 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:40:51,714 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/0e5yRX HTTP/1.1" 200 None
+2025-12-07 23:40:51,866 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:40:56,880 - utils.parser - DEBUG - [4] Found video code: START-227
+2025-12-07 23:40:56,881 - utils.parser - DEBUG - [4] Found actor: 彩月七緒
+2025-12-07 23:40:56,881 - utils.parser - DEBUG - [4] Found magnet: START-227-C.torrent with tags: ['高清', '字幕'], size: 6.87GB, time: 2025-02-11
+2025-12-07 23:40:56,881 - utils.parser - DEBUG - [4] Found magnet: START-227 with tags: [], size: 4.92GB, time: 2024-12-24
+2025-12-07 23:40:56,881 - utils.parser - DEBUG - [4] Found magnet: start-227v.torrent with tags: ['高清'], size: 4.84GB, time: 2024-12-24
+2025-12-07 23:40:56,881 - utils.parser - DEBUG - [4] Found 3 magnet links
+2025-12-07 23:40:56,881 - utils.magnet_extractor - DEBUG - [4] Found subtitle magnet: START-227-C.torrent (size: 6.87GB, time: 2025-02-11)
+2025-12-07 23:40:56,881 - utils.magnet_extractor - DEBUG - [4] Found normal magnet for no_subtitle: START-227 (size: 4.92GB, time: 2024-12-24)
+2025-12-07 23:40:56,881 - __main__ - INFO - [4/11] [Page 1] Processing START-227
+2025-12-07 23:40:56,881 - utils.history_manager - DEBUG - New movie /v/0e5yRX: should process
+2025-12-07 23:40:56,882 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:40:56,882 - __main__ - DEBUG - [4/11] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:40:56,899 - utils.history_manager - DEBUG - Adding new record for /v/0e5yRX
+2025-12-07 23:40:56,899 - utils.history_manager - DEBUG - Added new record for /v/0e5yRX with magnet links: ['subtitle']
+2025-12-07 23:40:56,925 - utils.history_manager - DEBUG - Updated history for /v/0e5yRX with magnet links: ['subtitle'] (total records: 5918)
+2025-12-07 23:40:57,931 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/P99vZ0 (attempt 1/3)
+2025-12-07 23:40:58,186 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/P99vZ0 HTTP/1.1" 200 None
+2025-12-07 23:40:58,371 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/P99vZ0
+2025-12-07 23:40:58,389 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:40:58,390 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=bbhn31k6n7p6276t3hg8ywvlfqZ8gxtrsrgw5fvmvd9lk98l8z8gm
+2025-12-07 23:40:58,592 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=bbhn31k6n7p6276t3hg8ywvlfqZ8gxtrsrgw5fvmvd9lk98l8z8gm HTTP/1.1" 302 None
+2025-12-07 23:40:58,848 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/P99vZ0 HTTP/1.1" 200 None
+2025-12-07 23:40:59,031 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:40:59,303 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/P99vZ0 HTTP/1.1" 200 None
+2025-12-07 23:40:59,473 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:41:04,489 - utils.parser - DEBUG - [5] Found video code: START-223
+2025-12-07 23:41:04,490 - utils.parser - DEBUG - [5] Found actor: 彩月七緒
+2025-12-07 23:41:04,491 - utils.parser - DEBUG - [5] Found magnet: START-223-C.torrent with tags: ['高清', '字幕'], size: 6.42GB, time: 2025-01-27
+2025-12-07 23:41:04,491 - utils.parser - DEBUG - [5] Found magnet: start-223.torrent with tags: ['高清'], size: 4.52GB, time: 2024-11-26
+2025-12-07 23:41:04,491 - utils.parser - DEBUG - [5] Found 2 magnet links
+2025-12-07 23:41:04,491 - utils.magnet_extractor - DEBUG - [5] Found subtitle magnet: START-223-C.torrent (size: 6.42GB, time: 2025-01-27)
+2025-12-07 23:41:04,491 - utils.magnet_extractor - DEBUG - [5] Found normal magnet for no_subtitle: start-223.torrent (size: 4.52GB, time: 2024-11-26)
+2025-12-07 23:41:04,491 - __main__ - INFO - [5/11] [Page 1] Processing START-223
+2025-12-07 23:41:04,491 - utils.history_manager - DEBUG - New movie /v/P99vZ0: should process
+2025-12-07 23:41:04,491 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:41:04,491 - __main__ - DEBUG - [5/11] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:41:04,504 - utils.history_manager - DEBUG - Adding new record for /v/P99vZ0
+2025-12-07 23:41:04,504 - utils.history_manager - DEBUG - Added new record for /v/P99vZ0 with magnet links: ['subtitle']
+2025-12-07 23:41:04,529 - utils.history_manager - DEBUG - Updated history for /v/P99vZ0 with magnet links: ['subtitle'] (total records: 5919)
+2025-12-07 23:41:05,531 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/MbbAVJ (attempt 1/3)
+2025-12-07 23:41:05,783 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/MbbAVJ HTTP/1.1" 200 None
+2025-12-07 23:41:05,950 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/MbbAVJ
+2025-12-07 23:41:05,971 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:41:05,971 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=qjbs22cpflf87hqfvjpptsxm7AZ8fbAxnh1wmqlvb3t2zfr7sw2v7
+2025-12-07 23:41:06,183 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=qjbs22cpflf87hqfvjpptsxm7AZ8fbAxnh1wmqlvb3t2zfr7sw2v7 HTTP/1.1" 302 None
+2025-12-07 23:41:06,442 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/MbbAVJ HTTP/1.1" 200 None
+2025-12-07 23:41:06,613 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:41:06,887 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/MbbAVJ HTTP/1.1" 200 None
+2025-12-07 23:41:07,072 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:41:12,084 - utils.parser - DEBUG - [6] Found video code: START-154
+2025-12-07 23:41:12,084 - utils.parser - DEBUG - [6] Found actor: 彩月七緒
+2025-12-07 23:41:12,085 - utils.parser - DEBUG - [6] Found magnet: START-154-C.torrent with tags: ['高清', '字幕'], size: 4.12GB, time: 2024-11-02
+2025-12-07 23:41:12,085 - utils.parser - DEBUG - [6] Found magnet: START-154 with tags: [], size: 4.18GB, time: 2024-08-27
+2025-12-07 23:41:12,085 - utils.parser - DEBUG - [6] Found magnet: start-154.torrent with tags: ['高清'], size: 4.11GB, time: 2024-08-27
+2025-12-07 23:41:12,085 - utils.parser - DEBUG - [6] Found 3 magnet links
+2025-12-07 23:41:12,085 - utils.magnet_extractor - DEBUG - [6] Found subtitle magnet: START-154-C.torrent (size: 4.12GB, time: 2024-11-02)
+2025-12-07 23:41:12,085 - utils.magnet_extractor - DEBUG - [6] Found normal magnet for no_subtitle: START-154 (size: 4.18GB, time: 2024-08-27)
+2025-12-07 23:41:12,085 - __main__ - INFO - [6/11] [Page 1] Processing START-154
+2025-12-07 23:41:12,085 - utils.history_manager - DEBUG - New movie /v/MbbAVJ: should process
+2025-12-07 23:41:12,085 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:41:12,086 - __main__ - DEBUG - [6/11] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:41:12,101 - utils.history_manager - DEBUG - Adding new record for /v/MbbAVJ
+2025-12-07 23:41:12,101 - utils.history_manager - DEBUG - Added new record for /v/MbbAVJ with magnet links: ['subtitle']
+2025-12-07 23:41:12,124 - utils.history_manager - DEBUG - Updated history for /v/MbbAVJ with magnet links: ['subtitle'] (total records: 5920)
+2025-12-07 23:41:13,129 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/WwwKWR (attempt 1/3)
+2025-12-07 23:41:13,510 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/WwwKWR HTTP/1.1" 200 None
+2025-12-07 23:41:13,694 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/WwwKWR
+2025-12-07 23:41:13,724 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:41:13,724 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=yz4l1hngkd5fncy505pp10mw91Ztz57yl5j9xj0q26zmjkjf7wbxy
+2025-12-07 23:41:13,948 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=yz4l1hngkd5fncy505pp10mw91Ztz57yl5j9xj0q26zmjkjf7wbxy HTTP/1.1" 302 None
+2025-12-07 23:41:14,207 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/WwwKWR HTTP/1.1" 200 None
+2025-12-07 23:41:14,378 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:41:14,630 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/WwwKWR HTTP/1.1" 200 None
+2025-12-07 23:41:14,809 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:41:19,823 - utils.parser - DEBUG - [7] Found video code: START-125
+2025-12-07 23:41:19,824 - utils.parser - DEBUG - [7] Found actor: 彩月七緒
+2025-12-07 23:41:19,824 - utils.parser - DEBUG - [7] Found magnet: START-125-C.torrent with tags: ['高清', '字幕'], size: 5.60GB, time: 2024-08-24
+2025-12-07 23:41:19,824 - utils.parser - DEBUG - [7] Found magnet: start-125.torrent with tags: ['高清'], size: 8.08GB, time: 2024-07-30
+2025-12-07 23:41:19,824 - utils.parser - DEBUG - [7] Found magnet: START-125 with tags: [], size: 5.69GB, time: 2024-07-30
+2025-12-07 23:41:19,824 - utils.parser - DEBUG - [7] Found 3 magnet links
+2025-12-07 23:41:19,824 - utils.magnet_extractor - DEBUG - [7] Found subtitle magnet: START-125-C.torrent (size: 5.60GB, time: 2024-08-24)
+2025-12-07 23:41:19,824 - utils.magnet_extractor - DEBUG - [7] Found normal magnet for no_subtitle: start-125.torrent (size: 8.08GB, time: 2024-07-30)
+2025-12-07 23:41:19,825 - __main__ - INFO - [7/11] [Page 1] Processing START-125
+2025-12-07 23:41:19,825 - utils.history_manager - DEBUG - New movie /v/WwwKWR: should process
+2025-12-07 23:41:19,825 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:41:19,825 - __main__ - DEBUG - [7/11] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:41:19,835 - utils.history_manager - DEBUG - Adding new record for /v/WwwKWR
+2025-12-07 23:41:19,835 - utils.history_manager - DEBUG - Added new record for /v/WwwKWR with magnet links: ['subtitle']
+2025-12-07 23:41:19,855 - utils.history_manager - DEBUG - Updated history for /v/WwwKWR with magnet links: ['subtitle'] (total records: 5921)
+2025-12-07 23:41:20,861 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/a8kb0g (attempt 1/3)
+2025-12-07 23:41:21,154 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/a8kb0g HTTP/1.1" 200 None
+2025-12-07 23:41:21,331 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/a8kb0g
+2025-12-07 23:41:21,339 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:41:21,339 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=s3bjmd6n90m9pks1rkw4xdf0hAZAc0qvvqgj7sgddfkk8rg0sj9t7
+2025-12-07 23:41:21,539 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=s3bjmd6n90m9pks1rkw4xdf0hAZAc0qvvqgj7sgddfkk8rg0sj9t7 HTTP/1.1" 302 None
+2025-12-07 23:41:21,805 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/a8kb0g HTTP/1.1" 200 None
+2025-12-07 23:41:21,989 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:41:22,257 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/a8kb0g HTTP/1.1" 200 None
+2025-12-07 23:41:22,435 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:41:27,449 - utils.parser - DEBUG - [8] Found video code: START-056
+2025-12-07 23:41:27,450 - utils.parser - DEBUG - [8] Found actor: 彩月七緒
+2025-12-07 23:41:27,450 - utils.parser - DEBUG - [8] Found magnet: START-056-C.torrent with tags: ['高清', '字幕'], size: 4.38GB, time: 2024-08-12
+2025-12-07 23:41:27,450 - utils.parser - DEBUG - [8] Found magnet: START-056 with tags: [], size: 4.44GB, time: 2024-04-30
+2025-12-07 23:41:27,451 - utils.parser - DEBUG - [8] Found magnet: start-056.torrent with tags: ['高清'], size: 4.37GB, time: 2024-04-30
+2025-12-07 23:41:27,451 - utils.parser - DEBUG - [8] Found 3 magnet links
+2025-12-07 23:41:27,451 - utils.magnet_extractor - DEBUG - [8] Found subtitle magnet: START-056-C.torrent (size: 4.38GB, time: 2024-08-12)
+2025-12-07 23:41:27,451 - utils.magnet_extractor - DEBUG - [8] Found normal magnet for no_subtitle: START-056 (size: 4.44GB, time: 2024-04-30)
+2025-12-07 23:41:27,451 - __main__ - INFO - [8/11] [Page 1] Processing START-056
+2025-12-07 23:41:27,451 - utils.history_manager - DEBUG - New movie /v/a8kb0g: should process
+2025-12-07 23:41:27,451 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:41:27,451 - __main__ - DEBUG - [8/11] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:41:27,461 - utils.history_manager - DEBUG - Adding new record for /v/a8kb0g
+2025-12-07 23:41:27,461 - utils.history_manager - DEBUG - Added new record for /v/a8kb0g with magnet links: ['subtitle']
+2025-12-07 23:41:27,481 - utils.history_manager - DEBUG - Updated history for /v/a8kb0g with magnet links: ['subtitle'] (total records: 5922)
+2025-12-07 23:41:28,486 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/82Vegx (attempt 1/3)
+2025-12-07 23:41:28,773 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/82Vegx HTTP/1.1" 200 None
+2025-12-07 23:41:28,943 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/82Vegx
+2025-12-07 23:41:28,966 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:41:28,967 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=11cv2t2p9ybtljcAh84dtvfhw3ZkAr3jhs9ghljl7t40q6mnvA51y
+2025-12-07 23:41:29,185 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=11cv2t2p9ybtljcAh84dtvfhw3ZkAr3jhs9ghljl7t40q6mnvA51y HTTP/1.1" 302 None
+2025-12-07 23:41:29,421 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/82Vegx HTTP/1.1" 200 None
+2025-12-07 23:41:29,599 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:41:29,895 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/82Vegx HTTP/1.1" 200 None
+2025-12-07 23:41:30,063 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:41:35,087 - utils.parser - DEBUG - [9] Found video code: START-048
+2025-12-07 23:41:35,088 - utils.parser - DEBUG - [9] Found actor: 彩月七緒
+2025-12-07 23:41:35,088 - utils.parser - DEBUG - [9] Found magnet: START-048-C.torrent with tags: ['高清', '字幕'], size: 3.95GB, time: 2024-05-20
+2025-12-07 23:41:35,088 - utils.parser - DEBUG - [9] Found magnet: START-048 with tags: [], size: 4.01GB, time: 2024-03-26
+2025-12-07 23:41:35,088 - utils.parser - DEBUG - [9] Found magnet: start-048.torrent with tags: ['高清'], size: 3.95GB, time: 2024-03-26
+2025-12-07 23:41:35,088 - utils.parser - DEBUG - [9] Found 3 magnet links
+2025-12-07 23:41:35,088 - utils.magnet_extractor - DEBUG - [9] Found subtitle magnet: START-048-C.torrent (size: 3.95GB, time: 2024-05-20)
+2025-12-07 23:41:35,089 - utils.magnet_extractor - DEBUG - [9] Found normal magnet for no_subtitle: START-048 (size: 4.01GB, time: 2024-03-26)
+2025-12-07 23:41:35,089 - __main__ - INFO - [9/11] [Page 1] Processing START-048
+2025-12-07 23:41:35,089 - utils.history_manager - DEBUG - New movie /v/82Vegx: should process
+2025-12-07 23:41:35,089 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:41:35,089 - __main__ - DEBUG - [9/11] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:41:35,104 - utils.history_manager - DEBUG - Adding new record for /v/82Vegx
+2025-12-07 23:41:35,104 - utils.history_manager - DEBUG - Added new record for /v/82Vegx with magnet links: ['subtitle']
+2025-12-07 23:41:35,129 - utils.history_manager - DEBUG - Updated history for /v/82Vegx with magnet links: ['subtitle'] (total records: 5923)
+2025-12-07 23:41:36,133 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/a8EX83 (attempt 1/3)
+2025-12-07 23:41:36,375 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/a8EX83 HTTP/1.1" 200 None
+2025-12-07 23:41:36,559 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/a8EX83
+2025-12-07 23:41:36,579 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:41:36,579 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=8Akmj2why0329nmmfzwc0zbbf1Zcbktchp04j9ww8tq21tnd317m3
+2025-12-07 23:41:36,776 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=8Akmj2why0329nmmfzwc0zbbf1Zcbktchp04j9ww8tq21tnd317m3 HTTP/1.1" 302 None
+2025-12-07 23:41:37,049 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/a8EX83 HTTP/1.1" 200 None
+2025-12-07 23:41:37,229 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:41:37,543 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/a8EX83 HTTP/1.1" 200 None
+2025-12-07 23:41:37,719 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:41:42,733 - utils.parser - DEBUG - [10] Found video code: START-020
+2025-12-07 23:41:42,733 - utils.parser - DEBUG - [10] Found actor: 吉村卓
+2025-12-07 23:41:42,734 - utils.parser - DEBUG - [10] Found magnet: START-020-C.torrent with tags: ['高清', '字幕'], size: 7.58GB, time: 2024-03-18
+2025-12-07 23:41:42,734 - utils.parser - DEBUG - [10] Found magnet: START-020 with tags: [], size: 5.62GB, time: 2024-02-27
+2025-12-07 23:41:42,734 - utils.parser - DEBUG - [10] Found 2 magnet links
+2025-12-07 23:41:42,734 - utils.magnet_extractor - DEBUG - [10] Found subtitle magnet: START-020-C.torrent (size: 7.58GB, time: 2024-03-18)
+2025-12-07 23:41:42,734 - utils.magnet_extractor - DEBUG - [10] Found normal magnet for no_subtitle: START-020 (size: 5.62GB, time: 2024-02-27)
+2025-12-07 23:41:42,734 - __main__ - INFO - [10/11] [Page 1] Processing START-020
+2025-12-07 23:41:42,734 - utils.history_manager - DEBUG - New movie /v/a8EX83: should process
+2025-12-07 23:41:42,734 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:41:42,734 - __main__ - DEBUG - [10/11] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:41:42,745 - utils.history_manager - DEBUG - Adding new record for /v/a8EX83
+2025-12-07 23:41:42,745 - utils.history_manager - DEBUG - Added new record for /v/a8EX83 with magnet links: ['subtitle']
+2025-12-07 23:41:42,763 - utils.history_manager - DEBUG - Updated history for /v/a8EX83 with magnet links: ['subtitle'] (total records: 5924)
+2025-12-07 23:41:43,766 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/vePqYO (attempt 1/3)
+2025-12-07 23:41:43,997 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/vePqYO HTTP/1.1" 200 None
+2025-12-07 23:41:44,163 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/vePqYO
+2025-12-07 23:41:44,175 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:41:44,175 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=q22kpd5nA406lgkvqz6crz0052Zvtmsw6s94nf2Ad67nc2qvhAc9m
+2025-12-07 23:41:44,388 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=q22kpd5nA406lgkvqz6crz0052Zvtmsw6s94nf2Ad67nc2qvhAc9m HTTP/1.1" 302 None
+2025-12-07 23:41:44,675 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/vePqYO HTTP/1.1" 200 None
+2025-12-07 23:41:44,857 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:41:45,137 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/vePqYO HTTP/1.1" 200 None
+2025-12-07 23:41:45,305 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:41:50,328 - utils.parser - DEBUG - [11] Found video code: STZY-011
+2025-12-07 23:41:50,329 - utils.parser - DEBUG - [11] Found actor: 彩月七緒
+2025-12-07 23:41:50,330 - utils.parser - DEBUG - [11] Found magnet: STZY-011-C_GG5 with tags: ['高清', '字幕'], size: 3.12GB, time: 2024-03-13
+2025-12-07 23:41:50,330 - utils.parser - DEBUG - [11] Found magnet: STZY-011 with tags: [], size: , time: 2024-04-06
+2025-12-07 23:41:50,330 - utils.parser - DEBUG - [11] Found 2 magnet links
+2025-12-07 23:41:50,330 - utils.magnet_extractor - DEBUG - [11] Found subtitle magnet: STZY-011-C_GG5 (size: 3.12GB, time: 2024-03-13)
+2025-12-07 23:41:50,330 - utils.magnet_extractor - DEBUG - [11] Found normal magnet for no_subtitle: STZY-011 (size: , time: 2024-04-06)
+2025-12-07 23:41:50,330 - __main__ - INFO - [11/11] [Page 1] Processing STZY-011
+2025-12-07 23:41:50,330 - utils.history_manager - DEBUG - New movie /v/vePqYO: should process
+2025-12-07 23:41:50,330 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:41:50,330 - __main__ - DEBUG - [11/11] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:41:50,341 - utils.history_manager - DEBUG - Adding new record for /v/vePqYO
+2025-12-07 23:41:50,341 - utils.history_manager - DEBUG - Added new record for /v/vePqYO with magnet links: ['subtitle']
+2025-12-07 23:41:50,365 - utils.history_manager - DEBUG - Updated history for /v/vePqYO with magnet links: ['subtitle'] (total records: 5925)
+2025-12-07 23:41:51,371 - __main__ - INFO - Phase 1 completed: 9 entries processed
+2025-12-07 23:41:51,371 - __main__ - INFO - ==================================================
+2025-12-07 23:41:51,371 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-12-07 23:41:51,371 - __main__ - INFO - ==================================================
+2025-12-07 23:41:51,371 - __main__ - DEBUG - [Page 1] Fetching for phase 2: https://javdb.com/actors/RdEb4
+2025-12-07 23:41:51,371 - __main__ - DEBUG - [Page 1] Initial attempt (Proxy=False, CF=False, Node=None)...
+2025-12-07 23:41:51,371 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4 (attempt 1/3)
+2025-12-07 23:41:51,718 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 200 None
+2025-12-07 23:41:51,896 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4
+2025-12-07 23:41:51,915 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:41:51,915 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=0qtz37qbgj37g98g67n47p05A1Ztmf58mghwfhnb7zbdhgfbsj3dq
+2025-12-07 23:41:52,178 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=0qtz37qbgj37g98g67n47p05A1Ztmf58mghwfhnb7zbdhgfbsj3dq HTTP/1.1" 302 None
+2025-12-07 23:41:52,537 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 200 None
+2025-12-07 23:41:52,704 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:41:52,981 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4 HTTP/1.1" 200 None
+2025-12-07 23:41:53,157 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:41:53,175 - __main__ - DEBUG - [Page 1] Success: Initial attempt (Proxy=False, CF=False, Node=None)
+2025-12-07 23:41:53,187 - utils.parser - DEBUG - [Page 1] Age verification modal detected, but continuing with parsing
+2025-12-07 23:41:53,188 - utils.parser - DEBUG - [Page 1] Found movie list container
+2025-12-07 23:41:53,188 - utils.parser - DEBUG - [Page 1] Parsing index page for phase 2...
+2025-12-07 23:41:53,188 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
+2025-12-07 23:41:53,189 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:41:53,189 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-463
+2025-12-07 23:41:53,189 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-463 (/v/2m0gpp) - Rate: 4.61, Comments: 757
+2025-12-07 23:41:53,189 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:41:53,189 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-442
+2025-12-07 23:41:53,189 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-442 (/v/mO9A8y) - Rate: 4.43, Comments: 748
+2025-12-07 23:41:53,189 - utils.parser - DEBUG - [Page 1] Found tags: []
+2025-12-07 23:41:53,189 - utils.parser - DEBUG - Extracted video code from <strong> tag: NAAC-036
+2025-12-07 23:41:53,189 - utils.parser - DEBUG - [Page 1] Skipped entry (filtered): NAAC-036 - Rate: 4.8, Comments: 18
+2025-12-07 23:41:53,189 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:41:53,189 - utils.parser - DEBUG - [Page 1] Found tags: []
+2025-12-07 23:41:53,189 - utils.parser - DEBUG - Extracted video code from <strong> tag: SODS-074
+2025-12-07 23:41:53,189 - utils.parser - DEBUG - [Page 1] Skipped entry (filtered): SODS-074 - Rate: 4.44, Comments: 18
+2025-12-07 23:41:53,189 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-356
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-356 (/v/7yq7YR) - Rate: 4.48, Comments: 1333
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - Extracted video code from <strong> tag: SDHS-062
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): SDHS-062 (/v/AqKAAy) - Rate: 4.31, Comments: 307
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - Extracted video code from <strong> tag: DSVR-1760
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): DSVR-1760 (/v/V4NONq) - Rate: 4.33, Comments: 114
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-327
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-327 (/v/NQP6Eg) - Rate: 4.37, Comments: 804
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - [Page 1] Found tags: []
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - Extracted video code from <strong> tag: NAAC-025
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - [Page 1] Skipped entry (filtered): NAAC-025 - Rate: 4.25, Comments: 22
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-315
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-315 (/v/e84aMR) - Rate: 4.6, Comments: 1442
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:41:53,190 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-298
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-298 (/v/RkGAKp) - Rate: 4.45, Comments: 1409
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - Extracted video code from <strong> tag: NAAC-019
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): NAAC-019 (/v/XeEbY4) - Rate: 4.23, Comments: 146
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - [Page 1] Found tags: []
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - Extracted video code from <strong> tag: 3DSVR-1627
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - [Page 1] Skipped entry (filtered): 3DSVR-1627 - Rate: 4.33, Comments: 14
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-256
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-256 (/v/96dV9V) - Rate: 4.32, Comments: 634
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-227-V
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-227-V (/v/NQ9xxN) - Rate: 4.17, Comments: 216
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-202
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-202 (/v/Wwwq6g) - Rate: 4.5, Comments: 1614
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - Extracted video code from <strong> tag: DSVR-1627
+2025-12-07 23:41:53,191 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): DSVR-1627 (/v/WwwDJ8) - Rate: 4.39, Comments: 191
+2025-12-07 23:41:53,192 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:41:53,192 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-183
+2025-12-07 23:41:53,192 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-183 (/v/YwwVk8) - Rate: 4.36, Comments: 1264
+2025-12-07 23:41:53,192 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:41:53,192 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:41:53,192 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:41:53,192 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-096
+2025-12-07 23:41:53,192 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-096 (/v/pk30rq) - Rate: 4.39, Comments: 1272
+2025-12-07 23:41:53,192 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:41:53,192 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-082
+2025-12-07 23:41:53,192 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-082 (/v/OX2GmK) - Rate: 4.37, Comments: 911
+2025-12-07 23:41:53,192 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:41:53,192 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:41:53,192 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:41:53,192 - utils.parser - DEBUG - [Page 1] Found tags: ['含中字磁鏈']
+2025-12-07 23:41:53,192 - utils.parser - DEBUG - [Page 1] Found tags: ['含磁鏈']
+2025-12-07 23:41:53,192 - utils.parser - DEBUG - Extracted video code from <strong> tag: START-010
+2025-12-07 23:41:53,192 - utils.parser - DEBUG - [Page 1] Found entry (filter disabled): START-010 (/v/nerQYm) - Rate: 4.29, Comments: 1847
+2025-12-07 23:41:53,192 - utils.parser - INFO - [Page 1] Found 17 entries for phase 2
+2025-12-07 23:41:55,198 - __main__ - DEBUG - [Page 2] Fetching for phase 2: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:41:55,198 - __main__ - DEBUG - [Page 2] Initial attempt (Proxy=False, CF=False, Node=None)...
+2025-12-07 23:41:55,199 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
+2025-12-07 23:41:55,458 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 None
+2025-12-07 23:41:55,460 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:41:55,472 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:41:55,473 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=7hmz8n618trnfttpqA91vdrrgyZlgfnfw19b682m2ww5k3wdss9h8b85jn50r980rhs6s3t0cn5tkb1
+2025-12-07 23:41:55,675 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=7hmz8n618trnfttpqA91vdrrgyZlgfnfw19b682m2ww5k3wdss9h8b85jn50r980rhs6s3t0cn5tkb1 HTTP/1.1" 302 None
+2025-12-07 23:41:55,967 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 None
+2025-12-07 23:41:55,968 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:41:56,227 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 None
+2025-12-07 23:41:56,228 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:41:56,236 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
+2025-12-07 23:41:56,236 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-07 23:41:56,236 - __main__ - DEBUG - [Page 2] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
+2025-12-07 23:41:56,236 - __main__ - DEBUG - [Page 2] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
+2025-12-07 23:41:56,236 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
+2025-12-07 23:41:56,236 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
+2025-12-07 23:41:56,236 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@140.245.123.124:12300'}
+2025-12-07 23:41:56,494 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 None
+2025-12-07 23:41:56,494 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:41:56,495 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:41:56,501 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:41:56,501 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=0scgxw60Akvh7gc3wmA3z7ww17Zdsbbdkxxg6f9qdrc5ngxlnc6j6jd1dbztmldxjj75qpk8kgqqA81
+2025-12-07 23:41:56,733 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=0scgxw60Akvh7gc3wmA3z7ww17Zdsbbdkxxg6f9qdrc5ngxlnc6j6jd1dbztmldxjj75qpk8kgqqA81 HTTP/1.1" 302 None
+2025-12-07 23:41:56,963 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 None
+2025-12-07 23:41:56,963 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:41:57,203 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 None
+2025-12-07 23:41:57,204 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:41:57,210 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
+2025-12-07 23:41:57,210 - __main__ - DEBUG - [Page 2] Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)...
+2025-12-07 23:41:57,210 - __main__ - DEBUG - [CF Bypass] Request Mirroring: https://javdb.com/actors/RdEb4?page=2 -> http://140.245.123.124:8000/actors/RdEb4?page=2
+2025-12-07 23:41:57,210 - __main__ - DEBUG - [CF Bypass] x-hostname: javdb.com
+2025-12-07 23:41:57,210 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=2 (attempt 1/3)
+2025-12-07 23:41:57,210 - __main__ - DEBUG - [CF Bypass] Actual request to: http://140.245.123.124:8000/actors/RdEb4?page=2
+2025-12-07 23:41:57,211 - urllib3.connectionpool - DEBUG - Resetting dropped connection: 140.245.123.124
+2025-12-07 23:41:57,470 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 30593
+2025-12-07 23:41:57,479 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=2
+2025-12-07 23:41:57,479 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:41:57,500 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:41:57,500 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=y64Abz9fk7711fc9hnw764gysmZ5Axd3mAfl5ch1y1vkrdmf61mcqw0wdv7s0mdzwfr1fnkw3w7wfy1
+2025-12-07 23:41:57,764 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=y64Abz9fk7711fc9hnw764gysmZ5Axd3mAfl5ch1y1vkrdmf61mcqw0wdv7s0mdzwfr1fnkw3w7wfy1 HTTP/1.1" 302 None
+2025-12-07 23:41:58,050 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 None
+2025-12-07 23:41:58,052 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:41:58,291 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=2 HTTP/1.1" 200 30593
+2025-12-07 23:41:58,303 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:41:58,319 - __main__ - DEBUG - [Page 2] Validation failed (no movie list): Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)
+2025-12-07 23:41:58,323 - __main__ - ERROR - [Page 2] All proxy attempts exhausted.
+2025-12-07 23:41:58,323 - __main__ - WARNING - [Page 2] No movie list found after all fallback attempts
+2025-12-07 23:41:58,323 - __main__ - DEBUG - [Page 3] Fetching for phase 2: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:41:58,323 - __main__ - DEBUG - [Page 3] Initial attempt (Proxy=False, CF=False, Node=None)...
+2025-12-07 23:41:58,323 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
+2025-12-07 23:41:58,572 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 None
+2025-12-07 23:41:58,574 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:41:58,586 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:41:58,586 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=4w9mtg6ytjk5qmg54c89ft418yZb6nrcp33qyn48kt1xwy11m2hmwj9w8n441dmkvtvy65nkjdmgl6q
+2025-12-07 23:41:58,814 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=4w9mtg6ytjk5qmg54c89ft418yZb6nrcp33qyn48kt1xwy11m2hmwj9w8n441dmkvtvy65nkjdmgl6q HTTP/1.1" 302 None
+2025-12-07 23:41:59,053 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 None
+2025-12-07 23:41:59,055 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:41:59,301 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 None
+2025-12-07 23:41:59,302 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:41:59,308 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
+2025-12-07 23:41:59,308 - __main__ - WARNING - [Page 3] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-07 23:41:59,308 - __main__ - DEBUG - [Page 3] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
+2025-12-07 23:41:59,308 - __main__ - DEBUG - [Page 3] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
+2025-12-07 23:41:59,308 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
+2025-12-07 23:41:59,308 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
+2025-12-07 23:41:59,308 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@140.245.123.124:12300'}
+2025-12-07 23:41:59,586 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 None
+2025-12-07 23:41:59,588 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:41:59,589 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:41:59,596 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:41:59,596 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=qr76nzfvgmk6msdwxt9m0jmy53Z7yh2cbtkr8kxbdl14dvvxr1dls815ltzrg541sm878xwzldqpk5q
+2025-12-07 23:41:59,808 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=qr76nzfvgmk6msdwxt9m0jmy53Z7yh2cbtkr8kxbdl14dvvxr1dls815ltzrg541sm878xwzldqpk5q HTTP/1.1" 302 None
+2025-12-07 23:42:00,050 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 None
+2025-12-07 23:42:00,052 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:42:00,316 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 None
+2025-12-07 23:42:00,316 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:42:00,323 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
+2025-12-07 23:42:00,323 - __main__ - DEBUG - [Page 3] Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)...
+2025-12-07 23:42:00,323 - __main__ - DEBUG - [CF Bypass] Request Mirroring: https://javdb.com/actors/RdEb4?page=3 -> http://140.245.123.124:8000/actors/RdEb4?page=3
+2025-12-07 23:42:00,323 - __main__ - DEBUG - [CF Bypass] x-hostname: javdb.com
+2025-12-07 23:42:00,323 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=3 (attempt 1/3)
+2025-12-07 23:42:00,323 - __main__ - DEBUG - [CF Bypass] Actual request to: http://140.245.123.124:8000/actors/RdEb4?page=3
+2025-12-07 23:42:00,651 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 30593
+2025-12-07 23:42:00,661 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=3
+2025-12-07 23:42:00,662 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:42:00,677 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:42:00,677 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=70mgb86w3A67y3kx8q6j9k11s7ZA68rdpws8h2frnpxt7r41skjjrvr6lpdxlj37902yAtb396klbAq
+2025-12-07 23:42:00,881 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=70mgb86w3A67y3kx8q6j9k11s7ZA68rdpws8h2frnpxt7r41skjjrvr6lpdxlj37902yAtb396klbAq HTTP/1.1" 302 None
+2025-12-07 23:42:01,143 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 None
+2025-12-07 23:42:01,144 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:42:01,531 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=3 HTTP/1.1" 200 30593
+2025-12-07 23:42:01,541 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:42:01,558 - __main__ - DEBUG - [Page 3] Validation failed (no movie list): Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)
+2025-12-07 23:42:01,559 - __main__ - ERROR - [Page 3] All proxy attempts exhausted.
+2025-12-07 23:42:01,559 - __main__ - WARNING - [Page 3] No movie list found after all fallback attempts
+2025-12-07 23:42:01,559 - __main__ - DEBUG - [Page 4] Fetching for phase 2: https://javdb.com/actors/RdEb4?page=4
+2025-12-07 23:42:01,559 - __main__ - DEBUG - [Page 4] Initial attempt (Proxy=False, CF=False, Node=None)...
+2025-12-07 23:42:01,559 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=4 (attempt 1/3)
+2025-12-07 23:42:01,800 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=4 HTTP/1.1" 200 None
+2025-12-07 23:42:01,802 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=4
+2025-12-07 23:42:01,819 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:42:01,819 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=86bkrbnjm44jtyjy49w0xrjnjmZc5sny249zvh5bqfqgxsv150s0mdh6bcq3nfm1804ygbnbd2xbjw1
+2025-12-07 23:42:02,031 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=86bkrbnjm44jtyjy49w0xrjnjmZc5sny249zvh5bqfqgxsv150s0mdh6bcq3nfm1804ygbnbd2xbjw1 HTTP/1.1" 302 None
+2025-12-07 23:42:02,272 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=4 HTTP/1.1" 200 None
+2025-12-07 23:42:02,273 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:42:02,579 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=4 HTTP/1.1" 200 None
+2025-12-07 23:42:02,579 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:42:02,587 - __main__ - DEBUG - [Page 4] Validation failed (no movie list): Initial attempt (Proxy=False, CF=False, Node=None)
+2025-12-07 23:42:02,587 - __main__ - WARNING - [Page 4] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-07 23:42:02,587 - __main__ - DEBUG - [Page 4] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...
+2025-12-07 23:42:02,587 - __main__ - DEBUG - [Page 4] Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)...
+2025-12-07 23:42:02,587 - __main__ - DEBUG - [spider_index] Using proxy pool - Current proxy: Singapore-ARM1
+2025-12-07 23:42:02,587 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=4 (attempt 1/3)
+2025-12-07 23:42:02,587 - __main__ - DEBUG - Using proxies: {'http': 'http://tedwu:No.25_Aminor@140.245.123.124:12300', 'https': 'http://tedwu:No.25_Aminor@140.245.123.124:12300'}
+2025-12-07 23:42:02,850 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=4 HTTP/1.1" 200 None
+2025-12-07 23:42:02,852 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=4
+2025-12-07 23:42:02,852 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:42:02,862 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:42:02,862 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=lfz15dhtddd9kr1jwn8nfyA5k1Zj41f43k2d7x8s4nj0wxw5bkxAqqpgbcz8Aylk1xpt24vk99g7tl1
+2025-12-07 23:42:03,082 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=lfz15dhtddd9kr1jwn8nfyA5k1Zj41f43k2d7x8s4nj0wxw5bkxAqqpgbcz8Aylk1xpt24vk99g7tl1 HTTP/1.1" 302 None
+2025-12-07 23:42:03,381 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=4 HTTP/1.1" 200 None
+2025-12-07 23:42:03,382 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:42:03,636 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=4 HTTP/1.1" 200 None
+2025-12-07 23:42:03,638 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:42:03,650 - __main__ - DEBUG - [Page 4] Validation failed (no movie list): Fallback Phase 2: Proxy Direct (Node=Singapore-ARM1)
+2025-12-07 23:42:03,650 - __main__ - DEBUG - [Page 4] Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)...
+2025-12-07 23:42:03,650 - __main__ - DEBUG - [CF Bypass] Request Mirroring: https://javdb.com/actors/RdEb4?page=4 -> http://140.245.123.124:8000/actors/RdEb4?page=4
+2025-12-07 23:42:03,650 - __main__ - DEBUG - [CF Bypass] x-hostname: javdb.com
+2025-12-07 23:42:03,650 - __main__ - DEBUG - Fetching URL: https://javdb.com/actors/RdEb4?page=4 (attempt 1/3)
+2025-12-07 23:42:03,650 - __main__ - DEBUG - [CF Bypass] Actual request to: http://140.245.123.124:8000/actors/RdEb4?page=4
+2025-12-07 23:42:03,899 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=4 HTTP/1.1" 200 30593
+2025-12-07 23:42:03,908 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/actors/RdEb4?page=4
+2025-12-07 23:42:03,908 - utils.proxy_pool - DEBUG - Proxy 'Singapore-ARM1' marked as successful (success rate: 100.0%)
+2025-12-07 23:42:03,926 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:42:03,926 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=4j3plwt95b8Anmnqlx77kA2fnAZrwtn8dmbngv46mp3gAc3sqtc70rdqt3y8q0A28ypvttd6s51lpg1
+2025-12-07 23:42:04,144 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=4j3plwt95b8Anmnqlx77kA2fnAZrwtn8dmbngv46mp3gAc3sqtc70rdqt3y8q0A28ypvttd6s51lpg1 HTTP/1.1" 302 None
+2025-12-07 23:42:04,382 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /actors/RdEb4?page=4 HTTP/1.1" 200 None
+2025-12-07 23:42:04,382 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:42:04,707 - urllib3.connectionpool - DEBUG - http://140.245.123.124:8000 "GET /actors/RdEb4?page=4 HTTP/1.1" 200 30593
+2025-12-07 23:42:04,717 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:42:04,735 - __main__ - DEBUG - [Page 4] Validation failed (no movie list): Fallback Phase 2: Proxy + CF Bypass (Node=Singapore-ARM1)
+2025-12-07 23:42:04,735 - __main__ - ERROR - [Page 4] All proxy attempts exhausted.
+2025-12-07 23:42:04,735 - __main__ - WARNING - [Page 4] No movie list found after all fallback attempts
+2025-12-07 23:42:04,735 - __main__ - INFO - [Page 4] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
+2025-12-07 23:42:04,735 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/2m0gpp (attempt 1/3)
+2025-12-07 23:42:05,092 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/2m0gpp HTTP/1.1" 200 None
+2025-12-07 23:42:05,279 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/2m0gpp
+2025-12-07 23:42:05,293 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:42:05,294 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=9nk07x2Asxsd7fxr49ghx2x2x7Zght8gkdb8lvcqtyjgd26mknywA
+2025-12-07 23:42:05,502 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=9nk07x2Asxsd7fxr49ghx2x2x7Zght8gkdb8lvcqtyjgd26mknywA HTTP/1.1" 302 None
+2025-12-07 23:42:05,740 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/2m0gpp HTTP/1.1" 200 None
+2025-12-07 23:42:05,910 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:42:06,188 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/2m0gpp HTTP/1.1" 200 None
+2025-12-07 23:42:06,190 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:42:11,219 - utils.parser - DEBUG - [P2-1] Found video code: START-463
+2025-12-07 23:42:11,220 - utils.parser - DEBUG - [P2-1] Found actor: 彩月七緒
+2025-12-07 23:42:11,221 - utils.parser - DEBUG - [P2-1] Found magnet: START-463.torrent with tags: ['高清'], size: 6.44GB, time: 2025-11-25
+2025-12-07 23:42:11,221 - utils.parser - DEBUG - [P2-1] Found magnet: START-463.mp4 with tags: ['高清'], size: 6.41GB, time: 2025-11-25
+2025-12-07 23:42:11,221 - utils.parser - DEBUG - [P2-1] Found magnet: START-463 with tags: ['高清'], size: 6.41GB, time: 2025-11-24
+2025-12-07 23:42:11,221 - utils.parser - DEBUG - [P2-1] Found magnet: start-463 with tags: ['高清'], size: 6.50GB, time: 2025-11-24
+2025-12-07 23:42:11,221 - utils.parser - DEBUG - [P2-1] Found magnet: START-463 with tags: [], size: 2.73GB, time: 2025-11-27
+2025-12-07 23:42:11,221 - utils.parser - DEBUG - [P2-1] Found magnet: START-463 with tags: [], size: 1.85GB, time: 2025-11-25
+2025-12-07 23:42:11,221 - utils.parser - DEBUG - [P2-1] Found 6 magnet links
+2025-12-07 23:42:11,221 - utils.magnet_extractor - DEBUG - [P2-1] Found normal magnet for no_subtitle: START-463 (size: 2.73GB, time: 2025-11-27)
+2025-12-07 23:42:11,221 - __main__ - INFO - [1/17] [Page 1] Processing START-463
+2025-12-07 23:42:11,221 - utils.history_manager - DEBUG - Movie /v/2m0gpp: current=['no_subtitle'], history=['no_subtitle'], phase=2
+2025-12-07 23:42:11,221 - utils.history_manager - DEBUG - Phase 2: no upgrade possible -> should not process
+2025-12-07 23:42:11,222 - __main__ - DEBUG - [1/17] [Page 1] Should process, missing preferred types: []
+2025-12-07 23:42:11,222 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/mO9A8y (attempt 1/3)
+2025-12-07 23:42:11,469 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/mO9A8y HTTP/1.1" 200 None
+2025-12-07 23:42:11,653 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/mO9A8y
+2025-12-07 23:42:11,674 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:42:11,674 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=r45nvcl8j0sn3nr147v9A0kAl2Ztnbz9f8ht4lmjd5qjd84zz9ds1
+2025-12-07 23:42:11,907 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=r45nvcl8j0sn3nr147v9A0kAl2Ztnbz9f8ht4lmjd5qjd84zz9ds1 HTTP/1.1" 302 None
+2025-12-07 23:42:12,184 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/mO9A8y HTTP/1.1" 200 None
+2025-12-07 23:42:12,361 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:42:12,822 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/mO9A8y HTTP/1.1" 200 None
+2025-12-07 23:42:13,007 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:42:18,020 - utils.parser - DEBUG - [P2-2] Found video code: START-442
+2025-12-07 23:42:18,021 - utils.parser - DEBUG - [P2-2] Found actor: 彩月七緒
+2025-12-07 23:42:18,022 - utils.parser - DEBUG - [P2-2] Found magnet: START-442.torrent with tags: ['高清'], size: 8.57GB, time: 2025-10-28
+2025-12-07 23:42:18,022 - utils.parser - DEBUG - [P2-2] Found magnet: START-442.mp4 with tags: ['高清'], size: 8.54GB, time: 2025-10-27
+2025-12-07 23:42:18,022 - utils.parser - DEBUG - [P2-2] Found magnet: START-442 with tags: ['高清'], size: 8.54GB, time: 2025-10-27
+2025-12-07 23:42:18,022 - utils.parser - DEBUG - [P2-2] Found magnet: START-442 with tags: ['高清'], size: 3.97GB, time: 2025-10-29
+2025-12-07 23:42:18,022 - utils.parser - DEBUG - [P2-2] Found magnet: START-442 with tags: ['高清'], size: 3.85GB, time: 2025-10-27
+2025-12-07 23:42:18,022 - utils.parser - DEBUG - [P2-2] Found magnet: START-442 with tags: [], size: 2.14GB, time: 2025-10-28
+2025-12-07 23:42:18,022 - utils.parser - DEBUG - [P2-2] Found 6 magnet links
+2025-12-07 23:42:18,023 - utils.magnet_extractor - DEBUG - [P2-2] Found normal magnet for no_subtitle: START-442 (size: 3.97GB, time: 2025-10-29)
+2025-12-07 23:42:18,023 - __main__ - INFO - [2/17] [Page 1] Processing START-442
+2025-12-07 23:42:18,023 - utils.history_manager - DEBUG - Movie /v/mO9A8y: current=['no_subtitle'], history=['no_subtitle'], phase=2
+2025-12-07 23:42:18,023 - utils.history_manager - DEBUG - Phase 2: no upgrade possible -> should not process
+2025-12-07 23:42:18,023 - __main__ - DEBUG - [2/17] [Page 1] Should process, missing preferred types: []
+2025-12-07 23:42:18,023 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/7yq7YR (attempt 1/3)
+2025-12-07 23:42:18,298 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/7yq7YR HTTP/1.1" 200 None
+2025-12-07 23:42:18,476 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/7yq7YR
+2025-12-07 23:42:18,494 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:42:18,494 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=A2g1hxrd5xA1xvd7g8l9h2f1s3Zcbsl99dpnq9b1hjhkcws5yb491
+2025-12-07 23:42:18,707 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=A2g1hxrd5xA1xvd7g8l9h2f1s3Zcbsl99dpnq9b1hjhkcws5yb491 HTTP/1.1" 302 None
+2025-12-07 23:42:18,980 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/7yq7YR HTTP/1.1" 200 None
+2025-12-07 23:42:19,135 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:42:19,402 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/7yq7YR HTTP/1.1" 200 None
+2025-12-07 23:42:19,588 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:42:24,620 - utils.parser - DEBUG - [P2-3] Found video code: START-356
+2025-12-07 23:42:24,621 - utils.parser - DEBUG - [P2-3] Found actor: 彩月七緒
+2025-12-07 23:42:24,622 - utils.parser - DEBUG - [P2-3] Found magnet: start-356.torrent with tags: ['高清'], size: 6.31GB, time: 2025-06-24
+2025-12-07 23:42:24,622 - utils.parser - DEBUG - [P2-3] Found magnet: START-356.mp4 with tags: ['高清'], size: 6.27GB, time: 2025-06-24
+2025-12-07 23:42:24,622 - utils.parser - DEBUG - [P2-3] Found magnet: start-356 with tags: ['高清'], size: 6.37GB, time: 2025-06-25
+2025-12-07 23:42:24,622 - utils.parser - DEBUG - [P2-3] Found magnet: START-356 with tags: ['高清'], size: 6.28GB, time: 2025-06-23
+2025-12-07 23:42:24,622 - utils.parser - DEBUG - [P2-3] Found magnet: START-356 with tags: [], size: 1.59GB, time: 2025-06-23
+2025-12-07 23:42:24,622 - utils.parser - DEBUG - [P2-3] Found magnet: START-356 with tags: [], size: 1.46GB, time: 2025-07-02
+2025-12-07 23:42:24,622 - utils.parser - DEBUG - [P2-3] Found 6 magnet links
+2025-12-07 23:42:24,622 - utils.magnet_extractor - DEBUG - [P2-3] Found normal magnet for no_subtitle: START-356 (size: 1.46GB, time: 2025-07-02)
+2025-12-07 23:42:24,622 - __main__ - INFO - [3/17] [Page 1] Processing START-356
+2025-12-07 23:42:24,622 - utils.history_manager - DEBUG - Movie /v/7yq7YR: current=['no_subtitle'], history=['no_subtitle'], phase=2
+2025-12-07 23:42:24,623 - utils.history_manager - DEBUG - Phase 2: no upgrade possible -> should not process
+2025-12-07 23:42:24,623 - __main__ - DEBUG - [3/17] [Page 1] Should process, missing preferred types: []
+2025-12-07 23:42:24,623 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/AqKAAy (attempt 1/3)
+2025-12-07 23:42:24,932 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/AqKAAy HTTP/1.1" 200 None
+2025-12-07 23:42:25,102 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/AqKAAy
+2025-12-07 23:42:25,123 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:42:25,124 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=4xfrvr2xjwwz0v9kc2d1Ah8b4AZyc49wAyw89tbv4cA6lptcgb25A
+2025-12-07 23:42:25,319 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=4xfrvr2xjwwz0v9kc2d1Ah8b4AZyc49wAyw89tbv4cA6lptcgb25A HTTP/1.1" 302 None
+2025-12-07 23:42:25,575 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/AqKAAy HTTP/1.1" 200 None
+2025-12-07 23:42:25,761 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:42:26,180 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/AqKAAy HTTP/1.1" 200 None
+2025-12-07 23:42:26,357 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:42:31,369 - utils.parser - DEBUG - [P2-4] Found video code: SDHS-062
+2025-12-07 23:42:31,370 - utils.parser - DEBUG - [P2-4] Found actor: 彩月七緒
+2025-12-07 23:42:31,371 - utils.parser - DEBUG - [P2-4] Found magnet: sdhs-062.torrent with tags: ['高清'], size: 4.08GB, time: 2025-07-17
+2025-12-07 23:42:31,371 - utils.parser - DEBUG - [P2-4] Found magnet: SDHS-062 with tags: ['高清'], size: 4.05GB, time: 2025-07-18
+2025-12-07 23:42:31,371 - utils.parser - DEBUG - [P2-4] Found magnet: SDHS-062.[4K]@R90s with tags: ['高清'], size: 7.64GB, time: 2025-08-02
+2025-12-07 23:42:31,371 - utils.parser - DEBUG - [P2-4] Found magnet: SDHS-062 with tags: [], size: 888MB, time: 2025-07-20
+2025-12-07 23:42:31,371 - utils.parser - DEBUG - [P2-4] Found 4 magnet links
+2025-12-07 23:42:31,371 - utils.magnet_extractor - DEBUG - [P2-4] Found 4K magnet for no_subtitle: SDHS-062.[4K]@R90s (size: 7.64GB, time: 2025-08-02)
+2025-12-07 23:42:31,371 - __main__ - INFO - [4/17] [Page 1] Processing SDHS-062
+2025-12-07 23:42:31,371 - utils.history_manager - DEBUG - New movie /v/AqKAAy: should process
+2025-12-07 23:42:31,371 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:42:31,372 - __main__ - DEBUG - [4/17] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:42:31,386 - utils.history_manager - DEBUG - Adding new record for /v/AqKAAy
+2025-12-07 23:42:31,386 - utils.history_manager - DEBUG - Added new record for /v/AqKAAy with magnet links: ['no_subtitle']
+2025-12-07 23:42:31,409 - utils.history_manager - DEBUG - Updated history for /v/AqKAAy with magnet links: ['no_subtitle'] (total records: 5926)
+2025-12-07 23:42:32,412 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/V4NONq (attempt 1/3)
+2025-12-07 23:42:32,688 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/V4NONq HTTP/1.1" 200 None
+2025-12-07 23:42:32,858 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/V4NONq
+2025-12-07 23:42:32,869 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:42:32,869 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=40wfdggpwpl8gb7Aztwmg371mqZ3nxq2Awpgqzl11mm38bqc7sy13
+2025-12-07 23:42:33,077 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=40wfdggpwpl8gb7Aztwmg371mqZ3nxq2Awpgqzl11mm38bqc7sy13 HTTP/1.1" 302 None
+2025-12-07 23:42:33,314 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/V4NONq HTTP/1.1" 200 None
+2025-12-07 23:42:33,485 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:42:33,766 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/V4NONq HTTP/1.1" 200 None
+2025-12-07 23:42:33,945 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:42:38,962 - utils.parser - DEBUG - [P2-5] Found video code: DSVR-1760
+2025-12-07 23:42:38,963 - utils.parser - DEBUG - [P2-5] Found actor: 彩月七緒
+2025-12-07 23:42:38,964 - utils.parser - DEBUG - [P2-5] Found magnet: 第一會所新片@SIS001@DSVR-1760-A with tags: ['高清'], size: 11.99GB, time: 2025-07-30
+2025-12-07 23:42:38,964 - utils.parser - DEBUG - [P2-5] Found 1 magnet links
+2025-12-07 23:42:38,964 - utils.magnet_extractor - DEBUG - [P2-5] Found normal magnet for no_subtitle: 第一會所新片@SIS001@DSVR-1760-A (size: 11.99GB, time: 2025-07-30)
+2025-12-07 23:42:38,964 - __main__ - INFO - [5/17] [Page 1] Processing DSVR-1760
+2025-12-07 23:42:38,964 - utils.history_manager - DEBUG - New movie /v/V4NONq: should process
+2025-12-07 23:42:38,964 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:42:38,965 - __main__ - DEBUG - [5/17] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:42:38,977 - utils.history_manager - DEBUG - Adding new record for /v/V4NONq
+2025-12-07 23:42:38,977 - utils.history_manager - DEBUG - Added new record for /v/V4NONq with magnet links: ['no_subtitle']
+2025-12-07 23:42:39,000 - utils.history_manager - DEBUG - Updated history for /v/V4NONq with magnet links: ['no_subtitle'] (total records: 5927)
+2025-12-07 23:42:40,005 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/NQP6Eg (attempt 1/3)
+2025-12-07 23:42:40,284 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/NQP6Eg HTTP/1.1" 200 None
+2025-12-07 23:42:40,470 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/NQP6Eg
+2025-12-07 23:42:40,483 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:42:40,483 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=6j3t58p3b055xfq9rzk5gvmc8yZ3gvz6bbcpd1lhb3rb17jswm67A
+2025-12-07 23:42:40,697 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=6j3t58p3b055xfq9rzk5gvmc8yZ3gvz6bbcpd1lhb3rb17jswm67A HTTP/1.1" 302 None
+2025-12-07 23:42:40,956 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/NQP6Eg HTTP/1.1" 200 None
+2025-12-07 23:42:41,126 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:42:41,431 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/NQP6Eg HTTP/1.1" 200 None
+2025-12-07 23:42:41,431 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:42:46,448 - utils.parser - DEBUG - [P2-6] Found video code: START-327
+2025-12-07 23:42:46,449 - utils.parser - DEBUG - [P2-6] Found actor: 彩月七緒
+2025-12-07 23:42:46,450 - utils.parser - DEBUG - [P2-6] Found magnet: start-327.torrent with tags: ['高清'], size: 6.55GB, time: 2025-05-27
+2025-12-07 23:42:46,450 - utils.parser - DEBUG - [P2-6] Found magnet: START-327-U.无码破解.torrent with tags: ['高清'], size: 6.53GB, time: 2025-06-29
+2025-12-07 23:42:46,450 - utils.parser - DEBUG - [P2-6] Found magnet: START-327.mp4 with tags: ['高清'], size: 6.51GB, time: 2025-05-27
+2025-12-07 23:42:46,450 - utils.parser - DEBUG - [P2-6] Found magnet: start-327 with tags: ['高清'], size: 6.60GB, time: 2025-05-29
+2025-12-07 23:42:46,450 - utils.parser - DEBUG - [P2-6] Found magnet: START-327 with tags: ['高清'], size: 6.51GB, time: 2025-05-27
+2025-12-07 23:42:46,450 - utils.parser - DEBUG - [P2-6] Found magnet: 【手机浏览器输入 www.c5b.top 免费看片约炮 麻豆 糖心 直播 约会 偷情 人妻 少妇 网红 换妻 3p 乱伦 】START-327.mp4 with tags: [], size: 1.63GB, time: 2025-05-29
+2025-12-07 23:42:46,450 - utils.parser - DEBUG - [P2-6] Found magnet: START-327.[4K] with tags: ['高清'], size: 12.20GB, time: 2025-06-04
+2025-12-07 23:42:46,450 - utils.parser - DEBUG - [P2-6] Found magnet: START-327 with tags: [], size: 1.63GB, time: 2025-05-29
+2025-12-07 23:42:46,450 - utils.parser - DEBUG - [P2-6] Found 8 magnet links
+2025-12-07 23:42:46,450 - utils.magnet_extractor - DEBUG - [P2-6] Found hacked_no_subtitle magnet: START-327-U.无码破解.torrent (size: 6.53GB, time: 2025-06-29)
+2025-12-07 23:42:46,450 - utils.magnet_extractor - DEBUG - [P2-6] Found 4K magnet for no_subtitle: START-327.[4K] (size: 12.20GB, time: 2025-06-04)
+2025-12-07 23:42:46,451 - __main__ - INFO - [6/17] [Page 1] Processing START-327
+2025-12-07 23:42:46,451 - utils.history_manager - DEBUG - Movie /v/NQP6Eg: current=['hacked_no_subtitle', 'no_subtitle'], history=['hacked_no_subtitle', 'no_subtitle'], phase=2
+2025-12-07 23:42:46,451 - utils.history_manager - DEBUG - Phase 2: upgrading no_subtitle to hacked_no_subtitle -> should process
+2025-12-07 23:42:46,451 - __main__ - DEBUG - Marking hacked_no_subtitle as downloaded for START-327
+2025-12-07 23:42:46,451 - __main__ - DEBUG - Marking no_subtitle as downloaded for START-327
+2025-12-07 23:42:46,451 - __main__ - DEBUG - [6/17] [Page 1] Skipped CSV entry - all torrent categories already in history
+2025-12-07 23:42:47,456 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/e84aMR (attempt 1/3)
+2025-12-07 23:42:47,741 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/e84aMR HTTP/1.1" 200 None
+2025-12-07 23:42:47,916 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/e84aMR
+2025-12-07 23:42:47,928 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:42:47,928 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=lp0mvAc3v1p7s23Ad1rp60qjqAZc6d5wbqgfw9r9fh7ltz6x4sky3
+2025-12-07 23:42:48,135 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=lp0mvAc3v1p7s23Ad1rp60qjqAZc6d5wbqgfw9r9fh7ltz6x4sky3 HTTP/1.1" 302 None
+2025-12-07 23:42:48,379 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/e84aMR HTTP/1.1" 200 None
+2025-12-07 23:42:48,558 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:42:48,816 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/e84aMR HTTP/1.1" 200 None
+2025-12-07 23:42:48,998 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:42:54,016 - utils.parser - DEBUG - [P2-7] Found video code: START-315
+2025-12-07 23:42:54,016 - utils.parser - DEBUG - [P2-7] Found actor: 彩月七緒
+2025-12-07 23:42:54,017 - utils.parser - DEBUG - [P2-7] Found magnet: START-315.mp4 with tags: ['高清'], size: 5.31GB, time: 2025-05-01
+2025-12-07 23:42:54,018 - utils.parser - DEBUG - [P2-7] Found magnet: start-315 with tags: ['高清'], size: 5.40GB, time: 2025-04-28
+2025-12-07 23:42:54,018 - utils.parser - DEBUG - [P2-7] Found magnet: start-315 with tags: ['高清'], size: 5.35GB, time: 2025-04-30
+2025-12-07 23:42:54,018 - utils.parser - DEBUG - [P2-7] Found magnet: START-315 with tags: ['高清'], size: 5.31GB, time: 2025-04-28
+2025-12-07 23:42:54,018 - utils.parser - DEBUG - [P2-7] Found magnet: START-315 with tags: [], size: 1.37GB, time: 2025-04-30
+2025-12-07 23:42:54,018 - utils.parser - DEBUG - [P2-7] Found magnet: START-315 with tags: [], size: 1.24GB, time: 2025-05-02
+2025-12-07 23:42:54,018 - utils.parser - DEBUG - [P2-7] Found 6 magnet links
+2025-12-07 23:42:54,018 - utils.magnet_extractor - DEBUG - [P2-7] Found normal magnet for no_subtitle: START-315 (size: 1.24GB, time: 2025-05-02)
+2025-12-07 23:42:54,018 - __main__ - INFO - [7/17] [Page 1] Processing START-315
+2025-12-07 23:42:54,018 - utils.history_manager - DEBUG - New movie /v/e84aMR: should process
+2025-12-07 23:42:54,018 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:42:54,019 - __main__ - DEBUG - [7/17] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:42:54,049 - utils.history_manager - DEBUG - Adding new record for /v/e84aMR
+2025-12-07 23:42:54,049 - utils.history_manager - DEBUG - Added new record for /v/e84aMR with magnet links: ['no_subtitle']
+2025-12-07 23:42:54,071 - utils.history_manager - DEBUG - Updated history for /v/e84aMR with magnet links: ['no_subtitle'] (total records: 5928)
+2025-12-07 23:42:55,077 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/RkGAKp (attempt 1/3)
+2025-12-07 23:42:55,367 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/RkGAKp HTTP/1.1" 200 None
+2025-12-07 23:42:55,542 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/RkGAKp
+2025-12-07 23:42:55,556 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:42:55,558 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=5A4fmx247xngjgyc3y0v75dl9yZjfrywgAxdc71kszcn1Am3p84ky
+2025-12-07 23:42:55,768 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=5A4fmx247xngjgyc3y0v75dl9yZjfrywgAxdc71kszcn1Am3p84ky HTTP/1.1" 302 None
+2025-12-07 23:42:56,079 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/RkGAKp HTTP/1.1" 200 None
+2025-12-07 23:42:56,264 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:42:56,613 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/RkGAKp HTTP/1.1" 200 None
+2025-12-07 23:42:56,794 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:43:01,812 - utils.parser - DEBUG - [P2-8] Found video code: START-298
+2025-12-07 23:43:01,812 - utils.parser - DEBUG - [P2-8] Found actor: 彩月七緒
+2025-12-07 23:43:01,813 - utils.parser - DEBUG - [P2-8] Found magnet: START-298 with tags: [], size: 6.10GB, time: 2025-03-24
+2025-12-07 23:43:01,813 - utils.parser - DEBUG - [P2-8] Found magnet: START-298.mp4 with tags: ['高清'], size: 4.21GB, time: 2025-03-25
+2025-12-07 23:43:01,813 - utils.parser - DEBUG - [P2-8] Found magnet: start-298 with tags: ['高清'], size: 6.18GB, time: 2025-03-26
+2025-12-07 23:43:01,813 - utils.parser - DEBUG - [P2-8] Found magnet: start-298 with tags: ['高清'], size: 6.13GB, time: 2025-03-25
+2025-12-07 23:43:01,814 - utils.parser - DEBUG - [P2-8] Found magnet: START-298-uncensored-HD with tags: ['高清'], size: 3.81GB, time: 2025-04-04
+2025-12-07 23:43:01,814 - utils.parser - DEBUG - [P2-8] Found magnet: START-298.[4K]@R90s with tags: ['高清'], size: 11.46GB, time: 2025-04-04
+2025-12-07 23:43:01,814 - utils.parser - DEBUG - [P2-8] Found magnet: START-298 with tags: [], size: 1.45GB, time: 2025-03-25
+2025-12-07 23:43:01,814 - utils.parser - DEBUG - [P2-8] Found magnet: START-298 with tags: [], size: 1.42GB, time: 2025-03-26
+2025-12-07 23:43:01,814 - utils.parser - DEBUG - [P2-8] Found 8 magnet links
+2025-12-07 23:43:01,814 - utils.magnet_extractor - DEBUG - [P2-8] Found 4K magnet for no_subtitle: START-298.[4K]@R90s (size: 11.46GB, time: 2025-04-04)
+2025-12-07 23:43:01,814 - __main__ - INFO - [8/17] [Page 1] Processing START-298
+2025-12-07 23:43:01,814 - utils.history_manager - DEBUG - New movie /v/RkGAKp: should process
+2025-12-07 23:43:01,814 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:43:01,814 - __main__ - DEBUG - [8/17] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:43:01,826 - utils.history_manager - DEBUG - Adding new record for /v/RkGAKp
+2025-12-07 23:43:01,826 - utils.history_manager - DEBUG - Added new record for /v/RkGAKp with magnet links: ['no_subtitle']
+2025-12-07 23:43:01,850 - utils.history_manager - DEBUG - Updated history for /v/RkGAKp with magnet links: ['no_subtitle'] (total records: 5929)
+2025-12-07 23:43:02,856 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/XeEbY4 (attempt 1/3)
+2025-12-07 23:43:03,144 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/XeEbY4 HTTP/1.1" 200 None
+2025-12-07 23:43:03,330 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/XeEbY4
+2025-12-07 23:43:03,351 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:43:03,351 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=b63mcyvx6vjgz3pg61pknwwyn3ZpmcljdnA91r29y62t200gtA572
+2025-12-07 23:43:03,609 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=b63mcyvx6vjgz3pg61pknwwyn3ZpmcljdnA91r29y62t200gtA572 HTTP/1.1" 302 None
+2025-12-07 23:43:03,866 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/XeEbY4 HTTP/1.1" 200 None
+2025-12-07 23:43:04,047 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:43:04,363 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/XeEbY4 HTTP/1.1" 200 None
+2025-12-07 23:43:04,547 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:43:09,579 - utils.parser - DEBUG - [P2-9] Found video code: NAAC-019
+2025-12-07 23:43:09,579 - utils.parser - DEBUG - [P2-9] Found actor: 彩月七緒
+2025-12-07 23:43:09,580 - utils.parser - DEBUG - [P2-9] Found magnet: NAAC-019 with tags: ['高清'], size: 4.26GB, time: 2025-04-02
+2025-12-07 23:43:09,580 - utils.parser - DEBUG - [P2-9] Found 1 magnet links
+2025-12-07 23:43:09,580 - utils.magnet_extractor - DEBUG - [P2-9] Found normal magnet for no_subtitle: NAAC-019 (size: 4.26GB, time: 2025-04-02)
+2025-12-07 23:43:09,580 - __main__ - INFO - [9/17] [Page 1] Processing NAAC-019
+2025-12-07 23:43:09,580 - utils.history_manager - DEBUG - New movie /v/XeEbY4: should process
+2025-12-07 23:43:09,580 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:43:09,581 - __main__ - DEBUG - [9/17] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:43:09,595 - utils.history_manager - DEBUG - Adding new record for /v/XeEbY4
+2025-12-07 23:43:09,595 - utils.history_manager - DEBUG - Added new record for /v/XeEbY4 with magnet links: ['no_subtitle']
+2025-12-07 23:43:09,619 - utils.history_manager - DEBUG - Updated history for /v/XeEbY4 with magnet links: ['no_subtitle'] (total records: 5930)
+2025-12-07 23:43:10,624 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/96dV9V (attempt 1/3)
+2025-12-07 23:43:10,877 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/96dV9V HTTP/1.1" 200 None
+2025-12-07 23:43:11,060 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/96dV9V
+2025-12-07 23:43:11,072 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:43:11,073 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=8t7jb6lzyr1l32kf2c4rdwqn2yZhj04dm3yzknvrdhtr5v9m13zw2
+2025-12-07 23:43:11,288 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=8t7jb6lzyr1l32kf2c4rdwqn2yZhj04dm3yzknvrdhtr5v9m13zw2 HTTP/1.1" 302 None
+2025-12-07 23:43:11,863 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/96dV9V HTTP/1.1" 200 None
+2025-12-07 23:43:12,025 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:43:12,303 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/96dV9V HTTP/1.1" 200 None
+2025-12-07 23:43:12,305 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:43:17,320 - utils.parser - DEBUG - [P2-10] Found video code: START-256
+2025-12-07 23:43:17,321 - utils.parser - DEBUG - [P2-10] Found actor: 彩月七緒
+2025-12-07 23:43:17,322 - utils.parser - DEBUG - [P2-10] Found magnet: START-256 with tags: ['高清'], size: 5.14GB, time: 2025-08-21
+2025-12-07 23:43:17,322 - utils.parser - DEBUG - [P2-10] Found 1 magnet links
+2025-12-07 23:43:17,322 - utils.magnet_extractor - DEBUG - [P2-10] Found normal magnet for no_subtitle: START-256 (size: 5.14GB, time: 2025-08-21)
+2025-12-07 23:43:17,322 - __main__ - INFO - [10/17] [Page 1] Processing START-256
+2025-12-07 23:43:17,322 - utils.history_manager - DEBUG - New movie /v/96dV9V: should process
+2025-12-07 23:43:17,322 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:43:17,322 - __main__ - DEBUG - [10/17] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:43:17,331 - utils.history_manager - DEBUG - Adding new record for /v/96dV9V
+2025-12-07 23:43:17,331 - utils.history_manager - DEBUG - Added new record for /v/96dV9V with magnet links: ['no_subtitle']
+2025-12-07 23:43:17,352 - utils.history_manager - DEBUG - Updated history for /v/96dV9V with magnet links: ['no_subtitle'] (total records: 5931)
+2025-12-07 23:43:18,358 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/NQ9xxN (attempt 1/3)
+2025-12-07 23:43:19,183 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/NQ9xxN HTTP/1.1" 200 None
+2025-12-07 23:43:19,369 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/NQ9xxN
+2025-12-07 23:43:19,379 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:43:19,379 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=6w3ch4tjbw462fsg7djyj4qxnyZxtx2cz0pwydqAq2yrmv5mht8gm
+2025-12-07 23:43:19,593 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=6w3ch4tjbw462fsg7djyj4qxnyZxtx2cz0pwydqAq2yrmv5mht8gm HTTP/1.1" 302 None
+2025-12-07 23:43:19,849 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/NQ9xxN HTTP/1.1" 200 None
+2025-12-07 23:43:20,028 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:43:20,263 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/NQ9xxN HTTP/1.1" 200 None
+2025-12-07 23:43:20,441 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:43:25,454 - utils.parser - DEBUG - [P2-11] Found video code: START-227-V
+2025-12-07 23:43:25,454 - utils.parser - DEBUG - [P2-11] Found actor: 彩月七緒
+2025-12-07 23:43:25,455 - utils.parser - DEBUG - [P2-11] Found magnet: start-227-v with tags: ['高清'], size: 7.21GB, time: 2024-12-24
+2025-12-07 23:43:25,455 - utils.parser - DEBUG - [P2-11] Found 1 magnet links
+2025-12-07 23:43:25,455 - utils.magnet_extractor - DEBUG - [P2-11] Found normal magnet for no_subtitle: start-227-v (size: 7.21GB, time: 2024-12-24)
+2025-12-07 23:43:25,455 - __main__ - INFO - [11/17] [Page 1] Processing START-227-V
+2025-12-07 23:43:25,455 - utils.history_manager - DEBUG - New movie /v/NQ9xxN: should process
+2025-12-07 23:43:25,455 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:43:25,455 - __main__ - DEBUG - [11/17] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:43:25,466 - utils.history_manager - DEBUG - Adding new record for /v/NQ9xxN
+2025-12-07 23:43:25,466 - utils.history_manager - DEBUG - Added new record for /v/NQ9xxN with magnet links: ['no_subtitle']
+2025-12-07 23:43:25,482 - utils.history_manager - DEBUG - Updated history for /v/NQ9xxN with magnet links: ['no_subtitle'] (total records: 5932)
+2025-12-07 23:43:26,488 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/Wwwq6g (attempt 1/3)
+2025-12-07 23:43:26,723 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/Wwwq6g HTTP/1.1" 200 None
+2025-12-07 23:43:26,893 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/Wwwq6g
+2025-12-07 23:43:26,905 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:43:26,905 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=AyA6ldngl0cd8w53mc00c89rgyZvxb8wvzjjc897rctj9tqgmlfbA
+2025-12-07 23:43:27,109 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=AyA6ldngl0cd8w53mc00c89rgyZvxb8wvzjjc897rctj9tqgmlfbA HTTP/1.1" 302 None
+2025-12-07 23:43:27,369 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/Wwwq6g HTTP/1.1" 200 None
+2025-12-07 23:43:27,555 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:43:27,837 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/Wwwq6g HTTP/1.1" 200 None
+2025-12-07 23:43:28,014 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:43:33,030 - utils.parser - DEBUG - [P2-12] Found video code: START-202
+2025-12-07 23:43:33,030 - utils.parser - DEBUG - [P2-12] Found actor: 彩月七緒
+2025-12-07 23:43:33,031 - utils.parser - DEBUG - [P2-12] Found magnet: start-202.torrent with tags: ['高清'], size: 3.99GB, time: 2024-10-29
+2025-12-07 23:43:33,031 - utils.parser - DEBUG - [P2-12] Found 1 magnet links
+2025-12-07 23:43:33,031 - utils.magnet_extractor - DEBUG - [P2-12] Found normal magnet for no_subtitle: start-202.torrent (size: 3.99GB, time: 2024-10-29)
+2025-12-07 23:43:33,031 - __main__ - INFO - [12/17] [Page 1] Processing START-202
+2025-12-07 23:43:33,031 - utils.history_manager - DEBUG - New movie /v/Wwwq6g: should process
+2025-12-07 23:43:33,031 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:43:33,032 - __main__ - DEBUG - [12/17] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:43:33,042 - utils.history_manager - DEBUG - Adding new record for /v/Wwwq6g
+2025-12-07 23:43:33,043 - utils.history_manager - DEBUG - Added new record for /v/Wwwq6g with magnet links: ['no_subtitle']
+2025-12-07 23:43:33,064 - utils.history_manager - DEBUG - Updated history for /v/Wwwq6g with magnet links: ['no_subtitle'] (total records: 5933)
+2025-12-07 23:43:34,070 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/WwwDJ8 (attempt 1/3)
+2025-12-07 23:43:34,343 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/WwwDJ8 HTTP/1.1" 200 None
+2025-12-07 23:43:34,529 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/WwwDJ8
+2025-12-07 23:43:34,541 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:43:34,541 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=gA74ld9j4wmkyhtrxxhs6vns21Zvbvwfkfmyvyn1gnvj07vnmwkA1
+2025-12-07 23:43:34,741 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=gA74ld9j4wmkyhtrxxhs6vns21Zvbvwfkfmyvyn1gnvj07vnmwkA1 HTTP/1.1" 302 None
+2025-12-07 23:43:34,995 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/WwwDJ8 HTTP/1.1" 200 None
+2025-12-07 23:43:35,173 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:43:35,468 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/WwwDJ8 HTTP/1.1" 200 None
+2025-12-07 23:43:35,645 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:43:40,660 - utils.parser - DEBUG - [P2-13] Found video code: DSVR-1627
+2025-12-07 23:43:40,661 - utils.parser - DEBUG - [P2-13] Found actor: 彩月七緒
+2025-12-07 23:43:40,661 - utils.parser - DEBUG - [P2-13] Found magnet: DSVR-1627 【VR】VR CHANNEL 005 8K VR7射精 彩月七緒 彩月七緒を感じる5コーナー（顔、身体、胸、尻、緊張）5コーナー×顔特化キス＆ガン見フェラ×全裸観察×オイルエステ×おっぱい密着特化×ハメ撮り特化SEX with tags: ['高清'], size: 16.43GB, time: 2024-12-04
+2025-12-07 23:43:40,661 - utils.parser - DEBUG - [P2-13] Found 1 magnet links
+2025-12-07 23:43:40,661 - utils.magnet_extractor - DEBUG - [P2-13] Found normal magnet for no_subtitle: DSVR-1627 【VR】VR CHANNEL 005 8K VR7射精 彩月七緒 彩月七緒を感じる5コーナー（顔、身体、胸、尻、緊張）5コーナー×顔特化キス＆ガン見フェラ×全裸観察×オイルエステ×おっぱい密着特化×ハメ撮り特化SEX (size: 16.43GB, time: 2024-12-04)
+2025-12-07 23:43:40,661 - __main__ - INFO - [13/17] [Page 1] Processing DSVR-1627
+2025-12-07 23:43:40,661 - utils.history_manager - DEBUG - New movie /v/WwwDJ8: should process
+2025-12-07 23:43:40,661 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:43:40,662 - __main__ - DEBUG - [13/17] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:43:40,673 - utils.history_manager - DEBUG - Adding new record for /v/WwwDJ8
+2025-12-07 23:43:40,673 - utils.history_manager - DEBUG - Added new record for /v/WwwDJ8 with magnet links: ['no_subtitle']
+2025-12-07 23:43:40,696 - utils.history_manager - DEBUG - Updated history for /v/WwwDJ8 with magnet links: ['no_subtitle'] (total records: 5934)
+2025-12-07 23:43:41,701 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/YwwVk8 (attempt 1/3)
+2025-12-07 23:43:41,963 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/YwwVk8 HTTP/1.1" 200 None
+2025-12-07 23:43:42,132 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/YwwVk8
+2025-12-07 23:43:42,144 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:43:42,144 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=bv02s88hvxtszn1v3m8qz62s13Z4gvchA4sqcjbvhz2j9An93tv02
+2025-12-07 23:43:42,381 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=bv02s88hvxtszn1v3m8qz62s13Z4gvchA4sqcjbvhz2j9An93tv02 HTTP/1.1" 302 None
+2025-12-07 23:43:42,619 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/YwwVk8 HTTP/1.1" 200 None
+2025-12-07 23:43:42,795 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:43:43,191 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/YwwVk8 HTTP/1.1" 200 None
+2025-12-07 23:43:43,375 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:43:48,390 - utils.parser - DEBUG - [P2-14] Found video code: START-183
+2025-12-07 23:43:48,391 - utils.parser - DEBUG - [P2-14] Found actor: 彩月七緒
+2025-12-07 23:43:48,392 - utils.parser - DEBUG - [P2-14] Found magnet: start-183.torrent with tags: ['高清'], size: 3.44GB, time: 2024-10-08
+2025-12-07 23:43:48,392 - utils.parser - DEBUG - [P2-14] Found 1 magnet links
+2025-12-07 23:43:48,392 - utils.magnet_extractor - DEBUG - [P2-14] Found normal magnet for no_subtitle: start-183.torrent (size: 3.44GB, time: 2024-10-08)
+2025-12-07 23:43:48,392 - __main__ - INFO - [14/17] [Page 1] Processing START-183
+2025-12-07 23:43:48,392 - utils.history_manager - DEBUG - New movie /v/YwwVk8: should process
+2025-12-07 23:43:48,392 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:43:48,393 - __main__ - DEBUG - [14/17] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:43:48,408 - utils.history_manager - DEBUG - Adding new record for /v/YwwVk8
+2025-12-07 23:43:48,408 - utils.history_manager - DEBUG - Added new record for /v/YwwVk8 with magnet links: ['no_subtitle']
+2025-12-07 23:43:48,435 - utils.history_manager - DEBUG - Updated history for /v/YwwVk8 with magnet links: ['no_subtitle'] (total records: 5935)
+2025-12-07 23:43:49,439 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/pk30rq (attempt 1/3)
+2025-12-07 23:43:49,683 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/pk30rq HTTP/1.1" 200 None
+2025-12-07 23:43:49,861 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/pk30rq
+2025-12-07 23:43:49,873 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:43:49,874 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=9Ak72tlt88yxqwlj62t1789q1yZ59nm76w4lbhswvfvscxqdg7Av2
+2025-12-07 23:43:50,083 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=9Ak72tlt88yxqwlj62t1789q1yZ59nm76w4lbhswvfvscxqdg7Av2 HTTP/1.1" 302 None
+2025-12-07 23:43:50,438 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/pk30rq HTTP/1.1" 200 None
+2025-12-07 23:43:50,608 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:43:50,904 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/pk30rq HTTP/1.1" 200 None
+2025-12-07 23:43:51,089 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:43:56,105 - utils.parser - DEBUG - [P2-15] Found video code: START-096
+2025-12-07 23:43:56,106 - utils.parser - DEBUG - [P2-15] Found actor: 彩月七緒
+2025-12-07 23:43:56,106 - utils.parser - DEBUG - [P2-15] Found magnet: START-096 with tags: [], size: 4.30GB, time: 2024-06-25
+2025-12-07 23:43:56,107 - utils.parser - DEBUG - [P2-15] Found magnet: start-096.torrent with tags: ['高清'], size: 4.24GB, time: 2024-06-25
+2025-12-07 23:43:56,107 - utils.parser - DEBUG - [P2-15] Found 2 magnet links
+2025-12-07 23:43:56,107 - utils.magnet_extractor - DEBUG - [P2-15] Found normal magnet for no_subtitle: START-096 (size: 4.30GB, time: 2024-06-25)
+2025-12-07 23:43:56,107 - __main__ - INFO - [15/17] [Page 1] Processing START-096
+2025-12-07 23:43:56,107 - utils.history_manager - DEBUG - New movie /v/pk30rq: should process
+2025-12-07 23:43:56,107 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:43:56,107 - __main__ - DEBUG - [15/17] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:43:56,119 - utils.history_manager - DEBUG - Adding new record for /v/pk30rq
+2025-12-07 23:43:56,119 - utils.history_manager - DEBUG - Added new record for /v/pk30rq with magnet links: ['no_subtitle']
+2025-12-07 23:43:56,144 - utils.history_manager - DEBUG - Updated history for /v/pk30rq with magnet links: ['no_subtitle'] (total records: 5936)
+2025-12-07 23:43:57,150 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/OX2GmK (attempt 1/3)
+2025-12-07 23:43:57,407 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/OX2GmK HTTP/1.1" 200 None
+2025-12-07 23:43:57,587 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/OX2GmK
+2025-12-07 23:43:57,596 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:43:57,596 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=hrrt0wxkdkq6At2x9Ankpk661mZshdy9v39gkgzhgc85zn9mt3ldq
+2025-12-07 23:43:57,792 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=hrrt0wxkdkq6At2x9Ankpk661mZshdy9v39gkgzhgc85zn9mt3ldq HTTP/1.1" 302 None
+2025-12-07 23:43:58,117 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/OX2GmK HTTP/1.1" 200 None
+2025-12-07 23:43:58,298 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:43:58,556 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/OX2GmK HTTP/1.1" 200 None
+2025-12-07 23:43:58,559 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:44:03,581 - utils.parser - DEBUG - [P2-16] Found video code: START-082
+2025-12-07 23:44:03,582 - utils.parser - DEBUG - [P2-16] Found actor: 彩月七緒
+2025-12-07 23:44:03,582 - utils.parser - DEBUG - [P2-16] Found magnet: start-082.torrent with tags: ['高清'], size: 5.67GB, time: 2024-05-28
+2025-12-07 23:44:03,583 - utils.parser - DEBUG - [P2-16] Found 1 magnet links
+2025-12-07 23:44:03,583 - utils.magnet_extractor - DEBUG - [P2-16] Found normal magnet for no_subtitle: start-082.torrent (size: 5.67GB, time: 2024-05-28)
+2025-12-07 23:44:03,583 - __main__ - INFO - [16/17] [Page 1] Processing START-082
+2025-12-07 23:44:03,583 - utils.history_manager - DEBUG - New movie /v/OX2GmK: should process
+2025-12-07 23:44:03,583 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:44:03,583 - __main__ - DEBUG - [16/17] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:44:03,598 - utils.history_manager - DEBUG - Adding new record for /v/OX2GmK
+2025-12-07 23:44:03,598 - utils.history_manager - DEBUG - Added new record for /v/OX2GmK with magnet links: ['no_subtitle']
+2025-12-07 23:44:03,625 - utils.history_manager - DEBUG - Updated history for /v/OX2GmK with magnet links: ['no_subtitle'] (total records: 5937)
+2025-12-07 23:44:04,628 - __main__ - DEBUG - Fetching URL: https://javdb.com/v/nerQYm (attempt 1/3)
+2025-12-07 23:44:04,919 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/nerQYm HTTP/1.1" 200 None
+2025-12-07 23:44:05,105 - __main__ - DEBUG - Successfully fetched URL: https://javdb.com/v/nerQYm
+2025-12-07 23:44:05,118 - __main__ - DEBUG - Age verification modal detected, attempting to bypass...
+2025-12-07 23:44:05,118 - __main__ - DEBUG - Found age verification link: https://javdb.com/over18?respond=1&rurl=cqfdwx51nwwyvsc0qt8rbqp1kAZlgrdp2wn29fzlt344Ajr8k5rfm
+2025-12-07 23:44:05,318 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /over18?respond=1&rurl=cqfdwx51nwwyvsc0qt8rbqp1kAZlgrdp2wn29fzlt344Ajr8k5rfm HTTP/1.1" 302 None
+2025-12-07 23:44:05,627 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/nerQYm HTTP/1.1" 200 None
+2025-12-07 23:44:05,802 - __main__ - DEBUG - Successfully bypassed age verification
+2025-12-07 23:44:06,070 - urllib3.connectionpool - DEBUG - https://javdb.com:443 "GET /v/nerQYm HTTP/1.1" 200 None
+2025-12-07 23:44:06,240 - __main__ - DEBUG - Successfully re-fetched page after age verification
+2025-12-07 23:44:11,257 - utils.parser - DEBUG - [P2-17] Found video code: START-010
+2025-12-07 23:44:11,257 - utils.parser - DEBUG - [P2-17] Found actor: 清水健
+2025-12-07 23:44:11,258 - utils.parser - DEBUG - [P2-17] Found magnet: start-010.torrent with tags: ['高清'], size: 10.45GB, time: 2024-01-23
+2025-12-07 23:44:11,258 - utils.parser - DEBUG - [P2-17] Found magnet: START-010 with tags: [], size: 6.08GB, time: 2024-02-06
+2025-12-07 23:44:11,258 - utils.parser - DEBUG - [P2-17] Found 2 magnet links
+2025-12-07 23:44:11,259 - utils.magnet_extractor - DEBUG - [P2-17] Found normal magnet for no_subtitle: START-010 (size: 6.08GB, time: 2024-02-06)
+2025-12-07 23:44:11,259 - __main__ - INFO - [17/17] [Page 1] Processing START-010
+2025-12-07 23:44:11,259 - utils.history_manager - DEBUG - New movie /v/nerQYm: should process
+2025-12-07 23:44:11,259 - __main__ - DEBUG - [FINISH] Writing results to Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv (mode: a)
+2025-12-07 23:44:11,259 - __main__ - DEBUG - [17/17] [Page 1] Added to CSV with new torrent categories
+2025-12-07 23:44:11,271 - utils.history_manager - DEBUG - Adding new record for /v/nerQYm
+2025-12-07 23:44:11,271 - utils.history_manager - DEBUG - Added new record for /v/nerQYm with magnet links: ['no_subtitle']
+2025-12-07 23:44:11,296 - utils.history_manager - DEBUG - Updated history for /v/nerQYm with magnet links: ['no_subtitle'] (total records: 5938)
+2025-12-07 23:44:12,299 - __main__ - INFO - Phase 2 completed: 13 entries processed
+2025-12-07 23:44:12,299 - __main__ - INFO - CSV file written incrementally to: Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
+2025-12-07 23:44:12,300 - __main__ - INFO - ==================================================
+2025-12-07 23:44:12,300 - __main__ - INFO - SUMMARY REPORT
+2025-12-07 23:44:12,300 - __main__ - INFO - ==================================================
+2025-12-07 23:44:12,300 - __main__ - INFO - Pages processed: 1 to 20
+2025-12-07 23:44:12,300 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-12-07 23:44:12,300 - __main__ - INFO - ==============================
+2025-12-07 23:44:12,300 - __main__ - INFO - PHASE 1 SUMMARY
+2025-12-07 23:44:12,300 - __main__ - INFO - ==============================
+2025-12-07 23:44:12,300 - __main__ - INFO - Phase 1 entries found: 9
+2025-12-07 23:44:12,300 - __main__ - INFO -   - Subtitle torrents: 9 (100.0%)
+2025-12-07 23:44:12,300 - __main__ - INFO -   - Hacked subtitle torrents: 0 (0.0%)
+2025-12-07 23:44:12,300 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
+2025-12-07 23:44:12,300 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
+2025-12-07 23:44:12,300 - __main__ - INFO - ==============================
+2025-12-07 23:44:12,300 - __main__ - INFO - PHASE 2 SUMMARY
+2025-12-07 23:44:12,300 - __main__ - INFO - ==============================
+2025-12-07 23:44:12,300 - __main__ - INFO - Phase 2 entries found: 13
+2025-12-07 23:44:12,300 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
+2025-12-07 23:44:12,300 - __main__ - INFO -   - Hacked subtitle torrents: 0 (0.0%)
+2025-12-07 23:44:12,300 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
+2025-12-07 23:44:12,300 - __main__ - INFO -   - No-subtitle torrents: 13 (100.0%)
+2025-12-07 23:44:12,300 - __main__ - INFO - ==============================
+2025-12-07 23:44:12,300 - __main__ - INFO - OVERALL SUMMARY
+2025-12-07 23:44:12,300 - __main__ - INFO - ==============================
+2025-12-07 23:44:12,300 - __main__ - INFO - Total entries found: 22
+2025-12-07 23:44:12,300 - __main__ - INFO - Successfully processed: 22
+2025-12-07 23:44:12,300 - __main__ - INFO - Skipped already parsed in this session: 28
+2025-12-07 23:44:12,300 - __main__ - INFO - Skipped already parsed in previous runs: 3350
+2025-12-07 23:44:12,300 - __main__ - INFO - Current parsed links in memory: 28
+2025-12-07 23:44:12,300 - __main__ - INFO - Overall subtitle torrents: 9 (40.9%)
+2025-12-07 23:44:12,300 - __main__ - INFO - Overall hacked subtitle torrents: 0 (0.0%)
+2025-12-07 23:44:12,300 - __main__ - INFO - Overall hacked no-subtitle torrents: 0 (0.0%)
+2025-12-07 23:44:12,300 - __main__ - INFO - Overall no-subtitle torrents: 13 (59.1%)
+2025-12-07 23:44:12,300 - __main__ - INFO - Results saved to: Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
+2025-12-07 23:44:12,301 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-12-07 23:44:12,301 - __main__ - INFO - ==================================================

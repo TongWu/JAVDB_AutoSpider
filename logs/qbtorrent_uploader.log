@@ -1,5 +1,42 @@
-2025-12-07 23:35:49,577 - __main__ - INFO - Starting qBittorrent uploader...
-2025-12-07 23:35:49,577 - __main__ - INFO - Using specified input file: Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
-2025-12-07 23:35:49,577 - __main__ - ERROR - CSV file not found: Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
-2025-12-07 23:35:49,577 - __main__ - INFO - Make sure you have run the spider script first to generate the CSV file
-2025-12-07 23:35:49,577 - __main__ - WARNING - No torrent links found in CSV file
+2025-12-07 23:44:12,442 - __main__ - INFO - Starting qBittorrent uploader...
+2025-12-07 23:44:12,442 - __main__ - INFO - Using specified input file: Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
+2025-12-07 23:44:12,443 - __main__ - INFO - Found 22 torrent links in Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
+2025-12-07 23:44:12,443 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-12-07 23:44:12,700 - __main__ - INFO - Successfully logged in to qBittorrent
+2025-12-07 23:44:12,700 - __main__ - INFO - History manager imported, will update downloaded status
+2025-12-07 23:44:12,701 - __main__ - INFO - Starting to add 22 torrents to qBittorrent...
+2025-12-07 23:44:12,701 - __main__ - INFO - [1/22] Adding: START-270 [Subtitle]
+2025-12-07 23:44:13,716 - __main__ - INFO - [2/22] Adding: START-227 [Subtitle]
+2025-12-07 23:44:14,724 - __main__ - INFO - [3/22] Adding: START-223 [Subtitle]
+2025-12-07 23:44:15,736 - __main__ - INFO - [4/22] Adding: START-154 [Subtitle]
+2025-12-07 23:44:16,758 - __main__ - INFO - [5/22] Adding: START-125 [Subtitle]
+2025-12-07 23:44:17,771 - __main__ - INFO - [6/22] Adding: START-056 [Subtitle]
+2025-12-07 23:44:18,783 - __main__ - INFO - [7/22] Adding: START-048 [Subtitle]
+2025-12-07 23:44:19,792 - __main__ - INFO - [8/22] Adding: START-020 [Subtitle]
+2025-12-07 23:44:20,808 - __main__ - INFO - [9/22] Adding: STZY-011 [Subtitle]
+2025-12-07 23:44:21,816 - __main__ - INFO - [10/22] Adding: SDHS-062 [NoSubtitle]
+2025-12-07 23:44:22,828 - __main__ - INFO - [11/22] Adding: DSVR-1760 [NoSubtitle]
+2025-12-07 23:44:23,839 - __main__ - INFO - [12/22] Adding: START-315 [NoSubtitle]
+2025-12-07 23:44:24,853 - __main__ - INFO - [13/22] Adding: START-298 [NoSubtitle]
+2025-12-07 23:44:25,862 - __main__ - INFO - [14/22] Adding: NAAC-019 [NoSubtitle]
+2025-12-07 23:44:26,873 - __main__ - INFO - [15/22] Adding: START-256 [NoSubtitle]
+2025-12-07 23:44:27,881 - __main__ - INFO - [16/22] Adding: START-227-V [NoSubtitle]
+2025-12-07 23:44:28,889 - __main__ - INFO - [17/22] Adding: START-202 [NoSubtitle]
+2025-12-07 23:44:29,901 - __main__ - INFO - [18/22] Adding: DSVR-1627 [NoSubtitle]
+2025-12-07 23:44:30,911 - __main__ - INFO - [19/22] Adding: START-183 [NoSubtitle]
+2025-12-07 23:44:31,921 - __main__ - INFO - [20/22] Adding: START-096 [NoSubtitle]
+2025-12-07 23:44:32,934 - __main__ - INFO - [21/22] Adding: START-082 [NoSubtitle]
+2025-12-07 23:44:33,945 - __main__ - INFO - [22/22] Adding: START-010 [NoSubtitle]
+2025-12-07 23:44:34,955 - __main__ - INFO - ==================================================
+2025-12-07 23:44:34,955 - __main__ - INFO - UPLOAD SUMMARY
+2025-12-07 23:44:34,955 - __main__ - INFO - ==================================================
+2025-12-07 23:44:34,955 - __main__ - INFO - CSV file: Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
+2025-12-07 23:44:34,955 - __main__ - INFO - Total torrents found: 22
+2025-12-07 23:44:34,955 - __main__ - INFO - Successfully added: 22
+2025-12-07 23:44:34,955 - __main__ - INFO -   - Hacked subtitle torrents: 0
+2025-12-07 23:44:34,955 - __main__ - INFO -   - Hacked no subtitle torrents: 0
+2025-12-07 23:44:34,955 - __main__ - INFO -   - Subtitle torrents: 9
+2025-12-07 23:44:34,955 - __main__ - INFO -   - No subtitle torrents: 13
+2025-12-07 23:44:34,955 - __main__ - INFO - Failed to add: 0
+2025-12-07 23:44:34,955 - __main__ - INFO - Success rate: 100.0%
+2025-12-07 23:44:34,955 - __main__ - INFO - ==================================================
