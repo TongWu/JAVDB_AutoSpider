@@ -318,18 +318,6 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
             if age_modal:
                 logger.debug("Age verification modal detected, attempting to bypass...")
                 
-                # Configure proxy for age verification
-                age_proxies = None
-                if should_use_proxy_for_module('spider_age_verification', use_proxy):
-                    if PROXY_MODE in ('pool', 'single') and global_proxy_pool is not None:
-                        age_proxies = global_proxy_pool.get_current_proxy()
-                    elif PROXY_HTTP or PROXY_HTTPS:
-                        age_proxies = {}
-                        if PROXY_HTTP:
-                            age_proxies['http'] = PROXY_HTTP
-                        if PROXY_HTTPS:
-                            age_proxies['https'] = PROXY_HTTPS
-                
                 # Find age verification link
                 age_links = age_modal.find_all('a', href=True)
                 for link in age_links:
@@ -337,16 +325,17 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
                         age_url = urljoin(BASE_URL, link.get('href'))
                         logger.debug(f"Found age verification link: {age_url}")
                         
-                        # Access age verification link
-                        age_response = session.get(age_url, headers=headers, proxies=age_proxies, timeout=30)
+                        # Access age verification link (use same proxy settings as main request)
+                        age_response = session.get(age_url, headers=headers, proxies=proxies, timeout=30)
                         if age_response.status_code == 200:
                             logger.debug("Successfully bypassed age verification")
-                            # Re-fetch the original page
-                            final_response = session.get(url, headers=headers, proxies=age_proxies, timeout=30)
+                            # Re-fetch the original page using the same URL and proxy settings
+                            final_response = session.get(actual_url, headers=headers, proxies=proxies, timeout=60 if use_cf_bypass else 30)
                             if final_response.status_code == 200:
+                                logger.debug("Successfully re-fetched page after age verification")
                                 return final_response.text
                             else:
-                                logger.debug(f"Failed to get final page after age verification: {final_response.status_code}")
+                                logger.warning(f"Failed to get final page after age verification: {final_response.status_code}")
                                 return final_response.text
                         else:
                             logger.debug(f"Failed to bypass age verification: {age_response.status_code}")
