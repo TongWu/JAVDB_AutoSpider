@@ -1,42 +1,46 @@
-2025-12-07 23:47:10,676 - __main__ - INFO - Starting qBittorrent uploader...
-2025-12-07 23:47:10,676 - __main__ - INFO - Using specified input file: Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
-2025-12-07 23:47:10,677 - __main__ - INFO - Found 22 torrent links in Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
-2025-12-07 23:47:10,677 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-12-07 23:47:10,911 - __main__ - INFO - Successfully logged in to qBittorrent
-2025-12-07 23:47:10,911 - __main__ - INFO - History manager imported, will update downloaded status
-2025-12-07 23:47:10,911 - __main__ - INFO - Starting to add 22 torrents to qBittorrent...
-2025-12-07 23:47:10,911 - __main__ - INFO - [1/22] Adding: START-270 [Subtitle]
-2025-12-07 23:47:11,913 - __main__ - INFO - [2/22] Adding: START-227 [Subtitle]
-2025-12-07 23:47:12,916 - __main__ - INFO - [3/22] Adding: START-223 [Subtitle]
-2025-12-07 23:47:13,918 - __main__ - INFO - [4/22] Adding: START-154 [Subtitle]
-2025-12-07 23:47:14,920 - __main__ - INFO - [5/22] Adding: START-125 [Subtitle]
-2025-12-07 23:47:15,922 - __main__ - INFO - [6/22] Adding: START-056 [Subtitle]
-2025-12-07 23:47:16,925 - __main__ - INFO - [7/22] Adding: START-048 [Subtitle]
-2025-12-07 23:47:17,927 - __main__ - INFO - [8/22] Adding: START-020 [Subtitle]
-2025-12-07 23:47:18,930 - __main__ - INFO - [9/22] Adding: STZY-011 [Subtitle]
-2025-12-07 23:47:19,932 - __main__ - INFO - [10/22] Adding: SDHS-062 [NoSubtitle]
-2025-12-07 23:47:20,935 - __main__ - INFO - [11/22] Adding: DSVR-1760 [NoSubtitle]
-2025-12-07 23:47:21,937 - __main__ - INFO - [12/22] Adding: START-315 [NoSubtitle]
-2025-12-07 23:47:22,940 - __main__ - INFO - [13/22] Adding: START-298 [NoSubtitle]
-2025-12-07 23:47:23,942 - __main__ - INFO - [14/22] Adding: NAAC-019 [NoSubtitle]
-2025-12-07 23:47:24,944 - __main__ - INFO - [15/22] Adding: START-256 [NoSubtitle]
-2025-12-07 23:47:25,947 - __main__ - INFO - [16/22] Adding: START-227-V [NoSubtitle]
-2025-12-07 23:47:26,949 - __main__ - INFO - [17/22] Adding: START-202 [NoSubtitle]
-2025-12-07 23:47:27,952 - __main__ - INFO - [18/22] Adding: DSVR-1627 [NoSubtitle]
-2025-12-07 23:47:28,955 - __main__ - INFO - [19/22] Adding: START-183 [NoSubtitle]
-2025-12-07 23:47:29,958 - __main__ - INFO - [20/22] Adding: START-096 [NoSubtitle]
-2025-12-07 23:47:30,966 - __main__ - INFO - [21/22] Adding: START-082 [NoSubtitle]
-2025-12-07 23:47:31,968 - __main__ - INFO - [22/22] Adding: START-010 [NoSubtitle]
-2025-12-07 23:47:32,971 - __main__ - INFO - ==================================================
-2025-12-07 23:47:32,971 - __main__ - INFO - UPLOAD SUMMARY
-2025-12-07 23:47:32,971 - __main__ - INFO - ==================================================
-2025-12-07 23:47:32,971 - __main__ - INFO - CSV file: Ad Hoc/Javdb_AdHoc_actors_RdEb4_20251207.csv
-2025-12-07 23:47:32,971 - __main__ - INFO - Total torrents found: 22
-2025-12-07 23:47:32,971 - __main__ - INFO - Successfully added: 22
-2025-12-07 23:47:32,971 - __main__ - INFO -   - Hacked subtitle torrents: 0
-2025-12-07 23:47:32,971 - __main__ - INFO -   - Hacked no subtitle torrents: 0
-2025-12-07 23:47:32,971 - __main__ - INFO -   - Subtitle torrents: 9
-2025-12-07 23:47:32,971 - __main__ - INFO -   - No subtitle torrents: 13
-2025-12-07 23:47:32,971 - __main__ - INFO - Failed to add: 0
-2025-12-07 23:47:32,971 - __main__ - INFO - Success rate: 100.0%
-2025-12-07 23:47:32,971 - __main__ - INFO - ==================================================
+2025-12-08 19:13:52,220 - __main__ - INFO - Starting qBittorrent uploader...
+2025-12-08 19:13:52,220 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-08 19:13:52,220 - utils.proxy_ban_manager - INFO - No existing ban log found at logs/proxy_bans.csv
+2025-12-08 19:13:52,221 - utils.proxy_pool - INFO - Added proxy 'Miraculous Fortress' to pool (HTTP: http://***:***@139.xxx.xxx.231:12300, HTTPS: http://***:***@139.xxx.xxx.231:12300)
+2025-12-08 19:13:52,221 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
+2025-12-08 19:13:52,221 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-08 19:13:52,221 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-08 19:13:52,221 - __main__ - INFO - PROXY POOL MODE for qBittorrent: 3 proxies with automatic failover
+2025-12-08 19:13:52,221 - __main__ - INFO - Using specified input file: Daily Report/Javdb_TodayTitle_20251208.csv
+2025-12-08 19:13:52,221 - __main__ - INFO - Found 18 torrent links in Daily Report/Javdb_TodayTitle_20251208.csv
+2025-12-08 19:13:52,221 - __main__ - INFO - Skipped 2 already downloaded torrents
+2025-12-08 19:13:52,221 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-12-08 19:13:52,436 - __main__ - INFO - Successfully logged in to qBittorrent
+2025-12-08 19:13:52,436 - __main__ - INFO - History manager imported, will update downloaded status
+2025-12-08 19:13:52,436 - __main__ - INFO - Starting to add 18 torrents to qBittorrent...
+2025-12-08 19:13:52,436 - __main__ - INFO - [1/18] Adding: AARM-322 [Subtitle]
+2025-12-08 19:13:53,442 - __main__ - INFO - [2/18] Adding: AGMX-239 [Subtitle]
+2025-12-08 19:13:54,445 - __main__ - INFO - [3/18] Adding: DASS-800 [Hacked+Subtitle]
+2025-12-08 19:13:55,448 - __main__ - INFO - [4/18] Adding: DASS-800 [Subtitle]
+2025-12-08 19:13:56,450 - __main__ - INFO - [5/18] Adding: DASS-810 [Subtitle]
+2025-12-08 19:13:57,453 - __main__ - INFO - [6/18] Adding: DLDSS-445 [Subtitle]
+2025-12-08 19:13:58,455 - __main__ - INFO - [7/18] Adding: DLDSS-446 [Subtitle]
+2025-12-08 19:13:59,458 - __main__ - INFO - [8/18] Adding: DLDSS-447 [Subtitle]
+2025-12-08 19:14:00,461 - __main__ - INFO - [9/18] Adding: DVAJ-709 [Subtitle]
+2025-12-08 19:14:01,463 - __main__ - INFO - [10/18] Adding: DVAJ-710 [Subtitle]
+2025-12-08 19:14:02,466 - __main__ - INFO - [11/18] Adding: blackedraw.18.04.02 [Subtitle]
+2025-12-08 19:14:03,468 - __main__ - INFO - [12/18] Adding: blackedraw.18.04.27 [Subtitle]
+2025-12-08 19:14:04,470 - __main__ - INFO - [13/18] Adding: SIRO-5561 [NoSubtitle]
+2025-12-08 19:14:05,473 - __main__ - INFO - [14/18] Adding: MKMP-690 [NoSubtitle]
+2025-12-08 19:14:06,475 - __main__ - INFO - [15/18] Adding: JUR-531 [Hacked+Subtitle]
+2025-12-08 19:14:07,478 - __main__ - INFO - [16/18] Adding: SNOS-006 [Hacked+Subtitle]
+2025-12-08 19:14:08,480 - __main__ - INFO - [17/18] Adding: IPZZ-742 [NoSubtitle]
+2025-12-08 19:14:09,482 - __main__ - INFO - [18/18] Adding: DVAJ-719 [NoSubtitle]
+2025-12-08 19:14:10,485 - __main__ - INFO - ==================================================
+2025-12-08 19:14:10,485 - __main__ - INFO - UPLOAD SUMMARY
+2025-12-08 19:14:10,485 - __main__ - INFO - ==================================================
+2025-12-08 19:14:10,485 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251208.csv
+2025-12-08 19:14:10,485 - __main__ - INFO - Total torrents found: 18
+2025-12-08 19:14:10,485 - __main__ - INFO - Successfully added: 18
+2025-12-08 19:14:10,485 - __main__ - INFO -   - Hacked subtitle torrents: 3
+2025-12-08 19:14:10,485 - __main__ - INFO -   - Hacked no subtitle torrents: 0
+2025-12-08 19:14:10,485 - __main__ - INFO -   - Subtitle torrents: 11
+2025-12-08 19:14:10,485 - __main__ - INFO -   - No subtitle torrents: 4
+2025-12-08 19:14:10,485 - __main__ - INFO - Failed to add: 0
+2025-12-08 19:14:10,485 - __main__ - INFO - Success rate: 100.0%
+2025-12-08 19:14:10,485 - __main__ - INFO - ==================================================
