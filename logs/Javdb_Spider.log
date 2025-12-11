@@ -1,145 +1,147 @@
-2025-12-10 19:00:01,589 - __main__ - INFO - Initializing proxy pool with 3 proxies...
-2025-12-10 19:00:01,590 - utils.proxy_ban_manager - INFO - No existing ban log found at logs/proxy_bans.csv
-2025-12-10 19:00:01,590 - utils.proxy_pool - INFO - Added proxy 'Miraculous Fortress' to pool (HTTP: http://***:***@139.xxx.xxx.231:12300, HTTPS: http://***:***@139.xxx.xxx.231:12300)
-2025-12-10 19:00:01,590 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
-2025-12-10 19:00:01,590 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-10 19:00:01,590 - __main__ - INFO - Proxy pool initialized successfully
-2025-12-10 19:00:01,590 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
-2025-12-10 19:00:01,590 - __main__ - INFO - Starting JavDB spider...
-2025-12-10 19:00:01,590 - __main__ - INFO - Arguments: start_page=1, end_page=10, phase=all
-2025-12-10 19:00:01,590 - __main__ - INFO - PROXY POOL MODE: 3 proxies configured with automatic failover
-2025-12-10 19:00:01,590 - __main__ - INFO - PROXY ENABLED: Using proxy for modules ['spider_index', 'spider_detail']
-2025-12-10 19:00:01,590 - __main__ - INFO - Validating history file integrity...
-2025-12-10 19:00:01,639 - utils.history_manager - INFO - Loaded 5959 previously parsed movies from history (phase 1: 3383, phase 2: 2576)
-2025-12-10 19:00:01,639 - __main__ - INFO - Initialized requests session
-2025-12-10 19:00:01,639 - __main__ - INFO - ==================================================
-2025-12-10 19:00:01,639 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-12-10 19:00:01,639 - __main__ - INFO - ==================================================
-2025-12-10 19:00:01,643 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=1 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7ba360d00800>: Failed to establish a new connection: [Errno 111] Connection refused')))
-2025-12-10 19:00:01,643 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (1/3)
-2025-12-10 19:00:01,644 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
-2025-12-10 19:00:01,644 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-10 19:00:03,407 - utils.parser - INFO - [Page 1] Found 11 entries for phase 1
-2025-12-10 19:00:08,899 - utils.parser - INFO - [Page 2] Found 4 entries for phase 1
-2025-12-10 19:00:14,432 - utils.parser - INFO - [Page 3] Found 9 entries for phase 1
-2025-12-10 19:00:20,005 - utils.parser - INFO - [Page 4] Found 0 entries for phase 1
-2025-12-10 19:00:25,538 - utils.parser - INFO - [Page 5] Found 0 entries for phase 1
-2025-12-10 19:00:31,037 - utils.parser - INFO - [Page 6] Found 0 entries for phase 1
-2025-12-10 19:00:36,564 - utils.parser - INFO - [Page 7] Found 0 entries for phase 1
-2025-12-10 19:00:42,081 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
-2025-12-10 19:00:47,615 - utils.parser - INFO - [Page 9] Found 0 entries for phase 1
-2025-12-10 19:00:53,125 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
-2025-12-10 19:01:03,409 - __main__ - INFO - [1/24] [Page 1] Processing DASS-820
-2025-12-10 19:01:18,901 - __main__ - INFO - [2/24] [Page 1] Processing IPZZ-707
-2025-12-10 19:01:34,372 - __main__ - INFO - [3/24] [Page 1] Processing IPZZ-719
-2025-12-10 19:01:49,858 - __main__ - INFO - [4/24] [Page 1] Processing IPZZ-723
-2025-12-10 19:02:05,376 - __main__ - INFO - [5/24] [Page 1] Processing JUR-513
-2025-12-10 19:02:21,018 - __main__ - INFO - [6/24] [Page 1] Processing JUR-528
-2025-12-10 19:02:36,479 - __main__ - INFO - [7/24] [Page 1] Processing JUR-569
-2025-12-10 19:02:51,945 - __main__ - INFO - [8/24] [Page 1] Processing JUR-574
-2025-12-10 19:03:07,428 - __main__ - INFO - [9/24] [Page 1] Processing JUR-576
-2025-12-10 19:03:22,891 - __main__ - INFO - [10/24] [Page 1] Processing blackedraw.18.07.01
-2025-12-10 19:03:38,378 - __main__ - INFO - [11/24] [Page 1] Processing blackedraw.18.07.06
-2025-12-10 19:03:53,856 - __main__ - INFO - [12/24] [Page 2] Processing IPZZ-717
-2025-12-10 19:04:04,301 - __main__ - INFO - [13/24] [Page 2] Processing IPZZ-730
-2025-12-10 19:04:14,756 - __main__ - INFO - [14/24] [Page 2] Processing IPZZ-732
-2025-12-10 19:04:25,215 - __main__ - INFO - [15/24] [Page 2] Processing IPZZ-740
-2025-12-10 19:04:35,659 - __main__ - INFO - [16/24] [Page 3] Processing IPZZ-741
-2025-12-10 19:04:46,154 - __main__ - INFO - [17/24] [Page 3] Processing IPZZ-744
-2025-12-10 19:04:56,593 - __main__ - INFO - [18/24] [Page 3] Processing IPZZ-745
-2025-12-10 19:05:07,037 - __main__ - INFO - [19/24] [Page 3] Processing IPZZ-749
-2025-12-10 19:05:17,488 - __main__ - INFO - [20/24] [Page 3] Processing IPZZ-751
-2025-12-10 19:05:27,935 - __main__ - INFO - [21/24] [Page 3] Processing IPZZ-752
-2025-12-10 19:05:38,419 - __main__ - INFO - [22/24] [Page 3] Processing JUR-554
-2025-12-10 19:05:48,879 - __main__ - INFO - [23/24] [Page 3] Processing blackedraw.18.05.02
-2025-12-10 19:05:59,374 - __main__ - INFO - [24/24] [Page 3] Processing blackedraw.18.06.26
-2025-12-10 19:05:59,374 - __main__ - INFO - Phase 1 completed: 11 entries processed
-2025-12-10 19:05:59,374 - __main__ - INFO - ==================================================
-2025-12-10 19:05:59,374 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-12-10 19:05:59,374 - __main__ - INFO - ==================================================
-2025-12-10 19:05:59,908 - utils.parser - INFO - [Page 1] Found 2 entries for phase 2
-2025-12-10 19:06:05,417 - utils.parser - INFO - [Page 2] Found 0 entries for phase 2
-2025-12-10 19:06:10,796 - utils.parser - INFO - [Page 3] Found 1 entries for phase 2
-2025-12-10 19:06:16,328 - utils.parser - INFO - [Page 4] Found 0 entries for phase 2
-2025-12-10 19:06:21,889 - utils.parser - INFO - [Page 5] Found 0 entries for phase 2
-2025-12-10 19:06:27,436 - utils.parser - INFO - [Page 6] Found 0 entries for phase 2
-2025-12-10 19:06:33,001 - utils.parser - INFO - [Page 7] Found 0 entries for phase 2
-2025-12-10 19:06:38,551 - utils.parser - INFO - [Page 8] Found 0 entries for phase 2
-2025-12-10 19:06:44,096 - utils.parser - INFO - [Page 9] Found 0 entries for phase 2
-2025-12-10 19:06:49,622 - utils.parser - INFO - [Page 10] Found 0 entries for phase 2
-2025-12-10 19:07:00,154 - __main__ - INFO - [1/3] [Page 1] Processing JUR-538
-2025-12-10 19:07:15,644 - __main__ - INFO - [2/3] [Page 1] Processing SNOS-014
-2025-12-10 19:07:31,139 - __main__ - INFO - [3/3] [Page 3] Processing ROE-431
-2025-12-10 19:07:31,139 - __main__ - INFO - Phase 2 completed: 2 entries processed
-2025-12-10 19:07:31,139 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251210.csv
-2025-12-10 19:07:31,139 - __main__ - INFO - ==================================================
-2025-12-10 19:07:31,139 - __main__ - INFO - SUMMARY REPORT
-2025-12-10 19:07:31,139 - __main__ - INFO - ==================================================
-2025-12-10 19:07:31,139 - __main__ - INFO - Pages processed: 1 to 10
-2025-12-10 19:07:31,139 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-12-10 19:07:31,139 - __main__ - INFO - ==============================
-2025-12-10 19:07:31,139 - __main__ - INFO - PHASE 1 SUMMARY
-2025-12-10 19:07:31,139 - __main__ - INFO - ==============================
-2025-12-10 19:07:31,139 - __main__ - INFO - Phase 1 entries found: 11
-2025-12-10 19:07:31,139 - __main__ - INFO -   - Subtitle torrents: 11 (100.0%)
-2025-12-10 19:07:31,139 - __main__ - INFO -   - Hacked subtitle torrents: 3 (27.3%)
-2025-12-10 19:07:31,139 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
-2025-12-10 19:07:31,139 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
-2025-12-10 19:07:31,139 - __main__ - INFO - ==============================
-2025-12-10 19:07:31,139 - __main__ - INFO - PHASE 2 SUMMARY
-2025-12-10 19:07:31,139 - __main__ - INFO - ==============================
-2025-12-10 19:07:31,139 - __main__ - INFO - Phase 2 entries found: 2
-2025-12-10 19:07:31,139 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
-2025-12-10 19:07:31,139 - __main__ - INFO -   - Hacked subtitle torrents: 2 (100.0%)
-2025-12-10 19:07:31,139 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
-2025-12-10 19:07:31,139 - __main__ - INFO -   - No-subtitle torrents: 2 (100.0%)
-2025-12-10 19:07:31,139 - __main__ - INFO - ==============================
-2025-12-10 19:07:31,139 - __main__ - INFO - OVERALL SUMMARY
-2025-12-10 19:07:31,139 - __main__ - INFO - ==============================
-2025-12-10 19:07:31,139 - __main__ - INFO - Total entries found: 13
-2025-12-10 19:07:31,139 - __main__ - INFO - Successfully processed: 13
-2025-12-10 19:07:31,139 - __main__ - INFO - Skipped already parsed in this session: 27
-2025-12-10 19:07:31,139 - __main__ - INFO - Skipped already parsed in previous runs: 3383
-2025-12-10 19:07:31,139 - __main__ - INFO - Current parsed links in memory: 27
-2025-12-10 19:07:31,139 - __main__ - INFO - Overall subtitle torrents: 11 (84.6%)
-2025-12-10 19:07:31,139 - __main__ - INFO - Overall hacked subtitle torrents: 5 (38.5%)
-2025-12-10 19:07:31,139 - __main__ - INFO - Overall hacked no-subtitle torrents: 0 (0.0%)
-2025-12-10 19:07:31,139 - __main__ - INFO - Overall no-subtitle torrents: 2 (15.4%)
-2025-12-10 19:07:31,139 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251210.csv
-2025-12-10 19:07:31,139 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-12-10 19:07:31,139 - __main__ - INFO - ==================================================
-2025-12-10 19:07:31,139 - __main__ - INFO - 
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO - ==================================================
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO - PROXY POOL STATISTICS
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO - ==================================================
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO - Total proxies: 3
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO - Available proxies: 3
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO - In cooldown: 0
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO - No-proxy mode: False
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO - 
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO - Individual proxy statistics:
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO -   [Standby] Miraculous Fortress:
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO -     - Total requests: 1
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO -     - Success rate: 0.0%
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO -     - Consecutive failures: 1
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO -     - Last success: Never
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO -     - Last failure: 2025-12-10 19:00:01
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO -   [ACTIVE] Singapore-ARM1:
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO -     - Total requests: 47
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO -     - Success rate: 100.0%
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO -     - Consecutive failures: 0
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO -     - Last success: 2025-12-10 19:07:21
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO -     - Last failure: Never
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO -   [Standby] Singapore-ARM2:
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO -     - Total requests: 0
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO -     - Success rate: 0.0%
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO -     - Consecutive failures: 0
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO -     - Last success: Never
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO -     - Last failure: Never
-2025-12-10 19:07:31,140 - utils.proxy_pool - INFO - ==================================================
-2025-12-10 19:07:31,140 - __main__ - INFO - 
-2025-12-10 19:07:31,140 - __main__ - INFO - ==================================================
-2025-12-10 19:07:31,140 - __main__ - INFO - PROXY BAN STATUS
-2025-12-10 19:07:31,140 - __main__ - INFO - ==================================================
-2025-12-10 19:07:31,140 - __main__ - INFO - No proxies currently banned.
-2025-12-10 19:07:31,140 - __main__ - INFO - ==================================================
+2025-12-11 19:00:02,091 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-11 19:00:02,091 - utils.proxy_ban_manager - INFO - No existing ban log found at logs/proxy_bans.csv
+2025-12-11 19:00:02,091 - utils.proxy_pool - INFO - Added proxy 'Miraculous Fortress' to pool (HTTP: http://***:***@139.xxx.xxx.231:12300, HTTPS: http://***:***@139.xxx.xxx.231:12300)
+2025-12-11 19:00:02,091 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@138.xxx.xxx.170:12300)
+2025-12-11 19:00:02,091 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-11 19:00:02,091 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-11 19:00:02,091 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
+2025-12-11 19:00:02,091 - __main__ - INFO - Starting JavDB spider...
+2025-12-11 19:00:02,091 - __main__ - INFO - Arguments: start_page=1, end_page=10, phase=all
+2025-12-11 19:00:02,091 - __main__ - INFO - PROXY POOL MODE: 3 proxies configured with automatic failover
+2025-12-11 19:00:02,091 - __main__ - INFO - PROXY ENABLED: Using proxy for modules ['spider_index', 'spider_detail']
+2025-12-11 19:00:02,091 - __main__ - INFO - Validating history file integrity...
+2025-12-11 19:00:02,127 - utils.history_manager - INFO - Loaded 5963 previously parsed movies from history (phase 1: 3394, phase 2: 2569)
+2025-12-11 19:00:02,127 - __main__ - INFO - Initialized requests session
+2025-12-11 19:00:02,127 - __main__ - INFO - ==================================================
+2025-12-11 19:00:02,127 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-12-11 19:00:02,128 - __main__ - INFO - ==================================================
+2025-12-11 19:00:02,132 - __main__ - ERROR - Error fetching https://javdb.com/?page=1: HTTPSConnectionPool(host='javdb.com', port=443): Max retries exceeded with url: /?page=1 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x767f07a38740>: Failed to establish a new connection: [Errno 111] Connection refused')))
+2025-12-11 19:00:02,132 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (1/3)
+2025-12-11 19:00:02,132 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
+2025-12-11 19:00:02,132 - __main__ - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
+2025-12-11 19:00:04,077 - utils.parser - INFO - [Page 1] Found 13 entries for phase 1
+2025-12-11 19:00:09,782 - utils.parser - INFO - [Page 2] Found 0 entries for phase 1
+2025-12-11 19:00:15,293 - utils.parser - INFO - [Page 3] Found 11 entries for phase 1
+2025-12-11 19:00:20,818 - utils.parser - INFO - [Page 4] Found 0 entries for phase 1
+2025-12-11 19:00:26,399 - utils.parser - INFO - [Page 5] Found 0 entries for phase 1
+2025-12-11 19:00:31,918 - utils.parser - INFO - [Page 6] Found 0 entries for phase 1
+2025-12-11 19:00:37,459 - utils.parser - INFO - [Page 7] Found 0 entries for phase 1
+2025-12-11 19:00:42,989 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
+2025-12-11 19:00:48,535 - utils.parser - INFO - [Page 9] Found 0 entries for phase 1
+2025-12-11 19:00:54,067 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
+2025-12-11 19:01:04,509 - __main__ - INFO - [1/24] [Page 1] Processing ABF-246
+2025-12-11 19:01:14,967 - __main__ - INFO - [2/24] [Page 1] Processing ABW-096
+2025-12-11 19:01:30,468 - __main__ - INFO - [3/24] [Page 1] Processing JUR-538
+2025-12-11 19:01:45,979 - __main__ - INFO - [4/24] [Page 1] Processing JUR-547
+2025-12-11 19:02:01,436 - __main__ - INFO - [5/24] [Page 1] Processing JUR-548
+2025-12-11 19:02:16,899 - __main__ - INFO - [6/24] [Page 1] Processing JUR-566
+2025-12-11 19:02:32,377 - __main__ - INFO - [7/24] [Page 1] Processing SNOS-006
+2025-12-11 19:02:47,829 - __main__ - INFO - [8/24] [Page 1] Processing SNOS-022
+2025-12-11 19:03:03,327 - __main__ - INFO - [9/24] [Page 1] Processing SNOS-045
+2025-12-11 19:03:18,795 - __main__ - INFO - [10/24] [Page 1] Processing SNOS-055
+2025-12-11 19:03:34,265 - __main__ - INFO - [11/24] [Page 1] Processing SONE-992
+2025-12-11 19:03:49,723 - __main__ - INFO - [12/24] [Page 1] Processing blackedraw.18.07.16
+2025-12-11 19:04:05,193 - __main__ - INFO - [13/24] [Page 1] Processing blackedraw.18.07.26
+2025-12-11 19:04:20,669 - __main__ - INFO - [14/24] [Page 3] Processing DASS-820
+2025-12-11 19:04:31,112 - __main__ - INFO - [15/24] [Page 3] Processing IPZZ-707
+2025-12-11 19:04:41,556 - __main__ - INFO - [16/24] [Page 3] Processing IPZZ-719
+2025-12-11 19:04:52,007 - __main__ - INFO - [17/24] [Page 3] Processing IPZZ-723
+2025-12-11 19:05:02,450 - __main__ - INFO - [18/24] [Page 3] Processing JUR-513
+2025-12-11 19:05:12,898 - __main__ - INFO - [19/24] [Page 3] Processing JUR-528
+2025-12-11 19:05:23,333 - __main__ - INFO - [20/24] [Page 3] Processing JUR-569
+2025-12-11 19:05:33,793 - __main__ - INFO - [21/24] [Page 3] Processing JUR-574
+2025-12-11 19:05:44,251 - __main__ - INFO - [22/24] [Page 3] Processing JUR-576
+2025-12-11 19:05:54,795 - __main__ - INFO - [23/24] [Page 3] Processing blackedraw.18.07.01
+2025-12-11 19:06:05,235 - __main__ - INFO - [24/24] [Page 3] Processing blackedraw.18.07.06
+2025-12-11 19:06:05,235 - __main__ - INFO - Phase 1 completed: 12 entries processed
+2025-12-11 19:06:05,235 - __main__ - INFO - ==================================================
+2025-12-11 19:06:05,235 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-12-11 19:06:05,235 - __main__ - INFO - ==================================================
+2025-12-11 19:06:05,759 - utils.parser - INFO - [Page 1] Found 3 entries for phase 2
+2025-12-11 19:06:11,268 - utils.parser - INFO - [Page 2] Found 1 entries for phase 2
+2025-12-11 19:06:16,811 - utils.parser - INFO - [Page 3] Found 1 entries for phase 2
+2025-12-11 19:06:22,320 - utils.parser - INFO - [Page 4] Found 0 entries for phase 2
+2025-12-11 19:06:27,825 - utils.parser - INFO - [Page 5] Found 0 entries for phase 2
+2025-12-11 19:06:33,354 - utils.parser - INFO - [Page 6] Found 0 entries for phase 2
+2025-12-11 19:06:38,902 - utils.parser - INFO - [Page 7] Found 0 entries for phase 2
+2025-12-11 19:06:44,445 - utils.parser - INFO - [Page 8] Found 0 entries for phase 2
+2025-12-11 19:06:49,987 - utils.parser - INFO - [Page 9] Found 0 entries for phase 2
+2025-12-11 19:06:55,492 - utils.parser - INFO - [Page 10] Found 0 entries for phase 2
+2025-12-11 19:07:05,981 - __main__ - INFO - [1/5] [Page 1] Processing IPZZ-727
+2025-12-11 19:07:21,472 - __main__ - INFO - [2/5] [Page 1] Processing IPZZ-756
+2025-12-11 19:07:36,987 - __main__ - INFO - [3/5] [Page 1] Processing ABF-254
+2025-12-11 19:07:52,465 - __main__ - INFO - [4/5] [Page 2] Processing START-475
+2025-12-11 19:08:07,945 - __main__ - INFO - [5/5] [Page 3] Processing SNOS-014
+2025-12-11 19:08:07,945 - __main__ - INFO - Phase 2 completed: 4 entries processed
+2025-12-11 19:08:07,945 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251211.csv
+2025-12-11 19:08:07,945 - __main__ - INFO - ==================================================
+2025-12-11 19:08:07,945 - __main__ - INFO - SUMMARY REPORT
+2025-12-11 19:08:07,945 - __main__ - INFO - ==================================================
+2025-12-11 19:08:07,945 - __main__ - INFO - Pages processed: 1 to 10
+2025-12-11 19:08:07,945 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-12-11 19:08:07,945 - __main__ - INFO - ==============================
+2025-12-11 19:08:07,945 - __main__ - INFO - PHASE 1 SUMMARY
+2025-12-11 19:08:07,945 - __main__ - INFO - ==============================
+2025-12-11 19:08:07,945 - __main__ - INFO - Phase 1 entries found: 12
+2025-12-11 19:08:07,945 - __main__ - INFO -   - Subtitle torrents: 12 (100.0%)
+2025-12-11 19:08:07,945 - __main__ - INFO -   - Hacked subtitle torrents: 3 (25.0%)
+2025-12-11 19:08:07,945 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
+2025-12-11 19:08:07,945 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
+2025-12-11 19:08:07,945 - __main__ - INFO - ==============================
+2025-12-11 19:08:07,946 - __main__ - INFO - PHASE 2 SUMMARY
+2025-12-11 19:08:07,946 - __main__ - INFO - ==============================
+2025-12-11 19:08:07,946 - __main__ - INFO - Phase 2 entries found: 4
+2025-12-11 19:08:07,946 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
+2025-12-11 19:08:07,946 - __main__ - INFO -   - Hacked subtitle torrents: 3 (75.0%)
+2025-12-11 19:08:07,946 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
+2025-12-11 19:08:07,946 - __main__ - INFO -   - No-subtitle torrents: 4 (100.0%)
+2025-12-11 19:08:07,946 - __main__ - INFO - ==============================
+2025-12-11 19:08:07,946 - __main__ - INFO - OVERALL SUMMARY
+2025-12-11 19:08:07,946 - __main__ - INFO - ==============================
+2025-12-11 19:08:07,946 - __main__ - INFO - Total entries found: 16
+2025-12-11 19:08:07,946 - __main__ - INFO - Successfully processed: 16
+2025-12-11 19:08:07,946 - __main__ - INFO - Skipped already parsed in this session: 29
+2025-12-11 19:08:07,946 - __main__ - INFO - Skipped already parsed in previous runs: 3394
+2025-12-11 19:08:07,946 - __main__ - INFO - Current parsed links in memory: 29
+2025-12-11 19:08:07,946 - __main__ - INFO - Overall subtitle torrents: 12 (75.0%)
+2025-12-11 19:08:07,946 - __main__ - INFO - Overall hacked subtitle torrents: 6 (37.5%)
+2025-12-11 19:08:07,946 - __main__ - INFO - Overall hacked no-subtitle torrents: 0 (0.0%)
+2025-12-11 19:08:07,946 - __main__ - INFO - Overall no-subtitle torrents: 4 (25.0%)
+2025-12-11 19:08:07,946 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251211.csv
+2025-12-11 19:08:07,946 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-12-11 19:08:07,946 - __main__ - INFO - ==================================================
+2025-12-11 19:08:07,946 - __main__ - INFO - 
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO - ==================================================
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO - PROXY POOL STATISTICS
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO - ==================================================
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO - Total proxies: 3
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO - Available proxies: 3
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO - In cooldown: 0
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO - No-proxy mode: False
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO - 
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO - Individual proxy statistics:
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO -   [Standby] Miraculous Fortress:
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO -     - Total requests: 1
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO -     - Success rate: 0.0%
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO -     - Consecutive failures: 1
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO -     - Last success: Never
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO -     - Last failure: 2025-12-11 19:00:02
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO -   [ACTIVE] Singapore-ARM1:
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO -     - Total requests: 49
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO -     - Success rate: 100.0%
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO -     - Consecutive failures: 0
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO -     - Last success: 2025-12-11 19:07:57
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO -     - Last failure: Never
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO -   [Standby] Singapore-ARM2:
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO -     - Total requests: 0
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO -     - Success rate: 0.0%
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO -     - Consecutive failures: 0
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO -     - Last success: Never
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO -     - Last failure: Never
+2025-12-11 19:08:07,946 - utils.proxy_pool - INFO - ==================================================
+2025-12-11 19:08:07,946 - __main__ - INFO - 
+2025-12-11 19:08:07,946 - __main__ - INFO - ==================================================
+2025-12-11 19:08:07,946 - __main__ - INFO - PROXY BAN STATUS
+2025-12-11 19:08:07,946 - __main__ - INFO - ==================================================
+2025-12-11 19:08:07,946 - __main__ - INFO - No proxies currently banned.
+2025-12-11 19:08:07,946 - __main__ - INFO - ==================================================
