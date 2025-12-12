@@ -183,10 +183,25 @@ PHASE2_MIN_COMMENTS = 100
 # Base URL for JavDB
 BASE_URL = 'https://javdb.com'
 
-# JavDB session cookie (only needed for custom URL mode)
-# Get this value from your browser's developer tools → Application → Cookies → _jdb_session
-# Only enter the value part, not including "_jdb_session="
-JAVDB_SESSION_COOKIE = 'your_javdb_session_cookie_value_here'
+# =============================================================================
+# JAVDB LOGIN CONFIGURATION (for automatic session cookie refresh)
+# =============================================================================
+
+# JavDB login credentials (optional - for automatic cookie refresh)
+# Fill in your credentials and run: python3 javdb_login.py
+JAVDB_USERNAME = ''  # Your JavDB email or username
+JAVDB_PASSWORD = ''  # Your JavDB password
+
+# 2Captcha API key (optional - for automatic captcha solving)
+# Leave empty to use free OCR or manual input
+# Get API key from: https://2captcha.com/
+# Cost: ~$1 per 1000 captchas
+TWOCAPTCHA_API_KEY = ''  # Optional: Your 2Captcha API key
+
+# JavDB session cookie (can be auto-updated by javdb_login.py)
+# Manual method: Get from browser → Developer Tools → Application → Cookies → _jdb_session
+# Automatic method: Set credentials above and run: python3 javdb_login.py
+JAVDB_SESSION_COOKIE = ''
 
 # Sleep time configuration (in seconds)
 DETAIL_PAGE_SLEEP = 5  # Sleep time before parsing detail pages to avoid DDoS protection
