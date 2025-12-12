@@ -1,0 +1,51 @@
+name: Sync main to dev
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  workflow_call:
+
+concurrency:
+  group: sync-main-to-dev
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Checkout dev branch
+        run: |
+          git fetch origin dev
+          git checkout dev
+
+      - name: Merge main into dev
+        run: |
+          set -e
+          if git merge origin/main --no-edit; then
+            echo "✅ Merge successful."
+          else
+            echo "❌ Merge failed due to conflicts. Manual intervention required."
+            exit 1
+          fi
+
+      - name: Push changes
+        run: |
+          git push origin dev
+
