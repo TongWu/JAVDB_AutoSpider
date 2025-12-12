@@ -23,7 +23,7 @@ from urllib.parse import urljoin
 
 # Import captcha solver
 try:
-    from javdb_captcha_solver import solve_captcha
+    from utils.login.javdb_captcha_solver import solve_captcha
     CAPTCHA_SOLVER_AVAILABLE = True
 except ImportError:
     CAPTCHA_SOLVER_AVAILABLE = False
