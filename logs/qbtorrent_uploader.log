@@ -1,50 +1,14 @@
-2025-12-12 19:26:05,606 - __main__ - INFO - Starting qBittorrent uploader...
-2025-12-12 19:26:05,606 - __main__ - INFO - Initializing proxy pool with 3 proxies...
-2025-12-12 19:26:05,607 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-12-12 19:26:05,607 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
-2025-12-12 19:26:05,607 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-12 19:26:05,607 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-12 19:26:05,607 - __main__ - INFO - Proxy pool initialized successfully
-2025-12-12 19:26:05,607 - __main__ - INFO - PROXY POOL MODE for qBittorrent: 2 proxies with automatic failover
-2025-12-12 19:26:05,607 - __main__ - INFO - Using specified input file: Daily Report/Javdb_TodayTitle_20251212.csv
-2025-12-12 19:26:05,607 - __main__ - INFO - Found 22 torrent links in Daily Report/Javdb_TodayTitle_20251212.csv
-2025-12-12 19:26:05,607 - __main__ - INFO - Skipped 2 already downloaded torrents
-2025-12-12 19:26:05,608 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-12-12 19:26:05,932 - __main__ - INFO - Successfully logged in to qBittorrent
-2025-12-12 19:26:05,932 - __main__ - INFO - History manager imported, will update downloaded status
-2025-12-12 19:26:05,932 - __main__ - INFO - Starting to add 22 torrents to qBittorrent...
-2025-12-12 19:26:05,932 - __main__ - INFO - [1/22] Adding: ABW-286 [Hacked+Subtitle]
-2025-12-12 19:26:06,956 - __main__ - INFO - [2/22] Adding: DASS-737 [Subtitle]
-2025-12-12 19:26:07,973 - __main__ - INFO - [3/22] Adding: DASS-740 [Subtitle]
-2025-12-12 19:26:08,989 - __main__ - INFO - [4/22] Adding: DASS-793 [Subtitle]
-2025-12-12 19:26:10,012 - __main__ - INFO - [5/22] Adding: DASS-812 [Subtitle]
-2025-12-12 19:26:11,026 - __main__ - INFO - [6/22] Adding: DASS-819 [Subtitle]
-2025-12-12 19:26:12,040 - __main__ - INFO - [7/22] Adding: DASS-825 [Subtitle]
-2025-12-12 19:26:13,098 - __main__ - INFO - [8/22] Adding: IPZZ-727 [Hacked+Subtitle]
-2025-12-12 19:26:14,109 - __main__ - INFO - [9/22] Adding: IPZZ-727 [Subtitle]
-2025-12-12 19:26:15,121 - __main__ - INFO - [10/22] Adding: IPZZ-729 [Subtitle]
-2025-12-12 19:26:16,138 - __main__ - INFO - [11/22] Adding: IPZZ-756 [Hacked+Subtitle]
-2025-12-12 19:26:17,149 - __main__ - INFO - [12/22] Adding: IPZZ-756 [Subtitle]
-2025-12-12 19:26:18,165 - __main__ - INFO - [13/22] Adding: blackedraw.18.08.05 [Subtitle]
-2025-12-12 19:26:19,181 - __main__ - INFO - [14/22] Adding: blackedraw.18.08.15 [Subtitle]
-2025-12-12 19:26:20,194 - __main__ - INFO - [15/22] Adding: MIDA-405 [NoSubtitle]
-2025-12-12 19:26:21,206 - __main__ - INFO - [16/22] Adding: ABF-297 [NoSubtitle]
-2025-12-12 19:26:22,219 - __main__ - INFO - [17/22] Adding: FFT-033 [NoSubtitle]
-2025-12-12 19:26:23,229 - __main__ - INFO - [18/22] Adding: ABW-187 [Hacked+Subtitle]
-2025-12-12 19:26:24,247 - __main__ - INFO - [19/22] Adding: MIDA-455 [NoSubtitle]
-2025-12-12 19:26:25,263 - __main__ - INFO - [20/22] Adding: MIDA-490 [NoSubtitle]
-2025-12-12 19:26:26,273 - __main__ - INFO - [21/22] Adding: ABF-295 [NoSubtitle]
-2025-12-12 19:26:27,289 - __main__ - INFO - [22/22] Adding: MIDA-439 [NoSubtitle]
-2025-12-12 19:26:28,306 - __main__ - INFO - ==================================================
-2025-12-12 19:26:28,307 - __main__ - INFO - UPLOAD SUMMARY
-2025-12-12 19:26:28,307 - __main__ - INFO - ==================================================
-2025-12-12 19:26:28,307 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251212.csv
-2025-12-12 19:26:28,307 - __main__ - INFO - Total torrents found: 22
-2025-12-12 19:26:28,307 - __main__ - INFO - Successfully added: 22
-2025-12-12 19:26:28,307 - __main__ - INFO -   - Hacked subtitle torrents: 4
-2025-12-12 19:26:28,307 - __main__ - INFO -   - Hacked no subtitle torrents: 0
-2025-12-12 19:26:28,307 - __main__ - INFO -   - Subtitle torrents: 11
-2025-12-12 19:26:28,307 - __main__ - INFO -   - No subtitle torrents: 7
-2025-12-12 19:26:28,307 - __main__ - INFO - Failed to add: 0
-2025-12-12 19:26:28,307 - __main__ - INFO - Success rate: 100.0%
-2025-12-12 19:26:28,307 - __main__ - INFO - ==================================================
+2025-12-13 21:43:15,186 - __main__ - INFO - Starting qBittorrent uploader...
+2025-12-13 21:43:15,186 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-13 21:43:15,187 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
+2025-12-13 21:43:15,187 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
+2025-12-13 21:43:15,187 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-13 21:43:15,187 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-13 21:43:15,187 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-13 21:43:15,187 - __main__ - INFO - PROXY POOL MODE for qBittorrent: 2 proxies with automatic failover
+2025-12-13 21:43:15,187 - __main__ - INFO - Using specified input file: Daily Report/Javdb_TodayTitle_20251213.csv
+2025-12-13 21:43:15,187 - __main__ - INFO - Found 66 torrent links in Daily Report/Javdb_TodayTitle_20251213.csv
+2025-12-13 21:43:15,187 - __main__ - INFO - Skipped 2 already downloaded torrents
+2025-12-13 21:43:15,187 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-12-13 21:43:15,189 - __main__ - ERROR - Login error: HTTPConnectionPool(host='101.100.165.240', port=12301): Max retries exceeded with url: /api/v2/auth/login (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x780f56dac140>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-12-13 21:43:15,189 - __main__ - ERROR - Failed to login to qBittorrent. Please check username and password.
