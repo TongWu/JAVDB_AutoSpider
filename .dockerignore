@@ -1,0 +1,77 @@
+# ============================================================
+# Docker Ignore File
+# ============================================================
+# Exclude unnecessary files from Docker build context
+# ============================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs (will be mounted from host)
+logs/
+*.log
+
+# Data directories (will be mounted from host)
+Ad Hoc/
+Daily Report/
+parsed_movies_history.csv
+
+# Config files (will be mounted from host)
+config.py
+
+# Docker files (not needed inside image)
+Dockerfile
+docker-compose.yml
+.dockerignore
+.env
+.env.example
+
+# Documentation
+*.md
+docs/
+
+# Migration scripts (not needed in production)
+migration/
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# OS files
+Thumbs.db
+desktop.ini
+
+# Backup files
+*.bak
+*.backup
+*~
+
