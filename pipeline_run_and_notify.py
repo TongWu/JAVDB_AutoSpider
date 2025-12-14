@@ -589,82 +589,71 @@ def extract_pikpak_statistics(log_path):
 
 def format_email_report(spider_stats, uploader_stats, pikpak_stats, ban_summary):
     """
-    Format a structured email report with tables.
+    Format a mobile-friendly email report.
     Returns: formatted email body string
     """
     body = f"""
-╔════════════════════════════════════════════════════════════════════════════╗
-║                   JavDB PIPELINE EXECUTION REPORT                          ║
-║                   {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}                                        ║
-╚════════════════════════════════════════════════════════════════════════════╝
+═══════════════════════════════
+JavDB Pipeline Report
+{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+═══════════════════════════════
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 📊 SPIDER STATISTICS                                                        │
-└─────────────────────────────────────────────────────────────────────────────┘
+📊 SPIDER STATISTICS
+───────────────────────────────
 
-Phase 1: High-Priority Entries (Subtitle + Today/Yesterday Tag)
-──────────────────────────────────────────────────────────────────────────────
-  • Found:                    {spider_stats['phase1']['found']:>4} entries
-  • Successfully Processed:   {spider_stats['phase1']['processed']:>4} entries
-  • Skipped (Session):        {spider_stats['phase1']['skipped_session']:>4} entries
-  • Skipped (History):        {spider_stats['phase1']['skipped_history']:>4} entries
+Phase 1 (Subtitle + Today/Yesterday)
+  Found: {spider_stats['phase1']['found']}
+  Processed: {spider_stats['phase1']['processed']}
+  Skipped (Session): {spider_stats['phase1']['skipped_session']}
+  Skipped (History): {spider_stats['phase1']['skipped_history']}
 
-Phase 2: Standard Entries (Today/Yesterday Tag, Rate>4.0, Comments>85)
-──────────────────────────────────────────────────────────────────────────────
-  • Found:                    {spider_stats['phase2']['found']:>4} entries
-  • Successfully Processed:   {spider_stats['phase2']['processed']:>4} entries
-  • Skipped (Session):        {spider_stats['phase2']['skipped_session']:>4} entries
-  • Skipped (History):        {spider_stats['phase2']['skipped_history']:>4} entries
+Phase 2 (Rate>4.0, Comments>85)
+  Found: {spider_stats['phase2']['found']}
+  Processed: {spider_stats['phase2']['processed']}
+  Skipped (Session): {spider_stats['phase2']['skipped_session']}
+  Skipped (History): {spider_stats['phase2']['skipped_history']}
 
 Overall Summary
-──────────────────────────────────────────────────────────────────────────────
-  • Total Entries Found:      {spider_stats['overall']['total_found']:>4} entries
-  • Successfully Processed:   {spider_stats['overall']['successfully_processed']:>4} entries
-  • Skipped (Session):        {spider_stats['overall']['skipped_session']:>4} entries
-  • Skipped (History):        {spider_stats['overall']['skipped_history']:>4} entries
+  Total Found: {spider_stats['overall']['total_found']}
+  Processed: {spider_stats['overall']['successfully_processed']}
+  Skipped (Session): {spider_stats['overall']['skipped_session']}
+  Skipped (History): {spider_stats['overall']['skipped_history']}
 
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 📤 QBITTORRENT UPLOADER STATISTICS                                          │
-└─────────────────────────────────────────────────────────────────────────────┘
+───────────────────────────────
+📤 QBITTORRENT UPLOADER
+───────────────────────────────
 
 Upload Summary
-──────────────────────────────────────────────────────────────────────────────
-  • Total Torrents:           {uploader_stats['total']:>4} torrents
-  • Successfully Added:       {uploader_stats['success']:>4} torrents ({uploader_stats['success_rate']:.1f}%)
-  • Failed:                   {uploader_stats['failed']:>4} torrents
+  Total: {uploader_stats['total']}
+  Success: {uploader_stats['success']} ({uploader_stats['success_rate']:.1f}%)
+  Failed: {uploader_stats['failed']}
 
 Breakdown by Type
-──────────────────────────────────────────────────────────────────────────────
-  • Hacked (Subtitle):        {uploader_stats['hacked_sub']:>4} torrents
-  • Hacked (No Subtitle):     {uploader_stats['hacked_nosub']:>4} torrents
-  • Regular (Subtitle):       {uploader_stats['subtitle']:>4} torrents
-  • Regular (No Subtitle):    {uploader_stats['no_subtitle']:>4} torrents
+  Hacked (Sub): {uploader_stats['hacked_sub']}
+  Hacked (NoSub): {uploader_stats['hacked_nosub']}
+  Regular (Sub): {uploader_stats['subtitle']}
+  Regular (NoSub): {uploader_stats['no_subtitle']}
 
+───────────────────────────────
+🔄 PIKPAK BRIDGE
+───────────────────────────────
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 🔄 PIKPAK BRIDGE STATISTICS                                                 │
-└─────────────────────────────────────────────────────────────────────────────┘
+Cleanup (>{pikpak_stats['threshold_days']} days)
+  Scanned: {pikpak_stats['total_torrents']}
+  Filtered: {pikpak_stats['filtered_old']}
+  Added to PikPak: {pikpak_stats['added_to_pikpak']}
+  Removed from QB: {pikpak_stats['removed_from_qb']}
+  Failed: {pikpak_stats['failed']}
 
-Cleanup Summary (>{pikpak_stats['threshold_days']} days old torrents)
-──────────────────────────────────────────────────────────────────────────────
-  • Total Torrents Scanned:   {pikpak_stats['total_torrents']:>4} torrents
-  • Filtered (Old):           {pikpak_stats['filtered_old']:>4} torrents
-  • Added to PikPak:          {pikpak_stats['added_to_pikpak']:>4} torrents
-  • Removed from qBittorrent: {pikpak_stats['removed_from_qb']:>4} torrents
-  • Failed Operations:        {pikpak_stats['failed']:>4} operations
-
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 🚦 PROXY STATUS                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+───────────────────────────────
+🚦 PROXY STATUS
+───────────────────────────────
 
 {ban_summary}
 
-
-═══════════════════════════════════════════════════════════════════════════════
+═══════════════════════════════
 End of Report
-═══════════════════════════════════════════════════════════════════════════════
+═══════════════════════════════
 """
     return body
 
@@ -962,18 +951,16 @@ def main():
         stats_report = format_email_report(spider_stats, uploader_stats, pikpak_stats, ban_summary)
         
         body = f"""
-╔════════════════════════════════════════════════════════════════════════════╗
-║                   ⚠️  PIPELINE EXECUTION FAILED  ⚠️                         ║
-║                   {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}                                        ║
-╚════════════════════════════════════════════════════════════════════════════╝
+═══════════════════════════════
+⚠️  PIPELINE FAILED  ⚠️
+{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+═══════════════════════════════
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 🚨 CRITICAL ERRORS                                                          │
-└─────────────────────────────────────────────────────────────────────────────┘
+🚨 CRITICAL ERRORS
 
 {error_details}
 
-Please check the attached log files for detailed information.
+Check attached logs for details.
 
 {stats_report}
 """
