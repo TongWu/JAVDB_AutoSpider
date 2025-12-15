@@ -1,62 +1,45 @@
-2025-12-14 22:35:29,331 - __main__ - INFO - Starting qBittorrent uploader...
-2025-12-14 22:35:29,331 - __main__ - INFO - Initializing proxy pool with 3 proxies...
-2025-12-14 22:35:29,332 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-12-14 22:35:29,332 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
-2025-12-14 22:35:29,332 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-14 22:35:29,332 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-14 22:35:29,332 - __main__ - INFO - Proxy pool initialized successfully
-2025-12-14 22:35:29,332 - __main__ - INFO - PROXY POOL MODE for qBittorrent: 2 proxies with automatic failover
-2025-12-14 22:35:29,332 - __main__ - INFO - Using specified input file: Daily Report/Javdb_TodayTitle_20251214.csv
-2025-12-14 22:35:29,333 - __main__ - INFO - Found 34 torrent links in Daily Report/Javdb_TodayTitle_20251214.csv
-2025-12-14 22:35:29,333 - __main__ - INFO - Skipped 5 already downloaded torrents
-2025-12-14 22:35:29,333 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-12-14 22:35:29,492 - __main__ - INFO - Successfully logged in to qBittorrent
-2025-12-14 22:35:29,492 - __main__ - INFO - History manager imported, will update downloaded status
-2025-12-14 22:35:29,492 - __main__ - INFO - Starting to add 34 torrents to qBittorrent...
-2025-12-14 22:35:29,492 - __main__ - INFO - [1/34] Adding: SDMUA-091 [Subtitle]
-2025-12-14 22:35:30,498 - __main__ - INFO - [2/34] Adding: SDNM-523 [Subtitle]
-2025-12-14 22:35:31,500 - __main__ - INFO - [3/34] Adding: SDNM-524 [Subtitle]
-2025-12-14 22:35:32,503 - __main__ - INFO - [4/34] Adding: SDNM-525 [Subtitle]
-2025-12-14 22:35:33,505 - __main__ - INFO - [5/34] Adding: SNIS-786 [Hacked+Subtitle]
-2025-12-14 22:35:34,507 - __main__ - INFO - [6/34] Adding: SNIS-825 [Hacked+Subtitle]
-2025-12-14 22:35:35,509 - __main__ - INFO - [7/34] Adding: SNOS-008 [Subtitle]
-2025-12-14 22:35:36,511 - __main__ - INFO - [8/34] Adding: SNOS-009 [Subtitle]
-2025-12-14 22:35:37,513 - __main__ - INFO - [9/34] Adding: SNOS-014 [Hacked+Subtitle]
-2025-12-14 22:35:38,515 - __main__ - INFO - [10/34] Adding: SNOS-014 [Subtitle]
-2025-12-14 22:35:39,518 - __main__ - INFO - [11/34] Adding: SNOS-040 [Subtitle]
-2025-12-14 22:35:40,520 - __main__ - INFO - [12/34] Adding: SONE-991 [Hacked+Subtitle]
-2025-12-14 22:35:41,522 - __main__ - INFO - [13/34] Adding: SONE-991 [Subtitle]
-2025-12-14 22:35:42,528 - __main__ - INFO - [14/34] Adding: SSIS-270 [Hacked+Subtitle]
-2025-12-14 22:35:43,530 - __main__ - INFO - [15/34] Adding: SSIS-338 [Hacked+Subtitle]
-2025-12-14 22:35:44,533 - __main__ - INFO - [16/34] Adding: blackedraw.18.10.19 [Subtitle]
-2025-12-14 22:35:45,535 - __main__ - INFO - [17/34] Adding: blackedraw.18.11.08 [Subtitle]
-2025-12-14 22:35:46,537 - __main__ - INFO - [18/34] Adding: MFYD-071 [NoSubtitle]
-2025-12-14 22:35:47,540 - __main__ - INFO - [19/34] Adding: MIAB-582 [NoSubtitle]
-2025-12-14 22:35:48,542 - __main__ - INFO - [20/34] Adding: PRED-826 [NoSubtitle]
-2025-12-14 22:35:49,544 - __main__ - INFO - [21/34] Adding: MDVR-374 [NoSubtitle]
-2025-12-14 22:35:50,546 - __main__ - INFO - [22/34] Adding: HALT-075 [NoSubtitle]
-2025-12-14 22:35:51,549 - __main__ - INFO - [23/34] Adding: MIAB-583 [NoSubtitle]
-2025-12-14 22:35:52,551 - __main__ - INFO - [24/34] Adding: MIDA-439 [Hacked+Subtitle]
-2025-12-14 22:35:53,554 - __main__ - INFO - [25/34] Adding: MNGS-023 [NoSubtitle]
-2025-12-14 22:35:54,556 - __main__ - INFO - [26/34] Adding: MIDA-442 [NoSubtitle]
-2025-12-14 22:35:55,558 - __main__ - INFO - [27/34] Adding: PRED-828 [NoSubtitle]
-2025-12-14 22:35:56,560 - __main__ - INFO - [28/34] Adding: PPPE-379 [NoSubtitle]
-2025-12-14 22:35:57,562 - __main__ - INFO - [29/34] Adding: MUKD-562 [NoSubtitle]
-2025-12-14 22:35:58,564 - __main__ - INFO - [30/34] Adding: MFYD-069 [NoSubtitle]
-2025-12-14 22:35:59,566 - __main__ - INFO - [31/34] Adding: MFYD-070 [NoSubtitle]
-2025-12-14 22:36:00,568 - __main__ - INFO - [32/34] Adding: MFYD-075 [NoSubtitle]
-2025-12-14 22:36:01,570 - __main__ - INFO - [33/34] Adding: MFYD-077 [NoSubtitle]
-2025-12-14 22:36:02,572 - __main__ - INFO - [34/34] Adding: MIMK-210 [NoSubtitle]
-2025-12-14 22:36:03,574 - __main__ - INFO - ==================================================
-2025-12-14 22:36:03,575 - __main__ - INFO - UPLOAD SUMMARY
-2025-12-14 22:36:03,575 - __main__ - INFO - ==================================================
-2025-12-14 22:36:03,575 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251214.csv
-2025-12-14 22:36:03,575 - __main__ - INFO - Total torrents found: 34
-2025-12-14 22:36:03,575 - __main__ - INFO - Successfully added: 34
-2025-12-14 22:36:03,575 - __main__ - INFO -   - Hacked subtitle torrents: 7
-2025-12-14 22:36:03,575 - __main__ - INFO -   - Hacked no subtitle torrents: 0
-2025-12-14 22:36:03,575 - __main__ - INFO -   - Subtitle torrents: 11
-2025-12-14 22:36:03,575 - __main__ - INFO -   - No subtitle torrents: 16
-2025-12-14 22:36:03,575 - __main__ - INFO - Failed to add: 0
-2025-12-14 22:36:03,575 - __main__ - INFO - Success rate: 100.0%
-2025-12-14 22:36:03,575 - __main__ - INFO - ==================================================
+2025-12-15 19:12:48,916 - __main__ - INFO - Starting qBittorrent uploader...
+2025-12-15 19:12:48,916 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-15 19:12:48,916 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
+2025-12-15 19:12:48,916 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
+2025-12-15 19:12:48,916 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-15 19:12:48,916 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-15 19:12:48,916 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-15 19:12:48,916 - __main__ - INFO - PROXY POOL MODE for qBittorrent: 2 proxies with automatic failover
+2025-12-15 19:12:48,916 - __main__ - INFO - Using specified input file: Daily Report/Javdb_TodayTitle_20251215.csv
+2025-12-15 19:12:48,917 - __main__ - INFO - Found 17 torrent links in Daily Report/Javdb_TodayTitle_20251215.csv
+2025-12-15 19:12:48,917 - __main__ - INFO - Skipped 1 already downloaded torrents
+2025-12-15 19:12:48,917 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-12-15 19:12:49,077 - __main__ - INFO - Successfully logged in to qBittorrent
+2025-12-15 19:12:49,077 - __main__ - INFO - History manager imported, will update downloaded status
+2025-12-15 19:12:49,077 - __main__ - INFO - Starting to add 17 torrents to qBittorrent...
+2025-12-15 19:12:49,077 - __main__ - INFO - [1/17] Adding: FNS-115 [Subtitle]
+2025-12-15 19:12:50,082 - __main__ - INFO - [2/17] Adding: FNS-116 [Subtitle]
+2025-12-15 19:12:51,085 - __main__ - INFO - [3/17] Adding: FNS-133 [Subtitle]
+2025-12-15 19:12:52,088 - __main__ - INFO - [4/17] Adding: FNS-135 [Subtitle]
+2025-12-15 19:12:53,090 - __main__ - INFO - [5/17] Adding: FNS-138 [Subtitle]
+2025-12-15 19:12:54,093 - __main__ - INFO - [6/17] Adding: FPRE-189 [Hacked-NoSubtitle]
+2025-12-15 19:12:55,096 - __main__ - INFO - [7/17] Adding: FPRE-189 [Subtitle]
+2025-12-15 19:12:56,099 - __main__ - INFO - [8/17] Adding: FPRE-192 [Subtitle]
+2025-12-15 19:12:57,102 - __main__ - INFO - [9/17] Adding: FPRE-197 [Subtitle]
+2025-12-15 19:12:58,105 - __main__ - INFO - [10/17] Adding: blackedraw.18.12.03 [Subtitle]
+2025-12-15 19:12:59,107 - __main__ - INFO - [11/17] Adding: blackedraw.18.12.08 [Subtitle]
+2025-12-15 19:13:00,110 - __main__ - INFO - [12/17] Adding: MIKR-059 [Hacked+Subtitle]
+2025-12-15 19:13:01,112 - __main__ - INFO - [13/17] Adding: 3DSVR-1875 [NoSubtitle]
+2025-12-15 19:13:02,115 - __main__ - INFO - [14/17] Adding: MUDR-350 [NoSubtitle]
+2025-12-15 19:13:03,117 - __main__ - INFO - [15/17] Adding: EBWH-292 [NoSubtitle]
+2025-12-15 19:13:04,120 - __main__ - INFO - [16/17] Adding: MMBF-005 [NoSubtitle]
+2025-12-15 19:13:05,122 - __main__ - INFO - [17/17] Adding: MNGS-022 [NoSubtitle]
+2025-12-15 19:13:06,125 - __main__ - INFO - ==================================================
+2025-12-15 19:13:06,125 - __main__ - INFO - UPLOAD SUMMARY
+2025-12-15 19:13:06,125 - __main__ - INFO - ==================================================
+2025-12-15 19:13:06,125 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251215.csv
+2025-12-15 19:13:06,125 - __main__ - INFO - Total torrents found: 17
+2025-12-15 19:13:06,125 - __main__ - INFO - Successfully added: 17
+2025-12-15 19:13:06,125 - __main__ - INFO -   - Hacked subtitle torrents: 1
+2025-12-15 19:13:06,125 - __main__ - INFO -   - Hacked no subtitle torrents: 1
+2025-12-15 19:13:06,125 - __main__ - INFO -   - Subtitle torrents: 10
+2025-12-15 19:13:06,125 - __main__ - INFO -   - No subtitle torrents: 5
+2025-12-15 19:13:06,125 - __main__ - INFO - Failed to add: 0
+2025-12-15 19:13:06,125 - __main__ - INFO - Success rate: 100.0%
+2025-12-15 19:13:06,125 - __main__ - INFO - ==================================================
