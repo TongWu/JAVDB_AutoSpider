@@ -396,6 +396,268 @@ def analyze_pikpak_log(log_path):
     return False, None
 
 
+def extract_spider_statistics(log_path):
+    """
+    Extract key statistics from spider log for email report.
+    Returns: dict with phase 1, phase 2, and overall statistics
+    """
+    stats = {
+        'phase1': {'found': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0},
+        'phase2': {'found': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0},
+        'overall': {'total_found': 0, 'successfully_processed': 0, 'skipped_session': 0, 'skipped_history': 0}
+    }
+    
+    if not os.path.exists(log_path):
+        return stats
+    
+    try:
+        with open(log_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Extract phase 1 statistics
+        phase1_found_pattern = r'\[Page \d+\] Found (\d+) entries for phase 1'
+        phase1_matches = re.findall(phase1_found_pattern, content)
+        stats['phase1']['found'] = sum(int(m) for m in phase1_matches)
+        
+        phase1_completed = re.search(r'Phase 1 completed: (\d+) entries processed', content)
+        if phase1_completed:
+            stats['phase1']['processed'] = int(phase1_completed.group(1))
+        
+        # Extract phase 2 statistics
+        phase2_found_pattern = r'\[Page \d+\] Found (\d+) entries for phase 2'
+        phase2_matches = re.findall(phase2_found_pattern, content)
+        stats['phase2']['found'] = sum(int(m) for m in phase2_matches)
+        
+        phase2_completed = re.search(r'Phase 2 completed: (\d+) entries processed', content)
+        if phase2_completed:
+            stats['phase2']['processed'] = int(phase2_completed.group(1))
+        
+        # Extract overall statistics
+        total_found = re.search(r'Total entries found: (\d+)', content)
+        if total_found:
+            stats['overall']['total_found'] = int(total_found.group(1))
+        
+        successfully_processed = re.search(r'Successfully processed: (\d+)', content)
+        if successfully_processed:
+            stats['overall']['successfully_processed'] = int(successfully_processed.group(1))
+        
+        skipped_session = re.search(r'Skipped already parsed in this session: (\d+)', content)
+        if skipped_session:
+            stats['overall']['skipped_session'] = int(skipped_session.group(1))
+        
+        skipped_history = re.search(r'Skipped already parsed in previous runs: (\d+)', content)
+        if skipped_history:
+            stats['overall']['skipped_history'] = int(skipped_history.group(1))
+        
+        # Distribute skipped counts between phases based on found entries
+        total_skipped_session = stats['overall']['skipped_session']
+        total_skipped_history = stats['overall']['skipped_history']
+        total_found = stats['phase1']['found'] + stats['phase2']['found']
+        
+        if total_found > 0:
+            # Distribute proportionally
+            phase1_ratio = stats['phase1']['found'] / total_found
+            stats['phase1']['skipped_session'] = int(total_skipped_session * phase1_ratio)
+            stats['phase1']['skipped_history'] = int(total_skipped_history * phase1_ratio)
+            
+            stats['phase2']['skipped_session'] = total_skipped_session - stats['phase1']['skipped_session']
+            stats['phase2']['skipped_history'] = total_skipped_history - stats['phase1']['skipped_history']
+        
+        return stats
+        
+    except Exception as e:
+        logger.warning(f"Failed to extract spider statistics: {e}")
+        return stats
+
+
+def extract_uploader_statistics(log_path):
+    """
+    Extract key statistics from uploader log for email report.
+    Returns: dict with upload statistics
+    """
+    stats = {
+        'total': 0,
+        'success': 0,
+        'failed': 0,
+        'hacked_sub': 0,
+        'hacked_nosub': 0,
+        'subtitle': 0,
+        'no_subtitle': 0,
+        'success_rate': 0.0
+    }
+    
+    if not os.path.exists(log_path):
+        return stats
+    
+    try:
+        with open(log_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Extract statistics
+        total = re.search(r'Total torrents found: (\d+)', content)
+        if total:
+            stats['total'] = int(total.group(1))
+        
+        success = re.search(r'Successfully added: (\d+)', content)
+        if success:
+            stats['success'] = int(success.group(1))
+        
+        failed = re.search(r'Failed to add: (\d+)', content)
+        if failed:
+            stats['failed'] = int(failed.group(1))
+        
+        hacked_sub = re.search(r'Hacked subtitle torrents: (\d+)', content)
+        if hacked_sub:
+            stats['hacked_sub'] = int(hacked_sub.group(1))
+        
+        hacked_nosub = re.search(r'Hacked no subtitle torrents: (\d+)', content)
+        if hacked_nosub:
+            stats['hacked_nosub'] = int(hacked_nosub.group(1))
+        
+        subtitle = re.search(r'Subtitle torrents: (\d+)', content)
+        if subtitle:
+            stats['subtitle'] = int(subtitle.group(1))
+        
+        no_subtitle = re.search(r'No subtitle torrents: (\d+)', content)
+        if no_subtitle:
+            stats['no_subtitle'] = int(no_subtitle.group(1))
+        
+        success_rate = re.search(r'Success rate: ([\d.]+)%', content)
+        if success_rate:
+            stats['success_rate'] = float(success_rate.group(1))
+        
+        return stats
+        
+    except Exception as e:
+        logger.warning(f"Failed to extract uploader statistics: {e}")
+        return stats
+
+
+def extract_pikpak_statistics(log_path):
+    """
+    Extract key statistics from PikPak log for email report.
+    Returns: dict with PikPak statistics
+    """
+    stats = {
+        'total_torrents': 0,
+        'filtered_old': 0,
+        'added_to_pikpak': 0,
+        'removed_from_qb': 0,
+        'failed': 0,
+        'threshold_days': 3
+    }
+    
+    if not os.path.exists(log_path):
+        return stats
+    
+    try:
+        with open(log_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Extract threshold
+        threshold = re.search(r'older than (\d+) days', content)
+        if threshold:
+            stats['threshold_days'] = int(threshold.group(1))
+        
+        # Extract statistics
+        total = re.search(r'Found (\d+) torrents', content)
+        if total:
+            stats['total_torrents'] = int(total.group(1))
+        
+        filtered = re.search(r'Filtered (\d+) torrents older than', content)
+        if filtered:
+            stats['filtered_old'] = int(filtered.group(1))
+        
+        # Count successful additions to PikPak
+        added_pattern = r'Successfully added to PikPak'
+        stats['added_to_pikpak'] = len(re.findall(added_pattern, content))
+        
+        # Count removals from qBittorrent
+        removed_pattern = r'Removed from qBittorrent'
+        stats['removed_from_qb'] = len(re.findall(removed_pattern, content))
+        
+        # Count failures
+        failed_pattern = r'Failed to (add|remove)'
+        stats['failed'] = len(re.findall(failed_pattern, content, re.IGNORECASE))
+        
+        return stats
+        
+    except Exception as e:
+        logger.warning(f"Failed to extract PikPak statistics: {e}")
+        return stats
+
+
+def format_email_report(spider_stats, uploader_stats, pikpak_stats, ban_summary):
+    """
+    Format a mobile-friendly email report.
+    Returns: formatted email body string
+    """
+    body = f"""
+═══════════════════════════════
+JavDB Pipeline Report
+{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+═══════════════════════════════
+
+📊 SPIDER STATISTICS
+───────────────────────────────
+
+Phase 1 (Subtitle + Today/Yesterday)
+  Found: {spider_stats['phase1']['found']}
+  Processed: {spider_stats['phase1']['processed']}
+  Skipped (Session): {spider_stats['phase1']['skipped_session']}
+  Skipped (History): {spider_stats['phase1']['skipped_history']}
+
+Phase 2 (Rate>4.0, Comments>85)
+  Found: {spider_stats['phase2']['found']}
+  Processed: {spider_stats['phase2']['processed']}
+  Skipped (Session): {spider_stats['phase2']['skipped_session']}
+  Skipped (History): {spider_stats['phase2']['skipped_history']}
+
+Overall Summary
+  Total Found: {spider_stats['overall']['total_found']}
+  Processed: {spider_stats['overall']['successfully_processed']}
+  Skipped (Session): {spider_stats['overall']['skipped_session']}
+  Skipped (History): {spider_stats['overall']['skipped_history']}
+
+───────────────────────────────
+📤 QBITTORRENT UPLOADER
+───────────────────────────────
+
+Upload Summary
+  Total: {uploader_stats['total']}
+  Success: {uploader_stats['success']} ({uploader_stats['success_rate']:.1f}%)
+  Failed: {uploader_stats['failed']}
+
+Breakdown by Type
+  Hacked (Sub): {uploader_stats['hacked_sub']}
+  Hacked (NoSub): {uploader_stats['hacked_nosub']}
+  Regular (Sub): {uploader_stats['subtitle']}
+  Regular (NoSub): {uploader_stats['no_subtitle']}
+
+───────────────────────────────
+🔄 PIKPAK BRIDGE
+───────────────────────────────
+
+Cleanup (>{pikpak_stats['threshold_days']} days)
+  Scanned: {pikpak_stats['total_torrents']}
+  Filtered: {pikpak_stats['filtered_old']}
+  Added to PikPak: {pikpak_stats['added_to_pikpak']}
+  Removed from QB: {pikpak_stats['removed_from_qb']}
+  Failed: {pikpak_stats['failed']}
+
+───────────────────────────────
+🚦 PROXY STATUS
+───────────────────────────────
+
+{ban_summary}
+
+═══════════════════════════════
+End of Report
+═══════════════════════════════
+"""
+    return body
+
+
 def get_proxy_ban_summary():
     """Get proxy ban summary for email notification"""
     try:
@@ -657,23 +919,15 @@ def main():
     today_str = datetime.now().strftime('%Y%m%d')
     if not has_critical_errors:
         # Pipeline succeeded - send detailed report with attachments
-        spider_summary = extract_spider_summary(SPIDER_LOG_FILE)
-        uploader_summary = get_log_summary(UPLOADER_LOG_FILE, lines=13)
-        pikpak_summary = get_log_summary(PIKPAK_LOG_FILE, lines=10)
+        # Extract structured statistics from logs
+        spider_stats = extract_spider_statistics(SPIDER_LOG_FILE)
+        uploader_stats = extract_uploader_statistics(UPLOADER_LOG_FILE)
+        pikpak_stats = extract_pikpak_statistics(PIKPAK_LOG_FILE)
         ban_summary = get_proxy_ban_summary()
-        body = f"""
-JavDB Spider, qBittorrent Uploader, and PikPak Bridge Pipeline Completed Successfully.
-
---- Proxy Ban Status ---
-{ban_summary}
-
---- JavDB Spider Summary ---
-{spider_summary}
---- qBittorrent Uploader Summary ---
-{uploader_summary}
---- PikPak Bridge Summary ---
-{pikpak_summary}
-"""
+        
+        # Format the email body with structured tables
+        body = format_email_report(spider_stats, uploader_stats, pikpak_stats, ban_summary)
+        
         attachments = [csv_path, SPIDER_LOG_FILE, UPLOADER_LOG_FILE, PIKPAK_LOG_FILE, PIPELINE_LOG_FILE]
         try:
             send_email(
@@ -685,34 +939,30 @@ JavDB Spider, qBittorrent Uploader, and PikPak Bridge Pipeline Completed Success
             logger.error(f'Failed to send success email: {e}')
     else:
         # Pipeline failed - send detailed failure notification
-        error_details = "\n".join([f"  - {error}" for error in pipeline_errors])
+        error_details = "\n".join([f"  • {error}" for error in pipeline_errors])
         
-        spider_summary = extract_spider_summary(SPIDER_LOG_FILE)
-        uploader_summary = get_log_summary(UPLOADER_LOG_FILE, lines=13)
-        pikpak_summary = get_log_summary(PIKPAK_LOG_FILE, lines=10)
+        # Extract structured statistics from logs
+        spider_stats = extract_spider_statistics(SPIDER_LOG_FILE)
+        uploader_stats = extract_uploader_statistics(UPLOADER_LOG_FILE)
+        pikpak_stats = extract_pikpak_statistics(PIKPAK_LOG_FILE)
         ban_summary = get_proxy_ban_summary()
         
+        # Format structured report
+        stats_report = format_email_report(spider_stats, uploader_stats, pikpak_stats, ban_summary)
+        
         body = f"""
-JavDB Pipeline Failed - Critical Errors Detected
+═══════════════════════════════
+⚠️  PIPELINE FAILED  ⚠️
+{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+═══════════════════════════════
 
-Error occurred at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+🚨 CRITICAL ERRORS
 
-CRITICAL ERRORS:
 {error_details}
 
-Please check the detailed logs below for more information.
+Check attached logs for details.
 
---- Proxy Ban Status ---
-{ban_summary}
-
---- JavDB Spider Summary ---
-{spider_summary}
-
---- qBittorrent Uploader Summary ---
-{uploader_summary}
-
---- PikPak Bridge Summary ---
-{pikpak_summary}
+{stats_report}
 """
         try:
             send_email(
