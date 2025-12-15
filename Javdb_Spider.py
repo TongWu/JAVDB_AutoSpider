@@ -914,6 +914,9 @@ def main():
     # Track if any proxy was banned during the entire run (initialize before phases)
     any_proxy_banned = False
     any_proxy_banned_phase2 = False
+    
+    # Track skipped entries (for accurate statistics)
+    skipped_session_count = 0
 
     # Phase 1: Collect entries with both "含中字磁鏈" and "今日新種"/"昨日新種" tags
     if phase_mode in ['1', 'all']:
@@ -1003,6 +1006,7 @@ def main():
             # Skip if already parsed in this session
             if href in parsed_links:
                 logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping already parsed in this session")
+                skipped_session_count += 1
                 continue
 
             # Add to parsed links set for this session
@@ -1186,6 +1190,7 @@ def main():
             # Skip if already parsed in this session
             if href in parsed_links:
                 logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping already parsed in this session")
+                skipped_session_count += 1
                 continue
 
             # Add to parsed links set for this session
@@ -1346,7 +1351,7 @@ def main():
     logger.info("=" * 30)
     logger.info(f"Total entries found: {len(rows)}")
     logger.info(f"Successfully processed: {len(rows)}")
-    logger.info(f"Skipped already parsed in this session: {len(parsed_links)}")
+    logger.info(f"Skipped already parsed in this session: {skipped_session_count}")
     if use_history_for_loading and not ignore_history:
         logger.info(f"Skipped already parsed in previous runs: {len(parsed_movies_history_phase1)}")
     elif ignore_history:
