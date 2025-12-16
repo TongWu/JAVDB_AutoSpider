@@ -1,45 +1,43 @@
-2025-12-15 19:12:48,916 - __main__ - INFO - Starting qBittorrent uploader...
-2025-12-15 19:12:48,916 - __main__ - INFO - Initializing proxy pool with 3 proxies...
-2025-12-15 19:12:48,916 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-12-15 19:12:48,916 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
-2025-12-15 19:12:48,916 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-15 19:12:48,916 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-15 19:12:48,916 - __main__ - INFO - Proxy pool initialized successfully
-2025-12-15 19:12:48,916 - __main__ - INFO - PROXY POOL MODE for qBittorrent: 2 proxies with automatic failover
-2025-12-15 19:12:48,916 - __main__ - INFO - Using specified input file: Daily Report/Javdb_TodayTitle_20251215.csv
-2025-12-15 19:12:48,917 - __main__ - INFO - Found 17 torrent links in Daily Report/Javdb_TodayTitle_20251215.csv
-2025-12-15 19:12:48,917 - __main__ - INFO - Skipped 1 already downloaded torrents
-2025-12-15 19:12:48,917 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-12-15 19:12:49,077 - __main__ - INFO - Successfully logged in to qBittorrent
-2025-12-15 19:12:49,077 - __main__ - INFO - History manager imported, will update downloaded status
-2025-12-15 19:12:49,077 - __main__ - INFO - Starting to add 17 torrents to qBittorrent...
-2025-12-15 19:12:49,077 - __main__ - INFO - [1/17] Adding: FNS-115 [Subtitle]
-2025-12-15 19:12:50,082 - __main__ - INFO - [2/17] Adding: FNS-116 [Subtitle]
-2025-12-15 19:12:51,085 - __main__ - INFO - [3/17] Adding: FNS-133 [Subtitle]
-2025-12-15 19:12:52,088 - __main__ - INFO - [4/17] Adding: FNS-135 [Subtitle]
-2025-12-15 19:12:53,090 - __main__ - INFO - [5/17] Adding: FNS-138 [Subtitle]
-2025-12-15 19:12:54,093 - __main__ - INFO - [6/17] Adding: FPRE-189 [Hacked-NoSubtitle]
-2025-12-15 19:12:55,096 - __main__ - INFO - [7/17] Adding: FPRE-189 [Subtitle]
-2025-12-15 19:12:56,099 - __main__ - INFO - [8/17] Adding: FPRE-192 [Subtitle]
-2025-12-15 19:12:57,102 - __main__ - INFO - [9/17] Adding: FPRE-197 [Subtitle]
-2025-12-15 19:12:58,105 - __main__ - INFO - [10/17] Adding: blackedraw.18.12.03 [Subtitle]
-2025-12-15 19:12:59,107 - __main__ - INFO - [11/17] Adding: blackedraw.18.12.08 [Subtitle]
-2025-12-15 19:13:00,110 - __main__ - INFO - [12/17] Adding: MIKR-059 [Hacked+Subtitle]
-2025-12-15 19:13:01,112 - __main__ - INFO - [13/17] Adding: 3DSVR-1875 [NoSubtitle]
-2025-12-15 19:13:02,115 - __main__ - INFO - [14/17] Adding: MUDR-350 [NoSubtitle]
-2025-12-15 19:13:03,117 - __main__ - INFO - [15/17] Adding: EBWH-292 [NoSubtitle]
-2025-12-15 19:13:04,120 - __main__ - INFO - [16/17] Adding: MMBF-005 [NoSubtitle]
-2025-12-15 19:13:05,122 - __main__ - INFO - [17/17] Adding: MNGS-022 [NoSubtitle]
-2025-12-15 19:13:06,125 - __main__ - INFO - ==================================================
-2025-12-15 19:13:06,125 - __main__ - INFO - UPLOAD SUMMARY
-2025-12-15 19:13:06,125 - __main__ - INFO - ==================================================
-2025-12-15 19:13:06,125 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251215.csv
-2025-12-15 19:13:06,125 - __main__ - INFO - Total torrents found: 17
-2025-12-15 19:13:06,125 - __main__ - INFO - Successfully added: 17
-2025-12-15 19:13:06,125 - __main__ - INFO -   - Hacked subtitle torrents: 1
-2025-12-15 19:13:06,125 - __main__ - INFO -   - Hacked no subtitle torrents: 1
-2025-12-15 19:13:06,125 - __main__ - INFO -   - Subtitle torrents: 10
-2025-12-15 19:13:06,125 - __main__ - INFO -   - No subtitle torrents: 5
-2025-12-15 19:13:06,125 - __main__ - INFO - Failed to add: 0
-2025-12-15 19:13:06,125 - __main__ - INFO - Success rate: 100.0%
-2025-12-15 19:13:06,125 - __main__ - INFO - ==================================================
+2025-12-16 19:10:19,390 - __main__ - INFO - Starting qBittorrent uploader...
+2025-12-16 19:10:19,390 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-16 19:10:19,391 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
+2025-12-16 19:10:19,391 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
+2025-12-16 19:10:19,391 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-16 19:10:19,391 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-16 19:10:19,391 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-16 19:10:19,391 - __main__ - INFO - PROXY POOL MODE for qBittorrent: 2 proxies with automatic failover
+2025-12-16 19:10:19,391 - __main__ - INFO - Using specified input file: Daily Report/Javdb_TodayTitle_20251216.csv
+2025-12-16 19:10:19,391 - __main__ - INFO - Found 16 torrent links in Daily Report/Javdb_TodayTitle_20251216.csv
+2025-12-16 19:10:19,391 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-12-16 19:10:19,547 - __main__ - INFO - Successfully logged in to qBittorrent
+2025-12-16 19:10:19,547 - __main__ - INFO - History manager imported, will update downloaded status
+2025-12-16 19:10:19,547 - __main__ - INFO - Starting to add 16 torrents to qBittorrent...
+2025-12-16 19:10:19,547 - __main__ - INFO - [1/16] Adding: ALDN-533 [Subtitle]
+2025-12-16 19:10:20,549 - __main__ - INFO - [2/16] Adding: ALDN-534 [Subtitle]
+2025-12-16 19:10:21,552 - __main__ - INFO - [3/16] Adding: ALDN-535 [Subtitle]
+2025-12-16 19:10:22,555 - __main__ - INFO - [4/16] Adding: ALDN-538 [Subtitle]
+2025-12-16 19:10:23,557 - __main__ - INFO - [5/16] Adding: START-407 [Subtitle]
+2025-12-16 19:10:24,559 - __main__ - INFO - [6/16] Adding: START-423 [Subtitle]
+2025-12-16 19:10:25,562 - __main__ - INFO - [7/16] Adding: START-458 [Subtitle]
+2025-12-16 19:10:26,564 - __main__ - INFO - [8/16] Adding: START-459 [Subtitle]
+2025-12-16 19:10:27,566 - __main__ - INFO - [9/16] Adding: START-464 [Hacked+Subtitle]
+2025-12-16 19:10:28,568 - __main__ - INFO - [10/16] Adding: START-464 [Subtitle]
+2025-12-16 19:10:29,570 - __main__ - INFO - [11/16] Adding: blackedraw.18.12.13 [Subtitle]
+2025-12-16 19:10:30,572 - __main__ - INFO - [12/16] Adding: tushy.19.03.07 [Subtitle]
+2025-12-16 19:10:31,575 - __main__ - INFO - [13/16] Adding: ASEX-008 [NoSubtitle]
+2025-12-16 19:10:32,578 - __main__ - INFO - [14/16] Adding: DANDYA-017 [NoSubtitle]
+2025-12-16 19:10:33,580 - __main__ - INFO - [15/16] Adding: TIKB-212 [NoSubtitle]
+2025-12-16 19:10:34,582 - __main__ - INFO - [16/16] Adding: FSTU-019 [NoSubtitle]
+2025-12-16 19:10:35,585 - __main__ - INFO - ==================================================
+2025-12-16 19:10:35,585 - __main__ - INFO - UPLOAD SUMMARY
+2025-12-16 19:10:35,585 - __main__ - INFO - ==================================================
+2025-12-16 19:10:35,585 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251216.csv
+2025-12-16 19:10:35,585 - __main__ - INFO - Total torrents found: 16
+2025-12-16 19:10:35,585 - __main__ - INFO - Successfully added: 16
+2025-12-16 19:10:35,585 - __main__ - INFO -   - Hacked subtitle torrents: 1
+2025-12-16 19:10:35,585 - __main__ - INFO -   - Hacked no subtitle torrents: 0
+2025-12-16 19:10:35,585 - __main__ - INFO -   - Subtitle torrents: 11
+2025-12-16 19:10:35,585 - __main__ - INFO -   - No subtitle torrents: 4
+2025-12-16 19:10:35,585 - __main__ - INFO - Failed to add: 0
+2025-12-16 19:10:35,585 - __main__ - INFO - Success rate: 100.0%
+2025-12-16 19:10:35,585 - __main__ - INFO - ==================================================
