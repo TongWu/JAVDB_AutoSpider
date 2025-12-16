@@ -917,6 +917,7 @@ def main():
     
     # Track skipped entries (for accurate statistics)
     skipped_session_count = 0
+    skipped_history_count = 0  # Track entries skipped due to history
 
     # Phase 1: Collect entries with both "含中字磁鏈" and "今日新種"/"昨日新種" tags
     if phase_mode in ['1', 'all']:
@@ -1039,6 +1040,7 @@ def main():
                 else:
                     logger.debug(
                         f"[{i}/{total_entries_phase1}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
+                skipped_history_count += 1
                 continue
 
             # Count found torrents
@@ -1223,6 +1225,7 @@ def main():
                 else:
                     logger.debug(
                         f"[{i}/{total_entries_phase2}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
+                skipped_history_count += 1
                 continue
 
             # Count found torrents
@@ -1353,7 +1356,7 @@ def main():
     logger.info(f"Successfully processed: {len(rows)}")
     logger.info(f"Skipped already parsed in this session: {skipped_session_count}")
     if use_history_for_loading and not ignore_history:
-        logger.info(f"Skipped already parsed in previous runs: {len(parsed_movies_history_phase1)}")
+        logger.info(f"Skipped already parsed in previous runs: {skipped_history_count}")
     elif ignore_history:
         logger.info("History checking was disabled (--ignore-history)")
     logger.info(f"Current parsed links in memory: {len(parsed_links)}")
