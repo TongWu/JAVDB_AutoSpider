@@ -282,11 +282,8 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
             logger.debug(f"[CF Bypass] Forcing cache refresh due to previous small response")
             cf_bypass_force_refresh = False  # Reset flag after use
         
-        # Always force refresh CF bypass cookies to avoid using stale/invalid cached cookies
-        # headers['x-bypass-cache'] = 'true'
-        
         logger.debug(f"[CF Bypass] Request Mirroring: {url} -> {actual_url}")
-        logger.debug(f"[CF Bypass] x-hostname: {target_hostname} (bypass-cache: always)")
+        logger.debug(f"[CF Bypass] x-hostname: {target_hostname}")
     else:
         # Normal mode - determine proxy configuration
         if should_use_proxy_for_module(module_name, use_proxy):
