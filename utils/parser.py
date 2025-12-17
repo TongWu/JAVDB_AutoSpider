@@ -310,15 +310,30 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
     return results
 
 
-def parse_detail(html_content, index=None):
-    """Parse the detail page to extract magnet links and actor information"""
+def parse_detail(html_content, index=None, skip_sleep=False):
+    """Parse the detail page to extract magnet links and actor information
+    
+    Args:
+        html_content: HTML content of the detail page
+        index: Index number for logging prefix
+        skip_sleep: If True, skip the sleep delay (used during fallback retries)
+    
+    Returns:
+        tuple: (magnets, actor_info, video_code, parse_success)
+            - magnets: List of magnet link dictionaries
+            - actor_info: Actor name string
+            - video_code: Video code string
+            - parse_success: True if both video_code and magnets_content were found
+    """
     # Wait to be respectful to JavDB website and avoid DDoS protection
-    time.sleep(DETAIL_PAGE_SLEEP)
+    if not skip_sleep:
+        time.sleep(DETAIL_PAGE_SLEEP)
 
     soup = BeautifulSoup(html_content, 'html.parser')
     magnets = []
     actor_info = ''
     video_code = ''
+    parse_success = True  # Track if parsing found expected elements
 
     prefix = f"[{index}]" if index is not None else ""
 
@@ -328,7 +343,8 @@ def parse_detail(html_content, index=None):
         video_code = copy_button.get('data-clipboard-text', '')
         logger.debug(f"{prefix} Found video code: {video_code}")
     else:
-        logger.warning(f"{prefix} No copy button found for video code")
+        logger.debug(f"{prefix} No copy button found for video code")
+        parse_success = False
 
     # Extract actor information from the detail page
     video_meta_panel = soup.find('div', class_='video-meta-panel')
@@ -350,8 +366,9 @@ def parse_detail(html_content, index=None):
 
     magnets_content = soup.find('div', id='magnets-content')
     if not magnets_content:
-        logger.warning(f"{prefix} No magnets content found in detail page")
-        return magnets, actor_info, video_code
+        logger.debug(f"{prefix} No magnets content found in detail page")
+        parse_success = False
+        return magnets, actor_info, video_code, parse_success
 
     for item in magnets_content.find_all('div', class_=re.compile(r'item columns is-desktop')):
         magnet_name_div = item.find('div', class_='magnet-name')
@@ -401,4 +418,4 @@ def parse_detail(html_content, index=None):
         })
 
     logger.debug(f"{prefix} Found {len(magnets)} magnet links")
-    return magnets, actor_info, video_code
+    return magnets, actor_info, video_code, parse_success
