@@ -1,42 +1,42 @@
-2025-12-17 19:00:02,048 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20251217.csv
-2025-12-17 19:00:02,048 - __main__ - INFO - ============================================================
-2025-12-17 19:00:02,048 - __main__ - INFO - STARTING JAVDB PIPELINE
-2025-12-17 19:00:02,048 - __main__ - INFO - MODE: Daily
-2025-12-17 19:00:02,048 - __main__ - INFO - ============================================================
-2025-12-17 19:00:02,048 - __main__ - INFO - Step 1: Running JavDB Spider...
-2025-12-17 19:00:02,048 - __main__ - INFO - Running: python3 Javdb_Spider.py --output-file Javdb_TodayTitle_20251217.csv --use-proxy
-2025-12-17 19:07:39,445 - __main__ - INFO - ✓ JavDB Spider completed successfully
-2025-12-17 19:07:39,445 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
-2025-12-17 19:07:39,445 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode daily --input-file Javdb_TodayTitle_20251217.csv --use-proxy
-2025-12-17 19:07:50,708 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
-2025-12-17 19:07:50,708 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
-2025-12-17 19:07:50,708 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
-2025-12-17 19:07:50,708 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-12-14)
-2025-12-17 19:07:50,708 - pikpak_bridge - INFO - Initializing proxy pool with 3 proxies...
-2025-12-17 19:07:50,709 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-12-17 19:07:50,709 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
-2025-12-17 19:07:50,710 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-17 19:07:50,710 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-17 19:07:50,710 - pikpak_bridge - INFO - Proxy pool initialized successfully
-2025-12-17 19:07:50,710 - pikpak_bridge - INFO - PROXY POOL MODE for PikPak bridge: 2 proxies with automatic failover
-2025-12-17 19:07:50,856 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
-2025-12-17 19:07:50,862 - pikpak_bridge - INFO - Found 11 torrents across categories ['Daily Ingestion', 'Ad Hoc']
-2025-12-17 19:07:50,862 - pikpak_bridge - INFO - Filtered 0 torrents older than 3 days
-2025-12-17 19:07:50,862 - pikpak_bridge - INFO - No torrents to process.
-2025-12-17 19:07:50,862 - __main__ - INFO - PikPak Bridge completed successfully
-2025-12-17 19:07:50,862 - __main__ - INFO - ✓ PikPak Bridge completed successfully
-2025-12-17 19:07:50,862 - __main__ - INFO - ============================================================
-2025-12-17 19:07:50,862 - __main__ - INFO - PIPELINE COMPLETED
-2025-12-17 19:07:50,862 - __main__ - INFO - ============================================================
-2025-12-17 19:07:50,863 - __main__ - INFO - Analyzing logs for critical errors...
-2025-12-17 19:07:50,863 - __main__ - INFO - ============================================================
-2025-12-17 19:07:50,863 - __main__ - INFO - PIPELINE COMPLETED SUCCESSFULLY - NO CRITICAL ERRORS
-2025-12-17 19:07:50,863 - __main__ - INFO - ============================================================
-2025-12-17 19:07:50,865 - __main__ - INFO - Connecting to SMTP server...
-2025-12-17 19:07:54,180 - __main__ - INFO - Email sent successfully.
-2025-12-17 19:07:54,181 - __main__ - INFO - Final commit for pipeline log...
-2025-12-17 19:07:54,181 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
-2025-12-17 19:07:54,190 - __main__ - INFO - Pulling latest changes from remote repository...
-2025-12-17 19:07:54,194 - __main__ - WARNING - Pull failed (this might be normal for new repos): Command ['git', 'pull', 'https://tongwu:ghp_***MASKED***@github.com/TongWu/JAVDB_AutoSpider.git', 'main'] returned non-zero exit status 128
-2025-12-17 19:07:54,194 - __main__ - INFO - Adding files to git...
-2025-12-17 19:07:54,211 - __main__ - INFO - Commit changes for pipeline_log
+2025-12-17 20:02:13,293 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20251217.csv
+2025-12-17 20:02:13,294 - __main__ - INFO - ============================================================
+2025-12-17 20:02:13,294 - __main__ - INFO - STARTING JAVDB PIPELINE
+2025-12-17 20:02:13,294 - __main__ - INFO - MODE: Daily
+2025-12-17 20:02:13,294 - __main__ - INFO - ============================================================
+2025-12-17 20:02:13,294 - __main__ - INFO - Step 1: Running JavDB Spider...
+2025-12-17 20:02:13,294 - __main__ - INFO - Running: python3 Javdb_Spider.py --output-file Javdb_TodayTitle_20251217.csv --use-proxy
+2025-12-17 20:08:42,546 - __main__ - INFO - ✓ JavDB Spider completed successfully
+2025-12-17 20:08:42,546 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
+2025-12-17 20:08:42,546 - __main__ - INFO - Running: python3 qbtorrent_uploader.py --mode daily --input-file Javdb_TodayTitle_20251217.csv --use-proxy
+2025-12-17 20:08:53,816 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
+2025-12-17 20:08:53,816 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
+2025-12-17 20:08:53,816 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
+2025-12-17 20:08:53,816 - pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-12-14)
+2025-12-17 20:08:53,816 - pikpak_bridge - INFO - Initializing proxy pool with 3 proxies...
+2025-12-17 20:08:53,817 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
+2025-12-17 20:08:53,817 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
+2025-12-17 20:08:53,817 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-17 20:08:53,817 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-17 20:08:53,817 - pikpak_bridge - INFO - Proxy pool initialized successfully
+2025-12-17 20:08:53,817 - pikpak_bridge - INFO - PROXY POOL MODE for PikPak bridge: 2 proxies with automatic failover
+2025-12-17 20:08:53,968 - pikpak_bridge - INFO - Logged into qBittorrent successfully.
+2025-12-17 20:08:53,974 - pikpak_bridge - INFO - Found 11 torrents across categories ['Daily Ingestion', 'Ad Hoc']
+2025-12-17 20:08:53,974 - pikpak_bridge - INFO - Filtered 0 torrents older than 3 days
+2025-12-17 20:08:53,974 - pikpak_bridge - INFO - No torrents to process.
+2025-12-17 20:08:53,974 - __main__ - INFO - PikPak Bridge completed successfully
+2025-12-17 20:08:53,974 - __main__ - INFO - ✓ PikPak Bridge completed successfully
+2025-12-17 20:08:53,974 - __main__ - INFO - ============================================================
+2025-12-17 20:08:53,974 - __main__ - INFO - PIPELINE COMPLETED
+2025-12-17 20:08:53,974 - __main__ - INFO - ============================================================
+2025-12-17 20:08:53,974 - __main__ - INFO - Analyzing logs for critical errors...
+2025-12-17 20:08:53,975 - __main__ - INFO - ============================================================
+2025-12-17 20:08:53,975 - __main__ - INFO - PIPELINE COMPLETED SUCCESSFULLY - NO CRITICAL ERRORS
+2025-12-17 20:08:53,975 - __main__ - INFO - ============================================================
+2025-12-17 20:08:53,977 - __main__ - INFO - Connecting to SMTP server...
+2025-12-17 20:08:57,184 - __main__ - INFO - Email sent successfully.
+2025-12-17 20:08:57,184 - __main__ - INFO - Final commit for pipeline log...
+2025-12-17 20:08:57,184 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
+2025-12-17 20:08:57,198 - __main__ - INFO - Pulling latest changes from remote repository...
+2025-12-17 20:08:57,200 - __main__ - WARNING - Pull failed (this might be normal for new repos): Command ['git', 'pull', 'https://tongwu:ghp_***MASKED***@github.com/TongWu/JAVDB_AutoSpider.git', 'main'] returned non-zero exit status 128
+2025-12-17 20:08:57,200 - __main__ - INFO - Adding files to git...
+2025-12-17 20:08:57,206 - __main__ - INFO - Commit changes for pipeline_log
