@@ -12,6 +12,11 @@ from bs4.element import Tag
 from urllib.parse import urljoin, urlparse
 from datetime import datetime
 
+# Change to project root directory (parent of scripts folder)
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(project_root)
+sys.path.insert(0, project_root)
+
 # Import utility functions
 from utils.history_manager import load_parsed_movies_history, save_parsed_movie_to_history, should_process_movie, \
     determine_torrent_types, get_missing_torrent_types, validate_history_file
@@ -25,7 +30,8 @@ try:
         DAILY_REPORT_DIR, AD_HOC_DIR, PARSED_MOVIES_CSV,
         SPIDER_LOG_FILE, LOG_LEVEL, DETAIL_PAGE_SLEEP, PAGE_SLEEP, MOVIE_SLEEP,
         JAVDB_SESSION_COOKIE, PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS,
-        PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES
+        PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES,
+        CF_TURNSTILE_COOLDOWN, PHASE_TRANSITION_COOLDOWN, FALLBACK_COOLDOWN
     )
 except ImportError:
     # Fallback values if config.py doesn't exist
@@ -46,6 +52,9 @@ except ImportError:
     PROXY_HTTP = None
     PROXY_HTTPS = None
     PROXY_MODULES = ['all']
+    CF_TURNSTILE_COOLDOWN = 10
+    PHASE_TRANSITION_COOLDOWN = 30
+    FALLBACK_COOLDOWN = 30
 
 # Import CloudFlare bypass configuration (with fallback)
 try:
@@ -62,8 +71,6 @@ except ImportError:
     PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 days (691200 seconds)
     PROXY_POOL_MAX_FAILURES = 3
 
-os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
-
 # Configure logging
 from utils.logging_config import setup_logging, get_logger
 setup_logging(SPIDER_LOG_FILE, LOG_LEVEL)
@@ -74,6 +81,10 @@ from utils.proxy_pool import ProxyPool, create_proxy_pool_from_config
 
 # Global proxy pool instance (will be initialized in main)
 global_proxy_pool: Optional[ProxyPool] = None
+
+# Counter for consecutive CF bypass failures (small responses)
+cf_bypass_failure_count: int = 0
+CF_BYPASS_MAX_FAILURES: int = 3  # Disable CF bypass after this many consecutive small responses
 
 # Global set to track parsed links
 parsed_links = set()
@@ -210,7 +221,7 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
         max_retries: Maximum number of retries with different proxies (only for proxy pool mode)
         use_cf_bypass: Whether to use CF bypass service (Request Mirroring mode)
     """
-    global global_proxy_pool
+    global global_proxy_pool, cf_bypass_failure_count
     
     if session is None:
         session = requests.Session()
@@ -265,6 +276,12 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
         # Add x-hostname header (required for Request Mirroring)
         headers['x-hostname'] = target_hostname
         
+        # Check if we need to force refresh CF bypass cookies
+        if cf_bypass_force_refresh:
+            headers['x-bypass-cache'] = 'true'
+            logger.debug(f"[CF Bypass] Forcing cache refresh due to previous small response")
+            cf_bypass_force_refresh = False  # Reset flag after use
+        
         logger.debug(f"[CF Bypass] Request Mirroring: {url} -> {actual_url}")
         logger.debug(f"[CF Bypass] x-hostname: {target_hostname}")
     else:
@@ -303,13 +320,39 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
             
             response = session.get(actual_url, headers=headers, proxies=proxies, timeout=60 if use_cf_bypass else 30)
             response.raise_for_status()
-            logger.debug(f"Successfully fetched URL: {url}")
+            logger.debug(f"Successfully fetched URL: {url} (Content-Length: {len(response.content)} bytes)")
             
             # Mark proxy as successful if using proxy pool
             if use_proxy_pool_mode and global_proxy_pool is not None:
                 global_proxy_pool.mark_success()
             
             html_content = response.text
+            
+            # Check for Cloudflare Turnstile verification page (indicates we're being challenged)
+            if 'Security Verification' in html_content and 'turnstile' in html_content.lower():
+                logger.warning(f"Cloudflare Turnstile verification page detected for {url} (Size: {len(html_content)} bytes). Waiting {CF_TURNSTILE_COOLDOWN}s before retry...")
+                time.sleep(CF_TURNSTILE_COOLDOWN)
+                return None  # Return None to trigger retry/fallback mechanism
+            
+            # Check for suspiciously small response (likely incomplete page without magnets)
+            # Normal detail pages are 50000+ bytes, index pages are 70000+ bytes
+            # Pages under 10000 bytes are likely protection pages or incomplete responses
+            if len(html_content) < 10000:
+                if use_cf_bypass:
+                    cf_bypass_failure_count += 1
+                    logger.warning(f"CF Bypass returned small response for {url} (Size: {len(html_content)} bytes). Failure count: {cf_bypass_failure_count}/{CF_BYPASS_MAX_FAILURES}")
+                    
+                    if cf_bypass_failure_count >= CF_BYPASS_MAX_FAILURES:
+                        logger.error(f"CF Bypass has failed {cf_bypass_failure_count} times consecutively. CF Bypass service may not be working properly. Consider restarting the CF Bypass container.")
+                    
+                    return None  # Return None to trigger fallback (try Proxy Direct instead)
+                elif '/v/' in url:
+                    logger.warning(f"Suspiciously small response for detail page {url} (Size: {len(html_content)} bytes).")
+            else:
+                # Reset failure count on successful response
+                if use_cf_bypass and cf_bypass_failure_count > 0:
+                    logger.info(f"CF Bypass recovered - resetting failure count from {cf_bypass_failure_count} to 0")
+                    cf_bypass_failure_count = 0
             
             # Check for age verification modal and bypass if needed
             soup = BeautifulSoup(html_content, 'html.parser')
@@ -1078,11 +1121,12 @@ def main():
                 is_adhoc_mode=custom_url is not None  # Don't ban proxies in ad hoc mode
             )
             
-            # Update global settings if fallback changed them (to be persistent for next pages/details)
+            # If fallback was triggered (settings changed), apply cooldown but DON'T persist the settings
+            # Next page/item should start fresh with original settings and wait for fallback if needed
             if has_movie_list and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass):
-                logger.info(f"Updating session settings based on successful fallback: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}")
-                use_proxy = effective_use_proxy
-                use_cf_bypass = effective_use_cf_bypass
+                logger.info(f"[Page {page_num}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). Applying {FALLBACK_COOLDOWN}s cooldown before next page...")
+                time.sleep(FALLBACK_COOLDOWN)
+                # Note: NOT updating use_proxy/use_cf_bypass - next page will use original settings
             
             if proxy_was_banned:
                 any_proxy_banned = True
@@ -1139,6 +1183,7 @@ def main():
         for i, entry in enumerate(all_index_results, 1):
             href = entry['href']
             page_num = entry['page']
+            fallback_triggered = False  # Track if fallback was triggered for this entry
 
             # Skip if already parsed in this session
             if href in parsed_links:
@@ -1162,14 +1207,16 @@ def main():
                 is_adhoc_mode=custom_url is not None
             )
             
-            # Update global settings if fallback changed them
-            if parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass):
-                logger.info(f"[{i}/{total_entries_phase1}] Updating session settings based on successful fallback: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}")
-                use_proxy = effective_use_proxy
-                use_cf_bypass = effective_use_cf_bypass
+            # If fallback was triggered (settings changed), apply cooldown but DON'T persist the settings
+            # Next item should start fresh with original settings and wait for fallback if needed
+            fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
+            if fallback_triggered:
+                logger.info(f"[{i}/{total_entries_phase1}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). Will apply {FALLBACK_COOLDOWN}s cooldown after processing...")
+                # Note: NOT updating use_proxy/use_cf_bypass - next item will use original settings
             
             if not parse_success and not magnets:
                 logger.error(f"[{i}/{total_entries_phase1}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
+                time.sleep(MOVIE_SLEEP)  # Respect rate limiting even on failure
                 continue
             
             magnet_links = extract_magnets(magnets, i)
@@ -1190,6 +1237,7 @@ def main():
                     logger.debug(
                         f"[{i}/{total_entries_phase1}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
                 skipped_history_count += 1
+                time.sleep(MOVIE_SLEEP)  # Respect rate limiting even when skipping
                 continue
 
             # Count found torrents
@@ -1209,6 +1257,7 @@ def main():
             row = create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet_links,
                                                      parsed_movies_history_phase1)
             # Override the title with video_code
+            video_code = entry['video_code']
             row['video_code'] = video_code
 
             # Only add row if it contains new torrent categories (excluding already downloaded ones)
@@ -1246,13 +1295,24 @@ def main():
                     f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipped CSV entry - all torrent categories already in history")
                 # Don't update history if no new torrents were found
 
-            # Small delay to be respectful to the server
-            time.sleep(MOVIE_SLEEP)
+            # Apply appropriate delay
+            if fallback_triggered:
+                # Extra cooldown after fallback to let Cloudflare/server recover
+                logger.debug(f"[{i}/{total_entries_phase1}] Applying fallback cooldown: {FALLBACK_COOLDOWN}s")
+                time.sleep(FALLBACK_COOLDOWN)
+            else:
+                # Normal delay between items
+                time.sleep(MOVIE_SLEEP)
 
         logger.info(f"Phase 1 completed: {len(phase1_rows)} entries processed")
 
     # Phase 2: Collect entries with only "今日新種"/"昨日新種" tag (filtered by quality)
     if phase_mode in ['2', 'all']:
+        # Add cooldown delay between phases to avoid triggering Cloudflare protection
+        if phase_mode == 'all':
+            logger.info(f"Waiting {PHASE_TRANSITION_COOLDOWN} seconds before Phase 2 to allow Cloudflare cooldown...")
+            time.sleep(PHASE_TRANSITION_COOLDOWN)
+        
         logger.info("=" * 50)
         logger.info(f"PHASE 2: Processing entries with only today/yesterday tag (rate > {PHASE2_MIN_RATE}, comments > {PHASE2_MIN_COMMENTS})")
         logger.info("=" * 50)
@@ -1276,11 +1336,12 @@ def main():
                 is_adhoc_mode=custom_url is not None  # Don't ban proxies in ad hoc mode
             )
             
-            # Update global settings if fallback changed them
+            # If fallback was triggered (settings changed), apply cooldown but DON'T persist the settings
+            # Next page/item should start fresh with original settings and wait for fallback if needed
             if has_movie_list and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass):
-                logger.info(f"Updating session settings based on successful fallback: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}")
-                use_proxy = effective_use_proxy
-                use_cf_bypass = effective_use_cf_bypass
+                logger.info(f"[Page {page_num}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). Applying {FALLBACK_COOLDOWN}s cooldown before next page...")
+                time.sleep(FALLBACK_COOLDOWN)
+                # Note: NOT updating use_proxy/use_cf_bypass - next page will use original settings
             
             if proxy_was_banned:
                 any_proxy_banned_phase2 = True
@@ -1337,11 +1398,13 @@ def main():
         for i, entry in enumerate(all_index_results_phase2, 1):
             href = entry['href']
             page_num = entry['page']
+            fallback_triggered = False  # Track if fallback was triggered for this entry
 
             # Skip if already parsed in this session
             if href in parsed_links:
                 logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping already parsed in this session")
                 skipped_session_count += 1
+                # No sleep needed here - we haven't made any request yet
                 continue
 
             # Add to parsed links set for this session
@@ -1360,14 +1423,16 @@ def main():
                 is_adhoc_mode=custom_url is not None
             )
             
-            # Update global settings if fallback changed them
-            if parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass):
-                logger.info(f"[P2-{i}/{total_entries_phase2}] Updating session settings based on successful fallback: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}")
-                use_proxy = effective_use_proxy
-                use_cf_bypass = effective_use_cf_bypass
+            # If fallback was triggered (settings changed), apply cooldown but DON'T persist the settings
+            # Next item should start fresh with original settings and wait for fallback if needed
+            fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
+            if fallback_triggered:
+                logger.info(f"[P2-{i}/{total_entries_phase2}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). Will apply {FALLBACK_COOLDOWN}s cooldown after processing...")
+                # Note: NOT updating use_proxy/use_cf_bypass - next item will use original settings
             
             if not parse_success and not magnets:
                 logger.error(f"[{i}/{total_entries_phase2}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
+                time.sleep(MOVIE_SLEEP)  # Respect rate limiting even on failure
                 continue
             
             magnet_links = extract_magnets(magnets, f"P2-{i}")
@@ -1388,6 +1453,7 @@ def main():
                     logger.debug(
                         f"[{i}/{total_entries_phase2}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
                 skipped_history_count += 1
+                time.sleep(MOVIE_SLEEP)  # Respect rate limiting even when skipping
                 continue
 
             # Count found torrents
@@ -1407,6 +1473,7 @@ def main():
             row = create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet_links,
                                                      parsed_movies_history_phase2)
             # Override the title with video_code
+            video_code = entry['video_code']
             row['video_code'] = video_code
 
             # Only add row if it contains new torrent categories (excluding already downloaded ones)
@@ -1444,8 +1511,14 @@ def main():
                     f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipped CSV entry - all torrent categories already in history")
                 # Don't update history if no new torrents were found
 
-            # Small delay to be respectful to the server
-            time.sleep(MOVIE_SLEEP)
+            # Apply appropriate delay
+            if fallback_triggered:
+                # Extra cooldown after fallback to let Cloudflare/server recover
+                logger.debug(f"[P2-{i}/{total_entries_phase2}] Applying fallback cooldown: {FALLBACK_COOLDOWN}s")
+                time.sleep(FALLBACK_COOLDOWN)
+            else:
+                # Normal delay between items
+                time.sleep(MOVIE_SLEEP)
 
         logger.info(f"Phase 2 completed: {len(phase2_rows)} entries processed")
 
@@ -1588,3 +1661,4 @@ def main():
 
 if __name__ == '__main__':
     main() 
+
