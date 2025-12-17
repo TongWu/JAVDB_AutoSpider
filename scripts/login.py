@@ -6,7 +6,7 @@ Automatically logs into JavDB and extracts the session cookie.
 Updates config.py with the new session cookie.
 
 Usage:
-    python3 javdb_login.py
+    python3 scripts/login.py
     
 Requirements:
     - JAVDB_USERNAME and JAVDB_PASSWORD must be set in config.py
@@ -20,6 +20,11 @@ import os
 import base64
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+
+# Change to project root directory (parent of scripts folder)
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(project_root)
+sys.path.insert(0, project_root)
 
 # Import captcha solver
 try:
@@ -405,7 +410,7 @@ def main():
         print("1. Open config.py")
         print("2. Set JAVDB_USERNAME = 'your_email_or_username'")
         print("3. Set JAVDB_PASSWORD = 'your_password'")
-        print("4. Run: python3 javdb_login.py")
+        print("4. Run: python3 scripts/login.py")
         print("5. Enter captcha code when prompted")
         sys.exit(1)
     
@@ -449,7 +454,7 @@ def main():
             print()
             print("The new session cookie has been saved to config.py")
             print("You can now use the spider with --url parameter:")
-            print("  python3 Javdb_Spider.py --url https://javdb.com/actors/...")
+            print("  python3 scripts/spider.py --url https://javdb.com/actors/...")
             
             # Cleanup captcha image
             try:
