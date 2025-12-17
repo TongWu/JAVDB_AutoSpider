@@ -3,9 +3,15 @@ import argparse
 import csv
 import os
 import time
+import sys
 from datetime import datetime, timedelta
 import requests
 from pikpakapi import PikPakApi
+
+# Change to project root directory (parent of scripts folder)
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(project_root)
+sys.path.insert(0, project_root)
 
 from config import QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD, PIKPAK_EMAIL, PIKPAK_PASSWORD, PIKPAK_LOG_FILE, DAILY_REPORT_DIR, TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC
 
@@ -494,3 +500,4 @@ if __name__ == "__main__":
     batch_mode = not args.individual
     
     pikpak_bridge(args.days, args.dry_run, batch_mode, args.use_proxy)
+
