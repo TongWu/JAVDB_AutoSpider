@@ -1,28 +1,49 @@
-2025-12-17 21:29:09,579 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20251217.csv
-2025-12-17 21:29:09,580 - __main__ - INFO - ============================================================
-2025-12-17 21:29:09,580 - __main__ - INFO - STARTING JAVDB PIPELINE
-2025-12-17 21:29:09,580 - __main__ - INFO - MODE: Daily
-2025-12-17 21:29:09,580 - __main__ - INFO - ============================================================
-2025-12-17 21:29:09,580 - __main__ - INFO - Step 1: Running JavDB Spider...
-2025-12-17 21:29:09,580 - __main__ - INFO - Running: python3 scripts/spider.py --output-file Javdb_TodayTitle_20251217.csv --use-proxy
-2025-12-17 21:35:04,124 - __main__ - ERROR - Script scripts/spider.py failed with return code 2
-2025-12-17 21:35:04,125 - __main__ - ERROR - ============================================================
-2025-12-17 21:35:04,125 - __main__ - ERROR - PIPELINE EXECUTION ERROR
-2025-12-17 21:35:04,125 - __main__ - ERROR - ============================================================
-2025-12-17 21:35:04,125 - __main__ - ERROR - Error: Script scripts/spider.py failed with return code 2
-2025-12-17 21:35:04,125 - __main__ - INFO - Analyzing logs for critical errors...
-2025-12-17 21:35:04,126 - __main__ - ERROR - CRITICAL ERROR in Spider: Proxy ban detected - one or more proxies were blocked by JavDB
-2025-12-17 21:35:04,126 - __main__ - ERROR - ============================================================
-2025-12-17 21:35:04,126 - __main__ - ERROR - PIPELINE FAILED - CRITICAL ERRORS DETECTED
-2025-12-17 21:35:04,126 - __main__ - ERROR - ============================================================
-2025-12-17 21:35:04,126 - __main__ - ERROR -   - Pipeline execution error: Script scripts/spider.py failed with return code 2
-2025-12-17 21:35:04,126 - __main__ - ERROR -   - Spider: Proxy ban detected - one or more proxies were blocked by JavDB
-2025-12-17 21:35:04,131 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-12-17 21:35:04,134 - __main__ - INFO - Connecting to SMTP server...
-2025-12-17 21:35:09,141 - __main__ - INFO - Email sent successfully.
-2025-12-17 21:35:09,141 - __main__ - INFO - Final commit for pipeline log...
-2025-12-17 21:35:09,141 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
-2025-12-17 21:35:09,170 - __main__ - INFO - Pulling latest changes from remote repository...
-2025-12-17 21:35:09,885 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
-2025-12-17 21:35:09,885 - __main__ - INFO - Adding files to git...
-2025-12-17 21:35:09,947 - __main__ - INFO - Commit changes for pipeline_log
+2025-12-17 21:46:32,500 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20251217.csv
+2025-12-17 21:46:32,500 - __main__ - INFO - ============================================================
+2025-12-17 21:46:32,500 - __main__ - INFO - STARTING JAVDB PIPELINE
+2025-12-17 21:46:32,500 - __main__ - INFO - MODE: Daily
+2025-12-17 21:46:32,500 - __main__ - INFO - ============================================================
+2025-12-17 21:46:32,500 - __main__ - INFO - Step 1: Running JavDB Spider...
+2025-12-17 21:46:32,500 - __main__ - INFO - Running: python3 scripts/spider.py --output-file Javdb_TodayTitle_20251217.csv --use-proxy
+2025-12-17 21:59:50,926 - __main__ - INFO - ✓ JavDB Spider completed successfully
+2025-12-17 21:59:50,927 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
+2025-12-17 21:59:50,927 - __main__ - INFO - Running: python3 scripts/qb_uploader.py --mode daily --input-file Javdb_TodayTitle_20251217.csv --use-proxy
+2025-12-17 22:00:03,487 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
+2025-12-17 22:00:03,488 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
+2025-12-17 22:00:03,488 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
+2025-12-17 22:00:03,488 - scripts.pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-12-14)
+2025-12-17 22:00:03,488 - scripts.pikpak_bridge - INFO - Initializing proxy pool with 3 proxies...
+2025-12-17 22:00:03,490 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
+2025-12-17 22:00:03,490 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
+2025-12-17 22:00:03,491 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-17 22:00:03,491 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-17 22:00:03,491 - scripts.pikpak_bridge - INFO - Proxy pool initialized successfully
+2025-12-17 22:00:03,491 - scripts.pikpak_bridge - INFO - PROXY POOL MODE for PikPak bridge: 2 proxies with automatic failover
+2025-12-17 22:00:03,498 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 101.100.165.240:12301
+2025-12-17 22:00:03,666 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/auth/login HTTP/1.1" 200 3
+2025-12-17 22:00:03,666 - scripts.pikpak_bridge - INFO - Logged into qBittorrent successfully.
+2025-12-17 22:00:03,676 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "GET /api/v2/torrents/info?category=Daily+Ingestion&filter=downloading HTTP/1.1" 200 1862
+2025-12-17 22:00:03,676 - scripts.pikpak_bridge - DEBUG - Found 12 torrents in category 'Daily Ingestion'
+2025-12-17 22:00:03,682 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "GET /api/v2/torrents/info?category=Ad+Hoc&filter=downloading HTTP/1.1" 200 2
+2025-12-17 22:00:03,682 - scripts.pikpak_bridge - DEBUG - Found 0 torrents in category 'Ad Hoc'
+2025-12-17 22:00:03,682 - scripts.pikpak_bridge - INFO - Found 12 torrents across categories ['Daily Ingestion', 'Ad Hoc']
+2025-12-17 22:00:03,682 - scripts.pikpak_bridge - INFO - Filtered 0 torrents older than 3 days
+2025-12-17 22:00:03,682 - scripts.pikpak_bridge - INFO - No torrents to process.
+2025-12-17 22:00:03,682 - __main__ - INFO - PikPak Bridge completed successfully
+2025-12-17 22:00:03,682 - __main__ - INFO - ✓ PikPak Bridge completed successfully
+2025-12-17 22:00:03,682 - __main__ - INFO - ============================================================
+2025-12-17 22:00:03,682 - __main__ - INFO - PIPELINE COMPLETED
+2025-12-17 22:00:03,682 - __main__ - INFO - ============================================================
+2025-12-17 22:00:03,682 - __main__ - INFO - Analyzing logs for critical errors...
+2025-12-17 22:00:03,683 - __main__ - INFO - ============================================================
+2025-12-17 22:00:03,683 - __main__ - INFO - PIPELINE COMPLETED SUCCESSFULLY - NO CRITICAL ERRORS
+2025-12-17 22:00:03,683 - __main__ - INFO - ============================================================
+2025-12-17 22:00:03,689 - __main__ - INFO - Connecting to SMTP server...
+2025-12-17 22:00:10,346 - __main__ - INFO - Email sent successfully.
+2025-12-17 22:00:10,346 - __main__ - INFO - Final commit for pipeline log...
+2025-12-17 22:00:10,347 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
+2025-12-17 22:00:10,362 - __main__ - INFO - Current branch: dev
+2025-12-17 22:00:10,393 - __main__ - INFO - Pulling latest changes from remote repository (branch: dev)...
+2025-12-17 22:00:11,013 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
+2025-12-17 22:00:11,013 - __main__ - INFO - Adding files to git...
+2025-12-17 22:00:11,088 - __main__ - INFO - Commit changes for pipeline_log
