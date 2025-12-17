@@ -6,6 +6,12 @@ import time
 import os
 import argparse
 import sys
+
+# Change to project root directory (parent of scripts folder)
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(project_root)
+sys.path.insert(0, project_root)
+
 # Import unified configuration
 try:
     from config import (
@@ -56,8 +62,6 @@ except ImportError:
     def is_downloaded_torrent(torrent_content):
         """Check if torrent content contains downloaded indicator"""
         return torrent_content.strip().startswith("[DOWNLOADED]")
-
-os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
 # Configure logging
 from utils.logging_config import setup_logging, get_logger
@@ -470,3 +474,4 @@ def main():
 
 if __name__ == '__main__':
     main() 
+
