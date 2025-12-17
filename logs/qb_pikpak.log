@@ -1,28 +1,28 @@
-2025-12-17 21:20:24,394 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20251217.csv
-2025-12-17 21:20:24,394 - __main__ - INFO - ============================================================
-2025-12-17 21:20:24,394 - __main__ - INFO - STARTING JAVDB PIPELINE
-2025-12-17 21:20:24,394 - __main__ - INFO - MODE: Daily
-2025-12-17 21:20:24,394 - __main__ - INFO - ============================================================
-2025-12-17 21:20:24,394 - __main__ - INFO - Step 1: Running JavDB Spider...
-2025-12-17 21:20:24,394 - __main__ - INFO - Running: python3 scripts/spider.py --output-file Javdb_TodayTitle_20251217.csv --use-proxy
-2025-12-17 21:26:23,797 - __main__ - ERROR - Script scripts/spider.py failed with return code 2
-2025-12-17 21:26:23,798 - __main__ - ERROR - ============================================================
-2025-12-17 21:26:23,799 - __main__ - ERROR - PIPELINE EXECUTION ERROR
-2025-12-17 21:26:23,799 - __main__ - ERROR - ============================================================
-2025-12-17 21:26:23,799 - __main__ - ERROR - Error: Script scripts/spider.py failed with return code 2
-2025-12-17 21:26:23,799 - __main__ - INFO - Analyzing logs for critical errors...
-2025-12-17 21:26:23,799 - __main__ - ERROR - CRITICAL ERROR in Spider: Proxy ban detected - one or more proxies were blocked by JavDB
-2025-12-17 21:26:23,799 - __main__ - ERROR - ============================================================
-2025-12-17 21:26:23,799 - __main__ - ERROR - PIPELINE FAILED - CRITICAL ERRORS DETECTED
-2025-12-17 21:26:23,799 - __main__ - ERROR - ============================================================
-2025-12-17 21:26:23,799 - __main__ - ERROR -   - Pipeline execution error: Script scripts/spider.py failed with return code 2
-2025-12-17 21:26:23,799 - __main__ - ERROR -   - Spider: Proxy ban detected - one or more proxies were blocked by JavDB
-2025-12-17 21:26:23,803 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-12-17 21:26:23,806 - __main__ - INFO - Connecting to SMTP server...
-2025-12-17 21:26:27,201 - __main__ - INFO - Email sent successfully.
-2025-12-17 21:26:27,201 - __main__ - INFO - Final commit for pipeline log...
-2025-12-17 21:26:27,202 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
-2025-12-17 21:26:27,243 - __main__ - INFO - Pulling latest changes from remote repository...
-2025-12-17 21:26:27,908 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
-2025-12-17 21:26:27,909 - __main__ - INFO - Adding files to git...
-2025-12-17 21:26:27,975 - __main__ - INFO - Commit changes for pipeline_log
+2025-12-17 21:29:09,579 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20251217.csv
+2025-12-17 21:29:09,580 - __main__ - INFO - ============================================================
+2025-12-17 21:29:09,580 - __main__ - INFO - STARTING JAVDB PIPELINE
+2025-12-17 21:29:09,580 - __main__ - INFO - MODE: Daily
+2025-12-17 21:29:09,580 - __main__ - INFO - ============================================================
+2025-12-17 21:29:09,580 - __main__ - INFO - Step 1: Running JavDB Spider...
+2025-12-17 21:29:09,580 - __main__ - INFO - Running: python3 scripts/spider.py --output-file Javdb_TodayTitle_20251217.csv --use-proxy
+2025-12-17 21:35:04,124 - __main__ - ERROR - Script scripts/spider.py failed with return code 2
+2025-12-17 21:35:04,125 - __main__ - ERROR - ============================================================
+2025-12-17 21:35:04,125 - __main__ - ERROR - PIPELINE EXECUTION ERROR
+2025-12-17 21:35:04,125 - __main__ - ERROR - ============================================================
+2025-12-17 21:35:04,125 - __main__ - ERROR - Error: Script scripts/spider.py failed with return code 2
+2025-12-17 21:35:04,125 - __main__ - INFO - Analyzing logs for critical errors...
+2025-12-17 21:35:04,126 - __main__ - ERROR - CRITICAL ERROR in Spider: Proxy ban detected - one or more proxies were blocked by JavDB
+2025-12-17 21:35:04,126 - __main__ - ERROR - ============================================================
+2025-12-17 21:35:04,126 - __main__ - ERROR - PIPELINE FAILED - CRITICAL ERRORS DETECTED
+2025-12-17 21:35:04,126 - __main__ - ERROR - ============================================================
+2025-12-17 21:35:04,126 - __main__ - ERROR -   - Pipeline execution error: Script scripts/spider.py failed with return code 2
+2025-12-17 21:35:04,126 - __main__ - ERROR -   - Spider: Proxy ban detected - one or more proxies were blocked by JavDB
+2025-12-17 21:35:04,131 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
+2025-12-17 21:35:04,134 - __main__ - INFO - Connecting to SMTP server...
+2025-12-17 21:35:09,141 - __main__ - INFO - Email sent successfully.
+2025-12-17 21:35:09,141 - __main__ - INFO - Final commit for pipeline log...
+2025-12-17 21:35:09,141 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
+2025-12-17 21:35:09,170 - __main__ - INFO - Pulling latest changes from remote repository...
+2025-12-17 21:35:09,885 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
+2025-12-17 21:35:09,885 - __main__ - INFO - Adding files to git...
+2025-12-17 21:35:09,947 - __main__ - INFO - Commit changes for pipeline_log
