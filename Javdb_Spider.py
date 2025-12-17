@@ -530,6 +530,142 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
     return last_failed_html, False, proxy_was_banned, use_proxy, use_cf_bypass
 
 
+def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, use_cf_bypass, entry_index, is_adhoc_mode=False):
+    """
+    Fetch detail page with smart multi-level fallback mechanism.
+    Similar to fetch_index_page_with_fallback, but validates using parse_detail success.
+    
+    Note: Unlike index page fallback, this function does NOT mark proxies as banned on failure,
+    because detail page failures are often due to page-specific issues (login required, 
+    page not found, etc.) rather than proxy problems.
+    
+    Fallback Hierarchy:
+    1. Initial Attempt: Use provided settings (e.g. No Proxy, No CF).
+    2. Proxy Pool Iteration: If initial failed, iterate through proxies.
+       For each proxy:
+       a. Try Direct Proxy (No CF)
+       b. Try Proxy + CF Bypass
+       c. If both fail, switch to next proxy (no ban marking).
+    
+    Args:
+        detail_url: URL to fetch
+        session: requests.Session object
+        use_cookie: Whether to use session cookie
+        use_proxy: Whether proxy is currently enabled
+        use_cf_bypass: Whether CF bypass is currently enabled
+        entry_index: Current entry index (for logging)
+        is_adhoc_mode: Unused, kept for API compatibility
+    
+    Returns:
+        tuple: (magnets, actor_info, video_code, parse_success, effective_use_proxy, effective_use_cf_bypass)
+            - magnets: List of magnet link dictionaries
+            - actor_info: Actor name string
+            - video_code: Video code string
+            - parse_success: True if parsing was successful
+            - effective_use_proxy: The proxy setting that eventually worked
+            - effective_use_cf_bypass: The CF bypass setting that eventually worked
+    """
+    global global_proxy_pool
+    
+    last_result = ([], '', '', False)  # Store result from failed attempts (magnets, actor_info, video_code, parse_success)
+    
+    # --- Helper function to attempt fetch, parse and validate ---
+    def try_fetch_and_parse(u_proxy, u_cf, context_msg, skip_sleep=False):
+        nonlocal last_result
+        logger.debug(f"[{entry_index}] {context_msg}...")
+        try:
+            html = get_page(detail_url, session, use_cookie=use_cookie,
+                            use_proxy=u_proxy, module_name='spider_detail',
+                            use_cf_bypass=u_cf)
+            if html:
+                # Parse detail page with skip_sleep for retry attempts
+                magnets, actor_info, video_code, parse_success = parse_detail(html, entry_index, skip_sleep=skip_sleep)
+                
+                if parse_success:
+                    logger.debug(f"[{entry_index}] Success: {context_msg}")
+                    return magnets, actor_info, video_code, True
+                else:
+                    # Fetched HTML but parsing failed (missing expected elements)
+                    # Store it as potential return value if all fallbacks fail
+                    last_result = (magnets, actor_info, video_code, False)
+                    logger.debug(f"[{entry_index}] Parse validation failed (missing video_code or magnets): {context_msg}")
+            else:
+                logger.debug(f"[{entry_index}] Failed to fetch HTML: {context_msg}")
+        except Exception as e:
+            logger.debug(f"[{entry_index}] Failed {context_msg}: {e}")
+        return [], '', '', False
+
+    # --- Phase 0: Initial Attempt (User Config) ---
+    current_proxy_name = global_proxy_pool.get_current_proxy_name() if (use_proxy and global_proxy_pool) else "None"
+    magnets, actor_info, video_code, success = try_fetch_and_parse(
+        use_proxy, use_cf_bypass, 
+        f"Detail Initial attempt (Proxy={use_proxy}, CF={use_cf_bypass}, Node={current_proxy_name})",
+        skip_sleep=False  # First attempt should respect sleep
+    )
+    if success:
+        return magnets, actor_info, video_code, True, use_proxy, use_cf_bypass
+
+    logger.warning(f"[{entry_index}] Detail page initial attempt failed. Starting smart fallback mechanism...")
+
+    # --- Phase 1: Local CF Fallback (Only if we started with No Proxy & No CF) ---
+    # Disabled by default: Don't automatically try CF Bypass if user didn't request it
+    if not use_proxy and not use_cf_bypass:
+        logger.debug(f"[{entry_index}] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...")
+
+    # --- Phase 2: Proxy Pool Iteration ---
+    if global_proxy_pool is None:
+        logger.error(f"[{entry_index}] Fallback failed: No proxy pool configured")
+        # Return last result if we have it
+        return last_result[0], last_result[1], last_result[2], last_result[3], use_proxy, use_cf_bypass
+
+    # We will try up to N switches (coverage of the pool)
+    # If using Single mode, we only have 1 try.
+    max_switches = len(global_proxy_pool.proxies) if PROXY_MODE == 'pool' else 1
+    # Limit max switches to avoid infinite loops if pool is huge, e.g. 10
+    max_switches = min(max_switches, 10) 
+    
+    attempts = 0
+    while attempts < max_switches:
+        current_proxy_name = global_proxy_pool.get_current_proxy_name()
+        
+        # Sub-step 2.1: Try Direct Proxy (No CF)
+        magnets, actor_info, video_code, success = try_fetch_and_parse(
+            True, False, 
+            f"Detail Fallback Phase 2: Proxy Direct (Node={current_proxy_name})",
+            skip_sleep=True  # Skip sleep for retry attempts
+        )
+        if success:
+            logger.info(f"[{entry_index}] Detail Proxy Direct succeeded. Switching mode to: use_proxy=True, use_cf_bypass=False")
+            return magnets, actor_info, video_code, True, True, False
+            
+        # Sub-step 2.2: Try Proxy + CF Bypass
+        magnets, actor_info, video_code, success = try_fetch_and_parse(
+            True, True, 
+            f"Detail Fallback Phase 2: Proxy + CF Bypass (Node={current_proxy_name})",
+            skip_sleep=True  # Skip sleep for retry attempts
+        )
+        if success:
+            logger.info(f"[{entry_index}] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True")
+            return magnets, actor_info, video_code, True, True, True
+
+        # If both failed for this proxy, just switch to next (no ban marking for detail pages)
+        # Detail page failures are often due to page-specific issues, not proxy problems
+        attempts += 1
+        if attempts < max_switches and PROXY_MODE == 'pool':
+            logger.debug(f"[{entry_index}] Proxy '{current_proxy_name}' failed both Direct and CF modes. Switching to next proxy (not marking as banned)...")
+            global_proxy_pool.mark_failure_and_switch()  # Single failure mark, no ban
+        else:
+            if PROXY_MODE == 'single':
+                logger.debug(f"[{entry_index}] Single proxy mode failed. Cannot switch.")
+            else:
+                logger.debug(f"[{entry_index}] All proxy attempts exhausted.")
+            break
+
+    # Return the last result we got (even if parsing failed), or empty if all fetches failed completely
+    logger.warning(f"[{entry_index}] Detail page fallback exhausted. Returning best available result.")
+    return last_result[0], last_result[1], last_result[2], last_result[3], use_proxy, use_cf_bypass
+
+
 def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
     """Write results to CSV file or print if dry-run"""
     if dry_run:
@@ -1015,18 +1151,30 @@ def main():
 
             detail_url = urljoin(BASE_URL, href)
 
-            # Fetch detail page
-            detail_html = get_page(detail_url, session, use_cookie=custom_url is not None, use_proxy=use_proxy, module_name='spider_detail', use_cf_bypass=use_cf_bypass)
-            if not detail_html:
-                logger.error(f"[{i}/{total_entries_phase1}] [Page {page_num}] Failed to fetch detail page")
+            # Fetch detail page with fallback mechanism
+            magnets, actor_info, video_code, parse_success, effective_use_proxy, effective_use_cf_bypass = fetch_detail_page_with_fallback(
+                detail_url, session,
+                use_cookie=custom_url is not None,
+                use_proxy=use_proxy,
+                use_cf_bypass=use_cf_bypass,
+                entry_index=f"{i}/{total_entries_phase1}",
+                is_adhoc_mode=custom_url is not None
+            )
+            
+            # Update global settings if fallback changed them
+            if parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass):
+                logger.info(f"[{i}/{total_entries_phase1}] Updating session settings based on successful fallback: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}")
+                use_proxy = effective_use_proxy
+                use_cf_bypass = effective_use_cf_bypass
+            
+            if not parse_success and not video_code and not magnets:
+                logger.error(f"[{i}/{total_entries_phase1}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
                 continue
-
-            # Parse detail page
-            magnets, actor_info, video_code = parse_detail(detail_html, i)
+            
             magnet_links = extract_magnets(magnets, i)
 
             # Log the processing with video_code instead of href
-            logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Processing {video_code}")
+            logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Processing {video_code or href}")
 
             # Check if we should process this movie based on history and phase rules
             should_process, history_torrent_types = should_process_movie(href, parsed_movies_history_phase1, 1,
@@ -1200,14 +1348,26 @@ def main():
 
             detail_url = urljoin(BASE_URL, href)
 
-            # Fetch detail page
-            detail_html = get_page(detail_url, session, use_cookie=custom_url is not None, use_proxy=use_proxy, module_name='spider_detail', use_cf_bypass=use_cf_bypass)
-            if not detail_html:
-                logger.error(f"[{i}/{total_entries_phase2}] [Page {page_num}] Failed to fetch detail page")
+            # Fetch detail page with fallback mechanism
+            magnets, actor_info, video_code, parse_success, effective_use_proxy, effective_use_cf_bypass = fetch_detail_page_with_fallback(
+                detail_url, session,
+                use_cookie=custom_url is not None,
+                use_proxy=use_proxy,
+                use_cf_bypass=use_cf_bypass,
+                entry_index=f"P2-{i}/{total_entries_phase2}",
+                is_adhoc_mode=custom_url is not None
+            )
+            
+            # Update global settings if fallback changed them
+            if parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass):
+                logger.info(f"[P2-{i}/{total_entries_phase2}] Updating session settings based on successful fallback: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}")
+                use_proxy = effective_use_proxy
+                use_cf_bypass = effective_use_cf_bypass
+            
+            if not parse_success and not video_code and not magnets:
+                logger.error(f"[{i}/{total_entries_phase2}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
                 continue
-
-            # Parse detail page
-            magnets, actor_info, video_code = parse_detail(detail_html, f"P2-{i}")
+            
             magnet_links = extract_magnets(magnets, f"P2-{i}")
 
             # Log the processing with video_code instead of href
