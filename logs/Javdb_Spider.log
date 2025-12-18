@@ -1,274 +1,138 @@
-2025-12-18 20:32:10,279 - __main__ - INFO - Initializing proxy pool with 3 proxies...
-2025-12-18 20:32:10,280 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-12-18 20:32:10,280 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
-2025-12-18 20:32:10,280 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-18 20:32:10,280 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-18 20:32:10,280 - __main__ - INFO - Proxy pool initialized successfully
-2025-12-18 20:32:10,280 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
-2025-12-18 20:32:10,280 - __main__ - INFO - Starting JavDB spider...
-2025-12-18 20:32:10,280 - __main__ - INFO - Arguments: start_page=1, end_page=10, phase=all
-2025-12-18 20:32:10,280 - __main__ - INFO - PROXY POOL MODE: 2 proxies configured with automatic failover
-2025-12-18 20:32:10,280 - __main__ - INFO - PROXY ENABLED: Using proxy for modules ['spider_index', 'spider_detail']
-2025-12-18 20:32:10,280 - __main__ - INFO - Validating history file integrity...
-2025-12-18 20:32:10,321 - utils.history_manager - INFO - Loaded 6089 previously parsed movies from history (phase 1: 3481, phase 2: 2608)
-2025-12-18 20:32:10,321 - __main__ - INFO - Initialized requests session
-2025-12-18 20:32:10,321 - __main__ - INFO - ==================================================
-2025-12-18 20:32:10,321 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-12-18 20:32:10,321 - __main__ - INFO - ==================================================
-2025-12-18 20:32:11,958 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
-2025-12-18 20:32:17,502 - utils.parser - INFO - [Page 2] Found 13 entries for phase 1
-2025-12-18 20:32:23,044 - utils.parser - INFO - [Page 3] Found 2 entries for phase 1
-2025-12-18 20:32:28,588 - utils.parser - INFO - [Page 4] Found 9 entries for phase 1
-2025-12-18 20:32:34,152 - utils.parser - INFO - [Page 5] Found 0 entries for phase 1
-2025-12-18 20:32:39,666 - utils.parser - INFO - [Page 6] Found 0 entries for phase 1
-2025-12-18 20:32:45,313 - utils.parser - INFO - [Page 7] Found 0 entries for phase 1
-2025-12-18 20:32:50,933 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
-2025-12-18 20:32:56,523 - utils.parser - INFO - [Page 9] Found 0 entries for phase 1
-2025-12-18 20:33:02,056 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
-2025-12-18 20:33:12,536 - __main__ - INFO - [1/24] [Page 2] Processing JUR-537
-2025-12-18 20:33:28,024 - __main__ - INFO - [2/24] [Page 2] Processing MIDA-444
-2025-12-18 20:33:43,662 - __main__ - INFO - [3/24] [Page 2] Processing MIDA-446
-2025-12-18 20:33:59,189 - __main__ - INFO - [4/24] [Page 2] Processing MIDA-447
-2025-12-18 20:34:14,651 - __main__ - INFO - [5/24] [Page 2] Processing MIDA-449
-2025-12-18 20:34:30,146 - __main__ - INFO - [6/24] [Page 2] Processing MIDA-450
-2025-12-18 20:34:45,615 - __main__ - INFO - [7/24] [Page 2] Processing MIDA-453
-2025-12-18 20:35:01,227 - __main__ - INFO - [8/24] [Page 2] Processing MIDA-473
-2025-12-18 20:35:16,778 - __main__ - INFO - [9/24] [Page 2] Processing SSNI-077
-2025-12-18 20:35:32,278 - __main__ - INFO - [10/24] [Page 2] Processing SSNI-152
-2025-12-18 20:35:47,779 - __main__ - INFO - [11/24] [Page 2] Processing SSNI-178
-2025-12-18 20:36:03,277 - __main__ - INFO - [12/24] [Page 2] Processing Blackedraw
-2025-12-18 20:36:08,500 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/OKN5v (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:36:18,501 - __main__ - WARNING - [13/24] Detail page initial attempt failed. Starting smart fallback mechanism...
-2025-12-18 20:36:18,716 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/OKN5v (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:36:30,398 - __main__ - INFO - [13/24] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
-2025-12-18 20:36:30,399 - __main__ - INFO - [13/24] Fallback succeeded (Proxy=True, CF=True). Consecutive count: 1/3
-2025-12-18 20:36:30,399 - __main__ - INFO - [13/24] [Page 2] Processing Blackedraw
-2025-12-18 20:36:35,613 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/qAxqx9 (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:36:45,615 - __main__ - WARNING - [14/24] Detail page initial attempt failed. Starting smart fallback mechanism...
-2025-12-18 20:36:45,887 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/qAxqx9 (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:36:56,182 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/qAxqx9 (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:37:06,187 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-18 20:37:06,188 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
-2025-12-18 20:37:06,404 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/qAxqx9 (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:37:16,747 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/qAxqx9 (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:37:26,752 - __main__ - WARNING - [14/24] Detail page fallback exhausted. Returning best available result.
-2025-12-18 20:37:26,752 - __main__ - ERROR - [14/24] [Page 3] Failed to fetch/parse detail page after all fallback attempts
-2025-12-18 20:37:32,115 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/e8qDOM (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:37:42,119 - __main__ - WARNING - [15/24] Detail page initial attempt failed. Starting smart fallback mechanism...
-2025-12-18 20:37:42,333 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/e8qDOM (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:37:52,567 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/e8qDOM (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:38:02,573 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
-2025-12-18 20:38:02,573 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Singapore-ARM1'
-2025-12-18 20:38:02,792 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/e8qDOM (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:38:13,026 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/e8qDOM (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:38:23,031 - __main__ - WARNING - [15/24] Detail page fallback exhausted. Returning best available result.
-2025-12-18 20:38:23,031 - __main__ - ERROR - [15/24] [Page 3] Failed to fetch/parse detail page after all fallback attempts
-2025-12-18 20:38:28,248 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/P9G12r (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:38:38,253 - __main__ - WARNING - [16/24] Detail page initial attempt failed. Starting smart fallback mechanism...
-2025-12-18 20:38:38,464 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/P9G12r (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:38:48,702 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/P9G12r (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:38:58,712 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-18 20:38:58,712 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
-2025-12-18 20:38:58,922 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/P9G12r (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:39:09,156 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/P9G12r (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:39:19,165 - __main__ - WARNING - [16/24] Detail page fallback exhausted. Returning best available result.
-2025-12-18 20:39:19,165 - __main__ - ERROR - [16/24] [Page 4] Failed to fetch/parse detail page after all fallback attempts
-2025-12-18 20:39:24,388 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/e8qDqd (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:39:34,399 - __main__ - WARNING - [17/24] Detail page initial attempt failed. Starting smart fallback mechanism...
-2025-12-18 20:39:34,609 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/e8qDqd (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:39:44,841 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/e8qDqd (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:39:54,848 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
-2025-12-18 20:39:54,848 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Singapore-ARM1'
-2025-12-18 20:39:55,061 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/e8qDqd (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:40:05,295 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/e8qDqd (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:40:15,305 - __main__ - WARNING - [17/24] Detail page fallback exhausted. Returning best available result.
-2025-12-18 20:40:15,305 - __main__ - ERROR - [17/24] [Page 4] Failed to fetch/parse detail page after all fallback attempts
-2025-12-18 20:40:20,529 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/ve3z3W (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:40:30,533 - __main__ - WARNING - [18/24] Detail page initial attempt failed. Starting smart fallback mechanism...
-2025-12-18 20:40:30,746 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/ve3z3W (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:40:40,975 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/ve3z3W (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:40:50,975 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-18 20:40:50,976 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
-2025-12-18 20:40:51,189 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/ve3z3W (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:41:01,436 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/ve3z3W (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:41:11,441 - __main__ - WARNING - [18/24] Detail page fallback exhausted. Returning best available result.
-2025-12-18 20:41:11,443 - __main__ - ERROR - [18/24] [Page 4] Failed to fetch/parse detail page after all fallback attempts
-2025-12-18 20:41:16,659 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/1AMxMA (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:41:26,663 - __main__ - WARNING - [19/24] Detail page initial attempt failed. Starting smart fallback mechanism...
-2025-12-18 20:41:26,882 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/1AMxMA (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:41:37,125 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/1AMxMA (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:41:47,135 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
-2025-12-18 20:41:47,135 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Singapore-ARM1'
-2025-12-18 20:41:47,349 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/1AMxMA (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:41:57,600 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/1AMxMA (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:42:07,604 - __main__ - WARNING - [19/24] Detail page fallback exhausted. Returning best available result.
-2025-12-18 20:42:07,604 - __main__ - ERROR - [19/24] [Page 4] Failed to fetch/parse detail page after all fallback attempts
-2025-12-18 20:42:12,826 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/DRKPK2 (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:42:22,829 - __main__ - WARNING - [20/24] Detail page initial attempt failed. Starting smart fallback mechanism...
-2025-12-18 20:42:23,229 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/DRKPK2 (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:42:33,459 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/DRKPK2 (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:42:43,463 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-18 20:42:43,463 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
-2025-12-18 20:42:43,676 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/DRKPK2 (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:42:53,913 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/DRKPK2 (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:43:03,923 - __main__ - WARNING - [20/24] Detail page fallback exhausted. Returning best available result.
-2025-12-18 20:43:03,923 - __main__ - ERROR - [20/24] [Page 4] Failed to fetch/parse detail page after all fallback attempts
-2025-12-18 20:43:09,143 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/gyWDqQ (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:43:19,149 - __main__ - WARNING - [21/24] Detail page initial attempt failed. Starting smart fallback mechanism...
-2025-12-18 20:43:19,365 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/gyWDqQ (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:43:29,601 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/gyWDqQ (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:43:39,609 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
-2025-12-18 20:43:39,609 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Singapore-ARM1'
-2025-12-18 20:43:39,825 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/gyWDqQ (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:43:50,068 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/gyWDqQ (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:44:00,076 - __main__ - WARNING - [21/24] Detail page fallback exhausted. Returning best available result.
-2025-12-18 20:44:00,077 - __main__ - ERROR - [21/24] [Page 4] Failed to fetch/parse detail page after all fallback attempts
-2025-12-18 20:44:05,295 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/yxdz4d (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:44:15,296 - __main__ - WARNING - [22/24] Detail page initial attempt failed. Starting smart fallback mechanism...
-2025-12-18 20:44:15,511 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/yxdz4d (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:44:25,749 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/yxdz4d (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:44:35,759 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-18 20:44:35,759 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
-2025-12-18 20:44:35,974 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/yxdz4d (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:44:46,296 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/yxdz4d (Size: 6472 bytes). Waiting 10s before retry...
-2025-12-18 20:44:56,299 - __main__ - WARNING - [22/24] Detail page fallback exhausted. Returning best available result.
-2025-12-18 20:44:56,299 - __main__ - ERROR - [22/24] [Page 4] Failed to fetch/parse detail page after all fallback attempts
-2025-12-18 20:45:01,520 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/46Q2E (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:45:11,521 - __main__ - WARNING - [23/24] Detail page initial attempt failed. Starting smart fallback mechanism...
-2025-12-18 20:45:11,741 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/46Q2E (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:45:21,988 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/46Q2E (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:45:31,989 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
-2025-12-18 20:45:31,989 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Singapore-ARM1'
-2025-12-18 20:45:32,201 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/46Q2E (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:45:42,653 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/46Q2E (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:45:52,655 - __main__ - WARNING - [23/24] Detail page fallback exhausted. Returning best available result.
-2025-12-18 20:45:52,655 - __main__ - ERROR - [23/24] [Page 4] Failed to fetch/parse detail page after all fallback attempts
-2025-12-18 20:45:57,873 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/DOp8J (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:46:07,881 - __main__ - WARNING - [24/24] Detail page initial attempt failed. Starting smart fallback mechanism...
-2025-12-18 20:46:08,090 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/DOp8J (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:46:18,328 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/DOp8J (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:46:28,330 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-18 20:46:28,330 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
-2025-12-18 20:46:28,547 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/DOp8J (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:46:38,779 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/v/DOp8J (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:46:48,783 - __main__ - WARNING - [24/24] Detail page fallback exhausted. Returning best available result.
-2025-12-18 20:46:48,783 - __main__ - ERROR - [24/24] [Page 4] Failed to fetch/parse detail page after all fallback attempts
-2025-12-18 20:46:53,794 - __main__ - INFO - Phase 1 completed: 0 entries processed
-2025-12-18 20:46:53,794 - __main__ - INFO - Waiting 30 seconds before Phase 2 to allow Cloudflare cooldown...
-2025-12-18 20:47:23,804 - __main__ - INFO - ==================================================
-2025-12-18 20:47:23,804 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-12-18 20:47:23,804 - __main__ - INFO - ==================================================
-2025-12-18 20:47:24,099 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/?page=1 (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:47:34,102 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-18 20:47:34,315 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/?page=1 (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:47:44,558 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/?page=1 (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:47:54,561 - __main__ - WARNING - [Page 1] Proxy 'Singapore-ARM2' failed both Direct and CF modes. Marking BANNED and switching...
-2025-12-18 20:47:54,561 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
-2025-12-18 20:47:54,561 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Singapore-ARM1'
-2025-12-18 20:47:54,561 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
-2025-12-18 20:47:54,561 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
-2025-12-18 20:47:54,561 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (2/3)
-2025-12-18 20:47:54,561 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Singapore-ARM1'
-2025-12-18 20:47:54,827 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/?page=1 (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:48:05,062 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/?page=1 (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:48:15,068 - __main__ - ERROR - [Page 1] All proxy attempts exhausted.
-2025-12-18 20:48:15,070 - __main__ - INFO - [Page 1] no movie list found (page fetch failed or does not exist)
-2025-12-18 20:48:15,283 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/?page=2 (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:48:25,293 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-18 20:48:25,503 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/?page=2 (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:48:35,740 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/?page=2 (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:48:45,750 - __main__ - WARNING - [Page 2] Proxy 'Singapore-ARM1' failed both Direct and CF modes. Marking BANNED and switching...
-2025-12-18 20:48:45,751 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-18 20:48:45,751 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
-2025-12-18 20:48:45,751 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (3/3)
-2025-12-18 20:48:45,751 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Singapore-ARM1'
-2025-12-18 20:48:45,751 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (2/3)
-2025-12-18 20:48:45,751 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
-2025-12-18 20:48:45,966 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/?page=2 (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:48:56,211 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/?page=2 (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:49:06,212 - __main__ - ERROR - [Page 2] All proxy attempts exhausted.
-2025-12-18 20:49:06,213 - __main__ - INFO - [Page 2] no movie list found (page fetch failed or does not exist)
-2025-12-18 20:49:06,425 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/?page=3 (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:49:16,429 - __main__ - WARNING - [Page 3] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-18 20:49:16,641 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/?page=3 (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:49:26,880 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/?page=3 (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:49:36,890 - __main__ - WARNING - [Page 3] Proxy 'Singapore-ARM2' failed both Direct and CF modes. Marking BANNED and switching...
-2025-12-18 20:49:36,890 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
-2025-12-18 20:49:36,890 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Singapore-ARM1'
-2025-12-18 20:49:36,890 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (3/3)
-2025-12-18 20:49:36,890 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
-2025-12-18 20:49:36,890 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (2/3)
-2025-12-18 20:49:36,890 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Singapore-ARM1'
-2025-12-18 20:49:37,100 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/?page=3 (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:49:47,329 - __main__ - WARNING - Cloudflare Turnstile verification page detected for https://javdb.com/?page=3 (Size: 6470 bytes). Waiting 10s before retry...
-2025-12-18 20:49:57,334 - __main__ - ERROR - [Page 3] All proxy attempts exhausted.
-2025-12-18 20:49:57,335 - __main__ - INFO - [Page 3] no movie list found (page fetch failed or does not exist)
-2025-12-18 20:49:57,335 - __main__ - INFO - [Page 3] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
-2025-12-18 20:49:57,335 - __main__ - INFO - Phase 2 completed: 0 entries processed
-2025-12-18 20:49:57,335 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251218.csv
-2025-12-18 20:49:57,335 - __main__ - INFO - ==================================================
-2025-12-18 20:49:57,335 - __main__ - INFO - SUMMARY REPORT
-2025-12-18 20:49:57,335 - __main__ - INFO - ==================================================
-2025-12-18 20:49:57,335 - __main__ - INFO - Pages processed: 1 to 10
-2025-12-18 20:49:57,335 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-12-18 20:49:57,335 - __main__ - INFO - ==============================
-2025-12-18 20:49:57,335 - __main__ - INFO - PHASE 1 SUMMARY
-2025-12-18 20:49:57,335 - __main__ - INFO - ==============================
-2025-12-18 20:49:57,335 - __main__ - INFO - Phase 1 entries found: 0
-2025-12-18 20:49:57,335 - __main__ - INFO -   - No entries found in Phase 1
-2025-12-18 20:49:57,335 - __main__ - INFO - ==============================
-2025-12-18 20:49:57,335 - __main__ - INFO - PHASE 2 SUMMARY
-2025-12-18 20:49:57,335 - __main__ - INFO - ==============================
-2025-12-18 20:49:57,335 - __main__ - INFO - Phase 2 entries found: 0
-2025-12-18 20:49:57,335 - __main__ - INFO -   - No entries found in Phase 2
-2025-12-18 20:49:57,335 - __main__ - INFO - ==============================
-2025-12-18 20:49:57,336 - __main__ - INFO - OVERALL SUMMARY
-2025-12-18 20:49:57,336 - __main__ - INFO - ==============================
-2025-12-18 20:49:57,336 - __main__ - INFO - Total entries found: 0
-2025-12-18 20:49:57,336 - __main__ - INFO - Successfully processed: 0
-2025-12-18 20:49:57,336 - __main__ - INFO - Skipped already parsed in this session: 0
-2025-12-18 20:49:57,336 - __main__ - INFO - Skipped already parsed in previous runs: 13
-2025-12-18 20:49:57,336 - __main__ - INFO - Current parsed links in memory: 24
-2025-12-18 20:49:57,336 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251218.csv
-2025-12-18 20:49:57,336 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-12-18 20:49:57,336 - __main__ - INFO - ==================================================
-2025-12-18 20:49:57,336 - __main__ - INFO - 
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO - ==================================================
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO - PROXY POOL STATISTICS
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO - ==================================================
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO - Total proxies: 2
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO - Available proxies: 2
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO - In cooldown: 0
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO - No-proxy mode: False
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO - 
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO - Individual proxy statistics:
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO -   [ACTIVE] Singapore-ARM1:
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO -     - Total requests: 70
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO -     - Success rate: 85.7%
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO -     - Consecutive failures: 0
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO -     - Last success: 2025-12-18 20:49:47
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO -     - Last failure: 2025-12-18 20:49:36
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO -   [Standby] Singapore-ARM2:
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO -     - Total requests: 45
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO -     - Success rate: 77.8%
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO -     - Consecutive failures: 2
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO -     - Last success: 2025-12-18 20:49:26
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO -     - Last failure: 2025-12-18 20:49:36
-2025-12-18 20:49:57,336 - utils.proxy_pool - INFO - ==================================================
-2025-12-18 20:49:57,336 - __main__ - INFO - 
-2025-12-18 20:49:57,336 - __main__ - INFO - ==================================================
-2025-12-18 20:49:57,336 - __main__ - INFO - PROXY BAN STATUS
-2025-12-18 20:49:57,337 - __main__ - INFO - ==================================================
-2025-12-18 20:49:57,337 - __main__ - INFO - Currently banned proxies: 1
+2025-12-19 00:09:27,258 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-19 00:09:27,259 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
+2025-12-19 00:09:27,259 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
+2025-12-19 00:09:27,259 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-19 00:09:27,259 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@129.xxx.xxx.19:12300, HTTPS: http://***:***@129.xxx.xxx.19:12300)
+2025-12-19 00:09:27,259 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-19 00:09:27,259 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
+2025-12-19 00:09:27,259 - __main__ - INFO - Starting JavDB spider...
+2025-12-19 00:09:27,259 - __main__ - INFO - Arguments: start_page=1, end_page=10, phase=all
+2025-12-19 00:09:27,259 - __main__ - INFO - MODE: Proxy only (no CF bypass)
+2025-12-19 00:09:27,259 - __main__ - INFO - PROXY POOL MODE: 2 proxies configured with automatic failover
+2025-12-19 00:09:27,259 - __main__ - INFO - PROXY ENABLED: Using proxy for modules ['spider_index', 'spider_detail']
+2025-12-19 00:09:27,260 - __main__ - INFO - Validating history file integrity...
+2025-12-19 00:09:27,299 - utils.history_manager - INFO - Loaded 6090 previously parsed movies from history (phase 1: 3481, phase 2: 2609)
+2025-12-19 00:09:27,300 - __main__ - INFO - Initialized requests session
+2025-12-19 00:09:27,300 - __main__ - INFO - ==================================================
+2025-12-19 00:09:27,300 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-12-19 00:09:27,300 - __main__ - INFO - ==================================================
+2025-12-19 00:09:29,338 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
+2025-12-19 00:09:45,204 - utils.parser - INFO - [Page 2] Found 0 entries for phase 1
+2025-12-19 00:10:00,811 - utils.parser - INFO - [Page 3] Found 11 entries for phase 1
+2025-12-19 00:10:16,428 - utils.parser - INFO - [Page 4] Found 0 entries for phase 1
+2025-12-19 00:10:31,998 - utils.parser - INFO - [Page 5] Found 0 entries for phase 1
+2025-12-19 00:10:47,612 - utils.parser - INFO - [Page 6] Found 0 entries for phase 1
+2025-12-19 00:11:03,214 - utils.parser - INFO - [Page 7] Found 0 entries for phase 1
+2025-12-19 00:11:18,771 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
+2025-12-19 00:11:34,381 - utils.parser - INFO - [Page 9] Found 0 entries for phase 1
+2025-12-19 00:11:49,927 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
+2025-12-19 00:12:20,504 - __main__ - INFO - [1/11] [Page 3] Processing JUR-537
+2025-12-19 00:12:35,506 - __main__ - INFO - [2/11] [Page 3] Skipping MIDA-444 - already has subtitle and hacked_subtitle in history
+2025-12-19 00:13:05,958 - __main__ - INFO - [3/11] [Page 3] Processing MIDA-446
+2025-12-19 00:13:51,455 - __main__ - INFO - [4/11] [Page 3] Processing MIDA-447
+2025-12-19 00:14:36,956 - __main__ - INFO - [5/11] [Page 3] Processing MIDA-449
+2025-12-19 00:15:22,415 - __main__ - INFO - [6/11] [Page 3] Processing MIDA-450
+2025-12-19 00:16:07,879 - __main__ - INFO - [7/11] [Page 3] Processing MIDA-453
+2025-12-19 00:16:53,354 - __main__ - INFO - [8/11] [Page 3] Processing MIDA-473
+2025-12-19 00:17:08,359 - __main__ - INFO - [9/11] [Page 3] Skipping SSNI-077 - already has subtitle and hacked_subtitle in history
+2025-12-19 00:17:08,359 - __main__ - INFO - [10/11] [Page 3] Skipping SSNI-152 - already has subtitle and hacked_subtitle in history
+2025-12-19 00:17:08,360 - __main__ - INFO - [11/11] [Page 3] Skipping SSNI-178 - already has subtitle and hacked_subtitle in history
+2025-12-19 00:17:08,360 - __main__ - INFO - Phase 1 completed: 0 entries processed
+2025-12-19 00:17:08,360 - __main__ - INFO - Waiting 60 seconds before Phase 2 to allow Cloudflare cooldown...
+2025-12-19 00:18:08,366 - __main__ - INFO - ==================================================
+2025-12-19 00:18:08,366 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-12-19 00:18:08,367 - __main__ - INFO - ==================================================
+2025-12-19 00:18:08,901 - utils.parser - INFO - [Page 1] Found 9 entries for phase 2
+2025-12-19 00:18:24,492 - utils.parser - INFO - [Page 2] Found 3 entries for phase 2
+2025-12-19 00:18:40,125 - utils.parser - INFO - [Page 3] Found 3 entries for phase 2
+2025-12-19 00:18:56,127 - utils.parser - INFO - [Page 4] Found 0 entries for phase 2
+2025-12-19 00:19:11,711 - utils.parser - INFO - [Page 5] Found 0 entries for phase 2
+2025-12-19 00:19:27,355 - utils.parser - INFO - [Page 6] Found 0 entries for phase 2
+2025-12-19 00:19:42,936 - utils.parser - INFO - [Page 7] Found 0 entries for phase 2
+2025-12-19 00:19:58,560 - utils.parser - INFO - [Page 8] Found 0 entries for phase 2
+2025-12-19 00:20:14,191 - utils.parser - INFO - [Page 9] Found 0 entries for phase 2
+2025-12-19 00:20:29,811 - utils.parser - INFO - [Page 10] Found 0 entries for phase 2
+2025-12-19 00:21:00,267 - __main__ - INFO - [1/15] [Page 1] Processing SDJS-342
+2025-12-19 00:21:45,934 - __main__ - INFO - [2/15] [Page 1] Processing START-447
+2025-12-19 00:22:31,454 - __main__ - INFO - [3/15] [Page 1] Processing START-426
+2025-12-19 00:23:16,988 - __main__ - INFO - [4/15] [Page 1] Processing NAMH-050
+2025-12-19 00:24:02,441 - __main__ - INFO - [5/15] [Page 1] Processing START-475
+2025-12-19 00:24:47,940 - __main__ - INFO - [6/15] [Page 1] Processing START-471
+2025-12-19 00:25:33,683 - __main__ - INFO - [7/15] [Page 1] Processing START-439
+2025-12-19 00:26:19,269 - __main__ - INFO - [8/15] [Page 1] Processing AQULA-101
+2025-12-19 00:27:04,787 - __main__ - INFO - [9/15] [Page 1] Processing MFCW-063
+2025-12-19 00:27:50,688 - __main__ - INFO - [10/15] [Page 2] Processing MIKR-064
+2025-12-19 00:28:36,319 - __main__ - INFO - [11/15] [Page 2] Processing DANDYA-017
+2025-12-19 00:29:21,805 - __main__ - INFO - [12/15] [Page 2] Processing IPVR-340
+2025-12-19 00:30:07,445 - __main__ - INFO - [13/15] [Page 3] Processing ABF-295
+2025-12-19 00:30:52,978 - __main__ - INFO - [14/15] [Page 3] Processing MIMK-260
+2025-12-19 00:31:38,658 - __main__ - INFO - [15/15] [Page 3] Processing MFYD-060
+2025-12-19 00:31:53,694 - __main__ - INFO - Phase 2 completed: 8 entries processed
+2025-12-19 00:31:53,695 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251219.csv
+2025-12-19 00:31:53,695 - __main__ - INFO - ==================================================
+2025-12-19 00:31:53,695 - __main__ - INFO - SUMMARY REPORT
+2025-12-19 00:31:53,695 - __main__ - INFO - ==================================================
+2025-12-19 00:31:53,695 - __main__ - INFO - Pages processed: 1 to 10
+2025-12-19 00:31:53,695 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-12-19 00:31:53,695 - __main__ - INFO - ==============================
+2025-12-19 00:31:53,696 - __main__ - INFO - PHASE 1 SUMMARY
+2025-12-19 00:31:53,696 - __main__ - INFO - ==============================
+2025-12-19 00:31:53,696 - __main__ - INFO - Phase 1 entries found: 0
+2025-12-19 00:31:53,696 - __main__ - INFO -   - No entries found in Phase 1
+2025-12-19 00:31:53,696 - __main__ - INFO - ==============================
+2025-12-19 00:31:53,696 - __main__ - INFO - PHASE 2 SUMMARY
+2025-12-19 00:31:53,696 - __main__ - INFO - ==============================
+2025-12-19 00:31:53,696 - __main__ - INFO - Phase 2 entries found: 8
+2025-12-19 00:31:53,696 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
+2025-12-19 00:31:53,696 - __main__ - INFO -   - Hacked subtitle torrents: 2 (25.0%)
+2025-12-19 00:31:53,697 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
+2025-12-19 00:31:53,697 - __main__ - INFO -   - No-subtitle torrents: 8 (100.0%)
+2025-12-19 00:31:53,697 - __main__ - INFO - ==============================
+2025-12-19 00:31:53,697 - __main__ - INFO - OVERALL SUMMARY
+2025-12-19 00:31:53,697 - __main__ - INFO - ==============================
+2025-12-19 00:31:53,697 - __main__ - INFO - Total entries found: 8
+2025-12-19 00:31:53,697 - __main__ - INFO - Successfully processed: 8
+2025-12-19 00:31:53,697 - __main__ - INFO - Skipped already parsed in this session: 0
+2025-12-19 00:31:53,697 - __main__ - INFO - Skipped already parsed in previous runs: 18
+2025-12-19 00:31:53,697 - __main__ - INFO - Current parsed links in memory: 26
+2025-12-19 00:31:53,697 - __main__ - INFO - Overall subtitle torrents: 0 (0.0%)
+2025-12-19 00:31:53,697 - __main__ - INFO - Overall hacked subtitle torrents: 2 (25.0%)
+2025-12-19 00:31:53,697 - __main__ - INFO - Overall hacked no-subtitle torrents: 0 (0.0%)
+2025-12-19 00:31:53,697 - __main__ - INFO - Overall no-subtitle torrents: 8 (100.0%)
+2025-12-19 00:31:53,698 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251219.csv
+2025-12-19 00:31:53,698 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-12-19 00:31:53,698 - __main__ - INFO - ==================================================
+2025-12-19 00:31:53,698 - __main__ - INFO - 
+2025-12-19 00:31:53,698 - utils.proxy_pool - INFO - ==================================================
+2025-12-19 00:31:53,698 - utils.proxy_pool - INFO - PROXY POOL STATISTICS
+2025-12-19 00:31:53,698 - utils.proxy_pool - INFO - ==================================================
+2025-12-19 00:31:53,698 - utils.proxy_pool - INFO - Total proxies: 2
+2025-12-19 00:31:53,698 - utils.proxy_pool - INFO - Available proxies: 2
+2025-12-19 00:31:53,698 - utils.proxy_pool - INFO - In cooldown: 0
+2025-12-19 00:31:53,698 - utils.proxy_pool - INFO - No-proxy mode: False
+2025-12-19 00:31:53,698 - utils.proxy_pool - INFO - 
+2025-12-19 00:31:53,698 - utils.proxy_pool - INFO - Individual proxy statistics:
+2025-12-19 00:31:53,698 - utils.proxy_pool - INFO -   [ACTIVE] Singapore-ARM1:
+2025-12-19 00:31:53,698 - utils.proxy_pool - INFO -     - Total requests: 21
+2025-12-19 00:31:53,698 - utils.proxy_pool - INFO -     - Success rate: 100.0%
+2025-12-19 00:31:53,699 - utils.proxy_pool - INFO -     - Consecutive failures: 0
+2025-12-19 00:31:53,699 - utils.proxy_pool - INFO -     - Last success: 2025-12-19 00:31:08
+2025-12-19 00:31:53,699 - utils.proxy_pool - INFO -     - Last failure: Never
+2025-12-19 00:31:53,699 - utils.proxy_pool - INFO -   [Standby] Singapore-ARM2:
+2025-12-19 00:31:53,699 - utils.proxy_pool - INFO -     - Total requests: 21
+2025-12-19 00:31:53,699 - utils.proxy_pool - INFO -     - Success rate: 100.0%
+2025-12-19 00:31:53,699 - utils.proxy_pool - INFO -     - Consecutive failures: 0
+2025-12-19 00:31:53,699 - utils.proxy_pool - INFO -     - Last success: 2025-12-19 00:30:22
+2025-12-19 00:31:53,699 - utils.proxy_pool - INFO -     - Last failure: Never
+2025-12-19 00:31:53,699 - utils.proxy_pool - INFO - ==================================================
+2025-12-19 00:31:53,699 - __main__ - INFO - 
+2025-12-19 00:31:53,699 - __main__ - INFO - ==================================================
+2025-12-19 00:31:53,699 - __main__ - INFO - PROXY BAN STATUS
+2025-12-19 00:31:53,699 - __main__ - INFO - ==================================================
+2025-12-19 00:31:53,700 - __main__ - INFO - Currently banned proxies: 1
 
   - Miraculous Fortress:
     Banned at: 2025-12-12 19:02:51
     Will unban: 2025-12-19 19:02:51
-    Time remaining: 0 days 22 hours
-2025-12-18 20:49:57,337 - __main__ - INFO - ==================================================
-2025-12-18 20:49:57,337 - __main__ - ERROR - ==================================================
-2025-12-18 20:49:57,337 - __main__ - ERROR - CRITICAL: PROXY BAN DETECTED DURING THIS RUN
-2025-12-18 20:49:57,337 - __main__ - ERROR - ==================================================
-2025-12-18 20:49:57,337 - __main__ - ERROR - One or more proxies were marked as BANNED due to failure to retrieve movie list.
-2025-12-18 20:49:57,337 - __main__ - ERROR - This indicates the proxy IP may be blocked by JavDB.
-2025-12-18 20:49:57,337 - __main__ - ERROR - Please check proxy ban status and consider using different proxies.
+    Time remaining: 0 days 18 hours
+2025-12-19 00:31:53,700 - __main__ - INFO - ==================================================
