@@ -1,0 +1,39 @@
+2025-12-18 09:08:07,953 - utils.proxy_ban_manager - INFO - No existing ban log found at /tmp/tmpilzeg3r3/bans.csv
+2025-12-18 09:08:07,954 - utils.proxy_pool - INFO - Added proxy 'Proxy-1' to pool (HTTP: http://proxy1:8080, HTTPS: http://proxy1:8080)
+2025-12-18 09:08:07,955 - utils.proxy_pool - INFO - Added proxy 'Proxy-1' to pool (HTTP: http://p1:8080, HTTPS: http://p1:8080)
+2025-12-18 09:08:07,956 - utils.proxy_pool - INFO - Added proxy 'Proxy-2' to pool (HTTP: http://p2:8080, HTTPS: http://p2:8080)
+2025-12-18 09:08:07,957 - utils.proxy_pool - INFO - Added proxy 'Test-Proxy' to pool (HTTP: http://proxy:8080, HTTPS: None)
+2025-12-18 09:08:07,958 - utils.proxy_pool - INFO - Added proxy 'Test-Proxy' to pool (HTTP: http://proxy:8080, HTTPS: None)
+2025-12-18 09:08:07,958 - utils.proxy_pool - INFO - No-proxy mode enabled (direct connection)
+2025-12-18 09:08:07,958 - utils.proxy_pool - INFO - No-proxy mode disabled
+2025-12-18 09:08:07,960 - utils.proxy_pool - INFO - Added proxy 'Test-Proxy' to pool (HTTP: http://proxy:8080, HTTPS: None)
+2025-12-18 09:08:07,960 - utils.proxy_pool - DEBUG - Proxy 'Test-Proxy' marked as successful (success rate: 100.0%)
+2025-12-18 09:08:07,961 - utils.proxy_pool - INFO - Added proxy 'Proxy-1' to pool (HTTP: http://p1:8080, HTTPS: None)
+2025-12-18 09:08:07,961 - utils.proxy_pool - INFO - Added proxy 'Proxy-2' to pool (HTTP: http://p2:8080, HTTPS: None)
+2025-12-18 09:08:07,961 - utils.proxy_pool - WARNING - Proxy 'Proxy-1' failed (1/2)
+2025-12-18 09:08:07,961 - utils.proxy_pool - INFO - Switched from 'Proxy-1' to 'Proxy-2'
+2025-12-18 09:08:07,963 - utils.proxy_pool - INFO - Added proxy 'Proxy-1' to pool (HTTP: http://p1:8080, HTTPS: None)
+2025-12-18 09:08:07,963 - utils.proxy_pool - INFO - Added proxy 'Proxy-2' to pool (HTTP: http://p2:8080, HTTPS: None)
+2025-12-18 09:08:07,964 - utils.proxy_pool - WARNING - No proxies configured in pool
+2025-12-18 09:08:07,969 - utils.proxy_ban_manager - INFO - No existing ban log found at /tmp/tmpamcyg9jn/bans.csv
+2025-12-18 09:08:07,970 - utils.proxy_ban_manager - INFO - No existing ban log found at /tmp/tmpzq2o9833/bans.csv
+2025-12-18 09:08:07,970 - utils.proxy_ban_manager - WARNING - Proxy 'Test-Proxy' banned until 2025-12-25 09:08:07 (7 days)
+2025-12-18 09:08:07,971 - utils.proxy_ban_manager - DEBUG - Saved 1 ban records to /tmp/tmpzq2o9833/bans.csv
+2025-12-18 09:08:07,972 - utils.proxy_ban_manager - INFO - No existing ban log found at /tmp/tmpubz619ok/bans.csv
+2025-12-18 09:08:07,972 - utils.proxy_ban_manager - WARNING - Proxy 'Test-Proxy' banned until 2025-12-25 09:08:07 (7 days)
+2025-12-18 09:08:07,972 - utils.proxy_ban_manager - DEBUG - Saved 1 ban records to /tmp/tmpubz619ok/bans.csv
+2025-12-18 09:08:07,973 - utils.proxy_ban_manager - INFO - No existing ban log found at /tmp/tmpb4k011ly/bans.csv
+2025-12-18 09:08:07,974 - utils.proxy_ban_manager - WARNING - Proxy 'Proxy-1' banned until 2025-12-25 09:08:07 (7 days)
+2025-12-18 09:08:07,974 - utils.proxy_ban_manager - DEBUG - Saved 1 ban records to /tmp/tmpb4k011ly/bans.csv
+2025-12-18 09:08:07,974 - utils.proxy_ban_manager - WARNING - Proxy 'Proxy-2' banned until 2025-12-25 09:08:07 (7 days)
+2025-12-18 09:08:07,974 - utils.proxy_ban_manager - DEBUG - Saved 2 ban records to /tmp/tmpb4k011ly/bans.csv
+2025-12-18 09:08:07,975 - utils.proxy_ban_manager - INFO - No existing ban log found at /tmp/tmp_uygcdko/bans.csv
+2025-12-18 09:08:07,975 - utils.proxy_ban_manager - WARNING - Proxy 'Test-Proxy' banned until 2025-12-25 09:08:07 (7 days)
+2025-12-18 09:08:07,976 - utils.proxy_ban_manager - DEBUG - Saved 1 ban records to /tmp/tmp_uygcdko/bans.csv
+2025-12-18 09:08:07,977 - utils.proxy_ban_manager - INFO - No existing ban log found at /tmp/tmp9fjl__s0/bans.csv
+2025-12-18 09:08:07,977 - utils.proxy_ban_manager - WARNING - Proxy 'Test-Proxy' banned until 2025-12-25 09:08:07 (7 days)
+2025-12-18 09:08:07,977 - utils.proxy_ban_manager - DEBUG - Saved 1 ban records to /tmp/tmp9fjl__s0/bans.csv
+2025-12-18 09:08:07,981 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from /tmp/tmp9fjl__s0/bans.csv
+2025-12-18 09:08:07,982 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
+2025-12-18 09:08:07,983 - utils.proxy_pool - INFO - Added proxy 'Proxy-1' to pool (HTTP: http://p1:8080, HTTPS: http://p1:8080)
+2025-12-18 09:08:07,983 - utils.proxy_pool - INFO - Added proxy 'Proxy-2' to pool (HTTP: http://p2:8080, HTTPS: http://p2:8080)
