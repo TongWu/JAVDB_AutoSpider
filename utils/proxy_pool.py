@@ -230,7 +230,7 @@ class ProxyPool:
                 
     def get_current_proxy(self) -> Optional[Dict[str, str]]:
         """
-        Get the current active proxy
+        Get the current active proxy (without rotating)
         
         Returns:
             Dictionary with 'http' and 'https' keys for requests library, or None if no proxy available
@@ -259,6 +259,47 @@ class ProxyPool:
             
             # All proxies are unavailable or in cooldown
             logger.warning("All proxies are unavailable or in cooldown")
+            return None
+    
+    def get_next_proxy(self) -> Optional[Dict[str, str]]:
+        """
+        Get the next available proxy in round-robin fashion.
+        Each call will rotate to a different proxy, distributing load evenly.
+        
+        Returns:
+            Dictionary with 'http' and 'https' keys for requests library, or None if no proxy available
+        """
+        if self.no_proxy_mode:
+            return None
+            
+        if not self.proxies:
+            logger.warning("No proxies configured in pool")
+            return None
+            
+        with self.lock:
+            self._check_cooldowns()
+            
+            # Count available proxies
+            available_count = sum(1 for p in self.proxies if p.is_available and not p.is_in_cooldown())
+            if available_count == 0:
+                logger.warning("All proxies are unavailable or in cooldown")
+                return None
+            
+            # Find next available proxy in round-robin fashion
+            attempts = 0
+            while attempts < len(self.proxies):
+                # Move to next proxy first (rotate before returning)
+                self.current_index = (self.current_index + 1) % len(self.proxies)
+                proxy = self.proxies[self.current_index]
+                
+                if proxy.is_available and not proxy.is_in_cooldown():
+                    logger.debug(f"Round-robin selected proxy: {proxy.name}")
+                    return proxy.get_proxies_dict()
+                    
+                attempts += 1
+            
+            # Should not reach here if available_count > 0
+            logger.warning("Unexpected: no available proxy found after rotation")
             return None
             
     def get_current_proxy_name(self) -> str:
