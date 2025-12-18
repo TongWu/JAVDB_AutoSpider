@@ -368,10 +368,18 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
         """
         proxy_ip = _get_bypass_ip(req_proxies, force_local)
         
-        # Skip if no proxy IP and not forcing local (means proxy pool is exhausted)
-        if not proxy_ip and not force_local and req_proxies is None:
-            logger.warning(f"[CF Bypass] Cannot refresh cache: no proxy available")
-            return False
+        # Validate bypass IP based on mode:
+        # - force_local=True: proxy_ip should be None (will use 127.0.0.1), this is expected
+        # - force_local=False with req_proxies: proxy_ip should NOT be None (IP extraction should succeed)
+        # - force_local=False without req_proxies: no proxy available, cannot refresh
+        if not force_local:
+            if req_proxies is None:
+                logger.warning(f"[CF Bypass] Cannot refresh cache: no proxy available")
+                return False
+            elif proxy_ip is None:
+                # req_proxies is set but IP extraction failed - this is a bug, don't silently fallback to localhost
+                logger.warning(f"[CF Bypass] Cannot refresh cache: failed to extract IP from proxy config")
+                return False
         
         bypass_base_url = get_cf_bypass_service_url(proxy_ip)
         encoded_url = quote(url, safe='')
@@ -416,11 +424,18 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
         """
         proxy_ip = _get_bypass_ip(req_proxies, force_local)
         
-        # If we need proxy bypass but no proxy available, fail immediately
-        # (use_proxy_bypass mode but proxies exhausted)
-        if not force_local and req_proxies is None and use_proxy_bypass:
-            logger.error(f"[CF Bypass] {context_msg}: No proxy available for proxy bypass mode")
-            return None, False, False
+        # Validate bypass IP based on mode:
+        # - force_local=True: proxy_ip should be None (will use 127.0.0.1), this is expected
+        # - force_local=False with req_proxies: proxy_ip should NOT be None (IP extraction should succeed)
+        # - force_local=False without req_proxies in proxy_bypass mode: no proxy available, fail
+        if not force_local:
+            if req_proxies is None and use_proxy_bypass:
+                logger.error(f"[CF Bypass] {context_msg}: No proxy available for proxy bypass mode")
+                return None, False, False
+            elif req_proxies is not None and proxy_ip is None:
+                # req_proxies is set but IP extraction failed - don't silently fallback to localhost
+                logger.error(f"[CF Bypass] {context_msg}: Failed to extract IP from proxy config")
+                return None, False, False
         
         # Build CF bypass URL: http://{ip}:8000/html?url={encoded_target_url}
         bypass_base_url = get_cf_bypass_service_url(proxy_ip)
