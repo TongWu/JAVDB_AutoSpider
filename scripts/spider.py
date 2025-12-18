@@ -557,11 +557,13 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
         html_content, success, is_turnstile = _fetch_with_cf_bypass(proxies, f"Proxy={proxy_name}", force_local=use_local_bypass)
         if success:
             result = _process_html(html_content, proxies)
-            if result:
+            if result and len(result) >= 10000:  # Validate response size
                 if use_proxy_pool_mode and global_proxy_pool:
                     global_proxy_pool.mark_success()
                 cf_bypass_failure_count = 0
                 return result
+            elif result:
+                logger.warning(f"[{module_name}] Initial CF bypass returned small response ({len(result)} bytes), continuing to fallback")
         
         turnstile_detected = is_turnstile
         logger.warning(f"[{module_name}] CF Bypass initial attempt failed. Starting fallback sequence (cooldown: {FALLBACK_COOLDOWN}s between steps)...")
@@ -577,11 +579,13 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
         html_content, success, is_turnstile = _fetch_with_cf_bypass(proxies, f"Retry Proxy={proxy_name}", force_local=use_local_bypass)
         if success:
             result = _process_html(html_content, proxies)
-            if result:
+            if result and len(result) >= 10000:  # Validate response size
                 if use_proxy_pool_mode and global_proxy_pool:
                     global_proxy_pool.mark_success()
                 cf_bypass_failure_count = 0
                 return result
+            elif result:
+                logger.warning(f"[{module_name}] Step (a) returned small response ({len(result)} bytes), continuing to next step")
         
         turnstile_detected = turnstile_detected or is_turnstile
         
@@ -649,10 +653,12 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
                 html_content, success, is_turnstile = _fetch_with_cf_bypass(proxies, f"Proxy={proxy_name}", force_local=False)
                 if success:
                     result = _process_html(html_content, proxies)
-                    if result:
+                    if result and len(result) >= 10000:  # Validate response size
                         global_proxy_pool.mark_success()
                         cf_bypass_failure_count = 0
                         return result
+                    elif result:
+                        logger.warning(f"[{module_name}] Step (d) returned small response ({len(result)} bytes), continuing to next proxy")
                 
                 turnstile_detected = turnstile_detected or is_turnstile
                 
@@ -686,11 +692,15 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
                 global_proxy_pool.mark_success()
             
             result = _process_html(html_content, proxies)
-            if result:
-                # Check for suspiciously small response
-                if len(result) < 10000 and '/v/' in url:
-                    logger.warning(f"Suspiciously small response for detail page {url} (Size: {len(result)} bytes).")
+            if result and len(result) >= 10000:  # Validate response size (consistent with CF bypass mode)
                 return result
+            elif result:
+                # Small response - for detail pages this is likely a failed response, retry
+                if '/v/' in url:
+                    logger.warning(f"[{module_name}] Small response for detail page ({len(result)} bytes), retrying...")
+                else:
+                    # For index pages, small response might be valid (empty page)
+                    return result
         
         # If Turnstile detected, wait before retry
         if is_turnstile:
