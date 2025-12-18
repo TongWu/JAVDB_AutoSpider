@@ -22,20 +22,30 @@ logger = get_logger(__name__)
 
 
 def extract_video_code(a):
-    """Extract video code from movie item with improved robustness"""
+    """Extract video code from movie item with improved robustness
+    
+    Returns:
+        video_code: The extracted video code, or empty string if not found or invalid.
+                   Video codes without '-' are considered invalid and will return empty string.
+    """
     video_title_div = a.find('div', class_='video-title')
     if video_title_div:
         # Try to extract video code from <strong> tag first (most reliable)
         strong_tag = video_title_div.find('strong')
         if strong_tag:
             video_code = strong_tag.get_text(strip=True)
-            logger.debug(f"Extracted video code from <strong> tag: {video_code}")
-            return video_code
         else:
             # Fallback to full text
             video_code = video_title_div.get_text(strip=True)
-            logger.debug(f"Extracted video code from full text: {video_code}")
-            return video_code
+        
+        # Validate video code: must contain '-' (e.g., "ABC-123")
+        # Video codes without '-' are typically invalid or special entries
+        if '-' not in video_code:
+            logger.debug(f"Skipping invalid video code (no '-'): {video_code}")
+            return ''
+        
+        logger.debug(f"Extracted video code: {video_code}")
+        return video_code
     logger.warning("No video-title div found")
     return ''
 
@@ -108,6 +118,10 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                 if has_subtitle:
                     href = a.get('href', '')
                     video_code = extract_video_code(a)
+                    
+                    # Skip entries with invalid video code (no '-')
+                    if not video_code:
+                        continue
 
                     # Extract rating information
                     rate = ''
@@ -155,6 +169,10 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
 
                     href = a.get('href', '')
                     video_code = extract_video_code(a)
+                    
+                    # Skip entries with invalid video code (no '-')
+                    if not video_code:
+                        continue
 
                     # Extract rating information
                     rate = ''
@@ -198,6 +216,10 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                 if not (('含中字磁鏈' in tags or '含中字磁链' in tags or 'CnSub DL' in tags)):
                     href = a.get('href', '')
                     video_code = extract_video_code(a)
+                    
+                    # Skip entries with invalid video code (no '-')
+                    if not video_code:
+                        continue
 
                     # Extract rating information
                     rate = ''
@@ -258,6 +280,10 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                     if not (('含中字磁鏈' in tags or '含中字磁链' in tags or 'CnSub DL' in tags)):
                         href = a.get('href', '')
                         video_code = extract_video_code(a)
+                        
+                        # Skip entries with invalid video code (no '-')
+                        if not video_code:
+                            continue
 
                         # Extract rating information
                         rate = ''
