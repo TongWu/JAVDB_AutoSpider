@@ -1,0 +1,72 @@
+# Coverage.py configuration file
+
+[run]
+# Measure branch coverage in addition to statement coverage
+branch = True
+
+# Source packages to measure
+source = 
+    utils
+    pipeline
+
+# Files to omit from coverage
+omit =
+    */tests/*
+    */test_*.py
+    */__init__.py
+    */config.py
+    */setup.py
+    */.venv/*
+    */venv/*
+    */virtualenv/*
+
+[report]
+# Set the precision for reported coverage percentages
+precision = 2
+
+# Show lines that weren't executed
+show_missing = True
+
+# Skip files with 100% coverage
+skip_covered = False
+
+# Sort the results by name
+sort = Name
+
+# Regexes for lines to exclude from consideration
+exclude_lines =
+    # Have to re-enable the standard pragma
+    pragma: no cover
+    
+    # Don't complain about missing debug-only code:
+    def __repr__
+    
+    # Don't complain if tests don't hit defensive assertion code:
+    raise AssertionError
+    raise NotImplementedError
+    
+    # Don't complain if non-runnable code isn't run:
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    
+    # Don't complain about abstract methods
+    @abstractmethod
+    @abc.abstractmethod
+    
+    # Don't complain about pass statements
+    pass
+
+[html]
+# Directory for HTML output
+directory = htmlcov
+
+# Title for HTML report
+title = JavDB Pipeline Test Coverage Report
+
+[xml]
+# File name for XML output
+output = coverage.xml
+
+[json]
+# File name for JSON output
+output = coverage.json

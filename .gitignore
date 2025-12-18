@@ -1,5 +1,81 @@
+# Python
 __pycache__/
-test_history_integrity.py
-config.py
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+junit.xml
+.cache
+
+# IDE
+.vscode/
 .idea/
-**/.DS_Store
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/*.log
+*.log
+
+# Configuration (sensitive)
+config.py
+*.ini
+*.cfg
+
+# Data files
+*.csv
+*.db
+*.sqlite
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Security
+bandit-report.json
+
+# Coverage reports
+.coverage
+htmlcov/
+coverage.xml
+.coverage.*
