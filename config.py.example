@@ -169,6 +169,22 @@ PROXY_MODULES = ['all']
 # PROXY_MODULES = []  # Disable proxy for all modules (even if --use-proxy is set)
 
 # =============================================================================
+# CLOUDFLARE BYPASS CONFIGURATION
+# =============================================================================
+
+# CloudflareBypassForScraping service configuration
+# Deploy the service from: https://github.com/sarperavci/CloudflareBypassForScraping
+# Run with: docker compose up -d (default port: 8000)
+#
+# The service URL is dynamically generated based on proxy configuration:
+#   - Without proxy: http://localhost:{CF_BYPASS_SERVICE_PORT}
+#   - With proxy pool: http://{PROXY_IP}:{CF_BYPASS_SERVICE_PORT}
+#     (uses the IP from current proxy in the pool)
+#
+# IMPORTANT: Deploy the CF bypass service on each proxy server using the same port
+CF_BYPASS_SERVICE_PORT = 8000
+
+# =============================================================================
 # SPIDER CONFIGURATION
 # =============================================================================
 
@@ -208,9 +224,10 @@ DETAIL_PAGE_SLEEP = 5  # Sleep time before parsing detail pages to avoid DDoS pr
 PAGE_SLEEP = 2  # Sleep time between pages
 MOVIE_SLEEP = 1  # Sleep time between movies
 
-# Phase 2 filtering criteria
-PHASE2_MIN_RATE = 4.0  # Minimum rating score for phase 2 entries
-PHASE2_MIN_COMMENTS = 80  # Minimum comment count for phase 2 entries
+# Cloudflare protection handling
+CF_TURNSTILE_COOLDOWN = 10  # Sleep time when Cloudflare Turnstile verification page is detected
+PHASE_TRANSITION_COOLDOWN = 30  # Sleep time between Phase 1 and Phase 2 to avoid triggering Cloudflare
+FALLBACK_COOLDOWN = 30  # Cooldown time after a successful fallback before processing next item
 
 # =============================================================================
 # LOGGING CONFIGURATION
