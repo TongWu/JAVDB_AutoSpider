@@ -1,77 +1,36 @@
-2025-12-17 21:59:51,076 - __main__ - INFO - Starting qBittorrent uploader...
-2025-12-17 21:59:51,076 - __main__ - INFO - Initializing proxy pool with 3 proxies...
-2025-12-17 21:59:51,077 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-12-17 21:59:51,077 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
-2025-12-17 21:59:51,077 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-17 21:59:51,077 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-17 21:59:51,077 - __main__ - INFO - Proxy pool initialized successfully
-2025-12-17 21:59:51,077 - __main__ - INFO - PROXY POOL MODE for qBittorrent: 2 proxies with automatic failover
-2025-12-17 21:59:51,077 - __main__ - INFO - Using specified input file: Daily Report/Javdb_TodayTitle_20251217.csv
-2025-12-17 21:59:51,077 - __main__ - INFO - Found 12 torrent links in Daily Report/Javdb_TodayTitle_20251217.csv
-2025-12-17 21:59:51,077 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
-2025-12-17 21:59:51,082 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 101.100.165.240:12301
-2025-12-17 21:59:51,277 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/auth/login HTTP/1.1" 200 3
-2025-12-17 21:59:51,278 - __main__ - INFO - Successfully logged in to qBittorrent
-2025-12-17 21:59:51,278 - __main__ - INFO - History manager imported, will update downloaded status
-2025-12-17 21:59:51,278 - __main__ - INFO - Starting to add 12 torrents to qBittorrent...
-2025-12-17 21:59:51,278 - __main__ - INFO - [1/12] Adding: HMN-744 [Subtitle]
-2025-12-17 21:59:51,278 - __main__ - DEBUG - Adding torrent: HMN-744 [Subtitle] with category: Daily Ingestion
-2025-12-17 21:59:51,284 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-12-17 21:59:51,284 - __main__ - DEBUG - Successfully added torrent: HMN-744 [Subtitle] to category: Daily Ingestion
-2025-12-17 21:59:52,289 - __main__ - INFO - [2/12] Adding: HMN-768 [Subtitle]
-2025-12-17 21:59:52,290 - __main__ - DEBUG - Adding torrent: HMN-768 [Subtitle] with category: Daily Ingestion
-2025-12-17 21:59:52,299 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-12-17 21:59:52,299 - __main__ - DEBUG - Successfully added torrent: HMN-768 [Subtitle] to category: Daily Ingestion
-2025-12-17 21:59:53,304 - __main__ - INFO - [3/12] Adding: HMN-771 [Subtitle]
-2025-12-17 21:59:53,305 - __main__ - DEBUG - Adding torrent: HMN-771 [Subtitle] with category: Daily Ingestion
-2025-12-17 21:59:53,314 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-12-17 21:59:53,314 - __main__ - DEBUG - Successfully added torrent: HMN-771 [Subtitle] to category: Daily Ingestion
-2025-12-17 21:59:54,318 - __main__ - INFO - [4/12] Adding: HMN-780 [Subtitle]
-2025-12-17 21:59:54,319 - __main__ - DEBUG - Adding torrent: HMN-780 [Subtitle] with category: Daily Ingestion
-2025-12-17 21:59:54,328 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-12-17 21:59:54,328 - __main__ - DEBUG - Successfully added torrent: HMN-780 [Subtitle] to category: Daily Ingestion
-2025-12-17 21:59:55,331 - __main__ - INFO - [5/12] Adding: MIAB-582 [Subtitle]
-2025-12-17 21:59:55,331 - __main__ - DEBUG - Adding torrent: MIAB-582 [Subtitle] with category: Daily Ingestion
-2025-12-17 21:59:55,338 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-12-17 21:59:55,338 - __main__ - DEBUG - Successfully added torrent: MIAB-582 [Subtitle] to category: Daily Ingestion
-2025-12-17 21:59:56,344 - __main__ - INFO - [6/12] Adding: MIAB-583 [Subtitle]
-2025-12-17 21:59:56,344 - __main__ - DEBUG - Adding torrent: MIAB-583 [Subtitle] with category: Daily Ingestion
-2025-12-17 21:59:56,360 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-12-17 21:59:56,360 - __main__ - DEBUG - Successfully added torrent: MIAB-583 [Subtitle] to category: Daily Ingestion
-2025-12-17 21:59:57,363 - __main__ - INFO - [7/12] Adding: MIAB-584 [Subtitle]
-2025-12-17 21:59:57,363 - __main__ - DEBUG - Adding torrent: MIAB-584 [Subtitle] with category: Daily Ingestion
-2025-12-17 21:59:57,370 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-12-17 21:59:57,370 - __main__ - DEBUG - Successfully added torrent: MIAB-584 [Subtitle] to category: Daily Ingestion
-2025-12-17 21:59:58,375 - __main__ - INFO - [8/12] Adding: MIAB-595 [Subtitle]
-2025-12-17 21:59:58,375 - __main__ - DEBUG - Adding torrent: MIAB-595 [Subtitle] with category: Daily Ingestion
-2025-12-17 21:59:58,383 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-12-17 21:59:58,383 - __main__ - DEBUG - Successfully added torrent: MIAB-595 [Subtitle] to category: Daily Ingestion
-2025-12-17 21:59:59,387 - __main__ - INFO - [9/12] Adding: MIAB-596 [Subtitle]
-2025-12-17 21:59:59,387 - __main__ - DEBUG - Adding torrent: MIAB-596 [Subtitle] with category: Daily Ingestion
-2025-12-17 21:59:59,396 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-12-17 21:59:59,397 - __main__ - DEBUG - Successfully added torrent: MIAB-596 [Subtitle] to category: Daily Ingestion
-2025-12-17 22:00:00,401 - __main__ - INFO - [10/12] Adding: blackedraw.19.01.02 [Subtitle]
-2025-12-17 22:00:00,402 - __main__ - DEBUG - Adding torrent: blackedraw.19.01.02 [Subtitle] with category: Daily Ingestion
-2025-12-17 22:00:00,412 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-12-17 22:00:00,412 - __main__ - DEBUG - Successfully added torrent: blackedraw.19.01.02 [Subtitle] to category: Daily Ingestion
-2025-12-17 22:00:01,417 - __main__ - INFO - [11/12] Adding: blackedraw.19.01.07 [Subtitle]
-2025-12-17 22:00:01,418 - __main__ - DEBUG - Adding torrent: blackedraw.19.01.07 [Subtitle] with category: Daily Ingestion
-2025-12-17 22:00:01,424 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-12-17 22:00:01,424 - __main__ - DEBUG - Successfully added torrent: blackedraw.19.01.07 [Subtitle] to category: Daily Ingestion
-2025-12-17 22:00:02,428 - __main__ - INFO - [12/12] Adding: HNAMH-024 [NoSubtitle]
-2025-12-17 22:00:02,429 - __main__ - DEBUG - Adding torrent: HNAMH-024 [NoSubtitle] with category: Daily Ingestion
-2025-12-17 22:00:02,461 - urllib3.connectionpool - DEBUG - http://101.100.165.240:12301 "POST /api/v2/torrents/add HTTP/1.1" 200 3
-2025-12-17 22:00:02,461 - __main__ - DEBUG - Successfully added torrent: HNAMH-024 [NoSubtitle] to category: Daily Ingestion
-2025-12-17 22:00:03,466 - __main__ - INFO - ==================================================
-2025-12-17 22:00:03,467 - __main__ - INFO - UPLOAD SUMMARY
-2025-12-17 22:00:03,467 - __main__ - INFO - ==================================================
-2025-12-17 22:00:03,467 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251217.csv
-2025-12-17 22:00:03,467 - __main__ - INFO - Total torrents found: 12
-2025-12-17 22:00:03,467 - __main__ - INFO - Successfully added: 12
-2025-12-17 22:00:03,467 - __main__ - INFO -   - Hacked subtitle torrents: 0
-2025-12-17 22:00:03,467 - __main__ - INFO -   - Hacked no subtitle torrents: 0
-2025-12-17 22:00:03,467 - __main__ - INFO -   - Subtitle torrents: 11
-2025-12-17 22:00:03,467 - __main__ - INFO -   - No subtitle torrents: 1
-2025-12-17 22:00:03,467 - __main__ - INFO - Failed to add: 0
-2025-12-17 22:00:03,467 - __main__ - INFO - Success rate: 100.0%
-2025-12-17 22:00:03,467 - __main__ - INFO - ==================================================
+2025-12-19 00:31:53,825 - __main__ - INFO - Starting qBittorrent uploader...
+2025-12-19 00:31:53,825 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-19 00:31:53,826 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
+2025-12-19 00:31:53,826 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
+2025-12-19 00:31:53,827 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-19 00:31:53,827 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@129.xxx.xxx.19:12300, HTTPS: http://***:***@129.xxx.xxx.19:12300)
+2025-12-19 00:31:53,827 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-19 00:31:53,827 - __main__ - INFO - PROXY POOL MODE for qBittorrent: 2 proxies with automatic failover
+2025-12-19 00:31:53,827 - __main__ - INFO - Using specified input file: Daily Report/Javdb_TodayTitle_20251219.csv
+2025-12-19 00:31:53,827 - __main__ - INFO - Found 8 torrent links in Daily Report/Javdb_TodayTitle_20251219.csv
+2025-12-19 00:31:53,827 - __main__ - INFO - Skipped 2 already downloaded torrents
+2025-12-19 00:31:53,827 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-12-19 00:31:54,001 - __main__ - INFO - Successfully logged in to qBittorrent
+2025-12-19 00:31:54,001 - __main__ - INFO - History manager imported, will update downloaded status
+2025-12-19 00:31:54,001 - __main__ - INFO - Starting to add 8 torrents to qBittorrent...
+2025-12-19 00:31:54,001 - __main__ - INFO - [1/8] Adding: NAMH-050 [NoSubtitle]
+2025-12-19 00:31:55,007 - __main__ - INFO - [2/8] Adding: START-471 [NoSubtitle]
+2025-12-19 00:31:56,018 - __main__ - INFO - [3/8] Adding: START-439 [NoSubtitle]
+2025-12-19 00:31:57,030 - __main__ - INFO - [4/8] Adding: AQULA-101 [NoSubtitle]
+2025-12-19 00:31:58,045 - __main__ - INFO - [5/8] Adding: MFCW-063 [NoSubtitle]
+2025-12-19 00:31:59,056 - __main__ - INFO - [6/8] Adding: ABF-295 [Hacked+Subtitle]
+2025-12-19 00:32:00,070 - __main__ - INFO - [7/8] Adding: MIMK-260 [Hacked+Subtitle]
+2025-12-19 00:32:01,080 - __main__ - INFO - [8/8] Adding: MFYD-060 [NoSubtitle]
+2025-12-19 00:32:02,096 - __main__ - INFO - ==================================================
+2025-12-19 00:32:02,096 - __main__ - INFO - UPLOAD SUMMARY
+2025-12-19 00:32:02,096 - __main__ - INFO - ==================================================
+2025-12-19 00:32:02,096 - __main__ - INFO - CSV file: Daily Report/Javdb_TodayTitle_20251219.csv
+2025-12-19 00:32:02,097 - __main__ - INFO - Total torrents found: 8
+2025-12-19 00:32:02,097 - __main__ - INFO - Successfully added: 8
+2025-12-19 00:32:02,097 - __main__ - INFO -   - Hacked subtitle torrents: 2
+2025-12-19 00:32:02,097 - __main__ - INFO -   - Hacked no subtitle torrents: 0
+2025-12-19 00:32:02,097 - __main__ - INFO -   - Subtitle torrents: 0
+2025-12-19 00:32:02,097 - __main__ - INFO -   - No subtitle torrents: 6
+2025-12-19 00:32:02,098 - __main__ - INFO - Failed to add: 0
+2025-12-19 00:32:02,098 - __main__ - INFO - Success rate: 100.0%
+2025-12-19 00:32:02,098 - __main__ - INFO - ==================================================
