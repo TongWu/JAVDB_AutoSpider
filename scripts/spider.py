@@ -9,7 +9,7 @@ import sys
 from typing import Optional, Dict, Any
 from bs4 import BeautifulSoup
 from bs4.element import Tag
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, quote
 from datetime import datetime
 
 # Change to project root directory (parent of scripts folder)
@@ -19,7 +19,7 @@ sys.path.insert(0, project_root)
 
 # Import utility functions
 from utils.history_manager import load_parsed_movies_history, save_parsed_movie_to_history, should_process_movie, \
-    determine_torrent_types, get_missing_torrent_types, validate_history_file
+    determine_torrent_types, get_missing_torrent_types, validate_history_file, has_complete_subtitles
 from utils.parser import parse_index, parse_detail
 from utils.magnet_extractor import extract_magnets
 
@@ -58,9 +58,10 @@ except ImportError:
 
 # Import CloudFlare bypass configuration (with fallback)
 try:
-    from config import CF_BYPASS_SERVICE_PORT
+    from config import CF_BYPASS_SERVICE_PORT, CF_BYPASS_ENABLED
 except ImportError:
     CF_BYPASS_SERVICE_PORT = 8000
+    CF_BYPASS_ENABLED = True
 
 # Import proxy pool configuration (with fallback)
 try:
@@ -85,6 +86,7 @@ global_proxy_pool: Optional[ProxyPool] = None
 # Counter for consecutive CF bypass failures (small responses)
 cf_bypass_failure_count: int = 0
 CF_BYPASS_MAX_FAILURES: int = 3  # Disable CF bypass after this many consecutive small responses
+cf_bypass_force_refresh: bool = False  # Flag to force refresh CF bypass cookies on next request
 
 # Global set to track parsed links
 parsed_links = set()
@@ -189,26 +191,61 @@ def get_cf_bypass_service_url(proxy_ip: Optional[str] = None) -> str:
     Get the CF bypass service URL based on proxy configuration.
     
     Args:
-        proxy_ip: IP address of the proxy server (if using proxy pool)
+        proxy_ip: IP address of the proxy server (if using proxy)
     
     Returns:
-        CF bypass service URL
-        - Without proxy: http://localhost:{CF_BYPASS_SERVICE_PORT}
+        CF bypass service URL:
+        - Without proxy: http://127.0.0.1:{CF_BYPASS_SERVICE_PORT}
         - With proxy: http://{proxy_ip}:{CF_BYPASS_SERVICE_PORT}
     """
     if proxy_ip:
         return f"http://{proxy_ip}:{CF_BYPASS_SERVICE_PORT}"
     else:
-        return f"http://localhost:{CF_BYPASS_SERVICE_PORT}"
+        return f"http://127.0.0.1:{CF_BYPASS_SERVICE_PORT}"
+
+
+def is_cf_bypass_failure(html_content: str) -> bool:
+    """
+    Check if the CF bypass response indicates a failure.
+    
+    Failure criteria: HTML size < 1000 bytes AND contains 'fail' keyword
+    
+    Args:
+        html_content: The HTML content returned by bypass service
+    
+    Returns:
+        True if the response is considered a failure
+    """
+    if html_content is None:
+        return True
+    
+    content_size = len(html_content)
+    contains_fail = 'fail' in html_content.lower()
+    
+    is_failure = content_size < 1000 and contains_fail
+    
+    if is_failure:
+        logger.debug(f"[CF Bypass] Failure detected: size={content_size} bytes, contains_fail={contains_fail}")
+    
+    return is_failure
 
 
 def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='unknown', max_retries=3, use_cf_bypass=False):
     """
     Fetch a webpage with proper headers, age verification bypass, and proxy pool support.
     
-    When use_cf_bypass=True, uses CloudflareBypassForScraping's Request Mirroring feature:
-    - Requests are forwarded through the bypass service
-    - Service automatically handles Cloudflare challenges and caches cookies
+    Mode combinations:
+    - --use-proxy only: Use proxy to access website directly (no bypass)
+    - --use-cf-bypass only: Use local CF bypass service (http://127.0.0.1:8000/html?url=...)
+    - --use-proxy --use-cf-bypass: Use proxy's CF bypass service (http://{proxy_ip}:8000/html?url=...)
+    
+    CF Bypass failure detection: HTML size < 1000 bytes AND contains 'fail' keyword
+    
+    Retry sequence on CF bypass failure:
+      a. Retry current method (bypass)
+      b. Without bypass, use current proxy
+      c. Switch to another proxy, without bypass
+      d. Use bypass with new proxy
     
     Service repository: https://github.com/sarperavci/CloudflareBypassForScraping
     
@@ -219,201 +256,472 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
         use_proxy: Whether --use-proxy flag is enabled
         module_name: Module name for proxy control ('spider_index', 'spider_detail', 'spider_age_verification')
         max_retries: Maximum number of retries with different proxies (only for proxy pool mode)
-        use_cf_bypass: Whether to use CF bypass service (Request Mirroring mode)
+        use_cf_bypass: Whether to use CF bypass service
     """
-    global global_proxy_pool, cf_bypass_failure_count
+    global global_proxy_pool, cf_bypass_failure_count, cf_bypass_force_refresh
     
     if session is None:
         session = requests.Session()
 
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8',
-        'Accept-Encoding': 'gzip, deflate',
+    # Check if CF bypass is globally disabled
+    effective_use_cf_bypass = use_cf_bypass and CF_BYPASS_ENABLED
+    if use_cf_bypass and not CF_BYPASS_ENABLED:
+        logger.debug(f"[CF Bypass] Globally disabled via CF_BYPASS_ENABLED=False")
+
+    # Browser-like headers for direct requests to javdb.com
+    # These mimic a real Chrome browser on macOS to avoid detection
+    browser_headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding': 'gzip, deflate, br, zstd',
         'Connection': 'keep-alive',
         'Upgrade-Insecure-Requests': '1',
         'Sec-Fetch-Dest': 'document',
         'Sec-Fetch-Mode': 'navigate',
         'Sec-Fetch-Site': 'none',
         'Sec-Fetch-User': '?1',
+        'Sec-Ch-Ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"macOS"',
         'Cache-Control': 'max-age=0',
     }
     
-    # Add JAVDB session cookie if configured
-    if use_cookie and JAVDB_SESSION_COOKIE:
-        headers['Cookie'] = f'_jdb_session={JAVDB_SESSION_COOKIE}'
-
-    # CF Bypass Request Mirroring mode
-    # When enabled, requests are forwarded through the bypass service
-    actual_url = url
-    proxies = None
-    use_proxy_pool_mode = False
+    # Minimal headers for CF bypass service requests
+    # The bypass service handles its own headers (User-Agent, cookies, etc.)
+    # We only need to pass minimal info or none at all
+    bypass_headers = {}
     
-    if use_cf_bypass:
-        # Parse the original URL to get hostname and path
-        parsed_url = urlparse(url)
-        target_hostname = parsed_url.netloc
-        url_path = parsed_url.path
-        if parsed_url.query:
-            url_path += f"?{parsed_url.query}"
-        
-        # Determine the CF bypass service URL
-        proxy_ip = None
-        if use_proxy and global_proxy_pool is not None:
-            current_proxy = global_proxy_pool.get_current_proxy()
-            if current_proxy:
-                proxy_url = current_proxy.get('https') or current_proxy.get('http')
-                if proxy_url:
-                    proxy_ip = extract_ip_from_proxy_url(proxy_url)
-                    use_proxy_pool_mode = True
-        
-        service_base_url = get_cf_bypass_service_url(proxy_ip)
-        
-        # Rewrite URL to point to bypass service
-        actual_url = f"{service_base_url}{url_path}"
-        
-        # Add x-hostname header (required for Request Mirroring)
-        headers['x-hostname'] = target_hostname
-        
-        # Check if we need to force refresh CF bypass cookies
-        if cf_bypass_force_refresh:
-            headers['x-bypass-cache'] = 'true'
-            logger.debug(f"[CF Bypass] Forcing cache refresh due to previous small response")
-            cf_bypass_force_refresh = False  # Reset flag after use
-        
-        logger.debug(f"[CF Bypass] Request Mirroring: {url} -> {actual_url}")
-        logger.debug(f"[CF Bypass] x-hostname: {target_hostname}")
-    else:
-        # Normal mode - determine proxy configuration
-        if should_use_proxy_for_module(module_name, use_proxy):
-            if PROXY_MODE in ('pool', 'single') and global_proxy_pool is not None:
-                use_proxy_pool_mode = True
-                proxies = global_proxy_pool.get_current_proxy()
-                if proxies:
-                    proxy_name = global_proxy_pool.get_current_proxy_name()
-                    if PROXY_MODE == 'pool':
-                        logger.debug(f"[{module_name}] Using proxy pool - Current proxy: {proxy_name}")
-                    else:
-                        logger.debug(f"[{module_name}] Using single proxy mode - Main proxy: {proxy_name}")
-                else:
-                    logger.warning(f"[{module_name}] Proxy mode '{PROXY_MODE}' enabled but no proxy available")
-            elif PROXY_HTTP or PROXY_HTTPS:
-                proxies = {}
-                if PROXY_HTTP:
-                    proxies['http'] = PROXY_HTTP
-                if PROXY_HTTPS:
-                    proxies['https'] = PROXY_HTTPS
-                logger.debug(f"[{module_name}] Using legacy proxy configuration: {proxies}")
-        elif use_proxy:
-            logger.debug(f"[{module_name}] Proxy disabled for this module")
+    # Add JAVDB session cookie if configured (only for direct requests)
+    if use_cookie and JAVDB_SESSION_COOKIE:
+        browser_headers['Cookie'] = f'_jdb_session={JAVDB_SESSION_COOKIE}'
 
-    # Retry logic
-    retry_count = 0
-    while retry_count < max_retries:
-        try:
-            logger.debug(f"Fetching URL: {url} (attempt {retry_count + 1}/{max_retries})")
-            if use_cf_bypass:
-                logger.debug(f"[CF Bypass] Actual request to: {actual_url}")
-            elif proxies:
-                logger.debug(f"Using proxies: {proxies}")
-            
-            response = session.get(actual_url, headers=headers, proxies=proxies, timeout=60 if use_cf_bypass else 30)
-            response.raise_for_status()
-            logger.debug(f"Successfully fetched URL: {url} (Content-Length: {len(response.content)} bytes)")
-            
-            # Mark proxy as successful if using proxy pool
-            if use_proxy_pool_mode and global_proxy_pool is not None:
-                global_proxy_pool.mark_success()
-            
-            html_content = response.text
-            
-            # Check for Cloudflare Turnstile verification page (indicates we're being challenged)
-            if 'Security Verification' in html_content and 'turnstile' in html_content.lower():
-                logger.warning(f"Cloudflare Turnstile verification page detected for {url} (Size: {len(html_content)} bytes). Waiting {CF_TURNSTILE_COOLDOWN}s before retry...")
-                time.sleep(CF_TURNSTILE_COOLDOWN)
-                return None  # Return None to trigger retry/fallback mechanism
-            
-            # Check for suspiciously small response (likely incomplete page without magnets)
-            # Normal detail pages are 50000+ bytes, index pages are 70000+ bytes
-            # Pages under 10000 bytes are likely protection pages or incomplete responses
-            if len(html_content) < 10000:
-                if use_cf_bypass:
-                    cf_bypass_failure_count += 1
-                    logger.warning(f"CF Bypass returned small response for {url} (Size: {len(html_content)} bytes). Failure count: {cf_bypass_failure_count}/{CF_BYPASS_MAX_FAILURES}")
-                    
-                    if cf_bypass_failure_count >= CF_BYPASS_MAX_FAILURES:
-                        logger.error(f"CF Bypass has failed {cf_bypass_failure_count} times consecutively. CF Bypass service may not be working properly. Consider restarting the CF Bypass container.")
-                    
-                    return None  # Return None to trigger fallback (try Proxy Direct instead)
-                elif '/v/' in url:
-                    logger.warning(f"Suspiciously small response for detail page {url} (Size: {len(html_content)} bytes).")
+    def _get_proxies_config():
+        """Get current proxy configuration based on settings.
+        
+        Uses round-robin proxy selection to distribute requests across all available proxies.
+        """
+        if not should_use_proxy_for_module(module_name, use_proxy):
+            return None, False
+        
+        if PROXY_MODE in ('pool', 'single') and global_proxy_pool is not None:
+            # Use round-robin proxy selection for load balancing
+            proxies = global_proxy_pool.get_next_proxy()
+            if proxies:
+                return proxies, True
             else:
-                # Reset failure count on successful response
-                if use_cf_bypass and cf_bypass_failure_count > 0:
-                    logger.info(f"CF Bypass recovered - resetting failure count from {cf_bypass_failure_count} to 0")
-                    cf_bypass_failure_count = 0
+                logger.warning(f"[{module_name}] Proxy mode '{PROXY_MODE}' enabled but no proxy available")
+                return None, False
+        elif PROXY_HTTP or PROXY_HTTPS:
+            proxies = {}
+            if PROXY_HTTP:
+                proxies['http'] = PROXY_HTTP
+            if PROXY_HTTPS:
+                proxies['https'] = PROXY_HTTPS
+            return proxies, False
+        
+        return None, False
+
+    def _do_request(target_url, req_headers, req_proxies, timeout, context_msg):
+        """Execute a single HTTP request."""
+        try:
+            logger.debug(f"[{context_msg}] Requesting: {target_url}")
+            logger.debug(f"[{context_msg}] Headers: {req_headers}")
+            if req_proxies:
+                logger.debug(f"[{context_msg}] Using proxies: {req_proxies}")
             
-            # Check for age verification modal and bypass if needed
-            soup = BeautifulSoup(html_content, 'html.parser')
-            age_modal = soup.find('div', class_='modal is-active over18-modal')
+            response = session.get(target_url, headers=req_headers, proxies=req_proxies, timeout=timeout)
+            response.raise_for_status()
             
-            if age_modal:
-                logger.debug("Age verification modal detected, attempting to bypass...")
-                
-                # Create clean headers for age verification (without x-hostname if CF bypass is enabled)
-                # Age verification requests go directly to javdb.com, not through CF bypass service
-                age_headers = {k: v for k, v in headers.items() if k != 'x-hostname'}
-                
-                # Find age verification link
-                age_links = age_modal.find_all('a', href=True)
-                for link in age_links:
-                    if 'over18' in link.get('href', ''):
-                        age_url = urljoin(BASE_URL, link.get('href'))
-                        logger.debug(f"Found age verification link: {age_url}")
-                        
-                        # Access age verification link (use same proxy settings as main request)
-                        # Use age_headers to exclude x-hostname header
-                        age_response = session.get(age_url, headers=age_headers, proxies=proxies, timeout=30)
+            # Log response details
+            content_len = len(response.content)
+            text_len = len(response.text)
+            logger.debug(f"[{context_msg}] Response: HTTP {response.status_code}, Content-Length: {content_len} bytes, Text-Length: {text_len} chars")
+            
+            # Log first 200 chars of response for debugging
+            preview = response.text[:200].replace('\n', ' ').replace('\r', '')
+            logger.debug(f"[{context_msg}] Response preview: {preview}...")
+            
+            return response.text, None
+        except requests.RequestException as e:
+            logger.error(f"[{context_msg}] Error: {e}")
+            return None, e
+
+    def _get_bypass_ip(req_proxies, force_local=False):
+        """Get the bypass service IP based on proxy configuration."""
+        if force_local or not req_proxies:
+            return None  # Will use 127.0.0.1
+        proxy_url = req_proxies.get('https') or req_proxies.get('http')
+        if proxy_url:
+            return extract_ip_from_proxy_url(proxy_url)
+        return None
+
+    def _refresh_bypass_cache(req_proxies, force_local=False):
+        """
+        Refresh the CF bypass cache by sending a request with x-bypass-cache header.
+        
+        This forces the bypass service to get fresh cf_clearance cookies.
+        
+        Request format:
+        curl "http://{ip}:8000/html?url={encoded_url}" \
+          -H "x-bypass-cache: true"
+        """
+        proxy_ip = _get_bypass_ip(req_proxies, force_local)
+        
+        # Validate bypass IP based on mode:
+        # - force_local=True: proxy_ip should be None (will use 127.0.0.1), this is expected
+        # - force_local=False with req_proxies: proxy_ip should NOT be None (IP extraction should succeed)
+        # - force_local=False without req_proxies: no proxy available, cannot refresh
+        if not force_local:
+            if req_proxies is None:
+                logger.warning(f"[CF Bypass] Cannot refresh cache: no proxy available")
+                return False
+            elif proxy_ip is None:
+                # req_proxies is set but IP extraction failed - this is a bug, don't silently fallback to localhost
+                logger.warning(f"[CF Bypass] Cannot refresh cache: failed to extract IP from proxy config")
+                return False
+        
+        bypass_base_url = get_cf_bypass_service_url(proxy_ip)
+        encoded_url = quote(url, safe='')
+        refresh_url = f"{bypass_base_url}/html?url={encoded_url}"
+        
+        # Build headers for cache refresh
+        refresh_headers = {
+            'x-bypass-cache': 'true'
+        }
+        
+        logger.info(f"[CF Bypass] Refreshing bypass cache: {refresh_url}")
+        
+        try:
+            response = session.get(refresh_url, headers=refresh_headers, timeout=120)
+            if response.status_code == 200:
+                content_size = len(response.content)
+                # Check if we got a valid response (not Turnstile page)
+                if content_size > 10000:
+                    logger.info(f"[CF Bypass] Cache refresh successful (size={content_size} bytes)")
+                    return True
+                else:
+                    logger.warning(f"[CF Bypass] Cache refresh returned small response (size={content_size} bytes)")
+                    return False
+            else:
+                logger.warning(f"[CF Bypass] Cache refresh failed: HTTP {response.status_code}")
+                return False
+        except requests.RequestException as e:
+            logger.error(f"[CF Bypass] Cache refresh error: {e}")
+            return False
+
+    def _fetch_with_cf_bypass(req_proxies, context_msg, force_local=False):
+        """
+        Fetch using CF bypass service.
+        
+        Args:
+            req_proxies: Proxy configuration (used to determine bypass service IP)
+            context_msg: Context message for logging
+            force_local: If True, always use local bypass (127.0.0.1) regardless of proxy settings
+        
+        Returns:
+            tuple: (html_content, success, is_turnstile)
+        """
+        proxy_ip = _get_bypass_ip(req_proxies, force_local)
+        
+        # Validate bypass IP based on mode:
+        # - force_local=True: proxy_ip should be None (will use 127.0.0.1), this is expected
+        # - force_local=False with req_proxies: proxy_ip should NOT be None (IP extraction should succeed)
+        # - force_local=False without req_proxies in proxy_bypass mode: no proxy available, fail
+        if not force_local:
+            if req_proxies is None and use_proxy_bypass:
+                logger.error(f"[CF Bypass] {context_msg}: No proxy available for proxy bypass mode")
+                return None, False, False
+            elif req_proxies is not None and proxy_ip is None:
+                # req_proxies is set but IP extraction failed - don't silently fallback to localhost
+                logger.error(f"[CF Bypass] {context_msg}: Failed to extract IP from proxy config")
+                return None, False, False
+        
+        # Build CF bypass URL: http://{ip}:8000/html?url={encoded_target_url}
+        bypass_base_url = get_cf_bypass_service_url(proxy_ip)
+        encoded_url = quote(url, safe='')
+        bypass_url = f"{bypass_base_url}/html?url={encoded_url}"
+        
+        logger.debug(f"[CF Bypass] {context_msg}: {url} -> {bypass_url}")
+        
+        # CF bypass requests are always sent directly (no proxy forwarding)
+        # Use minimal headers - the bypass service handles User-Agent, cookies, etc.
+        html_content, error = _do_request(bypass_url, bypass_headers, None, timeout=60, context_msg=f"CF Bypass {context_msg}")
+        
+        if html_content:
+            content_size = len(html_content)
+            has_turnstile_keyword = 'turnstile' in html_content.lower()
+            has_security_verification = 'Security Verification' in html_content
+            is_bypass_failure = is_cf_bypass_failure(html_content)
+            
+            logger.info(f"[CF Bypass] {context_msg} response: size={content_size}, turnstile_keyword={has_turnstile_keyword}, security_verification={has_security_verification}, bypass_failure={is_bypass_failure}")
+            
+            if not is_bypass_failure:
+                # Check if it's a Turnstile page
+                is_turnstile = has_security_verification and has_turnstile_keyword
+                if is_turnstile:
+                    logger.warning(f"[CF Bypass] {context_msg} returned Turnstile page (size={content_size} bytes)")
+                    return html_content, False, True  # failed, is turnstile
+                else:
+                    logger.info(f"[CF Bypass] {context_msg} SUCCESS - got valid HTML (size={content_size} bytes)")
+                    return html_content, True, False  # success, no turnstile
+            else:
+                logger.warning(f"[CF Bypass] {context_msg} returned failure response (size={content_size} bytes)")
+                return html_content, False, False  # failed, not turnstile
+        else:
+            logger.error(f"[CF Bypass] {context_msg} returned no content")
+            return None, False, False
+
+    def _fetch_direct(req_proxies, context_msg):
+        """Fetch directly without CF bypass. Uses browser-like headers."""
+        html_content, error = _do_request(url, browser_headers, req_proxies, timeout=30, context_msg=f"Direct {context_msg}")
+        if html_content:
+            # Check if it's a Turnstile page
+            is_turnstile = 'Security Verification' in html_content and 'turnstile' in html_content.lower()
+            if is_turnstile:
+                logger.warning(f"[Direct] {context_msg} returned Turnstile page (size={len(html_content)} bytes)")
+                return html_content, False, True  # failed, is turnstile
+            return html_content, error is None, False
+        return None, False, False
+
+    def _process_html(html_content, req_proxies):
+        """Process HTML content: check for Cloudflare and age verification."""
+        if not html_content:
+            return None
+        
+        # Check for Cloudflare Turnstile verification page (should already be handled, but double check)
+        if 'Security Verification' in html_content and 'turnstile' in html_content.lower():
+            logger.warning(f"Cloudflare Turnstile verification page detected for {url} (Size: {len(html_content)} bytes)")
+            return None
+        
+        # Check for age verification modal
+        soup = BeautifulSoup(html_content, 'html.parser')
+        age_modal = soup.find('div', class_='modal is-active over18-modal')
+        
+        if age_modal:
+            logger.debug("Age verification modal detected, attempting to bypass...")
+            
+            age_links = age_modal.find_all('a', href=True)
+            for link in age_links:
+                if 'over18' in link.get('href', ''):
+                    age_url = urljoin(BASE_URL, link.get('href'))
+                    logger.debug(f"Found age verification link: {age_url}")
+                    
+                    try:
+                        age_response = session.get(age_url, headers=browser_headers, proxies=req_proxies, timeout=30)
                         if age_response.status_code == 200:
                             logger.debug("Successfully bypassed age verification")
-                            # Re-fetch the original page using the same URL and proxy settings
-                            final_response = session.get(actual_url, headers=headers, proxies=proxies, timeout=60 if use_cf_bypass else 30)
+                            # Re-fetch the original page
+                            final_response = session.get(url, headers=browser_headers, proxies=req_proxies, timeout=30)
                             if final_response.status_code == 200:
                                 logger.debug("Successfully re-fetched page after age verification")
                                 return final_response.text
-                            else:
-                                logger.warning(f"Failed to get final page after age verification: {final_response.status_code}")
-                                return final_response.text
-                        else:
-                            logger.debug(f"Failed to bypass age verification: {age_response.status_code}")
-                            break
-                
-                logger.debug("Could not find or access age verification link")
-            else:
-                logger.debug("No age verification modal detected")
-            
-            return html_content
-            
-        except requests.RequestException as e:
-            logger.error(f"Error fetching {url}: {e}")
-            
-            # If using proxy pool, try to switch to another proxy
-            if use_proxy_pool_mode and global_proxy_pool is not None and retry_count < max_retries - 1:
-                switched = global_proxy_pool.mark_failure_and_switch()
-                if switched:
-                    proxies = global_proxy_pool.get_current_proxy()
-                    proxy_name = global_proxy_pool.get_current_proxy_name()
-                    logger.info(f"[{module_name}] Switched to proxy: {proxy_name}, retrying...")
-                    retry_count += 1
-                    continue
-                else:
-                    logger.error(f"[{module_name}] Failed to switch proxy, no more proxies available")
+                    except requests.RequestException as e:
+                        logger.debug(f"Failed to bypass age verification: {e}")
                     break
-            else:
-                # Single proxy mode or last retry - just fail
-                break
+            
+            logger.debug("Could not find or access age verification link")
+        
+        return html_content
+
+    # Get initial proxy configuration
+    proxies, use_proxy_pool_mode = _get_proxies_config()
+    proxy_name = global_proxy_pool.get_current_proxy_name() if (use_proxy_pool_mode and global_proxy_pool) else "None"
+    
+    # Determine the mode based on flags:
+    # - use_proxy + use_cf_bypass: Use proxy's bypass service
+    # - use_cf_bypass only: Use local bypass service (127.0.0.1)
+    # - use_proxy only: Direct request through proxy (no bypass)
+    use_local_bypass = effective_use_cf_bypass and not use_proxy
+    use_proxy_bypass = effective_use_cf_bypass and use_proxy
+    
+    if use_local_bypass:
+        logger.debug(f"[{module_name}] Mode: Local CF Bypass only (127.0.0.1:{CF_BYPASS_SERVICE_PORT})")
+    elif use_proxy_bypass:
+        logger.debug(f"[{module_name}] Mode: Proxy + Proxy's CF Bypass (Proxy={proxy_name})")
+    elif use_proxy:
+        logger.debug(f"[{module_name}] Mode: Proxy only (no bypass, Proxy={proxy_name})")
+    else:
+        logger.debug(f"[{module_name}] Mode: Direct request (no proxy, no bypass)")
+    
+    # If CF bypass is enabled, use the new retry sequence
+    if effective_use_cf_bypass:
+        turnstile_detected = False
+        
+        # Check if using proxy+bypass mode but no proxy available
+        if use_proxy_bypass and proxies is None:
+            logger.error(f"[{module_name}] Proxy+CF Bypass mode but no proxy available. Cannot proceed.")
+            return None
+        
+        # Step: Initial CF bypass attempt
+        html_content, success, is_turnstile = _fetch_with_cf_bypass(proxies, f"Proxy={proxy_name}", force_local=use_local_bypass)
+        if success:
+            result = _process_html(html_content, proxies)
+            if result and len(result) >= 10000:  # Validate response size
+                if use_proxy_pool_mode and global_proxy_pool:
+                    global_proxy_pool.mark_success()
+                cf_bypass_failure_count = 0
+                return result
+            elif result:
+                logger.warning(f"[{module_name}] Initial CF bypass returned small response ({len(result)} bytes), continuing to fallback")
+        
+        turnstile_detected = is_turnstile
+        logger.warning(f"[{module_name}] CF Bypass initial attempt failed. Starting fallback sequence (cooldown: {FALLBACK_COOLDOWN}s between steps)...")
+        cf_bypass_failure_count += 1
+        
+        # Cooldown before entering fallback
+        if FALLBACK_COOLDOWN > 0:
+            logger.debug(f"[{module_name}] Fallback cooldown: {FALLBACK_COOLDOWN}s before step (a)")
+            time.sleep(FALLBACK_COOLDOWN)
+        
+        # Step (a): Retry CF bypass (one more attempt)
+        logger.debug(f"[{module_name}] Fallback step (a): Retry CF bypass")
+        html_content, success, is_turnstile = _fetch_with_cf_bypass(proxies, f"Retry Proxy={proxy_name}", force_local=use_local_bypass)
+        if success:
+            result = _process_html(html_content, proxies)
+            if result and len(result) >= 10000:  # Validate response size
+                if use_proxy_pool_mode and global_proxy_pool:
+                    global_proxy_pool.mark_success()
+                cf_bypass_failure_count = 0
+                return result
+            elif result:
+                logger.warning(f"[{module_name}] Step (a) returned small response ({len(result)} bytes), continuing to next step")
+        
+        turnstile_detected = turnstile_detected or is_turnstile
+        
+        # === Refresh bypass cache between step (a) and (b) ===
+        if turnstile_detected:
+            logger.info(f"[{module_name}] Turnstile detected, refreshing bypass cache...")
+            if FALLBACK_COOLDOWN > 0:
+                time.sleep(FALLBACK_COOLDOWN)
+            _refresh_bypass_cache(proxies, force_local=use_local_bypass)
+            turnstile_detected = False  # Reset after refresh
+        
+        # Step (b): Try direct (no bypass) with current proxy (only if using proxy)
+        if use_proxy and proxies:
+            # Cooldown before step (b)
+            if FALLBACK_COOLDOWN > 0:
+                logger.debug(f"[{module_name}] Fallback cooldown: {FALLBACK_COOLDOWN}s before step (b)")
+                time.sleep(FALLBACK_COOLDOWN)
+            
+            logger.debug(f"[{module_name}] Fallback step (b): Direct request with current proxy (no bypass)")
+            html_content, success, is_turnstile = _fetch_direct(proxies, f"Proxy={proxy_name}")
+            if success:
+                result = _process_html(html_content, proxies)
+                if result and len(result) >= 10000:  # Validate response size
+                    if use_proxy_pool_mode and global_proxy_pool:
+                        global_proxy_pool.mark_success()
+                    return result
+            turnstile_detected = turnstile_detected or is_turnstile
+        
+        # Step (c) & (d): Try other proxies if in pool mode (only if using proxy)
+        if use_proxy and use_proxy_pool_mode and global_proxy_pool and PROXY_MODE == 'pool':
+            max_proxy_switches = min(len(global_proxy_pool.proxies) - 1, 5)  # Try up to 5 other proxies
+            
+            for switch_count in range(max_proxy_switches):
+                # Cooldown before switching proxy
+                if FALLBACK_COOLDOWN > 0:
+                    logger.debug(f"[{module_name}] Fallback cooldown: {FALLBACK_COOLDOWN}s before switching proxy")
+                    time.sleep(FALLBACK_COOLDOWN)
                 
+                # Switch to next proxy
+                switched = global_proxy_pool.mark_failure_and_switch()
+                if not switched:
+                    logger.warning(f"[{module_name}] No more proxies available in pool")
+                    break
+                
+                proxies = global_proxy_pool.get_current_proxy()
+                proxy_name = global_proxy_pool.get_current_proxy_name()
+                
+                # Step (c): Try direct with new proxy (no bypass)
+                logger.debug(f"[{module_name}] Fallback step (c): Direct request with new proxy={proxy_name} (no bypass)")
+                html_content, success, is_turnstile = _fetch_direct(proxies, f"Proxy={proxy_name}")
+                if success:
+                    result = _process_html(html_content, proxies)
+                    if result and len(result) >= 10000:
+                        global_proxy_pool.mark_success()
+                        return result
+                turnstile_detected = turnstile_detected or is_turnstile
+                
+                # Cooldown before step (d)
+                if FALLBACK_COOLDOWN > 0:
+                    logger.debug(f"[{module_name}] Fallback cooldown: {FALLBACK_COOLDOWN}s before step (d)")
+                    time.sleep(FALLBACK_COOLDOWN)
+                
+                # Step (d): Try CF bypass with new proxy (use proxy's bypass service)
+                logger.debug(f"[{module_name}] Fallback step (d): CF bypass with new proxy={proxy_name}")
+                html_content, success, is_turnstile = _fetch_with_cf_bypass(proxies, f"Proxy={proxy_name}", force_local=False)
+                if success:
+                    result = _process_html(html_content, proxies)
+                    if result and len(result) >= 10000:  # Validate response size
+                        global_proxy_pool.mark_success()
+                        cf_bypass_failure_count = 0
+                        return result
+                    elif result:
+                        logger.warning(f"[{module_name}] Step (d) returned small response ({len(result)} bytes), continuing to next proxy")
+                
+                turnstile_detected = turnstile_detected or is_turnstile
+                
+                # === Refresh bypass cache after step (d) if turnstile detected ===
+                if turnstile_detected:
+                    logger.info(f"[{module_name}] Turnstile detected after step (d), refreshing bypass cache for proxy={proxy_name}...")
+                    if FALLBACK_COOLDOWN > 0:
+                        time.sleep(FALLBACK_COOLDOWN)
+                    _refresh_bypass_cache(proxies, force_local=False)
+                    turnstile_detected = False  # Reset after refresh
+        
+        # All fallbacks failed
+        logger.error(f"[{module_name}] All CF bypass fallback attempts exhausted for {url}")
+        cf_bypass_failure_count += 1
+        if cf_bypass_failure_count >= CF_BYPASS_MAX_FAILURES:
+            logger.error(f"[{module_name}] CF Bypass has failed {cf_bypass_failure_count} times. Service may not be working properly.")
+        return None
+    
+    # Non-CF bypass mode: standard retry logic
+    retry_count = 0
+    while retry_count < max_retries:
+        logger.debug(f"Fetching URL: {url} (attempt {retry_count + 1}/{max_retries})")
+        if proxies:
+            logger.debug(f"Using proxies: {proxies}")
+        
+        html_content, success, is_turnstile = _fetch_direct(proxies, f"Proxy={proxy_name}" if proxies else "No proxy")
+        
+        if success:
+            # Mark proxy as successful
+            if use_proxy_pool_mode and global_proxy_pool:
+                global_proxy_pool.mark_success()
+            
+            result = _process_html(html_content, proxies)
+            if result and len(result) >= 10000:  # Validate response size (consistent with CF bypass mode)
+                return result
+            elif result:
+                # Small response - for detail pages this is likely a failed response, retry
+                if '/v/' in url:
+                    logger.warning(f"[{module_name}] Small response for detail page ({len(result)} bytes), retrying...")
+                else:
+                    # For index pages, small response might be valid (empty page)
+                    return result
+        
+        # If Turnstile detected, wait before retry
+        if is_turnstile:
+            logger.warning(f"[{module_name}] Turnstile detected, waiting {CF_TURNSTILE_COOLDOWN}s before retry...")
+            time.sleep(CF_TURNSTILE_COOLDOWN)
+        
+        # Request failed, try to switch proxy
+        if use_proxy_pool_mode and global_proxy_pool and retry_count < max_retries - 1:
+            switched = global_proxy_pool.mark_failure_and_switch()
+            if switched:
+                proxies = global_proxy_pool.get_current_proxy()
+                proxy_name = global_proxy_pool.get_current_proxy_name()
+                logger.info(f"[{module_name}] Switched to proxy: {proxy_name}, retrying...")
+                retry_count += 1
+                continue
+            else:
+                logger.error(f"[{module_name}] Failed to switch proxy, no more proxies available")
+                break
+        else:
+            retry_count += 1
+    
     return None
 
 
@@ -995,21 +1303,32 @@ def main():
         logger.info("PARSE ALL MODE: Will continue until empty page is found")
     if ignore_release_date:
         logger.info("IGNORE RELEASE DATE: Will process all entries regardless of today/yesterday tags")
-    if use_cf_bypass:
-        logger.info("CF BYPASS MODE: Using CloudflareBypassForScraping Request Mirroring")
+    # Log mode information based on flags
+    if use_cf_bypass and not CF_BYPASS_ENABLED:
+        logger.warning("CF BYPASS MODE: Requested but DISABLED via CF_BYPASS_ENABLED=False in config.py")
+    elif use_proxy and use_cf_bypass:
+        # Mode: --use-proxy --use-cf-bypass
+        logger.info("MODE: Proxy + Proxy's CF Bypass Service")
         logger.info(f"CF Bypass service port: {CF_BYPASS_SERVICE_PORT}")
-        # Determine which service URL will be used
-        if use_proxy and global_proxy_pool is not None:
+        if global_proxy_pool is not None:
             current_proxy = global_proxy_pool.get_current_proxy()
             if current_proxy:
                 proxy_url = current_proxy.get('https') or current_proxy.get('http')
                 if proxy_url:
                     proxy_ip = extract_ip_from_proxy_url(proxy_url)
                     service_url = get_cf_bypass_service_url(proxy_ip)
-                    logger.info(f"CF Bypass service URL: {service_url} (via proxy)")
-        else:
-            service_url = get_cf_bypass_service_url(None)
-            logger.info(f"CF Bypass service URL: {service_url} (localhost)")
+                    logger.info(f"CF Bypass URL: {service_url}/html?url=<target>")
+                    logger.info("Requests go directly to proxy server's bypass service (no proxy forwarding)")
+    elif use_cf_bypass:
+        # Mode: --use-cf-bypass only
+        logger.info("MODE: Local CF Bypass Service only (no proxy)")
+        logger.info(f"CF Bypass service port: {CF_BYPASS_SERVICE_PORT}")
+        service_url = get_cf_bypass_service_url()
+        logger.info(f"CF Bypass URL: {service_url}/html?url=<target>")
+    elif use_proxy:
+        # Mode: --use-proxy only
+        logger.info("MODE: Proxy only (no CF bypass)")
+    
     if use_proxy:
         if global_proxy_pool is not None:
             stats = global_proxy_pool.get_statistics()
@@ -1193,6 +1512,13 @@ def main():
 
             # Add to parsed links set for this session
             parsed_links.add(href)
+
+            # Early skip check: if movie already has both subtitle and hacked_subtitle in history,
+            # skip fetching detail page to avoid unnecessary network requests
+            if has_complete_subtitles(href, parsed_movies_history_phase1):
+                logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history")
+                skipped_history_count += 1
+                continue
 
             detail_url = urljoin(BASE_URL, href)
 
@@ -1409,6 +1735,13 @@ def main():
 
             # Add to parsed links set for this session
             parsed_links.add(href)
+
+            # Early skip check: if movie already has both subtitle and hacked_subtitle in history,
+            # skip fetching detail page to avoid unnecessary network requests
+            if has_complete_subtitles(href, parsed_movies_history_phase2):
+                logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history")
+                skipped_history_count += 1
+                continue
 
             detail_url = urljoin(BASE_URL, href)
 
