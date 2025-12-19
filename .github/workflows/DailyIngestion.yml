@@ -9,6 +9,7 @@ on:
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
+    environment: WT_DailyIngestion
     permissions:
       contents: write
     
