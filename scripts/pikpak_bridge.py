@@ -49,8 +49,14 @@ logger = get_logger(__name__)
 # Import proxy pool
 from utils.proxy_pool import ProxyPool, create_proxy_pool_from_config
 
+# Import proxy helper from request handler
+from utils.request_handler import ProxyHelper, create_proxy_helper_from_config
+
 # Global proxy pool instance
 global_proxy_pool = None
+
+# Global proxy helper instance
+global_proxy_helper = None
 
 # Categories to process (from config)
 CATEGORIES = [TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC]
@@ -60,44 +66,78 @@ PIKPAK_HISTORY_FILE = os.path.join(DAILY_REPORT_DIR, "pikpak_bridge_history.csv"
 # --------------------------
 # Proxy Helper Functions
 # --------------------------
-def should_use_proxy_for_module(module_name, use_proxy_flag):
-    """Check if a specific module should use proxy based on configuration"""
-    if not use_proxy_flag:
-        return False
-    if not PROXY_MODULES:
-        return False
-    if 'all' in PROXY_MODULES:
-        return True
-    return module_name in PROXY_MODULES
-
-
 def get_proxies_dict(module_name, use_proxy_flag):
-    """Get proxies dictionary for requests if module should use proxy"""
-    global global_proxy_pool
+    """
+    Get proxies dictionary for requests if module should use proxy.
+    Delegated to global_proxy_helper.
+    """
+    global global_proxy_helper
     
-    if not should_use_proxy_for_module(module_name, use_proxy_flag):
+    if global_proxy_helper is None:
+        logger.warning(f"[{module_name}] Proxy helper not initialized")
         return None
     
-    # Try proxy pool first (both pool and single modes)
-    if PROXY_MODE in ('pool', 'single') and global_proxy_pool is not None:
-        proxies = global_proxy_pool.get_current_proxy()
-        if proxies:
-            proxy_name = global_proxy_pool.get_current_proxy_name()
-            logger.debug(f"[{module_name}] Using proxy mode '{PROXY_MODE}' - Current proxy: {proxy_name}")
-        else:
-            logger.warning(f"[{module_name}] Proxy mode '{PROXY_MODE}' enabled but no proxy available")
-        return proxies
+    return global_proxy_helper.get_proxies_dict(module_name, use_proxy_flag)
+
+
+def initialize_proxy_helper(use_proxy):
+    """Initialize global proxy pool and proxy helper."""
+    global global_proxy_pool, global_proxy_helper
     
-    # Fallback to legacy PROXY_HTTP/PROXY_HTTPS
-    if not (PROXY_HTTP or PROXY_HTTPS):
-        return None
-    proxies = {}
-    if PROXY_HTTP:
-        proxies['http'] = PROXY_HTTP
-    if PROXY_HTTPS:
-        proxies['https'] = PROXY_HTTPS
-    logger.debug(f"[{module_name}] Using single proxy: {proxies}")
-    return proxies
+    if not use_proxy:
+        global_proxy_pool = None
+        global_proxy_helper = create_proxy_helper_from_config(
+            proxy_pool=None,
+            proxy_modules=PROXY_MODULES,
+            proxy_mode=PROXY_MODE,
+            proxy_http=PROXY_HTTP,
+            proxy_https=PROXY_HTTPS
+        )
+        return
+    
+    # Check if we have PROXY_POOL configuration
+    if PROXY_POOL and len(PROXY_POOL) > 0:
+        if PROXY_MODE == 'pool':
+            logger.info(f"Initializing proxy pool with {len(PROXY_POOL)} proxies...")
+            global_proxy_pool = create_proxy_pool_from_config(
+                PROXY_POOL,
+                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
+                max_failures=PROXY_POOL_MAX_FAILURES
+            )
+            logger.info(f"Proxy pool initialized successfully")
+        elif PROXY_MODE == 'single':
+            logger.info(f"Initializing single proxy mode (using first proxy from pool)...")
+            global_proxy_pool = create_proxy_pool_from_config(
+                [PROXY_POOL[0]],
+                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
+                max_failures=PROXY_POOL_MAX_FAILURES
+            )
+            logger.info(f"Single proxy initialized: {PROXY_POOL[0].get('name', 'Main-Proxy')}")
+    elif PROXY_HTTP or PROXY_HTTPS:
+        logger.info("Using legacy PROXY_HTTP/PROXY_HTTPS configuration")
+        legacy_proxy = {
+            'name': 'Legacy-Proxy',
+            'http': PROXY_HTTP,
+            'https': PROXY_HTTPS
+        }
+        global_proxy_pool = create_proxy_pool_from_config(
+            [legacy_proxy],
+            cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
+            max_failures=PROXY_POOL_MAX_FAILURES
+        )
+    else:
+        logger.warning("Proxy enabled but no proxy configuration found")
+        global_proxy_pool = None
+    
+    # Create proxy helper with the initialized pool
+    global_proxy_helper = create_proxy_helper_from_config(
+        proxy_pool=global_proxy_pool,
+        proxy_modules=PROXY_MODULES,
+        proxy_mode=PROXY_MODE,
+        proxy_http=PROXY_HTTP,
+        proxy_https=PROXY_HTTPS
+    )
+    logger.info("Proxy helper initialized successfully")
 
 
 # --------------------------
@@ -251,59 +291,23 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
 # Main Logic
 # --------------------------
 def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False):
-    global global_proxy_pool
+    global global_proxy_pool, global_proxy_helper
     
     cutoff_date = (datetime.now() - timedelta(days=days)).date()
     logger.info(f"Processing torrents older than {days} days (before {cutoff_date})")
     
-    # Initialize proxy pool if proxy is enabled
-    if use_proxy:
-        # Check if we have PROXY_POOL configuration
-        if PROXY_POOL and len(PROXY_POOL) > 0:
-            if PROXY_MODE == 'pool':
-                # Full proxy pool mode with automatic failover
-                logger.info(f"Initializing proxy pool with {len(PROXY_POOL)} proxies...")
-                global_proxy_pool = create_proxy_pool_from_config(
-                    PROXY_POOL,
-                    cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
-                    max_failures=PROXY_POOL_MAX_FAILURES
-                )
-                logger.info(f"Proxy pool initialized successfully")
-            elif PROXY_MODE == 'single':
-                # Single proxy mode - only use first proxy from pool
-                logger.info(f"Initializing single proxy mode (using first proxy from pool)...")
-                global_proxy_pool = create_proxy_pool_from_config(
-                    [PROXY_POOL[0]],  # Only use first proxy
-                    cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
-                    max_failures=PROXY_POOL_MAX_FAILURES
-                )
-                logger.info(f"Single proxy initialized: {PROXY_POOL[0].get('name', 'Main-Proxy')}")
-        # Fallback to legacy PROXY_HTTP/PROXY_HTTPS if no PROXY_POOL configured
-        elif PROXY_HTTP or PROXY_HTTPS:
-            logger.info("Using legacy PROXY_HTTP/PROXY_HTTPS configuration")
-            legacy_proxy = {
-                'name': 'Legacy-Proxy',
-                'http': PROXY_HTTP,
-                'https': PROXY_HTTPS
-            }
-            global_proxy_pool = create_proxy_pool_from_config(
-                [legacy_proxy],
-                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
-                max_failures=PROXY_POOL_MAX_FAILURES
-            )
-        else:
-            logger.warning("Proxy enabled but no proxy configuration found")
-            global_proxy_pool = None
+    # Initialize proxy helper
+    initialize_proxy_helper(use_proxy)
     
     if use_proxy:
-        if global_proxy_pool is not None:
-            stats = global_proxy_pool.get_statistics()
+        if global_proxy_helper is not None:
+            stats = global_proxy_helper.get_statistics()
             
             if PROXY_MODE == 'pool':
                 logger.info(f"PROXY POOL MODE for PikPak bridge: {stats['total_proxies']} proxies with automatic failover")
             elif PROXY_MODE == 'single':
                 logger.info(f"SINGLE PROXY MODE for PikPak bridge: Using main proxy only")
-                if stats['total_proxies'] > 0:
+                if stats['total_proxies'] > 0 and stats['proxies']:
                     main_proxy_name = stats['proxies'][0]['name']
                     logger.info(f"Main proxy: {main_proxy_name}")
         else:
