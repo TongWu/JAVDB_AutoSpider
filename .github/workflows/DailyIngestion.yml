@@ -9,6 +9,7 @@ on:
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
+    environment: WT_DailyIngestion
     permissions:
       contents: write
     
@@ -72,6 +73,7 @@ jobs:
           VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
           # Cloudflare Bypass Configuration
           VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
+          VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED }}
           # Spider Configuration
           VAR_START_PAGE: ${{ vars.START_PAGE }}
           VAR_END_PAGE: ${{ vars.END_PAGE }}
@@ -211,6 +213,7 @@ jobs:
               ('PROXY_MODULES', 'PROXY_MODULES_JSON', get_env_json, ['spider_index', 'spider_detail'], 'PROXY CONFIGURATION'),
               # Cloudflare Bypass Configuration
               ('CF_BYPASS_SERVICE_PORT', 'CF_BYPASS_SERVICE_PORT', get_env_int, 8000, 'CLOUDFLARE BYPASS CONFIGURATION'),
+              ('CF_BYPASS_ENABLED', 'CF_BYPASS_ENABLED', get_env_bool, True, 'CLOUDFLARE BYPASS CONFIGURATION'),
               # Spider Configuration
               ('START_PAGE', 'START_PAGE', get_env_int, 1, 'SPIDER CONFIGURATION'),
               ('END_PAGE', 'END_PAGE', get_env_int, 10, 'SPIDER CONFIGURATION'),
@@ -221,11 +224,11 @@ jobs:
               ('JAVDB_USERNAME', 'JAVDB_USERNAME', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
               ('JAVDB_PASSWORD', 'JAVDB_PASSWORD', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
               ('JAVDB_SESSION_COOKIE', 'JAVDB_SESSION_COOKIE', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
-              ('DETAIL_PAGE_SLEEP', 'DETAIL_PAGE_SLEEP', get_env_int, 10, 'JAVDB LOGIN CONFIGURATION'),
-              ('PAGE_SLEEP', 'PAGE_SLEEP', get_env_int, 5, 'JAVDB LOGIN CONFIGURATION'),
-              ('MOVIE_SLEEP', 'MOVIE_SLEEP', get_env_int, 5, 'JAVDB LOGIN CONFIGURATION'),
-              ('CF_TURNSTILE_COOLDOWN', 'CF_TURNSTILE_COOLDOWN', get_env_int, 10, 'JAVDB LOGIN CONFIGURATION'),
-              ('PHASE_TRANSITION_COOLDOWN', 'PHASE_TRANSITION_COOLDOWN', get_env_int, 30, 'JAVDB LOGIN CONFIGURATION'),
+              ('DETAIL_PAGE_SLEEP', 'DETAIL_PAGE_SLEEP', get_env_int, 30, 'JAVDB LOGIN CONFIGURATION'),
+              ('PAGE_SLEEP', 'PAGE_SLEEP', get_env_int, 15, 'JAVDB LOGIN CONFIGURATION'),
+              ('MOVIE_SLEEP', 'MOVIE_SLEEP', get_env_int, 15, 'JAVDB LOGIN CONFIGURATION'),
+              ('CF_TURNSTILE_COOLDOWN', 'CF_TURNSTILE_COOLDOWN', get_env_int, 30, 'JAVDB LOGIN CONFIGURATION'),
+              ('PHASE_TRANSITION_COOLDOWN', 'PHASE_TRANSITION_COOLDOWN', get_env_int, 60, 'JAVDB LOGIN CONFIGURATION'),
               ('FALLBACK_COOLDOWN', 'FALLBACK_COOLDOWN', get_env_int, 30, 'JAVDB LOGIN CONFIGURATION'),
               # Logging Configuration
               ('LOG_LEVEL', 'LOG_LEVEL', get_env, 'INFO', 'LOGGING CONFIGURATION'),
