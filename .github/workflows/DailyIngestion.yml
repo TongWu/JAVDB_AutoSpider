@@ -294,7 +294,7 @@ jobs:
           PYTHON_SCRIPT
 
       - name: Run Pipeline
-        run: python3 pipeline.py --use-proxy --use-cf-bypass
+        run: python3 pipeline.py --use-proxy
 
       - name: Commit Daily Report and Logs
         run: |
