@@ -61,11 +61,11 @@ docker-compose up -d
 
 ```bash
 # Build locally
-./docker-build.sh
+./docker/docker-build.sh
 
 # Or with docker-compose
-docker-compose build
-docker-compose up -d
+docker-compose -f docker/docker-compose.yml build
+docker-compose -f docker/docker-compose.yml up -d
 ```
 
 ### Automated Builds
