@@ -29,7 +29,7 @@ COPY .gitignore .
 COPY pipeline.py .
 
 # Copy docker entrypoint script
-COPY docker-entrypoint.sh /usr/local/bin/
+COPY docker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Create necessary directories (will be mounted from host)
