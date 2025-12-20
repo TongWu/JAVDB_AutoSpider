@@ -1,60 +1,52 @@
-# JavDB Auto Spider Docker Image
-# Supports both arm64 and x86_64 architectures
-
+# Use Python 3.11 slim image as base
 FROM python:3.11-slim
 
 # Set working directory
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y \
     git \
     cron \
     tzdata \
     && rm -rf /var/lib/apt/lists/*
 
-# Set timezone (can be overridden by environment variable)
+# Set timezone (default to Asia/Shanghai, can be overridden)
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Copy requirements first for better Docker cache
+# Copy requirements.txt first for better layer caching
 COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY scripts/ ./scripts/
+# Copy application files
 COPY utils/ ./utils/
-COPY pipeline.py .
 COPY config.py.example .
+COPY .gitignore .
+COPY javdb_login.py .
+COPY Javdb_Spider.py .
+COPY pikpak_bridge.py .
+COPY pipeline_run_and_notify.py .
+COPY qbtorrent_uploader.py .
 
 # Copy docker entrypoint script
-COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Create directories for mounted volumes
-RUN mkdir -p /app/config /app/data/Daily\ Report /app/data/Ad\ Hoc /app/logs
+# Create necessary directories (will be mounted from host)
+RUN mkdir -p /app/logs /app/"Ad Hoc" /app/"Daily Report"
 
-# Create symbolic links for volume mounts
-# Config - will be mounted from host
-RUN ln -sf /app/config/config.py /app/config.py
+# Create log file for cron
+RUN touch /var/log/cron.log
 
-# Data directories - will be mounted from host
-RUN rm -rf "/app/Daily Report" "/app/Ad Hoc" && \
-    ln -sf "/app/data/Daily Report" "/app/Daily Report" && \
-    ln -sf "/app/data/Ad Hoc" "/app/Ad Hoc"
+# Expose any ports if needed (none required for this app)
+# EXPOSE 8000
 
-# Note: logs directory symbolic link is created at runtime in entrypoint.sh
-# because it needs to point to the mounted volume
+# Use entrypoint script
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-
-# Default entrypoint
-ENTRYPOINT ["/entrypoint.sh"]
-
-# Default command (can be overridden)
-CMD ["cron"]
+# Default command: start cron in foreground and tail the log
+CMD ["cron", "-f"]
 
