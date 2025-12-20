@@ -56,7 +56,7 @@ echo "" >> $CRONTAB_FILE
 # ============================================================
 if [ "$ENABLE_SPIDER" = "true" ] && [ ! -z "$CRON_SPIDER" ]; then
     echo "Adding Spider cron job: $CRON_SPIDER"
-    SPIDER_CMD=${SPIDER_COMMAND:-"cd /app && /usr/local/bin/python Javdb_Spider.py >> /var/log/cron.log 2>&1"}
+    SPIDER_CMD=${SPIDER_COMMAND:-"cd /app && /usr/local/bin/python scripts/spider.py >> /var/log/cron.log 2>&1"}
     echo "$CRON_SPIDER $SPIDER_CMD" >> $CRONTAB_FILE
 else
     echo "Spider cron job disabled or not configured"
@@ -67,7 +67,7 @@ fi
 # ============================================================
 if [ "$ENABLE_PIPELINE" = "true" ] && [ ! -z "$CRON_PIPELINE" ]; then
     echo "Adding Pipeline cron job: $CRON_PIPELINE"
-    PIPELINE_CMD=${PIPELINE_COMMAND:-"cd /app && /usr/local/bin/python pipeline_run_and_notify.py >> /var/log/cron.log 2>&1"}
+    PIPELINE_CMD=${PIPELINE_COMMAND:-"cd /app && /usr/local/bin/python pipeline.py >> /var/log/cron.log 2>&1"}
     echo "$CRON_PIPELINE $PIPELINE_CMD" >> $CRONTAB_FILE
 else
     echo "Pipeline cron job disabled or not configured"
@@ -78,7 +78,7 @@ fi
 # ============================================================
 if [ "$ENABLE_QBTORRENT" = "true" ] && [ ! -z "$CRON_QBTORRENT" ]; then
     echo "Adding qBittorrent Uploader cron job: $CRON_QBTORRENT"
-    QBTORRENT_CMD=${QBTORRENT_COMMAND:-"cd /app && /usr/local/bin/python qbtorrent_uploader.py >> /var/log/cron.log 2>&1"}
+    QBTORRENT_CMD=${QBTORRENT_COMMAND:-"cd /app && /usr/local/bin/python scripts/qb_uploader.py >> /var/log/cron.log 2>&1"}
     echo "$CRON_QBTORRENT $QBTORRENT_CMD" >> $CRONTAB_FILE
 else
     echo "qBittorrent Uploader cron job disabled or not configured"
@@ -89,7 +89,7 @@ fi
 # ============================================================
 if [ "$ENABLE_PIKPAK" = "true" ] && [ ! -z "$CRON_PIKPAK" ]; then
     echo "Adding PikPak Bridge cron job: $CRON_PIKPAK"
-    PIKPAK_CMD=${PIKPAK_COMMAND:-"cd /app && /usr/local/bin/python pikpak_bridge.py >> /var/log/cron.log 2>&1"}
+    PIKPAK_CMD=${PIKPAK_COMMAND:-"cd /app && /usr/local/bin/python scripts/pikpak_bridge.py >> /var/log/cron.log 2>&1"}
     echo "$CRON_PIKPAK $PIKPAK_CMD" >> $CRONTAB_FILE
 else
     echo "PikPak Bridge cron job disabled or not configured"

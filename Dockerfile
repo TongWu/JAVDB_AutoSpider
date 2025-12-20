@@ -23,13 +23,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
 COPY utils/ ./utils/
+COPY scripts/ ./scripts/
 COPY config.py.example .
 COPY .gitignore .
-COPY javdb_login.py .
-COPY Javdb_Spider.py .
-COPY pikpak_bridge.py .
-COPY pipeline_run_and_notify.py .
-COPY qbtorrent_uploader.py .
+COPY pipeline.py .
 
 # Copy docker entrypoint script
 COPY docker-entrypoint.sh /usr/local/bin/
