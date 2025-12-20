@@ -8,7 +8,7 @@ on:
 
 jobs:
   run-pipeline:
-    runs-on: ubuntu-latest
+    runs-on: ARM64
     environment: WT_DailyIngestion
     permissions:
       contents: write
