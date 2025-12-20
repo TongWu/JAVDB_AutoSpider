@@ -102,7 +102,7 @@ if [ ! -f ".env" ]; then
         echo "WARNING: env.example not found, creating minimal .env"
         cat > .env << 'EOF'
 CRON_SPIDER=0 3 * * *
-SPIDER_COMMAND=cd /app && /usr/local/bin/python Javdb_Spider.py --use-proxy >> /var/log/cron.log 2>&1
+SPIDER_COMMAND=cd /app && /usr/local/bin/python scripts/spider.py --use-proxy >> /var/log/cron.log 2>&1
 ENABLE_SPIDER=true
 ENABLE_PIPELINE=false
 ENABLE_QBTORRENT=false
@@ -152,7 +152,7 @@ if [[ "$start_response" =~ ^[Yy]$ ]]; then
     echo "View cron logs:      docker exec javdb-spider tail -f /var/log/cron.log"
     echo "Stop container:      docker-compose down"
     echo "Restart container:   docker-compose restart"
-    echo "Run script manually: docker exec javdb-spider python Javdb_Spider.py --use-proxy"
+    echo "Run script manually: docker exec javdb-spider python scripts/spider.py --use-proxy"
     echo "=========================================="
 else
     echo ""
