@@ -99,9 +99,137 @@ cp config.py.example config.py
 # 详见下方 CloudFlare 绕过部分的设置说明
 ```
 
+### Docker 安装方式(替代方案)
+
+您也可以使用 Docker 容器运行应用程序,这样可以简化依赖管理和部署。
+
+#### Docker 快速开始
+
+1. **从 GitHub Container Registry 拉取镜像:**
+```bash
+docker pull ghcr.io/YOUR_USERNAME/javdb-autospider:latest
+```
+
+2. **准备配置文件:**
+```bash
+cp config.py.example config.py
+cp env.example .env
+# 编辑 config.py 填入你的配置
+```
+
+3. **运行容器:**
+```bash
+docker run -d \
+  --name javdb-spider \
+  --restart unless-stopped \
+  -v $(pwd)/config.py:/app/config.py:ro \
+  -v $(pwd)/logs:/app/logs \
+  -v $(pwd)/Ad\ Hoc:/app/Ad\ Hoc \
+  -v $(pwd)/Daily\ Report:/app/Daily\ Report \
+  --env-file .env \
+  ghcr.io/YOUR_USERNAME/javdb-autospider:latest
+```
+
+#### 使用 Docker Compose(推荐)
+
+1. **使用自动化构建脚本:**
+```bash
+./docker/docker-build.sh
+```
+
+或者手动操作:
+
+```bash
+# 准备配置文件
+cp config.py.example config.py
+cp env.example .env
+
+# 构建并启动
+docker-compose -f docker/docker-compose.yml build
+docker-compose -f docker/docker-compose.yml up -d
+```
+
+2. **查看日志:**
+```bash
+docker-compose -f docker/docker-compose.yml logs -f
+```
+
+详细 Docker 文档请参考 [DOCKER_README.md](docs/DOCKER_README.md) 或 [DOCKER_QUICKSTART.md](docs/DOCKER_QUICKSTART.md)。
+
 ## 使用方法
 
-### 单独运行脚本
+### Docker 使用方式
+
+如果您通过 Docker 安装,可以使用以下命令管理容器:
+
+#### 基本命令
+
+```bash
+# 查看容器日志
+docker logs -f javdb-spider
+
+# 查看 cron 日志
+docker exec javdb-spider tail -f /var/log/cron.log
+
+# 手动运行爬虫
+docker exec javdb-spider python scripts/spider.py --use-proxy
+
+# 手动运行流水线
+docker exec javdb-spider python pipeline.py
+
+# 在容器内执行命令
+docker exec -it javdb-spider bash
+
+# 停止容器
+docker stop javdb-spider
+
+# 启动容器
+docker start javdb-spider
+
+# 重启容器
+docker restart javdb-spider
+```
+
+#### 使用 Docker Compose
+
+```bash
+# 启动容器
+docker-compose -f docker/docker-compose.yml up -d
+
+# 停止容器
+docker-compose -f docker/docker-compose.yml down
+
+# 查看日志
+docker-compose -f docker/docker-compose.yml logs -f
+
+# 重启容器
+docker-compose -f docker/docker-compose.yml restart
+
+# 重新构建并启动
+docker-compose -f docker/docker-compose.yml build --no-cache
+docker-compose -f docker/docker-compose.yml up -d
+```
+
+#### 配置定时任务
+
+编辑 `.env` 文件来配置定时任务:
+
+```bash
+# 爬虫每天凌晨 3:00 运行
+CRON_SPIDER=0 3 * * *
+SPIDER_COMMAND=cd /app && /usr/local/bin/python scripts/spider.py --use-proxy >> /var/log/cron.log 2>&1
+
+# 流水线每天凌晨 4:00 运行
+CRON_PIPELINE=0 4 * * *
+PIPELINE_COMMAND=cd /app && /usr/local/bin/python pipeline.py >> /var/log/cron.log 2>&1
+```
+
+修改 `.env` 后,重启容器:
+```bash
+docker-compose -f docker/docker-compose.yml restart
+```
+
+### 单独运行脚本(本地安装)
 
 **运行爬虫提取数据:**
 ```bash
