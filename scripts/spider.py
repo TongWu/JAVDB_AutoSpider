@@ -226,8 +226,6 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
     Returns:
         HTML content as string, or None if failed
     """
-    global global_request_handler
-    
     if global_request_handler is None:
         logger.error("Request handler not initialized. Call initialize_request_handler() first.")
         return None
@@ -248,7 +246,7 @@ def initialize_request_handler():
     Initialize the global request handler with configuration from config.py.
     This should be called after proxy_pool is initialized in main().
     """
-    global global_request_handler, global_proxy_pool
+    global global_request_handler
     
     config = RequestConfig(
         base_url=BASE_URL,
@@ -316,8 +314,6 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
             - effective_use_proxy: The proxy setting that eventually worked
             - effective_use_cf_bypass: The CF bypass setting that eventually worked
     """
-    global global_proxy_pool
-    
     proxy_was_banned = False
     last_failed_html = None  # Store HTML from failed attempts
     
@@ -460,8 +456,6 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
             - effective_use_proxy: The proxy setting that eventually worked
             - effective_use_cf_bypass: The CF bypass setting that eventually worked
     """
-    global global_proxy_pool
-    
     last_result = ([], '', False)  # Store result from failed attempts (magnets, actor_info, parse_success)
     
     # --- Helper function to attempt fetch, parse and validate ---
