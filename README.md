@@ -5,6 +5,8 @@
 
 A comprehensive Python automation system for extracting torrent links from javdb.com and automatically adding them to qBittorrent. The system includes intelligent history tracking, git integration, automated pipeline execution, and duplicate download prevention.
 
+English | [简体中文](README_CN.md)
+
 ## Features
 
 ### Core Spider Functionality
@@ -61,6 +63,20 @@ The spider operates in two modes:
 - Email notifications with results and logs
 - Complete workflow automation
 
+### JavDB Auto Login
+- Automatic session cookie refresh
+- Captcha handling (manual input or 2Captcha API)
+- Updates config.py automatically
+- Supports custom URL scraping with authentication
+- See [JavDB Login Guide](utils/login/JAVDB_LOGIN_README.md) for setup
+
+### CloudFlare Bypass (Optional)
+- Integration with [CloudflareBypassForScraping](https://github.com/sarperavci/CloudflareBypassForScraping)
+- Request Mirroring mode for transparent CF bypass
+- Automatic cookie caching and management
+- Works with both local and remote proxy setups
+- Enable with `--use-cf-bypass` flag
+
 ## Installation
 
 1. Install Python dependencies:
@@ -68,9 +84,19 @@ The spider operates in two modes:
 pip install -r requirements.txt
 ```
 
-2. Configure the system by copying and editing the configuration file:
+2. (Optional) Install SOCKS5 proxy support if you want to use SOCKS5 proxies:
+```bash
+pip install requests[socks]
+```
+
+3. Configure the system by copying and editing the configuration file:
 ```bash
 cp config.py.example config.py
+```
+
+4. (Optional) For CloudFlare bypass feature, install and run [CloudflareBypassForScraping](https://github.com/sarperavci/CloudflareBypassForScraping) service:
+```bash
+# See CloudFlare Bypass section below for setup instructions
 ```
 
 ## Usage
@@ -211,6 +237,45 @@ python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --use-proxy --ignor
 | `--phase` | Phase to run (1/2/all) | all | `--phase 1` |
 | `--ignore-release-date` | Ignore today/yesterday tags | False | `--ignore-release-date` |
 | `--use-proxy` | Enable proxy from config.py | False | `--use-proxy` |
+| `--use-cf-bypass` | Use CloudFlare bypass service | False | `--use-cf-bypass` |
+
+### Additional Tools
+
+**JavDB Auto Login (for custom URL scraping):**
+```bash
+# Run when session cookie expires or before using --url parameter
+python3 javdb_login.py
+
+# The script will:
+# 1. Login to JavDB with your credentials
+# 2. Handle captcha (manual input or 2Captcha API)
+# 3. Extract and update session cookie in config.py
+# 4. Verify the cookie works
+
+# See JavDB Auto Login section above for setup details
+```
+
+**Check Proxy Ban Status:**
+```bash
+# View ban records
+cat logs/proxy_bans.csv
+
+# Ban information is also included in pipeline email reports
+```
+
+**Run Migration Scripts:**
+```bash
+cd migration
+
+# Clean up duplicate history entries
+python3 cleanup_history_priorities.py
+
+# Update history file format (if upgrading from older version)
+python3 update_history_format.py
+
+# Reclassify torrents (after classification rule changes)
+python3 reclassify_c_hacked_torrents.py
+```
 
 ### Automated Pipeline
 
@@ -307,20 +372,28 @@ EMAIL_FROM = 'your_email@gmail.com'
 EMAIL_TO = 'your_email@gmail.com'
 
 # =============================================================================
-# PROXY CONFIGURATION (Optional)
+# PROXY CONFIGURATION
 # =============================================================================
-PROXY_HTTP = None  # HTTP proxy URL (e.g., 'http://127.0.0.1:7890')
-PROXY_HTTPS = None  # HTTPS proxy URL (e.g., 'http://127.0.0.1:7890')
 
-# Example configurations:
-# PROXY_HTTP = 'http://127.0.0.1:7890'
-# PROXY_HTTPS = 'http://127.0.0.1:7890'
-# Or use SOCKS5:
-# PROXY_HTTP = 'socks5://127.0.0.1:1080'
-# PROXY_HTTPS = 'socks5://127.0.0.1:1080'
+# Proxy mode: 'single' (use first proxy only) or 'pool' (automatic failover)
+PROXY_MODE = 'single'
 
-# Modular proxy control - which parts use proxy when --use-proxy is enabled
-PROXY_MODULES = ['all']  # 'all' or list of: 'spider_index', 'spider_detail', 'spider_age_verification'
+# Proxy pool - list of proxies (first one used in single mode, all used in pool mode)
+PROXY_POOL = [
+    {'name': 'Main-Proxy', 'http': 'http://127.0.0.1:7890', 'https': 'http://127.0.0.1:7890'},
+    {'name': 'Backup-Proxy', 'http': 'http://127.0.0.1:7891', 'https': 'http://127.0.0.1:7891'},
+]
+
+# Proxy pool behavior (only for pool mode)
+PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 days cooldown for banned proxies
+PROXY_POOL_MAX_FAILURES = 3  # Max failures before cooldown
+
+# Legacy proxy config (deprecated - use PROXY_POOL instead)
+PROXY_HTTP = None
+PROXY_HTTPS = None
+
+# Modular proxy control - which modules use proxy
+PROXY_MODULES = ['all']  # 'all' or list: 'spider_index', 'spider_detail', 'spider_age_verification', 'qbittorrent', 'pikpak'
 
 # =============================================================================
 # SPIDER CONFIGURATION
@@ -336,6 +409,34 @@ PHASE2_MIN_COMMENTS = 80  # Minimum comment count for phase 2 entries
 # Release date filter
 IGNORE_RELEASE_DATE_FILTER = False  # Set True to ignore today/yesterday tags
 
+# Sleep time configuration (in seconds)
+DETAIL_PAGE_SLEEP = 5  # Sleep before parsing detail pages
+PAGE_SLEEP = 2  # Sleep between index pages
+MOVIE_SLEEP = 1  # Sleep between movies
+
+# =============================================================================
+# JAVDB LOGIN CONFIGURATION (for automatic session cookie refresh)
+# =============================================================================
+
+# JavDB login credentials (optional - for custom URL scraping)
+JAVDB_USERNAME = ''  # Your JavDB email or username
+JAVDB_PASSWORD = ''  # Your JavDB password
+
+# Session cookie (auto-updated by javdb_login.py)
+JAVDB_SESSION_COOKIE = ''
+
+# Optional: 2Captcha API key for automatic captcha solving
+# Get from: https://2captcha.com/ (~$1 per 1000 captchas)
+TWOCAPTCHA_API_KEY = ''  # Leave empty for manual captcha input
+
+# =============================================================================
+# CLOUDFLARE BYPASS CONFIGURATION (Optional)
+# =============================================================================
+
+# CloudFlare bypass service port (must match the service port)
+# See: https://github.com/sarperavci/CloudflareBypassForScraping
+CF_BYPASS_SERVICE_PORT = 8000
+
 # =============================================================================
 # LOGGING CONFIGURATION
 # =============================================================================
@@ -350,6 +451,18 @@ PIPELINE_LOG_FILE = 'logs/pipeline_run_and_notify.log'
 DAILY_REPORT_DIR = 'Daily Report'
 AD_HOC_DIR = 'Ad Hoc'
 PARSED_MOVIES_CSV = 'parsed_movies_history.csv'
+
+# =============================================================================
+# PIKPAK CONFIGURATION (for PikPak Bridge)
+# =============================================================================
+
+# PikPak login credentials
+PIKPAK_EMAIL = 'your_pikpak_email@example.com'
+PIKPAK_PASSWORD = 'your_pikpak_password'
+
+# PikPak settings
+PIKPAK_LOG_FILE = 'logs/qb_pikpak.log'
+PIKPAK_REQUEST_DELAY = 3  # Delay between requests (seconds) to avoid rate limiting
 ```
 
 **Setup Instructions:**
@@ -456,7 +569,9 @@ The system supports both **single proxy** and **proxy pool** modes for improved 
 Configure multiple proxies for automatic failover:
 - **Automatic Switching**: When one proxy fails, automatically switches to another
 - **Passive Health Checking**: Only marks proxies as failed on actual failures (no active probing)
-- **Cooldown Mechanism**: Failed proxies are temporarily disabled to allow recovery
+- **Cooldown Mechanism**: Failed proxies are temporarily disabled to allow recovery (8 days default)
+- **Ban Detection**: Automatically detects when proxies are banned by JavDB
+- **Persistent Ban Records**: Ban history stored in `logs/proxy_bans.csv` and persists across runs
 - **Statistics Tracking**: Detailed success rates and usage statistics for each proxy
 - **Perfect for JavDB**: Respects strict rate limiting while providing redundancy
 
@@ -470,8 +585,29 @@ PROXY_POOL = [
     {'name': 'Proxy-1', 'http': 'http://127.0.0.1:7890', 'https': 'http://127.0.0.1:7890'},
     {'name': 'Proxy-2', 'http': 'http://127.0.0.1:7891', 'https': 'http://127.0.0.1:7891'},
 ]
-PROXY_POOL_COOLDOWN_SECONDS = 300  # 5 minutes cooldown
+PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 days cooldown (JavDB bans for 7 days)
 PROXY_POOL_MAX_FAILURES = 3  # Max failures before cooldown
+```
+
+**Proxy Ban Management:**
+
+The system includes intelligent ban detection and management:
+- **Automatic Detection**: Detects when JavDB blocks a proxy IP
+- **Persistent Records**: Ban history stored in `logs/proxy_bans.csv`
+- **8-Day Cooldown**: Default cooldown matches JavDB's 7-day ban period
+- **Exit Code 2**: Spider exits with code 2 when proxies are banned (helps with automation)
+- **Ban Summary**: Detailed ban status included in pipeline email reports
+
+**Checking Ban Status:**
+```bash
+# Ban records are logged in:
+cat logs/proxy_bans.csv
+
+# Pipeline emails include ban summary with:
+# - Proxy name and IP
+# - Ban timestamp
+# - Cooldown expiry time
+# - Current status (BANNED/AVAILABLE)
 ```
 
 Then run with `--use-proxy` flag:
@@ -626,6 +762,281 @@ Common special characters that need URL encoding:
 
 Example: `http://user:My@Pass!123@proxy:8080` becomes `http://user:My%40Pass%21123@proxy:8080`
 
+### CloudFlare Bypass Support
+
+The system supports integration with [CloudflareBypassForScraping](https://github.com/sarperavci/CloudflareBypassForScraping) for handling CloudFlare protection on JavDB.
+
+#### What is CloudFlare Bypass?
+
+CloudFlare Bypass is an optional feature that helps you access JavDB when CloudFlare protection is enabled. It uses the CloudflareBypassForScraping service which automatically:
+- Handles CloudFlare challenges
+- Manages cf_clearance cookies
+- Provides transparent request forwarding (Request Mirroring mode)
+
+#### Setup
+
+**1. Install CloudflareBypassForScraping:**
+
+```bash
+# Clone the repository
+git clone https://github.com/sarperavci/CloudflareBypassForScraping.git
+cd CloudflareBypassForScraping
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure (edit config.json if needed)
+# Default port is 8000
+```
+
+**2. Start the CF Bypass Service:**
+
+```bash
+# Local setup (default)
+python app.py
+
+# Custom port (update CF_BYPASS_SERVICE_PORT in config.py to match)
+python app.py --port 8000
+```
+
+**3. Configure Spider:**
+
+Edit `config.py` to set the CF bypass service port:
+
+```python
+# CloudFlare Bypass Configuration
+CF_BYPASS_SERVICE_PORT = 8000  # Must match the service port
+```
+
+**4. Run Spider with CF Bypass:**
+
+```bash
+# Enable CF bypass for spider
+python Javdb_Spider.py --use-cf-bypass
+
+# Combine with proxy
+python Javdb_Spider.py --use-proxy --use-cf-bypass
+
+# Via pipeline
+python pipeline_run_and_notify.py --use-cf-bypass
+```
+
+#### How It Works
+
+When `--use-cf-bypass` is enabled:
+1. **Request Mirroring**: All requests are forwarded through the CF bypass service
+2. **URL Rewriting**: Original URL `https://javdb.com/page` → `http://localhost:8000/page`
+3. **Host Header**: The original hostname is sent via `x-hostname` header
+4. **Cookie Management**: CF bypass service handles cf_clearance cookies automatically
+5. **Transparent**: Your spider code doesn't need any changes
+
+#### Network Topology
+
+**Local Setup:**
+```
+Spider → http://localhost:8000 → CloudFlare Bypass Service → https://javdb.com
+```
+
+**With Proxy:**
+```
+Spider → http://proxy_ip:8000 → CF Bypass on Proxy Server → https://javdb.com
+```
+
+When using proxy pool, the CF bypass service URL automatically adjusts to match the current proxy IP.
+
+#### Configuration
+
+```python
+# In config.py
+CF_BYPASS_SERVICE_PORT = 8000  # CF bypass service port (default: 8000)
+```
+
+**Service Location Logic:**
+- **No Proxy**: Uses `http://localhost:8000`
+- **With Proxy Pool**: Uses `http://{proxy_ip}:8000` (extracts IP from current proxy URL)
+
+This allows you to run CF bypass service on the same server as your proxy for better performance.
+
+#### When to Use
+
+Use CloudFlare Bypass when:
+- ✅ JavDB shows CloudFlare challenge page
+- ✅ You get "Access Denied" or "Checking your browser" errors
+- ✅ Direct access works in browser but fails in script
+- ✅ Proxy alone doesn't bypass CloudFlare protection
+
+#### Troubleshooting
+
+**Error: "Connection refused to localhost:8000"**
+- Make sure CF bypass service is running
+- Check if port 8000 is available: `netstat -an | grep 8000`
+- Update `CF_BYPASS_SERVICE_PORT` if using different port
+
+**Error: "No movie list found" with CF bypass**
+- Check CF bypass service logs for errors
+- Verify `x-hostname` header is being sent correctly
+- Try restarting the CF bypass service
+
+**CF Bypass + Proxy Not Working**
+- Ensure CF bypass service is running on the proxy server
+- Verify proxy IP extraction is correct (check logs)
+- Test CF bypass service directly: `curl http://proxy_ip:8000/`
+
+#### Performance Notes
+
+- **First Request**: Slower (CF challenge solving)
+- **Subsequent Requests**: Fast (cookie cached)
+- **Cookie TTL**: Varies (usually hours to days)
+- **Overhead**: Minimal after first request
+
+### JavDB Auto Login
+
+The system includes automatic login functionality to maintain session cookies for custom URL scraping.
+
+#### Why Use Auto Login?
+
+When scraping custom URLs (actors, tags, etc.) with `--url` parameter, JavDB requires a valid session cookie. This cookie expires after some time, causing failures with age verification or login issues.
+
+Auto login solves this by:
+- ✅ Automatically logging into JavDB
+- ✅ Handling age verification automatically
+- ✅ Extracting and updating session cookie
+- ✅ Supporting captcha (manual input or 2Captcha API)
+
+#### Quick Start
+
+**1. Configure credentials in `config.py`:**
+
+```python
+# JavDB login credentials (for automatic session cookie refresh)
+JAVDB_USERNAME = 'your_email@example.com'  # or username
+JAVDB_PASSWORD = 'your_password'
+
+# Optional: 2Captcha API key for automatic captcha solving
+TWOCAPTCHA_API_KEY = ''  # Leave empty for manual captcha input
+```
+
+**2. Run the login script:**
+
+```bash
+python3 javdb_login.py
+```
+
+**3. Enter captcha when prompted:**
+
+The script will:
+- Download and save captcha image to `javdb_captcha.png`
+- Automatically open the image (if possible)
+- Prompt you to enter the captcha code
+
+**4. Use the spider with custom URLs:**
+
+```bash
+# Spider with custom URL
+python3 Javdb_Spider.py --url "https://javdb.com/actors/RdEb4"
+
+# Pipeline with custom URL
+python3 pipeline_run_and_notify.py --url "https://javdb.com/actors/RdEb4"
+```
+
+#### Captcha Handling
+
+**Manual Input (Default):**
+1. Script downloads captcha image
+2. Opens image automatically (platform-dependent)
+3. You enter the code when prompted
+4. Simple and free
+
+**2Captcha API (Optional):**
+1. Sign up at [2Captcha](https://2captcha.com/)
+2. Add API key to `config.py`: `TWOCAPTCHA_API_KEY = 'your_key'`
+3. Script automatically solves captchas (~$1 per 1000 captchas)
+4. Fully automated but costs money
+
+#### Configuration Options
+
+```python
+# In config.py
+
+# Login credentials (required)
+JAVDB_USERNAME = 'your_email@example.com'
+JAVDB_PASSWORD = 'your_password'
+
+# Session cookie (auto-updated by javdb_login.py)
+JAVDB_SESSION_COOKIE = ''
+
+# Optional: 2Captcha API key
+TWOCAPTCHA_API_KEY = ''  # For automatic captcha solving
+
+# Optional: Manual cookie extraction
+# Get from browser DevTools → Application → Cookies → _jdb_session
+# JAVDB_SESSION_COOKIE = 'your_session_cookie_here'
+```
+
+#### When to Re-run
+
+Re-run `python3 javdb_login.py` when:
+- ✅ Session cookie expires (usually after days/weeks)
+- ✅ Spider shows "No movie list found" on valid URLs
+- ✅ Age verification or login errors appear
+- ✅ Before using `--url` parameter for first time
+
+#### Automation (Optional)
+
+**Cron Job (Linux/Mac):**
+```bash
+# Refresh cookie every 7 days
+0 0 */7 * * cd ~/JAVDB_AutoSpider && python3 javdb_login.py >> logs/javdb_login.log 2>&1
+```
+
+**Task Scheduler (Windows):**
+- Set up scheduled task to run `javdb_login.py` weekly
+
+#### Advanced: OCR-based Captcha Solving
+
+The script includes an optional OCR-based captcha solver in `utils/login/javdb_captcha_solver.py`:
+
+```python
+# Free methods (included)
+solve_captcha(image_data, method='ocr')      # Local OCR (Tesseract)
+solve_captcha(image_data, method='manual')   # Manual input
+
+# Paid method (requires API key)
+solve_captcha(image_data, method='2captcha') # 2Captcha API
+solve_captcha(image_data, method='auto')     # Try OCR first, fallback to 2Captcha
+```
+
+**Installing Tesseract OCR (Optional):**
+```bash
+# Ubuntu/Debian
+sudo apt-get install tesseract-ocr
+
+# macOS
+brew install tesseract
+
+# Windows
+# Download installer from: https://github.com/UB-Mannheim/tesseract/wiki
+```
+
+#### Troubleshooting
+
+**Login Failed - Incorrect Captcha:**
+- Captcha is case-sensitive
+- Try again for a new captcha
+- Consider using 2Captcha API
+
+**Login Failed - Invalid Credentials:**
+- Verify username/password in config.py
+- Test credentials in browser first
+- Check for typos
+
+**Session Cookie Not Working:**
+- Verify cookie updated in config.py
+- Use same proxy/network for login and spider
+- Try logging in again
+
+**For detailed troubleshooting and manual cookie extraction, see [JavDB Login Guide](utils/login/JAVDB_LOGIN_README.md).**
+
 ## Downloaded Indicator Feature
 
 The system includes an advanced duplicate download prevention feature that automatically marks downloaded torrents and skips them in future runs.
@@ -716,6 +1127,46 @@ The system automatically handles migration from the old format (`parsed_date`) t
 
 This feature ensures system stability and efficiency, avoiding duplicate downloads while maintaining comprehensive history tracking with enhanced timestamp management.
 
+## Migration Scripts
+
+The `migration/` directory contains utility scripts for maintaining and upgrading the system:
+
+### Available Scripts
+
+**cleanup_history_priorities.py**
+- Removes duplicate entries from history file
+- Ensures data integrity
+- Safe to run multiple times
+
+**update_history_format.py**
+- Migrates old history format to new format
+- Converts `parsed_date` to `create_date`/`update_date`
+- Automatic backward compatibility
+
+**reclassify_c_hacked_torrents.py**
+- Reclassifies torrents with specific naming patterns
+- Updates torrent type classification
+- Useful after classification rule changes
+
+### When to Use
+
+Run migration scripts when:
+- ✅ Upgrading from older versions
+- ✅ History file shows duplicate entries
+- ✅ Format changes are introduced
+- ✅ Data cleanup is needed
+
+### How to Run
+
+```bash
+cd migration
+python3 cleanup_history_priorities.py
+python3 update_history_format.py
+python3 reclassify_c_hacked_torrents.py
+```
+
+**Note:** Always backup your `Daily Report/parsed_movies_history.csv` before running migration scripts.
+
 ## Logging
 
 The system provides comprehensive logging:
@@ -754,23 +1205,137 @@ Progress tracking includes:
 - **Import errors**: Ensure `utils/history_manager.py` file exists
 - **History format issues**: Ensure history file has correct column structure with backward compatibility
 
+**JavDB Login Issues:**
+- **Login failed**: Check credentials in config.py
+- **Captcha errors**: Try again for new captcha, or use 2Captcha API
+- **Cookie not working**: Verify cookie updated in config.py, use same proxy for login and spider
+- **See [JavDB Login Guide](utils/login/JAVDB_LOGIN_README.md) for detailed troubleshooting**
+
+**CloudFlare Bypass Issues:**
+- **Connection refused**: Ensure CF bypass service is running
+- **Port errors**: Verify CF_BYPASS_SERVICE_PORT matches service port
+- **No movie list found**: Check CF bypass service logs
+- **Proxy + CF not working**: Ensure CF bypass service runs on proxy server
+
+**Proxy Ban Issues:**
+- **All proxies banned**: Check `logs/proxy_bans.csv` for ban status
+- **Spider exits with code 2**: Indicates proxy ban detected, wait for cooldown or add new proxies
+- **Cooldown not working**: Default is 8 days, adjust PROXY_POOL_COOLDOWN_SECONDS if needed
+- **Ban false positives**: Check if JavDB is actually accessible from proxy IP
+
 ### Debug Mode
 
-To see detailed operations, you can temporarily increase logging level in the scripts.
+To see detailed operations, you can temporarily increase logging level in the scripts:
+
+```python
+# In config.py
+LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
+```
 
 ## Security Notes
 
-- Configuration files (`git_config.py`, `qbtorrent_config.py`) are automatically excluded from git commits
-- Never commit actual credentials to the repository
-- Use personal access tokens instead of passwords for GitHub authentication
-- Consider using environment variables for production deployments
+- **Configuration file**: `config.py` is automatically excluded from git commits (check `.gitignore`)
+- **Never commit credentials**: GitHub tokens, passwords, API keys should stay in `config.py` only
+- **GitHub authentication**: Use personal access tokens instead of passwords
+- **JavDB credentials**: Only stored locally in `config.py`, never transmitted except to JavDB
+- **PikPak credentials**: Stored in `config.py`, used only for PikPak API
+- **2Captcha API key**: Optional, only used if configured for automatic captcha solving
+- **Proxy passwords**: Use URL encoding for special characters in passwords
+- **Session cookies**: Auto-updated by login script, expire after some time
+- **Sensitive logs**: Pipeline automatically masks sensitive info in logs and emails
+- **Environment variables (optional)**: Consider for production deployments
+  ```python
+  import os
+  JAVDB_USERNAME = os.getenv('JAVDB_USER', '')
+  JAVDB_PASSWORD = os.getenv('JAVDB_PASS', '')
+  ```
 
 ## Notes
 
-- The system includes delays between requests to be respectful to servers
-- 1-second delay between detail page requests
-- 2-second delay between index page requests
-- 1-second delay between qBittorrent additions
+### Rate Limiting and Delays
+- The system includes delays between requests to be respectful to servers:
+  - **Detail pages**: 5 seconds (configurable via `DETAIL_PAGE_SLEEP`)
+  - **Index pages**: 2 seconds (configurable via `PAGE_SLEEP`)
+  - **Movies**: 1 second (configurable via `MOVIE_SLEEP`)
+  - **qBittorrent additions**: 1 second (configurable via `DELAY_BETWEEN_ADDITIONS`)
+  - **PikPak requests**: 3 seconds (configurable via `PIKPAK_REQUEST_DELAY`)
+
+### System Behavior
 - The system uses proper headers to mimic a real browser
-- CSV files are automatically saved to the "Daily Report" directory
+- CSV files are automatically saved to the "Daily Report" or "Ad Hoc" directory
 - The pipeline provides incremental commits for monitoring progress in real-time
+- History file tracks all downloaded movies with timestamps
+- Exit code 2 indicates proxy ban detection (useful for automation)
+- Logs automatically mask sensitive information (passwords, tokens, etc.)
+
+### File Structure
+- **Daily Report/**: Contains daily scraping results and history
+- **Ad Hoc/**: Contains custom URL scraping results
+- **logs/**: Contains all log files
+  - `Javdb_Spider.log`: Spider execution logs
+  - `qbtorrent_uploader.log`: Upload execution logs
+  - `pipeline_run_and_notify.log`: Pipeline execution logs
+  - `qb_pikpak.log`: PikPak bridge execution logs
+  - `proxy_bans.csv`: Proxy ban history (persistent across runs)
+- **migration/**: Contains database migration scripts
+- **utils/**: Utility modules (history, parser, proxy pool, etc.)
+- **utils/login/**: JavDB login related files and documentation
+
+## Quick Reference
+
+### Common Commands
+
+```bash
+# Basic daily scraping
+python3 Javdb_Spider.py
+python3 qbtorrent_uploader.py
+
+# Full automated pipeline
+python3 pipeline_run_and_notify.py
+
+# Scrape with proxy
+python3 Javdb_Spider.py --use-proxy
+python3 pipeline_run_and_notify.py --use-proxy
+
+# Scrape with CloudFlare bypass
+python3 Javdb_Spider.py --use-cf-bypass
+python3 pipeline_run_and_notify.py --use-proxy --use-cf-bypass
+
+# Custom URL scraping (requires login)
+python3 javdb_login.py  # First time setup
+python3 Javdb_Spider.py --url "https://javdb.com/actors/RdEb4"
+python3 pipeline_run_and_notify.py --url "https://javdb.com/actors/RdEb4"
+
+# Scrape ignoring release date
+python3 Javdb_Spider.py --ignore-release-date --phase 1
+python3 pipeline_run_and_notify.py --ignore-release-date
+
+# Ad hoc mode
+python3 Javdb_Spider.py --url "https://javdb.com/tags/xyz"
+python3 qbtorrent_uploader.py --mode adhoc
+
+# PikPak bridge
+python3 pikpak_bridge.py  # Default: 3 days, batch mode
+python3 pikpak_bridge.py --days 7 --individual  # Custom days, individual mode
+```
+
+### Configuration Files
+
+- **Main config**: `config.py` (copy from `config.py.example`)
+- **History file**: `Daily Report/parsed_movies_history.csv`
+- **Ban records**: `logs/proxy_bans.csv`
+- **Login docs**: `utils/login/JAVDB_LOGIN_README.md`
+
+### Important Links
+
+- [CloudFlare Bypass Service](https://github.com/sarperavci/CloudflareBypassForScraping)
+- [2Captcha API](https://2captcha.com/) (optional, for automatic captcha solving)
+- [JavDB Login Guide](utils/login/JAVDB_LOGIN_README.md)
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests.
+
+## License
+
+This project is for educational and personal use only. Please respect the terms of service of the websites you scrape.
