@@ -6,6 +6,8 @@ on:
 
 jobs:
   check-branch:
+    permissions:
+      pull-requests: write
     runs-on: ubuntu-latest
     # Only check PRs targeting main or master
     if: github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'master'
