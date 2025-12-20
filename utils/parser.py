@@ -22,20 +22,30 @@ logger = get_logger(__name__)
 
 
 def extract_video_code(a):
-    """Extract video code from movie item with improved robustness"""
+    """Extract video code from movie item with improved robustness
+    
+    Returns:
+        video_code: The extracted video code, or empty string if not found or invalid.
+                   Video codes without '-' are considered invalid and will return empty string.
+    """
     video_title_div = a.find('div', class_='video-title')
     if video_title_div:
         # Try to extract video code from <strong> tag first (most reliable)
         strong_tag = video_title_div.find('strong')
         if strong_tag:
             video_code = strong_tag.get_text(strip=True)
-            logger.debug(f"Extracted video code from <strong> tag: {video_code}")
-            return video_code
         else:
             # Fallback to full text
             video_code = video_title_div.get_text(strip=True)
-            logger.debug(f"Extracted video code from full text: {video_code}")
-            return video_code
+        
+        # Validate video code: must contain '-' (e.g., "ABC-123")
+        # Video codes without '-' are typically invalid or special entries
+        if '-' not in video_code:
+            logger.debug(f"Skipping invalid video code (no '-'): {video_code}")
+            return ''
+        
+        logger.debug(f"Extracted video code: {video_code}")
+        return video_code
     logger.warning("No video-title div found")
     return ''
 
@@ -108,6 +118,10 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                 if has_subtitle:
                     href = a.get('href', '')
                     video_code = extract_video_code(a)
+                    
+                    # Skip entries with invalid video code (no '-')
+                    if not video_code:
+                        continue
 
                     # Extract rating information
                     rate = ''
@@ -155,6 +169,10 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
 
                     href = a.get('href', '')
                     video_code = extract_video_code(a)
+                    
+                    # Skip entries with invalid video code (no '-')
+                    if not video_code:
+                        continue
 
                     # Extract rating information
                     rate = ''
@@ -198,6 +216,10 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                 if not (('含中字磁鏈' in tags or '含中字磁链' in tags or 'CnSub DL' in tags)):
                     href = a.get('href', '')
                     video_code = extract_video_code(a)
+                    
+                    # Skip entries with invalid video code (no '-')
+                    if not video_code:
+                        continue
 
                     # Extract rating information
                     rate = ''
@@ -258,6 +280,10 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                     if not (('含中字磁鏈' in tags or '含中字磁链' in tags or 'CnSub DL' in tags)):
                         href = a.get('href', '')
                         video_code = extract_video_code(a)
+                        
+                        # Skip entries with invalid video code (no '-')
+                        if not video_code:
+                            continue
 
                         # Extract rating information
                         rate = ''
@@ -310,25 +336,32 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
     return results
 
 
-def parse_detail(html_content, index=None):
-    """Parse the detail page to extract magnet links and actor information"""
+def parse_detail(html_content, index=None, skip_sleep=False):
+    """Parse the detail page to extract magnet links and actor information
+    
+    Note: video_code is extracted from the index/catalog page, not from detail page.
+    
+    Args:
+        html_content: HTML content of the detail page
+        index: Index number for logging prefix
+        skip_sleep: If True, skip the sleep delay (used during fallback retries)
+    
+    Returns:
+        tuple: (magnets, actor_info, parse_success)
+            - magnets: List of magnet link dictionaries
+            - actor_info: Actor name string
+            - parse_success: True if magnets_content was found
+    """
     # Wait to be respectful to JavDB website and avoid DDoS protection
-    time.sleep(DETAIL_PAGE_SLEEP)
+    if not skip_sleep:
+        time.sleep(DETAIL_PAGE_SLEEP)
 
     soup = BeautifulSoup(html_content, 'html.parser')
     magnets = []
     actor_info = ''
-    video_code = ''
+    parse_success = True  # Track if parsing found expected elements
 
     prefix = f"[{index}]" if index is not None else ""
-
-    # Extract movie code from the copy button
-    copy_button = soup.find('a', class_='button is-white copy-to-clipboard')
-    if copy_button:
-        video_code = copy_button.get('data-clipboard-text', '')
-        logger.debug(f"{prefix} Found video code: {video_code}")
-    else:
-        logger.warning(f"{prefix} No copy button found for video code")
 
     # Extract actor information from the detail page
     video_meta_panel = soup.find('div', class_='video-meta-panel')
@@ -350,8 +383,9 @@ def parse_detail(html_content, index=None):
 
     magnets_content = soup.find('div', id='magnets-content')
     if not magnets_content:
-        logger.warning(f"{prefix} No magnets content found in detail page")
-        return magnets, actor_info, video_code
+        logger.debug(f"{prefix} No magnets content found in detail page")
+        parse_success = False
+        return magnets, actor_info, parse_success
 
     for item in magnets_content.find_all('div', class_=re.compile(r'item columns is-desktop')):
         magnet_name_div = item.find('div', class_='magnet-name')
@@ -401,4 +435,4 @@ def parse_detail(html_content, index=None):
         })
 
     logger.debug(f"{prefix} Found {len(magnets)} magnet links")
-    return magnets, actor_info, video_code
+    return magnets, actor_info, parse_success
