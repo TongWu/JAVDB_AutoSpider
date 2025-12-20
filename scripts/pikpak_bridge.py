@@ -15,6 +15,15 @@ sys.path.insert(0, project_root)
 
 from config import QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD, PIKPAK_EMAIL, PIKPAK_PASSWORD, PIKPAK_LOG_FILE, DAILY_REPORT_DIR, TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC
 
+# Import GIT configuration with fallback
+try:
+    from config import GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH
+except ImportError:
+    GIT_USERNAME = 'github-actions'
+    GIT_PASSWORD = ''
+    GIT_REPO_URL = ''
+    GIT_BRANCH = 'main'
+
 # Import PikPak delay configuration with fallback
 try:
     from config import PIKPAK_REQUEST_DELAY
@@ -39,6 +48,7 @@ except ImportError:
     PROXY_POOL_MAX_FAILURES = 3
 
 from utils.logging_config import setup_logging, get_logger
+from utils.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 
 # --------------------------
 # Setup Logging
@@ -288,7 +298,7 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
 # --------------------------
 # Main Logic
 # --------------------------
-def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False):
+def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline=False):
     cutoff_date = (datetime.now() - timedelta(days=days)).date()
     logger.info(f"Processing torrents older than {days} days (before {cutoff_date})")
     
@@ -486,6 +496,30 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False):
     logger.info("")
     logger.info(f"PikPak transfer history saved to: {PIKPAK_HISTORY_FILE}")
     logger.info("=" * 60)
+    
+    # Git commit pikpak results (only if credentials are available)
+    if not dry_run and has_git_credentials(GIT_USERNAME, GIT_PASSWORD):
+        logger.info("Committing PikPak bridge results...")
+        # Flush log handlers to ensure all logs are written before commit
+        flush_log_handlers()
+        
+        files_to_commit = [
+            'logs/',
+            DAILY_REPORT_DIR  # Contains pikpak_bridge_history.csv
+        ]
+        commit_message = f"Auto-commit: PikPak bridge results {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        
+        git_commit_and_push(
+            files_to_add=files_to_commit,
+            commit_message=commit_message,
+            from_pipeline=from_pipeline,
+            git_username=GIT_USERNAME,
+            git_password=GIT_PASSWORD,
+            git_repo_url=GIT_REPO_URL,
+            git_branch=GIT_BRANCH
+        )
+    elif not dry_run:
+        logger.info("Skipping git commit - no credentials provided (commit will be handled by workflow)")
 
 
 if __name__ == "__main__":
@@ -494,10 +528,11 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run", action="store_true", help="Test mode: no delete or PikPak add")
     parser.add_argument("--individual", action="store_true", help="Process torrents individually instead of batch mode (default: batch mode)")
     parser.add_argument("--use-proxy", action="store_true", help="Enable proxy for qBittorrent API requests (proxy settings from config.py)")
+    parser.add_argument("--from-pipeline", action="store_true", help="Running from pipeline.py - use GIT_USERNAME for commits")
     args = parser.parse_args()
 
     # Default to batch mode unless --individual is specified
     batch_mode = not args.individual
     
-    pikpak_bridge(args.days, args.dry_run, batch_mode, args.use_proxy)
+    pikpak_bridge(args.days, args.dry_run, batch_mode, args.use_proxy, args.from_pipeline)
 
