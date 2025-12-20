@@ -569,9 +569,10 @@ CF_BYPASS_SERVICE_PORT = 8000
 # 日志配置
 # =============================================================================
 LOG_LEVEL = 'INFO'
-SPIDER_LOG_FILE = 'logs/Javdb_Spider.log'
-UPLOADER_LOG_FILE = 'logs/qbtorrent_uploader.log'
-PIPELINE_LOG_FILE = 'logs/pipeline_run_and_notify.log'
+SPIDER_LOG_FILE = 'logs/spider.log'
+UPLOADER_LOG_FILE = 'logs/qb_uploader.log'
+PIPELINE_LOG_FILE = 'logs/pipeline.log'
+EMAIL_NOTIFICATION_LOG_FILE = 'logs/email_notification.log'
 
 # =============================================================================
 # 文件路径
@@ -589,7 +590,7 @@ PIKPAK_EMAIL = 'your_pikpak_email@example.com'
 PIKPAK_PASSWORD = 'your_pikpak_password'
 
 # PikPak 设置
-PIKPAK_LOG_FILE = 'logs/qb_pikpak.log'
+PIKPAK_LOG_FILE = 'logs/pikpak_bridge.log'
 PIKPAK_REQUEST_DELAY = 3  # 请求之间的延迟(秒)以避免速率限制
 ```
 
