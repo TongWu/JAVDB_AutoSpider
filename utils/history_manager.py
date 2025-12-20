@@ -537,6 +537,30 @@ def get_missing_torrent_types(history_torrent_types, current_torrent_types):
     return missing_types
 
 
+def has_complete_subtitles(href, history_data):
+    """
+    Check if a movie already has both subtitle and hacked_subtitle in history.
+    
+    This is used for early skip check before fetching detail page, to avoid
+    unnecessary network requests for movies that already have all required torrents.
+    
+    Args:
+        href: The movie's href
+        history_data: Loaded history data dict
+        
+    Returns:
+        bool: True if both 'subtitle' and 'hacked_subtitle' exist in history
+    """
+    if not history_data or href not in history_data:
+        return False
+    
+    torrent_types = history_data[href].get('torrent_types', [])
+    has_subtitle = 'subtitle' in torrent_types
+    has_hacked_subtitle = 'hacked_subtitle' in torrent_types
+    
+    return has_subtitle and has_hacked_subtitle
+
+
 def should_process_movie(href, history_data, phase, magnet_links):
     """Determine if a movie should be processed based on history and phase rules"""
     if href not in history_data:
