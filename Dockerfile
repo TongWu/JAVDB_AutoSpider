@@ -29,7 +29,6 @@ COPY Javdb_Spider.py .
 COPY pikpak_bridge.py .
 COPY pipeline_run_and_notify.py .
 COPY qbtorrent_uploader.py .
-COPY README.md .
 
 # Copy docker entrypoint script
 COPY docker-entrypoint.sh /usr/local/bin/
