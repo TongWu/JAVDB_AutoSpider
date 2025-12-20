@@ -15,12 +15,36 @@ __pycache__/
 *$py.class
 *.so
 .Python
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
 
 # Virtual environments
 venv/
 env/
-ENV/
-.venv
+.venv/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Project specific - don't include in image
+Ad Hoc/
+Daily Report/
+parsed_movies_history.csv
+logs/
+*.log
+*.csv
+config.py
+
+# Documentation (keep README for reference but exclude others)
+docs/
 
 # IDE
 .vscode/
@@ -33,11 +57,6 @@ ENV/
 # Logs (will be mounted from host)
 logs/
 *.log
-
-# Data directories (will be mounted from host)
-Ad Hoc/
-Daily Report/
-parsed_movies_history.csv
 
 # Config files (will be mounted from host)
 config.py
@@ -53,25 +72,15 @@ docker-compose.yml
 *.md
 docs/
 
-# Migration scripts (not needed in production)
-migration/
-
 # Test files
 tests/
+*.test.py
 test_*.py
-*_test.py
 
-# Temporary files
-*.tmp
-*.temp
-.cache/
+# Docker files (not needed inside image)
+docker/docker-compose.yml
+docker/.env.example
 
-# OS files
-Thumbs.db
-desktop.ini
-
-# Backup files
-*.bak
-*.backup
-*~
+# GitHub
+.github/
 
