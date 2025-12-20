@@ -71,8 +71,6 @@ def get_proxies_dict(module_name, use_proxy_flag):
     Get proxies dictionary for requests if module should use proxy.
     Delegated to global_proxy_helper.
     """
-    global global_proxy_helper
-    
     if global_proxy_helper is None:
         logger.warning(f"[{module_name}] Proxy helper not initialized")
         return None
@@ -291,8 +289,6 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
 # Main Logic
 # --------------------------
 def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False):
-    global global_proxy_pool, global_proxy_helper
-    
     cutoff_date = (datetime.now() - timedelta(days=days)).date()
     logger.info(f"Processing torrents older than {days} days (before {cutoff_date})")
     
