@@ -1,16 +1,18 @@
-name: Build and Push Docker Image
+name: Multi-Platform Build Verification
+
+# This workflow focuses on verifying that Docker images can be built
+# successfully for multiple platforms (AMD64 and ARM64).
+# For comprehensive functional testing, see docker-test.yml
 
 on:
-  push:
-    branches:
-      - main
-      - master
-    tags:
-      - 'v*.*.*'
   pull_request:
     branches:
       - main
       - master
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger on version tags
   workflow_dispatch:  # Allow manual trigger
 
 env:
@@ -19,6 +21,11 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Only run when PR is from dev branch, or on tag push, or manual trigger
+    if: |
+      (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'dev') ||
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch'
     strategy:
       matrix:
         platform:
@@ -28,6 +35,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # For PRs, checkout the source branch instead of the destination branch
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.ref }}
       
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -48,21 +58,15 @@ jobs:
             type=semver,pattern={{major}}
             type=raw,value=latest,enable={{is_default_branch}}
       
-      - name: Build Docker image
+      - name: Build Docker image (multi-platform verification)
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: ./docker/Dockerfile
           platforms: ${{ matrix.platform }}
           push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      
-      - name: Test Docker image
-        if: matrix.platform == 'linux/amd64'
-        run: |
-          docker build -t test-image .
-          docker run --rm test-image python --version
-          docker run --rm test-image pip list | grep -i requests
 
