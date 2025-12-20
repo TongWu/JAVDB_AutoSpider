@@ -4,10 +4,10 @@
 
 ```bash
 # 1. 运行自动化脚本
-./docker-build.sh
+./docker/docker-build.sh
 
 # 2. 查看日志
-docker-compose logs -f
+docker-compose -f docker/docker-compose.yml logs -f
 ```
 
 ## 手动部署

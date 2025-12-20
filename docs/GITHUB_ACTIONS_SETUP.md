@@ -243,7 +243,7 @@ services:
     # 注释掉 build 部分
     # build:
     #   context: .
-    #   dockerfile: Dockerfile
+    #   dockerfile: docker/Dockerfile
 ```
 
 ## 查看构建状态

@@ -8,9 +8,17 @@ name: Unit Tests
 on:
   push:
     branches: [ main, master ]
+    paths:
+      - '**.py'
+      - 'pytest.ini'
+      - 'docker/**'
   pull_request:
     branches: [ main, master ]
     types: [ opened, synchronize, reopened ]
+    paths:
+      - '**.py'
+      - 'pytest.ini'
+      - 'docker/**'
 
 jobs:
   test:

@@ -204,7 +204,7 @@ BASE_URL = 'https://javdb.com'
 # =============================================================================
 
 # JavDB login credentials (optional - for automatic cookie refresh)
-# Fill in your credentials and run: python3 javdb_login.py
+# Fill in your credentials and run: python3 scripts/login.py
 JAVDB_USERNAME = ''  # Your JavDB email or username
 JAVDB_PASSWORD = ''  # Your JavDB password
 
@@ -214,9 +214,9 @@ JAVDB_PASSWORD = ''  # Your JavDB password
 # Cost: ~$1 per 1000 captchas
 TWOCAPTCHA_API_KEY = ''  # Optional: Your 2Captcha API key
 
-# JavDB session cookie (can be auto-updated by javdb_login.py)
+# JavDB session cookie (can be auto-updated by scripts/login.py)
 # Manual method: Get from browser → Developer Tools → Application → Cookies → _jdb_session
-# Automatic method: Set credentials above and run: python3 javdb_login.py
+# Automatic method: Set credentials above and run: python3 scripts/login.py
 JAVDB_SESSION_COOKIE = ''
 
 # Sleep time configuration (in seconds)
@@ -237,9 +237,10 @@ FALLBACK_COOLDOWN = 30  # Cooldown time after a successful fallback before proce
 LOG_LEVEL = 'INFO'
 
 # Log file paths
-SPIDER_LOG_FILE = 'logs/Javdb_Spider.log'
-UPLOADER_LOG_FILE = 'logs/qbtorrent_uploader.log'
-PIPELINE_LOG_FILE = 'logs/pipeline_run_and_notify.log'
+SPIDER_LOG_FILE = 'logs/spider.log'
+UPLOADER_LOG_FILE = 'logs/qb_uploader.log'
+PIPELINE_LOG_FILE = 'logs/pipeline.log'
+EMAIL_NOTIFICATION_LOG_FILE = 'logs/email_notification.log'
 
 # =============================================================================
 # PARSING CONFIGURATION
@@ -266,7 +267,7 @@ PARSED_MOVIES_CSV = 'parsed_movies_history.csv'
 # =============================================================================
 PIKPAK_EMAIL = "me@example.com"
 PIKPAK_PASSWORD = "password"
-PIKPAK_LOG_FILE = "logs/qb_pikpak.log"
+PIKPAK_LOG_FILE = "logs/pikpak_bridge.log"
 
 # Delay between PikPak offline download requests (in seconds)
 # This helps avoid rate limiting when processing multiple torrents
