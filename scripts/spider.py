@@ -9,12 +9,17 @@ import sys
 from typing import Optional, Dict, Any
 from bs4 import BeautifulSoup
 from bs4.element import Tag
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, quote
 from datetime import datetime
+
+# Change to project root directory (parent of scripts folder)
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(project_root)
+sys.path.insert(0, project_root)
 
 # Import utility functions
 from utils.history_manager import load_parsed_movies_history, save_parsed_movie_to_history, should_process_movie, \
-    determine_torrent_types, get_missing_torrent_types, validate_history_file
+    determine_torrent_types, get_missing_torrent_types, validate_history_file, has_complete_subtitles
 from utils.parser import parse_index, parse_detail
 from utils.magnet_extractor import extract_magnets
 
@@ -25,7 +30,8 @@ try:
         DAILY_REPORT_DIR, AD_HOC_DIR, PARSED_MOVIES_CSV,
         SPIDER_LOG_FILE, LOG_LEVEL, DETAIL_PAGE_SLEEP, PAGE_SLEEP, MOVIE_SLEEP,
         JAVDB_SESSION_COOKIE, PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS,
-        PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES
+        PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES,
+        CF_TURNSTILE_COOLDOWN, PHASE_TRANSITION_COOLDOWN, FALLBACK_COOLDOWN
     )
 except ImportError:
     # Fallback values if config.py doesn't exist
@@ -46,12 +52,16 @@ except ImportError:
     PROXY_HTTP = None
     PROXY_HTTPS = None
     PROXY_MODULES = ['all']
+    CF_TURNSTILE_COOLDOWN = 10
+    PHASE_TRANSITION_COOLDOWN = 30
+    FALLBACK_COOLDOWN = 30
 
 # Import CloudFlare bypass configuration (with fallback)
 try:
-    from config import CF_BYPASS_SERVICE_PORT
+    from config import CF_BYPASS_SERVICE_PORT, CF_BYPASS_ENABLED
 except ImportError:
     CF_BYPASS_SERVICE_PORT = 8000
+    CF_BYPASS_ENABLED = True
 
 # Import proxy pool configuration (with fallback)
 try:
@@ -62,8 +72,6 @@ except ImportError:
     PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 days (691200 seconds)
     PROXY_POOL_MAX_FAILURES = 3
 
-os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
-
 # Configure logging
 from utils.logging_config import setup_logging, get_logger
 setup_logging(SPIDER_LOG_FILE, LOG_LEVEL)
@@ -72,8 +80,14 @@ logger = get_logger(__name__)
 # Import proxy pool
 from utils.proxy_pool import ProxyPool, create_proxy_pool_from_config
 
+# Import unified request handler
+from utils.request_handler import RequestHandler, RequestConfig, create_request_handler_from_config
+
 # Global proxy pool instance (will be initialized in main)
 global_proxy_pool: Optional[ProxyPool] = None
+
+# Global request handler instance (will be initialized in main)
+global_request_handler: Optional[RequestHandler] = None
 
 # Global set to track parsed links
 parsed_links = set()
@@ -129,75 +143,74 @@ def ensure_daily_report_dir():
         logger.info(f"Created directory: {DAILY_REPORT_DIR}")
 
 
-def should_use_proxy_for_module(module_name, use_proxy_flag):
+# Legacy wrapper functions - now delegated to RequestHandler
+# These functions are kept for backward compatibility but internally use the global_request_handler
+
+def should_use_proxy_for_module(module_name: str, use_proxy_flag: bool) -> bool:
     """
-    Check if a specific module should use proxy based on configuration
-    
-    Args:
-        module_name: Name of the module ('spider_index', 'spider_detail', 'spider_age_verification')
-        use_proxy_flag: Whether --use-proxy flag is enabled
-    
-    Returns:
-        bool: True if the module should use proxy, False otherwise
+    Check if a specific module should use proxy based on configuration.
+    Delegated to global_request_handler.
     """
+    if global_request_handler:
+        return global_request_handler.should_use_proxy_for_module(module_name, use_proxy_flag)
+    # Fallback if handler not initialized
     if not use_proxy_flag:
         return False
-    
     if not PROXY_MODULES:
-        # Empty list means no modules use proxy
         return False
-    
     if 'all' in PROXY_MODULES:
-        # 'all' means all modules use proxy
         return True
-    
-    # Check if specific module is in the list
     return module_name in PROXY_MODULES
 
 
 def extract_ip_from_proxy_url(proxy_url: str) -> Optional[str]:
     """
     Extract IP address or hostname from a proxy URL.
-    
-    Args:
-        proxy_url: Proxy URL (e.g., 'http://user:pass@192.168.1.1:8080')
-    
-    Returns:
-        IP address or hostname, or None if extraction fails
+    Delegated to RequestHandler static method.
     """
-    try:
-        parsed = urlparse(proxy_url)
-        return parsed.hostname
-    except Exception as e:
-        logger.warning(f"Failed to extract IP from proxy URL: {e}")
-        return None
+    return RequestHandler.extract_ip_from_proxy_url(proxy_url)
 
 
 def get_cf_bypass_service_url(proxy_ip: Optional[str] = None) -> str:
     """
     Get the CF bypass service URL based on proxy configuration.
-    
-    Args:
-        proxy_ip: IP address of the proxy server (if using proxy pool)
-    
-    Returns:
-        CF bypass service URL
-        - Without proxy: http://localhost:{CF_BYPASS_SERVICE_PORT}
-        - With proxy: http://{proxy_ip}:{CF_BYPASS_SERVICE_PORT}
+    Delegated to global_request_handler.
     """
+    if global_request_handler:
+        return global_request_handler.get_cf_bypass_service_url(proxy_ip)
+    # Fallback if handler not initialized
     if proxy_ip:
         return f"http://{proxy_ip}:{CF_BYPASS_SERVICE_PORT}"
     else:
-        return f"http://localhost:{CF_BYPASS_SERVICE_PORT}"
+        return f"http://127.0.0.1:{CF_BYPASS_SERVICE_PORT}"
+
+
+def is_cf_bypass_failure(html_content: str) -> bool:
+    """
+    Check if the CF bypass response indicates a failure.
+    Delegated to RequestHandler static method.
+    """
+    return RequestHandler.is_cf_bypass_failure(html_content)
 
 
 def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='unknown', max_retries=3, use_cf_bypass=False):
     """
     Fetch a webpage with proper headers, age verification bypass, and proxy pool support.
     
-    When use_cf_bypass=True, uses CloudflareBypassForScraping's Request Mirroring feature:
-    - Requests are forwarded through the bypass service
-    - Service automatically handles Cloudflare challenges and caches cookies
+    This function delegates to the global_request_handler for actual request handling.
+    
+    Mode combinations:
+    - --use-proxy only: Use proxy to access website directly (no bypass)
+    - --use-cf-bypass only: Use local CF bypass service (http://127.0.0.1:8000/html?url=...)
+    - --use-proxy --use-cf-bypass: Use proxy's CF bypass service (http://{proxy_ip}:8000/html?url=...)
+    
+    CF Bypass failure detection: HTML size < 1000 bytes AND contains 'fail' keyword
+    
+    Retry sequence on CF bypass failure:
+      a. Retry current method (bypass)
+      b. Without bypass, use current proxy
+      c. Switch to another proxy, without bypass
+      d. Use bypass with new proxy
     
     Service repository: https://github.com/sarperavci/CloudflareBypassForScraping
     
@@ -208,170 +221,53 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
         use_proxy: Whether --use-proxy flag is enabled
         module_name: Module name for proxy control ('spider_index', 'spider_detail', 'spider_age_verification')
         max_retries: Maximum number of retries with different proxies (only for proxy pool mode)
-        use_cf_bypass: Whether to use CF bypass service (Request Mirroring mode)
+        use_cf_bypass: Whether to use CF bypass service
+        
+    Returns:
+        HTML content as string, or None if failed
     """
-    global global_proxy_pool
+    global global_request_handler
     
-    if session is None:
-        session = requests.Session()
-
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8',
-        'Accept-Encoding': 'gzip, deflate',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Cache-Control': 'max-age=0',
-    }
+    if global_request_handler is None:
+        logger.error("Request handler not initialized. Call initialize_request_handler() first.")
+        return None
     
-    # Add JAVDB session cookie if configured
-    if use_cookie and JAVDB_SESSION_COOKIE:
-        headers['Cookie'] = f'_jdb_session={JAVDB_SESSION_COOKIE}'
+    return global_request_handler.get_page(
+        url=url,
+        session=session,
+        use_cookie=use_cookie,
+        use_proxy=use_proxy,
+        module_name=module_name,
+        max_retries=max_retries,
+        use_cf_bypass=use_cf_bypass
+    )
 
-    # CF Bypass Request Mirroring mode
-    # When enabled, requests are forwarded through the bypass service
-    actual_url = url
-    proxies = None
-    use_proxy_pool_mode = False
+
+def initialize_request_handler():
+    """
+    Initialize the global request handler with configuration from config.py.
+    This should be called after proxy_pool is initialized in main().
+    """
+    global global_request_handler, global_proxy_pool
     
-    if use_cf_bypass:
-        # Parse the original URL to get hostname and path
-        parsed_url = urlparse(url)
-        target_hostname = parsed_url.netloc
-        url_path = parsed_url.path
-        if parsed_url.query:
-            url_path += f"?{parsed_url.query}"
-        
-        # Determine the CF bypass service URL
-        proxy_ip = None
-        if use_proxy and global_proxy_pool is not None:
-            current_proxy = global_proxy_pool.get_current_proxy()
-            if current_proxy:
-                proxy_url = current_proxy.get('https') or current_proxy.get('http')
-                if proxy_url:
-                    proxy_ip = extract_ip_from_proxy_url(proxy_url)
-                    use_proxy_pool_mode = True
-        
-        service_base_url = get_cf_bypass_service_url(proxy_ip)
-        
-        # Rewrite URL to point to bypass service
-        actual_url = f"{service_base_url}{url_path}"
-        
-        # Add x-hostname header (required for Request Mirroring)
-        headers['x-hostname'] = target_hostname
-        
-        logger.debug(f"[CF Bypass] Request Mirroring: {url} -> {actual_url}")
-        logger.debug(f"[CF Bypass] x-hostname: {target_hostname}")
-    else:
-        # Normal mode - determine proxy configuration
-        if should_use_proxy_for_module(module_name, use_proxy):
-            if PROXY_MODE in ('pool', 'single') and global_proxy_pool is not None:
-                use_proxy_pool_mode = True
-                proxies = global_proxy_pool.get_current_proxy()
-                if proxies:
-                    proxy_name = global_proxy_pool.get_current_proxy_name()
-                    if PROXY_MODE == 'pool':
-                        logger.debug(f"[{module_name}] Using proxy pool - Current proxy: {proxy_name}")
-                    else:
-                        logger.debug(f"[{module_name}] Using single proxy mode - Main proxy: {proxy_name}")
-                else:
-                    logger.warning(f"[{module_name}] Proxy mode '{PROXY_MODE}' enabled but no proxy available")
-            elif PROXY_HTTP or PROXY_HTTPS:
-                proxies = {}
-                if PROXY_HTTP:
-                    proxies['http'] = PROXY_HTTP
-                if PROXY_HTTPS:
-                    proxies['https'] = PROXY_HTTPS
-                logger.debug(f"[{module_name}] Using legacy proxy configuration: {proxies}")
-        elif use_proxy:
-            logger.debug(f"[{module_name}] Proxy disabled for this module")
+    config = RequestConfig(
+        base_url=BASE_URL,
+        cf_bypass_service_port=CF_BYPASS_SERVICE_PORT,
+        cf_bypass_enabled=CF_BYPASS_ENABLED,
+        cf_bypass_max_failures=3,
+        cf_turnstile_cooldown=CF_TURNSTILE_COOLDOWN,
+        fallback_cooldown=FALLBACK_COOLDOWN,
+        javdb_session_cookie=JAVDB_SESSION_COOKIE,
+        proxy_http=PROXY_HTTP,
+        proxy_https=PROXY_HTTPS,
+        proxy_modules=PROXY_MODULES,
+        proxy_mode=PROXY_MODE
+    )
+    
+    global_request_handler = RequestHandler(proxy_pool=global_proxy_pool, config=config)
+    logger.info("Request handler initialized successfully")
 
-    # Retry logic
-    retry_count = 0
-    while retry_count < max_retries:
-        try:
-            logger.debug(f"Fetching URL: {url} (attempt {retry_count + 1}/{max_retries})")
-            if use_cf_bypass:
-                logger.debug(f"[CF Bypass] Actual request to: {actual_url}")
-            elif proxies:
-                logger.debug(f"Using proxies: {proxies}")
-            
-            response = session.get(actual_url, headers=headers, proxies=proxies, timeout=60 if use_cf_bypass else 30)
-            response.raise_for_status()
-            logger.debug(f"Successfully fetched URL: {url}")
-            
-            # Mark proxy as successful if using proxy pool
-            if use_proxy_pool_mode and global_proxy_pool is not None:
-                global_proxy_pool.mark_success()
-            
-            html_content = response.text
-            
-            # Check for age verification modal and bypass if needed
-            soup = BeautifulSoup(html_content, 'html.parser')
-            age_modal = soup.find('div', class_='modal is-active over18-modal')
-            
-            if age_modal:
-                logger.debug("Age verification modal detected, attempting to bypass...")
-                
-                # Create clean headers for age verification (without x-hostname if CF bypass is enabled)
-                # Age verification requests go directly to javdb.com, not through CF bypass service
-                age_headers = {k: v for k, v in headers.items() if k != 'x-hostname'}
-                
-                # Find age verification link
-                age_links = age_modal.find_all('a', href=True)
-                for link in age_links:
-                    if 'over18' in link.get('href', ''):
-                        age_url = urljoin(BASE_URL, link.get('href'))
-                        logger.debug(f"Found age verification link: {age_url}")
-                        
-                        # Access age verification link (use same proxy settings as main request)
-                        # Use age_headers to exclude x-hostname header
-                        age_response = session.get(age_url, headers=age_headers, proxies=proxies, timeout=30)
-                        if age_response.status_code == 200:
-                            logger.debug("Successfully bypassed age verification")
-                            # Re-fetch the original page using the same URL and proxy settings
-                            final_response = session.get(actual_url, headers=headers, proxies=proxies, timeout=60 if use_cf_bypass else 30)
-                            if final_response.status_code == 200:
-                                logger.debug("Successfully re-fetched page after age verification")
-                                return final_response.text
-                            else:
-                                logger.warning(f"Failed to get final page after age verification: {final_response.status_code}")
-                                return final_response.text
-                        else:
-                            logger.debug(f"Failed to bypass age verification: {age_response.status_code}")
-                            break
-                
-                logger.debug("Could not find or access age verification link")
-            else:
-                logger.debug("No age verification modal detected")
-            
-            return html_content
-            
-        except requests.RequestException as e:
-            logger.error(f"Error fetching {url}: {e}")
-            
-            # If using proxy pool, try to switch to another proxy
-            if use_proxy_pool_mode and global_proxy_pool is not None and retry_count < max_retries - 1:
-                switched = global_proxy_pool.mark_failure_and_switch()
-                if switched:
-                    proxies = global_proxy_pool.get_current_proxy()
-                    proxy_name = global_proxy_pool.get_current_proxy_name()
-                    logger.info(f"[{module_name}] Switched to proxy: {proxy_name}, retrying...")
-                    retry_count += 1
-                    continue
-                else:
-                    logger.error(f"[{module_name}] Failed to switch proxy, no more proxies available")
-                    break
-            else:
-                # Single proxy mode or last retry - just fail
-                break
-                
-    return None
+
 
 
 def get_page_url(page_num, phase=1, custom_url=None):
@@ -528,6 +424,142 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
 
     # Return the last HTML content we fetched (even if validation failed), or None if all fetches failed completely
     return last_failed_html, False, proxy_was_banned, use_proxy, use_cf_bypass
+
+
+def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, use_cf_bypass, entry_index, is_adhoc_mode=False):
+    """
+    Fetch detail page with smart multi-level fallback mechanism.
+    Similar to fetch_index_page_with_fallback, but validates using parse_detail success.
+    
+    Note: Unlike index page fallback, this function does NOT mark proxies as banned on failure,
+    because detail page failures are often due to page-specific issues (login required, 
+    page not found, etc.) rather than proxy problems.
+    
+    Fallback Hierarchy:
+    1. Initial Attempt: Use provided settings (e.g. No Proxy, No CF).
+    2. Proxy Pool Iteration: If initial failed, iterate through proxies.
+       For each proxy:
+       a. Try Direct Proxy (No CF)
+       b. Try Proxy + CF Bypass
+       c. If both fail, switch to next proxy (no ban marking).
+    
+    Args:
+        detail_url: URL to fetch
+        session: requests.Session object
+        use_cookie: Whether to use session cookie
+        use_proxy: Whether proxy is currently enabled
+        use_cf_bypass: Whether CF bypass is currently enabled
+        entry_index: Current entry index (for logging)
+        is_adhoc_mode: Unused, kept for API compatibility
+    
+    Returns:
+        tuple: (magnets, actor_info, parse_success, effective_use_proxy, effective_use_cf_bypass)
+            - magnets: List of magnet link dictionaries
+            - actor_info: Actor name string
+            - parse_success: True if parsing was successful
+            - effective_use_proxy: The proxy setting that eventually worked
+            - effective_use_cf_bypass: The CF bypass setting that eventually worked
+    """
+    global global_proxy_pool
+    
+    last_result = ([], '', False)  # Store result from failed attempts (magnets, actor_info, parse_success)
+    
+    # --- Helper function to attempt fetch, parse and validate ---
+    def try_fetch_and_parse(u_proxy, u_cf, context_msg, skip_sleep=False):
+        nonlocal last_result
+        logger.debug(f"[{entry_index}] {context_msg}...")
+        try:
+            html = get_page(detail_url, session, use_cookie=use_cookie,
+                            use_proxy=u_proxy, module_name='spider_detail',
+                            use_cf_bypass=u_cf)
+            if html:
+                # Parse detail page with skip_sleep for retry attempts
+                # Note: video_code is already extracted from index page, not from detail page
+                magnets, actor_info, parse_success = parse_detail(html, entry_index, skip_sleep=skip_sleep)
+                
+                if parse_success:
+                    logger.debug(f"[{entry_index}] Success: {context_msg}")
+                    return magnets, actor_info, True
+                else:
+                    # Fetched HTML but parsing failed (missing expected elements)
+                    # Store it as potential return value if all fallbacks fail
+                    last_result = (magnets, actor_info, False)
+                    logger.debug(f"[{entry_index}] Parse validation failed (missing magnets): {context_msg}")
+            else:
+                logger.debug(f"[{entry_index}] Failed to fetch HTML: {context_msg}")
+        except Exception as e:
+            logger.debug(f"[{entry_index}] Failed {context_msg}: {e}")
+        return [], '', False
+
+    # --- Phase 0: Initial Attempt (User Config) ---
+    current_proxy_name = global_proxy_pool.get_current_proxy_name() if (use_proxy and global_proxy_pool) else "None"
+    magnets, actor_info, success = try_fetch_and_parse(
+        use_proxy, use_cf_bypass, 
+        f"Detail Initial attempt (Proxy={use_proxy}, CF={use_cf_bypass}, Node={current_proxy_name})",
+        skip_sleep=False  # First attempt should respect sleep
+    )
+    if success:
+        return magnets, actor_info, True, use_proxy, use_cf_bypass
+
+    logger.warning(f"[{entry_index}] Detail page initial attempt failed. Starting smart fallback mechanism...")
+
+    # --- Phase 1: Local CF Fallback (Only if we started with No Proxy & No CF) ---
+    # Disabled by default: Don't automatically try CF Bypass if user didn't request it
+    if not use_proxy and not use_cf_bypass:
+        logger.debug(f"[{entry_index}] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...")
+
+    # --- Phase 2: Proxy Pool Iteration ---
+    if global_proxy_pool is None:
+        logger.error(f"[{entry_index}] Fallback failed: No proxy pool configured")
+        # Return last result if we have it
+        return last_result[0], last_result[1], last_result[2], use_proxy, use_cf_bypass
+
+    # We will try up to N switches (coverage of the pool)
+    # If using Single mode, we only have 1 try.
+    max_switches = len(global_proxy_pool.proxies) if PROXY_MODE == 'pool' else 1
+    # Limit max switches to avoid infinite loops if pool is huge, e.g. 10
+    max_switches = min(max_switches, 10) 
+    
+    attempts = 0
+    while attempts < max_switches:
+        current_proxy_name = global_proxy_pool.get_current_proxy_name()
+        
+        # Sub-step 2.1: Try Direct Proxy (No CF)
+        magnets, actor_info, success = try_fetch_and_parse(
+            True, False, 
+            f"Detail Fallback Phase 2: Proxy Direct (Node={current_proxy_name})",
+            skip_sleep=True  # Skip sleep for retry attempts
+        )
+        if success:
+            logger.info(f"[{entry_index}] Detail Proxy Direct succeeded. Switching mode to: use_proxy=True, use_cf_bypass=False")
+            return magnets, actor_info, True, True, False
+            
+        # Sub-step 2.2: Try Proxy + CF Bypass
+        magnets, actor_info, success = try_fetch_and_parse(
+            True, True, 
+            f"Detail Fallback Phase 2: Proxy + CF Bypass (Node={current_proxy_name})",
+            skip_sleep=True  # Skip sleep for retry attempts
+        )
+        if success:
+            logger.info(f"[{entry_index}] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True")
+            return magnets, actor_info, True, True, True
+
+        # If both failed for this proxy, just switch to next (no ban marking for detail pages)
+        # Detail page failures are often due to page-specific issues, not proxy problems
+        attempts += 1
+        if attempts < max_switches and PROXY_MODE == 'pool':
+            logger.debug(f"[{entry_index}] Proxy '{current_proxy_name}' failed both Direct and CF modes. Switching to next proxy (not marking as banned)...")
+            global_proxy_pool.mark_failure_and_switch()  # Single failure mark, no ban
+        else:
+            if PROXY_MODE == 'single':
+                logger.debug(f"[{entry_index}] Single proxy mode failed. Cannot switch.")
+            else:
+                logger.debug(f"[{entry_index}] All proxy attempts exhausted.")
+            break
+
+    # Return the last result we got (even if parsing failed), or empty if all fetches failed completely
+    logger.warning(f"[{entry_index}] Detail page fallback exhausted. Returning best available result.")
+    return last_result[0], last_result[1], last_result[2], use_proxy, use_cf_bypass
 
 
 def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
@@ -783,6 +815,9 @@ def main():
             logger.warning("Proxy enabled but no proxy configuration found (neither PROXY_POOL nor PROXY_HTTP/PROXY_HTTPS)")
         global_proxy_pool = None
 
+    # Initialize global request handler (must be after proxy pool initialization)
+    initialize_request_handler()
+
     # Determine output directory and filename
     if args.url:
         output_dir = AD_HOC_DIR
@@ -816,21 +851,32 @@ def main():
         logger.info("PARSE ALL MODE: Will continue until empty page is found")
     if ignore_release_date:
         logger.info("IGNORE RELEASE DATE: Will process all entries regardless of today/yesterday tags")
-    if use_cf_bypass:
-        logger.info("CF BYPASS MODE: Using CloudflareBypassForScraping Request Mirroring")
+    # Log mode information based on flags
+    if use_cf_bypass and not CF_BYPASS_ENABLED:
+        logger.warning("CF BYPASS MODE: Requested but DISABLED via CF_BYPASS_ENABLED=False in config.py")
+    elif use_proxy and use_cf_bypass:
+        # Mode: --use-proxy --use-cf-bypass
+        logger.info("MODE: Proxy + Proxy's CF Bypass Service")
         logger.info(f"CF Bypass service port: {CF_BYPASS_SERVICE_PORT}")
-        # Determine which service URL will be used
-        if use_proxy and global_proxy_pool is not None:
+        if global_proxy_pool is not None:
             current_proxy = global_proxy_pool.get_current_proxy()
             if current_proxy:
                 proxy_url = current_proxy.get('https') or current_proxy.get('http')
                 if proxy_url:
                     proxy_ip = extract_ip_from_proxy_url(proxy_url)
                     service_url = get_cf_bypass_service_url(proxy_ip)
-                    logger.info(f"CF Bypass service URL: {service_url} (via proxy)")
-        else:
-            service_url = get_cf_bypass_service_url(None)
-            logger.info(f"CF Bypass service URL: {service_url} (localhost)")
+                    logger.info(f"CF Bypass URL: {service_url}/html?url=<target>")
+                    logger.info("Requests go directly to proxy server's bypass service (no proxy forwarding)")
+    elif use_cf_bypass:
+        # Mode: --use-cf-bypass only
+        logger.info("MODE: Local CF Bypass Service only (no proxy)")
+        logger.info(f"CF Bypass service port: {CF_BYPASS_SERVICE_PORT}")
+        service_url = get_cf_bypass_service_url()
+        logger.info(f"CF Bypass URL: {service_url}/html?url=<target>")
+    elif use_proxy:
+        # Mode: --use-proxy only
+        logger.info("MODE: Proxy only (no CF bypass)")
+    
     if use_proxy:
         if global_proxy_pool is not None:
             stats = global_proxy_pool.get_statistics()
@@ -914,6 +960,10 @@ def main():
     # Track if any proxy was banned during the entire run (initialize before phases)
     any_proxy_banned = False
     any_proxy_banned_phase2 = False
+    
+    # Track skipped entries (for accurate statistics)
+    skipped_session_count = 0
+    skipped_history_count = 0  # Track entries skipped due to history
 
     # Phase 1: Collect entries with both "含中字磁鏈" and "今日新種"/"昨日新種" tags
     if phase_mode in ['1', 'all']:
@@ -938,11 +988,12 @@ def main():
                 is_adhoc_mode=custom_url is not None  # Don't ban proxies in ad hoc mode
             )
             
-            # Update global settings if fallback changed them (to be persistent for next pages/details)
+            # If fallback was triggered (settings changed), apply cooldown but DON'T persist the settings
+            # Next page/item should start fresh with original settings and wait for fallback if needed
             if has_movie_list and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass):
-                logger.info(f"Updating session settings based on successful fallback: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}")
-                use_proxy = effective_use_proxy
-                use_cf_bypass = effective_use_cf_bypass
+                logger.info(f"[Page {page_num}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). Applying {FALLBACK_COOLDOWN}s cooldown before next page...")
+                time.sleep(FALLBACK_COOLDOWN)
+                # Note: NOT updating use_proxy/use_cf_bypass - next page will use original settings
             
             if proxy_was_banned:
                 any_proxy_banned = True
@@ -999,29 +1050,53 @@ def main():
         for i, entry in enumerate(all_index_results, 1):
             href = entry['href']
             page_num = entry['page']
+            fallback_triggered = False  # Track if fallback was triggered for this entry
 
             # Skip if already parsed in this session
             if href in parsed_links:
                 logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping already parsed in this session")
+                skipped_session_count += 1
                 continue
 
             # Add to parsed links set for this session
             parsed_links.add(href)
 
-            detail_url = urljoin(BASE_URL, href)
-
-            # Fetch detail page
-            detail_html = get_page(detail_url, session, use_cookie=custom_url is not None, use_proxy=use_proxy, module_name='spider_detail', use_cf_bypass=use_cf_bypass)
-            if not detail_html:
-                logger.error(f"[{i}/{total_entries_phase1}] [Page {page_num}] Failed to fetch detail page")
+            # Early skip check: if movie already has both subtitle and hacked_subtitle in history,
+            # skip fetching detail page to avoid unnecessary network requests
+            if has_complete_subtitles(href, parsed_movies_history_phase1):
+                logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history")
+                skipped_history_count += 1
                 continue
 
-            # Parse detail page
-            magnets, actor_info, video_code = parse_detail(detail_html, i)
+            detail_url = urljoin(BASE_URL, href)
+
+            # Fetch detail page with fallback mechanism
+            # Note: video_code is already extracted from index page in entry['video_code']
+            magnets, actor_info, parse_success, effective_use_proxy, effective_use_cf_bypass = fetch_detail_page_with_fallback(
+                detail_url, session,
+                use_cookie=custom_url is not None,
+                use_proxy=use_proxy,
+                use_cf_bypass=use_cf_bypass,
+                entry_index=f"{i}/{total_entries_phase1}",
+                is_adhoc_mode=custom_url is not None
+            )
+            
+            # If fallback was triggered (settings changed), apply cooldown but DON'T persist the settings
+            # Next item should start fresh with original settings and wait for fallback if needed
+            fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
+            if fallback_triggered:
+                logger.info(f"[{i}/{total_entries_phase1}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). Will apply {FALLBACK_COOLDOWN}s cooldown after processing...")
+                # Note: NOT updating use_proxy/use_cf_bypass - next item will use original settings
+            
+            if not parse_success and not magnets:
+                logger.error(f"[{i}/{total_entries_phase1}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
+                time.sleep(MOVIE_SLEEP)  # Respect rate limiting even on failure
+                continue
+            
             magnet_links = extract_magnets(magnets, i)
 
-            # Log the processing with video_code instead of href
-            logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Processing {video_code}")
+            # Log the processing with video_code from index page
+            logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Processing {entry['video_code'] or href}")
 
             # Check if we should process this movie based on history and phase rules
             should_process, history_torrent_types = should_process_movie(href, parsed_movies_history_phase1, 1,
@@ -1035,6 +1110,8 @@ def main():
                 else:
                     logger.debug(
                         f"[{i}/{total_entries_phase1}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
+                skipped_history_count += 1
+                time.sleep(MOVIE_SLEEP)  # Respect rate limiting even when skipping
                 continue
 
             # Count found torrents
@@ -1054,6 +1131,7 @@ def main():
             row = create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet_links,
                                                      parsed_movies_history_phase1)
             # Override the title with video_code
+            video_code = entry['video_code']
             row['video_code'] = video_code
 
             # Only add row if it contains new torrent categories (excluding already downloaded ones)
@@ -1091,13 +1169,24 @@ def main():
                     f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipped CSV entry - all torrent categories already in history")
                 # Don't update history if no new torrents were found
 
-            # Small delay to be respectful to the server
-            time.sleep(MOVIE_SLEEP)
+            # Apply appropriate delay
+            if fallback_triggered:
+                # Extra cooldown after fallback to let Cloudflare/server recover
+                logger.debug(f"[{i}/{total_entries_phase1}] Applying fallback cooldown: {FALLBACK_COOLDOWN}s")
+                time.sleep(FALLBACK_COOLDOWN)
+            else:
+                # Normal delay between items
+                time.sleep(MOVIE_SLEEP)
 
         logger.info(f"Phase 1 completed: {len(phase1_rows)} entries processed")
 
     # Phase 2: Collect entries with only "今日新種"/"昨日新種" tag (filtered by quality)
     if phase_mode in ['2', 'all']:
+        # Add cooldown delay between phases to avoid triggering Cloudflare protection
+        if phase_mode == 'all':
+            logger.info(f"Waiting {PHASE_TRANSITION_COOLDOWN} seconds before Phase 2 to allow Cloudflare cooldown...")
+            time.sleep(PHASE_TRANSITION_COOLDOWN)
+        
         logger.info("=" * 50)
         logger.info(f"PHASE 2: Processing entries with only today/yesterday tag (rate > {PHASE2_MIN_RATE}, comments > {PHASE2_MIN_COMMENTS})")
         logger.info("=" * 50)
@@ -1121,11 +1210,12 @@ def main():
                 is_adhoc_mode=custom_url is not None  # Don't ban proxies in ad hoc mode
             )
             
-            # Update global settings if fallback changed them
+            # If fallback was triggered (settings changed), apply cooldown but DON'T persist the settings
+            # Next page/item should start fresh with original settings and wait for fallback if needed
             if has_movie_list and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass):
-                logger.info(f"Updating session settings based on successful fallback: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}")
-                use_proxy = effective_use_proxy
-                use_cf_bypass = effective_use_cf_bypass
+                logger.info(f"[Page {page_num}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). Applying {FALLBACK_COOLDOWN}s cooldown before next page...")
+                time.sleep(FALLBACK_COOLDOWN)
+                # Note: NOT updating use_proxy/use_cf_bypass - next page will use original settings
             
             if proxy_was_banned:
                 any_proxy_banned_phase2 = True
@@ -1182,29 +1272,54 @@ def main():
         for i, entry in enumerate(all_index_results_phase2, 1):
             href = entry['href']
             page_num = entry['page']
+            fallback_triggered = False  # Track if fallback was triggered for this entry
 
             # Skip if already parsed in this session
             if href in parsed_links:
                 logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping already parsed in this session")
+                skipped_session_count += 1
+                # No sleep needed here - we haven't made any request yet
                 continue
 
             # Add to parsed links set for this session
             parsed_links.add(href)
 
-            detail_url = urljoin(BASE_URL, href)
-
-            # Fetch detail page
-            detail_html = get_page(detail_url, session, use_cookie=custom_url is not None, use_proxy=use_proxy, module_name='spider_detail', use_cf_bypass=use_cf_bypass)
-            if not detail_html:
-                logger.error(f"[{i}/{total_entries_phase2}] [Page {page_num}] Failed to fetch detail page")
+            # Early skip check: if movie already has both subtitle and hacked_subtitle in history,
+            # skip fetching detail page to avoid unnecessary network requests
+            if has_complete_subtitles(href, parsed_movies_history_phase2):
+                logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history")
+                skipped_history_count += 1
                 continue
 
-            # Parse detail page
-            magnets, actor_info, video_code = parse_detail(detail_html, f"P2-{i}")
+            detail_url = urljoin(BASE_URL, href)
+
+            # Fetch detail page with fallback mechanism
+            # Note: video_code is already extracted from index page in entry['video_code']
+            magnets, actor_info, parse_success, effective_use_proxy, effective_use_cf_bypass = fetch_detail_page_with_fallback(
+                detail_url, session,
+                use_cookie=custom_url is not None,
+                use_proxy=use_proxy,
+                use_cf_bypass=use_cf_bypass,
+                entry_index=f"P2-{i}/{total_entries_phase2}",
+                is_adhoc_mode=custom_url is not None
+            )
+            
+            # If fallback was triggered (settings changed), apply cooldown but DON'T persist the settings
+            # Next item should start fresh with original settings and wait for fallback if needed
+            fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
+            if fallback_triggered:
+                logger.info(f"[P2-{i}/{total_entries_phase2}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). Will apply {FALLBACK_COOLDOWN}s cooldown after processing...")
+                # Note: NOT updating use_proxy/use_cf_bypass - next item will use original settings
+            
+            if not parse_success and not magnets:
+                logger.error(f"[{i}/{total_entries_phase2}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
+                time.sleep(MOVIE_SLEEP)  # Respect rate limiting even on failure
+                continue
+            
             magnet_links = extract_magnets(magnets, f"P2-{i}")
 
-            # Log the processing with video_code instead of href
-            logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Processing {video_code}")
+            # Log the processing with video_code from index page
+            logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Processing {entry['video_code']}")
 
             # Check if we should process this movie based on history and phase rules
             should_process, history_torrent_types = should_process_movie(href, parsed_movies_history_phase2, 2,
@@ -1218,6 +1333,8 @@ def main():
                 else:
                     logger.debug(
                         f"[{i}/{total_entries_phase2}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
+                skipped_history_count += 1
+                time.sleep(MOVIE_SLEEP)  # Respect rate limiting even when skipping
                 continue
 
             # Count found torrents
@@ -1237,6 +1354,7 @@ def main():
             row = create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet_links,
                                                      parsed_movies_history_phase2)
             # Override the title with video_code
+            video_code = entry['video_code']
             row['video_code'] = video_code
 
             # Only add row if it contains new torrent categories (excluding already downloaded ones)
@@ -1274,8 +1392,14 @@ def main():
                     f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipped CSV entry - all torrent categories already in history")
                 # Don't update history if no new torrents were found
 
-            # Small delay to be respectful to the server
-            time.sleep(MOVIE_SLEEP)
+            # Apply appropriate delay
+            if fallback_triggered:
+                # Extra cooldown after fallback to let Cloudflare/server recover
+                logger.debug(f"[P2-{i}/{total_entries_phase2}] Applying fallback cooldown: {FALLBACK_COOLDOWN}s")
+                time.sleep(FALLBACK_COOLDOWN)
+            else:
+                # Normal delay between items
+                time.sleep(MOVIE_SLEEP)
 
         logger.info(f"Phase 2 completed: {len(phase2_rows)} entries processed")
 
@@ -1346,9 +1470,9 @@ def main():
     logger.info("=" * 30)
     logger.info(f"Total entries found: {len(rows)}")
     logger.info(f"Successfully processed: {len(rows)}")
-    logger.info(f"Skipped already parsed in this session: {len(parsed_links)}")
+    logger.info(f"Skipped already parsed in this session: {skipped_session_count}")
     if use_history_for_loading and not ignore_history:
-        logger.info(f"Skipped already parsed in previous runs: {len(parsed_movies_history_phase1)}")
+        logger.info(f"Skipped already parsed in previous runs: {skipped_history_count}")
     elif ignore_history:
         logger.info("History checking was disabled (--ignore-history)")
     logger.info(f"Current parsed links in memory: {len(parsed_links)}")
@@ -1418,3 +1542,4 @@ def main():
 
 if __name__ == '__main__':
     main() 
+
