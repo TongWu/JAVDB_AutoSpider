@@ -1,57 +1,59 @@
-# JavDB Auto Spider Docker Compose Configuration
-# This is a sample docker-compose file. Copy and modify as needed.
-
 version: '3.8'
 
 services:
-  # JavDB Auto Spider main service
   javdb-spider:
-    image: ghcr.io/your-username/javdb-autospider:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: javdb-spider
     restart: unless-stopped
     
-    # Uncomment to build from source instead of using pre-built image
-    # build:
-    #   context: ..
-    #   dockerfile: Dockerfile
+    # Environment variables for cron jobs
+    env_file:
+      - ../.env
     
+    # Mount volumes
     volumes:
-      # Configuration directory - REQUIRED
-      # Contains config.py and .env files
-      - ./config:/app/config:ro
+      # Mount config.py (must exist on host)
+      - ../config.py:/app/config.py:ro
       
-      # Data directory for daily reports and ad-hoc files
-      - ./data:/app/data
+      # Mount logs directory (read-write)
+      - ../logs:/app/logs
       
-      # Logs directory
-      - ./logs:/app/logs_volume
+      # Mount Ad Hoc directory (read-write)
+      - ../Ad Hoc:/app/Ad Hoc
+      
+      # Mount Daily Report directory (read-write)
+      - ../Daily Report:/app/Daily Report
+      
+      # Optional: Mount parsed movies history if you want to preserve it
+      # - ./parsed_movies_history.csv:/app/parsed_movies_history.csv
     
+    # Set timezone
     environment:
-      # Timezone setting
       - TZ=Asia/Shanghai
     
-    # Network mode - use host network for easier access to local services
-    # Uncomment if you need to access local qBittorrent or other services
-    # network_mode: host
+    # Health check (optional)
+    healthcheck:
+      test: ["CMD", "pgrep", "cron"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     
-    networks:
-      - javdb-network
+    # Resource limits (optional, adjust as needed)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '2'
+    #       memory: 2G
+    #     reservations:
+    #       cpus: '0.5'
+    #       memory: 512M
 
-  # CloudFlare Bypass service
-  # Required for bypassing Cloudflare protection on JavDB
-  # https://github.com/sarperavci/CloudflareBypassForScraping
-  cf-bypass:
-    image: ghcr.io/sarperavci/cloudflarebypassforscraping:latest
-    container_name: cf-bypass
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    environment:
-      - LOG_LEVEL=info
-    networks:
-      - javdb-network
-
-networks:
-  javdb-network:
-    driver: bridge
+# Optional: create named volumes for better data management
+# volumes:
+#   logs:
+#   ad_hoc:
+#   daily_report:
 
