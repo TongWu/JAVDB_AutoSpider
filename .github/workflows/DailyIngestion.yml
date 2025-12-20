@@ -105,6 +105,7 @@ jobs:
           VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE }}
           VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE }}
           VAR_PIPELINE_LOG_FILE: ${{ vars.PIPELINE_LOG_FILE }}
+          VAR_EMAIL_NOTIFICATION_LOG_FILE: ${{ vars.EMAIL_NOTIFICATION_LOG_FILE }}
           # Parsing Configuration
           VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER }}
           # File Paths
