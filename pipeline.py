@@ -51,7 +51,7 @@ setup_logging(PIPELINE_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
 # Import PikPak bridge functionality
-from pikpak_bridge import pikpak_bridge
+from scripts.pikpak_bridge import pikpak_bridge
 
 # --- FILE PATHS ---
 today_str = datetime.now().strftime('%Y%m%d')
@@ -702,16 +702,30 @@ def git_add_commit_push(step):
     try:
         safe_log_info(f"Step {step}: Committing and pushing files to GitHub...")
 
+        # Get current branch name (use current branch instead of hardcoded GIT_BRANCH)
+        try:
+            result = subprocess.run(['git', 'branch', '--show-current'], capture_output=True, text=True, check=True)
+            current_branch = result.stdout.strip()
+            if not current_branch:
+                # Fallback to GIT_BRANCH if we can't determine current branch
+                current_branch = GIT_BRANCH
+                safe_log_warning(f"Could not determine current branch, using default: {GIT_BRANCH}")
+            else:
+                safe_log_info(f"Current branch: {current_branch}")
+        except subprocess.CalledProcessError:
+            current_branch = GIT_BRANCH
+            safe_log_warning(f"Could not determine current branch, using default: {GIT_BRANCH}")
+
         # Configure git with credentials
         subprocess.run(['git', 'config', 'user.name', GIT_USERNAME], check=True)
         subprocess.run(['git', 'config', 'user.email', f'{GIT_USERNAME}@users.noreply.github.com'], check=True)
 
         # Pull latest changes from remote to avoid push conflicts
-        safe_log_info("Pulling latest changes from remote repository...")
+        safe_log_info(f"Pulling latest changes from remote repository (branch: {current_branch})...")
         try:
             # Use git pull with credentials in URL to avoid authentication issues
             remote_url_with_auth = GIT_REPO_URL.replace('https://', f'https://{GIT_USERNAME}:{GIT_PASSWORD}@')
-            subprocess.run(['git', 'pull', remote_url_with_auth, GIT_BRANCH], check=True)
+            subprocess.run(['git', 'pull', remote_url_with_auth, current_branch], check=True)
             safe_log_info("✓ Successfully pulled latest changes from remote")
         except subprocess.CalledProcessError as e:
             # Mask the command that contains sensitive information
@@ -739,7 +753,7 @@ def git_add_commit_push(step):
 
         # Push to remote repository
         remote_url_with_auth = GIT_REPO_URL.replace('https://', f'https://{GIT_USERNAME}:{GIT_PASSWORD}@')
-        subprocess.run(['git', 'push', remote_url_with_auth, GIT_BRANCH], check=True)
+        subprocess.run(['git', 'push', remote_url_with_auth, current_branch], check=True)
 
         return True
 
@@ -763,7 +777,7 @@ def git_add_commit_push(step):
 def parse_arguments():
     """Parse command line arguments for the pipeline"""
     parser = argparse.ArgumentParser(description='JavDB Pipeline - Run spider and uploader with optional arguments')
-    # Javdb_Spider arguments
+    # Spider arguments
     parser.add_argument('--url', type=str, help='Custom URL to scrape (add ?page=x for pages)')
     parser.add_argument('--start-page', type=int, help='Starting page number')
     parser.add_argument('--end-page', type=int, help='Ending page number')
@@ -788,8 +802,8 @@ def main():
         csv_filename = args.output_file
     else:
         if is_adhoc_mode:
-            import Javdb_Spider
-            csv_filename = Javdb_Spider.generate_output_csv_name(args.url)
+            from scripts import spider
+            csv_filename = spider.generate_output_csv_name(args.url)
         else:
             today_str = datetime.now().strftime('%Y%m%d')
             csv_filename = f'Javdb_TodayTitle_{today_str}.csv'
@@ -801,7 +815,7 @@ def main():
         csv_path = os.path.join(DAILY_REPORT_DIR, csv_filename)
         logger.info(f"Daily mode. Expected CSV: {csv_path}")
 
-    # Build arguments for Javdb_Spider
+    # Build arguments for spider
     spider_args = []
     if args.url:
         spider_args.extend(['--url', args.url])
@@ -828,7 +842,7 @@ def main():
     if args.use_cf_bypass:
         spider_args.append('--use-cf-bypass')
 
-    # Build arguments for qbtorrent_uploader
+    # Build arguments for uploader
     uploader_args = []
     if is_adhoc_mode:
         uploader_args.extend(['--mode', 'adhoc'])
@@ -854,14 +868,14 @@ def main():
             logger.info("MODE: Daily")
         logger.info("=" * 60)
 
-        # 1. Run Javdb_Spider
+        # 1. Run Spider
         logger.info("Step 1: Running JavDB Spider...")
-        run_script('Javdb_Spider.py', spider_args)
+        run_script('scripts/spider.py', spider_args)
         logger.info("✓ JavDB Spider completed successfully")
 
-        # 2. Run qbtorrent_uploader
+        # 2. Run Uploader
         logger.info("Step 2: Running qBittorrent Uploader...")
-        run_script('qbtorrent_uploader.py', uploader_args)
+        run_script('scripts/qb_uploader.py', uploader_args)
         logger.info("✓ qBittorrent Uploader completed successfully")
 
         # 3. Run PikPak Bridge to handle old torrents
@@ -980,3 +994,4 @@ Check attached logs for details.
 
 if __name__ == '__main__':
     main()
+
