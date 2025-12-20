@@ -3,13 +3,23 @@ Pytest configuration and fixtures for JAVDB AutoSpider tests.
 """
 import os
 import sys
-import pytest
-import tempfile
-import shutil
 
 # Add project root to path for imports
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
+
+# Mock pikpakapi before any other imports to avoid Python 3.9 compatibility issues
+# The pikpakapi library uses `from types import NoneType` which is only available in Python 3.10+
+from unittest.mock import MagicMock
+
+# Create mock pikpakapi module
+mock_pikpakapi = MagicMock()
+mock_pikpakapi.PikPakApi = MagicMock()
+sys.modules['pikpakapi'] = mock_pikpakapi
+
+import pytest
+import tempfile
+import shutil
 
 
 @pytest.fixture
