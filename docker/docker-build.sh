@@ -32,6 +32,13 @@ echo "✓ Docker is installed"
 echo "✓ Docker Compose is installed"
 echo ""
 
+# Get the project root directory (parent of docker directory)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Change to project root directory
+cd "$PROJECT_ROOT"
+
 # ============================================================
 # Create necessary directories
 # ============================================================
@@ -122,7 +129,7 @@ echo "=========================================="
 echo "Building Docker Image"
 echo "=========================================="
 echo ""
-docker-compose build
+docker-compose -f docker/docker-compose.yml build
 
 echo ""
 echo "✓ Docker image built successfully"
@@ -141,23 +148,23 @@ read -r start_response
 if [[ "$start_response" =~ ^[Yy]$ ]]; then
     echo ""
     echo "Starting container..."
-    docker-compose up -d
+    docker-compose -f docker/docker-compose.yml up -d
     echo ""
     echo "✓ Container started successfully!"
     echo ""
     echo "=========================================="
     echo "Quick Commands"
     echo "=========================================="
-    echo "View logs:           docker-compose logs -f"
+    echo "View logs:           docker-compose -f docker/docker-compose.yml logs -f"
     echo "View cron logs:      docker exec javdb-spider tail -f /var/log/cron.log"
-    echo "Stop container:      docker-compose down"
-    echo "Restart container:   docker-compose restart"
+    echo "Stop container:      docker-compose -f docker/docker-compose.yml down"
+    echo "Restart container:   docker-compose -f docker/docker-compose.yml restart"
     echo "Run script manually: docker exec javdb-spider python scripts/spider.py --use-proxy"
     echo "=========================================="
 else
     echo ""
     echo "To start the container later, run:"
-    echo "  docker-compose up -d"
+    echo "  docker-compose -f docker/docker-compose.yml up -d"
 fi
 
 echo ""
