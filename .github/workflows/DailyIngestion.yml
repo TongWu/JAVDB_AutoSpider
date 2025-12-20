@@ -17,7 +17,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
 
       - name: Get current branch
         id: branch_check
@@ -122,6 +122,18 @@ jobs:
           CURRENT_BRANCH="${{ steps.branch_check.outputs.branch }}"
           echo "Pulling latest changes from branch: $CURRENT_BRANCH"
           
+          # Ensure remote URL uses SSH (for deploy key)
+          # actions/checkout@v4 with ssh-key should already set this, but verify
+          REPO_URL=$(git remote get-url origin)
+          if [[ "$REPO_URL" == https://* ]]; then
+            # Convert HTTPS URL to SSH format
+            REPO_SSH=$(echo "$REPO_URL" | sed 's|https://github.com/|git@github.com:|')
+            git remote set-url origin "$REPO_SSH"
+            echo "Updated remote URL to SSH: $REPO_SSH"
+          else
+            echo "Remote URL already uses SSH: $REPO_URL"
+          fi
+          
           # Pull latest changes from remote (working tree is clean at this point)
           git fetch origin "$CURRENT_BRANCH"
           git pull --rebase origin "$CURRENT_BRANCH" || {
@@ -157,6 +169,18 @@ jobs:
           # Get current branch from previous step
           CURRENT_BRANCH="${{ steps.branch_check.outputs.branch }}"
           echo "Pushing to branch: $CURRENT_BRANCH"
+          
+          # Ensure remote URL uses SSH (for deploy key)
+          # actions/checkout@v4 with ssh-key should already set this, but verify
+          REPO_URL=$(git remote get-url origin)
+          if [[ "$REPO_URL" == https://* ]]; then
+            # Convert HTTPS URL to SSH format
+            REPO_SSH=$(echo "$REPO_URL" | sed 's|https://github.com/|git@github.com:|')
+            git remote set-url origin "$REPO_SSH"
+            echo "Updated remote URL to SSH: $REPO_SSH"
+          else
+            echo "Remote URL already uses SSH: $REPO_URL"
+          fi
           
           # Pull latest changes before committing (using autostash for any uncommitted changes)
           # This handles the case where remote was updated during script execution
