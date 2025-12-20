@@ -1,0 +1,11 @@
+2025-12-21 00:30:53,731 - __main__ - INFO - ============================================================
+2025-12-21 00:30:53,731 - __main__ - INFO - EMAIL NOTIFICATION SCRIPT
+2025-12-21 00:30:53,731 - __main__ - INFO - ============================================================
+2025-12-21 00:30:53,731 - __main__ - INFO - Analyzing logs for critical errors...
+2025-12-21 00:30:53,738 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
+2025-12-21 00:30:53,747 - __main__ - INFO - Connecting to SMTP server...
+2025-12-21 00:30:56,824 - __main__ - INFO - Email sent successfully.
+2025-12-21 00:30:56,824 - __main__ - INFO - Skipping git commit - no credentials provided (commit will be handled by workflow)
+2025-12-21 00:30:56,824 - __main__ - INFO - ============================================================
+2025-12-21 00:30:56,824 - __main__ - INFO - EMAIL NOTIFICATION COMPLETED
+2025-12-21 00:30:56,824 - __main__ - INFO - ============================================================
