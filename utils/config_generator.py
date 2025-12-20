@@ -239,9 +239,10 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('FALLBACK_COOLDOWN', 'FALLBACK_COOLDOWN', get_env_int, 30, 'JAVDB LOGIN CONFIGURATION'),
         # Logging Configuration
         ('LOG_LEVEL', 'LOG_LEVEL', get_env, 'INFO', 'LOGGING CONFIGURATION'),
-        ('SPIDER_LOG_FILE', 'SPIDER_LOG_FILE', get_env, 'logs/Javdb_Spider.log', 'LOGGING CONFIGURATION'),
-        ('UPLOADER_LOG_FILE', 'UPLOADER_LOG_FILE', get_env, 'logs/qbtorrent_uploader.log', 'LOGGING CONFIGURATION'),
-        ('PIPELINE_LOG_FILE', 'PIPELINE_LOG_FILE', get_env, 'logs/pipeline_run_and_notify.log', 'LOGGING CONFIGURATION'),
+        ('SPIDER_LOG_FILE', 'SPIDER_LOG_FILE', get_env, 'logs/spider.log', 'LOGGING CONFIGURATION'),
+        ('UPLOADER_LOG_FILE', 'UPLOADER_LOG_FILE', get_env, 'logs/qb_uploader.log', 'LOGGING CONFIGURATION'),
+        ('PIPELINE_LOG_FILE', 'PIPELINE_LOG_FILE', get_env, 'logs/pipeline.log', 'LOGGING CONFIGURATION'),
+        ('EMAIL_NOTIFICATION_LOG_FILE', 'EMAIL_NOTIFICATION_LOG_FILE', get_env, 'logs/email_notification.log', 'LOGGING CONFIGURATION'),
         # Parsing Configuration
         ('IGNORE_RELEASE_DATE_FILTER', 'IGNORE_RELEASE_DATE_FILTER', get_env_bool, False, 'PARSING CONFIGURATION'),
         # File Paths
@@ -251,7 +252,7 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # PikPak Configuration
         ('PIKPAK_EMAIL', 'PIKPAK_EMAIL', get_env, '', 'PIKPAK CONFIGURATION'),
         ('PIKPAK_PASSWORD', 'PIKPAK_PASSWORD', get_env, '', 'PIKPAK CONFIGURATION'),
-        ('PIKPAK_LOG_FILE', 'PIKPAK_LOG_FILE', get_env, 'logs/qb_pikpak.log', 'PIKPAK CONFIGURATION'),
+        ('PIKPAK_LOG_FILE', 'PIKPAK_LOG_FILE', get_env, 'logs/pikpak_bridge.log', 'PIKPAK CONFIGURATION'),
         ('PIKPAK_REQUEST_DELAY', 'PIKPAK_REQUEST_DELAY', get_env_int, 3, 'PIKPAK CONFIGURATION'),
     ]
 

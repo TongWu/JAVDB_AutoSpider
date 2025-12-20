@@ -33,7 +33,7 @@ except ImportError:
     # Fallback values if config.py doesn't exist
     BASE_URL = 'https://javdb.com'
     PARSED_MOVIES_CSV = 'parsed_movies_history.csv'
-    SPIDER_LOG_FILE = 'logs/Javdb_Spider.log'
+    SPIDER_LOG_FILE = 'logs/spider.log'
     LOG_LEVEL = 'INFO'
     DETAIL_PAGE_SLEEP = 5
     JAVDB_SESSION_COOKIE = None

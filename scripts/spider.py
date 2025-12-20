@@ -43,7 +43,7 @@ except ImportError:
     DAILY_REPORT_DIR = 'Daily Report'
     AD_HOC_DIR = 'Ad Hoc'
     PARSED_MOVIES_CSV = 'parsed_movies_history.csv'
-    SPIDER_LOG_FILE = 'logs/Javdb_Spider.log'
+    SPIDER_LOG_FILE = 'logs/spider.log'
     LOG_LEVEL = 'INFO'
     DETAIL_PAGE_SLEEP = 5
     PAGE_SLEEP = 2

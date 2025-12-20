@@ -38,7 +38,7 @@ except ImportError:
     REQUEST_TIMEOUT = 30
     DELAY_BETWEEN_ADDITIONS = 1
     
-    UPLOADER_LOG_FILE = 'logs/qbtorrent_uploader.log'
+    UPLOADER_LOG_FILE = 'logs/qb_uploader.log'
     DAILY_REPORT_DIR = 'Daily Report'
     AD_HOC_DIR = 'Ad Hoc'
     LOG_LEVEL = 'INFO'

@@ -49,17 +49,23 @@ except ImportError:
     EMAIL_FROM = 'your_email@gmail.com'
     EMAIL_TO = 'your_email@gmail.com'
     
-    PIPELINE_LOG_FILE = 'logs/pipeline_run_and_notify.log'
-    SPIDER_LOG_FILE = 'logs/Javdb_Spider.log'
-    UPLOADER_LOG_FILE = 'logs/qbtorrent_uploader.log'
+    PIPELINE_LOG_FILE = 'logs/pipeline.log'
+    SPIDER_LOG_FILE = 'logs/spider.log'
+    UPLOADER_LOG_FILE = 'logs/qb_uploader.log'
     DAILY_REPORT_DIR = 'Daily Report'
     AD_HOC_DIR = 'Ad Hoc'
     LOG_LEVEL = 'INFO'
-    PIKPAK_LOG_FILE = 'logs/qb_pikpak.log'
+    PIKPAK_LOG_FILE = 'logs/pikpak_bridge.log'
+
+# Import EMAIL_NOTIFICATION_LOG_FILE with fallback
+try:
+    from config import EMAIL_NOTIFICATION_LOG_FILE
+except ImportError:
+    EMAIL_NOTIFICATION_LOG_FILE = 'logs/email_notification.log'
 
 # --- LOGGING SETUP ---
 from utils.logging_config import setup_logging, get_logger
-setup_logging(PIPELINE_LOG_FILE, LOG_LEVEL)
+setup_logging(EMAIL_NOTIFICATION_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
 # Import git helper
@@ -588,7 +594,7 @@ def main():
     
     # Convert log files to txt for attachment
     txt_attachments = []
-    log_files = [SPIDER_LOG_FILE, UPLOADER_LOG_FILE, PIKPAK_LOG_FILE, PIPELINE_LOG_FILE]
+    log_files = [SPIDER_LOG_FILE, UPLOADER_LOG_FILE, PIKPAK_LOG_FILE, PIPELINE_LOG_FILE, EMAIL_NOTIFICATION_LOG_FILE]
     
     for log_file in log_files:
         txt_path = convert_log_to_txt(log_file)

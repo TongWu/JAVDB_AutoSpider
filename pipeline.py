@@ -27,7 +27,7 @@ try:
         PIPELINE_LOG_FILE, LOG_LEVEL, DAILY_REPORT_DIR, AD_HOC_DIR
     )
 except ImportError:
-    PIPELINE_LOG_FILE = 'logs/pipeline_run_and_notify.log'
+    PIPELINE_LOG_FILE = 'logs/pipeline.log'
     LOG_LEVEL = 'INFO'
     DAILY_REPORT_DIR = 'Daily Report'
     AD_HOC_DIR = 'Ad Hoc'
