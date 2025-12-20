@@ -23,6 +23,9 @@ on:
       - 'docker/**'
   workflow_dispatch:  # Allow manual trigger
 
+permissions:
+  contents: read
+
 env:
   REGISTRY_IMAGE: javdb-autospider
 
