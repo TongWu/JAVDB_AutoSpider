@@ -92,11 +92,20 @@ class TestHasGitCredentials:
         with patch.dict(os.environ, env, clear=True):
             assert has_git_credentials('user', None) is False
     
-    def test_returns_true_in_github_actions_regardless_of_credentials(self):
-        """Should return True in GitHub Actions even without credentials."""
+    def test_returns_false_in_github_actions_without_credentials(self):
+        """Should return False in GitHub Actions when credentials are empty.
+        
+        This ensures scripts don't attempt commits when run from GitHub Actions
+        workflow without credentials - the workflow handles commits itself.
+        """
         with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true'}):
-            assert has_git_credentials('', '') is True
-            assert has_git_credentials(None, None) is True
+            assert has_git_credentials('', '') is False
+            assert has_git_credentials(None, None) is False
+    
+    def test_returns_true_in_github_actions_with_credentials(self):
+        """Should return True in GitHub Actions when credentials are provided."""
+        with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true'}):
+            assert has_git_credentials('user', 'password') is True
 
 
 class TestGetCurrentBranch:

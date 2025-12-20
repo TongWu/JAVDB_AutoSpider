@@ -86,18 +86,20 @@ def has_git_credentials(git_username, git_password):
     """
     Check if git credentials are available for commit/push.
     
+    Note: This function only checks if actual credentials are provided.
+    In GitHub Actions, if GIT_PASSWORD is empty (as set by workflow),
+    scripts should NOT attempt to commit - the workflow handles commits.
+    
     Args:
         git_username: Git username
         git_password: Git password/token
     
     Returns:
-        bool: True if credentials are available, False otherwise
+        bool: True if both username and password are non-empty, False otherwise
     """
-    # In GitHub Actions, we can commit without explicit credentials
-    if is_github_actions():
-        return True
-    
-    # For local/pipeline mode, need both username and password
+    # Only return True if both username and password are actually provided
+    # This ensures scripts don't attempt commits when run from GitHub Actions
+    # workflow without credentials (workflow handles commits itself)
     return bool(git_username and git_password)
 
 
