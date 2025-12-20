@@ -19,7 +19,8 @@ try:
         TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC, TORRENT_SAVE_PATH, AUTO_START, SKIP_CHECKING,
         REQUEST_TIMEOUT, DELAY_BETWEEN_ADDITIONS,
         UPLOADER_LOG_FILE, DAILY_REPORT_DIR, AD_HOC_DIR, LOG_LEVEL,
-        PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES
+        PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES,
+        GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH
     )
 except ImportError:
     # Fallback values if config.py doesn't exist
@@ -44,6 +45,10 @@ except ImportError:
     PROXY_HTTP = None
     PROXY_HTTPS = None
     PROXY_MODULES = ['all']
+    GIT_USERNAME = 'github-actions'
+    GIT_PASSWORD = ''
+    GIT_REPO_URL = ''
+    GIT_BRANCH = 'main'
 
 # Import proxy pool configuration (with fallback)
 try:
@@ -68,6 +73,9 @@ from utils.logging_config import setup_logging, get_logger
 setup_logging(UPLOADER_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
+# Import git helper
+from utils.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
+
 # Import proxy pool
 from utils.proxy_pool import ProxyPool, create_proxy_pool_from_config
 
@@ -88,6 +96,7 @@ def parse_arguments():
     parser.add_argument('--mode', choices=['adhoc', 'daily'], default='daily', help='Upload mode: adhoc (Ad Hoc folder) or daily (Daily Report folder)')
     parser.add_argument('--input-file', type=str, help='Specify input CSV file name (overrides default date-based name)')
     parser.add_argument('--use-proxy', action='store_true', help='Enable proxy for qBittorrent API requests (proxy settings from config.py)')
+    parser.add_argument('--from-pipeline', action='store_true', help='Running from pipeline.py - use GIT_USERNAME for commits')
     return parser.parse_args()
 
 
@@ -455,6 +464,29 @@ def main():
     logger.info(f"Failed to add: {failed_count}")
     logger.info(f"Success rate: {((hacked_subtitle_count + hacked_no_subtitle_count + subtitle_count + no_subtitle_count)/total_torrents*100):.1f}%" if total_torrents > 0 else "N/A")
     logger.info("=" * 50)
+    
+    # Git commit uploader results (only if credentials are available)
+    from_pipeline = args.from_pipeline if hasattr(args, 'from_pipeline') else False
+    
+    if has_git_credentials(GIT_USERNAME, GIT_PASSWORD):
+        logger.info("Committing uploader results...")
+        # Flush log handlers to ensure all logs are written before commit
+        flush_log_handlers()
+        
+        files_to_commit = ['logs/']
+        commit_message = f"Auto-commit: Uploader results {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        
+        git_commit_and_push(
+            files_to_add=files_to_commit,
+            commit_message=commit_message,
+            from_pipeline=from_pipeline,
+            git_username=GIT_USERNAME,
+            git_password=GIT_PASSWORD,
+            git_repo_url=GIT_REPO_URL,
+            git_branch=GIT_BRANCH
+        )
+    else:
+        logger.info("Skipping git commit - no credentials provided (commit will be handled by workflow)")
 
 if __name__ == '__main__':
     main() 
