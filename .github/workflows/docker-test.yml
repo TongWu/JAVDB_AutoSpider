@@ -51,23 +51,23 @@ jobs:
       - name: Test required files exist
         run: |
           docker run --rm javdb-autospider:test sh -c "
-            test -f /app/Javdb_Spider.py && echo '✓ Javdb_Spider.py exists' &&
-            test -f /app/javdb_login.py && echo '✓ javdb_login.py exists' &&
-            test -f /app/pikpak_bridge.py && echo '✓ pikpak_bridge.py exists' &&
-            test -f /app/pipeline_run_and_notify.py && echo '✓ pipeline_run_and_notify.py exists' &&
-            test -f /app/qbtorrent_uploader.py && echo '✓ qbtorrent_uploader.py exists' &&
+            test -f /app/pipeline.py && echo '✓ pipeline.py exists' &&
             test -f /app/config.py.example && echo '✓ config.py.example exists' &&
-            test -f /app/README.md && echo '✓ README.md exists' &&
-            test -d /app/utils && echo '✓ utils directory exists'
+            test -d /app/utils && echo '✓ utils directory exists' &&
+            test -d /app/scripts && echo '✓ scripts directory exists' &&
+            test -f /app/scripts/spider.py && echo '✓ scripts/spider.py exists' &&
+            test -f /app/scripts/login.py && echo '✓ scripts/login.py exists' &&
+            test -f /app/scripts/pikpak_bridge.py && echo '✓ scripts/pikpak_bridge.py exists' &&
+            test -f /app/scripts/qb_uploader.py && echo '✓ scripts/qb_uploader.py exists'
           "
       
       - name: Test Python syntax
         run: |
-          docker run --rm javdb-autospider:test python -m py_compile /app/Javdb_Spider.py
-          docker run --rm javdb-autospider:test python -m py_compile /app/javdb_login.py
-          docker run --rm javdb-autospider:test python -m py_compile /app/pikpak_bridge.py
-          docker run --rm javdb-autospider:test python -m py_compile /app/pipeline_run_and_notify.py
-          docker run --rm javdb-autospider:test python -m py_compile /app/qbtorrent_uploader.py
+          docker run --rm javdb-autospider:test python -m py_compile /app/pipeline.py
+          docker run --rm javdb-autospider:test python -m py_compile /app/scripts/spider.py
+          docker run --rm javdb-autospider:test python -m py_compile /app/scripts/login.py
+          docker run --rm javdb-autospider:test python -m py_compile /app/scripts/pikpak_bridge.py
+          docker run --rm javdb-autospider:test python -m py_compile /app/scripts/qb_uploader.py
       
       - name: Test cron setup
         run: |
