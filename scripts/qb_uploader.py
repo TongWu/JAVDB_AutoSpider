@@ -103,8 +103,6 @@ def get_proxies_dict(module_name, use_proxy_flag):
     Returns:
         dict or None: Proxies dictionary for requests, or None
     """
-    global global_proxy_helper
-    
     if global_proxy_helper is None:
         logger.warning(f"[{module_name}] Proxy helper not initialized")
         return None
@@ -347,8 +345,6 @@ def initialize_proxy_helper(use_proxy):
 
 
 def main():
-    global global_proxy_pool, global_proxy_helper
-    
     args = parse_arguments()
     mode = args.mode
     use_proxy = args.use_proxy
