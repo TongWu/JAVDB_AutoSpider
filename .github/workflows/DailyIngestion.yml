@@ -8,7 +8,7 @@ on:
 
 jobs:
   run-pipeline:
-    runs-on: ubuntu-latest
+    runs-on: ARM64
     environment: WT_DailyIngestion
     permissions:
       contents: write
@@ -18,6 +18,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get current branch
+        id: branch_check
+        run: |
+          CURRENT_BRANCH="${GITHUB_REF#refs/heads/}"
+          echo "Current branch: $CURRENT_BRANCH"
+          echo "branch=$CURRENT_BRANCH" >> $GITHUB_OUTPUT
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -30,8 +37,7 @@ jobs:
       - name: Generate config.py from GitHub Variables and Secrets
         env:
           # ============ SECRETS (sensitive: passwords, tokens, IPs) ============
-          # Git
-          VAR_GIT_PASSWORD: ${{ secrets.GIT_PASSWORD }}
+          # Note: GIT_PASSWORD is NOT passed - scripts will not commit, workflow handles commits
           # qBittorrent (IP + password)
           VAR_QB_HOST: ${{ secrets.QB_HOST }}
           VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
@@ -46,8 +52,7 @@ jobs:
           VAR_PIKPAK_PASSWORD: ${{ secrets.PIKPAK_PASSWORD }}
           
           # ============ VARIABLES (non-sensitive, visible in settings) ============
-          # Git Configuration
-          VAR_GIT_USERNAME: ${{ vars.GIT_USERNAME }}
+          # Git Configuration - Note: GIT_USERNAME is hardcoded, GIT_BRANCH defaults to 'main' if not set
           VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
           VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
           # qBittorrent Configuration
@@ -94,6 +99,7 @@ jobs:
           VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE }}
           VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE }}
           VAR_PIPELINE_LOG_FILE: ${{ vars.PIPELINE_LOG_FILE }}
+          VAR_EMAIL_NOTIFICATION_LOG_FILE: ${{ vars.EMAIL_NOTIFICATION_LOG_FILE }}
           # Parsing Configuration
           VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER }}
           # File Paths
@@ -104,217 +110,39 @@ jobs:
           VAR_PIKPAK_EMAIL: ${{ vars.PIKPAK_EMAIL }}
           VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE }}
           VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
+        run: python3 utils/config_generator.py --github-actions
+
+      - name: Step 1 - Run Spider
+        run: python3 scripts/spider.py --use-proxy
+        # Scripts will not commit (no GIT_PASSWORD provided)
+
+      - name: Step 2 - Run qBittorrent Uploader
+        run: python3 scripts/qb_uploader.py --mode daily --use-proxy
+        # Scripts will not commit (no GIT_PASSWORD provided)
+
+      - name: Step 3 - Run PikPak Bridge
+        run: python3 scripts/pikpak_bridge.py --days 3
+        # Scripts will not commit (no GIT_PASSWORD provided)
+
+      - name: Step 4 - Run Email Notification
+        run: python3 scripts/email_notification.py
+        # Scripts will not commit (no GIT_PASSWORD provided)
+
+      - name: Commit and Push Results
         run: |
-          python3 << 'PYTHON_SCRIPT'
-          import os
-          import json
-          import re
-
-          # Placeholder values that represent "empty" (use these in GitHub when you want an empty value)
-          EMPTY_PLACEHOLDERS = ('__EMPTY__', '__NULL__', 'null', 'none', 'NULL', 'NONE')
-
-          def get_env(name, default=''):
-              """Get environment variable with default value.
-              Use __EMPTY__ or __NULL__ in GitHub Variables/Secrets to represent empty string.
-              """
-              val = os.environ.get(f'VAR_{name}', default)
-              if val in EMPTY_PLACEHOLDERS:
-                  return ''
-              return val or default
-
-          def get_env_int(name, default):
-              """Get environment variable as integer"""
-              val = get_env(name, str(default))
-              if val in EMPTY_PLACEHOLDERS or val == '':
-                  return default
-              try:
-                  return int(val)
-              except (ValueError, TypeError):
-                  return default
-
-          def get_env_float(name, default):
-              """Get environment variable as float"""
-              val = get_env(name, str(default))
-              if val in EMPTY_PLACEHOLDERS or val == '':
-                  return default
-              try:
-                  return float(val)
-              except (ValueError, TypeError):
-                  return default
-
-          def get_env_bool(name, default):
-              """Get environment variable as boolean"""
-              val = get_env(name, str(default)).lower()
-              if val in ('__empty__', '__null__'):
-                  return default
-              if val in ('true', '1', 'yes'):
-                  return True
-              elif val in ('false', '0', 'no'):
-                  return False
-              return default
-
-          def get_env_json(name, default):
-              """Get environment variable as JSON"""
-              val = get_env(name, '')
-              if val.strip():
-                  try:
-                      return json.loads(val)
-                  except json.JSONDecodeError:
-                      pass
-              return default
-
-          def format_python_value(value):
-              """Format Python value for config.py output"""
-              if isinstance(value, str):
-                  return repr(value)
-              elif isinstance(value, bool):
-                  return 'True' if value else 'False'
-              elif isinstance(value, (list, dict)):
-                  return json.dumps(value, ensure_ascii=False)
-              elif value is None:
-                  return 'None'
-              else:
-                  return str(value)
-
-          # Configuration mapping: (config_name, env_name, type_func, default_value, section)
-          # When adding new configs, just add a line here and add VAR_XXX to env section above
-          CONFIG_MAP = [
-              # Git Configuration
-              ('GIT_USERNAME', 'GIT_USERNAME', get_env, 'github-actions', 'GIT CONFIGURATION'),
-              ('GIT_PASSWORD', 'GIT_PASSWORD', get_env, '', 'GIT CONFIGURATION'),
-              ('GIT_REPO_URL', 'GIT_REPO_URL', get_env, 'https://github.com/user/repo.git', 'GIT CONFIGURATION'),
-              ('GIT_BRANCH', 'GIT_BRANCH', get_env, 'main', 'GIT CONFIGURATION'),
-              # qBittorrent Configuration
-              ('QB_HOST', 'QB_HOST', get_env, 'localhost', 'QBITTORRENT CONFIGURATION'),
-              ('QB_PORT', 'QB_PORT', get_env, '8080', 'QBITTORRENT CONFIGURATION'),
-              ('QB_USERNAME', 'QB_USERNAME', get_env, 'admin', 'QBITTORRENT CONFIGURATION'),
-              ('QB_PASSWORD', 'QB_PASSWORD', get_env, '', 'QBITTORRENT CONFIGURATION'),
-              ('TORRENT_CATEGORY', 'TORRENT_CATEGORY', get_env, 'Daily Ingestion', 'QBITTORRENT CONFIGURATION'),
-              ('TORRENT_CATEGORY_ADHOC', 'TORRENT_CATEGORY_ADHOC', get_env, 'Ad Hoc', 'QBITTORRENT CONFIGURATION'),
-              ('TORRENT_SAVE_PATH', 'TORRENT_SAVE_PATH', get_env, '', 'QBITTORRENT CONFIGURATION'),
-              ('AUTO_START', 'AUTO_START', get_env_bool, True, 'QBITTORRENT CONFIGURATION'),
-              ('SKIP_CHECKING', 'SKIP_CHECKING', get_env_bool, False, 'QBITTORRENT CONFIGURATION'),
-              ('REQUEST_TIMEOUT', 'REQUEST_TIMEOUT', get_env_int, 30, 'QBITTORRENT CONFIGURATION'),
-              ('DELAY_BETWEEN_ADDITIONS', 'DELAY_BETWEEN_ADDITIONS', get_env_int, 1, 'QBITTORRENT CONFIGURATION'),
-              # SMTP Configuration
-              ('SMTP_SERVER', 'SMTP_SERVER', get_env, 'smtp.gmail.com', 'SMTP CONFIGURATION'),
-              ('SMTP_PORT', 'SMTP_PORT', get_env_int, 587, 'SMTP CONFIGURATION'),
-              ('SMTP_USER', 'SMTP_USER', get_env, '', 'SMTP CONFIGURATION'),
-              ('SMTP_PASSWORD', 'SMTP_PASSWORD', get_env, '', 'SMTP CONFIGURATION'),
-              ('EMAIL_FROM', 'EMAIL_FROM', get_env, '', 'SMTP CONFIGURATION'),
-              ('EMAIL_TO', 'EMAIL_TO', get_env, '', 'SMTP CONFIGURATION'),
-              # Proxy Configuration
-              ('PROXY_MODE', 'PROXY_MODE', get_env, 'pool', 'PROXY CONFIGURATION'),
-              ('PROXY_POOL', 'PROXY_POOL_JSON', get_env_json, [], 'PROXY CONFIGURATION'),
-              ('PROXY_POOL_COOLDOWN_SECONDS', 'PROXY_POOL_COOLDOWN_SECONDS', get_env_int, 691200, 'PROXY CONFIGURATION'),
-              ('PROXY_POOL_MAX_FAILURES', 'PROXY_POOL_MAX_FAILURES', get_env_int, 3, 'PROXY CONFIGURATION'),
-              ('PROXY_HTTP', None, lambda n, d: None, None, 'PROXY CONFIGURATION'),  # Hardcoded None
-              ('PROXY_HTTPS', None, lambda n, d: None, None, 'PROXY CONFIGURATION'),  # Hardcoded None
-              ('PROXY_MODULES', 'PROXY_MODULES_JSON', get_env_json, ['spider_index', 'spider_detail'], 'PROXY CONFIGURATION'),
-              # Cloudflare Bypass Configuration
-              ('CF_BYPASS_SERVICE_PORT', 'CF_BYPASS_SERVICE_PORT', get_env_int, 8000, 'CLOUDFLARE BYPASS CONFIGURATION'),
-              ('CF_BYPASS_ENABLED', 'CF_BYPASS_ENABLED', get_env_bool, True, 'CLOUDFLARE BYPASS CONFIGURATION'),
-              # Spider Configuration
-              ('START_PAGE', 'START_PAGE', get_env_int, 1, 'SPIDER CONFIGURATION'),
-              ('END_PAGE', 'END_PAGE', get_env_int, 10, 'SPIDER CONFIGURATION'),
-              ('PHASE2_MIN_RATE', 'PHASE2_MIN_RATE', get_env_float, 4.0, 'SPIDER CONFIGURATION'),
-              ('PHASE2_MIN_COMMENTS', 'PHASE2_MIN_COMMENTS', get_env_int, 85, 'SPIDER CONFIGURATION'),
-              ('BASE_URL', 'BASE_URL', get_env, 'https://javdb.com', 'SPIDER CONFIGURATION'),
-              # JavDB Login Configuration
-              ('JAVDB_USERNAME', 'JAVDB_USERNAME', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
-              ('JAVDB_PASSWORD', 'JAVDB_PASSWORD', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
-              ('JAVDB_SESSION_COOKIE', 'JAVDB_SESSION_COOKIE', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
-              ('DETAIL_PAGE_SLEEP', 'DETAIL_PAGE_SLEEP', get_env_int, 30, 'JAVDB LOGIN CONFIGURATION'),
-              ('PAGE_SLEEP', 'PAGE_SLEEP', get_env_int, 15, 'JAVDB LOGIN CONFIGURATION'),
-              ('MOVIE_SLEEP', 'MOVIE_SLEEP', get_env_int, 15, 'JAVDB LOGIN CONFIGURATION'),
-              ('CF_TURNSTILE_COOLDOWN', 'CF_TURNSTILE_COOLDOWN', get_env_int, 30, 'JAVDB LOGIN CONFIGURATION'),
-              ('PHASE_TRANSITION_COOLDOWN', 'PHASE_TRANSITION_COOLDOWN', get_env_int, 60, 'JAVDB LOGIN CONFIGURATION'),
-              ('FALLBACK_COOLDOWN', 'FALLBACK_COOLDOWN', get_env_int, 30, 'JAVDB LOGIN CONFIGURATION'),
-              # Logging Configuration
-              ('LOG_LEVEL', 'LOG_LEVEL', get_env, 'INFO', 'LOGGING CONFIGURATION'),
-              ('SPIDER_LOG_FILE', 'SPIDER_LOG_FILE', get_env, 'logs/Javdb_Spider.log', 'LOGGING CONFIGURATION'),
-              ('UPLOADER_LOG_FILE', 'UPLOADER_LOG_FILE', get_env, 'logs/qbtorrent_uploader.log', 'LOGGING CONFIGURATION'),
-              ('PIPELINE_LOG_FILE', 'PIPELINE_LOG_FILE', get_env, 'logs/pipeline_run_and_notify.log', 'LOGGING CONFIGURATION'),
-              # Parsing Configuration
-              ('IGNORE_RELEASE_DATE_FILTER', 'IGNORE_RELEASE_DATE_FILTER', get_env_bool, False, 'PARSING CONFIGURATION'),
-              # File Paths
-              ('DAILY_REPORT_DIR', 'DAILY_REPORT_DIR', get_env, 'Daily Report', 'FILE PATHS'),
-              ('AD_HOC_DIR', 'AD_HOC_DIR', get_env, 'Ad Hoc', 'FILE PATHS'),
-              ('PARSED_MOVIES_CSV', 'PARSED_MOVIES_CSV', get_env, 'parsed_movies_history.csv', 'FILE PATHS'),
-              # PikPak Configuration
-              ('PIKPAK_EMAIL', 'PIKPAK_EMAIL', get_env, '', 'PIKPAK CONFIGURATION'),
-              ('PIKPAK_PASSWORD', 'PIKPAK_PASSWORD', get_env, '', 'PIKPAK CONFIGURATION'),
-              ('PIKPAK_LOG_FILE', 'PIKPAK_LOG_FILE', get_env, 'logs/qb_pikpak.log', 'PIKPAK CONFIGURATION'),
-              ('PIKPAK_REQUEST_DELAY', 'PIKPAK_REQUEST_DELAY', get_env_int, 3, 'PIKPAK CONFIGURATION'),
-          ]
-
-          # Group configs by section
-          sections = {}
-          for config_name, env_name, type_func, default, section in CONFIG_MAP:
-              if section not in sections:
-                  sections[section] = []
-              # Get value from environment or use default
-              if env_name:
-                  value = type_func(env_name, default)
-              else:
-                  value = default
-              sections[section].append((config_name, value))
-
-          # Build config file content
-          config_lines = [
-              '# JavDB Auto Spider - Unified Configuration File',
-              '# Auto-generated by GitHub Actions from repository variables',
-              '',
-          ]
-
-          for section_name, configs in sections.items():
-              config_lines.append('# ' + '=' * 75)
-              config_lines.append(f'# {section_name}')
-              config_lines.append('# ' + '=' * 75)
-              config_lines.append('')
-              
-              for config_name, value in configs:
-                  formatted_value = format_python_value(value)
-                  config_lines.append(f'{config_name} = {formatted_value}')
-              
-              config_lines.append('')
-
-          config_content = '\n'.join(config_lines)
-
-          # Write config file
-          with open('config.py', 'w') as f:
-              f.write(config_content)
-
-          print("✓ config.py generated successfully")
-          
-          # Print masked config for debugging
-          masked = config_content
-          masked = re.sub(r"(PASSWORD.*=.*')[^']*(')", r"\1***MASKED***\2", masked)
-          masked = re.sub(r"(ghp_)[a-zA-Z0-9]+", r"\1***MASKED***", masked)
-          masked = re.sub(r"(COOKIE.*=.*')[^']*(')", r"\1***MASKED***\2", masked)
-          print("\nConfig file contents (sensitive values masked):")
-          print(masked)
-          PYTHON_SCRIPT
-
-      - name: Run Pipeline
-        run: python3 pipeline.py --use-proxy
-
-      - name: Commit Daily Report and Logs
-        run: |
+          # Configure git with github-actions[bot]
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Add Daily Report CSV files
+          # Get current branch from previous step
+          CURRENT_BRANCH="${{ steps.branch_check.outputs.branch }}"
+          echo "Pushing to branch: $CURRENT_BRANCH"
+          
+          # Add all relevant files
           git add 'Daily Report'/*.csv || true
-          
-          # Add Ad Hoc CSV files
           git add 'Ad Hoc'/*.csv || true
-          
-          # Add log files
           git add 'logs'/*.log || true
           git add 'logs'/*.csv || true
-          
-          # Add parsed_movies_history.csv
           git add parsed_movies_history.csv || true
           
           # Check if there are any changes to commit
@@ -322,6 +150,6 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "Auto-commit: Daily pipeline results $(date +'%Y-%m-%d %H:%M:%S UTC')"
-            git push
-            echo "✓ Changes committed and pushed successfully"
+            git push origin "$CURRENT_BRANCH"
+            echo "✓ Changes committed and pushed to $CURRENT_BRANCH branch successfully"
           fi
