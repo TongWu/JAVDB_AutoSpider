@@ -16,6 +16,8 @@ jobs:
     name: Push Docker image to Docker Hub
     if: false  # DISABLED: Set to 'true' or remove this line to re-enable
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout code
