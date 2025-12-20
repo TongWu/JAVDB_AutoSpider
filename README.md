@@ -99,9 +99,137 @@ cp config.py.example config.py
 # See CloudFlare Bypass section below for setup instructions
 ```
 
+### Docker Installation (Alternative)
+
+You can also run the application using Docker containers, which simplifies dependency management and deployment.
+
+#### Quick Start with Docker
+
+1. **Pull the image from GitHub Container Registry:**
+```bash
+docker pull ghcr.io/YOUR_USERNAME/javdb-autospider:latest
+```
+
+2. **Prepare configuration files:**
+```bash
+cp config.py.example config.py
+cp env.example .env
+# Edit config.py with your settings
+```
+
+3. **Run the container:**
+```bash
+docker run -d \
+  --name javdb-spider \
+  --restart unless-stopped \
+  -v $(pwd)/config.py:/app/config.py:ro \
+  -v $(pwd)/logs:/app/logs \
+  -v $(pwd)/Ad\ Hoc:/app/Ad\ Hoc \
+  -v $(pwd)/Daily\ Report:/app/Daily\ Report \
+  --env-file .env \
+  ghcr.io/YOUR_USERNAME/javdb-autospider:latest
+```
+
+#### Using Docker Compose (Recommended)
+
+1. **Use the automated build script:**
+```bash
+./docker/docker-build.sh
+```
+
+Or manually:
+
+```bash
+# Prepare configuration
+cp config.py.example config.py
+cp env.example .env
+
+# Build and start
+docker-compose -f docker/docker-compose.yml build
+docker-compose -f docker/docker-compose.yml up -d
+```
+
+2. **View logs:**
+```bash
+docker-compose -f docker/docker-compose.yml logs -f
+```
+
+For detailed Docker documentation, see [DOCKER_README.md](docs/DOCKER_README.md) or [DOCKER_QUICKSTART.md](docs/DOCKER_QUICKSTART.md).
+
 ## Usage
 
-### Individual Scripts
+### Docker Usage
+
+If you installed via Docker, you can manage the container with the following commands:
+
+#### Basic Commands
+
+```bash
+# View container logs
+docker logs -f javdb-spider
+
+# View cron logs
+docker exec javdb-spider tail -f /var/log/cron.log
+
+# Run spider manually
+docker exec javdb-spider python scripts/spider.py --use-proxy
+
+# Run pipeline manually
+docker exec javdb-spider python pipeline.py
+
+# Execute commands inside container
+docker exec -it javdb-spider bash
+
+# Stop container
+docker stop javdb-spider
+
+# Start container
+docker start javdb-spider
+
+# Restart container
+docker restart javdb-spider
+```
+
+#### With Docker Compose
+
+```bash
+# Start containers
+docker-compose -f docker/docker-compose.yml up -d
+
+# Stop containers
+docker-compose -f docker/docker-compose.yml down
+
+# View logs
+docker-compose -f docker/docker-compose.yml logs -f
+
+# Restart containers
+docker-compose -f docker/docker-compose.yml restart
+
+# Rebuild and restart
+docker-compose -f docker/docker-compose.yml build --no-cache
+docker-compose -f docker/docker-compose.yml up -d
+```
+
+#### Configure Cron Jobs
+
+Edit the `.env` file to configure scheduled tasks:
+
+```bash
+# Spider runs daily at 3:00 AM
+CRON_SPIDER=0 3 * * *
+SPIDER_COMMAND=cd /app && /usr/local/bin/python scripts/spider.py --use-proxy >> /var/log/cron.log 2>&1
+
+# Pipeline runs daily at 4:00 AM
+CRON_PIPELINE=0 4 * * *
+PIPELINE_COMMAND=cd /app && /usr/local/bin/python pipeline.py >> /var/log/cron.log 2>&1
+```
+
+After modifying `.env`, restart the container:
+```bash
+docker-compose -f docker/docker-compose.yml restart
+```
+
+### Individual Scripts (Local Installation)
 
 **Run the spider to extract data:**
 ```bash
