@@ -112,6 +112,26 @@ jobs:
           VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
         run: python3 utils/config_generator.py --github-actions
 
+      - name: Pull latest changes from remote
+        run: |
+          # Configure git with github-actions[bot]
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Get current branch from previous step
+          CURRENT_BRANCH="${{ steps.branch_check.outputs.branch }}"
+          echo "Pulling latest changes from branch: $CURRENT_BRANCH"
+          
+          # Pull latest changes from remote (working tree is clean at this point)
+          git fetch origin "$CURRENT_BRANCH"
+          git pull --rebase origin "$CURRENT_BRANCH" || {
+            echo "Warning: Failed to pull/rebase, attempting merge instead"
+            git pull --no-edit origin "$CURRENT_BRANCH" || {
+              echo "Error: Could not integrate remote changes"
+              exit 1
+            }
+          }
+
       - name: Step 1 - Run Spider
         run: python3 scripts/spider.py --use-proxy
         # Scripts will not commit (no GIT_PASSWORD provided)
@@ -138,12 +158,31 @@ jobs:
           CURRENT_BRANCH="${{ steps.branch_check.outputs.branch }}"
           echo "Pushing to branch: $CURRENT_BRANCH"
           
+          # Pull latest changes before committing (using autostash for any uncommitted changes)
+          # This handles the case where remote was updated during script execution
+          git fetch origin "$CURRENT_BRANCH"
+          if git rev-parse --verify "origin/$CURRENT_BRANCH" >/dev/null 2>&1; then
+            # Check if we're behind remote
+            LOCAL=$(git rev-parse HEAD)
+            REMOTE=$(git rev-parse "origin/$CURRENT_BRANCH")
+            if [ "$LOCAL" != "$REMOTE" ]; then
+              echo "Remote has new commits, pulling with autostash..."
+              git pull --rebase --autostash origin "$CURRENT_BRANCH" || {
+                echo "Warning: Failed to pull/rebase with autostash, attempting merge instead"
+                git pull --no-edit --autostash origin "$CURRENT_BRANCH" || {
+                  echo "Error: Could not integrate remote changes"
+                  exit 1
+                }
+              }
+            fi
+          fi
+          
           # Add all relevant files
           git add 'Daily Report'/*.csv || true
           git add 'Ad Hoc'/*.csv || true
           git add 'logs'/*.log || true
           git add 'logs'/*.csv || true
-          git add parsed_movies_history.csv || true
+          git add 'Daily Report/parsed_movies_history.csv' || true
           
           # Check if there are any changes to commit
           if git diff --cached --quiet; then
