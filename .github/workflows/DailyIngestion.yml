@@ -138,12 +138,22 @@ jobs:
           CURRENT_BRANCH="${{ steps.branch_check.outputs.branch }}"
           echo "Pushing to branch: $CURRENT_BRANCH"
           
+          # Pull latest changes from remote before committing
+          git fetch origin "$CURRENT_BRANCH"
+          git pull --rebase origin "$CURRENT_BRANCH" || {
+            echo "Warning: Failed to pull/rebase, attempting merge instead"
+            git pull --no-edit origin "$CURRENT_BRANCH" || {
+              echo "Error: Could not integrate remote changes"
+              exit 1
+            }
+          }
+          
           # Add all relevant files
           git add 'Daily Report'/*.csv || true
           git add 'Ad Hoc'/*.csv || true
           git add 'logs'/*.log || true
           git add 'logs'/*.csv || true
-          git add parsed_movies_history.csv || true
+          git add 'Daily Report/parsed_movies_history.csv' || true
           
           # Check if there are any changes to commit
           if git diff --cached --quiet; then
