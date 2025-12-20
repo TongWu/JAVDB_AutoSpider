@@ -1,0 +1,16 @@
+# Test dependencies for JAVDB AutoSpider
+# Install with: pip install -r requirements-test.txt
+
+# Testing framework
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# Code coverage
+coverage>=7.0.0
+
+# Linting (optional, used in CI)
+flake8>=6.0.0
+
+# Mocking (included in standard library, but explicit for compatibility)
+# unittest.mock is used from standard library
+
