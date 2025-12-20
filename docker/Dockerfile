@@ -25,7 +25,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY utils/ ./utils/
 COPY scripts/ ./scripts/
 COPY config.py.example .
-COPY .gitignore .
 COPY pipeline.py .
 
 # Copy docker entrypoint script
