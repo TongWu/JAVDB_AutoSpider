@@ -1,10 +1,16 @@
+# ============================================================
+# Docker Ignore File
+# ============================================================
+# Exclude unnecessary files from Docker build context
+# ============================================================
+
 # Git
 .git
 .gitignore
 .gitattributes
 
-# Python
-__pycache__
+# Python cache
+__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -29,8 +35,9 @@ env/
 *~
 
 # Project specific - don't include in image
-Daily Report/
 Ad Hoc/
+Daily Report/
+parsed_movies_history.csv
 logs/
 *.log
 *.csv
@@ -39,8 +46,31 @@ config.py
 # Documentation (keep README for reference but exclude others)
 docs/
 
-# Migration scripts
-migration/
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs (will be mounted from host)
+logs/
+*.log
+
+# Config files (will be mounted from host)
+config.py
+
+# Docker files (not needed inside image)
+Dockerfile
+docker-compose.yml
+.dockerignore
+.env
+.env.example
+
+# Documentation
+*.md
+docs/
 
 # Test files
 tests/
