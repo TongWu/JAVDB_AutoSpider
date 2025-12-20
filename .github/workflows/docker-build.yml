@@ -10,9 +10,17 @@ on:
       - main
       - master
     types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - '**.py'
+      - 'pytest.ini'
+      - 'docker/**'
   push:
     tags:
       - 'v*.*.*'  # Trigger on version tags
+    paths:
+      - '**.py'
+      - 'pytest.ini'
+      - 'docker/**'
   workflow_dispatch:  # Allow manual trigger
 
 env:

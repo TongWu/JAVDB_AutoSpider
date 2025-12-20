@@ -9,10 +9,18 @@ on:
       - main
       - master
       - develop
+    paths:
+      - '**.py'
+      - 'pytest.ini'
+      - 'docker/**'
   pull_request:
     branches:
       - main
       - master
+    paths:
+      - '**.py'
+      - 'pytest.ini'
+      - 'docker/**'
   workflow_dispatch:
 
 jobs:
