@@ -5,16 +5,14 @@ name: Multi-Platform Build Verification
 # For comprehensive functional testing, see docker-test.yml
 
 on:
-  push:
-    branches:
-      - main
-      - master
-    tags:
-      - 'v*.*.*'
   pull_request:
     branches:
       - main
       - master
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger on version tags
   workflow_dispatch:  # Allow manual trigger
 
 env:
@@ -23,6 +21,11 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Only run when PR is from dev branch, or on tag push, or manual trigger
+    if: |
+      (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'dev') ||
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch'
     strategy:
       matrix:
         platform:
