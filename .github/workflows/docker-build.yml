@@ -1,4 +1,8 @@
-name: Build and Push Docker Image
+name: Multi-Platform Build Verification
+
+# This workflow focuses on verifying that Docker images can be built
+# successfully for multiple platforms (AMD64 and ARM64).
+# For comprehensive functional testing, see docker-test.yml
 
 on:
   push:
@@ -48,7 +52,7 @@ jobs:
             type=semver,pattern={{major}}
             type=raw,value=latest,enable={{is_default_branch}}
       
-      - name: Build Docker image
+      - name: Build Docker image (multi-platform verification)
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -58,11 +62,4 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      
-      - name: Test Docker image
-        if: matrix.platform == 'linux/amd64'
-        run: |
-          docker build -t test-image .
-          docker run --rm test-image python --version
-          docker run --rm test-image pip list | grep -i requests
 

@@ -1,4 +1,7 @@
-name: Docker Image CI
+name: Docker Image Functional Testing
+
+# This workflow focuses on comprehensive functional testing of the Docker image.
+# For multi-platform build verification, see docker-build.yml
 
 on:
   push:
