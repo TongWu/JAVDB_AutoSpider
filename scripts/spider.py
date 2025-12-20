@@ -22,6 +22,7 @@ from utils.history_manager import load_parsed_movies_history, save_parsed_movie_
     determine_torrent_types, get_missing_torrent_types, validate_history_file, has_complete_subtitles
 from utils.parser import parse_index, parse_detail
 from utils.magnet_extractor import extract_magnets
+from utils.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 
 # Import unified configuration
 try:
@@ -31,7 +32,8 @@ try:
         SPIDER_LOG_FILE, LOG_LEVEL, DETAIL_PAGE_SLEEP, PAGE_SLEEP, MOVIE_SLEEP,
         JAVDB_SESSION_COOKIE, PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS,
         PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES,
-        CF_TURNSTILE_COOLDOWN, PHASE_TRANSITION_COOLDOWN, FALLBACK_COOLDOWN
+        CF_TURNSTILE_COOLDOWN, PHASE_TRANSITION_COOLDOWN, FALLBACK_COOLDOWN,
+        GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH
     )
 except ImportError:
     # Fallback values if config.py doesn't exist
@@ -41,7 +43,7 @@ except ImportError:
     DAILY_REPORT_DIR = 'Daily Report'
     AD_HOC_DIR = 'Ad Hoc'
     PARSED_MOVIES_CSV = 'parsed_movies_history.csv'
-    SPIDER_LOG_FILE = 'logs/Javdb_Spider.log'
+    SPIDER_LOG_FILE = 'logs/spider.log'
     LOG_LEVEL = 'INFO'
     DETAIL_PAGE_SLEEP = 5
     PAGE_SLEEP = 2
@@ -55,6 +57,10 @@ except ImportError:
     CF_TURNSTILE_COOLDOWN = 10
     PHASE_TRANSITION_COOLDOWN = 30
     FALLBACK_COOLDOWN = 30
+    GIT_USERNAME = 'github-actions'
+    GIT_PASSWORD = ''
+    GIT_REPO_URL = ''
+    GIT_BRANCH = 'main'
 
 # Import CloudFlare bypass configuration (with fallback)
 try:
@@ -132,6 +138,9 @@ def parse_arguments():
 
     parser.add_argument('--use-cf-bypass', action='store_true',
                         help='Use CloudFlare5sBypass service to get cf_clearance cookie (service must be running)')
+
+    parser.add_argument('--from-pipeline', action='store_true',
+                        help='Running from pipeline.py - use GIT_USERNAME for commits')
 
     return parser.parse_args()
 
@@ -226,8 +235,6 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
     Returns:
         HTML content as string, or None if failed
     """
-    global global_request_handler
-    
     if global_request_handler is None:
         logger.error("Request handler not initialized. Call initialize_request_handler() first.")
         return None
@@ -248,7 +255,7 @@ def initialize_request_handler():
     Initialize the global request handler with configuration from config.py.
     This should be called after proxy_pool is initialized in main().
     """
-    global global_request_handler, global_proxy_pool
+    global global_request_handler
     
     config = RequestConfig(
         base_url=BASE_URL,
@@ -316,8 +323,6 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
             - effective_use_proxy: The proxy setting that eventually worked
             - effective_use_cf_bypass: The CF bypass setting that eventually worked
     """
-    global global_proxy_pool
-    
     proxy_was_banned = False
     last_failed_html = None  # Store HTML from failed attempts
     
@@ -460,8 +465,6 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
             - effective_use_proxy: The proxy setting that eventually worked
             - effective_use_cf_bypass: The CF bypass setting that eventually worked
     """
-    global global_proxy_pool
-    
     last_result = ([], '', False)  # Store result from failed attempts (magnets, actor_info, parse_success)
     
     # --- Helper function to attempt fetch, parse and validate ---
@@ -1538,6 +1541,34 @@ def main():
         logger.warning("=" * 50)
         logger.warning("This might indicate proxy issues or CF bypass service problems.")
         # Don't exit with error - it's possible there are legitimately no new entries
+
+    # Git commit spider results (only if credentials are available)
+    from_pipeline = args.from_pipeline if hasattr(args, 'from_pipeline') else False
+    
+    if not dry_run and has_git_credentials(GIT_USERNAME, GIT_PASSWORD):
+        logger.info("Committing spider results...")
+        # Flush log handlers to ensure all logs are written before commit
+        flush_log_handlers()
+        
+        files_to_commit = [
+            DAILY_REPORT_DIR,
+            AD_HOC_DIR,
+            'logs/',
+            'parsed_movies_history.csv'
+        ]
+        commit_message = f"Auto-commit: Spider results {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        
+        git_commit_and_push(
+            files_to_add=files_to_commit,
+            commit_message=commit_message,
+            from_pipeline=from_pipeline,
+            git_username=GIT_USERNAME,
+            git_password=GIT_PASSWORD,
+            git_repo_url=GIT_REPO_URL,
+            git_branch=GIT_BRANCH
+        )
+    elif not dry_run:
+        logger.info("Skipping git commit - no credentials provided (commit will be handled by workflow)")
 
 
 if __name__ == '__main__':
