@@ -4,6 +4,8 @@
 # - Code is pushed to main/master branch
 
 name: Unit Tests
+permissions:
+  contents: read
 
 on:
   push:
