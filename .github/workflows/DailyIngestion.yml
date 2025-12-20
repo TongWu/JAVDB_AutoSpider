@@ -19,19 +19,12 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check branch and set commit flag
+      - name: Get current branch
         id: branch_check
         run: |
           CURRENT_BRANCH="${GITHUB_REF#refs/heads/}"
           echo "Current branch: $CURRENT_BRANCH"
-          
-          if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
-            echo "Running on main branch - commits will be enabled"
-            echo "should_commit=true" >> $GITHUB_OUTPUT
-          else
-            echo "WARNING: Running on non-main branch ($CURRENT_BRANCH) - commits will be DISABLED"
-            echo "should_commit=false" >> $GITHUB_OUTPUT
-          fi
+          echo "branch=$CURRENT_BRANCH" >> $GITHUB_OUTPUT
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -59,8 +52,9 @@ jobs:
           VAR_PIKPAK_PASSWORD: ${{ secrets.PIKPAK_PASSWORD }}
           
           # ============ VARIABLES (non-sensitive, visible in settings) ============
-          # Git Configuration - Note: GIT_USERNAME and GIT_BRANCH are hardcoded, not from vars
+          # Git Configuration - Note: GIT_USERNAME is hardcoded, GIT_BRANCH defaults to 'main' if not set
           VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
+          VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
           # qBittorrent Configuration
           VAR_QB_PORT: ${{ vars.QB_PORT }}
           VAR_QB_USERNAME: ${{ vars.QB_USERNAME }}
@@ -135,11 +129,14 @@ jobs:
         # Scripts will not commit (no GIT_PASSWORD provided)
 
       - name: Commit and Push Results
-        if: steps.branch_check.outputs.should_commit == 'true'
         run: |
           # Configure git with github-actions[bot]
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Get current branch from previous step
+          CURRENT_BRANCH="${{ steps.branch_check.outputs.branch }}"
+          echo "Pushing to branch: $CURRENT_BRANCH"
           
           # Add all relevant files
           git add 'Daily Report'/*.csv || true
@@ -153,12 +150,6 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "Auto-commit: Daily pipeline results $(date +'%Y-%m-%d %H:%M:%S UTC')"
-            git push origin main
-            echo "✓ Changes committed and pushed to main branch successfully"
+            git push origin "$CURRENT_BRANCH"
+            echo "✓ Changes committed and pushed to $CURRENT_BRANCH branch successfully"
           fi
-
-      - name: Skip Commit (non-main branch)
-        if: steps.branch_check.outputs.should_commit == 'false'
-        run: |
-          echo "⚠️ Skipping commit - workflow was triggered on a non-main branch"
-          echo "Results are available in the workflow artifacts but will not be committed"
