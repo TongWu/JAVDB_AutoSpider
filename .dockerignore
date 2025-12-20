@@ -1,0 +1,56 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Project specific - don't include in image
+Daily Report/
+Ad Hoc/
+logs/
+*.log
+*.csv
+config.py
+
+# Documentation (keep README for reference but exclude others)
+docs/
+
+# Migration scripts
+migration/
+
+# Test files
+tests/
+*.test.py
+test_*.py
+
+# Docker files (not needed inside image)
+docker/docker-compose.yml
+docker/.env.example
+
+# GitHub
+.github/
+
