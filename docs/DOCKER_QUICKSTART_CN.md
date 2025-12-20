@@ -10,7 +10,7 @@
 
 ```bash
 # 运行自动化部署脚本
-./docker-build.sh
+./docker/docker-build.sh
 ```
 
 脚本会自动：
@@ -133,7 +133,7 @@ docker-compose down
 docker-compose restart
 
 # 查看容器状态
-docker-compose ps
+docker-compose -f docker/docker-compose.yml ps
 
 # 查看容器资源使用
 docker stats javdb-spider
@@ -306,7 +306,7 @@ TZ=Asia/Shanghai    # 上海时间
 
 ### 资源限制
 
-在 `docker-compose.yml` 中取消注释并调整：
+在 `docker/docker-compose.yml` 中取消注释并调整：
 ```yaml
 deploy:
   resources:
@@ -344,12 +344,12 @@ CLEANUP_COMMAND=cd /app && /usr/local/bin/python cleanup_script.py >> /var/log/c
 
 ## 文件说明
 
-- `Dockerfile` - Docker 镜像构建文件
-- `docker-compose.yml` - Docker Compose 配置文件
+- `docker/Dockerfile` - Docker 镜像构建文件
+- `docker/docker-compose.yml` - Docker Compose 配置文件
 - `env.example` - 环境变量示例文件
-- `docker-entrypoint.sh` - 容器启动脚本
+- `docker/docker-entrypoint.sh` - 容器启动脚本
 - `.dockerignore` - Docker 构建忽略文件
-- `docker-build.sh` - 自动化部署脚本
+- `docker/docker-build.sh` - 自动化部署脚本
 - `DOCKER_README.md` - 英文使用说明
 - `DOCKER_使用说明.md` - 中文使用说明（本文件）
 

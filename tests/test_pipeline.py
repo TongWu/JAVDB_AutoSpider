@@ -1,5 +1,5 @@
 """
-Unit tests for pipeline.py functions.
+Unit tests for email_notification.py functions (formerly in pipeline.py).
 """
 import os
 import sys
@@ -10,10 +10,8 @@ import tempfile
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from pipeline import (
-    mask_sensitive_info,
-    get_log_summary,
-    extract_spider_summary,
+# Import functions from email_notification script
+from scripts.email_notification import (
     analyze_spider_log,
     analyze_uploader_log,
     analyze_pikpak_log,
@@ -22,6 +20,18 @@ from pipeline import (
     extract_pikpak_statistics,
     format_email_report
 )
+
+# Import mask_sensitive_info from git_helper (it's now the canonical location)
+from utils.git_helper import mask_sensitive_info
+
+
+def get_log_summary(log_path, lines=200):
+    """Helper function to get last N lines from a log file."""
+    if not os.path.exists(log_path):
+        return f'Log file not found: {log_path}'
+    with open(log_path, 'r', encoding='utf-8') as f:
+        log_lines = f.readlines()
+    return ''.join(log_lines[-lines:])
 
 
 class TestMaskSensitiveInfo:

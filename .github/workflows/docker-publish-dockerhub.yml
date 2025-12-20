@@ -1,5 +1,7 @@
 name: Publish to Docker Hub
 
+# DISABLED: This workflow is currently disabled
+# To re-enable, remove the 'if: false' condition from the job below
 on:
   push:
     tags:
@@ -12,6 +14,7 @@ env:
 jobs:
   push_to_registry:
     name: Push Docker image to Docker Hub
+    if: false  # DISABLED: Set to 'true' or remove this line to re-enable
     runs-on: ubuntu-latest
     
     steps:
@@ -45,6 +48,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: ./docker/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
