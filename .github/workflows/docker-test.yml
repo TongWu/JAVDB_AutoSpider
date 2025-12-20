@@ -1,5 +1,8 @@
 name: Docker Image Functional Testing
 
+permissions:
+  contents: read
+
 # This workflow focuses on comprehensive functional testing of the Docker image.
 # For multi-platform build verification, see docker-build.yml
 
