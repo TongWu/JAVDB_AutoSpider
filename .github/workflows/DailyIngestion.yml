@@ -158,6 +158,25 @@ jobs:
           CURRENT_BRANCH="${{ steps.branch_check.outputs.branch }}"
           echo "Pushing to branch: $CURRENT_BRANCH"
           
+          # Pull latest changes before committing (using autostash for any uncommitted changes)
+          # This handles the case where remote was updated during script execution
+          git fetch origin "$CURRENT_BRANCH"
+          if git rev-parse --verify "origin/$CURRENT_BRANCH" >/dev/null 2>&1; then
+            # Check if we're behind remote
+            LOCAL=$(git rev-parse HEAD)
+            REMOTE=$(git rev-parse "origin/$CURRENT_BRANCH")
+            if [ "$LOCAL" != "$REMOTE" ]; then
+              echo "Remote has new commits, pulling with autostash..."
+              git pull --rebase --autostash origin "$CURRENT_BRANCH" || {
+                echo "Warning: Failed to pull/rebase with autostash, attempting merge instead"
+                git pull --no-edit --autostash origin "$CURRENT_BRANCH" || {
+                  echo "Error: Could not integrate remote changes"
+                  exit 1
+                }
+              }
+            fi
+          fi
+          
           # Add all relevant files
           git add 'Daily Report'/*.csv || true
           git add 'Ad Hoc'/*.csv || true
