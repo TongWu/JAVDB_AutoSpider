@@ -1,0 +1,49 @@
+name: Check PR Source Branch
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  check-branch:
+    runs-on: ubuntu-latest
+    # Only check PRs targeting main or master
+    if: github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'master'
+    
+    steps:
+      - name: Check if PR is from dev branch
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const sourceBranch = context.payload.pull_request.head.ref;
+            const targetBranch = context.payload.pull_request.base.ref;
+            
+            if (sourceBranch !== 'dev') {
+              const message = `❌ **PR Source Branch Restriction**\n\n` +
+                `This repository only accepts pull requests from the \`dev\` branch to \`${targetBranch}\`.\n\n` +
+                `Current source branch: \`${sourceBranch}\`\n\n` +
+                `Please create your PR from the \`dev\` branch instead.`;
+              
+              // Add comment to PR
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: message
+              });
+              
+              // Close the PR
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number,
+                state: 'closed'
+              });
+              
+              // Fail the check
+              core.setFailed(`PR must be from 'dev' branch, but got '${sourceBranch}'`);
+            } else {
+              console.log(`✅ PR is from allowed branch: ${sourceBranch}`);
+            }
+
