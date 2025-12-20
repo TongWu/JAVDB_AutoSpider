@@ -112,6 +112,26 @@ jobs:
           VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
         run: python3 utils/config_generator.py --github-actions
 
+      - name: Pull latest changes from remote
+        run: |
+          # Configure git with github-actions[bot]
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Get current branch from previous step
+          CURRENT_BRANCH="${{ steps.branch_check.outputs.branch }}"
+          echo "Pulling latest changes from branch: $CURRENT_BRANCH"
+          
+          # Pull latest changes from remote (working tree is clean at this point)
+          git fetch origin "$CURRENT_BRANCH"
+          git pull --rebase origin "$CURRENT_BRANCH" || {
+            echo "Warning: Failed to pull/rebase, attempting merge instead"
+            git pull --no-edit origin "$CURRENT_BRANCH" || {
+              echo "Error: Could not integrate remote changes"
+              exit 1
+            }
+          }
+
       - name: Step 1 - Run Spider
         run: python3 scripts/spider.py --use-proxy
         # Scripts will not commit (no GIT_PASSWORD provided)
@@ -137,16 +157,6 @@ jobs:
           # Get current branch from previous step
           CURRENT_BRANCH="${{ steps.branch_check.outputs.branch }}"
           echo "Pushing to branch: $CURRENT_BRANCH"
-          
-          # Pull latest changes from remote before committing
-          git fetch origin "$CURRENT_BRANCH"
-          git pull --rebase origin "$CURRENT_BRANCH" || {
-            echo "Warning: Failed to pull/rebase, attempting merge instead"
-            git pull --no-edit origin "$CURRENT_BRANCH" || {
-              echo "Error: Could not integrate remote changes"
-              exit 1
-            }
-          }
           
           # Add all relevant files
           git add 'Daily Report'/*.csv || true
