@@ -174,12 +174,12 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         List of configuration tuples
     """
     if github_actions_mode:
-        # GitHub Actions mode: GIT_PASSWORD is empty, GIT_BRANCH is hardcoded to 'main'
+        # GitHub Actions mode: GIT_PASSWORD is empty (scripts don't commit, workflow handles it)
         git_config = [
             ('GIT_USERNAME', None, lambda n, d: 'github-actions', 'github-actions', 'GIT CONFIGURATION'),
             ('GIT_PASSWORD', None, lambda n, d: '', '', 'GIT CONFIGURATION'),  # Empty - no script commits
             ('GIT_REPO_URL', 'GIT_REPO_URL', get_env, 'https://github.com/user/repo.git', 'GIT CONFIGURATION'),
-            ('GIT_BRANCH', None, lambda n, d: 'main', 'main', 'GIT CONFIGURATION'),  # Hardcoded to main
+            ('GIT_BRANCH', 'GIT_BRANCH', get_env, 'main', 'GIT CONFIGURATION'),  # Read from env or default to main
         ]
     else:
         # Local/pipeline mode: use environment variables
