@@ -170,6 +170,91 @@ def login_to_qbittorrent(session, use_proxy=False):
         logger.error(f"Login error: {e}")
         return False
 
+
+def extract_hash_from_magnet(magnet_link):
+    """
+    Extract info hash from magnet link.
+    
+    Args:
+        magnet_link: Magnet URI string
+        
+    Returns:
+        str: Info hash in lowercase, or None if not found
+    """
+    import re
+    # Magnet link format: magnet:?xt=urn:btih:HASH&...
+    match = re.search(r'xt=urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})', magnet_link)
+    if match:
+        hash_value = match.group(1)
+        # Convert base32 to hex if necessary (32 chars = base32, 40 chars = hex)
+        if len(hash_value) == 32:
+            try:
+                import base64
+                decoded = base64.b32decode(hash_value.upper())
+                hash_value = decoded.hex()
+            except Exception:
+                pass
+        return hash_value.lower()
+    return None
+
+
+def get_existing_torrents(session, use_proxy=False):
+    """
+    Get all existing torrents from qBittorrent.
+    
+    Args:
+        session: Requests session with login cookies
+        use_proxy: Whether to use proxy
+        
+    Returns:
+        set: Set of torrent hashes (lowercase) that are not in error state
+    """
+    info_url = f'{QB_BASE_URL}/api/v2/torrents/info'
+    proxies = get_proxies_dict('qbittorrent', use_proxy)
+    
+    try:
+        response = session.get(info_url, timeout=REQUEST_TIMEOUT, proxies=proxies)
+        
+        if response.status_code == 200:
+            torrents = response.json()
+            # Exclude torrents in error state
+            existing_hashes = set()
+            for t in torrents:
+                state = t.get('state', '')
+                # Skip torrents in error state
+                if state not in ('error', 'missingFiles'):
+                    hash_value = t.get('hash', '').lower()
+                    if hash_value:
+                        existing_hashes.add(hash_value)
+            
+            logger.info(f"Found {len(existing_hashes)} existing torrents in qBittorrent (excluding errors)")
+            return existing_hashes
+        else:
+            logger.warning(f"Failed to get torrent list: {response.status_code}")
+            return set()
+            
+    except requests.RequestException as e:
+        logger.error(f"Error getting torrent list: {e}")
+        return set()
+
+
+def is_torrent_exists(magnet_link, existing_hashes):
+    """
+    Check if a torrent already exists in qBittorrent.
+    
+    Args:
+        magnet_link: Magnet URI string
+        existing_hashes: Set of existing torrent hashes
+        
+    Returns:
+        bool: True if torrent already exists
+    """
+    torrent_hash = extract_hash_from_magnet(magnet_link)
+    if torrent_hash and torrent_hash in existing_hashes:
+        return True
+    return False
+
+
 def add_torrent_to_qbittorrent(session, magnet_link, title, mode='daily', use_proxy=False):
     """Add a torrent to qBittorrent"""
     add_url = f'{QB_BASE_URL}/api/v2/torrents/add'
@@ -411,6 +496,9 @@ def main():
         logger.error("Failed to login to qBittorrent. Please check username and password.")
         return
     
+    # Get existing torrents to check for duplicates
+    existing_hashes = get_existing_torrents(session, use_proxy)
+    
     # Import history manager functions for updating downloaded status
     try:
         from utils.history_manager import mark_torrent_as_downloaded
@@ -427,11 +515,18 @@ def main():
     subtitle_count = 0
     no_subtitle_count = 0
     failed_count = 0
+    duplicate_count = 0
     total_torrents = len(torrents)
     
     logger.info(f"Starting to add {total_torrents} torrents to qBittorrent...")
     
     for i, torrent in enumerate(torrents, 1):
+        # Check if torrent already exists in qBittorrent
+        if is_torrent_exists(torrent['magnet'], existing_hashes):
+            logger.info(f"[{i}/{total_torrents}] Skipping (already in qBittorrent): {torrent['title']}")
+            duplicate_count += 1
+            continue
+        
         logger.info(f"[{i}/{total_torrents}] Adding: {torrent['title']}")
         
         success = add_torrent_to_qbittorrent(session, torrent['magnet'], torrent['title'], mode, use_proxy)
@@ -445,6 +540,11 @@ def main():
                 subtitle_count += 1
             elif torrent['type'] == 'no_subtitle':
                 no_subtitle_count += 1
+            
+            # Add newly added torrent hash to existing set to avoid re-adding in same session
+            new_hash = extract_hash_from_magnet(torrent['magnet'])
+            if new_hash:
+                existing_hashes.add(new_hash)
         else:
             failed_count += 1
         
@@ -452,18 +552,26 @@ def main():
         time.sleep(DELAY_BETWEEN_ADDITIONS)
     
     # Generate summary
+    successfully_added = hacked_subtitle_count + hacked_no_subtitle_count + subtitle_count + no_subtitle_count
+    attempted = total_torrents - duplicate_count
+    
     logger.info("=" * 50)
     logger.info("UPLOAD SUMMARY")
     logger.info("=" * 50)
     logger.info(f"CSV file: {csv_filename}")
-    logger.info(f"Total torrents found: {total_torrents}")
-    logger.info(f"Successfully added: {hacked_subtitle_count + hacked_no_subtitle_count + subtitle_count + no_subtitle_count}")
+    logger.info(f"Total torrents in CSV: {total_torrents}")
+    logger.info(f"Skipped (already in qBittorrent): {duplicate_count}")
+    logger.info(f"Attempted to add: {attempted}")
+    logger.info(f"Successfully added: {successfully_added}")
     logger.info(f"  - Hacked subtitle torrents: {hacked_subtitle_count}")
     logger.info(f"  - Hacked no subtitle torrents: {hacked_no_subtitle_count}")
     logger.info(f"  - Subtitle torrents: {subtitle_count}")
     logger.info(f"  - No subtitle torrents: {no_subtitle_count}")
     logger.info(f"Failed to add: {failed_count}")
-    logger.info(f"Success rate: {((hacked_subtitle_count + hacked_no_subtitle_count + subtitle_count + no_subtitle_count)/total_torrents*100):.1f}%" if total_torrents > 0 else "N/A")
+    if attempted > 0:
+        logger.info(f"Success rate: {(successfully_added/attempted*100):.1f}%")
+    else:
+        logger.info("Success rate: N/A (all torrents already existed)")
     logger.info("=" * 50)
     
     # Git commit uploader results (only if credentials are available)
