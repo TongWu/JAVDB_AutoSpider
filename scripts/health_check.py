@@ -3,16 +3,20 @@
 Health Check Script for JAVDB AutoSpider
 
 This script performs pre-flight health checks before running the main pipeline.
-It verifies connectivity to essential services:
-- qBittorrent Web UI
-- Proxy pool availability
-- SMTP server (optional)
+It verifies connectivity to services:
+
+Critical checks (will fail the pipeline if not passed):
+- Proxy pool availability (when PROXY_MODE='pool' and all proxies banned)
+
+Non-critical checks (warnings only, pipeline continues):
+- qBittorrent Web UI (uploader step may fail, but spider can still run)
+- SMTP server (optional, email notification may fail)
 
 Usage:
     python3 scripts/health_check.py [--check-smtp] [--use-proxy]
 
 Exit codes:
-    0: All checks passed
+    0: All critical checks passed
     1: One or more critical checks failed
 """
 
@@ -217,7 +221,7 @@ def main():
     all_passed = True
     results: List[Tuple[str, bool, str]] = []
     
-    # Check 1: qBittorrent
+    # Check 1: qBittorrent (non-critical - just informational)
     logger.info("")
     logger.info("[1/3] Checking qBittorrent connectivity...")
     qb_success, qb_message = check_qbittorrent_connection()
@@ -225,8 +229,8 @@ def main():
     if qb_success:
         logger.info(f"  ✓ {qb_message}")
     else:
-        logger.error(f"  ✗ {qb_message}")
-        all_passed = False
+        logger.warning(f"  ⚠ {qb_message} (non-critical - uploader step may fail)")
+        # qBittorrent failure is non-critical - spider can still run
     
     # Check 2: Proxy Pool (if configured or --use-proxy)
     logger.info("")
