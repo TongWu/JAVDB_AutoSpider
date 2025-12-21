@@ -1,44 +1,203 @@
-2025-12-19 10:07:39,576 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20251219.csv
-2025-12-19 10:07:39,576 - __main__ - INFO - ============================================================
-2025-12-19 10:07:39,576 - __main__ - INFO - STARTING JAVDB PIPELINE
-2025-12-19 10:07:39,576 - __main__ - INFO - MODE: Daily
-2025-12-19 10:07:39,576 - __main__ - INFO - ============================================================
-2025-12-19 10:07:39,576 - __main__ - INFO - Step 1: Running JavDB Spider...
-2025-12-19 10:07:39,576 - __main__ - INFO - Running: python3 scripts/spider.py --output-file Javdb_TodayTitle_20251219.csv --use-proxy
-2025-12-19 10:29:34,381 - __main__ - INFO - ✓ JavDB Spider completed successfully
-2025-12-19 10:29:34,381 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
-2025-12-19 10:29:34,381 - __main__ - INFO - Running: python3 scripts/qb_uploader.py --mode daily --input-file Javdb_TodayTitle_20251219.csv --use-proxy
-2025-12-19 10:30:13,414 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
-2025-12-19 10:30:13,414 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
-2025-12-19 10:30:13,414 - __main__ - INFO - Running PikPak Bridge with 3 days threshold, dry_run=False, using batch mode
-2025-12-19 10:30:13,414 - scripts.pikpak_bridge - INFO - Processing torrents older than 3 days (before 2025-12-16)
-2025-12-19 10:30:13,415 - scripts.pikpak_bridge - INFO - Initializing proxy pool with 3 proxies...
-2025-12-19 10:30:13,416 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-12-19 10:30:13,416 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
-2025-12-19 10:30:13,416 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-19 10:30:13,417 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@129.xxx.xxx.19:12300, HTTPS: http://***:***@129.xxx.xxx.19:12300)
-2025-12-19 10:30:13,417 - scripts.pikpak_bridge - INFO - Proxy pool initialized successfully
-2025-12-19 10:30:13,417 - scripts.pikpak_bridge - INFO - Proxy helper initialized successfully
-2025-12-19 10:30:13,417 - scripts.pikpak_bridge - INFO - PROXY POOL MODE for PikPak bridge: 2 proxies with automatic failover
-2025-12-19 10:30:14,020 - scripts.pikpak_bridge - INFO - Logged into qBittorrent successfully.
-2025-12-19 10:30:14,486 - scripts.pikpak_bridge - INFO - Found 30 torrents across categories ['Daily Ingestion', 'Ad Hoc']
-2025-12-19 10:30:14,486 - scripts.pikpak_bridge - INFO - Filtered 0 torrents older than 3 days
-2025-12-19 10:30:14,486 - scripts.pikpak_bridge - INFO - No torrents to process.
-2025-12-19 10:30:14,486 - __main__ - INFO - PikPak Bridge completed successfully
-2025-12-19 10:30:14,486 - __main__ - INFO - ✓ PikPak Bridge completed successfully
-2025-12-19 10:30:14,487 - __main__ - INFO - ============================================================
-2025-12-19 10:30:14,487 - __main__ - INFO - PIPELINE COMPLETED
-2025-12-19 10:30:14,487 - __main__ - INFO - ============================================================
-2025-12-19 10:30:14,487 - __main__ - INFO - Analyzing logs for critical errors...
-2025-12-19 10:30:14,487 - __main__ - INFO - ============================================================
-2025-12-19 10:30:14,487 - __main__ - INFO - PIPELINE COMPLETED SUCCESSFULLY - NO CRITICAL ERRORS
-2025-12-19 10:30:14,487 - __main__ - INFO - ============================================================
-2025-12-19 10:30:14,492 - __main__ - INFO - Connecting to SMTP server...
-2025-12-19 10:30:16,843 - __main__ - INFO - Email sent successfully.
-2025-12-19 10:30:16,843 - __main__ - INFO - Final commit for pipeline log...
-2025-12-19 10:30:16,844 - __main__ - INFO - Step pipeline_log: Committing and pushing files to GitHub...
-2025-12-19 10:30:16,846 - __main__ - INFO - Current branch: main
-2025-12-19 10:30:16,849 - __main__ - INFO - Pulling latest changes from remote repository (branch: main)...
-2025-12-19 10:30:16,997 - __main__ - INFO - ✓ Successfully pulled latest changes from remote
-2025-12-19 10:30:16,997 - __main__ - INFO - Adding files to git...
-2025-12-19 10:30:17,033 - __main__ - INFO - Commit changes for pipeline_log
+2025-12-21 13:51:50,155 - __main__ - INFO - Processing torrents older than 0 days (before 2025-12-21)
+2025-12-21 13:51:50,531 - __main__ - INFO - Logged into qBittorrent successfully.
+2025-12-21 13:51:50,562 - __main__ - INFO - Found 22 torrents across categories ['Daily Ingestion', 'Ad Hoc']
+2025-12-21 13:51:50,562 - __main__ - INFO - Filtered 22 torrents older than 0 days
+2025-12-21 13:51:50,562 - __main__ - INFO - Using batch mode: uploading all torrents in one session
+2025-12-21 13:51:50,562 - __main__ - INFO - Starting batch upload of 22 torrents to PikPak...
+2025-12-21 13:51:50,682 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/shield/captcha/init "HTTP/1.1 200 OK"
+2025-12-21 13:51:50,788 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/signin "HTTP/1.1 200 OK"
+2025-12-21 13:51:50,814 - httpx - INFO - HTTP Request: POST https://user.mypikpak.com/v1/auth/token "HTTP/1.1 200 OK"
+2025-12-21 13:51:50,815 - __main__ - INFO - Starting batch upload of 22 torrents to PikPak...
+2025-12-21 13:51:50,815 - __main__ - INFO - Processing magnet 1/22: magnet:?xt=urn:btih:11981b78dcaaa46ad35c2b07ec62ebc8a83e0d7b&dn=%5Bjavdb.com%5Dsnos-041&xl=841374131...
+2025-12-21 13:51:50,992 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:50,992 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:11981b78dcaaa46ad35c2b07ec62ebc8a83e0d7b&dn=%5Bjavdb.com%5Dsnos-041&xl=841374131...
+2025-12-21 13:51:50,992 - __main__ - INFO - Processing magnet 2/22: magnet:?xt=urn:btih:0af6404223c11ea8029f6e6d2daf7fd4ab60c374&dn=%5Bjavdb.com%5DMISM-396&xl=642916279...
+2025-12-21 13:51:51,054 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:51,054 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:0af6404223c11ea8029f6e6d2daf7fd4ab60c374&dn=%5Bjavdb.com%5DMISM-396&xl=642916279...
+2025-12-21 13:51:51,054 - __main__ - INFO - Processing magnet 3/22: magnet:?xt=urn:btih:c9d85ace79dae842be8319c2e200002c220162e6&dn=%5Bjavdb.com%5DSTART-434-C.torrent&x...
+2025-12-21 13:51:51,116 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:51,117 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:c9d85ace79dae842be8319c2e200002c220162e6&dn=%5Bjavdb.com%5DSTART-434-C.torrent&x...
+2025-12-21 13:51:51,117 - __main__ - INFO - Processing magnet 4/22: magnet:?xt=urn:btih:ffa0351f0524de16dfce47bcc1f4429895520475&dn=%5Bjavdb.com%5D%E7%AC%AC%E4%B8%80%E6...
+2025-12-21 13:51:51,176 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:51,176 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:ffa0351f0524de16dfce47bcc1f4429895520475&dn=%5Bjavdb.com%5D%E7%AC%AC%E4%B8%80%E6...
+2025-12-21 13:51:51,176 - __main__ - INFO - Processing magnet 5/22: magnet:?xt=urn:btih:311b1f5e891daf181f6712d6c24e271966edb170&dn=%5Bjavdb.com%5DDASS-834&xl=727076537...
+2025-12-21 13:51:51,246 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:51,247 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:311b1f5e891daf181f6712d6c24e271966edb170&dn=%5Bjavdb.com%5DDASS-834&xl=727076537...
+2025-12-21 13:51:51,247 - __main__ - INFO - Processing magnet 6/22: magnet:?xt=urn:btih:4d81f291dd8d34e5d02f7b5c3e90ecb482478b7b&dn=%5Bjavdb.com%5Djur-608&xl=6614997490...
+2025-12-21 13:51:51,366 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:51,366 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:4d81f291dd8d34e5d02f7b5c3e90ecb482478b7b&dn=%5Bjavdb.com%5Djur-608&xl=6614997490...
+2025-12-21 13:51:51,366 - __main__ - INFO - Processing magnet 7/22: magnet:?xt=urn:btih:3fefce72ab837778d512bbbd5f01cddd36cf8277&dn=%5Bjavdb.com%5DSTART-438-C.torrent&x...
+2025-12-21 13:51:51,438 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:51,439 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:3fefce72ab837778d512bbbd5f01cddd36cf8277&dn=%5Bjavdb.com%5DSTART-438-C.torrent&x...
+2025-12-21 13:51:51,440 - __main__ - INFO - Processing magnet 8/22: magnet:?xt=urn:btih:2aee9801561fb8dcba95540937f234ee7d2f5223&dn=%5Bjavdb.com%5D300MIUM-1325&xl=46870...
+2025-12-21 13:51:51,530 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:51,531 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:2aee9801561fb8dcba95540937f234ee7d2f5223&dn=%5Bjavdb.com%5D300MIUM-1325&xl=46870...
+2025-12-21 13:51:51,532 - __main__ - INFO - Processing magnet 9/22: magnet:?xt=urn:btih:50e504125728df7a4c0af4b27f59c51c43e82190&dn=%5Bjavdb.com%5Daqula-101&xl=18077450...
+2025-12-21 13:51:51,627 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:51,627 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:50e504125728df7a4c0af4b27f59c51c43e82190&dn=%5Bjavdb.com%5Daqula-101&xl=18077450...
+2025-12-21 13:51:51,628 - __main__ - INFO - Processing magnet 10/22: magnet:?xt=urn:btih:5d3ea8a83e9c2bc6682536d80dee7b383a0fcb50&dn=%5Bjavdb.com%5Dsnos-036&xl=547440193...
+2025-12-21 13:51:51,707 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:51,708 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:5d3ea8a83e9c2bc6682536d80dee7b383a0fcb50&dn=%5Bjavdb.com%5Dsnos-036&xl=547440193...
+2025-12-21 13:51:51,708 - __main__ - INFO - Processing magnet 11/22: magnet:?xt=urn:btih:e4bb3ac7260ad562ca972f5cea32dfe262ecbc1a&dn=%5Bjavdb.com%5DGVH-807&xl=7808007639...
+2025-12-21 13:51:51,780 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:51,781 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:e4bb3ac7260ad562ca972f5cea32dfe262ecbc1a&dn=%5Bjavdb.com%5DGVH-807&xl=7808007639...
+2025-12-21 13:51:51,782 - __main__ - INFO - Processing magnet 12/22: magnet:?xt=urn:btih:fe1bf7199b544fff744a45b36d955c4b5cca9ead&dn=%5Bjavdb.com%5D%E7%AC%AC%E4%B8%80%E6...
+2025-12-21 13:51:51,949 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:51,950 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:fe1bf7199b544fff744a45b36d955c4b5cca9ead&dn=%5Bjavdb.com%5D%E7%AC%AC%E4%B8%80%E6...
+2025-12-21 13:51:51,950 - __main__ - INFO - Processing magnet 13/22: magnet:?xt=urn:btih:b86718324a843e6cd5e0795a7608ed6ec0416a28&dn=%5Bjavdb.com%5DCJOD-484&xl=791771006...
+2025-12-21 13:51:52,014 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:52,014 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:b86718324a843e6cd5e0795a7608ed6ec0416a28&dn=%5Bjavdb.com%5DCJOD-484&xl=791771006...
+2025-12-21 13:51:52,014 - __main__ - INFO - Processing magnet 14/22: magnet:?xt=urn:btih:c2a1f6856c00c32172cb20e29fc98501f7c88dcc&dn=%5Bjavdb.com%5DROE-427-C.torrent&xl=...
+2025-12-21 13:51:52,124 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:52,125 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:c2a1f6856c00c32172cb20e29fc98501f7c88dcc&dn=%5Bjavdb.com%5DROE-427-C.torrent&xl=...
+2025-12-21 13:51:52,125 - __main__ - INFO - Processing magnet 15/22: magnet:?xt=urn:btih:6e5b5c7de8e2920755549d74def731d53128129d&dn=%5Bjavdb.com%5Dsnos-034&xl=548064772...
+2025-12-21 13:51:52,192 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:52,193 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:6e5b5c7de8e2920755549d74def731d53128129d&dn=%5Bjavdb.com%5Dsnos-034&xl=548064772...
+2025-12-21 13:51:52,193 - __main__ - INFO - Processing magnet 16/22: magnet:?xt=urn:btih:e865691c379d9073cb20db4f0f42f164dd9a0e9c&dn=%5Bjavdb.com%5DMISM-417&xl=566137279...
+2025-12-21 13:51:52,285 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:52,286 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:e865691c379d9073cb20db4f0f42f164dd9a0e9c&dn=%5Bjavdb.com%5DMISM-417&xl=566137279...
+2025-12-21 13:51:52,287 - __main__ - INFO - Processing magnet 17/22: magnet:?xt=urn:btih:cf8c1c24d21f8627fe99ba8576a58363df432af0&dn=%5Bjavdb.com%5DMISM-407.torrent&xl=7...
+2025-12-21 13:51:52,399 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:52,400 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:cf8c1c24d21f8627fe99ba8576a58363df432af0&dn=%5Bjavdb.com%5DMISM-407.torrent&xl=7...
+2025-12-21 13:51:52,401 - __main__ - INFO - Processing magnet 18/22: magnet:?xt=urn:btih:46f52f0fc0e8c286c142ddad2010cb55eaafb6ed&dn=%5Bjavdb.com%5DSNOS-027&xl=673333698...
+2025-12-21 13:51:52,492 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:52,493 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:46f52f0fc0e8c286c142ddad2010cb55eaafb6ed&dn=%5Bjavdb.com%5DSNOS-027&xl=673333698...
+2025-12-21 13:51:52,493 - __main__ - INFO - Processing magnet 19/22: magnet:?xt=urn:btih:e29877ce25718614f17721aac3f94eebcf53b013&dn=%5Bjavdb.com%5DDASS-832&xl=662675626...
+2025-12-21 13:51:52,568 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:52,569 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:e29877ce25718614f17721aac3f94eebcf53b013&dn=%5Bjavdb.com%5DDASS-832&xl=662675626...
+2025-12-21 13:51:52,569 - __main__ - INFO - Processing magnet 20/22: magnet:?xt=urn:btih:4b02e5fdcd29cb193b9d9f7b11d83987aa2330fd&dn=%5Bjavdb.com%5DJUR-577&xl=5277230046...
+2025-12-21 13:51:52,643 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:52,644 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:4b02e5fdcd29cb193b9d9f7b11d83987aa2330fd&dn=%5Bjavdb.com%5DJUR-577&xl=5277230046...
+2025-12-21 13:51:52,644 - __main__ - INFO - Processing magnet 21/22: magnet:?xt=urn:btih:0e554391e9ad6918661ee1da4baf06d40755667b&dn=%5Bjavdb.com%5D%E7%AC%AC%E4%B8%80%E6...
+2025-12-21 13:51:52,799 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:52,799 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:0e554391e9ad6918661ee1da4baf06d40755667b&dn=%5Bjavdb.com%5D%E7%AC%AC%E4%B8%80%E6...
+2025-12-21 13:51:52,800 - __main__ - INFO - Processing magnet 22/22: magnet:?xt=urn:btih:b06e87f605d60c8b952e6dd662a415297fbdb813&dn=%5Bjavdb.com%5Ddass-779&xl=777075158...
+2025-12-21 13:51:52,870 - httpx - INFO - HTTP Request: POST https://api-drive.mypikpak.com/drive/v1/files "HTTP/1.1 200 OK"
+2025-12-21 13:51:52,873 - __main__ - INFO - Successfully added magnet to PikPak: magnet:?xt=urn:btih:b06e87f605d60c8b952e6dd662a415297fbdb813&dn=%5Bjavdb.com%5Ddass-779&xl=777075158...
+2025-12-21 13:51:52,873 - __main__ - INFO - Batch upload completed: 22 successful, 0 failed
+2025-12-21 13:51:52,874 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]snos-041
+2025-12-21 13:51:52,874 - __main__ - INFO - Saved to PikPak history: [javdb.com]snos-041 - success
+2025-12-21 13:51:52,884 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:52,884 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]snos-041
+2025-12-21 13:51:52,884 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]MISM-396
+2025-12-21 13:51:52,884 - __main__ - INFO - Saved to PikPak history: [javdb.com]MISM-396 - success
+2025-12-21 13:51:52,890 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:52,890 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]MISM-396
+2025-12-21 13:51:52,890 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]START-434-C.torrent
+2025-12-21 13:51:52,890 - __main__ - INFO - Saved to PikPak history: [javdb.com]START-434-C.torrent - success
+2025-12-21 13:51:52,896 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:52,896 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]START-434-C.torrent
+2025-12-21 13:51:52,896 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]第一會所新片@SIS001@START-439
+2025-12-21 13:51:52,897 - __main__ - INFO - Saved to PikPak history: [javdb.com]第一會所新片@SIS001@START-439 - success
+2025-12-21 13:51:52,902 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:52,902 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]第一會所新片@SIS001@START-439
+2025-12-21 13:51:52,902 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]DASS-834
+2025-12-21 13:51:52,902 - __main__ - INFO - Saved to PikPak history: [javdb.com]DASS-834 - success
+2025-12-21 13:51:52,908 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:52,908 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]DASS-834
+2025-12-21 13:51:52,908 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]jur-608
+2025-12-21 13:51:52,908 - __main__ - INFO - Saved to PikPak history: [javdb.com]jur-608 - success
+2025-12-21 13:51:52,918 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:52,919 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]jur-608
+2025-12-21 13:51:52,919 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]START-438-C.torrent
+2025-12-21 13:51:52,919 - __main__ - INFO - Saved to PikPak history: [javdb.com]START-438-C.torrent - success
+2025-12-21 13:51:52,926 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:52,926 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]START-438-C.torrent
+2025-12-21 13:51:52,926 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]300MIUM-1325
+2025-12-21 13:51:52,926 - __main__ - INFO - Saved to PikPak history: [javdb.com]300MIUM-1325 - success
+2025-12-21 13:51:52,932 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:52,932 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]300MIUM-1325
+2025-12-21 13:51:52,932 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]aqula-101
+2025-12-21 13:51:52,932 - __main__ - INFO - Saved to PikPak history: [javdb.com]aqula-101 - success
+2025-12-21 13:51:52,940 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:52,940 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]aqula-101
+2025-12-21 13:51:52,940 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]snos-036
+2025-12-21 13:51:52,940 - __main__ - INFO - Saved to PikPak history: [javdb.com]snos-036 - success
+2025-12-21 13:51:52,946 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:52,946 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]snos-036
+2025-12-21 13:51:52,946 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]GVH-807
+2025-12-21 13:51:52,946 - __main__ - INFO - Saved to PikPak history: [javdb.com]GVH-807 - success
+2025-12-21 13:51:52,954 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:52,954 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]GVH-807
+2025-12-21 13:51:52,954 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]第一會所新片@SIS001@FNS-053
+2025-12-21 13:51:52,954 - __main__ - INFO - Saved to PikPak history: [javdb.com]第一會所新片@SIS001@FNS-053 - success
+2025-12-21 13:51:52,986 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:52,986 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]第一會所新片@SIS001@FNS-053
+2025-12-21 13:51:52,986 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]CJOD-484
+2025-12-21 13:51:52,986 - __main__ - INFO - Saved to PikPak history: [javdb.com]CJOD-484 - success
+2025-12-21 13:51:52,998 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:52,998 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]CJOD-484
+2025-12-21 13:51:52,998 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]ROE-427-C.torrent
+2025-12-21 13:51:52,998 - __main__ - INFO - Saved to PikPak history: [javdb.com]ROE-427-C.torrent - success
+2025-12-21 13:51:53,006 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:53,006 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]ROE-427-C.torrent
+2025-12-21 13:51:53,006 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]snos-034
+2025-12-21 13:51:53,006 - __main__ - INFO - Saved to PikPak history: [javdb.com]snos-034 - success
+2025-12-21 13:51:53,010 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:53,010 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]snos-034
+2025-12-21 13:51:53,010 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]MISM-417
+2025-12-21 13:51:53,010 - __main__ - INFO - Saved to PikPak history: [javdb.com]MISM-417 - success
+2025-12-21 13:51:53,016 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:53,016 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]MISM-417
+2025-12-21 13:51:53,016 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]MISM-407.torrent
+2025-12-21 13:51:53,016 - __main__ - INFO - Saved to PikPak history: [javdb.com]MISM-407.torrent - success
+2025-12-21 13:51:53,022 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:53,022 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]MISM-407.torrent
+2025-12-21 13:51:53,022 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]SNOS-027
+2025-12-21 13:51:53,022 - __main__ - INFO - Saved to PikPak history: [javdb.com]SNOS-027 - success
+2025-12-21 13:51:53,028 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:53,028 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]SNOS-027
+2025-12-21 13:51:53,028 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]DASS-832
+2025-12-21 13:51:53,028 - __main__ - INFO - Saved to PikPak history: [javdb.com]DASS-832 - success
+2025-12-21 13:51:53,360 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:53,360 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]DASS-832
+2025-12-21 13:51:53,360 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]JUR-577
+2025-12-21 13:51:53,360 - __main__ - INFO - Saved to PikPak history: [javdb.com]JUR-577 - success
+2025-12-21 13:51:53,366 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:53,366 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]JUR-577
+2025-12-21 13:51:53,366 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]第一會所新片@SIS001@DLDSS-451
+2025-12-21 13:51:53,366 - __main__ - INFO - Saved to PikPak history: [javdb.com]第一會所新片@SIS001@DLDSS-451 - success
+2025-12-21 13:51:53,406 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:53,406 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]第一會所新片@SIS001@DLDSS-451
+2025-12-21 13:51:53,406 - __main__ - INFO - Successfully uploaded to PikPak: [javdb.com]dass-779
+2025-12-21 13:51:53,407 - __main__ - INFO - Saved to PikPak history: [javdb.com]dass-779 - success
+2025-12-21 13:51:53,590 - __main__ - INFO - Deleted 1 torrents from qBittorrent.
+2025-12-21 13:51:53,593 - __main__ - INFO - Successfully deleted from qBittorrent: [javdb.com]dass-779
+2025-12-21 13:51:53,593 - __main__ - INFO - ============================================================
+2025-12-21 13:51:53,593 - __main__ - INFO - PIKPAK BRIDGE TRANSFER SUMMARY
+2025-12-21 13:51:53,593 - __main__ - INFO - ============================================================
+2025-12-21 13:51:53,593 - __main__ - INFO - Processed categories: ['Daily Ingestion']
+2025-12-21 13:51:53,593 - __main__ - INFO - Total torrents found (older than 0 days): 22
+2025-12-21 13:51:53,593 - __main__ - INFO - Category 'Daily Ingestion': 22 total, 22 successful, 0 failed
+2025-12-21 13:51:53,593 - __main__ - INFO - Overall: 22 successful, 0 failed
+2025-12-21 13:51:53,593 - __main__ - INFO - Success rate: 100.0%
+2025-12-21 13:51:53,593 - __main__ - INFO - 
+2025-12-21 13:51:53,593 - __main__ - INFO - ✓ Successfully transferred torrents:
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]snos-041
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]MISM-396
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]START-434-C.torrent
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]第一會所新片@SIS001@START-439
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]DASS-834
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]jur-608
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]START-438-C.torrent
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]300MIUM-1325
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]aqula-101
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]snos-036
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]GVH-807
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]第一會所新片@SIS001@FNS-053
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]CJOD-484
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]ROE-427-C.torrent
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]snos-034
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]MISM-417
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]MISM-407.torrent
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]SNOS-027
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]DASS-832
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]JUR-577
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]第一會所新片@SIS001@DLDSS-451
+2025-12-21 13:51:53,593 - __main__ - INFO -   - [javdb.com]dass-779
+2025-12-21 13:51:53,593 - __main__ - INFO - 
+2025-12-21 13:51:53,593 - __main__ - INFO - PikPak transfer history saved to: Daily Report/pikpak_bridge_history.csv
+2025-12-21 13:51:53,593 - __main__ - INFO - ============================================================
+2025-12-21 13:51:53,593 - __main__ - INFO - Committing PikPak bridge results...
+2025-12-21 13:51:53,593 - utils.git_helper - INFO - Git commit/push: branch=main, from_pipeline=False
+2025-12-21 13:51:53,623 - utils.git_helper - INFO - Configured git user: tongwu
