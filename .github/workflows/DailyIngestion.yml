@@ -93,12 +93,14 @@ jobs:
               base_url = f'http://{QB_HOST}:{QB_PORT}'
               login_url = f'{base_url}/api/v2/auth/login'
               
-              # Explicitly disable proxy to avoid using environment proxy variables
-              response = requests.post(
+              # Create session with trust_env=False to ignore environment proxy variables
+              session = requests.Session()
+              session.trust_env = False
+              
+              response = session.post(
                   login_url,
                   data={'username': QB_USERNAME, 'password': QB_PASSWORD},
-                  timeout=REQUEST_TIMEOUT,
-                  proxies={'http': None, 'https': None}
+                  timeout=REQUEST_TIMEOUT
               )
               
               if response.status_code == 200 and response.text == 'Ok.':
