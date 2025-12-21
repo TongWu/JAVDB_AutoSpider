@@ -13,13 +13,14 @@
 2025-12-21 14:45:26,560 - __main__ - INFO - ✓ PikPak Bridge completed successfully
 2025-12-21 14:45:26,560 - __main__ - INFO - Step 4: Sending email notification...
 2025-12-21 14:45:26,560 - __main__ - INFO - Running: python3 scripts/email_notification.py --from-pipeline --csv-path Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
- tags
-2025-12-21 14:41:40,815 - __main__ - INFO - ==================================================
-2025-12-21 14:41:42,220 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-21 14:41:55,126 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=50078, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:41:55,146 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=50078 bytes)
-2025-12-21 14:41:55,168 - __main__ - INFO - [Page 1] Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
-2025-12-21 14:41:55,168 - __main__ - INFO - [Page 1] Fallback succeeded (Proxy=True, CF=True). Applying 5s cooldown before next page...
+2025-12-21 14:45:30,615 - __main__ - ERROR - Script scripts/email_notification.py failed with return code 1
+2025-12-21 14:45:30,616 - __main__ - ERROR - ============================================================
+2025-12-21 14:45:30,616 - __main__ - ERROR - PIPELINE EXECUTION ERROR
+2025-12-21 14:45:30,616 - __main__ - ERROR - ============================================================
+2025-12-21 14:45:30,616 - __main__ - ERROR - Error: Script scripts/email_notification.py failed with return code 1
+2025-12-21 14:45:30,616 - __main__ - INFO - Attempting to send failure notification email...
+2025-12-21 14:45:30,616 - __main__ - INFO - Running: python3 scripts/email_notification.py --from-pipeline --csv-path Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
+ue). Applying 5s cooldown before next page...
 2025-12-21 14:42:00,194 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
 2025-12-21 14:42:00,197 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
 2025-12-21 14:42:11,626 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
