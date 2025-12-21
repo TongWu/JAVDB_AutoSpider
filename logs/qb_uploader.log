@@ -1,5 +1,49 @@
-2025-12-21 14:50:00,086 - __main__ - INFO - Starting qBittorrent uploader...
-2025-12-21 14:50:00,086 - __main__ - INFO - Using specified input file: Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
-2025-12-21 14:50:00,086 - __main__ - ERROR - CSV file not found: Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
-2025-12-21 14:50:00,086 - __main__ - INFO - Make sure you have run the spider script first to generate the CSV file
-2025-12-21 14:50:00,086 - __main__ - WARNING - No torrent links found in CSV file
+2025-12-21 16:10:20,619 - __main__ - INFO - Starting qBittorrent uploader...
+2025-12-21 16:10:20,619 - __main__ - INFO - Using specified input file: /Users/tedwu/Documents/JAVDB_AutoSpider/Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
+2025-12-21 16:10:20,619 - __main__ - INFO - Found 26 torrent links in /Users/tedwu/Documents/JAVDB_AutoSpider/Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
+2025-12-21 16:10:20,619 - __main__ - INFO - Attempting to login to qBittorrent at http://101.100.165.240:12301
+2025-12-21 16:10:21,204 - __main__ - INFO - Successfully logged in to qBittorrent
+2025-12-21 16:10:21,204 - __main__ - INFO - History manager imported, will update downloaded status
+2025-12-21 16:10:21,204 - __main__ - INFO - Starting to add 26 torrents to qBittorrent...
+2025-12-21 16:10:21,204 - __main__ - INFO - [1/26] Adding: NMSL-001 [NoSubtitle]
+2025-12-21 16:10:22,278 - __main__ - INFO - [2/26] Adding: NMSL-002 [NoSubtitle]
+2025-12-21 16:10:23,364 - __main__ - INFO - [3/26] Adding: NMSL-030 [NoSubtitle]
+2025-12-21 16:10:24,701 - __main__ - INFO - [4/26] Adding: NMSL-029 [NoSubtitle]
+2025-12-21 16:10:25,857 - __main__ - INFO - [5/26] Adding: NMSL-028 [Hacked+Subtitle]
+2025-12-21 16:10:27,799 - __main__ - INFO - [6/26] Adding: NMSL-028 [NoSubtitle]
+2025-12-21 16:10:28,862 - __main__ - INFO - [7/26] Adding: NMSL-027 [NoSubtitle]
+2025-12-21 16:10:29,941 - __main__ - INFO - [8/26] Adding: NMSL-026 [NoSubtitle]
+2025-12-21 16:10:31,093 - __main__ - INFO - [9/26] Adding: NMSL-025 [NoSubtitle]
+2025-12-21 16:10:32,222 - __main__ - INFO - [10/26] Adding: NMSL-024 [Hacked-NoSubtitle]
+2025-12-21 16:10:33,246 - __main__ - INFO - [11/26] Adding: NMSL-024 [NoSubtitle]
+2025-12-21 16:10:34,258 - __main__ - INFO - [12/26] Adding: NMSL-023 [NoSubtitle]
+2025-12-21 16:10:35,288 - __main__ - INFO - [13/26] Adding: NMSL-022 [NoSubtitle]
+2025-12-21 16:10:36,298 - __main__ - INFO - [14/26] Adding: NMSL-020 [Hacked-NoSubtitle]
+2025-12-21 16:10:37,312 - __main__ - INFO - [15/26] Adding: NMSL-020 [NoSubtitle]
+2025-12-21 16:10:38,322 - __main__ - INFO - [16/26] Adding: NMSL-019 [NoSubtitle]
+2025-12-21 16:10:39,393 - __main__ - INFO - [17/26] Adding: NMSL-018 [NoSubtitle]
+2025-12-21 16:10:40,453 - __main__ - INFO - [18/26] Adding: NMSL-017 [NoSubtitle]
+2025-12-21 16:10:41,493 - __main__ - INFO - [19/26] Adding: NMSL-016 [NoSubtitle]
+2025-12-21 16:10:42,505 - __main__ - INFO - [20/26] Adding: NMSL-014 [Hacked-NoSubtitle]
+2025-12-21 16:10:43,518 - __main__ - INFO - [21/26] Adding: NMSL-014 [NoSubtitle]
+2025-12-21 16:10:44,528 - __main__ - INFO - [22/26] Adding: NMSL-013 [NoSubtitle]
+2025-12-21 16:10:45,551 - __main__ - INFO - [23/26] Adding: NMSL-012 [Hacked-NoSubtitle]
+2025-12-21 16:10:46,568 - __main__ - INFO - [24/26] Adding: NMSL-012 [NoSubtitle]
+2025-12-21 16:10:47,584 - __main__ - INFO - [25/26] Adding: NMSL-010 [NoSubtitle]
+2025-12-21 16:10:48,594 - __main__ - INFO - [26/26] Adding: NMSL-007 [NoSubtitle]
+2025-12-21 16:10:49,604 - __main__ - INFO - ==================================================
+2025-12-21 16:10:49,604 - __main__ - INFO - UPLOAD SUMMARY
+2025-12-21 16:10:49,604 - __main__ - INFO - ==================================================
+2025-12-21 16:10:49,604 - __main__ - INFO - CSV file: /Users/tedwu/Documents/JAVDB_AutoSpider/Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
+2025-12-21 16:10:49,604 - __main__ - INFO - Total torrents found: 26
+2025-12-21 16:10:49,604 - __main__ - INFO - Successfully added: 26
+2025-12-21 16:10:49,604 - __main__ - INFO -   - Hacked subtitle torrents: 1
+2025-12-21 16:10:49,604 - __main__ - INFO -   - Hacked no subtitle torrents: 4
+2025-12-21 16:10:49,604 - __main__ - INFO -   - Subtitle torrents: 0
+2025-12-21 16:10:49,604 - __main__ - INFO -   - No subtitle torrents: 21
+2025-12-21 16:10:49,604 - __main__ - INFO - Failed to add: 0
+2025-12-21 16:10:49,604 - __main__ - INFO - Success rate: 100.0%
+2025-12-21 16:10:49,604 - __main__ - INFO - ==================================================
+2025-12-21 16:10:49,604 - __main__ - INFO - Committing uploader results...
+2025-12-21 16:10:49,605 - utils.git_helper - INFO - Git commit/push: branch=main, from_pipeline=False
+2025-12-21 16:10:49,637 - utils.git_helper - INFO - Configured git user: tongwu
