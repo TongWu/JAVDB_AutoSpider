@@ -230,6 +230,78 @@ def analyze_pikpak_log(log_path):
     return False, None
 
 
+def analyze_pipeline_log(log_path):
+    """
+    Analyze pipeline log to detect script execution failures.
+    This catches cases where sub-scripts fail to start or crash early.
+    Returns: (is_critical_error, error_message)
+    """
+    if not os.path.exists(log_path):
+        return True, "Pipeline log file not found"
+    
+    with open(log_path, 'r', encoding='utf-8') as f:
+        log_content = f.read()
+    
+    # Check for script execution failures
+    script_failures = []
+    
+    # Pattern: "Script scripts/xxx.py failed with return code X"
+    failure_pattern = r'Script (scripts/\w+\.py) failed with return code (\d+)'
+    failures = re.findall(failure_pattern, log_content)
+    for script, code in failures:
+        script_name = os.path.basename(script).replace('.py', '')
+        script_failures.append(f"{script_name} (exit code {code})")
+    
+    # Check for "PIPELINE EXECUTION ERROR" marker
+    if 'PIPELINE EXECUTION ERROR' in log_content:
+        if script_failures:
+            return True, f"Pipeline scripts failed: {', '.join(script_failures)}"
+        return True, "Pipeline execution error detected"
+    
+    # Check for IndentationError, SyntaxError, etc. in the output
+    syntax_errors = [
+        (r'IndentationError:', 'Syntax error (IndentationError)'),
+        (r'SyntaxError:', 'Syntax error (SyntaxError)'),
+        (r'ModuleNotFoundError:', 'Missing module dependency'),
+        (r'ImportError:', 'Import error'),
+    ]
+    
+    for pattern, message in syntax_errors:
+        if re.search(pattern, log_content):
+            return True, message
+    
+    return False, None
+
+
+def check_log_freshness(log_path, pipeline_log_path):
+    """
+    Check if a log file was updated during the current pipeline run.
+    Compares modification time of log_path against pipeline_log_path start time.
+    
+    Returns: (is_stale, message) - is_stale is True if log might be from previous run
+    """
+    if not os.path.exists(log_path):
+        return False, None  # Missing log is handled elsewhere
+    
+    if not os.path.exists(pipeline_log_path):
+        return False, None  # Can't determine if stale
+    
+    try:
+        # Get modification times
+        log_mtime = os.path.getmtime(log_path)
+        pipeline_mtime = os.path.getmtime(pipeline_log_path)
+        
+        # If the sub-script's log is older than pipeline log, it might be stale
+        # Add a small tolerance (5 seconds) for timing differences
+        if log_mtime < pipeline_mtime - 5:
+            log_name = os.path.basename(log_path)
+            return True, f"{log_name} appears to be from a previous run (not updated this run)"
+    except Exception as e:
+        logger.debug(f"Error checking log freshness: {e}")
+    
+    return False, None
+
+
 def extract_spider_statistics(log_path):
     """Extract key statistics from spider log for email report."""
     stats = {
@@ -246,7 +318,9 @@ def extract_spider_statistics(log_path):
             content = f.read()
         
         # Extract phase 1 statistics
-        phase1_found_pattern = r'\[Page \d+\] Found (\d+) entries for phase 1'
+        # Match both new format "Found X entries for phase 1, Y for phase 2" 
+        # and old format "Found X entries for phase 1"
+        phase1_found_pattern = r'\[Page\s+\d+\] Found\s+(\d+) entries for phase 1'
         phase1_matches = re.findall(phase1_found_pattern, content)
         stats['phase1']['found'] = sum(int(m) for m in phase1_matches)
         
@@ -255,8 +329,13 @@ def extract_spider_statistics(log_path):
             stats['phase1']['processed'] = int(phase1_completed.group(1))
         
         # Extract phase 2 statistics
-        phase2_found_pattern = r'\[Page \d+\] Found (\d+) entries for phase 2'
-        phase2_matches = re.findall(phase2_found_pattern, content)
+        # Match both new format "X for phase 2" and old format "Found X entries for phase 2"
+        # New format: ", Y for phase 2" or just "Found Y entries for phase 2"
+        phase2_new_pattern = r',\s+(\d+) for phase 2'
+        phase2_old_pattern = r'\[Page\s+\d+\] Found\s+(\d+) entries for phase 2'
+        phase2_new_matches = re.findall(phase2_new_pattern, content)
+        phase2_old_matches = re.findall(phase2_old_pattern, content)
+        phase2_matches = phase2_new_matches if phase2_new_matches else phase2_old_matches
         stats['phase2']['found'] = sum(int(m) for m in phase2_matches)
         
         phase2_completed = re.search(r'Phase 2 completed: (\d+) entries processed', content)
@@ -561,6 +640,25 @@ def main():
     # Analyze logs for critical errors
     logger.info("Analyzing logs for critical errors...")
     pipeline_errors = []
+    
+    # First, check pipeline log for script execution failures
+    # This catches cases where sub-scripts crash before writing to their own logs
+    pipeline_critical, pipeline_error = analyze_pipeline_log(PIPELINE_LOG_FILE)
+    if pipeline_critical:
+        logger.error(f"CRITICAL ERROR in Pipeline: {pipeline_error}")
+        pipeline_errors.append(f"Pipeline: {pipeline_error}")
+    
+    # Check for stale logs (from previous runs)
+    # If a log file is older than the pipeline log, the script might have crashed early
+    stale_logs = []
+    for log_file, log_name in [(SPIDER_LOG_FILE, 'Spider'), (UPLOADER_LOG_FILE, 'Uploader'), (PIKPAK_LOG_FILE, 'PikPak')]:
+        is_stale, stale_msg = check_log_freshness(log_file, PIPELINE_LOG_FILE)
+        if is_stale:
+            logger.warning(f"Stale log detected: {stale_msg}")
+            stale_logs.append(log_name)
+    
+    if stale_logs:
+        pipeline_errors.append(f"Stale logs detected (scripts may have crashed): {', '.join(stale_logs)}")
     
     spider_critical, spider_error = analyze_spider_log(SPIDER_LOG_FILE)
     if spider_critical:
