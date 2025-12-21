@@ -119,11 +119,22 @@ jobs:
             }
           }
 
-      - name: Upload config artifact
+      - name: Encrypt config for artifact
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          # Encrypt config.py using AES-256-CBC before uploading
+          # All artifacts are encrypted to protect sensitive data
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
+            -in config.py -out config.py.enc \
+            -pass pass:"$ARTIFACT_KEY"
+          echo "✓ Config encrypted successfully"
+
+      - name: Upload encrypted config artifact
         uses: actions/upload-artifact@v4
         with:
-          name: config
-          path: config.py
+          name: config-encrypted
+          path: config.py.enc
           retention-days: 1
 
   # =============================================================================
@@ -146,11 +157,21 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Download config
+      - name: Download encrypted config
         uses: actions/download-artifact@v4
         with:
-          name: config
+          name: config-encrypted
           path: .
+
+      - name: Decrypt config
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+            -in config.py.enc -out config.py \
+            -pass pass:"$ARTIFACT_KEY"
+          rm config.py.enc
+          echo "✓ Config decrypted successfully"
 
       - name: Run health checks
         run: python3 scripts/health_check.py --use-proxy
@@ -177,11 +198,21 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Download config
+      - name: Download encrypted config
         uses: actions/download-artifact@v4
         with:
-          name: config
+          name: config-encrypted
           path: .
+
+      - name: Decrypt config
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+            -in config.py.enc -out config.py \
+            -pass pass:"$ARTIFACT_KEY"
+          rm config.py.enc
+          echo "✓ Config decrypted successfully"
 
       - name: Pull latest changes
         run: |
@@ -210,24 +241,58 @@ jobs:
         id: pikpak
         run: python3 scripts/pikpak_bridge.py --days 3
 
-      - name: Upload logs artifact
+      - name: Encrypt and upload logs artifact
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pipeline-logs
-          path: |
-            logs/*.log
-          retention-days: 7
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          # Create encrypted archive of logs
+          mkdir -p encrypted_artifacts
+          if ls logs/*.log 1> /dev/null 2>&1; then
+            tar -czf - logs/*.log | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
+              -out encrypted_artifacts/logs.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY"
+            echo "✓ Logs encrypted successfully"
+          else
+            echo "No log files found to encrypt"
+          fi
 
-      - name: Upload CSV reports artifact
+      - name: Upload encrypted logs artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pipeline-reports
-          path: |
-            Daily Report/*.csv
-            Ad Hoc/*.csv
+          name: pipeline-logs-encrypted
+          path: encrypted_artifacts/logs.tar.gz.enc
           retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Encrypt and upload CSV reports artifact
+        if: always()
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          # Create encrypted archive of reports
+          mkdir -p encrypted_artifacts
+          FOUND_FILES=0
+          if ls "Daily Report"/*.csv 1> /dev/null 2>&1 || ls "Ad Hoc"/*.csv 1> /dev/null 2>&1; then
+            tar -czf - "Daily Report"/*.csv "Ad Hoc"/*.csv 2>/dev/null | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
+              -out encrypted_artifacts/reports.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY"
+            echo "✓ Reports encrypted successfully"
+            FOUND_FILES=1
+          fi
+          if [ "$FOUND_FILES" -eq 0 ]; then
+            echo "No report files found to encrypt"
+          fi
+
+      - name: Upload encrypted reports artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-reports-encrypted
+          path: encrypted_artifacts/reports.tar.gz.enc
+          retention-days: 7
+          if-no-files-found: ignore
 
   # =============================================================================
   # Job 4: Email Notification - Always runs to report success or failure
@@ -250,25 +315,64 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Download config
+      - name: Download encrypted config
         uses: actions/download-artifact@v4
         with:
-          name: config
+          name: config-encrypted
           path: .
 
-      - name: Download logs (if available)
+      - name: Decrypt config
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+            -in config.py.enc -out config.py \
+            -pass pass:"$ARTIFACT_KEY"
+          rm config.py.enc
+          echo "✓ Config decrypted successfully"
+
+      - name: Download encrypted logs (if available)
         uses: actions/download-artifact@v4
         with:
-          name: pipeline-logs
-          path: logs
+          name: pipeline-logs-encrypted
+          path: encrypted_artifacts
         continue-on-error: true
 
-      - name: Download reports (if available)
+      - name: Decrypt logs (if available)
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          if [ -f encrypted_artifacts/logs.tar.gz.enc ]; then
+            openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+              -in encrypted_artifacts/logs.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY" | tar -xzf -
+            rm -rf encrypted_artifacts
+            echo "✓ Logs decrypted successfully"
+          else
+            echo "No encrypted logs found"
+            mkdir -p logs
+          fi
+
+      - name: Download encrypted reports (if available)
         uses: actions/download-artifact@v4
         with:
-          name: pipeline-reports
-          path: .
+          name: pipeline-reports-encrypted
+          path: encrypted_artifacts
         continue-on-error: true
+
+      - name: Decrypt reports (if available)
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          if [ -f encrypted_artifacts/reports.tar.gz.enc ]; then
+            openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+              -in encrypted_artifacts/reports.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY" | tar -xzf -
+            rm -rf encrypted_artifacts
+            echo "✓ Reports decrypted successfully"
+          else
+            echo "No encrypted reports found"
+          fi
 
       - name: Determine pipeline status
         id: status
@@ -281,6 +385,9 @@ jobs:
           echo "Setup: $SETUP_STATUS"
           echo "Health Check: $HEALTH_STATUS"
           echo "Pipeline: $PIPELINE_STATUS"
+          
+          # Ensure logs directory exists
+          mkdir -p logs
           
           # Create a status file for email notification to read
           echo "SETUP_STATUS=$SETUP_STATUS" >> logs/job_status.txt
@@ -317,12 +424,26 @@ jobs:
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
 
-      - name: Download reports
+      - name: Download encrypted reports
         uses: actions/download-artifact@v4
         with:
-          name: pipeline-reports
-          path: .
+          name: pipeline-reports-encrypted
+          path: encrypted_artifacts
         continue-on-error: true
+
+      - name: Decrypt reports
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          if [ -f encrypted_artifacts/reports.tar.gz.enc ]; then
+            openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+              -in encrypted_artifacts/reports.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY" | tar -xzf -
+            rm -rf encrypted_artifacts
+            echo "✓ Reports decrypted successfully"
+          else
+            echo "No encrypted reports found"
+          fi
 
       - name: Commit and Push Results
         run: |
