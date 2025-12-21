@@ -1,295 +1,142 @@
-<<<<<<< HEAD
-2025-12-21 13:48:27,182 - __main__ - INFO - Initializing proxy pool with 3 proxies...
-2025-12-21 13:48:27,183 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-12-21 13:48:27,183 - utils.proxy_ban_manager - INFO - Removed expired ban record for proxy 'Miraculous Fortress'
-2025-12-21 13:48:27,184 - utils.proxy_pool - INFO - Added proxy 'Miraculous Fortress' to pool (HTTP: http://***:***@139.xxx.xxx.231:12300, HTTPS: http://***:***@139.xxx.xxx.231:12300)
-2025-12-21 13:48:27,184 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-21 13:48:27,184 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@129.xxx.xxx.19:12300, HTTPS: http://***:***@129.xxx.xxx.19:12300)
-2025-12-21 13:48:27,184 - __main__ - INFO - Proxy pool initialized successfully
-2025-12-21 13:48:27,184 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
-2025-12-21 13:48:27,184 - __main__ - INFO - Request handler initialized successfully
-2025-12-21 13:48:27,184 - __main__ - INFO - Starting JavDB spider...
-2025-12-21 13:48:27,184 - __main__ - INFO - Arguments: start_page=1, end_page=10, phase=all
-2025-12-21 13:48:27,184 - __main__ - INFO - Custom URL: https://javdb.com/video_codes/NMSL
-2025-12-21 13:48:27,184 - __main__ - INFO - AD HOC MODE: Will skip entries already in history (use --ignore-history to override)
-2025-12-21 13:48:27,184 - __main__ - INFO - Validating history file integrity...
-2025-12-21 13:48:27,226 - utils.history_manager - INFO - Loaded 6105 previously parsed movies from history (phase 1: 3490, phase 2: 2615)
-2025-12-21 13:48:27,226 - __main__ - INFO - Initialized requests session
-2025-12-21 13:48:27,226 - __main__ - INFO - ==================================================
-2025-12-21 13:48:27,226 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-12-21 13:48:27,226 - __main__ - INFO - ==================================================
-2025-12-21 13:48:28,610 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-21 13:48:41,704 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=52147, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 13:48:41,704 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=52147 bytes)
-2025-12-21 13:48:41,720 - __main__ - INFO - [Page 1] Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
-2025-12-21 13:48:41,721 - __main__ - INFO - [Page 1] Fallback succeeded (Proxy=True, CF=True). Applying 30s cooldown before next page...
-2025-12-21 13:49:11,740 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
-2025-12-21 13:49:11,741 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
-2025-12-21 13:49:28,081 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-21 13:49:28,197 - utils.request_handler - ERROR - [Direct Proxy=Miraculous Fortress] Error: 403 Client Error: Forbidden for url: https://javdb.com/video_codes/NMSL?page=2
-2025-12-21 13:49:28,197 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (1/3)
-2025-12-21 13:49:28,198 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
-2025-12-21 13:49:28,198 - utils.request_handler - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-21 13:49:40,915 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=26377, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 13:49:40,916 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=26377 bytes)
-2025-12-21 13:49:41,885 - __main__ - WARNING - [Page 2] Proxy 'Singapore-ARM2' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)
-2025-12-21 13:49:41,885 - __main__ - INFO - [Page 2] Switching to next proxy...
-2025-12-21 13:49:41,885 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
-2025-12-21 13:49:41,885 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Miraculous Fortress'
-2025-12-21 13:49:54,817 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=26377, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 13:49:54,817 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=26377 bytes)
-2025-12-21 13:49:55,703 - __main__ - WARNING - [Page 2] Proxy 'Miraculous Fortress' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)
-2025-12-21 13:49:55,703 - __main__ - INFO - [Page 2] Switching to next proxy...
-2025-12-21 13:49:55,703 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
-2025-12-21 13:49:55,703 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Miraculous Fortress'
-2025-12-21 13:50:08,644 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=26377, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 13:50:08,644 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=26377 bytes)
-2025-12-21 13:50:09,565 - __main__ - ERROR - [Page 2] All proxy attempts exhausted.
-2025-12-21 13:50:09,565 - __main__ - WARNING - [Page 2] No movie list found after all fallback attempts
-2025-12-21 13:50:10,909 - __main__ - WARNING - [Page 3] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-21 13:50:11,015 - utils.request_handler - ERROR - [Direct Proxy=Miraculous Fortress] Error: 403 Client Error: Forbidden for url: https://javdb.com/video_codes/NMSL?page=3
-2025-12-21 13:50:11,015 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (2/3)
-2025-12-21 13:50:11,015 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
-2025-12-21 13:50:11,015 - utils.request_handler - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-21 13:50:23,972 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=27419, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 13:50:23,972 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=27419 bytes)
-2025-12-21 13:50:24,914 - __main__ - WARNING - [Page 3] Proxy 'Singapore-ARM2' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)
-2025-12-21 13:50:24,914 - __main__ - INFO - [Page 3] Switching to next proxy...
-2025-12-21 13:50:24,914 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
-2025-12-21 13:50:24,914 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Miraculous Fortress'
-2025-12-21 13:50:38,041 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=26377, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 13:50:38,042 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=26377 bytes)
-2025-12-21 13:50:38,934 - __main__ - WARNING - [Page 3] Proxy 'Miraculous Fortress' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)
-2025-12-21 13:50:38,934 - __main__ - INFO - [Page 3] Switching to next proxy...
-2025-12-21 13:50:38,934 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
-2025-12-21 13:50:38,934 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Miraculous Fortress'
-2025-12-21 13:50:51,973 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=26377, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 13:50:51,973 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=26377 bytes)
-2025-12-21 13:50:52,862 - __main__ - ERROR - [Page 3] All proxy attempts exhausted.
-2025-12-21 13:50:52,862 - __main__ - WARNING - [Page 3] No movie list found after all fallback attempts
-2025-12-21 13:50:54,216 - __main__ - WARNING - [Page 4] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-21 13:50:54,321 - utils.request_handler - ERROR - [Direct Proxy=Miraculous Fortress] Error: 403 Client Error: Forbidden for url: https://javdb.com/video_codes/NMSL?page=4
-2025-12-21 13:50:54,321 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (3/3)
-2025-12-21 13:50:54,321 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
-2025-12-21 13:50:54,321 - utils.request_handler - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-21 13:51:07,047 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=26377, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 13:51:07,047 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=26377 bytes)
-2025-12-21 13:51:08,217 - __main__ - WARNING - [Page 4] Proxy 'Singapore-ARM2' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)
-2025-12-21 13:51:08,217 - __main__ - INFO - [Page 4] Switching to next proxy...
-2025-12-21 13:51:08,217 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
-2025-12-21 13:51:08,217 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Miraculous Fortress'
-2025-12-21 13:51:21,181 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=26377, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 13:51:21,181 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=26377 bytes)
-2025-12-21 13:51:22,072 - __main__ - WARNING - [Page 4] Proxy 'Miraculous Fortress' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)
-2025-12-21 13:51:22,072 - __main__ - INFO - [Page 4] Switching to next proxy...
-2025-12-21 13:51:22,072 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
-2025-12-21 13:51:22,072 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Miraculous Fortress'
-2025-12-21 13:51:36,044 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=26377, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 13:51:36,044 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=26377 bytes)
-2025-12-21 13:51:36,961 - __main__ - ERROR - [Page 4] All proxy attempts exhausted.
-2025-12-21 13:51:36,961 - __main__ - WARNING - [Page 4] No movie list found after all fallback attempts
-2025-12-21 13:51:36,961 - __main__ - INFO - [Page 4] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
-2025-12-21 13:51:36,961 - __main__ - INFO - Phase 1 completed: 0 entries processed
-2025-12-21 13:51:36,961 - __main__ - INFO - Waiting 60 seconds before Phase 2 to allow Cloudflare cooldown...
-=======
-2025-12-21 00:01:29,998 - __main__ - INFO - Initializing proxy pool with 3 proxies...
-2025-12-21 00:01:30,000 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-12-21 00:01:30,000 - utils.proxy_ban_manager - INFO - Removed expired ban record for proxy 'Miraculous Fortress'
-2025-12-21 00:01:30,000 - utils.proxy_pool - INFO - Added proxy 'Miraculous Fortress' to pool (HTTP: http://***:***@139.xxx.xxx.231:12300, HTTPS: http://***:***@139.xxx.xxx.231:12300)
-2025-12-21 00:01:30,000 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-21 00:01:30,001 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@129.xxx.xxx.19:12300, HTTPS: http://***:***@129.xxx.xxx.19:12300)
-2025-12-21 00:01:30,001 - __main__ - INFO - Proxy pool initialized successfully
-2025-12-21 00:01:30,001 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
-2025-12-21 00:01:30,001 - __main__ - INFO - Request handler initialized successfully
-2025-12-21 00:01:30,001 - __main__ - INFO - Starting JavDB spider...
-2025-12-21 00:01:30,001 - __main__ - INFO - Arguments: start_page=1, end_page=10, phase=all
-2025-12-21 00:01:30,001 - __main__ - INFO - MODE: Proxy only (no CF bypass)
-2025-12-21 00:01:30,001 - __main__ - INFO - PROXY POOL MODE: 3 proxies configured with automatic failover
-2025-12-21 00:01:30,001 - __main__ - INFO - PROXY ENABLED: Using proxy for modules ['spider_index', 'spider_detail']
-2025-12-21 00:01:30,001 - __main__ - INFO - Validating history file integrity...
-2025-12-21 00:01:30,139 - utils.history_manager - INFO - Loaded 6105 previously parsed movies from history (phase 1: 3490, phase 2: 2615)
-2025-12-21 00:01:30,140 - __main__ - INFO - Initialized requests session
-2025-12-21 00:01:30,140 - __main__ - INFO - ==================================================
-2025-12-21 00:01:30,140 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
-2025-12-21 00:01:30,140 - __main__ - INFO - ==================================================
-2025-12-21 00:01:32,024 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
-2025-12-21 00:01:42,882 - utils.parser - INFO - [Page 2] Found 0 entries for phase 1
-2025-12-21 00:01:53,015 - utils.request_handler - ERROR - [Direct Proxy=Miraculous Fortress] Error: 403 Client Error: Forbidden for url: https://javdb.com/?page=3
-2025-12-21 00:01:53,015 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (1/3)
-2025-12-21 00:01:53,015 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
-2025-12-21 00:01:53,015 - utils.request_handler - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-21 00:01:53,693 - utils.parser - INFO - [Page 3] Found 6 entries for phase 1
-2025-12-21 00:02:04,362 - utils.parser - INFO - [Page 4] Found 8 entries for phase 1
-2025-12-21 00:02:14,547 - utils.request_handler - ERROR - [Direct Proxy=Miraculous Fortress] Error: 403 Client Error: Forbidden for url: https://javdb.com/?page=5
-2025-12-21 00:02:14,547 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (2/3)
-2025-12-21 00:02:14,547 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
-2025-12-21 00:02:14,547 - utils.request_handler - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-21 00:02:15,186 - utils.parser - INFO - [Page 5] Found 0 entries for phase 1
-2025-12-21 00:02:25,808 - utils.parser - INFO - [Page 6] Found 0 entries for phase 1
-2025-12-21 00:02:35,998 - utils.request_handler - ERROR - [Direct Proxy=Miraculous Fortress] Error: 403 Client Error: Forbidden for url: https://javdb.com/?page=7
-2025-12-21 00:02:35,998 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' failed (3/3)
-2025-12-21 00:02:35,998 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
-2025-12-21 00:02:35,998 - utils.request_handler - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-21 00:02:36,563 - utils.parser - INFO - [Page 7] Found 0 entries for phase 1
-2025-12-21 00:02:47,190 - utils.parser - INFO - [Page 8] Found 0 entries for phase 1
-2025-12-21 00:02:57,324 - utils.request_handler - ERROR - [Direct Proxy=Miraculous Fortress] Error: 403 Client Error: Forbidden for url: https://javdb.com/?page=9
-2025-12-21 00:02:57,324 - utils.proxy_ban_manager - WARNING - Proxy 'Miraculous Fortress' banned until 2025-12-28 00:02:57 (7 days)
-2025-12-21 00:02:57,325 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' reached 4 failures, putting in cooldown for 691200s (8 days)
-2025-12-21 00:02:57,325 - utils.proxy_pool - INFO - Switched from 'Miraculous Fortress' to 'Singapore-ARM1'
-2025-12-21 00:02:57,325 - utils.request_handler - INFO - [spider_index] Switched to proxy: Singapore-ARM1, retrying...
-2025-12-21 00:02:57,937 - utils.parser - INFO - [Page 9] Found 0 entries for phase 1
-2025-12-21 00:03:08,534 - utils.parser - INFO - [Page 10] Found 0 entries for phase 1
-2025-12-21 00:03:24,017 - __main__ - INFO - [1/14] [Page 3] Processing ROE-427
-2025-12-21 00:03:49,738 - __main__ - INFO - [2/14] [Page 3] Processing ROE-428
-2025-12-21 00:04:15,383 - __main__ - INFO - [3/14] [Page 3] Processing ROE-429
-2025-12-21 00:04:41,061 - __main__ - INFO - [4/14] [Page 3] Processing ROE-431
-2025-12-21 00:05:06,662 - __main__ - INFO - [5/14] [Page 3] Processing ROE-433
-2025-12-21 00:05:32,271 - __main__ - INFO - [6/14] [Page 3] Processing ROE-434
-2025-12-21 00:05:42,356 - __main__ - INFO - [7/14] [Page 4] Skipping SSNI-344 - already has subtitle and hacked_subtitle in history
-2025-12-21 00:05:57,887 - __main__ - INFO - [8/14] [Page 4] Processing SSNI-432
-2025-12-21 00:06:23,604 - __main__ - INFO - [9/14] [Page 4] Processing SSNI-473
-2025-12-21 00:06:49,415 - __main__ - INFO - [10/14] [Page 4] Processing SSNI-493
-2025-12-21 00:07:15,157 - __main__ - INFO - [11/14] [Page 4] Processing SSNI-516
-2025-12-21 00:07:40,726 - __main__ - INFO - [12/14] [Page 4] Processing START-425
-2025-12-21 00:08:06,338 - __main__ - INFO - [13/14] [Page 4] Processing START-434
-2025-12-21 00:08:31,938 - __main__ - INFO - [14/14] [Page 4] Processing START-438
-2025-12-21 00:08:42,023 - __main__ - INFO - Phase 1 completed: 13 entries processed
-2025-12-21 00:08:42,023 - __main__ - INFO - Waiting 30 seconds before Phase 2 to allow Cloudflare cooldown...
-2025-12-21 00:09:12,023 - __main__ - INFO - ==================================================
-2025-12-21 00:09:12,024 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-12-21 00:09:12,025 - __main__ - INFO - ==================================================
-2025-12-21 00:09:12,651 - utils.parser - INFO - [Page 1] Found 2 entries for phase 2
-2025-12-21 00:09:23,235 - utils.parser - INFO - [Page 2] Found 5 entries for phase 2
-2025-12-21 00:09:33,931 - utils.parser - INFO - [Page 3] Found 10 entries for phase 2
-2025-12-21 00:09:44,554 - utils.parser - INFO - [Page 4] Found 4 entries for phase 2
-2025-12-21 00:09:55,175 - utils.parser - INFO - [Page 5] Found 10 entries for phase 2
-2025-12-21 00:10:05,809 - utils.parser - INFO - [Page 6] Found 13 entries for phase 2
-2025-12-21 00:10:16,509 - utils.parser - INFO - [Page 7] Found 1 entries for phase 2
-2025-12-21 00:10:27,118 - utils.parser - INFO - [Page 8] Found 0 entries for phase 2
-2025-12-21 00:10:37,734 - utils.parser - INFO - [Page 9] Found 0 entries for phase 2
-2025-12-21 00:10:48,393 - utils.parser - INFO - [Page 10] Found 0 entries for phase 2
-2025-12-21 00:11:03,973 - __main__ - INFO - [1/45] [Page 1] Processing MISM-417
-2025-12-21 00:11:29,706 - __main__ - INFO - [2/45] [Page 1] Processing REAL-960
-2025-12-21 00:11:55,308 - __main__ - INFO - [3/45] [Page 2] Processing MFCW-063
-2025-12-21 00:12:20,889 - __main__ - INFO - [4/45] [Page 2] Processing SIRO-5600
-2025-12-21 00:12:46,422 - __main__ - INFO - [5/45] [Page 2] Processing HMN-776
-2025-12-21 00:13:11,980 - __main__ - INFO - [6/45] [Page 2] Processing SNOS-027
-2025-12-21 00:13:37,609 - __main__ - INFO - [7/45] [Page 2] Processing MAAN-1132
-2025-12-21 00:14:03,071 - __main__ - INFO - [8/45] [Page 3] Processing JUR-532
-2025-12-21 00:14:28,633 - __main__ - INFO - [9/45] [Page 3] Processing JUR-561
-2025-12-21 00:14:54,273 - __main__ - INFO - [10/45] [Page 3] Processing JUR-592
-2025-12-21 00:15:20,000 - __main__ - INFO - [11/45] [Page 3] Processing DASS-831
-2025-12-21 00:15:45,591 - __main__ - INFO - [12/45] [Page 3] Processing GVH-807
-2025-12-21 00:16:11,256 - __main__ - INFO - [13/45] [Page 3] Processing SNOS-015
-2025-12-21 00:16:36,736 - __main__ - INFO - [14/45] [Page 3] Processing SNOS-036
-2025-12-21 00:17:02,366 - __main__ - INFO - [15/45] [Page 3] Processing SNOS-024
-2025-12-21 00:17:27,961 - __main__ - INFO - [16/45] [Page 3] Processing NMSL-029
-2025-12-21 00:17:53,481 - __main__ - INFO - [17/45] [Page 3] Processing ROYD-278
-2025-12-21 00:18:19,042 - __main__ - INFO - [18/45] [Page 4] Processing MISM-396
-2025-12-21 00:18:44,709 - __main__ - INFO - [19/45] [Page 4] Processing CJOD-484
-2025-12-21 00:19:10,309 - __main__ - INFO - [20/45] [Page 4] Processing SNOS-021
-2025-12-21 00:19:35,945 - __main__ - INFO - [21/45] [Page 4] Processing SNOS-034
-2025-12-21 00:20:01,543 - __main__ - INFO - [22/45] [Page 5] Processing NMSL-030
-2025-12-21 00:20:27,127 - __main__ - INFO - [23/45] [Page 5] Processing DASS-823
-2025-12-21 00:20:52,746 - __main__ - INFO - [24/45] [Page 5] Processing DASS-832
-2025-12-21 00:21:18,316 - __main__ - INFO - [25/45] [Page 5] Processing DASS-834
-2025-12-21 00:21:43,928 - __main__ - INFO - [26/45] [Page 5] Processing DASS-840
-2025-12-21 00:22:09,531 - __main__ - INFO - [27/45] [Page 5] Processing MISM-419
-2025-12-21 00:22:35,230 - __main__ - INFO - [28/45] [Page 5] Processing MISM-420
-2025-12-21 00:23:00,873 - __main__ - INFO - [29/45] [Page 5] Processing URE-129
-2025-12-21 00:23:26,475 - __main__ - INFO - [30/45] [Page 5] Processing VEMA-253
-2025-12-21 00:23:52,057 - __main__ - INFO - [31/45] [Page 5] Processing SNOS-041
-2025-12-21 00:24:17,697 - __main__ - INFO - [32/45] [Page 6] Processing JUR-608
-2025-12-21 00:24:43,492 - __main__ - INFO - [33/45] [Page 6] Processing HMN-746
-2025-12-21 00:25:09,015 - __main__ - INFO - [34/45] [Page 6] Processing SNOS-033
-2025-12-21 00:25:34,637 - __main__ - INFO - [35/45] [Page 6] Processing SNOS-062
-2025-12-21 00:26:00,105 - __main__ - INFO - [36/45] [Page 6] Processing DASS-842
-2025-12-21 00:26:25,755 - __main__ - INFO - [37/45] [Page 6] Processing JUR-563
-2025-12-21 00:26:51,330 - __main__ - INFO - [38/45] [Page 6] Processing MISM-407
-2025-12-21 00:27:17,096 - __main__ - INFO - [39/45] [Page 6] Processing JUR-588
-2025-12-21 00:27:42,587 - __main__ - INFO - [40/45] [Page 6] Processing SNOS-016
-2025-12-21 00:28:08,466 - __main__ - INFO - [41/45] [Page 6] Processing DLDSS-451
-2025-12-21 00:28:34,060 - __main__ - INFO - [42/45] [Page 6] Processing FNS-053
-2025-12-21 00:28:59,718 - __main__ - INFO - [43/45] [Page 6] Processing FNS-063
-2025-12-21 00:29:25,312 - __main__ - INFO - [44/45] [Page 6] Processing FNS-143
-2025-12-21 00:29:51,250 - __main__ - INFO - [45/45] [Page 7] Processing DLDSS-464
-2025-12-21 00:30:01,374 - __main__ - INFO - Phase 2 completed: 37 entries processed
-2025-12-21 00:30:01,375 - __main__ - INFO - CSV file written incrementally to: Daily Report/Javdb_TodayTitle_20251221.csv
-2025-12-21 00:30:01,375 - __main__ - INFO - ==================================================
-2025-12-21 00:30:01,375 - __main__ - INFO - SUMMARY REPORT
-2025-12-21 00:30:01,375 - __main__ - INFO - ==================================================
-2025-12-21 00:30:01,375 - __main__ - INFO - Pages processed: 1 to 10
-2025-12-21 00:30:01,375 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-12-21 00:30:01,375 - __main__ - INFO - ==============================
-2025-12-21 00:30:01,375 - __main__ - INFO - PHASE 1 SUMMARY
-2025-12-21 00:30:01,375 - __main__ - INFO - ==============================
-2025-12-21 00:30:01,375 - __main__ - INFO - Phase 1 entries found: 13
-2025-12-21 00:30:01,375 - __main__ - INFO -   - Subtitle torrents: 13 (100.0%)
-2025-12-21 00:30:01,375 - __main__ - INFO -   - Hacked subtitle torrents: 5 (38.5%)
-2025-12-21 00:30:01,375 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
-2025-12-21 00:30:01,375 - __main__ - INFO -   - No-subtitle torrents: 0 (0.0%)
-2025-12-21 00:30:01,375 - __main__ - INFO - ==============================
-2025-12-21 00:30:01,375 - __main__ - INFO - PHASE 2 SUMMARY
-2025-12-21 00:30:01,375 - __main__ - INFO - ==============================
-2025-12-21 00:30:01,375 - __main__ - INFO - Phase 2 entries found: 37
-2025-12-21 00:30:01,376 - __main__ - INFO -   - Subtitle torrents: 0 (0.0%)
-2025-12-21 00:30:01,376 - __main__ - INFO -   - Hacked subtitle torrents: 0 (0.0%)
-2025-12-21 00:30:01,376 - __main__ - INFO -   - Hacked no-subtitle torrents: 0 (0.0%)
-2025-12-21 00:30:01,376 - __main__ - INFO -   - No-subtitle torrents: 37 (100.0%)
-2025-12-21 00:30:01,376 - __main__ - INFO - ==============================
-2025-12-21 00:30:01,376 - __main__ - INFO - OVERALL SUMMARY
-2025-12-21 00:30:01,376 - __main__ - INFO - ==============================
-2025-12-21 00:30:01,376 - __main__ - INFO - Total entries found: 50
-2025-12-21 00:30:01,376 - __main__ - INFO - Successfully processed: 50
-2025-12-21 00:30:01,376 - __main__ - INFO - Skipped already parsed in this session: 0
-2025-12-21 00:30:01,376 - __main__ - INFO - Skipped already parsed in previous runs: 9
-2025-12-21 00:30:01,376 - __main__ - INFO - Current parsed links in memory: 59
-2025-12-21 00:30:01,376 - __main__ - INFO - Overall subtitle torrents: 13 (26.0%)
-2025-12-21 00:30:01,376 - __main__ - INFO - Overall hacked subtitle torrents: 5 (10.0%)
-2025-12-21 00:30:01,376 - __main__ - INFO - Overall hacked no-subtitle torrents: 0 (0.0%)
-2025-12-21 00:30:01,376 - __main__ - INFO - Overall no-subtitle torrents: 37 (74.0%)
-2025-12-21 00:30:01,376 - __main__ - INFO - Results saved to: Daily Report/Javdb_TodayTitle_20251221.csv
-2025-12-21 00:30:01,376 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-12-21 00:30:01,376 - __main__ - INFO - ==================================================
-2025-12-21 00:30:01,376 - __main__ - INFO - 
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO - ==================================================
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO - PROXY POOL STATISTICS
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO - ==================================================
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO - Total proxies: 3
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO - Available proxies: 2
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO - In cooldown: 1
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO - No-proxy mode: False
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO - 
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO - Individual proxy statistics:
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO -   [Standby (Cooldown: 689575s)] Miraculous Fortress:
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO -     - Total requests: 4
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO -     - Success rate: 0.0%
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO -     - Consecutive failures: 4
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO -     - Last success: Never
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO -     - Last failure: 2025-12-21 00:02:57
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO -   [Standby] Singapore-ARM1:
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO -     - Total requests: 39
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO -     - Success rate: 100.0%
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO -     - Consecutive failures: 0
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO -     - Last success: 2025-12-21 00:29:10
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO -     - Last failure: Never
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO -   [ACTIVE] Singapore-ARM2:
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO -     - Total requests: 39
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO -     - Success rate: 100.0%
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO -     - Consecutive failures: 0
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO -     - Last success: 2025-12-21 00:29:36
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO -     - Last failure: Never
-2025-12-21 00:30:01,377 - utils.proxy_pool - INFO - ==================================================
-2025-12-21 00:30:01,377 - __main__ - INFO - 
-2025-12-21 00:30:01,377 - __main__ - INFO - ==================================================
-2025-12-21 00:30:01,377 - __main__ - INFO - PROXY BAN STATUS
-2025-12-21 00:30:01,377 - __main__ - INFO - ==================================================
-2025-12-21 00:30:01,378 - __main__ - INFO - Currently banned proxies: 1
-
-  - Miraculous Fortress:
-    Banned at: 2025-12-21 00:02:57
-    Will unban: 2025-12-28 00:02:57
-    Time remaining: 6 days 23 hours
-2025-12-21 00:30:01,378 - __main__ - INFO - ==================================================
-2025-12-21 00:30:01,378 - __main__ - INFO - Skipping git commit - no credentials provided (commit will be handled by workflow)
->>>>>>> 8fca7a2704bfaf3ffb96ab6f565b5c01cb492023
+2025-12-21 14:00:11,298 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-21 14:00:11,299 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
+2025-12-21 14:00:11,299 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
+2025-12-21 14:00:11,300 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-21 14:00:11,300 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@129.xxx.xxx.19:12300, HTTPS: http://***:***@129.xxx.xxx.19:12300)
+2025-12-21 14:00:11,300 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-21 14:00:11,300 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
+2025-12-21 14:00:11,300 - __main__ - INFO - Request handler initialized successfully
+2025-12-21 14:00:11,300 - __main__ - INFO - Starting JavDB spider...
+2025-12-21 14:00:11,300 - __main__ - INFO - Arguments: start_page=1, end_page=10, phase=all
+2025-12-21 14:00:11,300 - __main__ - INFO - Custom URL: https://javdb.com/video_codes/NMSL
+2025-12-21 14:00:11,300 - __main__ - INFO - AD HOC MODE: Will skip entries already in history (use --ignore-history to override)
+2025-12-21 14:00:11,300 - __main__ - INFO - Validating history file integrity...
+2025-12-21 14:00:11,341 - utils.history_manager - INFO - Loaded 6147 previously parsed movies from history (phase 1: 3499, phase 2: 2648)
+2025-12-21 14:00:11,341 - __main__ - INFO - Initialized requests session
+2025-12-21 14:00:11,342 - __main__ - INFO - ==================================================
+2025-12-21 14:00:11,342 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-12-21 14:00:11,342 - __main__ - INFO - ==================================================
+2025-12-21 14:00:12,751 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:00:25,962 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=52203, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:00:25,978 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=52203 bytes)
+2025-12-21 14:00:25,999 - __main__ - INFO - [Page 1] Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 14:00:25,999 - __main__ - INFO - [Page 1] Fallback succeeded (Proxy=True, CF=True). Applying 30s cooldown before next page...
+2025-12-21 14:00:56,033 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
+2025-12-21 14:00:56,035 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
+2025-12-21 14:01:12,772 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:01:25,883 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=26377, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:01:49,675 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1: After over18 bypass, got 24364 bytes
+2025-12-21 14:01:49,682 - utils.request_handler - WARNING - [CF Bypass] Proxy=Singapore-ARM1: Over18 bypass did not help, still no content
+2025-12-21 14:01:49,682 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=26377 bytes)
+2025-12-21 14:01:49,695 - __main__ - WARNING - [Page 2] Proxy 'Singapore-ARM1' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)
+2025-12-21 14:01:49,695 - __main__ - INFO - [Page 2] Switching to next proxy...
+2025-12-21 14:01:49,695 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
+2025-12-21 14:01:49,695 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
+2025-12-21 14:02:02,660 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=26377, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:02:25,981 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2: After over18 bypass, got 25406 bytes
+2025-12-21 14:02:25,990 - utils.request_handler - WARNING - [CF Bypass] Proxy=Singapore-ARM2: Over18 bypass did not help, still no content
+2025-12-21 14:02:25,990 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=26377 bytes)
+2025-12-21 14:02:26,000 - __main__ - ERROR - [Page 2] All proxy attempts exhausted.
+2025-12-21 14:02:26,000 - __main__ - WARNING - [Page 2] No movie list found after all fallback attempts
+2025-12-21 14:02:27,377 - __main__ - WARNING - [Page 3] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:02:40,491 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:02:40,498 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=24364 bytes)
+2025-12-21 14:02:40,509 - __main__ - WARNING - [Page 3] Proxy 'Singapore-ARM2' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)
+2025-12-21 14:02:40,509 - __main__ - INFO - [Page 3] Switching to next proxy...
+2025-12-21 14:02:40,509 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
+2025-12-21 14:02:40,509 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Singapore-ARM1'
+2025-12-21 14:02:53,304 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:02:53,313 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=24364 bytes)
+2025-12-21 14:02:53,320 - __main__ - ERROR - [Page 3] All proxy attempts exhausted.
+2025-12-21 14:02:53,320 - __main__ - WARNING - [Page 3] No movie list found after all fallback attempts
+2025-12-21 14:02:54,715 - __main__ - WARNING - [Page 4] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:03:07,589 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:03:07,598 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=24364 bytes)
+2025-12-21 14:03:07,610 - __main__ - WARNING - [Page 4] Proxy 'Singapore-ARM1' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)
+2025-12-21 14:03:07,610 - __main__ - INFO - [Page 4] Switching to next proxy...
+2025-12-21 14:03:07,610 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
+2025-12-21 14:03:07,610 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
+2025-12-21 14:03:20,379 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:03:20,388 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=24364 bytes)
+2025-12-21 14:03:20,400 - __main__ - ERROR - [Page 4] All proxy attempts exhausted.
+2025-12-21 14:03:20,400 - __main__ - WARNING - [Page 4] No movie list found after all fallback attempts
+2025-12-21 14:03:20,400 - __main__ - INFO - [Page 4] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
+2025-12-21 14:03:20,400 - __main__ - INFO - Phase 1 completed: 0 entries processed
+2025-12-21 14:03:20,400 - __main__ - INFO - Waiting 60 seconds before Phase 2 to allow Cloudflare cooldown...
+2025-12-21 14:04:20,406 - __main__ - INFO - ==================================================
+2025-12-21 14:04:20,407 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-12-21 14:04:20,407 - __main__ - INFO - ==================================================
+2025-12-21 14:04:21,806 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:04:34,775 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=50078, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:04:34,791 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=50078 bytes)
+2025-12-21 14:04:34,814 - __main__ - INFO - [Page 1] Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 14:04:34,814 - __main__ - INFO - [Page 1] Fallback succeeded (Proxy=True, CF=True). Applying 30s cooldown before next page...
+2025-12-21 14:05:04,831 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
+2025-12-21 14:05:04,835 - utils.parser - INFO - [Page 1] Found 0 entries for phase 2
+2025-12-21 14:05:21,183 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:05:34,058 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:05:34,068 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=24364 bytes)
+2025-12-21 14:05:34,077 - __main__ - WARNING - [Page 2] Proxy 'Singapore-ARM2' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)
+2025-12-21 14:05:34,077 - __main__ - INFO - [Page 2] Switching to next proxy...
+2025-12-21 14:05:34,077 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
+2025-12-21 14:05:34,077 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Singapore-ARM1'
+2025-12-21 14:05:47,105 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:05:47,116 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=24364 bytes)
+2025-12-21 14:05:47,124 - __main__ - ERROR - [Page 2] All proxy attempts exhausted.
+2025-12-21 14:05:47,124 - __main__ - WARNING - [Page 2] No movie list found after all fallback attempts
+2025-12-21 14:05:48,815 - __main__ - WARNING - [Page 3] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:06:01,941 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:06:01,951 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=24364 bytes)
+2025-12-21 14:06:01,962 - __main__ - WARNING - [Page 3] Proxy 'Singapore-ARM1' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)
+2025-12-21 14:06:01,962 - __main__ - INFO - [Page 3] Switching to next proxy...
+2025-12-21 14:06:01,962 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
+2025-12-21 14:06:01,962 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
+2025-12-21 14:06:14,991 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:06:14,997 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=24364 bytes)
+2025-12-21 14:06:15,004 - __main__ - ERROR - [Page 3] All proxy attempts exhausted.
+2025-12-21 14:06:15,004 - __main__ - WARNING - [Page 3] No movie list found after all fallback attempts
+2025-12-21 14:06:16,595 - __main__ - WARNING - [Page 4] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:06:29,790 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:06:29,804 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=24364 bytes)
+2025-12-21 14:06:29,812 - __main__ - WARNING - [Page 4] Proxy 'Singapore-ARM2' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)
+2025-12-21 14:06:29,812 - __main__ - INFO - [Page 4] Switching to next proxy...
+2025-12-21 14:06:29,812 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
+2025-12-21 14:06:29,813 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Singapore-ARM1'
+2025-12-21 14:06:42,827 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=25406, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:06:42,838 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=25406 bytes)
+2025-12-21 14:06:42,845 - __main__ - ERROR - [Page 4] All proxy attempts exhausted.
+2025-12-21 14:06:42,846 - __main__ - WARNING - [Page 4] No movie list found after all fallback attempts
+2025-12-21 14:06:42,846 - __main__ - INFO - [Page 4] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
+2025-12-21 14:06:42,846 - __main__ - INFO - Phase 2 completed: 0 entries processed
+2025-12-21 14:06:42,846 - __main__ - INFO - CSV file written incrementally to: Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
+2025-12-21 14:06:42,846 - __main__ - INFO - ==================================================
+2025-12-21 14:06:42,846 - __main__ - INFO - SUMMARY REPORT
+2025-12-21 14:06:42,846 - __main__ - INFO - ==================================================
+2025-12-21 14:06:42,846 - __main__ - INFO - Pages processed: 1 to 10
+2025-12-21 14:06:42,846 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-12-21 14:06:42,846 - __main__ - INFO - ==============================
+2025-12-21 14:06:42,846 - __main__ - INFO - PHASE 1 SUMMARY
+2025-12-21 14:06:42,846 - __main__ - INFO - ==============================
+2025-12-21 14:06:42,846 - __main__ - INFO - Phase 1 entries found: 0
+2025-12-21 14:06:42,846 - __main__ - INFO -   - No entries found in Phase 1
+2025-12-21 14:06:42,846 - __main__ - INFO - ==============================
+2025-12-21 14:06:42,846 - __main__ - INFO - PHASE 2 SUMMARY
+2025-12-21 14:06:42,846 - __main__ - INFO - ==============================
+2025-12-21 14:06:42,846 - __main__ - INFO - Phase 2 entries found: 0
+2025-12-21 14:06:42,846 - __main__ - INFO -   - No entries found in Phase 2
+2025-12-21 14:06:42,846 - __main__ - INFO - ==============================
+2025-12-21 14:06:42,846 - __main__ - INFO - OVERALL SUMMARY
+2025-12-21 14:06:42,846 - __main__ - INFO - ==============================
+2025-12-21 14:06:42,846 - __main__ - INFO - Total entries found: 0
+2025-12-21 14:06:42,846 - __main__ - INFO - Successfully processed: 0
+2025-12-21 14:06:42,846 - __main__ - INFO - Skipped already parsed in this session: 0
+2025-12-21 14:06:42,846 - __main__ - INFO - Skipped already parsed in previous runs: 0
+2025-12-21 14:06:42,846 - __main__ - INFO - Current parsed links in memory: 0
+2025-12-21 14:06:42,846 - __main__ - INFO - Results saved to: Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
+2025-12-21 14:06:42,846 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-12-21 14:06:42,846 - __main__ - INFO - ==================================================
+2025-12-21 14:06:42,846 - __main__ - INFO - Committing spider results...
+2025-12-21 14:06:42,846 - utils.git_helper - INFO - Git commit/push: branch=main, from_pipeline=True
+2025-12-21 14:06:42,876 - utils.git_helper - INFO - Configured git user: tongwu
+2025-12-21 14:06:42,890 - utils.git_helper - INFO - Added to git: Daily Report
+2025-12-21 14:06:42,904 - utils.git_helper - INFO - Added to git: Ad Hoc
