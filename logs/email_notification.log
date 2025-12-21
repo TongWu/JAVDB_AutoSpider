@@ -1,17 +1,11 @@
-2025-12-21 13:55:53,231 - __main__ - INFO - ============================================================
-2025-12-21 13:55:53,231 - __main__ - INFO - EMAIL NOTIFICATION SCRIPT
-2025-12-21 13:55:53,231 - __main__ - INFO - ============================================================
-2025-12-21 13:55:53,231 - __main__ - INFO - Analyzing logs for critical errors...
-2025-12-21 13:55:53,232 - __main__ - ERROR - CRITICAL ERROR in Spider: CF bypass and proxy fallback failed - movie list not found on 3 pages
-2025-12-21 13:55:53,236 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-12-21 13:55:53,241 - __main__ - INFO - Connecting to SMTP server...
-2025-12-21 13:55:56,551 - __main__ - INFO - Email sent successfully.
-2025-12-21 13:55:56,553 - __main__ - INFO - Committing pipeline log...
-2025-12-21 13:55:56,554 - utils.git_helper - INFO - Git commit/push: branch=main, from_pipeline=True
-2025-12-21 13:55:56,587 - utils.git_helper - INFO - Configured git user: tongwu
-2025-12-21 13:55:56,604 - utils.git_helper - INFO - Added to git: logs/
-2025-12-21 13:55:56,645 - utils.git_helper - INFO - Committed with message: Auto-commit: Pipeline notification 2025-12-21 13:55:56
-2025-12-21 13:55:57,266 - utils.git_helper - ERROR - Git operation failed: Command ['git', 'push', 'https://tongwu:ghp_***MASKED***@github.com/TongWu/JAVDB_AutoSpider.git', 'main'] returned non-zero exit status 1
-2025-12-21 13:55:57,266 - __main__ - INFO - ============================================================
-2025-12-21 13:55:57,266 - __main__ - INFO - EMAIL NOTIFICATION COMPLETED
-2025-12-21 13:55:57,266 - __main__ - INFO - ============================================================
+2025-12-21 14:06:44,622 - __main__ - INFO - ============================================================
+2025-12-21 14:06:44,622 - __main__ - INFO - EMAIL NOTIFICATION SCRIPT
+2025-12-21 14:06:44,622 - __main__ - INFO - ============================================================
+2025-12-21 14:06:44,622 - __main__ - INFO - Analyzing logs for critical errors...
+2025-12-21 14:06:44,622 - __main__ - ERROR - CRITICAL ERROR in Spider: CF bypass and proxy fallback failed - movie list not found on 6 pages
+2025-12-21 14:06:44,627 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
+2025-12-21 14:06:44,634 - __main__ - INFO - Connecting to SMTP server...
+2025-12-21 14:06:47,861 - __main__ - INFO - Email sent successfully.
+2025-12-21 14:06:47,861 - __main__ - INFO - Committing pipeline log...
+2025-12-21 14:06:47,861 - utils.git_helper - INFO - Git commit/push: branch=main, from_pipeline=True
+2025-12-21 14:06:47,888 - utils.git_helper - INFO - Configured git user: tongwu

@@ -1,5 +1,5 @@
-2025-12-21 13:55:48,134 - __main__ - INFO - Processing torrents older than 3 days (before 2025-12-18)
-2025-12-21 13:55:48,497 - __main__ - INFO - Logged into qBittorrent successfully.
-2025-12-21 13:55:48,509 - __main__ - INFO - Found 0 torrents across categories ['Daily Ingestion', 'Ad Hoc']
-2025-12-21 13:55:48,509 - __main__ - INFO - Filtered 0 torrents older than 3 days
-2025-12-21 13:55:48,509 - __main__ - INFO - No torrents to process.
+2025-12-21 14:06:44,077 - __main__ - INFO - Processing torrents older than 3 days (before 2025-12-18)
+2025-12-21 14:06:44,531 - __main__ - INFO - Logged into qBittorrent successfully.
+2025-12-21 14:06:44,544 - __main__ - INFO - Found 0 torrents across categories ['Daily Ingestion', 'Ad Hoc']
+2025-12-21 14:06:44,545 - __main__ - INFO - Filtered 0 torrents older than 3 days
+2025-12-21 14:06:44,545 - __main__ - INFO - No torrents to process.
