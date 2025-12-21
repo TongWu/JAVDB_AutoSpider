@@ -367,9 +367,11 @@ class RequestHandler:
                         # Age modal exists but no content - need to click over18 via CF bypass
                         logger.debug(f"[CF Bypass] {context_msg}: Age modal detected without content, attempting over18 bypass via CF...")
                         
+                        over18_link_found = False
                         age_links = age_modal.find_all('a', href=True)
                         for link in age_links:
                             if 'over18' in link.get('href', ''):
+                                over18_link_found = True
                                 over18_path = link.get('href')
                                 over18_url = urljoin(self.config.base_url, over18_path)
                                 
@@ -409,7 +411,17 @@ class RequestHandler:
                                             return html_content2, True, False
                                         else:
                                             logger.warning(f"[CF Bypass] {context_msg}: Over18 bypass did not help, still no content")
+                                else:
+                                    logger.warning(f"[CF Bypass] {context_msg}: Over18 bypass request failed")
                                 break
+                        
+                        # If we reach here, age modal was detected without content and bypass failed or wasn't possible
+                        if not over18_link_found:
+                            logger.warning(f"[CF Bypass] {context_msg}: Age modal detected but no over18 link found")
+                        
+                        # Return failure since we have age modal but no content
+                        logger.warning(f"[CF Bypass] {context_msg}: Age verification bypass failed - returning HTML without valid content")
+                        return html_content, False, False
                 
                 logger.info(f"[CF Bypass] {context_msg} SUCCESS - got valid HTML (size={content_size} bytes)")
                 return html_content, True, False
