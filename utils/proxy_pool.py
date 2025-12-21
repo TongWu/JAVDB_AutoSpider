@@ -141,7 +141,7 @@ class ProxyPool:
     """
     
     def __init__(self, cooldown_seconds: int = 300, max_failures_before_cooldown: int = 3,
-                 ban_log_file: str = 'logs/proxy_bans.csv'):
+                 ban_log_file: str = 'Daily Report/proxy_bans.csv'):
         """
         Initialize proxy pool
         
