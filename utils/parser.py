@@ -390,7 +390,7 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                             logger.debug(
                                 f"[Page {page_num}] Skipped entry (invalid data): {video_code} - Rate: {rate}, Comments: {comment_number}")
 
-    logger.info(f"[Page {page_num}] Found {len(results)} entries for phase {phase}")
+    logger.debug(f"[Page {page_num}] Found {len(results)} entries for phase {phase}")
     return results
 
 

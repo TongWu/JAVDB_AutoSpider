@@ -199,10 +199,9 @@ class TestExtractSpiderStatistics:
         """Test extracting statistics from spider log."""
         log_path = os.path.join(temp_dir, 'spider.log')
         with open(log_path, 'w') as f:
-            f.write("[Page 1] Found 20 entries for phase 1\n")
-            f.write("[Page 2] Found 15 entries for phase 1\n")
+            f.write("[Page  1] Found  20 entries for phase 1,  10 for phase 2\n")
+            f.write("[Page  2] Found  15 entries for phase 1,   0 for phase 2\n")
             f.write("Phase 1 completed: 30 entries processed\n")
-            f.write("[Page 1] Found 10 entries for phase 2\n")
             f.write("Phase 2 completed: 8 entries processed\n")
             f.write("Total entries found: 38\n")
             f.write("Successfully processed: 38\n")
