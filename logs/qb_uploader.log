@@ -47,3 +47,6 @@
 2025-12-21 16:10:49,604 - __main__ - INFO - Committing uploader results...
 2025-12-21 16:10:49,605 - utils.git_helper - INFO - Git commit/push: branch=main, from_pipeline=False
 2025-12-21 16:10:49,637 - utils.git_helper - INFO - Configured git user: tongwu
+2025-12-21 16:10:49,655 - utils.git_helper - INFO - Added to git: logs/
+2025-12-21 16:10:49,699 - utils.git_helper - INFO - Committed with message: Auto-commit: Uploader results 2025-12-21 16:10:49
+2025-12-21 16:10:50,326 - utils.git_helper - ERROR - Git operation failed: Command ['git', 'push', 'https://tongwu:ghp_***MASKED***@github.com/TongWu/JAVDB_AutoSpider.git', 'main'] returned non-zero exit status 1
