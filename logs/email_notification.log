@@ -1,11 +1,11 @@
-2025-12-21 00:30:53,731 - __main__ - INFO - ============================================================
-2025-12-21 00:30:53,731 - __main__ - INFO - EMAIL NOTIFICATION SCRIPT
-2025-12-21 00:30:53,731 - __main__ - INFO - ============================================================
-2025-12-21 00:30:53,731 - __main__ - INFO - Analyzing logs for critical errors...
-2025-12-21 00:30:53,738 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-12-21 00:30:53,747 - __main__ - INFO - Connecting to SMTP server...
-2025-12-21 00:30:56,824 - __main__ - INFO - Email sent successfully.
-2025-12-21 00:30:56,824 - __main__ - INFO - Skipping git commit - no credentials provided (commit will be handled by workflow)
-2025-12-21 00:30:56,824 - __main__ - INFO - ============================================================
-2025-12-21 00:30:56,824 - __main__ - INFO - EMAIL NOTIFICATION COMPLETED
-2025-12-21 00:30:56,824 - __main__ - INFO - ============================================================
+2025-12-21 13:55:48,603 - __main__ - INFO - ============================================================
+2025-12-21 13:55:48,603 - __main__ - INFO - EMAIL NOTIFICATION SCRIPT
+2025-12-21 13:55:48,603 - __main__ - INFO - ============================================================
+2025-12-21 13:55:48,603 - __main__ - INFO - Analyzing logs for critical errors...
+2025-12-21 13:55:48,603 - __main__ - ERROR - CRITICAL ERROR in Spider: CF bypass and proxy fallback failed - movie list not found on 3 pages
+2025-12-21 13:55:48,609 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
+2025-12-21 13:55:48,617 - __main__ - INFO - Connecting to SMTP server...
+2025-12-21 13:55:52,503 - __main__ - INFO - Email sent successfully.
+2025-12-21 13:55:52,503 - __main__ - INFO - Committing pipeline log...
+2025-12-21 13:55:52,504 - utils.git_helper - INFO - Git commit/push: branch=main, from_pipeline=True
+2025-12-21 13:55:52,525 - utils.git_helper - INFO - Configured git user: tongwu
