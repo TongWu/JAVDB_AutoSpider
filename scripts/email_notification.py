@@ -324,23 +324,36 @@ def extract_spider_statistics(log_path):
         phase1_matches = re.findall(phase1_found_pattern, content)
         stats['phase1']['found'] = sum(int(m) for m in phase1_matches)
         
-        phase1_completed = re.search(r'Phase 1 completed: (\d+) entries processed', content)
-        if phase1_completed:
-            stats['phase1']['processed'] = int(phase1_completed.group(1))
+        # Match new format: "Phase 1 completed: X found, Y skipped (history), Z written to CSV"
+        # or old format: "Phase 1 completed: X entries processed"
+        phase1_completed_new = re.search(r'Phase 1 completed: (\d+) found, (\d+) skipped.*?, (\d+) written to CSV', content)
+        phase1_completed_old = re.search(r'Phase 1 completed: (\d+) entries processed', content)
+        if phase1_completed_new:
+            stats['phase1']['processed'] = int(phase1_completed_new.group(3))  # written to CSV
+        elif phase1_completed_old:
+            stats['phase1']['processed'] = int(phase1_completed_old.group(1))
         
         # Extract phase 2 statistics
         # Match both new format "X for phase 2" and old format "Found X entries for phase 2"
-        # New format: ", Y for phase 2" or just "Found Y entries for phase 2"
+        # New format: ", Y for phase 2" (combined with phase 1 on same line)
+        # Old format: "[Page X] Found Y entries for phase 2" (separate line)
+        # Accumulate matches from both patterns to handle mixed logs
         phase2_new_pattern = r',\s+(\d+) for phase 2'
         phase2_old_pattern = r'\[Page\s+\d+\] Found\s+(\d+) entries for phase 2'
         phase2_new_matches = re.findall(phase2_new_pattern, content)
         phase2_old_matches = re.findall(phase2_old_pattern, content)
-        phase2_matches = phase2_new_matches if phase2_new_matches else phase2_old_matches
-        stats['phase2']['found'] = sum(int(m) for m in phase2_matches)
+        # Combine matches from both patterns
+        all_phase2_matches = phase2_new_matches + phase2_old_matches
+        stats['phase2']['found'] = sum(int(m) for m in all_phase2_matches)
         
-        phase2_completed = re.search(r'Phase 2 completed: (\d+) entries processed', content)
-        if phase2_completed:
-            stats['phase2']['processed'] = int(phase2_completed.group(1))
+        # Match new format: "Phase 2 completed: X found, Y skipped (history), Z written to CSV"
+        # or old format: "Phase 2 completed: X entries processed"
+        phase2_completed_new = re.search(r'Phase 2 completed: (\d+) found, (\d+) skipped.*?, (\d+) written to CSV', content)
+        phase2_completed_old = re.search(r'Phase 2 completed: (\d+) entries processed', content)
+        if phase2_completed_new:
+            stats['phase2']['processed'] = int(phase2_completed_new.group(3))  # written to CSV
+        elif phase2_completed_old:
+            stats['phase2']['processed'] = int(phase2_completed_old.group(1))
         
         # Extract overall statistics
         total_found = re.search(r'Total entries found: (\d+)', content)
