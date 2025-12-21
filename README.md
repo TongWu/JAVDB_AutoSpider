@@ -388,7 +388,7 @@ python3 javdb_login.py
 **Check Proxy Ban Status:**
 ```bash
 # View ban records
-cat logs/proxy_bans.csv
+cat "Daily Report/proxy_bans.csv"
 
 # Ban information is also included in pipeline email reports
 ```
@@ -702,7 +702,7 @@ Configure multiple proxies for automatic failover:
 - **Passive Health Checking**: Only marks proxies as failed on actual failures (no active probing)
 - **Cooldown Mechanism**: Failed proxies are temporarily disabled to allow recovery (8 days default)
 - **Ban Detection**: Automatically detects when proxies are banned by JavDB
-- **Persistent Ban Records**: Ban history stored in `logs/proxy_bans.csv` and persists across runs
+- **Persistent Ban Records**: Ban history stored in `Daily Report/proxy_bans.csv` and persists across runs
 - **Statistics Tracking**: Detailed success rates and usage statistics for each proxy
 - **Perfect for JavDB**: Respects strict rate limiting while providing redundancy
 
@@ -724,7 +724,7 @@ PROXY_POOL_MAX_FAILURES = 3  # Max failures before cooldown
 
 The system includes intelligent ban detection and management:
 - **Automatic Detection**: Detects when JavDB blocks a proxy IP
-- **Persistent Records**: Ban history stored in `logs/proxy_bans.csv`
+- **Persistent Records**: Ban history stored in `Daily Report/proxy_bans.csv`
 - **8-Day Cooldown**: Default cooldown matches JavDB's 7-day ban period
 - **Exit Code 2**: Spider exits with code 2 when proxies are banned (helps with automation)
 - **Ban Summary**: Detailed ban status included in pipeline email reports
@@ -732,7 +732,7 @@ The system includes intelligent ban detection and management:
 **Checking Ban Status:**
 ```bash
 # Ban records are logged in:
-cat logs/proxy_bans.csv
+cat "Daily Report/proxy_bans.csv"
 
 # Pipeline emails include ban summary with:
 # - Proxy name and IP
@@ -1349,7 +1349,7 @@ Progress tracking includes:
 - **Proxy + CF not working**: Ensure CF bypass service runs on proxy server
 
 **Proxy Ban Issues:**
-- **All proxies banned**: Check `logs/proxy_bans.csv` for ban status
+- **All proxies banned**: Check `Daily Report/proxy_bans.csv` for ban status
 - **Spider exits with code 2**: Indicates proxy ban detected, wait for cooldown or add new proxies
 - **Cooldown not working**: Default is 8 days, adjust PROXY_POOL_COOLDOWN_SECONDS if needed
 - **Ban false positives**: Check if JavDB is actually accessible from proxy IP
@@ -1454,7 +1454,7 @@ python3 pikpak_bridge.py --days 7 --individual  # Custom days, individual mode
 
 - **Main config**: `config.py` (copy from `config.py.example`)
 - **History file**: `Daily Report/parsed_movies_history.csv`
-- **Ban records**: `logs/proxy_bans.csv`
+- **Ban records**: `Daily Report/proxy_bans.csv`
 - **Login docs**: `utils/login/JAVDB_LOGIN_README.md`
 
 ### Important Links
