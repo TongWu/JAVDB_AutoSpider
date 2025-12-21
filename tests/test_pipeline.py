@@ -201,8 +201,8 @@ class TestExtractSpiderStatistics:
         with open(log_path, 'w') as f:
             f.write("[Page  1] Found  20 entries for phase 1,  10 for phase 2\n")
             f.write("[Page  2] Found  15 entries for phase 1,   0 for phase 2\n")
-            f.write("Phase 1 completed: 30 entries processed\n")
-            f.write("Phase 2 completed: 8 entries processed\n")
+            f.write("Phase 1 completed: 35 found, 5 skipped (history), 30 written to CSV\n")
+            f.write("Phase 2 completed: 10 found, 2 skipped (history), 8 written to CSV\n")
             f.write("Total entries found: 38\n")
             f.write("Successfully processed: 38\n")
             f.write("Skipped already parsed in this session: 5\n")
