@@ -316,17 +316,19 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
         is_adhoc_mode: If True, don't mark proxies as banned on failure (for custom URLs)
     
     Returns:
-        tuple: (html_content, has_movie_list, proxy_was_banned, effective_use_proxy, effective_use_cf_bypass)
+        tuple: (html_content, has_movie_list, proxy_was_banned, effective_use_proxy, effective_use_cf_bypass, is_valid_empty_page)
             - html_content: The HTML content (None if failed)
             - has_movie_list: True if movie list found
             - proxy_was_banned: True if a proxy was banned during fetch
             - effective_use_proxy: The proxy setting that eventually worked
             - effective_use_cf_bypass: The CF bypass setting that eventually worked
+            - is_valid_empty_page: True if page is valid but has no content (e.g. "No content yet")
     """
     proxy_was_banned = False
     last_failed_html = None  # Store HTML from failed attempts
     
     # --- Helper function to attempt fetch and validate ---
+    # Returns: (html, has_movie_list, is_valid_empty_page)
     def try_fetch(u_proxy, u_cf, context_msg):
         nonlocal last_failed_html
         logger.debug(f"[Page {page_num}] {context_msg}...")
@@ -339,22 +341,46 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
                 movie_list = soup.find('div', class_='movie-list h cols-4 vcols-8')
                 if movie_list:
                     logger.debug(f"[Page {page_num}] Success: {context_msg}")
-                    return html, True
+                    return html, True, False
                 else:
-                    # Fetched HTML but validation failed (no movie list)
-                    # Store it as potential return value if all fallbacks fail
-                    last_failed_html = html
-                    logger.debug(f"[Page {page_num}] Validation failed (no movie list): {context_msg}")
+                    # No movie list - check if this is a valid empty page or a failed fetch
+                    page_text = soup.get_text()
+                    title = soup.find('title')
+                    title_text = title.text.strip() if title else ""
+                    age_modal = soup.find('div', class_='modal is-active over18-modal')
+                    
+                    # Check if it's a login page
+                    is_login_page = '登入' in title_text or 'login' in title_text.lower()
+                    
+                    # Check if it's a valid empty results page
+                    # "No content yet" means the page exists but has no movies
+                    has_no_content_msg = 'No content yet' in page_text or 'No result' in page_text
+                    
+                    if not is_login_page and not age_modal and has_no_content_msg:
+                        logger.info(f"[Page {page_num}] Page exists but has no content ('No content yet' detected)")
+                        # This is a valid empty page - no need to retry
+                        return html, False, True
+                    elif not is_login_page and not age_modal and len(html) > 20000:
+                        # Large HTML but no movie list - might be a valid page, treat as empty
+                        logger.debug(f"[Page {page_num}] Large HTML without movie list, treating as empty page")
+                        return html, False, True
+                    else:
+                        # Fetched HTML but validation failed (login page or age modal)
+                        last_failed_html = html
+                        logger.debug(f"[Page {page_num}] Validation failed (no movie list, login={is_login_page}, age_modal={age_modal is not None}): {context_msg}")
         except Exception as e:
             logger.debug(f"[Page {page_num}] Failed {context_msg}: {e}")
-        return None, False
+        return None, False, False
 
     # --- Phase 0: Initial Attempt (User Config) ---
     current_proxy_name = global_proxy_pool.get_current_proxy_name() if (use_proxy and global_proxy_pool) else "None"
-    html, success = try_fetch(use_proxy, use_cf_bypass, 
+    html, success, is_valid_empty = try_fetch(use_proxy, use_cf_bypass, 
                               f"Initial attempt (Proxy={use_proxy}, CF={use_cf_bypass}, Node={current_proxy_name})")
     if success:
-        return html, True, False, use_proxy, use_cf_bypass
+        return html, True, False, use_proxy, use_cf_bypass, False
+    if is_valid_empty:
+        # Page fetched successfully but has no content - this is a valid stopping point
+        return html, False, False, use_proxy, use_cf_bypass, True
 
     logger.warning(f"[Page {page_num}] Initial attempt failed. Starting smart fallback mechanism...")
 
@@ -363,17 +389,19 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
     # The user must explicitly provide --use-cf-bypass to enable this feature
     if not use_proxy and not use_cf_bypass:
         logger.debug(f"[Page {page_num}] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...")
-        # html, success = try_fetch(False, True, "Fallback Phase 1: Local CF Bypass (No Proxy)")
+        # html, success, is_valid_empty = try_fetch(False, True, "Fallback Phase 1: Local CF Bypass (No Proxy)")
         # if success:
         #     logger.info(f"[Page {page_num}] Local CF Bypass succeeded. Switching mode to: use_cf_bypass=True")
-        #     return html, True, False, False, True
+        #     return html, True, False, False, True, False
+        # if is_valid_empty:
+        #     return html, False, False, False, True, True
         # logger.warning(f"[Page {page_num}] Local CF Bypass failed. Assuming local IP banned. Switching to Proxy Pool...")
 
     # --- Phase 2: Proxy Pool Iteration ---
     if global_proxy_pool is None:
         logger.error(f"[Page {page_num}] Fallback failed: No proxy pool configured")
         # Return last failed HTML if we have it, otherwise None
-        return last_failed_html, False, False, use_proxy, use_cf_bypass
+        return last_failed_html, False, False, use_proxy, use_cf_bypass, False
 
     # If we weren't using proxy, start using it now
     if not use_proxy:
@@ -393,16 +421,22 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
         
         # Sub-step 2.1: Try Direct Proxy (No CF)
         # User requested sequence: "依次是不使用cloudflare bypass和使用bypass"
-        html, success = try_fetch(True, False, f"Fallback Phase 2: Proxy Direct (Node={current_proxy_name})")
+        html, success, is_valid_empty = try_fetch(True, False, f"Fallback Phase 2: Proxy Direct (Node={current_proxy_name})")
         if success:
             logger.info(f"[Page {page_num}] Proxy Direct succeeded. Switching mode to: use_proxy=True, use_cf_bypass=False")
-            return html, True, proxy_was_banned, True, False
+            return html, True, proxy_was_banned, True, False, False
+        if is_valid_empty:
+            logger.info(f"[Page {page_num}] Proxy Direct: valid empty page detected")
+            return html, False, proxy_was_banned, True, False, True
             
         # Sub-step 2.2: Try Proxy + CF Bypass
-        html, success = try_fetch(True, True, f"Fallback Phase 2: Proxy + CF Bypass (Node={current_proxy_name})")
+        html, success, is_valid_empty = try_fetch(True, True, f"Fallback Phase 2: Proxy + CF Bypass (Node={current_proxy_name})")
         if success:
             logger.info(f"[Page {page_num}] Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True")
-            return html, True, proxy_was_banned, True, True
+            return html, True, proxy_was_banned, True, True, False
+        if is_valid_empty:
+            logger.info(f"[Page {page_num}] Proxy + CF Bypass: valid empty page detected")
+            return html, False, proxy_was_banned, True, True, True
 
         # If both failed for this proxy, handle based on mode
         attempts += 1
@@ -428,7 +462,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
             break
 
     # Return the last HTML content we fetched (even if validation failed), or None if all fetches failed completely
-    return last_failed_html, False, proxy_was_banned, use_proxy, use_cf_bypass
+    return last_failed_html, False, proxy_was_banned, use_proxy, use_cf_bypass, False
 
 
 def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, use_cf_bypass, entry_index, is_adhoc_mode=False):
@@ -968,84 +1002,117 @@ def main():
     skipped_session_count = 0
     skipped_history_count = 0  # Track entries skipped due to history
 
-    # Phase 1: Collect entries with both "含中字磁鏈" and "今日新種"/"昨日新種" tags
+    # ========================================
+    # Fetch all index pages and parse immediately
+    # ========================================
+    # This avoids fetching the same pages twice for phase 1 and phase 2
+    # Parse results are cached, not the raw HTML
+    cached_pages = {}  # {page_num: index_html} - for phase 2 parsing
+    all_index_results_phase2 = []  # Pre-collect phase 2 results
+    last_valid_page = 0
+    
+    logger.info("=" * 50)
+    logger.info("Fetching and parsing index pages")
+    logger.info("=" * 50)
+
+    page_num = start_page
+    consecutive_empty_pages = 0
+        
+    while True:
+        page_url = get_page_url(page_num, phase=1, custom_url=custom_url)
+        logger.debug(f"[Page {page_num}] Fetching: {page_url}")
+
+        # Fetch index page with fallback mechanism
+        index_html, has_movie_list, proxy_was_banned, effective_use_proxy, effective_use_cf_bypass, is_valid_empty_page = fetch_index_page_with_fallback(
+            page_url, session, 
+            use_cookie=custom_url is not None, 
+            use_proxy=use_proxy, 
+            use_cf_bypass=use_cf_bypass,
+            page_num=page_num,
+            is_adhoc_mode=custom_url is not None  # Don't ban proxies in ad hoc mode
+        )
+        
+        # If fallback was triggered (settings changed), apply cooldown but DON'T persist the settings
+        if has_movie_list and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass):
+            logger.info(f"[Page {page_num}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). Applying {FALLBACK_COOLDOWN}s cooldown before next page...")
+            time.sleep(FALLBACK_COOLDOWN)
+        
+        if proxy_was_banned:
+            any_proxy_banned = True
+        
+        # Handle valid empty page (e.g. "No content yet") - this is the last page
+        if is_valid_empty_page:
+            logger.info(f"[Page {page_num}] End of content reached (no more pages available)")
+            break
+        
+        if not index_html:
+            logger.info(f"[Page {page_num}] no movie list found (page fetch failed or does not exist)")
+            consecutive_empty_pages += 1
+            if consecutive_empty_pages >= max_consecutive_empty:
+                logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping fetch")
+                break
+            page_num += 1
+            continue
+        
+        if not has_movie_list:
+            logger.warning(f"[Page {page_num}] No movie list found after all fallback attempts")
+            consecutive_empty_pages += 1
+            if consecutive_empty_pages >= max_consecutive_empty:
+                logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping fetch")
+                break
+            page_num += 1
+            continue
+
+        # Parse immediately after fetching - log results right away
+        p1_count = 0
+        p2_count = 0
+        
+        if phase_mode in ['1', 'all']:
+            page_results = parse_index(index_html, page_num, phase=1,
+                                       disable_new_releases_filter=(custom_url is not None or ignore_release_date),
+                                       is_adhoc_mode=(custom_url is not None))
+            p1_count = len(page_results)
+            if p1_count > 0:
+                all_index_results.extend(page_results)
+        
+        # Also parse for phase 2 if needed (reuse the same HTML)
+        if phase_mode in ['2', 'all'] and custom_url is None:
+            page_results_p2 = parse_index(index_html, page_num, phase=2,
+                                          disable_new_releases_filter=ignore_release_date,
+                                          is_adhoc_mode=False)
+            p2_count = len(page_results_p2)
+            if p2_count > 0:
+                all_index_results_phase2.extend(page_results_p2)
+        
+        # Log combined results with aligned formatting
+        if phase_mode == 'all':
+            logger.info(f"[Page {page_num:2d}] Found {p1_count:3d} entries for phase 1, {p2_count:3d} for phase 2")
+        elif phase_mode == '1':
+            logger.info(f"[Page {page_num:2d}] Found {p1_count:3d} entries for phase 1")
+        elif phase_mode == '2':
+            logger.info(f"[Page {page_num:2d}] Found {p2_count:3d} entries for phase 2")
+        
+        last_valid_page = page_num
+        consecutive_empty_pages = 0  # Reset counter when we find valid page
+
+        # If not parse_all and reached end_page, stop
+        if not parse_all and page_num >= end_page:
+            break
+
+        page_num += 1
+
+        # Small delay between pages
+        time.sleep(PAGE_SLEEP)
+    
+    logger.info(f"Fetched and parsed {last_valid_page - start_page + 1 if last_valid_page >= start_page else 0} pages")
+
+    # ========================================
+    # Process Phase 1 entries
+    # ========================================
     if phase_mode in ['1', 'all']:
         logger.info("=" * 50)
-        logger.info("PHASE 1: Processing entries with both subtitle and today/yesterday tags")
+        logger.info("PHASE 1: Processing collected entries")
         logger.info("=" * 50)
-
-        page_num = start_page
-        consecutive_empty_pages = 0  # Track consecutive empty pages
-        
-        while True:
-            page_url = get_page_url(page_num, phase=1, custom_url=custom_url)
-            logger.debug(f"[Page {page_num}] Fetching: {page_url}")
-
-            # Fetch index page with fallback mechanism
-            index_html, has_movie_list, proxy_was_banned, effective_use_proxy, effective_use_cf_bypass = fetch_index_page_with_fallback(
-                page_url, session, 
-                use_cookie=custom_url is not None, 
-                use_proxy=use_proxy, 
-                use_cf_bypass=use_cf_bypass,
-                page_num=page_num,
-                is_adhoc_mode=custom_url is not None  # Don't ban proxies in ad hoc mode
-            )
-            
-            # If fallback was triggered (settings changed), apply cooldown but DON'T persist the settings
-            # Next page/item should start fresh with original settings and wait for fallback if needed
-            if has_movie_list and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass):
-                logger.info(f"[Page {page_num}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). Applying {FALLBACK_COOLDOWN}s cooldown before next page...")
-                time.sleep(FALLBACK_COOLDOWN)
-                # Note: NOT updating use_proxy/use_cf_bypass - next page will use original settings
-            
-            if proxy_was_banned:
-                any_proxy_banned = True
-            
-            if not index_html:
-                logger.info(f"[Page {page_num}] no movie list found (page fetch failed or does not exist)")
-                consecutive_empty_pages += 1
-                if consecutive_empty_pages >= max_consecutive_empty:
-                    logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping phase 1")
-                    break
-                page_num += 1
-                continue
-            
-            if not has_movie_list:
-                # Fallback mechanism exhausted but still no movie list
-                logger.warning(f"[Page {page_num}] No movie list found after all fallback attempts")
-                consecutive_empty_pages += 1
-                if consecutive_empty_pages >= max_consecutive_empty:
-                    logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping phase 1")
-                    break
-                page_num += 1
-                continue
-
-            # Parse index page for phase 1
-            # Disable new releases filter if: 1) custom URL is used, or 2) ignore_release_date flag is set
-            page_results = parse_index(index_html, page_num, phase=1,
-                                       disable_new_releases_filter=(custom_url is not None or ignore_release_date))
-
-            if len(page_results) == 0:
-                # Movie list exists but no eligible entries found (normal filtering)
-                logger.debug(f"[Page {page_num}] found 0 entries for phase 1 (page has content but no eligible entries)")
-                # Don't increment consecutive_empty_pages here - the page has content, just no eligible entries
-            else:
-                all_index_results.extend(page_results)
-                consecutive_empty_pages = 0  # Reset counter when we find results
-
-            # If parse_all is enabled and no results found, stop
-            if parse_all and len(page_results) == 0:
-                logger.info(f"[Page {page_num}] No results found, stopping phase 1")
-                break
-
-            # If not parse_all and reached end_page, stop
-            if not parse_all and page_num >= end_page:
-                break
-
-            page_num += 1
-
-            # Small delay between pages
-            time.sleep(PAGE_SLEEP)
 
         # Process phase 1 entries
         total_entries_phase1 = len(all_index_results)
@@ -1181,93 +1248,33 @@ def main():
                 # Normal delay between items
                 time.sleep(MOVIE_SLEEP)
 
-        logger.info(f"Phase 1 completed: {len(phase1_rows)} entries processed")
+        # Calculate phase 1 statistics
+        phase1_skipped_history = sum(1 for entry in all_index_results if has_complete_subtitles(entry['href'], parsed_movies_history_phase1))
+        phase1_actually_fetched = total_entries_phase1 - phase1_skipped_history
+        logger.info(f"Phase 1 completed: {total_entries_phase1} found, {phase1_skipped_history} skipped (history), {len(phase1_rows)} written to CSV")
 
+    # ========================================
+    # Process Phase 2 entries (already parsed during fetch)
+    # ========================================
     # Phase 2: Collect entries with only "今日新種"/"昨日新種" tag (filtered by quality)
     if phase_mode in ['2', 'all']:
-        # Add cooldown delay between phases to avoid triggering Cloudflare protection
-        if phase_mode == 'all':
-            logger.info(f"Waiting {PHASE_TRANSITION_COOLDOWN} seconds before Phase 2 to allow Cloudflare cooldown...")
-            time.sleep(PHASE_TRANSITION_COOLDOWN)
-        
-        logger.info("=" * 50)
-        logger.info(f"PHASE 2: Processing entries with only today/yesterday tag (rate > {PHASE2_MIN_RATE}, comments > {PHASE2_MIN_COMMENTS})")
-        logger.info("=" * 50)
-
-        all_index_results_phase2 = []
-
-        page_num = start_page
-        consecutive_empty_pages = 0  # Track consecutive empty pages
-        
-        while True:
-            page_url = get_page_url(page_num, phase=2, custom_url=custom_url)
-            logger.debug(f"[Page {page_num}] Fetching for phase 2: {page_url}")
-
-            # Fetch index page with fallback mechanism
-            index_html, has_movie_list, proxy_was_banned, effective_use_proxy, effective_use_cf_bypass = fetch_index_page_with_fallback(
-                page_url, session, 
-                use_cookie=custom_url is not None, 
-                use_proxy=use_proxy, 
-                use_cf_bypass=use_cf_bypass,
-                page_num=page_num,
-                is_adhoc_mode=custom_url is not None  # Don't ban proxies in ad hoc mode
-            )
+        # In ad hoc mode, phase 2 is skipped (all entries processed in phase 1)
+        if custom_url is not None:
+            logger.info("=" * 50)
+            logger.info("PHASE 2: Skipped (AD HOC MODE - all entries processed in Phase 1)")
+            logger.info("=" * 50)
+            all_index_results_phase2 = []
+        else:
+            # Add cooldown delay between phases to avoid triggering Cloudflare protection
+            if phase_mode == 'all':
+                logger.info(f"Waiting {PHASE_TRANSITION_COOLDOWN} seconds before Phase 2 to allow Cloudflare cooldown...")
+                time.sleep(PHASE_TRANSITION_COOLDOWN)
             
-            # If fallback was triggered (settings changed), apply cooldown but DON'T persist the settings
-            # Next page/item should start fresh with original settings and wait for fallback if needed
-            if has_movie_list and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass):
-                logger.info(f"[Page {page_num}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). Applying {FALLBACK_COOLDOWN}s cooldown before next page...")
-                time.sleep(FALLBACK_COOLDOWN)
-                # Note: NOT updating use_proxy/use_cf_bypass - next page will use original settings
-            
-            if proxy_was_banned:
-                any_proxy_banned_phase2 = True
-            
-            if not index_html:
-                logger.info(f"[Page {page_num}] no movie list found (page fetch failed or does not exist)")
-                consecutive_empty_pages += 1
-                if consecutive_empty_pages >= max_consecutive_empty:
-                    logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping phase 2")
-                    break
-                page_num += 1
-                continue
-            
-            if not has_movie_list:
-                # Fallback mechanism exhausted but still no movie list
-                logger.warning(f"[Page {page_num}] No movie list found after all fallback attempts")
-                consecutive_empty_pages += 1
-                if consecutive_empty_pages >= max_consecutive_empty:
-                    logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping phase 2")
-                    break
-                page_num += 1
-                continue
+            logger.info("=" * 50)
+            logger.info(f"PHASE 2: Processing {len(all_index_results_phase2)} collected entries (rate > {PHASE2_MIN_RATE}, comments > {PHASE2_MIN_COMMENTS})")
+            logger.info("=" * 50)
 
-            # Parse index page for phase 2
-            # Disable new releases filter if: 1) custom URL is used, or 2) ignore_release_date flag is set
-            page_results = parse_index(index_html, page_num, phase=2,
-                                       disable_new_releases_filter=(custom_url is not None or ignore_release_date))
-
-            if len(page_results) == 0:
-                # Movie list exists but no eligible entries found (normal filtering)
-                logger.debug(f"[Page {page_num}] found 0 entries for phase 2 (page has content but no eligible entries)")
-                # Don't increment consecutive_empty_pages here - the page has content, just no eligible entries
-            else:
-                all_index_results_phase2.extend(page_results)
-                consecutive_empty_pages = 0  # Reset counter when we find results
-
-            # If parse_all is enabled and no results found, stop
-            if parse_all and len(page_results) == 0:
-                logger.info(f"[Page {page_num}] No results found, stopping phase 2")
-                break
-
-            # If not parse_all and reached end_page, stop
-            if not parse_all and page_num >= end_page:
-                break
-
-            page_num += 1
-
-            # Small delay between pages
-            time.sleep(PAGE_SLEEP)
+            # all_index_results_phase2 was already populated during the fetch phase
 
         # Process phase 2 entries
         total_entries_phase2 = len(all_index_results_phase2)
@@ -1404,7 +1411,9 @@ def main():
                 # Normal delay between items
                 time.sleep(MOVIE_SLEEP)
 
-        logger.info(f"Phase 2 completed: {len(phase2_rows)} entries processed")
+        # Calculate phase 2 statistics
+        phase2_skipped_history = sum(1 for entry in all_index_results_phase2 if has_complete_subtitles(entry['href'], parsed_movies_history_phase2))
+        logger.info(f"Phase 2 completed: {total_entries_phase2} found, {phase2_skipped_history} skipped (history), {len(phase2_rows)} written to CSV")
 
     # CSV has been written incrementally during processing
     if not dry_run:
