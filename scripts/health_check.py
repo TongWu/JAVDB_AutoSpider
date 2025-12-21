@@ -18,6 +18,7 @@ Exit codes:
 
 import os
 import sys
+import re
 import argparse
 import socket
 import logging
@@ -28,6 +29,35 @@ from datetime import datetime
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(project_root)
 sys.path.insert(0, project_root)
+
+
+def mask_ip_address(host: str) -> str:
+    """
+    Mask IP address for logging (hide middle octets).
+    
+    Args:
+        host: Hostname or IP address
+        
+    Returns:
+        Masked IP (e.g., 192.xxx.xxx.168) or original hostname if not an IP
+        
+    Examples:
+        192.168.1.100 -> 192.xxx.xxx.100
+        example.com -> example.com
+    """
+    if not host:
+        return 'None'
+    
+    # Check if it's an IPv4 address
+    ip_pattern = r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$'
+    match = re.match(ip_pattern, str(host))
+    
+    if match:
+        # Mask the middle two octets
+        return f"{match.group(1)}.xxx.xxx.{match.group(4)}"
+    
+    # Not an IP address, return as-is (hostname)
+    return str(host)
 
 # Import configuration
 try:
@@ -56,6 +86,8 @@ def check_qbittorrent_connection() -> Tuple[bool, str]:
     Returns:
         Tuple of (success, message)
     """
+    masked_host = mask_ip_address(QB_HOST)
+    
     try:
         import requests
         
@@ -63,9 +95,11 @@ def check_qbittorrent_connection() -> Tuple[bool, str]:
         login_url = f"{base_url}/api/v2/auth/login"
         
         # Test connection with timeout
-        logger.info(f"Testing qBittorrent connection to {QB_HOST}:{QB_PORT}...")
+        logger.info(f"Testing qBittorrent connection to {masked_host}:{QB_PORT}...")
         
         session = requests.Session()
+        # Disable environment proxy to avoid interference
+        session.trust_env = False
         response = session.post(
             login_url,
             data={'username': QB_USERNAME, 'password': QB_PASSWORD},
@@ -88,9 +122,9 @@ def check_qbittorrent_connection() -> Tuple[bool, str]:
             return False, f"Unexpected response: {response.status_code} - {response.text}"
             
     except requests.exceptions.ConnectionError:
-        return False, f"Cannot connect to {QB_HOST}:{QB_PORT} - connection refused"
+        return False, f"Cannot connect to {masked_host}:{QB_PORT} - connection refused"
     except requests.exceptions.Timeout:
-        return False, f"Connection timeout to {QB_HOST}:{QB_PORT}"
+        return False, f"Connection timeout to {masked_host}:{QB_PORT}"
     except Exception as e:
         return False, f"Error: {str(e)}"
 
@@ -140,8 +174,10 @@ def check_smtp_connection() -> Tuple[bool, str]:
     Returns:
         Tuple of (success, message)
     """
+    masked_server = mask_ip_address(SMTP_SERVER)
+    
     try:
-        logger.info(f"Testing SMTP connection to {SMTP_SERVER}:{SMTP_PORT}...")
+        logger.info(f"Testing SMTP connection to {masked_server}:{SMTP_PORT}...")
         
         # Just test TCP connectivity, don't actually authenticate
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -150,12 +186,12 @@ def check_smtp_connection() -> Tuple[bool, str]:
         sock.close()
         
         if result == 0:
-            return True, f"SMTP server {SMTP_SERVER}:{SMTP_PORT} is reachable"
+            return True, f"SMTP server {masked_server}:{SMTP_PORT} is reachable"
         else:
-            return False, f"Cannot connect to SMTP server {SMTP_SERVER}:{SMTP_PORT}"
+            return False, f"Cannot connect to SMTP server {masked_server}:{SMTP_PORT}"
             
     except socket.timeout:
-        return False, f"Connection timeout to SMTP server {SMTP_SERVER}:{SMTP_PORT}"
+        return False, f"Connection timeout to SMTP server {masked_server}:{SMTP_PORT}"
     except Exception as e:
         return False, f"Error: {str(e)}"
 
