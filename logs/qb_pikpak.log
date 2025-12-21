@@ -201,3 +201,7 @@
 2025-12-21 13:51:53,593 - __main__ - INFO - Committing PikPak bridge results...
 2025-12-21 13:51:53,593 - utils.git_helper - INFO - Git commit/push: branch=main, from_pipeline=False
 2025-12-21 13:51:53,623 - utils.git_helper - INFO - Configured git user: tongwu
+2025-12-21 13:51:53,641 - utils.git_helper - INFO - Added to git: logs/
+2025-12-21 13:51:53,661 - utils.git_helper - INFO - Added to git: Daily Report
+2025-12-21 13:51:53,709 - utils.git_helper - INFO - Committed with message: Auto-commit: PikPak bridge results 2025-12-21 13:51:53
+2025-12-21 13:51:54,337 - utils.git_helper - ERROR - Git operation failed: Command ['git', 'push', 'https://tongwu:ghp_***MASKED***@github.com/TongWu/JAVDB_AutoSpider.git', 'main'] returned non-zero exit status 1
