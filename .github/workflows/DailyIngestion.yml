@@ -419,7 +419,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: WT_DailyIngestion
     needs: [setup, run-pipeline]
-    if: ${{ !cancelled() && needs.run-pipeline.result != 'skipped' }}
+    if: ${{ !cancelled() }}
     permissions:
       contents: write
     
