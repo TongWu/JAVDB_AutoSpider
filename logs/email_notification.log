@@ -1,10 +1,10 @@
-2025-12-21 16:21:43,045 - __main__ - INFO - ============================================================
-2025-12-21 16:21:43,045 - __main__ - INFO - EMAIL NOTIFICATION SCRIPT
-2025-12-21 16:21:43,045 - __main__ - INFO - ============================================================
-2025-12-21 16:21:43,045 - __main__ - INFO - Analyzing logs for critical errors...
-2025-12-21 16:21:43,050 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-12-21 16:21:43,057 - __main__ - INFO - Connecting to SMTP server...
-2025-12-21 16:21:47,610 - __main__ - INFO - Email sent successfully.
-2025-12-21 16:21:47,610 - __main__ - INFO - Committing pipeline log...
-2025-12-21 16:21:47,611 - utils.git_helper - INFO - Git commit/push: branch=main, from_pipeline=True
-2025-12-21 16:21:47,642 - utils.git_helper - INFO - Configured git user: tongwu
+2025-12-21 16:22:18,380 - __main__ - INFO - ============================================================
+2025-12-21 16:22:18,380 - __main__ - INFO - EMAIL NOTIFICATION SCRIPT
+2025-12-21 16:22:18,380 - __main__ - INFO - ============================================================
+2025-12-21 16:22:18,380 - __main__ - INFO - Analyzing logs for critical errors...
+2025-12-21 16:22:18,385 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
+2025-12-21 16:22:18,392 - __main__ - INFO - Connecting to SMTP server...
+2025-12-21 16:22:21,563 - __main__ - INFO - Email sent successfully.
+2025-12-21 16:22:21,564 - __main__ - INFO - Committing pipeline log...
+2025-12-21 16:22:21,564 - utils.git_helper - INFO - Git commit/push: branch=main, from_pipeline=True
+2025-12-21 16:22:21,593 - utils.git_helper - INFO - Configured git user: tongwu
