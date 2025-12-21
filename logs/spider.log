@@ -4,17 +4,16 @@
 2025-12-21 14:48:30,770 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
 2025-12-21 14:48:30,770 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@129.xxx.xxx.19:12300, HTTPS: http://***:***@129.xxx.xxx.19:12300)
 2025-12-21 14:48:30,770 - __main__ - INFO - Proxy pool initialized successfully
-2025-12-21 14:48:30,770 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
-2025-12-21 14:48:30,770 - __main__ - INFO - Request handler initialized successfully
-2025-12-21 14:48:30,770 - __main__ - INFO - Starting JavDB spider...
-2025-12-21 14:48:30,770 - __main__ - INFO - Arguments: start_page=1, end_page=10, phase=all
-2025-12-21 14:48:30,770 - __main__ - INFO - Custom URL: https://javdb.com/video_codes/NMSL
-2025-12-21 14:48:30,770 - __main__ - INFO - AD HOC MODE: Will skip entries already in history (use --ignore-history to override)
-2025-12-21 14:48:30,770 - __main__ - INFO - Validating history file integrity...
-2025-12-21 14:48:30,812 - utils.history_manager - INFO - Loaded 6147 previously parsed movies from history (phase 1: 3499, phase 2: 2648)
-2025-12-21 14:48:30,812 - __main__ - INFO - Initialized requests session
-2025-12-21 14:48:30,812 - __main__ - INFO - ==================================================
-2025-12-21 14:48:30,812 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-12-21 14:48:30,770 - __main__ - INFO - Cooldown: 691200s, Max failures before 2025-12-21 14:49:59,948 - __main__ - INFO - ✓ JavDB Spider completed successfully
+2025-12-21 14:49:59,949 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
+2025-12-21 14:49:59,949 - __main__ - INFO - Running: python3 scripts/qb_uploader.py --from-pipeline --mode adhoc --input-file Javdb_AdHoc_video_codes_NMSL_20251221.csv
+2025-12-21 14:50:00,101 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
+2025-12-21 14:50:00,101 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
+2025-12-21 14:50:00,101 - __main__ - INFO - Running: python3 scripts/pikpak_bridge.py --from-pipeline --days 3
+2025-12-21 14:50:00,513 - __main__ - INFO - ✓ PikPak Bridge completed successfully
+2025-12-21 14:50:00,513 - __main__ - INFO - Step 4: Sending email notification...
+2025-12-21 14:50:00,513 - __main__ - INFO - Running: python3 scripts/email_notification.py --from-pipeline --csv-path Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
+ tags
 2025-12-21 14:48:30,812 - __main__ - INFO - ==================================================
 2025-12-21 14:48:32,521 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
 2025-12-21 14:48:46,061 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=50190, turnstile_keyword=False, security_verification=False, bypass_failure=False
@@ -80,3 +79,7 @@
 2025-12-21 14:49:59,113 - utils.git_helper - INFO - Configured git user: tongwu
 2025-12-21 14:49:59,128 - utils.git_helper - INFO - Added to git: Daily Report
 2025-12-21 14:49:59,140 - utils.git_helper - INFO - Added to git: Ad Hoc
+2025-12-21 14:49:59,156 - utils.git_helper - INFO - Added to git: logs/
+2025-12-21 14:49:59,171 - utils.git_helper - WARNING - Failed to add parsed_movies_history.csv: Command '['git', 'add', 'parsed_movies_history.csv']' returned non-zero exit status 128.
+2025-12-21 14:49:59,213 - utils.git_helper - INFO - Committed with message: Auto-commit: Spider results 2025-12-21 14:49:59
+2025-12-21 14:49:59,918 - utils.git_helper - ERROR - Git operation failed: Command ['git', 'push', 'https://tongwu:ghp_***MASKED***@github.com/TongWu/JAVDB_AutoSpider.git', 'main'] returned non-zero exit status 1

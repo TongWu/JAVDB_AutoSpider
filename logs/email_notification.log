@@ -1,17 +1,10 @@
-2025-12-21 14:45:30,661 - __main__ - INFO - ============================================================
-2025-12-21 14:45:30,662 - __main__ - INFO - EMAIL NOTIFICATION SCRIPT
-2025-12-21 14:45:30,662 - __main__ - INFO - ============================================================
-2025-12-21 14:45:30,662 - __main__ - INFO - Analyzing logs for critical errors...
-2025-12-21 14:45:30,662 - __main__ - ERROR - CRITICAL ERROR in Spider: CF bypass and proxy fallback failed - movie list not found on 6 pages
-2025-12-21 14:45:30,666 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-12-21 14:45:30,672 - __main__ - INFO - Connecting to SMTP server...
-2025-12-21 14:45:33,826 - __main__ - INFO - Email sent successfully.
-2025-12-21 14:45:33,828 - __main__ - INFO - Committing pipeline log...
-2025-12-21 14:45:33,829 - utils.git_helper - INFO - Git commit/push: branch=main, from_pipeline=True
-2025-12-21 14:45:33,875 - utils.git_helper - INFO - Configured git user: tongwu
-2025-12-21 14:45:33,892 - utils.git_helper - INFO - Added to git: logs/
-2025-12-21 14:45:33,936 - utils.git_helper - INFO - Committed with message: Auto-commit: Pipeline notification 2025-12-21 14:45:33
-2025-12-21 14:45:34,550 - utils.git_helper - ERROR - Git operation failed: Command ['git', 'push', 'https://tongwu:ghp_***MASKED***@github.com/TongWu/JAVDB_AutoSpider.git', 'main'] returned non-zero exit status 1
-2025-12-21 14:45:34,550 - __main__ - INFO - ============================================================
-2025-12-21 14:45:34,550 - __main__ - INFO - EMAIL NOTIFICATION COMPLETED
-2025-12-21 14:45:34,550 - __main__ - INFO - ============================================================
+2025-12-21 14:50:00,556 - __main__ - INFO - ============================================================
+2025-12-21 14:50:00,556 - __main__ - INFO - EMAIL NOTIFICATION SCRIPT
+2025-12-21 14:50:00,556 - __main__ - INFO - ============================================================
+2025-12-21 14:50:00,556 - __main__ - INFO - Analyzing logs for critical errors...
+2025-12-21 14:50:00,563 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
+2025-12-21 14:50:00,569 - __main__ - INFO - Connecting to SMTP server...
+2025-12-21 14:50:03,799 - __main__ - INFO - Email sent successfully.
+2025-12-21 14:50:03,799 - __main__ - INFO - Committing pipeline log...
+2025-12-21 14:50:03,799 - utils.git_helper - INFO - Git commit/push: branch=main, from_pipeline=True
+2025-12-21 14:50:03,828 - utils.git_helper - INFO - Configured git user: tongwu
