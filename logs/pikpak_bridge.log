@@ -1,0 +1,5 @@
+2025-12-21 00:30:53,412 - __main__ - INFO - Processing torrents older than 3 days (before 2025-12-18)
+2025-12-21 00:30:53,574 - __main__ - INFO - Logged into qBittorrent successfully.
+2025-12-21 00:30:53,607 - __main__ - INFO - Found 62 torrents across categories ['Daily Ingestion', 'Ad Hoc']
+2025-12-21 00:30:53,607 - __main__ - INFO - Filtered 0 torrents older than 3 days
+2025-12-21 00:30:53,607 - __main__ - INFO - No torrents to process.
