@@ -13,12 +13,13 @@
 2025-12-21 14:35:30,180 - __main__ - INFO - ✓ PikPak Bridge completed successfully
 2025-12-21 14:35:30,180 - __main__ - INFO - Step 4: Sending email notification...
 2025-12-21 14:35:30,180 - __main__ - INFO - Running: python3 scripts/email_notification.py --from-pipeline --csv-path Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
- tags
-2025-12-21 14:15:07,986 - __main__ - INFO - ==================================================
-2025-12-21 14:15:09,365 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-21 14:15:23,493 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=50078, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:15:23,503 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=50078 bytes)
-2025-12-21 14:15:23,520 - __main__ - INFO - [Page 1] Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 14:35:34,151 - __main__ - ERROR - ============================================================
+2025-12-21 14:35:34,151 - __main__ - ERROR - PIPELINE EXECUTION ERROR
+2025-12-21 14:35:34,151 - __main__ - ERROR - ============================================================
+2025-12-21 14:35:34,151 - __main__ - ERROR - Error: [Errno 32] Broken pipe
+2025-12-21 14:35:34,151 - __main__ - INFO - Attempting to send failure notification email...
+2025-12-21 14:35:34,151 - __main__ - INFO - Running: python3 scripts/email_notification.py --from-pipeline --csv-path Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
+ed. Switching mode to: use_proxy=True, use_cf_bypass=True
 2025-12-21 14:15:23,521 - __main__ - INFO - [Page 1] Fallback succeeded (Proxy=True, CF=True). Applying 30s cooldown before next page...
 2025-12-21 14:15:53,546 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
 2025-12-21 14:15:53,549 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
