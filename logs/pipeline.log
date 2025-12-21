@@ -1,14 +1,14 @@
-2025-12-21 16:21:42,969 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20251221.csv
-2025-12-21 16:21:42,969 - __main__ - INFO - ============================================================
-2025-12-21 16:21:42,969 - __main__ - INFO - STARTING JAVDB PIPELINE
-2025-12-21 16:21:42,969 - __main__ - INFO - MODE: Daily
-2025-12-21 16:21:42,969 - __main__ - INFO - ============================================================
-2025-12-21 16:21:42,969 - __main__ - INFO - Step 1: Running JavDB Spider...
-2025-12-21 16:21:42,969 - __main__ - INFO - Running: python3 scripts/spider.py --from-pipeline --output-file Javdb_TodayTitle_20251221.csv --use-proxy
-2025-12-21 16:21:42,993 - __main__ - ERROR - Script scripts/spider.py failed with return code 1
-2025-12-21 16:21:42,993 - __main__ - ERROR - ============================================================
-2025-12-21 16:21:42,993 - __main__ - ERROR - PIPELINE EXECUTION ERROR
-2025-12-21 16:21:42,993 - __main__ - ERROR - ============================================================
-2025-12-21 16:21:42,993 - __main__ - ERROR - Error: Script scripts/spider.py failed with return code 1
-2025-12-21 16:21:42,993 - __main__ - INFO - Attempting to send failure notification email...
-2025-12-21 16:21:42,993 - __main__ - INFO - Running: python3 scripts/email_notification.py --from-pipeline --csv-path Daily Report/Javdb_TodayTitle_20251221.csv
+2025-12-21 16:22:18,311 - __main__ - INFO - Daily mode. Expected CSV: Daily Report/Javdb_TodayTitle_20251221.csv
+2025-12-21 16:22:18,311 - __main__ - INFO - ============================================================
+2025-12-21 16:22:18,312 - __main__ - INFO - STARTING JAVDB PIPELINE
+2025-12-21 16:22:18,312 - __main__ - INFO - MODE: Daily
+2025-12-21 16:22:18,312 - __main__ - INFO - ============================================================
+2025-12-21 16:22:18,312 - __main__ - INFO - Step 1: Running JavDB Spider...
+2025-12-21 16:22:18,312 - __main__ - INFO - Running: python3 scripts/spider.py --from-pipeline --output-file Javdb_TodayTitle_20251221.csv --use-proxy
+2025-12-21 16:22:18,337 - __main__ - ERROR - Script scripts/spider.py failed with return code 1
+2025-12-21 16:22:18,337 - __main__ - ERROR - ============================================================
+2025-12-21 16:22:18,337 - __main__ - ERROR - PIPELINE EXECUTION ERROR
+2025-12-21 16:22:18,337 - __main__ - ERROR - ============================================================
+2025-12-21 16:22:18,337 - __main__ - ERROR - Error: Script scripts/spider.py failed with return code 1
+2025-12-21 16:22:18,337 - __main__ - INFO - Attempting to send failure notification email...
+2025-12-21 16:22:18,337 - __main__ - INFO - Running: python3 scripts/email_notification.py --from-pipeline --csv-path Daily Report/Javdb_TodayTitle_20251221.csv
