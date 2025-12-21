@@ -13,6 +13,8 @@ jobs:
   setup:
     runs-on: ARM64
     environment: WT_DailyIngestion
+    permissions:
+      contents: read
     outputs:
       branch: ${{ steps.branch_check.outputs.branch }}
     
@@ -143,6 +145,8 @@ jobs:
   health-check:
     runs-on: ARM64
     environment: WT_DailyIngestion
+    permissions:
+      contents: read
     needs: setup
     
     steps:
@@ -182,6 +186,8 @@ jobs:
   run-pipeline:
     runs-on: ARM64
     environment: WT_DailyIngestion
+    permissions:
+      contents: read
     needs: [setup, health-check]
     outputs:
       spider_success: ${{ steps.spider.outcome == 'success' }}
@@ -304,6 +310,8 @@ jobs:
   email-notification:
     runs-on: ubuntu-latest
     environment: WT_DailyIngestion
+    permissions:
+      contents: read
     needs: [setup, health-check, run-pipeline]
     if: ${{ !cancelled() }}
     
