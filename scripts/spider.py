@@ -1248,7 +1248,10 @@ def main():
                 # Normal delay between items
                 time.sleep(MOVIE_SLEEP)
 
-        logger.info(f"Phase 1 completed: {len(phase1_rows)} entries processed")
+        # Calculate phase 1 statistics
+        phase1_skipped_history = sum(1 for entry in all_index_results if has_complete_subtitles(entry['href'], parsed_movies_history_phase1))
+        phase1_actually_fetched = total_entries_phase1 - phase1_skipped_history
+        logger.info(f"Phase 1 completed: {total_entries_phase1} found, {phase1_skipped_history} skipped (history), {len(phase1_rows)} written to CSV")
 
     # ========================================
     # Process Phase 2 entries (already parsed during fetch)
@@ -1408,7 +1411,9 @@ def main():
                 # Normal delay between items
                 time.sleep(MOVIE_SLEEP)
 
-        logger.info(f"Phase 2 completed: {len(phase2_rows)} entries processed")
+        # Calculate phase 2 statistics
+        phase2_skipped_history = sum(1 for entry in all_index_results_phase2 if has_complete_subtitles(entry['href'], parsed_movies_history_phase2))
+        logger.info(f"Phase 2 completed: {total_entries_phase2} found, {phase2_skipped_history} skipped (history), {len(phase2_rows)} written to CSV")
 
     # CSV has been written incrementally during processing
     if not dry_run:
