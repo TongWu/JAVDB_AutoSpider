@@ -183,6 +183,8 @@ jobs:
     runs-on: ARM64
     environment: WT_DailyIngestion
     needs: [setup, health-check]
+    outputs:
+      spider_success: ${{ steps.spider.outcome == 'success' }}
     
     steps:
       - name: Checkout repository
@@ -446,6 +448,8 @@ jobs:
           fi
 
       - name: Commit and Push Results
+        env:
+          SPIDER_SUCCESS: ${{ needs.run-pipeline.outputs.spider_success }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -470,8 +474,19 @@ jobs:
             fi
           fi
           
-          # Add CSV files only (no logs)
-          git add 'Daily Report'/*.csv || true
+          # Add CSV files (exclude parsed_movies_history.csv if spider failed)
+          if [[ "$SPIDER_SUCCESS" == "true" ]]; then
+            echo "Spider succeeded - committing all CSV files including parsed_movies_history.csv"
+            git add 'Daily Report'/*.csv || true
+          else
+            echo "Spider failed - skipping parsed_movies_history.csv commit"
+            # Add all CSVs except parsed_movies_history.csv
+            for f in "Daily Report"/*.csv; do
+              if [[ "$(basename "$f")" != "parsed_movies_history.csv" ]]; then
+                git add "$f" 2>/dev/null || true
+              fi
+            done
+          fi
           git add 'Ad Hoc'/*.csv || true
           
           # Check if there are any changes to commit
