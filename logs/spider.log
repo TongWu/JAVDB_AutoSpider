@@ -1,154 +1,82 @@
-2025-12-21 14:41:40,769 - __main__ - INFO - Initializing proxy pool with 3 proxies...
-2025-12-21 14:41:40,771 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-12-21 14:41:40,771 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
-2025-12-21 14:41:40,771 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-21 14:41:40,771 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@129.xxx.xxx.19:12300, HTTPS: http://***:***@129.xxx.xxx.19:12300)
-2025-12-21 14:41:40,771 - __main__ - INFO - Proxy pool initialized successfully
-2025-12-21 14:41:40,771 - __main__ - INFO - Cooldown: 691200s, Max failures before 2025-12-21 14:45:25,840 - __main__ - INFO - ✓ JavDB Spider completed successfully
-2025-12-21 14:45:25,841 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
-2025-12-21 14:45:25,841 - __main__ - INFO - Running: python3 scripts/qb_uploader.py --from-pipeline --mode adhoc --input-file Javdb_AdHoc_video_codes_NMSL_20251221.csv
-2025-12-21 14:45:26,090 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
-2025-12-21 14:45:26,090 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
-2025-12-21 14:45:26,090 - __main__ - INFO - Running: python3 scripts/pikpak_bridge.py --from-pipeline --days 3
-2025-12-21 14:45:26,560 - __main__ - INFO - ✓ PikPak Bridge completed successfully
-2025-12-21 14:45:26,560 - __main__ - INFO - Step 4: Sending email notification...
-2025-12-21 14:45:26,560 - __main__ - INFO - Running: python3 scripts/email_notification.py --from-pipeline --csv-path Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
-2025-12-21 14:45:30,615 - __main__ - ERROR - Script scripts/email_notification.py failed with return code 1
-2025-12-21 14:45:30,616 - __main__ - ERROR - ============================================================
-2025-12-21 14:45:30,616 - __main__ - ERROR - PIPELINE EXECUTION ERROR
-2025-12-21 14:45:30,616 - __main__ - ERROR - ============================================================
-2025-12-21 14:45:30,616 - __main__ - ERROR - Error: Script scripts/email_notification.py failed with return code 1
-2025-12-21 14:45:30,616 - __main__ - INFO - Attempting to send failure notification email...
-2025-12-21 14:45:30,616 - __main__ - INFO - Running: python3 scripts/email_notification.py --from-pipeline --csv-path Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
-ue). Applying 5s cooldown before next page...
-2025-12-21 14:42:00,194 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
-2025-12-21 14:42:00,197 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
-2025-12-21 14:42:11,626 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-21 14:42:26,381 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:42:26,391 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=24364 bytes)
-2025-12-21 14:42:26,400 - __main__ - INFO - [Page 2] Page exists but has no content ('No content yet' detected)
-2025-12-21 14:42:26,401 - __main__ - WARNING - [Page 2] Proxy 'Singapore-ARM1' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)
-2025-12-21 14:42:26,401 - __main__ - INFO - [Page 2] Switching to next proxy...
-2025-12-21 14:42:26,401 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-21 14:42:26,401 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
-2025-12-21 14:42:39,273 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=25406, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:42:39,278 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=25406 bytes)
-2025-12-21 14:42:39,287 - __main__ - INFO - [Page 2] Page exists but has no content ('No content yet' detected)
-2025-12-21 14:42:39,287 - __main__ - ERROR - [Page 2] All proxy attempts exhausted.
-2025-12-21 14:42:39,287 - __main__ - WARNING - [Page 2] No movie list found after all fallback attempts
-2025-12-21 14:42:40,716 - __main__ - WARNING - [Page 3] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-21 14:42:53,504 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:42:53,511 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=24364 bytes)
-2025-12-21 14:42:53,523 - __main__ - INFO - [Page 3] Page exists but has no content ('No content yet' detected)
-2025-12-21 14:42:53,523 - __main__ - WARNING - [Page 3] Proxy 'Singapore-ARM2' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)
-2025-12-21 14:42:53,523 - __main__ - INFO - [Page 3] Switching to next proxy...
-2025-12-21 14:42:53,523 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
-2025-12-21 14:42:53,523 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Singapore-ARM1'
-2025-12-21 14:43:06,307 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:43:06,322 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=24364 bytes)
-2025-12-21 14:43:06,334 - __main__ - INFO - [Page 3] Page exists but has no content ('No content yet' detected)
-2025-12-21 14:43:06,334 - __main__ - ERROR - [Page 3] All proxy attempts exhausted.
-2025-12-21 14:43:06,334 - __main__ - WARNING - [Page 3] No movie list found after all fallback attempts
-2025-12-21 14:43:07,763 - __main__ - WARNING - [Page 4] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-21 14:43:20,470 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:43:20,480 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=24364 bytes)
-2025-12-21 14:43:20,488 - __main__ - INFO - [Page 4] Page exists but has no content ('No content yet' detected)
-2025-12-21 14:43:20,489 - __main__ - WARNING - [Page 4] Proxy 'Singapore-ARM1' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)
-2025-12-21 14:43:20,489 - __main__ - INFO - [Page 4] Switching to next proxy...
-2025-12-21 14:43:20,489 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-21 14:43:20,489 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
-2025-12-21 14:43:33,279 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:43:33,288 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=24364 bytes)
-2025-12-21 14:43:33,300 - __main__ - INFO - [Page 4] Page exists but has no content ('No content yet' detected)
-2025-12-21 14:43:33,301 - __main__ - ERROR - [Page 4] All proxy attempts exhausted.
-2025-12-21 14:43:33,301 - __main__ - WARNING - [Page 4] No movie list found after all fallback attempts
-2025-12-21 14:43:33,301 - __main__ - INFO - [Page 4] Reached maximum tolerance (3 consecutive empty pages), stopping phase 1
-2025-12-21 14:43:33,301 - __main__ - INFO - Phase 1 completed: 0 entries processed
-2025-12-21 14:43:33,301 - __main__ - INFO - Waiting 0 seconds before Phase 2 to allow Cloudflare cooldown...
-2025-12-21 14:43:33,301 - __main__ - INFO - ==================================================
-2025-12-21 14:43:33,301 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-12-21 14:43:33,301 - __main__ - INFO - ==================================================
-2025-12-21 14:43:34,749 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-21 14:43:47,801 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=50134, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:43:47,817 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=50134 bytes)
-2025-12-21 14:43:47,838 - __main__ - INFO - [Page 1] Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
-2025-12-21 14:43:47,838 - __main__ - INFO - [Page 1] Fallback succeeded (Proxy=True, CF=True). Applying 5s cooldown before next page...
-2025-12-21 14:43:52,861 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
-2025-12-21 14:43:52,865 - utils.parser - INFO - [Page 1] Found 0 entries for phase 2
-2025-12-21 14:44:04,248 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-21 14:44:17,232 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:44:17,242 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=24364 bytes)
-2025-12-21 14:44:17,252 - __main__ - INFO - [Page 2] Page exists but has no content ('No content yet' detected)
-2025-12-21 14:44:17,253 - __main__ - WARNING - [Page 2] Proxy 'Singapore-ARM2' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)
-2025-12-21 14:44:17,253 - __main__ - INFO - [Page 2] Switching to next proxy...
-2025-12-21 14:44:17,253 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
-2025-12-21 14:44:17,253 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Singapore-ARM1'
-2025-12-21 14:44:30,262 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=25406, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:44:30,272 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=25406 bytes)
-2025-12-21 14:44:30,295 - __main__ - INFO - [Page 2] Page exists but has no content ('No content yet' detected)
-2025-12-21 14:44:30,296 - __main__ - ERROR - [Page 2] All proxy attempts exhausted.
-2025-12-21 14:44:30,296 - __main__ - WARNING - [Page 2] No movie list found after all fallback attempts
-2025-12-21 14:44:31,721 - __main__ - WARNING - [Page 3] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-21 14:44:44,658 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:44:44,667 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=24364 bytes)
-2025-12-21 14:44:44,678 - __main__ - INFO - [Page 3] Page exists but has no content ('No content yet' detected)
-2025-12-21 14:44:44,678 - __main__ - WARNING - [Page 3] Proxy 'Singapore-ARM1' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)
-2025-12-21 14:44:44,678 - __main__ - INFO - [Page 3] Switching to next proxy...
-2025-12-21 14:44:44,678 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM1' failed (1/3)
-2025-12-21 14:44:44,678 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM1' to 'Singapore-ARM2'
-2025-12-21 14:44:57,773 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:44:57,783 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=24364 bytes)
-2025-12-21 14:44:57,792 - __main__ - INFO - [Page 3] Page exists but has no content ('No content yet' detected)
-2025-12-21 14:44:57,792 - __main__ - ERROR - [Page 3] All proxy attempts exhausted.
-2025-12-21 14:44:57,792 - __main__ - WARNING - [Page 3] No movie list found after all fallback attempts
-2025-12-21 14:44:59,223 - __main__ - WARNING - [Page 4] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-21 14:45:12,111 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:45:12,119 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM2 SUCCESS - got valid HTML (size=24364 bytes)
-2025-12-21 14:45:12,127 - __main__ - INFO - [Page 4] Page exists but has no content ('No content yet' detected)
-2025-12-21 14:45:12,127 - __main__ - WARNING - [Page 4] Proxy 'Singapore-ARM2' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)
-2025-12-21 14:45:12,127 - __main__ - INFO - [Page 4] Switching to next proxy...
-2025-12-21 14:45:12,127 - utils.proxy_pool - WARNING - Proxy 'Singapore-ARM2' failed (1/3)
-2025-12-21 14:45:12,127 - utils.proxy_pool - INFO - Switched from 'Singapore-ARM2' to 'Singapore-ARM1'
-2025-12-21 14:45:24,973 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:45:24,985 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=24364 bytes)
-2025-12-21 14:45:24,993 - __main__ - INFO - [Page 4] Page exists but has no content ('No content yet' detected)
-2025-12-21 14:45:24,993 - __main__ - ERROR - [Page 4] All proxy attempts exhausted.
-2025-12-21 14:45:24,994 - __main__ - WARNING - [Page 4] No movie list found after all fallback attempts
-2025-12-21 14:45:24,994 - __main__ - INFO - [Page 4] Reached maximum tolerance (3 consecutive empty pages), stopping phase 2
-2025-12-21 14:45:24,994 - __main__ - INFO - Phase 2 completed: 0 entries processed
-2025-12-21 14:45:24,994 - __main__ - INFO - CSV file written incrementally to: Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
-2025-12-21 14:45:24,994 - __main__ - INFO - ==================================================
-2025-12-21 14:45:24,994 - __main__ - INFO - SUMMARY REPORT
-2025-12-21 14:45:24,994 - __main__ - INFO - ==================================================
-2025-12-21 14:45:24,994 - __main__ - INFO - Pages processed: 1 to 10
-2025-12-21 14:45:24,994 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-12-21 14:45:24,994 - __main__ - INFO - ==============================
-2025-12-21 14:45:24,994 - __main__ - INFO - PHASE 1 SUMMARY
-2025-12-21 14:45:24,994 - __main__ - INFO - ==============================
-2025-12-21 14:45:24,994 - __main__ - INFO - Phase 1 entries found: 0
-2025-12-21 14:45:24,994 - __main__ - INFO -   - No entries found in Phase 1
-2025-12-21 14:45:24,994 - __main__ - INFO - ==============================
-2025-12-21 14:45:24,994 - __main__ - INFO - PHASE 2 SUMMARY
-2025-12-21 14:45:24,994 - __main__ - INFO - ==============================
-2025-12-21 14:45:24,994 - __main__ - INFO - Phase 2 entries found: 0
-2025-12-21 14:45:24,994 - __main__ - INFO -   - No entries found in Phase 2
-2025-12-21 14:45:24,994 - __main__ - INFO - ==============================
-2025-12-21 14:45:24,994 - __main__ - INFO - OVERALL SUMMARY
-2025-12-21 14:45:24,994 - __main__ - INFO - ==============================
-2025-12-21 14:45:24,994 - __main__ - INFO - Total entries found: 0
-2025-12-21 14:45:24,994 - __main__ - INFO - Successfully processed: 0
-2025-12-21 14:45:24,994 - __main__ - INFO - Skipped already parsed in this session: 0
-2025-12-21 14:45:24,994 - __main__ - INFO - Skipped already parsed in previous runs: 0
-2025-12-21 14:45:24,994 - __main__ - INFO - Current parsed links in memory: 0
-2025-12-21 14:45:24,994 - __main__ - INFO - Results saved to: Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
-2025-12-21 14:45:24,994 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-12-21 14:45:24,994 - __main__ - INFO - ==================================================
-2025-12-21 14:45:24,994 - __main__ - INFO - Committing spider results...
-2025-12-21 14:45:24,995 - utils.git_helper - INFO - Git commit/push: branch=main, from_pipeline=True
-2025-12-21 14:45:25,034 - utils.git_helper - INFO - Configured git user: tongwu
-2025-12-21 14:45:25,059 - utils.git_helper - INFO - Added to git: Daily Report
-2025-12-21 14:45:25,074 - utils.git_helper - INFO - Added to git: Ad Hoc
-2025-12-21 14:45:25,095 - utils.git_helper - INFO - Added to git: logs/
-2025-12-21 14:45:25,109 - utils.git_helper - WARNING - Failed to add parsed_movies_history.csv: Command '['git', 'add', 'parsed_movies_history.csv']' returned non-zero exit status 128.
-2025-12-21 14:45:25,162 - utils.git_helper - INFO - Committed with message: Auto-commit: Spider results 2025-12-21 14:45:24
-2025-12-21 14:45:25,810 - utils.git_helper - ERROR - Git operation failed: Command ['git', 'push', 'https://tongwu:ghp_***MASKED***@github.com/TongWu/JAVDB_AutoSpider.git', 'main'] returned non-zero exit status 1
+2025-12-21 14:48:30,769 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-21 14:48:30,770 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
+2025-12-21 14:48:30,770 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
+2025-12-21 14:48:30,770 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-21 14:48:30,770 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@129.xxx.xxx.19:12300, HTTPS: http://***:***@129.xxx.xxx.19:12300)
+2025-12-21 14:48:30,770 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-21 14:48:30,770 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
+2025-12-21 14:48:30,770 - __main__ - INFO - Request handler initialized successfully
+2025-12-21 14:48:30,770 - __main__ - INFO - Starting JavDB spider...
+2025-12-21 14:48:30,770 - __main__ - INFO - Arguments: start_page=1, end_page=10, phase=all
+2025-12-21 14:48:30,770 - __main__ - INFO - Custom URL: https://javdb.com/video_codes/NMSL
+2025-12-21 14:48:30,770 - __main__ - INFO - AD HOC MODE: Will skip entries already in history (use --ignore-history to override)
+2025-12-21 14:48:30,770 - __main__ - INFO - Validating history file integrity...
+2025-12-21 14:48:30,812 - utils.history_manager - INFO - Loaded 6147 previously parsed movies from history (phase 1: 3499, phase 2: 2648)
+2025-12-21 14:48:30,812 - __main__ - INFO - Initialized requests session
+2025-12-21 14:48:30,812 - __main__ - INFO - ==================================================
+2025-12-21 14:48:30,812 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-12-21 14:48:30,812 - __main__ - INFO - ==================================================
+2025-12-21 14:48:32,521 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:48:46,061 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=50190, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:48:46,077 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=50190 bytes)
+2025-12-21 14:48:46,103 - __main__ - INFO - [Page 1] Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 14:48:46,103 - __main__ - INFO - [Page 1] Fallback succeeded (Proxy=True, CF=True). Applying 5s cooldown before next page...
+2025-12-21 14:48:51,123 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
+2025-12-21 14:48:51,125 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
+2025-12-21 14:49:02,545 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:49:15,326 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:49:15,329 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=24364 bytes)
+2025-12-21 14:49:15,337 - __main__ - INFO - [Page 2] Page exists but has no content ('No content yet' detected)
+2025-12-21 14:49:15,337 - __main__ - INFO - [Page 2] Proxy + CF Bypass: valid empty page detected
+2025-12-21 14:49:15,337 - __main__ - INFO - [Page 2] End of content reached (no more pages available)
+2025-12-21 14:49:15,337 - __main__ - INFO - Phase 1 completed: 0 entries processed
+2025-12-21 14:49:15,337 - __main__ - INFO - Waiting 0 seconds before Phase 2 to allow Cloudflare cooldown...
+2025-12-21 14:49:15,337 - __main__ - INFO - ==================================================
+2025-12-21 14:49:15,337 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
+2025-12-21 14:49:15,337 - __main__ - INFO - ==================================================
+2025-12-21 14:49:16,735 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:49:29,521 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=50078, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:49:29,534 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=50078 bytes)
+2025-12-21 14:49:29,557 - __main__ - INFO - [Page 1] Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 14:49:29,557 - __main__ - INFO - [Page 1] Fallback succeeded (Proxy=True, CF=True). Applying 5s cooldown before next page...
+2025-12-21 14:49:34,579 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
+2025-12-21 14:49:34,582 - utils.parser - INFO - [Page 1] Found 0 entries for phase 2
+2025-12-21 14:49:46,023 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:49:59,068 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:49:59,072 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=24364 bytes)
+2025-12-21 14:49:59,081 - __main__ - INFO - [Page 2] Page exists but has no content ('No content yet' detected)
+2025-12-21 14:49:59,081 - __main__ - INFO - [Page 2] Proxy + CF Bypass: valid empty page detected
+2025-12-21 14:49:59,081 - __main__ - INFO - [Page 2] End of content reached (no more pages available)
+2025-12-21 14:49:59,081 - __main__ - INFO - Phase 2 completed: 0 entries processed
+2025-12-21 14:49:59,081 - __main__ - INFO - CSV file written incrementally to: Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
+2025-12-21 14:49:59,081 - __main__ - INFO - ==================================================
+2025-12-21 14:49:59,082 - __main__ - INFO - SUMMARY REPORT
+2025-12-21 14:49:59,082 - __main__ - INFO - ==================================================
+2025-12-21 14:49:59,082 - __main__ - INFO - Pages processed: 1 to 10
+2025-12-21 14:49:59,082 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
+2025-12-21 14:49:59,082 - __main__ - INFO - ==============================
+2025-12-21 14:49:59,082 - __main__ - INFO - PHASE 1 SUMMARY
+2025-12-21 14:49:59,082 - __main__ - INFO - ==============================
+2025-12-21 14:49:59,082 - __main__ - INFO - Phase 1 entries found: 0
+2025-12-21 14:49:59,082 - __main__ - INFO -   - No entries found in Phase 1
+2025-12-21 14:49:59,082 - __main__ - INFO - ==============================
+2025-12-21 14:49:59,082 - __main__ - INFO - PHASE 2 SUMMARY
+2025-12-21 14:49:59,082 - __main__ - INFO - ==============================
+2025-12-21 14:49:59,082 - __main__ - INFO - Phase 2 entries found: 0
+2025-12-21 14:49:59,082 - __main__ - INFO -   - No entries found in Phase 2
+2025-12-21 14:49:59,082 - __main__ - INFO - ==============================
+2025-12-21 14:49:59,082 - __main__ - INFO - OVERALL SUMMARY
+2025-12-21 14:49:59,082 - __main__ - INFO - ==============================
+2025-12-21 14:49:59,082 - __main__ - INFO - Total entries found: 0
+2025-12-21 14:49:59,082 - __main__ - INFO - Successfully processed: 0
+2025-12-21 14:49:59,082 - __main__ - INFO - Skipped already parsed in this session: 0
+2025-12-21 14:49:59,082 - __main__ - INFO - Skipped already parsed in previous runs: 0
+2025-12-21 14:49:59,082 - __main__ - INFO - Current parsed links in memory: 0
+2025-12-21 14:49:59,082 - __main__ - INFO - Results saved to: Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
+2025-12-21 14:49:59,082 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
+2025-12-21 14:49:59,082 - __main__ - INFO - ==================================================
+2025-12-21 14:49:59,082 - __main__ - INFO - Committing spider results...
+2025-12-21 14:49:59,083 - utils.git_helper - INFO - Git commit/push: branch=main, from_pipeline=True
+2025-12-21 14:49:59,113 - utils.git_helper - INFO - Configured git user: tongwu
+2025-12-21 14:49:59,128 - utils.git_helper - INFO - Added to git: Daily Report
+2025-12-21 14:49:59,140 - utils.git_helper - INFO - Added to git: Ad Hoc
