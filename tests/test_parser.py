@@ -126,6 +126,34 @@ class TestParseIndex:
         
         for result in results:
             assert result['page'] == 5
+    
+    def test_parse_adhoc_mode_phase1_processes_all(self, sample_index_html):
+        """Test that adhoc mode processes all entries regardless of tags in phase 1."""
+        results = parse_index(sample_index_html, page_num=1, phase=1, is_adhoc_mode=True)
+        
+        # Adhoc mode should find ALL entries (ABC-123, DEF-456, GHI-789)
+        hrefs = [r['href'] for r in results]
+        assert len(results) == 3
+        assert '/v/ABC-123' in hrefs
+        assert '/v/DEF-456' in hrefs  # No subtitle tag, but included in adhoc mode
+        assert '/v/GHI-789' in hrefs
+    
+    def test_parse_adhoc_mode_phase2_skips_all(self, sample_index_html):
+        """Test that adhoc mode skips all entries in phase 2 (already processed in phase 1)."""
+        results = parse_index(sample_index_html, page_num=1, phase=2, is_adhoc_mode=True)
+        
+        # Phase 2 in adhoc mode should return empty (all processed in phase 1)
+        assert len(results) == 0
+    
+    def test_parse_adhoc_mode_extracts_metadata(self, sample_index_html):
+        """Test that adhoc mode still extracts rate and comment_number."""
+        results = parse_index(sample_index_html, page_num=1, phase=1, is_adhoc_mode=True)
+        
+        # Find ABC-123 result
+        abc_result = next((r for r in results if r['href'] == '/v/ABC-123'), None)
+        assert abc_result is not None
+        assert abc_result['rate'] == '4.47'
+        assert abc_result['comment_number'] == '595'
 
 
 class TestParseDetail:

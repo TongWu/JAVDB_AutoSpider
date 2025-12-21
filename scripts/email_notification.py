@@ -230,6 +230,49 @@ def analyze_pikpak_log(log_path):
     return False, None
 
 
+def analyze_pipeline_log(log_path):
+    """
+    Analyze pipeline log to detect script execution failures.
+    This catches cases where sub-scripts fail to start or crash early.
+    Returns: (is_critical_error, error_message)
+    """
+    if not os.path.exists(log_path):
+        return True, "Pipeline log file not found"
+    
+    with open(log_path, 'r', encoding='utf-8') as f:
+        log_content = f.read()
+    
+    # Check for script execution failures
+    script_failures = []
+    
+    # Pattern: "Script scripts/xxx.py failed with return code X"
+    failure_pattern = r'Script (scripts/\w+\.py) failed with return code (\d+)'
+    failures = re.findall(failure_pattern, log_content)
+    for script, code in failures:
+        script_name = os.path.basename(script).replace('.py', '')
+        script_failures.append(f"{script_name} (exit code {code})")
+    
+    # Check for "PIPELINE EXECUTION ERROR" marker
+    if 'PIPELINE EXECUTION ERROR' in log_content:
+        if script_failures:
+            return True, f"Pipeline scripts failed: {', '.join(script_failures)}"
+        return True, "Pipeline execution error detected"
+    
+    # Check for IndentationError, SyntaxError, etc. in the output
+    syntax_errors = [
+        (r'IndentationError:', 'Syntax error (IndentationError)'),
+        (r'SyntaxError:', 'Syntax error (SyntaxError)'),
+        (r'ModuleNotFoundError:', 'Missing module dependency'),
+        (r'ImportError:', 'Import error'),
+    ]
+    
+    for pattern, message in syntax_errors:
+        if re.search(pattern, log_content):
+            return True, message
+    
+    return False, None
+
+
 def extract_spider_statistics(log_path):
     """Extract key statistics from spider log for email report."""
     stats = {
@@ -246,22 +289,42 @@ def extract_spider_statistics(log_path):
             content = f.read()
         
         # Extract phase 1 statistics
-        phase1_found_pattern = r'\[Page \d+\] Found (\d+) entries for phase 1'
+        # Match both new format "Found X entries for phase 1, Y for phase 2" 
+        # and old format "Found X entries for phase 1"
+        phase1_found_pattern = r'\[Page\s+\d+\] Found\s+(\d+) entries for phase 1'
         phase1_matches = re.findall(phase1_found_pattern, content)
         stats['phase1']['found'] = sum(int(m) for m in phase1_matches)
         
-        phase1_completed = re.search(r'Phase 1 completed: (\d+) entries processed', content)
-        if phase1_completed:
-            stats['phase1']['processed'] = int(phase1_completed.group(1))
+        # Match new format: "Phase 1 completed: X found, Y skipped (history), Z written to CSV"
+        # or old format: "Phase 1 completed: X entries processed"
+        phase1_completed_new = re.search(r'Phase 1 completed: (\d+) found, (\d+) skipped.*?, (\d+) written to CSV', content)
+        phase1_completed_old = re.search(r'Phase 1 completed: (\d+) entries processed', content)
+        if phase1_completed_new:
+            stats['phase1']['processed'] = int(phase1_completed_new.group(3))  # written to CSV
+        elif phase1_completed_old:
+            stats['phase1']['processed'] = int(phase1_completed_old.group(1))
         
         # Extract phase 2 statistics
-        phase2_found_pattern = r'\[Page \d+\] Found (\d+) entries for phase 2'
-        phase2_matches = re.findall(phase2_found_pattern, content)
-        stats['phase2']['found'] = sum(int(m) for m in phase2_matches)
+        # Match both new format "X for phase 2" and old format "Found X entries for phase 2"
+        # New format: ", Y for phase 2" (combined with phase 1 on same line)
+        # Old format: "[Page X] Found Y entries for phase 2" (separate line)
+        # Accumulate matches from both patterns to handle mixed logs
+        phase2_new_pattern = r',\s+(\d+) for phase 2'
+        phase2_old_pattern = r'\[Page\s+\d+\] Found\s+(\d+) entries for phase 2'
+        phase2_new_matches = re.findall(phase2_new_pattern, content)
+        phase2_old_matches = re.findall(phase2_old_pattern, content)
+        # Combine matches from both patterns
+        all_phase2_matches = phase2_new_matches + phase2_old_matches
+        stats['phase2']['found'] = sum(int(m) for m in all_phase2_matches)
         
-        phase2_completed = re.search(r'Phase 2 completed: (\d+) entries processed', content)
-        if phase2_completed:
-            stats['phase2']['processed'] = int(phase2_completed.group(1))
+        # Match new format: "Phase 2 completed: X found, Y skipped (history), Z written to CSV"
+        # or old format: "Phase 2 completed: X entries processed"
+        phase2_completed_new = re.search(r'Phase 2 completed: (\d+) found, (\d+) skipped.*?, (\d+) written to CSV', content)
+        phase2_completed_old = re.search(r'Phase 2 completed: (\d+) entries processed', content)
+        if phase2_completed_new:
+            stats['phase2']['processed'] = int(phase2_completed_new.group(3))  # written to CSV
+        elif phase2_completed_old:
+            stats['phase2']['processed'] = int(phase2_completed_old.group(1))
         
         # Extract overall statistics
         total_found = re.search(r'Total entries found: (\d+)', content)
@@ -561,6 +624,13 @@ def main():
     # Analyze logs for critical errors
     logger.info("Analyzing logs for critical errors...")
     pipeline_errors = []
+    
+    # First, check pipeline log for script execution failures
+    # This catches cases where sub-scripts crash before writing to their own logs
+    pipeline_critical, pipeline_error = analyze_pipeline_log(PIPELINE_LOG_FILE)
+    if pipeline_critical:
+        logger.error(f"CRITICAL ERROR in Pipeline: {pipeline_error}")
+        pipeline_errors.append(f"Pipeline: {pipeline_error}")
     
     spider_critical, spider_error = analyze_spider_log(SPIDER_LOG_FILE)
     if spider_critical:

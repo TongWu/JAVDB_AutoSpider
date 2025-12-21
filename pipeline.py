@@ -77,6 +77,13 @@ def run_script(script_path, args=None):
         cmd += args
     logger.info(f'Running: {" ".join(cmd)}')
 
+    # Get the file handler from the root logger to write subprocess output directly
+    file_handler = None
+    for handler in logging.getLogger().handlers:
+        if isinstance(handler, logging.FileHandler):
+            file_handler = handler
+            break
+
     # Run with real-time output
     process = subprocess.Popen(
         cmd,
@@ -87,13 +94,18 @@ def run_script(script_path, args=None):
         universal_newlines=True
     )
 
-    # Print output in real-time
+    # Capture output and write to both console and log file
     output_lines = []
     if process.stdout:
         for line in iter(process.stdout.readline, ''):
             if line:
-                print(line.rstrip())  # Print to console
+                line_stripped = line.rstrip()
+                print(line_stripped)  # Print to console
                 output_lines.append(line)
+                # Write directly to log file (preserving original format from subprocess)
+                if file_handler:
+                    file_handler.stream.write(line)
+                    file_handler.stream.flush()
 
         process.stdout.close()
 
