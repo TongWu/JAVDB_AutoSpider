@@ -273,35 +273,6 @@ def analyze_pipeline_log(log_path):
     return False, None
 
 
-def check_log_freshness(log_path, pipeline_log_path):
-    """
-    Check if a log file was updated during the current pipeline run.
-    Compares modification time of log_path against pipeline_log_path start time.
-    
-    Returns: (is_stale, message) - is_stale is True if log might be from previous run
-    """
-    if not os.path.exists(log_path):
-        return False, None  # Missing log is handled elsewhere
-    
-    if not os.path.exists(pipeline_log_path):
-        return False, None  # Can't determine if stale
-    
-    try:
-        # Get modification times
-        log_mtime = os.path.getmtime(log_path)
-        pipeline_mtime = os.path.getmtime(pipeline_log_path)
-        
-        # If the sub-script's log is older than pipeline log, it might be stale
-        # Add a small tolerance (5 seconds) for timing differences
-        if log_mtime < pipeline_mtime - 5:
-            log_name = os.path.basename(log_path)
-            return True, f"{log_name} appears to be from a previous run (not updated this run)"
-    except Exception as e:
-        logger.debug(f"Error checking log freshness: {e}")
-    
-    return False, None
-
-
 def extract_spider_statistics(log_path):
     """Extract key statistics from spider log for email report."""
     stats = {
@@ -660,18 +631,6 @@ def main():
     if pipeline_critical:
         logger.error(f"CRITICAL ERROR in Pipeline: {pipeline_error}")
         pipeline_errors.append(f"Pipeline: {pipeline_error}")
-    
-    # Check for stale logs (from previous runs)
-    # If a log file is older than the pipeline log, the script might have crashed early
-    stale_logs = []
-    for log_file, log_name in [(SPIDER_LOG_FILE, 'Spider'), (UPLOADER_LOG_FILE, 'Uploader'), (PIKPAK_LOG_FILE, 'PikPak')]:
-        is_stale, stale_msg = check_log_freshness(log_file, PIPELINE_LOG_FILE)
-        if is_stale:
-            logger.warning(f"Stale log detected: {stale_msg}")
-            stale_logs.append(log_name)
-    
-    if stale_logs:
-        pipeline_errors.append(f"Stale logs detected (scripts may have crashed): {', '.join(stale_logs)}")
     
     spider_critical, spider_error = analyze_spider_log(SPIDER_LOG_FILE)
     if spider_critical:
