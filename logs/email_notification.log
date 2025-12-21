@@ -8,3 +8,9 @@
 2025-12-21 14:50:03,799 - __main__ - INFO - Committing pipeline log...
 2025-12-21 14:50:03,799 - utils.git_helper - INFO - Git commit/push: branch=main, from_pipeline=True
 2025-12-21 14:50:03,828 - utils.git_helper - INFO - Configured git user: tongwu
+2025-12-21 14:50:03,845 - utils.git_helper - INFO - Added to git: logs/
+2025-12-21 14:50:03,886 - utils.git_helper - INFO - Committed with message: Auto-commit: Pipeline notification 2025-12-21 14:50:03
+2025-12-21 14:50:04,625 - utils.git_helper - ERROR - Git operation failed: Command ['git', 'push', 'https://tongwu:ghp_***MASKED***@github.com/TongWu/JAVDB_AutoSpider.git', 'main'] returned non-zero exit status 1
+2025-12-21 14:50:04,625 - __main__ - INFO - ============================================================
+2025-12-21 14:50:04,625 - __main__ - INFO - EMAIL NOTIFICATION COMPLETED
+2025-12-21 14:50:04,625 - __main__ - INFO - ============================================================

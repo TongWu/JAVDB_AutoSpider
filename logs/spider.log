@@ -1,85 +1,164 @@
-2025-12-21 14:48:30,769 - __main__ - INFO - Initializing proxy pool with 3 proxies...
-2025-12-21 14:48:30,770 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-12-21 14:48:30,770 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
-2025-12-21 14:48:30,770 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
-2025-12-21 14:48:30,770 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@129.xxx.xxx.19:12300, HTTPS: http://***:***@129.xxx.xxx.19:12300)
-2025-12-21 14:48:30,770 - __main__ - INFO - Proxy pool initialized successfully
-2025-12-21 14:48:30,770 - __main__ - INFO - Cooldown: 691200s, Max failures before 2025-12-21 14:49:59,948 - __main__ - INFO - ✓ JavDB Spider completed successfully
-2025-12-21 14:49:59,949 - __main__ - INFO - Step 2: Running qBittorrent Uploader...
-2025-12-21 14:49:59,949 - __main__ - INFO - Running: python3 scripts/qb_uploader.py --from-pipeline --mode adhoc --input-file Javdb_AdHoc_video_codes_NMSL_20251221.csv
-2025-12-21 14:50:00,101 - __main__ - INFO - ✓ qBittorrent Uploader completed successfully
-2025-12-21 14:50:00,101 - __main__ - INFO - Step 3: Running PikPak Bridge to clean up old torrents...
-2025-12-21 14:50:00,101 - __main__ - INFO - Running: python3 scripts/pikpak_bridge.py --from-pipeline --days 3
-2025-12-21 14:50:00,513 - __main__ - INFO - ✓ PikPak Bridge completed successfully
-2025-12-21 14:50:00,513 - __main__ - INFO - Step 4: Sending email notification...
-2025-12-21 14:50:00,513 - __main__ - INFO - Running: python3 scripts/email_notification.py --from-pipeline --csv-path Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
- tags
-2025-12-21 14:48:30,812 - __main__ - INFO - ==================================================
-2025-12-21 14:48:32,521 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-21 14:48:46,061 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=50190, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:48:46,077 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=50190 bytes)
-2025-12-21 14:48:46,103 - __main__ - INFO - [Page 1] Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
-2025-12-21 14:48:46,103 - __main__ - INFO - [Page 1] Fallback succeeded (Proxy=True, CF=True). Applying 5s cooldown before next page...
-2025-12-21 14:48:51,123 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
-2025-12-21 14:48:51,125 - utils.parser - INFO - [Page 1] Found 0 entries for phase 1
-2025-12-21 14:49:02,545 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-21 14:49:15,326 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:49:15,329 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=24364 bytes)
-2025-12-21 14:49:15,337 - __main__ - INFO - [Page 2] Page exists but has no content ('No content yet' detected)
-2025-12-21 14:49:15,337 - __main__ - INFO - [Page 2] Proxy + CF Bypass: valid empty page detected
-2025-12-21 14:49:15,337 - __main__ - INFO - [Page 2] End of content reached (no more pages available)
-2025-12-21 14:49:15,337 - __main__ - INFO - Phase 1 completed: 0 entries processed
-2025-12-21 14:49:15,337 - __main__ - INFO - Waiting 0 seconds before Phase 2 to allow Cloudflare cooldown...
-2025-12-21 14:49:15,337 - __main__ - INFO - ==================================================
-2025-12-21 14:49:15,337 - __main__ - INFO - PHASE 2: Processing entries with only today/yesterday tag (rate > 4.0, comments > 85)
-2025-12-21 14:49:15,337 - __main__ - INFO - ==================================================
-2025-12-21 14:49:16,735 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-21 14:49:29,521 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=50078, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:49:29,534 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=50078 bytes)
-2025-12-21 14:49:29,557 - __main__ - INFO - [Page 1] Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
-2025-12-21 14:49:29,557 - __main__ - INFO - [Page 1] Fallback succeeded (Proxy=True, CF=True). Applying 5s cooldown before next page...
-2025-12-21 14:49:34,579 - utils.parser - INFO - [Page 1] New releases filter disabled - will process all entries
-2025-12-21 14:49:34,582 - utils.parser - INFO - [Page 1] Found 0 entries for phase 2
-2025-12-21 14:49:46,023 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
-2025-12-21 14:49:59,068 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
-2025-12-21 14:49:59,072 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=24364 bytes)
-2025-12-21 14:49:59,081 - __main__ - INFO - [Page 2] Page exists but has no content ('No content yet' detected)
-2025-12-21 14:49:59,081 - __main__ - INFO - [Page 2] Proxy + CF Bypass: valid empty page detected
-2025-12-21 14:49:59,081 - __main__ - INFO - [Page 2] End of content reached (no more pages available)
-2025-12-21 14:49:59,081 - __main__ - INFO - Phase 2 completed: 0 entries processed
-2025-12-21 14:49:59,081 - __main__ - INFO - CSV file written incrementally to: Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
-2025-12-21 14:49:59,081 - __main__ - INFO - ==================================================
-2025-12-21 14:49:59,082 - __main__ - INFO - SUMMARY REPORT
-2025-12-21 14:49:59,082 - __main__ - INFO - ==================================================
-2025-12-21 14:49:59,082 - __main__ - INFO - Pages processed: 1 to 10
-2025-12-21 14:49:59,082 - __main__ - INFO - Tolerance mechanism: Stops after 3 consecutive pages with no HTML content
-2025-12-21 14:49:59,082 - __main__ - INFO - ==============================
-2025-12-21 14:49:59,082 - __main__ - INFO - PHASE 1 SUMMARY
-2025-12-21 14:49:59,082 - __main__ - INFO - ==============================
-2025-12-21 14:49:59,082 - __main__ - INFO - Phase 1 entries found: 0
-2025-12-21 14:49:59,082 - __main__ - INFO -   - No entries found in Phase 1
-2025-12-21 14:49:59,082 - __main__ - INFO - ==============================
-2025-12-21 14:49:59,082 - __main__ - INFO - PHASE 2 SUMMARY
-2025-12-21 14:49:59,082 - __main__ - INFO - ==============================
-2025-12-21 14:49:59,082 - __main__ - INFO - Phase 2 entries found: 0
-2025-12-21 14:49:59,082 - __main__ - INFO -   - No entries found in Phase 2
-2025-12-21 14:49:59,082 - __main__ - INFO - ==============================
-2025-12-21 14:49:59,082 - __main__ - INFO - OVERALL SUMMARY
-2025-12-21 14:49:59,082 - __main__ - INFO - ==============================
-2025-12-21 14:49:59,082 - __main__ - INFO - Total entries found: 0
-2025-12-21 14:49:59,082 - __main__ - INFO - Successfully processed: 0
-2025-12-21 14:49:59,082 - __main__ - INFO - Skipped already parsed in this session: 0
-2025-12-21 14:49:59,082 - __main__ - INFO - Skipped already parsed in previous runs: 0
-2025-12-21 14:49:59,082 - __main__ - INFO - Current parsed links in memory: 0
-2025-12-21 14:49:59,082 - __main__ - INFO - Results saved to: Ad Hoc/Javdb_AdHoc_video_codes_NMSL_20251221.csv
-2025-12-21 14:49:59,082 - __main__ - INFO - History saved to: Daily Report/parsed_movies_history.csv
-2025-12-21 14:49:59,082 - __main__ - INFO - ==================================================
-2025-12-21 14:49:59,082 - __main__ - INFO - Committing spider results...
-2025-12-21 14:49:59,083 - utils.git_helper - INFO - Git commit/push: branch=main, from_pipeline=True
-2025-12-21 14:49:59,113 - utils.git_helper - INFO - Configured git user: tongwu
-2025-12-21 14:49:59,128 - utils.git_helper - INFO - Added to git: Daily Report
-2025-12-21 14:49:59,140 - utils.git_helper - INFO - Added to git: Ad Hoc
-2025-12-21 14:49:59,156 - utils.git_helper - INFO - Added to git: logs/
-2025-12-21 14:49:59,171 - utils.git_helper - WARNING - Failed to add parsed_movies_history.csv: Command '['git', 'add', 'parsed_movies_history.csv']' returned non-zero exit status 128.
-2025-12-21 14:49:59,213 - utils.git_helper - INFO - Committed with message: Auto-commit: Spider results 2025-12-21 14:49:59
-2025-12-21 14:49:59,918 - utils.git_helper - ERROR - Git operation failed: Command ['git', 'push', 'https://tongwu:ghp_***MASKED***@github.com/TongWu/JAVDB_AutoSpider.git', 'main'] returned non-zero exit status 1
+2025-12-21 14:55:37,335 - __main__ - INFO - Initializing proxy pool with 3 proxies...
+2025-12-21 14:55:37,336 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
+2025-12-21 14:55:37,336 - utils.proxy_pool - WARNING - Proxy 'Miraculous Fortress' is currently banned, skipping
+2025-12-21 14:55:37,336 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM1' to pool (HTTP: http://***:***@140.xxx.xxx.124:12300, HTTPS: http://***:***@140.xxx.xxx.124:12300)
+2025-12-21 14:55:37,336 - utils.proxy_pool - INFO - Added proxy 'Singapore-ARM2' to pool (HTTP: http://***:***@129.xxx.xxx.19:12300, HTTPS: http://***:***@129.xxx.xxx.19:12300)
+2025-12-21 14:55:37,336 - __main__ - INFO - Proxy pool initialized successfully
+2025-12-21 14:55:37,336 - __main__ - INFO - Cooldown: 691200s, Max failures before cooldown: 3
+2025-12-21 14:55:37,336 - __main__ - INFO - Request handler initialized successfully
+2025-12-21 14:55:37,336 - __main__ - INFO - Starting JavDB spider...
+2025-12-21 14:55:37,336 - __main__ - INFO - Arguments: start_page=1, end_page=10, phase=all
+2025-12-21 14:55:37,336 - __main__ - INFO - Custom URL: https://javdb.com/video_codes/NMSL
+2025-12-21 14:55:37,336 - __main__ - INFO - AD HOC MODE: Will skip entries already in history (use --ignore-history to override)
+2025-12-21 14:55:37,336 - __main__ - INFO - Validating history file integrity...
+2025-12-21 14:55:37,379 - utils.history_manager - INFO - Loaded 6147 previously parsed movies from history (phase 1: 3499, phase 2: 2648)
+2025-12-21 14:55:37,379 - __main__ - INFO - Initialized requests session
+2025-12-21 14:55:37,379 - __main__ - INFO - ==================================================
+2025-12-21 14:55:37,379 - __main__ - INFO - PHASE 1: Processing entries with both subtitle and today/yesterday tags
+2025-12-21 14:55:37,379 - __main__ - INFO - ==================================================
+2025-12-21 14:55:38,830 - __main__ - WARNING - [Page 1] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:55:52,005 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=50106, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:55:52,015 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=50106 bytes)
+2025-12-21 14:55:52,035 - __main__ - INFO - [Page 1] Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 14:55:52,035 - __main__ - INFO - [Page 1] Fallback succeeded (Proxy=True, CF=True). Applying 5s cooldown before next page...
+2025-12-21 14:55:57,061 - utils.parser - INFO - [Page 1] AD HOC MODE - all filters disabled, processing all entries
+2025-12-21 14:55:57,064 - utils.parser - INFO - [Page 1] Found 28 entries for phase 1
+2025-12-21 14:56:08,440 - __main__ - WARNING - [Page 2] Initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:56:21,455 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=24364, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:56:21,462 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=24364 bytes)
+2025-12-21 14:56:21,469 - __main__ - INFO - [Page 2] Page exists but has no content ('No content yet' detected)
+2025-12-21 14:56:21,469 - __main__ - INFO - [Page 2] Proxy + CF Bypass: valid empty page detected
+2025-12-21 14:56:21,469 - __main__ - INFO - [Page 2] End of content reached (no more pages available)
+2025-12-21 14:56:32,811 - __main__ - WARNING - [1/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:56:45,881 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=61519, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:56:45,900 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=61519 bytes)
+2025-12-21 14:56:45,922 - __main__ - INFO - [1/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 14:56:45,922 - __main__ - INFO - [1/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 14:56:45,922 - __main__ - INFO - [1/28] [Page 1] Processing NMSL-001
+2025-12-21 14:57:02,308 - __main__ - WARNING - [2/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:57:17,576 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=59019, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:57:17,589 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=59019 bytes)
+2025-12-21 14:57:17,613 - __main__ - INFO - [2/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 14:57:17,614 - __main__ - INFO - [2/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 14:57:17,614 - __main__ - INFO - [2/28] [Page 1] Processing NMSL-002
+2025-12-21 14:57:34,004 - __main__ - WARNING - [3/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:57:47,262 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=57443, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:57:47,282 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=57443 bytes)
+2025-12-21 14:57:47,300 - __main__ - INFO - [3/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 14:57:47,300 - __main__ - INFO - [3/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 14:57:47,300 - __main__ - INFO - [3/28] [Page 1] Processing NMSL-030
+2025-12-21 14:58:03,900 - __main__ - WARNING - [4/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:58:16,891 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=56592, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:58:16,903 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=56592 bytes)
+2025-12-21 14:58:16,923 - __main__ - INFO - [4/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 14:58:16,923 - __main__ - INFO - [4/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 14:58:16,923 - __main__ - INFO - [4/28] [Page 1] Processing NMSL-029
+2025-12-21 14:58:33,355 - __main__ - WARNING - [5/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:58:46,699 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=57675, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:58:46,712 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=57675 bytes)
+2025-12-21 14:58:46,739 - __main__ - INFO - [5/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 14:58:46,739 - __main__ - INFO - [5/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 14:58:46,739 - __main__ - INFO - [5/28] [Page 1] Processing NMSL-028
+2025-12-21 14:59:03,178 - __main__ - WARNING - [6/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:59:16,062 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=57801, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:59:16,076 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=57801 bytes)
+2025-12-21 14:59:16,098 - __main__ - INFO - [6/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 14:59:16,098 - __main__ - INFO - [6/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 14:59:16,098 - __main__ - INFO - [6/28] [Page 1] Processing NMSL-027
+2025-12-21 14:59:32,497 - __main__ - WARNING - [7/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 14:59:45,401 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=57326, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 14:59:45,415 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=57326 bytes)
+2025-12-21 14:59:45,436 - __main__ - INFO - [7/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 14:59:45,436 - __main__ - INFO - [7/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 14:59:45,436 - __main__ - INFO - [7/28] [Page 1] Processing NMSL-026
+2025-12-21 15:00:01,882 - __main__ - WARNING - [8/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 15:00:15,306 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=57431, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 15:00:15,324 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=57431 bytes)
+2025-12-21 15:00:15,351 - __main__ - INFO - [8/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 15:00:15,351 - __main__ - INFO - [8/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 15:00:15,351 - __main__ - INFO - [8/28] [Page 1] Processing NMSL-025
+2025-12-21 15:00:31,821 - __main__ - WARNING - [9/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 15:00:45,056 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=57937, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 15:00:45,079 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=57937 bytes)
+2025-12-21 15:00:45,100 - __main__ - INFO - [9/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 15:00:45,100 - __main__ - INFO - [9/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 15:00:45,100 - __main__ - INFO - [9/28] [Page 1] Processing NMSL-024
+2025-12-21 15:01:01,740 - __main__ - WARNING - [10/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 15:01:14,930 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=58392, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 15:01:14,943 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=58392 bytes)
+2025-12-21 15:01:14,969 - __main__ - INFO - [10/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 15:01:14,969 - __main__ - INFO - [10/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 15:01:14,969 - __main__ - INFO - [10/28] [Page 1] Processing NMSL-023
+2025-12-21 15:01:31,418 - __main__ - WARNING - [11/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 15:01:44,570 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=58061, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 15:01:44,587 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=58061 bytes)
+2025-12-21 15:01:44,613 - __main__ - INFO - [11/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 15:01:44,613 - __main__ - INFO - [11/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 15:01:44,613 - __main__ - INFO - [11/28] [Page 1] Processing NMSL-022
+2025-12-21 15:02:01,019 - __main__ - WARNING - [12/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 15:02:14,102 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=59164, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 15:02:14,121 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=59164 bytes)
+2025-12-21 15:02:14,140 - __main__ - INFO - [12/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 15:02:14,140 - __main__ - INFO - [12/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 15:02:14,140 - __main__ - INFO - [12/28] [Page 1] Processing NMSL-020
+2025-12-21 15:02:30,536 - __main__ - WARNING - [13/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 15:02:43,916 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=57330, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 15:02:43,931 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=57330 bytes)
+2025-12-21 15:02:43,950 - __main__ - INFO - [13/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 15:02:43,951 - __main__ - INFO - [13/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 15:02:43,951 - __main__ - INFO - [13/28] [Page 1] Processing NMSL-019
+2025-12-21 15:03:00,409 - __main__ - WARNING - [14/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 15:03:13,433 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=56398, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 15:03:13,450 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=56398 bytes)
+2025-12-21 15:03:13,471 - __main__ - INFO - [14/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 15:03:13,471 - __main__ - INFO - [14/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 15:03:13,471 - __main__ - INFO - [14/28] [Page 1] Processing NMSL-018
+2025-12-21 15:03:29,964 - __main__ - WARNING - [15/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 15:03:43,149 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=57837, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 15:03:43,163 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=57837 bytes)
+2025-12-21 15:03:43,183 - __main__ - INFO - [15/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 15:03:43,184 - __main__ - INFO - [15/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 15:03:43,184 - __main__ - INFO - [15/28] [Page 1] Processing NMSL-017
+2025-12-21 15:03:59,807 - __main__ - WARNING - [16/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 15:04:13,127 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=57021, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 15:04:13,138 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=57021 bytes)
+2025-12-21 15:04:13,158 - __main__ - INFO - [16/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 15:04:13,158 - __main__ - INFO - [16/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 15:04:13,158 - __main__ - INFO - [16/28] [Page 1] Processing NMSL-016
+2025-12-21 15:04:29,629 - __main__ - WARNING - [17/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 15:04:43,819 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=53924, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 15:04:43,836 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=53924 bytes)
+2025-12-21 15:04:43,856 - __main__ - INFO - [17/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 15:04:43,856 - __main__ - INFO - [17/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 15:04:43,856 - utils.magnet_extractor - WARNING - [17] No suitable magnet found
+2025-12-21 15:04:43,856 - __main__ - INFO - [17/28] [Page 1] Processing NMSL-015
+2025-12-21 15:05:00,219 - __main__ - WARNING - [18/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 15:05:13,224 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=59280, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 15:05:13,243 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=59280 bytes)
+2025-12-21 15:05:13,265 - __main__ - INFO - [18/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 15:05:13,266 - __main__ - INFO - [18/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 15:05:13,266 - __main__ - INFO - [18/28] [Page 1] Processing NMSL-014
+2025-12-21 15:05:29,791 - __main__ - WARNING - [19/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 15:05:43,365 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=63237, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 15:05:43,387 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=63237 bytes)
+2025-12-21 15:05:43,413 - __main__ - INFO - [19/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 15:05:43,413 - __main__ - INFO - [19/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 15:05:43,413 - __main__ - INFO - [19/28] [Page 1] Processing NMSL-013
+2025-12-21 15:05:59,839 - __main__ - WARNING - [20/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 15:06:12,984 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=63954, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 15:06:13,001 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=63954 bytes)
+2025-12-21 15:06:13,027 - __main__ - INFO - [20/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 15:06:13,028 - __main__ - INFO - [20/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 15:06:13,028 - __main__ - INFO - [20/28] [Page 1] Processing NMSL-012
+2025-12-21 15:06:29,643 - __main__ - WARNING - [21/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 15:06:43,288 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=60062, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 15:06:43,302 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=60062 bytes)
+2025-12-21 15:06:43,341 - __main__ - INFO - [21/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 15:06:43,341 - __main__ - INFO - [21/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 15:06:43,341 - __main__ - INFO - [21/28] [Page 1] Processing NMSL-010
+2025-12-21 15:06:59,908 - __main__ - WARNING - [22/28] Detail page initial attempt failed. Starting smart fallback mechanism...
+2025-12-21 15:07:13,694 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 response: size=62007, turnstile_keyword=False, security_verification=False, bypass_failure=False
+2025-12-21 15:07:13,705 - utils.request_handler - INFO - [CF Bypass] Proxy=Singapore-ARM1 SUCCESS - got valid HTML (size=62007 bytes)
+2025-12-21 15:07:13,725 - __main__ - INFO - [22/28] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True
+2025-12-21 15:07:13,725 - __main__ - INFO - [22/28] Fallback succeeded (Proxy=True, CF=True). Will apply 5s cooldown after processing...
+2025-12-21 15:07:13,725 - __main__ - INFO - [22/28] [Page 1] Processing NMSL-007
