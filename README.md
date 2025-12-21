@@ -5,6 +5,8 @@
 
 A comprehensive Python automation system for extracting torrent links from javdb.com and automatically adding them to qBittorrent. The system includes intelligent history tracking, git integration, automated pipeline execution, and duplicate download prevention.
 
+It can be played as an ingestion pipeline before the automated scrapping platform for JAV (e.g. [MDC-NG](https://github.com/mdc-ng/mdc-ng)).
+
 English | [简体中文](README_CN.md)
 
 ## Features
