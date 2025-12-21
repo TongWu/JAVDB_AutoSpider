@@ -299,12 +299,13 @@ def initialize_proxy_helper(use_proxy):
     
     if not use_proxy:
         global_proxy_pool = None
+        # When use_proxy=False, don't pass proxy configs to ensure no proxy is used
         global_proxy_helper = create_proxy_helper_from_config(
             proxy_pool=None,
             proxy_modules=PROXY_MODULES,
             proxy_mode=PROXY_MODE,
-            proxy_http=PROXY_HTTP,
-            proxy_https=PROXY_HTTPS
+            proxy_http=None,
+            proxy_https=None
         )
         return
     
