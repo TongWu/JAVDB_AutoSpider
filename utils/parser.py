@@ -50,8 +50,16 @@ def extract_video_code(a):
     return ''
 
 
-def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=False):
-    """Parse the index page to extract entries with required tags"""
+def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=False, is_adhoc_mode=False):
+    """Parse the index page to extract entries with required tags.
+    
+    Args:
+        html_content: HTML content to parse
+        page_num: Current page number
+        phase: 1 for subtitle entries, 2 for non-subtitle entries
+        disable_new_releases_filter: If True, disable release date filter but keep other filters
+        is_adhoc_mode: If True, disable ALL filters and process ALL entries (for custom URL mode)
+    """
     soup = BeautifulSoup(html_content, 'html.parser')
     results = []
 
@@ -89,7 +97,9 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
     logger.debug(f"[Page {page_num}] Found movie list container")
 
     logger.debug(f"[Page {page_num}] Parsing index page for phase {phase}...")
-    if disable_new_releases_filter:
+    if is_adhoc_mode:
+        logger.info(f"[Page {page_num}] AD HOC MODE - all filters disabled, processing all entries")
+    elif disable_new_releases_filter:
         logger.info(f"[Page {page_num}] New releases filter disabled - will process all entries")
     elif IGNORE_RELEASE_DATE_FILTER:
         logger.info(f"[Page {page_num}] Release date filter ignored - processing all subtitle entries")
@@ -109,6 +119,54 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                 tags.append(span.get_text(strip=True))
 
         logger.debug(f"[Page {page_num}] Found tags: {tags}")
+
+        # AD HOC MODE: Process ALL entries without any filtering
+        # In ad hoc mode, phase 1 processes all entries and phase 2 should be skipped
+        if is_adhoc_mode:
+            if phase == 1:
+                # Process all entries regardless of tags
+                href = a.get('href', '')
+                video_code = extract_video_code(a)
+                
+                # Skip entries with invalid video code (no '-')
+                if not video_code:
+                    continue
+
+                # Extract rating information
+                rate = ''
+                score_div = a.find('div', class_='score')
+                if score_div:
+                    value_span = score_div.find('span', class_='value')
+                    if value_span:
+                        score_text = value_span.get_text(strip=True)
+                        rate_match = re.search(r'(\d+\.?\d*)分', score_text)
+                        if rate_match:
+                            rate = rate_match.group(1)
+
+                # Extract comment number
+                comment_number = ''
+                if score_div:
+                    value_span = score_div.find('span', class_='value')
+                    if value_span:
+                        score_text = value_span.get_text(strip=True)
+                        comment_match = re.search(r'由(\d+)人評價', score_text)
+                        if comment_match:
+                            comment_number = comment_match.group(1)
+
+                logger.debug(f"[Page {page_num}] Found entry (adhoc mode): {video_code} ({href})")
+
+                results.append({
+                    'href': href,
+                    'video_code': video_code,
+                    'page': page_num,
+                    'actor': '',  # Will be filled from detail page
+                    'rate': rate,
+                    'comment_number': comment_number
+                })
+            else:
+                # Phase 2 in adhoc mode: skip all entries (already processed in phase 1)
+                pass
+            continue
 
         # Phase 1: Check if both required tags are present
         if phase == 1:
@@ -332,7 +390,7 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                             logger.debug(
                                 f"[Page {page_num}] Skipped entry (invalid data): {video_code} - Rate: {rate}, Comments: {comment_number}")
 
-    logger.info(f"[Page {page_num}] Found {len(results)} entries for phase {phase}")
+    logger.debug(f"[Page {page_num}] Found {len(results)} entries for phase {phase}")
     return results
 
 
