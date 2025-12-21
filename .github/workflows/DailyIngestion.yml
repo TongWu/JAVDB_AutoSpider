@@ -185,6 +185,7 @@ jobs:
     needs: [setup, health-check]
     outputs:
       spider_success: ${{ steps.spider.outcome == 'success' }}
+      uploader_success: ${{ steps.uploader.outcome == 'success' }}
     
     steps:
       - name: Checkout repository
@@ -450,6 +451,7 @@ jobs:
       - name: Commit and Push Results
         env:
           SPIDER_SUCCESS: ${{ needs.run-pipeline.outputs.spider_success }}
+          UPLOADER_SUCCESS: ${{ needs.run-pipeline.outputs.uploader_success }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -474,12 +476,14 @@ jobs:
             fi
           fi
           
-          # Add CSV files (exclude parsed_movies_history.csv if spider failed)
-          if [[ "$SPIDER_SUCCESS" == "true" ]]; then
-            echo "Spider succeeded - committing all CSV files including parsed_movies_history.csv"
+          # Add CSV files (exclude parsed_movies_history.csv if spider or uploader failed/cancelled)
+          if [[ "$SPIDER_SUCCESS" == "true" && "$UPLOADER_SUCCESS" == "true" ]]; then
+            echo "Spider and Uploader both succeeded - committing all CSV files including parsed_movies_history.csv"
             git add 'Daily Report'/*.csv || true
           else
-            echo "Spider failed - skipping parsed_movies_history.csv commit"
+            echo "Spider or Uploader failed/cancelled - skipping parsed_movies_history.csv commit"
+            echo "  Spider success: $SPIDER_SUCCESS"
+            echo "  Uploader success: $UPLOADER_SUCCESS"
             # Add all CSVs except parsed_movies_history.csv
             for f in "Daily Report"/*.csv; do
               if [[ "$(basename "$f")" != "parsed_movies_history.csv" ]]; then
