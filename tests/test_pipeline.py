@@ -104,11 +104,13 @@ class TestAnalyzeSpiderLog:
     """Test cases for analyze_spider_log function."""
     
     def test_log_not_found(self, temp_dir):
-        """Test with non-existent log file."""
+        """Test with non-existent log file - not critical since script may not have run."""
         log_path = os.path.join(temp_dir, 'nonexistent.log')
-        is_critical, error_msg = analyze_spider_log(log_path)
-        assert is_critical is True
+        is_critical, error_msg, log_exists = analyze_spider_log(log_path)
+        # Missing log is not critical - email notification should still succeed
+        assert is_critical is False
         assert 'not found' in error_msg
+        assert log_exists is False
     
     def test_proxy_ban_detected(self, temp_dir):
         """Test detection of proxy ban in log."""
@@ -116,9 +118,10 @@ class TestAnalyzeSpiderLog:
         with open(log_path, 'w') as f:
             f.write("CRITICAL: PROXY BAN DETECTED DURING THIS RUN\n")
         
-        is_critical, error_msg = analyze_spider_log(log_path)
+        is_critical, error_msg, log_exists = analyze_spider_log(log_path)
         assert is_critical is True
         assert 'Proxy ban' in error_msg
+        assert log_exists is True
     
     def test_successful_run(self, temp_dir):
         """Test successful spider run detection."""
@@ -129,20 +132,23 @@ class TestAnalyzeSpiderLog:
             f.write("Total entries found: 50\n")
             f.write("OVERALL SUMMARY\n")
         
-        is_critical, error_msg = analyze_spider_log(log_path)
+        is_critical, error_msg, log_exists = analyze_spider_log(log_path)
         assert is_critical is False
         assert error_msg is None
+        assert log_exists is True
 
 
 class TestAnalyzeUploaderLog:
     """Test cases for analyze_uploader_log function."""
     
     def test_log_not_found(self, temp_dir):
-        """Test with non-existent log file."""
+        """Test with non-existent log file - not critical since script may not have run."""
         log_path = os.path.join(temp_dir, 'nonexistent.log')
-        is_critical, error_msg = analyze_uploader_log(log_path)
-        assert is_critical is True
+        is_critical, error_msg, log_exists = analyze_uploader_log(log_path)
+        # Missing log is not critical - email notification should still succeed
+        assert is_critical is False
         assert 'not found' in error_msg
+        assert log_exists is False
     
     def test_qbittorrent_connection_failure(self, temp_dir):
         """Test detection of qBittorrent connection failure."""
@@ -150,9 +156,10 @@ class TestAnalyzeUploaderLog:
         with open(log_path, 'w') as f:
             f.write("Cannot connect to qBittorrent\n")
         
-        is_critical, error_msg = analyze_uploader_log(log_path)
+        is_critical, error_msg, log_exists = analyze_uploader_log(log_path)
         assert is_critical is True
         assert 'qBittorrent' in error_msg
+        assert log_exists is True
     
     def test_successful_upload(self, temp_dir):
         """Test successful upload detection."""
@@ -162,8 +169,9 @@ class TestAnalyzeUploaderLog:
             f.write("Successfully added: 10\n")
             f.write("Failed to add: 0\n")
         
-        is_critical, error_msg = analyze_uploader_log(log_path)
+        is_critical, error_msg, log_exists = analyze_uploader_log(log_path)
         assert is_critical is False
+        assert log_exists is True
 
 
 class TestAnalyzePikpakLog:
@@ -172,9 +180,10 @@ class TestAnalyzePikpakLog:
     def test_log_not_found(self, temp_dir):
         """Test with non-existent log file - should not be critical."""
         log_path = os.path.join(temp_dir, 'nonexistent.log')
-        is_critical, error_msg = analyze_pikpak_log(log_path)
+        is_critical, error_msg, log_exists = analyze_pikpak_log(log_path)
         # PikPak is optional, so missing log is not critical
         assert is_critical is False
+        assert log_exists is False
     
     def test_qbittorrent_login_failure(self, temp_dir):
         """Test detection of qBittorrent login failure in PikPak."""
@@ -182,20 +191,23 @@ class TestAnalyzePikpakLog:
         with open(log_path, 'w') as f:
             f.write("qBittorrent login failed\n")
         
-        is_critical, error_msg = analyze_pikpak_log(log_path)
+        is_critical, error_msg, log_exists = analyze_pikpak_log(log_path)
         assert is_critical is True
         assert 'qBittorrent' in error_msg
+        assert log_exists is True
 
 
 class TestAnalyzePipelineLog:
     """Test cases for analyze_pipeline_log function."""
     
     def test_log_not_found(self, temp_dir):
-        """Test with non-existent log file - should be critical."""
+        """Test with non-existent log file - not critical since email should still work."""
         log_path = os.path.join(temp_dir, 'nonexistent.log')
-        is_critical, error_msg = analyze_pipeline_log(log_path)
-        assert is_critical is True
+        is_critical, error_msg, log_exists = analyze_pipeline_log(log_path)
+        # Missing log is not critical - email notification should still succeed
+        assert is_critical is False
         assert 'not found' in error_msg
+        assert log_exists is False
     
     def test_script_execution_failure(self, temp_dir):
         """Test detection of script execution failure."""
@@ -204,9 +216,10 @@ class TestAnalyzePipelineLog:
             f.write("PIPELINE EXECUTION ERROR\n")
             f.write("Script scripts/spider.py failed with return code 1\n")
         
-        is_critical, error_msg = analyze_pipeline_log(log_path)
+        is_critical, error_msg, log_exists = analyze_pipeline_log(log_path)
         assert is_critical is True
         assert 'spider' in error_msg or 'Pipeline' in error_msg
+        assert log_exists is True
     
     def test_syntax_error_detected(self, temp_dir):
         """Test detection of syntax errors in pipeline log."""
@@ -215,9 +228,10 @@ class TestAnalyzePipelineLog:
             f.write("Starting pipeline...\n")
             f.write("IndentationError: unexpected indent\n")
         
-        is_critical, error_msg = analyze_pipeline_log(log_path)
+        is_critical, error_msg, log_exists = analyze_pipeline_log(log_path)
         assert is_critical is True
         assert 'IndentationError' in error_msg
+        assert log_exists is True
     
     def test_module_not_found_error(self, temp_dir):
         """Test detection of ModuleNotFoundError."""
@@ -226,9 +240,10 @@ class TestAnalyzePipelineLog:
             f.write("Starting pipeline...\n")
             f.write("ModuleNotFoundError: No module named 'missing_module'\n")
         
-        is_critical, error_msg = analyze_pipeline_log(log_path)
+        is_critical, error_msg, log_exists = analyze_pipeline_log(log_path)
         assert is_critical is True
         assert 'module' in error_msg.lower()
+        assert log_exists is True
     
     def test_import_error_detected(self, temp_dir):
         """Test detection of ImportError."""
@@ -237,9 +252,10 @@ class TestAnalyzePipelineLog:
             f.write("Starting pipeline...\n")
             f.write("ImportError: cannot import name 'something'\n")
         
-        is_critical, error_msg = analyze_pipeline_log(log_path)
+        is_critical, error_msg, log_exists = analyze_pipeline_log(log_path)
         assert is_critical is True
         assert 'Import' in error_msg
+        assert log_exists is True
     
     def test_successful_run(self, temp_dir):
         """Test successful pipeline run detection."""
@@ -250,9 +266,10 @@ class TestAnalyzePipelineLog:
             f.write("Spider completed successfully\n")
             f.write("Pipeline completed\n")
         
-        is_critical, error_msg = analyze_pipeline_log(log_path)
+        is_critical, error_msg, log_exists = analyze_pipeline_log(log_path)
         assert is_critical is False
         assert error_msg is None
+        assert log_exists is True
 
 
 class TestExtractSpiderStatistics:
