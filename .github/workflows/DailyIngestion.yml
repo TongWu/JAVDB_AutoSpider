@@ -295,13 +295,13 @@ jobs:
           if-no-files-found: ignore
 
   # =============================================================================
-  # Job 4: Email Notification - Always runs to report success or failure
+  # Job 4: Email Notification - Runs on success or failure, but NOT on cancel
   # =============================================================================
   email-notification:
     runs-on: ARM64
     environment: WT_DailyIngestion
     needs: [setup, health-check, run-pipeline]
-    if: always()
+    if: ${{ !cancelled() }}
     
     steps:
       - name: Checkout repository
@@ -414,7 +414,7 @@ jobs:
     runs-on: ARM64
     environment: WT_DailyIngestion
     needs: [setup, run-pipeline, email-notification]
-    if: always() && needs.run-pipeline.result != 'skipped'
+    if: ${{ !cancelled() && needs.run-pipeline.result != 'skipped' }}
     permissions:
       contents: write
     
