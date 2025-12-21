@@ -353,9 +353,66 @@ class RequestHandler:
                 if is_turnstile:
                     logger.warning(f"[CF Bypass] {context_msg} returned Turnstile page (size={content_size} bytes)")
                     return html_content, False, True
-                else:
-                    logger.info(f"[CF Bypass] {context_msg} SUCCESS - got valid HTML (size={content_size} bytes)")
-                    return html_content, True, False
+                
+                # Check for age verification modal without content
+                # If age modal exists but no movie-list/video-detail, we need to handle over18 via CF bypass
+                soup = BeautifulSoup(html_content, 'html.parser')
+                age_modal = soup.find('div', class_='modal is-active over18-modal')
+                
+                if age_modal:
+                    movie_list = soup.find('div', class_=lambda x: x and 'movie-list' in x)
+                    detail_content = soup.find('div', class_='video-detail')
+                    
+                    if not movie_list and not detail_content:
+                        # Age modal exists but no content - need to click over18 via CF bypass
+                        logger.debug(f"[CF Bypass] {context_msg}: Age modal detected without content, attempting over18 bypass via CF...")
+                        
+                        age_links = age_modal.find_all('a', href=True)
+                        for link in age_links:
+                            if 'over18' in link.get('href', ''):
+                                over18_path = link.get('href')
+                                over18_url = urljoin(self.config.base_url, over18_path)
+                                
+                                # Use CF bypass to visit over18 link (sets cookie on bypass server)
+                                encoded_over18_url = quote(over18_url, safe='')
+                                bypass_over18_url = f"{bypass_base_url}/html?url={encoded_over18_url}"
+                                
+                                logger.debug(f"[CF Bypass] {context_msg}: Visiting over18 URL via bypass: {over18_url}")
+                                
+                                over18_content, over18_error = self._do_request(
+                                    bypass_over18_url, self.BYPASS_HEADERS, None,
+                                    timeout=60, context_msg=f"CF Bypass Over18 {context_msg}",
+                                    session=session
+                                )
+                                
+                                if over18_content:
+                                    logger.debug(f"[CF Bypass] {context_msg}: Over18 bypass returned {len(over18_content)} bytes, re-fetching original URL...")
+                                    
+                                    # Re-fetch the original URL after over18 cookie is set
+                                    html_content2, error2 = self._do_request(
+                                        bypass_url, self.BYPASS_HEADERS, None,
+                                        timeout=60, context_msg=f"CF Bypass Retry {context_msg}",
+                                        session=session
+                                    )
+                                    
+                                    if html_content2:
+                                        content_size2 = len(html_content2)
+                                        logger.info(f"[CF Bypass] {context_msg}: After over18 bypass, got {content_size2} bytes")
+                                        
+                                        # Check if we now have content
+                                        soup2 = BeautifulSoup(html_content2, 'html.parser')
+                                        movie_list2 = soup2.find('div', class_=lambda x: x and 'movie-list' in x)
+                                        detail_content2 = soup2.find('div', class_='video-detail')
+                                        
+                                        if movie_list2 or detail_content2:
+                                            logger.info(f"[CF Bypass] {context_msg}: Over18 bypass successful, got content!")
+                                            return html_content2, True, False
+                                        else:
+                                            logger.warning(f"[CF Bypass] {context_msg}: Over18 bypass did not help, still no content")
+                                break
+                
+                logger.info(f"[CF Bypass] {context_msg} SUCCESS - got valid HTML (size={content_size} bytes)")
+                return html_content, True, False
             else:
                 logger.warning(f"[CF Bypass] {context_msg} returned failure response (size={content_size} bytes)")
                 return html_content, False, False
@@ -387,8 +444,18 @@ class RequestHandler:
         return None, False, False
     
     def _process_html(self, url: str, html_content: Optional[str], req_proxies: Optional[Dict],
-                      use_cookie: bool = False, session: Optional[requests.Session] = None) -> Optional[str]:
-        """Process HTML content: check for Cloudflare and age verification."""
+                      use_cookie: bool = False, session: Optional[requests.Session] = None,
+                      from_cf_bypass: bool = False) -> Optional[str]:
+        """Process HTML content: check for Cloudflare and age verification.
+        
+        Args:
+            url: Original URL that was fetched
+            html_content: HTML content to process
+            req_proxies: Proxy configuration
+            use_cookie: Whether to use session cookie
+            session: Optional custom session to use
+            from_cf_bypass: If True, HTML was fetched via CF bypass service
+        """
         if not html_content:
             return None
         
@@ -407,6 +474,28 @@ class RequestHandler:
         age_modal = soup.find('div', class_='modal is-active over18-modal')
         
         if age_modal:
+            # If HTML came from CF bypass and already contains useful content (movie-list),
+            # skip the age verification bypass as the content is already valid.
+            # The modal HTML may still be present but the page content is accessible.
+            if from_cf_bypass:
+                movie_list = soup.find('div', class_=lambda x: x and 'movie-list' in x)
+                if movie_list:
+                    logger.debug("Age verification modal detected but HTML from CF bypass already contains movie-list, skipping re-fetch")
+                    return html_content
+                
+                # Also check for detail page content (for /v/ pages)
+                detail_content = soup.find('div', class_='video-detail')
+                if detail_content:
+                    logger.debug("Age verification modal detected but HTML from CF bypass already contains video-detail, skipping re-fetch")
+                    return html_content
+                
+                # CF bypass HTML has age modal but no content - need to handle via CF bypass
+                # Using direct requests here would fail because the page requires CF bypass to access
+                logger.debug("Age verification modal detected in CF bypass HTML but no valid content found - returning as-is (bypass service should handle over18 cookie)")
+                # Return the HTML as-is; the validation will fail but at least we don't 
+                # cause infinite redirect loops by trying direct requests
+                return html_content
+            
             logger.debug("Age verification modal detected, attempting to bypass...")
             
             age_links = age_modal.find_all('a', href=True)
@@ -535,7 +624,7 @@ class RequestHandler:
             force_local=use_local_bypass, use_proxy_bypass=use_proxy_bypass, session=session
         )
         if success:
-            result = self._process_html(url, html_content, proxies, use_cookie, session)
+            result = self._process_html(url, html_content, proxies, use_cookie, session, from_cf_bypass=True)
             if result and len(result) >= 10000:
                 if use_proxy_pool_mode and self.proxy_pool:
                     self.proxy_pool.mark_success()
@@ -560,7 +649,7 @@ class RequestHandler:
             force_local=use_local_bypass, use_proxy_bypass=use_proxy_bypass, session=session
         )
         if success:
-            result = self._process_html(url, html_content, proxies, use_cookie, session)
+            result = self._process_html(url, html_content, proxies, use_cookie, session, from_cf_bypass=True)
             if result and len(result) >= 10000:
                 if use_proxy_pool_mode and self.proxy_pool:
                     self.proxy_pool.mark_success()
@@ -634,7 +723,7 @@ class RequestHandler:
                     use_proxy_bypass=True, session=session
                 )
                 if success:
-                    result = self._process_html(url, html_content, proxies, use_cookie, session)
+                    result = self._process_html(url, html_content, proxies, use_cookie, session, from_cf_bypass=True)
                     if result and len(result) >= 10000:
                         self.proxy_pool.mark_success()
                         self.cf_bypass_failure_count = 0
