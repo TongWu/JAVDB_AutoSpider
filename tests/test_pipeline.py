@@ -15,6 +15,7 @@ from scripts.email_notification import (
     analyze_spider_log,
     analyze_uploader_log,
     analyze_pikpak_log,
+    analyze_pipeline_log,
     extract_spider_statistics,
     extract_uploader_statistics,
     extract_pikpak_statistics,
@@ -184,6 +185,74 @@ class TestAnalyzePikpakLog:
         is_critical, error_msg = analyze_pikpak_log(log_path)
         assert is_critical is True
         assert 'qBittorrent' in error_msg
+
+
+class TestAnalyzePipelineLog:
+    """Test cases for analyze_pipeline_log function."""
+    
+    def test_log_not_found(self, temp_dir):
+        """Test with non-existent log file - should be critical."""
+        log_path = os.path.join(temp_dir, 'nonexistent.log')
+        is_critical, error_msg = analyze_pipeline_log(log_path)
+        assert is_critical is True
+        assert 'not found' in error_msg
+    
+    def test_script_execution_failure(self, temp_dir):
+        """Test detection of script execution failure."""
+        log_path = os.path.join(temp_dir, 'pipeline.log')
+        with open(log_path, 'w') as f:
+            f.write("PIPELINE EXECUTION ERROR\n")
+            f.write("Script scripts/spider.py failed with return code 1\n")
+        
+        is_critical, error_msg = analyze_pipeline_log(log_path)
+        assert is_critical is True
+        assert 'spider' in error_msg or 'Pipeline' in error_msg
+    
+    def test_syntax_error_detected(self, temp_dir):
+        """Test detection of syntax errors in pipeline log."""
+        log_path = os.path.join(temp_dir, 'pipeline.log')
+        with open(log_path, 'w') as f:
+            f.write("Starting pipeline...\n")
+            f.write("IndentationError: unexpected indent\n")
+        
+        is_critical, error_msg = analyze_pipeline_log(log_path)
+        assert is_critical is True
+        assert 'IndentationError' in error_msg
+    
+    def test_module_not_found_error(self, temp_dir):
+        """Test detection of ModuleNotFoundError."""
+        log_path = os.path.join(temp_dir, 'pipeline.log')
+        with open(log_path, 'w') as f:
+            f.write("Starting pipeline...\n")
+            f.write("ModuleNotFoundError: No module named 'missing_module'\n")
+        
+        is_critical, error_msg = analyze_pipeline_log(log_path)
+        assert is_critical is True
+        assert 'module' in error_msg.lower()
+    
+    def test_import_error_detected(self, temp_dir):
+        """Test detection of ImportError."""
+        log_path = os.path.join(temp_dir, 'pipeline.log')
+        with open(log_path, 'w') as f:
+            f.write("Starting pipeline...\n")
+            f.write("ImportError: cannot import name 'something'\n")
+        
+        is_critical, error_msg = analyze_pipeline_log(log_path)
+        assert is_critical is True
+        assert 'Import' in error_msg
+    
+    def test_successful_run(self, temp_dir):
+        """Test successful pipeline run detection."""
+        log_path = os.path.join(temp_dir, 'pipeline.log')
+        with open(log_path, 'w') as f:
+            f.write("Starting pipeline...\n")
+            f.write("Step 1: Running Spider...\n")
+            f.write("Spider completed successfully\n")
+            f.write("Pipeline completed\n")
+        
+        is_critical, error_msg = analyze_pipeline_log(log_path)
+        assert is_critical is False
+        assert error_msg is None
 
 
 class TestExtractSpiderStatistics:
