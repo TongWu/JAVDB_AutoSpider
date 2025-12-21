@@ -87,17 +87,51 @@ jobs:
           python3 -c "
           import requests
           import sys
-          from config import QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD, REQUEST_TIMEOUT
+          import os
+          from config import (
+              QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD, REQUEST_TIMEOUT,
+              PROXY_MODULES, PROXY_POOL, PROXY_MODE
+          )
           
           try:
+              # Determine if proxy should be used for qBittorrent based on PROXY_MODULES
+              use_proxy = False
+              proxy_config = {}
+              
+              if PROXY_MODULES and ('all' in PROXY_MODULES or 'qbittorrent' in PROXY_MODULES):
+                  use_proxy = True
+                  # Get proxy from pool (first proxy in single mode, or first available in pool mode)
+                  if PROXY_POOL and len(PROXY_POOL) > 0:
+                      proxy = PROXY_POOL[0]
+                      proxy_config = {
+                          'http': proxy.get('http'),
+                          'https': proxy.get('https')
+                      }
+                      print(f'Using proxy for qBittorrent: {proxy.get(\"name\", \"Unknown\")}')
+              
+              # Clear any proxy environment variables that might interfere
+              proxy_env_vars = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy']
+              original_proxy_values = {}
+              for var in proxy_env_vars:
+                  if var in os.environ:
+                      original_proxy_values[var] = os.environ[var]
+                      del os.environ[var]
+              
               base_url = f'http://{QB_HOST}:{QB_PORT}'
               login_url = f'{base_url}/api/v2/auth/login'
               
+              # Use proxy only if configured in PROXY_MODULES
+              proxies = proxy_config if use_proxy else {}
               response = requests.post(
                   login_url,
                   data={'username': QB_USERNAME, 'password': QB_PASSWORD},
-                  timeout=REQUEST_TIMEOUT
+                  timeout=REQUEST_TIMEOUT,
+                  proxies=proxies
               )
+              
+              # Restore original proxy environment variables
+              for var, value in original_proxy_values.items():
+                  os.environ[var] = value
               
               if response.status_code == 200 and response.text == 'Ok.':
                   print('✓ qBittorrent connection successful')
