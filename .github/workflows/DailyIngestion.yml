@@ -7,12 +7,149 @@ on:
     - cron: '0 10 * * *'
 
 jobs:
-  run-pipeline:
+  health-check:
     runs-on: ARM64
     environment: WT_DailyIngestion
-    permissions:
-      contents: write
-    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          # ============ SECRETS (sensitive: passwords, tokens, IPs) ============
+          VAR_QB_HOST: ${{ secrets.QB_HOST }}
+          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
+          VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
+          VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
+          VAR_JAVDB_SESSION_COOKIE: ${{ secrets.JAVDB_SESSION_COOKIE }}
+          VAR_PIKPAK_PASSWORD: ${{ secrets.PIKPAK_PASSWORD }}
+          
+          # ============ VARIABLES (non-sensitive, visible in settings) ============
+          VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
+          VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
+          VAR_QB_PORT: ${{ vars.QB_PORT }}
+          VAR_QB_USERNAME: ${{ vars.QB_USERNAME }}
+          VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
+          VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
+          VAR_TORRENT_SAVE_PATH: ${{ vars.TORRENT_SAVE_PATH }}
+          VAR_AUTO_START: ${{ vars.AUTO_START }}
+          VAR_SKIP_CHECKING: ${{ vars.SKIP_CHECKING }}
+          VAR_REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT }}
+          VAR_DELAY_BETWEEN_ADDITIONS: ${{ vars.DELAY_BETWEEN_ADDITIONS }}
+          VAR_SMTP_SERVER: ${{ vars.SMTP_SERVER }}
+          VAR_SMTP_PORT: ${{ vars.SMTP_PORT }}
+          VAR_SMTP_USER: ${{ vars.SMTP_USER }}
+          VAR_EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          VAR_EMAIL_TO: ${{ vars.EMAIL_TO }}
+          VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
+          VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS }}
+          VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES }}
+          VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
+          VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED }}
+          VAR_START_PAGE: ${{ vars.START_PAGE }}
+          VAR_END_PAGE: ${{ vars.END_PAGE }}
+          VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}
+          VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
+          VAR_BASE_URL: ${{ vars.BASE_URL }}
+          VAR_JAVDB_USERNAME: ${{ vars.JAVDB_USERNAME }}
+          VAR_DETAIL_PAGE_SLEEP: ${{ vars.DETAIL_PAGE_SLEEP }}
+          VAR_PAGE_SLEEP: ${{ vars.PAGE_SLEEP }}
+          VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
+          VAR_CF_TURNSTILE_COOLDOWN: ${{ vars.CF_TURNSTILE_COOLDOWN }}
+          VAR_PHASE_TRANSITION_COOLDOWN: ${{ vars.PHASE_TRANSITION_COOLDOWN }}
+          VAR_FALLBACK_COOLDOWN: ${{ vars.FALLBACK_COOLDOWN }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL }}
+          VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE }}
+          VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE }}
+          VAR_PIPELINE_LOG_FILE: ${{ vars.PIPELINE_LOG_FILE }}
+          VAR_EMAIL_NOTIFICATION_LOG_FILE: ${{ vars.EMAIL_NOTIFICATION_LOG_FILE }}
+          VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER }}
+          VAR_DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR }}
+          VAR_AD_HOC_DIR: ${{ vars.AD_HOC_DIR }}
+          VAR_PARSED_MOVIES_CSV: ${{ vars.PARSED_MOVIES_CSV }}
+          VAR_PIKPAK_EMAIL: ${{ vars.PIKPAK_EMAIL }}
+          VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE }}
+          VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
+        run: python3 utils/config_generator.py --github-actions
+
+      - name: Check qBittorrent connectivity
+        run: |
+          python3 -c "
+          import requests
+          import sys
+          from config import QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD, REQUEST_TIMEOUT
+          
+          try:
+              base_url = f'http://{QB_HOST}:{QB_PORT}'
+              login_url = f'{base_url}/api/v2/auth/login'
+              
+              response = requests.post(
+                  login_url,
+                  data={'username': QB_USERNAME, 'password': QB_PASSWORD},
+                  timeout=REQUEST_TIMEOUT
+              )
+              
+              if response.status_code == 200 and response.text == 'Ok.':
+                  print('✓ qBittorrent connection successful')
+                  sys.exit(0)
+              else:
+                  print(f'✗ qBittorrent login failed: {response.status_code} - {response.text}')
+                  sys.exit(1)
+          except Exception as e:
+              print(f'✗ qBittorrent connection error: {e}')
+              sys.exit(1)
+          "
+
+      - name: Check SMTP connectivity
+        run: |
+          python3 -c "
+          import smtplib
+          import sys
+          from config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD
+          
+          try:
+              server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10)
+              server.starttls()
+              server.login(SMTP_USER, SMTP_PASSWORD)
+              server.quit()
+              print('✓ SMTP connection successful')
+              sys.exit(0)
+          except Exception as e:
+              print(f'✗ SMTP connection error: {e}')
+              sys.exit(1)
+          "
+
+      - name: Check PikPak credentials (optional)
+        continue-on-error: true
+        run: |
+          python3 -c "
+          import sys
+          from config import PIKPAK_EMAIL, PIKPAK_PASSWORD
+          
+          if not PIKPAK_EMAIL or not PIKPAK_PASSWORD:
+              print('⚠ PikPak credentials not configured (optional)')
+              sys.exit(0)
+          else:
+              print('✓ PikPak credentials configured')
+              sys.exit(0)
+          "
+
+  setup:
+    runs-on: ARM64
+    environment: WT_DailyIngestion
+    needs: health-check
+    outputs:
+      branch: ${{ steps.branch_check.outputs.branch }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -37,25 +174,17 @@ jobs:
       - name: Generate config.py from GitHub Variables and Secrets
         env:
           # ============ SECRETS (sensitive: passwords, tokens, IPs) ============
-          # Note: GIT_PASSWORD is NOT passed - scripts will not commit, workflow handles commits
-          # qBittorrent (IP + password)
           VAR_QB_HOST: ${{ secrets.QB_HOST }}
           VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
-          # SMTP password
           VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          # Proxy pool (contains IPs and passwords)
           VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
-          # JavDB (password + session cookie)
           VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
           VAR_JAVDB_SESSION_COOKIE: ${{ secrets.JAVDB_SESSION_COOKIE }}
-          # PikPak password
           VAR_PIKPAK_PASSWORD: ${{ secrets.PIKPAK_PASSWORD }}
           
           # ============ VARIABLES (non-sensitive, visible in settings) ============
-          # Git Configuration - Note: GIT_USERNAME is hardcoded, GIT_BRANCH defaults to 'main' if not set
           VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
           VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
-          # qBittorrent Configuration
           VAR_QB_PORT: ${{ vars.QB_PORT }}
           VAR_QB_USERNAME: ${{ vars.QB_USERNAME }}
           VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
@@ -65,48 +194,38 @@ jobs:
           VAR_SKIP_CHECKING: ${{ vars.SKIP_CHECKING }}
           VAR_REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT }}
           VAR_DELAY_BETWEEN_ADDITIONS: ${{ vars.DELAY_BETWEEN_ADDITIONS }}
-          # SMTP Configuration
           VAR_SMTP_SERVER: ${{ vars.SMTP_SERVER }}
           VAR_SMTP_PORT: ${{ vars.SMTP_PORT }}
           VAR_SMTP_USER: ${{ vars.SMTP_USER }}
           VAR_EMAIL_FROM: ${{ vars.EMAIL_FROM }}
           VAR_EMAIL_TO: ${{ vars.EMAIL_TO }}
-          # Proxy Configuration
           VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
           VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS }}
           VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES }}
           VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
-          # Cloudflare Bypass Configuration
           VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
           VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED }}
-          # Spider Configuration
           VAR_START_PAGE: ${{ vars.START_PAGE }}
           VAR_END_PAGE: ${{ vars.END_PAGE }}
           VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}
           VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
           VAR_BASE_URL: ${{ vars.BASE_URL }}
-          # JavDB Login Configuration
           VAR_JAVDB_USERNAME: ${{ vars.JAVDB_USERNAME }}
-          # Sleep Configuration
           VAR_DETAIL_PAGE_SLEEP: ${{ vars.DETAIL_PAGE_SLEEP }}
           VAR_PAGE_SLEEP: ${{ vars.PAGE_SLEEP }}
           VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
           VAR_CF_TURNSTILE_COOLDOWN: ${{ vars.CF_TURNSTILE_COOLDOWN }}
           VAR_PHASE_TRANSITION_COOLDOWN: ${{ vars.PHASE_TRANSITION_COOLDOWN }}
           VAR_FALLBACK_COOLDOWN: ${{ vars.FALLBACK_COOLDOWN }}
-          # Logging Configuration
           VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL }}
           VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE }}
           VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE }}
           VAR_PIPELINE_LOG_FILE: ${{ vars.PIPELINE_LOG_FILE }}
           VAR_EMAIL_NOTIFICATION_LOG_FILE: ${{ vars.EMAIL_NOTIFICATION_LOG_FILE }}
-          # Parsing Configuration
           VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER }}
-          # File Paths
           VAR_DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR }}
           VAR_AD_HOC_DIR: ${{ vars.AD_HOC_DIR }}
           VAR_PARSED_MOVIES_CSV: ${{ vars.PARSED_MOVIES_CSV }}
-          # PikPak Configuration
           VAR_PIKPAK_EMAIL: ${{ vars.PIKPAK_EMAIL }}
           VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE }}
           VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
@@ -114,19 +233,14 @@ jobs:
 
       - name: Pull latest changes from remote
         run: |
-          # Configure git with github-actions[bot]
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Get current branch from previous step
           CURRENT_BRANCH="${{ steps.branch_check.outputs.branch }}"
           echo "Pulling latest changes from branch: $CURRENT_BRANCH"
           
-          # Ensure remote URL uses SSH (for deploy key)
-          # actions/checkout@v4 with ssh-key should already set this, but verify
           REPO_URL=$(git remote get-url origin)
           if [[ "$REPO_URL" == https://* ]]; then
-            # Convert HTTPS URL to SSH format
             REPO_SSH=$(echo "$REPO_URL" | sed 's|https://github.com/|git@github.com:|')
             git remote set-url origin "$REPO_SSH"
             echo "Updated remote URL to SSH: $REPO_SSH"
@@ -134,7 +248,6 @@ jobs:
             echo "Remote URL already uses SSH: $REPO_URL"
           fi
           
-          # Pull latest changes from remote (working tree is clean at this point)
           git fetch origin "$CURRENT_BRANCH"
           git pull --rebase origin "$CURRENT_BRANCH" || {
             echo "Warning: Failed to pull/rebase, attempting merge instead"
@@ -144,49 +257,435 @@ jobs:
             }
           }
 
-      - name: Step 1 - Run Spider
+  spider:
+    runs-on: ARM64
+    environment: WT_DailyIngestion
+    needs: setup
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          VAR_QB_HOST: ${{ secrets.QB_HOST }}
+          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
+          VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
+          VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
+          VAR_JAVDB_SESSION_COOKIE: ${{ secrets.JAVDB_SESSION_COOKIE }}
+          VAR_PIKPAK_PASSWORD: ${{ secrets.PIKPAK_PASSWORD }}
+          VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
+          VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
+          VAR_QB_PORT: ${{ vars.QB_PORT }}
+          VAR_QB_USERNAME: ${{ vars.QB_USERNAME }}
+          VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
+          VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
+          VAR_TORRENT_SAVE_PATH: ${{ vars.TORRENT_SAVE_PATH }}
+          VAR_AUTO_START: ${{ vars.AUTO_START }}
+          VAR_SKIP_CHECKING: ${{ vars.SKIP_CHECKING }}
+          VAR_REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT }}
+          VAR_DELAY_BETWEEN_ADDITIONS: ${{ vars.DELAY_BETWEEN_ADDITIONS }}
+          VAR_SMTP_SERVER: ${{ vars.SMTP_SERVER }}
+          VAR_SMTP_PORT: ${{ vars.SMTP_PORT }}
+          VAR_SMTP_USER: ${{ vars.SMTP_USER }}
+          VAR_EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          VAR_EMAIL_TO: ${{ vars.EMAIL_TO }}
+          VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
+          VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS }}
+          VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES }}
+          VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
+          VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED }}
+          VAR_START_PAGE: ${{ vars.START_PAGE }}
+          VAR_END_PAGE: ${{ vars.END_PAGE }}
+          VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}
+          VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
+          VAR_BASE_URL: ${{ vars.BASE_URL }}
+          VAR_JAVDB_USERNAME: ${{ vars.JAVDB_USERNAME }}
+          VAR_DETAIL_PAGE_SLEEP: ${{ vars.DETAIL_PAGE_SLEEP }}
+          VAR_PAGE_SLEEP: ${{ vars.PAGE_SLEEP }}
+          VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
+          VAR_CF_TURNSTILE_COOLDOWN: ${{ vars.CF_TURNSTILE_COOLDOWN }}
+          VAR_PHASE_TRANSITION_COOLDOWN: ${{ vars.PHASE_TRANSITION_COOLDOWN }}
+          VAR_FALLBACK_COOLDOWN: ${{ vars.FALLBACK_COOLDOWN }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL }}
+          VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE }}
+          VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE }}
+          VAR_PIPELINE_LOG_FILE: ${{ vars.PIPELINE_LOG_FILE }}
+          VAR_EMAIL_NOTIFICATION_LOG_FILE: ${{ vars.EMAIL_NOTIFICATION_LOG_FILE }}
+          VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER }}
+          VAR_DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR }}
+          VAR_AD_HOC_DIR: ${{ vars.AD_HOC_DIR }}
+          VAR_PARSED_MOVIES_CSV: ${{ vars.PARSED_MOVIES_CSV }}
+          VAR_PIKPAK_EMAIL: ${{ vars.PIKPAK_EMAIL }}
+          VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE }}
+          VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
+        run: python3 utils/config_generator.py --github-actions
+
+      - name: Run Spider
         run: python3 scripts/spider.py --use-proxy
-        # Scripts will not commit (no GIT_PASSWORD provided)
 
-      - name: Step 2 - Run qBittorrent Uploader
+      - name: Upload spider logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spider-logs
+          path: |
+            logs/spider.log
+            logs/pipeline.log
+          retention-days: 7
+
+      - name: Upload spider results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spider-results
+          path: |
+            Daily Report/*.csv
+            Ad Hoc/*.csv
+          retention-days: 7
+
+  qb-uploader:
+    runs-on: ARM64
+    environment: WT_DailyIngestion
+    needs: spider
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download spider results
+        uses: actions/download-artifact@v4
+        with:
+          name: spider-results
+          path: .
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          VAR_QB_HOST: ${{ secrets.QB_HOST }}
+          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
+          VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
+          VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
+          VAR_JAVDB_SESSION_COOKIE: ${{ secrets.JAVDB_SESSION_COOKIE }}
+          VAR_PIKPAK_PASSWORD: ${{ secrets.PIKPAK_PASSWORD }}
+          VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
+          VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
+          VAR_QB_PORT: ${{ vars.QB_PORT }}
+          VAR_QB_USERNAME: ${{ vars.QB_USERNAME }}
+          VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
+          VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
+          VAR_TORRENT_SAVE_PATH: ${{ vars.TORRENT_SAVE_PATH }}
+          VAR_AUTO_START: ${{ vars.AUTO_START }}
+          VAR_SKIP_CHECKING: ${{ vars.SKIP_CHECKING }}
+          VAR_REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT }}
+          VAR_DELAY_BETWEEN_ADDITIONS: ${{ vars.DELAY_BETWEEN_ADDITIONS }}
+          VAR_SMTP_SERVER: ${{ vars.SMTP_SERVER }}
+          VAR_SMTP_PORT: ${{ vars.SMTP_PORT }}
+          VAR_SMTP_USER: ${{ vars.SMTP_USER }}
+          VAR_EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          VAR_EMAIL_TO: ${{ vars.EMAIL_TO }}
+          VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
+          VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS }}
+          VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES }}
+          VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
+          VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED }}
+          VAR_START_PAGE: ${{ vars.START_PAGE }}
+          VAR_END_PAGE: ${{ vars.END_PAGE }}
+          VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}
+          VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
+          VAR_BASE_URL: ${{ vars.BASE_URL }}
+          VAR_JAVDB_USERNAME: ${{ vars.JAVDB_USERNAME }}
+          VAR_DETAIL_PAGE_SLEEP: ${{ vars.DETAIL_PAGE_SLEEP }}
+          VAR_PAGE_SLEEP: ${{ vars.PAGE_SLEEP }}
+          VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
+          VAR_CF_TURNSTILE_COOLDOWN: ${{ vars.CF_TURNSTILE_COOLDOWN }}
+          VAR_PHASE_TRANSITION_COOLDOWN: ${{ vars.PHASE_TRANSITION_COOLDOWN }}
+          VAR_FALLBACK_COOLDOWN: ${{ vars.FALLBACK_COOLDOWN }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL }}
+          VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE }}
+          VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE }}
+          VAR_PIPELINE_LOG_FILE: ${{ vars.PIPELINE_LOG_FILE }}
+          VAR_EMAIL_NOTIFICATION_LOG_FILE: ${{ vars.EMAIL_NOTIFICATION_LOG_FILE }}
+          VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER }}
+          VAR_DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR }}
+          VAR_AD_HOC_DIR: ${{ vars.AD_HOC_DIR }}
+          VAR_PARSED_MOVIES_CSV: ${{ vars.PARSED_MOVIES_CSV }}
+          VAR_PIKPAK_EMAIL: ${{ vars.PIKPAK_EMAIL }}
+          VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE }}
+          VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
+        run: python3 utils/config_generator.py --github-actions
+
+      - name: Run qBittorrent Uploader
         run: python3 scripts/qb_uploader.py --mode daily --use-proxy
-        # Scripts will not commit (no GIT_PASSWORD provided)
 
-      - name: Step 3 - Run PikPak Bridge
+      - name: Upload uploader logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uploader-logs
+          path: logs/qb_uploader.log
+          retention-days: 7
+
+  pikpak-bridge:
+    runs-on: ARM64
+    environment: WT_DailyIngestion
+    needs: qb-uploader
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          VAR_QB_HOST: ${{ secrets.QB_HOST }}
+          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
+          VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
+          VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
+          VAR_JAVDB_SESSION_COOKIE: ${{ secrets.JAVDB_SESSION_COOKIE }}
+          VAR_PIKPAK_PASSWORD: ${{ secrets.PIKPAK_PASSWORD }}
+          VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
+          VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
+          VAR_QB_PORT: ${{ vars.QB_PORT }}
+          VAR_QB_USERNAME: ${{ vars.QB_USERNAME }}
+          VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
+          VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
+          VAR_TORRENT_SAVE_PATH: ${{ vars.TORRENT_SAVE_PATH }}
+          VAR_AUTO_START: ${{ vars.AUTO_START }}
+          VAR_SKIP_CHECKING: ${{ vars.SKIP_CHECKING }}
+          VAR_REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT }}
+          VAR_DELAY_BETWEEN_ADDITIONS: ${{ vars.DELAY_BETWEEN_ADDITIONS }}
+          VAR_SMTP_SERVER: ${{ vars.SMTP_SERVER }}
+          VAR_SMTP_PORT: ${{ vars.SMTP_PORT }}
+          VAR_SMTP_USER: ${{ vars.SMTP_USER }}
+          VAR_EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          VAR_EMAIL_TO: ${{ vars.EMAIL_TO }}
+          VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
+          VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS }}
+          VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES }}
+          VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
+          VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED }}
+          VAR_START_PAGE: ${{ vars.START_PAGE }}
+          VAR_END_PAGE: ${{ vars.END_PAGE }}
+          VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}
+          VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
+          VAR_BASE_URL: ${{ vars.BASE_URL }}
+          VAR_JAVDB_USERNAME: ${{ vars.JAVDB_USERNAME }}
+          VAR_DETAIL_PAGE_SLEEP: ${{ vars.DETAIL_PAGE_SLEEP }}
+          VAR_PAGE_SLEEP: ${{ vars.PAGE_SLEEP }}
+          VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
+          VAR_CF_TURNSTILE_COOLDOWN: ${{ vars.CF_TURNSTILE_COOLDOWN }}
+          VAR_PHASE_TRANSITION_COOLDOWN: ${{ vars.PHASE_TRANSITION_COOLDOWN }}
+          VAR_FALLBACK_COOLDOWN: ${{ vars.FALLBACK_COOLDOWN }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL }}
+          VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE }}
+          VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE }}
+          VAR_PIPELINE_LOG_FILE: ${{ vars.PIPELINE_LOG_FILE }}
+          VAR_EMAIL_NOTIFICATION_LOG_FILE: ${{ vars.EMAIL_NOTIFICATION_LOG_FILE }}
+          VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER }}
+          VAR_DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR }}
+          VAR_AD_HOC_DIR: ${{ vars.AD_HOC_DIR }}
+          VAR_PARSED_MOVIES_CSV: ${{ vars.PARSED_MOVIES_CSV }}
+          VAR_PIKPAK_EMAIL: ${{ vars.PIKPAK_EMAIL }}
+          VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE }}
+          VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
+        run: python3 utils/config_generator.py --github-actions
+
+      - name: Run PikPak Bridge
         run: python3 scripts/pikpak_bridge.py --days 3
-        # Scripts will not commit (no GIT_PASSWORD provided)
 
-      - name: Step 4 - Run Email Notification
+      - name: Upload pikpak logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pikpak-logs
+          path: logs/pikpak_bridge.log
+          retention-days: 7
+
+  email-notification:
+    runs-on: ARM64
+    environment: WT_DailyIngestion
+    needs: [setup, spider, qb-uploader, pikpak-bridge]
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all logs
+        uses: actions/download-artifact@v4
+        with:
+          name: spider-logs
+          path: logs/
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Download uploader logs
+        uses: actions/download-artifact@v4
+        with:
+          name: uploader-logs
+          path: logs/
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Download pikpak logs
+        uses: actions/download-artifact@v4
+        with:
+          name: pikpak-logs
+          path: logs/
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Download spider results
+        uses: actions/download-artifact@v4
+        with:
+          name: spider-results
+          path: .
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          VAR_QB_HOST: ${{ secrets.QB_HOST }}
+          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
+          VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
+          VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
+          VAR_JAVDB_SESSION_COOKIE: ${{ secrets.JAVDB_SESSION_COOKIE }}
+          VAR_PIKPAK_PASSWORD: ${{ secrets.PIKPAK_PASSWORD }}
+          VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
+          VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
+          VAR_QB_PORT: ${{ vars.QB_PORT }}
+          VAR_QB_USERNAME: ${{ vars.QB_USERNAME }}
+          VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
+          VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
+          VAR_TORRENT_SAVE_PATH: ${{ vars.TORRENT_SAVE_PATH }}
+          VAR_AUTO_START: ${{ vars.AUTO_START }}
+          VAR_SKIP_CHECKING: ${{ vars.SKIP_CHECKING }}
+          VAR_REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT }}
+          VAR_DELAY_BETWEEN_ADDITIONS: ${{ vars.DELAY_BETWEEN_ADDITIONS }}
+          VAR_SMTP_SERVER: ${{ vars.SMTP_SERVER }}
+          VAR_SMTP_PORT: ${{ vars.SMTP_PORT }}
+          VAR_SMTP_USER: ${{ vars.SMTP_USER }}
+          VAR_EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          VAR_EMAIL_TO: ${{ vars.EMAIL_TO }}
+          VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
+          VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS }}
+          VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES }}
+          VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
+          VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED }}
+          VAR_START_PAGE: ${{ vars.START_PAGE }}
+          VAR_END_PAGE: ${{ vars.END_PAGE }}
+          VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}
+          VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
+          VAR_BASE_URL: ${{ vars.BASE_URL }}
+          VAR_JAVDB_USERNAME: ${{ vars.JAVDB_USERNAME }}
+          VAR_DETAIL_PAGE_SLEEP: ${{ vars.DETAIL_PAGE_SLEEP }}
+          VAR_PAGE_SLEEP: ${{ vars.PAGE_SLEEP }}
+          VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
+          VAR_CF_TURNSTILE_COOLDOWN: ${{ vars.CF_TURNSTILE_COOLDOWN }}
+          VAR_PHASE_TRANSITION_COOLDOWN: ${{ vars.PHASE_TRANSITION_COOLDOWN }}
+          VAR_FALLBACK_COOLDOWN: ${{ vars.FALLBACK_COOLDOWN }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL }}
+          VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE }}
+          VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE }}
+          VAR_PIPELINE_LOG_FILE: ${{ vars.PIPELINE_LOG_FILE }}
+          VAR_EMAIL_NOTIFICATION_LOG_FILE: ${{ vars.EMAIL_NOTIFICATION_LOG_FILE }}
+          VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER }}
+          VAR_DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR }}
+          VAR_AD_HOC_DIR: ${{ vars.AD_HOC_DIR }}
+          VAR_PARSED_MOVIES_CSV: ${{ vars.PARSED_MOVIES_CSV }}
+          VAR_PIKPAK_EMAIL: ${{ vars.PIKPAK_EMAIL }}
+          VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE }}
+          VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
+        run: python3 utils/config_generator.py --github-actions
+
+      - name: Run Email Notification
         run: python3 scripts/email_notification.py
-        # Scripts will not commit (no GIT_PASSWORD provided)
 
-      - name: Commit and Push Results
+  commit-results:
+    runs-on: ARM64
+    environment: WT_DailyIngestion
+    needs: [setup, spider, qb-uploader, pikpak-bridge]
+    permissions:
+      contents: write
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+
+      - name: Download spider results
+        uses: actions/download-artifact@v4
+        with:
+          name: spider-results
+          path: .
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Get current branch
+        id: branch_check
         run: |
-          # Configure git with github-actions[bot]
+          CURRENT_BRANCH="${GITHUB_REF#refs/heads/}"
+          echo "Current branch: $CURRENT_BRANCH"
+          echo "branch=$CURRENT_BRANCH" >> $GITHUB_OUTPUT
+
+      - name: Configure git
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Get current branch from previous step
           CURRENT_BRANCH="${{ steps.branch_check.outputs.branch }}"
           echo "Pushing to branch: $CURRENT_BRANCH"
           
-          # Ensure remote URL uses SSH (for deploy key)
-          # actions/checkout@v4 with ssh-key should already set this, but verify
           REPO_URL=$(git remote get-url origin)
           if [[ "$REPO_URL" == https://* ]]; then
-            # Convert HTTPS URL to SSH format
             REPO_SSH=$(echo "$REPO_URL" | sed 's|https://github.com/|git@github.com:|')
             git remote set-url origin "$REPO_SSH"
             echo "Updated remote URL to SSH: $REPO_SSH"
           else
             echo "Remote URL already uses SSH: $REPO_URL"
           fi
-          
-          # Pull latest changes before committing (using autostash for any uncommitted changes)
-          # This handles the case where remote was updated during script execution
+
+      - name: Pull latest changes before committing
+        run: |
+          CURRENT_BRANCH="${{ steps.branch_check.outputs.branch }}"
           git fetch origin "$CURRENT_BRANCH"
           if git rev-parse --verify "origin/$CURRENT_BRANCH" >/dev/null 2>&1; then
-            # Check if we're behind remote
             LOCAL=$(git rev-parse HEAD)
             REMOTE=$(git rev-parse "origin/$CURRENT_BRANCH")
             if [ "$LOCAL" != "$REMOTE" ]; then
@@ -200,12 +699,14 @@ jobs:
               }
             fi
           fi
+
+      - name: Commit and Push Results
+        run: |
+          CURRENT_BRANCH="${{ steps.branch_check.outputs.branch }}"
           
-          # Add all relevant files
+          # Add all relevant files (excluding logs)
           git add 'Daily Report'/*.csv || true
           git add 'Ad Hoc'/*.csv || true
-          git add 'logs'/*.log || true
-          git add 'logs'/*.csv || true
           git add 'Daily Report/parsed_movies_history.csv' || true
           
           # Check if there are any changes to commit
