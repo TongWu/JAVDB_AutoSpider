@@ -1,11 +1,11 @@
-2025-12-21 14:06:44,622 - __main__ - INFO - ============================================================
-2025-12-21 14:06:44,622 - __main__ - INFO - EMAIL NOTIFICATION SCRIPT
-2025-12-21 14:06:44,622 - __main__ - INFO - ============================================================
-2025-12-21 14:06:44,622 - __main__ - INFO - Analyzing logs for critical errors...
-2025-12-21 14:06:44,622 - __main__ - ERROR - CRITICAL ERROR in Spider: CF bypass and proxy fallback failed - movie list not found on 6 pages
-2025-12-21 14:06:44,627 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
-2025-12-21 14:06:44,634 - __main__ - INFO - Connecting to SMTP server...
-2025-12-21 14:06:47,861 - __main__ - INFO - Email sent successfully.
-2025-12-21 14:06:47,861 - __main__ - INFO - Committing pipeline log...
-2025-12-21 14:06:47,861 - utils.git_helper - INFO - Git commit/push: branch=main, from_pipeline=True
-2025-12-21 14:06:47,888 - utils.git_helper - INFO - Configured git user: tongwu
+2025-12-21 14:06:48,610 - __main__ - INFO - ============================================================
+2025-12-21 14:06:48,610 - __main__ - INFO - EMAIL NOTIFICATION SCRIPT
+2025-12-21 14:06:48,610 - __main__ - INFO - ============================================================
+2025-12-21 14:06:48,610 - __main__ - INFO - Analyzing logs for critical errors...
+2025-12-21 14:06:48,610 - __main__ - ERROR - CRITICAL ERROR in Spider: CF bypass and proxy fallback failed - movie list not found on 6 pages
+2025-12-21 14:06:48,614 - utils.proxy_ban_manager - INFO - Loaded 1 ban records from logs/proxy_bans.csv
+2025-12-21 14:06:48,622 - __main__ - INFO - Connecting to SMTP server...
+2025-12-21 14:06:51,760 - __main__ - INFO - Email sent successfully.
+2025-12-21 14:06:51,763 - __main__ - INFO - Committing pipeline log...
+2025-12-21 14:06:51,765 - utils.git_helper - INFO - Git commit/push: branch=main, from_pipeline=True
+2025-12-21 14:06:51,811 - utils.git_helper - INFO - Configured git user: tongwu
