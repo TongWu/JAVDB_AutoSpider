@@ -386,7 +386,7 @@ python3 javdb_login.py
 **检查代理禁用状态:**
 ```bash
 # 查看禁用记录
-cat logs/proxy_bans.csv
+cat "Daily Report/proxy_bans.csv"
 
 # 禁用信息也包含在流水线电子邮件报告中
 ```
@@ -700,7 +700,7 @@ python pipeline_run_and_notify.py --ignore-release-date
 - **被动健康检查**: 仅在实际失败时标记代理为失败(无主动探测)
 - **冷却机制**: 失败的代理暂时禁用以允许恢复(默认 8 天)
 - **禁用检测**: 自动检测代理何时被 JavDB 禁用
-- **持久化禁用记录**: 禁用历史存储在 `logs/proxy_bans.csv` 中,跨运行持久化
+- **持久化禁用记录**: 禁用历史存储在 `Daily Report/proxy_bans.csv` 中,跨运行持久化
 - **统计跟踪**: 每个代理的详细成功率和使用统计
 - **完美适配 JavDB**: 尊重严格的速率限制,同时提供冗余
 
@@ -722,7 +722,7 @@ PROXY_POOL_MAX_FAILURES = 3  # 冷却前的最大失败次数
 
 系统包含智能禁用检测和管理:
 - **自动检测**: 检测 JavDB 何时阻止代理 IP
-- **持久化记录**: 禁用历史存储在 `logs/proxy_bans.csv`
+- **持久化记录**: 禁用历史存储在 `Daily Report/proxy_bans.csv`
 - **8 天冷却期**: 默认冷却期匹配 JavDB 的 7 天禁止期
 - **退出代码 2**: 检测到代理被禁时,爬虫以代码 2 退出(有助于自动化)
 - **禁用摘要**: 流水线电子邮件报告中包含详细的禁用状态
@@ -730,7 +730,7 @@ PROXY_POOL_MAX_FAILURES = 3  # 冷却前的最大失败次数
 **检查禁用状态:**
 ```bash
 # 禁用记录记录在:
-cat logs/proxy_bans.csv
+cat "Daily Report/proxy_bans.csv"
 
 # 流水线邮件包含禁用摘要,包括:
 # - 代理名称和 IP
@@ -1347,7 +1347,7 @@ python3 reclassify_c_hacked_torrents.py
 - **代理 + CF 不工作**: 确保 CF 绕过服务在代理服务器上运行
 
 **代理禁用问题:**
-- **所有代理被禁**: 检查 `logs/proxy_bans.csv` 查看禁用状态
+- **所有代理被禁**: 检查 `Daily Report/proxy_bans.csv` 查看禁用状态
 - **爬虫以代码 2 退出**: 表示检测到代理禁用,等待冷却期或添加新代理
 - **冷却不工作**: 默认为 8 天,如需要调整 PROXY_POOL_COOLDOWN_SECONDS
 - **禁用误报**: 检查 JavDB 是否实际上可从代理 IP 访问
@@ -1452,7 +1452,7 @@ python3 pikpak_bridge.py --days 7 --individual  # 自定义天数,单个模式
 
 - **主配置**: `config.py`(从 `config.py.example` 复制)
 - **历史文件**: `Daily Report/parsed_movies_history.csv`
-- **禁用记录**: `logs/proxy_bans.csv`
+- **禁用记录**: `Daily Report/proxy_bans.csv`
 - **登录文档**: `utils/login/JAVDB_LOGIN_README.md`
 
 ### 重要链接

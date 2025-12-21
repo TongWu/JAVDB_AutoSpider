@@ -85,43 +85,43 @@ def parse_arguments():
 def analyze_spider_log(log_path):
     """
     Analyze spider log to detect critical errors
-    Returns: (is_critical_error, error_message)
+    Returns: (is_critical_error, error_message, log_exists)
     """
     if not os.path.exists(log_path):
-        return True, "Spider log file not found"
+        return False, "Spider log file not found (script may not have run)", False
     
     with open(log_path, 'r', encoding='utf-8') as f:
         log_content = f.read()
     
     # Check for explicit proxy ban detection (highest priority)
     if 'CRITICAL: PROXY BAN DETECTED DURING THIS RUN' in log_content:
-        return True, "Proxy ban detected - one or more proxies were blocked by JavDB"
+        return True, "Proxy ban detected - one or more proxies were blocked by JavDB", True
     
     # Check for fallback mechanism failures (no movie list after all retries)
     fallback_failures = log_content.count('No movie list found after all fallback attempts')
     if fallback_failures >= 3:
-        return True, f"CF bypass and proxy fallback failed - movie list not found on {fallback_failures} pages"
+        return True, f"CF bypass and proxy fallback failed - movie list not found on {fallback_failures} pages", True
     
     # Check for proxy being marked as banned during fetch
     proxy_ban_markers = log_content.count('Marking BANNED and switching')
     if proxy_ban_markers > 0:
-        return True, f"Proxy marked as banned during fetch ({proxy_ban_markers} times) - proxy IP may be blocked"
+        return True, f"Proxy marked as banned during fetch ({proxy_ban_markers} times) - proxy IP may be blocked", True
     
     # First check if we got any results at all
     total_entries_match = re.search(r'Total entries found: (\d+)', log_content)
     if total_entries_match:
         total_entries = int(total_entries_match.group(1))
         if total_entries > 0:
-            return False, None
+            return False, None, True
     
     # Check if we successfully processed any pages
     if 'Successfully fetched URL:' in log_content:
-        return False, None
+        return False, None, True
     
     # Check for movie list issues
     no_movie_list_count = len(re.findall(r'no movie list found', log_content, re.IGNORECASE))
     if no_movie_list_count >= 3:
-        return True, f"Cannot retrieve movie list from JavDB - {no_movie_list_count} pages failed"
+        return True, f"Cannot retrieve movie list from JavDB - {no_movie_list_count} pages failed", True
     
     # Count consecutive fetch errors
     phase1_errors = 0
@@ -150,9 +150,9 @@ def analyze_spider_log(log_path):
     
     if phase1_errors >= 3 and phase2_errors >= 3:
         if '403 Client Error: Forbidden' in log_content:
-            return True, "Cannot access JavDB - 403 Forbidden (proxy blocked or requires authentication)"
+            return True, "Cannot access JavDB - 403 Forbidden (proxy blocked or requires authentication)", True
         else:
-            return True, "Cannot access JavDB main site - all pages failed with 500 errors"
+            return True, "Cannot access JavDB main site - all pages failed with 500 errors", True
     
     # Check for other critical network errors
     critical_patterns = [
@@ -167,18 +167,18 @@ def analyze_spider_log(log_path):
         if pattern in log_content:
             error_count = log_content.count(pattern)
             if error_count >= 3:
-                return True, f"Critical network error: {message}"
+                return True, f"Critical network error: {message}", True
     
-    return False, None
+    return False, None, True
 
 
 def analyze_uploader_log(log_path):
     """
     Analyze uploader log to detect critical errors
-    Returns: (is_critical_error, error_message)
+    Returns: (is_critical_error, error_message, log_exists)
     """
     if not os.path.exists(log_path):
-        return True, "Uploader log file not found"
+        return False, "Uploader log file not found (script may not have run)", False
     
     with open(log_path, 'r', encoding='utf-8') as f:
         log_content = f.read()
@@ -192,7 +192,7 @@ def analyze_uploader_log(log_path):
     
     for pattern in critical_patterns:
         if pattern in log_content:
-            return True, f"Cannot access qBittorrent: {pattern}"
+            return True, f"Cannot access qBittorrent: {pattern}", True
     
     # Check if we attempted to add torrents but all failed
     if 'Starting to add' in log_content and 'Failed to add:' in log_content:
@@ -200,19 +200,19 @@ def analyze_uploader_log(log_path):
         if match and int(match.group(1)) == 0:
             failed_match = re.search(r'Failed to add: (\d+)', log_content)
             if failed_match and int(failed_match.group(1)) > 0:
-                return True, "All torrent additions failed"
+                return True, "All torrent additions failed", True
     
-    return False, None
+    return False, None, True
 
 
 def analyze_pikpak_log(log_path):
     """
     Analyze PikPak log to detect critical errors
-    Returns: (is_critical_error, error_message)
+    Returns: (is_critical_error, error_message, log_exists)
     """
     if not os.path.exists(log_path):
         # PikPak is optional, so missing log is not critical
-        return False, None
+        return False, None, False
     
     with open(log_path, 'r', encoding='utf-8') as f:
         log_content = f.read()
@@ -225,19 +225,20 @@ def analyze_pikpak_log(log_path):
     
     for pattern in critical_patterns:
         if pattern in log_content:
-            return True, f"Cannot access qBittorrent in PikPak bridge: {pattern}"
+            return True, f"Cannot access qBittorrent in PikPak bridge: {pattern}", True
     
-    return False, None
+    return False, None, True
 
 
 def analyze_pipeline_log(log_path):
     """
     Analyze pipeline log to detect script execution failures.
     This catches cases where sub-scripts fail to start or crash early.
-    Returns: (is_critical_error, error_message)
+    Returns: (is_critical_error, error_message, log_exists)
     """
     if not os.path.exists(log_path):
-        return True, "Pipeline log file not found"
+        # Pipeline log missing is not critical in GitHub Actions context
+        return False, "Pipeline log file not found", False
     
     with open(log_path, 'r', encoding='utf-8') as f:
         log_content = f.read()
@@ -255,8 +256,8 @@ def analyze_pipeline_log(log_path):
     # Check for "PIPELINE EXECUTION ERROR" marker
     if 'PIPELINE EXECUTION ERROR' in log_content:
         if script_failures:
-            return True, f"Pipeline scripts failed: {', '.join(script_failures)}"
-        return True, "Pipeline execution error detected"
+            return True, f"Pipeline scripts failed: {', '.join(script_failures)}", True
+        return True, "Pipeline execution error detected", True
     
     # Check for IndentationError, SyntaxError, etc. in the output
     syntax_errors = [
@@ -268,9 +269,9 @@ def analyze_pipeline_log(log_path):
     
     for pattern, message in syntax_errors:
         if re.search(pattern, log_content):
-            return True, message
+            return True, message, True
     
-    return False, None
+    return False, None, True
 
 
 def extract_spider_statistics(log_path):
@@ -479,14 +480,24 @@ def get_proxy_ban_summary():
         return "Proxy ban information not available."
 
 
-def format_email_report(spider_stats, uploader_stats, pikpak_stats, ban_summary):
-    """Format a mobile-friendly email report."""
-    body = f"""
+def format_email_report(spider_stats, uploader_stats, pikpak_stats, ban_summary,
+                        show_spider=True, show_uploader=True, show_pikpak=True):
+    """
+    Format a mobile-friendly email report.
+    Only includes sections for components that ran successfully.
+    """
+    sections = []
+    
+    # Header
+    sections.append(f"""
 ═══════════════════════════════
 JavDB Pipeline Report
 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-═══════════════════════════════
-
+═══════════════════════════════""")
+    
+    # Spider section
+    if show_spider:
+        sections.append(f"""
 📊 SPIDER STATISTICS
 ───────────────────────────────
 
@@ -506,8 +517,11 @@ Overall Summary
   Total Found: {spider_stats['overall']['total_found']}
   Processed: {spider_stats['overall']['successfully_processed']}
   Skipped (Session): {spider_stats['overall']['skipped_session']}
-  Skipped (History): {spider_stats['overall']['skipped_history']}
-
+  Skipped (History): {spider_stats['overall']['skipped_history']}""")
+    
+    # Uploader section
+    if show_uploader:
+        sections.append(f"""
 ───────────────────────────────
 📤 QBITTORRENT UPLOADER
 ───────────────────────────────
@@ -521,8 +535,11 @@ Breakdown by Type
   Hacked (Sub): {uploader_stats['hacked_sub']}
   Hacked (NoSub): {uploader_stats['hacked_nosub']}
   Regular (Sub): {uploader_stats['subtitle']}
-  Regular (NoSub): {uploader_stats['no_subtitle']}
-
+  Regular (NoSub): {uploader_stats['no_subtitle']}""")
+    
+    # PikPak section
+    if show_pikpak:
+        sections.append(f"""
 ───────────────────────────────
 🔄 PIKPAK BRIDGE
 ───────────────────────────────
@@ -532,8 +549,10 @@ Cleanup (>{pikpak_stats['threshold_days']} days)
   Filtered: {pikpak_stats['filtered_old']}
   Added to PikPak: {pikpak_stats['added_to_pikpak']}
   Removed from QB: {pikpak_stats['removed_from_qb']}
-  Failed: {pikpak_stats['failed']}
-
+  Failed: {pikpak_stats['failed']}""")
+    
+    # Proxy status (always show)
+    sections.append(f"""
 ───────────────────────────────
 🚦 PROXY STATUS
 ───────────────────────────────
@@ -542,9 +561,9 @@ Cleanup (>{pikpak_stats['threshold_days']} days)
 
 ═══════════════════════════════
 End of Report
-═══════════════════════════════
-"""
-    return body
+═══════════════════════════════""")
+    
+    return "\n".join(sections)
 
 
 def convert_log_to_txt(log_path):
@@ -622,37 +641,51 @@ def main():
     logger.info("=" * 60)
     
     # Analyze logs for critical errors
+    # Each analyze function returns: (is_critical_error, error_message, log_exists)
     logger.info("Analyzing logs for critical errors...")
     pipeline_errors = []
     
+    # Track which components have valid logs (for dynamic email sections)
+    spider_log_exists = False
+    uploader_log_exists = False
+    pikpak_log_exists = False
+    
     # First, check pipeline log for script execution failures
     # This catches cases where sub-scripts crash before writing to their own logs
-    pipeline_critical, pipeline_error = analyze_pipeline_log(PIPELINE_LOG_FILE)
+    pipeline_critical, pipeline_error, pipeline_exists = analyze_pipeline_log(PIPELINE_LOG_FILE)
     if pipeline_critical:
         logger.error(f"CRITICAL ERROR in Pipeline: {pipeline_error}")
         pipeline_errors.append(f"Pipeline: {pipeline_error}")
+    elif not pipeline_exists:
+        logger.warning(f"Pipeline log not found: {PIPELINE_LOG_FILE}")
     
-    spider_critical, spider_error = analyze_spider_log(SPIDER_LOG_FILE)
+    spider_critical, spider_error, spider_log_exists = analyze_spider_log(SPIDER_LOG_FILE)
     if spider_critical:
         logger.error(f"CRITICAL ERROR in Spider: {spider_error}")
         pipeline_errors.append(f"Spider: {spider_error}")
+    elif not spider_log_exists:
+        logger.warning(f"Spider log not found: {SPIDER_LOG_FILE}")
     
-    uploader_critical, uploader_error = analyze_uploader_log(UPLOADER_LOG_FILE)
+    uploader_critical, uploader_error, uploader_log_exists = analyze_uploader_log(UPLOADER_LOG_FILE)
     if uploader_critical:
         logger.error(f"CRITICAL ERROR in Uploader: {uploader_error}")
         pipeline_errors.append(f"Uploader: {uploader_error}")
+    elif not uploader_log_exists:
+        logger.warning(f"Uploader log not found: {UPLOADER_LOG_FILE}")
     
-    pikpak_critical, pikpak_error = analyze_pikpak_log(PIKPAK_LOG_FILE)
+    pikpak_critical, pikpak_error, pikpak_log_exists = analyze_pikpak_log(PIKPAK_LOG_FILE)
     if pikpak_critical:
         logger.error(f"CRITICAL ERROR in PikPak: {pikpak_error}")
         pipeline_errors.append(f"PikPak: {pikpak_error}")
+    elif not pikpak_log_exists:
+        logger.warning(f"PikPak log not found (optional): {PIKPAK_LOG_FILE}")
     
     has_critical_errors = len(pipeline_errors) > 0
     
-    # Extract statistics
-    spider_stats = extract_spider_statistics(SPIDER_LOG_FILE)
-    uploader_stats = extract_uploader_statistics(UPLOADER_LOG_FILE)
-    pikpak_stats = extract_pikpak_statistics(PIKPAK_LOG_FILE)
+    # Extract statistics (only if log exists)
+    spider_stats = extract_spider_statistics(SPIDER_LOG_FILE) if spider_log_exists else None
+    uploader_stats = extract_uploader_statistics(UPLOADER_LOG_FILE) if uploader_log_exists else None
+    pikpak_stats = extract_pikpak_statistics(PIKPAK_LOG_FILE) if pikpak_log_exists else None
     ban_summary = get_proxy_ban_summary()
     
     # Determine CSV path
@@ -676,13 +709,43 @@ def main():
     if os.path.exists(csv_path):
         attachments.insert(0, csv_path)
     
+    # Prepare default stats for missing components
+    default_spider_stats = {
+        'phase1': {'found': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0},
+        'phase2': {'found': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0},
+        'overall': {'total_found': 0, 'successfully_processed': 0, 'skipped_session': 0, 'skipped_history': 0}
+    }
+    default_uploader_stats = {
+        'total': 0, 'success': 0, 'failed': 0, 'hacked_sub': 0,
+        'hacked_nosub': 0, 'subtitle': 0, 'no_subtitle': 0, 'success_rate': 0.0
+    }
+    default_pikpak_stats = {
+        'total_torrents': 0, 'filtered_old': 0, 'added_to_pikpak': 0,
+        'removed_from_qb': 0, 'failed': 0, 'threshold_days': 3
+    }
+    
+    # Use actual stats or defaults
+    final_spider_stats = spider_stats if spider_stats else default_spider_stats
+    final_uploader_stats = uploader_stats if uploader_stats else default_uploader_stats
+    final_pikpak_stats = pikpak_stats if pikpak_stats else default_pikpak_stats
+    
     # Send email based on status
     if not has_critical_errors:
-        body = format_email_report(spider_stats, uploader_stats, pikpak_stats, ban_summary)
+        body = format_email_report(
+            final_spider_stats, final_uploader_stats, final_pikpak_stats, ban_summary,
+            show_spider=spider_log_exists,
+            show_uploader=uploader_log_exists,
+            show_pikpak=pikpak_log_exists
+        )
         subject = f'✓ SUCCESS - JavDB Pipeline Report {today_str}'
     else:
         error_details = "\n".join([f"  • {error}" for error in pipeline_errors])
-        stats_report = format_email_report(spider_stats, uploader_stats, pikpak_stats, ban_summary)
+        stats_report = format_email_report(
+            final_spider_stats, final_uploader_stats, final_pikpak_stats, ban_summary,
+            show_spider=spider_log_exists and not spider_critical,
+            show_uploader=uploader_log_exists and not uploader_critical,
+            show_pikpak=pikpak_log_exists and not pikpak_critical
+        )
         
         body = f"""
 ═══════════════════════════════
@@ -736,11 +799,11 @@ Check attached logs for details.
     logger.info("EMAIL NOTIFICATION COMPLETED")
     logger.info("=" * 60)
     
-    # Exit with appropriate code
-    if has_critical_errors:
-        sys.exit(1)
-    else:
-        sys.exit(0)
+    # Exit with success - email notification itself succeeded
+    # The email content will indicate if there were pipeline errors
+    # This ensures the email notification job doesn't fail just because
+    # some component scripts failed or logs are missing
+    sys.exit(0)
 
 
 if __name__ == '__main__':
