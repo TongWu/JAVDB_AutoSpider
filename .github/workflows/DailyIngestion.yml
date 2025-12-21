@@ -1,5 +1,8 @@
 name: JavDB Daily Ingestion Pipeline
 
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
   schedule:
@@ -7,11 +10,16 @@ on:
     - cron: '0 10 * * *'
 
 jobs:
-  run-pipeline:
+  # =============================================================================
+  # Job 1: Setup - Checkout, install dependencies, generate config
+  # =============================================================================
+  setup:
     runs-on: ARM64
     environment: WT_DailyIngestion
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      branch: ${{ steps.branch_check.outputs.branch }}
     
     steps:
       - name: Checkout repository
@@ -37,25 +45,16 @@ jobs:
       - name: Generate config.py from GitHub Variables and Secrets
         env:
           # ============ SECRETS (sensitive: passwords, tokens, IPs) ============
-          # Note: GIT_PASSWORD is NOT passed - scripts will not commit, workflow handles commits
-          # qBittorrent (IP + password)
           VAR_QB_HOST: ${{ secrets.QB_HOST }}
           VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
-          # SMTP password
           VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          # Proxy pool (contains IPs and passwords)
           VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
-          # JavDB (password + session cookie)
           VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
           VAR_JAVDB_SESSION_COOKIE: ${{ secrets.JAVDB_SESSION_COOKIE }}
-          # PikPak password
           VAR_PIKPAK_PASSWORD: ${{ secrets.PIKPAK_PASSWORD }}
-          
-          # ============ VARIABLES (non-sensitive, visible in settings) ============
-          # Git Configuration - Note: GIT_USERNAME is hardcoded, GIT_BRANCH defaults to 'main' if not set
+          # ============ VARIABLES (non-sensitive) ============
           VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
           VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
-          # qBittorrent Configuration
           VAR_QB_PORT: ${{ vars.QB_PORT }}
           VAR_QB_USERNAME: ${{ vars.QB_USERNAME }}
           VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
@@ -65,48 +64,38 @@ jobs:
           VAR_SKIP_CHECKING: ${{ vars.SKIP_CHECKING }}
           VAR_REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT }}
           VAR_DELAY_BETWEEN_ADDITIONS: ${{ vars.DELAY_BETWEEN_ADDITIONS }}
-          # SMTP Configuration
           VAR_SMTP_SERVER: ${{ vars.SMTP_SERVER }}
           VAR_SMTP_PORT: ${{ vars.SMTP_PORT }}
           VAR_SMTP_USER: ${{ vars.SMTP_USER }}
           VAR_EMAIL_FROM: ${{ vars.EMAIL_FROM }}
           VAR_EMAIL_TO: ${{ vars.EMAIL_TO }}
-          # Proxy Configuration
           VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
           VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS }}
           VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES }}
           VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
-          # Cloudflare Bypass Configuration
           VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
           VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED }}
-          # Spider Configuration
           VAR_START_PAGE: ${{ vars.START_PAGE }}
           VAR_END_PAGE: ${{ vars.END_PAGE }}
           VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}
           VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
           VAR_BASE_URL: ${{ vars.BASE_URL }}
-          # JavDB Login Configuration
           VAR_JAVDB_USERNAME: ${{ vars.JAVDB_USERNAME }}
-          # Sleep Configuration
           VAR_DETAIL_PAGE_SLEEP: ${{ vars.DETAIL_PAGE_SLEEP }}
           VAR_PAGE_SLEEP: ${{ vars.PAGE_SLEEP }}
           VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
           VAR_CF_TURNSTILE_COOLDOWN: ${{ vars.CF_TURNSTILE_COOLDOWN }}
           VAR_PHASE_TRANSITION_COOLDOWN: ${{ vars.PHASE_TRANSITION_COOLDOWN }}
           VAR_FALLBACK_COOLDOWN: ${{ vars.FALLBACK_COOLDOWN }}
-          # Logging Configuration
           VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL }}
           VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE }}
           VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE }}
           VAR_PIPELINE_LOG_FILE: ${{ vars.PIPELINE_LOG_FILE }}
           VAR_EMAIL_NOTIFICATION_LOG_FILE: ${{ vars.EMAIL_NOTIFICATION_LOG_FILE }}
-          # Parsing Configuration
           VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER }}
-          # File Paths
           VAR_DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR }}
           VAR_AD_HOC_DIR: ${{ vars.AD_HOC_DIR }}
           VAR_PARSED_MOVIES_CSV: ${{ vars.PARSED_MOVIES_CSV }}
-          # PikPak Configuration
           VAR_PIKPAK_EMAIL: ${{ vars.PIKPAK_EMAIL }}
           VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE }}
           VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
@@ -114,27 +103,18 @@ jobs:
 
       - name: Pull latest changes from remote
         run: |
-          # Configure git with github-actions[bot]
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Get current branch from previous step
           CURRENT_BRANCH="${{ steps.branch_check.outputs.branch }}"
           echo "Pulling latest changes from branch: $CURRENT_BRANCH"
           
-          # Ensure remote URL uses SSH (for deploy key)
-          # actions/checkout@v4 with ssh-key should already set this, but verify
           REPO_URL=$(git remote get-url origin)
           if [[ "$REPO_URL" == https://* ]]; then
-            # Convert HTTPS URL to SSH format
             REPO_SSH=$(echo "$REPO_URL" | sed 's|https://github.com/|git@github.com:|')
             git remote set-url origin "$REPO_SSH"
             echo "Updated remote URL to SSH: $REPO_SSH"
-          else
-            echo "Remote URL already uses SSH: $REPO_URL"
           fi
           
-          # Pull latest changes from remote (working tree is clean at this point)
           git fetch origin "$CURRENT_BRANCH"
           git pull --rebase origin "$CURRENT_BRANCH" || {
             echo "Warning: Failed to pull/rebase, attempting merge instead"
@@ -144,69 +124,387 @@ jobs:
             }
           }
 
+      - name: Encrypt config for artifact
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          # Encrypt config.py using AES-256-CBC before uploading
+          # All artifacts are encrypted to protect sensitive data
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
+            -in config.py -out config.py.enc \
+            -pass pass:"$ARTIFACT_KEY"
+          echo "✓ Config encrypted successfully"
+
+      - name: Upload encrypted config artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: config-encrypted
+          path: config.py.enc
+          retention-days: 1
+
+  # =============================================================================
+  # Job 2: Health Check - Verify essential services before running pipeline
+  # =============================================================================
+  health-check:
+    runs-on: ARM64
+    environment: WT_DailyIngestion
+    permissions:
+      contents: read
+    needs: setup
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download encrypted config
+        uses: actions/download-artifact@v4
+        with:
+          name: config-encrypted
+          path: .
+
+      - name: Decrypt config
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+            -in config.py.enc -out config.py \
+            -pass pass:"$ARTIFACT_KEY"
+          rm config.py.enc
+          echo "✓ Config decrypted successfully"
+
+      - name: Run health checks
+        run: python3 scripts/health_check.py --use-proxy
+
+  # =============================================================================
+  # Job 3: Run Pipeline - Execute spider, uploader, and pikpak bridge
+  # =============================================================================
+  run-pipeline:
+    runs-on: ARM64
+    environment: WT_DailyIngestion
+    permissions:
+      contents: read
+    needs: [setup, health-check]
+    outputs:
+      spider_success: ${{ steps.spider.outcome == 'success' }}
+      uploader_success: ${{ steps.uploader.outcome == 'success' }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download encrypted config
+        uses: actions/download-artifact@v4
+        with:
+          name: config-encrypted
+          path: .
+
+      - name: Decrypt config
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+            -in config.py.enc -out config.py \
+            -pass pass:"$ARTIFACT_KEY"
+          rm config.py.enc
+          echo "✓ Config decrypted successfully"
+
+      - name: Pull latest changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          CURRENT_BRANCH="${{ needs.setup.outputs.branch }}"
+          
+          REPO_URL=$(git remote get-url origin)
+          if [[ "$REPO_URL" == https://* ]]; then
+            REPO_SSH=$(echo "$REPO_URL" | sed 's|https://github.com/|git@github.com:|')
+            git remote set-url origin "$REPO_SSH"
+          fi
+          
+          git fetch origin "$CURRENT_BRANCH"
+          git pull --rebase origin "$CURRENT_BRANCH" || git pull --no-edit origin "$CURRENT_BRANCH" || true
+
       - name: Step 1 - Run Spider
+        id: spider
         run: python3 scripts/spider.py --use-proxy
-        # Scripts will not commit (no GIT_PASSWORD provided)
 
       - name: Step 2 - Run qBittorrent Uploader
+        id: uploader
         run: python3 scripts/qb_uploader.py --mode daily --use-proxy
-        # Scripts will not commit (no GIT_PASSWORD provided)
 
       - name: Step 3 - Run PikPak Bridge
+        id: pikpak
         run: python3 scripts/pikpak_bridge.py --days 3
-        # Scripts will not commit (no GIT_PASSWORD provided)
 
-      - name: Step 4 - Run Email Notification
+      - name: Encrypt and upload logs artifact
+        if: always()
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          # Create encrypted archive of logs
+          mkdir -p encrypted_artifacts
+          if ls logs/*.log 1> /dev/null 2>&1; then
+            tar -czf - logs/*.log | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
+              -out encrypted_artifacts/logs.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY"
+            echo "✓ Logs encrypted successfully"
+          else
+            echo "No log files found to encrypt"
+          fi
+
+      - name: Upload encrypted logs artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-logs-encrypted
+          path: encrypted_artifacts/logs.tar.gz.enc
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Encrypt and upload CSV reports artifact
+        if: always()
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          # Create encrypted archive of reports
+          mkdir -p encrypted_artifacts
+          FOUND_FILES=0
+          if ls "Daily Report"/*.csv 1> /dev/null 2>&1 || ls "Ad Hoc"/*.csv 1> /dev/null 2>&1; then
+            tar -czf - "Daily Report"/*.csv "Ad Hoc"/*.csv 2>/dev/null | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
+              -out encrypted_artifacts/reports.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY"
+            echo "✓ Reports encrypted successfully"
+            FOUND_FILES=1
+          fi
+          if [ "$FOUND_FILES" -eq 0 ]; then
+            echo "No report files found to encrypt"
+          fi
+
+      - name: Upload encrypted reports artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-reports-encrypted
+          path: encrypted_artifacts/reports.tar.gz.enc
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # =============================================================================
+  # Job 4: Email Notification - Runs on success or failure, but NOT on cancel
+  # (Runs in parallel with commit-results on GitHub-hosted runner)
+  # =============================================================================
+  email-notification:
+    runs-on: ubuntu-latest
+    environment: WT_DailyIngestion
+    permissions:
+      contents: read
+    needs: [setup, health-check, run-pipeline]
+    if: ${{ !cancelled() }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download encrypted config
+        uses: actions/download-artifact@v4
+        with:
+          name: config-encrypted
+          path: .
+
+      - name: Decrypt config
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+            -in config.py.enc -out config.py \
+            -pass pass:"$ARTIFACT_KEY"
+          rm config.py.enc
+          echo "✓ Config decrypted successfully"
+
+      - name: Download encrypted logs (if available)
+        uses: actions/download-artifact@v4
+        with:
+          name: pipeline-logs-encrypted
+          path: encrypted_artifacts
+        continue-on-error: true
+
+      - name: Decrypt logs (if available)
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          if [ -f encrypted_artifacts/logs.tar.gz.enc ]; then
+            openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+              -in encrypted_artifacts/logs.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY" | tar -xzf -
+            rm -rf encrypted_artifacts
+            echo "✓ Logs decrypted successfully"
+          else
+            echo "No encrypted logs found"
+            mkdir -p logs
+          fi
+
+      - name: Download encrypted reports (if available)
+        uses: actions/download-artifact@v4
+        with:
+          name: pipeline-reports-encrypted
+          path: encrypted_artifacts
+        continue-on-error: true
+
+      - name: Decrypt reports (if available)
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          if [ -f encrypted_artifacts/reports.tar.gz.enc ]; then
+            openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+              -in encrypted_artifacts/reports.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY" | tar -xzf -
+            rm -rf encrypted_artifacts
+            echo "✓ Reports decrypted successfully"
+          else
+            echo "No encrypted reports found"
+          fi
+
+      - name: Determine pipeline status
+        id: status
+        run: |
+          # Check the status of all previous jobs
+          SETUP_STATUS="${{ needs.setup.result }}"
+          HEALTH_STATUS="${{ needs.health-check.result }}"
+          PIPELINE_STATUS="${{ needs.run-pipeline.result }}"
+          
+          echo "Setup: $SETUP_STATUS"
+          echo "Health Check: $HEALTH_STATUS"
+          echo "Pipeline: $PIPELINE_STATUS"
+          
+          # Ensure logs directory exists
+          mkdir -p logs
+          
+          # Create a status file for email notification to read
+          echo "SETUP_STATUS=$SETUP_STATUS" >> logs/job_status.txt
+          echo "HEALTH_CHECK_STATUS=$HEALTH_STATUS" >> logs/job_status.txt
+          echo "PIPELINE_STATUS=$PIPELINE_STATUS" >> logs/job_status.txt
+          
+          if [[ "$SETUP_STATUS" == "failure" ]] || [[ "$HEALTH_STATUS" == "failure" ]] || [[ "$PIPELINE_STATUS" == "failure" ]]; then
+            echo "has_failure=true" >> $GITHUB_OUTPUT
+            echo "Pipeline had failures"
+          else
+            echo "has_failure=false" >> $GITHUB_OUTPUT
+            echo "Pipeline completed successfully"
+          fi
+
+      - name: Run Email Notification
+        env:
+          PIPELINE_HAS_FAILURE: ${{ steps.status.outputs.has_failure }}
         run: python3 scripts/email_notification.py
-        # Scripts will not commit (no GIT_PASSWORD provided)
+
+  # =============================================================================
+  # Job 5: Commit Results - Commit CSV files only (no logs)
+  # (Runs in parallel with email-notification on GitHub-hosted runner)
+  # =============================================================================
+  commit-results:
+    runs-on: ubuntu-latest
+    environment: WT_DailyIngestion
+    needs: [setup, run-pipeline]
+    if: ${{ !cancelled() }}
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+
+      - name: Download encrypted reports
+        uses: actions/download-artifact@v4
+        with:
+          name: pipeline-reports-encrypted
+          path: encrypted_artifacts
+        continue-on-error: true
+
+      - name: Decrypt reports
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          if [ -f encrypted_artifacts/reports.tar.gz.enc ]; then
+            openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+              -in encrypted_artifacts/reports.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY" | tar -xzf -
+            rm -rf encrypted_artifacts
+            echo "✓ Reports decrypted successfully"
+          else
+            echo "No encrypted reports found"
+          fi
 
       - name: Commit and Push Results
+        env:
+          SPIDER_SUCCESS: ${{ needs.run-pipeline.outputs.spider_success }}
+          UPLOADER_SUCCESS: ${{ needs.run-pipeline.outputs.uploader_success }}
         run: |
-          # Configure git with github-actions[bot]
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Get current branch from previous step
-          CURRENT_BRANCH="${{ steps.branch_check.outputs.branch }}"
+          CURRENT_BRANCH="${{ needs.setup.outputs.branch }}"
           echo "Pushing to branch: $CURRENT_BRANCH"
           
-          # Ensure remote URL uses SSH (for deploy key)
-          # actions/checkout@v4 with ssh-key should already set this, but verify
           REPO_URL=$(git remote get-url origin)
           if [[ "$REPO_URL" == https://* ]]; then
-            # Convert HTTPS URL to SSH format
             REPO_SSH=$(echo "$REPO_URL" | sed 's|https://github.com/|git@github.com:|')
             git remote set-url origin "$REPO_SSH"
             echo "Updated remote URL to SSH: $REPO_SSH"
-          else
-            echo "Remote URL already uses SSH: $REPO_URL"
           fi
           
-          # Pull latest changes before committing (using autostash for any uncommitted changes)
-          # This handles the case where remote was updated during script execution
           git fetch origin "$CURRENT_BRANCH"
           if git rev-parse --verify "origin/$CURRENT_BRANCH" >/dev/null 2>&1; then
-            # Check if we're behind remote
             LOCAL=$(git rev-parse HEAD)
             REMOTE=$(git rev-parse "origin/$CURRENT_BRANCH")
             if [ "$LOCAL" != "$REMOTE" ]; then
               echo "Remote has new commits, pulling with autostash..."
-              git pull --rebase --autostash origin "$CURRENT_BRANCH" || {
-                echo "Warning: Failed to pull/rebase with autostash, attempting merge instead"
-                git pull --no-edit --autostash origin "$CURRENT_BRANCH" || {
-                  echo "Error: Could not integrate remote changes"
-                  exit 1
-                }
-              }
+              git pull --rebase --autostash origin "$CURRENT_BRANCH" || git pull --no-edit --autostash origin "$CURRENT_BRANCH" || true
             fi
           fi
           
-          # Add all relevant files
-          git add 'Daily Report'/*.csv || true
+          # Add CSV files (exclude parsed_movies_history.csv if spider or uploader failed/cancelled)
+          if [[ "$SPIDER_SUCCESS" == "true" && "$UPLOADER_SUCCESS" == "true" ]]; then
+            echo "Spider and Uploader both succeeded - committing all CSV files including parsed_movies_history.csv"
+            git add 'Daily Report'/*.csv || true
+          else
+            echo "Spider or Uploader failed/cancelled - skipping parsed_movies_history.csv commit"
+            echo "  Spider success: $SPIDER_SUCCESS"
+            echo "  Uploader success: $UPLOADER_SUCCESS"
+            # Add all CSVs except parsed_movies_history.csv
+            for f in "Daily Report"/*.csv; do
+              if [[ "$(basename "$f")" != "parsed_movies_history.csv" ]]; then
+                git add "$f" 2>/dev/null || true
+              fi
+            done
+          fi
           git add 'Ad Hoc'/*.csv || true
-          git add 'logs'/*.log || true
-          git add 'logs'/*.csv || true
-          git add 'Daily Report/parsed_movies_history.csv' || true
           
           # Check if there are any changes to commit
           if git diff --cached --quiet; then

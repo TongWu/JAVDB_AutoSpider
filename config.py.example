@@ -137,7 +137,7 @@ PROXY_POOL = [
 
 # Proxy pool behavior settings (only applies when PROXY_MODE = 'pool')
 # IMPORTANT: JavDB bans IPs for 7 days, so cooldown is set to 8 days (691200 seconds)
-# Ban records are persistent across runs and stored in logs/proxy_bans.csv
+# Ban records are persistent across runs and stored in Daily Report/proxy_bans.csv
 PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 days (691200 seconds)
 PROXY_POOL_MAX_FAILURES = 3  # Max consecutive failures before putting proxy in cooldown
 
