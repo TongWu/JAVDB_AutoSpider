@@ -396,3 +396,137 @@ class TestEmptyPlaceholders:
         assert 'NULL' in EMPTY_PLACEHOLDERS
         assert 'NONE' in EMPTY_PLACEHOLDERS
 
+
+class TestGetEnvFloatExtended:
+    """Extended tests for get_env_float function."""
+    
+    def test_returns_default_for_empty_placeholder(self):
+        """Should return default for __EMPTY__ placeholder."""
+        with patch.dict(os.environ, {'VAR_FLOAT_VAR': '__EMPTY__'}):
+            assert get_env_float('FLOAT_VAR', 2.5) == 2.5
+    
+    def test_returns_default_for_empty_string(self):
+        """Should return default for empty string."""
+        with patch.dict(os.environ, {'VAR_FLOAT_VAR': ''}):
+            assert get_env_float('FLOAT_VAR', 3.14) == 3.14
+
+
+class TestGetEnvBoolExtended:
+    """Extended tests for get_env_bool function."""
+    
+    def test_returns_false_for_zero_string(self):
+        """Should return False for '0' string."""
+        with patch.dict(os.environ, {'VAR_BOOL_VAR': '0'}):
+            assert get_env_bool('BOOL_VAR', True) is False
+    
+    def test_returns_default_for_other_values(self):
+        """Should return default for values that are not true/false."""
+        with patch.dict(os.environ, {'VAR_BOOL_VAR': 'maybe'}):
+            assert get_env_bool('BOOL_VAR', True) is True
+            assert get_env_bool('BOOL_VAR', False) is False
+    
+    def test_returns_default_for_null_placeholder(self):
+        """Should return default for __null__ placeholder (lowercase)."""
+        with patch.dict(os.environ, {'VAR_BOOL_VAR': '__null__'}):
+            assert get_env_bool('BOOL_VAR', True) is True
+
+
+class TestWriteConfigExtended:
+    """Extended tests for write_config function."""
+    
+    def test_write_config_error_handling(self):
+        """Should handle write errors gracefully."""
+        # Try to write to a path that should fail
+        with patch.dict(os.environ, {}, clear=True):
+            # Mock open to raise an exception
+            with patch('builtins.open', side_effect=PermissionError("Permission denied")):
+                result = write_config(output_path='/impossible/path/config.py', show_masked=False)
+                assert result is False
+    
+    def test_write_config_with_show_masked_false(self):
+        """Should not print masked config when show_masked is False."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            temp_path = f.name
+        
+        try:
+            env = {}
+            with patch.dict(os.environ, env, clear=True):
+                result = write_config(output_path=temp_path, show_masked=False)
+                assert result is True
+        finally:
+            os.unlink(temp_path)
+
+
+class TestGenerateConfigContentExtended:
+    """Extended tests for generate_config_content function."""
+    
+    def test_contains_all_config_sections(self):
+        """Should contain all expected configuration sections."""
+        env = {}
+        with patch.dict(os.environ, env, clear=True):
+            content = generate_config_content()
+            
+            assert '# GIT CONFIGURATION' in content
+            assert '# QBITTORRENT CONFIGURATION' in content
+            assert '# SMTP CONFIGURATION' in content
+            assert '# PROXY CONFIGURATION' in content
+            assert '# CLOUDFLARE BYPASS CONFIGURATION' in content
+            assert '# SPIDER CONFIGURATION' in content
+            assert '# LOGGING CONFIGURATION' in content
+    
+    def test_values_from_environment(self):
+        """Should use values from environment variables."""
+        env = {
+            'VAR_QB_HOST': 'my.qbittorrent.server',
+            'VAR_QB_PORT': '9090',
+        }
+        with patch.dict(os.environ, env, clear=True):
+            content = generate_config_content()
+            
+            assert "QB_HOST = 'my.qbittorrent.server'" in content
+            assert "QB_PORT = '9090'" in content
+
+
+class TestMaskSensitiveValuesExtended:
+    """Extended tests for mask_sensitive_values function."""
+    
+    def test_masks_double_quoted_password(self):
+        """Should mask password in double quotes."""
+        content = 'QB_PASSWORD = "my_secret_password"'
+        masked = mask_sensitive_values(content)
+        assert 'my_secret_password' not in masked
+        assert '***MASKED***' in masked
+    
+    def test_masks_double_quoted_cookie(self):
+        """Should mask cookie in double quotes."""
+        content = 'JAVDB_SESSION_COOKIE = "session_abc123"'
+        masked = mask_sensitive_values(content)
+        assert 'session_abc123' not in masked
+
+
+class TestFormatPythonValueExtended:
+    """Extended tests for format_python_value function."""
+    
+    def test_formats_nested_dict(self):
+        """Should format nested dict as JSON."""
+        value = {'outer': {'inner': 'value'}}
+        result = format_python_value(value)
+        assert '"outer"' in result
+        assert '"inner"' in result
+        assert '"value"' in result
+    
+    def test_formats_empty_list(self):
+        """Should format empty list."""
+        result = format_python_value([])
+        assert result == '[]'
+    
+    def test_formats_empty_dict(self):
+        """Should format empty dict."""
+        result = format_python_value({})
+        assert result == '{}'
+    
+    def test_formats_negative_integer(self):
+        """Should format negative integer."""
+        result = format_python_value(-42)
+        assert result == '-42'
+
