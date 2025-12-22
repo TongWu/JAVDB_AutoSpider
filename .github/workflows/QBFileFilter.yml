@@ -1,0 +1,192 @@
+name: qBittorrent File Filter
+
+# This workflow filters out small files from recently added torrents
+# Scheduled to run 2 hours after DailyIngestion (10:00 UTC + 2h = 12:00 UTC)
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      min_size_mb:
+        description: 'Minimum file size in MB (files smaller than this will be filtered)'
+        required: false
+        default: '200'
+      days:
+        description: 'Number of days to look back for torrents'
+        required: false
+        default: '2'
+      dry_run:
+        description: 'Dry run mode (no actual changes)'
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    # Run 2 hours after DailyIngestion (which runs at 10:00 UTC)
+    # This allows time for qBittorrent to fetch torrent metadata
+    - cron: '0 12 * * *'
+
+jobs:
+  # =============================================================================
+  # Job 1: Setup - Checkout, install dependencies, generate config
+  # =============================================================================
+  setup:
+    runs-on: ARM64
+    environment: WT_DailyIngestion
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          # ============ SECRETS (sensitive: passwords, tokens, IPs) ============
+          VAR_QB_HOST: ${{ secrets.QB_HOST }}
+          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
+          VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
+          VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
+          VAR_JAVDB_SESSION_COOKIE: ${{ secrets.JAVDB_SESSION_COOKIE }}
+          VAR_PIKPAK_PASSWORD: ${{ secrets.PIKPAK_PASSWORD }}
+          # ============ VARIABLES (non-sensitive) ============
+          VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
+          VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
+          VAR_QB_PORT: ${{ vars.QB_PORT }}
+          VAR_QB_USERNAME: ${{ vars.QB_USERNAME }}
+          VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
+          VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
+          VAR_TORRENT_SAVE_PATH: ${{ vars.TORRENT_SAVE_PATH }}
+          VAR_AUTO_START: ${{ vars.AUTO_START }}
+          VAR_SKIP_CHECKING: ${{ vars.SKIP_CHECKING }}
+          VAR_REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT }}
+          VAR_DELAY_BETWEEN_ADDITIONS: ${{ vars.DELAY_BETWEEN_ADDITIONS }}
+          VAR_SMTP_SERVER: ${{ vars.SMTP_SERVER }}
+          VAR_SMTP_PORT: ${{ vars.SMTP_PORT }}
+          VAR_SMTP_USER: ${{ vars.SMTP_USER }}
+          VAR_EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          VAR_EMAIL_TO: ${{ vars.EMAIL_TO }}
+          VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
+          VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS }}
+          VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES }}
+          VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
+          VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED }}
+          VAR_START_PAGE: ${{ vars.START_PAGE }}
+          VAR_END_PAGE: ${{ vars.END_PAGE }}
+          VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}
+          VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
+          VAR_BASE_URL: ${{ vars.BASE_URL }}
+          VAR_JAVDB_USERNAME: ${{ vars.JAVDB_USERNAME }}
+          VAR_DETAIL_PAGE_SLEEP: ${{ vars.DETAIL_PAGE_SLEEP }}
+          VAR_PAGE_SLEEP: ${{ vars.PAGE_SLEEP }}
+          VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
+          VAR_CF_TURNSTILE_COOLDOWN: ${{ vars.CF_TURNSTILE_COOLDOWN }}
+          VAR_PHASE_TRANSITION_COOLDOWN: ${{ vars.PHASE_TRANSITION_COOLDOWN }}
+          VAR_FALLBACK_COOLDOWN: ${{ vars.FALLBACK_COOLDOWN }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL }}
+          VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE }}
+          VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE }}
+          VAR_PIPELINE_LOG_FILE: ${{ vars.PIPELINE_LOG_FILE }}
+          VAR_EMAIL_NOTIFICATION_LOG_FILE: ${{ vars.EMAIL_NOTIFICATION_LOG_FILE }}
+          VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER }}
+          VAR_DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR }}
+          VAR_AD_HOC_DIR: ${{ vars.AD_HOC_DIR }}
+          VAR_PARSED_MOVIES_CSV: ${{ vars.PARSED_MOVIES_CSV }}
+          VAR_PIKPAK_EMAIL: ${{ vars.PIKPAK_EMAIL }}
+          VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE }}
+          VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
+        run: python3 utils/config_generator.py --github-actions
+
+      - name: Encrypt config for artifact
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
+            -in config.py -out config.py.enc \
+            -pass pass:"$ARTIFACT_KEY"
+          echo "✓ Config encrypted successfully"
+
+      - name: Upload encrypted config artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: config-encrypted-filefilter
+          path: config.py.enc
+          retention-days: 1
+
+  # =============================================================================
+  # Job 2: Run File Filter
+  # =============================================================================
+  run-file-filter:
+    runs-on: ARM64
+    environment: WT_DailyIngestion
+    permissions:
+      contents: read
+    needs: setup
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download encrypted config
+        uses: actions/download-artifact@v4
+        with:
+          name: config-encrypted-filefilter
+          path: .
+
+      - name: Decrypt config
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+            -in config.py.enc -out config.py \
+            -pass pass:"$ARTIFACT_KEY"
+          rm config.py.enc
+          echo "✓ Config decrypted successfully"
+
+      - name: Run qBittorrent File Filter
+        env:
+          # Use workflow_dispatch inputs if provided, otherwise use defaults
+          MIN_SIZE_MB: ${{ github.event.inputs.min_size_mb || '50' }}
+          DAYS: ${{ github.event.inputs.days || '2' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          ARGS="--min-size $MIN_SIZE_MB --days $DAYS --use-proxy"
+          
+          if [ "$DRY_RUN" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          
+          echo "Running: python3 scripts/qb_file_filter.py $ARGS"
+          python3 scripts/qb_file_filter.py $ARGS
+
+      - name: Show log file content (for debugging)
+        if: always()
+        run: |
+          echo "=== File Filter Log ===" 
+          if [ -f logs/qb_file_filter.log ]; then
+            cat logs/qb_file_filter.log
+          else
+            echo "No log file found"
+          fi
+
