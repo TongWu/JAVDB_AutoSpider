@@ -12,7 +12,7 @@ on:
       min_size_mb:
         description: 'Minimum file size in MB (files smaller than this will be filtered)'
         required: false
-        default: '50'
+        default: '100'
       days:
         description: 'Number of days to look back for torrents'
         required: false
@@ -22,6 +22,11 @@ on:
         required: false
         type: boolean
         default: false
+      delete_local_files:
+        description: 'Delete local files that have already been downloaded but are below the size threshold'
+        required: false
+        type: boolean
+        default: true
   schedule:
     # Run 2 hours after DailyIngestion (which runs at 10:00 UTC)
     # This allows time for qBittorrent to fetch torrent metadata
@@ -173,11 +178,16 @@ jobs:
           MIN_SIZE_MB: ${{ github.event.inputs.min_size_mb || '50' }}
           DAYS: ${{ github.event.inputs.days || '2' }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          DELETE_LOCAL_FILES: ${{ github.event.inputs.delete_local_files || 'true' }}
         run: |
           ARGS="--min-size $MIN_SIZE_MB --days $DAYS --use-proxy"
           
           if [ "$DRY_RUN" = "true" ]; then
             ARGS="$ARGS --dry-run"
+          fi
+          
+          if [ "$DELETE_LOCAL_FILES" = "true" ]; then
+            ARGS="$ARGS --delete-local-files"
           fi
           
           echo "Running: python3 scripts/qb_file_filter.py $ARGS"
