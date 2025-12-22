@@ -253,8 +253,9 @@ def get_recent_torrents(session, days=2, category=None, use_proxy=False):
         if response.status_code == 200:
             torrents = response.json()
             
-            # Calculate cutoff timestamp (start of N days ago)
-            cutoff_date = datetime.now() - timedelta(days=days)
+            # Calculate cutoff timestamp (start of the first included day)
+            # days=1 means today only, days=2 means today and yesterday, etc.
+            cutoff_date = datetime.now() - timedelta(days=days - 1)
             cutoff_timestamp = int(cutoff_date.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
             
             # Filter torrents by added_on timestamp
