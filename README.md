@@ -52,6 +52,15 @@ The spider operates in two modes:
 - Comprehensive logging and progress tracking
 - Detailed summary reports
 
+### qBittorrent File Filter
+- Automatically filters small files from recently added torrents
+- Configurable minimum file size threshold (default: 50MB)
+- Sets priority to 0 (do not download) for files below threshold
+- Filters out NFO files, samples, screenshots, etc.
+- Supports dry-run mode for preview
+- Category-based filtering option
+- Scheduled via GitHub Actions (2 hours after daily ingestion)
+
 ### Duplicate Download Prevention
 - **Automatic Downloaded Detection**: Automatically identifies which torrents have been downloaded by checking the history CSV file
 - **Download Indicators**: Adds `[DOWNLOADED]` prefix to downloaded torrents in daily report CSV files
@@ -248,6 +257,24 @@ python qbtorrent_uploader.py --mode adhoc
 
 # Use proxy for qBittorrent API requests
 python qbtorrent_uploader.py --use-proxy
+```
+
+**Run the qBittorrent File Filter (filter out small files):**
+```bash
+# Default: filter files smaller than 50MB from last 2 days
+python scripts/qb_file_filter.py --min-size 50
+
+# Custom threshold and days
+python scripts/qb_file_filter.py --min-size 100 --days 3
+
+# Dry run (preview without changes)
+python scripts/qb_file_filter.py --min-size 50 --dry-run
+
+# Filter specific category only
+python scripts/qb_file_filter.py --min-size 50 --category JavDB
+
+# With proxy
+python scripts/qb_file_filter.py --min-size 50 --use-proxy
 ```
 
 **Run the PikPak bridge (transfer old torrents from qBittorrent to PikPak):**
@@ -594,6 +621,18 @@ PIKPAK_PASSWORD = 'your_pikpak_password'
 # PikPak settings
 PIKPAK_LOG_FILE = 'logs/pikpak_bridge.log'
 PIKPAK_REQUEST_DELAY = 3  # Delay between requests (seconds) to avoid rate limiting
+
+# =============================================================================
+# qBittorrent File Filter Configuration
+# =============================================================================
+
+# Minimum file size threshold in MB
+# Files smaller than this will be set to "do not download" priority
+# This helps filter out small files like NFO, samples, screenshots, etc.
+QB_FILE_FILTER_MIN_SIZE_MB = 50
+
+# Log file for the file filter script
+QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
 ```
 
 **Setup Instructions:**
@@ -1407,6 +1446,7 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
   - `qbtorrent_uploader.log`: Upload execution logs
   - `pipeline_run_and_notify.log`: Pipeline execution logs
   - `qb_pikpak.log`: PikPak bridge execution logs
+  - `qb_file_filter.log`: File filter execution logs
   - `proxy_bans.csv`: Proxy ban history (persistent across runs)
 - **migration/**: Contains database migration scripts
 - **utils/**: Utility modules (history, parser, proxy pool, etc.)
@@ -1448,6 +1488,10 @@ python3 qbtorrent_uploader.py --mode adhoc
 # PikPak bridge
 python3 pikpak_bridge.py  # Default: 3 days, batch mode
 python3 pikpak_bridge.py --days 7 --individual  # Custom days, individual mode
+
+# qBittorrent File Filter
+python3 scripts/qb_file_filter.py --min-size 50  # Filter files < 50MB
+python3 scripts/qb_file_filter.py --min-size 100 --days 3 --dry-run  # Preview mode
 ```
 
 ### Configuration Files
