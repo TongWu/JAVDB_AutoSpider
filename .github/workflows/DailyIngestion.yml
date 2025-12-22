@@ -195,6 +195,7 @@ jobs:
     outputs:
       spider_success: ${{ steps.spider.outcome == 'success' }}
       uploader_success: ${{ steps.uploader.outcome == 'success' }}
+      pikpak_success: ${{ steps.pikpak.outcome == 'success' }}
     
     steps:
       - name: Checkout repository
@@ -251,6 +252,7 @@ jobs:
 
       - name: Step 3 - Run PikPak Bridge
         id: pikpak
+        if: ${{ success() && steps.uploader.outcome == 'success' }}
         run: python3 scripts/pikpak_bridge.py --days 3
 
       - name: Encrypt and upload logs artifact
