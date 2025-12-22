@@ -12,7 +12,7 @@ on:
       min_size_mb:
         description: 'Minimum file size in MB (files smaller than this will be filtered)'
         required: false
-        default: '200'
+        default: '100'
       days:
         description: 'Number of days to look back for torrents'
         required: false
@@ -108,6 +108,8 @@ jobs:
           VAR_PIKPAK_EMAIL: ${{ vars.PIKPAK_EMAIL }}
           VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE }}
           VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
+          VAR_QB_FILE_FILTER_MIN_SIZE_MB: ${{ vars.QB_FILE_FILTER_MIN_SIZE_MB }}
+          VAR_QB_FILE_FILTER_LOG_FILE: ${{ vars.QB_FILE_FILTER_LOG_FILE }}
         run: python3 utils/config_generator.py --github-actions
 
       - name: Encrypt config for artifact
@@ -167,7 +169,8 @@ jobs:
       - name: Run qBittorrent File Filter
         env:
           # Use workflow_dispatch inputs if provided, otherwise use defaults
-          MIN_SIZE_MB: ${{ github.event.inputs.min_size_mb || '50' }}
+          # Note: defaults must match workflow_dispatch input defaults for consistent behavior
+          MIN_SIZE_MB: ${{ github.event.inputs.min_size_mb || '100' }}
           DAYS: ${{ github.event.inputs.days || '2' }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
