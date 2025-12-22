@@ -710,8 +710,8 @@ class TestRequestHandlerAdvanced:
             module_name='test'
         )
         
-        # Small response may be considered failure
-        assert result is not None or result is None  # Depends on implementation
+        # When fetch returns success (True), get_page should return the content
+        assert result == '<html>Small</html>'
     
     def test_extract_ip_from_proxy_url_empty(self):
         """Test extract_ip_from_proxy_url with empty URL."""

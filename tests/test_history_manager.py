@@ -482,9 +482,10 @@ class TestLoadParsedMoviesHistoryExtended:
         history_file = os.path.join(temp_dir, 'history.csv')
         
         # Create file with old format
+        # Note: torrent_type column contains comma-separated values, must be quoted in CSV
         with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
             f.write('href,phase,video_code,parsed_date,torrent_type\n')
-            f.write('/v/OLD-001,1,OLD-001,2024-01-01 10:00:00,subtitle,no_subtitle\n')
+            f.write('/v/OLD-001,1,OLD-001,2024-01-01 10:00:00,"subtitle,no_subtitle"\n')
         
         result = load_parsed_movies_history(history_file)
         
