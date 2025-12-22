@@ -37,6 +37,8 @@ from scripts.qb_file_filter import (
     get_recent_torrents,
     get_torrent_files,
     set_file_priority,
+    get_torrent_properties,
+    delete_local_file,
 )
 
 
@@ -434,6 +436,261 @@ class TestFilterSmallFiles:
         assert stats['size_saved'] == expected_saved
 
 
+class TestGetTorrentProperties:
+    """Test cases for get_torrent_properties function."""
+
+    @patch('scripts.qb_file_filter.get_proxies_dict')
+    def test_get_torrent_properties_success(self, mock_proxies):
+        """Test successful retrieval of torrent properties."""
+        mock_proxies.return_value = None
+
+        mock_session = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'save_path': '/downloads/torrents',
+            'total_size': 1024 * 1024 * 100,
+            'piece_size': 1024 * 1024,
+        }
+        mock_session.get.return_value = mock_response
+
+        result = get_torrent_properties(mock_session, 'abc123', use_proxy=False)
+
+        assert result['save_path'] == '/downloads/torrents'
+        assert result['total_size'] == 1024 * 1024 * 100
+
+    @patch('scripts.qb_file_filter.get_proxies_dict')
+    def test_get_torrent_properties_api_failure(self, mock_proxies):
+        """Test handling of API failure."""
+        mock_proxies.return_value = None
+
+        mock_session = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_session.get.return_value = mock_response
+
+        result = get_torrent_properties(mock_session, 'abc123', use_proxy=False)
+
+        assert result == {}
+
+    @patch('scripts.qb_file_filter.get_proxies_dict')
+    def test_get_torrent_properties_network_error(self, mock_proxies):
+        """Test handling of network error."""
+        import requests
+        mock_proxies.return_value = None
+
+        mock_session = MagicMock()
+        mock_session.get.side_effect = requests.RequestException("Network error")
+
+        result = get_torrent_properties(mock_session, 'abc123', use_proxy=False)
+
+        assert result == {}
+
+
+class TestDeleteLocalFile:
+    """Test cases for delete_local_file function."""
+
+    def test_delete_local_file_success(self, tmp_path):
+        """Test successful file deletion."""
+        # Create a temporary file
+        test_file = tmp_path / "test_file.mp4"
+        test_file.write_bytes(b"x" * 1024)  # 1KB file
+
+        success, size = delete_local_file(str(test_file))
+
+        assert success is True
+        assert size == 1024
+        assert not test_file.exists()
+
+    def test_delete_local_file_not_found(self, tmp_path):
+        """Test deletion of non-existent file."""
+        non_existent = tmp_path / "non_existent.mp4"
+
+        success, size = delete_local_file(str(non_existent))
+
+        assert success is False
+        assert size == 0
+
+    def test_delete_local_file_in_subdirectory(self, tmp_path):
+        """Test deletion of file in subdirectory."""
+        subdir = tmp_path / "torrent_folder" / "subfolder"
+        subdir.mkdir(parents=True)
+        test_file = subdir / "sample.mp4"
+        test_file.write_bytes(b"y" * 2048)
+
+        success, size = delete_local_file(str(test_file))
+
+        assert success is True
+        assert size == 2048
+        assert not test_file.exists()
+        # Parent directories should still exist
+        assert subdir.exists()
+
+    @patch('os.path.exists')
+    @patch('os.path.getsize')
+    @patch('os.remove')
+    def test_delete_local_file_permission_error(self, mock_remove, mock_getsize, mock_exists):
+        """Test handling of permission error during deletion."""
+        mock_exists.return_value = True
+        mock_getsize.return_value = 1024
+        mock_remove.side_effect = OSError("Permission denied")
+
+        success, size = delete_local_file("/some/protected/file.mp4")
+
+        assert success is False
+        assert size == 0
+
+
+class TestFilterSmallFilesWithDeletion:
+    """Test cases for filter_small_files with delete_local_files_flag enabled."""
+
+    @patch('scripts.qb_file_filter.get_torrent_files')
+    @patch('scripts.qb_file_filter.set_file_priority')
+    @patch('scripts.qb_file_filter.delete_local_file')
+    def test_filter_with_delete_downloaded_files(self, mock_delete, mock_set_priority, mock_get_files):
+        """Test filtering and deleting files that have been downloaded."""
+        mock_get_files.return_value = [
+            {'name': 'video.mp4', 'size': 100 * 1024 * 1024, 'priority': 1, 'progress': 1.0},
+            {'name': 'sample.mp4', 'size': 5 * 1024 * 1024, 'priority': 1, 'progress': 1.0},  # Downloaded
+            {'name': 'info.nfo', 'size': 1024, 'priority': 1, 'progress': 0.5},  # Partially downloaded
+        ]
+        mock_set_priority.return_value = True
+        mock_delete.return_value = (True, 5 * 1024 * 1024)  # sample.mp4 deleted
+
+        mock_session = MagicMock()
+        torrents = [{'hash': 'abc123', 'name': 'Test Torrent', 'added_on': 0, 'save_path': '/downloads'}]
+
+        stats = filter_small_files(
+            mock_session, torrents, min_size_mb=50, dry_run=False, delete_local_files_flag=True
+        )
+
+        assert stats['files_filtered'] == 2
+        assert stats['local_files_deleted'] == 2  # Both small files were downloaded
+        # delete_local_file should be called for both small files with progress > 0
+        assert mock_delete.call_count == 2
+
+    @patch('scripts.qb_file_filter.get_torrent_files')
+    @patch('scripts.qb_file_filter.set_file_priority')
+    @patch('scripts.qb_file_filter.delete_local_file')
+    def test_filter_with_delete_not_downloaded_files(self, mock_delete, mock_set_priority, mock_get_files):
+        """Test filtering files that haven't been downloaded yet (progress=0)."""
+        mock_get_files.return_value = [
+            {'name': 'video.mp4', 'size': 100 * 1024 * 1024, 'priority': 1, 'progress': 0},
+            {'name': 'sample.mp4', 'size': 5 * 1024 * 1024, 'priority': 1, 'progress': 0},  # Not downloaded
+        ]
+        mock_set_priority.return_value = True
+
+        mock_session = MagicMock()
+        torrents = [{'hash': 'abc123', 'name': 'Test Torrent', 'added_on': 0, 'save_path': '/downloads'}]
+
+        stats = filter_small_files(
+            mock_session, torrents, min_size_mb=50, dry_run=False, delete_local_files_flag=True
+        )
+
+        assert stats['files_filtered'] == 1
+        assert stats['local_files_deleted'] == 0  # No files to delete (progress=0)
+        mock_delete.assert_not_called()
+
+    @patch('scripts.qb_file_filter.get_torrent_files')
+    @patch('scripts.qb_file_filter.set_file_priority')
+    @patch('scripts.qb_file_filter.delete_local_file')
+    def test_filter_with_delete_dry_run(self, mock_delete, mock_set_priority, mock_get_files):
+        """Test dry run mode doesn't delete files."""
+        mock_get_files.return_value = [
+            {'name': 'video.mp4', 'size': 100 * 1024 * 1024, 'priority': 1, 'progress': 1.0},
+            {'name': 'sample.mp4', 'size': 5 * 1024 * 1024, 'priority': 1, 'progress': 1.0},
+        ]
+
+        mock_session = MagicMock()
+        torrents = [{'hash': 'abc123', 'name': 'Test Torrent', 'added_on': 0, 'save_path': '/downloads'}]
+
+        stats = filter_small_files(
+            mock_session, torrents, min_size_mb=50, dry_run=True, delete_local_files_flag=True
+        )
+
+        # In dry run, neither set_file_priority nor delete_local_file should be called
+        mock_set_priority.assert_not_called()
+        mock_delete.assert_not_called()
+        assert stats['files_filtered'] == 1
+
+    @patch('scripts.qb_file_filter.get_torrent_files')
+    @patch('scripts.qb_file_filter.set_file_priority')
+    @patch('scripts.qb_file_filter.delete_local_file')
+    def test_filter_delete_flag_disabled(self, mock_delete, mock_set_priority, mock_get_files):
+        """Test that files are not deleted when delete_local_files_flag is False."""
+        mock_get_files.return_value = [
+            {'name': 'video.mp4', 'size': 100 * 1024 * 1024, 'priority': 1, 'progress': 1.0},
+            {'name': 'sample.mp4', 'size': 5 * 1024 * 1024, 'priority': 1, 'progress': 1.0},
+        ]
+        mock_set_priority.return_value = True
+
+        mock_session = MagicMock()
+        torrents = [{'hash': 'abc123', 'name': 'Test Torrent', 'added_on': 0, 'save_path': '/downloads'}]
+
+        stats = filter_small_files(
+            mock_session, torrents, min_size_mb=50, dry_run=False, delete_local_files_flag=False
+        )
+
+        # Priority should be set, but files should not be deleted
+        mock_set_priority.assert_called_once()
+        mock_delete.assert_not_called()
+        assert stats['local_files_deleted'] == 0
+
+    @patch('scripts.qb_file_filter.get_torrent_files')
+    @patch('scripts.qb_file_filter.set_file_priority')
+    @patch('scripts.qb_file_filter.delete_local_file')
+    def test_filter_delete_tracks_size_correctly(self, mock_delete, mock_set_priority, mock_get_files):
+        """Test that local_size_deleted is tracked correctly."""
+        mock_get_files.return_value = [
+            {'name': 'video.mp4', 'size': 100 * 1024 * 1024, 'priority': 1, 'progress': 1.0},
+            {'name': 'sample.mp4', 'size': 10 * 1024 * 1024, 'priority': 1, 'progress': 1.0},
+            {'name': 'info.nfo', 'size': 2048, 'priority': 1, 'progress': 1.0},
+        ]
+        mock_set_priority.return_value = True
+        # Mock delete to return actual file sizes
+        mock_delete.side_effect = [
+            (True, 10 * 1024 * 1024),  # sample.mp4
+            (True, 2048),              # info.nfo
+        ]
+
+        mock_session = MagicMock()
+        torrents = [{'hash': 'abc123', 'name': 'Test Torrent', 'added_on': 0, 'save_path': '/downloads'}]
+
+        stats = filter_small_files(
+            mock_session, torrents, min_size_mb=50, dry_run=False, delete_local_files_flag=True
+        )
+
+        assert stats['local_files_deleted'] == 2
+        assert stats['local_size_deleted'] == (10 * 1024 * 1024) + 2048
+
+    @patch('scripts.qb_file_filter.get_torrent_files')
+    @patch('scripts.qb_file_filter.set_file_priority')
+    @patch('scripts.qb_file_filter.delete_local_file')
+    def test_filter_delete_partial_failure(self, mock_delete, mock_set_priority, mock_get_files):
+        """Test handling when some files fail to delete."""
+        mock_get_files.return_value = [
+            {'name': 'video.mp4', 'size': 100 * 1024 * 1024, 'priority': 1, 'progress': 1.0},
+            {'name': 'sample.mp4', 'size': 5 * 1024 * 1024, 'priority': 1, 'progress': 1.0},
+            {'name': 'info.nfo', 'size': 1024, 'priority': 1, 'progress': 1.0},
+        ]
+        mock_set_priority.return_value = True
+        # First file deletes successfully, second fails
+        mock_delete.side_effect = [
+            (True, 5 * 1024 * 1024),
+            (False, 0),
+        ]
+
+        mock_session = MagicMock()
+        torrents = [{'hash': 'abc123', 'name': 'Test Torrent', 'added_on': 0, 'save_path': '/downloads'}]
+
+        stats = filter_small_files(
+            mock_session, torrents, min_size_mb=50, dry_run=False, delete_local_files_flag=True
+        )
+
+        assert stats['local_files_deleted'] == 1
+        assert stats['local_size_deleted'] == 5 * 1024 * 1024
+
+
 class TestFilterIntegration:
     """Integration tests for the file filter workflow."""
 
@@ -476,4 +733,47 @@ class TestFilterIntegration:
         assert stats['files_filtered'] == 3  # sample.mp4, small1.nfo, small2.txt
         assert stats['files_kept'] == 2  # main.mp4 from hash1 and hash2
         assert len(stats['details']) == 2  # Only torrents with filtered files
+
+    @patch('scripts.qb_file_filter.get_torrent_files')
+    @patch('scripts.qb_file_filter.set_file_priority')
+    @patch('scripts.qb_file_filter.delete_local_file')
+    def test_complete_filter_workflow_with_deletion(self, mock_delete, mock_set_priority, mock_get_files):
+        """Test complete workflow with file deletion enabled."""
+        def get_files_side_effect(session, torrent_hash, use_proxy=False):
+            files_map = {
+                'hash1': [
+                    {'name': 'main.mp4', 'size': 500 * 1024 * 1024, 'priority': 1, 'progress': 0.5},
+                    {'name': 'sample.mp4', 'size': 30 * 1024 * 1024, 'priority': 1, 'progress': 1.0},
+                ],
+                'hash2': [
+                    {'name': 'main.mp4', 'size': 1024 * 1024 * 1024, 'priority': 1, 'progress': 0.1},
+                ],
+                'hash3': [
+                    {'name': 'small1.nfo', 'size': 1024, 'priority': 1, 'progress': 0},  # Not downloaded
+                    {'name': 'small2.txt', 'size': 2048, 'priority': 1, 'progress': 1.0},  # Downloaded
+                ],
+            }
+            return files_map.get(torrent_hash, [])
+
+        mock_get_files.side_effect = get_files_side_effect
+        mock_set_priority.return_value = True
+        mock_delete.return_value = (True, 1024)  # Simplified return
+
+        mock_session = MagicMock()
+        torrents = [
+            {'hash': 'hash1', 'name': 'Torrent 1', 'added_on': 0, 'save_path': '/downloads/1'},
+            {'hash': 'hash2', 'name': 'Torrent 2', 'added_on': 0, 'save_path': '/downloads/2'},
+            {'hash': 'hash3', 'name': 'Torrent 3', 'added_on': 0, 'save_path': '/downloads/3'},
+        ]
+
+        stats = filter_small_files(
+            mock_session, torrents, min_size_mb=50, dry_run=False, delete_local_files_flag=True
+        )
+
+        # Verify filtering
+        assert stats['torrents_processed'] == 3
+        assert stats['files_filtered'] == 3  # sample.mp4, small1.nfo, small2.txt
+        # Only files with progress > 0 should be deleted: sample.mp4 and small2.txt
+        assert stats['local_files_deleted'] == 2
+        assert mock_delete.call_count == 2
 
