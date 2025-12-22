@@ -510,34 +510,45 @@ def filter_small_files(session, torrents, min_size_mb, dry_run=False, use_proxy=
             # Set priority to 0 (do not download) for filtered files
             if not dry_run:
                 file_ids = [f['id'] for f in files_to_filter]
-                if set_file_priority(session, torrent_hash, file_ids, priority=0, use_proxy=use_proxy):
+                priority_set_success = set_file_priority(session, torrent_hash, file_ids, priority=0, use_proxy=use_proxy)
+                
+                if priority_set_success:
                     logger.info(f"  Successfully filtered {len(files_to_filter)} files from: {torrent_name}")
+                    
+                    # Only delete local files after successfully setting priority to prevent data loss
+                    # If priority setting fails, qBittorrent may still download these files
+                    if delete_local_files_flag:
+                        # Validate save_path to prevent accidental deletion of files in wrong location
+                        if not torrent_save_path or not os.path.isabs(torrent_save_path):
+                            logger.warning(f"  Skipping local file deletion: invalid save_path '{torrent_save_path}'")
+                        else:
+                            for f in files_to_filter:
+                                if f['progress'] > 0:  # File has been partially or fully downloaded
+                                    # Construct full file path: save_path + file_name
+                                    full_path = os.path.join(torrent_save_path, f['name'])
+                                    deleted, size_deleted = delete_local_file(full_path)
+                                    if deleted:
+                                        torrent_deleted_count += 1
+                                        torrent_deleted_size += size_deleted
+                                        stats['local_files_deleted'] += 1
+                                        stats['local_size_deleted'] += size_deleted
                 else:
                     logger.error(f"  Failed to filter files from: {torrent_name}")
                     stats['errors'] += 1
-                
-                # Delete local files if flag is enabled and files have been downloaded
-                if delete_local_files_flag:
-                    for f in files_to_filter:
-                        if f['progress'] > 0:  # File has been partially or fully downloaded
-                            # Construct full file path: save_path + file_name
-                            full_path = os.path.join(torrent_save_path, f['name'])
-                            deleted, size_deleted = delete_local_file(full_path)
-                            if deleted:
-                                torrent_deleted_count += 1
-                                torrent_deleted_size += size_deleted
-                                stats['local_files_deleted'] += 1
-                                stats['local_size_deleted'] += size_deleted
             else:
                 logger.info(f"  [DRY-RUN] Would filter {len(files_to_filter)} files from: {torrent_name}")
                 if delete_local_files_flag:
-                    # In dry-run mode, show what would be deleted
-                    files_to_delete = [f for f in files_to_filter if f['progress'] > 0]
-                    if files_to_delete:
-                        logger.info(f"  [DRY-RUN] Would delete {len(files_to_delete)} local files")
-                        for f in files_to_delete:
-                            full_path = os.path.join(torrent_save_path, f['name'])
-                            logger.info(f"    [DRY-RUN] Would delete: {full_path}")
+                    # Validate save_path in dry-run mode too
+                    if not torrent_save_path or not os.path.isabs(torrent_save_path):
+                        logger.warning(f"  [DRY-RUN] Would skip local file deletion: invalid save_path '{torrent_save_path}'")
+                    else:
+                        # In dry-run mode, show what would be deleted
+                        files_to_delete = [f for f in files_to_filter if f['progress'] > 0]
+                        if files_to_delete:
+                            logger.info(f"  [DRY-RUN] Would delete {len(files_to_delete)} local files")
+                            for f in files_to_delete:
+                                full_path = os.path.join(torrent_save_path, f['name'])
+                                logger.info(f"    [DRY-RUN] Would delete: {full_path}")
             
             stats['details'].append((torrent_name, len(files_to_filter), filtered_size, torrent_deleted_count, torrent_deleted_size))
         else:
