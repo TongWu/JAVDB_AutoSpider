@@ -690,6 +690,80 @@ class TestFilterSmallFilesWithDeletion:
         assert stats['local_files_deleted'] == 1
         assert stats['local_size_deleted'] == 5 * 1024 * 1024
 
+    @patch('scripts.qb_file_filter.get_torrent_files')
+    @patch('scripts.qb_file_filter.set_file_priority')
+    @patch('scripts.qb_file_filter.delete_local_file')
+    def test_filter_delete_skipped_when_save_path_empty(self, mock_delete, mock_set_priority, mock_get_files):
+        """Test that deletion is skipped when save_path is empty to prevent accidental deletion."""
+        mock_get_files.return_value = [
+            {'name': 'video.mp4', 'size': 100 * 1024 * 1024, 'priority': 1, 'progress': 1.0},
+            {'name': 'sample.mp4', 'size': 5 * 1024 * 1024, 'priority': 1, 'progress': 1.0},
+        ]
+        mock_set_priority.return_value = True
+
+        mock_session = MagicMock()
+        # Empty save_path should prevent deletion
+        torrents = [{'hash': 'abc123', 'name': 'Test Torrent', 'added_on': 0, 'save_path': ''}]
+
+        stats = filter_small_files(
+            mock_session, torrents, min_size_mb=50, dry_run=False, delete_local_files_flag=True
+        )
+
+        # Files should be filtered but not deleted due to empty save_path
+        assert stats['files_filtered'] == 1
+        assert stats['local_files_deleted'] == 0
+        mock_delete.assert_not_called()
+
+    @patch('scripts.qb_file_filter.get_torrent_files')
+    @patch('scripts.qb_file_filter.set_file_priority')
+    @patch('scripts.qb_file_filter.delete_local_file')
+    def test_filter_delete_skipped_when_save_path_relative(self, mock_delete, mock_set_priority, mock_get_files):
+        """Test that deletion is skipped when save_path is not absolute to prevent accidental deletion."""
+        mock_get_files.return_value = [
+            {'name': 'video.mp4', 'size': 100 * 1024 * 1024, 'priority': 1, 'progress': 1.0},
+            {'name': 'sample.mp4', 'size': 5 * 1024 * 1024, 'priority': 1, 'progress': 1.0},
+        ]
+        mock_set_priority.return_value = True
+
+        mock_session = MagicMock()
+        # Relative save_path should prevent deletion
+        torrents = [{'hash': 'abc123', 'name': 'Test Torrent', 'added_on': 0, 'save_path': 'downloads/torrents'}]
+
+        stats = filter_small_files(
+            mock_session, torrents, min_size_mb=50, dry_run=False, delete_local_files_flag=True
+        )
+
+        # Files should be filtered but not deleted due to relative save_path
+        assert stats['files_filtered'] == 1
+        assert stats['local_files_deleted'] == 0
+        mock_delete.assert_not_called()
+
+    @patch('scripts.qb_file_filter.get_torrent_files')
+    @patch('scripts.qb_file_filter.set_file_priority')
+    @patch('scripts.qb_file_filter.delete_local_file')
+    def test_filter_delete_skipped_when_priority_fails(self, mock_delete, mock_set_priority, mock_get_files):
+        """Test that deletion is skipped when set_file_priority fails to prevent data loss."""
+        mock_get_files.return_value = [
+            {'name': 'video.mp4', 'size': 100 * 1024 * 1024, 'priority': 1, 'progress': 1.0},
+            {'name': 'sample.mp4', 'size': 5 * 1024 * 1024, 'priority': 1, 'progress': 1.0},
+        ]
+        # Simulate priority setting failure
+        mock_set_priority.return_value = False
+
+        mock_session = MagicMock()
+        torrents = [{'hash': 'abc123', 'name': 'Test Torrent', 'added_on': 0, 'save_path': '/downloads'}]
+
+        stats = filter_small_files(
+            mock_session, torrents, min_size_mb=50, dry_run=False, delete_local_files_flag=True
+        )
+
+        # Files should not be deleted because priority setting failed
+        # qBittorrent may still download these files, so deleting them would cause data loss
+        assert stats['files_filtered'] == 1
+        assert stats['local_files_deleted'] == 0
+        assert stats['errors'] == 1
+        mock_delete.assert_not_called()
+
 
 class TestFilterIntegration:
     """Integration tests for the file filter workflow."""
