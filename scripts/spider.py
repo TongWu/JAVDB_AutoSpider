@@ -978,7 +978,7 @@ def main():
     session = requests.Session()
     logger.info("Initialized requests session")
 
-    all_index_results = []
+    all_index_results_phase1 = []
     rows = []
     phase1_rows = []  # Track phase 1 entries separately
     phase2_rows = []  # Track phase 2 entries separately
@@ -1011,9 +1011,9 @@ def main():
     all_index_results_phase2 = []  # Pre-collect phase 2 results
     last_valid_page = 0
     
-    logger.info("=" * 50)
+    logger.info("=" * 75)
     logger.info("Fetching and parsing index pages")
-    logger.info("=" * 50)
+    logger.info("=" * 75)
 
     page_num = start_page
     consecutive_empty_pages = 0
@@ -1073,7 +1073,7 @@ def main():
                                        is_adhoc_mode=(custom_url is not None))
             p1_count = len(page_results)
             if p1_count > 0:
-                all_index_results.extend(page_results)
+                all_index_results_phase1.extend(page_results)
         
         # Also parse for phase 2 if needed (reuse the same HTML)
         if phase_mode in ['2', 'all'] and custom_url is None:
@@ -1110,14 +1110,14 @@ def main():
     # Process Phase 1 entries
     # ========================================
     if phase_mode in ['1', 'all']:
-        logger.info("=" * 50)
-        logger.info("PHASE 1: Processing collected entries")
-        logger.info("=" * 50)
+        logger.info("=" * 75)
+        logger.info(f"PHASE 1: Processing {len(all_index_results_phase1)} collected entries with subtitle")
+        logger.info("=" * 75)
 
         # Process phase 1 entries
-        total_entries_phase1 = len(all_index_results)
+        total_entries_phase1 = len(all_index_results_phase1)
 
-        for i, entry in enumerate(all_index_results, 1):
+        for i, entry in enumerate(all_index_results_phase1, 1):
             href = entry['href']
             page_num = entry['page']
             fallback_triggered = False  # Track if fallback was triggered for this entry
@@ -1249,7 +1249,7 @@ def main():
                 time.sleep(MOVIE_SLEEP)
 
         # Calculate phase 1 statistics
-        phase1_skipped_history = sum(1 for entry in all_index_results if has_complete_subtitles(entry['href'], parsed_movies_history_phase1))
+        phase1_skipped_history = sum(1 for entry in all_index_results_phase1 if has_complete_subtitles(entry['href'], parsed_movies_history_phase1))
         phase1_actually_fetched = total_entries_phase1 - phase1_skipped_history
         logger.info(f"Phase 1 completed: {total_entries_phase1} found, {phase1_skipped_history} skipped (history), {len(phase1_rows)} written to CSV")
 
@@ -1260,9 +1260,9 @@ def main():
     if phase_mode in ['2', 'all']:
         # In ad hoc mode, phase 2 is skipped (all entries processed in phase 1)
         if custom_url is not None:
-            logger.info("=" * 50)
+            logger.info("=" * 75)
             logger.info("PHASE 2: Skipped (AD HOC MODE - all entries processed in Phase 1)")
-            logger.info("=" * 50)
+            logger.info("=" * 75)
             all_index_results_phase2 = []
         else:
             # Add cooldown delay between phases to avoid triggering Cloudflare protection
@@ -1270,9 +1270,9 @@ def main():
                 logger.info(f"Waiting {PHASE_TRANSITION_COOLDOWN} seconds before Phase 2")
                 time.sleep(PHASE_TRANSITION_COOLDOWN)
             
-            logger.info("=" * 50)
+            logger.info("=" * 75)
             logger.info(f"PHASE 2: Processing {len(all_index_results_phase2)} collected entries (rate > {PHASE2_MIN_RATE}, comments > {PHASE2_MIN_COMMENTS})")
-            logger.info("=" * 50)
+            logger.info("=" * 75)
 
             # all_index_results_phase2 was already populated during the fetch phase
 
@@ -1420,9 +1420,9 @@ def main():
         logger.info(f"CSV file written incrementally to: {csv_path}")
 
     # Generate summary
-    logger.info("=" * 50)
+    logger.info("=" * 75)
     logger.info("SUMMARY REPORT")
-    logger.info("=" * 50)
+    logger.info("=" * 75)
     if parse_all:
         logger.info(f"Pages processed: {start_page} to last page with results")
     else:
@@ -1509,7 +1509,7 @@ def main():
         logger.info(f"Results saved to: {csv_path}")
         if use_history_for_saving:
             logger.info(f"History saved to: {os.path.join(DAILY_REPORT_DIR, PARSED_MOVIES_CSV)}")
-    logger.info("=" * 50)
+    logger.info("=" * 75)
     
     # Log proxy statistics and ban status if using proxy
     if use_proxy and PROXY_MODE in ('pool', 'single') and global_proxy_pool is not None:
@@ -1518,12 +1518,12 @@ def main():
         
         # Log ban summary (without IP for logs)
         logger.info("")
-        logger.info("=" * 50)
+        logger.info("=" * 75)
         logger.info("PROXY BAN STATUS")
-        logger.info("=" * 50)
+        logger.info("=" * 75)
         ban_summary = global_proxy_pool.get_ban_summary(include_ip=False)
         logger.info(ban_summary)
-        logger.info("=" * 50)
+        logger.info("=" * 75)
     
     # Check for critical failures and exit with appropriate code
     # Track if any proxy was banned during the entire run
@@ -1534,9 +1534,9 @@ def main():
         proxies_were_banned = proxies_were_banned or any_proxy_banned_phase2
     
     if proxies_were_banned:
-        logger.error("=" * 50)
+        logger.error("=" * 75)
         logger.error("CRITICAL: PROXY BAN DETECTED DURING THIS RUN")
-        logger.error("=" * 50)
+        logger.error("=" * 75)
         logger.error("One or more proxies were marked as BANNED due to failure to retrieve movie list.")
         logger.error("This indicates the proxy IP may be blocked by JavDB.")
         logger.error("Please check proxy ban status and consider using different proxies.")
@@ -1545,9 +1545,9 @@ def main():
     # Check if we got any results at all (might indicate all proxies are banned)
     if len(rows) == 0 and use_proxy and use_cf_bypass:
         # No results with proxy + CF bypass might indicate issues
-        logger.warning("=" * 50)
+        logger.warning("=" * 75)
         logger.warning("WARNING: No entries found while using proxy and CF bypass")
-        logger.warning("=" * 50)
+        logger.warning("=" * 75)
         logger.warning("This might indicate proxy issues or CF bypass service problems.")
         # Don't exit with error - it's possible there are legitimately no new entries
 
