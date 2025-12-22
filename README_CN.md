@@ -50,6 +50,15 @@
 - 全面的日志记录和进度跟踪
 - 详细的汇总报告
 
+### qBittorrent 文件过滤器
+- 自动过滤最近添加的种子中的小文件
+- 可配置的最小文件大小阈值（默认：50MB）
+- 为低于阈值的文件设置优先级为 0（不下载）
+- 过滤 NFO 文件、样本、截图等
+- 支持预览模式（dry-run）
+- 可选的分类过滤
+- 通过 GitHub Actions 定时执行（在每日摄取后 2 小时）
+
 ### 重复下载预防
 - **自动下载检测**: 通过检查历史 CSV 文件自动识别哪些种子已被下载
 - **下载指示器**: 在每日报告 CSV 文件中为已下载的种子添加 `[DOWNLOADED]` 前缀
@@ -246,6 +255,24 @@ python qbtorrent_uploader.py --mode adhoc
 
 # 为 qBittorrent API 请求使用代理
 python qbtorrent_uploader.py --use-proxy
+```
+
+**运行 qBittorrent 文件过滤器(过滤小文件):**
+```bash
+# 默认: 过滤最近 2 天内添加的小于 50MB 的文件
+python scripts/qb_file_filter.py --min-size 50
+
+# 自定义阈值和天数
+python scripts/qb_file_filter.py --min-size 100 --days 3
+
+# 演练模式(预览而不实际更改)
+python scripts/qb_file_filter.py --min-size 50 --dry-run
+
+# 仅过滤特定分类
+python scripts/qb_file_filter.py --min-size 50 --category JavDB
+
+# 使用代理
+python scripts/qb_file_filter.py --min-size 50 --use-proxy
 ```
 
 **运行 PikPak 桥接器(将旧种子从 qBittorrent 转移到 PikPak):**
@@ -592,6 +619,18 @@ PIKPAK_PASSWORD = 'your_pikpak_password'
 # PikPak 设置
 PIKPAK_LOG_FILE = 'logs/pikpak_bridge.log'
 PIKPAK_REQUEST_DELAY = 3  # 请求之间的延迟(秒)以避免速率限制
+
+# =============================================================================
+# qBittorrent 文件过滤器配置
+# =============================================================================
+
+# 最小文件大小阈值(MB)
+# 小于此值的文件将被设置为"不下载"优先级
+# 这有助于过滤 NFO 文件、样本、截图等小文件
+QB_FILE_FILTER_MIN_SIZE_MB = 50
+
+# 文件过滤器的日志文件
+QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
 ```
 
 **设置说明:**
@@ -1405,6 +1444,7 @@ LOG_LEVEL = 'DEBUG'  # 显示详细的调试信息
   - `qbtorrent_uploader.log`: 上传执行日志
   - `pipeline_run_and_notify.log`: 流水线执行日志
   - `qb_pikpak.log`: PikPak 桥接执行日志
+  - `qb_file_filter.log`: 文件过滤器执行日志
   - `proxy_bans.csv`: 代理禁用历史(跨运行持久化)
 - **migration/**: 包含数据库迁移脚本
 - **utils/**: 实用工具模块(历史、解析器、代理池等)
@@ -1446,6 +1486,10 @@ python3 qbtorrent_uploader.py --mode adhoc
 # PikPak 桥接器
 python3 pikpak_bridge.py  # 默认: 3 天,批量模式
 python3 pikpak_bridge.py --days 7 --individual  # 自定义天数,单个模式
+
+# qBittorrent 文件过滤器
+python3 scripts/qb_file_filter.py --min-size 50  # 过滤 < 50MB 的文件
+python3 scripts/qb_file_filter.py --min-size 100 --days 3 --dry-run  # 预览模式
 ```
 
 ### 配置文件
