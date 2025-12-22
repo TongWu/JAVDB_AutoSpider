@@ -463,12 +463,12 @@ def main():
             logger.warning("PROXY ENABLED: But no proxy configured")
     
     # Test qBittorrent connection first
-    # if not test_qbittorrent_connection(use_proxy):
-    #     logger.error("Cannot connect to qBittorrent. Please check:")
-    #     logger.error("1. qBittorrent is running")
-    #     logger.error("2. Web UI is enabled")
-    #     logger.error("3. Host and port settings in config.py")
-    #     return
+    if not test_qbittorrent_connection(use_proxy):
+        logger.error("Cannot connect to qBittorrent. Please check:")
+        logger.error("1. qBittorrent is running")
+        logger.error("2. Web UI is enabled")
+        logger.error("3. Host and port settings in config.py")
+        sys.exit(1)
     
     # Get CSV filename
     if args.input_file:
@@ -486,6 +486,7 @@ def main():
     
     if not torrents:
         logger.warning("No torrent links found in CSV file")
+        # This is not an error - just no work to do
         return
     
     # Create session for qBittorrent
@@ -494,7 +495,7 @@ def main():
     # Login to qBittorrent
     if not login_to_qbittorrent(session, use_proxy):
         logger.error("Failed to login to qBittorrent. Please check username and password.")
-        return
+        sys.exit(1)
     
     # Get existing torrents to check for duplicates
     existing_hashes = get_existing_torrents(session, use_proxy)
@@ -596,6 +597,11 @@ def main():
         )
     else:
         logger.info("Skipping git commit - no credentials provided (commit will be handled by workflow)")
+    
+    # Exit with error code if all torrent additions failed (when there were attempts)
+    if attempted > 0 and successfully_added == 0:
+        logger.error("All torrent additions failed!")
+        sys.exit(1)
 
 if __name__ == '__main__':
     main() 
