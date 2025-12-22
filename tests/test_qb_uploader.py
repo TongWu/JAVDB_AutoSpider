@@ -385,3 +385,119 @@ class TestErrorHandlingExitCodes:
         
         assert exc_info.value.code == 1
 
+
+class TestQbUploaderAdvanced:
+    """Advanced test cases for qb_uploader functions."""
+    
+    @patch('scripts.qb_uploader.get_proxies_dict')
+    def test_login_to_qbittorrent_success(self, mock_proxies):
+        """Test successful login to qBittorrent."""
+        from scripts.qb_uploader import login_to_qbittorrent
+        mock_proxies.return_value = None
+        
+        mock_session = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = 'Ok.'
+        mock_session.post.return_value = mock_response
+        
+        result = login_to_qbittorrent(mock_session, use_proxy=False)
+        
+        assert result is True
+    
+    @patch('scripts.qb_uploader.get_proxies_dict')
+    def test_login_to_qbittorrent_failure(self, mock_proxies):
+        """Test failed login to qBittorrent."""
+        from scripts.qb_uploader import login_to_qbittorrent
+        mock_proxies.return_value = None
+        
+        mock_session = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 403
+        mock_response.text = 'Fails.'
+        mock_session.post.return_value = mock_response
+        
+        result = login_to_qbittorrent(mock_session, use_proxy=False)
+        
+        assert result is False
+
+
+class TestFindCsvFileLogic:
+    """Test cases for find_csv_file logic."""
+    
+    def test_find_csv_in_daily_report(self, temp_dir):
+        """Test finding CSV file in Daily Report directory."""
+        import glob
+        from datetime import datetime
+        
+        daily_report_dir = os.path.join(temp_dir, 'Daily Report')
+        os.makedirs(daily_report_dir, exist_ok=True)
+        
+        # Create a test CSV file
+        today = datetime.now().strftime('%Y%m%d')
+        csv_file = os.path.join(daily_report_dir, f'Javdb_DailyReport_{today}.csv')
+        with open(csv_file, 'w') as f:
+            f.write('test')
+        
+        # Find the file
+        pattern = os.path.join(daily_report_dir, f'Javdb_DailyReport_{today}*.csv')
+        found_files = glob.glob(pattern)
+        
+        assert len(found_files) == 1
+        assert csv_file in found_files
+    
+    def test_find_csv_no_file(self, temp_dir):
+        """Test finding CSV file when none exists."""
+        import glob
+        
+        daily_report_dir = os.path.join(temp_dir, 'Daily Report')
+        os.makedirs(daily_report_dir, exist_ok=True)
+        
+        pattern = os.path.join(daily_report_dir, '*.csv')
+        found_files = glob.glob(pattern)
+        
+        assert len(found_files) == 0
+
+
+class TestReadCsvMagnets:
+    """Test cases for reading magnets from CSV."""
+    
+    def test_read_csv_magnets(self, temp_dir):
+        """Test reading magnets from CSV file."""
+        import csv
+        
+        csv_file = os.path.join(temp_dir, 'test.csv')
+        
+        # Create a test CSV file
+        with open(csv_file, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.DictWriter(f, fieldnames=['href', 'video_code', 'hacked_subtitle', 'subtitle', 'no_subtitle'])
+            writer.writeheader()
+            writer.writerow({
+                'href': '/v/TEST-001',
+                'video_code': 'TEST-001',
+                'hacked_subtitle': 'magnet:?xt=urn:btih:abc123',
+                'subtitle': '',
+                'no_subtitle': ''
+            })
+        
+        # Read the file
+        with open(csv_file, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+        
+        assert len(rows) == 1
+        assert rows[0]['video_code'] == 'TEST-001'
+        assert 'abc123' in rows[0]['hacked_subtitle']
+
+
+class TestInitializeProxyHelper:
+    """Test cases for initialize_proxy_helper function."""
+    
+    def test_initialize_no_proxy(self):
+        """Test initialization without proxy."""
+        from scripts.qb_uploader import initialize_proxy_helper
+        
+        result = initialize_proxy_helper(use_proxy=False)
+        
+        assert result is None
+

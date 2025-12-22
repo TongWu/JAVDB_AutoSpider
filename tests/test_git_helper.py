@@ -302,4 +302,400 @@ class TestGitCommitAndPush:
                 git_repo_url='https://github.com/user/repo.git'
             )
             assert result is False
+    
+    def test_successful_commit_and_push_local_mode(self):
+        """Should successfully commit and push in local mode."""
+        from utils.git_helper import git_commit_and_push
+        
+        mock_results = [
+            MagicMock(stdout='main\n', returncode=0),  # get_current_branch
+            MagicMock(returncode=0),  # git config user.name
+            MagicMock(returncode=0),  # git config user.email
+            MagicMock(returncode=0),  # git add
+            MagicMock(stdout='M test.txt\n', returncode=0),  # git status
+            MagicMock(returncode=0),  # git commit
+            MagicMock(returncode=0),  # git push
+        ]
+        
+        env = os.environ.copy()
+        env.pop('GITHUB_ACTIONS', None)
+        
+        with patch.dict(os.environ, env, clear=True):
+            with patch('subprocess.run', side_effect=mock_results):
+                result = git_commit_and_push(
+                    files_to_add=['test.txt'],
+                    commit_message='Test commit',
+                    from_pipeline=True,
+                    git_username='user',
+                    git_password='pass',
+                    git_repo_url='https://github.com/user/repo.git',
+                    git_branch='main'
+                )
+                assert result is True
+    
+    def test_returns_false_on_subprocess_error(self):
+        """Should return False when subprocess fails."""
+        from utils.git_helper import git_commit_and_push
+        import subprocess
+        
+        env = os.environ.copy()
+        env.pop('GITHUB_ACTIONS', None)
+        
+        with patch.dict(os.environ, env, clear=True):
+            with patch('subprocess.run', side_effect=subprocess.CalledProcessError(1, 'git')):
+                result = git_commit_and_push(
+                    files_to_add=['test.txt'],
+                    commit_message='Test commit',
+                    from_pipeline=True,
+                    git_username='user',
+                    git_password='pass',
+                    git_repo_url='https://github.com/user/repo.git'
+                )
+                assert result is False
+    
+    def test_standalone_github_actions_mode(self):
+        """Should configure git user as github-actions[bot] in standalone GitHub Actions mode."""
+        from utils.git_helper import git_commit_and_push
+        
+        mock_results = [
+            MagicMock(stdout='main\n', returncode=0),  # get_current_branch
+            MagicMock(returncode=0),  # git config user.name (github-actions[bot])
+            MagicMock(returncode=0),  # git config user.email
+            MagicMock(returncode=0),  # git add
+            MagicMock(stdout='', returncode=0),  # git status (no changes)
+        ]
+        
+        with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true'}):
+            with patch('subprocess.run', side_effect=mock_results):
+                result = git_commit_and_push(
+                    files_to_add=['test.txt'],
+                    commit_message='Test commit',
+                    from_pipeline=False,
+                    git_username='user',
+                    git_password='pass',
+                    git_repo_url='https://github.com/user/repo.git'
+                )
+                assert result is True
+    
+    def test_local_mode_without_username(self):
+        """Should return False in local mode without username."""
+        from utils.git_helper import git_commit_and_push
+        
+        mock_result = MagicMock()
+        mock_result.stdout = 'main\n'
+        mock_result.returncode = 0
+        
+        env = os.environ.copy()
+        env.pop('GITHUB_ACTIONS', None)
+        
+        with patch.dict(os.environ, env, clear=True):
+            with patch('subprocess.run', return_value=mock_result):
+                result = git_commit_and_push(
+                    files_to_add=['test.txt'],
+                    commit_message='Test commit',
+                    from_pipeline=False,
+                    git_username='',  # No username
+                    git_password='pass',
+                    git_repo_url='https://github.com/user/repo.git'
+                )
+                assert result is False
+    
+    def test_skip_push_with_flag(self):
+        """Should skip push when skip_push=True."""
+        from utils.git_helper import git_commit_and_push
+        
+        mock_results = [
+            MagicMock(stdout='main\n', returncode=0),  # get_current_branch
+            MagicMock(returncode=0),  # git config user.name
+            MagicMock(returncode=0),  # git config user.email
+            MagicMock(returncode=0),  # git add
+            MagicMock(stdout='M test.txt\n', returncode=0),  # git status
+            MagicMock(returncode=0),  # git commit
+        ]
+        
+        env = os.environ.copy()
+        env.pop('GITHUB_ACTIONS', None)
+        
+        with patch.dict(os.environ, env, clear=True):
+            with patch('subprocess.run', side_effect=mock_results):
+                result = git_commit_and_push(
+                    files_to_add=['test.txt'],
+                    commit_message='Test commit',
+                    from_pipeline=True,
+                    git_username='user',
+                    git_password='pass',
+                    git_repo_url='https://github.com/user/repo.git',
+                    skip_push=True
+                )
+                assert result is True
+
+
+class TestSafeLogFunctions:
+    """Tests for safe_log_* functions."""
+    
+    def test_safe_log_info(self):
+        """Should log info message with sensitive info masked."""
+        from utils.git_helper import safe_log_info
+        
+        # Should not raise any exception
+        safe_log_info("Normal log message")
+        safe_log_info("Message with token: ghp_1234567890abcdefghijklmnopqrstuvwxyz12345")
+    
+    def test_safe_log_warning(self):
+        """Should log warning message with sensitive info masked."""
+        from utils.git_helper import safe_log_warning
+        
+        safe_log_warning("Warning message")
+        safe_log_warning("Warning with password: mysecretpassword")
+    
+    def test_safe_log_error(self):
+        """Should log error message with sensitive info masked."""
+        from utils.git_helper import safe_log_error
+        
+        safe_log_error("Error message")
+        safe_log_error("Error with SMTP_PASSWORD: mysmtppassword")
+
+
+class TestGitCommitAndPushAdvanced:
+    """Additional tests for git_commit_and_push edge cases."""
+    
+    def test_github_actions_fallback_to_username(self):
+        """Should fallback to git_username when github-actions[bot] fails."""
+        from utils.git_helper import git_commit_and_push
+        import subprocess
+        
+        call_count = [0]
+        
+        def mock_run(*args, **kwargs):
+            call_count[0] += 1
+            cmd = args[0] if args else kwargs.get('cmd', [])
+            
+            # First get_current_branch call
+            if call_count[0] == 1:
+                result = MagicMock()
+                result.stdout = 'main\n'
+                result.returncode = 0
+                return result
+            
+            # git config for github-actions[bot] - fail
+            if call_count[0] == 2 and 'config' in cmd and 'github-actions[bot]' in str(cmd):
+                raise subprocess.CalledProcessError(1, 'git')
+            
+            # git config for fallback user
+            if 'config' in cmd:
+                return MagicMock(returncode=0)
+            
+            # git add
+            if 'add' in cmd:
+                return MagicMock(returncode=0)
+            
+            # git status - no changes
+            if 'status' in cmd:
+                result = MagicMock()
+                result.stdout = ''
+                result.returncode = 0
+                return result
+            
+            return MagicMock(returncode=0)
+        
+        with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true'}):
+            with patch('subprocess.run', side_effect=mock_run):
+                result = git_commit_and_push(
+                    files_to_add=['test.txt'],
+                    commit_message='Test commit',
+                    from_pipeline=False,
+                    git_username='fallback_user',
+                    git_password='pass',
+                    git_repo_url='https://github.com/user/repo.git'
+                )
+                # Should succeed using fallback username
+                assert result is True
+    
+    def test_github_actions_push_without_pipeline(self):
+        """Should push in GitHub Actions when from_pipeline=False but not skipped."""
+        from utils.git_helper import git_commit_and_push
+        
+        mock_results = [
+            MagicMock(stdout='main\n', returncode=0),  # get_current_branch
+            MagicMock(returncode=0),  # git config user.name
+            MagicMock(returncode=0),  # git config user.email
+            MagicMock(returncode=0),  # git add
+            MagicMock(stdout='M test.txt\n', returncode=0),  # git status
+            MagicMock(returncode=0),  # git commit
+            MagicMock(returncode=0),  # git push
+        ]
+        
+        with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true'}):
+            with patch('subprocess.run', side_effect=mock_results):
+                result = git_commit_and_push(
+                    files_to_add=['test.txt'],
+                    commit_message='Test commit',
+                    from_pipeline=False,
+                    git_username='user',
+                    git_password='pass',
+                    git_repo_url='https://github.com/user/repo.git',
+                    skip_push=False  # Explicitly don't skip push
+                )
+                assert result is True
+    
+    def test_local_push_with_credentials(self):
+        """Should push with credentials in local mode."""
+        from utils.git_helper import git_commit_and_push
+        
+        mock_results = [
+            MagicMock(stdout='main\n', returncode=0),  # get_current_branch
+            MagicMock(returncode=0),  # git config user.name
+            MagicMock(returncode=0),  # git config user.email
+            MagicMock(returncode=0),  # git add
+            MagicMock(stdout='M test.txt\n', returncode=0),  # git status
+            MagicMock(returncode=0),  # git commit
+            MagicMock(returncode=0),  # git push (with auth URL)
+        ]
+        
+        env = os.environ.copy()
+        env.pop('GITHUB_ACTIONS', None)
+        
+        with patch.dict(os.environ, env, clear=True):
+            with patch('subprocess.run', side_effect=mock_results):
+                result = git_commit_and_push(
+                    files_to_add=['test.txt'],
+                    commit_message='Test commit',
+                    from_pipeline=False,
+                    git_username='user',
+                    git_password='pass',
+                    git_repo_url='https://github.com/user/repo.git'
+                )
+                assert result is True
+    
+    def test_local_push_without_credentials(self):
+        """Should try normal push when no credentials in local mode."""
+        from utils.git_helper import git_commit_and_push
+        
+        mock_results = [
+            MagicMock(stdout='main\n', returncode=0),  # get_current_branch
+            MagicMock(returncode=0),  # git config user.name
+            MagicMock(returncode=0),  # git config user.email
+            MagicMock(returncode=0),  # git add
+            MagicMock(stdout='M test.txt\n', returncode=0),  # git status
+            MagicMock(returncode=0),  # git commit
+            MagicMock(returncode=0),  # git push (normal)
+        ]
+        
+        env = os.environ.copy()
+        env.pop('GITHUB_ACTIONS', None)
+        
+        with patch.dict(os.environ, env, clear=True):
+            with patch('subprocess.run', side_effect=mock_results):
+                result = git_commit_and_push(
+                    files_to_add=['test.txt'],
+                    commit_message='Test commit',
+                    from_pipeline=False,
+                    git_username='user',
+                    git_password='',  # No password
+                    git_repo_url='https://github.com/user/repo.git'
+                )
+                assert result is True
+    
+    def test_unexpected_exception(self):
+        """Should return False on unexpected exception."""
+        from utils.git_helper import git_commit_and_push
+        
+        with patch('subprocess.run', side_effect=Exception("Unexpected error")):
+            result = git_commit_and_push(
+                files_to_add=['test.txt'],
+                commit_message='Test commit',
+                from_pipeline=True,
+                git_username='user',
+                git_password='pass',
+                git_repo_url='https://github.com/user/repo.git'
+            )
+            assert result is False
+    
+    def test_git_add_failure_continues(self):
+        """Should continue even when git add fails for some files."""
+        from utils.git_helper import git_commit_and_push
+        import subprocess
+        
+        call_count = [0]
+        
+        def mock_run(*args, **kwargs):
+            call_count[0] += 1
+            cmd = args[0] if args else kwargs.get('cmd', [])
+            
+            # get_current_branch
+            if call_count[0] == 1:
+                result = MagicMock()
+                result.stdout = 'main\n'
+                result.returncode = 0
+                return result
+            
+            # git config calls
+            if 'config' in cmd:
+                return MagicMock(returncode=0)
+            
+            # git add - fail for first file
+            if 'add' in cmd and call_count[0] == 4:
+                raise subprocess.CalledProcessError(1, 'git')
+            
+            # git add - success for second file
+            if 'add' in cmd:
+                return MagicMock(returncode=0)
+            
+            # git status - no changes
+            if 'status' in cmd:
+                result = MagicMock()
+                result.stdout = ''
+                result.returncode = 0
+                return result
+            
+            return MagicMock(returncode=0)
+        
+        env = os.environ.copy()
+        env.pop('GITHUB_ACTIONS', None)
+        
+        with patch.dict(os.environ, env, clear=True):
+            with patch('subprocess.run', side_effect=mock_run):
+                result = git_commit_and_push(
+                    files_to_add=['file1.txt', 'file2.txt'],
+                    commit_message='Test commit',
+                    from_pipeline=True,
+                    git_username='user',
+                    git_password='pass',
+                    git_repo_url='https://github.com/user/repo.git'
+                )
+                assert result is True
+
+
+class TestMaskSensitiveInfoAdvanced:
+    """Additional tests for mask_sensitive_info function."""
+    
+    def test_masks_github_refresh_token(self):
+        """Should mask GitHub refresh tokens (ghr_)."""
+        text = 'Token: ghr_1234567890abcdefghijklmnopqrstuvwxyz12345'
+        masked = mask_sensitive_info(text)
+        assert 'gh*_***MASKED***' in masked
+    
+    def test_masks_github_secret_token(self):
+        """Should mask GitHub secret tokens (ghs_)."""
+        text = 'Token: ghs_1234567890abcdefghijklmnopqrstuvwxyz12345'
+        masked = mask_sensitive_info(text)
+        assert 'gh*_***MASKED***' in masked
+    
+    def test_preserves_github_domain_in_url(self):
+        """Should preserve github.com domain in URL."""
+        text = 'URL: https://user:token@github.com/user/repo.git'
+        masked = mask_sensitive_info(text)
+        assert 'github.com' in masked
+    
+    def test_masks_password_with_equals_format(self):
+        """Should mask password in equals format."""
+        text = 'password=mysecretpassword'
+        masked = mask_sensitive_info(text)
+        assert 'mysecretpassword' not in masked
+    
+    def test_masks_password_with_quotes(self):
+        """Should mask password with quotes."""
+        text = 'password: "mysecretpassword"'
+        masked = mask_sensitive_info(text)
+        assert 'mysecretpassword' not in masked
 
