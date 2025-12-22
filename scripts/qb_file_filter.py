@@ -4,11 +4,13 @@ qBittorrent File Filter Script
 
 This script filters out small files from recently added torrents in qBittorrent.
 It sets the download priority to 0 (do not download) for files below the threshold.
+Optionally, it can also delete local files that have already been downloaded.
 
 Usage:
     python3 scripts/qb_file_filter.py --min-size 50  # Filter files smaller than 50MB
     python3 scripts/qb_file_filter.py --min-size 100 --days 2  # Filter files smaller than 100MB from last 2 days
     python3 scripts/qb_file_filter.py --min-size 50 --use-proxy  # With proxy
+    python3 scripts/qb_file_filter.py --min-size 50 --delete-local-files  # Also delete downloaded files
 """
 
 import requests
@@ -108,6 +110,11 @@ def parse_arguments():
         type=str,
         default=None,
         help='Filter only torrents in this category (default: all categories)'
+    )
+    parser.add_argument(
+        '--delete-local-files',
+        action='store_true',
+        help='Delete local files that have already been downloaded but are below the size threshold'
     )
     return parser.parse_args()
 
@@ -353,6 +360,64 @@ def set_file_priority(session, torrent_hash, file_ids, priority, use_proxy=False
         return False
 
 
+def get_torrent_properties(session, torrent_hash, use_proxy=False):
+    """
+    Get detailed properties of a torrent, including save_path.
+    
+    Args:
+        session: Requests session with login cookies
+        torrent_hash: Hash of the torrent
+        use_proxy: Whether to use proxy
+        
+    Returns:
+        dict: Torrent properties or empty dict on failure
+    """
+    props_url = f'{QB_BASE_URL}/api/v2/torrents/properties'
+    proxies = get_proxies_dict('qbittorrent', use_proxy)
+    
+    try:
+        response = session.get(
+            props_url,
+            params={'hash': torrent_hash},
+            timeout=REQUEST_TIMEOUT,
+            proxies=proxies
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logger.warning(f"Failed to get properties for torrent {torrent_hash}: {response.status_code}")
+            return {}
+            
+    except requests.RequestException as e:
+        logger.error(f"Error getting properties for torrent {torrent_hash}: {e}")
+        return {}
+
+
+def delete_local_file(file_path):
+    """
+    Delete a local file if it exists.
+    
+    Args:
+        file_path: Full path to the file
+        
+    Returns:
+        tuple: (success: bool, size_deleted: int)
+    """
+    try:
+        if os.path.exists(file_path):
+            file_size = os.path.getsize(file_path)
+            os.remove(file_path)
+            logger.info(f"  [DELETED] {file_path} ({format_size(file_size)})")
+            return True, file_size
+        else:
+            logger.debug(f"  File not found (not downloaded yet): {file_path}")
+            return False, 0
+    except OSError as e:
+        logger.error(f"  Failed to delete file {file_path}: {e}")
+        return False, 0
+
+
 def format_size(size_bytes):
     """Format size in bytes to human readable string"""
     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
@@ -362,7 +427,7 @@ def format_size(size_bytes):
     return f"{size_bytes:.2f} PB"
 
 
-def filter_small_files(session, torrents, min_size_mb, dry_run=False, use_proxy=False):
+def filter_small_files(session, torrents, min_size_mb, dry_run=False, use_proxy=False, delete_local_files_flag=False):
     """
     Filter out small files from torrents.
     
@@ -372,6 +437,7 @@ def filter_small_files(session, torrents, min_size_mb, dry_run=False, use_proxy=
         min_size_mb: Minimum file size in MB
         dry_run: If True, don't make actual changes
         use_proxy: Whether to use proxy
+        delete_local_files_flag: If True, delete local files that have been downloaded
         
     Returns:
         dict: Statistics about the filtering operation
@@ -384,13 +450,16 @@ def filter_small_files(session, torrents, min_size_mb, dry_run=False, use_proxy=
         'files_filtered': 0,
         'files_kept': 0,
         'size_saved': 0,  # Total size of filtered files
+        'local_files_deleted': 0,
+        'local_size_deleted': 0,  # Total size of deleted local files
         'errors': 0,
-        'details': []  # List of (torrent_name, filtered_files_count, filtered_size)
+        'details': []  # List of (torrent_name, filtered_files_count, filtered_size, deleted_count, deleted_size)
     }
     
     for torrent in torrents:
         torrent_hash = torrent.get('hash', '')
         torrent_name = torrent.get('name', 'Unknown')
+        torrent_save_path = torrent.get('save_path', '')  # Save path from torrent info
         added_on = torrent.get('added_on', 0)
         added_date = datetime.fromtimestamp(added_on).strftime('%Y-%m-%d %H:%M:%S')
         
@@ -411,13 +480,15 @@ def filter_small_files(session, torrents, min_size_mb, dry_run=False, use_proxy=
             file_size = file_info.get('size', 0)
             file_name = file_info.get('name', f'file_{idx}')
             current_priority = file_info.get('priority', 1)
+            file_progress = file_info.get('progress', 0)  # 0.0 to 1.0
             
             # Only filter files that are currently set to download (priority > 0)
             if file_size < min_size_bytes and current_priority > 0:
                 files_to_filter.append({
                     'id': idx,
                     'name': file_name,
-                    'size': file_size
+                    'size': file_size,
+                    'progress': file_progress
                 })
             elif current_priority > 0:
                 stats['files_kept'] += 1
@@ -427,29 +498,66 @@ def filter_small_files(session, torrents, min_size_mb, dry_run=False, use_proxy=
             stats['files_filtered'] += len(files_to_filter)
             stats['size_saved'] += filtered_size
             stats['torrents_with_filtered_files'] += 1
-            stats['details'].append((torrent_name, len(files_to_filter), filtered_size))
+            
+            torrent_deleted_count = 0
+            torrent_deleted_size = 0
             
             # Log filtered files
             for f in files_to_filter:
-                logger.info(f"  [FILTER] {f['name']} ({format_size(f['size'])})")
+                progress_str = f" - {f['progress']*100:.1f}% downloaded" if f['progress'] > 0 else ""
+                logger.info(f"  [FILTER] {f['name']} ({format_size(f['size'])}){progress_str}")
             
             # Set priority to 0 (do not download) for filtered files
             if not dry_run:
                 file_ids = [f['id'] for f in files_to_filter]
-                if set_file_priority(session, torrent_hash, file_ids, priority=0, use_proxy=use_proxy):
+                priority_set_success = set_file_priority(session, torrent_hash, file_ids, priority=0, use_proxy=use_proxy)
+                
+                if priority_set_success:
                     logger.info(f"  Successfully filtered {len(files_to_filter)} files from: {torrent_name}")
+                    
+                    # Only delete local files after successfully setting priority to prevent data loss
+                    # If priority setting fails, qBittorrent may still download these files
+                    if delete_local_files_flag:
+                        # Validate save_path to prevent accidental deletion of files in wrong location
+                        if not torrent_save_path or not os.path.isabs(torrent_save_path):
+                            logger.warning(f"  Skipping local file deletion: invalid save_path '{torrent_save_path}'")
+                        else:
+                            for f in files_to_filter:
+                                if f['progress'] > 0:  # File has been partially or fully downloaded
+                                    # Construct full file path: save_path + file_name
+                                    full_path = os.path.join(torrent_save_path, f['name'])
+                                    deleted, size_deleted = delete_local_file(full_path)
+                                    if deleted:
+                                        torrent_deleted_count += 1
+                                        torrent_deleted_size += size_deleted
+                                        stats['local_files_deleted'] += 1
+                                        stats['local_size_deleted'] += size_deleted
                 else:
                     logger.error(f"  Failed to filter files from: {torrent_name}")
                     stats['errors'] += 1
             else:
                 logger.info(f"  [DRY-RUN] Would filter {len(files_to_filter)} files from: {torrent_name}")
+                if delete_local_files_flag:
+                    # Validate save_path in dry-run mode too
+                    if not torrent_save_path or not os.path.isabs(torrent_save_path):
+                        logger.warning(f"  [DRY-RUN] Would skip local file deletion: invalid save_path '{torrent_save_path}'")
+                    else:
+                        # In dry-run mode, show what would be deleted
+                        files_to_delete = [f for f in files_to_filter if f['progress'] > 0]
+                        if files_to_delete:
+                            logger.info(f"  [DRY-RUN] Would delete {len(files_to_delete)} local files")
+                            for f in files_to_delete:
+                                full_path = os.path.join(torrent_save_path, f['name'])
+                                logger.info(f"    [DRY-RUN] Would delete: {full_path}")
+            
+            stats['details'].append((torrent_name, len(files_to_filter), filtered_size, torrent_deleted_count, torrent_deleted_size))
         else:
             logger.debug(f"  No files to filter in: {torrent_name}")
     
     return stats
 
 
-def print_summary(stats, min_size_mb, days, dry_run=False):
+def print_summary(stats, min_size_mb, days, dry_run=False, delete_local_files_flag=False):
     """Print a summary of the filtering operation"""
     logger.info("=" * 70)
     logger.info("FILE FILTER SUMMARY")
@@ -457,21 +565,34 @@ def print_summary(stats, min_size_mb, days, dry_run=False):
     logger.info(f"Mode: {'DRY-RUN (no changes made)' if dry_run else 'LIVE'}")
     logger.info(f"Filter threshold: {min_size_mb} MB")
     logger.info(f"Days lookback: {days}")
+    logger.info(f"Delete local files: {'Yes' if delete_local_files_flag else 'No'}")
     logger.info("-" * 70)
     logger.info(f"Torrents processed: {stats['torrents_processed']}")
     logger.info(f"Torrents with filtered files: {stats['torrents_with_filtered_files']}")
     logger.info(f"Files filtered (set to not download): {stats['files_filtered']}")
     logger.info(f"Files kept (above threshold): {stats['files_kept']}")
     logger.info(f"Total size saved: {format_size(stats['size_saved'])}")
+    
+    if delete_local_files_flag:
+        logger.info(f"Local files deleted: {stats.get('local_files_deleted', 0)}")
+        logger.info(f"Local disk space freed: {format_size(stats.get('local_size_deleted', 0))}")
+    
     logger.info(f"Errors encountered: {stats['errors']}")
     
     if stats['details']:
         logger.info("-" * 70)
         logger.info("Torrents with filtered files:")
-        for name, count, size in stats['details']:
+        for detail in stats['details']:
+            # Handle both old format (3 items) and new format (5 items)
+            if len(detail) == 5:
+                name, count, size, deleted_count, deleted_size = detail
+                deleted_info = f", deleted {deleted_count} local ({format_size(deleted_size)})" if deleted_count > 0 else ""
+            else:
+                name, count, size = detail
+                deleted_info = ""
             # Truncate long names
-            display_name = name if len(name) <= 50 else name[:47] + "..."
-            logger.info(f"  - {display_name}: {count} files ({format_size(size)})")
+            display_name = name if len(name) <= 45 else name[:42] + "..."
+            logger.info(f"  - {display_name}: {count} files ({format_size(size)}){deleted_info}")
     
     logger.info("=" * 70)
 
@@ -480,7 +601,7 @@ def main():
     args = parse_arguments()
     
     logger.info("Starting qBittorrent File Filter...")
-    logger.info(f"Configuration: min_size={args.min_size}MB, days={args.days}, dry_run={args.dry_run}")
+    logger.info(f"Configuration: min_size={args.min_size}MB, days={args.days}, dry_run={args.dry_run}, delete_local_files={args.delete_local_files}")
     
     # Initialize proxy helper
     initialize_proxy_helper(args.use_proxy)
@@ -515,9 +636,11 @@ def main():
             'files_filtered': 0,
             'files_kept': 0,
             'size_saved': 0,
+            'local_files_deleted': 0,
+            'local_size_deleted': 0,
             'errors': 0,
             'details': []
-        }, args.min_size, args.days, args.dry_run)
+        }, args.min_size, args.days, args.dry_run, args.delete_local_files)
         return
     
     # Filter small files
@@ -526,11 +649,12 @@ def main():
         torrents,
         min_size_mb=args.min_size,
         dry_run=args.dry_run,
-        use_proxy=args.use_proxy
+        use_proxy=args.use_proxy,
+        delete_local_files_flag=args.delete_local_files
     )
     
     # Print summary
-    print_summary(stats, args.min_size, args.days, args.dry_run)
+    print_summary(stats, args.min_size, args.days, args.dry_run, args.delete_local_files)
     
     # Exit with error code if there were errors
     if stats['errors'] > 0 and stats['torrents_processed'] == 0:
