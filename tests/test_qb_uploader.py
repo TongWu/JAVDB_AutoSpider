@@ -337,3 +337,51 @@ class TestDuplicateDetectionIntegration:
         # Now it should exist
         assert is_torrent_exists(new_magnet, existing_hashes) is True
 
+
+class TestErrorHandlingExitCodes:
+    """Test cases for error handling and exit codes in main()."""
+
+    @patch('scripts.qb_uploader.test_qbittorrent_connection')
+    @patch('scripts.qb_uploader.initialize_proxy_helper')
+    @patch('scripts.qb_uploader.parse_arguments')
+    def test_exit_on_connection_failure(self, mock_args, mock_init_proxy, mock_test_conn):
+        """Test that script exits with code 1 when connection test fails."""
+        mock_args.return_value = MagicMock(
+            mode='daily',
+            use_proxy=False,
+            input_file=None,
+            from_pipeline=False
+        )
+        mock_init_proxy.return_value = None
+        mock_test_conn.return_value = False  # Connection fails
+        
+        from scripts.qb_uploader import main
+        
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+        
+        assert exc_info.value.code == 1
+
+    @patch('scripts.qb_uploader.login_to_qbittorrent')
+    @patch('scripts.qb_uploader.test_qbittorrent_connection')
+    @patch('scripts.qb_uploader.initialize_proxy_helper')
+    @patch('scripts.qb_uploader.parse_arguments')
+    def test_exit_on_login_failure(self, mock_args, mock_init_proxy, mock_test_conn, mock_login):
+        """Test that script exits with code 1 when login fails."""
+        mock_args.return_value = MagicMock(
+            mode='daily',
+            use_proxy=False,
+            input_file=None,
+            from_pipeline=False
+        )
+        mock_init_proxy.return_value = None
+        mock_test_conn.return_value = True
+        mock_login.return_value = False  # Login fails
+        
+        from scripts.qb_uploader import main
+        
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+        
+        assert exc_info.value.code == 1
+
