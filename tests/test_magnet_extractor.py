@@ -200,3 +200,196 @@ class TestExtractMagnets:
         # no_subtitle should be populated from 4K or normal torrents
         # Note: hacked_no_subtitle won't be set if hacked_subtitle is set (elif logic)
 
+
+class TestExtractMagnetsAdvanced:
+    """Advanced test cases for extract_magnets function."""
+    
+    def test_detect_c_pattern_variants(self):
+        """Test detection of various hacked patterns."""
+        # Test -UC pattern
+        magnets = [
+            {
+                'href': 'magnet:?xt=urn:btih:hacked',
+                'name': 'ABC-123-UC.torrent',
+                'tags': ['HD'],
+                'size': '5GB',
+                'timestamp': '2024-01-15'
+            }
+        ]
+        result = extract_magnets(magnets, index=1)
+        
+        # Should be categorized as hacked_subtitle
+        assert result['hacked_subtitle'] == 'magnet:?xt=urn:btih:hacked'
+    
+    def test_prefer_larger_size_same_timestamp(self):
+        """Test that larger size is preferred when timestamp is the same."""
+        magnets = [
+            {
+                'href': 'magnet:?xt=urn:btih:smaller',
+                'name': 'ABC-123-small.torrent',
+                'tags': ['字幕'],
+                'size': '3GB',
+                'timestamp': '2024-01-15'
+            },
+            {
+                'href': 'magnet:?xt=urn:btih:larger',
+                'name': 'ABC-123-large.torrent',
+                'tags': ['字幕'],
+                'size': '6GB',
+                'timestamp': '2024-01-15'
+            }
+        ]
+        result = extract_magnets(magnets, index=1)
+        
+        # When timestamps are the same, larger size should be preferred
+        assert result['subtitle'] == 'magnet:?xt=urn:btih:larger'
+    
+    def test_parse_size_mb(self):
+        """Test parsing size in MB."""
+        magnets = [
+            {
+                'href': 'magnet:?xt=urn:btih:test',
+                'name': 'test.torrent',
+                'tags': ['HD'],
+                'size': '500MB',
+                'timestamp': '2024-01-15'
+            }
+        ]
+        result = extract_magnets(magnets, index=1)
+        
+        assert result['no_subtitle'] != ''
+        assert result['size_no_subtitle'] == '500MB'
+    
+    def test_parse_size_tb(self):
+        """Test parsing size in TB."""
+        magnets = [
+            {
+                'href': 'magnet:?xt=urn:btih:test',
+                'name': 'test.torrent',
+                'tags': ['HD'],
+                'size': '1.5TB',
+                'timestamp': '2024-01-15'
+            }
+        ]
+        result = extract_magnets(magnets, index=1)
+        
+        assert result['no_subtitle'] != ''
+        assert result['size_no_subtitle'] == '1.5TB'
+    
+    def test_chinese_subtitle_tag(self):
+        """Test detection of Chinese subtitle tag."""
+        magnets = [
+            {
+                'href': 'magnet:?xt=urn:btih:chinese',
+                'name': 'test-chinesesub.torrent',
+                'tags': ['字幕', 'HD'],
+                'size': '4GB',
+                'timestamp': '2024-01-15'
+            }
+        ]
+        result = extract_magnets(magnets, index=1)
+        
+        assert result['subtitle'] == 'magnet:?xt=urn:btih:chinese'
+    
+    def test_subtitle_with_chinese_tag(self):
+        """Test detection of subtitle via Chinese subtitle tag."""
+        magnets = [
+            {
+                'href': 'magnet:?xt=urn:btih:chinese',
+                'name': 'test.torrent',  # Normal name without hacked indicators
+                'tags': ['字幕', 'HD'],  # Chinese subtitle tag
+                'size': '4GB',
+                'timestamp': '2024-01-15'
+            }
+        ]
+        result = extract_magnets(magnets, index=1)
+        
+        # Should be categorized as regular subtitle
+        assert result['subtitle'] == 'magnet:?xt=urn:btih:chinese'
+    
+    def test_4k_tag_recognition(self):
+        """Test recognition of 4K tag."""
+        magnets = [
+            {
+                'href': 'magnet:?xt=urn:btih:4k',
+                'name': 'test-4k.torrent',
+                'tags': ['4K'],
+                'size': '10GB',
+                'timestamp': '2024-01-15'
+            }
+        ]
+        result = extract_magnets(magnets, index=1)
+        
+        assert result['no_subtitle'] == 'magnet:?xt=urn:btih:4k'
+    
+    def test_multiple_no_subtitle_prefer_4k(self):
+        """Test that 4K is preferred over regular no_subtitle."""
+        magnets = [
+            {
+                'href': 'magnet:?xt=urn:btih:regular',
+                'name': 'test-regular.torrent',
+                'tags': ['HD'],
+                'size': '4GB',
+                'timestamp': '2024-01-15'
+            },
+            {
+                'href': 'magnet:?xt=urn:btih:4k',
+                'name': 'test-4k.torrent',
+                'tags': ['4K'],
+                'size': '12GB',
+                'timestamp': '2024-01-15'
+            }
+        ]
+        result = extract_magnets(magnets, index=1)
+        
+        # 4K should be preferred
+        assert result['no_subtitle'] == 'magnet:?xt=urn:btih:4k'
+    
+    def test_invalid_size_format(self):
+        """Test handling of invalid size format."""
+        magnets = [
+            {
+                'href': 'magnet:?xt=urn:btih:invalid',
+                'name': 'test.torrent',
+                'tags': ['HD'],
+                'size': 'invalid',
+                'timestamp': '2024-01-15'
+            }
+        ]
+        result = extract_magnets(magnets, index=1)
+        
+        # Should still populate the result
+        assert result['no_subtitle'] != ''
+    
+    def test_missing_timestamp(self):
+        """Test handling of missing timestamp."""
+        magnets = [
+            {
+                'href': 'magnet:?xt=urn:btih:notimestamp',
+                'name': 'test.torrent',
+                'tags': ['HD'],
+                'size': '4GB',
+                'timestamp': ''
+            }
+        ]
+        result = extract_magnets(magnets, index=1)
+        
+        # Should still work even without timestamp
+        assert result['no_subtitle'] != ''
+    
+    def test_index_zero(self):
+        """Test extract_magnets with index=0."""
+        magnets = [
+            {
+                'href': 'magnet:?xt=urn:btih:test',
+                'name': 'test.torrent',
+                'tags': ['字幕'],
+                'size': '4GB',
+                'timestamp': '2024-01-15'
+            }
+        ]
+        result = extract_magnets(magnets, index=0)
+        
+        # Should work with index=0
+        assert result['subtitle'] != ''
+
