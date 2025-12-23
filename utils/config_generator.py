@@ -328,16 +328,16 @@ def mask_sensitive_values(content: str) -> str:
         Content with masked sensitive values
     """
     masked = content
-    # Mask passwords
-    masked = re.sub(r"(PASSWORD.*=.*')[^']*(')", r"\1***MASKED***\2", masked)
-    masked = re.sub(r'(PASSWORD.*=.*")[^"]*(")', r"\1***MASKED***\2", masked)
+    # Mask passwords - use \s* instead of .* to avoid greedy matching across fields
+    masked = re.sub(r"(PASSWORD\s*=\s*')[^']*(')", r"\1***MASKED***\2", masked)
+    masked = re.sub(r'(PASSWORD\s*=\s*")[^"]*(")', r"\1***MASKED***\2", masked)
     # Mask GitHub tokens
     masked = re.sub(r"(ghp_)[a-zA-Z0-9]+", r"\1***MASKED***", masked)
-    # Mask cookies
-    masked = re.sub(r"(COOKIE.*=.*')[^']*(')", r"\1***MASKED***\2", masked)
-    masked = re.sub(r'(COOKIE.*=.*")[^"]*(")', r"\1***MASKED***\2", masked)
+    # Mask cookies - use \s* instead of .* to avoid greedy matching
+    masked = re.sub(r"(COOKIE\s*=\s*')[^']*(')", r"\1***MASKED***\2", masked)
+    masked = re.sub(r'(COOKIE\s*=\s*")[^"]*(")', r"\1***MASKED***\2", masked)
     # Mask proxy pool (may contain IPs and passwords)
-    masked = re.sub(r"(PROXY_POOL.*=.*\[)[^\]]*(\])", r"\1***MASKED***\2", masked)
+    masked = re.sub(r"(PROXY_POOL\s*=\s*\[)[^\]]*(\])", r"\1***MASKED***\2", masked)
     return masked
 
 
