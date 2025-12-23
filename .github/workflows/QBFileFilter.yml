@@ -41,6 +41,8 @@ jobs:
     environment: Production
     permissions:
       contents: read
+    env:
+      TZ: Asia/Singapore
     
     steps:
       - name: Checkout repository
@@ -143,6 +145,8 @@ jobs:
     permissions:
       contents: read
     needs: setup
+    env:
+      TZ: Asia/Singapore
     
     steps:
       - name: Checkout repository
