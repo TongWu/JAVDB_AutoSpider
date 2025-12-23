@@ -246,8 +246,9 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # Parsing Configuration
         ('IGNORE_RELEASE_DATE_FILTER', 'IGNORE_RELEASE_DATE_FILTER', get_env_bool, False, 'PARSING CONFIGURATION'),
         # File Paths
-        ('DAILY_REPORT_DIR', 'DAILY_REPORT_DIR', get_env, 'Daily Report', 'FILE PATHS'),
-        ('AD_HOC_DIR', 'AD_HOC_DIR', get_env, 'Ad Hoc', 'FILE PATHS'),
+        ('REPORTS_DIR', 'REPORTS_DIR', get_env, 'reports', 'FILE PATHS'),
+        ('DAILY_REPORT_DIR', 'DAILY_REPORT_DIR', get_env, 'reports/DailyReport', 'FILE PATHS'),
+        ('AD_HOC_DIR', 'AD_HOC_DIR', get_env, 'reports/AdHoc', 'FILE PATHS'),
         ('PARSED_MOVIES_CSV', 'PARSED_MOVIES_CSV', get_env, 'parsed_movies_history.csv', 'FILE PATHS'),
         # PikPak Configuration
         ('PIKPAK_EMAIL', 'PIKPAK_EMAIL', get_env, '', 'PIKPAK CONFIGURATION'),
