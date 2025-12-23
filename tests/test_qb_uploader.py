@@ -423,40 +423,67 @@ class TestQbUploaderAdvanced:
 
 
 class TestFindCsvFileLogic:
-    """Test cases for find_csv_file logic."""
+    """Test cases for find_csv_file logic with dated subdirectories."""
     
-    def test_find_csv_in_daily_report(self, temp_dir):
-        """Test finding CSV file in Daily Report directory."""
+    def test_find_csv_in_dated_subdirectory(self, temp_dir):
+        """Test finding CSV file in dated subdirectory (YYYY/MM)."""
         import glob
         from datetime import datetime
         
-        daily_report_dir = os.path.join(temp_dir, 'Daily Report')
-        os.makedirs(daily_report_dir, exist_ok=True)
+        # Create dated subdirectory structure
+        now = datetime.now()
+        year = now.strftime('%Y')
+        month = now.strftime('%m')
+        dated_dir = os.path.join(temp_dir, 'Daily Report', year, month)
+        os.makedirs(dated_dir, exist_ok=True)
         
-        # Create a test CSV file
-        today = datetime.now().strftime('%Y%m%d')
-        csv_file = os.path.join(daily_report_dir, f'Javdb_DailyReport_{today}.csv')
+        # Create a test CSV file in dated subdirectory
+        today = now.strftime('%Y%m%d')
+        csv_file = os.path.join(dated_dir, f'Javdb_TodayTitle_{today}.csv')
         with open(csv_file, 'w') as f:
             f.write('test')
         
-        # Find the file
-        pattern = os.path.join(daily_report_dir, f'Javdb_DailyReport_{today}*.csv')
+        # Find the file using pattern that includes subdirectories
+        pattern = os.path.join(temp_dir, 'Daily Report', '*', '*', f'Javdb_TodayTitle_{today}*.csv')
         found_files = glob.glob(pattern)
         
         assert len(found_files) == 1
         assert csv_file in found_files
     
-    def test_find_csv_no_file(self, temp_dir):
-        """Test finding CSV file when none exists."""
+    def test_find_csv_no_file_in_dated_dir(self, temp_dir):
+        """Test finding CSV file when none exists in dated subdirectory."""
         import glob
+        from datetime import datetime
         
-        daily_report_dir = os.path.join(temp_dir, 'Daily Report')
-        os.makedirs(daily_report_dir, exist_ok=True)
+        # Create empty dated subdirectory
+        now = datetime.now()
+        year = now.strftime('%Y')
+        month = now.strftime('%m')
+        dated_dir = os.path.join(temp_dir, 'Daily Report', year, month)
+        os.makedirs(dated_dir, exist_ok=True)
         
-        pattern = os.path.join(daily_report_dir, '*.csv')
+        pattern = os.path.join(dated_dir, '*.csv')
         found_files = glob.glob(pattern)
         
         assert len(found_files) == 0
+    
+    def test_csv_path_format(self, temp_dir):
+        """Test that CSV path follows YYYY/MM format."""
+        from datetime import datetime
+        
+        now = datetime.now()
+        year = now.strftime('%Y')
+        month = now.strftime('%m')
+        filename = f'Javdb_TodayTitle_{now.strftime("%Y%m%d")}.csv'
+        
+        expected_path = os.path.join(temp_dir, 'Daily Report', year, month, filename)
+        
+        # Verify path structure
+        parts = expected_path.split(os.sep)
+        assert 'Daily Report' in parts
+        assert year in parts
+        assert month in parts
+        assert filename in parts
 
 
 class TestReadCsvMagnets:
