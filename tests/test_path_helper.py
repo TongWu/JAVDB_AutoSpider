@@ -27,26 +27,26 @@ class TestGetDatedSubdir:
     def test_returns_correct_format(self):
         """Test that the function returns correct YYYY/MM format."""
         date = datetime(2025, 12, 23)
-        result = get_dated_subdir('Daily Report', date)
+        result = get_dated_subdir('reports/DailyReport', date)
         
         # Should use os.path.join for cross-platform compatibility
-        expected = os.path.join('Daily Report', '2025', '12')
+        expected = os.path.join('reports/DailyReport', '2025', '12')
         assert result == expected
     
     def test_pads_month_with_zero(self):
         """Test that months are zero-padded (e.g., 06 not 6)."""
         date = datetime(2025, 6, 15)
-        result = get_dated_subdir('Ad Hoc', date)
+        result = get_dated_subdir('reports/AdHoc', date)
         
-        expected = os.path.join('Ad Hoc', '2025', '06')
+        expected = os.path.join('reports/AdHoc', '2025', '06')
         assert result == expected
     
     def test_uses_current_date_when_none(self):
         """Test that current date is used when date is None."""
-        result = get_dated_subdir('Daily Report')
+        result = get_dated_subdir('reports/DailyReport')
         
         now = datetime.now()
-        expected = os.path.join('Daily Report', now.strftime('%Y'), now.strftime('%m'))
+        expected = os.path.join('reports/DailyReport', now.strftime('%Y'), now.strftime('%m'))
         assert result == expected
     
     def test_works_with_different_base_dirs(self):
@@ -66,33 +66,33 @@ class TestGetDatedReportPath:
     def test_returns_full_path_with_filename(self):
         """Test that full path includes filename."""
         date = datetime(2025, 12, 23)
-        result = get_dated_report_path('Daily Report', 'report.csv', date)
+        result = get_dated_report_path('reports/DailyReport', 'report.csv', date)
         
-        expected = os.path.join('Daily Report', '2025', '12', 'report.csv')
+        expected = os.path.join('reports/DailyReport', '2025', '12', 'report.csv')
         assert result == expected
     
     def test_works_with_complex_filenames(self):
         """Test with typical JavDB filenames."""
         date = datetime(2025, 12, 23)
-        result = get_dated_report_path('Daily Report', 'Javdb_TodayTitle_20251223.csv', date)
+        result = get_dated_report_path('reports/DailyReport', 'Javdb_TodayTitle_20251223.csv', date)
         
-        expected = os.path.join('Daily Report', '2025', '12', 'Javdb_TodayTitle_20251223.csv')
+        expected = os.path.join('reports/DailyReport', '2025', '12', 'Javdb_TodayTitle_20251223.csv')
         assert result == expected
     
     def test_adhoc_path(self):
         """Test with Ad Hoc directory."""
         date = datetime(2025, 7, 4)
-        result = get_dated_report_path('Ad Hoc', 'Javdb_AdHoc_actors_abc_20250704.csv', date)
+        result = get_dated_report_path('reports/AdHoc', 'Javdb_AdHoc_actors_abc_20250704.csv', date)
         
-        expected = os.path.join('Ad Hoc', '2025', '07', 'Javdb_AdHoc_actors_abc_20250704.csv')
+        expected = os.path.join('reports/AdHoc', '2025', '07', 'Javdb_AdHoc_actors_abc_20250704.csv')
         assert result == expected
     
     def test_uses_current_date_when_none(self):
         """Test that current date is used when date is None."""
-        result = get_dated_report_path('Daily Report', 'test.csv')
+        result = get_dated_report_path('reports/DailyReport', 'test.csv')
         
         now = datetime.now()
-        expected = os.path.join('Daily Report', now.strftime('%Y'), now.strftime('%m'), 'test.csv')
+        expected = os.path.join('reports/DailyReport', now.strftime('%Y'), now.strftime('%m'), 'test.csv')
         assert result == expected
 
 
