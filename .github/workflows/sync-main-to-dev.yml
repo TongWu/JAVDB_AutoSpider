@@ -17,7 +17,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    environment: WT_DailyIngestion
+    environment: Production
 
     steps:
       - name: Checkout code
