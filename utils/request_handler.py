@@ -25,6 +25,9 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
+# Import masking utilities
+from utils.masking import mask_ip_address, mask_proxy_url, mask_full
+
 
 @dataclass
 class RequestConfig:
@@ -137,7 +140,8 @@ class RequestHandler:
             parsed = urlparse(proxy_url)
             return parsed.hostname
         except Exception as e:
-            logger.warning(f"Failed to extract IP from proxy URL: {e}")
+            # Don't log the actual proxy URL for security
+            logger.warning(f"Failed to extract IP from proxy URL: {type(e).__name__}")
             return None
     
     def get_cf_bypass_service_url(self, proxy_ip: Optional[str] = None) -> str:
@@ -281,7 +285,10 @@ class RequestHandler:
             'x-bypass-cache': 'true'
         }
         
-        logger.info(f"[CF Bypass] Refreshing bypass cache: {refresh_url}")
+        # Mask the proxy IP in the URL for logging (use 127.0.0.1 when proxy_ip is None)
+        masked_ip = mask_ip_address(proxy_ip) if proxy_ip else '127.0.0.1'
+        masked_bypass_url = f"http://{masked_ip}:{self.config.cf_bypass_service_port}/html?url=..."
+        logger.info(f"[CF Bypass] Refreshing bypass cache: {masked_bypass_url}")
         
         try:
             response = use_session.get(refresh_url, headers=refresh_headers, timeout=120)
@@ -333,7 +340,10 @@ class RequestHandler:
         encoded_url = quote(url, safe='')
         bypass_url = f"{bypass_base_url}/html?url={encoded_url}"
         
-        logger.debug(f"[CF Bypass] {context_msg}: {url} -> {bypass_url}")
+        # Mask the proxy IP in the URL for logging (use 127.0.0.1 when proxy_ip is None)
+        masked_ip = mask_ip_address(proxy_ip) if proxy_ip else '127.0.0.1'
+        masked_bypass_base = f"http://{masked_ip}:{self.config.cf_bypass_service_port}"
+        logger.debug(f"[CF Bypass] {context_msg}: {url} -> {masked_bypass_base}/html?url=...")
         
         # CF bypass requests are always sent directly (no proxy forwarding)
         html_content, error = self._do_request(bypass_url, self.BYPASS_HEADERS, None, 
