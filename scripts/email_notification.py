@@ -286,9 +286,9 @@ def extract_spider_statistics(log_path):
     Note: Each movie can have multiple torrent links (subtitle, no_subtitle, etc.)
     """
     stats = {
-        'phase1': {'discovered': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0},
-        'phase2': {'discovered': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0},
-        'overall': {'total_discovered': 0, 'successfully_processed': 0, 'skipped_session': 0, 'skipped_history': 0}
+        'phase1': {'discovered': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0, 'failed': 0},
+        'phase2': {'discovered': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0, 'failed': 0},
+        'overall': {'total_discovered': 0, 'successfully_processed': 0, 'skipped_session': 0, 'skipped_history': 0, 'failed': 0}
     }
     
     if not os.path.exists(log_path):
@@ -298,7 +298,13 @@ def extract_spider_statistics(log_path):
         with open(log_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # Extract phase 1 statistics from new format:
+        # Extract phase 1 statistics from new format (with failed):
+        # "Phase 1 completed: X movies discovered, Y processed, Z skipped (session), W skipped (history), F failed"
+        phase1_with_failed = re.search(
+            r'Phase 1 completed: (\d+) movies discovered, (\d+) processed, (\d+) skipped \(session\), (\d+) skipped \(history\), (\d+) failed',
+            content
+        )
+        # Fallback to intermediate format (without failed):
         # "Phase 1 completed: X movies discovered, Y processed, Z skipped (session), W skipped (history)"
         phase1_new = re.search(
             r'Phase 1 completed: (\d+) movies discovered, (\d+) processed, (\d+) skipped \(session\), (\d+) skipped \(history\)',
@@ -307,7 +313,13 @@ def extract_spider_statistics(log_path):
         # Fallback to old format: "Phase 1 completed: X found, Y skipped (history), Z written to CSV"
         phase1_old = re.search(r'Phase 1 completed: (\d+) found, (\d+) skipped.*?, (\d+) written to CSV', content)
         
-        if phase1_new:
+        if phase1_with_failed:
+            stats['phase1']['discovered'] = int(phase1_with_failed.group(1))
+            stats['phase1']['processed'] = int(phase1_with_failed.group(2))
+            stats['phase1']['skipped_session'] = int(phase1_with_failed.group(3))
+            stats['phase1']['skipped_history'] = int(phase1_with_failed.group(4))
+            stats['phase1']['failed'] = int(phase1_with_failed.group(5))
+        elif phase1_new:
             stats['phase1']['discovered'] = int(phase1_new.group(1))
             stats['phase1']['processed'] = int(phase1_new.group(2))
             stats['phase1']['skipped_session'] = int(phase1_new.group(3))
@@ -317,14 +329,24 @@ def extract_spider_statistics(log_path):
             stats['phase1']['processed'] = int(phase1_old.group(3))
             stats['phase1']['skipped_history'] = int(phase1_old.group(2))
         
-        # Extract phase 2 statistics from new format
+        # Extract phase 2 statistics from new format (with failed)
+        phase2_with_failed = re.search(
+            r'Phase 2 completed: (\d+) movies discovered, (\d+) processed, (\d+) skipped \(session\), (\d+) skipped \(history\), (\d+) failed',
+            content
+        )
         phase2_new = re.search(
             r'Phase 2 completed: (\d+) movies discovered, (\d+) processed, (\d+) skipped \(session\), (\d+) skipped \(history\)',
             content
         )
         phase2_old = re.search(r'Phase 2 completed: (\d+) found, (\d+) skipped.*?, (\d+) written to CSV', content)
         
-        if phase2_new:
+        if phase2_with_failed:
+            stats['phase2']['discovered'] = int(phase2_with_failed.group(1))
+            stats['phase2']['processed'] = int(phase2_with_failed.group(2))
+            stats['phase2']['skipped_session'] = int(phase2_with_failed.group(3))
+            stats['phase2']['skipped_history'] = int(phase2_with_failed.group(4))
+            stats['phase2']['failed'] = int(phase2_with_failed.group(5))
+        elif phase2_new:
             stats['phase2']['discovered'] = int(phase2_new.group(1))
             stats['phase2']['processed'] = int(phase2_new.group(2))
             stats['phase2']['skipped_session'] = int(phase2_new.group(3))
@@ -355,12 +377,17 @@ def extract_spider_statistics(log_path):
         if skipped_history:
             stats['overall']['skipped_history'] = int(skipped_history.group(1))
         
+        failed = re.search(r'Failed to fetch/parse: (\d+)', content)
+        if failed:
+            stats['overall']['failed'] = int(failed.group(1))
+        
         # If overall total_discovered wasn't found, calculate from phase totals
         if stats['overall']['total_discovered'] == 0:
             stats['overall']['total_discovered'] = (
                 stats['overall']['successfully_processed'] + 
                 stats['overall']['skipped_session'] + 
-                stats['overall']['skipped_history']
+                stats['overall']['skipped_history'] +
+                stats['overall']['failed']
             )
         
         return stats
@@ -504,10 +531,10 @@ JavDB Pipeline Report
     # Spider section
     # Note: Statistics are for MOVIES (unique pages), not individual torrent links
     if show_spider:
-        # Calculate totals for verification
-        p1_total = spider_stats['phase1']['processed'] + spider_stats['phase1']['skipped_session'] + spider_stats['phase1']['skipped_history']
-        p2_total = spider_stats['phase2']['processed'] + spider_stats['phase2']['skipped_session'] + spider_stats['phase2']['skipped_history']
-        overall_total = spider_stats['overall']['successfully_processed'] + spider_stats['overall']['skipped_session'] + spider_stats['overall']['skipped_history']
+        # Calculate totals for verification (include failed count)
+        p1_total = spider_stats['phase1']['processed'] + spider_stats['phase1']['skipped_session'] + spider_stats['phase1']['skipped_history'] + spider_stats['phase1']['failed']
+        p2_total = spider_stats['phase2']['processed'] + spider_stats['phase2']['skipped_session'] + spider_stats['phase2']['skipped_history'] + spider_stats['phase2']['failed']
+        overall_total = spider_stats['overall']['successfully_processed'] + spider_stats['overall']['skipped_session'] + spider_stats['overall']['skipped_history'] + spider_stats['overall']['failed']
         
         sections.append(f"""
 📊 SPIDER STATISTICS (Movies)
@@ -518,18 +545,21 @@ Phase 1 (Subtitle + Today/Yesterday)
   Processed:  {spider_stats['phase1']['processed']}
   Skipped (Session): {spider_stats['phase1']['skipped_session']}
   Skipped (History): {spider_stats['phase1']['skipped_history']}
+  Failed: {spider_stats['phase1']['failed']}
 
 Phase 2 (Rate>4.0, Comments>85)
   Discovered: {spider_stats['phase2']['discovered'] or p2_total}
   Processed:  {spider_stats['phase2']['processed']}
   Skipped (Session): {spider_stats['phase2']['skipped_session']}
   Skipped (History): {spider_stats['phase2']['skipped_history']}
+  Failed: {spider_stats['phase2']['failed']}
 
 Overall Summary
   Total Discovered: {spider_stats['overall']['total_discovered'] or overall_total}
   Processed:  {spider_stats['overall']['successfully_processed']}
   Skipped (Session): {spider_stats['overall']['skipped_session']}
-  Skipped (History): {spider_stats['overall']['skipped_history']}""")
+  Skipped (History): {spider_stats['overall']['skipped_history']}
+  Failed: {spider_stats['overall']['failed']}""")
     
     # Uploader section
     if show_uploader:
@@ -645,6 +675,46 @@ def send_email(subject, body, attachments=None, dry_run=False):
         return False
 
 
+def check_workflow_job_status():
+    """
+    Check workflow job status from environment variable or status file.
+    This is used to detect failures in GitHub Actions jobs (e.g., health-check failure)
+    that may not produce log files.
+    
+    Returns:
+        tuple: (has_job_failure: bool, failed_jobs: list of str)
+    """
+    failed_jobs = []
+    
+    # Check environment variable set by workflow
+    pipeline_has_failure = os.environ.get('PIPELINE_HAS_FAILURE', 'false').lower()
+    if pipeline_has_failure == 'true':
+        logger.info("PIPELINE_HAS_FAILURE environment variable indicates failure")
+    
+    # Check job status file created by workflow
+    job_status_file = 'logs/job_status.txt'
+    if os.path.exists(job_status_file):
+        try:
+            with open(job_status_file, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if '=' in line:
+                        key, value = line.split('=', 1)
+                        if value.lower() in ('failure', 'cancelled'):
+                            job_name = key.replace('_STATUS', '').replace('_', ' ').title()
+                            failed_jobs.append(f"{job_name}: {value}")
+                            logger.error(f"Job failure detected: {job_name} = {value}")
+                        elif value.lower() == 'skipped':
+                            # Skipped jobs indicate upstream failures
+                            job_name = key.replace('_STATUS', '').replace('_', ' ').title()
+                            logger.warning(f"Job skipped (upstream failure): {job_name}")
+        except Exception as e:
+            logger.warning(f"Failed to read job status file: {e}")
+    
+    has_job_failure = pipeline_has_failure == 'true' or len(failed_jobs) > 0
+    return has_job_failure, failed_jobs
+
+
 def main():
     args = parse_arguments()
     
@@ -652,10 +722,19 @@ def main():
     logger.info("EMAIL NOTIFICATION SCRIPT")
     logger.info("=" * 60)
     
+    # First, check workflow job status (for GitHub Actions)
+    # This catches failures that don't produce log files (e.g., health-check failure)
+    has_job_failure, failed_jobs = check_workflow_job_status()
+    
     # Analyze logs for critical errors
     # Each analyze function returns: (is_critical_error, error_message, log_exists)
     logger.info("Analyzing logs for critical errors...")
     pipeline_errors = []
+    
+    # Add any job failures detected from workflow status
+    if failed_jobs:
+        for job_failure in failed_jobs:
+            pipeline_errors.append(job_failure)
     
     # Track which components have valid logs (for dynamic email sections)
     spider_log_exists = False
@@ -692,7 +771,8 @@ def main():
     elif not pikpak_log_exists:
         logger.warning(f"PikPak log not found (optional): {PIKPAK_LOG_FILE}")
     
-    has_critical_errors = len(pipeline_errors) > 0
+    # Determine if we have critical errors (from logs OR from workflow job status)
+    has_critical_errors = len(pipeline_errors) > 0 or has_job_failure
     
     # Extract statistics (only if log exists)
     spider_stats = extract_spider_statistics(SPIDER_LOG_FILE) if spider_log_exists else None
@@ -723,9 +803,9 @@ def main():
     
     # Prepare default stats for missing components
     default_spider_stats = {
-        'phase1': {'discovered': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0},
-        'phase2': {'discovered': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0},
-        'overall': {'total_discovered': 0, 'successfully_processed': 0, 'skipped_session': 0, 'skipped_history': 0}
+        'phase1': {'discovered': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0, 'failed': 0},
+        'phase2': {'discovered': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0, 'failed': 0},
+        'overall': {'total_discovered': 0, 'successfully_processed': 0, 'skipped_session': 0, 'skipped_history': 0, 'failed': 0}
     }
     default_uploader_stats = {
         'total': 0, 'success': 0, 'failed': 0, 'hacked_sub': 0,
