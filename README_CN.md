@@ -14,7 +14,7 @@
 - 从 `javdb.com/?vft=2` 到 `javdb.com/?page=5&vft=2` 实时获取数据
 - 过滤同时包含"含中字磁鏈"和"今日新種"标签的条目(支持多种语言变体)
 - 根据特定分类和优先级顺序提取磁力链接
-- 将结果保存到"Daily Report"目录中的带时间戳的 CSV 文件
+- 将结果保存到 `reports/DailyReport/` 目录中的带时间戳的 CSV 文件
 - 全面的日志记录,支持不同级别(INFO、WARNING、DEBUG、ERROR)
 - 多页面处理,带进度跟踪
 - 提取额外的元数据(演员、评分、评论数)
@@ -32,13 +32,13 @@
 
 #### 每日模式(默认)
 - 使用基础 URL: `https://javdb.com/?vft=2`
-- 将结果保存到 `Daily Report/` 目录
+- 将结果保存到 `reports/DailyReport/` 目录
 - 默认检查历史记录以避免重复下载
 - 在 qBittorrent 中使用"JavDB"分类
 
 #### Ad Hoc 模式(自定义 URL)
 - 通过 `--url` 参数激活,用于自定义 URL(演员、标签等)
-- 将结果保存到 `Ad Hoc/` 目录
+- 将结果保存到 `reports/AdHoc/` 目录
 - **现在默认检查历史记录**以跳过已下载的条目
 - 使用 `--ignore-history` 重新下载所有内容
 - 在 qBittorrent 中使用"Ad Hoc"分类
@@ -333,7 +333,7 @@ python Javdb_Spider.py --phase all
 # 忽略历史文件并爬取所有页面(用于每日和 ad hoc 模式)
 python Javdb_Spider.py --ignore-history
 
-# 自定义 URL 爬取(创建"Ad Hoc"目录,默认检查历史)
+# 自定义 URL 爬取(保存到 reports/AdHoc/,默认检查历史)
 python Javdb_Spider.py --url "https://javdb.com/?vft=2"
 
 # 自定义 URL 爬取,忽略历史重新下载所有内容
@@ -672,17 +672,28 @@ QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
 
 ### 文件位置
 
-CSV 报告文件按年月组织在日期子目录中:
+所有报告文件都在 `reports/` 目录下:
 
-- **每日报告 CSV 文件**: `Daily Report/YYYY/MM/Javdb_TodayTitle_YYYYMMDD.csv`
-- **Ad Hoc CSV 文件**: `Ad Hoc/YYYY/MM/Javdb_AdHoc_*.csv`
-- **历史文件**: `Daily Report/parsed_movies_history.csv` (保持在根目录)
-- **PikPak 历史**: `Daily Report/pikpak_bridge_history.csv` (保持在根目录)
-- **代理禁用记录**: `Daily Report/proxy_bans.csv` (保持在根目录)
+```
+reports/
+├── DailyReport/YYYY/MM/    # 每日报告 CSV 文件
+│   └── Javdb_TodayTitle_YYYYMMDD.csv
+├── AdHoc/YYYY/MM/          # Ad Hoc 报告 CSV 文件
+│   └── Javdb_AdHoc_*.csv
+├── parsed_movies_history.csv    # 历史记录
+├── pikpak_bridge_history.csv    # PikPak 传输历史
+└── proxy_bans.csv               # 代理禁用记录
+```
+
+- **每日报告 CSV 文件**: `reports/DailyReport/YYYY/MM/Javdb_TodayTitle_YYYYMMDD.csv`
+- **Ad Hoc CSV 文件**: `reports/AdHoc/YYYY/MM/Javdb_AdHoc_*.csv`
+- **历史文件**: `reports/parsed_movies_history.csv`
+- **PikPak 历史**: `reports/pikpak_bridge_history.csv`
+- **代理禁用记录**: `reports/proxy_bans.csv`
 - **日志文件**: `logs/` 目录
-  - `Javdb_Spider.log`
-  - `qbtorrent_uploader.log`
-  - `pipeline_run_and_notify.log`
+  - `spider.log`
+  - `qb_uploader.log`
+  - `pipeline.log`
 
 ## 历史系统
 
