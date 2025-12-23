@@ -15,7 +15,7 @@ jobs:
   # =============================================================================
   setup:
     runs-on: ARM64
-    environment: WT_DailyIngestion
+    environment: Production
     permissions:
       contents: read
     outputs:
