@@ -74,6 +74,9 @@ from utils.masking import mask_email, mask_server, mask_full
 # Import git helper
 from utils.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 
+# Import path helper for dated subdirectories
+from utils.path_helper import get_dated_report_path
+
 
 def parse_arguments():
     """Parse command line arguments"""
@@ -822,12 +825,12 @@ def main():
     pikpak_stats = extract_pikpak_statistics(PIKPAK_LOG_FILE) if pikpak_log_exists else None
     ban_summary = get_proxy_ban_summary()
     
-    # Determine CSV path
+    # Determine CSV path (using dated subdirectory YYYY/MM)
     today_str = datetime.now().strftime('%Y%m%d')
     if args.csv_path:
         csv_path = args.csv_path
     else:
-        csv_path = os.path.join(DAILY_REPORT_DIR, f'Javdb_TodayTitle_{today_str}.csv')
+        csv_path = get_dated_report_path(DAILY_REPORT_DIR, f'Javdb_TodayTitle_{today_str}.csv')
     
     # Convert log files to txt for attachment
     txt_attachments = []

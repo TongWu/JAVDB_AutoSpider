@@ -673,9 +673,14 @@ The spider generates CSV files with the following columns:
 - `size_hacked_subtitle`, `size_hacked_no_subtitle`, `size_subtitle`, `size_no_subtitle`: Corresponding sizes
 
 ### File Locations
-- **Daily Report CSV files**: `Daily Report/Javdb_TodayTitle_YYYYMMDD.csv`
-- **Ad Hoc CSV files**: `Ad Hoc/Javdb_TodayTitle_YYYYMMDD.csv`
-- **History file**: `Daily Report/parsed_movies_history.csv`
+
+CSV report files are organized by year and month in dated subdirectories:
+
+- **Daily Report CSV files**: `Daily Report/YYYY/MM/Javdb_TodayTitle_YYYYMMDD.csv`
+- **Ad Hoc CSV files**: `Ad Hoc/YYYY/MM/Javdb_AdHoc_*.csv`
+- **History file**: `Daily Report/parsed_movies_history.csv` (stays at root level)
+- **PikPak history**: `Daily Report/pikpak_bridge_history.csv` (stays at root level)
+- **Proxy ban records**: `Daily Report/proxy_bans.csv` (stays at root level)
 - **Log files**: `logs/` directory
   - `Javdb_Spider.log`
   - `qbtorrent_uploader.log`
@@ -1441,7 +1446,12 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
 
 ### File Structure
 - **Daily Report/**: Contains daily scraping results and history
+  - `YYYY/MM/`: Dated subdirectories for CSV report files
+  - `parsed_movies_history.csv`: History tracking (at root level)
+  - `pikpak_bridge_history.csv`: PikPak transfer history (at root level)
+  - `proxy_bans.csv`: Proxy ban records (at root level)
 - **Ad Hoc/**: Contains custom URL scraping results
+  - `YYYY/MM/`: Dated subdirectories for CSV report files
 - **logs/**: Contains all log files
   - `Javdb_Spider.log`: Spider execution logs
   - `qbtorrent_uploader.log`: Upload execution logs

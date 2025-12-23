@@ -23,6 +23,7 @@ from utils.history_manager import load_parsed_movies_history, save_parsed_movie_
 from utils.parser import parse_index, parse_detail
 from utils.magnet_extractor import extract_magnets
 from utils.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
+from utils.path_helper import get_dated_report_path, ensure_dated_dir, get_dated_subdir
 
 # Import unified configuration
 try:
@@ -149,10 +150,25 @@ def parse_arguments():
 
 
 def ensure_daily_report_dir():
-    """Ensure the Daily Report directory exists"""
+    """Ensure the Daily Report directory exists (for history files at root level)"""
     if not os.path.exists(DAILY_REPORT_DIR):
         os.makedirs(DAILY_REPORT_DIR)
         logger.info(f"Created directory: {DAILY_REPORT_DIR}")
+
+
+def ensure_report_dated_dir(base_dir):
+    """
+    Ensure the dated subdirectory (YYYY/MM) exists for report files.
+    
+    Args:
+        base_dir: Base directory (DAILY_REPORT_DIR or AD_HOC_DIR)
+    
+    Returns:
+        Path to the dated subdirectory
+    """
+    dated_dir = ensure_dated_dir(base_dir)
+    logger.info(f"Using dated directory: {dated_dir}")
+    return dated_dir
 
 
 # Legacy wrapper functions - now delegated to RequestHandler
@@ -859,19 +875,19 @@ def main():
     initialize_request_handler()
 
     # Determine output directory and filename
+    # Reports use dated subdirectories (YYYY/MM) while history files stay at root
     if args.url:
-        output_dir = AD_HOC_DIR
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-            logger.info(f"Created directory: {output_dir}")
+        # Ad hoc mode: create dated subdirectory for reports
+        output_dated_dir = ensure_report_dated_dir(AD_HOC_DIR)
         output_csv = args.output_file if args.output_file else OUTPUT_CSV
-        csv_path = os.path.join(output_dir, output_csv)
+        csv_path = os.path.join(output_dated_dir, output_csv)
         use_history_for_loading = True   # Check history for ad hoc mode (changed from False)
         use_history_for_saving = True    # Record to history for ad hoc mode
     else:
-        output_dir = DAILY_REPORT_DIR
+        # Daily mode: create dated subdirectory for reports
+        output_dated_dir = ensure_report_dated_dir(DAILY_REPORT_DIR)
         output_csv = args.output_file if args.output_file else OUTPUT_CSV
-        csv_path = os.path.join(output_dir, output_csv)
+        csv_path = os.path.join(output_dated_dir, output_csv)
         use_history_for_loading = True   # Check history for daily mode
         use_history_for_saving = True    # Record to history for daily mode
 
