@@ -18,7 +18,7 @@ try:
         QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD,
         TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC, TORRENT_SAVE_PATH, AUTO_START, SKIP_CHECKING,
         REQUEST_TIMEOUT, DELAY_BETWEEN_ADDITIONS,
-        UPLOADER_LOG_FILE, DAILY_REPORT_DIR, AD_HOC_DIR, LOG_LEVEL,
+        UPLOADER_LOG_FILE, REPORTS_DIR, DAILY_REPORT_DIR, AD_HOC_DIR, LOG_LEVEL,
         PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES,
         GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH
     )
@@ -39,8 +39,9 @@ except ImportError:
     DELAY_BETWEEN_ADDITIONS = 1
     
     UPLOADER_LOG_FILE = 'logs/qb_uploader.log'
-    DAILY_REPORT_DIR = 'Daily Report'
-    AD_HOC_DIR = 'Ad Hoc'
+    REPORTS_DIR = 'reports'
+    DAILY_REPORT_DIR = 'reports/DailyReport'
+    AD_HOC_DIR = 'reports/AdHoc'
     LOG_LEVEL = 'INFO'
     PROXY_HTTP = None
     PROXY_HTTPS = None
@@ -512,7 +513,7 @@ def main():
     # Import history manager functions for updating downloaded status
     try:
         from utils.history_manager import mark_torrent_as_downloaded
-        history_file = os.path.join(DAILY_REPORT_DIR, 'parsed_movies_history.csv')
+        history_file = os.path.join(REPORTS_DIR, 'parsed_movies_history.csv')
         logger.info("History manager imported, will update downloaded status")
     except ImportError:
         logger.warning("Could not import history manager, downloaded status will not be updated")
