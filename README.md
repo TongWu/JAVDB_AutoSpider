@@ -16,7 +16,7 @@ English | [简体中文](README_CN.md)
 - Fetches data in real-time from `javdb.com/?vft=2` to `javdb.com/?page=5&vft=2`
 - Filters entries with both "含中字磁鏈" and "今日新種" tags (supports multiple language variations)
 - Extracts magnet links based on specific categories with priority ordering
-- Saves results to timestamped CSV files in "Daily Report" directory
+- Saves results to timestamped CSV files in `reports/DailyReport/` directory
 - Comprehensive logging with different levels (INFO, WARNING, DEBUG, ERROR)
 - Multi-page processing with progress tracking
 - Additional metadata extraction (actor, rating, comment count)
@@ -34,13 +34,13 @@ The spider operates in two modes:
 
 #### Daily Mode (Default)
 - Uses base URL: `https://javdb.com/?vft=2`
-- Saves results to `Daily Report/` directory
+- Saves results to `reports/DailyReport/` directory
 - Checks history by default to avoid re-downloading
 - Uses "JavDB" category in qBittorrent
 
 #### Ad Hoc Mode (Custom URL)
 - Activated with `--url` parameter for custom URLs (actors, tags, etc.)
-- Saves results to `Ad Hoc/` directory
+- Saves results to `reports/AdHoc/` directory
 - **Now checks history by default** to skip already downloaded entries
 - Use `--ignore-history` to re-download everything
 - Uses "Ad Hoc" category in qBittorrent
@@ -335,7 +335,7 @@ python Javdb_Spider.py --phase all
 # Ignore history file and scrape all pages (for both daily and ad hoc modes)
 python Javdb_Spider.py --ignore-history
 
-# Custom URL scraping (creates "Ad Hoc" directory, checks history by default)
+# Custom URL scraping (saves to reports/AdHoc/, checks history by default)
 python Javdb_Spider.py --url "https://javdb.com/?vft=2"
 
 # Custom URL scraping, ignoring history to re-download everything
@@ -416,7 +416,7 @@ python3 javdb_login.py
 **Check Proxy Ban Status:**
 ```bash
 # View ban records
-cat "Daily Report/proxy_bans.csv"
+cat "reports/proxy_bans.csv"
 
 # Ban information is also included in pipeline email reports
 ```
@@ -674,17 +674,28 @@ The spider generates CSV files with the following columns:
 
 ### File Locations
 
-CSV report files are organized by year and month in dated subdirectories:
+All report files are organized under the `reports/` directory:
 
-- **Daily Report CSV files**: `Daily Report/YYYY/MM/Javdb_TodayTitle_YYYYMMDD.csv`
-- **Ad Hoc CSV files**: `Ad Hoc/YYYY/MM/Javdb_AdHoc_*.csv`
-- **History file**: `Daily Report/parsed_movies_history.csv` (stays at root level)
-- **PikPak history**: `Daily Report/pikpak_bridge_history.csv` (stays at root level)
-- **Proxy ban records**: `Daily Report/proxy_bans.csv` (stays at root level)
+```
+reports/
+├── DailyReport/YYYY/MM/    # Daily report CSV files
+│   └── Javdb_TodayTitle_YYYYMMDD.csv
+├── AdHoc/YYYY/MM/          # Ad hoc report CSV files
+│   └── Javdb_AdHoc_*.csv
+├── parsed_movies_history.csv    # History tracking
+├── pikpak_bridge_history.csv    # PikPak transfer history
+└── proxy_bans.csv               # Proxy ban records
+```
+
+- **Daily Report CSV files**: `reports/DailyReport/YYYY/MM/Javdb_TodayTitle_YYYYMMDD.csv`
+- **Ad Hoc CSV files**: `reports/AdHoc/YYYY/MM/Javdb_AdHoc_*.csv`
+- **History file**: `reports/parsed_movies_history.csv`
+- **PikPak history**: `reports/pikpak_bridge_history.csv`
+- **Proxy ban records**: `reports/proxy_bans.csv`
 - **Log files**: `logs/` directory
-  - `Javdb_Spider.log`
-  - `qbtorrent_uploader.log`
-  - `pipeline_run_and_notify.log`
+  - `spider.log`
+  - `qb_uploader.log`
+  - `pipeline.log`
 
 ## History System
 
@@ -1438,27 +1449,25 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
 
 ### System Behavior
 - The system uses proper headers to mimic a real browser
-- CSV files are automatically saved to the "Daily Report" or "Ad Hoc" directory
+- CSV files are automatically saved to the `reports/DailyReport/` or `reports/AdHoc/` directory
 - The pipeline provides incremental commits for monitoring progress in real-time
 - History file tracks all downloaded movies with timestamps
 - Exit code 2 indicates proxy ban detection (useful for automation)
 - Logs automatically mask sensitive information (passwords, tokens, etc.)
 
 ### File Structure
-- **Daily Report/**: Contains daily scraping results and history
-  - `YYYY/MM/`: Dated subdirectories for CSV report files
-  - `parsed_movies_history.csv`: History tracking (at root level)
-  - `pikpak_bridge_history.csv`: PikPak transfer history (at root level)
-  - `proxy_bans.csv`: Proxy ban records (at root level)
-- **Ad Hoc/**: Contains custom URL scraping results
-  - `YYYY/MM/`: Dated subdirectories for CSV report files
+- **reports/**: Contains all report files and history
+  - `DailyReport/YYYY/MM/`: Daily scraping results
+  - `AdHoc/YYYY/MM/`: Custom URL scraping results
+  - `parsed_movies_history.csv`: History tracking
+  - `pikpak_bridge_history.csv`: PikPak transfer history
+  - `proxy_bans.csv`: Proxy ban records
 - **logs/**: Contains all log files
-  - `Javdb_Spider.log`: Spider execution logs
-  - `qbtorrent_uploader.log`: Upload execution logs
-  - `pipeline_run_and_notify.log`: Pipeline execution logs
-  - `qb_pikpak.log`: PikPak bridge execution logs
+  - `spider.log`: Spider execution logs
+  - `qb_uploader.log`: Upload execution logs
+  - `pipeline.log`: Pipeline execution logs
+  - `pikpak_bridge.log`: PikPak bridge execution logs
   - `qb_file_filter.log`: File filter execution logs
-  - `proxy_bans.csv`: Proxy ban history (persistent across runs)
 - **migration/**: Contains database migration scripts
 - **utils/**: Utility modules (history, parser, proxy pool, etc.)
 - **utils/login/**: JavDB login related files and documentation
