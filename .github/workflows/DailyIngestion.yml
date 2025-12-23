@@ -61,8 +61,8 @@ jobs:
           VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
           VAR_TORRENT_SAVE_PATH: ${{ vars.TORRENT_SAVE_PATH }}
           VAR_AUTO_START: ${{ vars.AUTO_START }}
-          VAR_SKIP_CHECKING: ${{ vars.SKIP_CHECKING }}
-          VAR_REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT }}
+          VAR_SKIP_CHECKING: ${{ vars.SKIP_CHECKING || 'False' }}
+          VAR_REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT || '30' }}
           VAR_DELAY_BETWEEN_ADDITIONS: ${{ vars.DELAY_BETWEEN_ADDITIONS }}
           VAR_SMTP_SERVER: ${{ vars.SMTP_SERVER }}
           VAR_SMTP_PORT: ${{ vars.SMTP_PORT }}
@@ -70,16 +70,16 @@ jobs:
           VAR_EMAIL_FROM: ${{ vars.EMAIL_FROM }}
           VAR_EMAIL_TO: ${{ vars.EMAIL_TO }}
           VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
-          VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS }}
+          VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS || '691200' }}
           VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES }}
           VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
           VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
-          VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED }}
+          VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED || 'True' }}
           VAR_START_PAGE: ${{ vars.START_PAGE }}
           VAR_END_PAGE: ${{ vars.END_PAGE }}
           VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}
           VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
-          VAR_BASE_URL: ${{ vars.BASE_URL }}
+          VAR_BASE_URL: ${{ vars.BASE_URL || 'https://javdb.com' }}
           VAR_JAVDB_USERNAME: ${{ vars.JAVDB_USERNAME }}
           VAR_DETAIL_PAGE_SLEEP: ${{ vars.DETAIL_PAGE_SLEEP }}
           VAR_PAGE_SLEEP: ${{ vars.PAGE_SLEEP }}
@@ -87,17 +87,17 @@ jobs:
           VAR_CF_TURNSTILE_COOLDOWN: ${{ vars.CF_TURNSTILE_COOLDOWN }}
           VAR_PHASE_TRANSITION_COOLDOWN: ${{ vars.PHASE_TRANSITION_COOLDOWN }}
           VAR_FALLBACK_COOLDOWN: ${{ vars.FALLBACK_COOLDOWN }}
-          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL }}
-          VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE }}
-          VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE }}
-          VAR_PIPELINE_LOG_FILE: ${{ vars.PIPELINE_LOG_FILE }}
-          VAR_EMAIL_NOTIFICATION_LOG_FILE: ${{ vars.EMAIL_NOTIFICATION_LOG_FILE }}
-          VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER }}
-          VAR_DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+          VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE || 'logs/spider.log' }}
+          VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE || 'logs/qb_uploader.log' }}
+          VAR_PIPELINE_LOG_FILE: ${{ vars.PIPELINE_LOG_FILE || 'logs/pipeline.log' }}
+          VAR_EMAIL_NOTIFICATION_LOG_FILE: ${{ vars.EMAIL_NOTIFICATION_LOG_FILE || 'logs/email_notification.log' }}
+          VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER || 'False' }}
+          VAR_DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'Daily Report' }}
           VAR_AD_HOC_DIR: ${{ vars.AD_HOC_DIR }}
           VAR_PARSED_MOVIES_CSV: ${{ vars.PARSED_MOVIES_CSV }}
           VAR_PIKPAK_EMAIL: ${{ vars.PIKPAK_EMAIL }}
-          VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE }}
+          VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE || 'logs/pikpak_bridge.log' }}
           VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
         run: python3 utils/config_generator.py --github-actions
 
