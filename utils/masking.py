@@ -27,7 +27,8 @@ def mask_full(value: Optional[str]) -> str:
     return '********'
 
 
-def mask_partial(value: Optional[str], show_start: int = 2, show_end: int = 2) -> str:
+def mask_partial(value: Optional[str], show_start: int = 2, show_end: int = 2, 
+                  min_masked: int = 2) -> str:
     """
     Partially mask a value, showing first and last few characters.
     Use for: usernames, emails, server addresses.
@@ -36,14 +37,16 @@ def mask_partial(value: Optional[str], show_start: int = 2, show_end: int = 2) -
         value: The value to partially mask
         show_start: Number of characters to show at the start
         show_end: Number of characters to show at the end
+        min_masked: Minimum number of characters to mask (default: 2)
         
     Returns:
-        Partially masked string like 'us***er' or 'None' if value is None/empty
+        Partially masked string like 'us**me' or 'None' if value is None/empty
         
     Examples:
-        'username' -> 'us***me'
-        'test@example.com' -> 'te***om'
-        'smtp.gmail.com' -> 'sm***om'
+        'username' -> 'us****me' (8 chars, mask 4)
+        'tedwu' -> 'te**u' (5 chars, mask 2)
+        'test' -> 't**t' (4 chars, mask 2)
+        'abc' -> 'a*c' (3 chars, mask 1 - minimum possible)
     """
     if not value:
         return 'None'
@@ -51,13 +54,28 @@ def mask_partial(value: Optional[str], show_start: int = 2, show_end: int = 2) -
     value_str = str(value)
     length = len(value_str)
     
-    # If value is too short, show less
-    if length <= show_start + show_end:
-        if length <= 2:
-            return '*' * length
-        return value_str[0] + '*' * (length - 2) + value_str[-1]
+    # Very short strings - mask as much as possible while showing at least 2 chars
+    if length <= 2:
+        return '*' * length
+    if length == 3:
+        return value_str[0] + '*' + value_str[-1]
     
-    return value_str[:show_start] + '***' + value_str[-show_end:]
+    # Calculate how many characters would be masked with default settings
+    chars_to_mask = length - show_start - show_end
+    
+    # Ensure we mask at least min_masked characters
+    if chars_to_mask < min_masked:
+        # Need to reduce visible characters to mask more
+        # Prioritize reducing show_end first, then show_start
+        actual_masked = min(min_masked, length - 2)  # Always show at least 2 chars
+        total_visible = length - actual_masked
+        
+        # Distribute visible chars: prioritize start
+        show_start = min(show_start, max(1, total_visible - 1))
+        show_end = max(1, total_visible - show_start)
+        chars_to_mask = length - show_start - show_end
+    
+    return value_str[:show_start] + '*' * chars_to_mask + value_str[-show_end:]
 
 
 def mask_email(email: Optional[str]) -> str:
