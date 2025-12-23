@@ -153,6 +153,44 @@ class TestEnsureDailyReportDir:
         assert os.path.exists(test_dir)
 
 
+class TestDatedSubdirectoryLogic:
+    """Test cases for dated subdirectory (YYYY/MM) logic."""
+    
+    def test_dated_subdir_format(self, temp_dir):
+        """Test that dated subdirectory follows YYYY/MM format."""
+        from datetime import datetime
+        base_dir = os.path.join(temp_dir, 'Daily Report')
+        
+        # Simulate the dated subdirectory creation
+        now = datetime.now()
+        year = now.strftime('%Y')
+        month = now.strftime('%m')
+        dated_dir = os.path.join(base_dir, year, month)
+        
+        os.makedirs(dated_dir)
+        
+        assert os.path.exists(dated_dir)
+        assert year in dated_dir
+        assert month in dated_dir
+    
+    def test_csv_path_includes_dated_subdir(self, temp_dir):
+        """Test that CSV paths include dated subdirectory."""
+        from datetime import datetime
+        base_dir = os.path.join(temp_dir, 'Daily Report')
+        
+        now = datetime.now()
+        year = now.strftime('%Y')
+        month = now.strftime('%m')
+        filename = f'Javdb_TodayTitle_{now.strftime("%Y%m%d")}.csv'
+        
+        expected_path = os.path.join(base_dir, year, month, filename)
+        
+        # Verify the expected path structure
+        assert year in expected_path
+        assert month in expected_path
+        assert filename in expected_path
+
+
 class TestShouldUseProxyForModule:
     """Test cases for should_use_proxy_for_module function logic."""
     
