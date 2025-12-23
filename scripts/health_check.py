@@ -35,33 +35,8 @@ os.chdir(project_root)
 sys.path.insert(0, project_root)
 
 
-def mask_ip_address(host: str) -> str:
-    """
-    Mask IP address for logging (hide middle octets).
-    
-    Args:
-        host: Hostname or IP address
-        
-    Returns:
-        Masked IP (e.g., 192.xxx.xxx.168) or original hostname if not an IP
-        
-    Examples:
-        192.168.1.100 -> 192.xxx.xxx.100
-        example.com -> example.com
-    """
-    if not host:
-        return 'None'
-    
-    # Check if it's an IPv4 address
-    ip_pattern = r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$'
-    match = re.match(ip_pattern, str(host))
-    
-    if match:
-        # Mask the middle two octets
-        return f"{match.group(1)}.xxx.xxx.{match.group(4)}"
-    
-    # Not an IP address, return as-is (hostname)
-    return str(host)
+# Import masking utilities
+from utils.masking import mask_ip_address, mask_username, mask_server, mask_full
 
 # Import configuration
 try:

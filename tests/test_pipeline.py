@@ -279,14 +279,44 @@ class TestExtractSpiderStatistics:
         """Test with non-existent log file."""
         log_path = os.path.join(temp_dir, 'nonexistent.log')
         stats = extract_spider_statistics(log_path)
-        assert stats['overall']['total_found'] == 0
+        # When log not found, discovered should be None (not 0) per new logic
+        assert stats['overall']['total_discovered'] is None
     
     def test_statistics_extraction(self, temp_dir):
-        """Test extracting statistics from spider log."""
+        """Test extracting statistics from spider log (new format with no_new_torrents)."""
         log_path = os.path.join(temp_dir, 'spider.log')
         with open(log_path, 'w') as f:
             f.write("[Page  1] Found  20 entries for phase 1,  10 for phase 2\n")
             f.write("[Page  2] Found  15 entries for phase 1,   0 for phase 2\n")
+            f.write("Phase 1 completed: 35 movies discovered, 28 processed, 2 skipped (session), 3 skipped (history), 1 no new torrents, 1 failed\n")
+            f.write("Phase 2 completed: 10 movies discovered, 7 processed, 1 skipped (session), 1 skipped (history), 0 no new torrents, 1 failed\n")
+            f.write("Total movies discovered: 45\n")
+            f.write("Successfully processed: 35\n")
+            f.write("Skipped already parsed in this session: 3\n")
+            f.write("Skipped already parsed in previous runs: 4\n")
+            f.write("No new torrents to download: 1\n")
+            f.write("Failed to fetch/parse: 2\n")
+        
+        stats = extract_spider_statistics(log_path)
+        assert stats['phase1']['discovered'] == 35
+        assert stats['phase1']['processed'] == 28
+        assert stats['phase1']['skipped_session'] == 2
+        assert stats['phase1']['skipped_history'] == 3
+        assert stats['phase1']['no_new_torrents'] == 1
+        assert stats['phase1']['failed'] == 1
+        assert stats['phase2']['discovered'] == 10
+        assert stats['phase2']['processed'] == 7
+        assert stats['overall']['total_discovered'] == 45
+        assert stats['overall']['successfully_processed'] == 35
+        assert stats['overall']['skipped_session'] == 3
+        assert stats['overall']['skipped_history'] == 4
+        assert stats['overall']['no_new_torrents'] == 1
+        assert stats['overall']['failed'] == 2
+    
+    def test_statistics_extraction_old_format(self, temp_dir):
+        """Test extracting statistics from spider log (old format for backwards compatibility)."""
+        log_path = os.path.join(temp_dir, 'spider.log')
+        with open(log_path, 'w') as f:
             f.write("Phase 1 completed: 35 found, 5 skipped (history), 30 written to CSV\n")
             f.write("Phase 2 completed: 10 found, 2 skipped (history), 8 written to CSV\n")
             f.write("Total entries found: 38\n")
@@ -295,11 +325,11 @@ class TestExtractSpiderStatistics:
             f.write("Skipped already parsed in previous runs: 10\n")
         
         stats = extract_spider_statistics(log_path)
-        assert stats['phase1']['found'] == 35  # 20 + 15
+        assert stats['phase1']['discovered'] == 35
         assert stats['phase1']['processed'] == 30
-        assert stats['phase2']['found'] == 10
+        assert stats['phase2']['discovered'] == 10
         assert stats['phase2']['processed'] == 8
-        assert stats['overall']['total_found'] == 38
+        assert stats['overall']['total_discovered'] == 38
         assert stats['overall']['successfully_processed'] == 38
         assert stats['overall']['skipped_session'] == 5
         assert stats['overall']['skipped_history'] == 10
@@ -375,9 +405,9 @@ class TestFormatEmailReport:
     def test_format_email_report(self):
         """Test email report formatting."""
         spider_stats = {
-            'phase1': {'found': 20, 'processed': 15, 'skipped_session': 2, 'skipped_history': 3},
-            'phase2': {'found': 10, 'processed': 8, 'skipped_session': 1, 'skipped_history': 1},
-            'overall': {'total_found': 30, 'successfully_processed': 23, 'skipped_session': 3, 'skipped_history': 4}
+            'phase1': {'discovered': 20, 'processed': 15, 'skipped_session': 2, 'skipped_history': 3, 'no_new_torrents': 0, 'failed': 0},
+            'phase2': {'discovered': 10, 'processed': 8, 'skipped_session': 1, 'skipped_history': 1, 'no_new_torrents': 0, 'failed': 0},
+            'overall': {'total_discovered': 30, 'successfully_processed': 23, 'skipped_session': 3, 'skipped_history': 4, 'no_new_torrents': 0, 'failed': 0}
         }
         uploader_stats = {
             'total': 23,
@@ -406,7 +436,8 @@ class TestFormatEmailReport:
         assert 'QBITTORRENT UPLOADER' in result
         assert 'PIKPAK BRIDGE' in result
         assert 'PROXY STATUS' in result
-        assert '20' in result  # phase1 found
+        assert '20' in result  # phase1 discovered
         assert '87.0%' in result  # success rate
         assert 'No banned proxies' in result
+        assert 'No New Torrents' in result  # new field
 
