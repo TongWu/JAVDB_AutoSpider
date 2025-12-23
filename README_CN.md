@@ -671,9 +671,14 @@ QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
 - `size_hacked_subtitle`, `size_hacked_no_subtitle`, `size_subtitle`, `size_no_subtitle`: 对应大小
 
 ### 文件位置
-- **每日报告 CSV 文件**: `Daily Report/Javdb_TodayTitle_YYYYMMDD.csv`
-- **Ad Hoc CSV 文件**: `Ad Hoc/Javdb_TodayTitle_YYYYMMDD.csv`
-- **历史文件**: `Daily Report/parsed_movies_history.csv`
+
+CSV 报告文件按年月组织在日期子目录中:
+
+- **每日报告 CSV 文件**: `Daily Report/YYYY/MM/Javdb_TodayTitle_YYYYMMDD.csv`
+- **Ad Hoc CSV 文件**: `Ad Hoc/YYYY/MM/Javdb_AdHoc_*.csv`
+- **历史文件**: `Daily Report/parsed_movies_history.csv` (保持在根目录)
+- **PikPak 历史**: `Daily Report/pikpak_bridge_history.csv` (保持在根目录)
+- **代理禁用记录**: `Daily Report/proxy_bans.csv` (保持在根目录)
 - **日志文件**: `logs/` 目录
   - `Javdb_Spider.log`
   - `qbtorrent_uploader.log`
