@@ -147,7 +147,7 @@ jobs:
   # =============================================================================
   health-check:
     runs-on: ARM64
-    environment: WT_DailyIngestion
+    environment: Production
     permissions:
       contents: read
     needs: setup
@@ -188,7 +188,7 @@ jobs:
   # =============================================================================
   run-pipeline:
     runs-on: ARM64
-    environment: WT_DailyIngestion
+    environment: Production
     permissions:
       contents: read
     needs: [setup, health-check]
@@ -314,7 +314,7 @@ jobs:
   # =============================================================================
   email-notification:
     runs-on: ubuntu-latest
-    environment: WT_DailyIngestion
+    environment: Production
     permissions:
       contents: read
     needs: [setup, health-check, run-pipeline]
@@ -430,7 +430,7 @@ jobs:
   # =============================================================================
   commit-results:
     runs-on: ubuntu-latest
-    environment: WT_DailyIngestion
+    environment: Production
     needs: [setup, run-pipeline]
     if: ${{ !cancelled() }}
     permissions:
