@@ -83,6 +83,9 @@ from utils.logging_config import setup_logging, get_logger
 setup_logging(SPIDER_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
+# Import masking utilities
+from utils.masking import mask_ip_address, mask_username, mask_full, mask_proxy_url
+
 # Import proxy pool
 from utils.proxy_pool import ProxyPool, create_proxy_pool_from_config
 
@@ -902,14 +905,15 @@ def main():
                 if proxy_url:
                     proxy_ip = extract_ip_from_proxy_url(proxy_url)
                     service_url = get_cf_bypass_service_url(proxy_ip)
-                    logger.info(f"CF Bypass URL: {service_url}/html?url=<target>")
+                    masked_service_url = f"http://{mask_ip_address(proxy_ip)}:{CF_BYPASS_SERVICE_PORT}"
+                    logger.info(f"CF Bypass URL: {masked_service_url}/html?url=<target>")
                     logger.info("Requests go directly to proxy server's bypass service (no proxy forwarding)")
     elif use_cf_bypass:
         # Mode: --use-cf-bypass only
         logger.info("MODE: Local CF Bypass Service only (no proxy)")
         logger.info(f"CF Bypass service port: {CF_BYPASS_SERVICE_PORT}")
         service_url = get_cf_bypass_service_url()
-        logger.info(f"CF Bypass URL: {service_url}/html?url=<target>")
+        logger.info(f"CF Bypass URL: http://127.0.0.1:{CF_BYPASS_SERVICE_PORT}/html?url=<target>")
     elif use_proxy:
         # Mode: --use-proxy only
         logger.info("MODE: Proxy only (no CF bypass)")
@@ -999,8 +1003,19 @@ def main():
     any_proxy_banned_phase2 = False
     
     # Track skipped entries (for accurate statistics)
+    # Separate counters for each phase for accurate email reporting
     skipped_session_count = 0
     skipped_history_count = 0  # Track entries skipped due to history
+    failed_count = 0  # Track entries that failed to fetch/parse
+    no_new_torrents_count = 0  # Track entries with no new torrents to download
+    phase1_skipped_session = 0
+    phase1_skipped_history_actual = 0  # Actual count during processing
+    phase1_failed = 0  # Track entries that failed to fetch/parse in phase 1
+    phase1_no_new_torrents = 0  # Track entries with no new torrents in phase 1
+    phase2_skipped_session = 0
+    phase2_skipped_history_actual = 0  # Actual count during processing
+    phase2_failed = 0  # Track entries that failed to fetch/parse in phase 2
+    phase2_no_new_torrents = 0  # Track entries with no new torrents in phase 2
 
     # ========================================
     # Fetch all index pages and parse immediately
@@ -1126,6 +1141,7 @@ def main():
             if href in parsed_links:
                 logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping already parsed in this session")
                 skipped_session_count += 1
+                phase1_skipped_session += 1
                 continue
 
             # Add to parsed links set for this session
@@ -1136,6 +1152,7 @@ def main():
             if has_complete_subtitles(href, parsed_movies_history_phase1):
                 logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history")
                 skipped_history_count += 1
+                phase1_skipped_history_actual += 1
                 continue
 
             detail_url = urljoin(BASE_URL, href)
@@ -1160,6 +1177,8 @@ def main():
             
             if not parse_success and not magnets:
                 logger.error(f"[{i}/{total_entries_phase1}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
+                failed_count += 1
+                phase1_failed += 1
                 time.sleep(MOVIE_SLEEP)  # Respect rate limiting even on failure
                 continue
             
@@ -1181,6 +1200,7 @@ def main():
                     logger.debug(
                         f"[{i}/{total_entries_phase1}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
                 skipped_history_count += 1
+                phase1_skipped_history_actual += 1
                 time.sleep(MOVIE_SLEEP)  # Respect rate limiting even when skipping
                 continue
 
@@ -1238,6 +1258,8 @@ def main():
                 logger.debug(
                     f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipped CSV entry - all torrent categories already in history")
                 # Don't update history if no new torrents were found
+                no_new_torrents_count += 1
+                phase1_no_new_torrents += 1
 
             # Apply appropriate delay
             if fallback_triggered:
@@ -1248,10 +1270,9 @@ def main():
                 # Normal delay between items
                 time.sleep(MOVIE_SLEEP)
 
-        # Calculate phase 1 statistics
-        phase1_skipped_history = sum(1 for entry in all_index_results_phase1 if has_complete_subtitles(entry['href'], parsed_movies_history_phase1))
-        phase1_actually_fetched = total_entries_phase1 - phase1_skipped_history
-        logger.info(f"Phase 1 completed: {total_entries_phase1} found, {phase1_skipped_history} skipped (history), {len(phase1_rows)} written to CSV")
+        # Phase 1 statistics - use actual tracked counts
+        # Verify: total_entries_phase1 == phase1_skipped_session + phase1_skipped_history_actual + len(phase1_rows) + phase1_no_new_torrents + phase1_failed
+        logger.info(f"Phase 1 completed: {total_entries_phase1} movies discovered, {len(phase1_rows)} processed, {phase1_skipped_session} skipped (session), {phase1_skipped_history_actual} skipped (history), {phase1_no_new_torrents} no new torrents, {phase1_failed} failed")
 
     # ========================================
     # Process Phase 2 entries (already parsed during fetch)
@@ -1288,6 +1309,7 @@ def main():
             if href in parsed_links:
                 logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping already parsed in this session")
                 skipped_session_count += 1
+                phase2_skipped_session += 1
                 # No sleep needed here - we haven't made any request yet
                 continue
 
@@ -1299,6 +1321,7 @@ def main():
             if has_complete_subtitles(href, parsed_movies_history_phase2):
                 logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history")
                 skipped_history_count += 1
+                phase2_skipped_history_actual += 1
                 continue
 
             detail_url = urljoin(BASE_URL, href)
@@ -1323,6 +1346,8 @@ def main():
             
             if not parse_success and not magnets:
                 logger.error(f"[{i}/{total_entries_phase2}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
+                failed_count += 1
+                phase2_failed += 1
                 time.sleep(MOVIE_SLEEP)  # Respect rate limiting even on failure
                 continue
             
@@ -1344,6 +1369,7 @@ def main():
                     logger.debug(
                         f"[{i}/{total_entries_phase2}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
                 skipped_history_count += 1
+                phase2_skipped_history_actual += 1
                 time.sleep(MOVIE_SLEEP)  # Respect rate limiting even when skipping
                 continue
 
@@ -1401,6 +1427,8 @@ def main():
                 logger.debug(
                     f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipped CSV entry - all torrent categories already in history")
                 # Don't update history if no new torrents were found
+                no_new_torrents_count += 1
+                phase2_no_new_torrents += 1
 
             # Apply appropriate delay
             if fallback_triggered:
@@ -1411,9 +1439,9 @@ def main():
                 # Normal delay between items
                 time.sleep(MOVIE_SLEEP)
 
-        # Calculate phase 2 statistics
-        phase2_skipped_history = sum(1 for entry in all_index_results_phase2 if has_complete_subtitles(entry['href'], parsed_movies_history_phase2))
-        logger.info(f"Phase 2 completed: {total_entries_phase2} found, {phase2_skipped_history} skipped (history), {len(phase2_rows)} written to CSV")
+        # Phase 2 statistics - use actual tracked counts
+        # Verify: total_entries_phase2 == phase2_skipped_session + phase2_skipped_history_actual + len(phase2_rows) + phase2_no_new_torrents + phase2_failed
+        logger.info(f"Phase 2 completed: {total_entries_phase2} movies discovered, {len(phase2_rows)} processed, {phase2_skipped_session} skipped (session), {phase2_skipped_history_actual} skipped (history), {phase2_no_new_torrents} no new torrents, {phase2_failed} failed")
 
     # CSV has been written incrementally during processing
     if not dry_run:
@@ -1477,16 +1505,21 @@ def main():
             logger.info("  - No entries found in Phase 2")
 
     # Overall Summary
+    # Note: "movies" = unique movie pages, each movie can have multiple torrent links
+    # total_discovered = processed + skipped_session + skipped_history + no_new_torrents + failed
+    total_discovered = len(rows) + skipped_session_count + skipped_history_count + no_new_torrents_count + failed_count
     logger.info("=" * 30)
     logger.info("OVERALL SUMMARY")
     logger.info("=" * 30)
-    logger.info(f"Total entries found: {len(rows)}")
+    logger.info(f"Total movies discovered: {total_discovered}")
     logger.info(f"Successfully processed: {len(rows)}")
     logger.info(f"Skipped already parsed in this session: {skipped_session_count}")
     if use_history_for_loading and not ignore_history:
         logger.info(f"Skipped already parsed in previous runs: {skipped_history_count}")
     elif ignore_history:
         logger.info("History checking was disabled (--ignore-history)")
+    logger.info(f"No new torrents to download: {no_new_torrents_count}")
+    logger.info(f"Failed to fetch/parse: {failed_count}")
     logger.info(f"Current parsed links in memory: {len(parsed_links)}")
 
     # Overall torrent statistics

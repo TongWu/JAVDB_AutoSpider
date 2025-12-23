@@ -65,6 +65,9 @@ from utils.logging_config import setup_logging, get_logger
 setup_logging(QB_FILE_FILTER_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
+# Import masking utilities
+from utils.masking import mask_ip_address, mask_username, mask_full
+
 # Import proxy pool
 from utils.proxy_pool import create_proxy_pool_from_config
 
@@ -195,7 +198,8 @@ def test_qbittorrent_connection(use_proxy=False):
     """Test if qBittorrent is accessible"""
     try:
         proxies = get_proxies_dict('qbittorrent', use_proxy)
-        logger.info(f"Testing connection to qBittorrent at {QB_BASE_URL}")
+        masked_url = f"http://{mask_ip_address(QB_HOST)}:{QB_PORT}"
+        logger.info(f"Testing connection to qBittorrent at {masked_url}")
         response = requests.get(f'{QB_BASE_URL}/api/v2/app/version', timeout=10, proxies=proxies)
         if response.status_code == 200 or response.status_code == 403:
             logger.info("qBittorrent is accessible")
@@ -217,9 +221,10 @@ def login_to_qbittorrent(session, use_proxy=False):
     }
     
     proxies = get_proxies_dict('qbittorrent', use_proxy)
+    masked_url = f"http://{mask_ip_address(QB_HOST)}:{QB_PORT}"
     
     try:
-        logger.info(f"Attempting to login to qBittorrent at {QB_BASE_URL}")
+        logger.info(f"Attempting to login to qBittorrent at {masked_url} as {mask_username(QB_USERNAME)}")
         response = session.post(login_url, data=login_data, timeout=REQUEST_TIMEOUT, proxies=proxies)
         
         if response.status_code == 200:
