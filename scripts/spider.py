@@ -1007,12 +1007,15 @@ def main():
     skipped_session_count = 0
     skipped_history_count = 0  # Track entries skipped due to history
     failed_count = 0  # Track entries that failed to fetch/parse
+    no_new_torrents_count = 0  # Track entries with no new torrents to download
     phase1_skipped_session = 0
     phase1_skipped_history_actual = 0  # Actual count during processing
     phase1_failed = 0  # Track entries that failed to fetch/parse in phase 1
+    phase1_no_new_torrents = 0  # Track entries with no new torrents in phase 1
     phase2_skipped_session = 0
     phase2_skipped_history_actual = 0  # Actual count during processing
     phase2_failed = 0  # Track entries that failed to fetch/parse in phase 2
+    phase2_no_new_torrents = 0  # Track entries with no new torrents in phase 2
 
     # ========================================
     # Fetch all index pages and parse immediately
@@ -1255,6 +1258,8 @@ def main():
                 logger.debug(
                     f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipped CSV entry - all torrent categories already in history")
                 # Don't update history if no new torrents were found
+                no_new_torrents_count += 1
+                phase1_no_new_torrents += 1
 
             # Apply appropriate delay
             if fallback_triggered:
@@ -1266,8 +1271,8 @@ def main():
                 time.sleep(MOVIE_SLEEP)
 
         # Phase 1 statistics - use actual tracked counts
-        # Verify: total_entries_phase1 == phase1_skipped_session + phase1_skipped_history_actual + len(phase1_rows) + phase1_failed
-        logger.info(f"Phase 1 completed: {total_entries_phase1} movies discovered, {len(phase1_rows)} processed, {phase1_skipped_session} skipped (session), {phase1_skipped_history_actual} skipped (history), {phase1_failed} failed")
+        # Verify: total_entries_phase1 == phase1_skipped_session + phase1_skipped_history_actual + len(phase1_rows) + phase1_no_new_torrents + phase1_failed
+        logger.info(f"Phase 1 completed: {total_entries_phase1} movies discovered, {len(phase1_rows)} processed, {phase1_skipped_session} skipped (session), {phase1_skipped_history_actual} skipped (history), {phase1_no_new_torrents} no new torrents, {phase1_failed} failed")
 
     # ========================================
     # Process Phase 2 entries (already parsed during fetch)
@@ -1422,6 +1427,8 @@ def main():
                 logger.debug(
                     f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipped CSV entry - all torrent categories already in history")
                 # Don't update history if no new torrents were found
+                no_new_torrents_count += 1
+                phase2_no_new_torrents += 1
 
             # Apply appropriate delay
             if fallback_triggered:
@@ -1433,8 +1440,8 @@ def main():
                 time.sleep(MOVIE_SLEEP)
 
         # Phase 2 statistics - use actual tracked counts
-        # Verify: total_entries_phase2 == phase2_skipped_session + phase2_skipped_history_actual + len(phase2_rows) + phase2_failed
-        logger.info(f"Phase 2 completed: {total_entries_phase2} movies discovered, {len(phase2_rows)} processed, {phase2_skipped_session} skipped (session), {phase2_skipped_history_actual} skipped (history), {phase2_failed} failed")
+        # Verify: total_entries_phase2 == phase2_skipped_session + phase2_skipped_history_actual + len(phase2_rows) + phase2_no_new_torrents + phase2_failed
+        logger.info(f"Phase 2 completed: {total_entries_phase2} movies discovered, {len(phase2_rows)} processed, {phase2_skipped_session} skipped (session), {phase2_skipped_history_actual} skipped (history), {phase2_no_new_torrents} no new torrents, {phase2_failed} failed")
 
     # CSV has been written incrementally during processing
     if not dry_run:
@@ -1499,8 +1506,8 @@ def main():
 
     # Overall Summary
     # Note: "movies" = unique movie pages, each movie can have multiple torrent links
-    # total_discovered = processed + skipped_session + skipped_history + failed
-    total_discovered = len(rows) + skipped_session_count + skipped_history_count + failed_count
+    # total_discovered = processed + skipped_session + skipped_history + no_new_torrents + failed
+    total_discovered = len(rows) + skipped_session_count + skipped_history_count + no_new_torrents_count + failed_count
     logger.info("=" * 30)
     logger.info("OVERALL SUMMARY")
     logger.info("=" * 30)
@@ -1511,6 +1518,7 @@ def main():
         logger.info(f"Skipped already parsed in previous runs: {skipped_history_count}")
     elif ignore_history:
         logger.info("History checking was disabled (--ignore-history)")
+    logger.info(f"No new torrents to download: {no_new_torrents_count}")
     logger.info(f"Failed to fetch/parse: {failed_count}")
     logger.info(f"Current parsed links in memory: {len(parsed_links)}")
 
