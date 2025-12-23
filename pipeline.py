@@ -32,6 +32,9 @@ except ImportError:
     DAILY_REPORT_DIR = 'Daily Report'
     AD_HOC_DIR = 'Ad Hoc'
 
+# Import path helper for dated subdirectories
+from utils.path_helper import get_dated_report_path
+
 # --- LOGGING SETUP ---
 from utils.logging_config import setup_logging, get_logger
 setup_logging(PIPELINE_LOG_FILE, LOG_LEVEL)
@@ -122,7 +125,7 @@ def main():
     args = parse_arguments()
     is_adhoc_mode = args.url is not None
     
-    # Determine CSV path based on mode
+    # Determine CSV path based on mode (using dated subdirectory YYYY/MM)
     if args.output_file:
         csv_filename = args.output_file
     else:
@@ -134,10 +137,10 @@ def main():
             csv_filename = f'Javdb_TodayTitle_{today_str}.csv'
 
     if is_adhoc_mode:
-        csv_path = os.path.join(AD_HOC_DIR, csv_filename)
+        csv_path = get_dated_report_path(AD_HOC_DIR, csv_filename)
         logger.info(f"Ad hoc mode detected. Expected CSV: {csv_path}")
     else:
-        csv_path = os.path.join(DAILY_REPORT_DIR, csv_filename)
+        csv_path = get_dated_report_path(DAILY_REPORT_DIR, csv_filename)
         logger.info(f"Daily mode. Expected CSV: {csv_path}")
 
     # Build arguments for spider
