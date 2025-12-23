@@ -4,21 +4,65 @@ Path Helper - Utility functions for generating dated subdirectory paths
 This module provides functions to generate paths with YYYY/MM subdirectories
 for organizing Daily Report and Ad Hoc report files.
 
+Directory Structure:
+    reports/
+    ├── DailyReport/YYYY/MM/    # Daily report CSV files
+    ├── AdHoc/YYYY/MM/          # Ad hoc report CSV files
+    ├── parsed_movies_history.csv
+    ├── pikpak_bridge_history.csv
+    └── proxy_bans.csv
+
 Usage:
-    from utils.path_helper import get_dated_report_path
+    from utils.path_helper import get_dated_report_path, get_history_file_path
     
     # Get path for today's report
-    csv_path = get_dated_report_path('Daily Report', 'report.csv')
-    # Returns: 'Daily Report/2025/12/report.csv'
+    csv_path = get_dated_report_path('reports/DailyReport', 'report.csv')
+    # Returns: 'reports/DailyReport/2025/12/report.csv'
     
     # Get path for a specific date
-    csv_path = get_dated_report_path('Ad Hoc', 'report.csv', datetime(2025, 6, 15))
-    # Returns: 'Ad Hoc/2025/06/report.csv'
+    csv_path = get_dated_report_path('reports/AdHoc', 'report.csv', datetime(2025, 6, 15))
+    # Returns: 'reports/AdHoc/2025/06/report.csv'
+    
+    # Get history file path
+    history_path = get_history_file_path('reports', 'parsed_movies_history.csv')
+    # Returns: 'reports/parsed_movies_history.csv'
 """
 
 import os
 from datetime import datetime
 from typing import Optional
+
+
+def get_history_file_path(reports_dir: str, filename: str) -> str:
+    """
+    Get the full path for a history file in the reports directory.
+    
+    History files are stored directly in the reports root directory,
+    not in dated subdirectories.
+    
+    Args:
+        reports_dir: Reports root directory (e.g., 'reports')
+        filename: History file name (e.g., 'parsed_movies_history.csv')
+    
+    Returns:
+        Full path to the history file (e.g., 'reports/parsed_movies_history.csv')
+    """
+    return os.path.join(reports_dir, filename)
+
+
+def ensure_reports_dir(reports_dir: str) -> str:
+    """
+    Ensure the reports root directory exists.
+    
+    Args:
+        reports_dir: Reports root directory (e.g., 'reports')
+    
+    Returns:
+        Path to the created/existing reports directory
+    """
+    if not os.path.exists(reports_dir):
+        os.makedirs(reports_dir)
+    return reports_dir
 
 
 def get_dated_subdir(base_dir: str, date: Optional[datetime] = None) -> str:
