@@ -38,7 +38,7 @@ jobs:
   # =============================================================================
   setup:
     runs-on: ARM64
-    environment: WT_DailyIngestion
+    environment: Production
     permissions:
       contents: read
     
@@ -138,7 +138,7 @@ jobs:
   # =============================================================================
   run-file-filter:
     runs-on: ARM64
-    environment: WT_DailyIngestion
+    environment: Production
     permissions:
       contents: read
     needs: setup
