@@ -285,8 +285,9 @@ class RequestHandler:
             'x-bypass-cache': 'true'
         }
         
-        # Mask the proxy IP in the URL for logging
-        masked_bypass_url = f"http://{mask_ip_address(proxy_ip)}:{self.config.cf_bypass_service_port}/html?url=..."
+        # Mask the proxy IP in the URL for logging (use 127.0.0.1 when proxy_ip is None)
+        masked_ip = mask_ip_address(proxy_ip) if proxy_ip else '127.0.0.1'
+        masked_bypass_url = f"http://{masked_ip}:{self.config.cf_bypass_service_port}/html?url=..."
         logger.info(f"[CF Bypass] Refreshing bypass cache: {masked_bypass_url}")
         
         try:
@@ -339,8 +340,9 @@ class RequestHandler:
         encoded_url = quote(url, safe='')
         bypass_url = f"{bypass_base_url}/html?url={encoded_url}"
         
-        # Mask the proxy IP in the URL for logging
-        masked_bypass_base = f"http://{mask_ip_address(proxy_ip)}:{self.config.cf_bypass_service_port}"
+        # Mask the proxy IP in the URL for logging (use 127.0.0.1 when proxy_ip is None)
+        masked_ip = mask_ip_address(proxy_ip) if proxy_ip else '127.0.0.1'
+        masked_bypass_base = f"http://{masked_ip}:{self.config.cf_bypass_service_port}"
         logger.debug(f"[CF Bypass] {context_msg}: {url} -> {masked_bypass_base}/html?url=...")
         
         # CF bypass requests are always sent directly (no proxy forwarding)
