@@ -29,7 +29,7 @@ from utils.path_helper import get_dated_report_path, ensure_dated_dir, get_dated
 try:
     from config import (
         BASE_URL, START_PAGE, END_PAGE,
-        DAILY_REPORT_DIR, AD_HOC_DIR, PARSED_MOVIES_CSV,
+        REPORTS_DIR, DAILY_REPORT_DIR, AD_HOC_DIR, PARSED_MOVIES_CSV,
         SPIDER_LOG_FILE, LOG_LEVEL, DETAIL_PAGE_SLEEP, PAGE_SLEEP, MOVIE_SLEEP,
         JAVDB_SESSION_COOKIE, PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS,
         PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES,
@@ -41,8 +41,9 @@ except ImportError:
     BASE_URL = 'https://javdb.com'
     START_PAGE = 1
     END_PAGE = 20
-    DAILY_REPORT_DIR = 'Daily Report'
-    AD_HOC_DIR = 'Ad Hoc'
+    REPORTS_DIR = 'reports'
+    DAILY_REPORT_DIR = 'reports/DailyReport'
+    AD_HOC_DIR = 'reports/AdHoc'
     PARSED_MOVIES_CSV = 'parsed_movies_history.csv'
     SPIDER_LOG_FILE = 'logs/spider.log'
     LOG_LEVEL = 'INFO'
@@ -149,11 +150,11 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def ensure_daily_report_dir():
-    """Ensure the Daily Report directory exists (for history files at root level)"""
-    if not os.path.exists(DAILY_REPORT_DIR):
-        os.makedirs(DAILY_REPORT_DIR)
-        logger.info(f"Created directory: {DAILY_REPORT_DIR}")
+def ensure_reports_dir():
+    """Ensure the reports root directory exists (for history files)"""
+    if not os.path.exists(REPORTS_DIR):
+        os.makedirs(REPORTS_DIR)
+        logger.info(f"Created directory: {REPORTS_DIR}")
 
 
 def ensure_report_dated_dir(base_dir):
@@ -961,8 +962,8 @@ def main():
     # Ensure Daily Report directory exists
     ensure_daily_report_dir()
 
-    # Initialize history file path and data
-    history_file = os.path.join(DAILY_REPORT_DIR, PARSED_MOVIES_CSV)
+    # Initialize history file path and data (history files are stored in REPORTS_DIR root)
+    history_file = os.path.join(REPORTS_DIR, PARSED_MOVIES_CSV)
     parsed_movies_history_phase1 = {}
     parsed_movies_history_phase2 = {}
 
@@ -1557,7 +1558,7 @@ def main():
     if not dry_run:
         logger.info(f"Results saved to: {csv_path}")
         if use_history_for_saving:
-            logger.info(f"History saved to: {os.path.join(DAILY_REPORT_DIR, PARSED_MOVIES_CSV)}")
+            logger.info(f"History saved to: {os.path.join(REPORTS_DIR, PARSED_MOVIES_CSV)}")
     logger.info("=" * 75)
     
     # Log proxy statistics and ban status if using proxy
@@ -1609,10 +1610,8 @@ def main():
         flush_log_handlers()
         
         files_to_commit = [
-            DAILY_REPORT_DIR,
-            AD_HOC_DIR,
+            REPORTS_DIR,  # Includes DailyReport, AdHoc subdirectories and history files
             'logs/',
-            'parsed_movies_history.csv'
         ]
         commit_message = f"Auto-commit: Spider results {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         
