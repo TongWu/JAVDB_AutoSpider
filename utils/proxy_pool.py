@@ -33,10 +33,11 @@ def mask_proxy_url(url: Optional[str]) -> str:
         url: Proxy URL that may contain credentials and IP
         
     Returns:
-        Masked URL with credentials and IP middle parts hidden
+        Masked URL with credentials hidden and IP middle parts hidden
+        Protocol (http://, https://, socks5://) is preserved as it's not sensitive.
         
     Examples:
-        http://user:pass@123.45.67.89:8080 -> http://***:***@123.xxx.xxx.89:8080
+        http://user:pass@123.45.67.89:8080 -> http://123.xxx.xxx.89:8080
         http://123.45.67.89:8080 -> http://123.xxx.xxx.89:8080
         http://proxy.example.com:8080 -> http://proxy.example.com:8080
         None -> 'None'
@@ -49,18 +50,16 @@ def mask_proxy_url(url: Optional[str]) -> str:
         
         protocol = ''
         host_port = url
-        credentials_masked = False
         
-        # Extract protocol
+        # Extract protocol (preserve it - not sensitive)
         if '://' in url:
             protocol, host_port = url.split('://', 1)
             protocol += '://'
         
-        # Check if URL contains credentials (username:password@)
+        # Strip credentials if present (username:password@)
+        # Credentials are sensitive, so we remove them entirely
         if '@' in host_port:
-            creds, host_port = host_port.split('@', 1)
-            protocol += '***:***@'
-            credentials_masked = True
+            _, host_port = host_port.split('@', 1)
         
         # Mask IP address (mask middle two octets)
         # Match IPv4 pattern: xxx.xxx.xxx.xxx
@@ -141,7 +140,7 @@ class ProxyPool:
     """
     
     def __init__(self, cooldown_seconds: int = 300, max_failures_before_cooldown: int = 3,
-                 ban_log_file: str = 'Daily Report/proxy_bans.csv'):
+                 ban_log_file: str = 'reports/proxy_bans.csv'):
         """
         Initialize proxy pool
         
@@ -467,7 +466,8 @@ class ProxyPool:
 
 def create_proxy_pool_from_config(proxy_list_config: List[Dict], 
                                    cooldown_seconds: int = 300,
-                                   max_failures: int = 3) -> ProxyPool:
+                                   max_failures: int = 3,
+                                   ban_log_file: str = 'reports/proxy_bans.csv') -> ProxyPool:
     """
     Create and configure a proxy pool from configuration
     
@@ -475,13 +475,15 @@ def create_proxy_pool_from_config(proxy_list_config: List[Dict],
         proxy_list_config: List of proxy configurations from config.py
         cooldown_seconds: Cooldown duration in seconds
         max_failures: Max failures before cooldown
+        ban_log_file: Path to ban log file (default: reports/proxy_bans.csv)
         
     Returns:
         Configured ProxyPool instance
     """
     pool = ProxyPool(
         cooldown_seconds=cooldown_seconds,
-        max_failures_before_cooldown=max_failures
+        max_failures_before_cooldown=max_failures,
+        ban_log_file=ban_log_file
     )
     
     pool.add_proxies_from_list(proxy_list_config)

@@ -833,6 +833,9 @@ def main():
     
     # Initialize proxy pool (always initialize if configured, even if not enabled by default)
     # This allows automatic fallback to proxy if direct connection fails
+    # Ban log file is stored in reports directory
+    ban_log_file = os.path.join(REPORTS_DIR, 'proxy_bans.csv')
+    
     if PROXY_POOL and len(PROXY_POOL) > 0:
         if PROXY_MODE == 'pool':
             # Full proxy pool mode with automatic failover
@@ -840,7 +843,8 @@ def main():
             global_proxy_pool = create_proxy_pool_from_config(
                 PROXY_POOL,
                 cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
-                max_failures=PROXY_POOL_MAX_FAILURES
+                max_failures=PROXY_POOL_MAX_FAILURES,
+                ban_log_file=ban_log_file
             )
             logger.info(f"Proxy pool initialized successfully")
             logger.info(f"Cooldown: {PROXY_POOL_COOLDOWN_SECONDS}s, Max failures before cooldown: {PROXY_POOL_MAX_FAILURES}")
@@ -850,7 +854,8 @@ def main():
             global_proxy_pool = create_proxy_pool_from_config(
                 [PROXY_POOL[0]],  # Only use first proxy
                 cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
-                max_failures=PROXY_POOL_MAX_FAILURES
+                max_failures=PROXY_POOL_MAX_FAILURES,
+                ban_log_file=ban_log_file
             )
             logger.info(f"Single proxy initialized: {PROXY_POOL[0].get('name', 'Main-Proxy')}")
     # Fallback to legacy PROXY_HTTP/PROXY_HTTPS if no PROXY_POOL configured
@@ -865,7 +870,8 @@ def main():
         global_proxy_pool = create_proxy_pool_from_config(
             [legacy_proxy],
             cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
-            max_failures=PROXY_POOL_MAX_FAILURES
+            max_failures=PROXY_POOL_MAX_FAILURES,
+            ban_log_file=ban_log_file
         )
     else:
         if use_proxy:
