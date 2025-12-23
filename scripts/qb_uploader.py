@@ -68,6 +68,9 @@ except ImportError:
         """Check if torrent content contains downloaded indicator"""
         return torrent_content.strip().startswith("[DOWNLOADED]")
 
+# Import path helper for dated subdirectories
+from utils.path_helper import get_dated_report_path, get_dated_subdir
+
 # Configure logging
 from utils.logging_config import setup_logging, get_logger
 setup_logging(UPLOADER_LOG_FILE, LOG_LEVEL)
@@ -122,14 +125,14 @@ def get_proxies_dict(module_name, use_proxy_flag):
     return global_proxy_helper.get_proxies_dict(module_name, use_proxy_flag)
 
 def get_csv_filename(mode='daily'):
-    """Get the CSV filename for current date and mode"""
+    """Get the CSV filename for current date and mode with dated subdirectory (YYYY/MM)"""
     current_date = datetime.now().strftime("%Y%m%d")
+    csv_filename = f'Javdb_TodayTitle_{current_date}.csv'
+    
     if mode == 'adhoc':
-        folder = AD_HOC_DIR
-        return os.path.join(folder, f'Javdb_TodayTitle_{current_date}.csv')
+        return get_dated_report_path(AD_HOC_DIR, csv_filename)
     else:
-        folder = DAILY_REPORT_DIR
-        return os.path.join(folder, f'Javdb_TodayTitle_{current_date}.csv')
+        return get_dated_report_path(DAILY_REPORT_DIR, csv_filename)
 
 def test_qbittorrent_connection(use_proxy=False):
     """Test if qBittorrent is accessible"""
@@ -477,10 +480,11 @@ def main():
     
     # Get CSV filename
     if args.input_file:
+        # When input file is specified, use dated subdirectory
         if mode == 'adhoc':
-            csv_filename = os.path.join(AD_HOC_DIR, args.input_file)
+            csv_filename = get_dated_report_path(AD_HOC_DIR, args.input_file)
         else:
-            csv_filename = os.path.join(DAILY_REPORT_DIR, args.input_file)
+            csv_filename = get_dated_report_path(DAILY_REPORT_DIR, args.input_file)
         logger.info(f"Using specified input file: {csv_filename}")
     else:
         csv_filename = get_csv_filename(mode)
