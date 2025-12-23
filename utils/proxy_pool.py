@@ -33,10 +33,11 @@ def mask_proxy_url(url: Optional[str]) -> str:
         url: Proxy URL that may contain credentials and IP
         
     Returns:
-        Masked URL with credentials and IP middle parts hidden
+        Masked URL with credentials hidden and IP middle parts hidden
+        Protocol (http://, https://, socks5://) is preserved as it's not sensitive.
         
     Examples:
-        http://user:pass@123.45.67.89:8080 -> http://***:***@123.xxx.xxx.89:8080
+        http://user:pass@123.45.67.89:8080 -> http://123.xxx.xxx.89:8080
         http://123.45.67.89:8080 -> http://123.xxx.xxx.89:8080
         http://proxy.example.com:8080 -> http://proxy.example.com:8080
         None -> 'None'
@@ -49,18 +50,16 @@ def mask_proxy_url(url: Optional[str]) -> str:
         
         protocol = ''
         host_port = url
-        credentials_masked = False
         
-        # Extract protocol
+        # Extract protocol (preserve it - not sensitive)
         if '://' in url:
             protocol, host_port = url.split('://', 1)
             protocol += '://'
         
-        # Check if URL contains credentials (username:password@)
+        # Strip credentials if present (username:password@)
+        # Credentials are sensitive, so we remove them entirely
         if '@' in host_port:
-            creds, host_port = host_port.split('@', 1)
-            protocol += '***:***@'
-            credentials_masked = True
+            _, host_port = host_port.split('@', 1)
         
         # Mask IP address (mask middle two octets)
         # Match IPv4 pattern: xxx.xxx.xxx.xxx
