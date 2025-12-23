@@ -37,10 +37,13 @@ class TestMaskProxyUrl:
         url = "http://user:pass@123.45.67.89:8080"
         result = mask_proxy_url(url)
         
-        # Credentials should be masked
+        # Credentials should be removed entirely (not shown in output)
         assert 'user' not in result
         assert 'pass' not in result
-        assert '***:***@' in result
+        assert '@' not in result  # No @ sign since credentials are removed
+        
+        # Protocol should be preserved
+        assert result.startswith('http://')
         
         # Middle octets of IP should be masked
         assert '123.' in result
@@ -71,8 +74,14 @@ class TestMaskProxyUrl:
         url = "https://user:pass@192.168.1.100:8080"
         result = mask_proxy_url(url)
         
+        # Protocol should be preserved
         assert 'https://' in result
-        assert '***:***@' in result
+        # Credentials should be removed
+        assert 'user' not in result
+        assert 'pass' not in result
+        assert '@' not in result
+        # IP should be masked
+        assert '.xxx.xxx.' in result
 
 
 class TestProxyInfo:
