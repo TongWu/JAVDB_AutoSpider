@@ -68,6 +68,9 @@ from utils.logging_config import setup_logging, get_logger
 setup_logging(EMAIL_NOTIFICATION_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
+# Import masking utilities
+from utils.masking import mask_email, mask_server, mask_full
+
 # Import git helper
 from utils.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 
@@ -635,8 +638,8 @@ def send_email(subject, body, attachments=None, dry_run=False):
         logger.info("=" * 60)
         logger.info("[DRY RUN] Email would be sent:")
         logger.info(f"Subject: {subject}")
-        logger.info(f"From: {EMAIL_FROM}")
-        logger.info(f"To: {EMAIL_TO}")
+        logger.info(f"From: {mask_email(EMAIL_FROM)}")
+        logger.info(f"To: {mask_email(EMAIL_TO)}")
         logger.info("Body:")
         logger.info(body)
         if attachments:
@@ -662,13 +665,13 @@ def send_email(subject, body, attachments=None, dry_run=False):
                 subtype = 'octet-stream'
                 msg.add_attachment(file_data, maintype=maintype, subtype=subtype, filename=file_name)
 
-    logger.info('Connecting to SMTP server...')
+    logger.info(f'Connecting to SMTP server {mask_server(SMTP_SERVER)}:{SMTP_PORT}...')
     try:
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
             server.starttls()
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.send_message(msg)
-        logger.info('Email sent successfully.')
+        logger.info(f'Email sent successfully to {mask_email(EMAIL_TO)}.')
         return True
     except Exception as e:
         logger.error(f'Failed to send email: {e}')
