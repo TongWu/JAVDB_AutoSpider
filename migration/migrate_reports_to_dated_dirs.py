@@ -1,9 +1,29 @@
 #!/usr/bin/env python3
 """
-Migration Script: Move existing reports to dated subdirectories (YYYY/MM)
+Migration Script: Migrate reports to new directory structure
 
-This script migrates existing CSV report files from the root of Daily Report
-and Ad Hoc directories into dated subdirectories based on their filenames.
+This script migrates existing CSV report files from the old directory structure
+to the new consolidated reports directory structure.
+
+Old Structure:
+    Daily Report/
+    ├── *.csv (report files)
+    ├── YYYY/MM/*.csv (already migrated reports)
+    ├── parsed_movies_history.csv
+    ├── pikpak_bridge_history.csv
+    └── proxy_bans.csv
+    
+    Ad Hoc/
+    ├── *.csv (report files)
+    └── YYYY/MM/*.csv (already migrated reports)
+
+New Structure:
+    reports/
+    ├── DailyReport/YYYY/MM/*.csv  (daily report files)
+    ├── AdHoc/YYYY/MM/*.csv        (ad hoc report files)
+    ├── parsed_movies_history.csv  (history file at root)
+    ├── pikpak_bridge_history.csv  (history file at root)
+    └── proxy_bans.csv             (history file at root)
 
 Usage:
     # Dry run (preview changes without moving files)
@@ -14,15 +34,6 @@ Usage:
     
     # Force migration even if target exists
     python migration/migrate_reports_to_dated_dirs.py --force
-
-Files that will be migrated:
-    - Daily Report/*.csv (except history files)
-    - Ad Hoc/*.csv
-
-Files that will NOT be migrated (stay at root level):
-    - parsed_movies_history.csv
-    - pikpak_bridge_history.csv
-    - proxy_bans.csv
 """
 
 import os
@@ -32,8 +43,17 @@ import argparse
 from datetime import datetime
 from typing import Optional, Tuple, List
 
-# Files that should stay at root level (not migrated)
-EXCLUDED_FILES = {
+# Old directory names
+OLD_DAILY_REPORT_DIR = 'Daily Report'
+OLD_AD_HOC_DIR = 'Ad Hoc'
+
+# New directory structure
+NEW_REPORTS_DIR = 'reports'
+NEW_DAILY_REPORT_DIR = 'reports/DailyReport'
+NEW_AD_HOC_DIR = 'reports/AdHoc'
+
+# History files that should be moved to reports root
+HISTORY_FILES = {
     'parsed_movies_history.csv',
     'pikpak_bridge_history.csv',
     'proxy_bans.csv',
@@ -56,7 +76,6 @@ def extract_date_from_filename(filename: str) -> Optional[Tuple[str, str]]:
     Returns:
         Tuple of (year, month) or None if date cannot be extracted
     """
-    # Pattern: Match YYYYMMDD at the end of filename (before .csv)
     patterns = [
         r'_(\d{4})(\d{2})\d{2}\.csv$',  # Standard: _YYYYMMDD.csv
         r'(\d{4})(\d{2})\d{2}\.csv$',    # Without underscore: YYYYMMDD.csv
@@ -67,7 +86,6 @@ def extract_date_from_filename(filename: str) -> Optional[Tuple[str, str]]:
         if match:
             year = match.group(1)
             month = match.group(2)
-            # Validate year and month
             if 2020 <= int(year) <= 2099 and 1 <= int(month) <= 12:
                 return (year, month)
     
@@ -78,84 +96,81 @@ def extract_date_from_file_mtime(filepath: str) -> Tuple[str, str]:
     """
     Extract year and month from file modification time.
     Used as fallback when date cannot be extracted from filename.
-    
-    Args:
-        filepath: Full path to the file
-    
-    Returns:
-        Tuple of (year, month)
     """
     mtime = os.path.getmtime(filepath)
     dt = datetime.fromtimestamp(mtime)
     return (dt.strftime('%Y'), dt.strftime('%m'))
 
 
-def get_target_path(source_file: str, base_dir: str) -> Optional[str]:
+def find_files_to_migrate(old_dir: str, new_base_dir: str) -> List[Tuple[str, str]]:
     """
-    Determine the target path for a file in dated subdirectory.
+    Find all report files that need to be migrated.
+    
+    This function handles:
+    1. Root-level CSV files → new_base_dir/YYYY/MM/
+    2. Already dated files (YYYY/MM/*.csv) → new_base_dir/YYYY/MM/
     
     Args:
-        source_file: Full path to the source file
-        base_dir: Base directory (Daily Report or Ad Hoc)
-    
-    Returns:
-        Target path or None if file should not be migrated
-    """
-    filename = os.path.basename(source_file)
-    
-    # Skip excluded files
-    if filename in EXCLUDED_FILES:
-        return None
-    
-    # Skip non-CSV files
-    if not filename.endswith('.csv'):
-        return None
-    
-    # Try to extract date from filename first
-    date_info = extract_date_from_filename(filename)
-    
-    if date_info is None:
-        # Fallback to file modification time
-        date_info = extract_date_from_file_mtime(source_file)
-        print(f"  Note: Using file mtime for {filename} (no date in filename)")
-    
-    year, month = date_info
-    
-    # Construct target path
-    target_dir = os.path.join(base_dir, year, month)
-    target_path = os.path.join(target_dir, filename)
-    
-    return target_path
-
-
-def find_files_to_migrate(base_dir: str) -> List[Tuple[str, str]]:
-    """
-    Find all files that need to be migrated in a directory.
-    
-    Args:
-        base_dir: Base directory to scan
+        old_dir: Old directory path (e.g., 'Daily Report')
+        new_base_dir: New base directory (e.g., 'reports/DailyReport')
     
     Returns:
         List of tuples (source_path, target_path)
     """
     migrations = []
     
-    if not os.path.exists(base_dir):
+    if not os.path.exists(old_dir):
         return migrations
     
-    # Only scan root level files (not subdirectories)
-    for filename in os.listdir(base_dir):
-        source_path = os.path.join(base_dir, filename)
-        
-        # Skip directories
-        if os.path.isdir(source_path):
-            continue
-        
-        # Get target path
-        target_path = get_target_path(source_path, base_dir)
-        
-        if target_path:
+    for root, dirs, files in os.walk(old_dir):
+        for filename in files:
+            if not filename.endswith('.csv'):
+                continue
+            
+            # Skip history files (they're handled separately)
+            if filename in HISTORY_FILES:
+                continue
+            
+            source_path = os.path.join(root, filename)
+            
+            # Determine if file is already in dated subdirectory
+            rel_path = os.path.relpath(source_path, old_dir)
+            path_parts = rel_path.split(os.sep)
+            
+            if len(path_parts) == 3:
+                # Already in YYYY/MM/ subdirectory
+                year, month = path_parts[0], path_parts[1]
+            else:
+                # Root level file - extract date from filename
+                date_info = extract_date_from_filename(filename)
+                if date_info is None:
+                    date_info = extract_date_from_file_mtime(source_path)
+                    print(f"  Note: Using file mtime for {filename} (no date in filename)")
+                year, month = date_info
+            
+            # Construct target path in new structure
+            target_path = os.path.join(new_base_dir, year, month, filename)
             migrations.append((source_path, target_path))
+    
+    return migrations
+
+
+def find_history_files_to_migrate() -> List[Tuple[str, str]]:
+    """
+    Find history files that need to be moved to the new reports root.
+    
+    Returns:
+        List of tuples (source_path, target_path)
+    """
+    migrations = []
+    
+    # Check old Daily Report directory for history files
+    if os.path.exists(OLD_DAILY_REPORT_DIR):
+        for filename in HISTORY_FILES:
+            source_path = os.path.join(OLD_DAILY_REPORT_DIR, filename)
+            if os.path.exists(source_path):
+                target_path = os.path.join(NEW_REPORTS_DIR, filename)
+                migrations.append((source_path, target_path))
     
     return migrations
 
@@ -173,7 +188,6 @@ def migrate_file(source: str, target: str, dry_run: bool = False, force: bool = 
     Returns:
         True if migration was successful (or would be in dry_run)
     """
-    # Check if target already exists
     if os.path.exists(target) and not force:
         print(f"  SKIP: Target already exists: {target}")
         return False
@@ -189,7 +203,6 @@ def migrate_file(source: str, target: str, dry_run: bool = False, force: bool = 
         os.makedirs(target_dir)
         print(f"  Created directory: {target_dir}")
     
-    # Move the file
     try:
         shutil.move(source, target)
         print(f"  Moved: {os.path.basename(source)}")
@@ -200,45 +213,75 @@ def migrate_file(source: str, target: str, dry_run: bool = False, force: bool = 
         return False
 
 
+def cleanup_empty_dirs(directory: str, dry_run: bool = False):
+    """Remove empty directories after migration."""
+    if not os.path.exists(directory):
+        return
+    
+    # Walk bottom-up to remove empty directories
+    for root, dirs, files in os.walk(directory, topdown=False):
+        for d in dirs:
+            dir_path = os.path.join(root, d)
+            try:
+                if not os.listdir(dir_path):
+                    if dry_run:
+                        print(f"  [DRY RUN] Would remove empty directory: {dir_path}")
+                    else:
+                        os.rmdir(dir_path)
+                        print(f"  Removed empty directory: {dir_path}")
+            except Exception as e:
+                print(f"  Warning: Could not remove directory {dir_path}: {e}")
+    
+    # Try to remove the root directory if empty
+    try:
+        if os.path.exists(directory) and not os.listdir(directory):
+            if dry_run:
+                print(f"  [DRY RUN] Would remove empty directory: {directory}")
+            else:
+                os.rmdir(directory)
+                print(f"  Removed empty directory: {directory}")
+    except Exception:
+        pass
+
+
 def run_migration(dry_run: bool = False, force: bool = False):
     """
-    Run the migration for all report directories.
+    Run the migration for all directories.
     
     Args:
         dry_run: If True, only print what would happen
         force: If True, overwrite existing files
     """
-    print("=" * 60)
-    print("Report Migration to Dated Subdirectories (YYYY/MM)")
-    print("=" * 60)
+    print("=" * 70)
+    print("Migration: Old Directory Structure → New Reports Structure")
+    print("=" * 70)
+    print()
+    print("Old Structure:")
+    print("  Daily Report/  → reports/DailyReport/YYYY/MM/")
+    print("  Ad Hoc/        → reports/AdHoc/YYYY/MM/")
+    print("  History files  → reports/")
+    print()
     
     if dry_run:
-        print("\n*** DRY RUN MODE - No files will be moved ***\n")
+        print("*** DRY RUN MODE - No files will be moved ***\n")
     
-    # Define directories to migrate
-    directories = ['Daily Report', 'Ad Hoc']
+    # Create new reports directory
+    if not dry_run:
+        os.makedirs(NEW_REPORTS_DIR, exist_ok=True)
+        os.makedirs(NEW_DAILY_REPORT_DIR, exist_ok=True)
+        os.makedirs(NEW_AD_HOC_DIR, exist_ok=True)
     
     total_found = 0
     total_migrated = 0
     total_skipped = 0
     total_errors = 0
     
-    for base_dir in directories:
-        print(f"\n--- Processing: {base_dir} ---")
-        
-        if not os.path.exists(base_dir):
-            print(f"  Directory does not exist, skipping.")
-            continue
-        
-        migrations = find_files_to_migrate(base_dir)
-        
-        if not migrations:
-            print(f"  No files to migrate.")
-            continue
-        
-        print(f"  Found {len(migrations)} file(s) to migrate:")
+    # Migrate Daily Report files
+    print(f"--- Processing: {OLD_DAILY_REPORT_DIR} → {NEW_DAILY_REPORT_DIR} ---")
+    migrations = find_files_to_migrate(OLD_DAILY_REPORT_DIR, NEW_DAILY_REPORT_DIR)
+    if migrations:
+        print(f"  Found {len(migrations)} report file(s) to migrate:")
         total_found += len(migrations)
-        
         for source, target in migrations:
             result = migrate_file(source, target, dry_run, force)
             if result:
@@ -247,11 +290,52 @@ def run_migration(dry_run: bool = False, force: bool = False):
                 total_skipped += 1
             else:
                 total_errors += 1
+    else:
+        print("  No report files to migrate.")
+    
+    # Migrate Ad Hoc files
+    print(f"\n--- Processing: {OLD_AD_HOC_DIR} → {NEW_AD_HOC_DIR} ---")
+    migrations = find_files_to_migrate(OLD_AD_HOC_DIR, NEW_AD_HOC_DIR)
+    if migrations:
+        print(f"  Found {len(migrations)} report file(s) to migrate:")
+        total_found += len(migrations)
+        for source, target in migrations:
+            result = migrate_file(source, target, dry_run, force)
+            if result:
+                total_migrated += 1
+            elif os.path.exists(target):
+                total_skipped += 1
+            else:
+                total_errors += 1
+    else:
+        print("  No report files to migrate.")
+    
+    # Migrate history files
+    print(f"\n--- Processing: History Files → {NEW_REPORTS_DIR} ---")
+    migrations = find_history_files_to_migrate()
+    if migrations:
+        print(f"  Found {len(migrations)} history file(s) to migrate:")
+        total_found += len(migrations)
+        for source, target in migrations:
+            result = migrate_file(source, target, dry_run, force)
+            if result:
+                total_migrated += 1
+            elif os.path.exists(target):
+                total_skipped += 1
+            else:
+                total_errors += 1
+    else:
+        print("  No history files to migrate.")
+    
+    # Cleanup empty directories
+    print("\n--- Cleanup: Removing empty directories ---")
+    cleanup_empty_dirs(OLD_DAILY_REPORT_DIR, dry_run)
+    cleanup_empty_dirs(OLD_AD_HOC_DIR, dry_run)
     
     # Print summary
-    print("\n" + "=" * 60)
+    print("\n" + "=" * 70)
     print("MIGRATION SUMMARY")
-    print("=" * 60)
+    print("=" * 70)
     print(f"  Total files found:    {total_found}")
     print(f"  Successfully moved:   {total_migrated}")
     print(f"  Skipped (exists):     {total_skipped}")
@@ -260,7 +344,7 @@ def run_migration(dry_run: bool = False, force: bool = False):
     if dry_run:
         print("\n*** This was a dry run. Run without --dry-run to execute. ***")
     
-    print("=" * 60)
+    print("=" * 70)
     
     return total_errors == 0
 
@@ -268,7 +352,7 @@ def run_migration(dry_run: bool = False, force: bool = False):
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description='Migrate CSV reports to dated subdirectories (YYYY/MM)',
+        description='Migrate reports to new directory structure',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -281,11 +365,14 @@ Examples:
     # Force migration (overwrite existing files)
     python migration/migrate_reports_to_dated_dirs.py --force
 
-Notes:
-    - History files (parsed_movies_history.csv, etc.) are NOT migrated
-    - Files are moved, not copied
-    - Date is extracted from filename (YYYYMMDD pattern)
-    - If no date found, file modification time is used
+Migration Details:
+    1. Daily Report/*.csv → reports/DailyReport/YYYY/MM/*.csv
+    2. Daily Report/YYYY/MM/*.csv → reports/DailyReport/YYYY/MM/*.csv
+    3. Ad Hoc/*.csv → reports/AdHoc/YYYY/MM/*.csv
+    4. Ad Hoc/YYYY/MM/*.csv → reports/AdHoc/YYYY/MM/*.csv
+    5. Daily Report/parsed_movies_history.csv → reports/parsed_movies_history.csv
+    6. Daily Report/pikpak_bridge_history.csv → reports/pikpak_bridge_history.csv
+    7. Daily Report/proxy_bans.csv → reports/proxy_bans.csv
         """
     )
     
@@ -312,4 +399,3 @@ def main():
 
 if __name__ == '__main__':
     exit(main())
-

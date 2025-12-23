@@ -255,11 +255,15 @@ IGNORE_RELEASE_DATE_FILTER = False
 # FILE PATHS
 # =============================================================================
 
-# Output directories
-DAILY_REPORT_DIR = 'Daily Report'
-AD_HOC_DIR = 'Ad Hoc'
+# Reports root directory (contains history files and report subdirectories)
+REPORTS_DIR = 'reports'
 
-# History file
+# Output directories for CSV reports (inside REPORTS_DIR)
+# Reports are stored in REPORTS_DIR/DailyReport/YYYY/MM/ and REPORTS_DIR/AdHoc/YYYY/MM/
+DAILY_REPORT_DIR = 'reports/DailyReport'
+AD_HOC_DIR = 'reports/AdHoc'
+
+# History file (stored directly in REPORTS_DIR)
 PARSED_MOVIES_CSV = 'parsed_movies_history.csv'
 
 # =============================================================================
