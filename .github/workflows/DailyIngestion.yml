@@ -284,15 +284,26 @@ jobs:
         if: always()
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+          DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'Daily Report' }}
+          AD_HOC_DIR: ${{ vars.AD_HOC_DIR || 'Ad Hoc' }}
         run: |
-          # Create encrypted archive of reports
+          # Create encrypted archive of reports (including YYYY/MM subdirectories)
           mkdir -p encrypted_artifacts
           FOUND_FILES=0
-          if ls "Daily Report"/*.csv 1> /dev/null 2>&1 || ls "Ad Hoc"/*.csv 1> /dev/null 2>&1; then
-            tar -czf - "Daily Report"/*.csv "Ad Hoc"/*.csv 2>/dev/null | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
-              -out encrypted_artifacts/reports.tar.gz.enc \
+          # Find all CSV files in Daily Report and Ad Hoc directories (including subdirectories)
+          # Exclude history files that should stay at root level
+          if find "$DAILY_REPORT_DIR" -name "*.csv" ! -name "parsed_movies_history.csv" ! -name "pikpak_bridge_history.csv" ! -name "proxy_bans.csv" 2>/dev/null | grep -q .; then
+            find "$DAILY_REPORT_DIR" -name "*.csv" ! -name "parsed_movies_history.csv" ! -name "pikpak_bridge_history.csv" ! -name "proxy_bans.csv" -print0 2>/dev/null | tar -czf - --null -T - | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
+              -out encrypted_artifacts/reports_daily.tar.gz.enc \
               -pass pass:"$ARTIFACT_KEY"
-            echo "✓ Reports encrypted successfully"
+            echo "✓ Daily Report files encrypted successfully"
+            FOUND_FILES=1
+          fi
+          if find "$AD_HOC_DIR" -name "*.csv" 2>/dev/null | grep -q .; then
+            find "$AD_HOC_DIR" -name "*.csv" -print0 2>/dev/null | tar -czf - --null -T - | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
+              -out encrypted_artifacts/reports_adhoc.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY"
+            echo "✓ Ad Hoc files encrypted successfully"
             FOUND_FILES=1
           fi
           if [ "$FOUND_FILES" -eq 0 ]; then
@@ -304,7 +315,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pipeline-reports-encrypted
-          path: encrypted_artifacts/reports.tar.gz.enc
+          path: |
+            encrypted_artifacts/reports_daily.tar.gz.enc
+            encrypted_artifacts/reports_adhoc.tar.gz.enc
           retention-days: 7
           if-no-files-found: ignore
 
@@ -381,13 +394,23 @@ jobs:
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
-          if [ -f encrypted_artifacts/reports.tar.gz.enc ]; then
+          FOUND_REPORTS=0
+          if [ -f encrypted_artifacts/reports_daily.tar.gz.enc ]; then
             openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
-              -in encrypted_artifacts/reports.tar.gz.enc \
+              -in encrypted_artifacts/reports_daily.tar.gz.enc \
               -pass pass:"$ARTIFACT_KEY" | tar -xzf -
-            rm -rf encrypted_artifacts
-            echo "✓ Reports decrypted successfully"
-          else
+            echo "✓ Daily Report files decrypted successfully"
+            FOUND_REPORTS=1
+          fi
+          if [ -f encrypted_artifacts/reports_adhoc.tar.gz.enc ]; then
+            openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+              -in encrypted_artifacts/reports_adhoc.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY" | tar -xzf -
+            echo "✓ Ad Hoc files decrypted successfully"
+            FOUND_REPORTS=1
+          fi
+          rm -rf encrypted_artifacts
+          if [ "$FOUND_REPORTS" -eq 0 ]; then
             echo "No encrypted reports found"
           fi
 
@@ -453,13 +476,23 @@ jobs:
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
-          if [ -f encrypted_artifacts/reports.tar.gz.enc ]; then
+          FOUND_REPORTS=0
+          if [ -f encrypted_artifacts/reports_daily.tar.gz.enc ]; then
             openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
-              -in encrypted_artifacts/reports.tar.gz.enc \
+              -in encrypted_artifacts/reports_daily.tar.gz.enc \
               -pass pass:"$ARTIFACT_KEY" | tar -xzf -
-            rm -rf encrypted_artifacts
-            echo "✓ Reports decrypted successfully"
-          else
+            echo "✓ Daily Report files decrypted successfully"
+            FOUND_REPORTS=1
+          fi
+          if [ -f encrypted_artifacts/reports_adhoc.tar.gz.enc ]; then
+            openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+              -in encrypted_artifacts/reports_adhoc.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY" | tar -xzf -
+            echo "✓ Ad Hoc files decrypted successfully"
+            FOUND_REPORTS=1
+          fi
+          rm -rf encrypted_artifacts
+          if [ "$FOUND_REPORTS" -eq 0 ]; then
             echo "No encrypted reports found"
           fi
 
@@ -467,6 +500,8 @@ jobs:
         env:
           SPIDER_SUCCESS: ${{ needs.run-pipeline.outputs.spider_success }}
           UPLOADER_SUCCESS: ${{ needs.run-pipeline.outputs.uploader_success }}
+          DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'Daily Report' }}
+          AD_HOC_DIR: ${{ vars.AD_HOC_DIR || 'Ad Hoc' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -491,22 +526,25 @@ jobs:
             fi
           fi
           
-          # Add CSV files (exclude parsed_movies_history.csv if spider or uploader failed/cancelled)
+          # Add CSV files (including YYYY/MM subdirectories)
+          # History files stay at root level, reports go in dated subdirectories
           if [[ "$SPIDER_SUCCESS" == "true" && "$UPLOADER_SUCCESS" == "true" ]]; then
-            echo "Spider and Uploader both succeeded - committing all CSV files including parsed_movies_history.csv"
-            git add 'Daily Report'/*.csv || true
+            echo "Spider and Uploader both succeeded - committing all CSV files including history files"
+            # Add history files at root level
+            git add "$DAILY_REPORT_DIR/parsed_movies_history.csv" || true
+            git add "$DAILY_REPORT_DIR/pikpak_bridge_history.csv" || true
+            git add "$DAILY_REPORT_DIR/proxy_bans.csv" || true
+            # Add all CSV files in dated subdirectories
+            find "$DAILY_REPORT_DIR" -path "$DAILY_REPORT_DIR/*/*/*.csv" -exec git add {} \; 2>/dev/null || true
           else
-            echo "Spider or Uploader failed/cancelled - skipping parsed_movies_history.csv commit"
+            echo "Spider or Uploader failed/cancelled - skipping history files commit"
             echo "  Spider success: $SPIDER_SUCCESS"
             echo "  Uploader success: $UPLOADER_SUCCESS"
-            # Add all CSVs except parsed_movies_history.csv
-            for f in "Daily Report"/*.csv; do
-              if [[ "$(basename "$f")" != "parsed_movies_history.csv" ]]; then
-                git add "$f" 2>/dev/null || true
-              fi
-            done
+            # Only add CSV files in dated subdirectories (not history files)
+            find "$DAILY_REPORT_DIR" -path "$DAILY_REPORT_DIR/*/*/*.csv" -exec git add {} \; 2>/dev/null || true
           fi
-          git add 'Ad Hoc'/*.csv || true
+          # Add all Ad Hoc CSV files in dated subdirectories
+          find "$AD_HOC_DIR" -path "$AD_HOC_DIR/*/*/*.csv" -exec git add {} \; 2>/dev/null || true
           
           # Check if there are any changes to commit
           if git diff --cached --quiet; then
