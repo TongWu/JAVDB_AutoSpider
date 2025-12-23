@@ -20,6 +20,8 @@ jobs:
       contents: read
     outputs:
       branch: ${{ steps.branch_check.outputs.branch }}
+    env:
+      TZ: Asia/Singapore
     
     steps:
       - name: Checkout repository
@@ -152,6 +154,8 @@ jobs:
     permissions:
       contents: read
     needs: setup
+    env:
+      TZ: Asia/Singapore
     
     steps:
       - name: Checkout repository
@@ -197,6 +201,8 @@ jobs:
       spider_success: ${{ steps.spider.outcome == 'success' }}
       uploader_success: ${{ steps.uploader.outcome == 'success' }}
       pikpak_success: ${{ steps.pikpak.outcome == 'success' }}
+    env:
+      TZ: Asia/Singapore
     
     steps:
       - name: Checkout repository
@@ -341,6 +347,8 @@ jobs:
       contents: read
     needs: [setup, health-check, run-pipeline]
     if: ${{ !cancelled() }}
+    env:
+      TZ: Asia/Singapore
     
     steps:
       - name: Checkout repository
@@ -467,6 +475,8 @@ jobs:
     if: ${{ !cancelled() }}
     permissions:
       contents: write
+    env:
+      TZ: Asia/Singapore
     
     steps:
       - name: Checkout repository
