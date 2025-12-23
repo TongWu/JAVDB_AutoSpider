@@ -93,8 +93,9 @@ jobs:
           VAR_PIPELINE_LOG_FILE: ${{ vars.PIPELINE_LOG_FILE || 'logs/pipeline.log' }}
           VAR_EMAIL_NOTIFICATION_LOG_FILE: ${{ vars.EMAIL_NOTIFICATION_LOG_FILE || 'logs/email_notification.log' }}
           VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER || 'False' }}
-          VAR_DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'Daily Report' }}
-          VAR_AD_HOC_DIR: ${{ vars.AD_HOC_DIR }}
+          VAR_REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+          VAR_DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'reports/DailyReport' }}
+          VAR_AD_HOC_DIR: ${{ vars.AD_HOC_DIR || 'reports/AdHoc' }}
           VAR_PARSED_MOVIES_CSV: ${{ vars.PARSED_MOVIES_CSV }}
           VAR_PIKPAK_EMAIL: ${{ secrets.PIKPAK_EMAIL }}
           VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE || 'logs/pikpak_bridge.log' }}
@@ -284,21 +285,29 @@ jobs:
         if: always()
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
-          DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'Daily Report' }}
-          AD_HOC_DIR: ${{ vars.AD_HOC_DIR || 'Ad Hoc' }}
+          REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+          DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'reports/DailyReport' }}
+          AD_HOC_DIR: ${{ vars.AD_HOC_DIR || 'reports/AdHoc' }}
         run: |
           # Create encrypted archive of reports (including YYYY/MM subdirectories)
+          # Directory structure:
+          #   reports/
+          #   ├── DailyReport/YYYY/MM/*.csv  (report files)
+          #   ├── AdHoc/YYYY/MM/*.csv        (report files)
+          #   ├── parsed_movies_history.csv  (history file at root)
+          #   ├── pikpak_bridge_history.csv  (history file at root)
+          #   └── proxy_bans.csv             (history file at root)
           mkdir -p encrypted_artifacts
           FOUND_FILES=0
-          # Find all CSV files in Daily Report and Ad Hoc directories (including subdirectories)
-          # Exclude history files that should stay at root level
-          if find "$DAILY_REPORT_DIR" -name "*.csv" ! -name "parsed_movies_history.csv" ! -name "pikpak_bridge_history.csv" ! -name "proxy_bans.csv" 2>/dev/null | grep -q .; then
-            find "$DAILY_REPORT_DIR" -name "*.csv" ! -name "parsed_movies_history.csv" ! -name "pikpak_bridge_history.csv" ! -name "proxy_bans.csv" -print0 2>/dev/null | tar -czf - --null -T - | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
+          # Find all CSV files in DailyReport subdirectory (report files only)
+          if find "$DAILY_REPORT_DIR" -name "*.csv" 2>/dev/null | grep -q .; then
+            find "$DAILY_REPORT_DIR" -name "*.csv" -print0 2>/dev/null | tar -czf - --null -T - | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
               -out encrypted_artifacts/reports_daily.tar.gz.enc \
               -pass pass:"$ARTIFACT_KEY"
             echo "✓ Daily Report files encrypted successfully"
             FOUND_FILES=1
           fi
+          # Find all CSV files in AdHoc subdirectory (report files only)
           if find "$AD_HOC_DIR" -name "*.csv" 2>/dev/null | grep -q .; then
             find "$AD_HOC_DIR" -name "*.csv" -print0 2>/dev/null | tar -czf - --null -T - | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
               -out encrypted_artifacts/reports_adhoc.tar.gz.enc \
@@ -500,8 +509,9 @@ jobs:
         env:
           SPIDER_SUCCESS: ${{ needs.run-pipeline.outputs.spider_success }}
           UPLOADER_SUCCESS: ${{ needs.run-pipeline.outputs.uploader_success }}
-          DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'Daily Report' }}
-          AD_HOC_DIR: ${{ vars.AD_HOC_DIR || 'Ad Hoc' }}
+          REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+          DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'reports/DailyReport' }}
+          AD_HOC_DIR: ${{ vars.AD_HOC_DIR || 'reports/AdHoc' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -526,26 +536,30 @@ jobs:
             fi
           fi
           
-          # Add CSV files (including YYYY/MM subdirectories and legacy root-level files)
-          # History files stay at root level, reports go in dated subdirectories
+          # Add CSV files (YYYY/MM subdirectories for reports, root level for history)
+          # Directory structure:
+          #   reports/
+          #   ├── DailyReport/YYYY/MM/*.csv  (report files)
+          #   ├── AdHoc/YYYY/MM/*.csv        (report files)
+          #   ├── parsed_movies_history.csv  (history file at root)
+          #   ├── pikpak_bridge_history.csv  (history file at root)
+          #   └── proxy_bans.csv             (history file at root)
           if [[ "$SPIDER_SUCCESS" == "true" && "$UPLOADER_SUCCESS" == "true" ]]; then
             echo "Spider and Uploader both succeeded - committing all CSV files including history files"
-            # Add history files at root level
-            git add "$DAILY_REPORT_DIR/parsed_movies_history.csv" || true
-            git add "$DAILY_REPORT_DIR/pikpak_bridge_history.csv" || true
-            git add "$DAILY_REPORT_DIR/proxy_bans.csv" || true
-            # Add all CSV files (dated subdirectories and legacy root-level files)
-            # This matches the same files that were encrypted in the artifact
-            find "$DAILY_REPORT_DIR" -name "*.csv" ! -name "parsed_movies_history.csv" ! -name "pikpak_bridge_history.csv" ! -name "proxy_bans.csv" -exec git add {} \; 2>/dev/null || true
+            # Add history files at reports root level
+            git add "$REPORTS_DIR/parsed_movies_history.csv" || true
+            git add "$REPORTS_DIR/pikpak_bridge_history.csv" || true
+            git add "$REPORTS_DIR/proxy_bans.csv" || true
+            # Add all report CSV files in DailyReport subdirectory
+            find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
           else
             echo "Spider or Uploader failed/cancelled - skipping history files commit"
             echo "  Spider success: $SPIDER_SUCCESS"
             echo "  Uploader success: $UPLOADER_SUCCESS"
             # Only add report CSV files (not history files)
-            # This matches the same files that were encrypted in the artifact
-            find "$DAILY_REPORT_DIR" -name "*.csv" ! -name "parsed_movies_history.csv" ! -name "pikpak_bridge_history.csv" ! -name "proxy_bans.csv" -exec git add {} \; 2>/dev/null || true
+            find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
           fi
-          # Add all Ad Hoc CSV files (dated subdirectories and legacy root-level files)
+          # Add all Ad Hoc CSV files
           find "$AD_HOC_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
           
           # Check if there are any changes to commit

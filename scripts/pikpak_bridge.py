@@ -13,7 +13,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
-from config import QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD, PIKPAK_EMAIL, PIKPAK_PASSWORD, PIKPAK_LOG_FILE, DAILY_REPORT_DIR, TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC
+from config import QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD, PIKPAK_EMAIL, PIKPAK_PASSWORD, PIKPAK_LOG_FILE, REPORTS_DIR, TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC
 
 # Import GIT configuration with fallback
 try:
@@ -71,7 +71,7 @@ global_proxy_helper = None
 
 # Categories to process (from config)
 CATEGORIES = [TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC]
-PIKPAK_HISTORY_FILE = os.path.join(DAILY_REPORT_DIR, "pikpak_bridge_history.csv")
+PIKPAK_HISTORY_FILE = os.path.join(REPORTS_DIR, "pikpak_bridge_history.csv")
 
 
 # --------------------------
@@ -509,7 +509,7 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline
         
         files_to_commit = [
             'logs/',
-            DAILY_REPORT_DIR  # Contains pikpak_bridge_history.csv
+            REPORTS_DIR  # Contains pikpak_bridge_history.csv
         ]
         commit_message = f"Auto-commit: PikPak bridge results {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         
