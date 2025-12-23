@@ -49,6 +49,7 @@ except ImportError:
 
 from utils.logging_config import setup_logging, get_logger
 from utils.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
+from utils.masking import mask_ip_address, mask_username, mask_email, mask_full
 
 # --------------------------
 # Setup Logging
@@ -168,7 +169,9 @@ class QBittorrentClient:
         if resp.status_code != 200 or resp.text != 'Ok.':
             logger.error(f"qBittorrent login failed: {resp.text}")
             raise Exception(f"Failed to login qBittorrent: {resp.text}")
-        logger.info("Logged into qBittorrent successfully.")
+        # Use mask_ip_address to extract and mask the host from base_url
+        masked_url = mask_ip_address(self.base_url)
+        logger.info(f"Logged into qBittorrent at {masked_url} as {mask_username(username)} successfully.")
 
     def get_torrents(self, category):
         resp = self.session.get(f"{self.base_url}/api/v2/torrents/info",
@@ -222,7 +225,7 @@ async def process_pikpak_batch(magnets, email, password, delay_between_requests=
     success_magnets = []
     failed_magnets = []
     
-    logger.info(f"Starting batch upload of {len(magnets)} torrents to PikPak...")
+    logger.info(f"Starting batch upload of {len(magnets)} torrents to PikPak as {mask_email(email)}...")
     
     for i, magnet in enumerate(magnets):
         try:
