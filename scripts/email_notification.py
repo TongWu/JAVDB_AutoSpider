@@ -275,11 +275,20 @@ def analyze_pipeline_log(log_path):
 
 
 def extract_spider_statistics(log_path):
-    """Extract key statistics from spider log for email report."""
+    """
+    Extract key statistics from spider log for email report.
+    
+    Statistics terminology:
+    - "movies" = unique movie pages discovered
+    - "processed" = movies successfully parsed and written to CSV
+    - "skipped" = movies skipped (either in this session or from history)
+    
+    Note: Each movie can have multiple torrent links (subtitle, no_subtitle, etc.)
+    """
     stats = {
-        'phase1': {'found': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0},
-        'phase2': {'found': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0},
-        'overall': {'total_found': 0, 'successfully_processed': 0, 'skipped_session': 0, 'skipped_history': 0}
+        'phase1': {'discovered': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0},
+        'phase2': {'discovered': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0},
+        'overall': {'total_discovered': 0, 'successfully_processed': 0, 'skipped_session': 0, 'skipped_history': 0}
     }
     
     if not os.path.exists(log_path):
@@ -289,48 +298,50 @@ def extract_spider_statistics(log_path):
         with open(log_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # Extract phase 1 statistics
-        # Match both new format "Found X entries for phase 1, Y for phase 2" 
-        # and old format "Found X entries for phase 1"
-        phase1_found_pattern = r'\[Page\s+\d+\] Found\s+(\d+) entries for phase 1'
-        phase1_matches = re.findall(phase1_found_pattern, content)
-        stats['phase1']['found'] = sum(int(m) for m in phase1_matches)
+        # Extract phase 1 statistics from new format:
+        # "Phase 1 completed: X movies discovered, Y processed, Z skipped (session), W skipped (history)"
+        phase1_new = re.search(
+            r'Phase 1 completed: (\d+) movies discovered, (\d+) processed, (\d+) skipped \(session\), (\d+) skipped \(history\)',
+            content
+        )
+        # Fallback to old format: "Phase 1 completed: X found, Y skipped (history), Z written to CSV"
+        phase1_old = re.search(r'Phase 1 completed: (\d+) found, (\d+) skipped.*?, (\d+) written to CSV', content)
         
-        # Match new format: "Phase 1 completed: X found, Y skipped (history), Z written to CSV"
-        # or old format: "Phase 1 completed: X entries processed"
-        phase1_completed_new = re.search(r'Phase 1 completed: (\d+) found, (\d+) skipped.*?, (\d+) written to CSV', content)
-        phase1_completed_old = re.search(r'Phase 1 completed: (\d+) entries processed', content)
-        if phase1_completed_new:
-            stats['phase1']['processed'] = int(phase1_completed_new.group(3))  # written to CSV
-        elif phase1_completed_old:
-            stats['phase1']['processed'] = int(phase1_completed_old.group(1))
+        if phase1_new:
+            stats['phase1']['discovered'] = int(phase1_new.group(1))
+            stats['phase1']['processed'] = int(phase1_new.group(2))
+            stats['phase1']['skipped_session'] = int(phase1_new.group(3))
+            stats['phase1']['skipped_history'] = int(phase1_new.group(4))
+        elif phase1_old:
+            stats['phase1']['discovered'] = int(phase1_old.group(1))
+            stats['phase1']['processed'] = int(phase1_old.group(3))
+            stats['phase1']['skipped_history'] = int(phase1_old.group(2))
         
-        # Extract phase 2 statistics
-        # Match both new format "X for phase 2" and old format "Found X entries for phase 2"
-        # New format: ", Y for phase 2" (combined with phase 1 on same line)
-        # Old format: "[Page X] Found Y entries for phase 2" (separate line)
-        # Accumulate matches from both patterns to handle mixed logs
-        phase2_new_pattern = r',\s+(\d+) for phase 2'
-        phase2_old_pattern = r'\[Page\s+\d+\] Found\s+(\d+) entries for phase 2'
-        phase2_new_matches = re.findall(phase2_new_pattern, content)
-        phase2_old_matches = re.findall(phase2_old_pattern, content)
-        # Combine matches from both patterns
-        all_phase2_matches = phase2_new_matches + phase2_old_matches
-        stats['phase2']['found'] = sum(int(m) for m in all_phase2_matches)
+        # Extract phase 2 statistics from new format
+        phase2_new = re.search(
+            r'Phase 2 completed: (\d+) movies discovered, (\d+) processed, (\d+) skipped \(session\), (\d+) skipped \(history\)',
+            content
+        )
+        phase2_old = re.search(r'Phase 2 completed: (\d+) found, (\d+) skipped.*?, (\d+) written to CSV', content)
         
-        # Match new format: "Phase 2 completed: X found, Y skipped (history), Z written to CSV"
-        # or old format: "Phase 2 completed: X entries processed"
-        phase2_completed_new = re.search(r'Phase 2 completed: (\d+) found, (\d+) skipped.*?, (\d+) written to CSV', content)
-        phase2_completed_old = re.search(r'Phase 2 completed: (\d+) entries processed', content)
-        if phase2_completed_new:
-            stats['phase2']['processed'] = int(phase2_completed_new.group(3))  # written to CSV
-        elif phase2_completed_old:
-            stats['phase2']['processed'] = int(phase2_completed_old.group(1))
+        if phase2_new:
+            stats['phase2']['discovered'] = int(phase2_new.group(1))
+            stats['phase2']['processed'] = int(phase2_new.group(2))
+            stats['phase2']['skipped_session'] = int(phase2_new.group(3))
+            stats['phase2']['skipped_history'] = int(phase2_new.group(4))
+        elif phase2_old:
+            stats['phase2']['discovered'] = int(phase2_old.group(1))
+            stats['phase2']['processed'] = int(phase2_old.group(3))
+            stats['phase2']['skipped_history'] = int(phase2_old.group(2))
         
-        # Extract overall statistics
-        total_found = re.search(r'Total entries found: (\d+)', content)
-        if total_found:
-            stats['overall']['total_found'] = int(total_found.group(1))
+        # Extract overall statistics from new format:
+        # "Total movies discovered: X"
+        total_discovered_new = re.search(r'Total movies discovered: (\d+)', content)
+        total_discovered_old = re.search(r'Total entries found: (\d+)', content)
+        if total_discovered_new:
+            stats['overall']['total_discovered'] = int(total_discovered_new.group(1))
+        elif total_discovered_old:
+            stats['overall']['total_discovered'] = int(total_discovered_old.group(1))
         
         successfully_processed = re.search(r'Successfully processed: (\d+)', content)
         if successfully_processed:
@@ -344,18 +355,13 @@ def extract_spider_statistics(log_path):
         if skipped_history:
             stats['overall']['skipped_history'] = int(skipped_history.group(1))
         
-        # Distribute skipped counts between phases
-        total_skipped_session = stats['overall']['skipped_session']
-        total_skipped_history = stats['overall']['skipped_history']
-        total_found = stats['phase1']['found'] + stats['phase2']['found']
-        
-        if total_found > 0:
-            phase1_ratio = stats['phase1']['found'] / total_found
-            stats['phase1']['skipped_session'] = int(total_skipped_session * phase1_ratio)
-            stats['phase1']['skipped_history'] = int(total_skipped_history * phase1_ratio)
-            
-            stats['phase2']['skipped_session'] = total_skipped_session - stats['phase1']['skipped_session']
-            stats['phase2']['skipped_history'] = total_skipped_history - stats['phase1']['skipped_history']
+        # If overall total_discovered wasn't found, calculate from phase totals
+        if stats['overall']['total_discovered'] == 0:
+            stats['overall']['total_discovered'] = (
+                stats['overall']['successfully_processed'] + 
+                stats['overall']['skipped_session'] + 
+                stats['overall']['skipped_history']
+            )
         
         return stats
         
@@ -496,26 +502,32 @@ JavDB Pipeline Report
 ═══════════════════════════════""")
     
     # Spider section
+    # Note: Statistics are for MOVIES (unique pages), not individual torrent links
     if show_spider:
+        # Calculate totals for verification
+        p1_total = spider_stats['phase1']['processed'] + spider_stats['phase1']['skipped_session'] + spider_stats['phase1']['skipped_history']
+        p2_total = spider_stats['phase2']['processed'] + spider_stats['phase2']['skipped_session'] + spider_stats['phase2']['skipped_history']
+        overall_total = spider_stats['overall']['successfully_processed'] + spider_stats['overall']['skipped_session'] + spider_stats['overall']['skipped_history']
+        
         sections.append(f"""
-📊 SPIDER STATISTICS
+📊 SPIDER STATISTICS (Movies)
 ───────────────────────────────
 
 Phase 1 (Subtitle + Today/Yesterday)
-  Found: {spider_stats['phase1']['found']}
-  Processed: {spider_stats['phase1']['processed']}
+  Discovered: {spider_stats['phase1']['discovered'] or p1_total}
+  Processed:  {spider_stats['phase1']['processed']}
   Skipped (Session): {spider_stats['phase1']['skipped_session']}
   Skipped (History): {spider_stats['phase1']['skipped_history']}
 
 Phase 2 (Rate>4.0, Comments>85)
-  Found: {spider_stats['phase2']['found']}
-  Processed: {spider_stats['phase2']['processed']}
+  Discovered: {spider_stats['phase2']['discovered'] or p2_total}
+  Processed:  {spider_stats['phase2']['processed']}
   Skipped (Session): {spider_stats['phase2']['skipped_session']}
   Skipped (History): {spider_stats['phase2']['skipped_history']}
 
 Overall Summary
-  Total Found: {spider_stats['overall']['total_found']}
-  Processed: {spider_stats['overall']['successfully_processed']}
+  Total Discovered: {spider_stats['overall']['total_discovered'] or overall_total}
+  Processed:  {spider_stats['overall']['successfully_processed']}
   Skipped (Session): {spider_stats['overall']['skipped_session']}
   Skipped (History): {spider_stats['overall']['skipped_history']}""")
     
@@ -711,9 +723,9 @@ def main():
     
     # Prepare default stats for missing components
     default_spider_stats = {
-        'phase1': {'found': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0},
-        'phase2': {'found': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0},
-        'overall': {'total_found': 0, 'successfully_processed': 0, 'skipped_session': 0, 'skipped_history': 0}
+        'phase1': {'discovered': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0},
+        'phase2': {'discovered': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0},
+        'overall': {'total_discovered': 0, 'successfully_processed': 0, 'skipped_session': 0, 'skipped_history': 0}
     }
     default_uploader_stats = {
         'total': 0, 'success': 0, 'failed': 0, 'hacked_sub': 0,
