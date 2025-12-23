@@ -56,7 +56,7 @@ jobs:
           VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
           VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
           VAR_QB_PORT: ${{ vars.QB_PORT }}
-          VAR_QB_USERNAME: ${{ vars.QB_USERNAME }}
+          VAR_QB_USERNAME: ${{ secrets.QB_USERNAME }}
           VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
           VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
           VAR_TORRENT_SAVE_PATH: ${{ vars.TORRENT_SAVE_PATH }}
@@ -64,11 +64,11 @@ jobs:
           VAR_SKIP_CHECKING: ${{ vars.SKIP_CHECKING || 'False' }}
           VAR_REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT || '30' }}
           VAR_DELAY_BETWEEN_ADDITIONS: ${{ vars.DELAY_BETWEEN_ADDITIONS }}
-          VAR_SMTP_SERVER: ${{ vars.SMTP_SERVER }}
+          VAR_SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
           VAR_SMTP_PORT: ${{ vars.SMTP_PORT }}
-          VAR_SMTP_USER: ${{ vars.SMTP_USER }}
-          VAR_EMAIL_FROM: ${{ vars.EMAIL_FROM }}
-          VAR_EMAIL_TO: ${{ vars.EMAIL_TO }}
+          VAR_SMTP_USER: ${{ secrets.SMTP_USER }}
+          VAR_EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          VAR_EMAIL_TO: ${{ secrets.EMAIL_TO }}
           VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
           VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS || '691200' }}
           VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES }}
@@ -80,7 +80,7 @@ jobs:
           VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}
           VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
           VAR_BASE_URL: ${{ vars.BASE_URL || 'https://javdb.com' }}
-          VAR_JAVDB_USERNAME: ${{ vars.JAVDB_USERNAME }}
+          VAR_JAVDB_USERNAME: ${{ secrets.JAVDB_USERNAME }}
           VAR_DETAIL_PAGE_SLEEP: ${{ vars.DETAIL_PAGE_SLEEP }}
           VAR_PAGE_SLEEP: ${{ vars.PAGE_SLEEP }}
           VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
@@ -96,7 +96,7 @@ jobs:
           VAR_DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'Daily Report' }}
           VAR_AD_HOC_DIR: ${{ vars.AD_HOC_DIR }}
           VAR_PARSED_MOVIES_CSV: ${{ vars.PARSED_MOVIES_CSV }}
-          VAR_PIKPAK_EMAIL: ${{ vars.PIKPAK_EMAIL }}
+          VAR_PIKPAK_EMAIL: ${{ secrets.PIKPAK_EMAIL }}
           VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE || 'logs/pikpak_bridge.log' }}
           VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
         run: python3 utils/config_generator.py --github-actions

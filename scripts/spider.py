@@ -83,6 +83,9 @@ from utils.logging_config import setup_logging, get_logger
 setup_logging(SPIDER_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
+# Import masking utilities
+from utils.masking import mask_ip_address, mask_username, mask_full, mask_proxy_url
+
 # Import proxy pool
 from utils.proxy_pool import ProxyPool, create_proxy_pool_from_config
 
@@ -902,14 +905,15 @@ def main():
                 if proxy_url:
                     proxy_ip = extract_ip_from_proxy_url(proxy_url)
                     service_url = get_cf_bypass_service_url(proxy_ip)
-                    logger.info(f"CF Bypass URL: {service_url}/html?url=<target>")
+                    masked_service_url = f"http://{mask_ip_address(proxy_ip)}:{CF_BYPASS_SERVICE_PORT}"
+                    logger.info(f"CF Bypass URL: {masked_service_url}/html?url=<target>")
                     logger.info("Requests go directly to proxy server's bypass service (no proxy forwarding)")
     elif use_cf_bypass:
         # Mode: --use-cf-bypass only
         logger.info("MODE: Local CF Bypass Service only (no proxy)")
         logger.info(f"CF Bypass service port: {CF_BYPASS_SERVICE_PORT}")
         service_url = get_cf_bypass_service_url()
-        logger.info(f"CF Bypass URL: {service_url}/html?url=<target>")
+        logger.info(f"CF Bypass URL: http://127.0.0.1:{CF_BYPASS_SERVICE_PORT}/html?url=<target>")
     elif use_proxy:
         # Mode: --use-proxy only
         logger.info("MODE: Proxy only (no CF bypass)")
