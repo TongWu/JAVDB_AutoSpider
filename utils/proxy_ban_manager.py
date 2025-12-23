@@ -60,7 +60,7 @@ class ProxyBanManager:
     BAN_DURATION_DAYS = 7  # JavDB bans IPs for 7 days
     COOLDOWN_DURATION_DAYS = 8  # 8 days cooldown (7 days ban + 1 day buffer)
     
-    def __init__(self, ban_log_file: str = 'Daily Report/proxy_bans.csv'):
+    def __init__(self, ban_log_file: str = 'reports/proxy_bans.csv'):
         self.ban_log_file = ban_log_file
         self.banned_proxies: Dict[str, ProxyBanRecord] = {}
         self.lock = Lock()
@@ -218,7 +218,7 @@ class ProxyBanManager:
 _global_ban_manager: Optional[ProxyBanManager] = None
 
 
-def get_ban_manager(ban_log_file: str = 'Daily Report/proxy_bans.csv') -> ProxyBanManager:
+def get_ban_manager(ban_log_file: str = 'reports/proxy_bans.csv') -> ProxyBanManager:
     """Get or create the global ban manager instance"""
     global _global_ban_manager
     
