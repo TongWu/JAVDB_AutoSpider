@@ -959,8 +959,8 @@ def main():
         else:
             logger.warning("PROXY ENABLED: But no proxy configured in config.py")
 
-    # Ensure Daily Report directory exists
-    ensure_daily_report_dir()
+    # Ensure reports root directory exists (for history files)
+    ensure_reports_dir()
 
     # Initialize history file path and data (history files are stored in REPORTS_DIR root)
     history_file = os.path.join(REPORTS_DIR, PARSED_MOVIES_CSV)
