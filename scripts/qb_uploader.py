@@ -18,7 +18,7 @@ try:
         QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD,
         TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC, TORRENT_SAVE_PATH, AUTO_START, SKIP_CHECKING,
         REQUEST_TIMEOUT, DELAY_BETWEEN_ADDITIONS,
-        UPLOADER_LOG_FILE, REPORTS_DIR, DAILY_REPORT_DIR, AD_HOC_DIR, LOG_LEVEL,
+        UPLOADER_LOG_FILE, DAILY_REPORT_DIR, AD_HOC_DIR, LOG_LEVEL,
         PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES,
         GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH
     )
@@ -572,16 +572,6 @@ def main():
     
     # Get existing torrents to check for duplicates
     existing_hashes = get_existing_torrents(session, use_proxy)
-    
-    # Import history manager functions for updating downloaded status
-    try:
-        from utils.history_manager import mark_torrent_as_downloaded
-        history_file = os.path.join(REPORTS_DIR, 'parsed_movies_history.csv')
-        logger.info("History manager imported, will update downloaded status")
-    except ImportError:
-        logger.warning("Could not import history manager, downloaded status will not be updated")
-        mark_torrent_as_downloaded = None
-        history_file = None
     
     # Add torrents to qBittorrent
     hacked_subtitle_count = 0

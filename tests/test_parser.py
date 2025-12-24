@@ -160,6 +160,35 @@ class TestParseIndex:
         assert abc_result['rate'] == '4.47'
         assert abc_result['comment_number'] == '595'
 
+    def test_parse_adhoc_mode_filters_no_magnet_entries(self, sample_index_html_with_magnet_tags):
+        """Test that adhoc mode filters out entries without magnet tags."""
+        results = parse_index(sample_index_html_with_magnet_tags, page_num=1, phase=1, is_adhoc_mode=True)
+        
+        # Phase 1 should only find entries WITH subtitle tag AND magnet tag
+        # ABC-123 has 含中字磁鏈 (subtitle magnet tag)
+        # DEF-456 has 含磁鏈 (regular magnet tag, no subtitle - goes to phase 2)
+        # GHI-789 has NO magnet tag (should be filtered out completely)
+        # JKL-012 has empty tags (should be filtered out completely)
+        hrefs = [r['href'] for r in results]
+        assert '/v/ABC-123' in hrefs  # Has subtitle magnet tag
+        assert '/v/DEF-456' not in hrefs  # No subtitle, goes to phase 2
+        assert '/v/GHI-789' not in hrefs  # No magnet tag, filtered out
+        assert '/v/JKL-012' not in hrefs  # Empty tags, filtered out
+
+    def test_parse_adhoc_mode_magnet_filter_phase2(self, sample_index_html_with_magnet_tags):
+        """Test that phase 2 in adhoc mode also filters by magnet tags."""
+        results = parse_index(sample_index_html_with_magnet_tags, page_num=1, phase=2, is_adhoc_mode=True)
+        
+        # Phase 2 should find entries WITH magnet tag but WITHOUT subtitle tag
+        # DEF-456 has 含磁鏈 (regular magnet tag)
+        # ABC-123 has subtitle - processed in phase 1
+        # GHI-789 and JKL-012 have no magnet tags - filtered out
+        hrefs = [r['href'] for r in results]
+        assert '/v/DEF-456' in hrefs  # Has magnet tag, no subtitle
+        assert '/v/ABC-123' not in hrefs  # Has subtitle, processed in phase 1
+        assert '/v/GHI-789' not in hrefs  # No magnet tag, filtered out
+        assert '/v/JKL-012' not in hrefs  # Empty tags, filtered out
+
 
 class TestParseDetail:
     """Test cases for parse_detail function."""

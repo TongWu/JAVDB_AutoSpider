@@ -7,6 +7,7 @@ This module provides a unified HTTP request handler that supports:
 - CloudFlare bypass service integration
 - Age verification bypass
 - Retry mechanisms with configurable fallback strategies
+- curl_cffi integration for better TLS fingerprint (bypasses Cloudflare detection)
 
 Usage:
     from utils.request_handler import RequestHandler
@@ -28,6 +29,17 @@ logger = logging.getLogger(__name__)
 # Import masking utilities
 from utils.masking import mask_ip_address, mask_proxy_url, mask_full
 
+# Try to import curl_cffi for better TLS fingerprint
+# curl_cffi mimics real browser TLS fingerprints, bypassing Cloudflare detection
+try:
+    from curl_cffi import requests as curl_requests
+    CURL_CFFI_AVAILABLE = True
+    logger.debug("curl_cffi is available - will use browser-like TLS fingerprint")
+except ImportError:
+    CURL_CFFI_AVAILABLE = False
+    curl_requests = None
+    logger.debug("curl_cffi not available - using standard requests library")
+
 
 @dataclass
 class RequestConfig:
@@ -43,6 +55,9 @@ class RequestConfig:
     proxy_https: Optional[str] = None
     proxy_modules: list = None
     proxy_mode: str = 'single'
+    # curl_cffi settings for better TLS fingerprint
+    use_curl_cffi: bool = True  # Use curl_cffi if available (recommended)
+    curl_cffi_impersonate: str = 'chrome131'  # Browser to impersonate
     
     def __post_init__(self):
         if self.proxy_modules is None:
@@ -99,6 +114,22 @@ class RequestHandler:
         # Counter for consecutive CF bypass failures (small responses)
         self.cf_bypass_failure_count: int = 0
         self.cf_bypass_force_refresh: bool = False
+        
+        # Initialize curl_cffi session if available and enabled
+        self.curl_cffi_session = None
+        self.use_curl_cffi = False
+        if CURL_CFFI_AVAILABLE and self.config.use_curl_cffi:
+            try:
+                self.curl_cffi_session = curl_requests.Session(
+                    impersonate=self.config.curl_cffi_impersonate
+                )
+                self.use_curl_cffi = True
+                logger.info(f"curl_cffi initialized with impersonate='{self.config.curl_cffi_impersonate}' (better TLS fingerprint)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize curl_cffi session: {e}")
+                self.use_curl_cffi = False
+        elif not CURL_CFFI_AVAILABLE and self.config.use_curl_cffi:
+            logger.info("curl_cffi not installed - using standard requests (install with: pip install curl_cffi)")
         
     def should_use_proxy_for_module(self, module_name: str, use_proxy_flag: bool) -> bool:
         """
@@ -218,7 +249,7 @@ class RequestHandler:
     
     def _do_request(self, target_url: str, req_headers: Dict, req_proxies: Optional[Dict], 
                     timeout: int, context_msg: str, session: Optional[requests.Session] = None) -> Tuple[Optional[str], Optional[Exception]]:
-        """Execute a single HTTP request."""
+        """Execute a single HTTP request using standard requests library."""
         use_session = session or self.session
         
         try:
@@ -242,6 +273,58 @@ class RequestHandler:
             return response.text, None
         except requests.RequestException as e:
             logger.error(f"[{context_msg}] Error: {e}")
+            return None, e
+    
+    def _do_request_curl_cffi(self, target_url: str, req_headers: Dict, req_proxies: Optional[Dict], 
+                               timeout: int, context_msg: str) -> Tuple[Optional[str], Optional[Exception]]:
+        """
+        Execute a single HTTP request using curl_cffi for better TLS fingerprint.
+        
+        curl_cffi uses libcurl backend and can impersonate real browser TLS fingerprints,
+        which helps bypass Cloudflare's bot detection.
+        
+        Args:
+            target_url: URL to request
+            req_headers: Request headers
+            req_proxies: Proxy configuration dict
+            timeout: Request timeout in seconds
+            context_msg: Context message for logging
+        
+        Returns:
+            Tuple of (response_text, error)
+        """
+        if not self.use_curl_cffi or self.curl_cffi_session is None:
+            logger.debug(f"[{context_msg}] curl_cffi not available, falling back to standard requests")
+            return None, Exception("curl_cffi not available")
+        
+        try:
+            logger.debug(f"[{context_msg}] [curl_cffi] Requesting: {target_url}")
+            logger.debug(f"[{context_msg}] [curl_cffi] Impersonate: {self.config.curl_cffi_impersonate}")
+            if req_proxies:
+                masked_proxies = {k: mask_proxy_url(v) for k, v in req_proxies.items()}
+                logger.debug(f"[{context_msg}] [curl_cffi] Using proxies: {masked_proxies}")
+            
+            # curl_cffi uses 'proxies' parameter similar to requests
+            response = self.curl_cffi_session.get(
+                target_url,
+                headers=req_headers,
+                proxies=req_proxies,
+                timeout=timeout
+            )
+            response.raise_for_status()
+            
+            # Log response details
+            content_len = len(response.content)
+            text_len = len(response.text)
+            logger.debug(f"[{context_msg}] [curl_cffi] Response: HTTP {response.status_code}, Content-Length: {content_len} bytes, Text-Length: {text_len} chars")
+            
+            # Log first 200 chars of response for debugging
+            preview = response.text[:200].replace('\n', ' ').replace('\r', '')
+            logger.debug(f"[{context_msg}] [curl_cffi] Response preview: {preview}...")
+            
+            return response.text, None
+        except Exception as e:
+            logger.error(f"[{context_msg}] [curl_cffi] Error: {e}")
             return None, e
     
     def _get_bypass_ip(self, req_proxies: Optional[Dict], force_local: bool = False) -> Optional[str]:
@@ -447,6 +530,9 @@ class RequestHandler:
         """
         Fetch directly without CF bypass. Uses browser-like headers.
         
+        If curl_cffi is available, uses it for better TLS fingerprint (recommended).
+        Falls back to standard requests library if curl_cffi fails or is not available.
+        
         Returns:
             tuple: (html_content, success, is_turnstile)
         """
@@ -454,9 +540,28 @@ class RequestHandler:
         if use_cookie and self.config.javdb_session_cookie:
             headers['Cookie'] = f'_jdb_session={self.config.javdb_session_cookie}'
         
-        html_content, error = self._do_request(url, headers, req_proxies, timeout=30, 
-                                                context_msg=f"Direct {context_msg}",
-                                                session=session)
+        html_content = None
+        error = None
+        
+        # Try curl_cffi first if available (better TLS fingerprint)
+        if self.use_curl_cffi:
+            html_content, error = self._do_request_curl_cffi(
+                url, headers, req_proxies, timeout=30, 
+                context_msg=f"Direct {context_msg}"
+            )
+            if html_content:
+                logger.debug(f"[Direct] {context_msg} succeeded with curl_cffi")
+            elif error:
+                logger.debug(f"[Direct] {context_msg} curl_cffi failed, falling back to standard requests: {error}")
+        
+        # Fall back to standard requests if curl_cffi failed or not available
+        if not html_content:
+            html_content, error = self._do_request(
+                url, headers, req_proxies, timeout=30, 
+                context_msg=f"Direct {context_msg}",
+                session=session
+            )
+        
         if html_content:
             is_turnstile = 'Security Verification' in html_content and 'turnstile' in html_content.lower()
             if is_turnstile:
@@ -496,50 +601,27 @@ class RequestHandler:
         age_modal = soup.find('div', class_='modal is-active over18-modal')
         
         if age_modal:
-            # If HTML came from CF bypass and already contains useful content (movie-list),
-            # skip the age verification bypass as the content is already valid.
-            # The modal HTML may still be present but the page content is accessible.
-            if from_cf_bypass:
-                movie_list = soup.find('div', class_=lambda x: x and 'movie-list' in x)
-                if movie_list:
-                    logger.debug("Age verification modal detected but HTML from CF bypass already contains movie-list, skipping re-fetch")
-                    return html_content
-                
-                # Also check for detail page content (for /v/ pages)
-                detail_content = soup.find('div', class_='video-detail')
-                if detail_content:
-                    logger.debug("Age verification modal detected but HTML from CF bypass already contains video-detail, skipping re-fetch")
-                    return html_content
-                
-                # CF bypass HTML has age modal but no content - need to handle via CF bypass
-                # Using direct requests here would fail because the page requires CF bypass to access
-                logger.debug("Age verification modal detected in CF bypass HTML but no valid content found - returning as-is (bypass service should handle over18 cookie)")
-                # Return the HTML as-is; the validation will fail but at least we don't 
-                # cause infinite redirect loops by trying direct requests
+            # IMPORTANT: JavDB returns the full page content even with age modal present.
+            # The age modal is just an overlay, the actual content (movie-list, video-detail)
+            # is already in the HTML. We should NOT attempt to bypass age verification
+            # as it would cause issues with curl_cffi (which doesn't share session with requests).
+            #
+            # Simply check if content is present and return as-is.
+            movie_list = soup.find('div', class_=lambda x: x and 'movie-list' in x)
+            if movie_list:
+                logger.debug("Age verification modal detected but HTML already contains movie-list, using as-is")
                 return html_content
             
-            logger.debug("Age verification modal detected, attempting to bypass...")
+            # Also check for detail page content (for /v/ pages)
+            detail_content = soup.find('div', class_='video-detail')
+            if detail_content:
+                logger.debug("Age verification modal detected but HTML already contains video-detail, using as-is")
+                return html_content
             
-            age_links = age_modal.find_all('a', href=True)
-            for link in age_links:
-                if 'over18' in link.get('href', ''):
-                    age_url = urljoin(self.config.base_url, link.get('href'))
-                    logger.debug(f"Found age verification link: {age_url}")
-                    
-                    try:
-                        age_response = use_session.get(age_url, headers=headers, proxies=req_proxies, timeout=30)
-                        if age_response.status_code == 200:
-                            logger.debug("Successfully bypassed age verification")
-                            # Re-fetch the original page
-                            final_response = use_session.get(url, headers=headers, proxies=req_proxies, timeout=30)
-                            if final_response.status_code == 200:
-                                logger.debug("Successfully re-fetched page after age verification")
-                                return final_response.text
-                    except requests.RequestException as e:
-                        logger.debug(f"Failed to bypass age verification: {e}")
-                    break
-            
-            logger.debug("Could not find or access age verification link")
+            # No movie-list or video-detail found - this might be a login redirect or other issue
+            # Return HTML as-is; the caller will validate and handle appropriately
+            logger.debug("Age verification modal detected but no movie-list/video-detail found - returning HTML as-is")
+            return html_content
         
         return html_content
     
