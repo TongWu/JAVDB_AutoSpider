@@ -545,12 +545,14 @@ jobs:
           DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'reports/DailyReport' }}
           AD_HOC_DIR: ${{ vars.AD_HOC_DIR || 'reports/AdHoc' }}
         run: |
+          set -e
+          
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
           CURRENT_BRANCH="${{ needs.setup.outputs.branch }}"
-          echo "Pushing to branch: $CURRENT_BRANCH"
           
+          # Setup SSH URL if needed
           REPO_URL=$(git remote get-url origin)
           if [[ "$REPO_URL" == https://* ]]; then
             REPO_SSH=$(echo "$REPO_URL" | sed 's|https://github.com/|git@github.com:|')
@@ -558,30 +560,21 @@ jobs:
             echo "Updated remote URL to SSH: $REPO_SSH"
           fi
           
-          # Add CSV files FIRST before pulling (to avoid untracked file conflicts)
-          # Directory structure:
-          #   reports/
-          #   ├── DailyReport/YYYY/MM/*.csv  (report files)
-          #   ├── AdHoc/YYYY/MM/*.csv        (report files)
-          #   ├── parsed_movies_history.csv  (history file at root)
-          #   ├── pikpak_bridge_history.csv  (history file at root)
-          #   └── proxy_bans.csv             (history file at root)
+          # ============================================================
+          # STEP 1: Stage all files IMMEDIATELY (before any git operations)
+          # This ensures files are tracked and won't conflict with remote
+          # ============================================================
+          echo "Step 1: Staging files..."
           if [[ "$SPIDER_SUCCESS" == "true" && "$UPLOADER_SUCCESS" == "true" ]]; then
             echo "Spider and Uploader both succeeded - staging all CSV files including history files"
-            # Add history files at reports root level
-            git add "$REPORTS_DIR/parsed_movies_history.csv" || true
-            git add "$REPORTS_DIR/pikpak_bridge_history.csv" || true
-            git add "$REPORTS_DIR/proxy_bans.csv" || true
-            # Add all report CSV files in DailyReport subdirectory
+            git add "$REPORTS_DIR/parsed_movies_history.csv" 2>/dev/null || true
+            git add "$REPORTS_DIR/pikpak_bridge_history.csv" 2>/dev/null || true
+            git add "$REPORTS_DIR/proxy_bans.csv" 2>/dev/null || true
             find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
           else
             echo "Spider or Uploader failed/cancelled - skipping history files commit"
-            echo "  Spider success: $SPIDER_SUCCESS"
-            echo "  Uploader success: $UPLOADER_SUCCESS"
-            # Only add report CSV files (not history files)
             find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
           fi
-          # Add all Ad Hoc CSV files
           find "$AD_HOC_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
           
           # Check if there are any changes to commit
@@ -590,54 +583,108 @@ jobs:
             exit 0
           fi
           
-          # Commit locally first
-          git commit -m "Auto-commit: Daily pipeline results $(date +'%Y-%m-%d %H:%M:%S UTC')"
+          # Show what will be committed
+          echo "Files to be committed:"
+          git diff --cached --name-only
           
-          # Push with retry logic to handle concurrent workflow commits
+          # ============================================================
+          # STEP 2: Commit locally BEFORE any remote interaction
+          # This ensures our files are tracked in a commit
+          # ============================================================
+          echo "Step 2: Creating local commit..."
+          git commit -m "Auto-commit: Daily pipeline results $(date +'%Y-%m-%d %H:%M:%S UTC')"
+          LOCAL_COMMIT=$(git rev-parse HEAD)
+          echo "Created local commit: $LOCAL_COMMIT"
+          
+          # ============================================================
+          # STEP 3: Push with retry logic and proper conflict handling
+          # ============================================================
+          echo "Step 3: Pushing to remote..."
+          echo "Target branch: $CURRENT_BRANCH"
+          
           MAX_RETRIES=5
-          RETRY_DELAY=5
+          RETRY_DELAY=3
+          
           for i in $(seq 1 $MAX_RETRIES); do
-            echo "Push attempt $i of $MAX_RETRIES..."
+            echo ""
+            echo "=== Push attempt $i of $MAX_RETRIES ==="
             
-            # Fetch latest changes
-            git fetch origin "$CURRENT_BRANCH"
+            # Fetch latest from remote
+            if ! git fetch origin "$CURRENT_BRANCH"; then
+              echo "Fetch failed, will retry..."
+              sleep $RETRY_DELAY
+              RETRY_DELAY=$((RETRY_DELAY * 2))
+              continue
+            fi
             
-            # Rebase our commit on top of remote changes
-            if git rebase "origin/$CURRENT_BRANCH"; then
-              # Try to push
-              if git push origin "$CURRENT_BRANCH"; then
-                echo "✓ Changes committed and pushed to $CURRENT_BRANCH branch successfully"
-                exit 0
-              fi
+            # Check if we need to integrate remote changes
+            LOCAL_HEAD=$(git rev-parse HEAD)
+            REMOTE_HEAD=$(git rev-parse "origin/$CURRENT_BRANCH" 2>/dev/null || echo "")
+            
+            if [[ -z "$REMOTE_HEAD" ]]; then
+              echo "Could not determine remote HEAD, pushing directly..."
+            elif [[ "$LOCAL_HEAD" == "$REMOTE_HEAD" ]]; then
+              echo "Already up to date with remote"
             else
-              echo "Rebase failed, trying merge strategy..."
-              git rebase --abort 2>/dev/null || true
+              # Check if we're ahead or behind
+              MERGE_BASE=$(git merge-base HEAD "origin/$CURRENT_BRANCH" 2>/dev/null || echo "")
               
-              # Reset to our commit and try merge
-              if ! git reset --hard HEAD; then
-                echo "Warning: git reset failed, skipping merge attempt for this iteration"
-                # Clean up any potential mess before retry
-                git clean -fd 2>/dev/null || true
-              else
-                git fetch origin "$CURRENT_BRANCH"
-                if git merge "origin/$CURRENT_BRANCH" --no-edit -m "Merge remote changes"; then
-                  if git push origin "$CURRENT_BRANCH"; then
-                    echo "✓ Changes merged and pushed to $CURRENT_BRANCH branch successfully"
-                    exit 0
-                  fi
+              if [[ "$MERGE_BASE" == "$REMOTE_HEAD" ]]; then
+                echo "Local is ahead of remote, can push directly"
+              elif [[ -n "$MERGE_BASE" ]]; then
+                echo "Local is behind remote, need to rebase..."
+                
+                # Try rebase first (cleaner history)
+                if git rebase "origin/$CURRENT_BRANCH"; then
+                  echo "Rebase successful"
                 else
-                  echo "Merge also failed, will retry..."
-                  git merge --abort 2>/dev/null || true
+                  echo "Rebase had conflicts, aborting and trying merge..."
+                  git rebase --abort 2>/dev/null || true
+                  
+                  # Try merge instead
+                  if git merge "origin/$CURRENT_BRANCH" --no-edit -m "Merge remote changes"; then
+                    echo "Merge successful"
+                  else
+                    echo "Merge also failed"
+                    git merge --abort 2>/dev/null || true
+                    
+                    # Try to accept our changes to resolve conflict
+                    echo "Attempting to resolve conflicts by keeping local changes..."
+                    if git rebase "origin/$CURRENT_BRANCH" -X ours 2>/dev/null; then
+                      echo "Rebase with ours strategy successful"
+                    else
+                      git rebase --abort 2>/dev/null || true
+                      echo "Could not resolve conflicts, will retry..."
+                      
+                      if [ $i -lt $MAX_RETRIES ]; then
+                        sleep $RETRY_DELAY
+                        RETRY_DELAY=$((RETRY_DELAY * 2))
+                      fi
+                      continue
+                    fi
+                  fi
                 fi
+              else
+                echo "No common ancestor found, pushing directly..."
               fi
             fi
             
-            if [ $i -lt $MAX_RETRIES ]; then
-              echo "Push failed, waiting ${RETRY_DELAY}s before retry..."
-              sleep $RETRY_DELAY
-              RETRY_DELAY=$((RETRY_DELAY * 2))  # Exponential backoff
+            # Try to push
+            if git push origin "$CURRENT_BRANCH"; then
+              echo ""
+              echo "✓ Changes committed and pushed to $CURRENT_BRANCH branch successfully"
+              exit 0
+            else
+              echo "Push failed"
+              
+              if [ $i -lt $MAX_RETRIES ]; then
+                echo "Waiting ${RETRY_DELAY}s before retry..."
+                sleep $RETRY_DELAY
+                RETRY_DELAY=$((RETRY_DELAY * 2))
+              fi
             fi
           done
           
-          echo "::warning::Failed to push after $MAX_RETRIES attempts. Changes are committed locally but not pushed."
+          echo ""
+          echo "::warning::Failed to push after $MAX_RETRIES attempts."
           exit 1
