@@ -420,13 +420,17 @@ def _add_actors_filter(url, parsed):
     
     # If no query string, simply add ?t=d
     if not parsed.query:
-        return f"{url}?t=d"
+        # Handle edge case: URL ends with '?' but has no query params
+        base_url = url.rstrip('?')
+        return f"{base_url}?t=d"
     
     params = parse_qs(parsed.query, keep_blank_values=True)
     
     if 't' not in params:
         # No 't' parameter, add t=d to existing query
-        return f"{url}&t=d"
+        # Handle edge case: URL might end with '&' or have trailing '?'
+        base_url = url.rstrip('&')
+        return f"{base_url}&t=d"
     else:
         # Has 't' parameter with other value (e.g. t=312), append ,d
         t_values = params['t']
@@ -473,13 +477,17 @@ def _add_download_filter(url, parsed):
     
     # If no query string, simply add ?f=download
     if not parsed.query:
-        return f"{url}?f=download"
+        # Handle edge case: URL ends with '?' but has no query params
+        base_url = url.rstrip('?')
+        return f"{base_url}?f=download"
     
     params = parse_qs(parsed.query, keep_blank_values=True)
     
     if 'f' not in params:
         # No 'f' parameter, add f=download to existing query
-        return f"{url}&f=download"
+        # Handle edge case: URL might end with '&'
+        base_url = url.rstrip('&')
+        return f"{base_url}&f=download"
     else:
         # 'f' parameter exists but is not 'download', we should still add it
         # Actually, if we reach here, has_magnet_filter returned False,

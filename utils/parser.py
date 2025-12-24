@@ -97,12 +97,12 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
     logger.debug(f"[Page {page_num}] Found movie list container")
 
     logger.debug(f"[Page {page_num}] Parsing index page for phase {phase}...")
-    if is_adhoc_mode:
-        logger.info(f"[Page {page_num}] AD HOC MODE - all filters disabled, processing all entries")
-    elif disable_new_releases_filter:
-        logger.info(f"[Page {page_num}] New releases filter disabled - will process all entries")
-    elif IGNORE_RELEASE_DATE_FILTER:
-        logger.info(f"[Page {page_num}] Release date filter ignored - processing all subtitle entries")
+    # if is_adhoc_mode:
+    #     logger.info(f"[Page {page_num}] AD HOC MODE - all filters disabled, processing all entries")
+    # elif disable_new_releases_filter:
+    #     logger.info(f"[Page {page_num}] New releases filter disabled - will process all entries")
+    # elif IGNORE_RELEASE_DATE_FILTER:
+    #     logger.info(f"[Page {page_num}] Release date filter ignored - processing all subtitle entries")
 
     for item in movie_list.find_all('div', class_='item'):
         a = item.find('a', class_='box')

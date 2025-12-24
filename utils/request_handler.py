@@ -288,14 +288,14 @@ class RequestHandler:
         # Mask the proxy IP in the URL for logging (use 127.0.0.1 when proxy_ip is None)
         masked_ip = mask_ip_address(proxy_ip) if proxy_ip else '127.0.0.1'
         masked_bypass_url = f"http://{masked_ip}:{self.config.cf_bypass_service_port}/html?url=..."
-        logger.info(f"[CF Bypass] Refreshing bypass cache: {masked_bypass_url}")
+        logger.debug(f"[CF Bypass] Refreshing bypass cache: {masked_bypass_url}")
         
         try:
             response = use_session.get(refresh_url, headers=refresh_headers, timeout=120)
             if response.status_code == 200:
                 content_size = len(response.content)
                 if content_size > 10000:
-                    logger.info(f"[CF Bypass] Cache refresh successful (size={content_size} bytes)")
+                    logger.debug(f"[CF Bypass] Cache refresh successful (size={content_size} bytes)")
                     return True
                 else:
                     logger.warning(f"[CF Bypass] Cache refresh returned small response (size={content_size} bytes)")
@@ -356,7 +356,7 @@ class RequestHandler:
             has_security_verification = 'Security Verification' in html_content
             is_bypass_failure = self.is_cf_bypass_failure(html_content)
             
-            logger.info(f"[CF Bypass] {context_msg} response: size={content_size}, turnstile_keyword={has_turnstile_keyword}, security_verification={has_security_verification}, bypass_failure={is_bypass_failure}")
+            logger.debug(f"[CF Bypass] {context_msg} response: size={content_size}, turnstile_keyword={has_turnstile_keyword}, security_verification={has_security_verification}, bypass_failure={is_bypass_failure}")
             
             if not is_bypass_failure:
                 is_turnstile = has_security_verification and has_turnstile_keyword
@@ -409,7 +409,7 @@ class RequestHandler:
                                     
                                     if html_content2:
                                         content_size2 = len(html_content2)
-                                        logger.info(f"[CF Bypass] {context_msg}: After over18 bypass, got {content_size2} bytes")
+                                        logger.debug(f"[CF Bypass] {context_msg}: After over18 bypass, got {content_size2} bytes")
                                         
                                         # Check if we now have content
                                         soup2 = BeautifulSoup(html_content2, 'html.parser')
@@ -417,7 +417,7 @@ class RequestHandler:
                                         detail_content2 = soup2.find('div', class_='video-detail')
                                         
                                         if movie_list2 or detail_content2:
-                                            logger.info(f"[CF Bypass] {context_msg}: Over18 bypass successful, got content!")
+                                            logger.debug(f"[CF Bypass] {context_msg}: Over18 bypass successful, got content!")
                                             return html_content2, True, False
                                         else:
                                             logger.warning(f"[CF Bypass] {context_msg}: Over18 bypass did not help, still no content")
@@ -433,7 +433,7 @@ class RequestHandler:
                         logger.warning(f"[CF Bypass] {context_msg}: Age verification bypass failed - returning HTML without valid content")
                         return html_content, False, False
                 
-                logger.info(f"[CF Bypass] {context_msg} SUCCESS - got valid HTML (size={content_size} bytes)")
+                logger.debug(f"[CF Bypass] {context_msg} SUCCESS - got valid HTML (size={content_size} bytes)")
                 return html_content, True, False
             else:
                 logger.warning(f"[CF Bypass] {context_msg} returned failure response (size={content_size} bytes)")
