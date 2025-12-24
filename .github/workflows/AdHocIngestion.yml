@@ -652,20 +652,10 @@ jobs:
             echo "Updated remote URL to SSH: $REPO_SSH"
           fi
           
-          git fetch origin "$CURRENT_BRANCH"
-          if git rev-parse --verify "origin/$CURRENT_BRANCH" >/dev/null 2>&1; then
-            LOCAL=$(git rev-parse HEAD)
-            REMOTE=$(git rev-parse "origin/$CURRENT_BRANCH")
-            if [ "$LOCAL" != "$REMOTE" ]; then
-              echo "Remote has new commits, pulling with autostash..."
-              git pull --rebase --autostash origin "$CURRENT_BRANCH" || git pull --no-edit --autostash origin "$CURRENT_BRANCH" || true
-            fi
-          fi
-          
-          # Add CSV files (YYYY/MM subdirectories for reports, root level for history)
+          # Add CSV files FIRST before pulling (to avoid untracked file conflicts)
           # For Ad-Hoc, we primarily commit AdHoc directory files
           if [[ "$SPIDER_SUCCESS" == "true" && "$UPLOADER_SUCCESS" == "true" ]]; then
-            echo "Spider and Uploader both succeeded - committing all CSV files including history files"
+            echo "Spider and Uploader both succeeded - staging all CSV files including history files"
             # Add history files at reports root level
             git add "$REPORTS_DIR/parsed_movies_history.csv" || true
             git add "$REPORTS_DIR/pikpak_bridge_history.csv" || true
@@ -686,9 +676,53 @@ jobs:
           # Check if there are any changes to commit
           if git diff --cached --quiet; then
             echo "No changes to commit"
-          else
-            git commit -m "Auto-commit: Ad-Hoc pipeline results $(date +'%Y-%m-%d %H:%M:%S UTC') - URL: $ADHOC_URL"
-            git push origin "$CURRENT_BRANCH"
-            echo "✓ Changes committed and pushed to $CURRENT_BRANCH branch successfully"
+            exit 0
           fi
+          
+          # Commit locally first
+          git commit -m "Auto-commit: Ad-Hoc pipeline results $(date +'%Y-%m-%d %H:%M:%S UTC') - URL: $ADHOC_URL"
+          
+          # Push with retry logic to handle concurrent workflow commits
+          MAX_RETRIES=5
+          RETRY_DELAY=5
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Push attempt $i of $MAX_RETRIES..."
+            
+            # Fetch latest changes
+            git fetch origin "$CURRENT_BRANCH"
+            
+            # Rebase our commit on top of remote changes
+            if git rebase "origin/$CURRENT_BRANCH"; then
+              # Try to push
+              if git push origin "$CURRENT_BRANCH"; then
+                echo "✓ Changes committed and pushed to $CURRENT_BRANCH branch successfully"
+                exit 0
+              fi
+            else
+              echo "Rebase failed, trying merge strategy..."
+              git rebase --abort 2>/dev/null || true
+              
+              # Reset to our commit and try merge
+              git reset --hard HEAD
+              git fetch origin "$CURRENT_BRANCH"
+              if git merge "origin/$CURRENT_BRANCH" --no-edit -m "Merge remote changes"; then
+                if git push origin "$CURRENT_BRANCH"; then
+                  echo "✓ Changes merged and pushed to $CURRENT_BRANCH branch successfully"
+                  exit 0
+                fi
+              else
+                echo "Merge also failed, will retry..."
+                git merge --abort 2>/dev/null || true
+              fi
+            fi
+            
+            if [ $i -lt $MAX_RETRIES ]; then
+              echo "Push failed, waiting ${RETRY_DELAY}s before retry..."
+              sleep $RETRY_DELAY
+              RETRY_DELAY=$((RETRY_DELAY * 2))  # Exponential backoff
+            fi
+          done
+          
+          echo "::warning::Failed to push after $MAX_RETRIES attempts. Changes are committed locally but not pushed."
+          exit 1
 
