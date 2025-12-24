@@ -601,50 +601,27 @@ class RequestHandler:
         age_modal = soup.find('div', class_='modal is-active over18-modal')
         
         if age_modal:
-            # If HTML came from CF bypass and already contains useful content (movie-list),
-            # skip the age verification bypass as the content is already valid.
-            # The modal HTML may still be present but the page content is accessible.
-            if from_cf_bypass:
-                movie_list = soup.find('div', class_=lambda x: x and 'movie-list' in x)
-                if movie_list:
-                    logger.debug("Age verification modal detected but HTML from CF bypass already contains movie-list, skipping re-fetch")
-                    return html_content
-                
-                # Also check for detail page content (for /v/ pages)
-                detail_content = soup.find('div', class_='video-detail')
-                if detail_content:
-                    logger.debug("Age verification modal detected but HTML from CF bypass already contains video-detail, skipping re-fetch")
-                    return html_content
-                
-                # CF bypass HTML has age modal but no content - need to handle via CF bypass
-                # Using direct requests here would fail because the page requires CF bypass to access
-                logger.debug("Age verification modal detected in CF bypass HTML but no valid content found - returning as-is (bypass service should handle over18 cookie)")
-                # Return the HTML as-is; the validation will fail but at least we don't 
-                # cause infinite redirect loops by trying direct requests
+            # IMPORTANT: JavDB returns the full page content even with age modal present.
+            # The age modal is just an overlay, the actual content (movie-list, video-detail)
+            # is already in the HTML. We should NOT attempt to bypass age verification
+            # as it would cause issues with curl_cffi (which doesn't share session with requests).
+            #
+            # Simply check if content is present and return as-is.
+            movie_list = soup.find('div', class_=lambda x: x and 'movie-list' in x)
+            if movie_list:
+                logger.debug("Age verification modal detected but HTML already contains movie-list, using as-is")
                 return html_content
             
-            logger.debug("Age verification modal detected, attempting to bypass...")
+            # Also check for detail page content (for /v/ pages)
+            detail_content = soup.find('div', class_='video-detail')
+            if detail_content:
+                logger.debug("Age verification modal detected but HTML already contains video-detail, using as-is")
+                return html_content
             
-            age_links = age_modal.find_all('a', href=True)
-            for link in age_links:
-                if 'over18' in link.get('href', ''):
-                    age_url = urljoin(self.config.base_url, link.get('href'))
-                    logger.debug(f"Found age verification link: {age_url}")
-                    
-                    try:
-                        age_response = use_session.get(age_url, headers=headers, proxies=req_proxies, timeout=30)
-                        if age_response.status_code == 200:
-                            logger.debug("Successfully bypassed age verification")
-                            # Re-fetch the original page
-                            final_response = use_session.get(url, headers=headers, proxies=req_proxies, timeout=30)
-                            if final_response.status_code == 200:
-                                logger.debug("Successfully re-fetched page after age verification")
-                                return final_response.text
-                    except requests.RequestException as e:
-                        logger.debug(f"Failed to bypass age verification: {e}")
-                    break
-            
-            logger.debug("Could not find or access age verification link")
+            # No movie-list or video-detail found - this might be a login redirect or other issue
+            # Return HTML as-is; the caller will validate and handle appropriately
+            logger.debug("Age verification modal detected but no movie-list/video-detail found - returning HTML as-is")
+            return html_content
         
         return html_content
     
