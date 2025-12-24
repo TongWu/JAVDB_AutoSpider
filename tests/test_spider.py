@@ -312,6 +312,505 @@ class TestIsCfBypassFailure:
         assert result is True
 
 
+class TestDetectUrlType:
+    """Test cases for detect_url_type function."""
+    
+    def detect_url_type(self, url):
+        """Local implementation of detect_url_type."""
+        if not url or 'javdb.com' not in url:
+            return 'unknown'
+        
+        try:
+            parsed = urlparse(url)
+            path = parsed.path.strip('/')
+            
+            if path.startswith('actors/'):
+                return 'actors'
+            elif path.startswith('makers/'):
+                return 'makers'
+            elif path.startswith('video_codes/'):
+                return 'video_codes'
+            else:
+                return 'unknown'
+        except Exception:
+            return 'unknown'
+    
+    def test_detect_actors_url(self):
+        """Test detection of actors URL."""
+        url = 'https://javdb.com/actors/bkxd'
+        assert self.detect_url_type(url) == 'actors'
+    
+    def test_detect_makers_url(self):
+        """Test detection of makers URL."""
+        url = 'https://javdb.com/makers/zKW?f=download'
+        assert self.detect_url_type(url) == 'makers'
+    
+    def test_detect_video_codes_url(self):
+        """Test detection of video_codes URL."""
+        url = 'https://javdb.com/video_codes/MIDA'
+        assert self.detect_url_type(url) == 'video_codes'
+    
+    def test_detect_unknown_url(self):
+        """Test detection of unknown URL type."""
+        url = 'https://javdb.com/some/other/path'
+        assert self.detect_url_type(url) == 'unknown'
+    
+    def test_detect_non_javdb_url(self):
+        """Test detection of non-javdb URL."""
+        url = 'https://example.com/actors/abc'
+        assert self.detect_url_type(url) == 'unknown'
+    
+    def test_detect_empty_url(self):
+        """Test detection of empty/None URL."""
+        assert self.detect_url_type(None) == 'unknown'
+        assert self.detect_url_type('') == 'unknown'
+
+
+class TestExtractUrlIdentifier:
+    """Test cases for extract_url_identifier function."""
+    
+    def extract_url_identifier(self, url):
+        """Local implementation of extract_url_identifier."""
+        try:
+            parsed = urlparse(url)
+            path = parsed.path.strip('/')
+            parts = path.split('/')
+            if len(parts) >= 2:
+                return parts[1]
+        except Exception:
+            pass
+        return None
+    
+    def test_extract_actor_identifier(self):
+        """Test extracting identifier from actors URL."""
+        url = 'https://javdb.com/actors/bkxd'
+        assert self.extract_url_identifier(url) == 'bkxd'
+    
+    def test_extract_maker_identifier(self):
+        """Test extracting identifier from makers URL."""
+        url = 'https://javdb.com/makers/zKW?f=download'
+        assert self.extract_url_identifier(url) == 'zKW'
+    
+    def test_extract_video_code_identifier(self):
+        """Test extracting identifier from video_codes URL."""
+        url = 'https://javdb.com/video_codes/MIDA'
+        assert self.extract_url_identifier(url) == 'MIDA'
+    
+    def test_extract_from_short_path(self):
+        """Test extracting from URL with short path."""
+        url = 'https://javdb.com/single'
+        assert self.extract_url_identifier(url) is None
+
+
+class TestParseActorNameFromHtml:
+    """Test cases for parse_actor_name_from_html function."""
+    
+    def parse_actor_name_from_html(self, html_content):
+        """Local implementation of parse_actor_name_from_html."""
+        try:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html_content, 'html.parser')
+            actor_span = soup.find('span', class_='actor-section-name')
+            if actor_span:
+                actor_name = actor_span.get_text(strip=True)
+                if actor_name:
+                    return actor_name
+        except Exception:
+            pass
+        return None
+    
+    def test_parse_actor_name(self):
+        """Test parsing actor name from HTML."""
+        html = '''
+        <div class="column section-title">
+            <h2 class="title is-4 has-text-justified">
+              <span class="actor-section-name">森日向子</span>
+            </h2>
+        </div>
+        '''
+        assert self.parse_actor_name_from_html(html) == '森日向子'
+    
+    def test_parse_actor_name_with_extra_whitespace(self):
+        """Test parsing actor name with extra whitespace."""
+        html = '<span class="actor-section-name">  Test Actor  </span>'
+        assert self.parse_actor_name_from_html(html) == 'Test Actor'
+    
+    def test_parse_actor_name_not_found(self):
+        """Test parsing when actor name is not found."""
+        html = '<div>No actor name here</div>'
+        assert self.parse_actor_name_from_html(html) is None
+    
+    def test_parse_actor_name_empty_span(self):
+        """Test parsing when span is empty."""
+        html = '<span class="actor-section-name"></span>'
+        assert self.parse_actor_name_from_html(html) is None
+
+
+class TestParseMakerNameFromHtml:
+    """Test cases for parse_maker_name_from_html function."""
+    
+    def parse_maker_name_from_html(self, html_content):
+        """Local implementation of parse_maker_name_from_html."""
+        try:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html_content, 'html.parser')
+            section_name = soup.find('span', class_='section-name')
+            if section_name:
+                maker_name = section_name.get_text(strip=True)
+                if maker_name:
+                    return maker_name
+        except Exception:
+            pass
+        return None
+    
+    def test_parse_maker_name(self):
+        """Test parsing maker name from HTML."""
+        html = '''
+        <div class="column section-title">
+            <h2 class="title is-4">
+              <span class="section-subtitle">片商</span>
+              <span class="section-name">MOODYZ</span>
+            </h2>
+        </div>
+        '''
+        assert self.parse_maker_name_from_html(html) == 'MOODYZ'
+    
+    def test_parse_maker_name_english(self):
+        """Test parsing English maker name."""
+        html = '<span class="section-name">Prestige</span>'
+        assert self.parse_maker_name_from_html(html) == 'Prestige'
+    
+    def test_parse_maker_name_not_found(self):
+        """Test parsing when maker name is not found."""
+        html = '<div>No maker name here</div>'
+        assert self.parse_maker_name_from_html(html) is None
+
+
+class TestSanitizeFilenamePart:
+    """Test cases for sanitize_filename_part function."""
+    
+    def sanitize_filename_part(self, text, max_length=30):
+        """Local implementation of sanitize_filename_part."""
+        import re
+        
+        if not text:
+            return ''
+        
+        # Replace or remove unsafe filename characters
+        unsafe_chars = r'<>:"/\|?*'
+        sanitized = text
+        for char in unsafe_chars:
+            sanitized = sanitized.replace(char, '')
+        
+        # Replace whitespace with underscore
+        sanitized = re.sub(r'\s+', '_', sanitized)
+        
+        # Remove any remaining non-alphanumeric characters except underscore, hyphen, and CJK characters
+        sanitized = re.sub(r'[^\w\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff-]', '', sanitized)
+        
+        # Truncate to max length
+        if len(sanitized) > max_length:
+            sanitized = sanitized[:max_length]
+        
+        return sanitized
+    
+    def test_sanitize_japanese_name(self):
+        """Test sanitizing Japanese name."""
+        assert self.sanitize_filename_part('森日向子') == '森日向子'
+    
+    def test_sanitize_english_name(self):
+        """Test sanitizing English name."""
+        assert self.sanitize_filename_part('MOODYZ') == 'MOODYZ'
+    
+    def test_sanitize_name_with_space(self):
+        """Test sanitizing name with spaces."""
+        assert self.sanitize_filename_part('Test Name') == 'Test_Name'
+    
+    def test_sanitize_name_with_slashes(self):
+        """Test sanitizing name with slashes."""
+        result = self.sanitize_filename_part('Name/With/Slashes')
+        assert '/' not in result
+    
+    def test_sanitize_name_with_special_chars(self):
+        """Test sanitizing name with special characters."""
+        result = self.sanitize_filename_part('Name<With>Special:Chars')
+        assert '<' not in result
+        assert '>' not in result
+        assert ':' not in result
+    
+    def test_sanitize_empty_string(self):
+        """Test sanitizing empty string."""
+        assert self.sanitize_filename_part('') == ''
+    
+    def test_sanitize_none(self):
+        """Test sanitizing None."""
+        assert self.sanitize_filename_part(None) == ''
+    
+    def test_sanitize_truncate_long_name(self):
+        """Test that long names are truncated."""
+        long_name = 'A' * 50
+        result = self.sanitize_filename_part(long_name, max_length=30)
+        assert len(result) == 30
+
+
+class TestHasMagnetFilter:
+    """Test cases for has_magnet_filter function.
+    
+    Different URL types use different filter parameters:
+    - actors: t=d or t=c
+    - makers/video_codes: f=download
+    """
+    
+    def has_magnet_filter(self, url):
+        """Local implementation of has_magnet_filter."""
+        try:
+            from urllib.parse import parse_qs
+            parsed = urlparse(url)
+            if not parsed.query:
+                return False
+            
+            params = parse_qs(parsed.query)
+            path = parsed.path.strip('/')
+            
+            if path.startswith('actors/'):
+                # For actors: check 't' parameter
+                if 't' not in params:
+                    return False
+                for t_val in params['t']:
+                    parts = t_val.split(',')
+                    if 'd' in parts or 'c' in parts:
+                        return True
+                return False
+            
+            elif path.startswith('makers/') or path.startswith('video_codes/'):
+                # For makers/video_codes: check 'f' parameter
+                if 'f' not in params:
+                    return False
+                for f_val in params['f']:
+                    if f_val == 'download':
+                        return True
+                return False
+            
+            return False
+        except Exception:
+            return False
+    
+    # Tests for actors (t=d filter)
+    def test_actors_no_filter_plain_url(self):
+        """Test actors URL without any filter."""
+        url = 'https://javdb.com/actors/YnZ1K'
+        assert self.has_magnet_filter(url) is False
+    
+    def test_actors_has_download_filter(self):
+        """Test actors URL with t=d filter."""
+        url = 'https://javdb.com/actors/YnZ1K?t=d'
+        assert self.has_magnet_filter(url) is True
+    
+    def test_actors_has_download_filter_with_other_params(self):
+        """Test actors URL with t=d and other parameters."""
+        url = 'https://javdb.com/actors/YnZ1K?t=d&sort_type=0'
+        assert self.has_magnet_filter(url) is True
+    
+    def test_actors_has_subtitle_filter(self):
+        """Test actors URL with t=c (subtitle) filter."""
+        url = 'https://javdb.com/actors/YnZ1K?t=c&sort_type=0'
+        assert self.has_magnet_filter(url) is True
+    
+    def test_actors_has_year_filter_only(self):
+        """Test actors URL with year filter only (no magnet filter)."""
+        url = 'https://javdb.com/actors/YnZ1K?t=312&sort_type=0'
+        assert self.has_magnet_filter(url) is False
+    
+    def test_actors_has_combined_filter(self):
+        """Test actors URL with combined filter (t=312,d)."""
+        url = 'https://javdb.com/actors/YnZ1K?t=312,d'
+        assert self.has_magnet_filter(url) is True
+    
+    def test_actors_has_other_params_no_t(self):
+        """Test actors URL with other params but no t parameter."""
+        url = 'https://javdb.com/actors/YnZ1K?sort_type=0'
+        assert self.has_magnet_filter(url) is False
+    
+    # Tests for makers (f=download filter)
+    def test_makers_no_filter_plain_url(self):
+        """Test makers URL without any filter."""
+        url = 'https://javdb.com/makers/zKW'
+        assert self.has_magnet_filter(url) is False
+    
+    def test_makers_has_download_filter(self):
+        """Test makers URL with f=download filter."""
+        url = 'https://javdb.com/makers/zKW?f=download'
+        assert self.has_magnet_filter(url) is True
+    
+    def test_makers_has_other_f_value(self):
+        """Test makers URL with different f value."""
+        url = 'https://javdb.com/makers/zKW?f=other'
+        assert self.has_magnet_filter(url) is False
+    
+    # Tests for video_codes (f=download filter)
+    def test_video_codes_no_filter_plain_url(self):
+        """Test video_codes URL without any filter."""
+        url = 'https://javdb.com/video_codes/MIDA'
+        assert self.has_magnet_filter(url) is False
+    
+    def test_video_codes_has_download_filter(self):
+        """Test video_codes URL with f=download filter."""
+        url = 'https://javdb.com/video_codes/MIDA?f=download'
+        assert self.has_magnet_filter(url) is True
+
+
+class TestAddMagnetFilterToUrl:
+    """Test cases for add_magnet_filter_to_url function.
+    
+    Different URL types use different filter parameters:
+    - actors: t=d (or append ,d to existing t value)
+    - makers/video_codes: f=download
+    """
+    
+    def has_magnet_filter(self, url):
+        """Helper method to check if URL has magnet filter."""
+        try:
+            from urllib.parse import parse_qs
+            parsed = urlparse(url)
+            if not parsed.query:
+                return False
+            params = parse_qs(parsed.query)
+            path = parsed.path.strip('/')
+            
+            if path.startswith('actors/'):
+                if 't' not in params:
+                    return False
+                for t_val in params['t']:
+                    parts = t_val.split(',')
+                    if 'd' in parts or 'c' in parts:
+                        return True
+                return False
+            elif path.startswith('makers/') or path.startswith('video_codes/'):
+                if 'f' not in params:
+                    return False
+                for f_val in params['f']:
+                    if f_val == 'download':
+                        return True
+                return False
+            return False
+        except Exception:
+            return False
+    
+    def add_magnet_filter_to_url(self, url):
+        """Local implementation of add_magnet_filter_to_url."""
+        from urllib.parse import parse_qs, urlencode, urlunparse
+        
+        try:
+            if self.has_magnet_filter(url):
+                return url
+            
+            parsed = urlparse(url)
+            path = parsed.path.strip('/')
+            
+            if path.startswith('actors/'):
+                # For actors: use t=d filter
+                if not parsed.query:
+                    return f"{url}?t=d"
+                params = parse_qs(parsed.query, keep_blank_values=True)
+                if 't' not in params:
+                    return f"{url}&t=d"
+                else:
+                    new_t_values = []
+                    for t_val in params['t']:
+                        parts = t_val.split(',')
+                        if 'd' not in parts and 'c' not in parts:
+                            new_t_values.append(f"{t_val},d")
+                        else:
+                            new_t_values.append(t_val)
+                    params['t'] = new_t_values
+                    flat_params = [(k, v) for k, vals in params.items() for v in vals]
+                    new_query = urlencode(flat_params, safe=',')
+                    return urlunparse((parsed.scheme, parsed.netloc, parsed.path,
+                                       parsed.params, new_query, parsed.fragment))
+            
+            elif path.startswith('makers/') or path.startswith('video_codes/'):
+                # For makers/video_codes: use f=download filter
+                if not parsed.query:
+                    return f"{url}?f=download"
+                params = parse_qs(parsed.query, keep_blank_values=True)
+                if 'f' not in params:
+                    return f"{url}&f=download"
+                else:
+                    params['f'] = ['download']
+                    flat_params = [(k, v) for k, vals in params.items() for v in vals]
+                    new_query = urlencode(flat_params)
+                    return urlunparse((parsed.scheme, parsed.netloc, parsed.path,
+                                       parsed.params, new_query, parsed.fragment))
+            
+            return url
+                
+        except Exception:
+            return url
+    
+    # Tests for actors (t=d filter)
+    def test_actors_add_filter_to_plain_url(self):
+        """Test adding t=d filter to actors URL without query params."""
+        url = 'https://javdb.com/actors/YnZ1K'
+        result = self.add_magnet_filter_to_url(url)
+        assert result == 'https://javdb.com/actors/YnZ1K?t=d'
+    
+    def test_actors_no_change_when_has_download_filter(self):
+        """Test no change when actors URL already has t=d."""
+        url = 'https://javdb.com/actors/YnZ1K?t=d&sort_type=0'
+        result = self.add_magnet_filter_to_url(url)
+        assert result == url
+    
+    def test_actors_no_change_when_has_subtitle_filter(self):
+        """Test no change when actors URL already has t=c."""
+        url = 'https://javdb.com/actors/YnZ1K?t=c&sort_type=0'
+        result = self.add_magnet_filter_to_url(url)
+        assert result == url
+    
+    def test_actors_append_to_year_filter(self):
+        """Test appending ,d to year filter for actors."""
+        url = 'https://javdb.com/actors/YnZ1K?t=312&sort_type=0'
+        result = self.add_magnet_filter_to_url(url)
+        assert 't=312,d' in result
+    
+    def test_actors_add_filter_to_url_with_other_params(self):
+        """Test adding t=d filter to actors URL with other params but no t."""
+        url = 'https://javdb.com/actors/YnZ1K?sort_type=0'
+        result = self.add_magnet_filter_to_url(url)
+        assert result == 'https://javdb.com/actors/YnZ1K?sort_type=0&t=d'
+    
+    # Tests for makers (f=download filter)
+    def test_makers_add_filter_to_plain_url(self):
+        """Test adding f=download filter to makers URL without query params."""
+        url = 'https://javdb.com/makers/zKW'
+        result = self.add_magnet_filter_to_url(url)
+        assert result == 'https://javdb.com/makers/zKW?f=download'
+    
+    def test_makers_no_change_when_has_download_filter(self):
+        """Test no change when makers URL already has f=download."""
+        url = 'https://javdb.com/makers/zKW?f=download'
+        result = self.add_magnet_filter_to_url(url)
+        assert result == url
+    
+    def test_makers_add_filter_to_url_with_other_params(self):
+        """Test adding f=download filter to makers URL with other params."""
+        url = 'https://javdb.com/makers/zKW?sort_type=0'
+        result = self.add_magnet_filter_to_url(url)
+        assert result == 'https://javdb.com/makers/zKW?sort_type=0&f=download'
+    
+    # Tests for video_codes (f=download filter)
+    def test_video_codes_add_filter_to_plain_url(self):
+        """Test adding f=download filter to video_codes URL without query params."""
+        url = 'https://javdb.com/video_codes/MIDA'
+        result = self.add_magnet_filter_to_url(url)
+        assert result == 'https://javdb.com/video_codes/MIDA?f=download'
+    
+    def test_video_codes_no_change_when_has_download_filter(self):
+        """Test no change when video_codes URL already has f=download."""
+        url = 'https://javdb.com/video_codes/MIDA?f=download'
+        result = self.add_magnet_filter_to_url(url)
+        assert result == url
+
+
 # Use temp_dir fixture
 @pytest.fixture
 def temp_dir():
