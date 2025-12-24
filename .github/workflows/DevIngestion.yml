@@ -54,11 +54,21 @@ on:
           - 'all'
           - '1'
           - '2'
-      use_proxy:
-        description: 'Enable proxy for HTTP requests (required on GitHub-hosted runners)'
-        required: true
-        type: boolean
+      proxy_spider:
+        description: 'Enable proxy for Spider requests'
+        required: false
         default: true
+        type: boolean
+      proxy_uploader:
+        description: 'Enable proxy for qBittorrent Uploader requests'
+        required: false
+        default: false
+        type: boolean
+      proxy_pikpak:
+        description: 'Enable proxy for PikPak Bridge requests'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   # =============================================================================
@@ -214,21 +224,10 @@ jobs:
           rm config.py.enc
           echo "✓ Config decrypted successfully"
 
-      - name: Validate proxy setting
-        run: |
-          # On GitHub-hosted runners, proxy must be enabled
-          RUNNER_NAME="${{ runner.name }}"
-          IS_SELF_HOSTED="${{ contains(runner.labels, 'self-hosted') }}"
-          
-          if [ "$IS_SELF_HOSTED" != "true" ] && [ "${{ inputs.use_proxy }}" != "true" ]; then
-            echo "::error::Proxy must be enabled on GitHub-hosted runners. Please set use_proxy to true."
-            exit 1
-          fi
-          echo "✓ Proxy setting validated (self-hosted: $IS_SELF_HOSTED, use_proxy: ${{ inputs.use_proxy }})"
-
       - name: Run health checks
         run: |
-          if [ "${{ inputs.use_proxy }}" == "true" ]; then
+          # Use proxy for health check if any proxy option is enabled
+          if [ "${{ inputs.proxy_spider }}" == "true" ] || [ "${{ inputs.proxy_uploader }}" == "true" ] || [ "${{ inputs.proxy_pikpak }}" == "true" ]; then
             python3 scripts/health_check.py --use-proxy
           else
             python3 scripts/health_check.py
@@ -278,17 +277,6 @@ jobs:
           rm config.py.enc
           echo "✓ Config decrypted successfully"
 
-      - name: Validate proxy setting
-        run: |
-          # On GitHub-hosted runners, proxy must be enabled
-          IS_SELF_HOSTED="${{ contains(runner.labels, 'self-hosted') }}"
-          
-          if [ "$IS_SELF_HOSTED" != "true" ] && [ "${{ inputs.use_proxy }}" != "true" ]; then
-            echo "::error::Proxy must be enabled on GitHub-hosted runners. Please set use_proxy to true."
-            exit 1
-          fi
-          echo "✓ Proxy setting validated (self-hosted: $IS_SELF_HOSTED, use_proxy: ${{ inputs.use_proxy }})"
-
       - name: Display run configuration
         run: |
           echo "=========================================="
@@ -300,7 +288,9 @@ jobs:
           echo "Ignore Release Date: ${{ inputs.ignore_release_date }}"
           echo "Log Level: ${{ inputs.log_level }}"
           echo "Phase: ${{ inputs.phase }}"
-          echo "Use Proxy: ${{ inputs.use_proxy }}"
+          echo "Proxy Spider: ${{ inputs.proxy_spider }}"
+          echo "Proxy Uploader: ${{ inputs.proxy_uploader }}"
+          echo "Proxy PikPak: ${{ inputs.proxy_pikpak }}"
           echo "=========================================="
 
       - name: Run Spider
@@ -320,7 +310,7 @@ jobs:
             CMD="$CMD --ignore-release-date"
           fi
           
-          if [ "${{ inputs.use_proxy }}" == "true" ]; then
+          if [ "${{ inputs.proxy_spider }}" == "true" ]; then
             CMD="$CMD --use-proxy"
           fi
           
@@ -372,7 +362,9 @@ jobs:
           echo "| Ignore Release Date | ${{ inputs.ignore_release_date }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Log Level | ${{ inputs.log_level }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Phase | ${{ inputs.phase }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Use Proxy | ${{ inputs.use_proxy }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Proxy Spider | ${{ inputs.proxy_spider }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Proxy Uploader | ${{ inputs.proxy_uploader }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Proxy PikPak | ${{ inputs.proxy_pikpak }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Job Results" >> $GITHUB_STEP_SUMMARY
           echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
