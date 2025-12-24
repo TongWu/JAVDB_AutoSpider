@@ -122,8 +122,15 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
 
         # AD HOC MODE: Disable release date filter but keep phase separation
         # Phase 1: entries with subtitle tag, Phase 2: entries without subtitle tag
+        # Note: Entries without magnet tags are always filtered out (no magnet = no download available)
         if is_adhoc_mode:
             has_subtitle = ('含中字磁鏈' in tags or '含中字磁链' in tags or 'CnSub DL' in tags)
+            has_magnet = ('含磁鏈' in tags or '含磁链' in tags or 'DL' in tags or has_subtitle)
+            
+            # Skip entries without magnet tags - no magnet link means nothing to download
+            if not has_magnet:
+                logger.debug(f"[Page {page_num}] Skipping entry without magnet link (no magnet tag in HTML)")
+                continue
             
             # Phase 1: Process entries WITH subtitle tag
             if phase == 1 and has_subtitle:
