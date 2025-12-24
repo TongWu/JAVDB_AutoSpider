@@ -120,11 +120,13 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
 
         logger.debug(f"[Page {page_num}] Found tags: {tags}")
 
-        # AD HOC MODE: Process ALL entries without any filtering
-        # In ad hoc mode, phase 1 processes all entries and phase 2 should be skipped
+        # AD HOC MODE: Disable release date filter but keep phase separation
+        # Phase 1: entries with subtitle tag, Phase 2: entries without subtitle tag
         if is_adhoc_mode:
-            if phase == 1:
-                # Process all entries regardless of tags
+            has_subtitle = ('含中字磁鏈' in tags or '含中字磁链' in tags or 'CnSub DL' in tags)
+            
+            # Phase 1: Process entries WITH subtitle tag
+            if phase == 1 and has_subtitle:
                 href = a.get('href', '')
                 video_code = extract_video_code(a)
                 
@@ -153,7 +155,7 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                         if comment_match:
                             comment_number = comment_match.group(1)
 
-                logger.debug(f"[Page {page_num}] Found entry (adhoc mode): {video_code} ({href})")
+                logger.debug(f"[Page {page_num}] Found entry (adhoc P1): {video_code} ({href})")
 
                 results.append({
                     'href': href,
@@ -163,9 +165,46 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                     'rate': rate,
                     'comment_number': comment_number
                 })
-            else:
-                # Phase 2 in adhoc mode: skip all entries (already processed in phase 1)
-                pass
+            # Phase 2: Process entries WITHOUT subtitle tag
+            elif phase == 2 and not has_subtitle:
+                href = a.get('href', '')
+                video_code = extract_video_code(a)
+                
+                # Skip entries with invalid video code (no '-')
+                if not video_code:
+                    continue
+
+                # Extract rating information
+                rate = ''
+                score_div = a.find('div', class_='score')
+                if score_div:
+                    value_span = score_div.find('span', class_='value')
+                    if value_span:
+                        score_text = value_span.get_text(strip=True)
+                        rate_match = re.search(r'(\d+\.?\d*)分', score_text)
+                        if rate_match:
+                            rate = rate_match.group(1)
+
+                # Extract comment number
+                comment_number = ''
+                if score_div:
+                    value_span = score_div.find('span', class_='value')
+                    if value_span:
+                        score_text = value_span.get_text(strip=True)
+                        comment_match = re.search(r'由(\d+)人評價', score_text)
+                        if comment_match:
+                            comment_number = comment_match.group(1)
+
+                logger.debug(f"[Page {page_num}] Found entry (adhoc P2): {video_code} ({href})")
+
+                results.append({
+                    'href': href,
+                    'video_code': video_code,
+                    'page': page_num,
+                    'actor': '',  # Will be filled from detail page
+                    'rate': rate,
+                    'comment_number': comment_number
+                })
             continue
 
         # Phase 1: Check if both required tags are present

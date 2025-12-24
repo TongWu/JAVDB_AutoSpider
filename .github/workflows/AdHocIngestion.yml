@@ -30,6 +30,15 @@ on:
         required: false
         default: false
         type: boolean
+      phase:
+        description: 'Which phase to run: 1 (subtitle only), 2 (non-subtitle only), all (both phases)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - 'all'
+          - '1'
+          - '2'
       proxy_spider:
         description: 'Enable proxy for Spider requests'
         required: false
@@ -300,6 +309,7 @@ jobs:
           echo "URL: ${{ inputs.url }}"
           echo "Start Page: ${{ inputs.start_page }}"
           echo "End Page: ${{ inputs.end_page || 'All pages (--all flag)' }}"
+          echo "Phase: ${{ inputs.phase || 'all' }}"
           echo "History Filter: ${{ inputs.history_filter }}"
           echo "Date Filter: ${{ inputs.date_filter }}"
           echo "Proxy Spider: ${{ inputs.proxy_spider }}"
@@ -326,6 +336,9 @@ jobs:
           else
             SPIDER_CMD="$SPIDER_CMD --end-page $END_PAGE"
           fi
+          
+          # Add phase flag
+          SPIDER_CMD="$SPIDER_CMD --phase ${{ inputs.phase || 'all' }}"
           
           # Add ignore history flag if history filter is disabled
           if [ "${{ inputs.history_filter }}" == "false" ]; then
@@ -551,6 +564,7 @@ jobs:
           echo "ADHOC_URL=${{ inputs.url }}" >> logs/job_status.txt
           echo "ADHOC_START_PAGE=${{ inputs.start_page }}" >> logs/job_status.txt
           echo "ADHOC_END_PAGE=${{ inputs.end_page }}" >> logs/job_status.txt
+          echo "ADHOC_PHASE=${{ inputs.phase || 'all' }}" >> logs/job_status.txt
           
           if [[ "$SETUP_STATUS" == "failure" ]] || [[ "$HEALTH_STATUS" == "failure" ]] || [[ "$PIPELINE_STATUS" == "failure" ]]; then
             echo "has_failure=true" >> $GITHUB_OUTPUT
