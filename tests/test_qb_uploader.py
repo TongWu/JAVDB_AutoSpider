@@ -386,6 +386,51 @@ class TestErrorHandlingExitCodes:
         
         assert exc_info.value.code == 1
 
+    @patch('scripts.qb_uploader.read_csv_file')
+    @patch('scripts.qb_uploader.test_qbittorrent_connection')
+    @patch('scripts.qb_uploader.initialize_proxy_helper')
+    @patch('scripts.qb_uploader.parse_arguments')
+    def test_exit_on_csv_file_not_found(self, mock_args, mock_init_proxy, mock_test_conn, mock_read_csv):
+        """Test that script exits with code 1 when CSV file is not found."""
+        mock_args.return_value = MagicMock(
+            mode='adhoc',
+            use_proxy=False,
+            input_file=None,
+            from_pipeline=False
+        )
+        mock_init_proxy.return_value = None
+        mock_test_conn.return_value = True
+        mock_read_csv.return_value = ([], False)  # File not found
+        
+        from scripts.qb_uploader import main
+        
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+        
+        assert exc_info.value.code == 1
+
+    @patch('scripts.qb_uploader.read_csv_file')
+    @patch('scripts.qb_uploader.test_qbittorrent_connection')
+    @patch('scripts.qb_uploader.initialize_proxy_helper')
+    @patch('scripts.qb_uploader.parse_arguments')
+    def test_no_exit_when_csv_empty_but_exists(self, mock_args, mock_init_proxy, mock_test_conn, mock_read_csv):
+        """Test that script does NOT exit with error when CSV file exists but is empty."""
+        mock_args.return_value = MagicMock(
+            mode='daily',
+            use_proxy=False,
+            input_file=None,
+            from_pipeline=False
+        )
+        mock_init_proxy.return_value = None
+        mock_test_conn.return_value = True
+        mock_read_csv.return_value = ([], True)  # File exists but no torrents
+        
+        from scripts.qb_uploader import main
+        
+        # Should NOT raise SystemExit - just returns normally
+        result = main()
+        assert result is None
+
 
 class TestQbUploaderAdvanced:
     """Advanced test cases for qb_uploader functions."""
@@ -516,6 +561,189 @@ class TestReadCsvMagnets:
         assert len(rows) == 1
         assert rows[0]['video_code'] == 'TEST-001'
         assert 'abc123' in rows[0]['hacked_subtitle']
+
+
+class TestReadCsvFile:
+    """Test cases for read_csv_file function return values."""
+    
+    def test_read_csv_file_not_found(self, temp_dir):
+        """Test that read_csv_file returns ([], False) when file not found."""
+        from scripts.qb_uploader import read_csv_file
+        
+        non_existent_file = os.path.join(temp_dir, 'nonexistent.csv')
+        torrents, file_exists = read_csv_file(non_existent_file)
+        
+        assert torrents == []
+        assert file_exists is False
+    
+    def test_read_csv_file_exists_with_data(self, temp_dir):
+        """Test that read_csv_file returns (data, True) when file exists with data."""
+        import csv
+        from scripts.qb_uploader import read_csv_file
+        
+        csv_file = os.path.join(temp_dir, 'test_torrents.csv')
+        
+        # Create a test CSV file with proper columns
+        with open(csv_file, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.DictWriter(f, fieldnames=[
+                'page', 'href', 'video_code', 'hacked_subtitle', 
+                'hacked_no_subtitle', 'subtitle', 'no_subtitle'
+            ])
+            writer.writeheader()
+            writer.writerow({
+                'page': '1',
+                'href': '/v/TEST-001',
+                'video_code': 'TEST-001',
+                'hacked_subtitle': 'magnet:?xt=urn:btih:abc123def456abc123def456abc123def456abc1',
+                'hacked_no_subtitle': '',
+                'subtitle': '',
+                'no_subtitle': ''
+            })
+        
+        torrents, file_exists = read_csv_file(csv_file)
+        
+        assert file_exists is True
+        assert len(torrents) == 1
+        assert torrents[0]['video_code'] == 'TEST-001'
+    
+    def test_read_csv_file_exists_but_empty(self, temp_dir):
+        """Test that read_csv_file returns ([], True) when file exists but is empty."""
+        import csv
+        from scripts.qb_uploader import read_csv_file
+        
+        csv_file = os.path.join(temp_dir, 'empty_torrents.csv')
+        
+        # Create an empty CSV file with just headers
+        with open(csv_file, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.DictWriter(f, fieldnames=[
+                'page', 'href', 'video_code', 'hacked_subtitle', 
+                'hacked_no_subtitle', 'subtitle', 'no_subtitle'
+            ])
+            writer.writeheader()
+        
+        torrents, file_exists = read_csv_file(csv_file)
+        
+        assert file_exists is True
+        assert torrents == []
+
+
+class TestFindLatestAdhocCsv:
+    """Test cases for find_latest_adhoc_csv_today function."""
+    
+    def test_find_latest_adhoc_csv_no_files(self, temp_dir):
+        """Test that function returns None when no adhoc CSV files exist."""
+        from unittest.mock import patch
+        from scripts.qb_uploader import find_latest_adhoc_csv_today
+        
+        with patch('scripts.qb_uploader.AD_HOC_DIR', temp_dir):
+            result = find_latest_adhoc_csv_today()
+            assert result is None
+    
+    def test_find_latest_adhoc_csv_with_custom_name(self, temp_dir):
+        """Test that function finds a custom-named adhoc CSV file."""
+        from unittest.mock import patch
+        from datetime import datetime
+        from scripts.qb_uploader import find_latest_adhoc_csv_today
+        
+        # Create dated directory structure
+        current_date = datetime.now().strftime("%Y%m%d")
+        year = datetime.now().strftime('%Y')
+        month = datetime.now().strftime('%m')
+        dated_dir = os.path.join(temp_dir, year, month)
+        os.makedirs(dated_dir, exist_ok=True)
+        
+        # Create a custom-named adhoc CSV file
+        custom_csv = os.path.join(dated_dir, f'Javdb_AdHoc_actors_ActorName_{current_date}.csv')
+        with open(custom_csv, 'w') as f:
+            f.write('test')
+        
+        with patch('scripts.qb_uploader.AD_HOC_DIR', temp_dir):
+            result = find_latest_adhoc_csv_today()
+            assert result is not None
+            assert 'Javdb_AdHoc_actors_ActorName' in result
+    
+    def test_find_latest_adhoc_csv_returns_most_recent(self, temp_dir):
+        """Test that function returns the most recently modified file."""
+        import time
+        from unittest.mock import patch
+        from datetime import datetime
+        from scripts.qb_uploader import find_latest_adhoc_csv_today
+        
+        # Create dated directory structure
+        current_date = datetime.now().strftime("%Y%m%d")
+        year = datetime.now().strftime('%Y')
+        month = datetime.now().strftime('%m')
+        dated_dir = os.path.join(temp_dir, year, month)
+        os.makedirs(dated_dir, exist_ok=True)
+        
+        # Create first CSV file
+        first_csv = os.path.join(dated_dir, f'Javdb_AdHoc_actors_FirstActor_{current_date}.csv')
+        with open(first_csv, 'w') as f:
+            f.write('first')
+        
+        time.sleep(0.1)  # Ensure different mtime
+        
+        # Create second CSV file (should be returned as most recent)
+        second_csv = os.path.join(dated_dir, f'Javdb_AdHoc_makers_SecondMaker_{current_date}.csv')
+        with open(second_csv, 'w') as f:
+            f.write('second')
+        
+        with patch('scripts.qb_uploader.AD_HOC_DIR', temp_dir):
+            result = find_latest_adhoc_csv_today()
+            assert result is not None
+            assert 'SecondMaker' in result
+
+
+class TestGetCsvFilenameAdhocAutoDiscovery:
+    """Test cases for get_csv_filename adhoc auto-discovery."""
+    
+    def test_get_csv_filename_adhoc_auto_discovers(self, temp_dir):
+        """Test that get_csv_filename auto-discovers adhoc CSV in adhoc mode."""
+        from unittest.mock import patch
+        from datetime import datetime
+        from scripts.qb_uploader import get_csv_filename
+        
+        # Create dated directory structure
+        current_date = datetime.now().strftime("%Y%m%d")
+        year = datetime.now().strftime('%Y')
+        month = datetime.now().strftime('%m')
+        dated_dir = os.path.join(temp_dir, year, month)
+        os.makedirs(dated_dir, exist_ok=True)
+        
+        # Create a custom-named adhoc CSV file
+        custom_csv = os.path.join(dated_dir, f'Javdb_AdHoc_video_codes_TEST_{current_date}.csv')
+        with open(custom_csv, 'w') as f:
+            f.write('test')
+        
+        with patch('scripts.qb_uploader.AD_HOC_DIR', temp_dir):
+            result = get_csv_filename(mode='adhoc')
+            assert result is not None
+            assert 'video_codes_TEST' in result
+    
+    def test_get_csv_filename_adhoc_fallback_when_no_file(self, temp_dir):
+        """Test that get_csv_filename falls back to default naming when no file found."""
+        from unittest.mock import patch
+        from datetime import datetime
+        from scripts.qb_uploader import get_csv_filename
+        
+        current_date = datetime.now().strftime("%Y%m%d")
+        
+        with patch('scripts.qb_uploader.AD_HOC_DIR', temp_dir):
+            result = get_csv_filename(mode='adhoc')
+            # Should fall back to default naming
+            assert 'Javdb_TodayTitle' in result or 'AdHoc' in result
+    
+    def test_get_csv_filename_daily_mode_unchanged(self, temp_dir):
+        """Test that daily mode still works with standard naming."""
+        from unittest.mock import patch
+        from datetime import datetime
+        from scripts.qb_uploader import get_csv_filename
+        
+        current_date = datetime.now().strftime("%Y%m%d")
+        
+        with patch('scripts.qb_uploader.DAILY_REPORT_DIR', temp_dir):
+            result = get_csv_filename(mode='daily')
+            assert f'Javdb_TodayTitle_{current_date}.csv' in result
 
 
 class TestInitializeProxyHelper:

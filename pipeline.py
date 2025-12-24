@@ -122,32 +122,52 @@ def run_script(script_path, args=None):
     return ''.join(output_lines)
 
 
+def extract_csv_path_from_output(output):
+    """
+    Extract CSV full path from spider output.
+    
+    Looks for a line in format: SPIDER_OUTPUT_CSV=/path/to/file.csv
+    
+    Args:
+        output: The captured stdout from spider script
+    
+    Returns:
+        str or None: The extracted CSV full path, or None if not found
+    """
+    for line in output.splitlines():
+        if line.startswith('SPIDER_OUTPUT_CSV='):
+            return line.split('=', 1)[1].strip()
+    return None
+
+
 def main():
     args = parse_arguments()
     is_adhoc_mode = args.url is not None
     
-    # Determine CSV path based on mode (using dated subdirectory YYYY/MM)
+    # For adhoc mode, let spider generate the filename dynamically
+    # For daily mode or when output_file is specified, use a pre-determined filename
     if args.output_file:
         csv_filename = args.output_file
+        spider_output_file = csv_filename
+    elif not is_adhoc_mode:
+        today_str = datetime.now().strftime('%Y%m%d')
+        csv_filename = f'Javdb_TodayTitle_{today_str}.csv'
+        spider_output_file = csv_filename
     else:
-        if is_adhoc_mode:
-            from scripts import spider
-            # Pass proxy and cf_bypass flags to generate CSV filename with resolved page names
-            csv_filename = spider.generate_output_csv_name(
-                args.url,
-                use_proxy=args.use_proxy,
-                use_cf_bypass=args.use_cf_bypass
-            )
-        else:
-            today_str = datetime.now().strftime('%Y%m%d')
-            csv_filename = f'Javdb_TodayTitle_{today_str}.csv'
+        # Adhoc mode without explicit output file: spider will generate the name
+        csv_filename = None
+        spider_output_file = None
 
-    if is_adhoc_mode:
-        csv_path = get_dated_report_path(AD_HOC_DIR, csv_filename)
-        logger.info(f"Ad hoc mode detected. Expected CSV: {csv_path}")
+    csv_path = None  # Will be set after spider runs if not pre-determined
+    if csv_filename:
+        if is_adhoc_mode:
+            csv_path = get_dated_report_path(AD_HOC_DIR, csv_filename)
+            logger.info(f"Ad hoc mode detected. Expected CSV: {csv_path}")
+        else:
+            csv_path = get_dated_report_path(DAILY_REPORT_DIR, csv_filename)
+            logger.info(f"Daily mode. Expected CSV: {csv_path}")
     else:
-        csv_path = get_dated_report_path(DAILY_REPORT_DIR, csv_filename)
-        logger.info(f"Daily mode. Expected CSV: {csv_path}")
+        logger.info("Ad hoc mode: CSV filename will be determined by spider")
 
     # Build arguments for spider
     spider_args = ['--from-pipeline']  # Always pass --from-pipeline
@@ -163,7 +183,8 @@ def main():
         spider_args.append('--ignore-history')
     if args.phase:
         spider_args.extend(['--phase', args.phase])
-    spider_args.extend(['--output-file', csv_filename])
+    if spider_output_file:
+        spider_args.extend(['--output-file', spider_output_file])
     if args.dry_run:
         spider_args.append('--dry-run')
     if args.ignore_release_date:
@@ -173,13 +194,12 @@ def main():
     if args.use_cf_bypass:
         spider_args.append('--use-cf-bypass')
 
-    # Build arguments for uploader
+    # Build base arguments for uploader (csv filename will be added after spider runs)
     uploader_args = ['--from-pipeline']  # Always pass --from-pipeline
     if is_adhoc_mode:
         uploader_args.extend(['--mode', 'adhoc'])
     else:
         uploader_args.extend(['--mode', 'daily'])
-    uploader_args.extend(['--input-file', csv_filename])
     if args.use_proxy:
         uploader_args.append('--use-proxy')
 
@@ -192,12 +212,6 @@ def main():
         pikpak_args.append('--individual')
     if args.use_proxy:
         pikpak_args.append('--use-proxy')
-
-    # Build arguments for email notification
-    email_args = ['--from-pipeline']  # Always pass --from-pipeline
-    email_args.extend(['--csv-path', csv_path])
-    if args.dry_run:
-        email_args.append('--dry-run')
 
     pipeline_success = False
     
@@ -213,8 +227,20 @@ def main():
 
         # 1. Run Spider
         logger.info("Step 1: Running JavDB Spider...")
-        run_script('scripts/spider.py', spider_args)
+        spider_output = run_script('scripts/spider.py', spider_args)
         logger.info("✓ JavDB Spider completed successfully")
+        
+        # Extract CSV path from spider output if not pre-determined
+        if csv_path is None:
+            csv_path = extract_csv_path_from_output(spider_output)
+            if csv_path:
+                logger.info(f"Captured CSV path from spider: {csv_path}")
+            else:
+                logger.warning("Could not extract CSV path from spider output, uploader will use auto-discovery")
+        
+        # Add CSV path to uploader args
+        if csv_path:
+            uploader_args.extend(['--input-file', csv_path])
 
         # 2. Run Uploader
         logger.info("Step 2: Running qBittorrent Uploader...")
@@ -227,6 +253,13 @@ def main():
         logger.info("✓ PikPak Bridge completed successfully")
 
         # 4. Run Email Notification
+        # Build email args after spider runs (csv_path is now known)
+        email_args = ['--from-pipeline']
+        if csv_path:
+            email_args.extend(['--csv-path', csv_path])
+        if args.dry_run:
+            email_args.append('--dry-run')
+        
         logger.info("Step 4: Sending email notification...")
         run_script('scripts/email_notification.py', email_args)
         logger.info("✓ Email notification sent successfully")
@@ -246,6 +279,12 @@ def main():
         # Still try to send email notification on failure
         try:
             logger.info("Attempting to send failure notification email...")
+            # Build email args for failure notification
+            email_args = ['--from-pipeline']
+            if csv_path:
+                email_args.extend(['--csv-path', csv_path])
+            if args.dry_run:
+                email_args.append('--dry-run')
             run_script('scripts/email_notification.py', email_args)
         except Exception as email_error:
             logger.error(f"Failed to send failure notification: {email_error}")
