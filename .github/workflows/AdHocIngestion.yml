@@ -356,12 +356,32 @@ jobs:
           fi
           
           echo "Executing: $SPIDER_CMD"
-          eval $SPIDER_CMD
+          # Capture output to extract the CSV filename
+          SPIDER_OUTPUT=$(eval $SPIDER_CMD | tee /dev/stderr)
+          
+          # Extract CSV filename from spider output (format: SPIDER_OUTPUT_CSV=filename.csv)
+          CSV_FILENAME=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_OUTPUT_CSV=" | cut -d'=' -f2 | tail -1)
+          if [ -n "$CSV_FILENAME" ]; then
+            echo "csv_filename=$CSV_FILENAME" >> $GITHUB_OUTPUT
+            echo "Captured CSV filename: $CSV_FILENAME"
+          else
+            echo "Warning: Could not capture CSV filename from spider output"
+          fi
 
       - name: Step 2 - Run qBittorrent Uploader (Ad-Hoc)
         id: uploader
         run: |
           CMD="python3 scripts/qb_uploader.py --mode adhoc"
+          
+          # Pass the CSV full path captured from spider
+          CSV_PATH="${{ steps.spider.outputs.csv_filename }}"
+          if [ -n "$CSV_PATH" ]; then
+            CMD="$CMD --input-file '$CSV_PATH'"
+            echo "Using CSV file from spider: $CSV_PATH"
+          else
+            echo "Warning: No CSV path provided, qb_uploader will use auto-discovery"
+          fi
+          
           if [ "${{ inputs.proxy_uploader }}" == "true" ]; then
             CMD="$CMD --use-proxy"
           fi
