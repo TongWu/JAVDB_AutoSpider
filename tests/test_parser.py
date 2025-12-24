@@ -127,23 +127,28 @@ class TestParseIndex:
         for result in results:
             assert result['page'] == 5
     
-    def test_parse_adhoc_mode_phase1_processes_all(self, sample_index_html):
-        """Test that adhoc mode processes all entries regardless of tags in phase 1."""
+    def test_parse_adhoc_mode_phase1_processes_subtitle_entries(self, sample_index_html):
+        """Test that adhoc mode phase 1 processes entries WITH subtitle tag."""
         results = parse_index(sample_index_html, page_num=1, phase=1, is_adhoc_mode=True)
         
-        # Adhoc mode should find ALL entries (ABC-123, DEF-456, GHI-789)
+        # Adhoc mode phase 1 should find entries with subtitle tag:
+        # ABC-123 (has 含中字磁鏈), GHI-789 (has 含中字磁鏈)
+        # DEF-456 has no subtitle tag, so it goes to phase 2
         hrefs = [r['href'] for r in results]
-        assert len(results) == 3
+        assert len(results) == 2
         assert '/v/ABC-123' in hrefs
-        assert '/v/DEF-456' in hrefs  # No subtitle tag, but included in adhoc mode
         assert '/v/GHI-789' in hrefs
+        assert '/v/DEF-456' not in hrefs  # No subtitle tag, processed in phase 2
     
-    def test_parse_adhoc_mode_phase2_skips_all(self, sample_index_html):
-        """Test that adhoc mode skips all entries in phase 2 (already processed in phase 1)."""
+    def test_parse_adhoc_mode_phase2_processes_non_subtitle_entries(self, sample_index_html):
+        """Test that adhoc mode phase 2 processes entries WITHOUT subtitle tag."""
         results = parse_index(sample_index_html, page_num=1, phase=2, is_adhoc_mode=True)
         
-        # Phase 2 in adhoc mode should return empty (all processed in phase 1)
-        assert len(results) == 0
+        # Phase 2 in adhoc mode should find entries without subtitle tag:
+        # DEF-456 (no subtitle tag)
+        hrefs = [r['href'] for r in results]
+        assert len(results) == 1
+        assert '/v/DEF-456' in hrefs
     
     def test_parse_adhoc_mode_extracts_metadata(self, sample_index_html):
         """Test that adhoc mode still extracts rate and comment_number."""
