@@ -20,21 +20,31 @@ on:
         required: false
         default: ''
         type: string
-      ignore_history:
-        description: 'Ignore history file (scrape all entries regardless of history)'
+      history_filter:
+        description: 'Enable history filter (skip entries already in history file)'
         required: false
-        default: true
+        default: false
         type: boolean
-      enable_date_filter:
+      date_filter:
         description: 'Enable release date filter (only scrape today/yesterday entries)'
         required: false
         default: false
         type: boolean
-      history_coverage:
-        description: 'History coverage mode (days to look back, e.g., 7 for last 7 days)'
+      proxy_spider:
+        description: 'Enable proxy for Spider requests'
         required: false
-        default: ''
-        type: string
+        default: true
+        type: boolean
+      proxy_uploader:
+        description: 'Enable proxy for qBittorrent Uploader requests'
+        required: false
+        default: false
+        type: boolean
+      proxy_pikpak:
+        description: 'Enable proxy for PikPak Bridge requests'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   # =============================================================================
@@ -213,7 +223,13 @@ jobs:
           echo "✓ Config decrypted successfully"
 
       - name: Run health checks
-        run: python3 scripts/health_check.py --use-proxy
+        run: |
+          # Use proxy for health check if any proxy option is enabled
+          if [ "${{ inputs.proxy_spider }}" == "true" ] || [ "${{ inputs.proxy_uploader }}" == "true" ] || [ "${{ inputs.proxy_pikpak }}" == "true" ]; then
+            python3 scripts/health_check.py --use-proxy
+          else
+            python3 scripts/health_check.py
+          fi
 
   # =============================================================================
   # Job 3: Run Pipeline - Execute spider, uploader, and pikpak bridge
@@ -284,16 +300,18 @@ jobs:
           echo "URL: ${{ inputs.url }}"
           echo "Start Page: ${{ inputs.start_page }}"
           echo "End Page: ${{ inputs.end_page || 'All pages (--all flag)' }}"
-          echo "Ignore History: ${{ inputs.ignore_history }}"
-          echo "Enable Date Filter: ${{ inputs.enable_date_filter }}"
-          echo "History Coverage: ${{ inputs.history_coverage || 'Not specified' }}"
+          echo "History Filter: ${{ inputs.history_filter }}"
+          echo "Date Filter: ${{ inputs.date_filter }}"
+          echo "Proxy Spider: ${{ inputs.proxy_spider }}"
+          echo "Proxy Uploader: ${{ inputs.proxy_uploader }}"
+          echo "Proxy PikPak: ${{ inputs.proxy_pikpak }}"
           echo "============================================"
 
       - name: Step 1 - Run Spider (Ad-Hoc)
         id: spider
         run: |
           # Build spider command with conditional flags
-          SPIDER_CMD="python3 scripts/spider.py --use-proxy"
+          SPIDER_CMD="python3 scripts/spider.py"
           
           # Add URL
           SPIDER_CMD="$SPIDER_CMD --url '${{ inputs.url }}'"
@@ -309,14 +327,19 @@ jobs:
             SPIDER_CMD="$SPIDER_CMD --end-page $END_PAGE"
           fi
           
-          # Add ignore history flag if enabled
-          if [ "${{ inputs.ignore_history }}" == "true" ]; then
+          # Add ignore history flag if history filter is disabled
+          if [ "${{ inputs.history_filter }}" == "false" ]; then
             SPIDER_CMD="$SPIDER_CMD --ignore-history"
           fi
           
           # Add ignore release date flag if date filter is disabled
-          if [ "${{ inputs.enable_date_filter }}" == "false" ]; then
+          if [ "${{ inputs.date_filter }}" == "false" ]; then
             SPIDER_CMD="$SPIDER_CMD --ignore-release-date"
+          fi
+          
+          # Add proxy flag if enabled
+          if [ "${{ inputs.proxy_spider }}" == "true" ]; then
+            SPIDER_CMD="$SPIDER_CMD --use-proxy"
           fi
           
           echo "Executing: $SPIDER_CMD"
@@ -324,12 +347,24 @@ jobs:
 
       - name: Step 2 - Run qBittorrent Uploader (Ad-Hoc)
         id: uploader
-        run: python3 scripts/qb_uploader.py --mode adhoc --use-proxy
+        run: |
+          CMD="python3 scripts/qb_uploader.py --mode adhoc"
+          if [ "${{ inputs.proxy_uploader }}" == "true" ]; then
+            CMD="$CMD --use-proxy"
+          fi
+          echo "Executing: $CMD"
+          eval $CMD
 
       - name: Step 3 - Run PikPak Bridge
         id: pikpak
         if: ${{ success() && steps.uploader.outcome == 'success' }}
-        run: python3 scripts/pikpak_bridge.py --days 3
+        run: |
+          CMD="python3 scripts/pikpak_bridge.py --days 3"
+          if [ "${{ inputs.proxy_pikpak }}" == "true" ]; then
+            CMD="$CMD --use-proxy"
+          fi
+          echo "Executing: $CMD"
+          eval $CMD
 
       - name: Encrypt and upload logs artifact
         if: always()
