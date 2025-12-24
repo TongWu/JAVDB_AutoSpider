@@ -614,16 +614,21 @@ jobs:
               git rebase --abort 2>/dev/null || true
               
               # Reset to our commit and try merge
-              git reset --hard HEAD
-              git fetch origin "$CURRENT_BRANCH"
-              if git merge "origin/$CURRENT_BRANCH" --no-edit -m "Merge remote changes"; then
-                if git push origin "$CURRENT_BRANCH"; then
-                  echo "✓ Changes merged and pushed to $CURRENT_BRANCH branch successfully"
-                  exit 0
-                fi
+              if ! git reset --hard HEAD; then
+                echo "Warning: git reset failed, skipping merge attempt for this iteration"
+                # Clean up any potential mess before retry
+                git clean -fd 2>/dev/null || true
               else
-                echo "Merge also failed, will retry..."
-                git merge --abort 2>/dev/null || true
+                git fetch origin "$CURRENT_BRANCH"
+                if git merge "origin/$CURRENT_BRANCH" --no-edit -m "Merge remote changes"; then
+                  if git push origin "$CURRENT_BRANCH"; then
+                    echo "✓ Changes merged and pushed to $CURRENT_BRANCH branch successfully"
+                    exit 0
+                  fi
+                else
+                  echo "Merge also failed, will retry..."
+                  git merge --abort 2>/dev/null || true
+                fi
               fi
             fi
             
