@@ -70,7 +70,7 @@ except ImportError:
         return torrent_content.strip().startswith("[DOWNLOADED]")
 
 # Import path helper for dated subdirectories
-from utils.path_helper import get_dated_report_path, get_dated_subdir
+from utils.path_helper import get_dated_report_path, get_dated_subdir, find_latest_report_in_dated_dirs
 
 # Configure logging
 from utils.logging_config import setup_logging, get_logger
@@ -125,14 +125,61 @@ def get_proxies_dict(module_name, use_proxy_flag):
     
     return global_proxy_helper.get_proxies_dict(module_name, use_proxy_flag)
 
-def get_csv_filename(mode='daily'):
-    """Get the CSV filename for current date and mode with dated subdirectory (YYYY/MM)"""
+def find_latest_adhoc_csv_today():
+    """
+    Find the most recently created/modified AdHoc CSV file from today's dated directory.
+    
+    This function handles the case where spider generates a custom-named CSV file
+    (e.g., Javdb_AdHoc_actors_森日向子_20251224.csv) and qb_uploader needs to find it.
+    
+    Returns:
+        str or None: Path to the most recent AdHoc CSV file, or None if not found
+    """
     current_date = datetime.now().strftime("%Y%m%d")
-    csv_filename = f'Javdb_TodayTitle_{current_date}.csv'
+    
+    # Look for any AdHoc CSV file from today using pattern matching
+    # Pattern: Javdb_AdHoc_*_{date}.csv
+    adhoc_pattern = f'Javdb_AdHoc_*_{current_date}.csv'
+    
+    latest_file = find_latest_report_in_dated_dirs(AD_HOC_DIR, adhoc_pattern)
+    
+    if latest_file:
+        return latest_file
+    
+    # Fallback: try the legacy pattern without AdHoc prefix
+    legacy_pattern = f'*_{current_date}.csv'
+    return find_latest_report_in_dated_dirs(AD_HOC_DIR, legacy_pattern)
+
+
+def get_csv_filename(mode='daily'):
+    """
+    Get the CSV filename for current date and mode with dated subdirectory (YYYY/MM).
+    
+    For adhoc mode, this function first tries to auto-discover the most recent
+    adhoc CSV file generated today by the spider. This handles custom-named files
+    like 'Javdb_AdHoc_actors_ActorName_20251224.csv'.
+    
+    Args:
+        mode: 'daily' or 'adhoc'
+    
+    Returns:
+        str: Path to the CSV file
+    """
+    current_date = datetime.now().strftime("%Y%m%d")
     
     if mode == 'adhoc':
-        return get_dated_report_path(AD_HOC_DIR, csv_filename)
+        # Try to auto-discover the latest adhoc CSV from today
+        latest_adhoc = find_latest_adhoc_csv_today()
+        if latest_adhoc:
+            logger.info(f"Auto-discovered adhoc CSV: {latest_adhoc}")
+            return latest_adhoc
+        else:
+            # Fallback to default naming if no file found
+            logger.warning("No adhoc CSV found for today, using default naming pattern")
+            csv_filename = f'Javdb_TodayTitle_{current_date}.csv'
+            return get_dated_report_path(AD_HOC_DIR, csv_filename)
     else:
+        csv_filename = f'Javdb_TodayTitle_{current_date}.csv'
         return get_dated_report_path(DAILY_REPORT_DIR, csv_filename)
 
 def test_qbittorrent_connection(use_proxy=False):
@@ -304,14 +351,20 @@ def add_torrent_to_qbittorrent(session, magnet_link, title, mode='daily', use_pr
         return False
 
 def read_csv_file(filename):
-    """Read the CSV file and extract all magnet links, skipping downloaded torrents"""
+    """Read the CSV file and extract all magnet links, skipping downloaded torrents.
+    
+    Returns:
+        tuple: (torrents_list, file_exists_bool)
+            - torrents_list: List of torrent dictionaries
+            - file_exists_bool: True if file was found, False if file not found
+    """
     torrents = []
     skipped_count = 0
     
     if not os.path.exists(filename):
         logger.error(f"CSV file not found: {filename}")
         logger.info("Make sure you have run the spider script first to generate the CSV file")
-        return torrents
+        return torrents, False  # Return tuple indicating file not found
     
     try:
         with open(filename, 'r', encoding='utf-8-sig') as f:
@@ -381,11 +434,11 @@ def read_csv_file(filename):
         logger.info(f"Found {len(torrents)} torrent links in {filename}")
         if skipped_count > 0:
             logger.info(f"Skipped {skipped_count} already downloaded torrents")
-        return torrents
+        return torrents, True  # File exists
         
     except Exception as e:
         logger.error(f"Error reading CSV file: {e}")
-        return torrents
+        return torrents, True  # File exists but had read error
 
 def initialize_proxy_helper(use_proxy):
     """Initialize global proxy pool and proxy helper."""
@@ -481,22 +534,32 @@ def main():
     
     # Get CSV filename
     if args.input_file:
-        # When input file is specified, use dated subdirectory
-        if mode == 'adhoc':
-            csv_filename = get_dated_report_path(AD_HOC_DIR, args.input_file)
+        # Check if input_file is already a full path (contains directory separator)
+        if os.path.sep in args.input_file or args.input_file.startswith('reports'):
+            # Already a full path, use as-is
+            csv_filename = args.input_file
         else:
-            csv_filename = get_dated_report_path(DAILY_REPORT_DIR, args.input_file)
+            # Just a filename, build full path with dated subdirectory
+            if mode == 'adhoc':
+                csv_filename = get_dated_report_path(AD_HOC_DIR, args.input_file)
+            else:
+                csv_filename = get_dated_report_path(DAILY_REPORT_DIR, args.input_file)
         logger.info(f"Using specified input file: {csv_filename}")
     else:
         csv_filename = get_csv_filename(mode)
         logger.info(f"Looking for CSV file: {csv_filename}")
     
     # Read torrent links from CSV
-    torrents = read_csv_file(csv_filename)
+    torrents, file_exists = read_csv_file(csv_filename)
+    
+    if not file_exists:
+        logger.error("CSV file not found - this is a critical error!")
+        logger.error("The spider script may have failed to generate the report file.")
+        sys.exit(1)
     
     if not torrents:
         logger.warning("No torrent links found in CSV file")
-        # This is not an error - just no work to do
+        # File exists but no torrents to add - this is not an error, just no work to do
         return
     
     # Create session for qBittorrent
