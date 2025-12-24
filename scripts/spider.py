@@ -1056,10 +1056,15 @@ def main():
     page_num = start_page
     consecutive_empty_pages = 0
     consecutive_fallback_successes = 0  # Track consecutive fallback successes before persisting settings
-    # Threshold = (number of active proxies in pool) * 3
-    fallback_persist_threshold = (len(global_proxy_pool.proxies) * 3) if global_proxy_pool else 3
+    # Thresholds based on fallback type:
+    # - CF bypass only (proxy unchanged): proxies * 1
+    # - Other changes (proxy changed): proxies * 3
+    proxy_count = len(global_proxy_pool.proxies) if global_proxy_pool else 1
+    fallback_persist_threshold_cf_only = proxy_count * 1  # Lower threshold for CF bypass only
+    fallback_persist_threshold_full = proxy_count * 3     # Higher threshold for proxy changes
+    current_fallback_threshold = fallback_persist_threshold_full  # Will be set based on fallback type
     pending_fallback_settings = None  # Store the fallback settings to be persisted (use_proxy, use_cf_bypass)
-    logger.debug(f"Fallback persist threshold set to {fallback_persist_threshold} (based on {len(global_proxy_pool.proxies) if global_proxy_pool else 0} proxies in pool)")
+    logger.debug(f"Fallback persist thresholds: CF-only={fallback_persist_threshold_cf_only}, Full={fallback_persist_threshold_full} (based on {proxy_count} proxies in pool)")
         
     while True:
         page_url = get_page_url(page_num, phase=1, custom_url=custom_url)
@@ -1077,15 +1082,24 @@ def main():
         
         # Track fallback successes and persist settings after reaching threshold
         if has_movie_list and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass):
+            # Determine fallback type and appropriate threshold
+            is_cf_only_change = (effective_use_proxy == use_proxy) and (effective_use_cf_bypass != use_cf_bypass)
+            
+            # If this is a new fallback type, reset counter and set appropriate threshold
+            if pending_fallback_settings is None or pending_fallback_settings != (effective_use_proxy, effective_use_cf_bypass):
+                consecutive_fallback_successes = 0
+                current_fallback_threshold = fallback_persist_threshold_cf_only if is_cf_only_change else fallback_persist_threshold_full
+            
             # Fallback was triggered and succeeded
             consecutive_fallback_successes += 1
             pending_fallback_settings = (effective_use_proxy, effective_use_cf_bypass)
-            logger.info(f"[Page {page_num}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
-                       f"Consecutive successes: {consecutive_fallback_successes}/{fallback_persist_threshold}")
+            fallback_type = "CF-only" if is_cf_only_change else "Full"
+            logger.info(f"[Page {page_num}] Fallback succeeded ({fallback_type}: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
+                       f"Consecutive successes: {consecutive_fallback_successes}/{current_fallback_threshold}")
             
             # Only persist settings after reaching the threshold
-            if consecutive_fallback_successes >= fallback_persist_threshold:
-                logger.info(f"[Page {page_num}] Reached {fallback_persist_threshold} consecutive fallback successes. "
+            if consecutive_fallback_successes >= current_fallback_threshold:
+                logger.info(f"[Page {page_num}] Reached {current_fallback_threshold} consecutive {fallback_type} fallback successes. "
                            f"Persisting settings: use_proxy={effective_use_proxy}, use_cf_bypass={effective_use_cf_bypass}")
                 use_proxy = effective_use_proxy
                 use_cf_bypass = effective_use_cf_bypass
@@ -1181,9 +1195,10 @@ def main():
         # Process phase 1 entries
         total_entries_phase1 = len(all_index_results_phase1)
         
-        # Reset fallback tracking for detail pages (reuse threshold from index phase)
+        # Reset fallback tracking for detail pages (reuse thresholds from index phase)
         detail_consecutive_fallback_successes = 0
         detail_pending_fallback_settings = None
+        detail_current_fallback_threshold = fallback_persist_threshold_full
 
         for i, entry in enumerate(all_index_results_phase1, 1):
             href = entry['href']
@@ -1224,14 +1239,23 @@ def main():
             # Track fallback successes and persist settings after reaching threshold (same as index phase)
             fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
             if fallback_triggered:
+                # Determine fallback type and appropriate threshold
+                is_cf_only_change = (effective_use_proxy == use_proxy) and (effective_use_cf_bypass != use_cf_bypass)
+                
+                # If this is a new fallback type, reset counter and set appropriate threshold
+                if detail_pending_fallback_settings is None or detail_pending_fallback_settings != (effective_use_proxy, effective_use_cf_bypass):
+                    detail_consecutive_fallback_successes = 0
+                    detail_current_fallback_threshold = fallback_persist_threshold_cf_only if is_cf_only_change else fallback_persist_threshold_full
+                
                 detail_consecutive_fallback_successes += 1
                 detail_pending_fallback_settings = (effective_use_proxy, effective_use_cf_bypass)
-                logger.info(f"[{i}/{total_entries_phase1}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
-                           f"Consecutive successes: {detail_consecutive_fallback_successes}/{fallback_persist_threshold}")
+                fallback_type = "CF-only" if is_cf_only_change else "Full"
+                logger.info(f"[{i}/{total_entries_phase1}] Fallback succeeded ({fallback_type}: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
+                           f"Consecutive successes: {detail_consecutive_fallback_successes}/{detail_current_fallback_threshold}")
                 
                 # Only persist settings after reaching the threshold
-                if detail_consecutive_fallback_successes >= fallback_persist_threshold:
-                    logger.info(f"[{i}/{total_entries_phase1}] Reached {fallback_persist_threshold} consecutive fallback successes. "
+                if detail_consecutive_fallback_successes >= detail_current_fallback_threshold:
+                    logger.info(f"[{i}/{total_entries_phase1}] Reached {detail_current_fallback_threshold} consecutive {fallback_type} fallback successes. "
                                f"Persisting settings: use_proxy={effective_use_proxy}, use_cf_bypass={effective_use_cf_bypass}")
                     use_proxy = effective_use_proxy
                     use_cf_bypass = effective_use_cf_bypass
@@ -1368,9 +1392,10 @@ def main():
         # Process phase 2 entries
         total_entries_phase2 = len(all_index_results_phase2)
         
-        # Reset fallback tracking for phase 2 detail pages (reuse threshold from index phase)
+        # Reset fallback tracking for phase 2 detail pages (reuse thresholds from index phase)
         detail_consecutive_fallback_successes = 0
         detail_pending_fallback_settings = None
+        detail_current_fallback_threshold = fallback_persist_threshold_full
 
         for i, entry in enumerate(all_index_results_phase2, 1):
             href = entry['href']
@@ -1412,14 +1437,23 @@ def main():
             # Track fallback successes and persist settings after reaching threshold (same as index phase)
             fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
             if fallback_triggered:
+                # Determine fallback type and appropriate threshold
+                is_cf_only_change = (effective_use_proxy == use_proxy) and (effective_use_cf_bypass != use_cf_bypass)
+                
+                # If this is a new fallback type, reset counter and set appropriate threshold
+                if detail_pending_fallback_settings is None or detail_pending_fallback_settings != (effective_use_proxy, effective_use_cf_bypass):
+                    detail_consecutive_fallback_successes = 0
+                    detail_current_fallback_threshold = fallback_persist_threshold_cf_only if is_cf_only_change else fallback_persist_threshold_full
+                
                 detail_consecutive_fallback_successes += 1
                 detail_pending_fallback_settings = (effective_use_proxy, effective_use_cf_bypass)
-                logger.info(f"[P2-{i}/{total_entries_phase2}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
-                           f"Consecutive successes: {detail_consecutive_fallback_successes}/{fallback_persist_threshold}")
+                fallback_type = "CF-only" if is_cf_only_change else "Full"
+                logger.info(f"[P2-{i}/{total_entries_phase2}] Fallback succeeded ({fallback_type}: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
+                           f"Consecutive successes: {detail_consecutive_fallback_successes}/{detail_current_fallback_threshold}")
                 
                 # Only persist settings after reaching the threshold
-                if detail_consecutive_fallback_successes >= fallback_persist_threshold:
-                    logger.info(f"[P2-{i}/{total_entries_phase2}] Reached {fallback_persist_threshold} consecutive fallback successes. "
+                if detail_consecutive_fallback_successes >= detail_current_fallback_threshold:
+                    logger.info(f"[P2-{i}/{total_entries_phase2}] Reached {detail_current_fallback_threshold} consecutive {fallback_type} fallback successes. "
                                f"Persisting settings: use_proxy={effective_use_proxy}, use_cf_bypass={effective_use_cf_bypass}")
                     use_proxy = effective_use_proxy
                     use_cf_bypass = effective_use_cf_bypass
