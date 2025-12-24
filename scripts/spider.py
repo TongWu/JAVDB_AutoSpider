@@ -295,6 +295,216 @@ def initialize_request_handler():
     logger.info("Request handler initialized successfully")
 
 
+# ============================================================
+# Adhoc URL Magnet Filter Functions
+# ============================================================
+
+def has_magnet_filter(url):
+    """
+    Check if URL already has a magnet/download filter.
+    
+    Different URL types use different filter parameters:
+    - actors: t=d or t=c (download/subtitle filter)
+    - makers/video_codes: f=download
+    
+    Args:
+        url: The URL to check
+    
+    Returns:
+        bool: True if URL already has magnet filter, False otherwise
+    """
+    try:
+        parsed = urlparse(url)
+        if not parsed.query:
+            return False
+        
+        # Parse query parameters
+        from urllib.parse import parse_qs
+        params = parse_qs(parsed.query)
+        
+        # Determine URL type
+        path = parsed.path.strip('/')
+        
+        if path.startswith('actors/'):
+            # For actors: check 't' parameter for 'd' or 'c'
+            if 't' not in params:
+                return False
+            t_values = params['t']
+            for t_val in t_values:
+                # t can be comma-separated like "312,d"
+                parts = t_val.split(',')
+                if 'd' in parts or 'c' in parts:
+                    return True
+            return False
+        
+        elif path.startswith('makers/') or path.startswith('video_codes/'):
+            # For makers/video_codes: check 'f' parameter for 'download'
+            if 'f' not in params:
+                return False
+            f_values = params['f']
+            for f_val in f_values:
+                if f_val == 'download':
+                    return True
+            return False
+        
+        else:
+            # Unknown URL type, no filter check needed
+            return False
+        
+    except Exception as e:
+        logger.debug(f"Error checking magnet filter in URL {url}: {e}")
+        return False
+
+
+def add_magnet_filter_to_url(url):
+    """
+    Add magnet filter to URL for adhoc mode based on URL type.
+    
+    Different URL types use different filter parameters:
+    - actors: t=d (or append ,d to existing t value)
+    - makers/video_codes: f=download
+    
+    Rules for actors (t parameter):
+    1. If URL has no 't' param: add ?t=d or &t=d
+    2. If URL has t=d or t=c: return URL unchanged (already has filter)
+    3. If URL has t=<other> (e.g. t=312): change to t=<other>,d (e.g. t=312,d)
+    
+    Rules for makers/video_codes (f parameter):
+    1. If URL has no 'f' param: add ?f=download or &f=download
+    2. If URL has f=download: return URL unchanged
+    
+    Args:
+        url: The original URL
+    
+    Returns:
+        str: URL with magnet filter added, or original if already has filter
+    """
+    try:
+        # If already has magnet filter, return unchanged
+        if has_magnet_filter(url):
+            logger.debug(f"URL already has magnet filter: {url}")
+            return url
+        
+        parsed = urlparse(url)
+        path = parsed.path.strip('/')
+        
+        # Determine URL type and appropriate filter
+        if path.startswith('actors/'):
+            # For actors: use t=d filter
+            return _add_actors_filter(url, parsed)
+        elif path.startswith('makers/') or path.startswith('video_codes/'):
+            # For makers/video_codes: use f=download filter
+            return _add_download_filter(url, parsed)
+        else:
+            # Unknown URL type, return unchanged
+            logger.debug(f"Unknown URL type, not adding filter: {url}")
+            return url
+            
+    except Exception as e:
+        logger.warning(f"Error adding magnet filter to URL {url}: {e}")
+        return url
+
+
+def _add_actors_filter(url, parsed):
+    """
+    Add t=d filter for actors URLs.
+    
+    Args:
+        url: The original URL
+        parsed: ParseResult from urlparse
+    
+    Returns:
+        str: URL with t=d filter added
+    """
+    from urllib.parse import parse_qs, urlencode, urlunparse
+    
+    # If no query string, simply add ?t=d
+    if not parsed.query:
+        return f"{url}?t=d"
+    
+    params = parse_qs(parsed.query, keep_blank_values=True)
+    
+    if 't' not in params:
+        # No 't' parameter, add t=d to existing query
+        return f"{url}&t=d"
+    else:
+        # Has 't' parameter with other value (e.g. t=312), append ,d
+        t_values = params['t']
+        new_t_values = []
+        for t_val in t_values:
+            parts = t_val.split(',')
+            if 'd' not in parts and 'c' not in parts:
+                new_t_values.append(f"{t_val},d")
+            else:
+                new_t_values.append(t_val)
+        
+        params['t'] = new_t_values
+        
+        # Rebuild URL
+        flat_params = []
+        for key, values in params.items():
+            for val in values:
+                flat_params.append((key, val))
+        
+        new_query = urlencode(flat_params, safe=',')
+        
+        return urlunparse((
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            new_query,
+            parsed.fragment
+        ))
+
+
+def _add_download_filter(url, parsed):
+    """
+    Add f=download filter for makers/video_codes URLs.
+    
+    Args:
+        url: The original URL
+        parsed: ParseResult from urlparse
+    
+    Returns:
+        str: URL with f=download filter added
+    """
+    from urllib.parse import parse_qs
+    
+    # If no query string, simply add ?f=download
+    if not parsed.query:
+        return f"{url}?f=download"
+    
+    params = parse_qs(parsed.query, keep_blank_values=True)
+    
+    if 'f' not in params:
+        # No 'f' parameter, add f=download to existing query
+        return f"{url}&f=download"
+    else:
+        # 'f' parameter exists but is not 'download', we should still add it
+        # Actually, if we reach here, has_magnet_filter returned False,
+        # meaning f is not 'download', so we need to handle this case
+        # For simplicity, just append &f=download (the server will use the last value)
+        # Or we can replace it - let's replace it for cleaner URLs
+        from urllib.parse import urlencode, urlunparse
+        
+        params['f'] = ['download']
+        
+        flat_params = []
+        for key, values in params.items():
+            for val in values:
+                flat_params.append((key, val))
+        
+        new_query = urlencode(flat_params)
+        
+        return urlunparse((
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            new_query,
+            parsed.fragment
+        ))
 
 
 def get_page_url(page_num, phase=1, custom_url=None):
@@ -771,6 +981,241 @@ def create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet
     return row
 
 
+# ============================================================
+# URL Type Detection and Page Name Extraction Functions
+# ============================================================
+
+def detect_url_type(url):
+    """
+    Detect the type of JavDB URL.
+    
+    Args:
+        url: The JavDB URL (e.g., 'https://javdb.com/actors/bkxd')
+    
+    Returns:
+        str: The URL type ('actors', 'makers', 'video_codes', or 'unknown')
+    """
+    if not url or 'javdb.com' not in url:
+        return 'unknown'
+    
+    try:
+        parsed = urlparse(url)
+        path = parsed.path.strip('/')
+        
+        if path.startswith('actors/'):
+            return 'actors'
+        elif path.startswith('makers/'):
+            return 'makers'
+        elif path.startswith('video_codes/'):
+            return 'video_codes'
+        else:
+            return 'unknown'
+    except Exception as e:
+        logger.warning(f"Error detecting URL type for {url}: {e}")
+        return 'unknown'
+
+
+def extract_url_identifier(url):
+    """
+    Extract the identifier from a JavDB URL (e.g., 'bkxd' from '/actors/bkxd').
+    
+    Args:
+        url: The JavDB URL
+    
+    Returns:
+        str: The identifier part of the URL
+    """
+    try:
+        parsed = urlparse(url)
+        path = parsed.path.strip('/')
+        parts = path.split('/')
+        if len(parts) >= 2:
+            return parts[1]
+    except Exception as e:
+        logger.warning(f"Error extracting URL identifier from {url}: {e}")
+    return None
+
+
+def parse_actor_name_from_html(html_content):
+    """
+    Extract actor name from JavDB actor page HTML.
+    
+    Looks for:
+    <span class="actor-section-name">森日向子</span>
+    
+    Args:
+        html_content: HTML content of the actor page
+    
+    Returns:
+        str: Actor name if found, None otherwise
+    """
+    try:
+        soup = BeautifulSoup(html_content, 'html.parser')
+        actor_span = soup.find('span', class_='actor-section-name')
+        if actor_span:
+            actor_name = actor_span.get_text(strip=True)
+            if actor_name:
+                return actor_name
+    except Exception as e:
+        logger.warning(f"Error parsing actor name from HTML: {e}")
+    return None
+
+
+def parse_maker_name_from_html(html_content):
+    """
+    Extract maker (studio) name from JavDB maker page HTML.
+    
+    Looks for:
+    <span class="section-subtitle">片商</span>
+    <span class="section-name">MOODYZ</span>
+    
+    Args:
+        html_content: HTML content of the maker page
+    
+    Returns:
+        str: Maker name if found, None otherwise
+    """
+    try:
+        soup = BeautifulSoup(html_content, 'html.parser')
+        section_name = soup.find('span', class_='section-name')
+        if section_name:
+            maker_name = section_name.get_text(strip=True)
+            if maker_name:
+                return maker_name
+    except Exception as e:
+        logger.warning(f"Error parsing maker name from HTML: {e}")
+    return None
+
+
+def sanitize_filename_part(text, max_length=30):
+    """
+    Sanitize text for use in filename.
+    Removes or replaces characters that are not safe for filenames.
+    
+    Args:
+        text: The text to sanitize
+        max_length: Maximum length of the result
+    
+    Returns:
+        str: Sanitized text safe for filenames
+    """
+    if not text:
+        return ''
+    
+    # Replace or remove unsafe filename characters
+    unsafe_chars = r'<>:"/\|?*'
+    sanitized = text
+    for char in unsafe_chars:
+        sanitized = sanitized.replace(char, '')
+    
+    # Replace whitespace with underscore
+    sanitized = re.sub(r'\s+', '_', sanitized)
+    
+    # Remove any remaining non-alphanumeric characters except underscore, hyphen, and CJK characters
+    # Keep: alphanumeric, CJK characters, underscore, hyphen
+    sanitized = re.sub(r'[^\w\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff-]', '', sanitized)
+    
+    # Truncate to max length
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length]
+    
+    return sanitized
+
+
+def fetch_page_simple(url, timeout=30):
+    """
+    Fetch a webpage with minimal configuration.
+    Used for extracting page names during CSV filename generation.
+    Does not use proxy or CF bypass.
+    
+    Args:
+        url: URL to fetch
+        timeout: Request timeout in seconds
+    
+    Returns:
+        str: HTML content if successful, None otherwise
+    """
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8',
+        'Cookie': 'over18=1',
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=timeout)
+        if response.status_code == 200:
+            return response.text
+        else:
+            logger.debug(f"Failed to fetch {url}: HTTP {response.status_code}")
+    except Exception as e:
+        logger.debug(f"Error fetching {url} for page name: {e}")
+    
+    return None
+
+
+def get_page_display_name(url, use_proxy=False, use_cf_bypass=False):
+    """
+    Get a human-readable display name for an adhoc URL.
+    
+    For actors: Fetches HTML and extracts actor name
+    For makers: Fetches HTML and extracts maker/studio name  
+    For video_codes: Extracts the video code directly from URL
+    
+    Args:
+        url: The JavDB URL
+        use_proxy: Whether to use proxy (uses global_request_handler if available)
+        use_cf_bypass: Whether to use CF bypass
+    
+    Returns:
+        tuple: (display_name, url_type) where display_name is sanitized for filename
+    """
+    url_type = detect_url_type(url)
+    url_id = extract_url_identifier(url)
+    
+    # For video_codes, we can get the name directly from URL without fetching HTML
+    if url_type == 'video_codes':
+        if url_id:
+            return (sanitize_filename_part(url_id), 'video_codes')
+        return (None, 'video_codes')
+    
+    # For actors and makers, we need to fetch the HTML
+    html_content = None
+    
+    # Try to use global_request_handler if available
+    if global_request_handler is not None:
+        try:
+            html_content = global_request_handler.get_page(
+                url=url,
+                use_proxy=use_proxy,
+                use_cf_bypass=use_cf_bypass,
+                module_name='csv_name_resolver',
+                max_retries=2
+            )
+        except Exception as e:
+            logger.debug(f"Failed to fetch page with request handler: {e}")
+    
+    # Fallback to simple fetch if request handler not available or failed
+    if not html_content:
+        html_content = fetch_page_simple(url)
+    
+    if not html_content:
+        logger.debug(f"Could not fetch page for display name: {url}")
+        return (None, url_type)
+    
+    # Parse based on URL type
+    if url_type == 'actors':
+        actor_name = parse_actor_name_from_html(html_content)
+        if actor_name:
+            return (sanitize_filename_part(actor_name), 'actors')
+    elif url_type == 'makers':
+        maker_name = parse_maker_name_from_html(html_content)
+        if maker_name:
+            return (sanitize_filename_part(maker_name), 'makers')
+    
+    return (None, url_type)
+
+
 def extract_url_part_after_javdb(url):
     """
     Extract the part of URL after javdb.com and convert it to a filename-safe format.
@@ -797,18 +1242,37 @@ def extract_url_part_after_javdb(url):
     return 'custom_url'
 
 
-def generate_output_csv_name(custom_url=None):
+def generate_output_csv_name(custom_url=None, use_proxy=False, use_cf_bypass=False):
     """
     Generate the output CSV filename based on whether a custom URL is provided.
+    
+    For adhoc mode with custom URLs:
+    - actors: Uses actor name from HTML (e.g., Javdb_AdHoc_actors_森日向子_20251224.csv)
+    - makers: Uses maker name from HTML (e.g., Javdb_AdHoc_makers_MOODYZ_20251224.csv)
+    - video_codes: Uses code from URL (e.g., Javdb_AdHoc_video_codes_MIDA_20251224.csv)
+    - unknown: Falls back to URL path extraction
+    
     Args:
         custom_url: Custom URL if provided, None otherwise
+        use_proxy: Whether to use proxy for fetching page
+        use_cf_bypass: Whether to use CF bypass for fetching page
+    
     Returns:
         str: The generated CSV filename
     """
     if custom_url:
-        url_part = extract_url_part_after_javdb(custom_url)
         today_date = datetime.now().strftime("%Y%m%d")
-        return f'Javdb_AdHoc_{url_part}_{today_date}.csv'
+        
+        # Try to get a friendly display name
+        display_name, url_type = get_page_display_name(custom_url, use_proxy, use_cf_bypass)
+        
+        if display_name:
+            # Use the friendly name
+            return f'Javdb_AdHoc_{url_type}_{display_name}_{today_date}.csv'
+        else:
+            # Fallback to URL extraction
+            url_part = extract_url_part_after_javdb(custom_url)
+            return f'Javdb_AdHoc_{url_part}_{today_date}.csv'
     else:
         return f'Javdb_TodayTitle_{datetime.now().strftime("%Y%m%d")}.csv'
 
@@ -886,7 +1350,11 @@ def main():
     if args.url:
         # Ad hoc mode: create dated subdirectory for reports
         output_dated_dir = ensure_report_dated_dir(AD_HOC_DIR)
-        output_csv = args.output_file if args.output_file else OUTPUT_CSV
+        # Generate CSV filename with resolved page names (actor/maker/video_codes)
+        if args.output_file:
+            output_csv = args.output_file
+        else:
+            output_csv = generate_output_csv_name(custom_url, use_proxy=use_proxy, use_cf_bypass=use_cf_bypass)
         csv_path = os.path.join(output_dated_dir, output_csv)
         use_history_for_loading = True   # Check history for ad hoc mode (changed from False)
         use_history_for_saving = True    # Record to history for ad hoc mode
@@ -1056,13 +1524,28 @@ def main():
     page_num = start_page
     consecutive_empty_pages = 0
     consecutive_fallback_successes = 0  # Track consecutive fallback successes before persisting settings
-    # Threshold = (number of active proxies in pool) * 3
-    fallback_persist_threshold = (len(global_proxy_pool.proxies) * 3) if global_proxy_pool else 3
+    # Thresholds based on fallback type:
+    # - CF bypass only (proxy unchanged): proxies * 1
+    # - Other changes (proxy changed): proxies * 3
+    proxy_count = len(global_proxy_pool.proxies) if global_proxy_pool else 1
+    fallback_persist_threshold_cf_only = proxy_count * 1  # Lower threshold for CF bypass only
+    fallback_persist_threshold_full = proxy_count * 3     # Higher threshold for proxy changes
+    current_fallback_threshold = fallback_persist_threshold_full  # Will be set based on fallback type
     pending_fallback_settings = None  # Store the fallback settings to be persisted (use_proxy, use_cf_bypass)
-    logger.debug(f"Fallback persist threshold set to {fallback_persist_threshold} (based on {len(global_proxy_pool.proxies) if global_proxy_pool else 0} proxies in pool)")
+    logger.debug(f"Fallback persist thresholds: CF-only={fallback_persist_threshold_cf_only}, Full={fallback_persist_threshold_full} (based on {proxy_count} proxies in pool)")
+    
+    # Adhoc mode: Track whether to use magnet filter (t=d) for URLs
+    # Start with filtered URL, fallback to original if filtered returns no results
+    adhoc_use_magnet_filter = custom_url is not None  # Start with filter enabled for adhoc mode
+    adhoc_filter_fallback_done = False  # Track if we've already fallen back to original URL
         
     while True:
-        page_url = get_page_url(page_num, phase=1, custom_url=custom_url)
+        # Generate page URL, applying magnet filter for adhoc mode if enabled
+        if custom_url is not None and adhoc_use_magnet_filter:
+            filtered_url = add_magnet_filter_to_url(custom_url)
+            page_url = get_page_url(page_num, phase=1, custom_url=filtered_url)
+        else:
+            page_url = get_page_url(page_num, phase=1, custom_url=custom_url)
         logger.debug(f"[Page {page_num}] Fetching: {page_url}")
 
         # Fetch index page with fallback mechanism
@@ -1077,15 +1560,24 @@ def main():
         
         # Track fallback successes and persist settings after reaching threshold
         if has_movie_list and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass):
+            # Determine fallback type and appropriate threshold
+            is_cf_only_change = (effective_use_proxy == use_proxy) and (effective_use_cf_bypass != use_cf_bypass)
+            
+            # If this is a new fallback type, reset counter and set appropriate threshold
+            if pending_fallback_settings is None or pending_fallback_settings != (effective_use_proxy, effective_use_cf_bypass):
+                consecutive_fallback_successes = 0
+                current_fallback_threshold = fallback_persist_threshold_cf_only if is_cf_only_change else fallback_persist_threshold_full
+            
             # Fallback was triggered and succeeded
             consecutive_fallback_successes += 1
             pending_fallback_settings = (effective_use_proxy, effective_use_cf_bypass)
-            logger.info(f"[Page {page_num}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
-                       f"Consecutive successes: {consecutive_fallback_successes}/{fallback_persist_threshold}")
+            fallback_type = "CF-only" if is_cf_only_change else "Full"
+            logger.info(f"[Page {page_num}] Fallback succeeded ({fallback_type}: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
+                       f"Consecutive successes: {consecutive_fallback_successes}/{current_fallback_threshold}")
             
             # Only persist settings after reaching the threshold
-            if consecutive_fallback_successes >= fallback_persist_threshold:
-                logger.info(f"[Page {page_num}] Reached {fallback_persist_threshold} consecutive fallback successes. "
+            if consecutive_fallback_successes >= current_fallback_threshold:
+                logger.info(f"[Page {page_num}] Reached {current_fallback_threshold} consecutive {fallback_type} fallback successes. "
                            f"Persisting settings: use_proxy={effective_use_proxy}, use_cf_bypass={effective_use_cf_bypass}")
                 use_proxy = effective_use_proxy
                 use_cf_bypass = effective_use_cf_bypass
@@ -1103,6 +1595,45 @@ def main():
         
         if proxy_was_banned:
             any_proxy_banned = True
+        
+        # ========================================
+        # Adhoc mode: Magnet filter fallback logic
+        # If first page with magnet filter returns empty/failed, try original URL
+        # ========================================
+        should_retry_without_filter = (
+            custom_url is not None and
+            adhoc_use_magnet_filter and
+            not adhoc_filter_fallback_done and
+            page_num == start_page and
+            (is_valid_empty_page or not index_html or not has_movie_list)
+        )
+        
+        if should_retry_without_filter:
+            logger.info(f"[Page {page_num}] Adhoc magnet filter (t=d) returned no results. Retrying with original URL...")
+            adhoc_use_magnet_filter = False
+            adhoc_filter_fallback_done = True
+            
+            # Re-fetch with original URL (without magnet filter)
+            page_url = get_page_url(page_num, phase=1, custom_url=custom_url)
+            logger.debug(f"[Page {page_num}] Retrying without filter: {page_url}")
+            
+            index_html, has_movie_list, proxy_was_banned_retry, effective_use_proxy, effective_use_cf_bypass, is_valid_empty_page = fetch_index_page_with_fallback(
+                page_url, session, 
+                use_cookie=custom_url is not None, 
+                use_proxy=use_proxy, 
+                use_cf_bypass=use_cf_bypass,
+                page_num=page_num,
+                is_adhoc_mode=True
+            )
+            
+            if proxy_was_banned_retry:
+                any_proxy_banned = True
+            
+            # Log whether fallback succeeded
+            if has_movie_list:
+                logger.info(f"[Page {page_num}] Fallback to original URL succeeded. Continuing without magnet filter.")
+            else:
+                logger.info(f"[Page {page_num}] Fallback to original URL also returned no results.")
         
         # Handle valid empty page (e.g. "No content yet") - this is the last page
         if is_valid_empty_page:
@@ -1140,10 +1671,10 @@ def main():
                 all_index_results_phase1.extend(page_results)
         
         # Also parse for phase 2 if needed (reuse the same HTML)
-        if phase_mode in ['2', 'all'] and custom_url is None:
+        if phase_mode in ['2', 'all']:
             page_results_p2 = parse_index(index_html, page_num, phase=2,
-                                          disable_new_releases_filter=ignore_release_date,
-                                          is_adhoc_mode=False)
+                                          disable_new_releases_filter=(custom_url is not None or ignore_release_date),
+                                          is_adhoc_mode=(custom_url is not None))
             p2_count = len(page_results_p2)
             if p2_count > 0:
                 all_index_results_phase2.extend(page_results_p2)
@@ -1175,15 +1706,19 @@ def main():
     # ========================================
     if phase_mode in ['1', 'all']:
         logger.info("=" * 75)
-        logger.info(f"PHASE 1: Processing {len(all_index_results_phase1)} collected entries with subtitle")
+        if custom_url is not None:
+            logger.info(f"PHASE 1: Processing {len(all_index_results_phase1)} collected entries with subtitle (AD HOC MODE)")
+        else:
+            logger.info(f"PHASE 1: Processing {len(all_index_results_phase1)} collected entries with subtitle")
         logger.info("=" * 75)
 
         # Process phase 1 entries
         total_entries_phase1 = len(all_index_results_phase1)
         
-        # Reset fallback tracking for detail pages (reuse threshold from index phase)
+        # Reset fallback tracking for detail pages (reuse thresholds from index phase)
         detail_consecutive_fallback_successes = 0
         detail_pending_fallback_settings = None
+        detail_current_fallback_threshold = fallback_persist_threshold_full
 
         for i, entry in enumerate(all_index_results_phase1, 1):
             href = entry['href']
@@ -1224,14 +1759,23 @@ def main():
             # Track fallback successes and persist settings after reaching threshold (same as index phase)
             fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
             if fallback_triggered:
+                # Determine fallback type and appropriate threshold
+                is_cf_only_change = (effective_use_proxy == use_proxy) and (effective_use_cf_bypass != use_cf_bypass)
+                
+                # If this is a new fallback type, reset counter and set appropriate threshold
+                if detail_pending_fallback_settings is None or detail_pending_fallback_settings != (effective_use_proxy, effective_use_cf_bypass):
+                    detail_consecutive_fallback_successes = 0
+                    detail_current_fallback_threshold = fallback_persist_threshold_cf_only if is_cf_only_change else fallback_persist_threshold_full
+                
                 detail_consecutive_fallback_successes += 1
                 detail_pending_fallback_settings = (effective_use_proxy, effective_use_cf_bypass)
-                logger.info(f"[{i}/{total_entries_phase1}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
-                           f"Consecutive successes: {detail_consecutive_fallback_successes}/{fallback_persist_threshold}")
+                fallback_type = "CF-only" if is_cf_only_change else "Full"
+                logger.info(f"[{i}/{total_entries_phase1}] Fallback succeeded ({fallback_type}: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
+                           f"Consecutive successes: {detail_consecutive_fallback_successes}/{detail_current_fallback_threshold}")
                 
                 # Only persist settings after reaching the threshold
-                if detail_consecutive_fallback_successes >= fallback_persist_threshold:
-                    logger.info(f"[{i}/{total_entries_phase1}] Reached {fallback_persist_threshold} consecutive fallback successes. "
+                if detail_consecutive_fallback_successes >= detail_current_fallback_threshold:
+                    logger.info(f"[{i}/{total_entries_phase1}] Reached {detail_current_fallback_threshold} consecutive {fallback_type} fallback successes. "
                                f"Persisting settings: use_proxy={effective_use_proxy}, use_cf_bypass={effective_use_cf_bypass}")
                     use_proxy = effective_use_proxy
                     use_cf_bypass = effective_use_cf_bypass
@@ -1347,30 +1891,28 @@ def main():
     # ========================================
     # Phase 2: Collect entries with only "今日新種"/"昨日新種" tag (filtered by quality)
     if phase_mode in ['2', 'all']:
-        # In ad hoc mode, phase 2 is skipped (all entries processed in phase 1)
+        # Add cooldown delay between phases to avoid triggering Cloudflare protection
+        if phase_mode == 'all':
+            logger.info(f"Waiting {PHASE_TRANSITION_COOLDOWN} seconds before Phase 2")
+            time.sleep(PHASE_TRANSITION_COOLDOWN)
+        
+        logger.info("=" * 75)
         if custom_url is not None:
-            logger.info("=" * 75)
-            logger.info("PHASE 2: Skipped (AD HOC MODE - all entries processed in Phase 1)")
-            logger.info("=" * 75)
-            all_index_results_phase2 = []
+            # Ad hoc mode: all filters disabled
+            logger.info(f"PHASE 2: Processing {len(all_index_results_phase2)} collected entries (AD HOC MODE - all filters disabled)")
         else:
-            # Add cooldown delay between phases to avoid triggering Cloudflare protection
-            if phase_mode == 'all':
-                logger.info(f"Waiting {PHASE_TRANSITION_COOLDOWN} seconds before Phase 2")
-                time.sleep(PHASE_TRANSITION_COOLDOWN)
-            
-            logger.info("=" * 75)
             logger.info(f"PHASE 2: Processing {len(all_index_results_phase2)} collected entries (rate > {PHASE2_MIN_RATE}, comments > {PHASE2_MIN_COMMENTS})")
-            logger.info("=" * 75)
+        logger.info("=" * 75)
 
-            # all_index_results_phase2 was already populated during the fetch phase
+        # all_index_results_phase2 was already populated during the fetch phase
 
         # Process phase 2 entries
         total_entries_phase2 = len(all_index_results_phase2)
         
-        # Reset fallback tracking for phase 2 detail pages (reuse threshold from index phase)
+        # Reset fallback tracking for phase 2 detail pages (reuse thresholds from index phase)
         detail_consecutive_fallback_successes = 0
         detail_pending_fallback_settings = None
+        detail_current_fallback_threshold = fallback_persist_threshold_full
 
         for i, entry in enumerate(all_index_results_phase2, 1):
             href = entry['href']
@@ -1412,14 +1954,23 @@ def main():
             # Track fallback successes and persist settings after reaching threshold (same as index phase)
             fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
             if fallback_triggered:
+                # Determine fallback type and appropriate threshold
+                is_cf_only_change = (effective_use_proxy == use_proxy) and (effective_use_cf_bypass != use_cf_bypass)
+                
+                # If this is a new fallback type, reset counter and set appropriate threshold
+                if detail_pending_fallback_settings is None or detail_pending_fallback_settings != (effective_use_proxy, effective_use_cf_bypass):
+                    detail_consecutive_fallback_successes = 0
+                    detail_current_fallback_threshold = fallback_persist_threshold_cf_only if is_cf_only_change else fallback_persist_threshold_full
+                
                 detail_consecutive_fallback_successes += 1
                 detail_pending_fallback_settings = (effective_use_proxy, effective_use_cf_bypass)
-                logger.info(f"[P2-{i}/{total_entries_phase2}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
-                           f"Consecutive successes: {detail_consecutive_fallback_successes}/{fallback_persist_threshold}")
+                fallback_type = "CF-only" if is_cf_only_change else "Full"
+                logger.info(f"[P2-{i}/{total_entries_phase2}] Fallback succeeded ({fallback_type}: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
+                           f"Consecutive successes: {detail_consecutive_fallback_successes}/{detail_current_fallback_threshold}")
                 
                 # Only persist settings after reaching the threshold
-                if detail_consecutive_fallback_successes >= fallback_persist_threshold:
-                    logger.info(f"[P2-{i}/{total_entries_phase2}] Reached {fallback_persist_threshold} consecutive fallback successes. "
+                if detail_consecutive_fallback_successes >= detail_current_fallback_threshold:
+                    logger.info(f"[P2-{i}/{total_entries_phase2}] Reached {detail_current_fallback_threshold} consecutive {fallback_type} fallback successes. "
                                f"Persisting settings: use_proxy={effective_use_proxy}, use_cf_bypass={effective_use_cf_bypass}")
                     use_proxy = effective_use_proxy
                     use_cf_bypass = effective_use_cf_bypass
