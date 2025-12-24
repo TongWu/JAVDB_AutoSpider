@@ -710,10 +710,14 @@ class TestAddMagnetFilterToUrl:
             if path.startswith('actors/'):
                 # For actors: use t=d filter
                 if not parsed.query:
-                    return f"{url}?t=d"
+                    # Handle edge case: URL ends with '?' but has no query params
+                    base_url = url.rstrip('?')
+                    return f"{base_url}?t=d"
                 params = parse_qs(parsed.query, keep_blank_values=True)
                 if 't' not in params:
-                    return f"{url}&t=d"
+                    # Handle edge case: URL might end with '&'
+                    base_url = url.rstrip('&')
+                    return f"{base_url}&t=d"
                 else:
                     new_t_values = []
                     for t_val in params['t']:
@@ -731,10 +735,14 @@ class TestAddMagnetFilterToUrl:
             elif path.startswith('makers/') or path.startswith('video_codes/'):
                 # For makers/video_codes: use f=download filter
                 if not parsed.query:
-                    return f"{url}?f=download"
+                    # Handle edge case: URL ends with '?' but has no query params
+                    base_url = url.rstrip('?')
+                    return f"{base_url}?f=download"
                 params = parse_qs(parsed.query, keep_blank_values=True)
                 if 'f' not in params:
-                    return f"{url}&f=download"
+                    # Handle edge case: URL might end with '&'
+                    base_url = url.rstrip('&')
+                    return f"{base_url}&f=download"
                 else:
                     params['f'] = ['download']
                     flat_params = [(k, v) for k, vals in params.items() for v in vals]
@@ -809,6 +817,28 @@ class TestAddMagnetFilterToUrl:
         url = 'https://javdb.com/video_codes/MIDA?f=download'
         result = self.add_magnet_filter_to_url(url)
         assert result == url
+    
+    # Edge case tests: URLs ending with '?'
+    def test_actors_url_ending_with_question_mark(self):
+        """Test that URL ending with '?' doesn't produce double '??'."""
+        url = 'https://javdb.com/actors/YnZ1K?'
+        result = self.add_magnet_filter_to_url(url)
+        assert '??' not in result
+        assert result == 'https://javdb.com/actors/YnZ1K?t=d'
+    
+    def test_makers_url_ending_with_question_mark(self):
+        """Test that makers URL ending with '?' doesn't produce double '??'."""
+        url = 'https://javdb.com/makers/zKW?'
+        result = self.add_magnet_filter_to_url(url)
+        assert '??' not in result
+        assert result == 'https://javdb.com/makers/zKW?f=download'
+    
+    def test_video_codes_url_ending_with_question_mark(self):
+        """Test that video_codes URL ending with '?' doesn't produce double '??'."""
+        url = 'https://javdb.com/video_codes/MIDA?'
+        result = self.add_magnet_filter_to_url(url)
+        assert '??' not in result
+        assert result == 'https://javdb.com/video_codes/MIDA?f=download'
 
 
 # Use temp_dir fixture
