@@ -2188,6 +2188,9 @@ def main():
         logger.info(f"Results saved to: {csv_path}")
         if use_history_for_saving:
             logger.info(f"History saved to: {os.path.join(REPORTS_DIR, PARSED_MOVIES_CSV)}")
+        # Output the CSV full path in a parseable format for downstream scripts
+        # This allows GitHub Actions or pipeline.py to capture and pass to qb_uploader
+        print(f"SPIDER_OUTPUT_CSV={csv_path}")
     logger.info("=" * 75)
     
     # Log proxy statistics and ban status if using proxy
