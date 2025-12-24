@@ -1542,18 +1542,13 @@ def main():
     pending_fallback_settings = None  # Store the fallback settings to be persisted (use_proxy, use_cf_bypass)
     logger.debug(f"Fallback persist thresholds: CF-only={fallback_persist_threshold_cf_only}, Full={fallback_persist_threshold_full} (based on {proxy_count} proxies in pool)")
     
-    # Adhoc mode: Track whether to use magnet filter (t=d) for URLs
-    # Start with filtered URL, fallback to original if filtered returns no results
-    adhoc_use_magnet_filter = custom_url is not None  # Start with filter enabled for adhoc mode
-    adhoc_filter_fallback_done = False  # Track if we've already fallen back to original URL
+    # Note: Magnet filtering is now done in parser.py based on HTML tags
+    # This avoids the need for ?t=d URL filter which requires authentication
+    # The URL-based magnet filter (t=d) is deprecated and disabled
         
     while True:
-        # Generate page URL, applying magnet filter for adhoc mode if enabled
-        if custom_url is not None and adhoc_use_magnet_filter:
-            filtered_url = add_magnet_filter_to_url(custom_url)
-            page_url = get_page_url(page_num, phase=1, custom_url=filtered_url)
-        else:
-            page_url = get_page_url(page_num, phase=1, custom_url=custom_url)
+        # Generate page URL (no URL-based magnet filter - filtering done in parser)
+        page_url = get_page_url(page_num, phase=1, custom_url=custom_url)
         logger.debug(f"[Page {page_num}] Fetching: {page_url}")
 
         # Fetch index page with fallback mechanism
@@ -1604,44 +1599,8 @@ def main():
         if proxy_was_banned:
             any_proxy_banned = True
         
-        # ========================================
-        # Adhoc mode: Magnet filter fallback logic
-        # If first page with magnet filter returns empty/failed, try original URL
-        # ========================================
-        should_retry_without_filter = (
-            custom_url is not None and
-            adhoc_use_magnet_filter and
-            not adhoc_filter_fallback_done and
-            page_num == start_page and
-            (is_valid_empty_page or not index_html or not has_movie_list)
-        )
-        
-        if should_retry_without_filter:
-            logger.info(f"[Page {page_num}] Adhoc magnet filter (t=d) returned no results. Retrying with original URL...")
-            adhoc_use_magnet_filter = False
-            adhoc_filter_fallback_done = True
-            
-            # Re-fetch with original URL (without magnet filter)
-            page_url = get_page_url(page_num, phase=1, custom_url=custom_url)
-            logger.debug(f"[Page {page_num}] Retrying without filter: {page_url}")
-            
-            index_html, has_movie_list, proxy_was_banned_retry, effective_use_proxy, effective_use_cf_bypass, is_valid_empty_page = fetch_index_page_with_fallback(
-                page_url, session, 
-                use_cookie=custom_url is not None, 
-                use_proxy=use_proxy, 
-                use_cf_bypass=use_cf_bypass,
-                page_num=page_num,
-                is_adhoc_mode=True
-            )
-            
-            if proxy_was_banned_retry:
-                any_proxy_banned = True
-            
-            # Log whether fallback succeeded
-            if has_movie_list:
-                logger.info(f"[Page {page_num}] Fallback to original URL succeeded. Continuing without magnet filter.")
-            else:
-                logger.info(f"[Page {page_num}] Fallback to original URL also returned no results.")
+        # Note: URL-based magnet filter fallback removed - filtering now done in parser.py
+        # based on HTML tags, no authentication required
         
         # Handle valid empty page (e.g. "No content yet") - this is the last page
         if is_valid_empty_page:
