@@ -66,6 +66,7 @@ def sample_index_html():
                 <a class="box" href="/v/DEF-456">
                     <div class="video-title"><strong>DEF-456</strong></div>
                     <div class="tags has-addons">
+                        <span class="tag">含磁鏈</span>
                         <span class="tag">今日新種</span>
                     </div>
                     <div class="score">
@@ -82,6 +83,66 @@ def sample_index_html():
                     </div>
                     <div class="score">
                         <span class="value">3.85分, 由50人評價</span>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </body>
+    </html>
+    '''
+
+
+@pytest.fixture
+def sample_index_html_with_magnet_tags():
+    """Return sample index page HTML with different magnet tag scenarios for testing adhoc magnet filtering."""
+    return '''
+    <html>
+    <head><title>JavDB</title></head>
+    <body>
+        <div class="movie-list h cols-4 vcols-8">
+            <!-- Entry with subtitle magnet tag -->
+            <div class="item">
+                <a class="box" href="/v/ABC-123">
+                    <div class="video-title"><strong>ABC-123</strong></div>
+                    <div class="tags has-addons">
+                        <span class="tag is-warning">含中字磁鏈</span>
+                    </div>
+                    <div class="score">
+                        <span class="value">4.47分, 由595人評價</span>
+                    </div>
+                </a>
+            </div>
+            <!-- Entry with regular magnet tag (no subtitle) -->
+            <div class="item">
+                <a class="box" href="/v/DEF-456">
+                    <div class="video-title"><strong>DEF-456</strong></div>
+                    <div class="tags has-addons">
+                        <span class="tag is-success">含磁鏈</span>
+                    </div>
+                    <div class="score">
+                        <span class="value">4.52分, 由120人評價</span>
+                    </div>
+                </a>
+            </div>
+            <!-- Entry WITHOUT any magnet tag (should be filtered out) -->
+            <div class="item">
+                <a class="box" href="/v/GHI-789">
+                    <div class="video-title"><strong>GHI-789</strong></div>
+                    <div class="tags has-addons">
+                    </div>
+                    <div class="score">
+                        <span class="value">4.85分, 由200人評價</span>
+                    </div>
+                </a>
+            </div>
+            <!-- Entry with empty tags div (should be filtered out) -->
+            <div class="item">
+                <a class="box" href="/v/JKL-012">
+                    <div class="video-title"><strong>JKL-012</strong></div>
+                    <div class="tags has-addons">
+                    </div>
+                    <div class="score">
+                        <span class="value">4.10分, 由80人評價</span>
                     </div>
                 </a>
             </div>
