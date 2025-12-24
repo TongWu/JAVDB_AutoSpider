@@ -1055,6 +1055,11 @@ def main():
 
     page_num = start_page
     consecutive_empty_pages = 0
+    consecutive_fallback_successes = 0  # Track consecutive fallback successes before persisting settings
+    # Threshold = (number of active proxies in pool) * 3
+    fallback_persist_threshold = (len(global_proxy_pool.proxies) * 3) if global_proxy_pool else 3
+    pending_fallback_settings = None  # Store the fallback settings to be persisted (use_proxy, use_cf_bypass)
+    logger.debug(f"Fallback persist threshold set to {fallback_persist_threshold} (based on {len(global_proxy_pool.proxies) if global_proxy_pool else 0} proxies in pool)")
         
     while True:
         page_url = get_page_url(page_num, phase=1, custom_url=custom_url)
@@ -1070,10 +1075,31 @@ def main():
             is_adhoc_mode=custom_url is not None  # Don't ban proxies in ad hoc mode
         )
         
-        # If fallback was triggered (settings changed), apply cooldown but DON'T persist the settings
+        # Track fallback successes and persist settings after reaching threshold
         if has_movie_list and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass):
-            logger.info(f"[Page {page_num}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). Applying {FALLBACK_COOLDOWN}s cooldown before next page...")
+            # Fallback was triggered and succeeded
+            consecutive_fallback_successes += 1
+            pending_fallback_settings = (effective_use_proxy, effective_use_cf_bypass)
+            logger.info(f"[Page {page_num}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
+                       f"Consecutive successes: {consecutive_fallback_successes}/{fallback_persist_threshold}")
+            
+            # Only persist settings after reaching the threshold
+            if consecutive_fallback_successes >= fallback_persist_threshold:
+                logger.info(f"[Page {page_num}] Reached {fallback_persist_threshold} consecutive fallback successes. "
+                           f"Persisting settings: use_proxy={effective_use_proxy}, use_cf_bypass={effective_use_cf_bypass}")
+                use_proxy = effective_use_proxy
+                use_cf_bypass = effective_use_cf_bypass
+                consecutive_fallback_successes = 0  # Reset counter after persisting
+                pending_fallback_settings = None
+            
+            logger.info(f"[Page {page_num}] Applying {FALLBACK_COOLDOWN}s cooldown before next page...")
             time.sleep(FALLBACK_COOLDOWN)
+        elif has_movie_list and pending_fallback_settings is not None:
+            # Initial attempt succeeded but we have pending fallback settings - reset counter
+            # This means the previous fallback mode is no longer consistently needed
+            logger.debug(f"[Page {page_num}] Initial attempt succeeded, resetting fallback counter (was {consecutive_fallback_successes})")
+            consecutive_fallback_successes = 0
+            pending_fallback_settings = None
         
         if proxy_was_banned:
             any_proxy_banned = True
@@ -1154,6 +1180,10 @@ def main():
 
         # Process phase 1 entries
         total_entries_phase1 = len(all_index_results_phase1)
+        
+        # Reset fallback tracking for detail pages (reuse threshold from index phase)
+        detail_consecutive_fallback_successes = 0
+        detail_pending_fallback_settings = None
 
         for i, entry in enumerate(all_index_results_phase1, 1):
             href = entry['href']
@@ -1191,12 +1221,27 @@ def main():
                 is_adhoc_mode=custom_url is not None
             )
             
-            # If fallback was triggered (settings changed), apply cooldown but DON'T persist the settings
-            # Next item should start fresh with original settings and wait for fallback if needed
+            # Track fallback successes and persist settings after reaching threshold (same as index phase)
             fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
             if fallback_triggered:
-                logger.info(f"[{i}/{total_entries_phase1}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). Will apply {FALLBACK_COOLDOWN}s cooldown after processing...")
-                # Note: NOT updating use_proxy/use_cf_bypass - next item will use original settings
+                detail_consecutive_fallback_successes += 1
+                detail_pending_fallback_settings = (effective_use_proxy, effective_use_cf_bypass)
+                logger.info(f"[{i}/{total_entries_phase1}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
+                           f"Consecutive successes: {detail_consecutive_fallback_successes}/{fallback_persist_threshold}")
+                
+                # Only persist settings after reaching the threshold
+                if detail_consecutive_fallback_successes >= fallback_persist_threshold:
+                    logger.info(f"[{i}/{total_entries_phase1}] Reached {fallback_persist_threshold} consecutive fallback successes. "
+                               f"Persisting settings: use_proxy={effective_use_proxy}, use_cf_bypass={effective_use_cf_bypass}")
+                    use_proxy = effective_use_proxy
+                    use_cf_bypass = effective_use_cf_bypass
+                    detail_consecutive_fallback_successes = 0  # Reset counter after persisting
+                    detail_pending_fallback_settings = None
+            elif parse_success and detail_pending_fallback_settings is not None:
+                # Initial attempt succeeded but we have pending fallback settings - reset counter
+                logger.debug(f"[{i}/{total_entries_phase1}] Initial attempt succeeded, resetting fallback counter (was {detail_consecutive_fallback_successes})")
+                detail_consecutive_fallback_successes = 0
+                detail_pending_fallback_settings = None
             
             if not parse_success and not magnets:
                 logger.error(f"[{i}/{total_entries_phase1}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
@@ -1322,6 +1367,10 @@ def main():
 
         # Process phase 2 entries
         total_entries_phase2 = len(all_index_results_phase2)
+        
+        # Reset fallback tracking for phase 2 detail pages (reuse threshold from index phase)
+        detail_consecutive_fallback_successes = 0
+        detail_pending_fallback_settings = None
 
         for i, entry in enumerate(all_index_results_phase2, 1):
             href = entry['href']
@@ -1360,12 +1409,27 @@ def main():
                 is_adhoc_mode=custom_url is not None
             )
             
-            # If fallback was triggered (settings changed), apply cooldown but DON'T persist the settings
-            # Next item should start fresh with original settings and wait for fallback if needed
+            # Track fallback successes and persist settings after reaching threshold (same as index phase)
             fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
             if fallback_triggered:
-                logger.info(f"[P2-{i}/{total_entries_phase2}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). Will apply {FALLBACK_COOLDOWN}s cooldown after processing...")
-                # Note: NOT updating use_proxy/use_cf_bypass - next item will use original settings
+                detail_consecutive_fallback_successes += 1
+                detail_pending_fallback_settings = (effective_use_proxy, effective_use_cf_bypass)
+                logger.info(f"[P2-{i}/{total_entries_phase2}] Fallback succeeded (Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
+                           f"Consecutive successes: {detail_consecutive_fallback_successes}/{fallback_persist_threshold}")
+                
+                # Only persist settings after reaching the threshold
+                if detail_consecutive_fallback_successes >= fallback_persist_threshold:
+                    logger.info(f"[P2-{i}/{total_entries_phase2}] Reached {fallback_persist_threshold} consecutive fallback successes. "
+                               f"Persisting settings: use_proxy={effective_use_proxy}, use_cf_bypass={effective_use_cf_bypass}")
+                    use_proxy = effective_use_proxy
+                    use_cf_bypass = effective_use_cf_bypass
+                    detail_consecutive_fallback_successes = 0  # Reset counter after persisting
+                    detail_pending_fallback_settings = None
+            elif parse_success and detail_pending_fallback_settings is not None:
+                # Initial attempt succeeded but we have pending fallback settings - reset counter
+                logger.debug(f"[P2-{i}/{total_entries_phase2}] Initial attempt succeeded, resetting fallback counter (was {detail_consecutive_fallback_successes})")
+                detail_consecutive_fallback_successes = 0
+                detail_pending_fallback_settings = None
             
             if not parse_success and not magnets:
                 logger.error(f"[{i}/{total_entries_phase2}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
