@@ -1542,7 +1542,7 @@ def main():
     pending_fallback_settings = None  # Store the fallback settings to be persisted (use_proxy, use_cf_bypass)
     logger.debug(f"Fallback persist thresholds: CF-only={fallback_persist_threshold_cf_only}, Full={fallback_persist_threshold_full} (based on {proxy_count} proxies in pool)")
     
-    # Note: Magnet filtering is now done in parser.py based on HTML tags (ADHOC_MAGNET_FILTER config)
+    # Note: Magnet filtering is now done in parser.py based on HTML tags
     # This avoids the need for ?t=d URL filter which requires authentication
     # The URL-based magnet filter (t=d) is deprecated and disabled
         
@@ -1600,7 +1600,7 @@ def main():
             any_proxy_banned = True
         
         # Note: URL-based magnet filter fallback removed - filtering now done in parser.py
-        # based on HTML tags (ADHOC_MAGNET_FILTER config), no authentication required
+        # based on HTML tags, no authentication required
         
         # Handle valid empty page (e.g. "No content yet") - this is the last page
         if is_valid_empty_page:
