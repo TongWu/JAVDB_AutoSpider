@@ -252,6 +252,16 @@ EMAIL_NOTIFICATION_LOG_FILE = 'logs/email_notification.log'
 IGNORE_RELEASE_DATE_FILTER = False
 
 # =============================================================================
+# ADHOC MODE CONFIGURATION
+# =============================================================================
+
+# Filter movies without magnet links in adhoc mode
+# If True: Only process movies that have "含磁鏈" or "含中字磁鏈" tags in the index page
+# If False: Process all movies (magnet availability checked on detail page)
+# Note: This filtering is done locally based on HTML tags, no login required
+ADHOC_MAGNET_FILTER = True
+
+# =============================================================================
 # FILE PATHS
 # =============================================================================
 
