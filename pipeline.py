@@ -132,7 +132,12 @@ def main():
     else:
         if is_adhoc_mode:
             from scripts import spider
-            csv_filename = spider.generate_output_csv_name(args.url)
+            # Pass proxy and cf_bypass flags to generate CSV filename with resolved page names
+            csv_filename = spider.generate_output_csv_name(
+                args.url,
+                use_proxy=args.use_proxy,
+                use_cf_bypass=args.use_cf_bypass
+            )
         else:
             today_str = datetime.now().strftime('%Y%m%d')
             csv_filename = f'Javdb_TodayTitle_{today_str}.csv'
