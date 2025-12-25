@@ -60,7 +60,7 @@ jobs:
   # Job 1: Setup - Checkout, install dependencies, generate config
   # =============================================================================
   setup:
-    runs-on: ARM64
+    runs-on: ubuntu-latest
     environment: Production
     permissions:
       contents: read
@@ -195,7 +195,7 @@ jobs:
   # Job 2: Health Check - Verify essential services before running pipeline
   # =============================================================================
   health-check:
-    runs-on: ARM64
+    runs-on: self-hosted
     environment: Production
     permissions:
       contents: read
@@ -244,7 +244,7 @@ jobs:
   # Job 3: Run Pipeline - Execute spider, uploader, and pikpak bridge
   # =============================================================================
   run-pipeline:
-    runs-on: ARM64
+    runs-on: self-hosted
     environment: Production
     permissions:
       contents: read
