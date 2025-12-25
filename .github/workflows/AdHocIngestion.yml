@@ -502,8 +502,28 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: pipeline-report
-          path: .
+          path: downloaded_report
         continue-on-error: true
+
+      - name: Move report to correct location
+        run: |
+          # Artifact download flattens directory structure, so we need to restore it
+          CSV_PATH="${{ needs.run-pipeline.outputs.csv_filename }}"
+          if [ -n "$CSV_PATH" ]; then
+            FILENAME=$(basename "$CSV_PATH")
+            DIR=$(dirname "$CSV_PATH")
+            if [ -f "downloaded_report/$FILENAME" ]; then
+              mkdir -p "$DIR"
+              mv "downloaded_report/$FILENAME" "$CSV_PATH"
+              echo "✓ Moved $FILENAME to $CSV_PATH"
+            else
+              echo "Warning: Downloaded report file not found: downloaded_report/$FILENAME"
+              ls -la downloaded_report/ 2>/dev/null || echo "downloaded_report directory does not exist"
+            fi
+          else
+            echo "No CSV path specified from pipeline output"
+          fi
+          rm -rf downloaded_report 2>/dev/null || true
 
       - name: Determine pipeline status
         id: status
@@ -581,8 +601,28 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: pipeline-report
-          path: .
+          path: downloaded_report
         continue-on-error: true
+
+      - name: Move report to correct location
+        run: |
+          # Artifact download flattens directory structure, so we need to restore it
+          CSV_PATH="${{ needs.run-pipeline.outputs.csv_filename }}"
+          if [ -n "$CSV_PATH" ]; then
+            FILENAME=$(basename "$CSV_PATH")
+            DIR=$(dirname "$CSV_PATH")
+            if [ -f "downloaded_report/$FILENAME" ]; then
+              mkdir -p "$DIR"
+              mv "downloaded_report/$FILENAME" "$CSV_PATH"
+              echo "✓ Moved $FILENAME to $CSV_PATH"
+            else
+              echo "Warning: Downloaded report file not found: downloaded_report/$FILENAME"
+              ls -la downloaded_report/ 2>/dev/null || echo "downloaded_report directory does not exist"
+            fi
+          else
+            echo "No CSV path specified from pipeline output"
+          fi
+          rm -rf downloaded_report 2>/dev/null || true
 
       - name: Commit and Push Results
         env:
