@@ -103,6 +103,9 @@ global_request_handler: Optional[RequestHandler] = None
 # Global set to track parsed links
 parsed_links = set()
 
+# Global list to track saved proxy ban HTML files for email notification
+proxy_ban_html_files = []
+
 # Generate output CSV filename
 OUTPUT_CSV = f'Javdb_TodayTitle_{datetime.now().strftime("%Y%m%d")}.csv'
 
@@ -170,6 +173,62 @@ def ensure_report_dated_dir(base_dir):
     dated_dir = ensure_dated_dir(base_dir)
     logger.info(f"Using dated directory: {dated_dir}")
     return dated_dir
+
+
+def save_proxy_ban_html(html_content, proxy_name, page_num):
+    """
+    Save the HTML content that caused a proxy to be banned.
+    This helps with debugging proxy ban issues.
+    
+    Args:
+        html_content: The HTML content from the failed request
+        proxy_name: Name of the proxy being banned
+        page_num: Page number where the failure occurred
+    
+    Returns:
+        str: Path to the saved file, or None if failed
+    """
+    # Note: proxy_ban_html_files is a module-level list, no need for 'global'
+    # since we're only appending to it, not reassigning it
+    
+    if not html_content:
+        logger.warning(f"No HTML content to save for banned proxy {proxy_name}")
+        return None
+    
+    try:
+        # Create logs directory if not exists
+        logs_dir = 'logs'
+        if not os.path.exists(logs_dir):
+            os.makedirs(logs_dir)
+        
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        # Sanitize proxy name for filename (remove special characters)
+        safe_proxy_name = re.sub(r'[^\w\-]', '_', proxy_name)
+        filename = f"proxy_ban_{safe_proxy_name}_page{page_num}_{timestamp}.txt"
+        filepath = os.path.join(logs_dir, filename)
+        
+        # Write HTML content to file
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(f"# Proxy Ban HTML Capture\n")
+            f.write(f"# Proxy: {proxy_name}\n")
+            f.write(f"# Page: {page_num}\n")
+            f.write(f"# Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"# HTML Length: {len(html_content)} bytes\n")
+            f.write(f"{'=' * 60}\n\n")
+            f.write(html_content)
+        
+        logger.info(f"Saved proxy ban HTML to: {filepath}")
+        proxy_ban_html_files.append(filepath)
+        
+        # Also output the path for downstream scripts to capture
+        print(f"PROXY_BAN_HTML={filepath}")
+        
+        return filepath
+        
+    except Exception as e:
+        logger.error(f"Failed to save proxy ban HTML: {e}")
+        return None
 
 
 # Legacy wrapper functions - now delegated to RequestHandler
@@ -688,6 +747,11 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
             else:
                 # Normal mode: Mark as banned after multiple failures
                 logger.warning(f"[Page {page_num}] Proxy '{current_proxy_name}' failed both Direct and CF modes. Marking BANNED and switching...")
+                
+                # Save the last failed HTML for debugging proxy ban issues
+                if last_failed_html:
+                    save_proxy_ban_html(last_failed_html, current_proxy_name, page_num)
+                
                 # Mark failure multiple times to trigger cooldown
                 for _ in range(PROXY_POOL_MAX_FAILURES):
                     global_proxy_pool.mark_failure_and_switch()
@@ -2165,6 +2229,19 @@ def main():
         ban_summary = global_proxy_pool.get_ban_summary(include_ip=False)
         logger.info(ban_summary)
         logger.info("=" * 75)
+    
+    # Log proxy ban HTML files if any were saved
+    if proxy_ban_html_files:
+        logger.info("")
+        logger.info("=" * 75)
+        logger.info("PROXY BAN HTML FILES")
+        logger.info("=" * 75)
+        logger.info(f"Saved {len(proxy_ban_html_files)} proxy ban HTML file(s) for debugging:")
+        for html_file in proxy_ban_html_files:
+            logger.info(f"  - {html_file}")
+        logger.info("=" * 75)
+        # Output file list for downstream scripts (e.g., email notification)
+        print(f"PROXY_BAN_HTML_FILES={','.join(proxy_ban_html_files)}")
     
     # Check for critical failures and exit with appropriate code
     # Track if any proxy was banned during the entire run
