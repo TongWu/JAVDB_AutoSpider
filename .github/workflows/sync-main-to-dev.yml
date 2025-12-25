@@ -5,10 +5,10 @@ permissions:
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-  workflow_call:
+  # push:
+  #   branches:
+  #     - main
+  # workflow_call:
 
 concurrency:
   group: sync-main-to-dev
