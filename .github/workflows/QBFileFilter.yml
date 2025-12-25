@@ -197,14 +197,3 @@ jobs:
           
           echo "Running: python3 scripts/qb_file_filter.py $ARGS"
           python3 scripts/qb_file_filter.py $ARGS
-
-      - name: Show log file content (for debugging)
-        if: always()
-        run: |
-          echo "=== File Filter Log ===" 
-          if [ -f logs/qb_file_filter.log ]; then
-            cat logs/qb_file_filter.log
-          else
-            echo "No log file found"
-          fi
-
