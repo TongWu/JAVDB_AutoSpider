@@ -107,7 +107,8 @@ def extract_adhoc_info_from_csv(csv_path):
     
     # Split and extract parts
     # actors_森日向子_20251224 -> ['actors', '森日向子', '20251224']
-    # video_codes_MIDA_20251224 -> ['video_codes', 'MIDA', '20251224']
+    # video_codes_MIDA_20251224 -> ['video', 'codes', 'MIDA', '20251224']
+    #   (multi-part types like video_codes get split into multiple parts)
     parts = without_prefix.split('_')
     
     if len(parts) < 3:
