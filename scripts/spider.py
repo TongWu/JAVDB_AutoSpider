@@ -130,7 +130,7 @@ def parse_arguments():
                         help='Parse all pages until an empty page is found (ignores --end-page)')
 
     parser.add_argument('--ignore-history', action='store_true',
-                        help='Ignore history file and scrape all pages from start to end')
+                        help='Ignore history file for reading (scrape all pages) but still save to history')
 
     parser.add_argument('--url', type=str,
                         help='Custom URL to scrape (add ?page=x for pages)')
@@ -1449,7 +1449,7 @@ def main():
     if dry_run:
         logger.info("DRY RUN MODE: No CSV file will be written")
     if ignore_history:
-        logger.info("IGNORE HISTORY: Will scrape all pages without checking history")
+        logger.info("IGNORE HISTORY: Will scrape all pages without checking history (but still save to history)")
     if parse_all:
         logger.info("PARSE ALL MODE: Will continue until empty page is found")
     if ignore_release_date:
@@ -1883,7 +1883,8 @@ def main():
                 logger.debug(f"[{i}/{total_entries_phase1}] [Page {page_num}] Added to CSV with new torrent categories")
                 
                 # Save to parsed movies history AFTER writing to CSV (only if new torrents found)
-                if use_history_for_saving and not dry_run and not ignore_history:
+                # Note: ignore_history only affects reading, not saving
+                if use_history_for_saving and not dry_run:
                     # Only save new magnet links to history (exclude already downloaded ones)
                     new_magnet_links = {}
                     if row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
@@ -2078,7 +2079,8 @@ def main():
                 logger.debug(f"[{i}/{total_entries_phase2}] [Page {page_num}] Added to CSV with new torrent categories")
                 
                 # Save to parsed movies history AFTER writing to CSV (only if new torrents found)
-                if use_history_for_saving and not dry_run and not ignore_history:
+                # Note: ignore_history only affects reading, not saving
+                if use_history_for_saving and not dry_run:
                     # Only save new magnet links to history (exclude already downloaded ones)
                     new_magnet_links = {}
                     if row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
@@ -2186,7 +2188,7 @@ def main():
     if use_history_for_loading and not ignore_history:
         logger.info(f"Skipped already parsed in previous runs: {skipped_history_count}")
     elif ignore_history:
-        logger.info("History checking was disabled (--ignore-history)")
+        logger.info("History reading was disabled (--ignore-history), but results will still be saved to history")
     logger.info(f"No new torrents to download: {no_new_torrents_count}")
     logger.info(f"Failed to fetch/parse: {failed_count}")
     logger.info(f"Current parsed links in memory: {len(parsed_links)}")
