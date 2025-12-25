@@ -536,11 +536,26 @@ jobs:
             echo "has_failure=false" >> $GITHUB_OUTPUT
             echo "Pipeline completed successfully"
           fi
+          
+          # Capture CSV filename from pipeline output
+          CSV_PATH="${{ needs.run-pipeline.outputs.csv_filename }}"
+          echo "csv_path=$CSV_PATH" >> $GITHUB_OUTPUT
 
       - name: Run Email Notification
         env:
           PIPELINE_HAS_FAILURE: ${{ steps.status.outputs.has_failure }}
-        run: python3 scripts/email_notification.py
+        run: |
+          CMD="python3 scripts/email_notification.py --mode adhoc"
+          
+          # Pass the CSV path if available
+          CSV_PATH="${{ steps.status.outputs.csv_path }}"
+          if [ -n "$CSV_PATH" ] && [ -f "$CSV_PATH" ]; then
+            CMD="$CMD --csv-path '$CSV_PATH'"
+            echo "Using CSV file: $CSV_PATH"
+          fi
+          
+          echo "Executing: $CMD"
+          eval $CMD
 
   # =============================================================================
   # Job 5: Commit Results - Commit CSV files only (no logs)
