@@ -14,7 +14,7 @@ jobs:
   # Job 1: Setup - Checkout, install dependencies, generate config
   # =============================================================================
   setup:
-    runs-on: ARM64
+    runs-on: ubuntu-latest
     environment: Production
     permissions:
       contents: read
