@@ -5,9 +5,9 @@ permissions:
 
 on:
   workflow_dispatch:
-  schedule:
-    # Run daily at 10:00 UTC (18:00 Beijing Time)
-    - cron: '0 10 * * *'
+  # schedule:
+  #   # Run daily at 10:00 UTC (18:00 Beijing Time)
+  #   - cron: '0 10 * * *'
 
 jobs:
   # =============================================================================
@@ -149,7 +149,7 @@ jobs:
   # Job 2: Health Check - Verify essential services before running pipeline
   # =============================================================================
   health-check:
-    runs-on: ARM64
+    runs-on: self-hosted
     environment: Production
     permissions:
       contents: read
@@ -192,7 +192,7 @@ jobs:
   # Job 3: Run Pipeline - Execute spider, uploader, and pikpak bridge
   # =============================================================================
   run-pipeline:
-    runs-on: ARM64
+    runs-on: self-hosted
     environment: Production
     permissions:
       contents: read
