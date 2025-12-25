@@ -253,6 +253,7 @@ jobs:
       spider_success: ${{ steps.spider.outcome == 'success' }}
       uploader_success: ${{ steps.uploader.outcome == 'success' }}
       pikpak_success: ${{ steps.pikpak.outcome == 'success' }}
+      csv_filename: ${{ steps.spider.outputs.csv_filename }}
     env:
       TZ: Asia/Singapore
     
@@ -424,46 +425,12 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-      - name: Encrypt and upload CSV reports artifact
-        if: always()
-        env:
-          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
-          REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
-          DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'reports/DailyReport' }}
-          AD_HOC_DIR: ${{ vars.AD_HOC_DIR || 'reports/AdHoc' }}
-        run: |
-          # Create encrypted archive of reports (including YYYY/MM subdirectories)
-          # For Ad-Hoc, we primarily care about AdHoc directory
-          mkdir -p encrypted_artifacts
-          FOUND_FILES=0
-          # Find all CSV files in AdHoc subdirectory (primary for ad-hoc runs)
-          if find "$AD_HOC_DIR" -name "*.csv" 2>/dev/null | grep -q .; then
-            find "$AD_HOC_DIR" -name "*.csv" -print0 2>/dev/null | tar -czf - --null -T - | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
-              -out encrypted_artifacts/reports_adhoc.tar.gz.enc \
-              -pass pass:"$ARTIFACT_KEY"
-            echo "✓ Ad Hoc files encrypted successfully"
-            FOUND_FILES=1
-          fi
-          # Also check DailyReport in case spider outputs there
-          if find "$DAILY_REPORT_DIR" -name "*.csv" 2>/dev/null | grep -q .; then
-            find "$DAILY_REPORT_DIR" -name "*.csv" -print0 2>/dev/null | tar -czf - --null -T - | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
-              -out encrypted_artifacts/reports_daily.tar.gz.enc \
-              -pass pass:"$ARTIFACT_KEY"
-            echo "✓ Daily Report files encrypted successfully"
-            FOUND_FILES=1
-          fi
-          if [ "$FOUND_FILES" -eq 0 ]; then
-            echo "No report files found to encrypt"
-          fi
-
-      - name: Upload encrypted reports artifact
+      - name: Upload CSV report artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pipeline-reports-encrypted
-          path: |
-            encrypted_artifacts/reports_adhoc.tar.gz.enc
-            encrypted_artifacts/reports_daily.tar.gz.enc
+          name: pipeline-report
+          path: ${{ steps.spider.outputs.csv_filename }}
           retention-days: 7
           if-no-files-found: ignore
 
@@ -531,36 +498,12 @@ jobs:
             mkdir -p logs
           fi
 
-      - name: Download encrypted reports (if available)
+      - name: Download report (if available)
         uses: actions/download-artifact@v4
         with:
-          name: pipeline-reports-encrypted
-          path: encrypted_artifacts
+          name: pipeline-report
+          path: .
         continue-on-error: true
-
-      - name: Decrypt reports (if available)
-        env:
-          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
-        run: |
-          FOUND_REPORTS=0
-          if [ -f encrypted_artifacts/reports_adhoc.tar.gz.enc ]; then
-            openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
-              -in encrypted_artifacts/reports_adhoc.tar.gz.enc \
-              -pass pass:"$ARTIFACT_KEY" | tar -xzf -
-            echo "✓ Ad Hoc files decrypted successfully"
-            FOUND_REPORTS=1
-          fi
-          if [ -f encrypted_artifacts/reports_daily.tar.gz.enc ]; then
-            openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
-              -in encrypted_artifacts/reports_daily.tar.gz.enc \
-              -pass pass:"$ARTIFACT_KEY" | tar -xzf -
-            echo "✓ Daily Report files decrypted successfully"
-            FOUND_REPORTS=1
-          fi
-          rm -rf encrypted_artifacts
-          if [ "$FOUND_REPORTS" -eq 0 ]; then
-            echo "No encrypted reports found"
-          fi
 
       - name: Determine pipeline status
         id: status
@@ -619,36 +562,12 @@ jobs:
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
 
-      - name: Download encrypted reports
+      - name: Download report
         uses: actions/download-artifact@v4
         with:
-          name: pipeline-reports-encrypted
-          path: encrypted_artifacts
+          name: pipeline-report
+          path: .
         continue-on-error: true
-
-      - name: Decrypt reports
-        env:
-          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
-        run: |
-          FOUND_REPORTS=0
-          if [ -f encrypted_artifacts/reports_adhoc.tar.gz.enc ]; then
-            openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
-              -in encrypted_artifacts/reports_adhoc.tar.gz.enc \
-              -pass pass:"$ARTIFACT_KEY" | tar -xzf -
-            echo "✓ Ad Hoc files decrypted successfully"
-            FOUND_REPORTS=1
-          fi
-          if [ -f encrypted_artifacts/reports_daily.tar.gz.enc ]; then
-            openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
-              -in encrypted_artifacts/reports_daily.tar.gz.enc \
-              -pass pass:"$ARTIFACT_KEY" | tar -xzf -
-            echo "✓ Daily Report files decrypted successfully"
-            FOUND_REPORTS=1
-          fi
-          rm -rf encrypted_artifacts
-          if [ "$FOUND_REPORTS" -eq 0 ]; then
-            echo "No encrypted reports found"
-          fi
 
       - name: Commit and Push Results
         env:
