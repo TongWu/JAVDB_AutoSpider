@@ -727,18 +727,25 @@ def extract_proxy_ban_summary(html_files):
             filename = os.path.basename(filepath)
             file_size = os.path.getsize(filepath)
             
-            # Read first few lines to get metadata
+            # Read first 6 lines to get metadata (header only)
+            # Header format from save_proxy_ban_html:
+            #   Line 1: # Proxy Ban HTML Capture
+            #   Line 2: # Proxy: {proxy_name}
+            #   Line 3: # Page: {page_num}
+            #   Line 4: # Timestamp: ...
+            #   Line 5: # HTML Length: ...
+            #   Line 6: ====...====
             with open(filepath, 'r', encoding='utf-8') as f:
-                lines = []
+                header_lines = []
                 for i, line in enumerate(f):
-                    if i >= 10:  # Read first 10 lines for header info
+                    if i >= 6:  # Only read first 6 lines (header only, not HTML content)
                         break
-                    lines.append(line.rstrip())
+                    header_lines.append(line.rstrip())
             
-            # Extract metadata from header
+            # Extract metadata from header only (avoid false matches in HTML content)
             proxy_name = "Unknown"
             page_num = "Unknown"
-            for line in lines:
+            for line in header_lines:
                 if line.startswith("# Proxy:"):
                     proxy_name = line.replace("# Proxy:", "").strip()
                 elif line.startswith("# Page:"):
