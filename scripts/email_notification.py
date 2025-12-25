@@ -679,9 +679,85 @@ def get_proxy_ban_summary():
         return "Proxy ban information not available."
 
 
+def find_proxy_ban_html_files(logs_dir='logs'):
+    """
+    Find all proxy ban HTML files in the logs directory.
+    
+    These files are created by spider.py when a proxy is banned,
+    and contain the HTML response that caused the ban.
+    
+    Args:
+        logs_dir: Directory to search for proxy ban HTML files
+    
+    Returns:
+        list: List of file paths to proxy ban HTML files
+    """
+    import glob
+    
+    if not os.path.exists(logs_dir):
+        return []
+    
+    pattern = os.path.join(logs_dir, 'proxy_ban_*.txt')
+    files = glob.glob(pattern)
+    
+    if files:
+        logger.info(f"Found {len(files)} proxy ban HTML file(s)")
+        for f in files:
+            logger.info(f"  - {f}")
+    
+    return files
+
+
+def extract_proxy_ban_summary(html_files):
+    """
+    Extract a summary from proxy ban HTML files for the email body.
+    
+    Args:
+        html_files: List of proxy ban HTML file paths
+    
+    Returns:
+        str: Summary text for email body, or None if no files
+    """
+    if not html_files:
+        return None
+    
+    summaries = []
+    for filepath in html_files:
+        try:
+            filename = os.path.basename(filepath)
+            file_size = os.path.getsize(filepath)
+            
+            # Read first few lines to get metadata
+            with open(filepath, 'r', encoding='utf-8') as f:
+                lines = []
+                for i, line in enumerate(f):
+                    if i >= 10:  # Read first 10 lines for header info
+                        break
+                    lines.append(line.rstrip())
+            
+            # Extract metadata from header
+            proxy_name = "Unknown"
+            page_num = "Unknown"
+            for line in lines:
+                if line.startswith("# Proxy:"):
+                    proxy_name = line.replace("# Proxy:", "").strip()
+                elif line.startswith("# Page:"):
+                    page_num = line.replace("# Page:", "").strip()
+            
+            summaries.append(f"  • {filename}\n    Proxy: {proxy_name}, Page: {page_num}, Size: {file_size} bytes")
+            
+        except Exception as e:
+            logger.warning(f"Failed to extract summary from {filepath}: {e}")
+            summaries.append(f"  • {os.path.basename(filepath)} (could not read)")
+    
+    if summaries:
+        return "Proxy Ban HTML Files Captured:\n" + "\n".join(summaries)
+    return None
+
+
 def format_email_report(spider_stats, uploader_stats, pikpak_stats, ban_summary,
                         show_spider=True, show_uploader=True, show_pikpak=True,
-                        mode='daily', adhoc_info=None):
+                        mode='daily', adhoc_info=None, proxy_ban_html_summary=None):
     """
     Format a mobile-friendly email report.
     Only includes sections for components that ran successfully.
@@ -689,6 +765,7 @@ def format_email_report(spider_stats, uploader_stats, pikpak_stats, ban_summary,
     Args:
         mode: 'daily' or 'adhoc'
         adhoc_info: Formatted Ad-Hoc info string (e.g., "Actor: 森日向子")
+        proxy_ban_html_summary: Summary of proxy ban HTML files captured (if any)
     """
     sections = []
     
@@ -785,6 +862,17 @@ Cleanup (>{pikpak_stats['threshold_days']} days)
   Added to PikPak: {pikpak_stats['added_to_pikpak']}
   Removed from QB: {pikpak_stats['removed_from_qb']}
   Failed: {pikpak_stats['failed']}""")
+    
+    # Proxy ban HTML files section (only show if there are captured files)
+    if proxy_ban_html_summary:
+        sections.append(f"""
+───────────────────────────────
+📄 PROXY BAN DEBUG FILES
+───────────────────────────────
+
+{proxy_ban_html_summary}
+
+(See attached .txt files for full HTML content)""")
     
     # Proxy status (always show)
     sections.append(f"""
@@ -1008,10 +1096,19 @@ def main():
         if txt_path:
             txt_attachments.append(txt_path)
     
+    # Find and include proxy ban HTML files (these are already .txt files)
+    proxy_ban_html_files = find_proxy_ban_html_files('logs')
+    proxy_ban_summary = extract_proxy_ban_summary(proxy_ban_html_files)
+    
     # Add CSV if exists
     attachments = txt_attachments.copy()
     if os.path.exists(csv_path):
         attachments.insert(0, csv_path)
+    
+    # Add proxy ban HTML files to attachments
+    for html_file in proxy_ban_html_files:
+        if os.path.exists(html_file):
+            attachments.append(html_file)
     
     # Prepare default stats for missing components
     default_spider_stats = {
@@ -1051,7 +1148,8 @@ def main():
             show_uploader=uploader_log_exists,
             show_pikpak=pikpak_log_exists,
             mode=mode,
-            adhoc_info=adhoc_info
+            adhoc_info=adhoc_info,
+            proxy_ban_html_summary=proxy_ban_summary
         )
         subject = f'✓ SUCCESS - JavDB {mode_display} Report {today_str}{adhoc_subject_suffix}'
     else:
@@ -1062,7 +1160,8 @@ def main():
             show_uploader=uploader_log_exists and not uploader_critical,
             show_pikpak=pikpak_log_exists and not pikpak_critical,
             mode=mode,
-            adhoc_info=adhoc_info
+            adhoc_info=adhoc_info,
+            proxy_ban_html_summary=proxy_ban_summary
         )
         
         # Add mode info to failure report header
