@@ -310,12 +310,50 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-      - name: Upload CSV report artifact
+      - name: Encrypt and upload reports artifact
+        if: always()
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+          REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+        run: |
+          # Create encrypted archive of all reports (preserving folder structure)
+          # This includes: CSV report, history files, proxy_bans.csv
+          mkdir -p encrypted_artifacts
+          
+          # Build list of files to archive
+          FILES_TO_ARCHIVE=""
+          
+          # Add spider output CSV if it exists
+          CSV_PATH="${{ steps.spider.outputs.csv_filename }}"
+          if [ -n "$CSV_PATH" ] && [ -f "$CSV_PATH" ]; then
+            FILES_TO_ARCHIVE="$CSV_PATH"
+            echo "Including CSV: $CSV_PATH"
+          fi
+          
+          # Add history files if they exist
+          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/pikpak_bridge_history.csv" "$REPORTS_DIR/proxy_bans.csv"; do
+            if [ -f "$HIST_FILE" ]; then
+              FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $HIST_FILE"
+              echo "Including history: $HIST_FILE"
+            fi
+          done
+          
+          if [ -n "$FILES_TO_ARCHIVE" ]; then
+            # Use tar with explicit file list to preserve folder structure
+            tar -czf - $FILES_TO_ARCHIVE | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
+              -out encrypted_artifacts/reports.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY"
+            echo "✓ Reports encrypted successfully (folder structure preserved)"
+          else
+            echo "No report files found to archive"
+          fi
+
+      - name: Upload encrypted reports artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pipeline-report
-          path: ${{ steps.spider.outputs.csv_filename }}
+          name: pipeline-reports-encrypted
+          path: encrypted_artifacts/reports.tar.gz.enc
           retention-days: 7
           if-no-files-found: ignore
 
@@ -376,39 +414,37 @@ jobs:
             openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
               -in encrypted_artifacts/logs.tar.gz.enc \
               -pass pass:"$ARTIFACT_KEY" | tar -xzf -
-            rm -rf encrypted_artifacts
             echo "✓ Logs decrypted successfully"
           else
             echo "No encrypted logs found"
             mkdir -p logs
           fi
 
-      - name: Download report (if available)
+      - name: Download encrypted reports (if available)
         uses: actions/download-artifact@v4
         with:
-          name: pipeline-report
-          path: downloaded_report
+          name: pipeline-reports-encrypted
+          path: encrypted_artifacts
         continue-on-error: true
 
-      - name: Move report to correct location
+      - name: Decrypt reports (if available)
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
-          # Artifact download flattens directory structure, so we need to restore it
-          CSV_PATH="${{ needs.run-pipeline.outputs.csv_filename }}"
-          if [ -n "$CSV_PATH" ]; then
-            FILENAME=$(basename "$CSV_PATH")
-            DIR=$(dirname "$CSV_PATH")
-            if [ -f "downloaded_report/$FILENAME" ]; then
-              mkdir -p "$DIR"
-              mv "downloaded_report/$FILENAME" "$CSV_PATH"
-              echo "✓ Moved $FILENAME to $CSV_PATH"
-            else
-              echo "Warning: Downloaded report file not found: downloaded_report/$FILENAME"
-              ls -la downloaded_report/ 2>/dev/null || echo "downloaded_report directory does not exist"
+          if [ -f encrypted_artifacts/reports.tar.gz.enc ]; then
+            openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+              -in encrypted_artifacts/reports.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY" | tar -xzf -
+            rm -rf encrypted_artifacts
+            echo "✓ Reports decrypted successfully (folder structure preserved)"
+            # Show what was extracted
+            CSV_PATH="${{ needs.run-pipeline.outputs.csv_filename }}"
+            if [ -n "$CSV_PATH" ] && [ -f "$CSV_PATH" ]; then
+              echo "CSV file restored: $CSV_PATH"
             fi
           else
-            echo "No CSV path specified from pipeline output"
+            echo "No encrypted reports found"
           fi
-          rm -rf downloaded_report 2>/dev/null || true
 
       - name: Determine pipeline status
         id: status
@@ -478,32 +514,29 @@ jobs:
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
 
-      - name: Download report
+      - name: Download encrypted reports
         uses: actions/download-artifact@v4
         with:
-          name: pipeline-report
-          path: downloaded_report
+          name: pipeline-reports-encrypted
+          path: encrypted_artifacts
         continue-on-error: true
 
-      - name: Move report to correct location
+      - name: Decrypt reports
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
-          # Artifact download flattens directory structure, so we need to restore it
-          CSV_PATH="${{ needs.run-pipeline.outputs.csv_filename }}"
-          if [ -n "$CSV_PATH" ]; then
-            FILENAME=$(basename "$CSV_PATH")
-            DIR=$(dirname "$CSV_PATH")
-            if [ -f "downloaded_report/$FILENAME" ]; then
-              mkdir -p "$DIR"
-              mv "downloaded_report/$FILENAME" "$CSV_PATH"
-              echo "✓ Moved $FILENAME to $CSV_PATH"
-            else
-              echo "Warning: Downloaded report file not found: downloaded_report/$FILENAME"
-              ls -la downloaded_report/ 2>/dev/null || echo "downloaded_report directory does not exist"
-            fi
+          if [ -f encrypted_artifacts/reports.tar.gz.enc ]; then
+            openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+              -in encrypted_artifacts/reports.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY" | tar -xzf -
+            rm -rf encrypted_artifacts
+            echo "✓ Reports decrypted successfully (folder structure preserved)"
+            # Show what was extracted
+            echo "Extracted files:"
+            find reports -type f -name "*.csv" 2>/dev/null | head -20 || echo "No CSV files found"
           else
-            echo "No CSV path specified from pipeline output"
+            echo "No encrypted reports found"
           fi
-          rm -rf downloaded_report 2>/dev/null || true
 
       - name: Commit and Push Results
         env:
