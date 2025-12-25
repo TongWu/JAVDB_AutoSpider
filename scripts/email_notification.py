@@ -79,10 +79,138 @@ from utils.git_helper import git_commit_and_push, flush_log_handlers, has_git_cr
 from utils.path_helper import get_dated_report_path
 
 
+def extract_adhoc_info_from_csv(csv_path):
+    """
+    Extract Ad-Hoc mode information from CSV filename.
+    
+    Expected format: Javdb_AdHoc_{type}_{name}_{date}.csv
+    Examples:
+    - Javdb_AdHoc_actors_森日向子_20251224.csv -> (actors, 森日向子)
+    - Javdb_AdHoc_makers_MOODYZ_20251224.csv -> (makers, MOODYZ)
+    - Javdb_AdHoc_video_codes_MIDA_20251224.csv -> (video_codes, MIDA)
+    
+    Returns:
+        tuple: (url_type, display_name) or (None, None) if not parseable
+    """
+    if not csv_path:
+        return None, None
+    
+    filename = os.path.basename(csv_path)
+    
+    # Check if it's an Ad-Hoc file
+    if not filename.startswith('Javdb_AdHoc_'):
+        return None, None
+    
+    # Remove prefix and extension
+    # Javdb_AdHoc_actors_森日向子_20251224.csv -> actors_森日向子_20251224
+    without_prefix = filename.replace('Javdb_AdHoc_', '').replace('.csv', '')
+    
+    # Split and extract parts
+    # actors_森日向子_20251224 -> ['actors', '森日向子', '20251224']
+    # video_codes_MIDA_20251224 -> ['video_codes', 'MIDA', '20251224']
+    parts = without_prefix.split('_')
+    
+    if len(parts) < 3:
+        return None, None
+    
+    # Handle url_type which might be multi-part (e.g., video_codes)
+    # The date is always the last part (8 digits)
+    date_part = parts[-1]
+    if not (len(date_part) == 8 and date_part.isdigit()):
+        return None, None
+    
+    # Known multi-part types
+    multi_part_types = ['video_codes']
+    
+    url_type = None
+    display_name = None
+    
+    # Check if it's a multi-part type
+    for multi_type in multi_part_types:
+        if without_prefix.startswith(multi_type + '_'):
+            url_type = multi_type
+            # Extract name between type and date
+            name_parts = parts[2:-1]  # Skip first two parts (video, codes) and last (date)
+            display_name = '_'.join(name_parts) if name_parts else None
+            break
+    
+    # If not a multi-part type, assume single part type
+    if url_type is None:
+        url_type = parts[0]
+        # Name is everything between type and date
+        name_parts = parts[1:-1]
+        display_name = '_'.join(name_parts) if name_parts else None
+    
+    return url_type, display_name
+
+
+def format_adhoc_info(url_type, display_name):
+    """
+    Format Ad-Hoc information for display in email.
+    
+    Returns:
+        str: Formatted string like "Actor: 森日向子" or "Video Code: MIDA"
+    """
+    type_labels = {
+        'actors': 'Actor',
+        'makers': 'Maker',
+        'video_codes': 'Video Code',
+        'series': 'Series',
+        'directors': 'Director',
+        'labels': 'Label',
+    }
+    
+    label = type_labels.get(url_type, url_type.replace('_', ' ').title() if url_type else 'Unknown')
+    name = display_name if display_name else 'Unknown'
+    
+    return f"{label}: {name}"
+
+
+def find_latest_adhoc_csv(adhoc_dir, date_str):
+    """
+    Find the latest Ad-Hoc CSV file for the given date.
+    
+    Searches in dated subdirectories (YYYY/MM) for files matching:
+    Javdb_AdHoc_*_{date_str}.csv
+    
+    Args:
+        adhoc_dir: Base Ad-Hoc directory (e.g., reports/AdHoc)
+        date_str: Date string in YYYYMMDD format
+    
+    Returns:
+        str: Full path to the latest CSV file, or None if not found
+    """
+    import glob
+    
+    # Determine the dated subdirectory
+    year = date_str[:4]
+    month = date_str[4:6]
+    dated_dir = os.path.join(adhoc_dir, year, month)
+    
+    if not os.path.exists(dated_dir):
+        logger.warning(f"Ad-Hoc dated directory not found: {dated_dir}")
+        return None
+    
+    # Find all matching CSV files
+    pattern = os.path.join(dated_dir, f'Javdb_AdHoc_*_{date_str}.csv')
+    matches = glob.glob(pattern)
+    
+    if not matches:
+        logger.warning(f"No Ad-Hoc CSV files found matching pattern: {pattern}")
+        return None
+    
+    # Return the most recently modified one
+    latest = max(matches, key=os.path.getmtime)
+    logger.info(f"Found Ad-Hoc CSV: {latest}")
+    return latest
+
+
 def parse_arguments():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description='Email Notification for JavDB Pipeline')
     parser.add_argument('--csv-path', type=str, help='Path to the CSV file to attach')
+    parser.add_argument('--mode', type=str, choices=['daily', 'adhoc'], default='daily',
+                        help='Pipeline mode: daily or adhoc (default: daily)')
     parser.add_argument('--dry-run', action='store_true', help='Print email content without sending')
     parser.add_argument('--from-pipeline', action='store_true', 
                         help='Running from pipeline.py - use GIT_USERNAME for commits')
@@ -551,19 +679,37 @@ def get_proxy_ban_summary():
 
 
 def format_email_report(spider_stats, uploader_stats, pikpak_stats, ban_summary,
-                        show_spider=True, show_uploader=True, show_pikpak=True):
+                        show_spider=True, show_uploader=True, show_pikpak=True,
+                        mode='daily', adhoc_info=None):
     """
     Format a mobile-friendly email report.
     Only includes sections for components that ran successfully.
+    
+    Args:
+        mode: 'daily' or 'adhoc'
+        adhoc_info: Formatted Ad-Hoc info string (e.g., "Actor: 森日向子")
     """
     sections = []
+    
+    # Determine mode display
+    if mode == 'adhoc':
+        mode_display = "Ad-Hoc"
+        if adhoc_info:
+            mode_detail = f"Mode: {mode_display}\nTarget: {adhoc_info}"
+        else:
+            mode_detail = f"Mode: {mode_display}"
+    else:
+        mode_display = "Daily"
+        mode_detail = f"Mode: {mode_display}"
     
     # Header
     sections.append(f"""
 ═══════════════════════════════
-JavDB Pipeline Report
+JavDB Pipeline Report ({mode_display})
 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-═══════════════════════════════""")
+═══════════════════════════════
+
+{mode_detail}""")
     
     # Spider section
     # Note: Statistics are for MOVIES (unique pages), not individual torrent links
@@ -826,12 +972,31 @@ def main():
     pikpak_stats = extract_pikpak_statistics(PIKPAK_LOG_FILE) if pikpak_log_exists else None
     ban_summary = get_proxy_ban_summary()
     
-    # Determine CSV path (using dated subdirectory YYYY/MM)
+    # Determine pipeline mode and CSV path
     today_str = datetime.now().strftime('%Y%m%d')
+    mode = args.mode
+    
+    # Determine CSV path (using dated subdirectory YYYY/MM)
     if args.csv_path:
         csv_path = args.csv_path
+        # Auto-detect mode from CSV path if not explicitly set and path looks like adhoc
+        if 'AdHoc' in csv_path or 'Javdb_AdHoc_' in csv_path:
+            mode = 'adhoc'
     else:
-        csv_path = get_dated_report_path(DAILY_REPORT_DIR, f'Javdb_TodayTitle_{today_str}.csv')
+        if mode == 'adhoc':
+            # For adhoc mode without explicit path, try to find the latest adhoc CSV
+            csv_path = find_latest_adhoc_csv(AD_HOC_DIR, today_str)
+        else:
+            csv_path = get_dated_report_path(DAILY_REPORT_DIR, f'Javdb_TodayTitle_{today_str}.csv')
+    
+    # Extract Ad-Hoc information from CSV filename
+    adhoc_url_type, adhoc_display_name = extract_adhoc_info_from_csv(csv_path)
+    adhoc_info = format_adhoc_info(adhoc_url_type, adhoc_display_name) if adhoc_url_type else None
+    
+    logger.info(f"Pipeline mode: {mode}")
+    logger.info(f"CSV path: {csv_path}")
+    if adhoc_info:
+        logger.info(f"Ad-Hoc target: {adhoc_info}")
     
     # Convert log files to txt for attachment
     txt_attachments = []
@@ -867,29 +1032,50 @@ def main():
     final_uploader_stats = uploader_stats if uploader_stats else default_uploader_stats
     final_pikpak_stats = pikpak_stats if pikpak_stats else default_pikpak_stats
     
+    # Prepare mode display for subject line
+    mode_display = "Ad-Hoc" if mode == 'adhoc' else "Daily"
+    
+    # Prepare short adhoc info for subject (if applicable)
+    adhoc_subject_suffix = ""
+    if mode == 'adhoc' and adhoc_display_name:
+        # Truncate display name if too long for subject
+        short_name = adhoc_display_name[:20] + "..." if len(adhoc_display_name) > 20 else adhoc_display_name
+        adhoc_subject_suffix = f" [{short_name}]"
+    
     # Send email based on status
     if not has_critical_errors:
         body = format_email_report(
             final_spider_stats, final_uploader_stats, final_pikpak_stats, ban_summary,
             show_spider=spider_log_exists,
             show_uploader=uploader_log_exists,
-            show_pikpak=pikpak_log_exists
+            show_pikpak=pikpak_log_exists,
+            mode=mode,
+            adhoc_info=adhoc_info
         )
-        subject = f'✓ SUCCESS - JavDB Pipeline Report {today_str}'
+        subject = f'✓ SUCCESS - JavDB {mode_display} Report {today_str}{adhoc_subject_suffix}'
     else:
         error_details = "\n".join([f"  • {error}" for error in pipeline_errors])
         stats_report = format_email_report(
             final_spider_stats, final_uploader_stats, final_pikpak_stats, ban_summary,
             show_spider=spider_log_exists and not spider_critical,
             show_uploader=uploader_log_exists and not uploader_critical,
-            show_pikpak=pikpak_log_exists and not pikpak_critical
+            show_pikpak=pikpak_log_exists and not pikpak_critical,
+            mode=mode,
+            adhoc_info=adhoc_info
         )
+        
+        # Add mode info to failure report header
+        mode_info_line = f"Mode: {mode_display}"
+        if adhoc_info:
+            mode_info_line += f"\nTarget: {adhoc_info}"
         
         body = f"""
 ═══════════════════════════════
-⚠️  PIPELINE FAILED  ⚠️
+⚠️  PIPELINE FAILED ({mode_display})  ⚠️
 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 ═══════════════════════════════
+
+{mode_info_line}
 
 🚨 CRITICAL ERRORS
 
@@ -899,7 +1085,7 @@ Check attached logs for details.
 
 {stats_report}
 """
-        subject = f'✗ FAILED - JavDB Pipeline Report {today_str}'
+        subject = f'✗ FAILED - JavDB {mode_display} Report {today_str}{adhoc_subject_suffix}'
     
     # Send email
     email_sent = send_email(subject, body, attachments, args.dry_run)
