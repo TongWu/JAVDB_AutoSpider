@@ -290,13 +290,24 @@ jobs:
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
-          # Create encrypted archive of logs
+          # Create encrypted archive of logs (including .log and .txt files)
+          # .txt files include proxy ban HTML captures for debugging
           mkdir -p encrypted_artifacts
+          
+          # Build list of files to archive
+          LOG_FILES=""
           if ls logs/*.log 1> /dev/null 2>&1; then
-            tar -czf - logs/*.log | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
+            LOG_FILES="logs/*.log"
+          fi
+          if ls logs/*.txt 1> /dev/null 2>&1; then
+            LOG_FILES="$LOG_FILES logs/*.txt"
+          fi
+          
+          if [ -n "$LOG_FILES" ]; then
+            tar -czf - $LOG_FILES | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
               -out encrypted_artifacts/logs.tar.gz.enc \
               -pass pass:"$ARTIFACT_KEY"
-            echo "✓ Logs encrypted successfully"
+            echo "✓ Logs encrypted successfully (including proxy ban HTML files if any)"
           else
             echo "No log files found to encrypt"
           fi
@@ -358,7 +369,7 @@ jobs:
           if-no-files-found: ignore
 
   # =============================================================================
-  # Job 4: Email Notification - Runs on success or failure, but NOT on cancel
+  # Job 4: Email Notification - Always runs (success, failure, or cancel)
   # (Runs in parallel with commit-results on GitHub-hosted runner)
   # =============================================================================
   email-notification:
@@ -367,7 +378,7 @@ jobs:
     permissions:
       contents: read
     needs: [setup, health-check, run-pipeline]
-    if: ${{ !cancelled() }}
+    if: always()
     env:
       TZ: Asia/Singapore
     
