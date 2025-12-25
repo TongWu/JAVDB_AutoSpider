@@ -188,7 +188,8 @@ def save_proxy_ban_html(html_content, proxy_name, page_num):
     Returns:
         str: Path to the saved file, or None if failed
     """
-    global proxy_ban_html_files
+    # Note: proxy_ban_html_files is a module-level list, no need for 'global'
+    # since we're only appending to it, not reassigning it
     
     if not html_content:
         logger.warning(f"No HTML content to save for banned proxy {proxy_name}")
