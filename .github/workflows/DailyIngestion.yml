@@ -5,9 +5,9 @@ permissions:
 
 on:
   workflow_dispatch:
-  # schedule:
-  #   # Run daily at 10:00 UTC (18:00 Beijing Time)
-  #   - cron: '0 10 * * *'
+  schedule:
+    # Run daily at 10:00 UTC (18:00 Beijing Time)
+    - cron: '0 10 * * *'
 
 jobs:
   # =============================================================================
