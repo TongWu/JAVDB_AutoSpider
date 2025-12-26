@@ -349,7 +349,7 @@ class TestExtractUploaderStatistics:
         """Test extracting statistics from uploader log."""
         log_path = os.path.join(temp_dir, 'uploader.log')
         with open(log_path, 'w') as f:
-            f.write("Total torrents found: 25\n")
+            f.write("Total torrents in CSV: 25\n")
             f.write("Successfully added: 22\n")
             f.write("Failed to add: 3\n")
             f.write("Hacked subtitle torrents: 5\n")
