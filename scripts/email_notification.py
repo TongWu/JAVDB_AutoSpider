@@ -583,7 +583,7 @@ def extract_uploader_statistics(log_path):
         with open(log_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        total = re.search(r'Total torrents found: (\d+)', content)
+        total = re.search(r'Total torrents in CSV: (\d+)', content)
         if total:
             stats['total'] = int(total.group(1))
         
