@@ -1762,6 +1762,9 @@ def main():
         detail_pending_fallback_settings = None
         detail_current_fallback_threshold = fallback_persist_threshold_full
 
+        # Track pending sleep - only sleep before entries that will make network requests
+        pending_movie_sleep = False
+
         for i, entry in enumerate(all_index_results_phase1, 1):
             href = entry['href']
             page_num = entry['page']
@@ -1772,6 +1775,7 @@ def main():
                 logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping already parsed in this session")
                 skipped_session_count += 1
                 phase1_skipped_session += 1
+                # No sleep needed - pending_movie_sleep stays as-is for next entry that needs processing
                 continue
 
             # Add to parsed links set for this session
@@ -1783,7 +1787,13 @@ def main():
                 logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history")
                 skipped_history_count += 1
                 phase1_skipped_history_actual += 1
+                # No sleep needed - pending_movie_sleep stays as-is for next entry that needs processing
                 continue
+
+            # This entry needs processing - apply pending sleep before making network request
+            if pending_movie_sleep:
+                time.sleep(MOVIE_SLEEP)
+                pending_movie_sleep = False
 
             detail_url = urljoin(BASE_URL, href)
 
@@ -1833,7 +1843,8 @@ def main():
                 logger.error(f"[{i}/{total_entries_phase1}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
                 failed_count += 1
                 phase1_failed += 1
-                time.sleep(MOVIE_SLEEP)  # Respect rate limiting even on failure
+                # Mark pending sleep - will only execute if next entry needs network request
+                pending_movie_sleep = True
                 continue
             
             magnet_links = extract_magnets(magnets, i)
@@ -1855,7 +1866,8 @@ def main():
                         f"[{i}/{total_entries_phase1}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
                 skipped_history_count += 1
                 phase1_skipped_history_actual += 1
-                time.sleep(MOVIE_SLEEP)  # Respect rate limiting even when skipping
+                # Mark pending sleep - network request was made, so respect rate limiting
+                pending_movie_sleep = True
                 continue
 
             # Count found torrents
@@ -1921,9 +1933,10 @@ def main():
                 # Extra cooldown after fallback to let Cloudflare/server recover
                 logger.debug(f"[{i}/{total_entries_phase1}] Applying fallback cooldown: {FALLBACK_COOLDOWN}s")
                 time.sleep(FALLBACK_COOLDOWN)
+                pending_movie_sleep = False  # Already waited enough
             else:
-                # Normal delay between items
-                time.sleep(MOVIE_SLEEP)
+                # Mark pending sleep - will only execute if next entry needs network request
+                pending_movie_sleep = True
 
         # Phase 1 statistics - use actual tracked counts
         # Verify: total_entries_phase1 == phase1_skipped_session + phase1_skipped_history_actual + len(phase1_rows) + phase1_no_new_torrents + phase1_failed
@@ -1957,6 +1970,9 @@ def main():
         detail_pending_fallback_settings = None
         detail_current_fallback_threshold = fallback_persist_threshold_full
 
+        # Track pending sleep - only sleep before entries that will make network requests
+        pending_movie_sleep = False
+
         for i, entry in enumerate(all_index_results_phase2, 1):
             href = entry['href']
             page_num = entry['page']
@@ -1967,7 +1983,7 @@ def main():
                 logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping already parsed in this session")
                 skipped_session_count += 1
                 phase2_skipped_session += 1
-                # No sleep needed here - we haven't made any request yet
+                # No sleep needed - pending_movie_sleep stays as-is for next entry that needs processing
                 continue
 
             # Add to parsed links set for this session
@@ -1979,7 +1995,13 @@ def main():
                 logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history")
                 skipped_history_count += 1
                 phase2_skipped_history_actual += 1
+                # No sleep needed - pending_movie_sleep stays as-is for next entry that needs processing
                 continue
+
+            # This entry needs processing - apply pending sleep before making network request
+            if pending_movie_sleep:
+                time.sleep(MOVIE_SLEEP)
+                pending_movie_sleep = False
 
             detail_url = urljoin(BASE_URL, href)
 
@@ -2029,7 +2051,8 @@ def main():
                 logger.error(f"[{i}/{total_entries_phase2}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
                 failed_count += 1
                 phase2_failed += 1
-                time.sleep(MOVIE_SLEEP)  # Respect rate limiting even on failure
+                # Mark pending sleep - will only execute if next entry needs network request
+                pending_movie_sleep = True
                 continue
             
             magnet_links = extract_magnets(magnets, f"P2-{i}")
@@ -2051,7 +2074,8 @@ def main():
                         f"[{i}/{total_entries_phase2}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
                 skipped_history_count += 1
                 phase2_skipped_history_actual += 1
-                time.sleep(MOVIE_SLEEP)  # Respect rate limiting even when skipping
+                # Mark pending sleep - network request was made, so respect rate limiting
+                pending_movie_sleep = True
                 continue
 
             # Count found torrents
@@ -2117,9 +2141,10 @@ def main():
                 # Extra cooldown after fallback to let Cloudflare/server recover
                 logger.debug(f"[P2-{i}/{total_entries_phase2}] Applying fallback cooldown: {FALLBACK_COOLDOWN}s")
                 time.sleep(FALLBACK_COOLDOWN)
+                pending_movie_sleep = False  # Already waited enough
             else:
-                # Normal delay between items
-                time.sleep(MOVIE_SLEEP)
+                # Mark pending sleep - will only execute if next entry needs network request
+                pending_movie_sleep = True
 
         # Phase 2 statistics - use actual tracked counts
         # Verify: total_entries_phase2 == phase2_skipped_session + phase2_skipped_history_actual + len(phase2_rows) + phase2_no_new_torrents + phase2_failed
