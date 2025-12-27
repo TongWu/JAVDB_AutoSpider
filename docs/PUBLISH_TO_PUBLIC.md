@@ -9,7 +9,7 @@ Publishing flow:
 ```
 Private repo (main/dev) 
     ↓
-Private repo (publish branch) - Clean sensitive content
+Private repo (public-sync branch) - Clean sensitive content
     ↓
 Public repo (dev branch)
 ```
@@ -104,7 +104,7 @@ You can also manually specify the public repo URL:
 # Dry run (simulate without pushing)
 ./scripts/publish_to_public.sh --dry-run
 
-# Only push to publish branch, skip public repo
+# Only push to public-sync branch, skip public repo
 ./scripts/publish_to_public.sh --skip-public
 
 # Use SSH mode (default)
@@ -116,12 +116,12 @@ You can also manually specify the public repo URL:
 
 ## Detailed Flow
 
-### Step 1: Create publish branch
+### Step 1: Create public-sync branch
 
-The script creates a new `publish` branch from the current branch:
+The script creates a new `public-sync` branch from the current branch:
 
 ```bash
-git checkout -b publish
+git checkout -b public-sync
 ```
 
 ### Step 2: Remove sensitive content
@@ -162,16 +162,16 @@ git add -A
 git commit -m "Prepare for public release"
 ```
 
-### Step 5: Push to publish branch
+### Step 5: Push to public-sync branch
 
 ```bash
-git push -f origin publish
+git push -f origin public-sync
 ```
 
 ### Step 6: Push to public repository
 
 ```bash
-git push -f public publish:dev
+git push -f public public-sync:dev
 ```
 
 ### Step 7: Restore original branch
@@ -239,7 +239,7 @@ A: Edit the `PUBLIC_TARGET_BRANCH` variable in the script:
 PUBLIC_TARGET_BRANCH="main"  # Change to target branch name
 ```
 
-#### Q: Can the publish branch be deleted?
+#### Q: Can the public-sync branch be deleted?
 A: Yes, but it's recommended to keep it for history. Each script run overwrites this branch.
 
 ## Rollback
