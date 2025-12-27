@@ -192,8 +192,16 @@ jobs:
       - name: Push to public repository
         id: push_public
         if: ${{ !inputs.dry_run }}
+        env:
+          PUBLIC_REPO_URL: ${{ secrets.GIT_REPO_URL_REMOTE }}
+          GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
+          GIT_PASSWORD: ${{ secrets.GIT_PASSWORD }}
         run: |
           echo "Pushing to public repository..."
+          
+          # Build authenticated URL for push (bypass GitHub Actions credential helper)
+          ENCODED_PASSWORD=$(python3 -c "from urllib.parse import quote; print(quote('$GIT_PASSWORD', safe=''))")
+          AUTH_URL=$(echo "$PUBLIC_REPO_URL" | sed "s|https://|https://${GIT_USERNAME}:${ENCODED_PASSWORD}@|")
           
           # Check if public branch exists
           if git show-ref --verify --quiet "refs/remotes/public/$PUBLIC_TARGET_BRANCH"; then
@@ -215,10 +223,10 @@ jobs:
             CAN_FAST_FORWARD=true
           fi
           
-          # Attempt push based on situation
+          # Attempt push based on situation (use AUTH_URL directly to bypass credential helper)
           if [ "$CAN_FAST_FORWARD" = true ]; then
             echo "Attempting normal push..."
-            if git push public "$PUBLISH_BRANCH:$PUBLIC_TARGET_BRANCH"; then
+            if git push "$AUTH_URL" "$PUBLISH_BRANCH:$PUBLIC_TARGET_BRANCH" 2>&1; then
               echo "✓ Pushed to public repository ($PUBLIC_TARGET_BRANCH branch)"
               echo "push_method=normal" >> $GITHUB_OUTPUT
               exit 0
@@ -231,9 +239,13 @@ jobs:
           # History diverged or normal push failed
           if [ "${{ inputs.force_push }}" = "true" ]; then
             echo "::warning::Force push enabled - overwriting public repo history"
-            git push -f public "$PUBLISH_BRANCH:$PUBLIC_TARGET_BRANCH"
-            echo "✓ Force pushed to public repository ($PUBLIC_TARGET_BRANCH branch)"
-            echo "push_method=force" >> $GITHUB_OUTPUT
+            if git push -f "$AUTH_URL" "$PUBLISH_BRANCH:$PUBLIC_TARGET_BRANCH" 2>&1; then
+              echo "✓ Force pushed to public repository ($PUBLIC_TARGET_BRANCH branch)"
+              echo "push_method=force" >> $GITHUB_OUTPUT
+            else
+              echo "::error::Force push failed"
+              exit 1
+            fi
           else
             echo ""
             echo "=============================================="
