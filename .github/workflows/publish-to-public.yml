@@ -199,7 +199,12 @@ jobs:
         run: |
           echo "Pushing to public repository..."
           
-          # Build authenticated URL for push (bypass GitHub Actions credential helper)
+          # Disable GitHub Actions credential helper to use our own credentials
+          git config --unset-all http.https://github.com/.extraheader || true
+          git config --global --unset-all http.https://github.com/.extraheader || true
+          git config --global credential.helper ""
+          
+          # Build authenticated URL for push
           ENCODED_PASSWORD=$(python3 -c "from urllib.parse import quote; print(quote('$GIT_PASSWORD', safe=''))")
           AUTH_URL=$(echo "$PUBLIC_REPO_URL" | sed "s|https://|https://${GIT_USERNAME}:${ENCODED_PASSWORD}@|")
           
