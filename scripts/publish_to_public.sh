@@ -58,6 +58,7 @@ EXCLUDE_PATTERNS=(
     "reports/"
     "scripts/publish_to_public.sh"
     "docs/PUBLISH_TO_PUBLIC.md"
+    ".github/workflows/block-public-sync-to-main.yml"
 )
 
 # Workflow files to modify (disable schedule)
