@@ -24,12 +24,11 @@ os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 # Import unified configuration
 try:
     from config import (
-        PIPELINE_LOG_FILE, LOG_LEVEL, REPORTS_DIR, DAILY_REPORT_DIR, AD_HOC_DIR
+        PIPELINE_LOG_FILE, LOG_LEVEL, DAILY_REPORT_DIR, AD_HOC_DIR
     )
 except ImportError:
     PIPELINE_LOG_FILE = 'logs/pipeline.log'
     LOG_LEVEL = 'INFO'
-    REPORTS_DIR = 'reports'
     DAILY_REPORT_DIR = 'reports/DailyReport'
     AD_HOC_DIR = 'reports/AdHoc'
 
