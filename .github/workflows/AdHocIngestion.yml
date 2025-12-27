@@ -54,6 +54,14 @@ on:
         required: false
         default: false
         type: boolean
+      runner:
+        description: 'Runner type for pipeline jobs (health-check and run-pipeline)'
+        required: false
+        default: 'ubuntu-latest'
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'self-hosted'
 
 jobs:
   # =============================================================================
@@ -195,7 +203,7 @@ jobs:
   # Job 2: Health Check - Verify essential services before running pipeline
   # =============================================================================
   health-check:
-    runs-on: self-hosted
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     environment: Production
     permissions:
       contents: read
@@ -244,7 +252,7 @@ jobs:
   # Job 3: Run Pipeline - Execute spider, uploader, and pikpak bridge
   # =============================================================================
   run-pipeline:
-    runs-on: self-hosted
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     environment: Production
     permissions:
       contents: read
@@ -341,9 +349,11 @@ jobs:
           # Add phase flag
           SPIDER_CMD="$SPIDER_CMD --phase ${{ inputs.phase || 'all' }}"
           
-          # Add ignore history flag if history filter is disabled
-          if [ "${{ inputs.history_filter }}" == "false" ]; then
-            SPIDER_CMD="$SPIDER_CMD --ignore-history"
+          # Add use-history flag if history filter is enabled
+          # Note: Ad hoc mode defaults to NOT checking history (process all entries)
+          # Only add --use-history when explicitly requested to skip already-parsed entries
+          if [ "${{ inputs.history_filter }}" == "true" ]; then
+            SPIDER_CMD="$SPIDER_CMD --use-history"
           fi
           
           # Add ignore release date flag if date filter is disabled

@@ -300,9 +300,63 @@ class RequestHandler:
         try:
             logger.debug(f"[{context_msg}] [curl_cffi] Requesting: {target_url}")
             logger.debug(f"[{context_msg}] [curl_cffi] Impersonate: {self.config.curl_cffi_impersonate}")
+            # Log if Cookie header is present (for debugging login issues)
+            # NOTE: Do NOT log actual cookie values - they contain sensitive session secrets
+            if 'Cookie' in req_headers:
+                # Only log presence and cookie names (not values)
+                cookie_str = req_headers['Cookie']
+                cookie_names = [part.split('=')[0].strip() for part in cookie_str.split(';') if '=' in part]
+                logger.debug(f"[{context_msg}] [curl_cffi] Cookie header present: {len(cookie_names)} cookies ({', '.join(cookie_names)})")
+            else:
+                logger.debug(f"[{context_msg}] [curl_cffi] No Cookie header in request")
             if req_proxies:
                 masked_proxies = {k: mask_proxy_url(v) for k, v in req_proxies.items()}
                 logger.debug(f"[{context_msg}] [curl_cffi] Using proxies: {masked_proxies}")
+            
+            # Handle cookie merging when manual Cookie header is present.
+            # When curl_cffi session is reused, the session's internal cookie jar can override
+            # the Cookie header we set manually. This causes login issues when:
+            # 1. First request (without cookie) receives a Set-Cookie from server
+            # 2. Session saves this (possibly invalid) cookie
+            # 3. Subsequent requests have their Cookie header overridden by session's cookie
+            # 
+            # Solution: When manual Cookie header is set, we:
+            # 1. Extract ALL cookies from session (cf_clearance, over18, __cf_bm, etc.)
+            # 2. Merge them with the manual Cookie header (manual cookies take priority)
+            # 3. Clear session cookies to prevent override
+            # 
+            # When NO manual Cookie header is set, preserve all session cookies as-is.
+            if 'Cookie' in req_headers:
+                # Extract ALL session cookies before clearing
+                session_cookies = []
+                for cookie_name, cookie_value in self.curl_cffi_session.cookies.items():
+                    session_cookies.append(f"{cookie_name}={cookie_value}")
+                    logger.debug(f"[{context_msg}] [curl_cffi] Found session cookie: {cookie_name}")
+                
+                # Merge session cookies with manual Cookie header (manual takes priority)
+                if session_cookies:
+                    # Parse existing Cookie header to get manual cookie names
+                    manual_cookie = req_headers['Cookie']
+                    manual_cookie_names = set()
+                    for part in manual_cookie.split(';'):
+                        if '=' in part:
+                            name = part.split('=')[0].strip()
+                            manual_cookie_names.add(name)
+                    
+                    # Only add session cookies that aren't already in manual Cookie
+                    cookies_to_add = []
+                    for cookie_str in session_cookies:
+                        cookie_name = cookie_str.split('=')[0]
+                        if cookie_name not in manual_cookie_names:
+                            cookies_to_add.append(cookie_str)
+                    
+                    if cookies_to_add:
+                        req_headers['Cookie'] = manual_cookie + '; ' + '; '.join(cookies_to_add)
+                        logger.debug(f"[{context_msg}] [curl_cffi] Merged {len(cookies_to_add)} session cookies into Cookie header")
+                
+                # Clear session cookies to prevent them from overriding our merged Cookie header
+                self.curl_cffi_session.cookies.clear()
+                logger.debug(f"[{context_msg}] [curl_cffi] Cleared session cookies after merging")
             
             # curl_cffi uses 'proxies' parameter similar to requests
             response = self.curl_cffi_session.get(

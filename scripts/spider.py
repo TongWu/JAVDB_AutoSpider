@@ -132,6 +132,9 @@ def parse_arguments():
     parser.add_argument('--ignore-history', action='store_true',
                         help='Ignore history file for reading (scrape all pages) but still save to history')
 
+    parser.add_argument('--use-history', action='store_true',
+                        help='Enable history filter for ad-hoc mode (by default, ad-hoc mode ignores history for reading)')
+
     parser.add_argument('--url', type=str,
                         help='Custom URL to scrape (add ?page=x for pages)')
 
@@ -635,7 +638,11 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
                             use_cf_bypass=u_cf)
             if html:
                 soup = BeautifulSoup(html, 'html.parser')
-                movie_list = soup.find('div', class_='movie-list h cols-4 vcols-8')
+                # Use flexible matching - look for any div with 'movie-list' in class
+                # Different pages may have different class combinations:
+                # - Normal pages: 'movie-list h cols-4 vcols-8'  
+                # - Rankings pages: 'movie-list h cols-4'
+                movie_list = soup.find('div', class_=lambda x: x and 'movie-list' in x)
                 if movie_list:
                     logger.debug(f"[Page {page_num}] Success: {context_msg}")
                     return html, True, False
@@ -1362,6 +1369,7 @@ def main():
     custom_url = args.url
     dry_run = args.dry_run
     ignore_history = args.ignore_history
+    use_history = args.use_history
     parse_all = args.all
     ignore_release_date = args.ignore_release_date
     use_proxy = args.use_proxy
@@ -1428,8 +1436,10 @@ def main():
         else:
             output_csv = generate_output_csv_name(custom_url, use_proxy=use_proxy, use_cf_bypass=use_cf_bypass)
         csv_path = os.path.join(output_dated_dir, output_csv)
-        use_history_for_loading = True   # Check history for ad hoc mode (changed from False)
-        use_history_for_saving = True    # Record to history for ad hoc mode
+        # Ad hoc mode: default to NOT checking history (process all entries)
+        # Use --use-history to enable history filter in ad hoc mode
+        use_history_for_loading = use_history
+        use_history_for_saving = True    # Always record to history for ad hoc mode
     else:
         # Daily mode: create dated subdirectory for reports
         output_dated_dir = ensure_report_dated_dir(DAILY_REPORT_DIR)
@@ -1442,13 +1452,14 @@ def main():
     logger.info(f"Arguments: start_page={start_page}, end_page={end_page}, phase={phase_mode}")
     if custom_url:
         logger.info(f"Custom URL: {custom_url}")
-        if ignore_history:
-            logger.info("AD HOC MODE: Will process all entries (ignoring history)")
+        if use_history:
+            logger.info("AD HOC MODE: History filter ENABLED (--use-history) - will skip entries already in history")
         else:
-            logger.info("AD HOC MODE: Will skip entries already in history (use --ignore-history to override)")
+            logger.info("AD HOC MODE: Will process all entries (history filter disabled by default)")
     if dry_run:
         logger.info("DRY RUN MODE: No CSV file will be written")
-    if ignore_history:
+    if ignore_history and not custom_url:
+        # Only log this for daily mode, since ad hoc mode already defaults to ignoring history
         logger.info("IGNORE HISTORY: Will scrape all pages without checking history (but still save to history)")
     if parse_all:
         logger.info("PARSE ALL MODE: Will continue until empty page is found")
