@@ -40,14 +40,15 @@ The script automatically performs the following:
 
 ### 1. Excluded Files/Directories
 
-The following files and directories are removed during publishing:
+The following **git-tracked** files and directories are removed during publishing:
 
 | Path                           | Reason                                               |
 | ------------------------------ | ---------------------------------------------------- |
 | `reports/`                     | Contains runtime data, not suitable for public       |
 | `scripts/publish_to_public.sh` | The publish script itself, not needed in public repo |
 | `docs/PUBLISH_TO_PUBLIC.md`    | This document, not needed in public repo             |
-| `config.py`                    | Contains sensitive configuration, cannot be public   |
+
+**Note**: `config.py` is NOT removed because it's in `.gitignore` and never tracked by git. The script only removes git-tracked files to prevent accidental deletion of local configuration.
 
 ### 2. Modified Workflow Files
 
