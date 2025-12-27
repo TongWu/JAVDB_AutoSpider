@@ -1,0 +1,295 @@
+name: Publish to Public Repository
+
+# =============================================================================
+# This workflow pushes code from the private repository to a public repository
+# Flow: private repo -> public-sync branch -> public repo dev branch
+#
+# Required Secrets:
+#   - DEPLOY_KEY: SSH key for private repo
+#   - GIT_USERNAME: Git username for public repo
+#   - GIT_PASSWORD: Git password/token for public repo
+#   - GIT_REPO_URL_REMOTE: Public repository URL (HTTPS format)
+# =============================================================================
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (skip push to public repo)'
+        required: false
+        type: boolean
+        default: false
+      force_push:
+        description: 'Force push (overwrite public repo history)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: Production
+    env:
+      TZ: Asia/Singapore
+      PUBLISH_BRANCH: public-sync
+      PUBLIC_TARGET_BRANCH: dev
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          fetch-depth: 0  # Full history for branch operations
+
+      - name: Get current branch
+        id: branch_check
+        run: |
+          CURRENT_BRANCH="${GITHUB_REF#refs/heads/}"
+          echo "Current branch: $CURRENT_BRANCH"
+          echo "branch=$CURRENT_BRANCH" >> $GITHUB_OUTPUT
+
+      - name: Check for uncommitted changes
+        run: |
+          if ! git diff --cached --quiet || ! git diff --quiet; then
+            echo "::error::Working tree is not clean"
+            exit 1
+          fi
+          echo "✓ Working tree is clean"
+
+      - name: Setup public repo remote
+        env:
+          PUBLIC_REPO_URL: ${{ secrets.GIT_REPO_URL_REMOTE }}
+          GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
+          GIT_PASSWORD: ${{ secrets.GIT_PASSWORD }}
+        run: |
+          if [ -z "$PUBLIC_REPO_URL" ]; then
+            echo "::error::GIT_REPO_URL_REMOTE secret is required"
+            exit 1
+          fi
+          
+          if [ -z "$GIT_USERNAME" ] || [ -z "$GIT_PASSWORD" ]; then
+            echo "::error::GIT_USERNAME and GIT_PASSWORD secrets are required"
+            exit 1
+          fi
+          
+          # URL encode password (handle special characters)
+          ENCODED_PASSWORD=$(python3 -c "from urllib.parse import quote; print(quote('$GIT_PASSWORD', safe=''))")
+          
+          # Convert URL to authenticated URL
+          AUTH_URL=$(echo "$PUBLIC_REPO_URL" | sed "s|https://|https://${GIT_USERNAME}:${ENCODED_PASSWORD}@|")
+          
+          # Add public remote
+          git remote add public "$AUTH_URL" 2>/dev/null || git remote set-url public "$AUTH_URL"
+          
+          # Fetch public repo
+          echo "Fetching public repository..."
+          git fetch public "$PUBLIC_TARGET_BRANCH" 2>/dev/null || echo "Note: Public branch may not exist yet"
+          
+          echo "✓ Public remote configured"
+
+      - name: Create publish branch
+        run: |
+          echo "Creating/updating $PUBLISH_BRANCH branch..."
+          
+          # Delete publish branch if it exists locally
+          if git show-ref --verify --quiet "refs/heads/$PUBLISH_BRANCH"; then
+            echo "Deleting existing local $PUBLISH_BRANCH branch"
+            git branch -D "$PUBLISH_BRANCH"
+          fi
+          
+          # Create new publish branch from current branch
+          git checkout -b "$PUBLISH_BRANCH"
+          echo "✓ Created $PUBLISH_BRANCH branch"
+
+      - name: Remove excluded files
+        run: |
+          echo "Removing excluded files from git..."
+          
+          # Files and directories to exclude (only git-tracked files)
+          EXCLUDE_PATTERNS=(
+            "reports/"
+            "scripts/publish_to_public.sh"
+            "docs/PUBLISH_TO_PUBLIC.md"
+            ".github/workflows/block-public-sync-to-main.yml"
+            ".github/workflows/publish-to-public.yml"
+          )
+          
+          for pattern in "${EXCLUDE_PATTERNS[@]}"; do
+            if [ -e "$pattern" ]; then
+              # Check if the file is tracked by git
+              if git ls-files --error-unmatch "$pattern" > /dev/null 2>&1; then
+                echo "Removing from git: $pattern"
+                git rm -rf "$pattern" 2>/dev/null || true
+              else
+                echo "Skipping untracked file: $pattern"
+              fi
+            fi
+          done
+          
+          echo "✓ Excluded files removed"
+
+      - name: Disable workflow schedules
+        run: |
+          echo "Disabling workflow schedules..."
+          
+          # Workflow files to modify (disable schedule)
+          WORKFLOW_FILES=(
+            ".github/workflows/DailyIngestion.yml"
+            ".github/workflows/QBFileFilter.yml"
+          )
+          
+          for workflow in "${WORKFLOW_FILES[@]}"; do
+            if [ -f "$workflow" ]; then
+              echo "Processing: $workflow"
+              
+              # Use sed to comment out schedule section
+              sed -i 's/^  schedule:$/  # schedule: # DISABLED FOR PUBLIC REPO/g' "$workflow"
+              sed -i 's/^    - cron:/    # - cron:/g' "$workflow"
+              
+              echo "✓ Disabled schedule in $workflow"
+            else
+              echo "⚠ File not found: $workflow"
+            fi
+          done
+
+      - name: Commit changes
+        id: commit
+        run: |
+          echo "Committing changes..."
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add -A
+          
+          # Check if there are changes to commit
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            git commit -m "Sync from private repository
+
+          Changes:
+          - Removed private reports directory
+          - Removed publish scripts and docs
+          - Disabled scheduled workflows for public repo
+
+          This commit is auto-generated by publish-to-public.yml workflow"
+            echo "✓ Changes committed"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Push to publish branch (private repo)
+        if: ${{ !inputs.dry_run }}
+        run: |
+          echo "Pushing to origin/$PUBLISH_BRANCH..."
+          git push -f origin "$PUBLISH_BRANCH"
+          echo "✓ Pushed to origin/$PUBLISH_BRANCH"
+
+      - name: Push to public repository
+        id: push_public
+        if: ${{ !inputs.dry_run }}
+        run: |
+          echo "Pushing to public repository..."
+          
+          # Check if public branch exists
+          if git show-ref --verify --quiet "refs/remotes/public/$PUBLIC_TARGET_BRANCH"; then
+            echo "Public branch exists, checking history compatibility..."
+            
+            # Check if we can do a normal push (fast-forward)
+            MERGE_BASE=$(git merge-base HEAD "public/$PUBLIC_TARGET_BRANCH" 2>/dev/null || echo "")
+            PUBLIC_HEAD=$(git rev-parse "public/$PUBLIC_TARGET_BRANCH" 2>/dev/null || echo "")
+            
+            if [ -n "$MERGE_BASE" ] && [ "$MERGE_BASE" = "$PUBLIC_HEAD" ]; then
+              echo "History is compatible (fast-forward possible)"
+              CAN_FAST_FORWARD=true
+            else
+              echo "History diverged - fast-forward not possible"
+              CAN_FAST_FORWARD=false
+            fi
+          else
+            echo "Public branch does not exist yet, will create it"
+            CAN_FAST_FORWARD=true
+          fi
+          
+          # Attempt push based on situation
+          if [ "$CAN_FAST_FORWARD" = true ]; then
+            echo "Attempting normal push..."
+            if git push public "$PUBLISH_BRANCH:$PUBLIC_TARGET_BRANCH"; then
+              echo "✓ Pushed to public repository ($PUBLIC_TARGET_BRANCH branch)"
+              echo "push_method=normal" >> $GITHUB_OUTPUT
+              exit 0
+            else
+              echo "Normal push failed"
+              CAN_FAST_FORWARD=false
+            fi
+          fi
+          
+          # History diverged or normal push failed
+          if [ "${{ inputs.force_push }}" = "true" ]; then
+            echo "::warning::Force push enabled - overwriting public repo history"
+            git push -f public "$PUBLISH_BRANCH:$PUBLIC_TARGET_BRANCH"
+            echo "✓ Force pushed to public repository ($PUBLIC_TARGET_BRANCH branch)"
+            echo "push_method=force" >> $GITHUB_OUTPUT
+          else
+            echo ""
+            echo "=============================================="
+            echo "  PUSH FAILED - History Diverged"
+            echo "=============================================="
+            echo ""
+            echo "The public repository has commits that are not in the private repository."
+            echo "This can happen if:"
+            echo "  1. Someone made commits directly to the public repo"
+            echo "  2. A PR was merged to the public repo"
+            echo "  3. The sync process was modified"
+            echo ""
+            echo "Options:"
+            echo "  1. Re-run this workflow with 'Force push' enabled to overwrite"
+            echo "  2. Manually merge public repo changes into private repo first"
+            echo ""
+            echo "::error::Push failed - history diverged. Enable 'force_push' to overwrite."
+            exit 1
+          fi
+
+      - name: Dry run summary
+        if: ${{ inputs.dry_run }}
+        run: |
+          echo ""
+          echo "=============================================="
+          echo "  DRY RUN COMPLETED"
+          echo "=============================================="
+          echo ""
+          echo "Would have pushed to:"
+          echo "  - Private repo: origin/$PUBLISH_BRANCH"
+          echo "  - Public repo: $PUBLIC_TARGET_BRANCH"
+          echo ""
+          echo "Changes prepared:"
+          git log --oneline -1
+          echo ""
+          echo "Files removed from git:"
+          git diff --name-status HEAD~1 2>/dev/null || echo "(first commit)"
+
+      - name: Restore original branch
+        if: always()
+        run: |
+          ORIGINAL_BRANCH="${{ steps.branch_check.outputs.branch }}"
+          echo "Restoring to original branch: $ORIGINAL_BRANCH"
+          git checkout "$ORIGINAL_BRANCH" 2>/dev/null || true
+
+      - name: Summary
+        if: ${{ !inputs.dry_run && !failure() }}
+        env:
+          PUBLIC_REPO_URL: ${{ secrets.GIT_REPO_URL_REMOTE }}
+        run: |
+          echo ""
+          echo "=============================================="
+          echo "  PUBLISH COMPLETED SUCCESSFULLY"
+          echo "=============================================="
+          echo ""
+          echo "Private repo publish branch: origin/$PUBLISH_BRANCH"
+          echo "Public repo target branch: $PUBLIC_TARGET_BRANCH"
+          echo "Push method: ${{ steps.push_public.outputs.push_method || 'N/A' }}"
+          echo "Public repo URL: $PUBLIC_REPO_URL"
