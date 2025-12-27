@@ -190,10 +190,19 @@ detect_private_remote() {
 
 # Check for uncommitted changes
 check_uncommitted_changes() {
-    if ! git diff-index --quiet HEAD --; then
-        log_error "You have uncommitted changes. Please commit or stash them first"
+    # Check for staged changes
+    if ! git diff --cached --quiet; then
+        log_error "You have staged changes. Please commit or stash them first"
         exit 1
     fi
+    
+    # Check for unstaged changes to tracked files
+    if ! git diff --quiet; then
+        log_error "You have unstaged changes. Please commit or stash them first"
+        exit 1
+    fi
+    
+    log_info "Working tree is clean"
 }
 
 # Save current branch
