@@ -43,7 +43,7 @@ log_error() {
 # =============================================================================
 # Configuration
 # =============================================================================
-PUBLISH_BRANCH="publish"
+PUBLISH_BRANCH="public-sync"
 PUBLIC_REMOTE_NAME="public"
 PUBLIC_TARGET_BRANCH="dev"
 PRIVATE_REMOTE_NAME=""  # Will be auto-detected (origin or private)
