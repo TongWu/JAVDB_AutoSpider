@@ -341,9 +341,11 @@ jobs:
           # Add phase flag
           SPIDER_CMD="$SPIDER_CMD --phase ${{ inputs.phase || 'all' }}"
           
-          # Add ignore history flag if history filter is disabled
-          if [ "${{ inputs.history_filter }}" == "false" ]; then
-            SPIDER_CMD="$SPIDER_CMD --ignore-history"
+          # Add use-history flag if history filter is enabled
+          # Note: Ad hoc mode defaults to NOT checking history (process all entries)
+          # Only add --use-history when explicitly requested to skip already-parsed entries
+          if [ "${{ inputs.history_filter }}" == "true" ]; then
+            SPIDER_CMD="$SPIDER_CMD --use-history"
           fi
           
           # Add ignore release date flag if date filter is disabled
