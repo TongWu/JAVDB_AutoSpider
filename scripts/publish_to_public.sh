@@ -382,12 +382,47 @@ restore_original_branch() {
     git checkout "$ORIGINAL_BRANCH"
 }
 
-# Cleanup function
+# Clean up macOS duplicate files/folders (e.g., "folder 2", "file 2.txt")
+cleanup_macos_duplicates() {
+    log_info "Cleaning up macOS duplicate files..."
+    
+    # Find and remove files/folders with " 2" suffix created by macOS
+    # This happens when macOS auto-creates copies during file operations
+    local duplicates_found=false
+    
+    # Clean up in project root
+    while IFS= read -r -d '' dup_file; do
+        if [ -e "$dup_file" ]; then
+            log_warn "Removing macOS duplicate: $dup_file"
+            rm -rf "$dup_file"
+            duplicates_found=true
+        fi
+    done < <(find "$PROJECT_ROOT" -name "* 2" -print0 2>/dev/null)
+    
+    while IFS= read -r -d '' dup_file; do
+        if [ -e "$dup_file" ]; then
+            log_warn "Removing macOS duplicate: $dup_file"
+            rm -rf "$dup_file"
+            duplicates_found=true
+        fi
+    done < <(find "$PROJECT_ROOT" -name "* 2.*" -print0 2>/dev/null)
+    
+    if [ "$duplicates_found" = true ]; then
+        log_success "macOS duplicates cleaned up"
+    else
+        log_info "No macOS duplicates found"
+    fi
+}
+
+# Cleanup function (called on exit)
 cleanup() {
     if [ -n "$ORIGINAL_BRANCH" ]; then
         log_info "Cleanup: restoring to original branch..."
         git checkout "$ORIGINAL_BRANCH" 2>/dev/null || true
     fi
+    
+    # Always clean up macOS duplicates on exit
+    cleanup_macos_duplicates 2>/dev/null || true
 }
 
 # Show help
