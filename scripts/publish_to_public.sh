@@ -581,9 +581,11 @@ main() {
     
     if [ "$skip_public" = false ] && [ "$dry_run" = false ]; then
         public_url=$(git remote get-url "$PUBLIC_REMOTE_NAME" 2>/dev/null || echo "not set")
+        # Hide credentials in URL display
+        display_url=$(echo "$public_url" | sed 's|://[^:]*:[^@]*@|://***:***@|')
         echo "Private repo publish branch: $PRIVATE_REMOTE_NAME/$PUBLISH_BRANCH"
         echo "Public repo target branch: $PUBLIC_REMOTE_NAME/$PUBLIC_TARGET_BRANCH"
-        echo "Public repo URL: $public_url"
+        echo "Public repo URL: $display_url"
     fi
 }
 
