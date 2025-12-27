@@ -635,7 +635,11 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
                             use_cf_bypass=u_cf)
             if html:
                 soup = BeautifulSoup(html, 'html.parser')
-                movie_list = soup.find('div', class_='movie-list h cols-4 vcols-8')
+                # Use flexible matching - look for any div with 'movie-list' in class
+                # Different pages may have different class combinations:
+                # - Normal pages: 'movie-list h cols-4 vcols-8'  
+                # - Rankings pages: 'movie-list h cols-4'
+                movie_list = soup.find('div', class_=lambda x: x and 'movie-list' in x)
                 if movie_list:
                     logger.debug(f"[Page {page_num}] Success: {context_msg}")
                     return html, True, False

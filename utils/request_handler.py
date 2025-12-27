@@ -300,9 +300,24 @@ class RequestHandler:
         try:
             logger.debug(f"[{context_msg}] [curl_cffi] Requesting: {target_url}")
             logger.debug(f"[{context_msg}] [curl_cffi] Impersonate: {self.config.curl_cffi_impersonate}")
+            # Log if Cookie header is present (for debugging login issues)
+            if 'Cookie' in req_headers:
+                cookie_preview = req_headers['Cookie'][:50] + '...' if len(req_headers.get('Cookie', '')) > 50 else req_headers.get('Cookie', '')
+                logger.debug(f"[{context_msg}] [curl_cffi] Cookie header present: {cookie_preview}")
+            else:
+                logger.debug(f"[{context_msg}] [curl_cffi] No Cookie header in request")
             if req_proxies:
                 masked_proxies = {k: mask_proxy_url(v) for k, v in req_proxies.items()}
                 logger.debug(f"[{context_msg}] [curl_cffi] Using proxies: {masked_proxies}")
+            
+            # IMPORTANT: Clear session cookies before each request to prevent cookie conflicts.
+            # When curl_cffi session is reused, the session's internal cookie jar can override
+            # the Cookie header we set manually. This causes login issues when:
+            # 1. First request (without cookie) receives a Set-Cookie from server
+            # 2. Session saves this (possibly invalid) cookie
+            # 3. Subsequent requests have their Cookie header overridden by session's cookie
+            # Clearing cookies ensures our manually set Cookie header is always used.
+            self.curl_cffi_session.cookies.clear()
             
             # curl_cffi uses 'proxies' parameter similar to requests
             response = self.curl_cffi_session.get(
