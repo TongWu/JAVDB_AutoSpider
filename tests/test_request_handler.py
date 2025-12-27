@@ -810,3 +810,163 @@ class TestRequestConfigAdvanced:
         assert config.proxy_modules == ['spider_index', 'spider_detail']
         assert config.proxy_mode == 'pool'
 
+
+class TestCurlCffiCookieHandling:
+    """Test cases for curl_cffi session cookie handling."""
+    
+    def test_no_cookie_clear_without_manual_cookie(self):
+        """Test that session cookies are NOT cleared when no manual Cookie header is set.
+        
+        This ensures server-set cookies (cf_clearance, over18, etc.) persist across requests.
+        """
+        config = RequestConfig(use_curl_cffi=True)
+        handler = RequestHandler(config=config)
+        
+        # Skip if curl_cffi is not available
+        if not handler.use_curl_cffi:
+            pytest.skip("curl_cffi not available")
+        
+        # Set up mock session cookies
+        handler.curl_cffi_session.cookies.set('cf_clearance', 'test_clearance_value')
+        handler.curl_cffi_session.cookies.set('over18', '1')
+        
+        # Mock the session.get to avoid actual request
+        with patch.object(handler.curl_cffi_session, 'get') as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.text = '<html>Content</html>'
+            mock_response.content = b'<html>Content</html>'
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+            
+            # Request without Cookie header
+            headers = {'User-Agent': 'Test'}
+            handler._do_request_curl_cffi(
+                'http://test.com', headers, None, timeout=30, context_msg='Test'
+            )
+            
+            # Verify session cookies are NOT cleared
+            assert handler.curl_cffi_session.cookies.get('cf_clearance') == 'test_clearance_value'
+            assert handler.curl_cffi_session.cookies.get('over18') == '1'
+    
+    def test_cookie_merge_with_manual_cookie(self):
+        """Test that session cookies are merged with manual Cookie header.
+        
+        Manual cookies take priority, session cookies are added if not duplicate.
+        """
+        config = RequestConfig(use_curl_cffi=True)
+        handler = RequestHandler(config=config)
+        
+        # Skip if curl_cffi is not available
+        if not handler.use_curl_cffi:
+            pytest.skip("curl_cffi not available")
+        
+        # Set up mock session cookies
+        handler.curl_cffi_session.cookies.set('cf_clearance', 'session_clearance')
+        handler.curl_cffi_session.cookies.set('over18', '1')
+        handler.curl_cffi_session.cookies.set('__cf_bm', 'bm_token')
+        
+        # Mock the session.get to capture headers
+        with patch.object(handler.curl_cffi_session, 'get') as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.text = '<html>Content</html>'
+            mock_response.content = b'<html>Content</html>'
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+            
+            # Request WITH manual Cookie header
+            headers = {'User-Agent': 'Test', 'Cookie': '_jdb_session=my_session_cookie'}
+            handler._do_request_curl_cffi(
+                'http://test.com', headers, None, timeout=30, context_msg='Test'
+            )
+            
+            # Verify the headers passed to get() contain merged cookies
+            call_args = mock_get.call_args
+            passed_headers = call_args[1]['headers']
+            cookie_header = passed_headers.get('Cookie', '')
+            
+            # Manual cookie should be present
+            assert '_jdb_session=my_session_cookie' in cookie_header
+            # Session cookies should be merged in
+            assert 'cf_clearance=session_clearance' in cookie_header
+            assert 'over18=1' in cookie_header
+            assert '__cf_bm=bm_token' in cookie_header
+            
+            # Session cookies should be cleared after request
+            assert handler.curl_cffi_session.cookies.get('cf_clearance') is None
+    
+    def test_manual_cookie_priority_over_session(self):
+        """Test that manual cookies take priority over session cookies with same name."""
+        config = RequestConfig(use_curl_cffi=True)
+        handler = RequestHandler(config=config)
+        
+        # Skip if curl_cffi is not available
+        if not handler.use_curl_cffi:
+            pytest.skip("curl_cffi not available")
+        
+        # Set up session cookie with same name as manual cookie
+        handler.curl_cffi_session.cookies.set('_jdb_session', 'old_session_value')
+        handler.curl_cffi_session.cookies.set('cf_clearance', 'clearance_value')
+        
+        # Mock the session.get to capture headers
+        with patch.object(handler.curl_cffi_session, 'get') as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.text = '<html>Content</html>'
+            mock_response.content = b'<html>Content</html>'
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+            
+            # Request WITH manual Cookie header (same name as session cookie)
+            headers = {'User-Agent': 'Test', 'Cookie': '_jdb_session=new_session_value'}
+            handler._do_request_curl_cffi(
+                'http://test.com', headers, None, timeout=30, context_msg='Test'
+            )
+            
+            # Verify the headers
+            call_args = mock_get.call_args
+            passed_headers = call_args[1]['headers']
+            cookie_header = passed_headers.get('Cookie', '')
+            
+            # Manual cookie should be present (priority)
+            assert '_jdb_session=new_session_value' in cookie_header
+            # Old session cookie with same name should NOT be duplicated
+            assert cookie_header.count('_jdb_session=') == 1
+            # Other session cookies should be merged
+            assert 'cf_clearance=clearance_value' in cookie_header
+    
+    def test_empty_session_cookies_with_manual_cookie(self):
+        """Test behavior when session has no cookies but manual Cookie is set."""
+        config = RequestConfig(use_curl_cffi=True)
+        handler = RequestHandler(config=config)
+        
+        # Skip if curl_cffi is not available
+        if not handler.use_curl_cffi:
+            pytest.skip("curl_cffi not available")
+        
+        # Ensure session cookies are empty
+        handler.curl_cffi_session.cookies.clear()
+        
+        # Mock the session.get to capture headers
+        with patch.object(handler.curl_cffi_session, 'get') as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.text = '<html>Content</html>'
+            mock_response.content = b'<html>Content</html>'
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+            
+            # Request WITH manual Cookie header
+            headers = {'User-Agent': 'Test', 'Cookie': '_jdb_session=my_session'}
+            handler._do_request_curl_cffi(
+                'http://test.com', headers, None, timeout=30, context_msg='Test'
+            )
+            
+            # Verify the headers - only manual cookie should be present
+            call_args = mock_get.call_args
+            passed_headers = call_args[1]['headers']
+            cookie_header = passed_headers.get('Cookie', '')
+            
+            assert cookie_header == '_jdb_session=my_session'
+
