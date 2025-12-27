@@ -70,7 +70,11 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
     else:
         logger.debug(f'[Page {page_num}] No age verification modal found')
 
-    movie_list = soup.find('div', class_='movie-list h cols-4 vcols-8')
+    # Use flexible matching - look for any div with 'movie-list' in class
+    # Different pages may have different class combinations:
+    # - Normal pages: 'movie-list h cols-4 vcols-8'  
+    # - Rankings pages: 'movie-list h cols-4'
+    movie_list = soup.find('div', class_=lambda x: x and 'movie-list' in x)
     if not movie_list:
         logger.warning(f'[Page {page_num}] No movie list found!')
 
