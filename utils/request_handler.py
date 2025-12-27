@@ -301,9 +301,12 @@ class RequestHandler:
             logger.debug(f"[{context_msg}] [curl_cffi] Requesting: {target_url}")
             logger.debug(f"[{context_msg}] [curl_cffi] Impersonate: {self.config.curl_cffi_impersonate}")
             # Log if Cookie header is present (for debugging login issues)
+            # NOTE: Do NOT log actual cookie values - they contain sensitive session secrets
             if 'Cookie' in req_headers:
-                cookie_preview = req_headers['Cookie'][:50] + '...' if len(req_headers.get('Cookie', '')) > 50 else req_headers.get('Cookie', '')
-                logger.debug(f"[{context_msg}] [curl_cffi] Cookie header present: {cookie_preview}")
+                # Only log presence and cookie names (not values)
+                cookie_str = req_headers['Cookie']
+                cookie_names = [part.split('=')[0].strip() for part in cookie_str.split(';') if '=' in part]
+                logger.debug(f"[{context_msg}] [curl_cffi] Cookie header present: {len(cookie_names)} cookies ({', '.join(cookie_names)})")
             else:
                 logger.debug(f"[{context_msg}] [curl_cffi] No Cookie header in request")
             if req_proxies:
