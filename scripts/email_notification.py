@@ -32,7 +32,7 @@ try:
         GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH,
         SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO,
         PIPELINE_LOG_FILE, SPIDER_LOG_FILE, UPLOADER_LOG_FILE,
-        REPORTS_DIR, DAILY_REPORT_DIR, AD_HOC_DIR, LOG_LEVEL,
+        DAILY_REPORT_DIR, AD_HOC_DIR, LOG_LEVEL,
         PIKPAK_LOG_FILE
     )
 except ImportError:
@@ -52,7 +52,6 @@ except ImportError:
     PIPELINE_LOG_FILE = 'logs/pipeline.log'
     SPIDER_LOG_FILE = 'logs/spider.log'
     UPLOADER_LOG_FILE = 'logs/qb_uploader.log'
-    REPORTS_DIR = 'reports'
     DAILY_REPORT_DIR = 'reports/DailyReport'
     AD_HOC_DIR = 'reports/AdHoc'
     LOG_LEVEL = 'INFO'
