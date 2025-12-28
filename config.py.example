@@ -208,11 +208,11 @@ BASE_URL = 'https://javdb.com'
 JAVDB_USERNAME = ''  # Your JavDB email or username
 JAVDB_PASSWORD = ''  # Your JavDB password
 
-# 2Captcha API key (optional - for automatic captcha solving)
-# Leave empty to use free OCR or manual input
-# Get API key from: https://2captcha.com/
-# Cost: ~$1 per 1000 captchas
-TWOCAPTCHA_API_KEY = ''  # Optional: Your 2Captcha API key
+# GPT API for AI-powered captcha solving (recommended - most accurate)
+# Uses GPT-4o Vision to recognize captcha images
+# Compatible with OpenAI API or any OpenAI-compatible API (e.g., api.gpt.ge)
+GPT_API_URL = 'https://api.gpt.ge/v1/chat/completions'  # API endpoint
+GPT_API_KEY = ''  # Your API key (e.g., sk-xxx)
 
 # JavDB session cookie (can be auto-updated by scripts/login.py)
 # Manual method: Get from browser → Developer Tools → Application → Cookies → _jdb_session

@@ -80,6 +80,22 @@ except ImportError:
     PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 days (691200 seconds)
     PROXY_POOL_MAX_FAILURES = 3
 
+# Import GPT API configuration for login (optional)
+try:
+    from config import GPT_API_KEY, GPT_API_URL
+    LOGIN_FEATURE_AVAILABLE = bool(GPT_API_KEY and GPT_API_URL)
+except ImportError:
+    GPT_API_KEY = None
+    GPT_API_URL = None
+    LOGIN_FEATURE_AVAILABLE = False
+
+# Import JavDB login credentials (optional)
+try:
+    from config import JAVDB_USERNAME, JAVDB_PASSWORD
+except ImportError:
+    JAVDB_USERNAME = None
+    JAVDB_PASSWORD = None
+
 # Configure logging
 from utils.logging_config import setup_logging, get_logger
 setup_logging(SPIDER_LOG_FILE, LOG_LEVEL)
@@ -105,6 +121,12 @@ parsed_links = set()
 
 # Global list to track saved proxy ban HTML files for email notification
 proxy_ban_html_files = []
+
+# Global flag to track if login has been attempted (only allow once per run)
+login_attempted = False
+
+# Global variable to store refreshed session cookie
+refreshed_session_cookie = None
 
 # Generate output CSV filename
 OUTPUT_CSV = f'Javdb_TodayTitle_{datetime.now().strftime("%Y%m%d")}.csv'
@@ -355,6 +377,127 @@ def initialize_request_handler():
     
     global_request_handler = RequestHandler(proxy_pool=global_proxy_pool, config=config)
     logger.info("Request handler initialized successfully")
+
+
+def attempt_login_refresh():
+    """
+    Attempt to refresh session cookie by logging in via login.py.
+    This function can only be called ONCE per spider run.
+    
+    After successful login, login.py updates config.py with the new cookie,
+    then we reload config.py to get the updated cookie value.
+    
+    Returns:
+        tuple: (success: bool, new_cookie: str or None)
+    """
+    global login_attempted, refreshed_session_cookie
+    
+    # Check if login has already been attempted
+    if login_attempted:
+        logger.debug("Login already attempted in this run, skipping")
+        return False, None
+    
+    # Mark login as attempted (even if it fails, we don't retry)
+    login_attempted = True
+    
+    # Check if login feature is available
+    if not LOGIN_FEATURE_AVAILABLE:
+        logger.warning("Login feature not available (GPT_API_KEY/GPT_API_URL not configured)")
+        return False, None
+    
+    # Check if credentials are available
+    if not JAVDB_USERNAME or not JAVDB_PASSWORD:
+        logger.warning("Login credentials not configured (JAVDB_USERNAME/JAVDB_PASSWORD)")
+        return False, None
+    
+    logger.info("=" * 60)
+    logger.info("ATTEMPTING SESSION COOKIE REFRESH VIA LOGIN")
+    logger.info("=" * 60)
+    
+    try:
+        # Import login functions from login.py
+        from scripts.login import login_with_retry, update_config_file
+        
+        # Perform login with retry logic (max 5 attempts)
+        success, session_cookie, message = login_with_retry(JAVDB_USERNAME, JAVDB_PASSWORD, max_retries=5)
+        
+        if success and session_cookie:
+            logger.info(f"✓ Login successful, new session cookie obtained")
+            logger.info(f"  Cookie: {session_cookie[:10]}***{session_cookie[-10:]}")
+            
+            # Update config.py with new cookie
+            if update_config_file(session_cookie):
+                logger.info("✓ Updated config.py with new session cookie")
+                
+                # Reload config.py to get the updated cookie value
+                import importlib
+                import config
+                importlib.reload(config)
+                
+                # Get the refreshed cookie from reloaded config
+                new_cookie = getattr(config, 'JAVDB_SESSION_COOKIE', session_cookie)
+                refreshed_session_cookie = new_cookie
+                logger.info(f"✓ Reloaded config.py, cookie: {new_cookie[:10]}***{new_cookie[-10:]}")
+                
+                # Update global request handler with new cookie from config
+                if global_request_handler:
+                    global_request_handler.config.javdb_session_cookie = new_cookie
+                    logger.info("✓ Updated request handler with new session cookie")
+                
+                logger.info("=" * 60)
+                return True, new_cookie
+            else:
+                # Failed to update config.py, use the cookie directly
+                logger.warning("Failed to update config.py, using cookie directly for this run")
+                refreshed_session_cookie = session_cookie
+                
+                # Update global request handler with the returned cookie
+                if global_request_handler:
+                    global_request_handler.config.javdb_session_cookie = session_cookie
+                    logger.info("✓ Updated request handler with new session cookie")
+                
+                logger.info("=" * 60)
+                return True, session_cookie
+        else:
+            logger.error(f"✗ Login failed: {message}")
+            logger.info("=" * 60)
+            return False, None
+            
+    except ImportError as e:
+        logger.error(f"Failed to import login module: {e}")
+        return False, None
+    except Exception as e:
+        logger.error(f"Unexpected error during login: {e}")
+        return False, None
+
+
+def can_attempt_login(is_adhoc_mode: bool, is_index_page: bool = False) -> bool:
+    """
+    Check if login attempt is allowed based on mode and context.
+    
+    Args:
+        is_adhoc_mode: True if running in adhoc mode
+        is_index_page: True if this is for an index page fetch
+    
+    Returns:
+        bool: True if login attempt is allowed
+    """
+    # Already attempted - never allow again
+    if login_attempted:
+        return False
+    
+    # Login feature not available
+    if not LOGIN_FEATURE_AVAILABLE:
+        return False
+    
+    # Daily mode: only allow for movie (detail) pages, not index pages
+    if not is_adhoc_mode:
+        if is_index_page:
+            return False
+        return True
+    
+    # Adhoc mode: allow for both index and movie pages
+    return True
 
 
 # ============================================================
@@ -701,6 +844,24 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
         #     return html, False, False, False, True, True
         # logger.warning(f"[Page {page_num}] Local CF Bypass failed. Assuming local IP banned. Switching to Proxy Pool...")
 
+    # --- Phase 1.5: Login Refresh Fallback (adhoc mode only, before switching proxies) ---
+    # Try to refresh session cookie via login if in adhoc mode
+    if is_adhoc_mode and can_attempt_login(is_adhoc_mode, is_index_page=True):
+        logger.info(f"[Page {page_num}] Attempting login refresh before switching proxies...")
+        login_success, new_cookie = attempt_login_refresh()
+        if login_success:
+            # Retry with new cookie
+            html, success, is_valid_empty = try_fetch(use_proxy, use_cf_bypass, 
+                f"Fallback: Retry with refreshed cookie")
+            if success:
+                logger.info(f"[Page {page_num}] Login refresh succeeded! Index page fetched successfully.")
+                return html, True, False, use_proxy, use_cf_bypass, False
+            if is_valid_empty:
+                return html, False, False, use_proxy, use_cf_bypass, True
+            logger.warning(f"[Page {page_num}] Login refresh completed but index page still failed")
+        else:
+            logger.warning(f"[Page {page_num}] Login refresh failed, continuing with proxy pool fallback...")
+
     # --- Phase 2: Proxy Pool Iteration ---
     if global_proxy_pool is None:
         logger.error(f"[Page {page_num}] Fallback failed: No proxy pool configured")
@@ -854,6 +1015,26 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
     if not use_proxy and not use_cf_bypass:
         logger.debug(f"[{entry_index}] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...")
 
+    # --- Phase 1.5: Login Refresh Fallback (before switching proxies) ---
+    # Try to refresh session cookie via login if allowed
+    if can_attempt_login(is_adhoc_mode, is_index_page=False):
+        logger.info(f"[{entry_index}] Attempting login refresh before switching proxies...")
+        login_success, new_cookie = attempt_login_refresh()
+        if login_success:
+            # Retry with new cookie
+            magnets, actor_info, success = try_fetch_and_parse(
+                use_proxy, use_cf_bypass,
+                f"Detail Fallback: Retry with refreshed cookie",
+                skip_sleep=True
+            )
+            if success:
+                logger.info(f"[{entry_index}] Login refresh succeeded! Detail page fetched successfully.")
+                return magnets, actor_info, True, use_proxy, use_cf_bypass
+            else:
+                logger.warning(f"[{entry_index}] Login refresh completed but detail page still failed")
+        else:
+            logger.warning(f"[{entry_index}] Login refresh failed, continuing with proxy pool fallback...")
+    
     # --- Phase 2: Proxy Pool Iteration ---
     if global_proxy_pool is None:
         logger.error(f"[{entry_index}] Fallback failed: No proxy pool configured")
@@ -1762,6 +1943,9 @@ def main():
         detail_pending_fallback_settings = None
         detail_current_fallback_threshold = fallback_persist_threshold_full
 
+        # Track pending sleep - only sleep before entries that will make network requests
+        pending_movie_sleep = False
+
         for i, entry in enumerate(all_index_results_phase1, 1):
             href = entry['href']
             page_num = entry['page']
@@ -1772,6 +1956,7 @@ def main():
                 logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping already parsed in this session")
                 skipped_session_count += 1
                 phase1_skipped_session += 1
+                # No sleep needed - pending_movie_sleep stays as-is for next entry that needs processing
                 continue
 
             # Add to parsed links set for this session
@@ -1783,7 +1968,13 @@ def main():
                 logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history")
                 skipped_history_count += 1
                 phase1_skipped_history_actual += 1
+                # No sleep needed - pending_movie_sleep stays as-is for next entry that needs processing
                 continue
+
+            # This entry needs processing - apply pending sleep before making network request
+            if pending_movie_sleep:
+                time.sleep(MOVIE_SLEEP)
+                pending_movie_sleep = False
 
             detail_url = urljoin(BASE_URL, href)
 
@@ -1833,7 +2024,8 @@ def main():
                 logger.error(f"[{i}/{total_entries_phase1}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
                 failed_count += 1
                 phase1_failed += 1
-                time.sleep(MOVIE_SLEEP)  # Respect rate limiting even on failure
+                # Mark pending sleep - will only execute if next entry needs network request
+                pending_movie_sleep = True
                 continue
             
             magnet_links = extract_magnets(magnets, i)
@@ -1855,7 +2047,8 @@ def main():
                         f"[{i}/{total_entries_phase1}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
                 skipped_history_count += 1
                 phase1_skipped_history_actual += 1
-                time.sleep(MOVIE_SLEEP)  # Respect rate limiting even when skipping
+                # Mark pending sleep - network request was made, so respect rate limiting
+                pending_movie_sleep = True
                 continue
 
             # Count found torrents
@@ -1921,9 +2114,10 @@ def main():
                 # Extra cooldown after fallback to let Cloudflare/server recover
                 logger.debug(f"[{i}/{total_entries_phase1}] Applying fallback cooldown: {FALLBACK_COOLDOWN}s")
                 time.sleep(FALLBACK_COOLDOWN)
+                pending_movie_sleep = False  # Already waited enough
             else:
-                # Normal delay between items
-                time.sleep(MOVIE_SLEEP)
+                # Mark pending sleep - will only execute if next entry needs network request
+                pending_movie_sleep = True
 
         # Phase 1 statistics - use actual tracked counts
         # Verify: total_entries_phase1 == phase1_skipped_session + phase1_skipped_history_actual + len(phase1_rows) + phase1_no_new_torrents + phase1_failed
@@ -1957,6 +2151,9 @@ def main():
         detail_pending_fallback_settings = None
         detail_current_fallback_threshold = fallback_persist_threshold_full
 
+        # Track pending sleep - only sleep before entries that will make network requests
+        pending_movie_sleep = False
+
         for i, entry in enumerate(all_index_results_phase2, 1):
             href = entry['href']
             page_num = entry['page']
@@ -1967,7 +2164,7 @@ def main():
                 logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping already parsed in this session")
                 skipped_session_count += 1
                 phase2_skipped_session += 1
-                # No sleep needed here - we haven't made any request yet
+                # No sleep needed - pending_movie_sleep stays as-is for next entry that needs processing
                 continue
 
             # Add to parsed links set for this session
@@ -1979,7 +2176,13 @@ def main():
                 logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history")
                 skipped_history_count += 1
                 phase2_skipped_history_actual += 1
+                # No sleep needed - pending_movie_sleep stays as-is for next entry that needs processing
                 continue
+
+            # This entry needs processing - apply pending sleep before making network request
+            if pending_movie_sleep:
+                time.sleep(MOVIE_SLEEP)
+                pending_movie_sleep = False
 
             detail_url = urljoin(BASE_URL, href)
 
@@ -2029,7 +2232,8 @@ def main():
                 logger.error(f"[{i}/{total_entries_phase2}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
                 failed_count += 1
                 phase2_failed += 1
-                time.sleep(MOVIE_SLEEP)  # Respect rate limiting even on failure
+                # Mark pending sleep - will only execute if next entry needs network request
+                pending_movie_sleep = True
                 continue
             
             magnet_links = extract_magnets(magnets, f"P2-{i}")
@@ -2051,7 +2255,8 @@ def main():
                         f"[{i}/{total_entries_phase2}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
                 skipped_history_count += 1
                 phase2_skipped_history_actual += 1
-                time.sleep(MOVIE_SLEEP)  # Respect rate limiting even when skipping
+                # Mark pending sleep - network request was made, so respect rate limiting
+                pending_movie_sleep = True
                 continue
 
             # Count found torrents
@@ -2117,9 +2322,10 @@ def main():
                 # Extra cooldown after fallback to let Cloudflare/server recover
                 logger.debug(f"[P2-{i}/{total_entries_phase2}] Applying fallback cooldown: {FALLBACK_COOLDOWN}s")
                 time.sleep(FALLBACK_COOLDOWN)
+                pending_movie_sleep = False  # Already waited enough
             else:
-                # Normal delay between items
-                time.sleep(MOVIE_SLEEP)
+                # Mark pending sleep - will only execute if next entry needs network request
+                pending_movie_sleep = True
 
         # Phase 2 statistics - use actual tracked counts
         # Verify: total_entries_phase2 == phase2_skipped_session + phase2_skipped_history_actual + len(phase2_rows) + phase2_no_new_torrents + phase2_failed
