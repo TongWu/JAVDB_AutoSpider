@@ -390,7 +390,7 @@ def attempt_login_refresh():
     Returns:
         tuple: (success: bool, new_cookie: str or None)
     """
-    global login_attempted, refreshed_session_cookie, global_request_handler
+    global login_attempted, refreshed_session_cookie
     
     # Check if login has already been attempted
     if login_attempted:
