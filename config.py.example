@@ -214,12 +214,6 @@ JAVDB_PASSWORD = ''  # Your JavDB password
 GPT_API_URL = 'https://api.gpt.ge/v1/chat/completions'  # API endpoint
 GPT_API_KEY = ''  # Your API key (e.g., sk-xxx)
 
-# 2Captcha API key (optional - fallback for automatic captcha solving)
-# Leave empty to use free OCR or manual input
-# Get API key from: https://2captcha.com/
-# Cost: ~$1 per 1000 captchas
-TWOCAPTCHA_API_KEY = ''  # Optional: Your 2Captcha API key
-
 # JavDB session cookie (can be auto-updated by scripts/login.py)
 # Manual method: Get from browser → Developer Tools → Application → Cookies → _jdb_session
 # Automatic method: Set credentials above and run: python3 scripts/login.py
