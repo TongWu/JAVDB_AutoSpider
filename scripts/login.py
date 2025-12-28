@@ -18,6 +18,9 @@ import re
 import sys
 import os
 import base64
+import json
+import time
+import logging
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
@@ -26,27 +29,48 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
-# Import captcha solver
+# Setup logging - use existing logger if available, otherwise create a basic one
 try:
-    from utils.login.javdb_captcha_solver import solve_captcha
-    CAPTCHA_SOLVER_AVAILABLE = True
+    from utils.logging_config import get_logger
+    logger = get_logger(__name__)
 except ImportError:
-    CAPTCHA_SOLVER_AVAILABLE = False
-    print("⚠️  Warning: javdb_captcha_solver.py not found, will use manual input only")
+    # Fallback: create a basic logger for standalone use
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+
+# OCR captcha solver (deprecated, using AI instead)
+# try:
+#     from utils.login.javdb_captcha_solver import solve_captcha
+#     CAPTCHA_SOLVER_AVAILABLE = True
+# except ImportError:
+#     CAPTCHA_SOLVER_AVAILABLE = False
+#     print("⚠️  Warning: javdb_captcha_solver.py not found, will use manual input only")
 
 # Import configuration
 try:
     from config import JAVDB_USERNAME, JAVDB_PASSWORD, BASE_URL
 except ImportError:
-    print("❌ Error: Could not import config.py")
-    print("   Make sure config.py exists and contains JAVDB_USERNAME and JAVDB_PASSWORD")
+    logger.error("Could not import config.py")
+    logger.error("Make sure config.py exists and contains JAVDB_USERNAME and JAVDB_PASSWORD")
     sys.exit(1)
 
-# Try to import 2Captcha API key (optional)
+# 2Captcha API key (deprecated, using AI instead)
+# try:
+#     from config import TWOCAPTCHA_API_KEY
+# except ImportError:
+#     TWOCAPTCHA_API_KEY = None
+
+# Try to import GPT API settings (optional)
 try:
-    from config import TWOCAPTCHA_API_KEY
+    from config import GPT_API_KEY, GPT_API_URL
+    GPT_API_AVAILABLE = bool(GPT_API_KEY and GPT_API_URL)
 except ImportError:
-    TWOCAPTCHA_API_KEY = None
+    GPT_API_KEY = None
+    GPT_API_URL = None
+    GPT_API_AVAILABLE = False
 
 
 def extract_csrf_token(html_content):
@@ -73,79 +97,172 @@ def save_captcha_image(image_data, filename='captcha.png'):
             f.write(image_data)
         return True
     except Exception as e:
-        print(f"⚠️  Warning: Could not save captcha image: {e}")
+        logger.warning(f"Could not save captcha image: {e}")
         return False
+
+
+def solve_captcha_with_ai(image_data):
+    """
+    Use GPT-4o API to solve captcha
+    
+    Args:
+        image_data: Raw image bytes
+    
+    Returns:
+        str: Captcha code or None if failed
+    """
+    if not GPT_API_AVAILABLE:
+        logger.warning("GPT API not configured, skipping AI captcha solving")
+        return None
+    
+    try:
+        logger.info("Calling AI API to solve captcha...")
+        
+        # Convert image to base64
+        image_base64 = base64.b64encode(image_data).decode('utf-8')
+        
+        # Determine image type (assume PNG for captcha)
+        image_type = "image/png"
+        if image_data[:3] == b'\xff\xd8\xff':
+            image_type = "image/jpeg"
+        elif image_data[:4] == b'\x89PNG':
+            image_type = "image/png"
+        elif image_data[:4] == b'GIF8':
+            image_type = "image/gif"
+        
+        # Prepare the API request
+        prompt = (
+            "Analyze the provided image and return the characters displayed. "
+            "Output the result as plain text only. "
+            "Do not describe the image, do not explain your reasoning, "
+            "and do not include anything except the recognized characters."
+        )
+        
+        payload = {
+            "model": "gpt-5-chat-latest",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": prompt
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{image_type};base64,{image_base64}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            "max_tokens": 50
+        }
+        
+        headers = {
+            'Authorization': f'Bearer {GPT_API_KEY}',
+            'Content-Type': 'application/json'
+        }
+        
+        response = requests.post(
+            GPT_API_URL,
+            headers=headers,
+            data=json.dumps(payload),
+            timeout=60
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            if 'choices' in result and len(result['choices']) > 0:
+                captcha_code = result['choices'][0]['message']['content'].strip()
+                # Clean up the response - remove any extra whitespace or newlines
+                captcha_code = captcha_code.strip().lower()
+                logger.info(f"AI recognized captcha: {captcha_code}")
+                return captcha_code
+            else:
+                logger.warning("AI API returned empty response")
+                return None
+        else:
+            logger.warning(f"AI API request failed (status: {response.status_code})")
+            try:
+                error_info = response.json()
+                logger.warning(f"Error: {error_info.get('error', {}).get('message', 'Unknown error')}")
+            except:
+                pass
+            return None
+            
+    except requests.Timeout:
+        logger.warning("AI API request timed out")
+        return None
+    except Exception as e:
+        logger.warning(f"Error calling AI API: {e}")
+        return None
 
 
 def get_captcha_from_user(captcha_url, session, headers, use_auto_solve=True):
     """
-    Download captcha image and solve it (automatically or manually)
+    Download captcha image and solve it using AI
     
     Args:
         captcha_url: URL of the captcha image
         session: requests.Session object
         headers: HTTP headers
-        use_auto_solve: Whether to try automatic solving (OCR/2Captcha)
+        use_auto_solve: Whether to try automatic solving (AI)
     
     Returns:
         str: Captcha code or None if failed
     """
     try:
-        print()
-        print("🔐 Fetching captcha image...")
+        logger.info("Fetching captcha image...")
         captcha_response = session.get(captcha_url, headers=headers, timeout=30)
         
         if captcha_response.status_code == 200:
-            print("✓ Captcha image downloaded")
+            logger.info("Captcha image downloaded")
             
-            if use_auto_solve and CAPTCHA_SOLVER_AVAILABLE:
-                # Try automatic solving
-                captcha_code = solve_captcha(
-                    captcha_response.content, 
-                    method='auto',
-                    api_key=TWOCAPTCHA_API_KEY,
-                    save_path='javdb_captcha.png',
-                    auto_confirm=True,  # Auto-accept if confidence > 60%
-                    confidence_threshold=0.6
-                )
-                
-                if captcha_code:
-                    return captcha_code
-                else:
-                    print("⚠️  Automatic solving failed")
+            # Save captcha image first
+            captcha_file = 'javdb_captcha.png'
+            save_captcha_image(captcha_response.content, captcha_file)
+            
+            if use_auto_solve:
+                # Use AI API to solve captcha
+                if GPT_API_AVAILABLE:
+                    captcha_code = solve_captcha_with_ai(captcha_response.content)
+                    if captcha_code:
+                        return captcha_code
+                    logger.warning("AI captcha solving failed")
                     return None
-            else:
-                # Manual input only
-                captcha_file = 'javdb_captcha.png'
-                if save_captcha_image(captcha_response.content, captcha_file):
-                    print(f"✓ Captcha image saved to: {captcha_file}")
-                    print(f"  Please open the image to view the captcha")
-                    
-                    # Try to open the image automatically
-                    try:
-                        import platform
-                        system = platform.system()
-                        if system == 'Darwin':  # macOS
-                            os.system(f'open {captcha_file}')
-                        elif system == 'Linux':
-                            os.system(f'xdg-open {captcha_file} 2>/dev/null')
-                        elif system == 'Windows':
-                            os.system(f'start {captcha_file}')
-                    except:
-                        pass
-                    
-                    print()
-                    captcha_code = input("🔐 Please enter the captcha code: ").strip().lower()
-                    return captcha_code if captcha_code else None
                 else:
-                    print("⚠️  Could not save captcha image")
+                    logger.warning("GPT API not configured, cannot solve captcha")
                     return None
+            
+            # # Manual input as fallback (currently disabled)
+            # print(f"✓ Captcha image saved to: {captcha_file}")
+            # print(f"  Please open the image to view the captcha")
+            # 
+            # # Try to open the image automatically
+            # try:
+            #     import platform
+            #     system = platform.system()
+            #     if system == 'Darwin':  # macOS
+            #         os.system(f'open {captcha_file}')
+            #     elif system == 'Linux':
+            #         os.system(f'xdg-open {captcha_file} 2>/dev/null')
+            #     elif system == 'Windows':
+            #         os.system(f'start {captcha_file}')
+            # except:
+            #     pass
+            # 
+            # print()
+            # captcha_code = input("🔐 Please enter the captcha code: ").strip().lower()
+            # return captcha_code if captcha_code else None
+            return None
         else:
-            print(f"⚠️  Failed to fetch captcha (status: {captcha_response.status_code})")
+            logger.warning(f"Failed to fetch captcha (status: {captcha_response.status_code})")
             return None
             
     except Exception as e:
-        print(f"⚠️  Error processing captcha: {e}")
+        logger.warning(f"Error processing captcha: {e}")
         return None
 
 
@@ -172,7 +289,7 @@ def login_javdb(username, password):
     }
     
     try:
-        print("Step 1: Fetching login page...")
+        logger.info("Step 1: Fetching login page...")
         # Step 1: Get login page to extract CSRF token
         login_page_url = urljoin(BASE_URL, '/login')
         response = session.get(login_page_url, headers=headers, timeout=30)
@@ -180,28 +297,28 @@ def login_javdb(username, password):
         if response.status_code != 200:
             return False, None, f"Failed to fetch login page (status: {response.status_code})"
         
-        print(f"✓ Login page fetched (status: {response.status_code})")
+        logger.info(f"Login page fetched (status: {response.status_code})")
         
         # Extract CSRF token
         csrf_token = extract_csrf_token(response.text)
         if not csrf_token:
-            print("⚠️  Warning: Could not extract CSRF token, proceeding without it...")
+            logger.warning("Could not extract CSRF token, proceeding without it...")
         else:
-            print(f"✓ CSRF token extracted: {csrf_token[:20]}...")
+            logger.info(f"CSRF token extracted: {csrf_token[:20]}...")
         
         # Step 2: Handle age verification if present
         soup = BeautifulSoup(response.text, 'html.parser')
         age_modal = soup.find('div', class_='modal is-active over18-modal')
         
         if age_modal:
-            print("\nStep 1.5: Age verification detected, bypassing...")
+            logger.info("Step 1.5: Age verification detected, bypassing...")
             age_links = age_modal.find_all('a', href=True)
             for link in age_links:
                 if 'over18' in link.get('href', ''):
                     age_url = urljoin(BASE_URL, link.get('href'))
                     age_response = session.get(age_url, headers=headers, timeout=30)
                     if age_response.status_code == 200:
-                        print("✓ Age verification bypassed")
+                        logger.info("Age verification bypassed")
                         # Re-fetch login page
                         response = session.get(login_page_url, headers=headers, timeout=30)
                         # Re-extract CSRF token
@@ -209,7 +326,7 @@ def login_javdb(username, password):
                     break
         
         # Step 2.5: Extract and handle captcha
-        print("\nStep 2: Checking for captcha...")
+        logger.info("Step 2: Checking for captcha...")
         soup = BeautifulSoup(response.text, 'html.parser')
         
         # Find captcha image - common patterns
@@ -224,17 +341,17 @@ def login_javdb(username, password):
         
         if captcha_img and captcha_img.get('src'):
             captcha_url = urljoin(BASE_URL, captcha_img.get('src'))
-            print(f"✓ Captcha detected: {captcha_url}")
+            logger.info(f"Captcha detected: {captcha_url}")
             
             # Get captcha input from user
             captcha_code = get_captcha_from_user(captcha_url, session, headers)
             if not captcha_code:
                 return False, None, "Failed to get captcha code from user"
         else:
-            print("✓ No captcha detected (or could not find captcha image)")
+            logger.info("No captcha detected (or could not find captcha image)")
             captcha_code = None
         
-        print("\nStep 3: Submitting login credentials...")
+        logger.info("Step 3: Submitting login credentials...")
         # Step 3: Submit login form
         # Actual JavDB login endpoint (found via debug script)
         login_url = urljoin(BASE_URL, '/user_sessions')
@@ -264,16 +381,16 @@ def login_javdb(username, password):
             'Referer': login_page_url,
         })
         
-        print(f"  Submitting to: /user_sessions")
+        logger.info("Submitting to: /user_sessions")
         
         # Submit login
         login_response = session.post(login_url, data=login_data, headers=headers, 
                                      timeout=30, allow_redirects=True)
         
-        print(f"✓ Login request submitted (status: {login_response.status_code})")
+        logger.info(f"Login request submitted (status: {login_response.status_code})")
         
         # Check if login was successful
-        print(f"  Final URL: {login_response.url}")
+        logger.info(f"Final URL: {login_response.url}")
         
         # Check response
         if login_response.status_code == 200:
@@ -304,14 +421,14 @@ def login_javdb(username, password):
                 return False, None, "Login failed: Still on login page. Check username/password and captcha."
             else:
                 # Redirected away from login page - success
-                print("✓ Login successful (redirected away from login page)")
+                logger.info("Login successful (redirected away from login page)")
         elif login_response.status_code == 302 or login_response.status_code == 303:
-            print("✓ Login successful (got redirect)")
+            logger.info("Login successful (got redirect)")
         else:
             return False, None, f"Login failed: Unexpected status code {login_response.status_code}"
         
         # Step 4: Extract session cookie
-        print("\nStep 4: Extracting session cookie...")
+        logger.info("Step 4: Extracting session cookie...")
         session_cookie = None
         for cookie in session.cookies:
             if cookie.name == '_jdb_session':
@@ -321,10 +438,10 @@ def login_javdb(username, password):
         if not session_cookie:
             return False, None, "Login might have succeeded, but could not extract session cookie"
         
-        print(f"✓ Session cookie extracted: {session_cookie[:50]}...")
+        logger.info(f"Session cookie extracted: {session_cookie[:10]}***{session_cookie[-10:]}")
         
         # Verify cookie works
-        print("\nStep 5: Verifying session cookie...")
+        logger.info("Step 5: Verifying session cookie...")
         test_url = urljoin(BASE_URL, '/')
         test_headers = {
             'User-Agent': headers['User-Agent'],
@@ -338,9 +455,9 @@ def login_javdb(username, password):
             # Look for user-related elements (adjust selector based on JavDB's HTML)
             user_menu = soup.find('a', href='/users/edit') or soup.find('a', href='/logout')
             if user_menu:
-                print("✓ Session cookie verified (user logged in)")
+                logger.info("Session cookie verified (user logged in)")
             else:
-                print("⚠️  Warning: Could not verify login status, but cookie was extracted")
+                logger.warning("Could not verify login status, but cookie was extracted")
         
         return True, session_cookie, "Login successful"
         
@@ -348,6 +465,52 @@ def login_javdb(username, password):
         return False, None, f"Network error: {e}"
     except Exception as e:
         return False, None, f"Unexpected error: {e}"
+
+
+def login_with_retry(username, password, max_retries=5):
+    """
+    Login to JavDB with retry logic for captcha failures.
+    
+    This function wraps login_javdb() with retry logic, automatically
+    retrying on captcha-related errors.
+    
+    Args:
+        username: JavDB username/email
+        password: JavDB password
+        max_retries: Maximum number of retry attempts (default: 5)
+    
+    Returns:
+        tuple: (success: bool, session_cookie: str, message: str)
+    """
+    success = False
+    session_cookie = None
+    message = None
+    
+    for attempt in range(1, max_retries + 1):
+        logger.info(f"Login attempt {attempt}/{max_retries}")
+        
+        success, session_cookie, message = login_javdb(username, password)
+        
+        if success:
+            break
+        else:
+            # Check if it's a captcha-related error (worth retrying)
+            is_captcha_error = any(keyword in message.lower() for keyword in [
+                'captcha', '验证码', '驗證碼', 'verification'
+            ])
+            
+            if attempt < max_retries:
+                if is_captcha_error:
+                    logger.warning("Captcha error detected, retrying with new captcha...")
+                else:
+                    logger.warning(f"Login failed: {message}")
+                    logger.info("Retrying...")
+                # Small delay before retry
+                time.sleep(2)
+            else:
+                logger.error(f"All {max_retries} attempts failed")
+    
+    return success, session_cookie, message
 
 
 def update_config_file(session_cookie):
@@ -363,7 +526,7 @@ def update_config_file(session_cookie):
     config_path = 'config.py'
     
     if not os.path.exists(config_path):
-        print(f"❌ Error: {config_path} not found")
+        logger.error(f"{config_path} not found")
         return False
     
     try:
@@ -377,7 +540,7 @@ def update_config_file(session_cookie):
         
         # Check if pattern exists
         if not re.search(pattern, content):
-            print("❌ Error: Could not find JAVDB_SESSION_COOKIE in config.py")
+            logger.error("Could not find JAVDB_SESSION_COOKIE in config.py")
             return False
         
         # Replace with new cookie
@@ -387,99 +550,83 @@ def update_config_file(session_cookie):
         with open(config_path, 'w', encoding='utf-8') as f:
             f.write(new_content)
         
-        print(f"✓ Updated {config_path} with new session cookie")
+        logger.info(f"Updated {config_path} with new session cookie")
         return True
         
     except Exception as e:
-        print(f"❌ Error updating config.py: {e}")
+        logger.error(f"Error updating config.py: {e}")
         return False
 
 
 def main():
     """Main function"""
-    print("=" * 60)
-    print("JavDB Auto Login Script (with Captcha Support)")
-    print("=" * 60)
-    print()
+    logger.info("=" * 60)
+    logger.info("JavDB Auto Login Script (with Captcha Support)")
+    logger.info("=" * 60)
     
     # Check credentials
     if not JAVDB_USERNAME or not JAVDB_PASSWORD:
-        print("❌ Error: JAVDB_USERNAME and JAVDB_PASSWORD must be set in config.py")
-        print()
-        print("To use this script:")
-        print("1. Open config.py")
-        print("2. Set JAVDB_USERNAME = 'your_email_or_username'")
-        print("3. Set JAVDB_PASSWORD = 'your_password'")
-        print("4. Run: python3 scripts/login.py")
-        print("5. Enter captcha code when prompted")
+        logger.error("JAVDB_USERNAME and JAVDB_PASSWORD must be set in config.py")
+        logger.info("To use this script:")
+        logger.info("1. Open config.py")
+        logger.info("2. Set JAVDB_USERNAME = 'your_email_or_username'")
+        logger.info("3. Set JAVDB_PASSWORD = 'your_password'")
+        logger.info("4. Run: python3 scripts/login.py")
+        logger.info("5. Enter captcha code when prompted")
         sys.exit(1)
     
-    print(f"Username: {JAVDB_USERNAME}")
-    print(f"Base URL: {BASE_URL}")
-    print()
+    # Mask username for privacy
+    masked_username = JAVDB_USERNAME[:3] + "***" + JAVDB_USERNAME[-3:] if len(JAVDB_USERNAME) > 6 else JAVDB_USERNAME[:2] + "***"
+    logger.info(f"Username: {masked_username}")
+    logger.info(f"Base URL: {BASE_URL}")
     
     # Show captcha solving method
-    if CAPTCHA_SOLVER_AVAILABLE:
-        print("🤖 Captcha Solving: AUTO (OCR + Manual fallback)")
-        print("   - Will try OCR automatic recognition first")
-        print("   - Falls back to manual input if OCR fails")
-        if TWOCAPTCHA_API_KEY:
-            print("   - 2Captcha API configured (optional)")
+    if GPT_API_AVAILABLE:
+        logger.info("Captcha Solving: AI (GPT Vision)")
+        logger.info("   - Using AI API for automatic recognition")
     else:
-        print("📝 Captcha Solving: MANUAL ONLY")
-        print("   - Install dependencies for automatic solving:")
-        print("     brew install tesseract  # macOS")
-        print("     pip install pytesseract pillow")
-    print()
+        logger.warning("Captcha Solving: NOT AVAILABLE")
+        logger.warning("   - Configure GPT_API_KEY and GPT_API_URL in config.py for AI solving")
     
-    # Perform login
-    success, session_cookie, message = login_javdb(JAVDB_USERNAME, JAVDB_PASSWORD)
+    # Perform login with retry logic
+    success, session_cookie, message = login_with_retry(JAVDB_USERNAME, JAVDB_PASSWORD, max_retries=5)
     
-    print()
-    print("=" * 60)
+    logger.info("=" * 60)
     if success:
-        print("✅ LOGIN SUCCESSFUL")
-        print("=" * 60)
-        print()
-        print(f"Session Cookie: {session_cookie[:50]}...")
-        print()
+        logger.info("LOGIN SUCCESSFUL")
+        logger.info("=" * 60)
+        logger.info(f"Session Cookie: {session_cookie[:10]}***{session_cookie[-10:]}")
         
         # Update config.py
-        print("Updating config.py...")
+        logger.info("Updating config.py...")
         if update_config_file(session_cookie):
-            print()
-            print("=" * 60)
-            print("✅ ALL DONE!")
-            print("=" * 60)
-            print()
-            print("The new session cookie has been saved to config.py")
-            print("You can now use the spider with --url parameter:")
-            print("  python3 scripts/spider.py --url https://javdb.com/actors/...")
+            logger.info("=" * 60)
+            logger.info("ALL DONE!")
+            logger.info("=" * 60)
+            logger.info("The new session cookie has been saved to config.py")
+            logger.info("You can now use the spider with --url parameter:")
+            logger.info("  python3 scripts/spider.py --url https://javdb.com/actors/...")
             
             # Cleanup captcha image
             try:
                 if os.path.exists('javdb_captcha.png'):
                     os.remove('javdb_captcha.png')
-                    print("\n✓ Cleaned up captcha image file")
+                    logger.info("Cleaned up captcha image file")
             except:
                 pass
         else:
-            print()
-            print("⚠️  Warning: Login successful but failed to update config.py")
-            print(f"Please manually update JAVDB_SESSION_COOKIE in config.py with:")
-            print(f"  {session_cookie}")
+            logger.warning("Login successful but failed to update config.py")
+            logger.warning(f"Please manually update JAVDB_SESSION_COOKIE in config.py with:")
+            logger.warning(f"  {session_cookie[:10]}***{session_cookie[-10:]}")
     else:
-        print("❌ LOGIN FAILED")
-        print("=" * 60)
-        print()
-        print(f"Error: {message}")
-        print()
-        print("Troubleshooting:")
-        print("1. Check your username and password in config.py")
-        print("2. Make sure you can login via web browser")
-        print("3. Make sure you entered the captcha code correctly")
-        print("4. Try running the script again (captcha changes each time)")
-        print("5. Check if JavDB changed their login form")
+        logger.error("LOGIN FAILED")
+        logger.info("=" * 60)
+        logger.error(f"Error: {message}")
+        logger.info("Troubleshooting:")
+        logger.info("1. Check your username and password in config.py")
+        logger.info("2. Make sure you can login via web browser")
+        logger.info("3. AI may have recognized the captcha incorrectly")
+        logger.info("4. Check if JavDB changed their login form")
         sys.exit(1)
 
 
