@@ -231,6 +231,9 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('JAVDB_USERNAME', 'JAVDB_USERNAME', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
         ('JAVDB_PASSWORD', 'JAVDB_PASSWORD', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
         ('JAVDB_SESSION_COOKIE', 'JAVDB_SESSION_COOKIE', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
+        # GPT API Configuration (optional - for automatic captcha solving during login)
+        ('GPT_API_URL', 'GPT_API_URL', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
+        ('GPT_API_KEY', 'GPT_API_KEY', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
         ('DETAIL_PAGE_SLEEP', 'DETAIL_PAGE_SLEEP', get_env_int, 30, 'JAVDB LOGIN CONFIGURATION'),
         ('PAGE_SLEEP', 'PAGE_SLEEP', get_env_int, 15, 'JAVDB LOGIN CONFIGURATION'),
         ('MOVIE_SLEEP', 'MOVIE_SLEEP', get_env_int, 15, 'JAVDB LOGIN CONFIGURATION'),

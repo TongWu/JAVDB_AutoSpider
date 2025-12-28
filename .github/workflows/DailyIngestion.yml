@@ -92,6 +92,8 @@ jobs:
           VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
           VAR_BASE_URL: ${{ vars.BASE_URL || 'https://javdb.com' }}
           VAR_JAVDB_USERNAME: ${{ secrets.JAVDB_USERNAME }}
+          VAR_GPT_API_URL: ${{ vars.GPT_API_URL }}
+          VAR_GPT_API_KEY: ${{ secrets.GPT_API_KEY }}
           VAR_DETAIL_PAGE_SLEEP: ${{ vars.DETAIL_PAGE_SLEEP }}
           VAR_PAGE_SLEEP: ${{ vars.PAGE_SLEEP }}
           VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
