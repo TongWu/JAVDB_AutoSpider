@@ -206,12 +206,12 @@ class TestShouldUseProxyForModule:
     
     def test_false_when_use_proxy_flag_is_false(self):
         """Test returns False when use_proxy_flag is False."""
-        result = self.should_use_proxy_for_module('spider_index', False, ['all'])
+        result = self.should_use_proxy_for_module('spider', False, ['all'])
         assert result is False
     
     def test_true_when_all_in_proxy_modules(self):
         """Test returns True when 'all' in PROXY_MODULES."""
-        result = self.should_use_proxy_for_module('spider_index', True, ['all'])
+        result = self.should_use_proxy_for_module('spider', True, ['all'])
         assert result is True
     
     def test_true_when_module_in_proxy_modules(self):
