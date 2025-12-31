@@ -549,7 +549,7 @@ PROXY_HTTP = None
 PROXY_HTTPS = None
 
 # 模块化代理控制 - 哪些模块使用代理
-PROXY_MODULES = ['all']  # 'all' 或列表: 'spider_index', 'spider_detail', 'spider_age_verification', 'qbittorrent', 'pikpak'
+PROXY_MODULES = ['all']  # 'all' 或列表: 'spider', 'qbittorrent', 'pikpak'
 
 # =============================================================================
 # 爬虫配置
@@ -825,8 +825,8 @@ PROXY_HTTPS = 'http://username:password@proxy.example.com:8080'
 
 # 控制哪些模块使用代理(模块化控制)
 PROXY_MODULES = ['all']  # 为所有模块启用
-# PROXY_MODULES = ['spider_index', 'spider_detail']  # 仅索引和详情页
-# PROXY_MODULES = ['spider_detail']  # 仅详情页
+# PROXY_MODULES = ['spider']  # 仅爬虫模块（包含登录）
+# PROXY_MODULES = ['spider', 'qbittorrent']  # 爬虫和 qBittorrent
 # PROXY_MODULES = []  # 为所有模块禁用
 ```
 
@@ -859,9 +859,7 @@ python pipeline_run_and_notify.py --use-proxy
 
 | 模块 | 描述 | 使用场景 |
 |--------|-------------|----------|
-| `spider_index` | 索引/列表页面 | 使用代理访问主列表页面 |
-| `spider_detail` | 电影详情页面 | 使用代理访问单个电影页面 |
-| `spider_age_verification` | 年龄验证绕过 | 使用代理进行年龄验证请求 |
+| `spider` | JavDB 爬虫 | 使用代理访问所有 JavDB 页面（索引、详情、登录/刷新会话） |
 | `qbittorrent` | qBittorrent Web UI API | 使用代理进行 qBittorrent API 请求 |
 | `pikpak` | PikPak 桥接器 qBittorrent API | 使用代理进行 PikPak 桥接操作 |
 | `all` | 所有模块 | 为所有内容使用代理(默认) |
@@ -871,24 +869,24 @@ python pipeline_run_and_notify.py --use-proxy
 # 为所有内容使用代理
 PROXY_MODULES = ['all']
 
-# 仅为详情页使用代理(在索引页上节省带宽)
-PROXY_MODULES = ['spider_detail']
+# 仅为爬虫使用代理（包含登录）,不为其他模块
+PROXY_MODULES = ['spider']
 
-# 为索引和详情使用代理,但不为年龄验证
-PROXY_MODULES = ['spider_index', 'spider_detail']
+# 为爬虫和 qBittorrent 使用代理
+PROXY_MODULES = ['spider', 'qbittorrent']
 
 # 仅为 qBittorrent 和 PikPak 使用代理,不为爬虫
 PROXY_MODULES = ['qbittorrent', 'pikpak']
 
 # 仅为爬虫使用代理,不为 qBittorrent/PikPak
-PROXY_MODULES = ['spider_index', 'spider_detail', 'spider_age_verification']
+PROXY_MODULES = ['spider']
 
 # 为所有模块禁用代理(即使设置了 --use-proxy)
 PROXY_MODULES = []
 ```
 
 **常见场景:**
-- **仅 JavDB 受地理限制**: `PROXY_MODULES = ['spider_index', 'spider_detail', 'spider_age_verification']`
+- **仅 JavDB 受地理限制**: `PROXY_MODULES = ['spider']`
 - **本地 qBittorrent 在防火墙后**: `PROXY_MODULES = ['qbittorrent', 'pikpak']`
 - **通过代理的所有内容**: `PROXY_MODULES = ['all']`
 
@@ -929,7 +927,7 @@ pip install requests[socks]
 - 某些代理不支持磁力链接或种子
 - 尝试不同的代理或为 qBittorrent/PikPak 使用直接连接:
   ```python
-  PROXY_MODULES = ['spider_index', 'spider_detail', 'spider_age_verification']
+  PROXY_MODULES = ['spider']
   ```
 
 **带特殊字符的密码**
