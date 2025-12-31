@@ -332,7 +332,7 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
         session: requests.Session object for connection reuse
         use_cookie: Whether to add session cookie
         use_proxy: Whether --use-proxy flag is enabled
-        module_name: Module name for proxy control ('spider_index', 'spider_detail', 'spider_age_verification')
+        module_name: Module name for proxy control ('spider', 'qbittorrent', 'pikpak', etc.)
         max_retries: Maximum number of retries with different proxies (only for proxy pool mode)
         use_cf_bypass: Whether to use CF bypass service
         
@@ -387,6 +387,8 @@ def attempt_login_refresh():
     After successful login, login.py updates config.py with the new cookie,
     then we reload config.py to get the updated cookie value.
     
+    Note: If spider is using proxy, login will also use the same proxy.
+    
     Returns:
         tuple: (success: bool, new_cookie: str or None)
     """
@@ -414,12 +416,28 @@ def attempt_login_refresh():
     logger.info("ATTEMPTING SESSION COOKIE REFRESH VIA LOGIN")
     logger.info("=" * 60)
     
+    # Get current proxy configuration if proxy pool is available
+    login_proxies = None
+    if global_proxy_pool is not None:
+        current_proxy = global_proxy_pool.get_current_proxy()
+        if current_proxy:
+            login_proxies = {
+                'http': current_proxy.get('http'),
+                'https': current_proxy.get('https')
+            }
+            # Remove None values
+            login_proxies = {k: v for k, v in login_proxies.items() if v}
+            if login_proxies:
+                logger.info(f"Login will use proxy: {global_proxy_pool.get_current_proxy_name()}")
+            else:
+                login_proxies = None
+    
     try:
         # Import login functions from login.py
         from scripts.login import login_with_retry, update_config_file
         
-        # Perform login with retry logic (max 5 attempts)
-        success, session_cookie, message = login_with_retry(JAVDB_USERNAME, JAVDB_PASSWORD, max_retries=5)
+        # Perform login with retry logic (max 5 attempts), passing proxy config
+        success, session_cookie, message = login_with_retry(JAVDB_USERNAME, JAVDB_PASSWORD, max_retries=5, proxies=login_proxies)
         
         if success and session_cookie:
             logger.info(f"✓ Login successful, new session cookie obtained")
@@ -777,7 +795,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
         logger.debug(f"[Page {page_num}] {context_msg}...")
         try:
             html = get_page(page_url, session, use_cookie=use_cookie,
-                            use_proxy=u_proxy, module_name='spider_index',
+                            use_proxy=u_proxy, module_name='spider',
                             use_cf_bypass=u_cf)
             if html:
                 soup = BeautifulSoup(html, 'html.parser')
@@ -977,7 +995,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
         logger.debug(f"[{entry_index}] {context_msg}...")
         try:
             html = get_page(detail_url, session, use_cookie=use_cookie,
-                            use_proxy=u_proxy, module_name='spider_detail',
+                            use_proxy=u_proxy, module_name='spider',
                             use_cf_bypass=u_cf)
             if html:
                 # Parse detail page with skip_sleep for retry attempts
