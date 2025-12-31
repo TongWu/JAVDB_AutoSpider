@@ -27,10 +27,10 @@ on:
         required: false
         type: boolean
         default: true
-  # schedule:
-  #   # Run 2 hours after DailyIngestion (which runs at 10:00 UTC)
-  #   # This allows time for qBittorrent to fetch torrent metadata
-  #   - cron: '0 12 * * *'
+  schedule:
+    # Run 2 hours after DailyIngestion (which runs at 10:00 UTC)
+    # This allows time for qBittorrent to fetch torrent metadata
+    - cron: '0 12 * * *'
 
 jobs:
   # =============================================================================
