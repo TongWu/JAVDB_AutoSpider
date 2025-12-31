@@ -136,7 +136,7 @@ class RequestHandler:
         Check if a specific module should use proxy based on configuration.
         
         Args:
-            module_name: Name of the module ('spider_index', 'spider_detail', 'spider_age_verification')
+            module_name: Name of the module ('spider', 'qbittorrent', 'pikpak', etc.)
             use_proxy_flag: Whether --use-proxy flag is enabled
         
         Returns:
@@ -705,7 +705,7 @@ class RequestHandler:
             session: requests.Session object for connection reuse
             use_cookie: Whether to add session cookie
             use_proxy: Whether --use-proxy flag is enabled
-            module_name: Module name for proxy control ('spider_index', 'spider_detail', 'spider_age_verification')
+            module_name: Module name for proxy control ('spider', 'qbittorrent', 'pikpak', etc.)
             max_retries: Maximum number of retries with different proxies (only for proxy pool mode)
             use_cf_bypass: Whether to use CF bypass service
             

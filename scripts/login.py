@@ -72,6 +72,13 @@ except ImportError:
     GPT_API_URL = None
     GPT_API_AVAILABLE = False
 
+# Try to import proxy settings (optional, for use when called from spider.py)
+try:
+    from config import PROXY_HTTP, PROXY_HTTPS
+except ImportError:
+    PROXY_HTTP = None
+    PROXY_HTTPS = None
+
 
 def extract_csrf_token(html_content):
     """Extract CSRF token from login page"""
@@ -101,12 +108,13 @@ def save_captcha_image(image_data, filename='captcha.png'):
         return False
 
 
-def solve_captcha_with_ai(image_data):
+def solve_captcha_with_ai(image_data, proxies=None):
     """
     Use GPT-4o API to solve captcha
     
     Args:
         image_data: Raw image bytes
+        proxies: Optional proxy dict for requests (e.g., {'http': '...', 'https': '...'})
     
     Returns:
         str: Captcha code or None if failed
@@ -169,7 +177,8 @@ def solve_captcha_with_ai(image_data):
             GPT_API_URL,
             headers=headers,
             data=json.dumps(payload),
-            timeout=60
+            timeout=60,
+            proxies=proxies
         )
         
         if response.status_code == 200:
@@ -200,7 +209,7 @@ def solve_captcha_with_ai(image_data):
         return None
 
 
-def get_captcha_from_user(captcha_url, session, headers, use_auto_solve=True):
+def get_captcha_from_user(captcha_url, session, headers, use_auto_solve=True, proxies=None):
     """
     Download captcha image and solve it using AI
     
@@ -209,13 +218,14 @@ def get_captcha_from_user(captcha_url, session, headers, use_auto_solve=True):
         session: requests.Session object
         headers: HTTP headers
         use_auto_solve: Whether to try automatic solving (AI)
+        proxies: Optional proxy dict for requests (e.g., {'http': '...', 'https': '...'})
     
     Returns:
         str: Captcha code or None if failed
     """
     try:
         logger.info("Fetching captcha image...")
-        captcha_response = session.get(captcha_url, headers=headers, timeout=30)
+        captcha_response = session.get(captcha_url, headers=headers, timeout=30, proxies=proxies)
         
         if captcha_response.status_code == 200:
             logger.info("Captcha image downloaded")
@@ -227,7 +237,7 @@ def get_captcha_from_user(captcha_url, session, headers, use_auto_solve=True):
             if use_auto_solve:
                 # Use AI API to solve captcha
                 if GPT_API_AVAILABLE:
-                    captcha_code = solve_captcha_with_ai(captcha_response.content)
+                    captcha_code = solve_captcha_with_ai(captcha_response.content, proxies=proxies)
                     if captcha_code:
                         return captcha_code
                     logger.warning("AI captcha solving failed")
@@ -266,15 +276,39 @@ def get_captcha_from_user(captcha_url, session, headers, use_auto_solve=True):
         return None
 
 
-def login_javdb(username, password):
+def login_javdb(username, password, proxies=None):
     """
     Login to JavDB and return session cookie
+    
+    Args:
+        username: JavDB username/email
+        password: JavDB password
+        proxies: Optional proxy dict for requests (e.g., {'http': '...', 'https': '...'})
     
     Returns:
         tuple: (success: bool, session_cookie: str, message: str)
     """
     if not username or not password:
         return False, None, "Username or password not configured in config.py"
+    
+    # Log proxy usage
+    if proxies:
+        # Mask proxy URL for logging
+        masked_proxies = {}
+        for k, v in proxies.items():
+            if v:
+                # Simple masking: show protocol and port only
+                import re
+                match = re.match(r'(https?://)([^:]+):([^@]+)@([^:]+):(\d+)', v)
+                if match:
+                    masked_proxies[k] = f"{match.group(1)}***:***@***:{match.group(5)}"
+                else:
+                    match = re.match(r'(https?://)([^:]+):(\d+)', v)
+                    if match:
+                        masked_proxies[k] = f"{match.group(1)}***:{match.group(3)}"
+                    else:
+                        masked_proxies[k] = "***"
+        logger.info(f"Using proxy for login: {masked_proxies}")
     
     # Create session
     session = requests.Session()
@@ -292,9 +326,13 @@ def login_javdb(username, password):
         logger.info("Step 1: Fetching login page...")
         # Step 1: Get login page to extract CSRF token
         login_page_url = urljoin(BASE_URL, '/login')
-        response = session.get(login_page_url, headers=headers, timeout=30)
+        response = session.get(login_page_url, headers=headers, timeout=30, proxies=proxies)
         
         if response.status_code != 200:
+            if response.status_code == 403:
+                logger.error("HTTP 403 Forbidden - Access denied by JavDB")
+                logger.error("This may indicate IP blocking. If using proxy, ensure 'spider' is in PROXY_MODULES config.")
+                logger.error("Example: PROXY_MODULES = ['spider'] or PROXY_MODULES = ['all']")
             return False, None, f"Failed to fetch login page (status: {response.status_code})"
         
         logger.info(f"Login page fetched (status: {response.status_code})")
@@ -316,11 +354,11 @@ def login_javdb(username, password):
             for link in age_links:
                 if 'over18' in link.get('href', ''):
                     age_url = urljoin(BASE_URL, link.get('href'))
-                    age_response = session.get(age_url, headers=headers, timeout=30)
+                    age_response = session.get(age_url, headers=headers, timeout=30, proxies=proxies)
                     if age_response.status_code == 200:
                         logger.info("Age verification bypassed")
                         # Re-fetch login page
-                        response = session.get(login_page_url, headers=headers, timeout=30)
+                        response = session.get(login_page_url, headers=headers, timeout=30, proxies=proxies)
                         # Re-extract CSRF token
                         csrf_token = extract_csrf_token(response.text)
                     break
@@ -344,7 +382,7 @@ def login_javdb(username, password):
             logger.info(f"Captcha detected: {captcha_url}")
             
             # Get captcha input from user
-            captcha_code = get_captcha_from_user(captcha_url, session, headers)
+            captcha_code = get_captcha_from_user(captcha_url, session, headers, proxies=proxies)
             if not captcha_code:
                 return False, None, "Failed to get captcha code from user"
         else:
@@ -385,7 +423,7 @@ def login_javdb(username, password):
         
         # Submit login
         login_response = session.post(login_url, data=login_data, headers=headers, 
-                                     timeout=30, allow_redirects=True)
+                                     timeout=30, allow_redirects=True, proxies=proxies)
         
         logger.info(f"Login request submitted (status: {login_response.status_code})")
         
@@ -425,6 +463,10 @@ def login_javdb(username, password):
         elif login_response.status_code == 302 or login_response.status_code == 303:
             logger.info("Login successful (got redirect)")
         else:
+            if login_response.status_code == 403:
+                logger.error("HTTP 403 Forbidden - Access denied by JavDB during login")
+                logger.error("This may indicate IP blocking. If using proxy, ensure 'spider' is in PROXY_MODULES config.")
+                logger.error("Example: PROXY_MODULES = ['spider'] or PROXY_MODULES = ['all']")
             return False, None, f"Login failed: Unexpected status code {login_response.status_code}"
         
         # Step 4: Extract session cookie
@@ -447,7 +489,7 @@ def login_javdb(username, password):
             'User-Agent': headers['User-Agent'],
             'Cookie': f'_jdb_session={session_cookie}'
         }
-        test_response = requests.get(test_url, headers=test_headers, timeout=30)
+        test_response = requests.get(test_url, headers=test_headers, timeout=30, proxies=proxies)
         
         if test_response.status_code == 200:
             # Check if we're logged in by looking for logout link or user menu
@@ -467,7 +509,7 @@ def login_javdb(username, password):
         return False, None, f"Unexpected error: {e}"
 
 
-def login_with_retry(username, password, max_retries=5):
+def login_with_retry(username, password, max_retries=5, proxies=None):
     """
     Login to JavDB with retry logic for captcha failures.
     
@@ -478,6 +520,7 @@ def login_with_retry(username, password, max_retries=5):
         username: JavDB username/email
         password: JavDB password
         max_retries: Maximum number of retry attempts (default: 5)
+        proxies: Optional proxy dict for requests (e.g., {'http': '...', 'https': '...'})
     
     Returns:
         tuple: (success: bool, session_cookie: str, message: str)
@@ -489,7 +532,7 @@ def login_with_retry(username, password, max_retries=5):
     for attempt in range(1, max_retries + 1):
         logger.info(f"Login attempt {attempt}/{max_retries}")
         
-        success, session_cookie, message = login_javdb(username, password)
+        success, session_cookie, message = login_javdb(username, password, proxies=proxies)
         
         if success:
             break
