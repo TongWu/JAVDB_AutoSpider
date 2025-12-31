@@ -37,7 +37,7 @@ jobs:
   # Job 1: Setup - Checkout, install dependencies, generate config
   # =============================================================================
   setup:
-    runs-on: ARM64
+    runs-on: ubuntu-latest
     environment: Production
     permissions:
       contents: read
@@ -140,7 +140,7 @@ jobs:
   # Job 2: Run File Filter
   # =============================================================================
   run-file-filter:
-    runs-on: ARM64
+    runs-on: ubuntu-latest
     environment: Production
     permissions:
       contents: read
