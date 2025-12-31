@@ -551,7 +551,7 @@ PROXY_HTTP = None
 PROXY_HTTPS = None
 
 # Modular proxy control - which modules use proxy
-PROXY_MODULES = ['all']  # 'all' or list: 'spider_index', 'spider_detail', 'spider_age_verification', 'qbittorrent', 'pikpak'
+PROXY_MODULES = ['all']  # 'all' or list: 'spider', 'qbittorrent', 'pikpak'
 
 # =============================================================================
 # SPIDER CONFIGURATION
@@ -827,8 +827,8 @@ PROXY_HTTPS = 'http://username:password@proxy.example.com:8080'
 
 # Control which modules use proxy (modular control)
 PROXY_MODULES = ['all']  # Enable for all modules
-# PROXY_MODULES = ['spider_index', 'spider_detail']  # Only index and detail pages
-# PROXY_MODULES = ['spider_detail']  # Only detail pages
+# PROXY_MODULES = ['spider']  # Only spider module (includes login)
+# PROXY_MODULES = ['spider', 'qbittorrent']  # Spider and qBittorrent
 # PROXY_MODULES = []  # Disable for all modules
 ```
 
@@ -861,9 +861,7 @@ The `PROXY_MODULES` setting allows fine-grained control over which parts use pro
 
 | Module | Description | Use Case |
 |--------|-------------|----------|
-| `spider_index` | Index/listing pages | Use proxy to access main listing pages |
-| `spider_detail` | Movie detail pages | Use proxy for individual movie pages |
-| `spider_age_verification` | Age verification bypass | Use proxy for age verification requests |
+| `spider` | JavDB Spider | Use proxy to access all JavDB pages (index, detail, login/session refresh) |
 | `qbittorrent` | qBittorrent Web UI API | Use proxy for qBittorrent API requests |
 | `pikpak` | PikPak bridge qBittorrent API | Use proxy for PikPak bridge operations |
 | `all` | All modules | Use proxy for everything (default) |
@@ -873,24 +871,24 @@ The `PROXY_MODULES` setting allows fine-grained control over which parts use pro
 # Use proxy for everything
 PROXY_MODULES = ['all']
 
-# Only use proxy for detail pages (save bandwidth on index pages)
-PROXY_MODULES = ['spider_detail']
+# Only use proxy for spider module (includes login)
+PROXY_MODULES = ['spider']
 
-# Use proxy for index and detail, but not age verification
-PROXY_MODULES = ['spider_index', 'spider_detail']
+# Use proxy for spider and qBittorrent
+PROXY_MODULES = ['spider', 'qbittorrent']
 
 # Only use proxy for qBittorrent and PikPak, not spider
 PROXY_MODULES = ['qbittorrent', 'pikpak']
 
 # Use proxy for spider only, not qBittorrent/PikPak
-PROXY_MODULES = ['spider_index', 'spider_detail', 'spider_age_verification']
+PROXY_MODULES = ['spider']
 
 # Disable proxy for all modules (even if --use-proxy is set)
 PROXY_MODULES = []
 ```
 
 **Common Scenarios:**
-- **Geo-restricted JavDB only**: `PROXY_MODULES = ['spider_index', 'spider_detail', 'spider_age_verification']`
+- **Geo-restricted JavDB only**: `PROXY_MODULES = ['spider']`
 - **Local qBittorrent behind firewall**: `PROXY_MODULES = ['qbittorrent', 'pikpak']`
 - **Everything through proxy**: `PROXY_MODULES = ['all']`
 
@@ -931,7 +929,7 @@ pip install requests[socks]
 - Some proxies don't support magnet links or torrents
 - Try different proxy or use direct connection for qBittorrent/PikPak:
   ```python
-  PROXY_MODULES = ['spider_index', 'spider_detail', 'spider_age_verification']
+  PROXY_MODULES = ['spider']
   ```
 
 **Password with special characters**
