@@ -95,7 +95,7 @@ class TestRequestHandler:
         """Test should_use_proxy_for_module returns False when flag is False."""
         handler = RequestHandler()
         
-        result = handler.should_use_proxy_for_module('spider_index', use_proxy_flag=False)
+        result = handler.should_use_proxy_for_module('spider', use_proxy_flag=False)
         
         assert result is False
     
@@ -104,24 +104,24 @@ class TestRequestHandler:
         config = RequestConfig(proxy_modules=['all'])
         handler = RequestHandler(config=config)
         
-        result = handler.should_use_proxy_for_module('spider_index', use_proxy_flag=True)
+        result = handler.should_use_proxy_for_module('spider', use_proxy_flag=True)
         
         assert result is True
     
     def test_should_use_proxy_for_module_specific(self):
         """Test should_use_proxy_for_module with specific module."""
-        config = RequestConfig(proxy_modules=['spider_index', 'spider_detail'])
+        config = RequestConfig(proxy_modules=['spider', 'qbittorrent'])
         handler = RequestHandler(config=config)
         
-        assert handler.should_use_proxy_for_module('spider_index', use_proxy_flag=True) is True
-        assert handler.should_use_proxy_for_module('spider_other', use_proxy_flag=True) is False
+        assert handler.should_use_proxy_for_module('spider', use_proxy_flag=True) is True
+        assert handler.should_use_proxy_for_module('pikpak', use_proxy_flag=True) is False
     
     def test_should_use_proxy_for_module_empty_list(self):
         """Test should_use_proxy_for_module with empty module list."""
         config = RequestConfig(proxy_modules=[])
         handler = RequestHandler(config=config)
         
-        result = handler.should_use_proxy_for_module('spider_index', use_proxy_flag=True)
+        result = handler.should_use_proxy_for_module('spider', use_proxy_flag=True)
         
         assert result is False
     
@@ -243,7 +243,7 @@ class TestRequestHandler:
         """Test _get_proxies_config when proxy not used."""
         handler = RequestHandler()
         
-        proxies, use_pool = handler._get_proxies_config('spider_index', use_proxy=False)
+        proxies, use_pool = handler._get_proxies_config('spider', use_proxy=False)
         
         assert proxies is None
         assert use_pool is False
@@ -258,7 +258,7 @@ class TestRequestHandler:
         )
         handler = RequestHandler(config=config)
         
-        proxies, use_pool = handler._get_proxies_config('spider_index', use_proxy=True)
+        proxies, use_pool = handler._get_proxies_config('spider', use_proxy=True)
         
         assert proxies == {'http': 'http://proxy:8080', 'https': 'https://proxy:8080'}
         assert use_pool is False
@@ -271,7 +271,7 @@ class TestRequestHandler:
         config = RequestConfig(proxy_mode='pool', proxy_modules=['all'])
         handler = RequestHandler(proxy_pool=mock_pool, config=config)
         
-        proxies, use_pool = handler._get_proxies_config('spider_index', use_proxy=True)
+        proxies, use_pool = handler._get_proxies_config('spider', use_proxy=True)
         
         assert proxies == {'http': 'http://pool-proxy:8080'}
         assert use_pool is True
@@ -673,7 +673,7 @@ class TestRequestHandlerAdvanced:
         )
         handler = RequestHandler(config=config)
         
-        proxies, use_pool = handler._get_proxies_config('spider_index', use_proxy=True)
+        proxies, use_pool = handler._get_proxies_config('spider', use_proxy=True)
         
         assert proxies == {'http': 'http://proxy:8080'}
         assert use_pool is False
@@ -794,7 +794,7 @@ class TestRequestConfigAdvanced:
             javdb_session_cookie='session123',
             proxy_http='http://proxy:8080',
             proxy_https='https://proxy:8080',
-            proxy_modules=['spider_index', 'spider_detail'],
+            proxy_modules=['spider', 'qbittorrent'],
             proxy_mode='pool'
         )
         
@@ -807,7 +807,7 @@ class TestRequestConfigAdvanced:
         assert config.javdb_session_cookie == 'session123'
         assert config.proxy_http == 'http://proxy:8080'
         assert config.proxy_https == 'https://proxy:8080'
-        assert config.proxy_modules == ['spider_index', 'spider_detail']
+        assert config.proxy_modules == ['spider', 'qbittorrent']
         assert config.proxy_mode == 'pool'
 
 
