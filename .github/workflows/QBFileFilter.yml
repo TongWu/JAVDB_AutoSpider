@@ -27,17 +27,17 @@ on:
         required: false
         type: boolean
         default: true
-  # schedule:
-  #   # Run 2 hours after DailyIngestion (which runs at 10:00 UTC)
-  #   # This allows time for qBittorrent to fetch torrent metadata
-  #   - cron: '0 12 * * *'
+  # schedule: # DISABLED FOR PUBLIC REPO
+    # Run 2 hours after DailyIngestion (which runs at 10:00 UTC)
+    # This allows time for qBittorrent to fetch torrent metadata
+    # - cron: '0 12 * * *'
 
 jobs:
   # =============================================================================
   # Job 1: Setup - Checkout, install dependencies, generate config
   # =============================================================================
   setup:
-    runs-on: ARM64
+    runs-on: ubuntu-latest
     environment: Production
     permissions:
       contents: read
@@ -140,7 +140,7 @@ jobs:
   # Job 2: Run File Filter
   # =============================================================================
   run-file-filter:
-    runs-on: ARM64
+    runs-on: ubuntu-latest
     environment: Production
     permissions:
       contents: read
