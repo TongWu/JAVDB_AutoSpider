@@ -805,8 +805,17 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
                 # - Rankings pages: 'movie-list h cols-4'
                 movie_list = soup.find('div', class_=lambda x: x and 'movie-list' in x)
                 if movie_list:
-                    logger.debug(f"[Page {page_num}] Success: {context_msg}")
-                    return html, True, False
+                    # Check if movie-list has actual movie items
+                    # An empty movie-list div (e.g., page=8 of rankings with only 250 items total)
+                    # should be treated as a valid empty page, not a successful fetch
+                    movie_items = movie_list.find_all('div', class_='item')
+                    if len(movie_items) > 0:
+                        logger.debug(f"[Page {page_num}] Success: {context_msg} - Found {len(movie_items)} movie items")
+                        return html, True, False
+                    else:
+                        # movie-list exists but is empty - this is a valid empty page
+                        logger.info(f"[Page {page_num}] movie-list exists but is empty (0 items) - treating as valid empty page")
+                        return html, False, True
                 else:
                     # No movie list - check if this is a valid empty page or a failed fetch
                     page_text = soup.get_text()
