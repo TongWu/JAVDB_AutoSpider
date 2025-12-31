@@ -151,11 +151,9 @@ PROXY_HTTPS = None  # Deprecated: Use PROXY_POOL instead
 
 # Proxy modules control (which parts of the script use proxy when --use-proxy is enabled)
 # Available modules:
-#   'spider_index'  - Index page fetching (main listing pages)
-#   'spider_detail' - Detail page fetching (individual movie pages)
-#   'spider_age_verification' - Age verification bypass requests
-#   'qbittorrent'   - qBittorrent Web UI API requests
-#   'pikpak'        - PikPak bridge qBittorrent API requests
+#   'spider'      - All JavDB requests (index pages, detail pages, login/session refresh)
+#   'qbittorrent' - qBittorrent Web UI API requests
+#   'pikpak'      - PikPak bridge qBittorrent API requests
 # Add module names to the list to enable proxy for those modules
 # Leave empty list [] to disable proxy for all modules
 # Use ['all'] to enable proxy for all modules
@@ -163,8 +161,8 @@ PROXY_MODULES = ['all']
 
 # Example configurations:
 # PROXY_MODULES = ['all']  # Enable proxy for all modules (default)
-# PROXY_MODULES = ['spider_index', 'spider_detail']  # Only spider, not qBittorrent/PikPak
-# PROXY_MODULES = ['spider_detail', 'qbittorrent']  # Detail pages and qBittorrent
+# PROXY_MODULES = ['spider']  # Only spider (including login), not qBittorrent/PikPak
+# PROXY_MODULES = ['spider', 'qbittorrent']  # Spider and qBittorrent
 # PROXY_MODULES = ['qbittorrent', 'pikpak']  # Only qBittorrent and PikPak, not spider
 # PROXY_MODULES = []  # Disable proxy for all modules (even if --use-proxy is set)
 
