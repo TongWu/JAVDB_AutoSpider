@@ -282,7 +282,7 @@ PIKPAK_REQUEST_DELAY = 3
 # Minimum file size threshold in MB
 # Files smaller than this will be set to "do not download" priority
 # This helps filter out small files like NFO, samples, screenshots, etc.
-QB_FILE_FILTER_MIN_SIZE_MB = 50
+QB_FILE_FILTER_MIN_SIZE_MB = 100
 
 # Log file for the file filter script
 QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
