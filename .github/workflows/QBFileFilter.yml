@@ -30,7 +30,7 @@ on:
   # schedule: # DISABLED FOR PUBLIC REPO
     # Run 2 hours after DailyIngestion (which runs at 10:00 UTC)
     # This allows time for qBittorrent to fetch torrent metadata
-    # - cron: '0 12 * * *'
+    # - cron: '0 */6 * * *'
 
 jobs:
   # =============================================================================
@@ -179,8 +179,8 @@ jobs:
       - name: Run qBittorrent File Filter
         env:
           # Use workflow_dispatch inputs if provided, otherwise use config defaults
-          # Note: defaults here match QB_FILE_FILTER_MIN_SIZE_MB in config.py.example (50MB)
-          MIN_SIZE_MB: ${{ github.event.inputs.min_size_mb || '50' }}
+          # Note: defaults here match QB_FILE_FILTER_MIN_SIZE_MB in config.py.example (100MB)
+          MIN_SIZE_MB: ${{ github.event.inputs.min_size_mb || '100' }}
           DAYS: ${{ github.event.inputs.days || '2' }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
           DELETE_LOCAL_FILES: ${{ github.event.inputs.delete_local_files || 'false' }}
