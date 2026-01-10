@@ -386,16 +386,21 @@ class TestFilterSmallFiles:
 
     @patch('scripts.qb_file_filter.get_torrent_files')
     @patch('scripts.qb_file_filter.set_file_priority')
-    def test_filter_small_files_error_handling(self, mock_set_priority, mock_get_files):
-        """Test error handling when getting files fails."""
-        mock_get_files.return_value = []  # Empty list simulates failure
+    def test_filter_small_files_pending_metadata(self, mock_set_priority, mock_get_files):
+        """Test handling when metadata is not yet available (empty file list).
+        
+        This is a normal condition for recently added torrents, not an error.
+        """
+        mock_get_files.return_value = []  # Empty list means metadata not yet available
 
         mock_session = MagicMock()
         torrents = [{'hash': 'abc123', 'name': 'Test Torrent', 'added_on': 0}]
 
         stats = filter_small_files(mock_session, torrents, min_size_mb=50, dry_run=False)
 
-        assert stats['errors'] == 1
+        # Pending metadata should not be counted as an error
+        assert stats['pending_metadata'] == 1
+        assert stats['errors'] == 0
         assert stats['torrents_processed'] == 0
 
     @patch('scripts.qb_file_filter.get_torrent_files')
