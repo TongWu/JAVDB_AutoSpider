@@ -298,7 +298,8 @@ def get_torrent_files(session, torrent_hash, use_proxy=False):
         use_proxy: Whether to use proxy
         
     Returns:
-        list: List of file info dictionaries
+        list: List of file info dictionaries on success (may be empty if metadata not ready)
+        None: On API failure or exception (to distinguish from empty metadata)
     """
     files_url = f'{QB_BASE_URL}/api/v2/torrents/files'
     proxies = get_proxies_dict('qbittorrent', use_proxy)
@@ -312,14 +313,14 @@ def get_torrent_files(session, torrent_hash, use_proxy=False):
         )
         
         if response.status_code == 200:
-            return response.json()
+            return response.json()  # Returns [] if metadata not ready, or list of files
         else:
             logger.warning(f"Failed to get files for torrent {torrent_hash}: {response.status_code}")
-            return []
+            return None  # API failure - return None to distinguish from empty metadata
             
     except requests.RequestException as e:
         logger.error(f"Error getting files for torrent {torrent_hash}: {e}")
-        return []
+        return None  # Request exception - return None to distinguish from empty metadata
 
 
 def set_file_priority(session, torrent_hash, file_ids, priority, use_proxy=False):
@@ -473,7 +474,14 @@ def filter_small_files(session, torrents, min_size_mb, dry_run=False, use_proxy=
         
         files = get_torrent_files(session, torrent_hash, use_proxy)
         
-        if not files:
+        # Distinguish between API failure (None) and metadata not ready (empty list)
+        if files is None:
+            # API failure - this is an actual error
+            logger.warning(f"  Failed to get file list for: {torrent_name}")
+            stats['errors'] += 1
+            continue
+        
+        if len(files) == 0:
             # Metadata not yet available is a normal condition for recently added torrents
             # This should not be counted as an error
             logger.info(f"  Metadata not yet available for: {torrent_name} (will be processed on next run)")
