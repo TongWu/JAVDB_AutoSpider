@@ -405,6 +405,26 @@ class TestFilterSmallFiles:
 
     @patch('scripts.qb_file_filter.get_torrent_files')
     @patch('scripts.qb_file_filter.set_file_priority')
+    def test_filter_small_files_api_failure(self, mock_set_priority, mock_get_files):
+        """Test error handling when API call fails (returns None).
+        
+        API failures (non-200 status or exceptions) should be counted as errors,
+        not as pending metadata.
+        """
+        mock_get_files.return_value = None  # None indicates API failure
+
+        mock_session = MagicMock()
+        torrents = [{'hash': 'abc123', 'name': 'Test Torrent', 'added_on': 0}]
+
+        stats = filter_small_files(mock_session, torrents, min_size_mb=50, dry_run=False)
+
+        # API failure should be counted as an error, not pending metadata
+        assert stats['errors'] == 1
+        assert stats['pending_metadata'] == 0
+        assert stats['torrents_processed'] == 0
+
+    @patch('scripts.qb_file_filter.get_torrent_files')
+    @patch('scripts.qb_file_filter.set_file_priority')
     def test_filter_small_files_set_priority_failure(self, mock_set_priority, mock_get_files):
         """Test handling when set_file_priority fails."""
         mock_get_files.return_value = [
