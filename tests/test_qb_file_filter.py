@@ -197,7 +197,10 @@ class TestGetTorrentFiles:
 
     @patch('scripts.qb_file_filter.get_proxies_dict')
     def test_get_torrent_files_api_failure(self, mock_proxies):
-        """Test handling of API failure."""
+        """Test handling of API failure (non-200 status).
+        
+        API failures should return None to distinguish from empty metadata.
+        """
         mock_proxies.return_value = None
 
         mock_session = MagicMock()
@@ -207,11 +210,14 @@ class TestGetTorrentFiles:
 
         result = get_torrent_files(mock_session, 'abc123', use_proxy=False)
 
-        assert result == []
+        assert result is None
 
     @patch('scripts.qb_file_filter.get_proxies_dict')
     def test_get_torrent_files_network_error(self, mock_proxies):
-        """Test handling of network error."""
+        """Test handling of network error (exception).
+        
+        Request exceptions should return None to distinguish from empty metadata.
+        """
         import requests
         mock_proxies.return_value = None
 
@@ -220,7 +226,7 @@ class TestGetTorrentFiles:
 
         result = get_torrent_files(mock_session, 'abc123', use_proxy=False)
 
-        assert result == []
+        assert result is None
 
 
 class TestSetFilePriority:
