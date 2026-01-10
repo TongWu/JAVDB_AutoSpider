@@ -298,7 +298,8 @@ def get_torrent_files(session, torrent_hash, use_proxy=False):
         use_proxy: Whether to use proxy
         
     Returns:
-        list: List of file info dictionaries
+        list: List of file info dictionaries on success (may be empty if metadata not ready)
+        None: On API failure or exception (to distinguish from empty metadata)
     """
     files_url = f'{QB_BASE_URL}/api/v2/torrents/files'
     proxies = get_proxies_dict('qbittorrent', use_proxy)
@@ -312,14 +313,14 @@ def get_torrent_files(session, torrent_hash, use_proxy=False):
         )
         
         if response.status_code == 200:
-            return response.json()
+            return response.json()  # Returns [] if metadata not ready, or list of files
         else:
             logger.warning(f"Failed to get files for torrent {torrent_hash}: {response.status_code}")
-            return []
+            return None  # API failure - return None to distinguish from empty metadata
             
     except requests.RequestException as e:
         logger.error(f"Error getting files for torrent {torrent_hash}: {e}")
-        return []
+        return None  # Request exception - return None to distinguish from empty metadata
 
 
 def set_file_priority(session, torrent_hash, file_ids, priority, use_proxy=False):
@@ -457,7 +458,8 @@ def filter_small_files(session, torrents, min_size_mb, dry_run=False, use_proxy=
         'size_saved': 0,  # Total size of filtered files
         'local_files_deleted': 0,
         'local_size_deleted': 0,  # Total size of deleted local files
-        'errors': 0,
+        'pending_metadata': 0,  # Torrents waiting for metadata (not an error)
+        'errors': 0,  # Actual errors (API failures, etc.)
         'details': []  # List of (torrent_name, filtered_files_count, filtered_size, deleted_count, deleted_size)
     }
     
@@ -472,9 +474,18 @@ def filter_small_files(session, torrents, min_size_mb, dry_run=False, use_proxy=
         
         files = get_torrent_files(session, torrent_hash, use_proxy)
         
-        if not files:
-            logger.warning(f"  No files found or metadata not yet available for: {torrent_name}")
+        # Distinguish between API failure (None) and metadata not ready (empty list)
+        if files is None:
+            # API failure - this is an actual error
+            logger.warning(f"  Failed to get file list for: {torrent_name}")
             stats['errors'] += 1
+            continue
+        
+        if len(files) == 0:
+            # Metadata not yet available is a normal condition for recently added torrents
+            # This should not be counted as an error
+            logger.info(f"  Metadata not yet available for: {torrent_name} (will be processed on next run)")
+            stats['pending_metadata'] += 1
             continue
         
         stats['torrents_processed'] += 1
@@ -573,6 +584,7 @@ def print_summary(stats, min_size_mb, days, dry_run=False, delete_local_files_fl
     logger.info(f"Delete local files: {'Yes' if delete_local_files_flag else 'No'}")
     logger.info("-" * 70)
     logger.info(f"Torrents processed: {stats['torrents_processed']}")
+    logger.info(f"Torrents pending metadata: {stats.get('pending_metadata', 0)}")
     logger.info(f"Torrents with filtered files: {stats['torrents_with_filtered_files']}")
     logger.info(f"Files filtered (set to not download): {stats['files_filtered']}")
     logger.info(f"Files kept (above threshold): {stats['files_kept']}")
@@ -582,7 +594,8 @@ def print_summary(stats, min_size_mb, days, dry_run=False, delete_local_files_fl
         logger.info(f"Local files deleted: {stats.get('local_files_deleted', 0)}")
         logger.info(f"Local disk space freed: {format_size(stats.get('local_size_deleted', 0))}")
     
-    logger.info(f"Errors encountered: {stats['errors']}")
+    if stats['errors'] > 0:
+        logger.info(f"Errors encountered: {stats['errors']}")
     
     if stats['details']:
         logger.info("-" * 70)
@@ -643,6 +656,7 @@ def main():
             'size_saved': 0,
             'local_files_deleted': 0,
             'local_size_deleted': 0,
+            'pending_metadata': 0,
             'errors': 0,
             'details': []
         }, args.min_size, args.days, args.dry_run, args.delete_local_files)
@@ -661,10 +675,15 @@ def main():
     # Print summary
     print_summary(stats, args.min_size, args.days, args.dry_run, args.delete_local_files)
     
-    # Exit with error code if there were errors
+    # Exit with error code only if there were actual errors (not pending metadata)
+    # Pending metadata is a normal condition for recently added torrents
     if stats['errors'] > 0 and stats['torrents_processed'] == 0:
-        logger.error("All torrent processing failed!")
+        logger.error("All torrent processing failed due to errors!")
         sys.exit(1)
+    
+    # Log info if all torrents are pending metadata (this is normal, not an error)
+    if stats.get('pending_metadata', 0) > 0 and stats['torrents_processed'] == 0 and stats['errors'] == 0:
+        logger.info("All torrents are waiting for metadata. They will be processed on the next run.")
 
 
 if __name__ == '__main__':
