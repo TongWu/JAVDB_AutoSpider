@@ -1,16 +1,16 @@
 name: Publish to GitHub Container Registry
 
 on:
-  # push:  # DISABLED FOR PRIVATE REPO - enabled in public repo
-  #   branches:
-  #     - main
-  #     - master
-  #   tags:
-  #     - 'v*.*.*'
-  #   paths:
-  #     - '**.py'
-  #     - 'pytest.ini'
-  #     - 'docker/**'
+  push:  # DISABLED FOR PRIVATE REPO - enabled in public repo
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*.*.*'
+    paths:
+      - '**.py'
+      - 'pytest.ini'
+      - 'docker/**'
   workflow_dispatch:  # Allow manual trigger
 
 env:
@@ -53,7 +53,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix={{branch}}-
+            type=sha,prefix=sha-,enable=${{ !startsWith(github.ref, 'refs/tags/') }}
       
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -77,4 +77,3 @@ jobs:
           echo '```bash' >> $GITHUB_STEP_SUMMARY
           echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-
