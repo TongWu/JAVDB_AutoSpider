@@ -186,24 +186,26 @@ jobs:
           # Note: defaults here match QB_FILE_FILTER_MIN_SIZE_MB in config.py.example (100MB)
           MIN_SIZE_MB: ${{ github.event.inputs.min_size_mb || '100' }}
           DAYS: ${{ github.event.inputs.days || '2' }}
-          CATEGORIES: ${{ github.event.inputs.categories || '["Ad Hoc", "Daily Ingestion"]' }}
+          # Pass categories via env var to avoid command injection from eval
+          QB_FILTER_CATEGORIES: ${{ github.event.inputs.categories || '["Ad Hoc", "Daily Ingestion"]' }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
           DELETE_LOCAL_FILES: ${{ github.event.inputs.delete_local_files || 'false' }}
         run: |
-          ARGS="--min-size $MIN_SIZE_MB --days $DAYS --use-proxy"
+          # Build argument array safely without eval
+          ARGS=(--min-size "$MIN_SIZE_MB" --days "$DAYS" --use-proxy)
           
-          # Add categories filter (JSON array format)
-          if [ -n "$CATEGORIES" ]; then
-            ARGS="$ARGS --categories '$CATEGORIES'"
+          # Add categories filter via env var (script reads QB_FILTER_CATEGORIES)
+          if [ -n "$QB_FILTER_CATEGORIES" ]; then
+            ARGS+=(--categories "$QB_FILTER_CATEGORIES")
           fi
           
           if [ "$DRY_RUN" = "true" ]; then
-            ARGS="$ARGS --dry-run"
+            ARGS+=(--dry-run)
           fi
           
           if [ "$DELETE_LOCAL_FILES" = "true" ]; then
-            ARGS="$ARGS --delete-local-files"
+            ARGS+=(--delete-local-files)
           fi
           
-          echo "Running: python3 scripts/qb_file_filter.py $ARGS"
-          eval python3 scripts/qb_file_filter.py $ARGS
+          echo "Running: python3 scripts/qb_file_filter.py ${ARGS[*]}"
+          python3 scripts/qb_file_filter.py "${ARGS[@]}"
