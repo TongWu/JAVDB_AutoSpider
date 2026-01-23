@@ -151,7 +151,7 @@ class TestGetRecentTorrents:
 
     @patch('scripts.qb_file_filter.get_proxies_dict')
     def test_get_recent_torrents_with_category(self, mock_proxies):
-        """Test filtering by category."""
+        """Test filtering by single category (backward compatibility)."""
         mock_proxies.return_value = None
 
         mock_session = MagicMock()
@@ -160,16 +160,90 @@ class TestGetRecentTorrents:
         import time
         current_time = int(time.time())
         mock_response.json.return_value = [
-            {'hash': 'abc123', 'name': 'Torrent 1', 'added_on': current_time - 3600},
+            {'hash': 'abc123', 'name': 'Torrent 1', 'added_on': current_time - 3600, 'category': 'JavDB'},
+            {'hash': 'def456', 'name': 'Torrent 2', 'added_on': current_time - 3600, 'category': 'Other'},
         ]
         mock_session.get.return_value = mock_response
 
         result = get_recent_torrents(mock_session, days=2, category='JavDB', use_proxy=False)
 
-        # Verify category parameter was passed
-        mock_session.get.assert_called_once()
-        call_args = mock_session.get.call_args
-        assert call_args[1]['params']['category'] == 'JavDB'
+        # Only torrent with matching category should be returned
+        assert len(result) == 1
+        assert result[0]['name'] == 'Torrent 1'
+        assert result[0]['category'] == 'JavDB'
+
+    @patch('scripts.qb_file_filter.get_proxies_dict')
+    def test_get_recent_torrents_with_categories_list(self, mock_proxies):
+        """Test filtering by multiple categories."""
+        mock_proxies.return_value = None
+
+        mock_session = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        import time
+        current_time = int(time.time())
+        mock_response.json.return_value = [
+            {'hash': 'abc123', 'name': 'Torrent 1', 'added_on': current_time - 3600, 'category': 'Ad Hoc'},
+            {'hash': 'def456', 'name': 'Torrent 2', 'added_on': current_time - 3600, 'category': 'Daily Ingestion'},
+            {'hash': 'ghi789', 'name': 'Torrent 3', 'added_on': current_time - 3600, 'category': 'Other'},
+        ]
+        mock_session.get.return_value = mock_response
+
+        result = get_recent_torrents(
+            mock_session, days=2, categories=['Ad Hoc', 'Daily Ingestion'], use_proxy=False
+        )
+
+        # Only torrents with matching categories should be returned
+        assert len(result) == 2
+        assert result[0]['category'] == 'Ad Hoc'
+        assert result[1]['category'] == 'Daily Ingestion'
+
+    @patch('scripts.qb_file_filter.get_proxies_dict')
+    def test_get_recent_torrents_categories_overrides_category(self, mock_proxies):
+        """Test that categories parameter overrides category parameter."""
+        mock_proxies.return_value = None
+
+        mock_session = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        import time
+        current_time = int(time.time())
+        mock_response.json.return_value = [
+            {'hash': 'abc123', 'name': 'Torrent 1', 'added_on': current_time - 3600, 'category': 'Ad Hoc'},
+            {'hash': 'def456', 'name': 'Torrent 2', 'added_on': current_time - 3600, 'category': 'JavDB'},
+        ]
+        mock_session.get.return_value = mock_response
+
+        # Both category and categories provided - categories should take precedence
+        result = get_recent_torrents(
+            mock_session, days=2, category='JavDB', categories=['Ad Hoc'], use_proxy=False
+        )
+
+        # Only 'Ad Hoc' should be returned because categories overrides category
+        assert len(result) == 1
+        assert result[0]['category'] == 'Ad Hoc'
+
+    @patch('scripts.qb_file_filter.get_proxies_dict')
+    def test_get_recent_torrents_no_category_filter(self, mock_proxies):
+        """Test that all torrents are returned when no category filter is specified."""
+        mock_proxies.return_value = None
+
+        mock_session = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        import time
+        current_time = int(time.time())
+        mock_response.json.return_value = [
+            {'hash': 'abc123', 'name': 'Torrent 1', 'added_on': current_time - 3600, 'category': 'Cat1'},
+            {'hash': 'def456', 'name': 'Torrent 2', 'added_on': current_time - 3600, 'category': 'Cat2'},
+            {'hash': 'ghi789', 'name': 'Torrent 3', 'added_on': current_time - 3600, 'category': ''},
+        ]
+        mock_session.get.return_value = mock_response
+
+        result = get_recent_torrents(mock_session, days=2, use_proxy=False)
+
+        # All recent torrents should be returned
+        assert len(result) == 3
 
 
 class TestGetTorrentFiles:
