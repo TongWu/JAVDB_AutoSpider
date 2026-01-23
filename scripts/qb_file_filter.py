@@ -112,7 +112,13 @@ def parse_arguments():
         '--category',
         type=str,
         default=None,
-        help='Filter only torrents in this category (default: all categories)'
+        help='Filter only torrents in this category (default: all categories). Deprecated: use --categories instead.'
+    )
+    parser.add_argument(
+        '--categories',
+        type=str,
+        default=None,
+        help='JSON array of categories to filter (e.g., \'["Ad Hoc", "Daily Ingestion"]\'). If specified, overrides --category.'
     )
     parser.add_argument(
         '--delete-local-files',
@@ -239,14 +245,15 @@ def login_to_qbittorrent(session, use_proxy=False):
         return False
 
 
-def get_recent_torrents(session, days=2, category=None, use_proxy=False):
+def get_recent_torrents(session, days=2, category=None, categories=None, use_proxy=False):
     """
     Get torrents added within the specified number of days.
     
     Args:
         session: Requests session with login cookies
         days: Number of days to look back (default 2 for today and yesterday)
-        category: Optional category filter
+        category: Optional single category filter (deprecated, use categories instead)
+        categories: Optional list of categories to filter
         use_proxy: Whether to use proxy
         
     Returns:
@@ -255,9 +262,17 @@ def get_recent_torrents(session, days=2, category=None, use_proxy=False):
     info_url = f'{QB_BASE_URL}/api/v2/torrents/info'
     proxies = get_proxies_dict('qbittorrent', use_proxy)
     
+    # Build category filter list
+    category_filter = None
+    if categories:
+        # Use categories list if provided
+        category_filter = categories
+    elif category:
+        # Fallback to single category for backward compatibility
+        category_filter = [category]
+    
+    # qBittorrent API only supports single category filter, so we get all and filter in code
     params = {}
-    if category:
-        params['category'] = category
     
     try:
         response = session.get(info_url, params=params, timeout=REQUEST_TIMEOUT, proxies=proxies)
@@ -270,14 +285,27 @@ def get_recent_torrents(session, days=2, category=None, use_proxy=False):
             cutoff_date = datetime.now() - timedelta(days=days - 1)
             cutoff_timestamp = int(cutoff_date.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
             
-            # Filter torrents by added_on timestamp
+            # Filter torrents by added_on timestamp and category
             recent_torrents = []
             for torrent in torrents:
                 added_on = torrent.get('added_on', 0)
-                if added_on >= cutoff_timestamp:
-                    recent_torrents.append(torrent)
+                torrent_category = torrent.get('category', '')
+                
+                # Check time filter
+                if added_on < cutoff_timestamp:
+                    continue
+                
+                # Check category filter if specified
+                if category_filter:
+                    if torrent_category not in category_filter:
+                        continue
+                
+                recent_torrents.append(torrent)
             
-            logger.info(f"Found {len(recent_torrents)} torrents added in the last {days} day(s)")
+            if category_filter:
+                logger.info(f"Found {len(recent_torrents)} torrents in categories {category_filter} added in the last {days} day(s)")
+            else:
+                logger.info(f"Found {len(recent_torrents)} torrents added in the last {days} day(s)")
             return recent_torrents
         else:
             logger.warning(f"Failed to get torrent list: {response.status_code}")
@@ -619,7 +647,25 @@ def main():
     args = parse_arguments()
     
     logger.info("Starting qBittorrent File Filter...")
-    logger.info(f"Configuration: min_size={args.min_size}MB, days={args.days}, dry_run={args.dry_run}, delete_local_files={args.delete_local_files}")
+    
+    # Parse categories from JSON array string
+    categories_list = None
+    if args.categories:
+        import json
+        try:
+            categories_list = json.loads(args.categories)
+            if not isinstance(categories_list, list):
+                logger.error(f"--categories must be a JSON array, got: {type(categories_list).__name__}")
+                sys.exit(1)
+            # Filter out empty strings
+            categories_list = [c for c in categories_list if c]
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse --categories as JSON array: {e}")
+            logger.error(f"Expected format: '[\"Category 1\", \"Category 2\"]'")
+            sys.exit(1)
+        logger.info(f"Configuration: min_size={args.min_size}MB, days={args.days}, categories={categories_list}, dry_run={args.dry_run}, delete_local_files={args.delete_local_files}")
+    else:
+        logger.info(f"Configuration: min_size={args.min_size}MB, days={args.days}, category={args.category}, dry_run={args.dry_run}, delete_local_files={args.delete_local_files}")
     
     # Initialize proxy helper
     initialize_proxy_helper(args.use_proxy)
@@ -643,6 +689,7 @@ def main():
         session,
         days=args.days,
         category=args.category,
+        categories=categories_list,
         use_proxy=args.use_proxy
     )
     
