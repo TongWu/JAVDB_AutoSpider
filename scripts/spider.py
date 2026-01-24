@@ -839,10 +839,16 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
                         empty_message_div is not None
                     )
                     
-                    if not is_login_page and not age_modal and has_no_content_msg:
-                        empty_msg_text = empty_message_div.get_text().strip() if empty_message_div else 'N/A'
+                    # If empty-message div is found, this is a valid empty page regardless of age_modal
+                    # (age modal is just an overlay, doesn't affect page content validity)
+                    if not is_login_page and empty_message_div is not None:
+                        empty_msg_text = empty_message_div.get_text().strip()
                         logger.info(f"[Page {page_num}] Page exists but has no content (empty-message: '{empty_msg_text}')")
                         # This is a valid empty page - no need to retry
+                        return html, False, True
+                    elif not is_login_page and not age_modal and has_no_content_msg:
+                        # Fallback for text-based detection (No content yet, etc.)
+                        logger.info(f"[Page {page_num}] Page exists but has no content (text pattern detected)")
                         return html, False, True
                     elif not is_login_page and not age_modal and len(html) > 20000:
                         # Large HTML but no movie list - might be a valid page, treat as empty
