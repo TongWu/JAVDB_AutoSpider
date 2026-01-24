@@ -125,62 +125,97 @@ def get_proxies_dict(module_name, use_proxy_flag):
     
     return global_proxy_helper.get_proxies_dict(module_name, use_proxy_flag)
 
-def find_latest_adhoc_csv_today():
+def find_latest_adhoc_csv():
     """
-    Find the most recently created/modified AdHoc CSV file from today's dated directory.
+    Find the most recently created/modified AdHoc CSV file.
     
     This function handles the case where spider generates a custom-named CSV file
     (e.g., Javdb_AdHoc_actors_森日向子_20251224.csv) and qb_uploader needs to find it.
     
+    Note: This function uses wildcard patterns (not date-specific) to handle 
+    cross-midnight scenarios where spider runs before midnight but qb_uploader 
+    runs after midnight. It relies on file modification time to find the most 
+    recent file.
+    
     Returns:
         str or None: Path to the most recent AdHoc CSV file, or None if not found
     """
-    current_date = datetime.now().strftime("%Y%m%d")
-    
-    # Look for any AdHoc CSV file from today using pattern matching
-    # Pattern: Javdb_AdHoc_*_{date}.csv
-    adhoc_pattern = f'Javdb_AdHoc_*_{current_date}.csv'
+    # Use wildcard pattern to find the most recent AdHoc CSV file
+    # Pattern: Javdb_AdHoc_*.csv (any date)
+    # This handles cross-midnight scenarios where spider generates file on day N
+    # but qb_uploader runs on day N+1
+    adhoc_pattern = 'Javdb_AdHoc_*.csv'
     
     latest_file = find_latest_report_in_dated_dirs(AD_HOC_DIR, adhoc_pattern)
     
     if latest_file:
         return latest_file
     
-    # Fallback: try the legacy pattern without AdHoc prefix
-    legacy_pattern = f'*_{current_date}.csv'
+    # Fallback: try to find any CSV file (legacy pattern)
+    legacy_pattern = 'Javdb_*.csv'
     return find_latest_report_in_dated_dirs(AD_HOC_DIR, legacy_pattern)
+
+
+def find_latest_daily_csv():
+    """
+    Find the most recently created/modified Daily CSV file.
+    
+    This function uses wildcard patterns (not date-specific) to handle 
+    cross-midnight scenarios where spider runs before midnight but qb_uploader 
+    runs after midnight. It relies on file modification time to find the most 
+    recent file.
+    
+    Returns:
+        str or None: Path to the most recent Daily CSV file, or None if not found
+    """
+    # Use wildcard pattern to find the most recent Daily CSV file
+    # Pattern: Javdb_TodayTitle_*.csv (any date)
+    daily_pattern = 'Javdb_TodayTitle_*.csv'
+    
+    return find_latest_report_in_dated_dirs(DAILY_REPORT_DIR, daily_pattern)
 
 
 def get_csv_filename(mode='daily'):
     """
-    Get the CSV filename for current date and mode with dated subdirectory (YYYY/MM).
+    Get the CSV filename for the specified mode with dated subdirectory (YYYY/MM).
     
-    For adhoc mode, this function first tries to auto-discover the most recent
-    adhoc CSV file generated today by the spider. This handles custom-named files
-    like 'Javdb_AdHoc_actors_ActorName_20251224.csv'.
+    This function auto-discovers the most recent CSV file using wildcard patterns,
+    which handles cross-midnight scenarios where spider runs before midnight but
+    qb_uploader runs after midnight.
+    
+    For adhoc mode: looks for Javdb_AdHoc_*.csv files
+    For daily mode: looks for Javdb_TodayTitle_*.csv files
     
     Args:
         mode: 'daily' or 'adhoc'
     
     Returns:
-        str: Path to the CSV file
+        str: Path to the CSV file (auto-discovered or fallback to date-based naming)
     """
     current_date = datetime.now().strftime("%Y%m%d")
     
     if mode == 'adhoc':
-        # Try to auto-discover the latest adhoc CSV from today
-        latest_adhoc = find_latest_adhoc_csv_today()
+        # Try to auto-discover the latest adhoc CSV
+        latest_adhoc = find_latest_adhoc_csv()
         if latest_adhoc:
             logger.info(f"Auto-discovered adhoc CSV: {latest_adhoc}")
             return latest_adhoc
         else:
             # Fallback to default naming if no file found
-            logger.warning("No adhoc CSV found for today, using default naming pattern")
+            logger.warning("No adhoc CSV found, using default naming pattern with current date")
             csv_filename = f'Javdb_TodayTitle_{current_date}.csv'
             return get_dated_report_path(AD_HOC_DIR, csv_filename)
     else:
-        csv_filename = f'Javdb_TodayTitle_{current_date}.csv'
-        return get_dated_report_path(DAILY_REPORT_DIR, csv_filename)
+        # Try to auto-discover the latest daily CSV
+        latest_daily = find_latest_daily_csv()
+        if latest_daily:
+            logger.info(f"Auto-discovered daily CSV: {latest_daily}")
+            return latest_daily
+        else:
+            # Fallback to default naming if no file found
+            logger.warning("No daily CSV found, using default naming pattern with current date")
+            csv_filename = f'Javdb_TodayTitle_{current_date}.csv'
+            return get_dated_report_path(DAILY_REPORT_DIR, csv_filename)
 
 def test_qbittorrent_connection(use_proxy=False):
     """Test if qBittorrent is accessible"""
