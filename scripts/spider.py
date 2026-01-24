@@ -436,8 +436,8 @@ def attempt_login_refresh():
         # Import login functions from login.py
         from scripts.login import login_with_retry, update_config_file
         
-        # Perform login with retry logic (max 5 attempts), passing proxy config
-        success, session_cookie, message = login_with_retry(JAVDB_USERNAME, JAVDB_PASSWORD, max_retries=5, proxies=login_proxies)
+        # Perform login with retry logic (max 10 attempts), passing proxy config
+        success, session_cookie, message = login_with_retry(JAVDB_USERNAME, JAVDB_PASSWORD, max_retries=10, proxies=login_proxies)
         
         if success and session_cookie:
             logger.info(f"✓ Login successful, new session cookie obtained")
