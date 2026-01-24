@@ -509,8 +509,9 @@ class RequestHandler:
                 empty_message = soup.find('div', class_='empty-message')
                 
                 # If page has empty-message, it's a valid empty page - return success
-                if empty_message and not age_modal:
-                    logger.debug(f"[CF Bypass] {context_msg}: Valid empty page detected ('{empty_message.get_text().strip()}')")
+                # Note: age modal is just an overlay, doesn't affect content validity
+                if empty_message:
+                    logger.debug(f"[CF Bypass] {context_msg}: Valid empty page detected ('{empty_message.get_text().strip()}', age_modal={age_modal is not None})")
                     return html_content, True, False
                 
                 if age_modal:
