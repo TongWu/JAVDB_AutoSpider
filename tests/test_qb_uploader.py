@@ -628,22 +628,22 @@ class TestReadCsvFile:
 
 
 class TestFindLatestAdhocCsv:
-    """Test cases for find_latest_adhoc_csv_today function."""
+    """Test cases for find_latest_adhoc_csv function."""
     
     def test_find_latest_adhoc_csv_no_files(self, temp_dir):
         """Test that function returns None when no adhoc CSV files exist."""
         from unittest.mock import patch
-        from scripts.qb_uploader import find_latest_adhoc_csv_today
+        from scripts.qb_uploader import find_latest_adhoc_csv
         
         with patch('scripts.qb_uploader.AD_HOC_DIR', temp_dir):
-            result = find_latest_adhoc_csv_today()
+            result = find_latest_adhoc_csv()
             assert result is None
     
     def test_find_latest_adhoc_csv_with_custom_name(self, temp_dir):
         """Test that function finds a custom-named adhoc CSV file."""
         from unittest.mock import patch
         from datetime import datetime
-        from scripts.qb_uploader import find_latest_adhoc_csv_today
+        from scripts.qb_uploader import find_latest_adhoc_csv
         
         # Create dated directory structure
         current_date = datetime.now().strftime("%Y%m%d")
@@ -658,7 +658,7 @@ class TestFindLatestAdhocCsv:
             f.write('test')
         
         with patch('scripts.qb_uploader.AD_HOC_DIR', temp_dir):
-            result = find_latest_adhoc_csv_today()
+            result = find_latest_adhoc_csv()
             assert result is not None
             assert 'Javdb_AdHoc_actors_ActorName' in result
     
@@ -667,7 +667,7 @@ class TestFindLatestAdhocCsv:
         import time
         from unittest.mock import patch
         from datetime import datetime
-        from scripts.qb_uploader import find_latest_adhoc_csv_today
+        from scripts.qb_uploader import find_latest_adhoc_csv
         
         # Create dated directory structure
         current_date = datetime.now().strftime("%Y%m%d")
@@ -689,9 +689,35 @@ class TestFindLatestAdhocCsv:
             f.write('second')
         
         with patch('scripts.qb_uploader.AD_HOC_DIR', temp_dir):
-            result = find_latest_adhoc_csv_today()
+            result = find_latest_adhoc_csv()
             assert result is not None
             assert 'SecondMaker' in result
+    
+    def test_find_latest_adhoc_csv_cross_midnight(self, temp_dir):
+        """Test that function finds yesterday's file when running after midnight."""
+        import time
+        from unittest.mock import patch
+        from datetime import datetime, timedelta
+        from scripts.qb_uploader import find_latest_adhoc_csv
+        
+        # Simulate yesterday's file (cross-midnight scenario)
+        yesterday = datetime.now() - timedelta(days=1)
+        yesterday_date = yesterday.strftime("%Y%m%d")
+        year = yesterday.strftime('%Y')
+        month = yesterday.strftime('%m')
+        dated_dir = os.path.join(temp_dir, year, month)
+        os.makedirs(dated_dir, exist_ok=True)
+        
+        # Create yesterday's CSV file
+        yesterday_csv = os.path.join(dated_dir, f'Javdb_AdHoc_actors_YesterdayActor_{yesterday_date}.csv')
+        with open(yesterday_csv, 'w') as f:
+            f.write('yesterday')
+        
+        with patch('scripts.qb_uploader.AD_HOC_DIR', temp_dir):
+            result = find_latest_adhoc_csv()
+            # Should find yesterday's file even though "today" is different
+            assert result is not None
+            assert 'YesterdayActor' in result
 
 
 class TestGetCsvFilenameAdhocAutoDiscovery:
@@ -733,8 +759,31 @@ class TestGetCsvFilenameAdhocAutoDiscovery:
             # Should fall back to default naming
             assert 'Javdb_TodayTitle' in result or 'AdHoc' in result
     
-    def test_get_csv_filename_daily_mode_unchanged(self, temp_dir):
-        """Test that daily mode still works with standard naming."""
+    def test_get_csv_filename_daily_mode_auto_discovers(self, temp_dir):
+        """Test that daily mode auto-discovers existing CSV files."""
+        from unittest.mock import patch
+        from datetime import datetime
+        from scripts.qb_uploader import get_csv_filename
+        
+        # Create dated directory structure
+        current_date = datetime.now().strftime("%Y%m%d")
+        year = datetime.now().strftime('%Y')
+        month = datetime.now().strftime('%m')
+        dated_dir = os.path.join(temp_dir, year, month)
+        os.makedirs(dated_dir, exist_ok=True)
+        
+        # Create a daily CSV file
+        daily_csv = os.path.join(dated_dir, f'Javdb_TodayTitle_{current_date}.csv')
+        with open(daily_csv, 'w') as f:
+            f.write('test')
+        
+        with patch('scripts.qb_uploader.DAILY_REPORT_DIR', temp_dir):
+            result = get_csv_filename(mode='daily')
+            assert result is not None
+            assert f'Javdb_TodayTitle_{current_date}.csv' in result
+    
+    def test_get_csv_filename_daily_mode_fallback(self, temp_dir):
+        """Test that daily mode falls back to default naming when no file found."""
         from unittest.mock import patch
         from datetime import datetime
         from scripts.qb_uploader import get_csv_filename
@@ -743,7 +792,33 @@ class TestGetCsvFilenameAdhocAutoDiscovery:
         
         with patch('scripts.qb_uploader.DAILY_REPORT_DIR', temp_dir):
             result = get_csv_filename(mode='daily')
+            # Should fall back to default naming with current date
             assert f'Javdb_TodayTitle_{current_date}.csv' in result
+    
+    def test_get_csv_filename_daily_mode_cross_midnight(self, temp_dir):
+        """Test that daily mode finds yesterday's file after midnight."""
+        from unittest.mock import patch
+        from datetime import datetime, timedelta
+        from scripts.qb_uploader import get_csv_filename
+        
+        # Simulate yesterday's file (cross-midnight scenario)
+        yesterday = datetime.now() - timedelta(days=1)
+        yesterday_date = yesterday.strftime("%Y%m%d")
+        year = yesterday.strftime('%Y')
+        month = yesterday.strftime('%m')
+        dated_dir = os.path.join(temp_dir, year, month)
+        os.makedirs(dated_dir, exist_ok=True)
+        
+        # Create yesterday's CSV file
+        yesterday_csv = os.path.join(dated_dir, f'Javdb_TodayTitle_{yesterday_date}.csv')
+        with open(yesterday_csv, 'w') as f:
+            f.write('yesterday')
+        
+        with patch('scripts.qb_uploader.DAILY_REPORT_DIR', temp_dir):
+            result = get_csv_filename(mode='daily')
+            # Should find yesterday's file since it's the most recent
+            assert result is not None
+            assert yesterday_date in result
 
 
 class TestInitializeProxyHelper:
