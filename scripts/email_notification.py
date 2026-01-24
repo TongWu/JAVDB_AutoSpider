@@ -75,7 +75,7 @@ from utils.masking import mask_email, mask_server, mask_full
 from utils.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 
 # Import path helper for dated subdirectories
-from utils.path_helper import get_dated_report_path
+from utils.path_helper import get_dated_report_path, find_latest_report_in_dated_dirs
 
 
 def extract_adhoc_info_from_csv(csv_path):
@@ -166,43 +166,68 @@ def format_adhoc_info(url_type, display_name):
     return f"{label}: {name}"
 
 
-def find_latest_adhoc_csv(adhoc_dir, date_str):
+def find_latest_adhoc_csv(adhoc_dir):
     """
-    Find the latest Ad-Hoc CSV file for the given date.
+    Find the most recently created/modified Ad-Hoc CSV file.
     
-    Searches in dated subdirectories (YYYY/MM) for files matching:
-    Javdb_AdHoc_*_{date_str}.csv
+    This function uses wildcard patterns (not date-specific) to handle 
+    cross-midnight scenarios where spider runs before midnight but 
+    email notification runs after midnight.
     
     Args:
         adhoc_dir: Base Ad-Hoc directory (e.g., reports/AdHoc)
-        date_str: Date string in YYYYMMDD format
     
     Returns:
         str: Full path to the latest CSV file, or None if not found
     """
-    import glob
+    # Use wildcard pattern to find the most recent AdHoc CSV file
+    # Pattern: Javdb_AdHoc_*.csv (any date)
+    adhoc_pattern = 'Javdb_AdHoc_*.csv'
     
-    # Determine the dated subdirectory
-    year = date_str[:4]
-    month = date_str[4:6]
-    dated_dir = os.path.join(adhoc_dir, year, month)
+    latest_file = find_latest_report_in_dated_dirs(adhoc_dir, adhoc_pattern)
     
-    if not os.path.exists(dated_dir):
-        logger.warning(f"Ad-Hoc dated directory not found: {dated_dir}")
-        return None
+    if latest_file:
+        logger.info(f"Found Ad-Hoc CSV: {latest_file}")
+        return latest_file
     
-    # Find all matching CSV files
-    pattern = os.path.join(dated_dir, f'Javdb_AdHoc_*_{date_str}.csv')
-    matches = glob.glob(pattern)
+    # Fallback: try to find any CSV file (legacy pattern)
+    legacy_pattern = 'Javdb_*.csv'
+    latest_legacy = find_latest_report_in_dated_dirs(adhoc_dir, legacy_pattern)
     
-    if not matches:
-        logger.warning(f"No Ad-Hoc CSV files found matching pattern: {pattern}")
-        return None
+    if latest_legacy:
+        logger.info(f"Found Ad-Hoc CSV (legacy pattern): {latest_legacy}")
+        return latest_legacy
     
-    # Return the most recently modified one
-    latest = max(matches, key=os.path.getmtime)
-    logger.info(f"Found Ad-Hoc CSV: {latest}")
-    return latest
+    logger.warning(f"No Ad-Hoc CSV files found in {adhoc_dir}")
+    return None
+
+
+def find_latest_daily_csv(daily_dir):
+    """
+    Find the most recently created/modified Daily CSV file.
+    
+    This function uses wildcard patterns (not date-specific) to handle 
+    cross-midnight scenarios where spider runs before midnight but 
+    email notification runs after midnight.
+    
+    Args:
+        daily_dir: Base Daily Report directory (e.g., reports/DailyReport)
+    
+    Returns:
+        str: Full path to the latest CSV file, or None if not found
+    """
+    # Use wildcard pattern to find the most recent Daily CSV file
+    # Pattern: Javdb_TodayTitle_*.csv (any date)
+    daily_pattern = 'Javdb_TodayTitle_*.csv'
+    
+    latest_file = find_latest_report_in_dated_dirs(daily_dir, daily_pattern)
+    
+    if latest_file:
+        logger.info(f"Found Daily CSV: {latest_file}")
+        return latest_file
+    
+    logger.warning(f"No Daily CSV files found in {daily_dir}")
+    return None
 
 
 def parse_arguments():
@@ -1068,10 +1093,11 @@ def main():
     ban_summary = get_proxy_ban_summary()
     
     # Determine pipeline mode and CSV path
-    today_str = datetime.now().strftime('%Y%m%d')
     mode = args.mode
     
     # Determine CSV path (using dated subdirectory YYYY/MM)
+    # Note: We use wildcard-based discovery (not date-specific) to handle cross-midnight
+    # scenarios where spider runs before midnight but email notification runs after midnight
     if args.csv_path:
         csv_path = args.csv_path
         # Auto-detect mode from CSV path if not explicitly set and path looks like adhoc
@@ -1080,9 +1106,10 @@ def main():
     else:
         if mode == 'adhoc':
             # For adhoc mode without explicit path, try to find the latest adhoc CSV
-            csv_path = find_latest_adhoc_csv(AD_HOC_DIR, today_str)
+            csv_path = find_latest_adhoc_csv(AD_HOC_DIR)
         else:
-            csv_path = get_dated_report_path(DAILY_REPORT_DIR, f'Javdb_TodayTitle_{today_str}.csv')
+            # For daily mode without explicit path, try to find the latest daily CSV
+            csv_path = find_latest_daily_csv(DAILY_REPORT_DIR)
     
     # Extract Ad-Hoc information from CSV filename
     adhoc_url_type, adhoc_display_name = extract_adhoc_info_from_csv(csv_path)
