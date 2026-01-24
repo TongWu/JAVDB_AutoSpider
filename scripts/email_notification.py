@@ -1094,6 +1094,7 @@ def main():
     
     # Determine pipeline mode and CSV path
     mode = args.mode
+    today_str = datetime.now().strftime('%Y%m%d')  # For email subject display
     
     # Determine CSV path (using dated subdirectory YYYY/MM)
     # Note: We use wildcard-based discovery (not date-specific) to handle cross-midnight
