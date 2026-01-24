@@ -298,7 +298,6 @@ def login_javdb(username, password, proxies=None):
         for k, v in proxies.items():
             if v:
                 # Simple masking: show protocol and port only
-                import re
                 match = re.match(r'(https?://)([^:]+):([^@]+)@([^:]+):(\d+)', v)
                 if match:
                     masked_proxies[k] = f"{match.group(1)}***:***@***:{match.group(5)}"
