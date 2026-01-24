@@ -827,11 +827,21 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
                     is_login_page = '登入' in title_text or 'login' in title_text.lower()
                     
                     # Check if it's a valid empty results page
-                    # "No content yet" means the page exists but has no movies
-                    has_no_content_msg = 'No content yet' in page_text or 'No result' in page_text
+                    # Various indicators that the page exists but has no movies:
+                    # 1. Check for empty-message div (e.g. <div class="empty-message">暫無內容</div>)
+                    empty_message_div = soup.find('div', class_='empty-message')
+                    # 2. Check for text patterns in various languages
+                    has_no_content_msg = (
+                        'No content yet' in page_text or 
+                        'No result' in page_text or
+                        '暫無內容' in page_text or
+                        '暂无内容' in page_text or
+                        empty_message_div is not None
+                    )
                     
                     if not is_login_page and not age_modal and has_no_content_msg:
-                        logger.info(f"[Page {page_num}] Page exists but has no content ('No content yet' detected)")
+                        empty_msg_text = empty_message_div.get_text().strip() if empty_message_div else 'N/A'
+                        logger.info(f"[Page {page_num}] Page exists but has no content (empty-message: '{empty_msg_text}')")
                         # This is a valid empty page - no need to retry
                         return html, False, True
                     elif not is_login_page and not age_modal and len(html) > 20000:
