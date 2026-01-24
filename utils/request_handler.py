@@ -505,12 +505,19 @@ class RequestHandler:
                 # If age modal exists but no movie-list/video-detail, we need to handle over18 via CF bypass
                 soup = BeautifulSoup(html_content, 'html.parser')
                 age_modal = soup.find('div', class_='modal is-active over18-modal')
+                # Also check for valid empty page (e.g. <div class="empty-message">暫無內容</div>)
+                empty_message = soup.find('div', class_='empty-message')
+                
+                # If page has empty-message, it's a valid empty page - return success
+                if empty_message and not age_modal:
+                    logger.debug(f"[CF Bypass] {context_msg}: Valid empty page detected ('{empty_message.get_text().strip()}')")
+                    return html_content, True, False
                 
                 if age_modal:
                     movie_list = soup.find('div', class_=lambda x: x and 'movie-list' in x)
                     detail_content = soup.find('div', class_='video-detail')
                     
-                    if not movie_list and not detail_content:
+                    if not movie_list and not detail_content and not empty_message:
                         # Age modal exists but no content - need to click over18 via CF bypass
                         logger.debug(f"[CF Bypass] {context_msg}: Age modal detected without content, attempting over18 bypass via CF...")
                         
@@ -552,9 +559,15 @@ class RequestHandler:
                                         soup2 = BeautifulSoup(html_content2, 'html.parser')
                                         movie_list2 = soup2.find('div', class_=lambda x: x and 'movie-list' in x)
                                         detail_content2 = soup2.find('div', class_='video-detail')
+                                        # Also check for valid empty page (e.g. <div class="empty-message">暫無內容</div>)
+                                        empty_message2 = soup2.find('div', class_='empty-message')
                                         
                                         if movie_list2 or detail_content2:
                                             logger.debug(f"[CF Bypass] {context_msg}: Over18 bypass successful, got content!")
+                                            return html_content2, True, False
+                                        elif empty_message2:
+                                            # Valid empty page - return success
+                                            logger.debug(f"[CF Bypass] {context_msg}: Over18 bypass got valid empty page ('{empty_message2.get_text().strip()}')")
                                             return html_content2, True, False
                                         else:
                                             logger.warning(f"[CF Bypass] {context_msg}: Over18 bypass did not help, still no content")
