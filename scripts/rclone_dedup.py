@@ -146,6 +146,8 @@ class DeletionRecord:
     size: int
     file_count: int
     full_path: str
+    delete_command: str = ""  # rclone delete command
+    delete_datetime: str = ""  # Deletion timestamp (YYYY-MM-DD HH:MM:SS)
     kept_folder_path: str = ""  # Path of the folder that was kept (same movie code)
 
 
@@ -1439,12 +1441,18 @@ def generate_csv_report(
     # Collect all deletion records
     records: List[DeletionRecord] = []
     
+    # Get current timestamp for delete datetime
+    delete_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
     for result in dedup_results:
         # Get the kept folder path(s) for this movie code
         kept_paths = [f.full_path for f in result.folders_to_keep]
         kept_folder_path = "; ".join(kept_paths) if kept_paths else ""
         
         for folder, reason in result.folders_to_delete:
+            # Generate rclone delete command
+            delete_command = f"rclone purge \"{folder.full_path}\""
+            
             records.append(DeletionRecord(
                 movie_code=folder.movie_code,
                 sensor_category=folder.sensor_category,
@@ -1453,6 +1461,8 @@ def generate_csv_report(
                 size=folder.size,
                 file_count=folder.file_count,
                 full_path=folder.full_path,
+                delete_command=delete_command,
+                delete_datetime=delete_timestamp,
                 kept_folder_path=kept_folder_path
             ))
     
@@ -1469,6 +1479,8 @@ def generate_csv_report(
             'Folder Size',
             'File Count',
             'Deleted Folder Path',
+            'Delete Command',
+            'Delete Datetime',
             'Kept Folder Path'
         ])
         
@@ -1482,6 +1494,8 @@ def generate_csv_report(
                 format_size(record.size),
                 record.file_count,
                 record.full_path,
+                record.delete_command,
+                record.delete_datetime,
                 record.kept_folder_path
             ])
     
