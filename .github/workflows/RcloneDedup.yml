@@ -121,7 +121,7 @@ jobs:
           fi
           
           if [ -n "${{ inputs.years }}" ]; then
-            ARGS="$ARGS --years '${{ inputs.years }}'"
+            ARGS="$ARGS --years ${{ inputs.years }}"
             echo "📆 Year filter: ${{ inputs.years }}"
           fi
           
