@@ -1,0 +1,166 @@
+name: RClone Deduplication
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run mode (simulate without deleting)'
+        required: false
+        default: true
+        type: boolean
+      incremental:
+        description: 'Incremental mode (only process movie codes with recent changes)'
+        required: false
+        default: false
+        type: boolean
+      years:
+        description: 'Comma-separated list of years to process (e.g., "2025,2026"). Leave empty for all years.'
+        required: false
+        default: ''
+        type: string
+      workers:
+        description: 'Number of parallel workers'
+        required: false
+        default: '4'
+        type: string
+      log_level:
+        description: 'Logging level'
+        required: false
+        default: 'INFO'
+        type: choice
+        options:
+          - 'DEBUG'
+          - 'INFO'
+          - 'WARNING'
+          - 'ERROR'
+      runner:
+        description: 'Runner type for the job'
+        required: false
+        default: 'ubuntu-latest'
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'self-hosted'
+
+jobs:
+  # =============================================================================
+  # Job: RClone Deduplication
+  # =============================================================================
+  dedup:
+    runs-on: ${{ inputs.runner }}
+    environment: Production
+    permissions:
+      contents: read
+    env:
+      TZ: Asia/Singapore
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install rclone
+        run: |
+          curl https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Configure rclone
+        env:
+          RCLONE_CONFIG_CONTENT: ${{ secrets.RCLONE_CONFIG }}
+        run: |
+          mkdir -p ~/.config/rclone
+          echo "$RCLONE_CONFIG_CONTENT" > ~/.config/rclone/rclone.conf
+          chmod 600 ~/.config/rclone/rclone.conf
+          echo "✓ rclone configured"
+          rclone listremotes
+
+      - name: Validate environment variables
+        env:
+          DRIVE_NAME: ${{ secrets.RCLONE_DRIVE_NAME }}
+          ROOT_FOLDER: ${{ secrets.RCLONE_ROOT_FOLDER }}
+        run: |
+          if [ -z "$DRIVE_NAME" ]; then
+            echo "❌ Error: RCLONE_DRIVE_NAME secret is not set"
+            exit 1
+          fi
+          if [ -z "$ROOT_FOLDER" ]; then
+            echo "❌ Error: RCLONE_ROOT_FOLDER secret is not set"
+            exit 1
+          fi
+          echo "✓ DRIVE_NAME: $DRIVE_NAME"
+          echo "✓ ROOT_FOLDER: $ROOT_FOLDER"
+
+      - name: Run Deduplication Script
+        env:
+          DRIVE_NAME: ${{ secrets.RCLONE_DRIVE_NAME }}
+          ROOT_FOLDER: ${{ secrets.RCLONE_ROOT_FOLDER }}
+        run: |
+          # Build command arguments
+          ARGS=""
+          
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+            echo "🔍 Running in DRY-RUN mode (no files will be deleted)"
+          else
+            echo "⚠️ Running in LIVE mode (files will be deleted)"
+          fi
+          
+          if [ "${{ inputs.incremental }}" = "true" ]; then
+            ARGS="$ARGS --incremental"
+            echo "📅 Incremental mode enabled (only recent changes)"
+          fi
+          
+          if [ -n "${{ inputs.years }}" ]; then
+            ARGS="$ARGS --years ${{ inputs.years }}"
+            echo "📆 Year filter: ${{ inputs.years }}"
+          fi
+          
+          python scripts/rclone_dedup.py \
+            "$DRIVE_NAME" \
+            "$ROOT_FOLDER" \
+            $ARGS \
+            --workers ${{ inputs.workers }} \
+            --log-level ${{ inputs.log_level }}
+
+      - name: Upload Dedup Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dedup-report-${{ github.run_number }}
+          path: reports/Dedup/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Deduplication Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Mode**: ${{ inputs.dry_run == 'true' && 'DRY-RUN' || 'LIVE' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Incremental**: ${{ inputs.incremental == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ inputs.years }}" ]; then
+            echo "- **Year Filter**: ${{ inputs.years }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "- **Workers**: ${{ inputs.workers }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Log Level**: ${{ inputs.log_level }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -d "reports/Dedup" ]; then
+            REPORT_FILE=$(find reports/Dedup -name "*.csv" -type f | sort -r | head -1)
+            if [ -n "$REPORT_FILE" ]; then
+              echo "### Report Generated" >> $GITHUB_STEP_SUMMARY
+              echo "Report file: \`$REPORT_FILE\`" >> $GITHUB_STEP_SUMMARY
+              LINES=$(wc -l < "$REPORT_FILE")
+              echo "Records: $((LINES - 1))" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
