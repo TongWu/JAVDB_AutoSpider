@@ -2113,6 +2113,7 @@ def main():
 
     page_num = start_page
     consecutive_empty_pages = 0
+    csv_name_resolved = False  # Track if CSV name has been resolved from first successful page
     consecutive_fallback_successes = 0  # Track consecutive fallback successes before persisting settings
     # Thresholds based on fallback type:
     # - CF bypass only (proxy unchanged): proxies * 1
@@ -2241,7 +2242,9 @@ def main():
         
         # For ad hoc mode: resolve display name from first successful page's HTML
         # This updates csv_path with the actual name instead of URL-based fallback
-        if custom_url is not None and page_num == start_page and not args.output_file:
+        # Use csv_name_resolved flag instead of page_num == start_page to handle cases
+        # where the starting page fails but a subsequent page succeeds
+        if custom_url is not None and not csv_name_resolved and not args.output_file:
             url_type = detect_url_type(custom_url)
             # Resolve for all types that can extract names from HTML
             # (actors, makers, publishers, series, directors, video_codes)
@@ -2251,6 +2254,7 @@ def main():
                     output_csv = resolved_csv_name
                     csv_path = os.path.join(output_dated_dir, output_csv)
                     logger.info(f"[AdHoc] Updated CSV path: {csv_path}")
+            csv_name_resolved = True  # Mark as resolved to avoid re-resolving on subsequent pages
 
         # If not parse_all and reached end_page, stop
         if not parse_all and page_num >= end_page:
