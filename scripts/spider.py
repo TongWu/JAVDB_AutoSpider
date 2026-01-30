@@ -1212,9 +1212,11 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
     if append_mode and os.path.exists(csv_path):
         existing_rows = {}  # Keyed by video_code for merge operations
         rows_without_key = []  # Preserve rows without video_code
+        existing_fieldnames = []  # Track existing CSV columns to preserve them
         try:
             with open(csv_path, 'r', newline='', encoding='utf-8-sig') as f:
                 reader = csv.DictReader(f)
+                existing_fieldnames = reader.fieldnames or []
                 for row in reader:
                     video_code = row.get('video_code', '')
                     if video_code:
@@ -1228,6 +1230,7 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
             logger.warning(f"Error reading existing CSV file: {e}. Will create new file.")
             existing_rows = {}
             rows_without_key = []
+            existing_fieldnames = []
         
         # Merge new rows with existing rows
         merged_count = 0
@@ -1250,11 +1253,17 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
                 added_count += 1
                 logger.debug(f"[CSV] Added new entry: {video_code}")
         
+        # Merge fieldnames: preserve existing columns + add any new columns from current fieldnames
+        # This prevents data loss when CSV schema changes (extra columns in existing file are preserved)
+        merged_fieldnames = list(fieldnames)  # Start with current fieldnames
+        for existing_field in existing_fieldnames:
+            if existing_field not in merged_fieldnames:
+                merged_fieldnames.append(existing_field)
+                logger.debug(f"[CSV] Preserving extra column from existing CSV: {existing_field}")
+        
         # Write all data back to file (keyed rows first, then rows without key)
-        # Use extrasaction='ignore' to handle rows with extra columns not in fieldnames
-        # This prevents ValueError and data loss when CSV schema changes
         with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
+            writer = csv.DictWriter(f, fieldnames=merged_fieldnames, extrasaction='ignore')
             writer.writeheader()
             for row in existing_rows.values():
                 writer.writerow(row)
