@@ -1672,8 +1672,8 @@ class TestWriteCsvMerge:
     def write_csv(self, rows, csv_path, fieldnames, dry_run=False, append_mode=False):
         """Local implementation of write_csv with merge support.
         
-        Uses extrasaction='ignore' to safely handle rows with extra columns not in fieldnames.
-        This prevents ValueError and data loss when existing CSV has additional columns.
+        Preserves existing columns in the CSV file to prevent data loss when schema changes.
+        Merges existing fieldnames with new fieldnames to keep all columns.
         """
         import csv
         
@@ -1683,9 +1683,11 @@ class TestWriteCsvMerge:
         if append_mode and os.path.exists(csv_path):
             existing_rows = {}
             rows_without_key = []  # Preserve rows without video_code
+            existing_fieldnames = []  # Track existing CSV columns to preserve them
             try:
                 with open(csv_path, 'r', newline='', encoding='utf-8-sig') as f:
                     reader = csv.DictReader(f)
+                    existing_fieldnames = reader.fieldnames or []
                     for row in reader:
                         video_code = row.get('video_code', '')
                         if video_code:
@@ -1695,6 +1697,7 @@ class TestWriteCsvMerge:
             except Exception:
                 existing_rows = {}
                 rows_without_key = []
+                existing_fieldnames = []
             
             for new_row in rows:
                 video_code = new_row.get('video_code', '')
@@ -1705,9 +1708,14 @@ class TestWriteCsvMerge:
                 else:
                     existing_rows[video_code] = new_row
             
+            # Merge fieldnames: preserve existing columns + add any new columns
+            merged_fieldnames = list(fieldnames)
+            for existing_field in existing_fieldnames:
+                if existing_field not in merged_fieldnames:
+                    merged_fieldnames.append(existing_field)
+            
             with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
-                # Use extrasaction='ignore' to handle rows with extra columns not in fieldnames
-                writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
+                writer = csv.DictWriter(f, fieldnames=merged_fieldnames, extrasaction='ignore')
                 writer.writeheader()
                 for row in existing_rows.values():
                     writer.writerow(row)
@@ -1715,7 +1723,6 @@ class TestWriteCsvMerge:
                     writer.writerow(row)
         else:
             with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
-                # Use extrasaction='ignore' to handle rows with extra columns not in fieldnames
                 writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
                 writer.writeheader()
                 for row in rows:
@@ -1844,14 +1851,15 @@ class TestWriteCsvMerge:
         assert 'ABC-003' in video_codes
         assert 'ABC-004' in video_codes
     
-    def test_append_mode_handles_extra_columns_in_existing_csv(self, temp_dir):
-        """Test that append_mode doesn't fail when existing CSV has extra columns.
+    def test_append_mode_preserves_extra_columns_in_existing_csv(self, temp_dir):
+        """Test that append_mode preserves extra columns from existing CSV.
         
         This test verifies that when an existing CSV file has columns that are NOT
         in the provided fieldnames, the write operation:
         1. Does not raise a ValueError
-        2. Does not lose existing data
-        3. Successfully writes the new data (with extra columns ignored)
+        2. Preserves ALL existing columns (including extra ones not in new fieldnames)
+        3. Successfully writes the new data
+        4. Does NOT lose the extra column data
         """
         import csv
         csv_path = os.path.join(temp_dir, 'test.csv')
@@ -1869,7 +1877,6 @@ class TestWriteCsvMerge:
             })
         
         # Now try to append with fieldnames that don't include 'extra_column'
-        # Without extrasaction='ignore', this would raise ValueError
         new_fieldnames = ['video_code', 'subtitle', 'actor']
         new_rows = [
             {'video_code': 'ABC-002', 'subtitle': 'link2', 'actor': 'Actor B'}
@@ -1886,6 +1893,15 @@ class TestWriteCsvMerge:
         video_codes = [r['video_code'] for r in result]
         assert 'ABC-001' in video_codes
         assert 'ABC-002' in video_codes
+        
+        # CRITICAL: Verify extra_column is preserved and not lost
+        row_abc001 = next(r for r in result if r['video_code'] == 'ABC-001')
+        assert 'extra_column' in row_abc001, "Extra column should be preserved in existing row"
+        assert row_abc001['extra_column'] == 'extra_data', "Extra column data should not be lost"
+        
+        # New row should have empty extra_column since it wasn't provided
+        row_abc002 = next(r for r in result if r['video_code'] == 'ABC-002')
+        assert row_abc002.get('extra_column', '') == '', "New row should have empty extra_column"
     
     def test_merge_with_downloaded_placeholder(self, temp_dir):
         """Test that DOWNLOADED_PLACEHOLDER doesn't overwrite existing magnet URLs during merge."""
