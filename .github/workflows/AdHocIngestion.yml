@@ -54,6 +54,11 @@ on:
         required: false
         default: false
         type: boolean
+      qb_category:
+        description: 'Custom qBittorrent category for downloads (leave empty to use default Ad Hoc category)'
+        required: false
+        default: ''
+        type: string
       runner:
         description: 'Runner type for pipeline jobs (health-check and run-pipeline)'
         required: false
@@ -326,6 +331,7 @@ jobs:
           echo "Proxy Spider: ${{ inputs.proxy_spider }}"
           echo "Proxy Uploader: ${{ inputs.proxy_uploader }}"
           echo "Proxy PikPak: ${{ inputs.proxy_pikpak }}"
+          echo "QB Category: ${{ inputs.qb_category || 'Default (Ad Hoc)' }}"
           echo "============================================"
 
       - name: Step 1 - Run Spider (Ad-Hoc)
@@ -398,6 +404,14 @@ jobs:
           if [ "${{ inputs.proxy_uploader }}" == "true" ]; then
             CMD="$CMD --use-proxy"
           fi
+          
+          # Add custom category if provided
+          QB_CATEGORY="${{ inputs.qb_category }}"
+          if [ -n "$QB_CATEGORY" ]; then
+            CMD="$CMD --category '$QB_CATEGORY'"
+            echo "Using custom qBittorrent category: $QB_CATEGORY"
+          fi
+          
           echo "Executing: $CMD"
           eval $CMD
 

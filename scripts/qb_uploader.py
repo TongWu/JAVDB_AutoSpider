@@ -104,6 +104,7 @@ def parse_arguments():
     parser.add_argument('--input-file', type=str, help='Specify input CSV file name (overrides default date-based name)')
     parser.add_argument('--use-proxy', action='store_true', help='Enable proxy for qBittorrent API requests (proxy settings from config.py)')
     parser.add_argument('--from-pipeline', action='store_true', help='Running from pipeline.py - use GIT_USERNAME for commits')
+    parser.add_argument('--category', type=str, help='Override qBittorrent category (defaults to TORRENT_CATEGORY_ADHOC for adhoc mode, TORRENT_CATEGORY for daily mode)')
     return parser.parse_args()
 
 
@@ -346,12 +347,15 @@ def is_torrent_exists(magnet_link, existing_hashes):
     return False
 
 
-def add_torrent_to_qbittorrent(session, magnet_link, title, mode='daily', use_proxy=False):
+def add_torrent_to_qbittorrent(session, magnet_link, title, mode='daily', use_proxy=False, category_override=None):
     """Add a torrent to qBittorrent"""
     add_url = f'{QB_BASE_URL}/api/v2/torrents/add'
     
-    # Choose category based on mode
-    category = TORRENT_CATEGORY_ADHOC if mode == 'adhoc' else TORRENT_CATEGORY
+    # Choose category: use override if provided, otherwise based on mode
+    if category_override:
+        category = category_override
+    else:
+        category = TORRENT_CATEGORY_ADHOC if mode == 'adhoc' else TORRENT_CATEGORY
     
     # Prepare the data for adding torrent
     torrent_data = {
@@ -540,7 +544,10 @@ def main():
     args = parse_arguments()
     mode = args.mode
     use_proxy = args.use_proxy
+    category_override = args.category
     logger.info("Starting qBittorrent uploader...")
+    if category_override:
+        logger.info(f"Using custom category: {category_override}")
     
     # Initialize proxy helper
     initialize_proxy_helper(use_proxy)
@@ -628,7 +635,7 @@ def main():
         
         logger.info(f"[{i}/{total_torrents}] Adding: {torrent['title']}")
         
-        success = add_torrent_to_qbittorrent(session, torrent['magnet'], torrent['title'], mode, use_proxy)
+        success = add_torrent_to_qbittorrent(session, torrent['magnet'], torrent['title'], mode, use_proxy, category_override)
         
         if success:            
             if torrent['type'] == 'hacked_subtitle':
