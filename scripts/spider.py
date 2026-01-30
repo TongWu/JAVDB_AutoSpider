@@ -1132,8 +1132,57 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
     return last_result[0], last_result[1], last_result[2], use_proxy, use_cf_bypass
 
 
+def merge_row_data(existing_row, new_row):
+    """
+    Merge new row data into existing row.
+    
+    Merge rules:
+    - If existing has data AND new has data -> use new (overwrite)
+    - If existing has data AND new is empty -> keep existing
+    - If existing is empty AND new has data -> use new
+    
+    Args:
+        existing_row: The existing row from CSV
+        new_row: The new row to merge
+    
+    Returns:
+        dict: Merged row data
+    """
+    merged = existing_row.copy()
+    
+    for key, new_value in new_row.items():
+        existing_value = merged.get(key, '')
+        
+        # Convert to string for comparison (handle None values)
+        new_str = str(new_value) if new_value is not None else ''
+        existing_str = str(existing_value) if existing_value is not None else ''
+        
+        if new_str:
+            # New has data - use it (overwrite or fill empty)
+            merged[key] = new_value
+        # else: keep existing value (new is empty)
+    
+    return merged
+
+
 def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
-    """Write results to CSV file or print if dry-run"""
+    """
+    Write results to CSV file or print if dry-run.
+    
+    When append_mode is True and file exists:
+    - Reads existing data
+    - Merges new rows with existing rows based on video_code
+    - If video_code exists: merge data (new data takes priority, but keeps existing if new is empty)
+    - If video_code is new: append as new row
+    - Writes back the merged data
+    
+    Args:
+        rows: List of row dictionaries to write
+        csv_path: Path to the CSV file
+        fieldnames: List of column names
+        dry_run: If True, only log what would be written
+        append_mode: If True, merge with existing file data
+    """
     if dry_run:
         logger.info(f"[DRY RUN] Would write {len(rows)} entries to {csv_path}")
         logger.info("[DRY RUN] Sample entries:")
@@ -1143,18 +1192,54 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
             logger.info(f"[DRY RUN] ... and {len(rows) - 3} more entries")
         return
 
-    # Determine if we need to write header (only if file doesn't exist or not in append mode)
-    write_header = not os.path.exists(csv_path) or not append_mode
-    
-    mode = 'a' if append_mode else 'w'
-    logger.debug(f"[FINISH] Writing results to {csv_path} (mode: {mode})")
-    
-    with open(csv_path, mode, newline='', encoding='utf-8-sig') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        if write_header:
+    # If append_mode and file exists, read existing data and merge
+    if append_mode and os.path.exists(csv_path):
+        existing_rows = {}
+        try:
+            with open(csv_path, 'r', newline='', encoding='utf-8-sig') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    video_code = row.get('video_code', '')
+                    if video_code:
+                        existing_rows[video_code] = row
+        except Exception as e:
+            logger.warning(f"Error reading existing CSV file: {e}. Will create new file.")
+            existing_rows = {}
+        
+        # Merge new rows with existing rows
+        merged_count = 0
+        added_count = 0
+        for new_row in rows:
+            video_code = new_row.get('video_code', '')
+            if video_code in existing_rows:
+                # Merge with existing row
+                existing_rows[video_code] = merge_row_data(existing_rows[video_code], new_row)
+                merged_count += 1
+                logger.debug(f"[CSV] Merged existing entry: {video_code}")
+            else:
+                # Add new row
+                existing_rows[video_code] = new_row
+                added_count += 1
+                logger.debug(f"[CSV] Added new entry: {video_code}")
+        
+        # Write all data back to file
+        with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
-        for row in rows:
-            writer.writerow(row)
+            for row in existing_rows.values():
+                writer.writerow(row)
+        
+        if merged_count > 0 or added_count > 0:
+            logger.info(f"[CSV] Updated {csv_path}: {merged_count} merged, {added_count} added, {len(existing_rows)} total entries")
+    else:
+        # No existing file or not in append mode - write new file
+        logger.debug(f"[CSV] Writing new file: {csv_path}")
+        with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)
+        logger.info(f"[CSV] Created {csv_path} with {len(rows)} entries")
 
 
 def should_include_torrent_in_csv(href, history_data, magnet_links):
@@ -1296,7 +1381,7 @@ def detect_url_type(url):
         url: The JavDB URL (e.g., 'https://javdb.com/actors/bkxd')
     
     Returns:
-        str: The URL type ('actors', 'makers', 'video_codes', or 'unknown')
+        str: The URL type ('actors', 'makers', 'publishers', 'series', 'directors', 'video_codes', or 'unknown')
     """
     if not url or 'javdb.com' not in url:
         return 'unknown'
@@ -1309,6 +1394,12 @@ def detect_url_type(url):
             return 'actors'
         elif path.startswith('makers/'):
             return 'makers'
+        elif path.startswith('publishers/'):
+            return 'publishers'
+        elif path.startswith('series/'):
+            return 'series'
+        elif path.startswith('directors/'):
+            return 'directors'
         elif path.startswith('video_codes/'):
             return 'video_codes'
         else:
@@ -1364,6 +1455,36 @@ def parse_actor_name_from_html(html_content):
     return None
 
 
+def parse_section_name_from_html(html_content):
+    """
+    Extract section name from JavDB page HTML.
+    
+    This is a generic function that extracts names from pages using the 
+    <span class="section-name"> element, which is used by:
+    - makers (片商): e.g., "蚊香社, PRESTIGE,プレステージ"
+    - publishers (发行商): e.g., "ABSOLUTELY FANTASIA"
+    - series (系列): e.g., "親友の人妻と背徳不倫。禁断中出し小旅行。"
+    - video_codes (番号): e.g., "ABF"
+    - directors (导演): e.g., "Director Name"
+    
+    Args:
+        html_content: HTML content of the page
+    
+    Returns:
+        str: Section name if found, None otherwise
+    """
+    try:
+        soup = BeautifulSoup(html_content, 'html.parser')
+        section_name = soup.find('span', class_='section-name')
+        if section_name:
+            name = section_name.get_text(strip=True)
+            if name:
+                return name
+    except Exception as e:
+        logger.warning(f"Error parsing section name from HTML: {e}")
+    return None
+
+
 def parse_maker_name_from_html(html_content):
     """
     Extract maker (studio) name from JavDB maker page HTML.
@@ -1378,16 +1499,73 @@ def parse_maker_name_from_html(html_content):
     Returns:
         str: Maker name if found, None otherwise
     """
-    try:
-        soup = BeautifulSoup(html_content, 'html.parser')
-        section_name = soup.find('span', class_='section-name')
-        if section_name:
-            maker_name = section_name.get_text(strip=True)
-            if maker_name:
-                return maker_name
-    except Exception as e:
-        logger.warning(f"Error parsing maker name from HTML: {e}")
-    return None
+    return parse_section_name_from_html(html_content)
+
+
+def parse_publisher_name_from_html(html_content):
+    """
+    Extract publisher name from JavDB publisher page HTML.
+    
+    Looks for:
+    <span class="section-name">ABSOLUTELY FANTASIA</span>
+    
+    Args:
+        html_content: HTML content of the publisher page
+    
+    Returns:
+        str: Publisher name if found, None otherwise
+    """
+    return parse_section_name_from_html(html_content)
+
+
+def parse_series_name_from_html(html_content):
+    """
+    Extract series name from JavDB series page HTML.
+    
+    Looks for:
+    <span class="section-subtitle">系列</span>
+    <span class="section-name">Series Name</span>
+    
+    Args:
+        html_content: HTML content of the series page
+    
+    Returns:
+        str: Series name if found, None otherwise
+    """
+    return parse_section_name_from_html(html_content)
+
+
+def parse_video_code_name_from_html(html_content):
+    """
+    Extract video code name from JavDB video_codes page HTML.
+    
+    Looks for:
+    <span class="section-subtitle">番號</span>
+    <span class="section-name">ABF</span>
+    
+    Args:
+        html_content: HTML content of the video_codes page
+    
+    Returns:
+        str: Video code name if found, None otherwise
+    """
+    return parse_section_name_from_html(html_content)
+
+
+def parse_director_name_from_html(html_content):
+    """
+    Extract director name from JavDB director page HTML.
+    
+    Looks for:
+    <span class="section-name">Director Name</span>
+    
+    Args:
+        html_content: HTML content of the director page
+    
+    Returns:
+        str: Director name if found, None otherwise
+    """
+    return parse_section_name_from_html(html_content)
 
 
 def sanitize_filename_part(text, max_length=30):
@@ -1533,10 +1711,19 @@ def get_page_display_name(url, use_proxy=False, use_cf_bypass=False):
 def extract_url_part_after_javdb(url):
     """
     Extract the part of URL after javdb.com and convert it to a filename-safe format.
+    
+    Preserves query parameters by converting them to filename-safe format.
+    
     Args:
-        url: The custom URL (e.g., 'https://javdb.com/actors/EvkJ')
+        url: The custom URL (e.g., 'https://javdb.com/rankings/movies?p=monthly&t=censored')
+    
     Returns:
-        str: The extracted part converted to filename-safe format (e.g., 'actors_EvkJ')
+        str: The extracted part converted to filename-safe format 
+             (e.g., 'rankings_movies_p=monthly&t=censored')
+    
+    Examples:
+        - 'https://javdb.com/actors/EvkJ' -> 'actors_EvkJ'
+        - 'https://javdb.com/rankings/movies?p=monthly&t=censored' -> 'rankings_movies_p=monthly&t=censored'
     """
     try:
         if 'javdb.com' in url:
@@ -1547,9 +1734,8 @@ def extract_url_part_after_javdb(url):
                     after_domain = after_domain[1:]
                 if after_domain.endswith('/'):
                     after_domain = after_domain[:-1]
-                filename_part = after_domain.replace('/', '_')
-                if '?' in filename_part:
-                    filename_part = filename_part.split('?')[0]
+                # Replace / with _, but keep query parameters (replace ? with _)
+                filename_part = after_domain.replace('/', '_').replace('?', '_')
                 return filename_part
     except Exception as e:
         logger.warning(f"Error extracting URL part from {url}: {e}")
@@ -1566,7 +1752,10 @@ def generate_output_csv_name_from_html(custom_url, index_html):
     For adhoc mode with custom URLs:
     - actors: Uses actor name from HTML (e.g., Javdb_AdHoc_actors_森日向子_20251224.csv)
     - makers: Uses maker name from HTML (e.g., Javdb_AdHoc_makers_MOODYZ_20251224.csv)
-    - video_codes: Uses code from URL (e.g., Javdb_AdHoc_video_codes_MIDA_20251224.csv)
+    - publishers: Uses publisher name from HTML (e.g., Javdb_AdHoc_publishers_PRESTIGE_20251224.csv)
+    - series: Uses series name from HTML (e.g., Javdb_AdHoc_series_SeriesName_20251224.csv)
+    - directors: Uses director name from HTML (e.g., Javdb_AdHoc_directors_DirectorName_20251224.csv)
+    - video_codes: Uses code from HTML or URL (e.g., Javdb_AdHoc_video_codes_ABF_20251224.csv)
     - unknown: Falls back to URL path extraction
     
     Args:
@@ -1579,23 +1768,46 @@ def generate_output_csv_name_from_html(custom_url, index_html):
     today_date = datetime.now().strftime("%Y%m%d")
     url_type = detect_url_type(custom_url)
     display_name = None
+    raw_name = None
     
-    # For video_codes, get the name directly from URL (no HTML parsing needed)
-    if url_type == 'video_codes':
-        url_id = extract_url_identifier(custom_url)
-        if url_id:
-            display_name = sanitize_filename_part(url_id)
-    # For actors and makers, parse from the already-fetched HTML
-    elif url_type == 'actors':
-        actor_name = parse_actor_name_from_html(index_html)
-        if actor_name:
-            display_name = sanitize_filename_part(actor_name)
-            logger.info(f"[AdHoc] Successfully extracted actor name from index page: {actor_name}")
+    # Parse display name based on URL type
+    if url_type == 'actors':
+        raw_name = parse_actor_name_from_html(index_html)
+        if raw_name:
+            display_name = sanitize_filename_part(raw_name)
+            logger.info(f"[AdHoc] Successfully extracted actor name from index page: {raw_name}")
     elif url_type == 'makers':
-        maker_name = parse_maker_name_from_html(index_html)
-        if maker_name:
-            display_name = sanitize_filename_part(maker_name)
-            logger.info(f"[AdHoc] Successfully extracted maker name from index page: {maker_name}")
+        raw_name = parse_maker_name_from_html(index_html)
+        if raw_name:
+            display_name = sanitize_filename_part(raw_name)
+            logger.info(f"[AdHoc] Successfully extracted maker name from index page: {raw_name}")
+    elif url_type == 'publishers':
+        raw_name = parse_publisher_name_from_html(index_html)
+        if raw_name:
+            display_name = sanitize_filename_part(raw_name)
+            logger.info(f"[AdHoc] Successfully extracted publisher name from index page: {raw_name}")
+    elif url_type == 'series':
+        raw_name = parse_series_name_from_html(index_html)
+        if raw_name:
+            display_name = sanitize_filename_part(raw_name)
+            logger.info(f"[AdHoc] Successfully extracted series name from index page: {raw_name}")
+    elif url_type == 'directors':
+        raw_name = parse_director_name_from_html(index_html)
+        if raw_name:
+            display_name = sanitize_filename_part(raw_name)
+            logger.info(f"[AdHoc] Successfully extracted director name from index page: {raw_name}")
+    elif url_type == 'video_codes':
+        # Try to get from HTML first, fallback to URL extraction
+        raw_name = parse_video_code_name_from_html(index_html)
+        if raw_name:
+            display_name = sanitize_filename_part(raw_name)
+            logger.info(f"[AdHoc] Successfully extracted video code from index page: {raw_name}")
+        else:
+            # Fallback to URL extraction for video_codes
+            url_id = extract_url_identifier(custom_url)
+            if url_id:
+                display_name = sanitize_filename_part(url_id)
+                logger.info(f"[AdHoc] Extracted video code from URL: {url_id}")
     
     if display_name:
         csv_filename = f'Javdb_AdHoc_{url_type}_{display_name}_{today_date}.csv'
@@ -2028,11 +2240,12 @@ def main():
         consecutive_empty_pages = 0  # Reset counter when we find valid page
         
         # For ad hoc mode: resolve display name from first successful page's HTML
-        # This updates csv_path with the actual actor/maker name instead of URL-based fallback
+        # This updates csv_path with the actual name instead of URL-based fallback
         if custom_url is not None and page_num == start_page and not args.output_file:
             url_type = detect_url_type(custom_url)
-            # Only resolve for actors and makers (video_codes already resolved from URL)
-            if url_type in ('actors', 'makers'):
+            # Resolve for all types that can extract names from HTML
+            # (actors, makers, publishers, series, directors, video_codes)
+            if url_type in ('actors', 'makers', 'publishers', 'series', 'directors', 'video_codes'):
                 resolved_csv_name = generate_output_csv_name_from_html(custom_url, index_html)
                 if resolved_csv_name != output_csv:
                     output_csv = resolved_csv_name
