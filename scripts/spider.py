@@ -1425,7 +1425,7 @@ def sanitize_filename_part(text, max_length=30):
     return sanitized
 
 
-def fetch_page_simple(url, timeout=30):
+def fetch_page_simple(url, timeout=30, use_session_cookie=False):
     """
     Fetch a webpage with minimal configuration.
     Used for extracting page names during CSV filename generation.
@@ -1434,15 +1434,21 @@ def fetch_page_simple(url, timeout=30):
     Args:
         url: URL to fetch
         timeout: Request timeout in seconds
+        use_session_cookie: Whether to include the JAVDB_SESSION_COOKIE in request
     
     Returns:
         str: HTML content if successful, None otherwise
     """
+    # Build cookie string
+    cookie_str = 'over18=1'
+    if use_session_cookie and JAVDB_SESSION_COOKIE:
+        cookie_str = f'over18=1; _jdb_session={JAVDB_SESSION_COOKIE}'
+    
     headers = {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8',
-        'Cookie': 'over18=1',
+        'Cookie': cookie_str,
     }
     
     try:
@@ -1465,6 +1471,9 @@ def get_page_display_name(url, use_proxy=False, use_cf_bypass=False):
     For makers: Fetches HTML and extracts maker/studio name  
     For video_codes: Extracts the video code directly from URL
     
+    This function will try to login and refresh session cookie if the first
+    attempt fails to get the display name (e.g., when session cookie is expired).
+    
     Args:
         url: The JavDB URL
         use_proxy: Whether to use proxy (uses global_request_handler if available)
@@ -1483,39 +1492,59 @@ def get_page_display_name(url, use_proxy=False, use_cf_bypass=False):
         return (None, 'video_codes')
     
     # For actors and makers, we need to fetch the HTML
-    html_content = None
+    # Try up to 2 times: first with existing cookie, then after login refresh
+    for attempt in range(2):
+        html_content = None
+        display_name = None
+        
+        # Try to use global_request_handler if available
+        if global_request_handler is not None:
+            try:
+                # Always use cookie for fetching actor/maker pages (they may require login)
+                html_content = global_request_handler.get_page(
+                    url=url,
+                    use_proxy=use_proxy,
+                    use_cf_bypass=use_cf_bypass,
+                    use_cookie=True,  # Use session cookie for authenticated access
+                    module_name='csv_name_resolver',
+                    max_retries=2
+                )
+            except Exception as e:
+                logger.debug(f"Failed to fetch page with request handler: {e}")
+        
+        # Fallback to simple fetch if request handler not available or failed
+        if not html_content:
+            html_content = fetch_page_simple(url, use_session_cookie=True)
+        
+        if not html_content:
+            logger.debug(f"[Attempt {attempt + 1}] Could not fetch page for display name: {url}")
+        else:
+            # Parse based on URL type
+            if url_type == 'actors':
+                display_name = parse_actor_name_from_html(html_content)
+                if display_name:
+                    logger.info(f"Successfully extracted actor name: {display_name}")
+                    return (sanitize_filename_part(display_name), 'actors')
+            elif url_type == 'makers':
+                display_name = parse_maker_name_from_html(html_content)
+                if display_name:
+                    logger.info(f"Successfully extracted maker name: {display_name}")
+                    return (sanitize_filename_part(display_name), 'makers')
+        
+        # If first attempt failed to get display name, try to login and refresh cookie
+        if attempt == 0 and display_name is None:
+            logger.info(f"Could not extract display name from page, attempting login refresh...")
+            login_success, new_cookie = attempt_login_refresh()
+            if login_success and new_cookie:
+                logger.info(f"Login successful, retrying page fetch with new cookie...")
+                # Update the global request handler's cookie if available
+                if global_request_handler is not None:
+                    global_request_handler.config.javdb_session_cookie = new_cookie
+            else:
+                logger.debug(f"Login refresh failed or not available, giving up on display name extraction")
+                break
     
-    # Try to use global_request_handler if available
-    if global_request_handler is not None:
-        try:
-            html_content = global_request_handler.get_page(
-                url=url,
-                use_proxy=use_proxy,
-                use_cf_bypass=use_cf_bypass,
-                module_name='csv_name_resolver',
-                max_retries=2
-            )
-        except Exception as e:
-            logger.debug(f"Failed to fetch page with request handler: {e}")
-    
-    # Fallback to simple fetch if request handler not available or failed
-    if not html_content:
-        html_content = fetch_page_simple(url)
-    
-    if not html_content:
-        logger.debug(f"Could not fetch page for display name: {url}")
-        return (None, url_type)
-    
-    # Parse based on URL type
-    if url_type == 'actors':
-        actor_name = parse_actor_name_from_html(html_content)
-        if actor_name:
-            return (sanitize_filename_part(actor_name), 'actors')
-    elif url_type == 'makers':
-        maker_name = parse_maker_name_from_html(html_content)
-        if maker_name:
-            return (sanitize_filename_part(maker_name), 'makers')
-    
+    logger.debug(f"Could not extract display name for {url_type} page after all attempts")
     return (None, url_type)
 
 
@@ -1571,11 +1600,17 @@ def generate_output_csv_name(custom_url=None, use_proxy=False, use_cf_bypass=Fal
         
         if display_name:
             # Use the friendly name
-            return f'Javdb_AdHoc_{url_type}_{display_name}_{today_date}.csv'
+            csv_filename = f'Javdb_AdHoc_{url_type}_{display_name}_{today_date}.csv'
+            logger.info(f"[AdHoc] URL type: {url_type}, Display name: {display_name}")
+            logger.info(f"[AdHoc] Generated CSV filename: {csv_filename}")
+            return csv_filename
         else:
             # Fallback to URL extraction
             url_part = extract_url_part_after_javdb(custom_url)
-            return f'Javdb_AdHoc_{url_part}_{today_date}.csv'
+            csv_filename = f'Javdb_AdHoc_{url_part}_{today_date}.csv'
+            logger.warning(f"[AdHoc] Could not extract display name for URL type: {url_type}")
+            logger.info(f"[AdHoc] Fallback CSV filename: {csv_filename}")
+            return csv_filename
     else:
         return f'Javdb_TodayTitle_{datetime.now().strftime("%Y%m%d")}.csv'
 
