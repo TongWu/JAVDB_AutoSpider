@@ -1465,14 +1465,15 @@ def fetch_page_simple(url, timeout=30, use_session_cookie=False):
 
 def get_page_display_name(url, use_proxy=False, use_cf_bypass=False):
     """
-    Get a human-readable display name for an adhoc URL.
+    Get a human-readable display name for an adhoc URL by fetching the page.
+    
+    Note: This function is deprecated for CSV filename generation.
+    Use generate_output_csv_name_from_html() instead, which parses the display name
+    from already-fetched index page HTML to avoid extra network requests.
     
     For actors: Fetches HTML and extracts actor name
     For makers: Fetches HTML and extracts maker/studio name  
     For video_codes: Extracts the video code directly from URL
-    
-    This function will try to login and refresh session cookie if the first
-    attempt fails to get the display name (e.g., when session cookie is expired).
     
     Args:
         url: The JavDB URL
@@ -1492,59 +1493,40 @@ def get_page_display_name(url, use_proxy=False, use_cf_bypass=False):
         return (None, 'video_codes')
     
     # For actors and makers, we need to fetch the HTML
-    # Try up to 2 times: first with existing cookie, then after login refresh
-    for attempt in range(2):
-        html_content = None
-        display_name = None
-        
-        # Try to use global_request_handler if available
-        if global_request_handler is not None:
-            try:
-                # Always use cookie for fetching actor/maker pages (they may require login)
-                html_content = global_request_handler.get_page(
-                    url=url,
-                    use_proxy=use_proxy,
-                    use_cf_bypass=use_cf_bypass,
-                    use_cookie=True,  # Use session cookie for authenticated access
-                    module_name='csv_name_resolver',
-                    max_retries=2
-                )
-            except Exception as e:
-                logger.debug(f"Failed to fetch page with request handler: {e}")
-        
-        # Fallback to simple fetch if request handler not available or failed
-        if not html_content:
-            html_content = fetch_page_simple(url, use_session_cookie=True)
-        
-        if not html_content:
-            logger.debug(f"[Attempt {attempt + 1}] Could not fetch page for display name: {url}")
-        else:
-            # Parse based on URL type
-            if url_type == 'actors':
-                display_name = parse_actor_name_from_html(html_content)
-                if display_name:
-                    logger.info(f"Successfully extracted actor name: {display_name}")
-                    return (sanitize_filename_part(display_name), 'actors')
-            elif url_type == 'makers':
-                display_name = parse_maker_name_from_html(html_content)
-                if display_name:
-                    logger.info(f"Successfully extracted maker name: {display_name}")
-                    return (sanitize_filename_part(display_name), 'makers')
-        
-        # If first attempt failed to get display name, try to login and refresh cookie
-        if attempt == 0 and display_name is None:
-            logger.info(f"Could not extract display name from page, attempting login refresh...")
-            login_success, new_cookie = attempt_login_refresh()
-            if login_success and new_cookie:
-                logger.info(f"Login successful, retrying page fetch with new cookie...")
-                # Update the global request handler's cookie if available
-                if global_request_handler is not None:
-                    global_request_handler.config.javdb_session_cookie = new_cookie
-            else:
-                logger.debug(f"Login refresh failed or not available, giving up on display name extraction")
-                break
+    html_content = None
     
-    logger.debug(f"Could not extract display name for {url_type} page after all attempts")
+    # Try to use global_request_handler if available
+    if global_request_handler is not None:
+        try:
+            html_content = global_request_handler.get_page(
+                url=url,
+                use_proxy=use_proxy,
+                use_cf_bypass=use_cf_bypass,
+                use_cookie=True,
+                module_name='csv_name_resolver',
+                max_retries=2
+            )
+        except Exception as e:
+            logger.debug(f"Failed to fetch page with request handler: {e}")
+    
+    # Fallback to simple fetch if request handler not available or failed
+    if not html_content:
+        html_content = fetch_page_simple(url, use_session_cookie=True)
+    
+    if not html_content:
+        logger.debug(f"Could not fetch page for display name: {url}")
+        return (None, url_type)
+    
+    # Parse based on URL type
+    if url_type == 'actors':
+        display_name = parse_actor_name_from_html(html_content)
+        if display_name:
+            return (sanitize_filename_part(display_name), 'actors')
+    elif url_type == 'makers':
+        display_name = parse_maker_name_from_html(html_content)
+        if display_name:
+            return (sanitize_filename_part(display_name), 'makers')
+    
     return (None, url_type)
 
 
@@ -1574,9 +1556,12 @@ def extract_url_part_after_javdb(url):
     return 'custom_url'
 
 
-def generate_output_csv_name(custom_url=None, use_proxy=False, use_cf_bypass=False):
+def generate_output_csv_name_from_html(custom_url, index_html):
     """
-    Generate the output CSV filename based on whether a custom URL is provided.
+    Generate the output CSV filename by parsing display name from already-fetched HTML.
+    
+    This function is called after successfully fetching the first index page,
+    which avoids an extra network request and ensures success.
     
     For adhoc mode with custom URLs:
     - actors: Uses actor name from HTML (e.g., Javdb_AdHoc_actors_森日向子_20251224.csv)
@@ -1585,32 +1570,83 @@ def generate_output_csv_name(custom_url=None, use_proxy=False, use_cf_bypass=Fal
     - unknown: Falls back to URL path extraction
     
     Args:
+        custom_url: The custom URL being processed
+        index_html: The HTML content of the first index page (already fetched)
+    
+    Returns:
+        str: The generated CSV filename
+    """
+    today_date = datetime.now().strftime("%Y%m%d")
+    url_type = detect_url_type(custom_url)
+    display_name = None
+    
+    # For video_codes, get the name directly from URL (no HTML parsing needed)
+    if url_type == 'video_codes':
+        url_id = extract_url_identifier(custom_url)
+        if url_id:
+            display_name = sanitize_filename_part(url_id)
+    # For actors and makers, parse from the already-fetched HTML
+    elif url_type == 'actors':
+        actor_name = parse_actor_name_from_html(index_html)
+        if actor_name:
+            display_name = sanitize_filename_part(actor_name)
+            logger.info(f"[AdHoc] Successfully extracted actor name from index page: {actor_name}")
+    elif url_type == 'makers':
+        maker_name = parse_maker_name_from_html(index_html)
+        if maker_name:
+            display_name = sanitize_filename_part(maker_name)
+            logger.info(f"[AdHoc] Successfully extracted maker name from index page: {maker_name}")
+    
+    if display_name:
+        csv_filename = f'Javdb_AdHoc_{url_type}_{display_name}_{today_date}.csv'
+        logger.info(f"[AdHoc] URL type: {url_type}, Display name: {display_name}")
+        logger.info(f"[AdHoc] Generated CSV filename: {csv_filename}")
+        return csv_filename
+    else:
+        # Fallback to URL extraction
+        url_part = extract_url_part_after_javdb(custom_url)
+        csv_filename = f'Javdb_AdHoc_{url_part}_{today_date}.csv'
+        logger.warning(f"[AdHoc] Could not extract display name for URL type: {url_type}")
+        logger.info(f"[AdHoc] Fallback CSV filename: {csv_filename}")
+        return csv_filename
+
+
+def generate_output_csv_name(custom_url=None, use_proxy=False, use_cf_bypass=False):
+    """
+    Generate the output CSV filename based on whether a custom URL is provided.
+    
+    Note: For adhoc mode, this generates a temporary filename using URL extraction.
+    The actual display name will be resolved later using generate_output_csv_name_from_html()
+    after the first index page is successfully fetched.
+    
+    Args:
         custom_url: Custom URL if provided, None otherwise
-        use_proxy: Whether to use proxy for fetching page
-        use_cf_bypass: Whether to use CF bypass for fetching page
+        use_proxy: Whether to use proxy for fetching page (unused, kept for compatibility)
+        use_cf_bypass: Whether to use CF bypass for fetching page (unused, kept for compatibility)
     
     Returns:
         str: The generated CSV filename
     """
     if custom_url:
         today_date = datetime.now().strftime("%Y%m%d")
+        url_type = detect_url_type(custom_url)
         
-        # Try to get a friendly display name
-        display_name, url_type = get_page_display_name(custom_url, use_proxy, use_cf_bypass)
+        # For video_codes, we can get the name directly from URL without fetching HTML
+        if url_type == 'video_codes':
+            url_id = extract_url_identifier(custom_url)
+            if url_id:
+                display_name = sanitize_filename_part(url_id)
+                csv_filename = f'Javdb_AdHoc_{url_type}_{display_name}_{today_date}.csv'
+                logger.info(f"[AdHoc] URL type: {url_type}, Display name: {display_name}")
+                logger.info(f"[AdHoc] Generated CSV filename: {csv_filename}")
+                return csv_filename
         
-        if display_name:
-            # Use the friendly name
-            csv_filename = f'Javdb_AdHoc_{url_type}_{display_name}_{today_date}.csv'
-            logger.info(f"[AdHoc] URL type: {url_type}, Display name: {display_name}")
-            logger.info(f"[AdHoc] Generated CSV filename: {csv_filename}")
-            return csv_filename
-        else:
-            # Fallback to URL extraction
-            url_part = extract_url_part_after_javdb(custom_url)
-            csv_filename = f'Javdb_AdHoc_{url_part}_{today_date}.csv'
-            logger.warning(f"[AdHoc] Could not extract display name for URL type: {url_type}")
-            logger.info(f"[AdHoc] Fallback CSV filename: {csv_filename}")
-            return csv_filename
+        # For other types (actors, makers), use temporary URL-based filename
+        # The actual name will be resolved after fetching the first index page
+        url_part = extract_url_part_after_javdb(custom_url)
+        csv_filename = f'Javdb_AdHoc_{url_part}_{today_date}.csv'
+        logger.info(f"[AdHoc] Temporary CSV filename (will resolve display name after fetching index page): {csv_filename}")
+        return csv_filename
     else:
         return f'Javdb_TodayTitle_{datetime.now().strftime("%Y%m%d")}.csv'
 
@@ -1990,6 +2026,18 @@ def main():
         
         last_valid_page = page_num
         consecutive_empty_pages = 0  # Reset counter when we find valid page
+        
+        # For ad hoc mode: resolve display name from first successful page's HTML
+        # This updates csv_path with the actual actor/maker name instead of URL-based fallback
+        if custom_url is not None and page_num == start_page and not args.output_file:
+            url_type = detect_url_type(custom_url)
+            # Only resolve for actors and makers (video_codes already resolved from URL)
+            if url_type in ('actors', 'makers'):
+                resolved_csv_name = generate_output_csv_name_from_html(custom_url, index_html)
+                if resolved_csv_name != output_csv:
+                    output_csv = resolved_csv_name
+                    csv_path = os.path.join(output_dated_dir, output_csv)
+                    logger.info(f"[AdHoc] Updated CSV path: {csv_path}")
 
         # If not parse_all and reached end_page, stop
         if not parse_all and page_num >= end_page:
