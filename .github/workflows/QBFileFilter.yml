@@ -31,10 +31,10 @@ on:
         required: false
         type: boolean
         default: true
-  schedule:
+  # schedule: # DISABLED FOR PUBLIC REPO
     # Run 2 hours after DailyIngestion (which runs at 10:00 UTC)
     # This allows time for qBittorrent to fetch torrent metadata
-    - cron: '0 */6 * * *'
+    # - cron: '0 */6 * * *'
 
 jobs:
   # =============================================================================
