@@ -1140,6 +1140,7 @@ def merge_row_data(existing_row, new_row):
     - If existing has data AND new has data -> use new (overwrite)
     - If existing has data AND new is empty -> keep existing
     - If existing is empty AND new has data -> use new
+    - Special: '[DOWNLOADED PREVIOUSLY]' is treated as empty to preserve existing magnet URLs
     
     Args:
         existing_row: The existing row from CSV
@@ -1148,6 +1149,9 @@ def merge_row_data(existing_row, new_row):
     Returns:
         dict: Merged row data
     """
+    # Placeholder that should not overwrite actual magnet URLs
+    DOWNLOADED_PLACEHOLDER = '[DOWNLOADED PREVIOUSLY]'
+    
     merged = existing_row.copy()
     
     for key, new_value in new_row.items():
@@ -1157,8 +1161,14 @@ def merge_row_data(existing_row, new_row):
         new_str = str(new_value) if new_value is not None else ''
         existing_str = str(existing_value) if existing_value is not None else ''
         
-        if new_str:
-            # New has data - use it (overwrite or fill empty)
+        # Treat placeholder as empty - don't let it overwrite actual magnet URLs
+        if new_str == DOWNLOADED_PLACEHOLDER:
+            # Only use placeholder if existing is empty (no data to preserve)
+            if not existing_str:
+                merged[key] = new_value
+            # else: keep existing value (preserve the actual magnet URL)
+        elif new_str:
+            # New has real data - use it (overwrite or fill empty)
             merged[key] = new_value
         # else: keep existing value (new is empty)
     
