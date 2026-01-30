@@ -1727,18 +1727,20 @@ def extract_url_part_after_javdb(url):
     """
     Extract the part of URL after javdb.com and convert it to a filename-safe format.
     
-    Preserves query parameters by converting them to filename-safe format.
+    Converts URL path and query parameters to a safe filename string by replacing
+    special characters (/, ?, &, =) with underscores and collapsing multiple
+    consecutive underscores.
     
     Args:
         url: The custom URL (e.g., 'https://javdb.com/rankings/movies?p=monthly&t=censored')
     
     Returns:
         str: The extracted part converted to filename-safe format 
-             (e.g., 'rankings_movies_p=monthly&t=censored')
+             (e.g., 'rankings_movies_p-monthly_t-censored')
     
     Examples:
         - 'https://javdb.com/actors/EvkJ' -> 'actors_EvkJ'
-        - 'https://javdb.com/rankings/movies?p=monthly&t=censored' -> 'rankings_movies_p=monthly&t=censored'
+        - 'https://javdb.com/rankings/movies?p=monthly&t=censored' -> 'rankings_movies_p-monthly_t-censored'
     """
     try:
         if 'javdb.com' in url:
@@ -1749,9 +1751,20 @@ def extract_url_part_after_javdb(url):
                     after_domain = after_domain[1:]
                 if after_domain.endswith('/'):
                     after_domain = after_domain[:-1]
-                # Replace / with _, but keep query parameters (replace ? with _)
-                filename_part = after_domain.replace('/', '_').replace('?', '_')
-                return filename_part
+                # Replace URL special characters for filename safety
+                # - / (path separator) -> _
+                # - ? (query start) -> _
+                # - & (param separator) -> _
+                # - = (key-value separator) -> - (hyphen for better readability)
+                filename_part = after_domain
+                for char in ['/', '?', '&']:
+                    filename_part = filename_part.replace(char, '_')
+                filename_part = filename_part.replace('=', '-')
+                # Collapse multiple consecutive underscores into one
+                filename_part = re.sub(r'_+', '_', filename_part)
+                # Remove leading/trailing underscores
+                filename_part = filename_part.strip('_')
+                return filename_part if filename_part else 'custom_url'
     except Exception as e:
         logger.warning(f"Error extracting URL part from {url}: {e}")
     return 'custom_url'
