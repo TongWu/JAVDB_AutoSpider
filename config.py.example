@@ -249,6 +249,11 @@ EMAIL_NOTIFICATION_LOG_FILE = 'logs/email_notification.log'
 # If False: Only parse entries that have both subtitle tags AND today/yesterday tags
 IGNORE_RELEASE_DATE_FILTER = False
 
+# Whether to include movies in report even if all torrent categories are already downloaded
+# If True: Include movies in report with [DOWNLOADED PREVIOUSLY] markers for already downloaded categories
+# If False: Skip movies where all available torrent categories are already in history (default)
+INCLUDE_DOWNLOADED_IN_REPORT = False
+
 # =============================================================================
 # FILE PATHS
 # =============================================================================
