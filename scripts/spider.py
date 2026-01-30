@@ -1510,89 +1510,6 @@ def parse_section_name_from_html(html_content):
     return None
 
 
-def parse_maker_name_from_html(html_content):
-    """
-    Extract maker (studio) name from JavDB maker page HTML.
-    
-    Looks for:
-    <span class="section-subtitle">片商</span>
-    <span class="section-name">MOODYZ</span>
-    
-    Args:
-        html_content: HTML content of the maker page
-    
-    Returns:
-        str: Maker name if found, None otherwise
-    """
-    return parse_section_name_from_html(html_content)
-
-
-def parse_publisher_name_from_html(html_content):
-    """
-    Extract publisher name from JavDB publisher page HTML.
-    
-    Looks for:
-    <span class="section-name">ABSOLUTELY FANTASIA</span>
-    
-    Args:
-        html_content: HTML content of the publisher page
-    
-    Returns:
-        str: Publisher name if found, None otherwise
-    """
-    return parse_section_name_from_html(html_content)
-
-
-def parse_series_name_from_html(html_content):
-    """
-    Extract series name from JavDB series page HTML.
-    
-    Looks for:
-    <span class="section-subtitle">系列</span>
-    <span class="section-name">Series Name</span>
-    
-    Args:
-        html_content: HTML content of the series page
-    
-    Returns:
-        str: Series name if found, None otherwise
-    """
-    return parse_section_name_from_html(html_content)
-
-
-def parse_video_code_name_from_html(html_content):
-    """
-    Extract video code name from JavDB video_codes page HTML.
-    
-    Looks for:
-    <span class="section-subtitle">番號</span>
-    <span class="section-name">ABF</span>
-    
-    Args:
-        html_content: HTML content of the video_codes page
-    
-    Returns:
-        str: Video code name if found, None otherwise
-    """
-    return parse_section_name_from_html(html_content)
-
-
-def parse_director_name_from_html(html_content):
-    """
-    Extract director name from JavDB director page HTML.
-    
-    Looks for:
-    <span class="section-name">Director Name</span>
-    
-    Args:
-        html_content: HTML content of the director page
-    
-    Returns:
-        str: Director name if found, None otherwise
-    """
-    return parse_section_name_from_html(html_content)
-
-
 def sanitize_filename_part(text, max_length=30):
     """
     Sanitize text for use in filename.
@@ -1747,29 +1664,14 @@ def generate_output_csv_name_from_html(custom_url, index_html):
         if raw_name:
             display_name = sanitize_filename_part(raw_name)
             logger.info(f"[AdHoc] Successfully extracted actor name from index page: {raw_name}")
-    elif url_type == 'makers':
-        raw_name = parse_maker_name_from_html(index_html)
+    elif url_type in ('makers', 'publishers', 'series', 'directors'):
+        raw_name = parse_section_name_from_html(index_html)
         if raw_name:
             display_name = sanitize_filename_part(raw_name)
-            logger.info(f"[AdHoc] Successfully extracted maker name from index page: {raw_name}")
-    elif url_type == 'publishers':
-        raw_name = parse_publisher_name_from_html(index_html)
-        if raw_name:
-            display_name = sanitize_filename_part(raw_name)
-            logger.info(f"[AdHoc] Successfully extracted publisher name from index page: {raw_name}")
-    elif url_type == 'series':
-        raw_name = parse_series_name_from_html(index_html)
-        if raw_name:
-            display_name = sanitize_filename_part(raw_name)
-            logger.info(f"[AdHoc] Successfully extracted series name from index page: {raw_name}")
-    elif url_type == 'directors':
-        raw_name = parse_director_name_from_html(index_html)
-        if raw_name:
-            display_name = sanitize_filename_part(raw_name)
-            logger.info(f"[AdHoc] Successfully extracted director name from index page: {raw_name}")
+            logger.info(f"[AdHoc] Successfully extracted {url_type} name from index page: {raw_name}")
     elif url_type == 'video_codes':
         # Try to get from HTML first, fallback to URL extraction
-        raw_name = parse_video_code_name_from_html(index_html)
+        raw_name = parse_section_name_from_html(index_html)
         if raw_name:
             display_name = sanitize_filename_part(raw_name)
             logger.info(f"[AdHoc] Successfully extracted video code from index page: {raw_name}")
