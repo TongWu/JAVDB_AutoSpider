@@ -248,6 +248,7 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('EMAIL_NOTIFICATION_LOG_FILE', 'EMAIL_NOTIFICATION_LOG_FILE', get_env, 'logs/email_notification.log', 'LOGGING CONFIGURATION'),
         # Parsing Configuration
         ('IGNORE_RELEASE_DATE_FILTER', 'IGNORE_RELEASE_DATE_FILTER', get_env_bool, False, 'PARSING CONFIGURATION'),
+        ('INCLUDE_DOWNLOADED_IN_REPORT', 'INCLUDE_DOWNLOADED_IN_REPORT', get_env_bool, False, 'PARSING CONFIGURATION'),
         # File Paths
         ('REPORTS_DIR', 'REPORTS_DIR', get_env, 'reports', 'FILE PATHS'),
         ('DAILY_REPORT_DIR', 'DAILY_REPORT_DIR', get_env, 'reports/DailyReport', 'FILE PATHS'),
