@@ -106,6 +106,7 @@ jobs:
           VAR_PIPELINE_LOG_FILE: ${{ vars.PIPELINE_LOG_FILE || 'logs/pipeline.log' }}
           VAR_EMAIL_NOTIFICATION_LOG_FILE: ${{ vars.EMAIL_NOTIFICATION_LOG_FILE || 'logs/email_notification.log' }}
           VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER || 'False' }}
+          VAR_INCLUDE_DOWNLOADED_IN_REPORT: ${{ vars.INCLUDE_DOWNLOADED_IN_REPORT || 'False' }}
           VAR_REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
           VAR_DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'reports/DailyReport' }}
           VAR_AD_HOC_DIR: ${{ vars.AD_HOC_DIR || 'reports/AdHoc' }}

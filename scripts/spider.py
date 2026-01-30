@@ -96,6 +96,12 @@ except ImportError:
     JAVDB_USERNAME = None
     JAVDB_PASSWORD = None
 
+# Import report configuration (optional)
+try:
+    from config import INCLUDE_DOWNLOADED_IN_REPORT
+except ImportError:
+    INCLUDE_DOWNLOADED_IN_REPORT = False
+
 # Configure logging
 from utils.logging_config import setup_logging, get_logger
 setup_logging(SPIDER_LOG_FILE, LOG_LEVEL)
@@ -2252,7 +2258,15 @@ def main():
             video_code = entry['video_code']
             row['video_code'] = video_code
 
-            # Only add row if it contains new torrent categories (excluding already downloaded ones)
+            # Check if row has any torrent content (including already downloaded ones)
+            has_any_torrents = any([
+                row['hacked_subtitle'],
+                row['hacked_no_subtitle'],
+                row['subtitle'],
+                row['no_subtitle']
+            ])
+            
+            # Check if there are new torrents (not yet downloaded)
             has_new_torrents = any([
                 row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
                 row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
@@ -2260,16 +2274,26 @@ def main():
                 row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]'
             ])
 
-            if has_new_torrents:
+            # Determine if we should include this movie in report
+            # If INCLUDE_DOWNLOADED_IN_REPORT is True, include movies even if all torrents are already downloaded
+            should_include_in_report = has_new_torrents or (INCLUDE_DOWNLOADED_IN_REPORT and has_any_torrents)
+
+            if should_include_in_report:
                 # Write to CSV immediately (before updating history)
                 write_csv([row], csv_path, fieldnames, dry_run, append_mode=True)
                 rows.append(row)
                 phase1_rows.append(row)  # Track phase 1 entries
-                logger.debug(f"[{i}/{total_entries_phase1}] [Page {page_num}] Added to CSV with new torrent categories")
+                
+                if has_new_torrents:
+                    logger.debug(f"[{i}/{total_entries_phase1}] [Page {page_num}] Added to CSV with new torrent categories")
+                else:
+                    logger.debug(f"[{i}/{total_entries_phase1}] [Page {page_num}] Added to CSV with all torrents already downloaded (INCLUDE_DOWNLOADED_IN_REPORT=True)")
+                    no_new_torrents_count += 1
+                    phase1_no_new_torrents += 1
                 
                 # Save to parsed movies history AFTER writing to CSV (only if new torrents found)
                 # Note: ignore_history only affects reading, not saving
-                if use_history_for_saving and not dry_run:
+                if use_history_for_saving and not dry_run and has_new_torrents:
                     # Only save new magnet links to history (exclude already downloaded ones)
                     new_magnet_links = {}
                     if row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
@@ -2460,7 +2484,15 @@ def main():
             video_code = entry['video_code']
             row['video_code'] = video_code
 
-            # Only add row if it contains new torrent categories (excluding already downloaded ones)
+            # Check if row has any torrent content (including already downloaded ones)
+            has_any_torrents = any([
+                row['hacked_subtitle'],
+                row['hacked_no_subtitle'],
+                row['subtitle'],
+                row['no_subtitle']
+            ])
+            
+            # Check if there are new torrents (not yet downloaded)
             has_new_torrents = any([
                 row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
                 row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
@@ -2468,16 +2500,26 @@ def main():
                 row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]'
             ])
 
-            if has_new_torrents:
+            # Determine if we should include this movie in report
+            # If INCLUDE_DOWNLOADED_IN_REPORT is True, include movies even if all torrents are already downloaded
+            should_include_in_report = has_new_torrents or (INCLUDE_DOWNLOADED_IN_REPORT and has_any_torrents)
+
+            if should_include_in_report:
                 # Write to CSV immediately (before updating history)
                 write_csv([row], csv_path, fieldnames, dry_run, append_mode=True)
                 rows.append(row)
                 phase2_rows.append(row)  # Track phase 2 entries
-                logger.debug(f"[{i}/{total_entries_phase2}] [Page {page_num}] Added to CSV with new torrent categories")
+                
+                if has_new_torrents:
+                    logger.debug(f"[{i}/{total_entries_phase2}] [Page {page_num}] Added to CSV with new torrent categories")
+                else:
+                    logger.debug(f"[{i}/{total_entries_phase2}] [Page {page_num}] Added to CSV with all torrents already downloaded (INCLUDE_DOWNLOADED_IN_REPORT=True)")
+                    no_new_torrents_count += 1
+                    phase2_no_new_torrents += 1
                 
                 # Save to parsed movies history AFTER writing to CSV (only if new torrents found)
                 # Note: ignore_history only affects reading, not saving
-                if use_history_for_saving and not dry_run:
+                if use_history_for_saving and not dry_run and has_new_torrents:
                     # Only save new magnet links to history (exclude already downloaded ones)
                     new_magnet_links = {}
                     if row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
