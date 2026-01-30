@@ -1194,7 +1194,8 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
 
     # If append_mode and file exists, read existing data and merge
     if append_mode and os.path.exists(csv_path):
-        existing_rows = {}
+        existing_rows = {}  # Keyed by video_code for merge operations
+        rows_without_key = []  # Preserve rows without video_code
         try:
             with open(csv_path, 'r', newline='', encoding='utf-8-sig') as f:
                 reader = csv.DictReader(f)
@@ -1202,35 +1203,49 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
                     video_code = row.get('video_code', '')
                     if video_code:
                         existing_rows[video_code] = row
+                    else:
+                        # Preserve rows without video_code (cannot merge, just keep them)
+                        rows_without_key.append(row)
+            if rows_without_key:
+                logger.warning(f"[CSV] Found {len(rows_without_key)} existing rows without video_code - preserving them")
         except Exception as e:
             logger.warning(f"Error reading existing CSV file: {e}. Will create new file.")
             existing_rows = {}
+            rows_without_key = []
         
         # Merge new rows with existing rows
         merged_count = 0
         added_count = 0
         for new_row in rows:
             video_code = new_row.get('video_code', '')
-            if video_code in existing_rows:
+            if not video_code:
+                # New row without video_code - cannot merge, append directly
+                rows_without_key.append(new_row)
+                added_count += 1
+                logger.warning(f"[CSV] Added new entry without video_code (cannot merge)")
+            elif video_code in existing_rows:
                 # Merge with existing row
                 existing_rows[video_code] = merge_row_data(existing_rows[video_code], new_row)
                 merged_count += 1
                 logger.debug(f"[CSV] Merged existing entry: {video_code}")
             else:
-                # Add new row
+                # Add new row with video_code
                 existing_rows[video_code] = new_row
                 added_count += 1
                 logger.debug(f"[CSV] Added new entry: {video_code}")
         
-        # Write all data back to file
+        # Write all data back to file (keyed rows first, then rows without key)
         with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for row in existing_rows.values():
                 writer.writerow(row)
+            for row in rows_without_key:
+                writer.writerow(row)
         
+        total_entries = len(existing_rows) + len(rows_without_key)
         if merged_count > 0 or added_count > 0:
-            logger.info(f"[CSV] Updated {csv_path}: {merged_count} merged, {added_count} added, {len(existing_rows)} total entries")
+            logger.info(f"[CSV] Updated {csv_path}: {merged_count} merged, {added_count} added, {total_entries} total entries")
     else:
         # No existing file or not in append mode - write new file
         logger.debug(f"[CSV] Writing new file: {csv_path}")
@@ -2860,4 +2875,3 @@ def main():
 
 if __name__ == '__main__':
     main() 
-
