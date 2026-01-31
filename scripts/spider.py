@@ -2130,15 +2130,16 @@ def main():
     if phase_mode in ['1', 'all']:
         logger.info("=" * 75)
         
-        # Apply max_movies_per_phase limit if specified
-        if max_movies_per_phase is not None and len(all_index_results_phase1) > max_movies_per_phase:
-            logger.info(f"PHASE 1: Limiting from {len(all_index_results_phase1)} to {max_movies_per_phase} entries (--max-movies-per-phase)")
+        # Apply max_movies_per_phase limit if specified (only positive values)
+        original_count_phase1 = len(all_index_results_phase1)
+        if max_movies_per_phase is not None and max_movies_per_phase > 0 and original_count_phase1 > max_movies_per_phase:
+            logger.info(f"PHASE 1: Discovered {original_count_phase1} entries, limiting to {max_movies_per_phase} (--max-movies-per-phase)")
             all_index_results_phase1 = all_index_results_phase1[:max_movies_per_phase]
         
         if custom_url is not None:
-            logger.info(f"PHASE 1: Processing {len(all_index_results_phase1)} collected entries with subtitle (AD HOC MODE)")
+            logger.info(f"PHASE 1: Processing {len(all_index_results_phase1)} entries with subtitle (AD HOC MODE)")
         else:
-            logger.info(f"PHASE 1: Processing {len(all_index_results_phase1)} collected entries with subtitle")
+            logger.info(f"PHASE 1: Processing {len(all_index_results_phase1)} entries with subtitle")
         logger.info("=" * 75)
 
         # Process phase 1 entries
@@ -2360,16 +2361,17 @@ def main():
         
         logger.info("=" * 75)
         
-        # Apply max_movies_per_phase limit if specified
-        if max_movies_per_phase is not None and len(all_index_results_phase2) > max_movies_per_phase:
-            logger.info(f"PHASE 2: Limiting from {len(all_index_results_phase2)} to {max_movies_per_phase} entries (--max-movies-per-phase)")
+        # Apply max_movies_per_phase limit if specified (only positive values)
+        original_count_phase2 = len(all_index_results_phase2)
+        if max_movies_per_phase is not None and max_movies_per_phase > 0 and original_count_phase2 > max_movies_per_phase:
+            logger.info(f"PHASE 2: Discovered {original_count_phase2} entries, limiting to {max_movies_per_phase} (--max-movies-per-phase)")
             all_index_results_phase2 = all_index_results_phase2[:max_movies_per_phase]
         
         if custom_url is not None:
             # Ad hoc mode: all filters disabled
-            logger.info(f"PHASE 2: Processing {len(all_index_results_phase2)} collected entries (AD HOC MODE - all filters disabled)")
+            logger.info(f"PHASE 2: Processing {len(all_index_results_phase2)} entries (AD HOC MODE - all filters disabled)")
         else:
-            logger.info(f"PHASE 2: Processing {len(all_index_results_phase2)} collected entries (rate > {PHASE2_MIN_RATE}, comments > {PHASE2_MIN_COMMENTS})")
+            logger.info(f"PHASE 2: Processing {len(all_index_results_phase2)} entries (rate > {PHASE2_MIN_RATE}, comments > {PHASE2_MIN_COMMENTS})")
         logger.info("=" * 75)
 
         # all_index_results_phase2 was already populated during the fetch phase
