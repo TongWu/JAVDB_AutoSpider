@@ -18,10 +18,9 @@ on:
   #   branches:
   #     - main
   #   paths:
-  #     - '**.py'
-  #   paths-ignore:
-  #     - 'docker/**'
-  #     - 'tests/**'
+  #     - 'scripts/**/*.py'
+  #     - 'utils/**/*.py'
+  #     - 'pipeline.py'
   
   workflow_dispatch:
     inputs:
