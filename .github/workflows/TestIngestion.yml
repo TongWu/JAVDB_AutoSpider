@@ -77,6 +77,9 @@ jobs:
           VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
           VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
           VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          # ============ GPT API FOR LOGIN (required for auto-login) ============
+          VAR_GPT_API_URL: ${{ secrets.GPT_API_URL }}
+          VAR_GPT_API_KEY: ${{ secrets.GPT_API_KEY }}
           # ============ DEFAULT VALUES FOR OTHER CONFIGS ============
           VAR_BASE_URL: 'https://javdb.com'
           VAR_START_PAGE: '1'
