@@ -143,6 +143,14 @@ jobs:
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
+          # Guard: fail workflow if ARTIFACT_KEY is not configured (prevent unencrypted config upload)
+          if [ -z "$ARTIFACT_KEY" ]; then
+            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
+            echo "This secret is required to encrypt config.py before upload."
+            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
+            exit 1
+          fi
+          
           # Encrypt config.py using AES-256-CBC before uploading
           # All artifacts are encrypted to protect sensitive data
           openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
@@ -191,6 +199,14 @@ jobs:
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
+          # Guard: fail workflow if ARTIFACT_KEY is not configured
+          if [ -z "$ARTIFACT_KEY" ]; then
+            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
+            echo "This secret is required to decrypt config.py."
+            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
+            exit 1
+          fi
+          
           openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
             -in config.py.enc -out config.py \
             -pass pass:"$ARTIFACT_KEY"
@@ -241,6 +257,14 @@ jobs:
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
+          # Guard: fail workflow if ARTIFACT_KEY is not configured
+          if [ -z "$ARTIFACT_KEY" ]; then
+            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
+            echo "This secret is required to decrypt config.py."
+            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
+            exit 1
+          fi
+          
           openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
             -in config.py.enc -out config.py \
             -pass pass:"$ARTIFACT_KEY"
@@ -302,6 +326,14 @@ jobs:
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
+          # Guard: fail workflow if ARTIFACT_KEY is not configured (prevent unencrypted artifacts)
+          if [ -z "$ARTIFACT_KEY" ]; then
+            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
+            echo "This secret is required to encrypt artifacts before upload."
+            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
+            exit 1
+          fi
+          
           # Create encrypted archive of logs (including .log and .txt files)
           # .txt files include proxy ban HTML captures for debugging
           mkdir -p encrypted_artifacts
@@ -339,6 +371,14 @@ jobs:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
           REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
         run: |
+          # Guard: fail workflow if ARTIFACT_KEY is not configured (prevent unencrypted artifacts)
+          if [ -z "$ARTIFACT_KEY" ]; then
+            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
+            echo "This secret is required to encrypt artifacts before upload."
+            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
+            exit 1
+          fi
+          
           # Create encrypted archive of all reports (preserving folder structure)
           # This includes: CSV report, history files, proxy_bans.csv
           mkdir -p encrypted_artifacts
@@ -416,6 +456,14 @@ jobs:
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
+          # Guard: fail workflow if ARTIFACT_KEY is not configured
+          if [ -z "$ARTIFACT_KEY" ]; then
+            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
+            echo "This secret is required to decrypt config.py."
+            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
+            exit 1
+          fi
+          
           openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
             -in config.py.enc -out config.py \
             -pass pass:"$ARTIFACT_KEY"
@@ -433,6 +481,14 @@ jobs:
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
+          # Guard: fail workflow if ARTIFACT_KEY is not configured
+          if [ -z "$ARTIFACT_KEY" ]; then
+            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
+            echo "This secret is required to decrypt artifacts."
+            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
+            exit 1
+          fi
+          
           if [ -f encrypted_artifacts/logs.tar.gz.enc ]; then
             openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
               -in encrypted_artifacts/logs.tar.gz.enc \
@@ -454,6 +510,14 @@ jobs:
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
+          # Guard: fail workflow if ARTIFACT_KEY is not configured
+          if [ -z "$ARTIFACT_KEY" ]; then
+            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
+            echo "This secret is required to decrypt artifacts."
+            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
+            exit 1
+          fi
+          
           if [ -f encrypted_artifacts/reports.tar.gz.enc ]; then
             openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
               -in encrypted_artifacts/reports.tar.gz.enc \
@@ -548,6 +612,14 @@ jobs:
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
+          # Guard: fail workflow if ARTIFACT_KEY is not configured
+          if [ -z "$ARTIFACT_KEY" ]; then
+            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
+            echo "This secret is required to decrypt artifacts."
+            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
+            exit 1
+          fi
+          
           if [ -f encrypted_artifacts/reports.tar.gz.enc ]; then
             openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
               -in encrypted_artifacts/reports.tar.gz.enc \
@@ -616,7 +688,7 @@ jobs:
           # This ensures our files are tracked in a commit
           # ============================================================
           echo "Step 2: Creating local commit..."
-          git commit -m "Auto-commit: Daily pipeline results $(date +'%Y-%m-%d %H:%M:%S UTC')"
+          git commit -m "Auto-commit: Daily pipeline results $(date +'%Y-%m-%d %H:%M:%S SGT')"
           LOCAL_COMMIT=$(git rev-parse HEAD)
           echo "Created local commit: $LOCAL_COMMIT"
           
