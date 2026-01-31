@@ -2296,9 +2296,10 @@ def main():
                 if has_new_torrents:
                     logger.debug(f"[{i}/{total_entries_phase1}] [Page {page_num}] Added to CSV with new torrent categories")
                 else:
+                    # Movie included due to INCLUDE_DOWNLOADED_IN_REPORT=True
+                    # Note: Don't increment no_new_torrents_count here because the movie IS in rows
+                    # no_new_torrents_count is for movies NOT included in report
                     logger.debug(f"[{i}/{total_entries_phase1}] [Page {page_num}] Added to CSV with all torrents already downloaded (INCLUDE_DOWNLOADED_IN_REPORT=True)")
-                    no_new_torrents_count += 1
-                    phase1_no_new_torrents += 1
                 
                 # Save to parsed movies history AFTER writing to CSV (only if new torrents found)
                 # Note: ignore_history only affects reading, not saving
@@ -2522,9 +2523,10 @@ def main():
                 if has_new_torrents:
                     logger.debug(f"[{i}/{total_entries_phase2}] [Page {page_num}] Added to CSV with new torrent categories")
                 else:
+                    # Movie included due to INCLUDE_DOWNLOADED_IN_REPORT=True
+                    # Note: Don't increment no_new_torrents_count here because the movie IS in rows
+                    # no_new_torrents_count is for movies NOT included in report
                     logger.debug(f"[{i}/{total_entries_phase2}] [Page {page_num}] Added to CSV with all torrents already downloaded (INCLUDE_DOWNLOADED_IN_REPORT=True)")
-                    no_new_torrents_count += 1
-                    phase2_no_new_torrents += 1
                 
                 # Save to parsed movies history AFTER writing to CSV (only if new torrents found)
                 # Note: ignore_history only affects reading, not saving
