@@ -11,7 +11,7 @@ name: JavDB Test Ingestion Pipeline (Mock)
 # - Minimal secrets/variables required
 
 permissions:
-  contents: write
+  contents: read  # Least privilege: only commit-results job needs write (overrides at job level)
 
 on:
   # push:  # DISABLED FOR PRIVATE REPO - enabled in public repo
@@ -73,7 +73,7 @@ jobs:
           VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
           VAR_JAVDB_USERNAME: ${{ secrets.JAVDB_USERNAME }}
           VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH || 'main' }}
-          VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL || github.server_url }}/${{ github.repository }}
+          VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL || format('{0}/{1}', github.server_url, github.repository) }}
           VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
           VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
           VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
