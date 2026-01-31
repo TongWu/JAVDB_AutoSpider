@@ -38,7 +38,7 @@ jobs:
   # Job 1: Setup and Run Pipeline - Simplified single job
   # =============================================================================
   run-pipeline:
-    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    runs-on: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
     environment: Production
     outputs:
       branch: ${{ steps.branch_check.outputs.branch }}
@@ -110,12 +110,14 @@ jobs:
           echo ""
           echo "DAILY INGESTION TEST:"
           echo "  - Pages to parse: 1-3 (first 3 pages)"
-          echo "  - Max movies per phase: 3"
+          echo "  - Max movies phase 1: 1"
+          echo "  - Max movies phase 2: 1"
           echo ""
           echo "ADHOC INGESTION TEST:"
           echo "  - URL: https://javdb.com/actors/wm9B?t=d&sort_type=0"
           echo "  - Pages to parse: 1 (first page only)"
-          echo "  - Max movies per phase: 1"
+          echo "  - Max movies phase 1: 1"
+          echo "  - Max movies phase 2: 1"
           echo ""
           echo "NOTE: This workflow will COMMIT but NOT PUSH changes"
           echo "NOTE: qBittorrent, PikPak, and Email steps are DISABLED"
@@ -133,12 +135,14 @@ jobs:
           
           # Run spider with limited scope for testing
           # - Parse only first 3 pages (--start-page 1 --end-page 3)
-          # - Process only first 3 movies per phase (--max-movies-per-phase 3)
+          # - Process only first 1 movie for phase 1 (--max-movies-phase1 1)
+          # - Process only first 1 movie for phase 2 (--max-movies-phase2 1)
           SPIDER_OUTPUT=$(python3 scripts/spider.py \
             --use-proxy \
             --start-page 1 \
             --end-page 3 \
-            --max-movies-per-phase 3 | tee /dev/stderr)
+            --max-movies-phase1 1 \
+            --max-movies-phase2 1 | tee /dev/stderr)
           
           # Extract CSV filename from spider output
           CSV_FILENAME=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_OUTPUT_CSV=" | cut -d'=' -f2 | tail -1)
@@ -162,14 +166,16 @@ jobs:
           # Run spider with limited scope for testing
           # - Custom URL: actors/wm9B with sort parameters
           # - Parse only first 1 page (--start-page 1 --end-page 1)
-          # - Process only first 1 movie per phase (--max-movies-per-phase 1)
+          # - Process only first 1 movie for phase 1 (--max-movies-phase1 1)
+          # - Process only first 1 movie for phase 2 (--max-movies-phase2 1)
           # - Ignore release date filter for adhoc mode
           SPIDER_OUTPUT=$(python3 scripts/spider.py \
             --use-proxy \
             --url 'https://javdb.com/actors/wm9B?t=d&sort_type=0' \
             --start-page 1 \
             --end-page 1 \
-            --max-movies-per-phase 1 \
+            --max-movies-phase1 1 \
+            --max-movies-phase2 1 \
             --ignore-release-date | tee /dev/stderr)
           
           # Extract CSV filename from spider output
