@@ -1278,7 +1278,7 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
         
         total_entries = len(existing_rows) + len(rows_without_key)
         if merged_count > 0 or added_count > 0:
-            logger.info(f"[CSV] Updated {csv_path}: {merged_count} merged, {added_count} added, {total_entries} total entries")
+            logger.debug(f"[CSV] Updated {csv_path}: {merged_count} merged, {added_count} added, {total_entries} total entries")
     else:
         # No existing file or not in append mode - write new file
         logger.debug(f"[CSV] Writing new file: {csv_path}")
