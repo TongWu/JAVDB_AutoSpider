@@ -1,0 +1,407 @@
+name: JavDB Test Ingestion Pipeline (Mock)
+
+# This is a mock workflow to test the full ingestion functionality
+# without pushing changes to the remote repository.
+# It runs both Daily and AdHoc ingestion with minimal data for quick testing.
+# 
+# SIMPLIFIED VERSION:
+# - No qBittorrent upload
+# - No PikPak bridge
+# - No email notification
+# - Minimal secrets/variables required
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/**/*.py'
+      - 'utils/**/*.py'
+      - 'pipeline.py'
+  
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: 'Runner type for pipeline jobs'
+        required: false
+        default: 'ubuntu-latest'
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'self-hosted'
+
+jobs:
+  # =============================================================================
+  # Job 1: Setup and Run Pipeline - Simplified single job
+  # =============================================================================
+  run-pipeline:
+    runs-on: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
+    environment: Production
+    outputs:
+      branch: ${{ steps.branch_check.outputs.branch }}
+      daily_csv_filename: ${{ steps.daily_spider.outputs.csv_filename }}
+      adhoc_csv_filename: ${{ steps.adhoc_spider.outputs.csv_filename }}
+    env:
+      TZ: Asia/Singapore
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get current branch
+        id: branch_check
+        run: |
+          CURRENT_BRANCH="${GITHUB_REF#refs/heads/}"
+          echo "Current branch: $CURRENT_BRANCH"
+          echo "branch=$CURRENT_BRANCH" >> $GITHUB_OUTPUT
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          # ============ REQUIRED SECRETS/VARIABLES (minimal set) ============
+          # These 8 are required for testing:
+          VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
+          VAR_JAVDB_USERNAME: ${{ secrets.JAVDB_USERNAME }}
+          VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH || 'main' }}
+          VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL || github.server_url }}/${{ github.repository }}
+          VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
+          VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
+          VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          # ============ DEFAULT VALUES FOR OTHER CONFIGS ============
+          VAR_BASE_URL: 'https://javdb.com'
+          VAR_START_PAGE: '1'
+          VAR_END_PAGE: '20'
+          VAR_PHASE2_MIN_RATE: '4.0'
+          VAR_PHASE2_MIN_COMMENTS: '85'
+          VAR_DETAIL_PAGE_SLEEP: '5'
+          VAR_PAGE_SLEEP: '2'
+          VAR_MOVIE_SLEEP: '1'
+          VAR_CF_TURNSTILE_COOLDOWN: '30'
+          VAR_PHASE_TRANSITION_COOLDOWN: '10'
+          VAR_FALLBACK_COOLDOWN: '30'
+          VAR_LOG_LEVEL: 'INFO'
+          VAR_SPIDER_LOG_FILE: 'logs/spider.log'
+          VAR_REPORTS_DIR: 'reports'
+          VAR_DAILY_REPORT_DIR: 'reports/DailyReport'
+          VAR_AD_HOC_DIR: 'reports/AdHoc'
+          VAR_PARSED_MOVIES_CSV: 'parsed_movies_history.csv'
+          VAR_IGNORE_RELEASE_DATE_FILTER: 'False'
+          VAR_CF_BYPASS_ENABLED: 'True'
+          VAR_CF_BYPASS_SERVICE_PORT: '8000'
+          VAR_PROXY_POOL_COOLDOWN_SECONDS: '691200'
+          VAR_PROXY_POOL_MAX_FAILURES: '3'
+        run: python3 utils/config_generator.py --github-actions
+
+      - name: Display Test Parameters
+        run: |
+          echo "============================================"
+          echo "TEST INGESTION PARAMETERS (Mock Mode)"
+          echo "============================================"
+          echo ""
+          echo "DAILY INGESTION TEST:"
+          echo "  - Pages to parse: 1-3 (first 3 pages)"
+          echo "  - Max movies phase 1: 1"
+          echo "  - Max movies phase 2: 1"
+          echo ""
+          echo "ADHOC INGESTION TEST:"
+          echo "  - URL: https://javdb.com/actors/wm9B?t=d&sort_type=0"
+          echo "  - Pages to parse: 1 (first page only)"
+          echo "  - Max movies phase 1: 1"
+          echo "  - Max movies phase 2: 1"
+          echo ""
+          echo "NOTE: This workflow will COMMIT but NOT PUSH changes"
+          echo "NOTE: qBittorrent, PikPak, and Email steps are DISABLED"
+          echo "============================================"
+
+      # ========================================
+      # PART 1: Daily Ingestion Test (Spider Only)
+      # ========================================
+      - name: "[DAILY] Run Spider"
+        id: daily_spider
+        run: |
+          echo "============================================"
+          echo "DAILY INGESTION - Spider"
+          echo "============================================"
+          
+          # Run spider with limited scope for testing
+          # - Parse only first 3 pages (--start-page 1 --end-page 3)
+          # - Process only first 1 movie for phase 1 (--max-movies-phase1 1)
+          # - Process only first 1 movie for phase 2 (--max-movies-phase2 1)
+          SPIDER_OUTPUT=$(python3 scripts/spider.py \
+            --use-proxy \
+            --start-page 1 \
+            --end-page 3 \
+            --max-movies-phase1 1 \
+            --max-movies-phase2 1 | tee /dev/stderr)
+          
+          # Extract CSV filename from spider output
+          CSV_FILENAME=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_OUTPUT_CSV=" | cut -d'=' -f2 | tail -1)
+          if [ -n "$CSV_FILENAME" ]; then
+            echo "csv_filename=$CSV_FILENAME" >> $GITHUB_OUTPUT
+            echo "Captured Daily CSV filename: $CSV_FILENAME"
+          else
+            echo "Warning: Could not capture Daily CSV filename from spider output"
+          fi
+
+      # ========================================
+      # PART 2: AdHoc Ingestion Test (Spider Only)
+      # ========================================
+      - name: "[ADHOC] Run Spider"
+        id: adhoc_spider
+        run: |
+          echo "============================================"
+          echo "ADHOC INGESTION - Spider"
+          echo "============================================"
+          
+          # Run spider with limited scope for testing
+          # - Custom URL: actors/wm9B with sort parameters
+          # - Parse only first 1 page (--start-page 1 --end-page 1)
+          # - Process only first 1 movie for phase 1 (--max-movies-phase1 1)
+          # - Process only first 1 movie for phase 2 (--max-movies-phase2 1)
+          # - Ignore release date filter for adhoc mode
+          SPIDER_OUTPUT=$(python3 scripts/spider.py \
+            --use-proxy \
+            --url 'https://javdb.com/actors/wm9B?t=d&sort_type=0' \
+            --start-page 1 \
+            --end-page 1 \
+            --max-movies-phase1 1 \
+            --max-movies-phase2 1 \
+            --ignore-release-date | tee /dev/stderr)
+          
+          # Extract CSV filename from spider output
+          CSV_FILENAME=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_OUTPUT_CSV=" | cut -d'=' -f2 | tail -1)
+          if [ -n "$CSV_FILENAME" ]; then
+            echo "csv_filename=$CSV_FILENAME" >> $GITHUB_OUTPUT
+            echo "Captured AdHoc CSV filename: $CSV_FILENAME"
+          else
+            echo "Warning: Could not capture AdHoc CSV filename from spider output"
+          fi
+
+      - name: Display generated reports
+        run: |
+          echo "============================================"
+          echo "GENERATED REPORTS"
+          echo "============================================"
+          echo ""
+          echo "Daily CSV: ${{ steps.daily_spider.outputs.csv_filename }}"
+          echo "AdHoc CSV: ${{ steps.adhoc_spider.outputs.csv_filename }}"
+          echo ""
+          echo "All CSV files in reports directory:"
+          find reports -name "*.csv" -type f 2>/dev/null | head -20 || echo "No CSV files found"
+          echo ""
+          echo "History file status:"
+          if [ -f "reports/parsed_movies_history.csv" ]; then
+            echo "  parsed_movies_history.csv: EXISTS ($(wc -l < reports/parsed_movies_history.csv) lines)"
+          else
+            echo "  parsed_movies_history.csv: NOT FOUND"
+          fi
+
+      - name: Encrypt and upload logs artifact
+        if: always()
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          mkdir -p encrypted_artifacts
+          
+          LOG_FILES=""
+          if ls logs/*.log 1> /dev/null 2>&1; then
+            LOG_FILES="logs/*.log"
+          fi
+          if ls logs/*.txt 1> /dev/null 2>&1; then
+            LOG_FILES="$LOG_FILES logs/*.txt"
+          fi
+          
+          if [ -n "$LOG_FILES" ]; then
+            tar -czf - $LOG_FILES | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
+              -out encrypted_artifacts/logs.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY"
+            echo "✓ Logs encrypted successfully"
+          else
+            echo "No log files found to encrypt"
+          fi
+
+      - name: Upload encrypted logs artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-logs-encrypted
+          path: encrypted_artifacts/logs.tar.gz.enc
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Encrypt and upload reports artifact
+        if: always()
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+          REPORTS_DIR: 'reports'
+        run: |
+          mkdir -p encrypted_artifacts
+          
+          FILES_TO_ARCHIVE=""
+          
+          # Add Daily spider output CSV if it exists
+          DAILY_CSV_PATH="${{ steps.daily_spider.outputs.csv_filename }}"
+          if [ -n "$DAILY_CSV_PATH" ] && [ -f "$DAILY_CSV_PATH" ]; then
+            FILES_TO_ARCHIVE="$DAILY_CSV_PATH"
+            echo "Including Daily CSV: $DAILY_CSV_PATH"
+          fi
+          
+          # Add AdHoc spider output CSV if it exists
+          ADHOC_CSV_PATH="${{ steps.adhoc_spider.outputs.csv_filename }}"
+          if [ -n "$ADHOC_CSV_PATH" ] && [ -f "$ADHOC_CSV_PATH" ]; then
+            FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $ADHOC_CSV_PATH"
+            echo "Including AdHoc CSV: $ADHOC_CSV_PATH"
+          fi
+          
+          # Add history files if they exist
+          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/proxy_bans.csv"; do
+            if [ -f "$HIST_FILE" ]; then
+              FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $HIST_FILE"
+              echo "Including history: $HIST_FILE"
+            fi
+          done
+          
+          if [ -n "$FILES_TO_ARCHIVE" ]; then
+            tar -czf - $FILES_TO_ARCHIVE | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
+              -out encrypted_artifacts/reports.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY"
+            echo "✓ Reports encrypted successfully"
+          else
+            echo "No report files found to archive"
+          fi
+
+      - name: Upload encrypted reports artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-reports-encrypted
+          path: encrypted_artifacts/reports.tar.gz.enc
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # =============================================================================
+  # Job 2: Commit Results - Commit CSV files (NO PUSH)
+  # This tests the commit functionality without affecting the remote repository
+  # =============================================================================
+  commit-results:
+    runs-on: ubuntu-latest
+    environment: Production
+    needs: [run-pipeline]
+    if: ${{ !cancelled() }}
+    permissions:
+      contents: write
+    env:
+      TZ: Asia/Singapore
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download encrypted reports
+        uses: actions/download-artifact@v4
+        with:
+          name: pipeline-reports-encrypted
+          path: encrypted_artifacts
+        continue-on-error: true
+
+      - name: Decrypt reports
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          if [ -f encrypted_artifacts/reports.tar.gz.enc ]; then
+            openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+              -in encrypted_artifacts/reports.tar.gz.enc \
+              -pass pass:"$ARTIFACT_KEY" | tar -xzf -
+            rm -rf encrypted_artifacts
+            echo "✓ Reports decrypted successfully"
+            echo "Extracted files:"
+            find reports -type f -name "*.csv" 2>/dev/null | head -20 || echo "No CSV files found"
+          else
+            echo "No encrypted reports found"
+          fi
+
+      - name: Commit Results (NO PUSH - Test Mode)
+        env:
+          REPORTS_DIR: 'reports'
+          DAILY_REPORT_DIR: 'reports/DailyReport'
+          AD_HOC_DIR: 'reports/AdHoc'
+        run: |
+          set -e
+          
+          echo "============================================"
+          echo "COMMIT RESULTS - TEST MODE (NO PUSH)"
+          echo "============================================"
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          CURRENT_BRANCH="${{ needs.run-pipeline.outputs.branch }}"
+          echo "Current branch: $CURRENT_BRANCH"
+          
+          # ============================================================
+          # STEP 1: Stage all files
+          # ============================================================
+          echo ""
+          echo "Step 1: Staging files..."
+          
+          # Stage history files
+          git add "$REPORTS_DIR/parsed_movies_history.csv" 2>/dev/null || true
+          git add "$REPORTS_DIR/proxy_bans.csv" 2>/dev/null || true
+          
+          # Stage Daily report CSVs
+          find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
+          
+          # Stage AdHoc report CSVs
+          find "$AD_HOC_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
+          
+          # Check if there are any changes to commit
+          if git diff --cached --quiet; then
+            echo ""
+            echo "✓ No changes to commit"
+            exit 0
+          fi
+          
+          # Show what will be committed
+          echo ""
+          echo "Files staged for commit:"
+          git diff --cached --name-only
+          
+          # ============================================================
+          # STEP 2: Create local commit (NO PUSH)
+          # ============================================================
+          echo ""
+          echo "Step 2: Creating local commit..."
+          git commit -m "Test-commit: Mock ingestion results $(date +'%Y-%m-%d %H:%M:%S UTC')"
+          LOCAL_COMMIT=$(git rev-parse HEAD)
+          echo "Created local commit: $LOCAL_COMMIT"
+          
+          # ============================================================
+          # STEP 3: Verify commit (NO PUSH)
+          # ============================================================
+          echo ""
+          echo "Step 3: Verifying commit..."
+          echo "============================================"
+          echo "COMMIT DETAILS:"
+          git log -1 --stat
+          echo "============================================"
+          
+          # Show what would be pushed (but don't actually push)
+          echo ""
+          echo "NOTE: This is TEST MODE - NO PUSH will be performed"
+          echo "The commit remains local and will not affect the remote repository."
+          echo ""
+          echo "To verify the commit locally, you can check:"
+          echo "  - git log -1"
+          echo "  - git show HEAD"
+          echo ""
+          echo "✓ Test commit completed successfully (NO PUSH)"

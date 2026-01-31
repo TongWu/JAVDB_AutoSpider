@@ -181,6 +181,12 @@ def parse_arguments():
     parser.add_argument('--from-pipeline', action='store_true',
                         help='Running from pipeline.py - use GIT_USERNAME for commits')
 
+    parser.add_argument('--max-movies-phase1', type=int, default=None,
+                        help='Limit the number of movies to process in phase 1 (for testing purposes)')
+
+    parser.add_argument('--max-movies-phase2', type=int, default=None,
+                        help='Limit the number of movies to process in phase 2 (for testing purposes)')
+
     return parser.parse_args()
 
 
@@ -1734,6 +1740,8 @@ def main():
     ignore_release_date = args.ignore_release_date
     use_proxy = args.use_proxy
     use_cf_bypass = args.use_cf_bypass
+    max_movies_phase1 = args.max_movies_phase1
+    max_movies_phase2 = args.max_movies_phase2
     
     # Initialize proxy pool (always initialize if configured, even if not enabled by default)
     # This allows automatic fallback to proxy if direct connection fails
@@ -2125,10 +2133,17 @@ def main():
     # ========================================
     if phase_mode in ['1', 'all']:
         logger.info("=" * 75)
+        
+        # Apply max_movies_phase1 limit if specified (only positive values)
+        original_count_phase1 = len(all_index_results_phase1)
+        if max_movies_phase1 is not None and max_movies_phase1 > 0 and original_count_phase1 > max_movies_phase1:
+            logger.info(f"PHASE 1: Discovered {original_count_phase1} entries, limiting to {max_movies_phase1} (--max-movies-phase1)")
+            all_index_results_phase1 = all_index_results_phase1[:max_movies_phase1]
+        
         if custom_url is not None:
-            logger.info(f"PHASE 1: Processing {len(all_index_results_phase1)} collected entries with subtitle (AD HOC MODE)")
+            logger.info(f"PHASE 1: Processing {len(all_index_results_phase1)} entries with subtitle (AD HOC MODE)")
         else:
-            logger.info(f"PHASE 1: Processing {len(all_index_results_phase1)} collected entries with subtitle")
+            logger.info(f"PHASE 1: Processing {len(all_index_results_phase1)} entries with subtitle")
         logger.info("=" * 75)
 
         # Process phase 1 entries
@@ -2349,11 +2364,18 @@ def main():
             time.sleep(PHASE_TRANSITION_COOLDOWN)
         
         logger.info("=" * 75)
+        
+        # Apply max_movies_phase2 limit if specified (only positive values)
+        original_count_phase2 = len(all_index_results_phase2)
+        if max_movies_phase2 is not None and max_movies_phase2 > 0 and original_count_phase2 > max_movies_phase2:
+            logger.info(f"PHASE 2: Discovered {original_count_phase2} entries, limiting to {max_movies_phase2} (--max-movies-phase2)")
+            all_index_results_phase2 = all_index_results_phase2[:max_movies_phase2]
+        
         if custom_url is not None:
             # Ad hoc mode: all filters disabled
-            logger.info(f"PHASE 2: Processing {len(all_index_results_phase2)} collected entries (AD HOC MODE - all filters disabled)")
+            logger.info(f"PHASE 2: Processing {len(all_index_results_phase2)} entries (AD HOC MODE - all filters disabled)")
         else:
-            logger.info(f"PHASE 2: Processing {len(all_index_results_phase2)} collected entries (rate > {PHASE2_MIN_RATE}, comments > {PHASE2_MIN_COMMENTS})")
+            logger.info(f"PHASE 2: Processing {len(all_index_results_phase2)} entries (rate > {PHASE2_MIN_RATE}, comments > {PHASE2_MIN_COMMENTS})")
         logger.info("=" * 75)
 
         # all_index_results_phase2 was already populated during the fetch phase
