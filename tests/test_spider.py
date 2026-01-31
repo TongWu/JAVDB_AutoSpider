@@ -406,7 +406,8 @@ class TestExtractUrlPartAfterJavdb:
     """Test cases for extract_url_part_after_javdb function."""
     
     def extract_url_part_after_javdb(self, url):
-        """Local implementation of extract_url_part_after_javdb."""
+        """Local implementation of extract_url_part_after_javdb - matches production behavior."""
+        import re
         try:
             if 'javdb.com' in url:
                 domain_pos = url.find('javdb.com')
@@ -416,9 +417,20 @@ class TestExtractUrlPartAfterJavdb:
                         after_domain = after_domain[1:]
                     if after_domain.endswith('/'):
                         after_domain = after_domain[:-1]
-                    # Replace / with _, but keep query parameters (replace ? with _)
-                    filename_part = after_domain.replace('/', '_').replace('?', '_')
-                    return filename_part
+                    # Replace URL special characters for filename safety
+                    # - / (path separator) -> _
+                    # - ? (query start) -> _
+                    # - & (param separator) -> _
+                    # - = (key-value separator) -> - (hyphen for better readability)
+                    filename_part = after_domain
+                    for char in ['/', '?', '&']:
+                        filename_part = filename_part.replace(char, '_')
+                    filename_part = filename_part.replace('=', '-')
+                    # Collapse multiple consecutive underscores into one
+                    filename_part = re.sub(r'_+', '_', filename_part)
+                    # Remove leading/trailing underscores
+                    filename_part = filename_part.strip('_')
+                    return filename_part if filename_part else 'custom_url'
         except Exception:
             pass
         return 'custom_url'
@@ -432,19 +444,20 @@ class TestExtractUrlPartAfterJavdb:
         """Test extracting from actors URL with query parameters."""
         url = 'https://javdb.com/actors/658kM?t=d,c&sort_type=3'
         result = self.extract_url_part_after_javdb(url)
-        assert result == 'actors_658kM_t=d,c&sort_type=3'
+        # Production replaces & with _, = with -, and collapses consecutive underscores
+        assert result == 'actors_658kM_t-d,c_sort_type-3'
     
     def test_rankings_url_with_query_params(self):
         """Test extracting from rankings URL with query parameters."""
         url = 'https://javdb.com/rankings/movies?p=monthly&t=censored'
         result = self.extract_url_part_after_javdb(url)
-        assert result == 'rankings_movies_p=monthly&t=censored'
+        assert result == 'rankings_movies_p-monthly_t-censored'
     
     def test_makers_url_with_query_params(self):
         """Test extracting from makers URL with query parameters."""
         url = 'https://javdb.com/makers/6M?f=download'
         result = self.extract_url_part_after_javdb(url)
-        assert result == 'makers_6M_f=download'
+        assert result == 'makers_6M_f-download'
     
     def test_url_with_trailing_slash(self):
         """Test extracting from URL with trailing slash."""
@@ -659,7 +672,8 @@ class TestGenerateOutputCsvNameFromHtml:
         return 'unknown'
     
     def extract_url_part_after_javdb(self, url):
-        """Local implementation of extract_url_part_after_javdb."""
+        """Local implementation of extract_url_part_after_javdb - matches production behavior."""
+        import re
         try:
             if 'javdb.com' in url:
                 domain_pos = url.find('javdb.com')
@@ -669,9 +683,20 @@ class TestGenerateOutputCsvNameFromHtml:
                         after_domain = after_domain[1:]
                     if after_domain.endswith('/'):
                         after_domain = after_domain[:-1]
-                    # Replace / with _, but keep query parameters (replace ? with _)
-                    filename_part = after_domain.replace('/', '_').replace('?', '_')
-                    return filename_part
+                    # Replace URL special characters for filename safety
+                    # - / (path separator) -> _
+                    # - ? (query start) -> _
+                    # - & (param separator) -> _
+                    # - = (key-value separator) -> - (hyphen for better readability)
+                    filename_part = after_domain
+                    for char in ['/', '?', '&']:
+                        filename_part = filename_part.replace(char, '_')
+                    filename_part = filename_part.replace('=', '-')
+                    # Collapse multiple consecutive underscores into one
+                    filename_part = re.sub(r'_+', '_', filename_part)
+                    # Remove leading/trailing underscores
+                    filename_part = filename_part.strip('_')
+                    return filename_part if filename_part else 'custom_url'
         except Exception:
             pass
         return 'custom_url'
@@ -726,8 +751,8 @@ class TestGenerateOutputCsvNameFromHtml:
         html = '<div>No actor name here</div>'
         
         result = self.generate_output_csv_name_from_html(url, html)
-        # Should fallback to URL-based name (now preserves query parameters)
-        assert result == f'Javdb_AdHoc_actors_658kM_t=d,c&sort_type=3_{today_date}.csv'
+        # Should fallback to URL-based name (production replaces & with _, = with -)
+        assert result == f'Javdb_AdHoc_actors_658kM_t-d,c_sort_type-3_{today_date}.csv'
     
     def test_generate_csv_name_for_maker_page(self):
         """Test generating CSV name for maker page."""
@@ -954,7 +979,8 @@ class TestGenerateOutputCsvNameAllTypes:
         return 'unknown'
     
     def extract_url_part_after_javdb(self, url):
-        """Local implementation of extract_url_part_after_javdb."""
+        """Local implementation of extract_url_part_after_javdb - matches production behavior."""
+        import re
         try:
             if 'javdb.com' in url:
                 domain_pos = url.find('javdb.com')
@@ -964,9 +990,20 @@ class TestGenerateOutputCsvNameAllTypes:
                         after_domain = after_domain[1:]
                     if after_domain.endswith('/'):
                         after_domain = after_domain[:-1]
-                    # Replace / with _, but keep query parameters (replace ? with _)
-                    filename_part = after_domain.replace('/', '_').replace('?', '_')
-                    return filename_part
+                    # Replace URL special characters for filename safety
+                    # - / (path separator) -> _
+                    # - ? (query start) -> _
+                    # - & (param separator) -> _
+                    # - = (key-value separator) -> - (hyphen for better readability)
+                    filename_part = after_domain
+                    for char in ['/', '?', '&']:
+                        filename_part = filename_part.replace(char, '_')
+                    filename_part = filename_part.replace('=', '-')
+                    # Collapse multiple consecutive underscores into one
+                    filename_part = re.sub(r'_+', '_', filename_part)
+                    # Remove leading/trailing underscores
+                    filename_part = filename_part.strip('_')
+                    return filename_part if filename_part else 'custom_url'
         except Exception:
             pass
         return 'custom_url'
@@ -1469,16 +1506,30 @@ def temp_dir():
 class TestMergeRowData:
     """Test cases for merge_row_data function."""
     
+    # Placeholder that should not overwrite actual magnet URLs (matches production)
+    DOWNLOADED_PLACEHOLDER = '[DOWNLOADED PREVIOUSLY]'
+    
     def merge_row_data(self, existing_row, new_row):
-        """Local implementation of merge_row_data."""
+        """Local implementation of merge_row_data - matches production behavior."""
         merged = existing_row.copy()
         
         for key, new_value in new_row.items():
             existing_value = merged.get(key, '')
-            new_str = str(new_value) if new_value is not None else ''
             
-            if new_str:
+            # Convert to string for comparison (handle None values)
+            new_str = str(new_value) if new_value is not None else ''
+            existing_str = str(existing_value) if existing_value is not None else ''
+            
+            # Treat placeholder as empty - don't let it overwrite actual magnet URLs
+            if new_str == self.DOWNLOADED_PLACEHOLDER:
+                # Only use placeholder if existing is empty (no data to preserve)
+                if not existing_str:
+                    merged[key] = new_value
+                # else: keep existing value (preserve the actual magnet URL)
+            elif new_str:
+                # New has real data - use it (overwrite or fill empty)
                 merged[key] = new_value
+            # else: keep existing value (new is empty)
         
         return merged
     
@@ -1545,22 +1596,85 @@ class TestMergeRowData:
         result = self.merge_row_data(existing, new)
         
         assert result['subtitle'] == 'old_subtitle'
+    
+    def test_downloaded_placeholder_does_not_overwrite_existing_magnet(self):
+        """Test that DOWNLOADED_PLACEHOLDER doesn't overwrite existing magnet URLs."""
+        existing = {'video_code': 'ABC-123', 'subtitle': 'magnet:?xt=urn:btih:abc123'}
+        new = {'video_code': 'ABC-123', 'subtitle': '[DOWNLOADED PREVIOUSLY]'}
+        
+        result = self.merge_row_data(existing, new)
+        
+        # The placeholder should NOT overwrite the actual magnet URL
+        assert result['subtitle'] == 'magnet:?xt=urn:btih:abc123'
+    
+    def test_downloaded_placeholder_fills_empty_existing(self):
+        """Test that DOWNLOADED_PLACEHOLDER is used when existing is empty."""
+        existing = {'video_code': 'ABC-123', 'subtitle': ''}
+        new = {'video_code': 'ABC-123', 'subtitle': '[DOWNLOADED PREVIOUSLY]'}
+        
+        result = self.merge_row_data(existing, new)
+        
+        # The placeholder should be used since existing is empty
+        assert result['subtitle'] == '[DOWNLOADED PREVIOUSLY]'
+    
+    def test_downloaded_placeholder_mixed_scenario(self):
+        """Test mixed scenario with placeholder and real data."""
+        existing = {
+            'video_code': 'ABC-123',
+            'subtitle': 'magnet:?xt=urn:btih:abc123',  # has real data
+            'hacked_subtitle': '',                      # empty
+            'no_subtitle': 'magnet:?xt=urn:btih:def456' # has real data
+        }
+        new = {
+            'video_code': 'ABC-123',
+            'subtitle': '[DOWNLOADED PREVIOUSLY]',      # placeholder -> should NOT overwrite
+            'hacked_subtitle': '[DOWNLOADED PREVIOUSLY]', # placeholder -> should fill empty
+            'no_subtitle': 'new_magnet_link'             # real data -> should overwrite
+        }
+        
+        result = self.merge_row_data(existing, new)
+        
+        assert result['subtitle'] == 'magnet:?xt=urn:btih:abc123'  # preserved
+        assert result['hacked_subtitle'] == '[DOWNLOADED PREVIOUSLY]'  # filled
+        assert result['no_subtitle'] == 'new_magnet_link'  # overwritten by real data
 
 
 class TestWriteCsvMerge:
     """Test cases for write_csv merge functionality."""
     
+    # Placeholder that should not overwrite actual magnet URLs (matches production)
+    DOWNLOADED_PLACEHOLDER = '[DOWNLOADED PREVIOUSLY]'
+    
     def merge_row_data(self, existing_row, new_row):
-        """Local implementation of merge_row_data."""
+        """Local implementation of merge_row_data - matches production behavior."""
         merged = existing_row.copy()
+        
         for key, new_value in new_row.items():
+            existing_value = merged.get(key, '')
+            
+            # Convert to string for comparison (handle None values)
             new_str = str(new_value) if new_value is not None else ''
-            if new_str:
+            existing_str = str(existing_value) if existing_value is not None else ''
+            
+            # Treat placeholder as empty - don't let it overwrite actual magnet URLs
+            if new_str == self.DOWNLOADED_PLACEHOLDER:
+                # Only use placeholder if existing is empty (no data to preserve)
+                if not existing_str:
+                    merged[key] = new_value
+                # else: keep existing value (preserve the actual magnet URL)
+            elif new_str:
+                # New has real data - use it (overwrite or fill empty)
                 merged[key] = new_value
+            # else: keep existing value (new is empty)
+        
         return merged
     
     def write_csv(self, rows, csv_path, fieldnames, dry_run=False, append_mode=False):
-        """Local implementation of write_csv with merge support."""
+        """Local implementation of write_csv with merge support.
+        
+        Preserves existing columns in the CSV file to prevent data loss when schema changes.
+        Merges existing fieldnames with new fieldnames to keep all columns.
+        """
         import csv
         
         if dry_run:
@@ -1568,31 +1682,48 @@ class TestWriteCsvMerge:
         
         if append_mode and os.path.exists(csv_path):
             existing_rows = {}
+            rows_without_key = []  # Preserve rows without video_code
+            existing_fieldnames = []  # Track existing CSV columns to preserve them
             try:
                 with open(csv_path, 'r', newline='', encoding='utf-8-sig') as f:
                     reader = csv.DictReader(f)
+                    existing_fieldnames = reader.fieldnames or []
                     for row in reader:
                         video_code = row.get('video_code', '')
                         if video_code:
                             existing_rows[video_code] = row
+                        else:
+                            rows_without_key.append(row)
             except Exception:
                 existing_rows = {}
+                rows_without_key = []
+                existing_fieldnames = []
             
             for new_row in rows:
                 video_code = new_row.get('video_code', '')
-                if video_code in existing_rows:
+                if not video_code:
+                    rows_without_key.append(new_row)
+                elif video_code in existing_rows:
                     existing_rows[video_code] = self.merge_row_data(existing_rows[video_code], new_row)
                 else:
                     existing_rows[video_code] = new_row
             
+            # Merge fieldnames: preserve existing columns + add any new columns
+            merged_fieldnames = list(fieldnames)
+            for existing_field in existing_fieldnames:
+                if existing_field not in merged_fieldnames:
+                    merged_fieldnames.append(existing_field)
+            
             with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer = csv.DictWriter(f, fieldnames=merged_fieldnames, extrasaction='ignore')
                 writer.writeheader()
                 for row in existing_rows.values():
                     writer.writerow(row)
+                for row in rows_without_key:
+                    writer.writerow(row)
         else:
             with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
                 writer.writeheader()
                 for row in rows:
                     writer.writerow(row)
@@ -1719,4 +1850,82 @@ class TestWriteCsvMerge:
         assert 'ABC-002' in video_codes
         assert 'ABC-003' in video_codes
         assert 'ABC-004' in video_codes
+    
+    def test_append_mode_preserves_extra_columns_in_existing_csv(self, temp_dir):
+        """Test that append_mode preserves extra columns from existing CSV.
+        
+        This test verifies that when an existing CSV file has columns that are NOT
+        in the provided fieldnames, the write operation:
+        1. Does not raise a ValueError
+        2. Preserves ALL existing columns (including extra ones not in new fieldnames)
+        3. Successfully writes the new data
+        4. Does NOT lose the extra column data
+        """
+        import csv
+        csv_path = os.path.join(temp_dir, 'test.csv')
+        
+        # Create an existing CSV with an extra column not in our fieldnames
+        existing_fieldnames = ['video_code', 'subtitle', 'actor', 'extra_column']
+        with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.DictWriter(f, fieldnames=existing_fieldnames)
+            writer.writeheader()
+            writer.writerow({
+                'video_code': 'ABC-001',
+                'subtitle': 'link1',
+                'actor': 'Actor A',
+                'extra_column': 'extra_data'
+            })
+        
+        # Now try to append with fieldnames that don't include 'extra_column'
+        new_fieldnames = ['video_code', 'subtitle', 'actor']
+        new_rows = [
+            {'video_code': 'ABC-002', 'subtitle': 'link2', 'actor': 'Actor B'}
+        ]
+        
+        # This should NOT raise an exception
+        self.write_csv(new_rows, csv_path, new_fieldnames, append_mode=True)
+        
+        # Verify data was written and existing data preserved
+        result = self.read_csv(csv_path)
+        assert len(result) == 2
+        
+        # Both rows should be present
+        video_codes = [r['video_code'] for r in result]
+        assert 'ABC-001' in video_codes
+        assert 'ABC-002' in video_codes
+        
+        # CRITICAL: Verify extra_column is preserved and not lost
+        row_abc001 = next(r for r in result if r['video_code'] == 'ABC-001')
+        assert 'extra_column' in row_abc001, "Extra column should be preserved in existing row"
+        assert row_abc001['extra_column'] == 'extra_data', "Extra column data should not be lost"
+        
+        # New row should have empty extra_column since it wasn't provided
+        row_abc002 = next(r for r in result if r['video_code'] == 'ABC-002')
+        assert row_abc002.get('extra_column', '') == '', "New row should have empty extra_column"
+    
+    def test_merge_with_downloaded_placeholder(self, temp_dir):
+        """Test that DOWNLOADED_PLACEHOLDER doesn't overwrite existing magnet URLs during merge."""
+        csv_path = os.path.join(temp_dir, 'test.csv')
+        fieldnames = ['video_code', 'subtitle', 'hacked_subtitle']
+        
+        # Write initial data with actual magnet links
+        initial_rows = [
+            {'video_code': 'ABC-001', 'subtitle': 'magnet:?xt=urn:btih:abc123', 'hacked_subtitle': ''}
+        ]
+        self.write_csv(initial_rows, csv_path, fieldnames, append_mode=False)
+        
+        # Append data with DOWNLOADED_PLACEHOLDER for the same video_code
+        new_rows = [
+            {'video_code': 'ABC-001', 'subtitle': '[DOWNLOADED PREVIOUSLY]', 'hacked_subtitle': 'new_hacked_link'}
+        ]
+        self.write_csv(new_rows, csv_path, fieldnames, append_mode=True)
+        
+        # Verify
+        result = self.read_csv(csv_path)
+        assert len(result) == 1
+        assert result[0]['video_code'] == 'ABC-001'
+        # The placeholder should NOT overwrite the actual magnet URL
+        assert result[0]['subtitle'] == 'magnet:?xt=urn:btih:abc123'
+        # The new hacked_subtitle should be written since existing was empty
+        assert result[0]['hacked_subtitle'] == 'new_hacked_link'
 
