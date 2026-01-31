@@ -14,13 +14,13 @@ permissions:
   contents: write
 
 on:
-  # push:  # DISABLED FOR PRIVATE REPO - enabled in public repo
-  #   branches:
-  #     - main
-  #   paths:
-  #     - 'scripts/**/*.py'
-  #     - 'utils/**/*.py'
-  #     - 'pipeline.py'
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/**/*.py'
+      - 'utils/**/*.py'
+      - 'pipeline.py'
   
   workflow_dispatch:
     inputs:
