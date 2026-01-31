@@ -181,6 +181,9 @@ def parse_arguments():
     parser.add_argument('--from-pipeline', action='store_true',
                         help='Running from pipeline.py - use GIT_USERNAME for commits')
 
+    parser.add_argument('--max-movies-per-phase', type=int, default=None,
+                        help='Limit the number of movies to process per phase (for testing purposes)')
+
     return parser.parse_args()
 
 
@@ -1734,6 +1737,7 @@ def main():
     ignore_release_date = args.ignore_release_date
     use_proxy = args.use_proxy
     use_cf_bypass = args.use_cf_bypass
+    max_movies_per_phase = args.max_movies_per_phase
     
     # Initialize proxy pool (always initialize if configured, even if not enabled by default)
     # This allows automatic fallback to proxy if direct connection fails
@@ -2125,6 +2129,12 @@ def main():
     # ========================================
     if phase_mode in ['1', 'all']:
         logger.info("=" * 75)
+        
+        # Apply max_movies_per_phase limit if specified
+        if max_movies_per_phase is not None and len(all_index_results_phase1) > max_movies_per_phase:
+            logger.info(f"PHASE 1: Limiting from {len(all_index_results_phase1)} to {max_movies_per_phase} entries (--max-movies-per-phase)")
+            all_index_results_phase1 = all_index_results_phase1[:max_movies_per_phase]
+        
         if custom_url is not None:
             logger.info(f"PHASE 1: Processing {len(all_index_results_phase1)} collected entries with subtitle (AD HOC MODE)")
         else:
@@ -2349,6 +2359,12 @@ def main():
             time.sleep(PHASE_TRANSITION_COOLDOWN)
         
         logger.info("=" * 75)
+        
+        # Apply max_movies_per_phase limit if specified
+        if max_movies_per_phase is not None and len(all_index_results_phase2) > max_movies_per_phase:
+            logger.info(f"PHASE 2: Limiting from {len(all_index_results_phase2)} to {max_movies_per_phase} entries (--max-movies-per-phase)")
+            all_index_results_phase2 = all_index_results_phase2[:max_movies_per_phase]
+        
         if custom_url is not None:
             # Ad hoc mode: all filters disabled
             logger.info(f"PHASE 2: Processing {len(all_index_results_phase2)} collected entries (AD HOC MODE - all filters disabled)")
