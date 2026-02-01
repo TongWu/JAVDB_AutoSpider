@@ -137,13 +137,13 @@ jobs:
           echo "============================================"
           
           # Run spider with limited scope for testing
-          # - Parse only first 3 pages (--start-page 1 --end-page 3)
+          # - Parse only first 10 pages (--start-page 1 --end-page 10)
           # - Process only first 1 movie for phase 1 (--max-movies-phase1 1)
           # - Process only first 1 movie for phase 2 (--max-movies-phase2 1)
           SPIDER_OUTPUT=$(python3 scripts/spider.py \
             --use-proxy \
             --start-page 1 \
-            --end-page 3 \
+            --end-page 10 \
             --max-movies-phase1 1 \
             --max-movies-phase2 1 | tee /dev/stderr)
           
