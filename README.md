@@ -87,7 +87,7 @@ The spider operates in two modes:
 - Request Mirroring mode for transparent CF bypass
 - Automatic cookie caching and management
 - Works with both local and remote proxy setups
-- Enable with `--use-cf-bypass` flag
+- Automatically activated as a fallback when direct requests fail
 
 ## Installation
 
@@ -395,7 +395,6 @@ python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --use-proxy --ignor
 | `--phase` | Phase to run (1/2/all) | all | `--phase 1` |
 | `--ignore-release-date` | Ignore today/yesterday tags | False | `--ignore-release-date` |
 | `--use-proxy` | Enable proxy from config.py | False | `--use-proxy` |
-| `--use-cf-bypass` | Use CloudFlare bypass service | False | `--use-cf-bypass` |
 
 ### Additional Tools
 
@@ -993,23 +992,14 @@ Edit `config.py` to set the CF bypass service port:
 CF_BYPASS_SERVICE_PORT = 8000  # Must match the service port
 ```
 
-**4. Run Spider with CF Bypass:**
+**4. CF Bypass Behavior:**
 
-```bash
-# Enable CF bypass for spider
-python Javdb_Spider.py --use-cf-bypass
-
-# Combine with proxy
-python Javdb_Spider.py --use-proxy --use-cf-bypass
-
-# Via pipeline
-python pipeline_run_and_notify.py --use-cf-bypass
-```
+CF bypass is automatically activated as a fallback when direct requests fail during the proxy pool fallback mechanism. No command-line flag is needed.
 
 #### How It Works
 
-When `--use-cf-bypass` is enabled:
-1. **Request Mirroring**: All requests are forwarded through the CF bypass service
+When CF bypass is activated during fallback:
+1. **Request Mirroring**: Requests are forwarded through the CF bypass service
 2. **URL Rewriting**: Original URL `https://javdb.com/page` → `http://localhost:8000/page`
 3. **Host Header**: The original hostname is sent via `x-hostname` header
 4. **Cookie Management**: CF bypass service handles cf_clearance cookies automatically
@@ -1486,9 +1476,9 @@ python3 pipeline_run_and_notify.py
 python3 Javdb_Spider.py --use-proxy
 python3 pipeline_run_and_notify.py --use-proxy
 
-# Scrape with CloudFlare bypass
-python3 Javdb_Spider.py --use-cf-bypass
-python3 pipeline_run_and_notify.py --use-proxy --use-cf-bypass
+# Scrape with proxy (CF bypass activates automatically as fallback)
+python3 Javdb_Spider.py --use-proxy
+python3 pipeline_run_and_notify.py --use-proxy
 
 # Custom URL scraping (requires login)
 python3 javdb_login.py  # First time setup
