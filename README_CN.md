@@ -85,7 +85,7 @@
 - Request Mirroring 模式实现透明 CF 绕过
 - 自动 cookie 缓存和管理
 - 支持本地和远程代理设置
-- 使用 `--use-cf-bypass` 标志启用
+- 直接请求失败时自动作为 fallback 启用
 
 ## 安装
 
@@ -393,7 +393,6 @@ python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --use-proxy --ignor
 | `--phase` | 运行的阶段(1/2/all) | all | `--phase 1` |
 | `--ignore-release-date` | 忽略今日/昨日标签 | False | `--ignore-release-date` |
 | `--use-proxy` | 从 config.py 启用代理 | False | `--use-proxy` |
-| `--use-cf-bypass` | 使用 CloudFlare 绕过服务 | False | `--use-cf-bypass` |
 
 ### 附加工具
 
@@ -991,23 +990,14 @@ python app.py --port 8000
 CF_BYPASS_SERVICE_PORT = 8000  # 必须匹配服务端口
 ```
 
-**4. 使用 CF 绕过运行爬虫:**
+**4. CF 绕过行为:**
 
-```bash
-# 为爬虫启用 CF 绕过
-python Javdb_Spider.py --use-cf-bypass
-
-# 与代理组合
-python Javdb_Spider.py --use-proxy --use-cf-bypass
-
-# 通过流水线
-python pipeline_run_and_notify.py --use-cf-bypass
-```
+CF 绕过会在代理池 fallback 机制中直接请求失败时自动启用，无需命令行参数。
 
 #### 工作原理
 
-启用 `--use-cf-bypass` 时:
-1. **请求镜像**: 所有请求都通过 CF 绕过服务转发
+当 CF 绕过在 fallback 中激活时:
+1. **请求镜像**: 请求通过 CF 绕过服务转发
 2. **URL 重写**: 原始 URL `https://javdb.com/page` → `http://localhost:8000/page`
 3. **Host 头**: 原始主机名通过 `x-hostname` 头发送
 4. **Cookie 管理**: CF 绕过服务自动处理 cf_clearance cookies
@@ -1481,9 +1471,9 @@ python3 pipeline_run_and_notify.py
 python3 Javdb_Spider.py --use-proxy
 python3 pipeline_run_and_notify.py --use-proxy
 
-# 使用 CloudFlare 绕过爬取
-python3 Javdb_Spider.py --use-cf-bypass
-python3 pipeline_run_and_notify.py --use-proxy --use-cf-bypass
+# 使用代理爬取（CF 绕过会作为 fallback 自动启用）
+python3 Javdb_Spider.py --use-proxy
+python3 pipeline_run_and_notify.py --use-proxy
 
 # 自定义 URL 爬取(需要登录)
 python3 javdb_login.py  # 首次设置
