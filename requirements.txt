@@ -3,6 +3,8 @@ beautifulsoup4>=4.9.3
 lxml>=4.6.3
 pikpakapi>=0.1.11
 curl_cffi>=0.7.0
+fastapi>=0.110.0
+uvicorn>=0.27.0
 
 # Optional dependencies
 # For SOCKS5 proxy support (optional):
