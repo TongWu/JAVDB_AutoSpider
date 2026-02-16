@@ -22,6 +22,13 @@ from utils.history_manager import load_parsed_movies_history, save_parsed_movie_
     determine_torrent_types, get_missing_torrent_types, validate_history_file, has_complete_subtitles
 from utils.parser import parse_index, parse_detail
 from utils.magnet_extractor import extract_magnets
+
+# New API layer – available for direct use by callers
+from api.parsers.common import extract_category_name as _api_extract_category_name
+from api.parsers import parse_index_page as api_parse_index_page
+from api.parsers import parse_detail_page as api_parse_detail_page
+from api.parsers import parse_category_page as api_parse_category_page
+from api.parsers import parse_top_page as api_parse_top_page
 from utils.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 from utils.path_helper import get_dated_report_path, ensure_dated_dir, get_dated_subdir
 
@@ -1482,23 +1489,20 @@ def extract_url_identifier(url):
 def parse_actor_name_from_html(html_content):
     """
     Extract actor name from JavDB actor page HTML.
-    
-    Looks for:
-    <span class="actor-section-name">森日向子</span>
-    
+
+    Delegates to ``api.parsers.common.extract_category_name``.
+
     Args:
         html_content: HTML content of the actor page
-    
+
     Returns:
         str: Actor name if found, None otherwise
     """
     try:
         soup = BeautifulSoup(html_content, 'html.parser')
-        actor_span = soup.find('span', class_='actor-section-name')
-        if actor_span:
-            actor_name = actor_span.get_text(strip=True)
-            if actor_name:
-                return actor_name
+        cat_type, cat_name = _api_extract_category_name(soup)
+        if cat_name:
+            return cat_name
     except Exception as e:
         logger.warning(f"Error parsing actor name from HTML: {e}")
     return None
@@ -1507,28 +1511,24 @@ def parse_actor_name_from_html(html_content):
 def parse_section_name_from_html(html_content):
     """
     Extract section name from JavDB page HTML.
-    
-    This is a generic function that extracts names from pages using the 
-    <span class="section-name"> element, which is used by:
-    - makers (片商): e.g., "蚊香社, PRESTIGE,プレステージ"
-    - publishers (发行商): e.g., "ABSOLUTELY FANTASIA"
-    - series (系列): e.g., "親友の人妻と背徳不倫。禁断中出し小旅行。"
-    - video_codes (番号): e.g., "ABF"
-    - directors (导演): e.g., "Director Name"
-    
+
+    Delegates to ``api.parsers.common.extract_category_name``.
+
+    This is a generic function that extracts names from pages using the
+    ``<span class="section-name">`` element, which is used by makers,
+    publishers, series, video_codes, and directors.
+
     Args:
         html_content: HTML content of the page
-    
+
     Returns:
         str: Section name if found, None otherwise
     """
     try:
         soup = BeautifulSoup(html_content, 'html.parser')
-        section_name = soup.find('span', class_='section-name')
-        if section_name:
-            name = section_name.get_text(strip=True)
-            if name:
-                return name
+        cat_type, cat_name = _api_extract_category_name(soup)
+        if cat_name:
+            return cat_name
     except Exception as e:
         logger.warning(f"Error parsing section name from HTML: {e}")
     return None
@@ -1946,15 +1946,12 @@ def main():
     
     # Track skipped entries (for accurate statistics)
     # Separate counters for each phase for accurate email reporting
-    skipped_session_count = 0
     skipped_history_count = 0  # Track entries skipped due to history
     failed_count = 0  # Track entries that failed to fetch/parse
     no_new_torrents_count = 0  # Track entries with no new torrents to download
-    phase1_skipped_session = 0
     phase1_skipped_history_actual = 0  # Actual count during processing
     phase1_failed = 0  # Track entries that failed to fetch/parse in phase 1
     phase1_no_new_torrents = 0  # Track entries with no new torrents in phase 1
-    phase2_skipped_session = 0
     phase2_skipped_history_actual = 0  # Actual count during processing
     phase2_failed = 0  # Track entries that failed to fetch/parse in phase 2
     phase2_no_new_torrents = 0  # Track entries with no new torrents in phase 2
@@ -2162,15 +2159,13 @@ def main():
             page_num = entry['page']
             fallback_triggered = False  # Track if fallback was triggered for this entry
 
-            # Skip if already parsed in this session
+            # Skip duplicate entry in current run
             if href in parsed_links:
-                logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping already parsed in this session")
-                skipped_session_count += 1
-                phase1_skipped_session += 1
+                logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping duplicate entry in current run")
                 # No sleep needed - pending_movie_sleep stays as-is for next entry that needs processing
                 continue
 
-            # Add to parsed links set for this session
+            # Add to parsed links set for this run
             parsed_links.add(href)
 
             # Early skip check: if movie already has both subtitle and hacked_subtitle in history,
@@ -2350,8 +2345,8 @@ def main():
                 pending_movie_sleep = True
 
         # Phase 1 statistics - use actual tracked counts
-        # Verify: total_entries_phase1 == phase1_skipped_session + phase1_skipped_history_actual + len(phase1_rows) + phase1_no_new_torrents + phase1_failed
-        logger.info(f"Phase 1 completed: {total_entries_phase1} movies discovered, {len(phase1_rows)} processed, {phase1_skipped_session} skipped (session), {phase1_skipped_history_actual} skipped (history), {phase1_no_new_torrents} no new torrents, {phase1_failed} failed")
+        # Verify: total_entries_phase1 ~= phase1_skipped_history_actual + len(phase1_rows) + phase1_no_new_torrents + phase1_failed
+        logger.info(f"Phase 1 completed: {total_entries_phase1} movies discovered, {len(phase1_rows)} processed, {phase1_skipped_history_actual} skipped (history), {phase1_no_new_torrents} no new torrents, {phase1_failed} failed")
 
     # ========================================
     # Process Phase 2 entries (already parsed during fetch)
@@ -2396,15 +2391,13 @@ def main():
             page_num = entry['page']
             fallback_triggered = False  # Track if fallback was triggered for this entry
 
-            # Skip if already parsed in this session
+            # Skip duplicate entry in current run
             if href in parsed_links:
-                logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping already parsed in this session")
-                skipped_session_count += 1
-                phase2_skipped_session += 1
+                logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping duplicate entry in current run")
                 # No sleep needed - pending_movie_sleep stays as-is for next entry that needs processing
                 continue
 
-            # Add to parsed links set for this session
+            # Add to parsed links set for this run
             parsed_links.add(href)
 
             # Early skip check: if movie already has both subtitle and hacked_subtitle in history,
@@ -2584,8 +2577,8 @@ def main():
                 pending_movie_sleep = True
 
         # Phase 2 statistics - use actual tracked counts
-        # Verify: total_entries_phase2 == phase2_skipped_session + phase2_skipped_history_actual + len(phase2_rows) + phase2_no_new_torrents + phase2_failed
-        logger.info(f"Phase 2 completed: {total_entries_phase2} movies discovered, {len(phase2_rows)} processed, {phase2_skipped_session} skipped (session), {phase2_skipped_history_actual} skipped (history), {phase2_no_new_torrents} no new torrents, {phase2_failed} failed")
+        # Verify: total_entries_phase2 ~= phase2_skipped_history_actual + len(phase2_rows) + phase2_no_new_torrents + phase2_failed
+        logger.info(f"Phase 2 completed: {total_entries_phase2} movies discovered, {len(phase2_rows)} processed, {phase2_skipped_history_actual} skipped (history), {phase2_no_new_torrents} no new torrents, {phase2_failed} failed")
 
     # CSV has been written incrementally during processing
     if not dry_run:
@@ -2650,14 +2643,13 @@ def main():
 
     # Overall Summary
     # Note: "movies" = unique movie pages, each movie can have multiple torrent links
-    # total_discovered = processed + skipped_session + skipped_history + no_new_torrents + failed
-    total_discovered = len(rows) + skipped_session_count + skipped_history_count + no_new_torrents_count + failed_count
+    # total_discovered = processed + skipped_history + no_new_torrents + failed
+    total_discovered = len(rows) + skipped_history_count + no_new_torrents_count + failed_count
     logger.info("=" * 30)
     logger.info("OVERALL SUMMARY")
     logger.info("=" * 30)
     logger.info(f"Total movies discovered: {total_discovered}")
     logger.info(f"Successfully processed: {len(rows)}")
-    logger.info(f"Skipped already parsed in this session: {skipped_session_count}")
     if use_history_for_loading and not ignore_history:
         logger.info(f"Skipped already parsed in previous runs: {skipped_history_count}")
     elif ignore_history:
