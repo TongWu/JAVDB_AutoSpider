@@ -13,7 +13,7 @@ Usage:
     from utils.request_handler import RequestHandler
     
     handler = RequestHandler(proxy_pool=my_proxy_pool, config=my_config)
-    html = handler.get_page(url, use_proxy=True, use_cf_bypass=True)
+    html = handler.get_page(url, use_proxy=True)
 """
 
 import requests
@@ -699,10 +699,8 @@ class RequestHandler:
         """
         Fetch a webpage with proper headers, age verification bypass, and proxy pool support.
         
-        Mode combinations:
-        - --use-proxy only: Use proxy to access website directly (no bypass)
-        - --use-cf-bypass only: Use local CF bypass service (http://127.0.0.1:8000/html?url=...)
-        - --use-proxy --use-cf-bypass: Use proxy's CF bypass service (http://{proxy_ip}:8000/html?url=...)
+        CF bypass is not enabled by default for initial requests. It is automatically
+        tried during the fallback mechanism when direct requests fail.
         
         CF Bypass failure detection: HTML size < 1000 bytes AND contains 'fail' keyword
         
@@ -718,10 +716,10 @@ class RequestHandler:
             url: URL to fetch
             session: requests.Session object for connection reuse
             use_cookie: Whether to add session cookie
-            use_proxy: Whether --use-proxy flag is enabled
+            use_proxy: Whether proxy is enabled
             module_name: Module name for proxy control ('spider', 'qbittorrent', 'pikpak', etc.)
             max_retries: Maximum number of retries with different proxies (only for proxy pool mode)
-            use_cf_bypass: Whether to use CF bypass service
+            use_cf_bypass: Whether to use CF bypass service (set by fallback mechanism)
             
         Returns:
             HTML content as string, or None if failed
