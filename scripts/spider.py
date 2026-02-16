@@ -2355,8 +2355,11 @@ def main():
     if phase_mode in ['2', 'all']:
         # Add cooldown delay between phases to avoid triggering Cloudflare protection
         if phase_mode == 'all':
-            logger.info(f"Waiting {PHASE_TRANSITION_COOLDOWN} seconds before Phase 2")
-            time.sleep(PHASE_TRANSITION_COOLDOWN)
+            if total_entries_phase1 > 0:
+                logger.info(f"Waiting {PHASE_TRANSITION_COOLDOWN} seconds before Phase 2")
+                time.sleep(PHASE_TRANSITION_COOLDOWN)
+            else:
+                logger.info("Phase 1 had no entries to process, skipping phase transition cooldown")
         
         logger.info("=" * 75)
         
