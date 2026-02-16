@@ -9,8 +9,10 @@ jobs:
     permissions:
       pull-requests: write
     runs-on: ubuntu-latest
-    # Only check PRs targeting main or master
-    if: github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'master'
+    # Only run in public repos and check PRs targeting main or master
+    if: >-
+      github.event.repository.private == false &&
+      (github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'master')
     
     steps:
       - name: Check if PR is from dev branch

@@ -22,6 +22,13 @@ from utils.history_manager import load_parsed_movies_history, save_parsed_movie_
     determine_torrent_types, get_missing_torrent_types, validate_history_file, has_complete_subtitles
 from utils.parser import parse_index, parse_detail
 from utils.magnet_extractor import extract_magnets
+
+# New API layer – available for direct use by callers
+from api.parsers.common import extract_category_name as _api_extract_category_name
+from api.parsers import parse_index_page as api_parse_index_page
+from api.parsers import parse_detail_page as api_parse_detail_page
+from api.parsers import parse_category_page as api_parse_category_page
+from api.parsers import parse_top_page as api_parse_top_page
 from utils.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 from utils.path_helper import get_dated_report_path, ensure_dated_dir, get_dated_subdir
 
@@ -1464,23 +1471,20 @@ def extract_url_identifier(url):
 def parse_actor_name_from_html(html_content):
     """
     Extract actor name from JavDB actor page HTML.
-    
-    Looks for:
-    <span class="actor-section-name">森日向子</span>
-    
+
+    Delegates to ``api.parsers.common.extract_category_name``.
+
     Args:
         html_content: HTML content of the actor page
-    
+
     Returns:
         str: Actor name if found, None otherwise
     """
     try:
         soup = BeautifulSoup(html_content, 'html.parser')
-        actor_span = soup.find('span', class_='actor-section-name')
-        if actor_span:
-            actor_name = actor_span.get_text(strip=True)
-            if actor_name:
-                return actor_name
+        cat_type, cat_name = _api_extract_category_name(soup)
+        if cat_name:
+            return cat_name
     except Exception as e:
         logger.warning(f"Error parsing actor name from HTML: {e}")
     return None
@@ -1489,28 +1493,24 @@ def parse_actor_name_from_html(html_content):
 def parse_section_name_from_html(html_content):
     """
     Extract section name from JavDB page HTML.
-    
-    This is a generic function that extracts names from pages using the 
-    <span class="section-name"> element, which is used by:
-    - makers (片商): e.g., "蚊香社, PRESTIGE,プレステージ"
-    - publishers (发行商): e.g., "ABSOLUTELY FANTASIA"
-    - series (系列): e.g., "親友の人妻と背徳不倫。禁断中出し小旅行。"
-    - video_codes (番号): e.g., "ABF"
-    - directors (导演): e.g., "Director Name"
-    
+
+    Delegates to ``api.parsers.common.extract_category_name``.
+
+    This is a generic function that extracts names from pages using the
+    ``<span class="section-name">`` element, which is used by makers,
+    publishers, series, video_codes, and directors.
+
     Args:
         html_content: HTML content of the page
-    
+
     Returns:
         str: Section name if found, None otherwise
     """
     try:
         soup = BeautifulSoup(html_content, 'html.parser')
-        section_name = soup.find('span', class_='section-name')
-        if section_name:
-            name = section_name.get_text(strip=True)
-            if name:
-                return name
+        cat_type, cat_name = _api_extract_category_name(soup)
+        if cat_name:
+            return cat_name
     except Exception as e:
         logger.warning(f"Error parsing section name from HTML: {e}")
     return None
