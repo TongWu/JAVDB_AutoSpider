@@ -55,7 +55,6 @@ def parse_arguments():
     parser.add_argument('--dry-run', action='store_true', help='Print items that would be written without changing CSV file')
     parser.add_argument('--ignore-release-date', action='store_true', help='Ignore today/yesterday tags')
     parser.add_argument('--use-proxy', action='store_true', help='Enable proxy for all HTTP requests')
-    parser.add_argument('--use-cf-bypass', action='store_true', help='Use CloudFlare5sBypass service')
     # PikPak Bridge arguments
     parser.add_argument('--pikpak-individual', action='store_true', help='Use individual mode for PikPak Bridge')
     return parser.parse_args()
@@ -190,9 +189,6 @@ def main():
         spider_args.append('--ignore-release-date')
     if args.use_proxy:
         spider_args.append('--use-proxy')
-    if args.use_cf_bypass:
-        spider_args.append('--use-cf-bypass')
-
     # Build base arguments for uploader (csv filename will be added after spider runs)
     uploader_args = ['--from-pipeline']  # Always pass --from-pipeline
     if is_adhoc_mode:
