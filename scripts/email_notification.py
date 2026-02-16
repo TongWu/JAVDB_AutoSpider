@@ -441,14 +441,14 @@ def extract_spider_statistics(log_path):
     Statistics terminology:
     - "movies" = unique movie pages discovered
     - "processed" = movies successfully parsed and written to CSV
-    - "skipped" = movies skipped (either in this session or from history)
+    - "skipped" = movies skipped by history rules
     
     Note: Each movie can have multiple torrent links (subtitle, no_subtitle, etc.)
     """
     stats = {
-        'phase1': {'discovered': None, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0},
-        'phase2': {'discovered': None, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0},
-        'overall': {'total_discovered': None, 'successfully_processed': 0, 'skipped_session': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0}
+        'phase1': {'discovered': None, 'processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0},
+        'phase2': {'discovered': None, 'processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0},
+        'overall': {'total_discovered': None, 'successfully_processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0}
     }
     
     if not os.path.exists(log_path):
@@ -458,21 +458,37 @@ def extract_spider_statistics(log_path):
         with open(log_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # Extract phase 1 statistics from newest format (with no_new_torrents):
-        # "Phase 1 completed: X movies discovered, Y processed, Z skipped (session), W skipped (history), N no new torrents, F failed"
+        # Extract phase 1 statistics from current format (without skipped session):
+        # "Phase 1 completed: X movies discovered, Y processed, Z skipped (history), N no new torrents, F failed"
         phase1_with_no_new = re.search(
+            r'Phase 1 completed: (\d+) movies discovered, (\d+) processed, (\d+) skipped \(history\), (\d+) no new torrents, (\d+) failed',
+            content
+        )
+        # Backward-compatible format:
+        # "Phase 1 completed: X movies discovered, Y processed, S skipped (session), Z skipped (history), N no new torrents, F failed"
+        phase1_with_no_new_legacy = re.search(
             r'Phase 1 completed: (\d+) movies discovered, (\d+) processed, (\d+) skipped \(session\), (\d+) skipped \(history\), (\d+) no new torrents, (\d+) failed',
             content
         )
         # Fallback to format with failed but no no_new_torrents:
-        # "Phase 1 completed: X movies discovered, Y processed, Z skipped (session), W skipped (history), F failed"
+        # "Phase 1 completed: X movies discovered, Y processed, Z skipped (history), F failed"
         phase1_with_failed = re.search(
+            r'Phase 1 completed: (\d+) movies discovered, (\d+) processed, (\d+) skipped \(history\), (\d+) failed',
+            content
+        )
+        # Backward-compatible format with skipped session:
+        phase1_with_failed_legacy = re.search(
             r'Phase 1 completed: (\d+) movies discovered, (\d+) processed, (\d+) skipped \(session\), (\d+) skipped \(history\), (\d+) failed',
             content
         )
         # Fallback to intermediate format (without failed):
-        # "Phase 1 completed: X movies discovered, Y processed, Z skipped (session), W skipped (history)"
+        # "Phase 1 completed: X movies discovered, Y processed, Z skipped (history)"
         phase1_new = re.search(
+            r'Phase 1 completed: (\d+) movies discovered, (\d+) processed, (\d+) skipped \(history\)',
+            content
+        )
+        # Backward-compatible intermediate format:
+        phase1_new_legacy = re.search(
             r'Phase 1 completed: (\d+) movies discovered, (\d+) processed, (\d+) skipped \(session\), (\d+) skipped \(history\)',
             content
         )
@@ -482,37 +498,64 @@ def extract_spider_statistics(log_path):
         if phase1_with_no_new:
             stats['phase1']['discovered'] = int(phase1_with_no_new.group(1))
             stats['phase1']['processed'] = int(phase1_with_no_new.group(2))
-            stats['phase1']['skipped_session'] = int(phase1_with_no_new.group(3))
-            stats['phase1']['skipped_history'] = int(phase1_with_no_new.group(4))
-            stats['phase1']['no_new_torrents'] = int(phase1_with_no_new.group(5))
-            stats['phase1']['failed'] = int(phase1_with_no_new.group(6))
+            stats['phase1']['skipped_history'] = int(phase1_with_no_new.group(3))
+            stats['phase1']['no_new_torrents'] = int(phase1_with_no_new.group(4))
+            stats['phase1']['failed'] = int(phase1_with_no_new.group(5))
+        elif phase1_with_no_new_legacy:
+            stats['phase1']['discovered'] = int(phase1_with_no_new_legacy.group(1))
+            stats['phase1']['processed'] = int(phase1_with_no_new_legacy.group(2))
+            stats['phase1']['skipped_history'] = int(phase1_with_no_new_legacy.group(4))
+            stats['phase1']['no_new_torrents'] = int(phase1_with_no_new_legacy.group(5))
+            stats['phase1']['failed'] = int(phase1_with_no_new_legacy.group(6))
         elif phase1_with_failed:
             stats['phase1']['discovered'] = int(phase1_with_failed.group(1))
             stats['phase1']['processed'] = int(phase1_with_failed.group(2))
-            stats['phase1']['skipped_session'] = int(phase1_with_failed.group(3))
-            stats['phase1']['skipped_history'] = int(phase1_with_failed.group(4))
-            stats['phase1']['failed'] = int(phase1_with_failed.group(5))
+            stats['phase1']['skipped_history'] = int(phase1_with_failed.group(3))
+            stats['phase1']['failed'] = int(phase1_with_failed.group(4))
+        elif phase1_with_failed_legacy:
+            stats['phase1']['discovered'] = int(phase1_with_failed_legacy.group(1))
+            stats['phase1']['processed'] = int(phase1_with_failed_legacy.group(2))
+            stats['phase1']['skipped_history'] = int(phase1_with_failed_legacy.group(4))
+            stats['phase1']['failed'] = int(phase1_with_failed_legacy.group(5))
         elif phase1_new:
             stats['phase1']['discovered'] = int(phase1_new.group(1))
             stats['phase1']['processed'] = int(phase1_new.group(2))
-            stats['phase1']['skipped_session'] = int(phase1_new.group(3))
-            stats['phase1']['skipped_history'] = int(phase1_new.group(4))
+            stats['phase1']['skipped_history'] = int(phase1_new.group(3))
+        elif phase1_new_legacy:
+            stats['phase1']['discovered'] = int(phase1_new_legacy.group(1))
+            stats['phase1']['processed'] = int(phase1_new_legacy.group(2))
+            stats['phase1']['skipped_history'] = int(phase1_new_legacy.group(4))
         elif phase1_old:
             stats['phase1']['discovered'] = int(phase1_old.group(1))
             stats['phase1']['processed'] = int(phase1_old.group(3))
             stats['phase1']['skipped_history'] = int(phase1_old.group(2))
         
-        # Extract phase 2 statistics from newest format (with no_new_torrents)
+        # Extract phase 2 statistics from current format (without skipped session)
         phase2_with_no_new = re.search(
+            r'Phase 2 completed: (\d+) movies discovered, (\d+) processed, (\d+) skipped \(history\), (\d+) no new torrents, (\d+) failed',
+            content
+        )
+        # Backward-compatible format with skipped session
+        phase2_with_no_new_legacy = re.search(
             r'Phase 2 completed: (\d+) movies discovered, (\d+) processed, (\d+) skipped \(session\), (\d+) skipped \(history\), (\d+) no new torrents, (\d+) failed',
             content
         )
         # Fallback to format with failed but no no_new_torrents
         phase2_with_failed = re.search(
+            r'Phase 2 completed: (\d+) movies discovered, (\d+) processed, (\d+) skipped \(history\), (\d+) failed',
+            content
+        )
+        # Backward-compatible format with skipped session
+        phase2_with_failed_legacy = re.search(
             r'Phase 2 completed: (\d+) movies discovered, (\d+) processed, (\d+) skipped \(session\), (\d+) skipped \(history\), (\d+) failed',
             content
         )
         phase2_new = re.search(
+            r'Phase 2 completed: (\d+) movies discovered, (\d+) processed, (\d+) skipped \(history\)',
+            content
+        )
+        # Backward-compatible intermediate format
+        phase2_new_legacy = re.search(
             r'Phase 2 completed: (\d+) movies discovered, (\d+) processed, (\d+) skipped \(session\), (\d+) skipped \(history\)',
             content
         )
@@ -521,21 +564,33 @@ def extract_spider_statistics(log_path):
         if phase2_with_no_new:
             stats['phase2']['discovered'] = int(phase2_with_no_new.group(1))
             stats['phase2']['processed'] = int(phase2_with_no_new.group(2))
-            stats['phase2']['skipped_session'] = int(phase2_with_no_new.group(3))
-            stats['phase2']['skipped_history'] = int(phase2_with_no_new.group(4))
-            stats['phase2']['no_new_torrents'] = int(phase2_with_no_new.group(5))
-            stats['phase2']['failed'] = int(phase2_with_no_new.group(6))
+            stats['phase2']['skipped_history'] = int(phase2_with_no_new.group(3))
+            stats['phase2']['no_new_torrents'] = int(phase2_with_no_new.group(4))
+            stats['phase2']['failed'] = int(phase2_with_no_new.group(5))
+        elif phase2_with_no_new_legacy:
+            stats['phase2']['discovered'] = int(phase2_with_no_new_legacy.group(1))
+            stats['phase2']['processed'] = int(phase2_with_no_new_legacy.group(2))
+            stats['phase2']['skipped_history'] = int(phase2_with_no_new_legacy.group(4))
+            stats['phase2']['no_new_torrents'] = int(phase2_with_no_new_legacy.group(5))
+            stats['phase2']['failed'] = int(phase2_with_no_new_legacy.group(6))
         elif phase2_with_failed:
             stats['phase2']['discovered'] = int(phase2_with_failed.group(1))
             stats['phase2']['processed'] = int(phase2_with_failed.group(2))
-            stats['phase2']['skipped_session'] = int(phase2_with_failed.group(3))
-            stats['phase2']['skipped_history'] = int(phase2_with_failed.group(4))
-            stats['phase2']['failed'] = int(phase2_with_failed.group(5))
+            stats['phase2']['skipped_history'] = int(phase2_with_failed.group(3))
+            stats['phase2']['failed'] = int(phase2_with_failed.group(4))
+        elif phase2_with_failed_legacy:
+            stats['phase2']['discovered'] = int(phase2_with_failed_legacy.group(1))
+            stats['phase2']['processed'] = int(phase2_with_failed_legacy.group(2))
+            stats['phase2']['skipped_history'] = int(phase2_with_failed_legacy.group(4))
+            stats['phase2']['failed'] = int(phase2_with_failed_legacy.group(5))
         elif phase2_new:
             stats['phase2']['discovered'] = int(phase2_new.group(1))
             stats['phase2']['processed'] = int(phase2_new.group(2))
-            stats['phase2']['skipped_session'] = int(phase2_new.group(3))
-            stats['phase2']['skipped_history'] = int(phase2_new.group(4))
+            stats['phase2']['skipped_history'] = int(phase2_new.group(3))
+        elif phase2_new_legacy:
+            stats['phase2']['discovered'] = int(phase2_new_legacy.group(1))
+            stats['phase2']['processed'] = int(phase2_new_legacy.group(2))
+            stats['phase2']['skipped_history'] = int(phase2_new_legacy.group(4))
         elif phase2_old:
             stats['phase2']['discovered'] = int(phase2_old.group(1))
             stats['phase2']['processed'] = int(phase2_old.group(3))
@@ -554,10 +609,6 @@ def extract_spider_statistics(log_path):
         if successfully_processed:
             stats['overall']['successfully_processed'] = int(successfully_processed.group(1))
         
-        skipped_session = re.search(r'Skipped already parsed in this session: (\d+)', content)
-        if skipped_session:
-            stats['overall']['skipped_session'] = int(skipped_session.group(1))
-        
         skipped_history = re.search(r'Skipped already parsed in previous runs: (\d+)', content)
         if skipped_history:
             stats['overall']['skipped_history'] = int(skipped_history.group(1))
@@ -574,7 +625,6 @@ def extract_spider_statistics(log_path):
         if stats['overall']['total_discovered'] is None:
             stats['overall']['total_discovered'] = (
                 stats['overall']['successfully_processed'] + 
-                stats['overall']['skipped_session'] + 
                 stats['overall']['skipped_history'] +
                 stats['overall']['no_new_torrents'] +
                 stats['overall']['failed']
@@ -824,9 +874,9 @@ JavDB Pipeline Report ({mode_display})
     # Note: Statistics are for MOVIES (unique pages), not individual torrent links
     if show_spider:
         # Calculate totals for verification (include failed count and no_new_torrents)
-        p1_total = spider_stats['phase1']['processed'] + spider_stats['phase1']['skipped_session'] + spider_stats['phase1']['skipped_history'] + spider_stats['phase1']['failed'] + spider_stats['phase1'].get('no_new_torrents', 0)
-        p2_total = spider_stats['phase2']['processed'] + spider_stats['phase2']['skipped_session'] + spider_stats['phase2']['skipped_history'] + spider_stats['phase2']['failed'] + spider_stats['phase2'].get('no_new_torrents', 0)
-        overall_total = spider_stats['overall']['successfully_processed'] + spider_stats['overall']['skipped_session'] + spider_stats['overall']['skipped_history'] + spider_stats['overall']['failed'] + spider_stats['overall'].get('no_new_torrents', 0)
+        p1_total = spider_stats['phase1']['processed'] + spider_stats['phase1']['skipped_history'] + spider_stats['phase1']['failed'] + spider_stats['phase1'].get('no_new_torrents', 0)
+        p2_total = spider_stats['phase2']['processed'] + spider_stats['phase2']['skipped_history'] + spider_stats['phase2']['failed'] + spider_stats['phase2'].get('no_new_torrents', 0)
+        overall_total = spider_stats['overall']['successfully_processed'] + spider_stats['overall']['skipped_history'] + spider_stats['overall']['failed'] + spider_stats['overall'].get('no_new_torrents', 0)
         
         # Use None check instead of `or` to handle 0 correctly
         # `or` treats 0 as falsy and would incorrectly fall back to calculated total
@@ -841,7 +891,6 @@ JavDB Pipeline Report ({mode_display})
 Phase 1 (Subtitle + Today/Yesterday)
   Discovered: {p1_discovered}
   Processed:  {spider_stats['phase1']['processed']}
-  Skipped (Session): {spider_stats['phase1']['skipped_session']}
   Skipped (History): {spider_stats['phase1']['skipped_history']}
   No New Torrents: {spider_stats['phase1'].get('no_new_torrents', 0)}
   Failed: {spider_stats['phase1']['failed']}
@@ -849,7 +898,6 @@ Phase 1 (Subtitle + Today/Yesterday)
 Phase 2 (Rate>4.0, Comments>85)
   Discovered: {p2_discovered}
   Processed:  {spider_stats['phase2']['processed']}
-  Skipped (Session): {spider_stats['phase2']['skipped_session']}
   Skipped (History): {spider_stats['phase2']['skipped_history']}
   No New Torrents: {spider_stats['phase2'].get('no_new_torrents', 0)}
   Failed: {spider_stats['phase2']['failed']}
@@ -857,7 +905,6 @@ Phase 2 (Rate>4.0, Comments>85)
 Overall Summary
   Total Discovered: {overall_discovered}
   Processed:  {spider_stats['overall']['successfully_processed']}
-  Skipped (Session): {spider_stats['overall']['skipped_session']}
   Skipped (History): {spider_stats['overall']['skipped_history']}
   No New Torrents: {spider_stats['overall'].get('no_new_torrents', 0)}
   Failed: {spider_stats['overall']['failed']}""")
@@ -1146,9 +1193,9 @@ def main():
     
     # Prepare default stats for missing components
     default_spider_stats = {
-        'phase1': {'discovered': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0, 'failed': 0},
-        'phase2': {'discovered': 0, 'processed': 0, 'skipped_session': 0, 'skipped_history': 0, 'failed': 0},
-        'overall': {'total_discovered': 0, 'successfully_processed': 0, 'skipped_session': 0, 'skipped_history': 0, 'failed': 0}
+        'phase1': {'discovered': 0, 'processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0},
+        'phase2': {'discovered': 0, 'processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0},
+        'overall': {'total_discovered': 0, 'successfully_processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0}
     }
     default_uploader_stats = {
         'total': 0, 'success': 0, 'failed': 0, 'hacked_sub': 0,
@@ -1266,4 +1313,3 @@ Check attached logs for details.
 
 if __name__ == '__main__':
     main()
-
