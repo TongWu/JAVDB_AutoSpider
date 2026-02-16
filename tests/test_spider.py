@@ -41,8 +41,6 @@ class TestParseArguments:
                             help='Ignore today/yesterday tags')
         parser.add_argument('--use-proxy', action='store_true',
                             help='Enable proxy for all HTTP requests')
-        parser.add_argument('--use-cf-bypass', action='store_true',
-                            help='Use CloudFlare5sBypass service')
         parser.add_argument('--from-pipeline', action='store_true',
                             help='Running from pipeline.py')
         
@@ -56,7 +54,6 @@ class TestParseArguments:
         assert args.dry_run is False
         assert args.ignore_history is False
         assert args.use_proxy is False
-        assert args.use_cf_bypass is False
         assert args.from_pipeline is False
         assert args.phase == 'all'
         assert args.start_page == 1
@@ -121,14 +118,6 @@ class TestParseArguments:
         
         assert args.use_proxy is True
     
-    def test_use_cf_bypass_flag(self):
-        """Test --use-cf-bypass flag."""
-        parser = self.create_parser()
-        args = parser.parse_args(['--use-cf-bypass'])
-        
-        assert args.use_cf_bypass is True
-
-
 class TestEnsureDailyReportDir:
     """Test cases for ensure_daily_report_dir function logic."""
     

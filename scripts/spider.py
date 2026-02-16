@@ -175,9 +175,6 @@ def parse_arguments():
     parser.add_argument('--use-proxy', action='store_true',
                         help='Enable proxy for all HTTP requests (proxy settings from config.py)')
 
-    parser.add_argument('--use-cf-bypass', action='store_true',
-                        help='Use CloudFlare5sBypass service to get cf_clearance cookie (service must be running)')
-
     parser.add_argument('--from-pipeline', action='store_true',
                         help='Running from pipeline.py - use GIT_USERNAME for commits')
 
@@ -324,18 +321,9 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
     
     This function delegates to the global_request_handler for actual request handling.
     
-    Mode combinations:
-    - --use-proxy only: Use proxy to access website directly (no bypass)
-    - --use-cf-bypass only: Use local CF bypass service (http://127.0.0.1:8000/html?url=...)
-    - --use-proxy --use-cf-bypass: Use proxy's CF bypass service (http://{proxy_ip}:8000/html?url=...)
-    
-    CF Bypass failure detection: HTML size < 1000 bytes AND contains 'fail' keyword
-    
-    Retry sequence on CF bypass failure:
-      a. Retry current method (bypass)
-      b. Without bypass, use current proxy
-      c. Switch to another proxy, without bypass
-      d. Use bypass with new proxy
+    CF bypass is not enabled by default for initial requests. It is automatically
+    tried during the fallback mechanism in fetch_index_page_with_fallback() and
+    fetch_detail_page_with_fallback() when direct requests fail.
     
     Service repository: https://github.com/sarperavci/CloudflareBypassForScraping
     
@@ -343,10 +331,10 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False, module_name='
         url: URL to fetch
         session: requests.Session object for connection reuse
         use_cookie: Whether to add session cookie
-        use_proxy: Whether --use-proxy flag is enabled
+        use_proxy: Whether proxy is enabled
         module_name: Module name for proxy control ('spider', 'qbittorrent', 'pikpak', etc.)
         max_retries: Maximum number of retries with different proxies (only for proxy pool mode)
-        use_cf_bypass: Whether to use CF bypass service
+        use_cf_bypass: Whether to use CF bypass service (set by fallback mechanism)
         
     Returns:
         HTML content as string, or None if failed
@@ -784,7 +772,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
         session: requests.Session object
         use_cookie: Whether to use session cookie
         use_proxy: Whether proxy is currently enabled
-        use_cf_bypass: Whether CF bypass is currently enabled
+        use_cf_bypass: Whether CF bypass is currently enabled (set by fallback mechanism)
         page_num: Current page number (for logging)
         is_adhoc_mode: If True, don't mark proxies as banned on failure (for custom URLs)
     
@@ -886,18 +874,11 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
 
     logger.warning(f"[Page {page_num}] Initial attempt failed. Starting smart fallback mechanism...")
 
-    # --- Phase 1: Local CF Fallback (Only if we started with No Proxy & No CF) ---
-    # Disabled by default: Don't automatically try CF Bypass if user didn't request it (avoids localhost connection errors)
-    # The user must explicitly provide --use-cf-bypass to enable this feature
-    if not use_proxy and not use_cf_bypass:
-        logger.debug(f"[Page {page_num}] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...")
-        # html, success, is_valid_empty = try_fetch(False, True, "Fallback Phase 1: Local CF Bypass (No Proxy)")
-        # if success:
-        #     logger.info(f"[Page {page_num}] Local CF Bypass succeeded. Switching mode to: use_cf_bypass=True")
-        #     return html, True, False, False, True, False
-        # if is_valid_empty:
-        #     return html, False, False, False, True, True
-        # logger.warning(f"[Page {page_num}] Local CF Bypass failed. Assuming local IP banned. Switching to Proxy Pool...")
+    # --- Phase 1: Local CF Fallback ---
+    # Skipped: Local CF bypass is not used as a fallback to avoid localhost connection errors.
+    # CF bypass is only tried during proxy pool fallback (Phase 2).
+    if not use_proxy:
+        logger.debug(f"[Page {page_num}] Skipping Local CF Bypass fallback. Switching to Proxy Pool...")
 
     # --- Phase 1.5: Login Refresh Fallback (adhoc mode only, before switching proxies) ---
     # Try to refresh session cookie via login if in adhoc mode
@@ -1012,7 +993,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
         session: requests.Session object
         use_cookie: Whether to use session cookie
         use_proxy: Whether proxy is currently enabled
-        use_cf_bypass: Whether CF bypass is currently enabled
+        use_cf_bypass: Whether CF bypass is currently enabled (set by fallback mechanism)
         entry_index: Current entry index (for logging)
         is_adhoc_mode: Unused, kept for API compatibility
     
@@ -1065,10 +1046,11 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
 
     logger.warning(f"[{entry_index}] Detail page initial attempt failed. Starting smart fallback mechanism...")
 
-    # --- Phase 1: Local CF Fallback (Only if we started with No Proxy & No CF) ---
-    # Disabled by default: Don't automatically try CF Bypass if user didn't request it
-    if not use_proxy and not use_cf_bypass:
-        logger.debug(f"[{entry_index}] Skipping automatic Local CF Bypass fallback (flag not set). Switching to Proxy Pool...")
+    # --- Phase 1: Local CF Fallback ---
+    # Skipped: Local CF bypass is not used as a fallback to avoid localhost connection errors.
+    # CF bypass is only tried during proxy pool fallback (Phase 2).
+    if not use_proxy:
+        logger.debug(f"[{entry_index}] Skipping Local CF Bypass fallback. Switching to Proxy Pool...")
 
     # --- Phase 1.5: Login Refresh Fallback (before switching proxies) ---
     # Try to refresh session cookie via login if allowed
@@ -1682,7 +1664,7 @@ def generate_output_csv_name_from_html(custom_url, index_html):
         return csv_filename
 
 
-def generate_output_csv_name(custom_url=None, use_proxy=False, use_cf_bypass=False):
+def generate_output_csv_name(custom_url=None, use_proxy=False):
     """
     Generate the output CSV filename based on whether a custom URL is provided.
     
@@ -1693,7 +1675,6 @@ def generate_output_csv_name(custom_url=None, use_proxy=False, use_cf_bypass=Fal
     Args:
         custom_url: Custom URL if provided, None otherwise
         use_proxy: Whether to use proxy for fetching page (unused, kept for compatibility)
-        use_cf_bypass: Whether to use CF bypass for fetching page (unused, kept for compatibility)
     
     Returns:
         str: The generated CSV filename
@@ -1739,7 +1720,7 @@ def main():
     parse_all = args.all
     ignore_release_date = args.ignore_release_date
     use_proxy = args.use_proxy
-    use_cf_bypass = args.use_cf_bypass
+    use_cf_bypass = False  # CF bypass is only activated automatically during fallback
     max_movies_phase1 = args.max_movies_phase1
     max_movies_phase2 = args.max_movies_phase2
     
@@ -1802,7 +1783,7 @@ def main():
         if args.output_file:
             output_csv = args.output_file
         else:
-            output_csv = generate_output_csv_name(custom_url, use_proxy=use_proxy, use_cf_bypass=use_cf_bypass)
+            output_csv = generate_output_csv_name(custom_url, use_proxy=use_proxy)
         csv_path = os.path.join(output_dated_dir, output_csv)
         # Ad hoc mode: default to NOT checking history (process all entries)
         # Use --use-history to enable history filter in ad hoc mode
@@ -1833,32 +1814,15 @@ def main():
         logger.info("PARSE ALL MODE: Will continue until empty page is found")
     if ignore_release_date:
         logger.info("IGNORE RELEASE DATE: Will process all entries regardless of today/yesterday tags")
-    # Log mode information based on flags
-    if use_cf_bypass and not CF_BYPASS_ENABLED:
-        logger.warning("CF BYPASS MODE: Requested but DISABLED via CF_BYPASS_ENABLED=False in config.py")
-    elif use_proxy and use_cf_bypass:
-        # Mode: --use-proxy --use-cf-bypass
-        logger.info("MODE: Proxy + Proxy's CF Bypass Service")
-        logger.info(f"CF Bypass service port: {CF_BYPASS_SERVICE_PORT}")
-        if global_proxy_pool is not None:
-            current_proxy = global_proxy_pool.get_current_proxy()
-            if current_proxy:
-                proxy_url = current_proxy.get('https') or current_proxy.get('http')
-                if proxy_url:
-                    proxy_ip = extract_ip_from_proxy_url(proxy_url)
-                    service_url = get_cf_bypass_service_url(proxy_ip)
-                    masked_service_url = f"http://{mask_ip_address(proxy_ip)}:{CF_BYPASS_SERVICE_PORT}"
-                    logger.info(f"CF Bypass URL: {masked_service_url}/html?url=<target>")
-                    logger.info("Requests go directly to proxy server's bypass service (no proxy forwarding)")
-    elif use_cf_bypass:
-        # Mode: --use-cf-bypass only
-        logger.info("MODE: Local CF Bypass Service only (no proxy)")
-        logger.info(f"CF Bypass service port: {CF_BYPASS_SERVICE_PORT}")
-        service_url = get_cf_bypass_service_url()
-        logger.info(f"CF Bypass URL: http://127.0.0.1:{CF_BYPASS_SERVICE_PORT}/html?url=<target>")
-    elif use_proxy:
-        # Mode: --use-proxy only
-        logger.info("MODE: Proxy only (no CF bypass)")
+    # Log mode information
+    if use_proxy:
+        logger.info("MODE: Proxy (CF bypass available as automatic fallback)")
+    else:
+        logger.info("MODE: Direct (CF bypass available as automatic fallback)")
+    if CF_BYPASS_ENABLED:
+        logger.info(f"CF Bypass: Enabled as fallback (service port: {CF_BYPASS_SERVICE_PORT})")
+    else:
+        logger.info("CF Bypass: Globally disabled via CF_BYPASS_ENABLED=False in config.py")
     
     if use_proxy:
         if global_proxy_pool is not None:
@@ -2731,10 +2695,9 @@ def main():
         sys.exit(2)  # Exit code 2 indicates proxy ban
     
     # Check if we got any results at all (might indicate all proxies are banned)
-    if len(rows) == 0 and use_proxy and use_cf_bypass:
-        # No results with proxy + CF bypass might indicate issues
+    if len(rows) == 0 and use_proxy:
         logger.warning("=" * 75)
-        logger.warning("WARNING: No entries found while using proxy and CF bypass")
+        logger.warning("WARNING: No entries found while using proxy")
         logger.warning("=" * 75)
         logger.warning("This might indicate proxy issues or CF bypass service problems.")
         # Don't exit with error - it's possible there are legitimately no new entries
