@@ -428,7 +428,10 @@ jobs:
           echo "✓ Config decrypted successfully"
 
       - name: Run health checks
-        run: python3 scripts/health_check.py --use-proxy
+        run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline
+          python3 scripts/health_check.py --use-proxy
 
   # =============================================================================
   # Job 3: Run Pipeline - Execute spider, uploader, and pikpak bridge
@@ -545,6 +548,9 @@ jobs:
       - name: Step 1 - Run Spider
         id: spider
         run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline (important for tee)
+          
           # Capture output to extract the CSV filename
           SPIDER_OUTPUT=$(python3 scripts/spider.py --use-proxy | tee /dev/stderr)
           
@@ -560,6 +566,9 @@ jobs:
       - name: Step 2 - Run qBittorrent Uploader
         id: uploader
         run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline
+          
           CMD="python3 scripts/qb_uploader.py --mode daily --use-proxy"
           
           # Pass the CSV full path captured from spider
@@ -575,7 +584,10 @@ jobs:
       - name: Step 3 - Run PikPak Bridge
         id: pikpak
         if: ${{ success() && steps.uploader.outcome == 'success' }}
-        run: python3 scripts/pikpak_bridge.py --days 3
+        run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline
+          python3 scripts/pikpak_bridge.py --days 3
 
       - name: Encrypt and upload logs artifact
         if: always()
@@ -867,6 +879,9 @@ jobs:
         env:
           PIPELINE_HAS_FAILURE: ${{ steps.status.outputs.has_failure }}
         run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline
+          
           CMD="python3 scripts/email_notification.py --mode daily"
           
           # Pass the CSV path if available
