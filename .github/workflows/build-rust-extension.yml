@@ -68,19 +68,20 @@ jobs:
           echo "Built wheel file:"
           ls -lh dist/*.whl
 
+      - name: Sanitize branch name
+        id: branch
+        run: echo "name=$(echo '${{ github.ref_name }}' | sed 's/[^a-zA-Z0-9._-]/-/g')" >> $GITHUB_OUTPUT
+
       - name: Upload Rust extension wheel artifact
         uses: actions/upload-artifact@v4
         with:
           name: rust-extension-wheel-${{ github.sha }}
           path: rust_core/dist/*.whl
           retention-days: 30
-          # Use commit SHA as version identifier to ensure each build has a unique identifier
 
-      - name: Upload Rust extension wheel artifact (latest)
+      - name: Upload Rust extension wheel artifact (branch latest)
         uses: actions/upload-artifact@v4
         with:
-          name: rust-extension-wheel-latest
+          name: rust-extension-wheel-latest-${{ steps.branch.outputs.name }}
           path: rust_core/dist/*.whl
           retention-days: 7
-          # Also upload a latest version for other workflows to use
-          # Note: This will be overwritten on each push

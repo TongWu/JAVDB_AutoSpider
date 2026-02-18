@@ -70,13 +70,16 @@ jobs:
           # Try to find and download the latest pre-built wheel using GitHub API
           TOKEN="${{ secrets.GITHUB_TOKEN }}"
           REPO="${{ github.repository }}"
-          ARTIFACT_NAME="rust-extension-wheel-latest"
+          BRANCH="${{ github.ref_name }}"
+          SANITIZED_BRANCH=$(echo "$BRANCH" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          ARTIFACT_NAME="rust-extension-wheel-latest-${SANITIZED_BRANCH}"
           
-          echo "Attempting to download pre-built Rust extension wheel..."
+          echo "Attempting to download pre-built Rust extension wheel for branch: $BRANCH..."
           
-          # Find the latest successful build-rust-extension workflow run
+          # Find the latest successful build-rust-extension workflow run on the same branch
+          ENCODED_BRANCH=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$BRANCH', safe=''))")
           WORKFLOW_RUN=$(curl -s -H "Authorization: token $TOKEN" \
-            "https://api.github.com/repos/$REPO/actions/workflows/build-rust-extension.yml/runs?status=success&per_page=1" \
+            "https://api.github.com/repos/$REPO/actions/workflows/build-rust-extension.yml/runs?status=success&branch=${ENCODED_BRANCH}&per_page=1" \
             | jq -r '.workflow_runs[0].id // empty')
           
           if [ -z "$WORKFLOW_RUN" ] || [ "$WORKFLOW_RUN" == "null" ]; then
