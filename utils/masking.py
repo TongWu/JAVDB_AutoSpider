@@ -5,10 +5,25 @@ This module provides functions to mask sensitive information before logging.
 Different masking strategies are applied based on the sensitivity level:
 - Full masking (100%): passwords, keys, proxy pool JSON, cookies
 - Partial masking: usernames, emails, server addresses (show first/last few chars)
+
+Prefers the Rust implementation (``javdb_rust_core``) when available,
+falling back to the pure-Python implementation otherwise.
 """
 
 import re
 from typing import Optional
+
+try:
+    from javdb_rust_core import (
+        mask_full as _rust_mask_full,
+        mask_partial as _rust_mask_partial,
+        mask_email as _rust_mask_email,
+        mask_ip_address as _rust_mask_ip_address,
+        mask_proxy_url as _rust_mask_proxy_url,
+    )
+    RUST_MASKING_AVAILABLE = True
+except ImportError:
+    RUST_MASKING_AVAILABLE = False
 
 
 def mask_full(value: Optional[str]) -> str:

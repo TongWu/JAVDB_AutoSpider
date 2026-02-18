@@ -41,6 +41,55 @@ setup_logging(PIPELINE_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
 
+def check_rust_core_status():
+    """Check and log the availability status of Rust core components."""
+    status = {}
+    
+    # Check parsers
+    try:
+        from api.parsers import RUST_PARSERS_AVAILABLE
+        status['parsers'] = RUST_PARSERS_AVAILABLE
+    except Exception:
+        status['parsers'] = False
+    
+    # Check proxy pool
+    try:
+        from utils.proxy_pool import RUST_PROXY_AVAILABLE
+        status['proxy_pool'] = RUST_PROXY_AVAILABLE
+    except Exception:
+        status['proxy_pool'] = False
+    
+    # Check request handler
+    try:
+        from utils.request_handler import RUST_REQUEST_HANDLER_AVAILABLE
+        status['request_handler'] = RUST_REQUEST_HANDLER_AVAILABLE
+    except Exception:
+        status['request_handler'] = False
+    
+    # Log summary
+    logger.info("=" * 60)
+    logger.info("RUST CORE STATUS CHECK")
+    logger.info("=" * 60)
+    for component, available in status.items():
+        icon = "✅" if available else "⚠️ "
+        impl = "Rust" if available else "Python"
+        logger.info(f"{icon} {component.replace('_', ' ').title()}: {impl}")
+    
+    all_rust = all(status.values())
+    if all_rust:
+        logger.info("=" * 60)
+        logger.info("🚀 All components using Rust - maximum performance!")
+        logger.info("=" * 60)
+    else:
+        rust_count = sum(status.values())
+        total_count = len(status)
+        logger.info("=" * 60)
+        logger.info(f"📊 Rust components: {rust_count}/{total_count} available")
+        logger.info("=" * 60)
+    
+    return status
+
+
 def parse_arguments():
     """Parse command line arguments for the pipeline"""
     parser = argparse.ArgumentParser(description='JavDB Pipeline - Run spider and uploader with optional arguments')
@@ -211,6 +260,9 @@ def main():
     pipeline_success = False
     
     try:
+        # Check Rust core status at startup
+        check_rust_core_status()
+        
         logger.info("=" * 60)
         logger.info("STARTING JAVDB PIPELINE")
         if is_adhoc_mode:
