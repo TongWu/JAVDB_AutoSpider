@@ -203,16 +203,27 @@ jobs:
           echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
 
       - name: Download Rust extension wheel
+        id: download_wheel
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: rust-extension-wheel
           path: rust_core/dist
 
       - name: Install Rust extension from wheel
+        if: steps.download_wheel.outcome == 'success'
         run: |
           source .venv/bin/activate
           pip install rust_core/dist/*.whl
           echo "✓ Installed Rust extension from pre-built wheel"
+
+      - name: Build and install Rust extension from source (fallback)
+        if: steps.download_wheel.outcome != 'success'
+        run: |
+          source .venv/bin/activate
+          pip install maturin
+          cd rust_core && maturin develop --release
+          echo "✓ Built and installed Rust extension from source (fallback)"
 
       - name: Generate config.py from GitHub Variables and Secrets
         env:
@@ -370,16 +381,27 @@ jobs:
           echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
 
       - name: Download Rust extension wheel
+        id: download_wheel
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: rust-extension-wheel
           path: rust_core/dist
 
       - name: Install Rust extension from wheel
+        if: steps.download_wheel.outcome == 'success'
         run: |
           source .venv/bin/activate
           pip install rust_core/dist/*.whl
           echo "✓ Installed Rust extension from pre-built wheel"
+
+      - name: Build and install Rust extension from source (fallback)
+        if: steps.download_wheel.outcome != 'success'
+        run: |
+          source .venv/bin/activate
+          pip install maturin
+          cd rust_core && maturin develop --release
+          echo "✓ Built and installed Rust extension from source (fallback)"
 
       - name: Download encrypted config
         uses: actions/download-artifact@v4
@@ -459,16 +481,27 @@ jobs:
           echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
 
       - name: Download Rust extension wheel
+        id: download_wheel
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: rust-extension-wheel
           path: rust_core/dist
 
       - name: Install Rust extension from wheel
+        if: steps.download_wheel.outcome == 'success'
         run: |
           source .venv/bin/activate
           pip install rust_core/dist/*.whl
           echo "✓ Installed Rust extension from pre-built wheel"
+
+      - name: Build and install Rust extension from source (fallback)
+        if: steps.download_wheel.outcome != 'success'
+        run: |
+          source .venv/bin/activate
+          pip install maturin
+          cd rust_core && maturin develop --release
+          echo "✓ Built and installed Rust extension from source (fallback)"
 
       - name: Download encrypted config
         uses: actions/download-artifact@v4
@@ -689,16 +722,27 @@ jobs:
           echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
 
       - name: Download Rust extension wheel
+        id: download_wheel
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: rust-extension-wheel
           path: rust_core/dist
 
       - name: Install Rust extension from wheel
+        if: steps.download_wheel.outcome == 'success'
         run: |
           source .venv/bin/activate
           pip install rust_core/dist/*.whl
           echo "✓ Installed Rust extension from pre-built wheel"
+
+      - name: Build and install Rust extension from source (fallback)
+        if: steps.download_wheel.outcome != 'success'
+        run: |
+          source .venv/bin/activate
+          pip install maturin
+          cd rust_core && maturin develop --release
+          echo "✓ Built and installed Rust extension from source (fallback)"
 
       - name: Download encrypted config
         uses: actions/download-artifact@v4
