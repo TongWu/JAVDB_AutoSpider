@@ -4,6 +4,9 @@ Proxy Pool Manager for JavDB Spider
 This module provides a proxy pool with automatic failover and passive health checking.
 It avoids active health checks to prevent triggering JavDB's IP ban policy.
 
+Prefers the Rust implementation (``javdb_rust_core``) when available,
+falling back to the pure-Python implementation otherwise.
+
 Features:
 - Multiple proxy support with automatic failover
 - Passive health checking (only marks proxy as failed on actual request failures)
@@ -19,10 +22,26 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from threading import Lock
 
+try:
+    from javdb_rust_core import (
+        RustProxyPool,
+        RustProxyInfo,
+        create_proxy_pool_from_config as _rust_create_proxy_pool,
+    )
+    RUST_PROXY_AVAILABLE = True
+except ImportError as e:
+    RUST_PROXY_AVAILABLE = False
+
 from .proxy_ban_manager import get_ban_manager, ProxyBanManager
 
 
 logger = logging.getLogger(__name__)
+
+# Log Rust availability status on module import
+if RUST_PROXY_AVAILABLE:
+    logger.info("✅ Rust proxy pool available - using high-performance Rust implementation")
+else:
+    logger.warning(f"⚠️  Rust proxy pool not available (ImportError: {e if 'e' in locals() else 'unknown'}) - falling back to pure-Python implementation")
 
 
 def mask_proxy_url(url: Optional[str]) -> str:

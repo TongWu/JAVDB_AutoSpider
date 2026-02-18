@@ -9,6 +9,9 @@ This module provides a unified HTTP request handler that supports:
 - Retry mechanisms with configurable fallback strategies
 - curl_cffi integration for better TLS fingerprint (bypasses Cloudflare detection)
 
+Prefers the Rust implementation (``javdb_rust_core``) when available,
+falling back to the pure-Python implementation otherwise.
+
 Usage:
     from utils.request_handler import RequestHandler
     
@@ -28,6 +31,22 @@ logger = logging.getLogger(__name__)
 
 # Import masking utilities
 from utils.masking import mask_ip_address, mask_proxy_url, mask_full
+
+# Try Rust implementations
+try:
+    from javdb_rust_core import (
+        RustRequestHandler,
+        RustRequestConfig,
+        RustProxyHelper,
+        create_request_handler_from_config as _rust_create_handler,
+        create_proxy_helper_from_config as _rust_create_helper,
+    )
+    RUST_REQUEST_HANDLER_AVAILABLE = True
+except ImportError as e:
+    RUST_REQUEST_HANDLER_AVAILABLE = False
+    logger.warning(f"⚠️  Rust request handler not available (ImportError: {e}) - falling back to pure-Python implementation")
+else:
+    logger.info("✅ Rust request handler available - using high-performance Rust implementation")
 
 # Try to import curl_cffi for better TLS fingerprint
 # curl_cffi mimics real browser TLS fingerprints, bypassing Cloudflare detection

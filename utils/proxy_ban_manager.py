@@ -3,6 +3,9 @@ Proxy Ban Manager
 
 Manages proxy ban records with persistent storage.
 Records when proxies are banned and tracks their expected unban time (7 days).
+
+Prefers the Rust implementation (``javdb_rust_core``) when available,
+falling back to the pure-Python implementation otherwise.
 """
 
 import os
@@ -11,6 +14,15 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from threading import Lock
+
+try:
+    from javdb_rust_core import (
+        RustProxyBanManager,
+        get_global_ban_manager as _rust_get_ban_manager,
+    )
+    RUST_BAN_MANAGER_AVAILABLE = True
+except ImportError:
+    RUST_BAN_MANAGER_AVAILABLE = False
 
 
 logger = logging.getLogger(__name__)
