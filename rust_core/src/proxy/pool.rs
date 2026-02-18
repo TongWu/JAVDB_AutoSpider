@@ -430,7 +430,8 @@ impl ProxyPool {
     }
 
     #[pyo3(signature = (level=None))]
-    pub fn log_statistics(&self, _level: Option<i32>) {
+    #[allow(unused_variables)]
+    pub fn log_statistics(&self, level: Option<i32>) {
         let mut pool = self.inner.lock();
         check_cooldowns(&mut pool.proxies);
 
