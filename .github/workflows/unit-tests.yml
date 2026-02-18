@@ -100,10 +100,14 @@ jobs:
 
     - name: Install dependencies
       run: |
+        python -m venv .venv
+        source .venv/bin/activate
         python -m pip install --upgrade pip
         pip install maturin
         pip install -r requirements.txt
         pip install -r requirements-test.txt
+        echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
+        echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
 
     - name: Build Rust extension
       working-directory: rust_core
