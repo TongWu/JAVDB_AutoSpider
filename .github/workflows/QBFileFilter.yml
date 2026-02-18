@@ -375,6 +375,9 @@ jobs:
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
           DELETE_LOCAL_FILES: ${{ github.event.inputs.delete_local_files || 'false' }}
         run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline
+          
           # Build argument array safely without eval
           ARGS=(--min-size "$MIN_SIZE_MB" --days "$DAYS" --use-proxy)
           

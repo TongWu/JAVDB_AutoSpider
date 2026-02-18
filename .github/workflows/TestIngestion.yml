@@ -235,6 +235,9 @@ jobs:
       - name: "[DAILY] Run Spider"
         id: daily_spider
         run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline (important for tee)
+          
           echo "============================================"
           echo "DAILY INGESTION - Spider"
           echo "============================================"
@@ -265,6 +268,9 @@ jobs:
       - name: "[ADHOC] Run Spider"
         id: adhoc_spider
         run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline (important for tee)
+          
           echo "============================================"
           echo "ADHOC INGESTION - Spider"
           echo "============================================"

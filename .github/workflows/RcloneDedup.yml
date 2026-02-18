@@ -208,6 +208,9 @@ jobs:
           DRIVE_NAME: ${{ secrets.RCLONE_DRIVE_NAME }}
           ROOT_FOLDER: ${{ secrets.RCLONE_ROOT_FOLDER }}
         run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline
+          
           # Build command arguments
           ARGS=""
           
