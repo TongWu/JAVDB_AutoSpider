@@ -20,9 +20,136 @@ on:
 
 jobs:
   # =============================================================================
+  # Job 0: Build Rust Extension - Try to download pre-built artifact, fallback to build if failed
+  # =============================================================================
+  build-rust:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read  # Required to read artifacts from other workflows
+    outputs:
+      wheel_available: ${{ steps.download_wheel.outputs.available }}
+    env:
+      TZ: Asia/Singapore
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust_core/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust_core/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install maturin
+        run: |
+          python -m pip install --upgrade pip
+          pip install maturin
+
+      - name: Install jq (for JSON parsing)
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Try to download pre-built Rust extension wheel
+        id: download_wheel
+        continue-on-error: true
+        run: |
+          # Try to find and download the latest pre-built wheel using GitHub API
+          TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          REPO="${{ github.repository }}"
+          ARTIFACT_NAME="rust-extension-wheel-latest"
+          
+          echo "Attempting to download pre-built Rust extension wheel..."
+          
+          # Find the latest successful build-rust-extension workflow run
+          WORKFLOW_RUN=$(curl -s -H "Authorization: token $TOKEN" \
+            "https://api.github.com/repos/$REPO/actions/workflows/build-rust-extension.yml/runs?status=success&per_page=1" \
+            | jq -r '.workflow_runs[0].id // empty')
+          
+          if [ -z "$WORKFLOW_RUN" ] || [ "$WORKFLOW_RUN" == "null" ]; then
+            echo "No successful build-rust-extension workflow run found"
+            echo "available=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "Found workflow run: $WORKFLOW_RUN"
+          
+          # Find the artifact
+          ARTIFACT_ID=$(curl -s -H "Authorization: token $TOKEN" \
+            "https://api.github.com/repos/$REPO/actions/runs/$WORKFLOW_RUN/artifacts" \
+            | jq -r ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .id // empty")
+          
+          if [ -z "$ARTIFACT_ID" ] || [ "$ARTIFACT_ID" == "null" ]; then
+            echo "Artifact '$ARTIFACT_NAME' not found"
+            echo "available=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "Found artifact ID: $ARTIFACT_ID"
+          
+          # Download the artifact
+          mkdir -p rust_core/dist
+          curl -L -H "Authorization: token $TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$REPO/actions/artifacts/$ARTIFACT_ID/zip" \
+            -o /tmp/wheel.zip || {
+            echo "Failed to download artifact"
+            echo "available=false" >> $GITHUB_OUTPUT
+            exit 0
+          }
+          
+          # Extract the wheel file
+          unzip -q /tmp/wheel.zip -d rust_core/dist/ || {
+            echo "Failed to extract wheel"
+            echo "available=false" >> $GITHUB_OUTPUT
+            exit 0
+          }
+          
+          rm /tmp/wheel.zip
+          
+          # Verify that wheel file exists
+          if ls rust_core/dist/*.whl 1> /dev/null 2>&1; then
+            echo "✓ Pre-built wheel downloaded successfully"
+            echo "available=true" >> $GITHUB_OUTPUT
+            ls -lh rust_core/dist/*.whl
+          else
+            echo "Wheel file not found after download"
+            echo "available=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build Rust extension wheel (if download failed)
+        if: steps.download_wheel.outputs.available != 'true'
+        working-directory: rust_core
+        run: |
+          echo "Pre-built wheel not available, building from source..."
+          maturin build --release --out dist
+          echo "✓ Built Rust extension wheel from source"
+
+      - name: Upload Rust extension wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-extension-wheel
+          path: rust_core/dist/*.whl
+          retention-days: 7
+
+  # =============================================================================
   # Job 1: Setup - Checkout, install dependencies, generate config
   # =============================================================================
   setup:
+    needs: build-rust
     runs-on: ubuntu-latest
     environment: Production
     permissions:
@@ -68,14 +195,21 @@ jobs:
         run: |
           python -m venv .venv
           source .venv/bin/activate
-          pip install maturin
           pip install -r requirements.txt
           echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
           echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
 
-      - name: Build Rust extension
-        working-directory: rust_core
-        run: maturin develop --release
+      - name: Download Rust extension wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: rust-extension-wheel
+          path: rust_core/dist
+
+      - name: Install Rust extension from wheel
+        run: |
+          source .venv/bin/activate
+          pip install rust_core/dist/*.whl
+          echo "✓ Installed Rust extension from pre-built wheel"
 
       - name: Generate config.py from GitHub Variables and Secrets
         env:
@@ -197,7 +331,7 @@ jobs:
     environment: Production
     permissions:
       contents: read
-    needs: setup
+    needs: [build-rust, setup]
     env:
       TZ: Asia/Singapore
     
@@ -228,14 +362,21 @@ jobs:
         run: |
           python -m venv .venv
           source .venv/bin/activate
-          pip install maturin
           pip install -r requirements.txt
           echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
           echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
 
-      - name: Build Rust extension
-        working-directory: rust_core
-        run: maturin develop --release
+      - name: Download Rust extension wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: rust-extension-wheel
+          path: rust_core/dist
+
+      - name: Install Rust extension from wheel
+        run: |
+          source .venv/bin/activate
+          pip install rust_core/dist/*.whl
+          echo "✓ Installed Rust extension from pre-built wheel"
 
       - name: Download encrypted config
         uses: actions/download-artifact@v4
@@ -272,7 +413,7 @@ jobs:
     environment: Production
     permissions:
       contents: read
-    needs: [setup, health-check]
+    needs: [build-rust, setup, health-check]
     outputs:
       spider_success: ${{ steps.spider.outcome == 'success' }}
       uploader_success: ${{ steps.uploader.outcome == 'success' }}
@@ -310,14 +451,21 @@ jobs:
         run: |
           python -m venv .venv
           source .venv/bin/activate
-          pip install maturin
           pip install -r requirements.txt
           echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
           echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
 
-      - name: Build Rust extension
-        working-directory: rust_core
-        run: maturin develop --release
+      - name: Download Rust extension wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: rust-extension-wheel
+          path: rust_core/dist
+
+      - name: Install Rust extension from wheel
+        run: |
+          source .venv/bin/activate
+          pip install rust_core/dist/*.whl
+          echo "✓ Installed Rust extension from pre-built wheel"
 
       - name: Download encrypted config
         uses: actions/download-artifact@v4
@@ -501,7 +649,7 @@ jobs:
     environment: Production
     permissions:
       contents: read
-    needs: [setup, health-check, run-pipeline]
+    needs: [build-rust, setup, health-check, run-pipeline]
     if: always()
     env:
       TZ: Asia/Singapore
@@ -533,14 +681,21 @@ jobs:
         run: |
           python -m venv .venv
           source .venv/bin/activate
-          pip install maturin
           pip install -r requirements.txt
           echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
           echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
 
-      - name: Build Rust extension
-        working-directory: rust_core
-        run: maturin develop --release
+      - name: Download Rust extension wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: rust-extension-wheel
+          path: rust_core/dist
+
+      - name: Install Rust extension from wheel
+        run: |
+          source .venv/bin/activate
+          pip install rust_core/dist/*.whl
+          echo "✓ Installed Rust extension from pre-built wheel"
 
       - name: Download encrypted config
         uses: actions/download-artifact@v4

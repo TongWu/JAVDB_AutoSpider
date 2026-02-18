@@ -1,0 +1,86 @@
+name: Build Rust Extension
+
+# This workflow builds the Rust extension on every push and uploads it as an artifact
+# Other workflows can download and use this pre-built artifact to avoid redundant compilation
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - feature/**
+    paths:
+      - 'rust_core/**'
+      - '.github/workflows/build-rust-extension.yml'
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: read
+  actions: read  # Required to read artifacts from other workflows (not needed for this workflow, but kept for completeness)
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Singapore
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust_core/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust_core/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install maturin
+        run: |
+          python -m pip install --upgrade pip
+          pip install maturin
+
+      - name: Build Rust extension wheel
+        working-directory: rust_core
+        run: |
+          # Build wheel file using maturin build
+          maturin build --release --out dist
+          
+          # Verify that wheel file exists
+          if [ ! -f dist/*.whl ]; then
+            echo "Error: No wheel file found in dist/"
+            exit 1
+          fi
+          
+          # Display the built wheel file name
+          echo "Built wheel file:"
+          ls -lh dist/*.whl
+
+      - name: Upload Rust extension wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-extension-wheel-${{ github.sha }}
+          path: rust_core/dist/*.whl
+          retention-days: 30
+          # Use commit SHA as version identifier to ensure each build has a unique identifier
+
+      - name: Upload Rust extension wheel artifact (latest)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-extension-wheel-latest
+          path: rust_core/dist/*.whl
+          retention-days: 7
+          # Also upload a latest version for other workflows to use
+          # Note: This will be overwritten on each push
