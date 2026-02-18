@@ -12,6 +12,8 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - '**.py'
+      - '**.rs'
+      - 'rust_core/Cargo.toml'
       - 'pytest.ini'
       - 'docker/**'
   push:
@@ -19,6 +21,8 @@ on:
       - 'v*.*.*'  # Trigger on version tags
     paths:
       - '**.py'
+      - '**.rs'
+      - 'rust_core/Cargo.toml'
       - 'pytest.ini'
       - 'docker/**'
   workflow_dispatch:  # Allow manual trigger
