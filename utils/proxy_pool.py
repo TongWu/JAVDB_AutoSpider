@@ -393,6 +393,10 @@ class ProxyPool:
             logger.error("Failed to switch proxy: all proxies are unavailable")
             return False
             
+    def get_proxy_count(self) -> int:
+        """Return the number of proxies in the pool (compatible with RustProxyPool)"""
+        return len(self.proxies)
+
     def get_statistics(self) -> Dict:
         """Get statistics about proxy pool usage"""
         if not self.proxies:
