@@ -1,5 +1,6 @@
 use pyo3::prelude::*;
 
+pub mod history;
 pub mod models;
 pub mod proxy;
 pub mod requester;
@@ -18,6 +19,13 @@ use proxy::pool::{create_proxy_pool_from_config, ProxyInfo, ProxyPool};
 use requester::config::RequestConfig;
 use requester::handler::{create_request_handler_from_config, RequestHandler};
 use requester::helper::{create_proxy_helper_from_config, ProxyHelper};
+use history::manager::{
+    load_parsed_movies_history, cleanup_history_file, maintain_history_limit,
+    save_parsed_movie_to_history, validate_history_file, determine_torrent_types,
+    determine_torrent_type, get_missing_torrent_types, has_complete_subtitles,
+    should_process_movie, check_torrent_in_history, add_downloaded_indicator_to_csv,
+    is_downloaded_torrent, mark_torrent_as_downloaded,
+};
 
 // Python-facing wrapper functions for parsers
 #[pyfunction]
@@ -101,6 +109,22 @@ fn javdb_rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_top_page, m)?)?;
     m.add_function(wrap_pyfunction!(parse_tag_page, m)?)?;
     m.add_function(wrap_pyfunction!(detect_page_type, m)?)?;
+
+    // --- History Manager ---
+    m.add_function(wrap_pyfunction!(load_parsed_movies_history, m)?)?;
+    m.add_function(wrap_pyfunction!(cleanup_history_file, m)?)?;
+    m.add_function(wrap_pyfunction!(maintain_history_limit, m)?)?;
+    m.add_function(wrap_pyfunction!(save_parsed_movie_to_history, m)?)?;
+    m.add_function(wrap_pyfunction!(validate_history_file, m)?)?;
+    m.add_function(wrap_pyfunction!(determine_torrent_types, m)?)?;
+    m.add_function(wrap_pyfunction!(determine_torrent_type, m)?)?;
+    m.add_function(wrap_pyfunction!(get_missing_torrent_types, m)?)?;
+    m.add_function(wrap_pyfunction!(has_complete_subtitles, m)?)?;
+    m.add_function(wrap_pyfunction!(should_process_movie, m)?)?;
+    m.add_function(wrap_pyfunction!(check_torrent_in_history, m)?)?;
+    m.add_function(wrap_pyfunction!(add_downloaded_indicator_to_csv, m)?)?;
+    m.add_function(wrap_pyfunction!(is_downloaded_torrent, m)?)?;
+    m.add_function(wrap_pyfunction!(mark_torrent_as_downloaded, m)?)?;
 
     Ok(())
 }
