@@ -114,7 +114,7 @@ from utils.logging_config import setup_logging, get_logger
 setup_logging(SPIDER_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
-# Check Rust parsers availability and log status
+# Check Rust components availability and log status
 try:
     from api.parsers import RUST_PARSERS_AVAILABLE
     if RUST_PARSERS_AVAILABLE:
@@ -123,6 +123,15 @@ try:
         logger.info("⚠️  Spider using Python parsers - Rust parsers not available")
 except Exception:
     logger.info("⚠️  Could not determine parser implementation status")
+
+try:
+    from utils.history_manager import RUST_HISTORY_AVAILABLE
+    if RUST_HISTORY_AVAILABLE:
+        logger.info("✅ Spider using Rust history manager - high-performance CSV I/O enabled")
+    else:
+        logger.info("⚠️  Spider using Python history manager - Rust not available")
+except Exception:
+    logger.info("⚠️  Could not determine history manager implementation status")
 
 # Import masking utilities
 from utils.masking import mask_ip_address, mask_username, mask_full, mask_proxy_url
