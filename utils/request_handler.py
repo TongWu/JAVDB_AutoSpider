@@ -875,7 +875,7 @@ class RequestHandler:
         
         # Step (c) & (d): Try other proxies if in pool mode
         if use_proxy and use_proxy_pool_mode and self.proxy_pool and self.config.proxy_mode == 'pool':
-            max_proxy_switches = min(len(self.proxy_pool.proxies) - 1, 5)
+            max_proxy_switches = min(self.proxy_pool.get_proxy_count() - 1, 5)
             
             for switch_count in range(max_proxy_switches):
                 if self.config.fallback_cooldown > 0:
