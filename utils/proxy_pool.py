@@ -486,9 +486,10 @@ class ProxyPool:
 def create_proxy_pool_from_config(proxy_list_config: List[Dict], 
                                    cooldown_seconds: int = 300,
                                    max_failures: int = 3,
-                                   ban_log_file: str = 'reports/proxy_bans.csv') -> ProxyPool:
+                                   ban_log_file: str = 'reports/proxy_bans.csv'):
     """
-    Create and configure a proxy pool from configuration
+    Create and configure a proxy pool from configuration.
+    Prefers Rust implementation when available, falls back to Python otherwise.
     
     Args:
         proxy_list_config: List of proxy configurations from config.py
@@ -497,8 +498,37 @@ def create_proxy_pool_from_config(proxy_list_config: List[Dict],
         ban_log_file: Path to ban log file (default: reports/proxy_bans.csv)
         
     Returns:
-        Configured ProxyPool instance
+        Configured ProxyPool instance (RustProxyPool if available, otherwise Python ProxyPool)
     """
+    if RUST_PROXY_AVAILABLE:
+        # Use Rust implementation
+        try:
+            # Convert proxy_list_config to format expected by Rust function
+            # Rust expects Vec<HashMap<String, String>>
+            rust_proxy_list = []
+            for proxy_config in proxy_list_config:
+                rust_proxy_dict = {}
+                if 'name' in proxy_config:
+                    rust_proxy_dict['name'] = proxy_config['name']
+                if 'http' in proxy_config and proxy_config['http']:
+                    rust_proxy_dict['http'] = proxy_config['http']
+                if 'https' in proxy_config and proxy_config['https']:
+                    rust_proxy_dict['https'] = proxy_config['https']
+                rust_proxy_list.append(rust_proxy_dict)
+            
+            pool = _rust_create_proxy_pool(
+                rust_proxy_list,
+                cooldown_seconds=cooldown_seconds,
+                max_failures=max_failures,
+                ban_log_file=ban_log_file
+            )
+            logger.debug("Created Rust proxy pool")
+            return pool
+        except Exception as e:
+            logger.warning(f"Failed to create Rust proxy pool, falling back to Python: {e}")
+            # Fall through to Python implementation
+    
+    # Fallback to Python implementation
     pool = ProxyPool(
         cooldown_seconds=cooldown_seconds,
         max_failures_before_cooldown=max_failures,
