@@ -66,6 +66,13 @@ def check_rust_core_status():
     except Exception:
         status['request_handler'] = False
     
+    # Check history manager
+    try:
+        from utils.history_manager import RUST_HISTORY_AVAILABLE
+        status['history_manager'] = RUST_HISTORY_AVAILABLE
+    except Exception:
+        status['history_manager'] = False
+    
     # Log summary
     logger.info("=" * 60)
     logger.info("RUST CORE STATUS CHECK")
