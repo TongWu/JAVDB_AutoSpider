@@ -11,6 +11,8 @@ RUN apt-get update && apt-get install -y \
     tzdata \
     curl \
     build-essential \
+    pkg-config \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust toolchain
