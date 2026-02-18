@@ -3,6 +3,7 @@ test_history_integrity.py
 config.py
 .idea/
 logs/
+html/
 
 # Docker files
 .env
