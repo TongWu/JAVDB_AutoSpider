@@ -450,6 +450,9 @@ jobs:
 
       - name: Run health checks
         run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline
+          
           # Use proxy for health check if any proxy option is enabled
           if [ "${{ inputs.proxy_spider }}" == "true" ] || [ "${{ inputs.proxy_uploader }}" == "true" ] || [ "${{ inputs.proxy_pikpak }}" == "true" ]; then
             python3 scripts/health_check.py --use-proxy
@@ -579,6 +582,9 @@ jobs:
       - name: Step 1 - Run Spider (Ad-Hoc)
         id: spider
         run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline (important for tee)
+          
           # Build spider command with conditional flags
           SPIDER_CMD="python3 scripts/spider.py"
           
@@ -632,6 +638,9 @@ jobs:
       - name: Step 2 - Run qBittorrent Uploader (Ad-Hoc)
         id: uploader
         run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline
+          
           CMD="python3 scripts/qb_uploader.py --mode adhoc"
           
           # Pass the CSV full path captured from spider
@@ -661,6 +670,9 @@ jobs:
         id: pikpak
         if: ${{ success() && steps.uploader.outcome == 'success' }}
         run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline
+          
           CMD="python3 scripts/pikpak_bridge.py --days 3"
           if [ "${{ inputs.proxy_pikpak }}" == "true" ]; then
             CMD="$CMD --use-proxy"
@@ -952,6 +964,9 @@ jobs:
         env:
           PIPELINE_HAS_FAILURE: ${{ steps.status.outputs.has_failure }}
         run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline
+          
           CMD="python3 scripts/email_notification.py --mode adhoc"
           
           # Pass the CSV path if available
