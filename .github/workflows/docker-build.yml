@@ -14,6 +14,7 @@ on:
       - '**.py'
       - '**.rs'
       - 'rust_core/Cargo.toml'
+      - 'rust_core/Cargo.lock'
       - 'pytest.ini'
       - 'docker/**'
   push:
@@ -23,6 +24,7 @@ on:
       - '**.py'
       - '**.rs'
       - 'rust_core/Cargo.toml'
+      - 'rust_core/Cargo.lock'
       - 'pytest.ini'
       - 'docker/**'
   workflow_dispatch:  # Allow manual trigger

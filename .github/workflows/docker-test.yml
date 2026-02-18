@@ -16,6 +16,7 @@ on:
       - '**.py'
       - '**.rs'
       - 'rust_core/Cargo.toml'
+      - 'rust_core/Cargo.lock'
       - 'pytest.ini'
       - 'docker/**'
   pull_request:
@@ -26,6 +27,7 @@ on:
       - '**.py'
       - '**.rs'
       - 'rust_core/Cargo.toml'
+      - 'rust_core/Cargo.lock'
       - 'pytest.ini'
       - 'docker/**'
   workflow_dispatch:
