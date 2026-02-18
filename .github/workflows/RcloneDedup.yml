@@ -54,6 +54,7 @@ jobs:
     environment: Production
     permissions:
       contents: read
+      actions: read
     env:
       TZ: Asia/Singapore
     
@@ -89,9 +90,87 @@ jobs:
           echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
           echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
 
-      - name: Build Rust extension
+      - name: Install jq (for JSON parsing)
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Try to download pre-built Rust extension wheel
+        id: download_wheel
+        continue-on-error: true
+        run: |
+          TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          REPO="${{ github.repository }}"
+          BRANCH="${{ github.ref_name }}"
+          SANITIZED_BRANCH=$(echo "$BRANCH" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          ARTIFACT_NAME="rust-extension-wheel-latest-${SANITIZED_BRANCH}"
+          
+          echo "Attempting to download pre-built Rust extension wheel for branch: $BRANCH..."
+          
+          ENCODED_BRANCH=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$BRANCH', safe=''))")
+          WORKFLOW_RUN=$(curl -s -H "Authorization: token $TOKEN" \
+            "https://api.github.com/repos/$REPO/actions/workflows/build-rust-extension.yml/runs?status=success&branch=${ENCODED_BRANCH}&per_page=1" \
+            | jq -r '.workflow_runs[0].id // empty')
+          
+          if [ -z "$WORKFLOW_RUN" ] || [ "$WORKFLOW_RUN" == "null" ]; then
+            echo "No successful build-rust-extension workflow run found for branch: $BRANCH"
+            echo "available=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "Found workflow run: $WORKFLOW_RUN"
+          
+          ARTIFACT_ID=$(curl -s -H "Authorization: token $TOKEN" \
+            "https://api.github.com/repos/$REPO/actions/runs/$WORKFLOW_RUN/artifacts" \
+            | jq -r ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .id // empty")
+          
+          if [ -z "$ARTIFACT_ID" ] || [ "$ARTIFACT_ID" == "null" ]; then
+            echo "Artifact '$ARTIFACT_NAME' not found"
+            echo "available=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "Found artifact ID: $ARTIFACT_ID"
+          
+          mkdir -p rust_core/dist
+          curl -L -H "Authorization: token $TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$REPO/actions/artifacts/$ARTIFACT_ID/zip" \
+            -o /tmp/wheel.zip || {
+            echo "Failed to download artifact"
+            echo "available=false" >> $GITHUB_OUTPUT
+            exit 0
+          }
+          
+          unzip -q /tmp/wheel.zip -d rust_core/dist/ || {
+            echo "Failed to extract wheel"
+            echo "available=false" >> $GITHUB_OUTPUT
+            exit 0
+          }
+          
+          rm /tmp/wheel.zip
+          
+          if ls rust_core/dist/*.whl 1> /dev/null 2>&1; then
+            echo "✓ Pre-built wheel downloaded successfully"
+            echo "available=true" >> $GITHUB_OUTPUT
+            ls -lh rust_core/dist/*.whl
+          else
+            echo "Wheel file not found after download"
+            echo "available=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install Rust extension from wheel
+        if: steps.download_wheel.outputs.available == 'true'
+        run: |
+          source .venv/bin/activate
+          pip install rust_core/dist/*.whl
+          echo "✓ Installed Rust extension from pre-built wheel"
+
+      - name: Build and install Rust extension from source (fallback)
+        if: steps.download_wheel.outputs.available != 'true'
         working-directory: rust_core
-        run: maturin develop --release
+        run: |
+          echo "Pre-built wheel not available, building from source..."
+          maturin develop --release
+          echo "✓ Built and installed Rust extension from source"
 
       - name: Install rclone
         run: |
