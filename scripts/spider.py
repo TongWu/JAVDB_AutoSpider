@@ -938,7 +938,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
 
     # We will try up to N switches (coverage of the pool)
     # If using Single mode, we only have 1 try.
-    max_switches = len(global_proxy_pool.proxies) if PROXY_MODE == 'pool' else 1
+    max_switches = global_proxy_pool.get_proxy_count() if PROXY_MODE == 'pool' else 1
     # Limit max switches to avoid infinite loops if pool is huge, e.g. 10
     max_switches = min(max_switches, 10) 
     
@@ -1106,7 +1106,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
 
     # We will try up to N switches (coverage of the pool)
     # If using Single mode, we only have 1 try.
-    max_switches = len(global_proxy_pool.proxies) if PROXY_MODE == 'pool' else 1
+    max_switches = global_proxy_pool.get_proxy_count() if PROXY_MODE == 'pool' else 1
     # Limit max switches to avoid infinite loops if pool is huge, e.g. 10
     max_switches = min(max_switches, 10) 
     
@@ -1959,7 +1959,7 @@ def main():
     # Thresholds based on fallback type:
     # - CF bypass only (proxy unchanged): proxies * 1
     # - Other changes (proxy changed): proxies * 3
-    proxy_count = len(global_proxy_pool.proxies) if global_proxy_pool else 1
+    proxy_count = global_proxy_pool.get_proxy_count() if global_proxy_pool else 1
     fallback_persist_threshold_cf_only = proxy_count * 1  # Lower threshold for CF bypass only
     fallback_persist_threshold_full = proxy_count * 3     # Higher threshold for proxy changes
     current_fallback_threshold = fallback_persist_threshold_full  # Will be set based on fallback type
