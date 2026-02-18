@@ -140,7 +140,9 @@ struct PoolInner {
 #[pyclass(name = "RustProxyPool")]
 pub struct ProxyPool {
     inner: Mutex<PoolInner>,
+    #[pyo3(get)]
     cooldown_seconds: i64,
+    #[pyo3(get)]
     max_failures_before_cooldown: u32,
     ban_manager: Arc<ProxyBanManager>,
 }
@@ -491,6 +493,16 @@ impl ProxyPool {
 
     pub fn get_proxy_count(&self) -> usize {
         self.inner.lock().proxies.len()
+    }
+
+    #[getter]
+    fn proxies(&self) -> Vec<ProxyInfo> {
+        self.inner
+            .lock()
+            .proxies
+            .iter()
+            .map(|p| ProxyInfo { inner: p.clone() })
+            .collect()
     }
 }
 
