@@ -29,8 +29,10 @@ try:
         create_proxy_pool_from_config as _rust_create_proxy_pool,
     )
     RUST_PROXY_AVAILABLE = True
+    RUST_IMPORT_ERROR = None
 except ImportError as e:
     RUST_PROXY_AVAILABLE = False
+    RUST_IMPORT_ERROR = str(e)
 
 from .proxy_ban_manager import get_ban_manager, ProxyBanManager
 
@@ -41,7 +43,8 @@ logger = logging.getLogger(__name__)
 if RUST_PROXY_AVAILABLE:
     logger.info("✅ Rust proxy pool available - using high-performance Rust implementation")
 else:
-    logger.warning(f"⚠️  Rust proxy pool not available (ImportError: {e if 'e' in locals() else 'unknown'}) - falling back to pure-Python implementation")
+    error_msg = RUST_IMPORT_ERROR if RUST_IMPORT_ERROR else 'unknown'
+    logger.warning(f"⚠️  Rust proxy pool not available (ImportError: {error_msg}) - falling back to pure-Python implementation")
 
 
 def mask_proxy_url(url: Optional[str]) -> str:
