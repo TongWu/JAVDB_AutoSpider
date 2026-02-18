@@ -41,6 +41,17 @@ except ImportError as e:
     RUST_CORE_AVAILABLE = False
     logger.warning(f"⚠️  Rust core not available (ImportError: {e}) - API server falling back to pure-Python implementation")
 
+
+def _result_to_dict(result):
+    """Convert a parser result to dict.
+
+    Rust PyO3 objects expose ``to_dict()``; Python dataclasses use
+    ``dataclasses.asdict()``.
+    """
+    if hasattr(result, 'to_dict'):
+        return result.to_dict()
+    return asdict(result)
+
 app = FastAPI(
     title='JAVDB AutoSpider API',
     version='0.1.0',
@@ -78,7 +89,7 @@ async def api_parse_index(payload: HtmlPayload):
     """Parse a normal index / home page and return all movie entries."""
     try:
         result = parse_index_page(payload.html, payload.page_num)
-        return asdict(result)
+        return _result_to_dict(result)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -88,7 +99,7 @@ async def api_parse_detail(payload: HtmlPayload):
     """Parse a movie detail page and return full metadata."""
     try:
         result = parse_detail_page(payload.html)
-        return asdict(result)
+        return _result_to_dict(result)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -98,7 +109,7 @@ async def api_parse_category(payload: HtmlPayload):
     """Parse a category page (maker, publisher, series, director, etc.)."""
     try:
         result = parse_category_page(payload.html, payload.page_num)
-        return asdict(result)
+        return _result_to_dict(result)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -108,7 +119,7 @@ async def api_parse_top(payload: HtmlPayload):
     """Parse a top / ranking page."""
     try:
         result = parse_top_page(payload.html, payload.page_num)
-        return asdict(result)
+        return _result_to_dict(result)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -119,7 +130,7 @@ async def api_parse_tags(payload: HtmlPayload):
     with tag ID ↔ name mappings."""
     try:
         result = parse_tag_page(payload.html, payload.page_num)
-        return asdict(result)
+        return _result_to_dict(result)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
