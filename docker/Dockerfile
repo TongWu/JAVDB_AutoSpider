@@ -27,7 +27,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY requirements.txt .
 
 # Install Python dependencies and maturin
-RUN pip install --no-cache-dir maturin && \
+RUN pip install --no-cache-dir "maturin[patchelf]" && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy and build Rust extension (before application code for better caching)
