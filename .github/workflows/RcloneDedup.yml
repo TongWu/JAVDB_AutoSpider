@@ -166,10 +166,10 @@ jobs:
 
       - name: Build and install Rust extension from source (fallback)
         if: steps.download_wheel.outputs.available != 'true'
-        working-directory: rust_core
         run: |
+          source .venv/bin/activate
           echo "Pre-built wheel not available, building from source..."
-          maturin develop --release
+          cd rust_core && maturin develop --release
           echo "✓ Built and installed Rust extension from source"
 
       - name: Install rclone

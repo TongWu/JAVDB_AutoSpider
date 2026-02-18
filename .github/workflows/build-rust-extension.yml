@@ -59,7 +59,7 @@ jobs:
           maturin build --release --out dist
           
           # Verify that wheel file exists
-          if [ ! -f dist/*.whl ]; then
+          if ! ls dist/*.whl 1> /dev/null 2>&1; then
             echo "Error: No wheel file found in dist/"
             exit 1
           fi
