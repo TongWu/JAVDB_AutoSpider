@@ -63,8 +63,28 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust_core/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust_core/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install maturin
+          pip install -r requirements.txt
+
+      - name: Build Rust extension
+        working-directory: rust_core
+        run: maturin develop --release
 
       - name: Generate config.py from GitHub Variables and Secrets
         env:
