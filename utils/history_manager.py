@@ -14,6 +14,8 @@ from utils.logging_config import get_logger, setup_logging
 setup_logging(log_level=LOG_LEVEL)
 logger = get_logger(__name__)
 
+RUST_HISTORY_AVAILABLE = False
+
 
 def load_parsed_movies_history(history_file, phase=None):
     """Load previously parsed movies from CSV file with phase filtering"""
@@ -744,4 +746,30 @@ def mark_torrent_as_downloaded(history_file, href, video_code, torrent_type):
         
     except Exception as e:
         logger.error(f"Error marking torrent as downloaded: {e}")
-        return False 
+        return False
+
+
+# ── Rust-first override ─────────────────────────────────────────────────
+# When javdb_rust_core is available, replace pure-Python implementations
+# with high-performance Rust equivalents. Falls back silently on ImportError.
+try:
+    from javdb_rust_core import (
+        load_parsed_movies_history,
+        cleanup_history_file,
+        maintain_history_limit,
+        save_parsed_movie_to_history,
+        validate_history_file,
+        determine_torrent_types,
+        determine_torrent_type,
+        get_missing_torrent_types,
+        has_complete_subtitles,
+        should_process_movie,
+        check_torrent_in_history,
+        add_downloaded_indicator_to_csv,
+        is_downloaded_torrent,
+        mark_torrent_as_downloaded,
+    )
+    RUST_HISTORY_AVAILABLE = True
+    logger.info("✅ Rust history manager loaded - using high-performance Rust implementation")
+except ImportError:
+    pass
