@@ -288,11 +288,10 @@ class TestExtractSpiderStatistics:
         with open(log_path, 'w') as f:
             f.write("[Page  1] Found  20 entries for phase 1,  10 for phase 2\n")
             f.write("[Page  2] Found  15 entries for phase 1,   0 for phase 2\n")
-            f.write("Phase 1 completed: 35 movies discovered, 28 processed, 2 skipped (session), 3 skipped (history), 1 no new torrents, 1 failed\n")
-            f.write("Phase 2 completed: 10 movies discovered, 7 processed, 1 skipped (session), 1 skipped (history), 0 no new torrents, 1 failed\n")
+            f.write("Phase 1 completed: 35 movies discovered, 28 processed, 3 skipped (history), 1 no new torrents, 1 failed\n")
+            f.write("Phase 2 completed: 10 movies discovered, 7 processed, 1 skipped (history), 0 no new torrents, 1 failed\n")
             f.write("Total movies discovered: 45\n")
             f.write("Successfully processed: 35\n")
-            f.write("Skipped already parsed in this session: 3\n")
             f.write("Skipped already parsed in previous runs: 4\n")
             f.write("No new torrents to download: 1\n")
             f.write("Failed to fetch/parse: 2\n")
@@ -300,7 +299,6 @@ class TestExtractSpiderStatistics:
         stats = extract_spider_statistics(log_path)
         assert stats['phase1']['discovered'] == 35
         assert stats['phase1']['processed'] == 28
-        assert stats['phase1']['skipped_session'] == 2
         assert stats['phase1']['skipped_history'] == 3
         assert stats['phase1']['no_new_torrents'] == 1
         assert stats['phase1']['failed'] == 1
@@ -308,7 +306,6 @@ class TestExtractSpiderStatistics:
         assert stats['phase2']['processed'] == 7
         assert stats['overall']['total_discovered'] == 45
         assert stats['overall']['successfully_processed'] == 35
-        assert stats['overall']['skipped_session'] == 3
         assert stats['overall']['skipped_history'] == 4
         assert stats['overall']['no_new_torrents'] == 1
         assert stats['overall']['failed'] == 2
@@ -321,7 +318,6 @@ class TestExtractSpiderStatistics:
             f.write("Phase 2 completed: 10 found, 2 skipped (history), 8 written to CSV\n")
             f.write("Total entries found: 38\n")
             f.write("Successfully processed: 38\n")
-            f.write("Skipped already parsed in this session: 5\n")
             f.write("Skipped already parsed in previous runs: 10\n")
         
         stats = extract_spider_statistics(log_path)
@@ -331,7 +327,6 @@ class TestExtractSpiderStatistics:
         assert stats['phase2']['processed'] == 8
         assert stats['overall']['total_discovered'] == 38
         assert stats['overall']['successfully_processed'] == 38
-        assert stats['overall']['skipped_session'] == 5
         assert stats['overall']['skipped_history'] == 10
 
 
@@ -405,9 +400,9 @@ class TestFormatEmailReport:
     def test_format_email_report(self):
         """Test email report formatting."""
         spider_stats = {
-            'phase1': {'discovered': 20, 'processed': 15, 'skipped_session': 2, 'skipped_history': 3, 'no_new_torrents': 0, 'failed': 0},
-            'phase2': {'discovered': 10, 'processed': 8, 'skipped_session': 1, 'skipped_history': 1, 'no_new_torrents': 0, 'failed': 0},
-            'overall': {'total_discovered': 30, 'successfully_processed': 23, 'skipped_session': 3, 'skipped_history': 4, 'no_new_torrents': 0, 'failed': 0}
+            'phase1': {'discovered': 20, 'processed': 15, 'skipped_history': 3, 'no_new_torrents': 0, 'failed': 0},
+            'phase2': {'discovered': 10, 'processed': 8, 'skipped_history': 1, 'no_new_torrents': 0, 'failed': 0},
+            'overall': {'total_discovered': 30, 'successfully_processed': 23, 'skipped_history': 4, 'no_new_torrents': 0, 'failed': 0}
         }
         uploader_stats = {
             'total': 23,
@@ -440,4 +435,4 @@ class TestFormatEmailReport:
         assert '87.0%' in result  # success rate
         assert 'No banned proxies' in result
         assert 'No New Torrents' in result  # new field
-
+        assert 'Skipped (Session)' not in result

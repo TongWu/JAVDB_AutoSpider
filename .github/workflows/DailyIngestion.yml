@@ -15,8 +15,8 @@ on:
           - 'ubuntu-latest'
           - 'self-hosted'
   # schedule: # DISABLED FOR PUBLIC REPO
-    # Run daily at 10:00 UTC (18:00 Beijing Time)
-    # - cron: '0 10 * * *'
+    # Run daily at 14:00 UTC (22:00 Beijing Time)
+    # - cron: '0 14 * * *'
 
 jobs:
   # =============================================================================
