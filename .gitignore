@@ -52,3 +52,30 @@ coverage.xml
 *.cover
 .hypothesis/
 .pytest_cache/
+
+# Rust
+# Compiled files
+rust_core/target/
+**/*.rs.bk
+**/*.rs.bak
+
+# Cargo
+# Note: Cargo.lock should be committed for applications/libraries
+# Uncomment the next line if you want to ignore Cargo.lock
+# rust_core/Cargo.lock
+
+# Rust build artifacts
+**/*.rlib
+**/*.dll
+**/*.dylib
+**/*.so
+**/*.pdb
+
+# Rust IDE files
+rust-analyzer/
+*.orig
+
+# Maturin build outputs
+rust_core/target/wheels/
+rust_core/target/dist/
+rust_core/target/sdist/
