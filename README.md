@@ -567,9 +567,8 @@ PHASE2_MIN_COMMENTS = 80  # Minimum comment count for phase 2 entries
 IGNORE_RELEASE_DATE_FILTER = False  # Set True to ignore today/yesterday tags
 
 # Sleep time configuration (in seconds)
-DETAIL_PAGE_SLEEP = 5  # Sleep before parsing detail pages
 PAGE_SLEEP = 2  # Sleep between index pages
-MOVIE_SLEEP = 1  # Sleep between movies
+MOVIE_SLEEP = 5  # Sleep between movies (includes detail page rate limiting)
 
 # =============================================================================
 # JAVDB LOGIN CONFIGURATION (for automatic session cookie refresh)
@@ -1429,9 +1428,8 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
 
 ### Rate Limiting and Delays
 - The system includes delays between requests to be respectful to servers:
-  - **Detail pages**: 5 seconds (configurable via `DETAIL_PAGE_SLEEP`)
   - **Index pages**: 2 seconds (configurable via `PAGE_SLEEP`)
-  - **Movies**: 1 second (configurable via `MOVIE_SLEEP`)
+  - **Movies**: 5 seconds (configurable via `MOVIE_SLEEP`)
   - **qBittorrent additions**: 1 second (configurable via `DELAY_BETWEEN_ADDITIONS`)
   - **PikPak requests**: 3 seconds (configurable via `PIKPAK_REQUEST_DELAY`)
 

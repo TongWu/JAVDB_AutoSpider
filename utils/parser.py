@@ -14,16 +14,14 @@ continue to work without modification.
 
 import re
 import logging
-import time
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 
 # Import configuration
 try:
-    from config import DETAIL_PAGE_SLEEP, PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS, LOG_LEVEL, IGNORE_RELEASE_DATE_FILTER
+    from config import PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS, LOG_LEVEL, IGNORE_RELEASE_DATE_FILTER
 except ImportError:
     # Fallback values if config.py doesn't exist
-    DETAIL_PAGE_SLEEP = 5
     PHASE2_MIN_RATE = 4.0
     PHASE2_MIN_COMMENTS = 100
     LOG_LEVEL = 'INFO'
@@ -225,8 +223,9 @@ def parse_detail(html_content, index=None, skip_sleep=False):
     Args:
         html_content: HTML content of the detail page
         index: Index number for logging prefix
-        skip_sleep: If True, skip the sleep delay (used during fallback
-            retries)
+        skip_sleep: Deprecated, kept for backward compatibility. Rate-limit
+            sleep is now handled exclusively by the caller (spider.py via
+            ``MOVIE_SLEEP``).
 
     Returns:
         tuple: (magnets, actor_info, parse_success)
@@ -234,10 +233,6 @@ def parse_detail(html_content, index=None, skip_sleep=False):
             - actor_info: Actor name string
             - parse_success: True if magnets_content was found
     """
-    # Respect the rate-limit sleep (the API layer does NOT sleep)
-    if not skip_sleep:
-        time.sleep(DETAIL_PAGE_SLEEP)
-
     prefix = f"[{index}]" if index is not None else ""
 
     # Delegate to the new API parser
