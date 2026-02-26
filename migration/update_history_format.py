@@ -27,7 +27,7 @@ from utils.logging_config import setup_logging, get_logger
 try:
     from config import (
         BASE_URL, PARSED_MOVIES_CSV, SPIDER_LOG_FILE, LOG_LEVEL,
-        DETAIL_PAGE_SLEEP, JAVDB_SESSION_COOKIE
+        MOVIE_SLEEP, JAVDB_SESSION_COOKIE
     )
 except ImportError:
     # Fallback values if config.py doesn't exist
@@ -35,7 +35,7 @@ except ImportError:
     PARSED_MOVIES_CSV = 'parsed_movies_history.csv'
     SPIDER_LOG_FILE = 'logs/spider.log'
     LOG_LEVEL = 'INFO'
-    DETAIL_PAGE_SLEEP = 5
+    MOVIE_SLEEP = 5
     JAVDB_SESSION_COOKIE = None
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
@@ -301,8 +301,8 @@ def main():
             
             # Sleep between requests to be respectful to the server
             if i < len(entries_to_update) - 1:  # Don't sleep after last request
-                logger.info(f"Sleeping {DETAIL_PAGE_SLEEP} seconds...")
-                time.sleep(DETAIL_PAGE_SLEEP)
+                logger.info(f"Sleeping {MOVIE_SLEEP} seconds...")
+                time.sleep(MOVIE_SLEEP)
                 
         except KeyboardInterrupt:
             logger.info("\nInterrupted by user")

@@ -99,9 +99,8 @@
 | JAVDB_SESSION_COOKIE | string | 会话 Cookie（敏感） | 空 |
 | GPT_API_URL | string | GPT 兼容 API URL（验证码） | 空 |
 | GPT_API_KEY | string | API Key（敏感） | 空 |
-| DETAIL_PAGE_SLEEP | int | 详情页间隔（秒） | `5`–`30` |
 | PAGE_SLEEP | int | 翻页间隔（秒） | `2`–`15` |
-| MOVIE_SLEEP | int | 影片间间隔（秒） | `1`–`15` |
+| MOVIE_SLEEP | int | 影片间间隔（秒，含详情页限速） | `5`–`30` |
 | CF_TURNSTILE_COOLDOWN | int | Turnstile 冷却（秒） | `10`–`30` |
 | PHASE_TRANSITION_COOLDOWN | int | 阶段切换冷却（秒） | `30`–`60` |
 | FALLBACK_COOLDOWN | int | 回退冷却（秒） | `30` |
