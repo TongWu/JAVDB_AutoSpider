@@ -110,17 +110,17 @@ pub fn mask_proxy_url(proxy_url: Option<&str>) -> String {
     let re = Regex::new(r"^(https?://)(?:([^:]+):([^@]+)@)?([^:]+):(\d+)(.*)$").unwrap();
     if let Some(caps) = re.captures(url) {
         let protocol = &caps[1];
-        let user = caps.get(2);
         let host = &caps[4];
         let port = &caps[5];
         let suffix = caps.get(6).map_or("", |m| m.as_str());
 
-        let masked_host = mask_ip_address(Some(host));
-        if user.is_some() {
-            format!("{protocol}***:***@{masked_host}:{port}{suffix}")
+        let ip_re = Regex::new(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$").unwrap();
+        let masked_host = if ip_re.is_match(host) {
+            mask_ip_address(Some(host))
         } else {
-            format!("{protocol}{masked_host}:{port}{suffix}")
-        }
+            host.to_string()
+        };
+        format!("{protocol}{masked_host}:{port}{suffix}")
     } else {
         mask_partial(Some(url), 10, 5, 2)
     }
@@ -219,7 +219,8 @@ mod tests {
     #[test]
     fn test_mask_proxy_url() {
         let result = mask_proxy_url(Some("http://user:pass@192.168.1.1:8080"));
-        assert!(result.contains("***:***@"));
+        assert!(!result.contains("@"));
         assert!(result.contains("xxx.xxx"));
+        assert!(result.starts_with("http://"));
     }
 }

@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, Local};
+use chrono::{DateTime, Duration, Local, NaiveDateTime};
 use log::{debug, error, info, warn};
 use parking_lot::Mutex;
 use pyo3::prelude::*;
@@ -66,73 +66,160 @@ impl ProxyInfoInner {
     }
 }
 
+fn naive_to_local(ndt: NaiveDateTime) -> DateTime<Local> {
+    ndt.and_local_timezone(Local)
+        .single()
+        .unwrap_or_else(Local::now)
+}
+
+fn local_to_naive(dt: DateTime<Local>) -> NaiveDateTime {
+    dt.naive_local()
+}
+
+/// Shared proxy info: cloning ProxyInfo shares the same underlying data.
 #[pyclass(name = "RustProxyInfo")]
 #[derive(Clone, Debug)]
 pub struct ProxyInfo {
-    inner: ProxyInfoInner,
+    inner: Arc<Mutex<ProxyInfoInner>>,
+}
+
+impl ProxyInfo {
+    pub fn new_shared(data: ProxyInfoInner) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(data)),
+        }
+    }
+
+    pub fn arc(&self) -> Arc<Mutex<ProxyInfoInner>> {
+        self.inner.clone()
+    }
 }
 
 #[pymethods]
 impl ProxyInfo {
     #[new]
     #[pyo3(signature = (http_url=None, https_url=None, name="Unnamed".to_string()))]
-    fn new(http_url: Option<String>, https_url: Option<String>, name: String) -> Self {
-        Self {
-            inner: ProxyInfoInner {
-                http_url,
-                https_url,
-                name,
-                failures: 0,
-                last_success: None,
-                last_failure: None,
-                total_requests: 0,
-                successful_requests: 0,
-                is_available: true,
-                cooldown_until: None,
-            },
-        }
+    fn py_new(http_url: Option<String>, https_url: Option<String>, name: String) -> Self {
+        Self::new_shared(ProxyInfoInner {
+            http_url,
+            https_url,
+            name,
+            failures: 0,
+            last_success: None,
+            last_failure: None,
+            total_requests: 0,
+            successful_requests: 0,
+            is_available: true,
+            cooldown_until: None,
+        })
+    }
+
+    // --- Getters ---
+
+    #[getter]
+    fn name(&self) -> String {
+        self.inner.lock().name.clone()
     }
 
     #[getter]
-    fn name(&self) -> &str {
-        &self.inner.name
+    fn http_url(&self) -> Option<String> {
+        self.inner.lock().http_url.clone()
+    }
+
+    #[getter]
+    fn https_url(&self) -> Option<String> {
+        self.inner.lock().https_url.clone()
     }
 
     #[getter]
     fn failures(&self) -> u32 {
-        self.inner.failures
+        self.inner.lock().failures
     }
 
     #[getter]
     fn is_available(&self) -> bool {
-        self.inner.is_available
+        self.inner.lock().is_available
     }
 
     #[getter]
     fn total_requests(&self) -> u64 {
-        self.inner.total_requests
+        self.inner.lock().total_requests
     }
 
     #[getter]
     fn successful_requests(&self) -> u64 {
-        self.inner.successful_requests
+        self.inner.lock().successful_requests
     }
 
+    #[getter]
+    fn cooldown_until(&self) -> Option<NaiveDateTime> {
+        self.inner.lock().cooldown_until.map(local_to_naive)
+    }
+
+    #[getter]
+    fn last_success(&self) -> Option<NaiveDateTime> {
+        self.inner.lock().last_success.map(local_to_naive)
+    }
+
+    #[getter]
+    fn last_failure(&self) -> Option<NaiveDateTime> {
+        self.inner.lock().last_failure.map(local_to_naive)
+    }
+
+    // --- Setters ---
+
+    #[setter]
+    fn set_failures(&self, value: u32) {
+        self.inner.lock().failures = value;
+    }
+
+    #[setter]
+    fn set_is_available(&self, value: bool) {
+        self.inner.lock().is_available = value;
+    }
+
+    #[setter]
+    fn set_total_requests(&self, value: u64) {
+        self.inner.lock().total_requests = value;
+    }
+
+    #[setter]
+    fn set_successful_requests(&self, value: u64) {
+        self.inner.lock().successful_requests = value;
+    }
+
+    #[setter]
+    fn set_cooldown_until(&self, value: Option<NaiveDateTime>) {
+        self.inner.lock().cooldown_until = value.map(naive_to_local);
+    }
+
+    // --- Methods ---
+
     fn get_proxies_dict(&self) -> HashMap<String, String> {
-        self.inner.get_proxies_dict()
+        self.inner.lock().get_proxies_dict()
     }
 
     fn get_success_rate(&self) -> f64 {
-        self.inner.get_success_rate()
+        self.inner.lock().get_success_rate()
     }
 
     fn is_in_cooldown(&self) -> bool {
-        self.inner.is_in_cooldown()
+        self.inner.lock().is_in_cooldown()
+    }
+
+    #[pyo3(signature = ())]
+    fn mark_success(&self) {
+        self.inner.lock().mark_success();
+    }
+
+    #[pyo3(signature = (cooldown_seconds=300))]
+    fn mark_failure(&self, cooldown_seconds: i64) {
+        self.inner.lock().mark_failure(cooldown_seconds);
     }
 }
 
 struct PoolInner {
-    proxies: Vec<ProxyInfoInner>,
+    proxies: Vec<Arc<Mutex<ProxyInfoInner>>>,
     current_index: usize,
     no_proxy_mode: bool,
 }
@@ -144,7 +231,7 @@ pub struct ProxyPool {
     cooldown_seconds: i64,
     #[pyo3(get)]
     max_failures_before_cooldown: u32,
-    ban_manager: Arc<ProxyBanManager>,
+    ban_manager: ProxyBanManager,
 }
 
 #[pymethods]
@@ -167,6 +254,35 @@ impl ProxyPool {
             ban_manager: get_ban_manager(&ban_log_file),
         }
     }
+
+    // --- Pool-level getters ---
+
+    #[getter]
+    fn current_index(&self) -> usize {
+        self.inner.lock().current_index
+    }
+
+    #[getter]
+    fn no_proxy_mode(&self) -> bool {
+        self.inner.lock().no_proxy_mode
+    }
+
+    #[getter]
+    fn ban_manager(&self) -> ProxyBanManager {
+        self.ban_manager.clone()
+    }
+
+    #[getter]
+    fn proxies(&self) -> Vec<ProxyInfo> {
+        self.inner
+            .lock()
+            .proxies
+            .iter()
+            .map(|arc| ProxyInfo { inner: arc.clone() })
+            .collect()
+    }
+
+    // --- Proxy management ---
 
     #[pyo3(signature = (http_url=None, https_url=None, name=None))]
     pub fn add_proxy(
@@ -206,7 +322,7 @@ impl ProxyPool {
             cooldown_until: None,
         };
 
-        self.inner.lock().proxies.push(proxy);
+        self.inner.lock().proxies.push(Arc::new(Mutex::new(proxy)));
         info!(
             "Added proxy '{}' to pool (HTTP: {}, HTTPS: {})",
             proxy_name, masked_http, masked_https
@@ -245,14 +361,15 @@ impl ProxyPool {
             return None;
         }
 
-        check_cooldowns(&mut pool.proxies);
+        check_cooldowns(&pool.proxies);
 
         let len = pool.proxies.len();
         for _ in 0..len {
-            let proxy = &pool.proxies[pool.current_index];
+            let proxy = pool.proxies[pool.current_index].lock();
             if proxy.is_available && !proxy.is_in_cooldown() {
                 return Some(proxy.get_proxies_dict());
             }
+            drop(proxy);
             pool.current_index = (pool.current_index + 1) % len;
         }
 
@@ -270,12 +387,15 @@ impl ProxyPool {
             return None;
         }
 
-        check_cooldowns(&mut pool.proxies);
+        check_cooldowns(&pool.proxies);
 
         let available = pool
             .proxies
             .iter()
-            .filter(|p| p.is_available && !p.is_in_cooldown())
+            .filter(|p| {
+                let proxy = p.lock();
+                proxy.is_available && !proxy.is_in_cooldown()
+            })
             .count();
         if available == 0 {
             warn!("All proxies are unavailable or in cooldown");
@@ -285,7 +405,7 @@ impl ProxyPool {
         let len = pool.proxies.len();
         for _ in 0..len {
             pool.current_index = (pool.current_index + 1) % len;
-            let proxy = &pool.proxies[pool.current_index];
+            let proxy = pool.proxies[pool.current_index].lock();
             if proxy.is_available && !proxy.is_in_cooldown() {
                 debug!("Round-robin selected proxy: {}", proxy.name);
                 return Some(proxy.get_proxies_dict());
@@ -304,20 +424,22 @@ impl ProxyPool {
         if pool.proxies.is_empty() {
             return "None".to_string();
         }
-        pool.proxies[pool.current_index].name.clone()
+        let name = pool.proxies[pool.current_index].lock().name.clone();
+        name
     }
 
     pub fn mark_success(&self) {
-        let mut pool = self.inner.lock();
+        let pool = self.inner.lock();
         if pool.no_proxy_mode || pool.proxies.is_empty() {
             return;
         }
         let idx = pool.current_index;
-        pool.proxies[idx].mark_success();
+        let mut proxy = pool.proxies[idx].lock();
+        proxy.mark_success();
         debug!(
             "Proxy '{}' marked as successful (success rate: {:.1}%)",
-            pool.proxies[idx].name,
-            pool.proxies[idx].get_success_rate() * 100.0
+            proxy.name,
+            proxy.get_success_rate() * 100.0
         );
     }
 
@@ -328,27 +450,30 @@ impl ProxyPool {
         }
 
         let idx = pool.current_index;
-        let current_name = pool.proxies[idx].name.clone();
+        let current_name = pool.proxies[idx].lock().name.clone();
 
-        if pool.proxies[idx].failures >= self.max_failures_before_cooldown {
-            let proxy_url = pool.proxies[idx]
-                .http_url
-                .clone()
-                .or_else(|| pool.proxies[idx].https_url.clone());
-            self.ban_manager.add_ban(&current_name, proxy_url);
-            pool.proxies[idx].mark_failure(self.cooldown_seconds);
-            warn!(
-                "Proxy '{}' reached {} failures, putting in cooldown for {}s (8 days)",
-                current_name, pool.proxies[idx].failures, self.cooldown_seconds
-            );
-        } else {
-            pool.proxies[idx].failures += 1;
-            pool.proxies[idx].total_requests += 1;
-            pool.proxies[idx].last_failure = Some(Local::now());
-            warn!(
-                "Proxy '{}' failed ({}/{})",
-                current_name, pool.proxies[idx].failures, self.max_failures_before_cooldown
-            );
+        {
+            let mut proxy = pool.proxies[idx].lock();
+            if proxy.failures >= self.max_failures_before_cooldown {
+                let proxy_url = proxy
+                    .http_url
+                    .clone()
+                    .or_else(|| proxy.https_url.clone());
+                self.ban_manager.add_ban(&current_name, proxy_url);
+                proxy.mark_failure(self.cooldown_seconds);
+                warn!(
+                    "Proxy '{}' reached {} failures, putting in cooldown for {}s (8 days)",
+                    current_name, proxy.failures, self.cooldown_seconds
+                );
+            } else {
+                proxy.failures += 1;
+                proxy.total_requests += 1;
+                proxy.last_failure = Some(Local::now());
+                warn!(
+                    "Proxy '{}' failed ({}/{})",
+                    current_name, proxy.failures, self.max_failures_before_cooldown
+                );
+            }
         }
 
         let len = pool.proxies.len();
@@ -356,12 +481,11 @@ impl ProxyPool {
 
         for _ in 0..len {
             pool.current_index = (pool.current_index + 1) % len;
-            if pool.proxies[pool.current_index].is_available
-                && !pool.proxies[pool.current_index].is_in_cooldown()
-            {
+            let proxy = pool.proxies[pool.current_index].lock();
+            if proxy.is_available && !proxy.is_in_cooldown() {
                 info!(
                     "Switched from '{}' to '{}'",
-                    current_name, pool.proxies[pool.current_index].name
+                    current_name, proxy.name
                 );
                 return true;
             }
@@ -374,8 +498,8 @@ impl ProxyPool {
 
     pub fn get_statistics(&self) -> HashMap<String, PyObject> {
         Python::with_gil(|py| {
-            let mut pool = self.inner.lock();
-            check_cooldowns(&mut pool.proxies);
+            let pool = self.inner.lock();
+            check_cooldowns(&pool.proxies);
 
             let mut stats = HashMap::new();
             stats.insert("total_proxies".to_string(), pool.proxies.len().to_object(py));
@@ -383,11 +507,14 @@ impl ProxyPool {
             let available = pool
                 .proxies
                 .iter()
-                .filter(|p| p.is_available && !p.is_in_cooldown())
+                .filter(|p| {
+                    let proxy = p.lock();
+                    proxy.is_available && !proxy.is_in_cooldown()
+                })
                 .count();
             stats.insert("available_proxies".to_string(), available.to_object(py));
 
-            let in_cooldown = pool.proxies.iter().filter(|p| p.is_in_cooldown()).count();
+            let in_cooldown = pool.proxies.iter().filter(|p| p.lock().is_in_cooldown()).count();
             stats.insert("in_cooldown".to_string(), in_cooldown.to_object(py));
             stats.insert("no_proxy_mode".to_string(), pool.no_proxy_mode.to_object(py));
 
@@ -395,7 +522,8 @@ impl ProxyPool {
                 .proxies
                 .iter()
                 .enumerate()
-                .map(|(i, proxy)| {
+                .map(|(i, arc)| {
+                    let proxy = arc.lock();
                     let mut ps: HashMap<String, PyObject> = HashMap::new();
                     ps.insert("name".to_string(), proxy.name.clone().to_object(py));
                     ps.insert("is_current".to_string(), (i == pool.current_index).to_object(py));
@@ -434,24 +562,29 @@ impl ProxyPool {
     #[pyo3(signature = (level=None))]
     #[allow(unused_variables)]
     pub fn log_statistics(&self, level: Option<i32>) {
-        let mut pool = self.inner.lock();
-        check_cooldowns(&mut pool.proxies);
+        let pool = self.inner.lock();
+        check_cooldowns(&pool.proxies);
 
         let total = pool.proxies.len();
         let available = pool
             .proxies
             .iter()
-            .filter(|p| p.is_available && !p.is_in_cooldown())
+            .filter(|p| {
+                let proxy = p.lock();
+                proxy.is_available && !proxy.is_in_cooldown()
+            })
             .count();
-        let in_cooldown = pool.proxies.iter().filter(|p| p.is_in_cooldown()).count();
+        let in_cooldown = pool.proxies.iter().filter(|p| p.lock().is_in_cooldown()).count();
+        let no_proxy_mode = pool.no_proxy_mode;
 
         info!("=== Proxy Pool Statistics ===");
         info!(
             "Total: {} | Available: {} | Cooldown: {} | No-Proxy Mode: {}",
-            total, available, in_cooldown, pool.no_proxy_mode
+            total, available, in_cooldown, no_proxy_mode
         );
 
-        for (i, proxy) in pool.proxies.iter().enumerate() {
+        for (i, arc) in pool.proxies.iter().enumerate() {
+            let proxy = arc.lock();
             let current = if i == pool.current_index {
                 " [CURRENT]"
             } else {
@@ -487,6 +620,7 @@ impl ProxyPool {
         info!("=============================");
     }
 
+    #[pyo3(signature = (include_ip=false))]
     pub fn get_ban_summary(&self, include_ip: bool) -> String {
         self.ban_manager.get_ban_summary(include_ip)
     }
@@ -494,20 +628,11 @@ impl ProxyPool {
     pub fn get_proxy_count(&self) -> usize {
         self.inner.lock().proxies.len()
     }
-
-    #[getter]
-    fn proxies(&self) -> Vec<ProxyInfo> {
-        self.inner
-            .lock()
-            .proxies
-            .iter()
-            .map(|p| ProxyInfo { inner: p.clone() })
-            .collect()
-    }
 }
 
-fn check_cooldowns(proxies: &mut [ProxyInfoInner]) {
-    for proxy in proxies.iter_mut() {
+fn check_cooldowns(proxies: &[Arc<Mutex<ProxyInfoInner>>]) {
+    for arc in proxies {
+        let mut proxy = arc.lock();
         if proxy.is_in_cooldown() {
             continue;
         }

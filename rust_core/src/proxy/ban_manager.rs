@@ -5,6 +5,7 @@ use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 const BAN_DURATION_DAYS: i64 = 7;
 const COOLDOWN_DURATION_DAYS: i64 = 8;
@@ -34,10 +35,15 @@ impl ProxyBanRecord {
     }
 }
 
-#[pyclass(name = "RustProxyBanManager")]
-pub struct ProxyBanManager {
+struct BanManagerInner {
     ban_log_file: PathBuf,
     banned_proxies: Mutex<HashMap<String, ProxyBanRecord>>,
+}
+
+#[pyclass(name = "RustProxyBanManager")]
+#[derive(Clone)]
+pub struct ProxyBanManager {
+    inner: Arc<BanManagerInner>,
 }
 
 #[pymethods]
@@ -51,8 +57,10 @@ impl ProxyBanManager {
         }
 
         let mgr = Self {
-            ban_log_file: path,
-            banned_proxies: Mutex::new(HashMap::new()),
+            inner: Arc::new(BanManagerInner {
+                ban_log_file: path,
+                banned_proxies: Mutex::new(HashMap::new()),
+            }),
         };
         mgr.load_ban_records();
         mgr.cleanup_expired_bans();
@@ -60,7 +68,7 @@ impl ProxyBanManager {
     }
 
     pub fn is_proxy_banned(&self, proxy_name: &str) -> bool {
-        let mut banned = self.banned_proxies.lock();
+        let mut banned = self.inner.banned_proxies.lock();
         if let Some(record) = banned.get(proxy_name) {
             if !record.is_still_banned() {
                 banned.remove(proxy_name);
@@ -75,7 +83,7 @@ impl ProxyBanManager {
 
     #[pyo3(signature = (proxy_name, proxy_url=None))]
     pub fn add_ban(&self, proxy_name: &str, proxy_url: Option<String>) {
-        let mut banned = self.banned_proxies.lock();
+        let mut banned = self.inner.banned_proxies.lock();
         if let Some(existing) = banned.get(proxy_name) {
             if existing.is_still_banned() {
                 warn!("Proxy '{}' is already in ban period, not updating", proxy_name);
@@ -107,7 +115,7 @@ impl ProxyBanManager {
     #[pyo3(signature = (include_ip=false))]
     pub fn get_ban_summary(&self, include_ip: bool) -> String {
         self.cleanup_expired_bans();
-        let banned = self.banned_proxies.lock();
+        let banned = self.inner.banned_proxies.lock();
 
         if banned.is_empty() {
             return "No proxies currently banned.".to_string();
@@ -152,13 +160,13 @@ impl ProxyBanManager {
 
     pub fn get_banned_proxy_names(&self) -> Vec<String> {
         self.cleanup_expired_bans();
-        let banned = self.banned_proxies.lock();
+        let banned = self.inner.banned_proxies.lock();
         banned.keys().cloned().collect()
     }
 
     pub fn get_banned_proxies(&self) -> Vec<HashMap<String, String>> {
         self.cleanup_expired_bans();
-        let banned = self.banned_proxies.lock();
+        let banned = self.inner.banned_proxies.lock();
         banned
             .values()
             .map(|r| {
@@ -190,21 +198,21 @@ impl ProxyBanManager {
 
     pub fn get_banned_count(&self) -> usize {
         self.cleanup_expired_bans();
-        self.banned_proxies.lock().len()
+        self.inner.banned_proxies.lock().len()
     }
 }
 
 impl ProxyBanManager {
     fn load_ban_records(&self) {
-        if !self.ban_log_file.exists() {
-            info!("No existing ban log found at {:?}", self.ban_log_file);
+        if !self.inner.ban_log_file.exists() {
+            info!("No existing ban log found at {:?}", self.inner.ban_log_file);
             return;
         }
 
-        match fs::File::open(&self.ban_log_file) {
+        match fs::File::open(&self.inner.ban_log_file) {
             Ok(file) => {
                 let mut reader = csv::Reader::from_reader(file);
-                let mut banned = self.banned_proxies.lock();
+                let mut banned = self.inner.banned_proxies.lock();
                 for result in reader.records() {
                     if let Ok(record) = result {
                         let proxy_name = record.get(0).unwrap_or_default().to_string();
@@ -239,7 +247,7 @@ impl ProxyBanManager {
                 info!(
                     "Loaded {} ban records from {:?}",
                     banned.len(),
-                    self.ban_log_file
+                    self.inner.ban_log_file
                 );
             }
             Err(e) => error!("Error loading ban records: {}", e),
@@ -248,7 +256,7 @@ impl ProxyBanManager {
 
     fn save_ban_records_inner(&self, banned: &HashMap<String, ProxyBanRecord>) {
         let result = (|| -> Result<(), Box<dyn std::error::Error>> {
-            let file = fs::File::create(&self.ban_log_file)?;
+            let file = fs::File::create(&self.inner.ban_log_file)?;
             let mut writer = csv::Writer::from_writer(file);
             writer.write_record(["proxy_name", "ban_time", "unban_time"])?;
             for record in banned.values() {
@@ -262,7 +270,7 @@ impl ProxyBanManager {
             debug!(
                 "Saved {} ban records to {:?}",
                 banned.len(),
-                self.ban_log_file
+                self.inner.ban_log_file
             );
             Ok(())
         })();
@@ -273,7 +281,7 @@ impl ProxyBanManager {
     }
 
     fn cleanup_expired_bans(&self) {
-        let mut banned = self.banned_proxies.lock();
+        let mut banned = self.inner.banned_proxies.lock();
         let expired: Vec<String> = banned
             .iter()
             .filter(|(_, r)| !r.is_still_banned())
@@ -290,15 +298,13 @@ impl ProxyBanManager {
     }
 }
 
-// Global singleton
 use once_cell::sync::OnceCell;
-use std::sync::Arc;
 
-static GLOBAL_BAN_MANAGER: OnceCell<Arc<ProxyBanManager>> = OnceCell::new();
+static GLOBAL_BAN_MANAGER: OnceCell<ProxyBanManager> = OnceCell::new();
 
-pub fn get_ban_manager(ban_log_file: &str) -> Arc<ProxyBanManager> {
+pub fn get_ban_manager(ban_log_file: &str) -> ProxyBanManager {
     GLOBAL_BAN_MANAGER
-        .get_or_init(|| Arc::new(ProxyBanManager::new(ban_log_file.to_string())))
+        .get_or_init(|| ProxyBanManager::new(ban_log_file.to_string()))
         .clone()
 }
 
