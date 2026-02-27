@@ -180,11 +180,11 @@ pub fn mask_proxy_url_internal(url: Option<&str>) -> String {
             let re = Regex::new(r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})").unwrap();
             let mut result = u.to_string();
 
-            if result.contains('@') {
-                if let Some(at_pos) = result.find('@') {
-                    if let Some(proto_end) = result.find("://") {
-                        result = format!("{}{}", &result[..proto_end + 3], &result[at_pos + 1..]);
-                    }
+            if let Some(at_pos) = result.find('@') {
+                if let Some(proto_end) = result.find("://") {
+                    result = format!("{}{}", &result[..proto_end + 3], &result[at_pos + 1..]);
+                } else {
+                    result = result[at_pos + 1..].to_string();
                 }
             }
 
