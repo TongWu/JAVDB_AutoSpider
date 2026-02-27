@@ -153,10 +153,46 @@ class MovieSleepManager:
     pick from the top 30 % to avoid consecutive short intervals.
     """
 
+    VOLUME_TIERS = [
+        (50,  1.0, 1.0),
+        (75,  1.1, 1.3),
+        (100, 1.2, 1.6),
+        (125, 1.3, 2.0),
+        (150, 1.4, 2.5),
+    ]
+    VOLUME_MAX_MULTIPLIER = (1.5, 3.0)
+
     def __init__(self, sleep_min: float, sleep_max: float):
-        self.sleep_min = float(sleep_min)
-        self.sleep_max = float(sleep_max)
+        self.base_min = float(sleep_min)
+        self.base_max = float(sleep_max)
+        self.sleep_min = self.base_min
+        self.sleep_max = self.base_max
         self._force_high = False
+
+    def apply_volume_multiplier(self, n: int) -> None:
+        """Scale sleep range based on estimated processing volume *n*.
+
+        Only activates when n > 50.  Multipliers grow with volume to reduce
+        request pressure during large runs.
+        """
+        min_mult, max_mult = 1.0, 1.0
+        for threshold, m_lo, m_hi in self.VOLUME_TIERS:
+            if n < threshold:
+                break
+            min_mult, max_mult = m_lo, m_hi
+        else:
+            if n >= self.VOLUME_TIERS[-1][0]:
+                min_mult, max_mult = self.VOLUME_MAX_MULTIPLIER
+
+        self.sleep_min = round(self.base_min * min_mult, 1)
+        self.sleep_max = round(self.base_max * max_mult, 1)
+        if min_mult > 1.0 or max_mult > 1.0:
+            logger.info(
+                "Volume-based sleep adjustment: N=%d → sleep range [%.1f, %.1f] "
+                "(base [%.1f, %.1f], multipliers %.1fx/%.1fx)",
+                n, self.sleep_min, self.sleep_max,
+                self.base_min, self.base_max, min_mult, max_mult,
+            )
 
     def get_sleep_time(self) -> float:
         span = self.sleep_max - self.sleep_min
@@ -604,6 +640,20 @@ def attempt_login_refresh():
         return False, None
 
 
+def is_login_page(html: str) -> bool:
+    """Detect whether the returned HTML is a JavDB login page."""
+    if not html:
+        return False
+    from bs4 import BeautifulSoup as _BS
+    soup = _BS(html, 'html.parser')
+    title_tag = soup.find('title')
+    if title_tag:
+        title_text = title_tag.get_text().strip().lower()
+        if '登入' in title_text or 'login' in title_text:
+            return True
+    return False
+
+
 def can_attempt_login(is_adhoc_mode: bool, is_index_page: bool = False) -> bool:
     """
     Check if login attempt is allowed based on mode and context.
@@ -899,6 +949,48 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
     proxy_was_banned = False
     last_failed_html = None
     
+    def _validate_index_html(html, context_msg):
+        """Validate index page HTML. Returns (html, has_movie_list, is_valid_empty)."""
+        nonlocal last_failed_html
+        soup = BeautifulSoup(html, 'html.parser')
+        movie_list = soup.find('div', class_=lambda x: x and 'movie-list' in x)
+        if movie_list:
+            movie_items = movie_list.find_all('div', class_='item')
+            if len(movie_items) > 0:
+                logger.debug(f"[Page {page_num}] Success: {context_msg} - Found {len(movie_items)} movie items")
+                return html, True, False
+            else:
+                logger.info(f"[Page {page_num}] movie-list exists but is empty (0 items) - treating as valid empty page")
+                return html, False, True
+        else:
+            page_text = soup.get_text()
+            title = soup.find('title')
+            title_text = title.text.strip() if title else ""
+            age_modal = soup.find('div', class_='modal is-active over18-modal')
+            empty_message_div = soup.find('div', class_='empty-message')
+            has_no_content_msg = (
+                'No content yet' in page_text or
+                'No result' in page_text or
+                '暫無內容' in page_text or
+                '暂无内容' in page_text or
+                empty_message_div is not None
+            )
+
+            if empty_message_div is not None:
+                empty_msg_text = empty_message_div.get_text().strip()
+                logger.info(f"[Page {page_num}] Page exists but has no content (empty-message: '{empty_msg_text}')")
+                return html, False, True
+            elif not age_modal and has_no_content_msg:
+                logger.info(f"[Page {page_num}] Page exists but has no content (text pattern detected)")
+                return html, False, True
+            elif not age_modal and len(html) > 20000:
+                logger.debug(f"[Page {page_num}] Large HTML without movie list, treating as empty page")
+                return html, False, True
+            else:
+                last_failed_html = html
+                logger.debug(f"[Page {page_num}] Validation failed (no movie list, age_modal={age_modal is not None}): {context_msg}")
+        return None, False, False
+
     def try_fetch(u_proxy, u_cf, context_msg):
         nonlocal last_failed_html
         logger.debug(f"[Page {page_num}] {context_msg}...")
@@ -907,44 +999,23 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
                             use_proxy=u_proxy, module_name='spider',
                             max_retries=1, use_cf_bypass=u_cf)
             if html:
-                soup = BeautifulSoup(html, 'html.parser')
-                movie_list = soup.find('div', class_=lambda x: x and 'movie-list' in x)
-                if movie_list:
-                    movie_items = movie_list.find_all('div', class_='item')
-                    if len(movie_items) > 0:
-                        logger.debug(f"[Page {page_num}] Success: {context_msg} - Found {len(movie_items)} movie items")
-                        return html, True, False
-                    else:
-                        logger.info(f"[Page {page_num}] movie-list exists but is empty (0 items) - treating as valid empty page")
-                        return html, False, True
-                else:
-                    page_text = soup.get_text()
-                    title = soup.find('title')
-                    title_text = title.text.strip() if title else ""
-                    age_modal = soup.find('div', class_='modal is-active over18-modal')
-                    is_login_page = '登入' in title_text or 'login' in title_text.lower()
-                    empty_message_div = soup.find('div', class_='empty-message')
-                    has_no_content_msg = (
-                        'No content yet' in page_text or 
-                        'No result' in page_text or
-                        '暫無內容' in page_text or
-                        '暂无内容' in page_text or
-                        empty_message_div is not None
-                    )
-                    
-                    if not is_login_page and empty_message_div is not None:
-                        empty_msg_text = empty_message_div.get_text().strip()
-                        logger.info(f"[Page {page_num}] Page exists but has no content (empty-message: '{empty_msg_text}')")
-                        return html, False, True
-                    elif not is_login_page and not age_modal and has_no_content_msg:
-                        logger.info(f"[Page {page_num}] Page exists but has no content (text pattern detected)")
-                        return html, False, True
-                    elif not is_login_page and not age_modal and len(html) > 20000:
-                        logger.debug(f"[Page {page_num}] Large HTML without movie list, treating as empty page")
-                        return html, False, True
-                    else:
-                        last_failed_html = html
-                        logger.debug(f"[Page {page_num}] Validation failed (no movie list, login={is_login_page}, age_modal={age_modal is not None}): {context_msg}")
+                if is_login_page(html):
+                    logger.warning(f"[Page {page_num}] Login page detected: {context_msg}")
+                    if can_attempt_login(is_adhoc_mode, is_index_page=True):
+                        logger.info(f"[Page {page_num}] Attempting login refresh due to login page...")
+                        login_ok, _ = attempt_login_refresh()
+                        if login_ok:
+                            html = get_page(page_url, session, use_cookie=use_cookie,
+                                            use_proxy=u_proxy, module_name='spider',
+                                            max_retries=1, use_cf_bypass=u_cf)
+                            if html and not is_login_page(html):
+                                return _validate_index_html(html, context_msg)
+                            else:
+                                logger.warning(f"[Page {page_num}] Still login page after refresh")
+                    last_failed_html = html
+                    return None, False, False
+
+                return _validate_index_html(html, context_msg)
         except Exception as e:
             logger.debug(f"[Page {page_num}] Failed {context_msg}: {e}")
         return None, False, False
@@ -1111,6 +1182,26 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
                             use_proxy=u_proxy, module_name='spider',
                             max_retries=1, use_cf_bypass=u_cf)
             if html:
+                if is_login_page(html):
+                    logger.warning(f"[{entry_index}] Login page detected: {context_msg}")
+                    if can_attempt_login(is_adhoc_mode, is_index_page=False):
+                        logger.info(f"[{entry_index}] Attempting login refresh due to login page...")
+                        login_ok, _ = attempt_login_refresh()
+                        if login_ok:
+                            html = get_page(detail_url, session, use_cookie=use_cookie,
+                                            use_proxy=u_proxy, module_name='spider',
+                                            max_retries=1, use_cf_bypass=u_cf)
+                            if html and not is_login_page(html):
+                                magnets, actor_info, parse_success = parse_detail(html, entry_index, skip_sleep=skip_sleep)
+                                if parse_success:
+                                    logger.info(f"[{entry_index}] Login refresh succeeded: {context_msg}")
+                                    return magnets, actor_info, True
+                                else:
+                                    last_result = (magnets, actor_info, False)
+                            else:
+                                logger.warning(f"[{entry_index}] Still login page after refresh")
+                    return [], '', False
+
                 magnets, actor_info, parse_success = parse_detail(html, entry_index, skip_sleep=skip_sleep)
                 if parse_success:
                     logger.debug(f"[{entry_index}] Success: {context_msg}")
@@ -1329,6 +1420,26 @@ class ProxyWorker(threading.Thread):
         try:
             html = self._fetch_html(task.url, use_cf)
             if html:
+                if is_login_page(html):
+                    logger.warning(
+                        f"[W:{self.proxy_name}] [{task.entry_index}] Login page detected: {context}")
+                    if can_attempt_login(self.is_adhoc_mode, is_index_page=False):
+                        if self._try_login_refresh():
+                            html = self._fetch_html(task.url, use_cf)
+                            if html and not is_login_page(html):
+                                magnets, actor_info, ok = parse_detail(
+                                    html, task.entry_index, skip_sleep=True)
+                                if ok:
+                                    logger.info(
+                                        f"[W:{self.proxy_name}] [{task.entry_index}] "
+                                        f"Login refresh succeeded: {context}")
+                                    return magnets, actor_info, True
+                            else:
+                                logger.warning(
+                                    f"[W:{self.proxy_name}] [{task.entry_index}] "
+                                    f"Still login page after refresh")
+                    return [], '', False
+
                 magnets, actor_info, ok = parse_detail(html, task.entry_index, skip_sleep=True)
                 if ok:
                     return magnets, actor_info, True
@@ -2515,6 +2626,18 @@ def main():
         time.sleep(PAGE_SLEEP)
     
     logger.info(f"Fetched and parsed {last_valid_page - start_page + 1 if last_valid_page >= start_page else 0} pages")
+
+    # --- Estimate processing volume and apply sleep multiplier ---
+    _est_skip = 0
+    for _e in all_index_results_phase1:
+        if has_complete_subtitles(_e['href'], parsed_movies_history_phase1):
+            _est_skip += 1
+    for _e in all_index_results_phase2:
+        if has_complete_subtitles(_e['href'], parsed_movies_history_phase2):
+            _est_skip += 1
+    _est_n = len(all_index_results_phase1) + len(all_index_results_phase2) - _est_skip
+    logger.info(f"Estimated processing volume: N={_est_n} (total={len(all_index_results_phase1)+len(all_index_results_phase2)}, pre-skip={_est_skip})")
+    movie_sleep_mgr.apply_volume_multiplier(_est_n)
 
     # ========================================
     # Process Phase 1 entries
