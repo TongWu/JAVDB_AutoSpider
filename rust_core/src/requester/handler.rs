@@ -574,8 +574,15 @@ impl RequestHandler {
         use_proxy_pool_mode: bool,
         proxy_name: &str,
     ) -> Option<String> {
-        let use_local_bypass = !use_proxy;
+        let use_local_bypass = !use_proxy || proxies.is_none();
         let mut turnstile_detected;
+
+        if use_proxy && proxies.is_none() {
+            warn!(
+                "[{}] Proxy mode requested but no proxies available, falling back to direct/local bypass",
+                module_name
+            );
+        }
 
         // Initial CF bypass attempt
         let (html, success, is_turnstile) = self.fetch_with_cf_bypass(
@@ -639,16 +646,21 @@ impl RequestHandler {
             turnstile_detected = false;
         }
 
-        // Step (b): Direct with current proxy
-        if use_proxy && proxies.is_some() {
+        // Step (b): Direct request (with current proxy, or proxyless if none available)
+        {
             if self.config.fallback_cooldown > 0 {
                 thread::sleep(Duration::from_secs(self.config.fallback_cooldown));
             }
-            debug!("[{}] Fallback step (b): Direct request with current proxy", module_name);
+            let ctx = if proxies.is_some() {
+                format!("Proxy={}", proxy_name)
+            } else {
+                "No proxy (direct)".to_string()
+            };
+            debug!("[{}] Fallback step (b): Direct request with {}", module_name, ctx);
             let (html, success, is_turnstile) = self.fetch_direct(
                 url,
                 proxies.as_ref(),
-                &format!("Proxy={}", proxy_name),
+                &ctx,
                 use_cookie,
             );
             if success {
