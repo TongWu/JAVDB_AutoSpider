@@ -858,7 +858,8 @@ class RequestHandler:
             turnstile_detected = False
         
         # Step (b): Try direct (no bypass) with current proxy (only if using proxy)
-        if use_proxy and proxies:
+        # Skip when max_retries <= 1 (caller handles direct fallback externally)
+        if max_retries > 1 and use_proxy and proxies:
             if self.config.fallback_cooldown > 0:
                 logger.debug(f"[{module_name}] Fallback cooldown: {self.config.fallback_cooldown}s before step (b)")
                 time.sleep(self.config.fallback_cooldown)
@@ -874,7 +875,8 @@ class RequestHandler:
             turnstile_detected = turnstile_detected or is_turnstile
         
         # Step (c) & (d): Try other proxies if in pool mode
-        if use_proxy and use_proxy_pool_mode and self.proxy_pool and self.config.proxy_mode == 'pool':
+        # Skip when max_retries <= 1 (caller handles proxy cycling externally)
+        if max_retries > 1 and use_proxy and use_proxy_pool_mode and self.proxy_pool and self.config.proxy_mode == 'pool':
             max_proxy_switches = min(self.proxy_pool.get_proxy_count() - 1, 5)
             
             for switch_count in range(max_proxy_switches):
@@ -961,19 +963,18 @@ class RequestHandler:
                 if result and len(result) >= 10000:
                     return result
                 elif result:
-                    # Small response - for detail pages this is likely a failed response, retry
                     if '/v/' in url:
                         logger.warning(f"[{module_name}] Small response for detail page ({len(result)} bytes), retrying...")
                     else:
-                        # For index pages, small response might be valid (empty page)
                         return result
             
-            # If Turnstile detected, wait before retry
             if is_turnstile:
-                logger.warning(f"[{module_name}] Turnstile detected, waiting {self.config.cf_turnstile_cooldown}s before retry...")
-                time.sleep(self.config.cf_turnstile_cooldown)
+                if retry_count < max_retries - 1:
+                    logger.warning(f"[{module_name}] Turnstile detected, waiting {self.config.cf_turnstile_cooldown}s before retry...")
+                    time.sleep(self.config.cf_turnstile_cooldown)
+                else:
+                    logger.warning(f"[{module_name}] Turnstile detected, no retries remaining")
             
-            # Request failed, try to switch proxy
             if use_proxy_pool_mode and self.proxy_pool and retry_count < max_retries - 1:
                 switched = self.proxy_pool.mark_failure_and_switch()
                 if switched:
