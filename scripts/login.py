@@ -439,7 +439,7 @@ def login_javdb(username, password, proxies=None):
                 if _is_cloudflare_challenge(response):
                     # Attempt 2: refresh bypass cache and retry once more
                     logger.warning("Still blocked after warmup, refreshing bypass cache...")
-                    handler._refresh_bypass_cache(
+                    handler.refresh_bypass_cache(
                         login_page_url,
                         proxies,
                         force_local=(proxies is None),
