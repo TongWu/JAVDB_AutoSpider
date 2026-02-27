@@ -44,7 +44,7 @@ try:
         SPIDER_LOG_FILE, LOG_LEVEL, PAGE_SLEEP, MOVIE_SLEEP_MIN, MOVIE_SLEEP_MAX,
         JAVDB_SESSION_COOKIE, PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS,
         PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES,
-        CF_TURNSTILE_COOLDOWN, PHASE_TRANSITION_COOLDOWN, FALLBACK_COOLDOWN,
+        CF_TURNSTILE_COOLDOWN, FALLBACK_COOLDOWN,
         GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH
     )
 except ImportError:
@@ -60,7 +60,7 @@ except ImportError:
     LOG_LEVEL = 'INFO'
     PAGE_SLEEP = 2
     MOVIE_SLEEP_MIN = 5
-    MOVIE_SLEEP_MAX = 30
+    MOVIE_SLEEP_MAX = 15
     JAVDB_SESSION_COOKIE = None
     PHASE2_MIN_RATE = 4.0
     PHASE2_MIN_COMMENTS = 100
@@ -68,7 +68,6 @@ except ImportError:
     PROXY_HTTPS = None
     PROXY_MODULES = ['all']
     CF_TURNSTILE_COOLDOWN = 10
-    PHASE_TRANSITION_COOLDOWN = 30
     FALLBACK_COOLDOWN = 30
     GIT_USERNAME = 'github-actions'
     GIT_PASSWORD = ''
@@ -2694,11 +2693,11 @@ def main():
     # ========================================
     # Phase 2: Collect entries with only "今日新種"/"昨日新種" tag (filtered by quality)
     if phase_mode in ['2', 'all']:
-        # Add cooldown delay between phases to avoid triggering Cloudflare protection
         if phase_mode == 'all':
             if total_entries_phase1 > 0:
-                logger.info(f"Waiting {PHASE_TRANSITION_COOLDOWN} seconds before Phase 2")
-                time.sleep(PHASE_TRANSITION_COOLDOWN)
+                t = movie_sleep_mgr.get_sleep_time()
+                logger.info(f"Phase transition cooldown: {t}s before Phase 2")
+                time.sleep(t)
             else:
                 logger.info("Phase 1 had no entries to process, skipping phase transition cooldown")
         

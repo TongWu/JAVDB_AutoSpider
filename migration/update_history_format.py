@@ -37,7 +37,7 @@ except ImportError:
     SPIDER_LOG_FILE = 'logs/spider.log'
     LOG_LEVEL = 'INFO'
     MOVIE_SLEEP_MIN = 5
-    MOVIE_SLEEP_MAX = 30
+    MOVIE_SLEEP_MAX = 15
     JAVDB_SESSION_COOKIE = None
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
