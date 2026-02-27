@@ -128,7 +128,6 @@ jobs:
           VAR_PAGE_SLEEP: ${{ vars.PAGE_SLEEP }}
           VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
           VAR_CF_TURNSTILE_COOLDOWN: ${{ vars.CF_TURNSTILE_COOLDOWN }}
-          VAR_PHASE_TRANSITION_COOLDOWN: ${{ vars.PHASE_TRANSITION_COOLDOWN }}
           VAR_FALLBACK_COOLDOWN: ${{ vars.FALLBACK_COOLDOWN }}
           VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
           VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE || 'logs/spider.log' }}
