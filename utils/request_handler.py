@@ -409,8 +409,8 @@ class RequestHandler:
             return self.extract_ip_from_proxy_url(proxy_url)
         return None
     
-    def _refresh_bypass_cache(self, url: str, req_proxies: Optional[Dict], 
-                               force_local: bool = False, session: Optional[requests.Session] = None) -> bool:
+    def refresh_bypass_cache(self, url: str, req_proxies: Optional[Dict], 
+                              force_local: bool = False, session: Optional[requests.Session] = None) -> bool:
         """
         Refresh the CF bypass cache by sending a request with x-bypass-cache header.
         
@@ -854,7 +854,7 @@ class RequestHandler:
             logger.info(f"[{module_name}] Turnstile detected, refreshing bypass cache...")
             if self.config.fallback_cooldown > 0:
                 time.sleep(self.config.fallback_cooldown)
-            self._refresh_bypass_cache(url, proxies, force_local=use_local_bypass, session=session)
+            self.refresh_bypass_cache(url, proxies, force_local=use_local_bypass, session=session)
             turnstile_detected = False
         
         # Step (b): Try direct (no bypass) with current proxy (only if using proxy)
@@ -927,7 +927,7 @@ class RequestHandler:
                     logger.info(f"[{module_name}] Turnstile detected after step (d), refreshing bypass cache for proxy={proxy_name}...")
                     if self.config.fallback_cooldown > 0:
                         time.sleep(self.config.fallback_cooldown)
-                    self._refresh_bypass_cache(url, proxies, force_local=False, session=session)
+                    self.refresh_bypass_cache(url, proxies, force_local=False, session=session)
                     turnstile_detected = False
         
         # All fallbacks failed
