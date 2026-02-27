@@ -18,24 +18,52 @@ setup_logging(log_level=LOG_LEVEL)
 logger = get_logger(__name__)
 
 # ── Rust core imports ────────────────────────────────────────────────────
-from javdb_rust_core import (
-    load_parsed_movies_history,
-    cleanup_history_file,
-    maintain_history_limit,
-    save_parsed_movie_to_history,
-    validate_history_file,
-    determine_torrent_types,
-    determine_torrent_type,
-    get_missing_torrent_types,
-    has_complete_subtitles,
-    should_process_movie,
-    check_torrent_in_history,
-    add_downloaded_indicator_to_csv,
-    is_downloaded_torrent,
-    mark_torrent_as_downloaded,
-)
-RUST_HISTORY_AVAILABLE = True
-logger.info("Rust history manager loaded - using high-performance Rust implementation")
+try:
+    from javdb_rust_core import (
+        load_parsed_movies_history,
+        cleanup_history_file,
+        maintain_history_limit,
+        save_parsed_movie_to_history,
+        validate_history_file,
+        determine_torrent_types,
+        determine_torrent_type,
+        get_missing_torrent_types,
+        has_complete_subtitles,
+        should_process_movie,
+        check_torrent_in_history,
+        add_downloaded_indicator_to_csv,
+        is_downloaded_torrent,
+        mark_torrent_as_downloaded,
+    )
+    RUST_HISTORY_AVAILABLE = True
+    logger.info("Rust history manager loaded - using high-performance Rust implementation")
+except Exception as e:
+    RUST_HISTORY_AVAILABLE = False
+    logger.error("Failed to import javdb_rust_core history functions: %s", e)
+    logger.warning("Falling back to Python stub implementations — history operations will raise RuntimeError")
+
+    _UNAVAILABLE_MSG = (
+        "javdb_rust_core is not available. Install the Rust wheel to use history functions. "
+        "Import error: %s" % e
+    )
+
+    def _rust_unavailable(*args, **kwargs):
+        raise RuntimeError(_UNAVAILABLE_MSG)
+
+    load_parsed_movies_history = _rust_unavailable
+    cleanup_history_file = _rust_unavailable
+    maintain_history_limit = _rust_unavailable
+    save_parsed_movie_to_history = _rust_unavailable
+    validate_history_file = _rust_unavailable
+    determine_torrent_types = _rust_unavailable
+    determine_torrent_type = _rust_unavailable
+    get_missing_torrent_types = _rust_unavailable
+    has_complete_subtitles = _rust_unavailable
+    should_process_movie = _rust_unavailable
+    check_torrent_in_history = _rust_unavailable
+    add_downloaded_indicator_to_csv = _rust_unavailable
+    is_downloaded_torrent = _rust_unavailable
+    mark_torrent_as_downloaded = _rust_unavailable
 
 
 # ═════════════════════════════════════════════════════════════════════════
