@@ -296,14 +296,16 @@ pub fn parse_detail_page(html_content: &str) -> MovieDetail {
     detail.magnets = magnets;
     detail.parse_success = parse_success;
 
+    let title_preview: String = detail.title.chars().take(40).collect();
+    let title_display = if detail.title.chars().count() > 40 {
+        format!("{}…", title_preview)
+    } else {
+        title_preview
+    };
     debug!(
         "Parsed detail: code={}, title={}, actors={}, magnets={}",
         detail.video_code,
-        if detail.title.len() > 40 {
-            &detail.title[..40]
-        } else {
-            &detail.title
-        },
+        title_display,
         detail.actors.len(),
         detail.magnets.len(),
     );
