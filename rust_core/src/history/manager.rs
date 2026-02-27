@@ -404,7 +404,7 @@ fn save_history_impl(
     let mut updated_record: Option<Record> = None;
 
     if Path::new(history_file).exists() {
-        let (_headers, existing) = read_csv_records(history_file).unwrap_or_default();
+        let (_headers, existing) = read_csv_records(history_file)?;
         for mut row in existing {
             if row.get("href").map(|s| s.as_str()) == Some(href) {
                 existing_count += 1;
@@ -891,7 +891,10 @@ pub fn mark_torrent_as_downloaded(
     torrent_type: &str,
 ) -> PyResult<bool> {
     let mut links = HashMap::new();
-    links.insert(torrent_type.to_string(), String::new());
+    links.insert(
+        torrent_type.to_string(),
+        format!("magnet:?dn=downloaded&vc={}", video_code),
+    );
 
     let result = py.allow_threads(|| save_history_impl(history_file, href, "2", video_code, &links));
 
