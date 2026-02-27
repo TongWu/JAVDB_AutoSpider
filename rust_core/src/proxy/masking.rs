@@ -23,12 +23,13 @@ pub fn mask_partial(
         _ => return "None".to_string(),
     };
 
-    let length = v.len();
+    let chars: Vec<char> = v.chars().collect();
+    let length = chars.len();
     if length <= 2 {
         return "*".repeat(length);
     }
     if length == 3 {
-        return format!("{}*{}", &v[..1], &v[length - 1..]);
+        return format!("{}*{}", chars[0], chars[length - 1]);
     }
 
     let chars_to_mask = length.saturating_sub(show_start + show_end);
@@ -43,12 +44,9 @@ pub fn mask_partial(
         (show_start, show_end, chars_to_mask)
     };
 
-    format!(
-        "{}{}{}",
-        &v[..actual_start],
-        "*".repeat(actual_mask),
-        &v[length - actual_end..]
-    )
+    let start: String = chars[..actual_start].iter().collect();
+    let end: String = chars[length - actual_end..].iter().collect();
+    format!("{}{}{}", start, "*".repeat(actual_mask), end)
 }
 
 #[pyfunction]
@@ -122,7 +120,16 @@ pub fn mask_proxy_url(proxy_url: Option<&str>) -> String {
         };
         format!("{protocol}{masked_host}:{port}{suffix}")
     } else {
-        mask_partial(Some(url), 10, 5, 2)
+        let cleaned = if let Some(at_pos) = url.find('@') {
+            if let Some(proto_end) = url.find("://") {
+                format!("{}{}", &url[..proto_end + 3], &url[at_pos + 1..])
+            } else {
+                url[at_pos + 1..].to_string()
+            }
+        } else {
+            url.to_string()
+        };
+        mask_partial(Some(&cleaned), 10, 5, 2)
     }
 }
 
@@ -159,14 +166,15 @@ pub fn mask_server(server: Option<&str>) -> String {
     if s.contains('.') {
         let parts: Vec<&str> = s.splitn(2, '.').collect();
         if parts.len() == 2 {
-            return format!("{}.***.{}", &parts[0][..parts[0].len().min(3)], {
-                let domain = parts[1];
-                if domain.len() > 4 {
-                    &domain[domain.len() - 4..]
-                } else {
-                    domain
-                }
-            });
+            let prefix_chars: String = parts[0].chars().take(3).collect();
+            let domain = parts[1];
+            let domain_chars: Vec<char> = domain.chars().collect();
+            let domain_suffix: String = if domain_chars.len() > 4 {
+                domain_chars[domain_chars.len() - 4..].iter().collect()
+            } else {
+                domain.to_string()
+            };
+            return format!("{}.***.{}", prefix_chars, domain_suffix);
         }
     }
 
