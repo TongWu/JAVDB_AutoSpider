@@ -218,9 +218,8 @@ GPT_API_KEY = ''  # Your API key (e.g., sk-xxx)
 JAVDB_SESSION_COOKIE = ''
 
 # Sleep time configuration (in seconds)
-DETAIL_PAGE_SLEEP = 5  # Sleep time before parsing detail pages to avoid DDoS protection
-PAGE_SLEEP = 2  # Sleep time between pages
-MOVIE_SLEEP = 1  # Sleep time between movies
+PAGE_SLEEP = 2  # Sleep time between index pages
+MOVIE_SLEEP = 5  # Sleep time between movies (includes detail page rate limiting)
 
 # Cloudflare protection handling
 CF_TURNSTILE_COOLDOWN = 10  # Sleep time when Cloudflare Turnstile verification page is detected

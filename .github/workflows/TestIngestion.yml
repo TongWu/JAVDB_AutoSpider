@@ -64,7 +64,15 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
+          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
+
+      - name: Install Rust extension
+        uses: ./.github/actions/install-rust-wheel
 
       - name: Generate config.py from GitHub Variables and Secrets
         env:
@@ -86,9 +94,8 @@ jobs:
           VAR_END_PAGE: '20'
           VAR_PHASE2_MIN_RATE: '4.0'
           VAR_PHASE2_MIN_COMMENTS: '85'
-          VAR_DETAIL_PAGE_SLEEP: '5'
           VAR_PAGE_SLEEP: '2'
-          VAR_MOVIE_SLEEP: '1'
+          VAR_MOVIE_SLEEP: '5'
           VAR_CF_TURNSTILE_COOLDOWN: '30'
           VAR_PHASE_TRANSITION_COOLDOWN: '10'
           VAR_FALLBACK_COOLDOWN: '30'
@@ -132,6 +139,9 @@ jobs:
       - name: "[DAILY] Run Spider"
         id: daily_spider
         run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline (important for tee)
+          
           echo "============================================"
           echo "DAILY INGESTION - Spider"
           echo "============================================"
@@ -162,6 +172,9 @@ jobs:
       - name: "[ADHOC] Run Spider"
         id: adhoc_spider
         run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline (important for tee)
+          
           echo "============================================"
           echo "ADHOC INGESTION - Spider"
           echo "============================================"

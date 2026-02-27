@@ -9,6 +9,9 @@ This module provides a unified HTTP request handler that supports:
 - Retry mechanisms with configurable fallback strategies
 - curl_cffi integration for better TLS fingerprint (bypasses Cloudflare detection)
 
+Prefers the Rust implementation (``javdb_rust_core``) when available,
+falling back to the pure-Python implementation otherwise.
+
 Usage:
     from utils.request_handler import RequestHandler
     
@@ -28,6 +31,22 @@ logger = logging.getLogger(__name__)
 
 # Import masking utilities
 from utils.masking import mask_ip_address, mask_proxy_url, mask_full
+
+# Try Rust implementations
+try:
+    from javdb_rust_core import (
+        RustRequestHandler,
+        RustRequestConfig,
+        RustProxyHelper,
+        create_request_handler_from_config as _rust_create_handler,
+        create_proxy_helper_from_config as _rust_create_helper,
+    )
+    RUST_REQUEST_HANDLER_AVAILABLE = True
+except ImportError as e:
+    RUST_REQUEST_HANDLER_AVAILABLE = False
+    logger.warning(f"⚠️  Rust request handler not available (ImportError: {e}) - falling back to pure-Python implementation")
+else:
+    logger.info("✅ Rust request handler available - using high-performance Rust implementation")
 
 # Try to import curl_cffi for better TLS fingerprint
 # curl_cffi mimics real browser TLS fingerprints, bypassing Cloudflare detection
@@ -390,8 +409,8 @@ class RequestHandler:
             return self.extract_ip_from_proxy_url(proxy_url)
         return None
     
-    def _refresh_bypass_cache(self, url: str, req_proxies: Optional[Dict], 
-                               force_local: bool = False, session: Optional[requests.Session] = None) -> bool:
+    def refresh_bypass_cache(self, url: str, req_proxies: Optional[Dict], 
+                              force_local: bool = False, session: Optional[requests.Session] = None) -> bool:
         """
         Refresh the CF bypass cache by sending a request with x-bypass-cache header.
         
@@ -835,7 +854,7 @@ class RequestHandler:
             logger.info(f"[{module_name}] Turnstile detected, refreshing bypass cache...")
             if self.config.fallback_cooldown > 0:
                 time.sleep(self.config.fallback_cooldown)
-            self._refresh_bypass_cache(url, proxies, force_local=use_local_bypass, session=session)
+            self.refresh_bypass_cache(url, proxies, force_local=use_local_bypass, session=session)
             turnstile_detected = False
         
         # Step (b): Try direct (no bypass) with current proxy (only if using proxy)
@@ -856,7 +875,7 @@ class RequestHandler:
         
         # Step (c) & (d): Try other proxies if in pool mode
         if use_proxy and use_proxy_pool_mode and self.proxy_pool and self.config.proxy_mode == 'pool':
-            max_proxy_switches = min(len(self.proxy_pool.proxies) - 1, 5)
+            max_proxy_switches = min(self.proxy_pool.get_proxy_count() - 1, 5)
             
             for switch_count in range(max_proxy_switches):
                 if self.config.fallback_cooldown > 0:
@@ -908,7 +927,7 @@ class RequestHandler:
                     logger.info(f"[{module_name}] Turnstile detected after step (d), refreshing bypass cache for proxy={proxy_name}...")
                     if self.config.fallback_cooldown > 0:
                         time.sleep(self.config.fallback_cooldown)
-                    self._refresh_bypass_cache(url, proxies, force_local=False, session=session)
+                    self.refresh_bypass_cache(url, proxies, force_local=False, session=session)
                     turnstile_detected = False
         
         # All fallbacks failed

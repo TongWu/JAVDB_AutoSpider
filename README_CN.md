@@ -565,9 +565,8 @@ PHASE2_MIN_COMMENTS = 80  # 阶段 2 条目的最少评论数
 IGNORE_RELEASE_DATE_FILTER = False  # 设为 True 以忽略今日/昨日标签
 
 # 休眠时间配置(秒)
-DETAIL_PAGE_SLEEP = 5  # 解析详情页前休眠
 PAGE_SLEEP = 2  # 索引页之间休眠
-MOVIE_SLEEP = 1  # 电影之间休眠
+MOVIE_SLEEP = 5  # 电影之间休眠（包含详情页限速）
 
 # =============================================================================
 # JAVDB 登录配置(用于自动会话 cookie 刷新)
@@ -1427,9 +1426,8 @@ LOG_LEVEL = 'DEBUG'  # 显示详细的调试信息
 
 ### 速率限制和延迟
 - 系统包含请求之间的延迟以尊重服务器:
-  - **详情页**: 5 秒(通过 `DETAIL_PAGE_SLEEP` 配置)
   - **索引页**: 2 秒(通过 `PAGE_SLEEP` 配置)
-  - **电影**: 1 秒(通过 `MOVIE_SLEEP` 配置)
+  - **电影**: 5 秒(通过 `MOVIE_SLEEP` 配置)
   - **qBittorrent 添加**: 1 秒(通过 `DELAY_BETWEEN_ADDITIONS` 配置)
   - **PikPak 请求**: 3 秒(通过 `PIKPAK_REQUEST_DELAY` 配置)
 

@@ -1,0 +1,56 @@
+name: Build Rust Extension
+
+# This workflow builds the Rust extension wheel and caches it.
+# It can be triggered standalone on push, manually, or called by other workflows.
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - feature/**
+    paths:
+      - 'rust_core/**'
+      - '.github/workflows/build-rust-extension.yml'
+      - '.github/actions/install-rust-wheel/**'
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Singapore
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build and cache Rust wheel
+        uses: ./.github/actions/install-rust-wheel
+
+      - name: Sanitize branch name
+        id: branch
+        run: echo "name=$(echo '${{ github.ref_name }}' | sed 's/[^a-zA-Z0-9._-]/-/g')" >> $GITHUB_OUTPUT
+
+      - name: Upload Rust extension wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-extension-wheel-${{ github.sha }}
+          path: /tmp/rust-wheel/*.whl
+          retention-days: 30
+
+      - name: Upload Rust extension wheel artifact (branch latest)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-extension-wheel-latest-${{ steps.branch.outputs.name }}
+          path: /tmp/rust-wheel/*.whl
+          retention-days: 7

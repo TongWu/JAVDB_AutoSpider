@@ -1,14 +1,37 @@
-# Use Python 3.11 slim image as base
+# ============================================================
+# Stage 1: Build Rust extension wheel
+# This layer is cached by Docker BuildKit and only rebuilds
+# when rust_core/ source files change.
+# ============================================================
+FROM python:3.11-slim AS rust-builder
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+RUN pip install --no-cache-dir maturin[patchelf]
+
+COPY rust_core/ /build/rust_core/
+RUN cd /build/rust_core && maturin build --release --out /wheels
+
+# ============================================================
+# Stage 2: Runtime image (no Rust toolchain needed)
+# ============================================================
 FROM python:3.11-slim
 
-# Set working directory
 WORKDIR /app
 
-# Install system dependencies
 RUN apt-get update && apt-get install -y \
     git \
     cron \
     tzdata \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Set timezone (default to Asia/Shanghai, can be overridden)
@@ -21,7 +44,12 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install pre-built Rust extension wheel from builder stage
+COPY --from=rust-builder /wheels/*.whl /tmp/
+RUN pip install /tmp/*.whl && rm -f /tmp/*.whl
+
 # Copy application files
+COPY api/ ./api/
 COPY utils/ ./utils/
 COPY scripts/ ./scripts/
 COPY config.py.example .
@@ -37,12 +65,8 @@ RUN mkdir -p /app/logs /app/"Ad Hoc" /app/"Daily Report"
 # Create log file for cron
 RUN touch /var/log/cron.log
 
-# Expose any ports if needed (none required for this app)
-# EXPOSE 8000
-
 # Use entrypoint script
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # Default command: start cron in foreground and tail the log
 CMD ["cron", "-f"]
-

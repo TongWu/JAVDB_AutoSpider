@@ -20,9 +20,32 @@ on:
 
 jobs:
   # =============================================================================
+  # Job 0: Build Rust Extension - Build and cache wheel (subsequent jobs get cache hits)
+  # =============================================================================
+  build-rust:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TZ: Asia/Singapore
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build and cache Rust wheel
+        uses: ./.github/actions/install-rust-wheel
+
+  # =============================================================================
   # Job 1: Setup - Checkout, install dependencies, generate config
   # =============================================================================
   setup:
+    needs: build-rust
     runs-on: ubuntu-latest
     environment: Production
     permissions:
@@ -51,7 +74,15 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
+          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
+
+      - name: Install Rust extension
+        uses: ./.github/actions/install-rust-wheel
 
       - name: Generate config.py from GitHub Variables and Secrets
         env:
@@ -94,7 +125,6 @@ jobs:
           VAR_JAVDB_USERNAME: ${{ secrets.JAVDB_USERNAME }}
           VAR_GPT_API_URL: ${{ secrets.GPT_API_URL }}
           VAR_GPT_API_KEY: ${{ secrets.GPT_API_KEY }}
-          VAR_DETAIL_PAGE_SLEEP: ${{ vars.DETAIL_PAGE_SLEEP }}
           VAR_PAGE_SLEEP: ${{ vars.PAGE_SLEEP }}
           VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
           VAR_CF_TURNSTILE_COOLDOWN: ${{ vars.CF_TURNSTILE_COOLDOWN }}
@@ -173,7 +203,7 @@ jobs:
     environment: Production
     permissions:
       contents: read
-    needs: setup
+    needs: [build-rust, setup]
     env:
       TZ: Asia/Singapore
     
@@ -187,7 +217,15 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
+          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
+
+      - name: Install Rust extension
+        uses: ./.github/actions/install-rust-wheel
 
       - name: Download encrypted config
         uses: actions/download-artifact@v4
@@ -199,7 +237,6 @@ jobs:
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
-          # Guard: fail workflow if ARTIFACT_KEY is not configured
           if [ -z "$ARTIFACT_KEY" ]; then
             echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
             echo "This secret is required to decrypt config.py."
@@ -214,7 +251,10 @@ jobs:
           echo "✓ Config decrypted successfully"
 
       - name: Run health checks
-        run: python3 scripts/health_check.py --use-proxy
+        run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline
+          python3 scripts/health_check.py --use-proxy
 
   # =============================================================================
   # Job 3: Run Pipeline - Execute spider, uploader, and pikpak bridge
@@ -224,7 +264,7 @@ jobs:
     environment: Production
     permissions:
       contents: read
-    needs: [setup, health-check]
+    needs: [build-rust, setup, health-check]
     outputs:
       spider_success: ${{ steps.spider.outcome == 'success' }}
       uploader_success: ${{ steps.uploader.outcome == 'success' }}
@@ -245,7 +285,15 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
+          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
+
+      - name: Install Rust extension
+        uses: ./.github/actions/install-rust-wheel
 
       - name: Download encrypted config
         uses: actions/download-artifact@v4
@@ -289,6 +337,9 @@ jobs:
       - name: Step 1 - Run Spider
         id: spider
         run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline (important for tee)
+          
           # Capture output to extract the CSV filename
           SPIDER_OUTPUT=$(python3 scripts/spider.py --use-proxy | tee /dev/stderr)
           
@@ -304,6 +355,9 @@ jobs:
       - name: Step 2 - Run qBittorrent Uploader
         id: uploader
         run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline
+          
           CMD="python3 scripts/qb_uploader.py --mode daily --use-proxy"
           
           # Pass the CSV full path captured from spider
@@ -319,7 +373,10 @@ jobs:
       - name: Step 3 - Run PikPak Bridge
         id: pikpak
         if: ${{ success() && steps.uploader.outcome == 'success' }}
-        run: python3 scripts/pikpak_bridge.py --days 3
+        run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline
+          python3 scripts/pikpak_bridge.py --days 3
 
       - name: Encrypt and upload logs artifact
         if: always()
@@ -429,7 +486,7 @@ jobs:
     environment: Production
     permissions:
       contents: read
-    needs: [setup, health-check, run-pipeline]
+    needs: [build-rust, setup, health-check, run-pipeline]
     if: always()
     env:
       TZ: Asia/Singapore
@@ -444,7 +501,15 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
+          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
+
+      - name: Install Rust extension
+        uses: ./.github/actions/install-rust-wheel
 
       - name: Download encrypted config
         uses: actions/download-artifact@v4
@@ -569,6 +634,9 @@ jobs:
         env:
           PIPELINE_HAS_FAILURE: ${{ steps.status.outputs.has_failure }}
         run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline
+          
           CMD="python3 scripts/email_notification.py --mode daily"
           
           # Pass the CSV path if available

@@ -14,6 +14,9 @@ on:
       - develop
     paths:
       - '**.py'
+      - '**.rs'
+      - 'rust_core/Cargo.toml'
+      - 'rust_core/Cargo.lock'
       - 'pytest.ini'
       - 'docker/**'
   pull_request:
@@ -22,6 +25,9 @@ on:
       - master
     paths:
       - '**.py'
+      - '**.rs'
+      - 'rust_core/Cargo.toml'
+      - 'rust_core/Cargo.lock'
       - 'pytest.ini'
       - 'docker/**'
   workflow_dispatch:
@@ -79,6 +85,10 @@ jobs:
             test -f /app/scripts/qb_uploader.py && echo '✓ scripts/qb_uploader.py exists'
           "
       
+      - name: Test Rust extension
+        run: |
+          docker run --rm javdb-autospider:test python -c "import javdb_rust_core; print('✓ javdb_rust_core imported successfully')"
+
       - name: Test Python syntax
         run: |
           docker run --rm javdb-autospider:test python -m py_compile /app/pipeline.py

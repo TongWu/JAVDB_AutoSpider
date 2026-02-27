@@ -67,7 +67,15 @@ jobs:
           python-version: '3.11'
 
       - name: Install Python dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
+          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
+
+      - name: Install Rust extension
+        uses: ./.github/actions/install-rust-wheel
 
       - name: Install rclone
         run: |
@@ -105,6 +113,9 @@ jobs:
           DRIVE_NAME: ${{ secrets.RCLONE_DRIVE_NAME }}
           ROOT_FOLDER: ${{ secrets.RCLONE_ROOT_FOLDER }}
         run: |
+          set -e  # Exit on error
+          set -o pipefail  # Exit on error in pipeline
+          
           # Build command arguments
           ARGS=""
           

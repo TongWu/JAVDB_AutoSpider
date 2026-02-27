@@ -1,0 +1,58 @@
+name: 'Install Rust Wheel'
+description: 'Build or restore cached javdb_rust_core wheel and install it into the current Python environment'
+
+outputs:
+  cache-hit:
+    description: 'Whether the wheel was restored from cache'
+    value: ${{ steps.wheel-cache.outputs.cache-hit }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Restore Rust wheel from cache
+      id: wheel-cache
+      uses: actions/cache@v4
+      with:
+        path: /tmp/rust-wheel
+        key: rust-wheel-${{ runner.os }}-${{ hashFiles('rust_core/src/**', 'rust_core/Cargo.toml', 'rust_core/Cargo.lock') }}
+
+    - name: Install from cached wheel
+      if: steps.wheel-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: |
+        pip install /tmp/rust-wheel/*.whl
+        echo "✓ Installed Rust extension from cache"
+
+    - name: Install Rust toolchain
+      if: steps.wheel-cache.outputs.cache-hit != 'true'
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache Cargo dependencies
+      if: steps.wheel-cache.outputs.cache-hit != 'true'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          rust_core/target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('rust_core/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+
+    - name: Build Rust extension wheel
+      if: steps.wheel-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        pip install maturin
+        mkdir -p /tmp/rust-wheel
+        cd rust_core
+        maturin build --release --out /tmp/rust-wheel
+        echo "✓ Built Rust extension wheel:"
+        ls -lh /tmp/rust-wheel/*.whl
+
+    - name: Install built wheel
+      if: steps.wheel-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        pip install /tmp/rust-wheel/*.whl
+        echo "✓ Installed Rust extension from freshly built wheel"

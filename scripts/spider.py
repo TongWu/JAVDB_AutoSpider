@@ -37,7 +37,7 @@ try:
     from config import (
         BASE_URL, START_PAGE, END_PAGE,
         REPORTS_DIR, DAILY_REPORT_DIR, AD_HOC_DIR, PARSED_MOVIES_CSV,
-        SPIDER_LOG_FILE, LOG_LEVEL, DETAIL_PAGE_SLEEP, PAGE_SLEEP, MOVIE_SLEEP,
+        SPIDER_LOG_FILE, LOG_LEVEL, PAGE_SLEEP, MOVIE_SLEEP,
         JAVDB_SESSION_COOKIE, PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS,
         PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES,
         CF_TURNSTILE_COOLDOWN, PHASE_TRANSITION_COOLDOWN, FALLBACK_COOLDOWN,
@@ -54,9 +54,8 @@ except ImportError:
     PARSED_MOVIES_CSV = 'parsed_movies_history.csv'
     SPIDER_LOG_FILE = 'logs/spider.log'
     LOG_LEVEL = 'INFO'
-    DETAIL_PAGE_SLEEP = 5
     PAGE_SLEEP = 2
-    MOVIE_SLEEP = 1
+    MOVIE_SLEEP = 5
     JAVDB_SESSION_COOKIE = None
     PHASE2_MIN_RATE = 4.0
     PHASE2_MIN_COMMENTS = 100
@@ -113,6 +112,25 @@ except ImportError:
 from utils.logging_config import setup_logging, get_logger
 setup_logging(SPIDER_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
+
+# Check Rust components availability and log status
+try:
+    from api.parsers import RUST_PARSERS_AVAILABLE
+    if RUST_PARSERS_AVAILABLE:
+        logger.info("✅ Spider using Rust parsers - high-performance HTML parsing enabled")
+    else:
+        logger.info("⚠️  Spider using Python parsers - Rust parsers not available")
+except Exception:
+    logger.info("⚠️  Could not determine parser implementation status")
+
+try:
+    from utils.history_manager import RUST_HISTORY_AVAILABLE
+    if RUST_HISTORY_AVAILABLE:
+        logger.info("✅ Spider using Rust history manager - high-performance CSV I/O enabled")
+    else:
+        logger.info("⚠️  Spider using Python history manager - Rust not available")
+except Exception:
+    logger.info("⚠️  Could not determine history manager implementation status")
 
 # Import masking utilities
 from utils.masking import mask_ip_address, mask_username, mask_full, mask_proxy_url
@@ -919,7 +937,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
 
     # We will try up to N switches (coverage of the pool)
     # If using Single mode, we only have 1 try.
-    max_switches = len(global_proxy_pool.proxies) if PROXY_MODE == 'pool' else 1
+    max_switches = global_proxy_pool.get_proxy_count() if PROXY_MODE == 'pool' else 1
     # Limit max switches to avoid infinite loops if pool is huge, e.g. 10
     max_switches = min(max_switches, 10) 
     
@@ -1087,7 +1105,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
 
     # We will try up to N switches (coverage of the pool)
     # If using Single mode, we only have 1 try.
-    max_switches = len(global_proxy_pool.proxies) if PROXY_MODE == 'pool' else 1
+    max_switches = global_proxy_pool.get_proxy_count() if PROXY_MODE == 'pool' else 1
     # Limit max switches to avoid infinite loops if pool is huge, e.g. 10
     max_switches = min(max_switches, 10) 
     
@@ -1940,7 +1958,7 @@ def main():
     # Thresholds based on fallback type:
     # - CF bypass only (proxy unchanged): proxies * 1
     # - Other changes (proxy changed): proxies * 3
-    proxy_count = len(global_proxy_pool.proxies) if global_proxy_pool else 1
+    proxy_count = global_proxy_pool.get_proxy_count() if global_proxy_pool else 1
     fallback_persist_threshold_cf_only = proxy_count * 1  # Lower threshold for CF bypass only
     fallback_persist_threshold_full = proxy_count * 3     # Higher threshold for proxy changes
     current_fallback_threshold = fallback_persist_threshold_full  # Will be set based on fallback type
