@@ -1357,6 +1357,11 @@ class ProxyWorker(threading.Thread):
 
             magnets, actor_info, success, used_cf = self._try_direct_then_cf(task)
             if success:
+                cf_tag = " +CF" if used_cf else ""
+                logger.info(
+                    f"[W:{self.proxy_name}] [{task.entry_index}] "
+                    f"Parsed {task.entry.get('video_code', '')}{cf_tag}"
+                )
                 self.result_queue.put(DetailResult(
                     task=task, magnets=magnets, actor_info=actor_info,
                     parse_success=True, used_cf_bypass=used_cf,
@@ -1365,9 +1370,10 @@ class ProxyWorker(threading.Thread):
                 task.failed_proxies.add(self.proxy_name)
                 task.retry_count += 1
                 self.detail_queue.put(task)
-                logger.debug(
-                    f"[W:{self.proxy_name}] [{task.entry_index}] failed, "
-                    f"re-queued (failed_proxies={task.failed_proxies})"
+                logger.info(
+                    f"[W:{self.proxy_name}] [{task.entry_index}] "
+                    f"Failed {task.entry.get('video_code', '')}, re-queued "
+                    f"(tried {len(task.failed_proxies)}/{self.total_workers} proxies)"
                 )
 
 
