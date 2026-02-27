@@ -454,21 +454,23 @@ impl ProxyPool {
 
         {
             let mut proxy = pool.proxies[idx].lock();
+            proxy.failures += 1;
+            proxy.total_requests += 1;
+            proxy.last_failure = Some(Local::now());
+
             if proxy.failures >= self.max_failures_before_cooldown {
                 let proxy_url = proxy
                     .http_url
                     .clone()
                     .or_else(|| proxy.https_url.clone());
                 self.ban_manager.add_ban(&current_name, proxy_url);
-                proxy.mark_failure(self.cooldown_seconds);
+                proxy.cooldown_until = Some(Local::now() + Duration::seconds(self.cooldown_seconds));
+                proxy.is_available = false;
                 warn!(
                     "Proxy '{}' reached {} failures, putting in cooldown for {}s (8 days)",
                     current_name, proxy.failures, self.cooldown_seconds
                 );
             } else {
-                proxy.failures += 1;
-                proxy.total_requests += 1;
-                proxy.last_failure = Some(Local::now());
                 warn!(
                     "Proxy '{}' failed ({}/{})",
                     current_name, proxy.failures, self.max_failures_before_cooldown
