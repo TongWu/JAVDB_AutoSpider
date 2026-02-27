@@ -220,11 +220,10 @@ JAVDB_SESSION_COOKIE = ''
 # Sleep time configuration (in seconds)
 PAGE_SLEEP = 2  # Sleep time between index pages
 MOVIE_SLEEP_MIN = 5   # Minimum random sleep between movies
-MOVIE_SLEEP_MAX = 30  # Maximum random sleep between movies
+MOVIE_SLEEP_MAX = 15  # Maximum random sleep between movies
 
 # Cloudflare protection handling
 CF_TURNSTILE_COOLDOWN = 10  # Sleep time when Cloudflare Turnstile verification page is detected
-PHASE_TRANSITION_COOLDOWN = 30  # Sleep time between Phase 1 and Phase 2 to avoid triggering Cloudflare
 FALLBACK_COOLDOWN = 30  # Cooldown time after a successful fallback before processing next item
 
 # =============================================================================
