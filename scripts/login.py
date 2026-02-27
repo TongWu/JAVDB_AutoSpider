@@ -296,7 +296,7 @@ def solve_captcha_with_ai(image_data, proxies=None):
         if response.status_code == 200:
             result = response.json()
             if 'choices' in result and len(result['choices']) > 0:
-                captcha_code = result['choices'][0]['message']['content'].strip().lower()
+                captcha_code = result['choices'][0]['message']['content'].strip()
                 logger.info(f"AI recognized captcha: {captcha_code}")
                 return captcha_code
             logger.warning("AI API returned empty response")
@@ -433,7 +433,7 @@ def login_javdb(username, password, proxies=None):
             # Attempt 1: CF bypass service warmup
             if _attempt_cf_warmup(handler, login_page_url, proxies):
                 logger.info("CF warmup succeeded, retrying login page fetch after cooldown...")
-                time.sleep(5)
+                time.sleep(FALLBACK_COOLDOWN)
                 response = session.get(login_page_url, headers=headers, timeout=30, proxies=proxies)
 
                 if _is_cloudflare_challenge(response):
@@ -444,7 +444,7 @@ def login_javdb(username, password, proxies=None):
                         proxies,
                         force_local=(proxies is None),
                     )
-                    time.sleep(5)
+                    time.sleep(FALLBACK_COOLDOWN)
                     response = session.get(login_page_url, headers=headers, timeout=30, proxies=proxies)
 
                     if _is_cloudflare_challenge(response):
