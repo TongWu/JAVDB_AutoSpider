@@ -153,6 +153,13 @@ class MovieSleepManager:
     pick from the top 30 % to avoid consecutive short intervals.
     """
 
+    # (threshold, min_multiplier, max_multiplier)  — base [5, 15]
+    # N < 50  → (1.0, 1.0): [5, 15]    avg ~10s
+    # 50–74   → (1.1, 1.3): [5.5, 19.5] avg ~13s
+    # 75–99   → (1.2, 1.6): [6, 24]     avg ~16s
+    # 100–124 → (1.3, 2.0): [6.5, 30]   avg ~19s
+    # 125–149 → (1.4, 2.5): [7, 37.5]   avg ~23s
+    # ≥ 150   → (1.5, 3.0): [7.5, 45]   avg ~27s
     VOLUME_TIERS = [
         (50,  1.0, 1.0),
         (75,  1.1, 1.3),
@@ -1590,7 +1597,7 @@ def process_detail_entries_parallel(
 
         detail_url = urljoin(BASE_URL, href)
         entry_index = f"{phase_prefix}{i}/{total_entries}"
-        logger.info(f"[{entry_index}] [Page {entry['page']}] Queued {entry['video_code'] or href}")
+        logger.debug(f"[{entry_index}] [Page {entry['page']}] Queued {entry['video_code'] or href}")
         detail_queue.put(DetailTask(
             url=detail_url,
             entry=entry,
