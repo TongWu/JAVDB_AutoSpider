@@ -165,19 +165,27 @@ def main():
 
     handler = RequestHandler(proxy_pool=proxy_pool, config=config)
 
-    # Use module_name='spider' so PROXY_MODULES (e.g. ['spider'] or ['all']) applies
+    # Single-shot fetch: no fallback, no retry, return whatever HTML we get
     logger.info("Fetching: %s (use_proxy=%s, use_cf_bypass=%s)", url, use_proxy, use_cf_bypass)
-    html = handler.get_page(
-        url,
-        use_cookie=args.use_cookie,
-        use_proxy=use_proxy,
-        module_name="spider",
-        max_retries=3,
-        use_cf_bypass=use_cf_bypass,
-    )
+
+    proxies, _ = handler._get_proxies_config("spider", use_proxy)
+    proxy_name = proxy_pool.get_current_proxy_name() if proxy_pool else "None"
+
+    html = None
+    if use_cf_bypass and config.cf_bypass_enabled:
+        force_local = use_cf_bypass and not use_proxy
+        use_proxy_bypass = use_cf_bypass and use_proxy
+        html, _ok, _ts = handler._fetch_with_cf_bypass(
+            url, proxies, f"Proxy={proxy_name}",
+            force_local=force_local, use_proxy_bypass=use_proxy_bypass,
+        )
+    if html is None:
+        html, _ok, _ts = handler._fetch_direct(
+            url, proxies, f"Proxy={proxy_name}", use_cookie=args.use_cookie,
+        )
 
     if html is None:
-        logger.error("Failed to fetch URL")
+        logger.error("Failed to fetch URL (no response)")
         sys.exit(1)
 
     out_path = args.output or default_output_path(url)
