@@ -529,8 +529,6 @@ def login_javdb(username, password, proxies=None):
 
         if captcha_code:
             login_data['_rucaptcha'] = captcha_code
-        else:
-            return False, None, "Captcha code is required but not provided"
 
         if csrf_token:
             login_data['authenticity_token'] = csrf_token
