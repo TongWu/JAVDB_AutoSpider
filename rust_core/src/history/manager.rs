@@ -2,7 +2,7 @@ use chrono::Local;
 use log::{debug, error, info, warn};
 use pyo3::prelude::*;
 use pyo3::types::{PyAnyMethods, PyDict};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{BufReader, Write};
 use std::path::Path;
@@ -808,6 +808,52 @@ pub fn add_downloaded_indicator_to_csv(
     Ok(py.allow_threads(|| add_downloaded_impl(csv_file, history_file)))
 }
 
+fn build_downloaded_lookup(history_file: &str) -> HashMap<String, HashSet<String>> {
+    let mut lookup: HashMap<String, HashSet<String>> = HashMap::new();
+    if !Path::new(history_file).exists() {
+        return lookup;
+    }
+    let records = match read_csv_records(history_file) {
+        Ok((_, r)) => r,
+        Err(e) => {
+            error!("Error reading history for downloaded lookup: {}", e);
+            return lookup;
+        }
+    };
+    for row in &records {
+        let href = match row.get("href") {
+            Some(h) if !h.is_empty() => h.clone(),
+            _ => continue,
+        };
+
+        if let Some(tt) = row.get("torrent_type") {
+            let cats: HashSet<String> = tt
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            lookup.entry(href).or_default().extend(cats);
+            continue;
+        }
+
+        for cat in TORRENT_CATEGORIES {
+            let content = row.get(*cat).map(|s| s.trim()).unwrap_or("");
+            if content.is_empty() {
+                continue;
+            }
+            let has_magnet = if content.starts_with('[') && content.contains(']') {
+                content.splitn(2, ']').nth(1).unwrap_or("").starts_with("magnet:")
+            } else {
+                content.starts_with("magnet:")
+            };
+            if has_magnet {
+                lookup.entry(href.clone()).or_default().insert(cat.to_string());
+            }
+        }
+    }
+    lookup
+}
+
 fn add_downloaded_impl(csv_file: &str, history_file: &str) -> bool {
     if !Path::new(csv_file).exists() {
         error!("CSV file not found: {}", csv_file);
@@ -822,15 +868,19 @@ fn add_downloaded_impl(csv_file: &str, history_file: &str) -> bool {
         }
     };
 
+    let downloaded_lookup = build_downloaded_lookup(history_file);
+
     let mut modified = false;
     for row in &mut rows {
         let href = row.get("href").cloned().unwrap_or_default();
+        let empty_set = HashSet::new();
+        let downloaded_cats = downloaded_lookup.get(&href).unwrap_or(&empty_set);
         for col in TORRENT_CATEGORIES {
             let content = row.get(*col).cloned().unwrap_or_default();
             if content.trim().is_empty() {
                 continue;
             }
-            if check_torrent_impl(history_file, &href, col) {
+            if downloaded_cats.contains(*col) {
                 if content.trim() != "[DOWNLOADED PREVIOUSLY]" {
                     row.insert(col.to_string(), "[DOWNLOADED PREVIOUSLY]".into());
                     modified = true;
