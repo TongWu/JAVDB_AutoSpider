@@ -2,6 +2,7 @@ import requests
 import csv
 import time
 import re
+import random
 import logging
 import os
 import argparse
@@ -37,7 +38,7 @@ try:
     from config import (
         BASE_URL, START_PAGE, END_PAGE,
         REPORTS_DIR, DAILY_REPORT_DIR, AD_HOC_DIR, PARSED_MOVIES_CSV,
-        SPIDER_LOG_FILE, LOG_LEVEL, PAGE_SLEEP, MOVIE_SLEEP,
+        SPIDER_LOG_FILE, LOG_LEVEL, PAGE_SLEEP, MOVIE_SLEEP_MIN, MOVIE_SLEEP_MAX,
         JAVDB_SESSION_COOKIE, PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS,
         PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES,
         CF_TURNSTILE_COOLDOWN, PHASE_TRANSITION_COOLDOWN, FALLBACK_COOLDOWN,
@@ -55,7 +56,8 @@ except ImportError:
     SPIDER_LOG_FILE = 'logs/spider.log'
     LOG_LEVEL = 'INFO'
     PAGE_SLEEP = 2
-    MOVIE_SLEEP = 5
+    MOVIE_SLEEP_MIN = 5
+    MOVIE_SLEEP_MAX = 30
     JAVDB_SESSION_COOKIE = None
     PHASE2_MIN_RATE = 4.0
     PHASE2_MIN_COMMENTS = 100
@@ -140,6 +142,46 @@ from utils.proxy_pool import ProxyPool, create_proxy_pool_from_config
 
 # Import unified request handler
 from utils.request_handler import RequestHandler, RequestConfig, create_request_handler_from_config
+
+class MovieSleepManager:
+    """Randomised movie sleep with adaptive throttling.
+
+    Picks a random sleep time in ``[sleep_min, sleep_max]``.  When the chosen
+    value falls in the bottom 10 % of the range the *next* call is forced to
+    pick from the top 30 % to avoid consecutive short intervals.
+    """
+
+    def __init__(self, sleep_min: float, sleep_max: float):
+        self.sleep_min = float(sleep_min)
+        self.sleep_max = float(sleep_max)
+        self._force_high = False
+
+    def get_sleep_time(self) -> float:
+        span = self.sleep_max - self.sleep_min
+        if span <= 0:
+            return self.sleep_min
+
+        if self._force_high:
+            low = self.sleep_min + span * 0.7
+            sleep_time = random.uniform(low, self.sleep_max)
+            self._force_high = False
+        else:
+            sleep_time = random.uniform(self.sleep_min, self.sleep_max)
+
+        if sleep_time <= self.sleep_min + span * 0.1:
+            self._force_high = True
+
+        return round(sleep_time, 1)
+
+    def sleep(self) -> float:
+        """Sleep for a random duration and return the chosen time."""
+        t = self.get_sleep_time()
+        logger.debug("Movie sleep: %.1fs (force_high_next=%s)", t, self._force_high)
+        time.sleep(t)
+        return t
+
+
+movie_sleep_mgr = MovieSleepManager(MOVIE_SLEEP_MIN, MOVIE_SLEEP_MAX)
 
 # Global proxy pool instance (will be initialized in main)
 global_proxy_pool: Optional[ProxyPool] = None
@@ -2134,7 +2176,7 @@ def main():
                 continue
 
             if pending_movie_sleep:
-                time.sleep(MOVIE_SLEEP)
+                movie_sleep_mgr.sleep()
                 pending_movie_sleep = False
 
             detail_url = urljoin(BASE_URL, href)
@@ -2330,7 +2372,7 @@ def main():
                 continue
 
             if pending_movie_sleep:
-                time.sleep(MOVIE_SLEEP)
+                movie_sleep_mgr.sleep()
                 pending_movie_sleep = False
 
             detail_url = urljoin(BASE_URL, href)

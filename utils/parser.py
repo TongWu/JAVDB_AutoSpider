@@ -225,7 +225,7 @@ def parse_detail(html_content, index=None, skip_sleep=False):
         index: Index number for logging prefix
         skip_sleep: Deprecated, kept for backward compatibility. Rate-limit
             sleep is now handled exclusively by the caller (spider.py via
-            ``MOVIE_SLEEP``).
+            ``MOVIE_SLEEP_MIN`` / ``MOVIE_SLEEP_MAX``).
 
     Returns:
         tuple: (magnets, actor_info, parse_success)
