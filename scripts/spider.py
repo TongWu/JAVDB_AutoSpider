@@ -159,6 +159,23 @@ login_attempted = False
 # Global variable to store refreshed session cookie
 refreshed_session_cookie = None
 
+# Per-proxy CF bypass tracking: proxy names that require CF bypass in this runtime
+# When CF bypass succeeds through a proxy, that proxy is added here.
+# All future requests via that proxy will automatically use CF bypass.
+proxies_requiring_cf_bypass: set = set()
+
+
+def proxy_needs_cf_bypass(proxy_name: str) -> bool:
+    """Check if a proxy has been marked as requiring CF bypass."""
+    return proxy_name in proxies_requiring_cf_bypass
+
+
+def mark_proxy_cf_bypass(proxy_name: str):
+    """Mark a proxy as requiring CF bypass for all future requests in this runtime."""
+    if proxy_name not in proxies_requiring_cf_bypass:
+        proxies_requiring_cf_bypass.add(proxy_name)
+        logger.info(f"Proxy '{proxy_name}' marked as requiring CF bypass for this runtime")
+
 # Generate output CSV filename
 OUTPUT_CSV = f'Javdb_TodayTitle_{datetime.now().strftime("%Y%m%d")}.csv'
 
@@ -783,79 +800,57 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
     """
     Fetch index page with smart multi-level fallback mechanism.
     
-    Fallback Hierarchy:
-    1. Initial Attempt: Use provided settings (e.g. No Proxy, No CF).
-    2. Local CF Fallback: If Direct failed, try Local CF Bypass.
-    3. Proxy Pool Iteration: If Local failed (IP banned?), iterate through proxies.
-       For each proxy:
-       a. Try Direct Proxy (No CF)
-       b. Try Proxy + CF Bypass
-       c. If both fail, mark proxy as BANNED and switch to next (unless in ad hoc mode).
+    Fallback Hierarchy (per-proxy, with max_retries=1 to avoid internal proxy cycling):
+    1. Proxy A: direct request (or CF bypass if proxy is marked)
+    2. Proxy A: CF bypass (if not already tried in step 1)
+    3. Login refresh (once per runtime, adhoc mode only for index) → retry Proxy A steps 1-2
+    4. Proxy B: direct request (or CF bypass if proxy is marked)
+    5. Proxy B: CF bypass (if not already tried)
+    6. Continue through all proxies in the pool
+    
+    When CF bypass succeeds with a proxy, that proxy is marked to always use
+    CF bypass for subsequent requests in this runtime.
     
     Args:
         page_url: URL to fetch
         session: requests.Session object
         use_cookie: Whether to use session cookie
         use_proxy: Whether proxy is currently enabled
-        use_cf_bypass: Whether CF bypass is currently enabled (set by fallback mechanism)
+        use_cf_bypass: Whether CF bypass is currently enabled
         page_num: Current page number (for logging)
-        is_adhoc_mode: If True, don't mark proxies as banned on failure (for custom URLs)
+        is_adhoc_mode: If True, don't mark proxies as banned on failure
     
     Returns:
         tuple: (html_content, has_movie_list, proxy_was_banned, effective_use_proxy, effective_use_cf_bypass, is_valid_empty_page)
-            - html_content: The HTML content (None if failed)
-            - has_movie_list: True if movie list found
-            - proxy_was_banned: True if a proxy was banned during fetch
-            - effective_use_proxy: The proxy setting that eventually worked
-            - effective_use_cf_bypass: The CF bypass setting that eventually worked
-            - is_valid_empty_page: True if page is valid but has no content (e.g. "No content yet")
     """
     proxy_was_banned = False
-    last_failed_html = None  # Store HTML from failed attempts
+    last_failed_html = None
     
-    # --- Helper function to attempt fetch and validate ---
-    # Returns: (html, has_movie_list, is_valid_empty_page)
     def try_fetch(u_proxy, u_cf, context_msg):
         nonlocal last_failed_html
         logger.debug(f"[Page {page_num}] {context_msg}...")
         try:
             html = get_page(page_url, session, use_cookie=use_cookie,
                             use_proxy=u_proxy, module_name='spider',
-                            use_cf_bypass=u_cf)
+                            max_retries=1, use_cf_bypass=u_cf)
             if html:
                 soup = BeautifulSoup(html, 'html.parser')
-                # Use flexible matching - look for any div with 'movie-list' in class
-                # Different pages may have different class combinations:
-                # - Normal pages: 'movie-list h cols-4 vcols-8'  
-                # - Rankings pages: 'movie-list h cols-4'
                 movie_list = soup.find('div', class_=lambda x: x and 'movie-list' in x)
                 if movie_list:
-                    # Check if movie-list has actual movie items
-                    # An empty movie-list div (e.g., page=8 of rankings with only 250 items total)
-                    # should be treated as a valid empty page, not a successful fetch
                     movie_items = movie_list.find_all('div', class_='item')
                     if len(movie_items) > 0:
                         logger.debug(f"[Page {page_num}] Success: {context_msg} - Found {len(movie_items)} movie items")
                         return html, True, False
                     else:
-                        # movie-list exists but is empty - this is a valid empty page
                         logger.info(f"[Page {page_num}] movie-list exists but is empty (0 items) - treating as valid empty page")
                         return html, False, True
                 else:
-                    # No movie list - check if this is a valid empty page or a failed fetch
                     page_text = soup.get_text()
                     title = soup.find('title')
                     title_text = title.text.strip() if title else ""
                     age_modal = soup.find('div', class_='modal is-active over18-modal')
-                    
-                    # Check if it's a login page
                     is_login_page = '登入' in title_text or 'login' in title_text.lower()
-                    
-                    # Check if it's a valid empty results page
-                    # Various indicators that the page exists but has no movies:
-                    # 1. Check for empty-message div (e.g. <div class="empty-message">暫無內容</div>)
                     empty_message_div = soup.find('div', class_='empty-message')
-                    # 2. Check for text patterns in various languages
                     has_no_content_msg = (
                         'No content yet' in page_text or 
                         'No result' in page_text or
@@ -864,135 +859,140 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
                         empty_message_div is not None
                     )
                     
-                    # If empty-message div is found, this is a valid empty page regardless of age_modal
-                    # (age modal is just an overlay, doesn't affect page content validity)
                     if not is_login_page and empty_message_div is not None:
                         empty_msg_text = empty_message_div.get_text().strip()
                         logger.info(f"[Page {page_num}] Page exists but has no content (empty-message: '{empty_msg_text}')")
-                        # This is a valid empty page - no need to retry
                         return html, False, True
                     elif not is_login_page and not age_modal and has_no_content_msg:
-                        # Fallback for text-based detection (No content yet, etc.)
                         logger.info(f"[Page {page_num}] Page exists but has no content (text pattern detected)")
                         return html, False, True
                     elif not is_login_page and not age_modal and len(html) > 20000:
-                        # Large HTML but no movie list - might be a valid page, treat as empty
                         logger.debug(f"[Page {page_num}] Large HTML without movie list, treating as empty page")
                         return html, False, True
                     else:
-                        # Fetched HTML but validation failed (login page or age modal)
                         last_failed_html = html
                         logger.debug(f"[Page {page_num}] Validation failed (no movie list, login={is_login_page}, age_modal={age_modal is not None}): {context_msg}")
         except Exception as e:
             logger.debug(f"[Page {page_num}] Failed {context_msg}: {e}")
         return None, False, False
 
-    # --- Phase 0: Initial Attempt (User Config) ---
-    current_proxy_name = global_proxy_pool.get_current_proxy_name() if (use_proxy and global_proxy_pool) else "None"
-    html, success, is_valid_empty = try_fetch(use_proxy, use_cf_bypass, 
-                              f"Initial attempt (Proxy={use_proxy}, CF={use_cf_bypass}, Node={current_proxy_name})")
-    if success:
-        return html, True, False, use_proxy, use_cf_bypass, False
-    if is_valid_empty:
-        # Page fetched successfully but has no content - this is a valid stopping point
-        return html, False, False, use_proxy, use_cf_bypass, True
-
-    logger.warning(f"[Page {page_num}] Initial attempt failed. Starting smart fallback mechanism...")
-
-    # --- Phase 1: Local CF Fallback ---
-    # Skipped: Local CF bypass is not used as a fallback to avoid localhost connection errors.
-    # CF bypass is only tried during proxy pool fallback (Phase 2).
-    if not use_proxy:
-        logger.debug(f"[Page {page_num}] Skipping Local CF Bypass fallback. Switching to Proxy Pool...")
-
-    # --- Phase 1.5: Login Refresh Fallback (adhoc mode only, before switching proxies) ---
-    # Try to refresh session cookie via login if in adhoc mode
-    if is_adhoc_mode and can_attempt_login(is_adhoc_mode, is_index_page=True):
-        logger.info(f"[Page {page_num}] Attempting login refresh before switching proxies...")
-        login_success, new_cookie = attempt_login_refresh()
-        if login_success:
-            # Retry with new cookie
-            html, success, is_valid_empty = try_fetch(use_proxy, use_cf_bypass, 
-                f"Fallback: Retry with refreshed cookie")
+    def try_proxy_direct_then_cf(proxy_name):
+        """Try a single proxy: direct first (unless marked for CF), then CF bypass.
+        Returns (html, has_movie_list, is_valid_empty, used_cf_bypass)."""
+        needs_cf = proxy_needs_cf_bypass(proxy_name)
+        
+        if needs_cf:
+            html, success, is_valid_empty = try_fetch(
+                True, True, f"Index: Proxy={proxy_name} + CF Bypass (marked)")
+            if success or is_valid_empty:
+                return html, success, is_valid_empty, True
+            return None, False, False, True
+        
+        # Step a: Direct request with this proxy
+        html, success, is_valid_empty = try_fetch(
+            True, False, f"Index: Proxy={proxy_name} Direct")
+        if success or is_valid_empty:
+            return html, success, is_valid_empty, False
+        
+        # Step b: CF bypass with this proxy
+        html, success, is_valid_empty = try_fetch(
+            True, True, f"Index: Proxy={proxy_name} + CF Bypass")
+        if success or is_valid_empty:
             if success:
-                logger.info(f"[Page {page_num}] Login refresh succeeded! Index page fetched successfully.")
-                return html, True, False, use_proxy, use_cf_bypass, False
+                mark_proxy_cf_bypass(proxy_name)
+            return html, success, is_valid_empty, True
+        
+        return None, False, False, False
+
+    # --- Phase 0: Initial Attempt with current proxy ---
+    if use_proxy and global_proxy_pool:
+        current_proxy_name = global_proxy_pool.get_current_proxy_name()
+        initial_cf = use_cf_bypass or proxy_needs_cf_bypass(current_proxy_name)
+        
+        html, success, is_valid_empty = try_fetch(
+            True, initial_cf,
+            f"Initial attempt (Proxy={current_proxy_name}, CF={initial_cf})")
+        if success:
+            return html, True, False, True, initial_cf, False
+        if is_valid_empty:
+            return html, False, False, True, initial_cf, True
+        
+        # Phase 0.5: If initial was direct, try CF bypass with same proxy
+        if not initial_cf:
+            html, success, is_valid_empty = try_fetch(
+                True, True,
+                f"Index: Proxy={current_proxy_name} + CF Bypass")
+            if success:
+                mark_proxy_cf_bypass(current_proxy_name)
+                return html, True, False, True, True, False
             if is_valid_empty:
-                return html, False, False, use_proxy, use_cf_bypass, True
+                return html, False, False, True, True, True
+        
+        logger.warning(f"[Page {page_num}] Initial attempt failed. Starting fallback...")
+    elif not use_proxy:
+        html, success, is_valid_empty = try_fetch(
+            False, use_cf_bypass,
+            f"Initial attempt (No Proxy, CF={use_cf_bypass})")
+        if success:
+            return html, True, False, False, use_cf_bypass, False
+        if is_valid_empty:
+            return html, False, False, False, use_cf_bypass, True
+        logger.warning(f"[Page {page_num}] Initial attempt failed (no proxy). Starting fallback...")
+    else:
+        logger.warning(f"[Page {page_num}] No proxy pool configured for initial attempt.")
+
+    # --- Phase 1: Login Refresh (once per runtime, adhoc only for index pages) ---
+    if is_adhoc_mode and can_attempt_login(is_adhoc_mode, is_index_page=True):
+        logger.info(f"[Page {page_num}] Attempting login refresh...")
+        login_success, new_cookie = attempt_login_refresh()
+        if login_success and use_proxy and global_proxy_pool:
+            current_proxy_name = global_proxy_pool.get_current_proxy_name()
+            html, success, is_valid_empty, used_cf = try_proxy_direct_then_cf(current_proxy_name)
+            if success:
+                logger.info(f"[Page {page_num}] Login refresh + retry succeeded (Proxy={current_proxy_name}, CF={used_cf})")
+                return html, True, False, True, used_cf, False
+            if is_valid_empty:
+                return html, False, False, True, used_cf, True
             logger.warning(f"[Page {page_num}] Login refresh completed but index page still failed")
-        else:
+        elif login_success and not use_proxy:
+            html, success, is_valid_empty = try_fetch(
+                False, use_cf_bypass,
+                f"Fallback: Retry with refreshed cookie (No Proxy)")
+            if success:
+                return html, True, False, False, use_cf_bypass, False
+            if is_valid_empty:
+                return html, False, False, False, use_cf_bypass, True
+        elif not login_success:
             logger.warning(f"[Page {page_num}] Login refresh failed, continuing with proxy pool fallback...")
 
-    # --- Phase 2: Proxy Pool Iteration ---
+    # --- Phase 2: Iterate through remaining proxies ---
     if global_proxy_pool is None:
         logger.error(f"[Page {page_num}] Fallback failed: No proxy pool configured")
-        # Return last failed HTML if we have it, otherwise None
         return last_failed_html, False, False, use_proxy, use_cf_bypass, False
 
-    # If we weren't using proxy, start using it now
-    if not use_proxy:
-        # If we are just switching to proxy mode, ensure we start with a fresh/valid proxy if possible
-        # (The current one might be random if we haven't used it yet)
-        pass 
-
-    # We will try up to N switches (coverage of the pool)
-    # If using Single mode, we only have 1 try.
     max_switches = global_proxy_pool.get_proxy_count() if PROXY_MODE == 'pool' else 1
-    # Limit max switches to avoid infinite loops if pool is huge, e.g. 10
-    max_switches = min(max_switches, 10) 
+    max_switches = min(max_switches, 10)
     
-    attempts = 0
-    while attempts < max_switches:
-        current_proxy_name = global_proxy_pool.get_current_proxy_name()
-        
-        # Sub-step 2.1: Try Direct Proxy (No CF)
-        # User requested sequence: "依次是不使用cloudflare bypass和使用bypass"
-        html, success, is_valid_empty = try_fetch(True, False, f"Fallback Phase 2: Proxy Direct (Node={current_proxy_name})")
-        if success:
-            logger.info(f"[Page {page_num}] Proxy Direct succeeded. Switching mode to: use_proxy=True, use_cf_bypass=False")
-            return html, True, proxy_was_banned, True, False, False
-        if is_valid_empty:
-            logger.info(f"[Page {page_num}] Proxy Direct: valid empty page detected")
-            return html, False, proxy_was_banned, True, False, True
-            
-        # Sub-step 2.2: Try Proxy + CF Bypass
-        html, success, is_valid_empty = try_fetch(True, True, f"Fallback Phase 2: Proxy + CF Bypass (Node={current_proxy_name})")
-        if success:
-            logger.info(f"[Page {page_num}] Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True")
-            return html, True, proxy_was_banned, True, True, False
-        if is_valid_empty:
-            logger.info(f"[Page {page_num}] Proxy + CF Bypass: valid empty page detected")
-            return html, False, proxy_was_banned, True, True, True
-
-        # If both failed for this proxy, handle based on mode
-        attempts += 1
-        if attempts < max_switches and PROXY_MODE == 'pool':
-            if is_adhoc_mode:
-                # Ad hoc mode: Don't mark as banned, just switch to next proxy
-                # Failure might be due to page-specific issues (login required, page not found, etc.)
-                logger.warning(f"[Page {page_num}] Proxy '{current_proxy_name}' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)")
-                logger.info(f"[Page {page_num}] Switching to next proxy...")
-                global_proxy_pool.mark_failure_and_switch()  # Single failure mark, no ban
-            else:
-                # Normal mode: Mark as banned after multiple failures
-                logger.warning(f"[Page {page_num}] Proxy '{current_proxy_name}' failed both Direct and CF modes. Marking BANNED and switching...")
-                
-                # Save the last failed HTML for debugging proxy ban issues
-                if last_failed_html:
-                    save_proxy_ban_html(last_failed_html, current_proxy_name, page_num)
-                
-                # Mark failure multiple times to trigger cooldown
-                for _ in range(PROXY_POOL_MAX_FAILURES):
-                    global_proxy_pool.mark_failure_and_switch()
-                proxy_was_banned = True
+    for attempt in range(max_switches):
+        if is_adhoc_mode:
+            global_proxy_pool.mark_failure_and_switch()
         else:
-            if PROXY_MODE == 'single':
-                logger.error(f"[Page {page_num}] Single proxy mode failed. Cannot switch.")
-            else:
-                logger.error(f"[Page {page_num}] All proxy attempts exhausted.")
-            break
+            if last_failed_html:
+                current_proxy_name = global_proxy_pool.get_current_proxy_name()
+                save_proxy_ban_html(last_failed_html, current_proxy_name, page_num)
+            for _ in range(PROXY_POOL_MAX_FAILURES):
+                global_proxy_pool.mark_failure_and_switch()
+            proxy_was_banned = True
+        
+        current_proxy_name = global_proxy_pool.get_current_proxy_name()
+        html, success, is_valid_empty, used_cf = try_proxy_direct_then_cf(current_proxy_name)
+        if success:
+            logger.info(f"[Page {page_num}] Index Proxy fallback succeeded (Proxy={current_proxy_name}, CF={used_cf})")
+            return html, True, proxy_was_banned, True, used_cf, False
+        if is_valid_empty:
+            return html, False, proxy_was_banned, True, used_cf, True
 
-    # Return the last HTML content we fetched (even if validation failed), or None if all fetches failed completely
+    logger.error(f"[Page {page_num}] All proxy attempts exhausted.")
     return last_failed_html, False, proxy_was_banned, use_proxy, use_cf_bypass, False
 
 
@@ -1005,52 +1005,44 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
     because detail page failures are often due to page-specific issues (login required, 
     page not found, etc.) rather than proxy problems.
     
-    Fallback Hierarchy:
-    1. Initial Attempt: Use provided settings (e.g. No Proxy, No CF).
-    2. Proxy Pool Iteration: If initial failed, iterate through proxies.
-       For each proxy:
-       a. Try Direct Proxy (No CF)
-       b. Try Proxy + CF Bypass
-       c. If both fail, switch to next proxy (no ban marking).
+    Fallback Hierarchy (per-proxy, with max_retries=1 to avoid internal proxy cycling):
+    1. Proxy A: direct request (or CF bypass if proxy is marked)
+    2. Proxy A: CF bypass (if not already tried in step 1)
+    3. Login refresh (once per runtime) → retry Proxy A steps 1-2
+    4. Proxy B: direct request (or CF bypass if proxy is marked)
+    5. Proxy B: CF bypass (if not already tried)
+    6. Continue through all proxies in the pool
+    
+    When CF bypass succeeds with a proxy, that proxy is marked to always use
+    CF bypass for subsequent requests in this runtime.
     
     Args:
         detail_url: URL to fetch
         session: requests.Session object
         use_cookie: Whether to use session cookie
         use_proxy: Whether proxy is currently enabled
-        use_cf_bypass: Whether CF bypass is currently enabled (set by fallback mechanism)
+        use_cf_bypass: Whether CF bypass is currently enabled
         entry_index: Current entry index (for logging)
         is_adhoc_mode: Unused, kept for API compatibility
     
     Returns:
         tuple: (magnets, actor_info, parse_success, effective_use_proxy, effective_use_cf_bypass)
-            - magnets: List of magnet link dictionaries
-            - actor_info: Actor name string
-            - parse_success: True if parsing was successful
-            - effective_use_proxy: The proxy setting that eventually worked
-            - effective_use_cf_bypass: The CF bypass setting that eventually worked
     """
-    last_result = ([], '', False)  # Store result from failed attempts (magnets, actor_info, parse_success)
+    last_result = ([], '', False)
     
-    # --- Helper function to attempt fetch, parse and validate ---
     def try_fetch_and_parse(u_proxy, u_cf, context_msg, skip_sleep=False):
         nonlocal last_result
         logger.debug(f"[{entry_index}] {context_msg}...")
         try:
             html = get_page(detail_url, session, use_cookie=use_cookie,
                             use_proxy=u_proxy, module_name='spider',
-                            use_cf_bypass=u_cf)
+                            max_retries=1, use_cf_bypass=u_cf)
             if html:
-                # Parse detail page with skip_sleep for retry attempts
-                # Note: video_code is already extracted from index page, not from detail page
                 magnets, actor_info, parse_success = parse_detail(html, entry_index, skip_sleep=skip_sleep)
-                
                 if parse_success:
                     logger.debug(f"[{entry_index}] Success: {context_msg}")
                     return magnets, actor_info, True
                 else:
-                    # Fetched HTML but parsing failed (missing expected elements)
-                    # Store it as potential return value if all fallbacks fail
                     last_result = (magnets, actor_info, False)
                     logger.debug(f"[{entry_index}] Parse validation failed (missing magnets): {context_msg}")
             else:
@@ -1059,94 +1051,124 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
             logger.debug(f"[{entry_index}] Failed {context_msg}: {e}")
         return [], '', False
 
-    # --- Phase 0: Initial Attempt (User Config) ---
-    current_proxy_name = global_proxy_pool.get_current_proxy_name() if (use_proxy and global_proxy_pool) else "None"
-    magnets, actor_info, success = try_fetch_and_parse(
-        use_proxy, use_cf_bypass, 
-        f"Detail Initial attempt (Proxy={use_proxy}, CF={use_cf_bypass}, Node={current_proxy_name})",
-        skip_sleep=False  # First attempt should respect sleep
-    )
-    if success:
-        return magnets, actor_info, True, use_proxy, use_cf_bypass
-
-    logger.warning(f"[{entry_index}] Detail page initial attempt failed. Starting smart fallback mechanism...")
-
-    # --- Phase 1: Local CF Fallback ---
-    # Skipped: Local CF bypass is not used as a fallback to avoid localhost connection errors.
-    # CF bypass is only tried during proxy pool fallback (Phase 2).
-    if not use_proxy:
-        logger.debug(f"[{entry_index}] Skipping Local CF Bypass fallback. Switching to Proxy Pool...")
-
-    # --- Phase 1.5: Login Refresh Fallback (before switching proxies) ---
-    # Try to refresh session cookie via login if allowed
-    if can_attempt_login(is_adhoc_mode, is_index_page=False):
-        logger.info(f"[{entry_index}] Attempting login refresh before switching proxies...")
-        login_success, new_cookie = attempt_login_refresh()
-        if login_success:
-            # Retry with new cookie
+    def try_proxy_direct_then_cf(proxy_name, skip_sleep=True):
+        """Try a single proxy: direct first (unless marked for CF), then CF bypass.
+        Returns (magnets, actor_info, success, used_cf_bypass)."""
+        needs_cf = proxy_needs_cf_bypass(proxy_name)
+        
+        if needs_cf:
+            # This proxy is marked as needing CF bypass, skip direct attempt
             magnets, actor_info, success = try_fetch_and_parse(
-                use_proxy, use_cf_bypass,
-                f"Detail Fallback: Retry with refreshed cookie",
+                True, True,
+                f"Detail: Proxy={proxy_name} + CF Bypass (marked)",
+                skip_sleep=skip_sleep
+            )
+            if success:
+                return magnets, actor_info, True, True
+            return [], '', False, True
+        
+        # Step a: Direct request with this proxy
+        magnets, actor_info, success = try_fetch_and_parse(
+            True, False,
+            f"Detail: Proxy={proxy_name} Direct",
+            skip_sleep=skip_sleep
+        )
+        if success:
+            return magnets, actor_info, True, False
+        
+        # Step b: CF bypass with this proxy
+        magnets, actor_info, success = try_fetch_and_parse(
+            True, True,
+            f"Detail: Proxy={proxy_name} + CF Bypass",
+            skip_sleep=skip_sleep
+        )
+        if success:
+            mark_proxy_cf_bypass(proxy_name)
+            return magnets, actor_info, True, True
+        
+        return [], '', False, False
+
+    # --- Phase 0: Initial Attempt with current proxy ---
+    if use_proxy and global_proxy_pool:
+        current_proxy_name = global_proxy_pool.get_current_proxy_name()
+        initial_cf = use_cf_bypass or proxy_needs_cf_bypass(current_proxy_name)
+        
+        magnets, actor_info, success = try_fetch_and_parse(
+            True, initial_cf,
+            f"Detail Initial (Proxy={current_proxy_name}, CF={initial_cf})",
+            skip_sleep=False
+        )
+        if success:
+            return magnets, actor_info, True, True, initial_cf
+        
+        # Phase 0.5: If initial was direct, try CF bypass with same proxy
+        if not initial_cf:
+            magnets, actor_info, success = try_fetch_and_parse(
+                True, True,
+                f"Detail: Proxy={current_proxy_name} + CF Bypass",
                 skip_sleep=True
             )
             if success:
-                logger.info(f"[{entry_index}] Login refresh succeeded! Detail page fetched successfully.")
-                return magnets, actor_info, True, use_proxy, use_cf_bypass
-            else:
-                logger.warning(f"[{entry_index}] Login refresh completed but detail page still failed")
-        else:
+                mark_proxy_cf_bypass(current_proxy_name)
+                logger.info(f"[{entry_index}] Detail CF Bypass succeeded with initial proxy={current_proxy_name}")
+                return magnets, actor_info, True, True, True
+        
+        logger.warning(f"[{entry_index}] Detail page initial attempt failed. Starting fallback...")
+    elif not use_proxy:
+        # No proxy mode: single direct attempt
+        magnets, actor_info, success = try_fetch_and_parse(
+            False, use_cf_bypass,
+            f"Detail Initial (No Proxy, CF={use_cf_bypass})",
+            skip_sleep=False
+        )
+        if success:
+            return magnets, actor_info, True, False, use_cf_bypass
+        logger.warning(f"[{entry_index}] Detail page initial attempt failed (no proxy). Starting fallback...")
+    else:
+        logger.warning(f"[{entry_index}] No proxy pool configured for initial attempt.")
+
+    # --- Phase 1: Login Refresh (once per runtime) → retry current proxy ---
+    if can_attempt_login(is_adhoc_mode, is_index_page=False):
+        logger.info(f"[{entry_index}] Attempting login refresh...")
+        login_success, new_cookie = attempt_login_refresh()
+        if login_success and use_proxy and global_proxy_pool:
+            current_proxy_name = global_proxy_pool.get_current_proxy_name()
+            magnets, actor_info, success, used_cf = try_proxy_direct_then_cf(current_proxy_name, skip_sleep=True)
+            if success:
+                logger.info(f"[{entry_index}] Login refresh + retry succeeded (Proxy={current_proxy_name}, CF={used_cf})")
+                return magnets, actor_info, True, True, used_cf
+            logger.warning(f"[{entry_index}] Login refresh completed but detail page still failed")
+        elif login_success and not use_proxy:
+            magnets, actor_info, success = try_fetch_and_parse(
+                False, use_cf_bypass,
+                f"Detail: Retry with refreshed cookie (No Proxy)",
+                skip_sleep=True
+            )
+            if success:
+                return magnets, actor_info, True, False, use_cf_bypass
+        elif not login_success:
             logger.warning(f"[{entry_index}] Login refresh failed, continuing with proxy pool fallback...")
-    
-    # --- Phase 2: Proxy Pool Iteration ---
+
+    # --- Phase 2: Iterate through remaining proxies ---
     if global_proxy_pool is None:
         logger.error(f"[{entry_index}] Fallback failed: No proxy pool configured")
-        # Return last result if we have it
         return last_result[0], last_result[1], last_result[2], use_proxy, use_cf_bypass
 
-    # We will try up to N switches (coverage of the pool)
-    # If using Single mode, we only have 1 try.
     max_switches = global_proxy_pool.get_proxy_count() if PROXY_MODE == 'pool' else 1
-    # Limit max switches to avoid infinite loops if pool is huge, e.g. 10
-    max_switches = min(max_switches, 10) 
+    max_switches = min(max_switches, 10)
     
-    attempts = 0
-    while attempts < max_switches:
-        current_proxy_name = global_proxy_pool.get_current_proxy_name()
-        
-        # Sub-step 2.1: Try Direct Proxy (No CF)
-        magnets, actor_info, success = try_fetch_and_parse(
-            True, False, 
-            f"Detail Fallback Phase 2: Proxy Direct (Node={current_proxy_name})",
-            skip_sleep=True  # Skip sleep for retry attempts
-        )
-        if success:
-            logger.info(f"[{entry_index}] Detail Proxy Direct succeeded. Switching mode to: use_proxy=True, use_cf_bypass=False")
-            return magnets, actor_info, True, True, False
-            
-        # Sub-step 2.2: Try Proxy + CF Bypass
-        magnets, actor_info, success = try_fetch_and_parse(
-            True, True, 
-            f"Detail Fallback Phase 2: Proxy + CF Bypass (Node={current_proxy_name})",
-            skip_sleep=True  # Skip sleep for retry attempts
-        )
-        if success:
-            logger.info(f"[{entry_index}] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True")
-            return magnets, actor_info, True, True, True
-
-        # If both failed for this proxy, just switch to next (no ban marking for detail pages)
-        # Detail page failures are often due to page-specific issues, not proxy problems
-        attempts += 1
-        if attempts < max_switches and PROXY_MODE == 'pool':
-            logger.debug(f"[{entry_index}] Proxy '{current_proxy_name}' failed both Direct and CF modes. Switching to next proxy (not marking as banned)...")
-            global_proxy_pool.mark_failure_and_switch()  # Single failure mark, no ban
-        else:
-            if PROXY_MODE == 'single':
-                logger.debug(f"[{entry_index}] Single proxy mode failed. Cannot switch.")
-            else:
-                logger.debug(f"[{entry_index}] All proxy attempts exhausted.")
+    for attempt in range(max_switches):
+        switched = global_proxy_pool.mark_failure_and_switch()
+        if not switched:
+            logger.warning(f"[{entry_index}] No more proxies available in pool")
             break
+        
+        current_proxy_name = global_proxy_pool.get_current_proxy_name()
+        magnets, actor_info, success, used_cf = try_proxy_direct_then_cf(current_proxy_name, skip_sleep=True)
+        if success:
+            logger.info(f"[{entry_index}] Detail Proxy fallback succeeded (Proxy={current_proxy_name}, CF={used_cf})")
+            return magnets, actor_info, True, True, used_cf
 
-    # Return the last result we got (even if parsing failed), or empty if all fetches failed completely
     logger.warning(f"[{entry_index}] Detail page fallback exhausted. Returning best available result.")
     return last_result[0], last_result[1], last_result[2], use_proxy, use_cf_bypass
 
@@ -1954,17 +1976,6 @@ def main():
     page_num = start_page
     consecutive_empty_pages = 0
     csv_name_resolved = False  # Track if CSV name has been resolved from first successful page
-    consecutive_fallback_successes = 0  # Track consecutive fallback successes before persisting settings
-    # Thresholds based on fallback type:
-    # - CF bypass only (proxy unchanged): proxies * 1
-    # - Other changes (proxy changed): proxies * 3
-    proxy_count = global_proxy_pool.get_proxy_count() if global_proxy_pool else 1
-    fallback_persist_threshold_cf_only = proxy_count * 1  # Lower threshold for CF bypass only
-    fallback_persist_threshold_full = proxy_count * 3     # Higher threshold for proxy changes
-    current_fallback_threshold = fallback_persist_threshold_full  # Will be set based on fallback type
-    pending_fallback_settings = None  # Store the fallback settings to be persisted (use_proxy, use_cf_bypass)
-    logger.debug(f"Fallback persist thresholds: CF-only={fallback_persist_threshold_cf_only}, Full={fallback_persist_threshold_full} (based on {proxy_count} proxies in pool)")
-    
     # Note: Magnet filtering is now done in parser.py based on HTML tags
     # This avoids the need for ?t=d URL filter which requires authentication
     # The URL-based magnet filter (t=d) is deprecated and disabled
@@ -1984,40 +1995,14 @@ def main():
             is_adhoc_mode=custom_url is not None  # Don't ban proxies in ad hoc mode
         )
         
-        # Track fallback successes and persist settings after reaching threshold
-        if has_movie_list and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass):
-            # Determine fallback type and appropriate threshold
-            is_cf_only_change = (effective_use_proxy == use_proxy) and (effective_use_cf_bypass != use_cf_bypass)
-            
-            # If this is a new fallback type, reset counter and set appropriate threshold
-            if pending_fallback_settings is None or pending_fallback_settings != (effective_use_proxy, effective_use_cf_bypass):
-                consecutive_fallback_successes = 0
-                current_fallback_threshold = fallback_persist_threshold_cf_only if is_cf_only_change else fallback_persist_threshold_full
-            
-            # Fallback was triggered and succeeded
-            consecutive_fallback_successes += 1
-            pending_fallback_settings = (effective_use_proxy, effective_use_cf_bypass)
-            fallback_type = "CF-only" if is_cf_only_change else "Full"
-            logger.info(f"[Page {page_num}] Fallback succeeded ({fallback_type}: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
-                       f"Consecutive successes: {consecutive_fallback_successes}/{current_fallback_threshold}")
-            
-            # Only persist settings after reaching the threshold
-            if consecutive_fallback_successes >= current_fallback_threshold:
-                logger.info(f"[Page {page_num}] Reached {current_fallback_threshold} consecutive {fallback_type} fallback successes. "
-                           f"Persisting settings: use_proxy={effective_use_proxy}, use_cf_bypass={effective_use_cf_bypass}")
-                use_proxy = effective_use_proxy
-                use_cf_bypass = effective_use_cf_bypass
-                consecutive_fallback_successes = 0  # Reset counter after persisting
-                pending_fallback_settings = None
-            
-            logger.info(f"[Page {page_num}] Applying {FALLBACK_COOLDOWN}s cooldown before next page...")
-            time.sleep(FALLBACK_COOLDOWN)
-        elif has_movie_list and pending_fallback_settings is not None:
-            # Initial attempt succeeded but we have pending fallback settings - reset counter
-            # This means the previous fallback mode is no longer consistently needed
-            logger.debug(f"[Page {page_num}] Initial attempt succeeded, resetting fallback counter (was {consecutive_fallback_successes})")
-            consecutive_fallback_successes = 0
-            pending_fallback_settings = None
+        # Per-proxy CF bypass is now tracked inside the fallback functions via
+        # mark_proxy_cf_bypass(). The effective settings are automatically applied
+        # on subsequent requests by checking proxy_needs_cf_bypass().
+        # Update use_cf_bypass to match effective settings for logging/state consistency.
+        if has_movie_list and effective_use_cf_bypass != use_cf_bypass:
+            use_cf_bypass = effective_use_cf_bypass
+        if has_movie_list and effective_use_proxy != use_proxy:
+            use_proxy = effective_use_proxy
         
         if proxy_was_banned:
             any_proxy_banned = True
@@ -2128,46 +2113,32 @@ def main():
         # Process phase 1 entries
         total_entries_phase1 = len(all_index_results_phase1)
         
-        # Reset fallback tracking for detail pages (reuse thresholds from index phase)
-        detail_consecutive_fallback_successes = 0
-        detail_pending_fallback_settings = None
-        detail_current_fallback_threshold = fallback_persist_threshold_full
-
         # Track pending sleep - only sleep before entries that will make network requests
         pending_movie_sleep = False
 
         for i, entry in enumerate(all_index_results_phase1, 1):
             href = entry['href']
             page_num = entry['page']
-            fallback_triggered = False  # Track if fallback was triggered for this entry
 
             # Skip duplicate entry in current run
             if href in parsed_links:
                 logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping duplicate entry in current run")
-                # No sleep needed - pending_movie_sleep stays as-is for next entry that needs processing
                 continue
 
-            # Add to parsed links set for this run
             parsed_links.add(href)
 
-            # Early skip check: if movie already has both subtitle and hacked_subtitle in history,
-            # skip fetching detail page to avoid unnecessary network requests
             if has_complete_subtitles(href, parsed_movies_history_phase1):
                 logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history")
                 skipped_history_count += 1
                 phase1_skipped_history_actual += 1
-                # No sleep needed - pending_movie_sleep stays as-is for next entry that needs processing
                 continue
 
-            # This entry needs processing - apply pending sleep before making network request
             if pending_movie_sleep:
                 time.sleep(MOVIE_SLEEP)
                 pending_movie_sleep = False
 
             detail_url = urljoin(BASE_URL, href)
 
-            # Fetch detail page with fallback mechanism
-            # Note: video_code is already extracted from index page in entry['video_code']
             magnets, actor_info, parse_success, effective_use_proxy, effective_use_cf_bypass = fetch_detail_page_with_fallback(
                 detail_url, session,
                 use_cookie=custom_url is not None,
@@ -2177,48 +2148,23 @@ def main():
                 is_adhoc_mode=custom_url is not None
             )
             
-            # Track fallback successes and persist settings after reaching threshold (same as index phase)
+            # Per-proxy CF bypass is tracked inside the fallback functions.
+            # Detect if fallback was triggered (settings changed from initial)
             fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
-            if fallback_triggered:
-                # Determine fallback type and appropriate threshold
-                is_cf_only_change = (effective_use_proxy == use_proxy) and (effective_use_cf_bypass != use_cf_bypass)
-                
-                # If this is a new fallback type, reset counter and set appropriate threshold
-                if detail_pending_fallback_settings is None or detail_pending_fallback_settings != (effective_use_proxy, effective_use_cf_bypass):
-                    detail_consecutive_fallback_successes = 0
-                    detail_current_fallback_threshold = fallback_persist_threshold_cf_only if is_cf_only_change else fallback_persist_threshold_full
-                
-                detail_consecutive_fallback_successes += 1
-                detail_pending_fallback_settings = (effective_use_proxy, effective_use_cf_bypass)
-                fallback_type = "CF-only" if is_cf_only_change else "Full"
-                logger.info(f"[{i}/{total_entries_phase1}] Fallback succeeded ({fallback_type}: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
-                           f"Consecutive successes: {detail_consecutive_fallback_successes}/{detail_current_fallback_threshold}")
-                
-                # Only persist settings after reaching the threshold
-                if detail_consecutive_fallback_successes >= detail_current_fallback_threshold:
-                    logger.info(f"[{i}/{total_entries_phase1}] Reached {detail_current_fallback_threshold} consecutive {fallback_type} fallback successes. "
-                               f"Persisting settings: use_proxy={effective_use_proxy}, use_cf_bypass={effective_use_cf_bypass}")
-                    use_proxy = effective_use_proxy
-                    use_cf_bypass = effective_use_cf_bypass
-                    detail_consecutive_fallback_successes = 0  # Reset counter after persisting
-                    detail_pending_fallback_settings = None
-            elif parse_success and detail_pending_fallback_settings is not None:
-                # Initial attempt succeeded but we have pending fallback settings - reset counter
-                logger.debug(f"[{i}/{total_entries_phase1}] Initial attempt succeeded, resetting fallback counter (was {detail_consecutive_fallback_successes})")
-                detail_consecutive_fallback_successes = 0
-                detail_pending_fallback_settings = None
+            if parse_success and effective_use_cf_bypass != use_cf_bypass:
+                use_cf_bypass = effective_use_cf_bypass
+            if parse_success and effective_use_proxy != use_proxy:
+                use_proxy = effective_use_proxy
             
             if not parse_success and not magnets:
                 logger.error(f"[{i}/{total_entries_phase1}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
                 failed_count += 1
                 phase1_failed += 1
-                # Mark pending sleep - will only execute if next entry needs network request
                 pending_movie_sleep = True
                 continue
             
             magnet_links = extract_magnets(magnets, i)
 
-            # Log the processing with video_code from index page
             logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Processing {entry['video_code'] or href}")
 
             # Check if we should process this movie based on history and phase rules
@@ -2363,46 +2309,32 @@ def main():
         # Process phase 2 entries
         total_entries_phase2 = len(all_index_results_phase2)
         
-        # Reset fallback tracking for phase 2 detail pages (reuse thresholds from index phase)
-        detail_consecutive_fallback_successes = 0
-        detail_pending_fallback_settings = None
-        detail_current_fallback_threshold = fallback_persist_threshold_full
-
         # Track pending sleep - only sleep before entries that will make network requests
         pending_movie_sleep = False
 
         for i, entry in enumerate(all_index_results_phase2, 1):
             href = entry['href']
             page_num = entry['page']
-            fallback_triggered = False  # Track if fallback was triggered for this entry
 
             # Skip duplicate entry in current run
             if href in parsed_links:
                 logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping duplicate entry in current run")
-                # No sleep needed - pending_movie_sleep stays as-is for next entry that needs processing
                 continue
 
-            # Add to parsed links set for this run
             parsed_links.add(href)
 
-            # Early skip check: if movie already has both subtitle and hacked_subtitle in history,
-            # skip fetching detail page to avoid unnecessary network requests
             if has_complete_subtitles(href, parsed_movies_history_phase2):
                 logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history")
                 skipped_history_count += 1
                 phase2_skipped_history_actual += 1
-                # No sleep needed - pending_movie_sleep stays as-is for next entry that needs processing
                 continue
 
-            # This entry needs processing - apply pending sleep before making network request
             if pending_movie_sleep:
                 time.sleep(MOVIE_SLEEP)
                 pending_movie_sleep = False
 
             detail_url = urljoin(BASE_URL, href)
 
-            # Fetch detail page with fallback mechanism
-            # Note: video_code is already extracted from index page in entry['video_code']
             magnets, actor_info, parse_success, effective_use_proxy, effective_use_cf_bypass = fetch_detail_page_with_fallback(
                 detail_url, session,
                 use_cookie=custom_url is not None,
@@ -2412,48 +2344,22 @@ def main():
                 is_adhoc_mode=custom_url is not None
             )
             
-            # Track fallback successes and persist settings after reaching threshold (same as index phase)
+            # Per-proxy CF bypass is tracked inside the fallback functions.
             fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
-            if fallback_triggered:
-                # Determine fallback type and appropriate threshold
-                is_cf_only_change = (effective_use_proxy == use_proxy) and (effective_use_cf_bypass != use_cf_bypass)
-                
-                # If this is a new fallback type, reset counter and set appropriate threshold
-                if detail_pending_fallback_settings is None or detail_pending_fallback_settings != (effective_use_proxy, effective_use_cf_bypass):
-                    detail_consecutive_fallback_successes = 0
-                    detail_current_fallback_threshold = fallback_persist_threshold_cf_only if is_cf_only_change else fallback_persist_threshold_full
-                
-                detail_consecutive_fallback_successes += 1
-                detail_pending_fallback_settings = (effective_use_proxy, effective_use_cf_bypass)
-                fallback_type = "CF-only" if is_cf_only_change else "Full"
-                logger.info(f"[P2-{i}/{total_entries_phase2}] Fallback succeeded ({fallback_type}: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
-                           f"Consecutive successes: {detail_consecutive_fallback_successes}/{detail_current_fallback_threshold}")
-                
-                # Only persist settings after reaching the threshold
-                if detail_consecutive_fallback_successes >= detail_current_fallback_threshold:
-                    logger.info(f"[P2-{i}/{total_entries_phase2}] Reached {detail_current_fallback_threshold} consecutive {fallback_type} fallback successes. "
-                               f"Persisting settings: use_proxy={effective_use_proxy}, use_cf_bypass={effective_use_cf_bypass}")
-                    use_proxy = effective_use_proxy
-                    use_cf_bypass = effective_use_cf_bypass
-                    detail_consecutive_fallback_successes = 0  # Reset counter after persisting
-                    detail_pending_fallback_settings = None
-            elif parse_success and detail_pending_fallback_settings is not None:
-                # Initial attempt succeeded but we have pending fallback settings - reset counter
-                logger.debug(f"[P2-{i}/{total_entries_phase2}] Initial attempt succeeded, resetting fallback counter (was {detail_consecutive_fallback_successes})")
-                detail_consecutive_fallback_successes = 0
-                detail_pending_fallback_settings = None
+            if parse_success and effective_use_cf_bypass != use_cf_bypass:
+                use_cf_bypass = effective_use_cf_bypass
+            if parse_success and effective_use_proxy != use_proxy:
+                use_proxy = effective_use_proxy
             
             if not parse_success and not magnets:
                 logger.error(f"[{i}/{total_entries_phase2}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
                 failed_count += 1
                 phase2_failed += 1
-                # Mark pending sleep - will only execute if next entry needs network request
                 pending_movie_sleep = True
                 continue
             
             magnet_links = extract_magnets(magnets, f"P2-{i}")
 
-            # Log the processing with video_code from index page
             logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Processing {entry['video_code']}")
 
             # Check if we should process this movie based on history and phase rules
