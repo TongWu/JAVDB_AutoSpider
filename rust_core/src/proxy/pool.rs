@@ -361,7 +361,7 @@ impl ProxyPool {
             return None;
         }
 
-        check_cooldowns(&pool.proxies);
+        check_cooldowns(&pool.proxies, &self.ban_manager);
 
         let len = pool.proxies.len();
         for _ in 0..len {
@@ -387,7 +387,7 @@ impl ProxyPool {
             return None;
         }
 
-        check_cooldowns(&pool.proxies);
+        check_cooldowns(&pool.proxies, &self.ban_manager);
 
         let available = pool
             .proxies
@@ -501,7 +501,7 @@ impl ProxyPool {
     pub fn get_statistics(&self) -> HashMap<String, PyObject> {
         Python::with_gil(|py| {
             let pool = self.inner.lock();
-            check_cooldowns(&pool.proxies);
+            check_cooldowns(&pool.proxies, &self.ban_manager);
 
             let mut stats = HashMap::new();
             stats.insert("total_proxies".to_string(), pool.proxies.len().to_object(py));
@@ -565,7 +565,7 @@ impl ProxyPool {
     #[allow(unused_variables)]
     pub fn log_statistics(&self, level: Option<i32>) {
         let pool = self.inner.lock();
-        check_cooldowns(&pool.proxies);
+        check_cooldowns(&pool.proxies, &self.ban_manager);
 
         let total = pool.proxies.len();
         let available = pool
@@ -632,14 +632,18 @@ impl ProxyPool {
     }
 }
 
-fn check_cooldowns(proxies: &[Arc<Mutex<ProxyInfoInner>>]) {
+fn check_cooldowns(proxies: &[Arc<Mutex<ProxyInfoInner>>], ban_manager: &ProxyBanManager) {
     for arc in proxies {
         let mut proxy = arc.lock();
         if proxy.is_in_cooldown() {
             continue;
         }
         if !proxy.is_available {
+            if ban_manager.is_proxy_banned(&proxy.name) {
+                continue;
+            }
             proxy.is_available = true;
+            proxy.failures = 0;
             info!(
                 "Proxy '{}' cooldown period ended, marked as available",
                 proxy.name
