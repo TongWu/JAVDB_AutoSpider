@@ -37,6 +37,8 @@ def mask_full(value: Optional[str]) -> str:
     Returns:
         '********' if value exists, 'None' if value is None/empty
     """
+    if RUST_MASKING_AVAILABLE:
+        return _rust_mask_full(value)
     if not value:
         return 'None'
     return '********'
@@ -63,6 +65,8 @@ def mask_partial(value: Optional[str], show_start: int = 2, show_end: int = 2,
         'test' -> 't**t' (4 chars, mask 2)
         'abc' -> 'a*c' (3 chars, mask 1 - minimum possible)
     """
+    if RUST_MASKING_AVAILABLE:
+        return _rust_mask_partial(value, show_start, show_end, min_masked)
     if not value:
         return 'None'
     
@@ -103,6 +107,8 @@ def mask_email(email: Optional[str]) -> str:
     Returns:
         Masked email like 'us***er@ex***le.com'
     """
+    if RUST_MASKING_AVAILABLE:
+        return _rust_mask_email(email)
     if not email:
         return 'None'
     
@@ -130,6 +136,8 @@ def mask_ip_address(host: Optional[str]) -> str:
         '192.168.1.100' -> '192.xxx.xxx.100'
         'example.com' -> 'ex***om'
     """
+    if RUST_MASKING_AVAILABLE:
+        return _rust_mask_ip_address(host)
     if not host:
         return 'None'
     
@@ -202,6 +210,8 @@ def mask_proxy_url(proxy_url: Optional[str]) -> str:
     Returns:
         Masked proxy URL like 'http://***@192.xxx.xxx.100:8080'
     """
+    if RUST_MASKING_AVAILABLE:
+        return _rust_mask_proxy_url(proxy_url)
     if not proxy_url:
         return 'None'
     
