@@ -12,22 +12,64 @@ Features:
 - Comprehensive logging and statistics
 """
 
+import re
 import logging
 from typing import Optional, Dict, List
-
-from javdb_rust_core import (
-    RustProxyPool as ProxyPool,
-    RustProxyInfo as ProxyInfo,
-    create_proxy_pool_from_config as _rust_create_proxy_pool,
-    mask_proxy_url,
-)
 
 from .proxy_ban_manager import get_ban_manager, ProxyBanManager
 
 logger = logging.getLogger(__name__)
 
-RUST_PROXY_AVAILABLE = True
-logger.info("Rust proxy pool loaded - using high-performance Rust implementation")
+try:
+    from javdb_rust_core import (
+        RustProxyPool as ProxyPool,
+        RustProxyInfo as ProxyInfo,
+        create_proxy_pool_from_config as _rust_create_proxy_pool,
+        mask_proxy_url,
+    )
+    RUST_PROXY_AVAILABLE = True
+    logger.info("Rust proxy pool loaded - using high-performance Rust implementation")
+except Exception as e:
+    RUST_PROXY_AVAILABLE = False
+    logger.warning("javdb_rust_core proxy module not available, using Python fallback stubs: %s", e)
+
+    _UNAVAILABLE_MSG = (
+        "javdb_rust_core is not available. Install the Rust wheel to use proxy pool. "
+        "Import error: %s" % e
+    )
+
+    class ProxyPool:  # type: ignore[no-redef]
+        """Stub — Rust proxy pool is unavailable."""
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError(_UNAVAILABLE_MSG)
+
+    class ProxyInfo:  # type: ignore[no-redef]
+        """Stub — Rust proxy info is unavailable."""
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError(_UNAVAILABLE_MSG)
+
+    def _rust_create_proxy_pool(*args, **kwargs):
+        raise RuntimeError(_UNAVAILABLE_MSG)
+
+    def mask_proxy_url(url: Optional[str]) -> str:
+        """Mask sensitive information in proxy URL for logging (Python fallback)."""
+        if not url:
+            return 'None'
+        try:
+            protocol = ''
+            host_port = str(url)
+            if '://' in host_port:
+                protocol, host_port = host_port.split('://', 1)
+                protocol += '://'
+            if '@' in host_port:
+                _, host_port = host_port.split('@', 1)
+            ip_pattern = r'(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})'
+            def _mask_ip(match):
+                return f"{match.group(1)}.xxx.xxx.{match.group(4)}"
+            host_port_masked = re.sub(ip_pattern, _mask_ip, host_port)
+            return protocol + host_port_masked
+        except Exception:
+            return '[proxy URL masked]'
 
 
 def create_proxy_pool_from_config(proxy_list_config: List[Dict],
