@@ -7,16 +7,10 @@ falling back to the pure-Python implementation otherwise.
 
 import csv
 import os
-import logging
 from datetime import datetime, timedelta
 
-try:
-    from config import LOG_LEVEL
-except ImportError:
-    LOG_LEVEL = 'INFO'
+from utils.logging_config import get_logger
 
-from utils.logging_config import get_logger, setup_logging
-setup_logging(log_level=LOG_LEVEL)
 logger = get_logger(__name__)
 
 RUST_HISTORY_AVAILABLE = False

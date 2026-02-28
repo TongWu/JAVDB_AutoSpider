@@ -13,7 +13,6 @@ continue to work without modification.
 """
 
 import re
-import logging
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 
@@ -27,13 +26,12 @@ except ImportError:
     LOG_LEVEL = 'INFO'
     IGNORE_RELEASE_DATE_FILTER = False
 
-from utils.logging_config import get_logger, setup_logging
+from utils.logging_config import get_logger
 
 # New API layer imports
 from api.parsers.index_parser import parse_index_page as _api_parse_index
 from api.parsers.detail_parser import parse_detail_page as _api_parse_detail
 
-setup_logging(log_level=LOG_LEVEL)
 logger = get_logger(__name__)
 
 

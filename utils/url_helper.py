@@ -125,9 +125,8 @@ def _py_get_page_url(page_num: int, base_url: str, custom_url=None) -> str:
             return custom_url
         sep = '&' if '?' in custom_url else '?'
         return f"{custom_url}{sep}page={page_num}"
-    if base_url.endswith('.com'):
-        return f'{base_url}/?page={page_num}'
-    return f'{base_url}&page={page_num}'
+    sep = '&' if '?' in base_url else '?'
+    return f'{base_url}{sep}page={page_num}'
 
 
 def _py_sanitize_filename_part(text: str, max_length: int = 30) -> str:
