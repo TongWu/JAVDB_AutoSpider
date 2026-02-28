@@ -18,7 +18,6 @@ class MovieSleepManager:
     """
 
     # (threshold, min_multiplier, max_multiplier)
-    # 5， 15
     VOLUME_TIERS = [
         (25,  1.0, 1.0),
         (50,  2.0, 2.0),
