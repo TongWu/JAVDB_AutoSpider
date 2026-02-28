@@ -184,7 +184,7 @@ docker logs -f javdb-spider
 docker exec javdb-spider tail -f /var/log/cron.log
 
 # Run spider manually
-docker exec javdb-spider python scripts/spider.py --use-proxy
+docker exec javdb-spider python -m scripts.spider --use-proxy
 
 # Run pipeline manually
 docker exec javdb-spider python pipeline.py
@@ -229,7 +229,7 @@ Edit the `.env` file to configure scheduled tasks:
 ```bash
 # Spider runs daily at 3:00 AM
 CRON_SPIDER=0 3 * * *
-SPIDER_COMMAND=cd /app && /usr/local/bin/python scripts/spider.py --use-proxy >> /var/log/cron.log 2>&1
+SPIDER_COMMAND=cd /app && /usr/local/bin/python -m scripts.spider --use-proxy >> /var/log/cron.log 2>&1
 
 # Pipeline runs daily at 4:00 AM
 CRON_PIPELINE=0 4 * * *
