@@ -9,6 +9,7 @@ from utils.magnet_extractor import extract_magnets
 from utils.history_manager import (
     has_complete_subtitles, should_process_movie,
     get_missing_torrent_types, save_parsed_movie_to_history,
+    batch_update_last_visited,
 )
 from utils.csv_writer import write_csv
 
@@ -46,6 +47,7 @@ def process_phase_entries_sequential(
     """
     total_entries = len(entries)
     phase_rows: list = []
+    visited_hrefs: set = set()
     skipped_history = 0
     failed = 0
     no_new_torrents = 0
@@ -98,6 +100,7 @@ def process_phase_entries_sequential(
             pending_movie_sleep = True
             continue
 
+        visited_hrefs.add(href)
         magnet_links = extract_magnets(magnets, entry_index)
 
         should_process, history_torrent_types = should_process_movie(href, history_data, phase, magnet_links)
@@ -133,6 +136,9 @@ def process_phase_entries_sequential(
             pending_movie_sleep = False
         else:
             pending_movie_sleep = True
+
+    if use_history_for_saving and not dry_run and visited_hrefs:
+        batch_update_last_visited(history_file, visited_hrefs)
 
     logger.info(
         f"Phase {phase} completed: {total_entries} movies discovered, "

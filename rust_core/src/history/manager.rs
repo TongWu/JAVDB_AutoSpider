@@ -11,8 +11,9 @@ const CSV_HEADER: &[&str] = &[
     "href",
     "phase",
     "video_code",
-    "create_date",
-    "update_date",
+    "create_datetime",
+    "update_datetime",
+    "last_visited_datetime",
     "hacked_subtitle",
     "hacked_no_subtitle",
     "subtitle",
@@ -78,9 +79,11 @@ fn write_csv_records(path: &str, records: &[Record]) -> Result<(), String> {
     Ok(())
 }
 
-fn get_update_date(record: &Record) -> String {
+fn get_update_datetimetime(record: &Record) -> String {
     record
-        .get("update_date")
+        .get("update_datetime")
+        .filter(|v| !v.is_empty())
+        .or_else(|| record.get("update_date"))
         .filter(|v| !v.is_empty())
         .or_else(|| record.get("parsed_date"))
         .cloned()
@@ -88,16 +91,30 @@ fn get_update_date(record: &Record) -> String {
 }
 
 fn normalize_record(record: &mut Record) {
-    // Backward compat: parsed_date → create_date / update_date
-    if !record.contains_key("create_date") || record["create_date"].is_empty() {
+    // Backward compat: rename old column names
+    if let Some(v) = record.remove("create_date") {
+        record.entry("create_datetime".into()).or_insert(v);
+    }
+    if let Some(v) = record.remove("update_date") {
+        record.entry("update_datetime".into()).or_insert(v);
+    }
+
+    // parsed_date fallback
+    if !record.contains_key("create_datetime") || record["create_datetime"].is_empty() {
         if let Some(pd) = record.get("parsed_date").cloned() {
-            record.insert("create_date".into(), pd);
+            record.insert("create_datetime".into(), pd);
         }
     }
-    if !record.contains_key("update_date") || record["update_date"].is_empty() {
+    if !record.contains_key("update_datetime") || record["update_datetime"].is_empty() {
         if let Some(pd) = record.get("parsed_date").cloned() {
-            record.insert("update_date".into(), pd);
+            record.insert("update_datetime".into(), pd);
         }
+    }
+
+    // Ensure last_visited_datetime exists
+    if record.get("last_visited_datetime").map(|s| s.is_empty()).unwrap_or(true) {
+        let fallback = record.get("update_datetime").cloned().unwrap_or_default();
+        record.insert("last_visited_datetime".into(), fallback);
     }
 
     // Old torrent_type column → individual columns
@@ -108,7 +125,7 @@ fn normalize_record(record: &mut Record) {
                 record.insert(cat.to_string(), String::new());
             }
         }
-        let _ = types; // old format had no magnet links, just empty strings
+        let _ = types;
     }
 
     // Ensure all required columns exist
@@ -148,24 +165,30 @@ fn build_history_entry(record: &Record) -> Record {
     let mut entry = HashMap::new();
     entry.insert("phase".into(), record.get("phase").cloned().unwrap_or_default());
     entry.insert("video_code".into(), record.get("video_code").cloned().unwrap_or_default());
-    entry.insert(
-        "create_date".into(),
-        record
-            .get("create_date")
-            .filter(|v| !v.is_empty())
-            .or_else(|| record.get("parsed_date"))
-            .cloned()
-            .unwrap_or_default(),
-    );
-    entry.insert(
-        "update_date".into(),
-        record
-            .get("update_date")
-            .filter(|v| !v.is_empty())
-            .or_else(|| record.get("parsed_date"))
-            .cloned()
-            .unwrap_or_default(),
-    );
+
+    let create_dt = record.get("create_datetime")
+        .filter(|v| !v.is_empty())
+        .or_else(|| record.get("create_date"))
+        .filter(|v| !v.is_empty())
+        .or_else(|| record.get("parsed_date"))
+        .cloned()
+        .unwrap_or_default();
+    entry.insert("create_datetime".into(), create_dt);
+
+    let update_dt = record.get("update_datetime")
+        .filter(|v| !v.is_empty())
+        .or_else(|| record.get("update_date"))
+        .filter(|v| !v.is_empty())
+        .or_else(|| record.get("parsed_date"))
+        .cloned()
+        .unwrap_or_default();
+    entry.insert("update_datetime".into(), update_dt.clone());
+
+    let last_visited = record.get("last_visited_datetime")
+        .filter(|v| !v.is_empty())
+        .cloned()
+        .unwrap_or_else(|| update_dt);
+    entry.insert("last_visited_datetime".into(), last_visited);
 
     let torrent_types = extract_torrent_types(record);
     let tt_strs: Vec<String> = torrent_types.iter().map(|s| s.to_string()).collect();
@@ -234,8 +257,8 @@ fn load_history_impl(
             continue;
         }
         if let Some(existing) = href_records.get(&href) {
-            let existing_date = get_update_date(existing);
-            let current_date = get_update_date(row);
+            let existing_date = get_update_datetime(existing);
+            let current_date = get_update_datetime(row);
             if current_date > existing_date {
                 href_records.insert(href, row.clone());
             }
@@ -307,7 +330,7 @@ fn cleanup_history_impl(
     href_records: &HashMap<String, Record>,
 ) -> Result<(), String> {
     let mut sorted_records: Vec<Record> = href_records.values().cloned().collect();
-    sorted_records.sort_by(|a, b| get_update_date(b).cmp(&get_update_date(a)));
+    sorted_records.sort_by(|a, b| get_update_datetime(b).cmp(&get_update_datetime(a)));
 
     for rec in &mut sorted_records {
         normalize_record(rec);
@@ -347,7 +370,7 @@ fn maintain_history_limit_impl(history_file: &str, max_records: usize) -> Result
     }
 
     let mut sorted = records;
-    sorted.sort_by(|a, b| get_update_date(a).cmp(&get_update_date(b)));
+    sorted.sort_by(|a, b| get_update_datetime(a).cmp(&get_update_datetime(b)));
     let skip_count = sorted.len().saturating_sub(max_records);
     let kept: Vec<Record> = sorted.into_iter().skip(skip_count).collect();
 
@@ -469,7 +492,8 @@ fn update_existing_record(
         }
         existing_types.sort();
         row.insert("torrent_type".into(), existing_types.join(","));
-        row.insert("update_date".into(), current_time.into());
+        row.insert("update_datetime".into(), current_time.into());
+        row.insert("last_visited_datetime".into(), current_time.into());
         row.insert("phase".into(), phase.into());
     } else {
         // New format: apply filtered links with priority
@@ -514,7 +538,8 @@ fn update_existing_record(
             }
         }
 
-        row.insert("update_date".into(), current_time.into());
+        row.insert("update_datetime".into(), current_time.into());
+        row.insert("last_visited_datetime".into(), current_time.into());
         row.insert("phase".into(), phase.into());
     }
 }
@@ -531,8 +556,9 @@ fn create_new_record(
     rec.insert("href".into(), href.into());
     rec.insert("phase".into(), phase.into());
     rec.insert("video_code".into(), video_code.into());
-    rec.insert("create_date".into(), current_time.into());
-    rec.insert("update_date".into(), current_time.into());
+    rec.insert("create_datetime".into(), current_time.into());
+    rec.insert("update_datetime".into(), current_time.into());
+    rec.insert("last_visited_datetime".into(), current_time.into());
 
     for cat in TORRENT_CATEGORIES {
         let link = magnet_links.get(*cat).cloned().unwrap_or_default();
@@ -713,20 +739,82 @@ pub fn should_skip_recent_yesterday_release(
         None => return Ok(false),
     };
     let entry_dict: &Bound<'_, PyDict> = entry.downcast()?;
-    let update_date_str: String = match entry_dict.get_item("update_date")? {
-        Some(v) => v.extract::<String>()?,
-        None => return Ok(false),
+
+    // Prefer last_visited_datetime, fall back to update_datetime
+    let visited_str: String = match entry_dict.get_item("last_visited_datetime")? {
+        Some(v) => {
+            let s = v.extract::<String>()?;
+            if s.is_empty() {
+                match entry_dict.get_item("update_datetime")? {
+                    Some(v2) => v2.extract::<String>()?,
+                    None => return Ok(false),
+                }
+            } else {
+                s
+            }
+        }
+        None => match entry_dict.get_item("update_datetime")? {
+            Some(v) => v.extract::<String>()?,
+            None => return Ok(false),
+        },
     };
-    if update_date_str.is_empty() {
+    if visited_str.is_empty() {
         return Ok(false);
     }
 
     let cutoff = (Local::now() - chrono::Duration::days(1))
         .format("%Y-%m-%d")
         .to_string();
-    let update_date_prefix = &update_date_str[..update_date_str.len().min(10)];
+    let prefix = &visited_str[..visited_str.len().min(10)];
 
-    Ok(update_date_prefix >= cutoff.as_str())
+    Ok(prefix >= cutoff.as_str())
+}
+
+#[pyfunction]
+pub fn batch_update_last_visited(
+    py: Python<'_>,
+    history_file: &str,
+    visited_hrefs: HashSet<String>,
+) -> PyResult<()> {
+    py.allow_threads(|| {
+        if let Err(e) = batch_update_last_visited_impl(history_file, &visited_hrefs) {
+            error!("Error batch-updating last_visited_datetime: {}", e);
+        }
+    });
+    Ok(())
+}
+
+fn batch_update_last_visited_impl(
+    history_file: &str,
+    visited_hrefs: &HashSet<String>,
+) -> Result<(), String> {
+    if visited_hrefs.is_empty() || !Path::new(history_file).exists() {
+        return Ok(());
+    }
+
+    let current_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let (_headers, mut records) = read_csv_records(history_file)?;
+
+    let mut updated = 0usize;
+    for rec in &mut records {
+        if let Some(href) = rec.get("href") {
+            if visited_hrefs.contains(href) {
+                rec.insert("last_visited_datetime".into(), current_time.clone());
+                updated += 1;
+            }
+        }
+    }
+
+    for rec in &mut records {
+        normalize_record(rec);
+    }
+
+    write_csv_records(history_file, &records)?;
+
+    if updated > 0 {
+        debug!("Updated last_visited_datetime for {} movies", updated);
+    }
+    Ok(())
 }
 
 #[pyfunction]

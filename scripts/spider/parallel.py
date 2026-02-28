@@ -10,7 +10,7 @@ from urllib.parse import urljoin
 from utils.logging_config import get_logger
 from utils.parser import parse_detail
 from utils.magnet_extractor import extract_magnets
-from utils.history_manager import has_complete_subtitles, should_skip_recent_yesterday_release, should_process_movie, save_parsed_movie_to_history
+from utils.history_manager import has_complete_subtitles, should_skip_recent_yesterday_release, should_process_movie, save_parsed_movie_to_history, batch_update_last_visited
 from utils.csv_writer import write_csv
 from utils.proxy_pool import create_proxy_pool_from_config
 from utils.request_handler import RequestHandler, RequestConfig
@@ -350,6 +350,7 @@ def process_detail_entries_parallel(
 
     rows: list = []
     phase_rows: list = []
+    visited_hrefs: set = set()
     failed = 0
     no_new_torrents = 0
     results_received = 0
@@ -368,6 +369,7 @@ def process_detail_entries_parallel(
             failed += 1
             continue
 
+        visited_hrefs.add(href)
         magnet_links = extract_magnets(result.magnets, idx_str)
 
         should_process, history_torrent_types = should_process_movie(
@@ -400,6 +402,9 @@ def process_detail_entries_parallel(
         detail_queue.put(None)
     for w in all_workers:
         w.join(timeout=10)
+
+    if use_history_for_saving and not dry_run and visited_hrefs:
+        batch_update_last_visited(history_file, visited_hrefs)
 
     logger.info(
         f"Phase {phase} parallel completed: {total_entries} discovered, "

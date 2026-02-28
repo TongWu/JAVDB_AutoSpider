@@ -19,9 +19,10 @@ from utils.history_manager import (
     get_missing_torrent_types,
     has_complete_subtitles,
     should_skip_recent_yesterday_release,
+    batch_update_last_visited,
     should_process_movie,
     check_torrent_in_history,
-    is_downloaded_torrent
+    is_downloaded_torrent,
 )
 
 
@@ -66,7 +67,7 @@ class TestSaveParsedMovieToHistory:
         
         # Create empty history file
         with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
-            f.write('href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
+            f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
         
         magnet_links = {'subtitle': 'magnet:?xt=urn:btih:abc123'}
         save_parsed_movie_to_history(history_file, '/v/NEW-001', 1, 'NEW-001', magnet_links)
@@ -87,8 +88,8 @@ class TestSaveParsedMovieToHistory:
         
         # Create history file with existing record
         with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
-            f.write('href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
-            f.write('/v/EXIST-001,1,EXIST-001,2024-01-01 10:00:00,2024-01-01 10:00:00,,,[2024-01-01]magnet:?xt=urn:btih:old,\n')
+            f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
+            f.write('/v/EXIST-001,1,EXIST-001,2024-01-01 10:00:00,2024-01-01 10:00:00,2024-01-01 10:00:00,,,[2024-01-01]magnet:?xt=urn:btih:old,\n')
         
         # Update with hacked_subtitle
         magnet_links = {'hacked_subtitle': 'magnet:?xt=urn:btih:new123'}
@@ -256,39 +257,39 @@ class TestHasCompleteSubtitles:
 class TestShouldSkipRecentYesterdayRelease:
     """Test cases for should_skip_recent_yesterday_release function."""
 
-    def test_yesterday_release_recently_updated_should_skip(self):
-        """Yesterday release + updated today → skip."""
+    def test_yesterday_release_recently_visited_should_skip(self):
+        """Yesterday release + visited today → skip."""
         from datetime import datetime
         today = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         history_data = {
-            '/v/ABC-123': {'update_date': today, 'torrent_types': ['subtitle']}
+            '/v/ABC-123': {'last_visited_datetime': today, 'update_datetime': today, 'torrent_types': ['subtitle']}
         }
         assert should_skip_recent_yesterday_release('/v/ABC-123', history_data, True) is True
 
-    def test_yesterday_release_updated_yesterday_should_skip(self):
-        """Yesterday release + updated yesterday → skip."""
+    def test_yesterday_release_visited_yesterday_should_skip(self):
+        """Yesterday release + visited yesterday → skip."""
         from datetime import datetime, timedelta
         yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
         history_data = {
-            '/v/ABC-123': {'update_date': yesterday, 'torrent_types': ['no_subtitle']}
+            '/v/ABC-123': {'last_visited_datetime': yesterday, 'update_datetime': yesterday, 'torrent_types': ['no_subtitle']}
         }
         assert should_skip_recent_yesterday_release('/v/ABC-123', history_data, True) is True
 
-    def test_yesterday_release_old_update_should_not_skip(self):
-        """Yesterday release + updated 3 days ago → do not skip."""
+    def test_yesterday_release_old_visit_should_not_skip(self):
+        """Yesterday release + visited 3 days ago → do not skip."""
         from datetime import datetime, timedelta
         old_date = (datetime.now() - timedelta(days=3)).strftime('%Y-%m-%d %H:%M:%S')
         history_data = {
-            '/v/ABC-123': {'update_date': old_date, 'torrent_types': ['subtitle']}
+            '/v/ABC-123': {'last_visited_datetime': old_date, 'update_datetime': old_date, 'torrent_types': ['subtitle']}
         }
         assert should_skip_recent_yesterday_release('/v/ABC-123', history_data, True) is False
 
-    def test_today_release_recently_updated_should_not_skip(self):
-        """Today release (is_yesterday_release=False) + recent update → do not skip."""
+    def test_today_release_recently_visited_should_not_skip(self):
+        """Today release (is_yesterday_release=False) + recent visit → do not skip."""
         from datetime import datetime
         today = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         history_data = {
-            '/v/ABC-123': {'update_date': today, 'torrent_types': ['subtitle']}
+            '/v/ABC-123': {'last_visited_datetime': today, 'update_datetime': today, 'torrent_types': ['subtitle']}
         }
         assert should_skip_recent_yesterday_release('/v/ABC-123', history_data, False) is False
 
@@ -300,12 +301,21 @@ class TestShouldSkipRecentYesterdayRelease:
         """None history data → do not skip."""
         assert should_skip_recent_yesterday_release('/v/ABC-123', None, True) is False
 
-    def test_empty_update_date_should_not_skip(self):
-        """Empty update_date → do not skip."""
+    def test_empty_last_visited_datetime_should_not_skip(self):
+        """Empty last_visited_datetime and update_datetime → do not skip."""
         history_data = {
-            '/v/ABC-123': {'update_date': '', 'torrent_types': ['subtitle']}
+            '/v/ABC-123': {'last_visited_datetime': '', 'update_datetime': '', 'torrent_types': ['subtitle']}
         }
         assert should_skip_recent_yesterday_release('/v/ABC-123', history_data, True) is False
+
+    def test_fallback_to_update_datetime(self):
+        """When last_visited_datetime is empty, fall back to update_datetime."""
+        from datetime import datetime
+        today = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        history_data = {
+            '/v/ABC-123': {'last_visited_datetime': '', 'update_datetime': today, 'torrent_types': ['subtitle']}
+        }
+        assert should_skip_recent_yesterday_release('/v/ABC-123', history_data, True) is True
 
 
 class TestShouldProcessMovie:
@@ -349,7 +359,7 @@ class TestCheckTorrentInHistory:
         """Test when torrent is not in history."""
         history_file = os.path.join(temp_dir, 'history.csv')
         with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
-            f.write('href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
+            f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
         
         result = check_torrent_in_history(history_file, '/v/ABC-123', 'subtitle')
         assert result is False
@@ -402,23 +412,25 @@ class TestCleanupHistoryFile:
                 'href': '/v/ABC-123',
                 'phase': '1',
                 'video_code': 'ABC-123',
-                'create_date': '2024-01-01 10:00:00',
-                'update_date': '2024-01-02 10:00:00',
+                'create_datetime': '2024-01-01 10:00:00',
+                'update_datetime': '2024-01-02 10:00:00',
+                'last_visited_datetime': '2024-01-02 10:00:00',
                 'hacked_subtitle': '',
                 'hacked_no_subtitle': '',
                 'subtitle': 'magnet:?xt=urn:btih:abc',
-                'no_subtitle': ''
+                'no_subtitle': '',
             },
             '/v/DEF-456': {
                 'href': '/v/DEF-456',
                 'phase': '2',
                 'video_code': 'DEF-456',
-                'create_date': '2024-01-03 10:00:00',
-                'update_date': '2024-01-03 10:00:00',
+                'create_datetime': '2024-01-03 10:00:00',
+                'update_datetime': '2024-01-03 10:00:00',
+                'last_visited_datetime': '2024-01-03 10:00:00',
                 'hacked_subtitle': '',
                 'hacked_no_subtitle': '',
                 'subtitle': '',
-                'no_subtitle': 'magnet:?xt=urn:btih:def'
+                'no_subtitle': 'magnet:?xt=urn:btih:def',
             }
         }
         
@@ -443,9 +455,9 @@ class TestMaintainHistoryLimit:
         
         # Create file with multiple records
         with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
-            f.write('href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
+            f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
             for i in range(10):
-                f.write(f'/v/TEST-{i:03d},1,TEST-{i:03d},2024-01-{i+1:02d} 10:00:00,2024-01-{i+1:02d} 10:00:00,,,,\n')
+                f.write(f'/v/TEST-{i:03d},1,TEST-{i:03d},2024-01-{i+1:02d} 10:00:00,2024-01-{i+1:02d} 10:00:00,2024-01-{i+1:02d} 10:00:00,,,,\n')
         
         # Maintain limit of 5
         maintain_history_limit(history_file, max_records=5)
@@ -484,8 +496,8 @@ class TestAddDownloadedIndicatorToCsv:
         
         # Create history file
         with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
-            f.write('href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
-            f.write('/v/ABC-123,1,ABC-123,2024-01-01 10:00:00,2024-01-01 10:00:00,[2024-01-01]magnet:?xt=urn:btih:abc,,,\n')
+            f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
+            f.write('/v/ABC-123,1,ABC-123,2024-01-01 10:00:00,2024-01-01 10:00:00,2024-01-01 10:00:00,[2024-01-01]magnet:?xt=urn:btih:abc,,,\n')
         
         result = add_downloaded_indicator_to_csv(csv_file, history_file)
         
@@ -514,7 +526,7 @@ class TestMarkTorrentAsDownloaded:
         
         # Create empty history file with header
         with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
-            f.write('href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
+            f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
         
         result = mark_torrent_as_downloaded(
             history_file, '/v/NEW-001', 'NEW-001', 'subtitle'
@@ -556,9 +568,9 @@ class TestLoadParsedMoviesHistoryExtended:
         
         # Create file with duplicate hrefs
         with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
-            f.write('href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
-            f.write('/v/DUP-001,1,DUP-001,2024-01-01 10:00:00,2024-01-01 10:00:00,,,,\n')
-            f.write('/v/DUP-001,1,DUP-001,2024-01-01 10:00:00,2024-01-05 10:00:00,magnet:abc,,,\n')
+            f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
+            f.write('/v/DUP-001,1,DUP-001,2024-01-01 10:00:00,2024-01-01 10:00:00,2024-01-01 10:00:00,,,,\n')
+            f.write('/v/DUP-001,1,DUP-001,2024-01-01 10:00:00,2024-01-05 10:00:00,2024-01-05 10:00:00,magnet:abc,,,\n')
         
         result = load_parsed_movies_history(history_file)
         
@@ -573,9 +585,9 @@ class TestLoadParsedMoviesHistoryExtended:
         history_file = os.path.join(temp_dir, 'history.csv')
         
         with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
-            f.write('href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
-            f.write('/v/TEST-001,1,TEST-001,2024-01-01 10:00:00,2024-01-01 10:00:00,,,,\n')
-            f.write('/v/TEST-002,2,TEST-002,2024-01-02 10:00:00,2024-01-02 10:00:00,,,,\n')
+            f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
+            f.write('/v/TEST-001,1,TEST-001,2024-01-01 10:00:00,2024-01-01 10:00:00,2024-01-01 10:00:00,,,,\n')
+            f.write('/v/TEST-002,2,TEST-002,2024-01-02 10:00:00,2024-01-02 10:00:00,2024-01-02 10:00:00,,,,\n')
         
         result = load_parsed_movies_history(history_file, phase=2)
         
@@ -658,7 +670,7 @@ class TestLoadHistoryEdgeCases:
         history_file = os.path.join(temp_dir, 'header_only.csv')
         
         with open(history_file, 'w', encoding='utf-8-sig') as f:
-            f.write('href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
+            f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
         
         result = load_parsed_movies_history(history_file)
         
@@ -718,10 +730,10 @@ class TestMaintainHistoryLimitExtended:
         history_file = os.path.join(temp_dir, 'history_preserve.csv')
         
         with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
-            f.write('href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
+            f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
             # Write 10 records with increasing dates
             for i in range(10):
-                f.write(f'/v/TEST-{i:03d},1,TEST-{i:03d},2024-01-{i+1:02d} 10:00:00,2024-01-{i+1:02d} 10:00:00,,,,\n')
+                f.write(f'/v/TEST-{i:03d},1,TEST-{i:03d},2024-01-{i+1:02d} 10:00:00,2024-01-{i+1:02d} 10:00:00,2024-01-{i+1:02d} 10:00:00,,,,\n')
         
         maintain_history_limit(history_file, max_records=5)
         
@@ -744,7 +756,7 @@ class TestSaveAndLoadIntegration:
         
         # Create empty history file
         with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
-            f.write('href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
+            f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
         
         # Save a new record
         magnet_links = {'subtitle': 'magnet:?xt=urn:btih:test123'}
@@ -755,4 +767,60 @@ class TestSaveAndLoadIntegration:
         
         assert '/v/INT-001' in result
         assert 'subtitle' in result['/v/INT-001']['torrent_types']
+
+
+class TestBatchUpdateLastVisited:
+    """Test cases for batch_update_last_visited function."""
+
+    def test_updates_visited_hrefs(self, temp_dir):
+        """Test that last_visited_datetime is updated for visited hrefs."""
+        history_file = os.path.join(temp_dir, 'history.csv')
+        with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
+            f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
+            f.write('/v/ABC-123,1,ABC-123,2024-01-01 10:00:00,2024-01-01 10:00:00,2024-01-01 10:00:00,,,,\n')
+            f.write('/v/DEF-456,1,DEF-456,2024-01-02 10:00:00,2024-01-02 10:00:00,2024-01-02 10:00:00,,,,\n')
+
+        batch_update_last_visited(history_file, {'/v/ABC-123'})
+
+        with open(history_file, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            records = {r['href']: r for r in reader}
+
+        assert records['/v/ABC-123']['last_visited_datetime'] != '2024-01-01 10:00:00'
+        assert records['/v/DEF-456']['last_visited_datetime'] == '2024-01-02 10:00:00'
+
+    def test_empty_visited_set(self, temp_dir):
+        """Test that empty visited set is a no-op."""
+        history_file = os.path.join(temp_dir, 'history.csv')
+        with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
+            f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
+            f.write('/v/ABC-123,1,ABC-123,2024-01-01 10:00:00,2024-01-01 10:00:00,2024-01-01 10:00:00,,,,\n')
+
+        batch_update_last_visited(history_file, set())
+
+        with open(history_file, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            records = list(reader)
+
+        assert records[0]['last_visited_datetime'] == '2024-01-01 10:00:00'
+
+    def test_nonexistent_file(self, temp_dir):
+        """Test that nonexistent file is handled gracefully."""
+        history_file = os.path.join(temp_dir, 'nonexistent.csv')
+        batch_update_last_visited(history_file, {'/v/ABC-123'})
+
+    def test_unknown_hrefs_ignored(self, temp_dir):
+        """Test that hrefs not in history are silently ignored."""
+        history_file = os.path.join(temp_dir, 'history.csv')
+        with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
+            f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
+            f.write('/v/ABC-123,1,ABC-123,2024-01-01 10:00:00,2024-01-01 10:00:00,2024-01-01 10:00:00,,,,\n')
+
+        batch_update_last_visited(history_file, {'/v/UNKNOWN'})
+
+        with open(history_file, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            records = list(reader)
+
+        assert records[0]['last_visited_datetime'] == '2024-01-01 10:00:00'
 
