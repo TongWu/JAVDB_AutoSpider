@@ -1,14 +1,78 @@
+"""Magnet link extraction and categorisation.
+
+Tries to use the high-performance Rust implementation from
+``javdb_rust_core.extract_magnets``.  Falls back to the pure-Python
+implementation transparently when the Rust extension is unavailable.
+"""
+
 import logging
 from utils.logging_config import get_logger, setup_logging
+
 try:
     from config import LOG_LEVEL
 except ImportError:
     LOG_LEVEL = 'INFO'
+
 setup_logging(log_level=LOG_LEVEL)
 logger = get_logger(__name__)
 
+# ---------------------------------------------------------------------------
+# Try Rust implementation
+# ---------------------------------------------------------------------------
+
+try:
+    from javdb_rust_core import extract_magnets as _rust_extract_magnets
+    RUST_MAGNET_AVAILABLE = True
+    logger.debug("✅ Rust magnet extractor available")
+except ImportError:
+    RUST_MAGNET_AVAILABLE = False
+    logger.debug("⚠️  Rust magnet extractor not available, using Python fallback")
+
+
 def extract_magnets(magnets, index=None):
-    """Extract magnet links based on categories"""
+    """Extract magnet links based on categories.
+
+    Each magnet in *magnets* is a dict with keys:
+    ``href``, ``name``, ``tags`` (list[str]), ``size``, ``timestamp``.
+
+    Returns a dict with keys: ``subtitle``, ``hacked_subtitle``,
+    ``hacked_no_subtitle``, ``no_subtitle`` (and their ``size_*`` counterparts).
+    """
+    if RUST_MAGNET_AVAILABLE:
+        try:
+            result = _rust_extract_magnets(magnets)
+            prefix = f"[{index}]" if index is not None else ""
+            if not any(result.get(k) for k in ('subtitle', 'hacked_subtitle', 'hacked_no_subtitle', 'no_subtitle')):
+                logger.warning(f"{prefix} No suitable magnet found")
+            return result
+        except Exception as e:
+            logger.debug(f"Rust extract_magnets failed ({e}), falling back to Python")
+
+    return _python_extract_magnets(magnets, index)
+
+
+# ---------------------------------------------------------------------------
+# Pure-Python fallback
+# ---------------------------------------------------------------------------
+
+def _parse_size(size_str):
+    if not size_str:
+        return 0
+    size_str = size_str.upper()
+    if 'GB' in size_str:
+        return float(size_str.replace('GB', '').strip()) * 1024 * 1024 * 1024
+    elif 'MB' in size_str:
+        return float(size_str.replace('MB', '').strip()) * 1024 * 1024
+    elif 'KB' in size_str:
+        return float(size_str.replace('KB', '').strip()) * 1024
+    return 0
+
+
+def _sort_key(m):
+    return (m.get('timestamp', ''), _parse_size(m.get('size', '')))
+
+
+def _python_extract_magnets(magnets, index=None):
     result = {
         'hacked_subtitle': '',
         'hacked_no_subtitle': '',
@@ -17,158 +81,74 @@ def extract_magnets(magnets, index=None):
         'size_hacked_subtitle': '',
         'size_hacked_no_subtitle': '',
         'size_subtitle': '',
-        'size_no_subtitle': ''
+        'size_no_subtitle': '',
     }
-    
+
     prefix = f"[{index}]" if index is not None else ""
-    
-    # Extract subtitle magnets (current magnet_字幕 logic)
-    subtitle_magnets = []
-    for m in magnets:
-        if any('字幕' in tag or 'Subtitle' in tag for tag in m['tags']):
-            # Exclude torrents with ".无码破解" in name (these belong to hacked category)
-            if '.无码破解' not in m['name']:
-                subtitle_magnets.append(m)
-    
+
+    # --- subtitle ---
+    subtitle_magnets = [
+        m for m in magnets
+        if any('字幕' in tag or 'Subtitle' in tag for tag in m['tags'])
+        and '.无码破解' not in m['name']
+    ]
     if subtitle_magnets:
-        # Sort by timestamp first (latest first), then by size (biggest first)
-        def parse_size(size_str):
-            """Parse size string to bytes for comparison"""
-            if not size_str:
-                return 0
-            size_str = size_str.upper()
-            if 'GB' in size_str:
-                return float(size_str.replace('GB', '').strip()) * 1024 * 1024 * 1024
-            elif 'MB' in size_str:
-                return float(size_str.replace('MB', '').strip()) * 1024 * 1024
-            elif 'KB' in size_str:
-                return float(size_str.replace('KB', '').strip()) * 1024
-            else:
-                return 0
-        
-        def parse_timestamp(time_str):
-            """Parse timestamp string to comparable value"""
-            if not time_str:
-                return ''
-            # Keep timestamp as string for sorting (newer timestamps come first alphabetically)
-            return time_str
-        
-        # Sort by timestamp first (latest first), then by size (biggest first)
-        subtitle_magnets.sort(key=lambda x: (parse_timestamp(x['timestamp']), parse_size(x['size'])), reverse=True)
-        
-        best_subtitle = subtitle_magnets[0]
-        result['subtitle'] = best_subtitle['href']
-        result['size_subtitle'] = best_subtitle['size']
-        logger.debug(f"{prefix} Found subtitle magnet: {best_subtitle['name']} (size: {best_subtitle['size']}, time: {best_subtitle['timestamp']})")
-    
-    # Extract hacked magnets based on new logic
+        subtitle_magnets.sort(key=_sort_key, reverse=True)
+        best = subtitle_magnets[0]
+        result['subtitle'] = best['href']
+        result['size_subtitle'] = best['size']
+        logger.debug(f"{prefix} Found subtitle magnet: {best['name']} (size: {best['size']}, time: {best['timestamp']})")
+
+    # --- hacked ---
     hacked_subtitle_magnets = []
     hacked_no_subtitle_magnets = []
-    
     for m in magnets:
-        # Check for hacked_subtitle: -UC or -C.无码破解 in torrent link
-        if '-UC' in m['name'] or '-CU' in m['name'] or '-C.无码破解' in m['name'] or '-U-C' in m['name'] or '-C-U' in m['name']:
+        name = m['name']
+        if any(p in name for p in ('-UC', '-CU', '-C.无码破解', '-U-C', '-C-U')):
             hacked_subtitle_magnets.append(m)
-        # Check for hacked_no_subtitle: -U.torrent or -U.无码破解 in torrent link
-        elif '-U' in m['name'] or '.无码破解' in m['name']:
+        elif '-U' in name or '.无码破解' in name:
             hacked_no_subtitle_magnets.append(m)
-    
-    # Select best hacked_subtitle if available
+
     if hacked_subtitle_magnets:
-        def parse_size(size_str):
-            if not size_str:
-                return 0
-            size_str = size_str.upper()
-            if 'GB' in size_str:
-                return float(size_str.replace('GB', '').strip()) * 1024 * 1024 * 1024
-            elif 'MB' in size_str:
-                return float(size_str.replace('MB', '').strip()) * 1024 * 1024
-            elif 'KB' in size_str:
-                return float(size_str.replace('KB', '').strip()) * 1024
-            else:
-                return 0
-        def parse_timestamp(time_str):
-            if not time_str:
-                return ''
-            return time_str
-        hacked_subtitle_magnets.sort(key=lambda x: (parse_timestamp(x['timestamp']), parse_size(x['size'])), reverse=True)
-        best_hacked_subtitle = hacked_subtitle_magnets[0]
-        result['hacked_subtitle'] = best_hacked_subtitle['href']
-        result['size_hacked_subtitle'] = best_hacked_subtitle['size']
-        logger.debug(f"{prefix} Found hacked_subtitle magnet: {best_hacked_subtitle['name']} (size: {best_hacked_subtitle['size']}, time: {best_hacked_subtitle['timestamp']})")
-    
-    # Select best hacked_no_subtitle if available and no hacked_subtitle
+        hacked_subtitle_magnets.sort(key=_sort_key, reverse=True)
+        best = hacked_subtitle_magnets[0]
+        result['hacked_subtitle'] = best['href']
+        result['size_hacked_subtitle'] = best['size']
+        logger.debug(f"{prefix} Found hacked_subtitle magnet: {best['name']} (size: {best['size']}, time: {best['timestamp']})")
     elif hacked_no_subtitle_magnets:
-        def parse_size(size_str):
-            if not size_str:
-                return 0
-            size_str = size_str.upper()
-            if 'GB' in size_str:
-                return float(size_str.replace('GB', '').strip()) * 1024 * 1024 * 1024
-            elif 'MB' in size_str:
-                return float(size_str.replace('MB', '').strip()) * 1024 * 1024
-            elif 'KB' in size_str:
-                return float(size_str.replace('KB', '').strip()) * 1024
-            else:
-                return 0
-        def parse_timestamp(time_str):
-            if not time_str:
-                return ''
-            return time_str
-        hacked_no_subtitle_magnets.sort(key=lambda x: (parse_timestamp(x['timestamp']), parse_size(x['size'])), reverse=True)
-        best_hacked_no_subtitle = hacked_no_subtitle_magnets[0]
-        result['hacked_no_subtitle'] = best_hacked_no_subtitle['href']
-        result['size_hacked_no_subtitle'] = best_hacked_no_subtitle['size']
-        logger.debug(f"{prefix} Found hacked_no_subtitle magnet: {best_hacked_no_subtitle['name']} (size: {best_hacked_no_subtitle['size']}, time: {best_hacked_no_subtitle['timestamp']})")
-    
-    # For no_subtitle, prefer 4k torrent if available, otherwise normal
-    # This should always run to populate no_subtitle when appropriate
+        hacked_no_subtitle_magnets.sort(key=_sort_key, reverse=True)
+        best = hacked_no_subtitle_magnets[0]
+        result['hacked_no_subtitle'] = best['href']
+        result['size_hacked_no_subtitle'] = best['size']
+        logger.debug(f"{prefix} Found hacked_no_subtitle magnet: {best['name']} (size: {best['size']}, time: {best['timestamp']})")
+
+    # --- no_subtitle (prefer 4k) ---
     k4_magnets = []
     normal_magnets = []
     for m in magnets:
-        # Skip if it's already categorized as subtitle or hacked
-        is_subtitle = any('字幕' in tag for tag in m['tags']) and '.无码破解' not in m['name']
-        is_hacked = '-UC' in m['name'] or '-U' in m['name'] or '.无码破解' in m['name']
-        
+        name = m['name']
+        is_subtitle = any('字幕' in tag for tag in m['tags']) and '.无码破解' not in name
+        is_hacked = any(p in name for p in ('-UC', '-U', '.无码破解'))
         if not is_subtitle and not is_hacked:
-            is_4k = '-4k' in m['name'].lower() or '4k' in m['name'].lower()
-            if is_4k:
+            if '4k' in name.lower():
                 k4_magnets.append(m)
             else:
                 normal_magnets.append(m)
-    
-    def parse_size(size_str):
-        if not size_str:
-            return 0
-        size_str = size_str.upper()
-        if 'GB' in size_str:
-            return float(size_str.replace('GB', '').strip()) * 1024 * 1024 * 1024
-        elif 'MB' in size_str:
-            return float(size_str.replace('MB', '').strip()) * 1024 * 1024
-        elif 'KB' in size_str:
-            return float(size_str.replace('KB', '').strip()) * 1024
-        else:
-            return 0
-    def parse_timestamp(time_str):
-        if not time_str:
-            return ''
-        return time_str
-    
+
     if k4_magnets:
-        # Prefer 4k torrents for no_subtitle
-        k4_magnets.sort(key=lambda x: (parse_timestamp(x['timestamp']), parse_size(x['size'])), reverse=True)
-        best_4k = k4_magnets[0]
-        result['no_subtitle'] = best_4k['href']
-        result['size_no_subtitle'] = best_4k['size']
-        logger.debug(f"{prefix} Found 4K magnet for no_subtitle: {best_4k['name']} (size: {best_4k['size']}, time: {best_4k['timestamp']})")
+        k4_magnets.sort(key=_sort_key, reverse=True)
+        best = k4_magnets[0]
+        result['no_subtitle'] = best['href']
+        result['size_no_subtitle'] = best['size']
+        logger.debug(f"{prefix} Found 4K magnet for no_subtitle: {best['name']} (size: {best['size']}, time: {best['timestamp']})")
     elif normal_magnets:
-        normal_magnets.sort(key=lambda x: (parse_timestamp(x['timestamp']), parse_size(x['size'])), reverse=True)
-        best_normal = normal_magnets[0]
-        result['no_subtitle'] = best_normal['href']
-        result['size_no_subtitle'] = best_normal['size']
-        logger.debug(f"{prefix} Found normal magnet for no_subtitle: {best_normal['name']} (size: {best_normal['size']}, time: {best_normal['timestamp']})")
-    
-    if not result['subtitle'] and not result['hacked_subtitle'] and not result['hacked_no_subtitle'] and not result['no_subtitle']:
+        normal_magnets.sort(key=_sort_key, reverse=True)
+        best = normal_magnets[0]
+        result['no_subtitle'] = best['href']
+        result['size_no_subtitle'] = best['size']
+        logger.debug(f"{prefix} Found normal magnet for no_subtitle: {best['name']} (size: {best['size']}, time: {best['timestamp']})")
+
+    if not any(result[k] for k in ('subtitle', 'hacked_subtitle', 'hacked_no_subtitle', 'no_subtitle')):
         logger.warning(f"{prefix} No suitable magnet found")
-    
-    return result 
+
+    return result
