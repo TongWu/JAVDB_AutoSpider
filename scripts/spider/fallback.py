@@ -229,7 +229,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
                 state.global_proxy_pool.mark_failure_and_switch()
             proxy_was_banned = True
 
-    for attempt in range(max_switches):
+    for _ in range(max_switches):
         current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
         html, success, is_valid_empty, used_cf = try_proxy_direct_then_cf(current_proxy_name)
         if success:
