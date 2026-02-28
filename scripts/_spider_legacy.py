@@ -701,8 +701,8 @@ def can_attempt_login(is_adhoc_mode: bool, is_index_page: bool = False) -> bool:
 # Adhoc URL Magnet Filter Functions
 # ============================================================
 
-def get_page_url(page_num, phase=1, custom_url=None):
-    """Generate URL for a specific page number and phase."""
+def get_page_url(page_num, custom_url=None):
+    """Generate URL for a specific page number."""
     return _url_helper_get_page_url(page_num, BASE_URL, custom_url)
 
 
@@ -1811,7 +1811,7 @@ def fetch_all_index_pages(
     csv_name_resolved = False
 
     while True:
-        page_url = get_page_url(page_num, phase=1, custom_url=custom_url)
+        page_url = get_page_url(page_num, custom_url=custom_url)
         logger.debug(f"[Page {page_num}] Fetching: {page_url}")
 
         index_html, has_movie_list, proxy_was_banned, effective_use_proxy, effective_use_cf_bypass, is_valid_empty_page = fetch_index_page_with_fallback(

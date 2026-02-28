@@ -20,8 +20,8 @@ except ImportError:
     _RUST_VALIDATE = False
 
 
-def get_page_url(page_num, phase=1, custom_url=None):
-    """Generate URL for a specific page number and phase."""
+def get_page_url(page_num, custom_url=None):
+    """Generate URL for a specific page number."""
     return _url_helper_get_page_url(page_num, BASE_URL, custom_url)
 
 
