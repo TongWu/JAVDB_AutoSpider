@@ -275,7 +275,6 @@ def process_detail_entries_parallel(
         rows, skipped_history, failed, no_new_torrents
     """
     total_entries = len(entries)
-    phase_prefix = '' if phase == 1 else 'P2-'
 
     detail_queue: queue_module.Queue[Optional[DetailTask]] = queue_module.Queue()
     result_queue: queue_module.Queue[DetailResult] = queue_module.Queue()
@@ -309,13 +308,13 @@ def process_detail_entries_parallel(
 
         if has_complete_subtitles(href, history_data):
             logger.info(
-                f"[{phase_prefix}{i}/{total_entries}] [Page {entry['page']}] "
+                f"[{i}/{total_entries}] [Page {entry['page']}] "
                 f"Skipping {entry['video_code']} — already has subtitle and hacked_subtitle in history"
             )
             continue
 
         detail_url = urljoin(BASE_URL, href)
-        entry_index = f"{phase_prefix}{i}/{total_entries}"
+        entry_index = f"{i}/{total_entries}"
         logger.debug(f"[{entry_index}] [Page {entry['page']}] Queued {entry['video_code'] or href}")
         detail_queue.put(DetailTask(
             url=detail_url,
