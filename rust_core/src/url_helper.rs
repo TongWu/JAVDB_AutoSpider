@@ -173,8 +173,11 @@ pub fn get_page_url(page_num: i32, base_url: &str, custom_url: Option<&str>) -> 
         return format!("{cu}{sep}page={page_num}");
     }
 
-    let sep = if base_url.contains('?') { '&' } else { '?' };
-    format!("{base_url}{sep}page={page_num}")
+    if base_url.ends_with(".com") {
+        format!("{base_url}/?page={page_num}")
+    } else {
+        format!("{base_url}&page={page_num}")
+    }
 }
 
 #[pyfunction]
@@ -190,9 +193,12 @@ pub fn sanitize_filename_part(text: &str, max_length: usize) -> String {
     sanitized = WHITESPACE_RE.replace_all(&sanitized, "_").to_string();
     sanitized = NON_SAFE_CHAR_RE.replace_all(&sanitized, "").to_string();
 
-    // Truncate by character count to match Python's text[:max_length] (not byte count)
-    if sanitized.chars().count() > max_length {
-        sanitized = sanitized.chars().take(max_length).collect();
+    if sanitized.len() > max_length {
+        let mut end = max_length;
+        while end > 0 && !sanitized.is_char_boundary(end) {
+            end -= 1;
+        }
+        sanitized.truncate(end);
     }
 
     sanitized

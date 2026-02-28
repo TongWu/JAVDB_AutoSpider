@@ -20,8 +20,8 @@ except ImportError:
     _RUST_VALIDATE = False
 
 
-def get_page_url(page_num, custom_url=None):
-    """Generate URL for a specific page number."""
+def get_page_url(page_num, phase=1, custom_url=None):
+    """Generate URL for a specific page number and phase."""
     return _url_helper_get_page_url(page_num, BASE_URL, custom_url)
 
 
@@ -100,9 +100,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
                 return html, False, True
             else:
                 last_failed_html = html
-                logger.debug(
-                    f"[Page {page_num}] Validation failed (no movie list, age_modal={age_modal is not None}, title={title_text!r}): {context_msg}"
-                )
+                logger.debug(f"[Page {page_num}] Validation failed (no movie list, age_modal={age_modal is not None}): {context_msg}")
         return None, False, False
 
     def try_fetch(u_proxy, u_cf, context_msg):
@@ -189,7 +187,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
     # --- Phase 1: Login Refresh ---
     if is_adhoc_mode and can_attempt_login(is_adhoc_mode, is_index_page=True):
         logger.info(f"[Page {page_num}] Attempting login refresh...")
-        login_success, _ = attempt_login_refresh()
+        login_success, new_cookie = attempt_login_refresh()
         if login_success and use_proxy and state.global_proxy_pool:
             current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
             html, success, is_valid_empty, used_cf = try_proxy_direct_then_cf(current_proxy_name)
@@ -202,7 +200,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
         elif login_success and not use_proxy:
             html, success, is_valid_empty = try_fetch(
                 False, use_cf_bypass,
-                "Fallback: Retry with refreshed cookie (No Proxy)")
+                f"Fallback: Retry with refreshed cookie (No Proxy)")
             if success:
                 return html, True, False, False, use_cf_bypass, False
             if is_valid_empty:
@@ -229,7 +227,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
                 state.global_proxy_pool.mark_failure_and_switch()
             proxy_was_banned = True
 
-    for _ in range(max_switches):
+    for attempt in range(max_switches):
         current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
         html, success, is_valid_empty, used_cf = try_proxy_direct_then_cf(current_proxy_name)
         if success:
@@ -360,7 +358,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
     # --- Phase 1: Login Refresh ---
     if can_attempt_login(is_adhoc_mode, is_index_page=False):
         logger.info(f"[{entry_index}] Attempting login refresh...")
-        login_success, _ = attempt_login_refresh()
+        login_success, new_cookie = attempt_login_refresh()
         if login_success and use_proxy and state.global_proxy_pool:
             current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
             magnets, actor_info, success, used_cf = try_proxy_direct_then_cf(current_proxy_name, skip_sleep=True)
@@ -371,7 +369,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
         elif login_success and not use_proxy:
             magnets, actor_info, success = try_fetch_and_parse(
                 False, use_cf_bypass,
-                "Detail: Retry with refreshed cookie (No Proxy)",
+                f"Detail: Retry with refreshed cookie (No Proxy)",
                 skip_sleep=True)
             if success:
                 return magnets, actor_info, True, False, use_cf_bypass
@@ -386,7 +384,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
     max_switches = state.global_proxy_pool.get_proxy_count() if PROXY_MODE == 'pool' else 1
     max_switches = min(max_switches, 10)
 
-    for _ in range(max_switches):
+    for attempt in range(max_switches):
         switched = state.global_proxy_pool.mark_failure_and_switch()
         if not switched:
             logger.warning(f"[{entry_index}] No more proxies available in pool")
