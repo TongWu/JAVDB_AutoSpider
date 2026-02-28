@@ -32,6 +32,15 @@ from scripts.spider.config_loader import (
 
 logger = get_logger(__name__)
 
+
+def _requeue_front(q: queue_module.Queue, item) -> None:
+    """Put *item* at the front of a Queue so it gets picked up next."""
+    with q.mutex:
+        q.queue.appendleft(item)
+        q.unfinished_tasks += 1
+        q.not_empty.notify()
+
+
 # ---------------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------------
@@ -99,9 +108,6 @@ class ProxyWorker(threading.Thread):
 
         self.needs_cf_bypass = False
         self._first_request = True
-        self._success_count = 0
-        self._batch_cooldown = 120.0
-        self._batch_size = 10
 
         self._proxy_pool = create_proxy_pool_from_config(
             [proxy_config],
@@ -217,31 +223,23 @@ class ProxyWorker(threading.Thread):
                         if self._try_login_refresh():
                             task.failed_proxies.clear()
                             task.retry_count += 1
-                            self.detail_queue.put(task)
+                            _requeue_front(self.detail_queue, task)
                             continue
                     self.result_queue.put(DetailResult(
                         task=task, magnets=[], actor_info='',
                         parse_success=False, used_cf_bypass=False,
                     ))
                     continue
-                self.detail_queue.put(task)
+                _requeue_front(self.detail_queue, task)
                 time.sleep(0.1)
                 continue
 
             if not self._first_request:
-                if self._success_count > 0 and self._success_count % self._batch_size == 0:
-                    logger.info(
-                        f"[{self.proxy_name}] Batch cooldown after {self._success_count} movies: "
-                        f"{self._batch_cooldown:.0f}s"
-                    )
-                    time.sleep(self._batch_cooldown)
-                else:
-                    self._sleep_mgr.sleep()
+                self._sleep_mgr.sleep()
             self._first_request = False
 
             magnets, actor_info, success, used_cf = self._try_direct_then_cf(task)
             if success:
-                self._success_count += 1
                 cf_tag = " +CF" if used_cf else ""
                 logger.info(
                     f"[{task.entry_index}] "
@@ -255,7 +253,7 @@ class ProxyWorker(threading.Thread):
             else:
                 task.failed_proxies.add(self.proxy_name)
                 task.retry_count += 1
-                self.detail_queue.put(task)
+                _requeue_front(self.detail_queue, task)
                 logger.info(
                     f"[{self.proxy_name}] [{task.entry_index}] "
                     f"Failed {task.entry.get('video_code', '')}, re-queued "
