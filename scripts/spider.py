@@ -2,11 +2,15 @@ import requests
 import csv
 import time
 import re
+import random
 import logging
 import os
 import argparse
 import sys
-from typing import Optional, Dict, Any
+import threading
+import queue as queue_module
+from dataclasses import dataclass, field
+from typing import Optional, Dict, Any, List, Tuple
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 from urllib.parse import urljoin, urlparse, quote
@@ -37,10 +41,10 @@ try:
     from config import (
         BASE_URL, START_PAGE, END_PAGE,
         REPORTS_DIR, DAILY_REPORT_DIR, AD_HOC_DIR, PARSED_MOVIES_CSV,
-        SPIDER_LOG_FILE, LOG_LEVEL, PAGE_SLEEP, MOVIE_SLEEP,
+        SPIDER_LOG_FILE, LOG_LEVEL, PAGE_SLEEP, MOVIE_SLEEP_MIN, MOVIE_SLEEP_MAX,
         JAVDB_SESSION_COOKIE, PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS,
         PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES,
-        CF_TURNSTILE_COOLDOWN, PHASE_TRANSITION_COOLDOWN, FALLBACK_COOLDOWN,
+        CF_TURNSTILE_COOLDOWN, FALLBACK_COOLDOWN,
         GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH
     )
 except ImportError:
@@ -55,7 +59,8 @@ except ImportError:
     SPIDER_LOG_FILE = 'logs/spider.log'
     LOG_LEVEL = 'INFO'
     PAGE_SLEEP = 2
-    MOVIE_SLEEP = 5
+    MOVIE_SLEEP_MIN = 5
+    MOVIE_SLEEP_MAX = 15
     JAVDB_SESSION_COOKIE = None
     PHASE2_MIN_RATE = 4.0
     PHASE2_MIN_COMMENTS = 100
@@ -63,7 +68,6 @@ except ImportError:
     PROXY_HTTPS = None
     PROXY_MODULES = ['all']
     CF_TURNSTILE_COOLDOWN = 10
-    PHASE_TRANSITION_COOLDOWN = 30
     FALLBACK_COOLDOWN = 30
     GIT_USERNAME = 'github-actions'
     GIT_PASSWORD = ''
@@ -141,6 +145,89 @@ from utils.proxy_pool import ProxyPool, create_proxy_pool_from_config
 # Import unified request handler
 from utils.request_handler import RequestHandler, RequestConfig, create_request_handler_from_config
 
+class MovieSleepManager:
+    """Randomised movie sleep with adaptive throttling.
+
+    Picks a random sleep time in ``[sleep_min, sleep_max]``.  When the chosen
+    value falls in the bottom 10 % of the range the *next* call is forced to
+    pick from the top 30 % to avoid consecutive short intervals.
+    """
+
+    # (threshold, min_multiplier, max_multiplier)  — base [5, 15]
+    # N < 50  → (1.0, 1.0): [5, 15]    avg ~10s
+    # 50–74   → (1.1, 1.3): [5.5, 19.5] avg ~13s
+    # 75–99   → (1.2, 1.6): [6, 24]     avg ~16s
+    # 100–124 → (1.3, 2.0): [6.5, 30]   avg ~19s
+    # 125–149 → (1.4, 2.5): [7, 37.5]   avg ~23s
+    # ≥ 150   → (1.5, 3.0): [7.5, 45]   avg ~27s
+    VOLUME_TIERS = [
+        (50,  1.0, 1.0),
+        (75,  1.1, 1.3),
+        (100, 1.2, 1.6),
+        (125, 1.3, 2.0),
+        (150, 1.4, 2.5),
+    ]
+    VOLUME_MAX_MULTIPLIER = (1.5, 3.0)
+
+    def __init__(self, sleep_min: float, sleep_max: float):
+        self.base_min = float(sleep_min)
+        self.base_max = float(sleep_max)
+        self.sleep_min = self.base_min
+        self.sleep_max = self.base_max
+        self._force_high = False
+
+    def apply_volume_multiplier(self, n: int) -> None:
+        """Scale sleep range based on estimated processing volume *n*.
+
+        Only activates when n > 50.  Multipliers grow with volume to reduce
+        request pressure during large runs.
+        """
+        min_mult, max_mult = 1.0, 1.0
+        for threshold, m_lo, m_hi in self.VOLUME_TIERS:
+            if n < threshold:
+                break
+            min_mult, max_mult = m_lo, m_hi
+        else:
+            if n >= self.VOLUME_TIERS[-1][0]:
+                min_mult, max_mult = self.VOLUME_MAX_MULTIPLIER
+
+        self.sleep_min = round(self.base_min * min_mult, 1)
+        self.sleep_max = round(self.base_max * max_mult, 1)
+        if min_mult > 1.0 or max_mult > 1.0:
+            logger.info(
+                "Volume-based sleep adjustment: N=%d → sleep range [%.1f, %.1f] "
+                "(base [%.1f, %.1f], multipliers %.1fx/%.1fx)",
+                n, self.sleep_min, self.sleep_max,
+                self.base_min, self.base_max, min_mult, max_mult,
+            )
+
+    def get_sleep_time(self) -> float:
+        span = self.sleep_max - self.sleep_min
+        if span <= 0:
+            return self.sleep_min
+
+        if self._force_high:
+            low = self.sleep_min + span * 0.7
+            sleep_time = random.uniform(low, self.sleep_max)
+            self._force_high = False
+        else:
+            sleep_time = random.uniform(self.sleep_min, self.sleep_max)
+
+        if sleep_time <= self.sleep_min + span * 0.1:
+            self._force_high = True
+
+        return round(sleep_time, 1)
+
+    def sleep(self) -> float:
+        """Sleep for a random duration and return the chosen time."""
+        t = self.get_sleep_time()
+        logger.debug("Movie sleep: %.1fs (force_high_next=%s)", t, self._force_high)
+        time.sleep(t)
+        return t
+
+
+movie_sleep_mgr = MovieSleepManager(MOVIE_SLEEP_MIN, MOVIE_SLEEP_MAX)
+
 # Global proxy pool instance (will be initialized in main)
 global_proxy_pool: Optional[ProxyPool] = None
 
@@ -158,6 +245,49 @@ login_attempted = False
 
 # Global variable to store refreshed session cookie
 refreshed_session_cookie = None
+
+# Per-proxy CF bypass tracking: proxy names that require CF bypass in this runtime
+# When CF bypass succeeds through a proxy, that proxy is added here.
+# All future requests via that proxy will automatically use CF bypass.
+proxies_requiring_cf_bypass: set = set()
+
+
+def proxy_needs_cf_bypass(proxy_name: str) -> bool:
+    """Check if a proxy has been marked as requiring CF bypass."""
+    return proxy_name in proxies_requiring_cf_bypass
+
+
+def mark_proxy_cf_bypass(proxy_name: str):
+    """Mark a proxy as requiring CF bypass for all future requests in this runtime."""
+    if proxy_name not in proxies_requiring_cf_bypass:
+        proxies_requiring_cf_bypass.add(proxy_name)
+        logger.info(f"Proxy '{proxy_name}' marked as requiring CF bypass for this runtime")
+
+
+# ---------------------------------------------------------------------------
+# Parallel detail processing data structures
+# ---------------------------------------------------------------------------
+
+@dataclass
+class DetailTask:
+    """A detail page to be fetched by a worker thread."""
+    url: str
+    entry: dict
+    phase: int
+    entry_index: str
+    retry_count: int = 0
+    failed_proxies: set = field(default_factory=set)
+
+
+@dataclass
+class DetailResult:
+    """Result produced by a worker after processing a DetailTask."""
+    task: DetailTask
+    magnets: list
+    actor_info: str
+    parse_success: bool
+    used_cf_bypass: bool
+
 
 # Generate output CSV filename
 OUTPUT_CSV = f'Javdb_TodayTitle_{datetime.now().strftime("%Y%m%d")}.csv'
@@ -208,6 +338,9 @@ def parse_arguments():
 
     parser.add_argument('--max-movies-phase2', type=int, default=None,
                         help='Limit the number of movies to process in phase 2 (for testing purposes)')
+
+    parser.add_argument('--sequential', action='store_true',
+                        help='Force sequential detail processing even in proxy pool mode (disables parallel workers)')
 
     return parser.parse_args()
 
@@ -514,6 +647,20 @@ def attempt_login_refresh():
         return False, None
 
 
+def is_login_page(html: str) -> bool:
+    """Detect whether the returned HTML is a JavDB login page."""
+    if not html:
+        return False
+    from bs4 import BeautifulSoup as _BS
+    soup = _BS(html, 'html.parser')
+    title_tag = soup.find('title')
+    if title_tag:
+        title_text = title_tag.get_text().strip().lower()
+        if '登入' in title_text or 'login' in title_text:
+            return True
+    return False
+
+
 def can_attempt_login(is_adhoc_mode: bool, is_index_page: bool = False) -> bool:
     """
     Check if login attempt is allowed based on mode and context.
@@ -783,216 +930,220 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
     """
     Fetch index page with smart multi-level fallback mechanism.
     
-    Fallback Hierarchy:
-    1. Initial Attempt: Use provided settings (e.g. No Proxy, No CF).
-    2. Local CF Fallback: If Direct failed, try Local CF Bypass.
-    3. Proxy Pool Iteration: If Local failed (IP banned?), iterate through proxies.
-       For each proxy:
-       a. Try Direct Proxy (No CF)
-       b. Try Proxy + CF Bypass
-       c. If both fail, mark proxy as BANNED and switch to next (unless in ad hoc mode).
+    Fallback Hierarchy (per-proxy, with max_retries=1 to avoid internal proxy cycling):
+    1. Proxy A: direct request (or CF bypass if proxy is marked)
+    2. Proxy A: CF bypass (if not already tried in step 1)
+    3. Login refresh (once per runtime, adhoc mode only for index) → retry Proxy A steps 1-2
+    4. Proxy B: direct request (or CF bypass if proxy is marked)
+    5. Proxy B: CF bypass (if not already tried)
+    6. Continue through all proxies in the pool
+    
+    When CF bypass succeeds with a proxy, that proxy is marked to always use
+    CF bypass for subsequent requests in this runtime.
     
     Args:
         page_url: URL to fetch
         session: requests.Session object
         use_cookie: Whether to use session cookie
         use_proxy: Whether proxy is currently enabled
-        use_cf_bypass: Whether CF bypass is currently enabled (set by fallback mechanism)
+        use_cf_bypass: Whether CF bypass is currently enabled
         page_num: Current page number (for logging)
-        is_adhoc_mode: If True, don't mark proxies as banned on failure (for custom URLs)
+        is_adhoc_mode: If True, don't mark proxies as banned on failure
     
     Returns:
         tuple: (html_content, has_movie_list, proxy_was_banned, effective_use_proxy, effective_use_cf_bypass, is_valid_empty_page)
-            - html_content: The HTML content (None if failed)
-            - has_movie_list: True if movie list found
-            - proxy_was_banned: True if a proxy was banned during fetch
-            - effective_use_proxy: The proxy setting that eventually worked
-            - effective_use_cf_bypass: The CF bypass setting that eventually worked
-            - is_valid_empty_page: True if page is valid but has no content (e.g. "No content yet")
     """
     proxy_was_banned = False
-    last_failed_html = None  # Store HTML from failed attempts
+    last_failed_html = None
     
-    # --- Helper function to attempt fetch and validate ---
-    # Returns: (html, has_movie_list, is_valid_empty_page)
+    def _validate_index_html(html, context_msg):
+        """Validate index page HTML. Returns (html, has_movie_list, is_valid_empty)."""
+        nonlocal last_failed_html
+        soup = BeautifulSoup(html, 'html.parser')
+        movie_list = soup.find('div', class_=lambda x: x and 'movie-list' in x)
+        if movie_list:
+            movie_items = movie_list.find_all('div', class_='item')
+            if len(movie_items) > 0:
+                logger.debug(f"[Page {page_num}] Success: {context_msg} - Found {len(movie_items)} movie items")
+                return html, True, False
+            else:
+                logger.info(f"[Page {page_num}] movie-list exists but is empty (0 items) - treating as valid empty page")
+                return html, False, True
+        else:
+            page_text = soup.get_text()
+            title = soup.find('title')
+            title_text = title.text.strip() if title else ""
+            age_modal = soup.find('div', class_='modal is-active over18-modal')
+            empty_message_div = soup.find('div', class_='empty-message')
+            has_no_content_msg = (
+                'No content yet' in page_text or
+                'No result' in page_text or
+                '暫無內容' in page_text or
+                '暂无内容' in page_text or
+                empty_message_div is not None
+            )
+
+            if empty_message_div is not None:
+                empty_msg_text = empty_message_div.get_text().strip()
+                logger.info(f"[Page {page_num}] Page exists but has no content (empty-message: '{empty_msg_text}')")
+                return html, False, True
+            elif not age_modal and has_no_content_msg:
+                logger.info(f"[Page {page_num}] Page exists but has no content (text pattern detected)")
+                return html, False, True
+            elif not age_modal and len(html) > 20000:
+                logger.debug(f"[Page {page_num}] Large HTML without movie list, treating as empty page")
+                return html, False, True
+            else:
+                last_failed_html = html
+                logger.debug(f"[Page {page_num}] Validation failed (no movie list, age_modal={age_modal is not None}): {context_msg}")
+        return None, False, False
+
     def try_fetch(u_proxy, u_cf, context_msg):
         nonlocal last_failed_html
         logger.debug(f"[Page {page_num}] {context_msg}...")
         try:
             html = get_page(page_url, session, use_cookie=use_cookie,
                             use_proxy=u_proxy, module_name='spider',
-                            use_cf_bypass=u_cf)
+                            max_retries=1, use_cf_bypass=u_cf)
             if html:
-                soup = BeautifulSoup(html, 'html.parser')
-                # Use flexible matching - look for any div with 'movie-list' in class
-                # Different pages may have different class combinations:
-                # - Normal pages: 'movie-list h cols-4 vcols-8'  
-                # - Rankings pages: 'movie-list h cols-4'
-                movie_list = soup.find('div', class_=lambda x: x and 'movie-list' in x)
-                if movie_list:
-                    # Check if movie-list has actual movie items
-                    # An empty movie-list div (e.g., page=8 of rankings with only 250 items total)
-                    # should be treated as a valid empty page, not a successful fetch
-                    movie_items = movie_list.find_all('div', class_='item')
-                    if len(movie_items) > 0:
-                        logger.debug(f"[Page {page_num}] Success: {context_msg} - Found {len(movie_items)} movie items")
-                        return html, True, False
-                    else:
-                        # movie-list exists but is empty - this is a valid empty page
-                        logger.info(f"[Page {page_num}] movie-list exists but is empty (0 items) - treating as valid empty page")
-                        return html, False, True
-                else:
-                    # No movie list - check if this is a valid empty page or a failed fetch
-                    page_text = soup.get_text()
-                    title = soup.find('title')
-                    title_text = title.text.strip() if title else ""
-                    age_modal = soup.find('div', class_='modal is-active over18-modal')
-                    
-                    # Check if it's a login page
-                    is_login_page = '登入' in title_text or 'login' in title_text.lower()
-                    
-                    # Check if it's a valid empty results page
-                    # Various indicators that the page exists but has no movies:
-                    # 1. Check for empty-message div (e.g. <div class="empty-message">暫無內容</div>)
-                    empty_message_div = soup.find('div', class_='empty-message')
-                    # 2. Check for text patterns in various languages
-                    has_no_content_msg = (
-                        'No content yet' in page_text or 
-                        'No result' in page_text or
-                        '暫無內容' in page_text or
-                        '暂无内容' in page_text or
-                        empty_message_div is not None
-                    )
-                    
-                    # If empty-message div is found, this is a valid empty page regardless of age_modal
-                    # (age modal is just an overlay, doesn't affect page content validity)
-                    if not is_login_page and empty_message_div is not None:
-                        empty_msg_text = empty_message_div.get_text().strip()
-                        logger.info(f"[Page {page_num}] Page exists but has no content (empty-message: '{empty_msg_text}')")
-                        # This is a valid empty page - no need to retry
-                        return html, False, True
-                    elif not is_login_page and not age_modal and has_no_content_msg:
-                        # Fallback for text-based detection (No content yet, etc.)
-                        logger.info(f"[Page {page_num}] Page exists but has no content (text pattern detected)")
-                        return html, False, True
-                    elif not is_login_page and not age_modal and len(html) > 20000:
-                        # Large HTML but no movie list - might be a valid page, treat as empty
-                        logger.debug(f"[Page {page_num}] Large HTML without movie list, treating as empty page")
-                        return html, False, True
-                    else:
-                        # Fetched HTML but validation failed (login page or age modal)
-                        last_failed_html = html
-                        logger.debug(f"[Page {page_num}] Validation failed (no movie list, login={is_login_page}, age_modal={age_modal is not None}): {context_msg}")
+                if is_login_page(html):
+                    logger.warning(f"[Page {page_num}] Login page detected: {context_msg}")
+                    if can_attempt_login(is_adhoc_mode, is_index_page=True):
+                        logger.info(f"[Page {page_num}] Attempting login refresh due to login page...")
+                        login_ok, _ = attempt_login_refresh()
+                        if login_ok:
+                            html = get_page(page_url, session, use_cookie=use_cookie,
+                                            use_proxy=u_proxy, module_name='spider',
+                                            max_retries=1, use_cf_bypass=u_cf)
+                            if html and not is_login_page(html):
+                                return _validate_index_html(html, context_msg)
+                            else:
+                                logger.warning(f"[Page {page_num}] Still login page after refresh")
+                    last_failed_html = html
+                    return None, False, False
+
+                return _validate_index_html(html, context_msg)
         except Exception as e:
             logger.debug(f"[Page {page_num}] Failed {context_msg}: {e}")
         return None, False, False
 
-    # --- Phase 0: Initial Attempt (User Config) ---
-    current_proxy_name = global_proxy_pool.get_current_proxy_name() if (use_proxy and global_proxy_pool) else "None"
-    html, success, is_valid_empty = try_fetch(use_proxy, use_cf_bypass, 
-                              f"Initial attempt (Proxy={use_proxy}, CF={use_cf_bypass}, Node={current_proxy_name})")
-    if success:
-        return html, True, False, use_proxy, use_cf_bypass, False
-    if is_valid_empty:
-        # Page fetched successfully but has no content - this is a valid stopping point
-        return html, False, False, use_proxy, use_cf_bypass, True
-
-    logger.warning(f"[Page {page_num}] Initial attempt failed. Starting smart fallback mechanism...")
-
-    # --- Phase 1: Local CF Fallback ---
-    # Skipped: Local CF bypass is not used as a fallback to avoid localhost connection errors.
-    # CF bypass is only tried during proxy pool fallback (Phase 2).
-    if not use_proxy:
-        logger.debug(f"[Page {page_num}] Skipping Local CF Bypass fallback. Switching to Proxy Pool...")
-
-    # --- Phase 1.5: Login Refresh Fallback (adhoc mode only, before switching proxies) ---
-    # Try to refresh session cookie via login if in adhoc mode
-    if is_adhoc_mode and can_attempt_login(is_adhoc_mode, is_index_page=True):
-        logger.info(f"[Page {page_num}] Attempting login refresh before switching proxies...")
-        login_success, new_cookie = attempt_login_refresh()
-        if login_success:
-            # Retry with new cookie
-            html, success, is_valid_empty = try_fetch(use_proxy, use_cf_bypass, 
-                f"Fallback: Retry with refreshed cookie")
+    def try_proxy_direct_then_cf(proxy_name):
+        """Try a single proxy: direct first (unless marked for CF), then CF bypass.
+        Returns (html, has_movie_list, is_valid_empty, used_cf_bypass)."""
+        needs_cf = proxy_needs_cf_bypass(proxy_name)
+        
+        if needs_cf:
+            html, success, is_valid_empty = try_fetch(
+                True, True, f"Index: Proxy={proxy_name} + CF Bypass (marked)")
+            if success or is_valid_empty:
+                return html, success, is_valid_empty, True
+            return None, False, False, True
+        
+        # Step a: Direct request with this proxy
+        html, success, is_valid_empty = try_fetch(
+            True, False, f"Index: Proxy={proxy_name} Direct")
+        if success or is_valid_empty:
+            return html, success, is_valid_empty, False
+        
+        # Step b: CF bypass with this proxy
+        html, success, is_valid_empty = try_fetch(
+            True, True, f"Index: Proxy={proxy_name} + CF Bypass")
+        if success or is_valid_empty:
             if success:
-                logger.info(f"[Page {page_num}] Login refresh succeeded! Index page fetched successfully.")
-                return html, True, False, use_proxy, use_cf_bypass, False
+                mark_proxy_cf_bypass(proxy_name)
+            return html, success, is_valid_empty, True
+        
+        return None, False, False, False
+
+    # --- Phase 0: Initial Attempt with current proxy ---
+    if use_proxy and global_proxy_pool:
+        current_proxy_name = global_proxy_pool.get_current_proxy_name()
+        initial_cf = use_cf_bypass or proxy_needs_cf_bypass(current_proxy_name)
+        
+        html, success, is_valid_empty = try_fetch(
+            True, initial_cf,
+            f"Initial attempt (Proxy={current_proxy_name}, CF={initial_cf})")
+        if success:
+            return html, True, False, True, initial_cf, False
+        if is_valid_empty:
+            return html, False, False, True, initial_cf, True
+        
+        # Phase 0.5: If initial was direct, try CF bypass with same proxy
+        if not initial_cf:
+            html, success, is_valid_empty = try_fetch(
+                True, True,
+                f"Index: Proxy={current_proxy_name} + CF Bypass")
+            if success:
+                mark_proxy_cf_bypass(current_proxy_name)
+                return html, True, False, True, True, False
             if is_valid_empty:
-                return html, False, False, use_proxy, use_cf_bypass, True
+                return html, False, False, True, True, True
+        
+        logger.warning(f"[Page {page_num}] Initial attempt failed. Starting fallback...")
+    elif not use_proxy:
+        html, success, is_valid_empty = try_fetch(
+            False, use_cf_bypass,
+            f"Initial attempt (No Proxy, CF={use_cf_bypass})")
+        if success:
+            return html, True, False, False, use_cf_bypass, False
+        if is_valid_empty:
+            return html, False, False, False, use_cf_bypass, True
+        logger.warning(f"[Page {page_num}] Initial attempt failed (no proxy). Starting fallback...")
+    else:
+        logger.warning(f"[Page {page_num}] No proxy pool configured for initial attempt.")
+
+    # --- Phase 1: Login Refresh (once per runtime, adhoc only for index pages) ---
+    if is_adhoc_mode and can_attempt_login(is_adhoc_mode, is_index_page=True):
+        logger.info(f"[Page {page_num}] Attempting login refresh...")
+        login_success, new_cookie = attempt_login_refresh()
+        if login_success and use_proxy and global_proxy_pool:
+            current_proxy_name = global_proxy_pool.get_current_proxy_name()
+            html, success, is_valid_empty, used_cf = try_proxy_direct_then_cf(current_proxy_name)
+            if success:
+                logger.info(f"[Page {page_num}] Login refresh + retry succeeded (Proxy={current_proxy_name}, CF={used_cf})")
+                return html, True, False, True, used_cf, False
+            if is_valid_empty:
+                return html, False, False, True, used_cf, True
             logger.warning(f"[Page {page_num}] Login refresh completed but index page still failed")
-        else:
+        elif login_success and not use_proxy:
+            html, success, is_valid_empty = try_fetch(
+                False, use_cf_bypass,
+                f"Fallback: Retry with refreshed cookie (No Proxy)")
+            if success:
+                return html, True, False, False, use_cf_bypass, False
+            if is_valid_empty:
+                return html, False, False, False, use_cf_bypass, True
+        elif not login_success:
             logger.warning(f"[Page {page_num}] Login refresh failed, continuing with proxy pool fallback...")
 
-    # --- Phase 2: Proxy Pool Iteration ---
+    # --- Phase 2: Iterate through remaining proxies ---
     if global_proxy_pool is None:
         logger.error(f"[Page {page_num}] Fallback failed: No proxy pool configured")
-        # Return last failed HTML if we have it, otherwise None
         return last_failed_html, False, False, use_proxy, use_cf_bypass, False
 
-    # If we weren't using proxy, start using it now
-    if not use_proxy:
-        # If we are just switching to proxy mode, ensure we start with a fresh/valid proxy if possible
-        # (The current one might be random if we haven't used it yet)
-        pass 
-
-    # We will try up to N switches (coverage of the pool)
-    # If using Single mode, we only have 1 try.
     max_switches = global_proxy_pool.get_proxy_count() if PROXY_MODE == 'pool' else 1
-    # Limit max switches to avoid infinite loops if pool is huge, e.g. 10
-    max_switches = min(max_switches, 10) 
+    max_switches = min(max_switches, 10)
     
-    attempts = 0
-    while attempts < max_switches:
-        current_proxy_name = global_proxy_pool.get_current_proxy_name()
-        
-        # Sub-step 2.1: Try Direct Proxy (No CF)
-        # User requested sequence: "依次是不使用cloudflare bypass和使用bypass"
-        html, success, is_valid_empty = try_fetch(True, False, f"Fallback Phase 2: Proxy Direct (Node={current_proxy_name})")
-        if success:
-            logger.info(f"[Page {page_num}] Proxy Direct succeeded. Switching mode to: use_proxy=True, use_cf_bypass=False")
-            return html, True, proxy_was_banned, True, False, False
-        if is_valid_empty:
-            logger.info(f"[Page {page_num}] Proxy Direct: valid empty page detected")
-            return html, False, proxy_was_banned, True, False, True
-            
-        # Sub-step 2.2: Try Proxy + CF Bypass
-        html, success, is_valid_empty = try_fetch(True, True, f"Fallback Phase 2: Proxy + CF Bypass (Node={current_proxy_name})")
-        if success:
-            logger.info(f"[Page {page_num}] Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True")
-            return html, True, proxy_was_banned, True, True, False
-        if is_valid_empty:
-            logger.info(f"[Page {page_num}] Proxy + CF Bypass: valid empty page detected")
-            return html, False, proxy_was_banned, True, True, True
-
-        # If both failed for this proxy, handle based on mode
-        attempts += 1
-        if attempts < max_switches and PROXY_MODE == 'pool':
-            if is_adhoc_mode:
-                # Ad hoc mode: Don't mark as banned, just switch to next proxy
-                # Failure might be due to page-specific issues (login required, page not found, etc.)
-                logger.warning(f"[Page {page_num}] Proxy '{current_proxy_name}' failed both Direct and CF modes (Ad Hoc mode - not marking as banned)")
-                logger.info(f"[Page {page_num}] Switching to next proxy...")
-                global_proxy_pool.mark_failure_and_switch()  # Single failure mark, no ban
-            else:
-                # Normal mode: Mark as banned after multiple failures
-                logger.warning(f"[Page {page_num}] Proxy '{current_proxy_name}' failed both Direct and CF modes. Marking BANNED and switching...")
-                
-                # Save the last failed HTML for debugging proxy ban issues
-                if last_failed_html:
-                    save_proxy_ban_html(last_failed_html, current_proxy_name, page_num)
-                
-                # Mark failure multiple times to trigger cooldown
-                for _ in range(PROXY_POOL_MAX_FAILURES):
-                    global_proxy_pool.mark_failure_and_switch()
-                proxy_was_banned = True
+    for attempt in range(max_switches):
+        if is_adhoc_mode:
+            global_proxy_pool.mark_failure_and_switch()
         else:
-            if PROXY_MODE == 'single':
-                logger.error(f"[Page {page_num}] Single proxy mode failed. Cannot switch.")
-            else:
-                logger.error(f"[Page {page_num}] All proxy attempts exhausted.")
-            break
+            if last_failed_html:
+                current_proxy_name = global_proxy_pool.get_current_proxy_name()
+                save_proxy_ban_html(last_failed_html, current_proxy_name, page_num)
+            for _ in range(PROXY_POOL_MAX_FAILURES):
+                global_proxy_pool.mark_failure_and_switch()
+            proxy_was_banned = True
+        
+        current_proxy_name = global_proxy_pool.get_current_proxy_name()
+        html, success, is_valid_empty, used_cf = try_proxy_direct_then_cf(current_proxy_name)
+        if success:
+            logger.info(f"[Page {page_num}] Index Proxy fallback succeeded (Proxy={current_proxy_name}, CF={used_cf})")
+            return html, True, proxy_was_banned, True, used_cf, False
+        if is_valid_empty:
+            return html, False, proxy_was_banned, True, used_cf, True
 
-    # Return the last HTML content we fetched (even if validation failed), or None if all fetches failed completely
+    logger.error(f"[Page {page_num}] All proxy attempts exhausted.")
     return last_failed_html, False, proxy_was_banned, use_proxy, use_cf_bypass, False
 
 
@@ -1005,52 +1156,64 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
     because detail page failures are often due to page-specific issues (login required, 
     page not found, etc.) rather than proxy problems.
     
-    Fallback Hierarchy:
-    1. Initial Attempt: Use provided settings (e.g. No Proxy, No CF).
-    2. Proxy Pool Iteration: If initial failed, iterate through proxies.
-       For each proxy:
-       a. Try Direct Proxy (No CF)
-       b. Try Proxy + CF Bypass
-       c. If both fail, switch to next proxy (no ban marking).
+    Fallback Hierarchy (per-proxy, with max_retries=1 to avoid internal proxy cycling):
+    1. Proxy A: direct request (or CF bypass if proxy is marked)
+    2. Proxy A: CF bypass (if not already tried in step 1)
+    3. Login refresh (once per runtime) → retry Proxy A steps 1-2
+    4. Proxy B: direct request (or CF bypass if proxy is marked)
+    5. Proxy B: CF bypass (if not already tried)
+    6. Continue through all proxies in the pool
+    
+    When CF bypass succeeds with a proxy, that proxy is marked to always use
+    CF bypass for subsequent requests in this runtime.
     
     Args:
         detail_url: URL to fetch
         session: requests.Session object
         use_cookie: Whether to use session cookie
         use_proxy: Whether proxy is currently enabled
-        use_cf_bypass: Whether CF bypass is currently enabled (set by fallback mechanism)
+        use_cf_bypass: Whether CF bypass is currently enabled
         entry_index: Current entry index (for logging)
         is_adhoc_mode: Unused, kept for API compatibility
     
     Returns:
         tuple: (magnets, actor_info, parse_success, effective_use_proxy, effective_use_cf_bypass)
-            - magnets: List of magnet link dictionaries
-            - actor_info: Actor name string
-            - parse_success: True if parsing was successful
-            - effective_use_proxy: The proxy setting that eventually worked
-            - effective_use_cf_bypass: The CF bypass setting that eventually worked
     """
-    last_result = ([], '', False)  # Store result from failed attempts (magnets, actor_info, parse_success)
+    last_result = ([], '', False)
     
-    # --- Helper function to attempt fetch, parse and validate ---
     def try_fetch_and_parse(u_proxy, u_cf, context_msg, skip_sleep=False):
         nonlocal last_result
         logger.debug(f"[{entry_index}] {context_msg}...")
         try:
             html = get_page(detail_url, session, use_cookie=use_cookie,
                             use_proxy=u_proxy, module_name='spider',
-                            use_cf_bypass=u_cf)
+                            max_retries=1, use_cf_bypass=u_cf)
             if html:
-                # Parse detail page with skip_sleep for retry attempts
-                # Note: video_code is already extracted from index page, not from detail page
+                if is_login_page(html):
+                    logger.warning(f"[{entry_index}] Login page detected: {context_msg}")
+                    if can_attempt_login(is_adhoc_mode, is_index_page=False):
+                        logger.info(f"[{entry_index}] Attempting login refresh due to login page...")
+                        login_ok, _ = attempt_login_refresh()
+                        if login_ok:
+                            html = get_page(detail_url, session, use_cookie=use_cookie,
+                                            use_proxy=u_proxy, module_name='spider',
+                                            max_retries=1, use_cf_bypass=u_cf)
+                            if html and not is_login_page(html):
+                                magnets, actor_info, parse_success = parse_detail(html, entry_index, skip_sleep=skip_sleep)
+                                if parse_success:
+                                    logger.info(f"[{entry_index}] Login refresh succeeded: {context_msg}")
+                                    return magnets, actor_info, True
+                                else:
+                                    last_result = (magnets, actor_info, False)
+                            else:
+                                logger.warning(f"[{entry_index}] Still login page after refresh")
+                    return [], '', False
+
                 magnets, actor_info, parse_success = parse_detail(html, entry_index, skip_sleep=skip_sleep)
-                
                 if parse_success:
                     logger.debug(f"[{entry_index}] Success: {context_msg}")
                     return magnets, actor_info, True
                 else:
-                    # Fetched HTML but parsing failed (missing expected elements)
-                    # Store it as potential return value if all fallbacks fail
                     last_result = (magnets, actor_info, False)
                     logger.debug(f"[{entry_index}] Parse validation failed (missing magnets): {context_msg}")
             else:
@@ -1059,96 +1222,483 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
             logger.debug(f"[{entry_index}] Failed {context_msg}: {e}")
         return [], '', False
 
-    # --- Phase 0: Initial Attempt (User Config) ---
-    current_proxy_name = global_proxy_pool.get_current_proxy_name() if (use_proxy and global_proxy_pool) else "None"
-    magnets, actor_info, success = try_fetch_and_parse(
-        use_proxy, use_cf_bypass, 
-        f"Detail Initial attempt (Proxy={use_proxy}, CF={use_cf_bypass}, Node={current_proxy_name})",
-        skip_sleep=False  # First attempt should respect sleep
-    )
-    if success:
-        return magnets, actor_info, True, use_proxy, use_cf_bypass
-
-    logger.warning(f"[{entry_index}] Detail page initial attempt failed. Starting smart fallback mechanism...")
-
-    # --- Phase 1: Local CF Fallback ---
-    # Skipped: Local CF bypass is not used as a fallback to avoid localhost connection errors.
-    # CF bypass is only tried during proxy pool fallback (Phase 2).
-    if not use_proxy:
-        logger.debug(f"[{entry_index}] Skipping Local CF Bypass fallback. Switching to Proxy Pool...")
-
-    # --- Phase 1.5: Login Refresh Fallback (before switching proxies) ---
-    # Try to refresh session cookie via login if allowed
-    if can_attempt_login(is_adhoc_mode, is_index_page=False):
-        logger.info(f"[{entry_index}] Attempting login refresh before switching proxies...")
-        login_success, new_cookie = attempt_login_refresh()
-        if login_success:
-            # Retry with new cookie
+    def try_proxy_direct_then_cf(proxy_name, skip_sleep=True):
+        """Try a single proxy: direct first (unless marked for CF), then CF bypass.
+        Returns (magnets, actor_info, success, used_cf_bypass)."""
+        needs_cf = proxy_needs_cf_bypass(proxy_name)
+        
+        if needs_cf:
+            # This proxy is marked as needing CF bypass, skip direct attempt
             magnets, actor_info, success = try_fetch_and_parse(
-                use_proxy, use_cf_bypass,
-                f"Detail Fallback: Retry with refreshed cookie",
+                True, True,
+                f"Detail: Proxy={proxy_name} + CF Bypass (marked)",
+                skip_sleep=skip_sleep
+            )
+            if success:
+                return magnets, actor_info, True, True
+            return [], '', False, True
+        
+        # Step a: Direct request with this proxy
+        magnets, actor_info, success = try_fetch_and_parse(
+            True, False,
+            f"Detail: Proxy={proxy_name} Direct",
+            skip_sleep=skip_sleep
+        )
+        if success:
+            return magnets, actor_info, True, False
+        
+        # Step b: CF bypass with this proxy
+        magnets, actor_info, success = try_fetch_and_parse(
+            True, True,
+            f"Detail: Proxy={proxy_name} + CF Bypass",
+            skip_sleep=skip_sleep
+        )
+        if success:
+            mark_proxy_cf_bypass(proxy_name)
+            return magnets, actor_info, True, True
+        
+        return [], '', False, False
+
+    # --- Phase 0: Initial Attempt with current proxy ---
+    if use_proxy and global_proxy_pool:
+        current_proxy_name = global_proxy_pool.get_current_proxy_name()
+        initial_cf = use_cf_bypass or proxy_needs_cf_bypass(current_proxy_name)
+        
+        magnets, actor_info, success = try_fetch_and_parse(
+            True, initial_cf,
+            f"Detail Initial (Proxy={current_proxy_name}, CF={initial_cf})",
+            skip_sleep=False
+        )
+        if success:
+            return magnets, actor_info, True, True, initial_cf
+        
+        # Phase 0.5: If initial was direct, try CF bypass with same proxy
+        if not initial_cf:
+            magnets, actor_info, success = try_fetch_and_parse(
+                True, True,
+                f"Detail: Proxy={current_proxy_name} + CF Bypass",
                 skip_sleep=True
             )
             if success:
-                logger.info(f"[{entry_index}] Login refresh succeeded! Detail page fetched successfully.")
-                return magnets, actor_info, True, use_proxy, use_cf_bypass
-            else:
-                logger.warning(f"[{entry_index}] Login refresh completed but detail page still failed")
-        else:
+                mark_proxy_cf_bypass(current_proxy_name)
+                logger.info(f"[{entry_index}] Detail CF Bypass succeeded with initial proxy={current_proxy_name}")
+                return magnets, actor_info, True, True, True
+        
+        logger.warning(f"[{entry_index}] Detail page initial attempt failed. Starting fallback...")
+    elif not use_proxy:
+        # No proxy mode: single direct attempt
+        magnets, actor_info, success = try_fetch_and_parse(
+            False, use_cf_bypass,
+            f"Detail Initial (No Proxy, CF={use_cf_bypass})",
+            skip_sleep=False
+        )
+        if success:
+            return magnets, actor_info, True, False, use_cf_bypass
+        logger.warning(f"[{entry_index}] Detail page initial attempt failed (no proxy). Starting fallback...")
+    else:
+        logger.warning(f"[{entry_index}] No proxy pool configured for initial attempt.")
+
+    # --- Phase 1: Login Refresh (once per runtime) → retry current proxy ---
+    if can_attempt_login(is_adhoc_mode, is_index_page=False):
+        logger.info(f"[{entry_index}] Attempting login refresh...")
+        login_success, new_cookie = attempt_login_refresh()
+        if login_success and use_proxy and global_proxy_pool:
+            current_proxy_name = global_proxy_pool.get_current_proxy_name()
+            magnets, actor_info, success, used_cf = try_proxy_direct_then_cf(current_proxy_name, skip_sleep=True)
+            if success:
+                logger.info(f"[{entry_index}] Login refresh + retry succeeded (Proxy={current_proxy_name}, CF={used_cf})")
+                return magnets, actor_info, True, True, used_cf
+            logger.warning(f"[{entry_index}] Login refresh completed but detail page still failed")
+        elif login_success and not use_proxy:
+            magnets, actor_info, success = try_fetch_and_parse(
+                False, use_cf_bypass,
+                f"Detail: Retry with refreshed cookie (No Proxy)",
+                skip_sleep=True
+            )
+            if success:
+                return magnets, actor_info, True, False, use_cf_bypass
+        elif not login_success:
             logger.warning(f"[{entry_index}] Login refresh failed, continuing with proxy pool fallback...")
-    
-    # --- Phase 2: Proxy Pool Iteration ---
+
+    # --- Phase 2: Iterate through remaining proxies ---
     if global_proxy_pool is None:
         logger.error(f"[{entry_index}] Fallback failed: No proxy pool configured")
-        # Return last result if we have it
         return last_result[0], last_result[1], last_result[2], use_proxy, use_cf_bypass
 
-    # We will try up to N switches (coverage of the pool)
-    # If using Single mode, we only have 1 try.
     max_switches = global_proxy_pool.get_proxy_count() if PROXY_MODE == 'pool' else 1
-    # Limit max switches to avoid infinite loops if pool is huge, e.g. 10
-    max_switches = min(max_switches, 10) 
+    max_switches = min(max_switches, 10)
     
-    attempts = 0
-    while attempts < max_switches:
-        current_proxy_name = global_proxy_pool.get_current_proxy_name()
-        
-        # Sub-step 2.1: Try Direct Proxy (No CF)
-        magnets, actor_info, success = try_fetch_and_parse(
-            True, False, 
-            f"Detail Fallback Phase 2: Proxy Direct (Node={current_proxy_name})",
-            skip_sleep=True  # Skip sleep for retry attempts
-        )
-        if success:
-            logger.info(f"[{entry_index}] Detail Proxy Direct succeeded. Switching mode to: use_proxy=True, use_cf_bypass=False")
-            return magnets, actor_info, True, True, False
-            
-        # Sub-step 2.2: Try Proxy + CF Bypass
-        magnets, actor_info, success = try_fetch_and_parse(
-            True, True, 
-            f"Detail Fallback Phase 2: Proxy + CF Bypass (Node={current_proxy_name})",
-            skip_sleep=True  # Skip sleep for retry attempts
-        )
-        if success:
-            logger.info(f"[{entry_index}] Detail Proxy + CF Bypass succeeded. Switching mode to: use_proxy=True, use_cf_bypass=True")
-            return magnets, actor_info, True, True, True
-
-        # If both failed for this proxy, just switch to next (no ban marking for detail pages)
-        # Detail page failures are often due to page-specific issues, not proxy problems
-        attempts += 1
-        if attempts < max_switches and PROXY_MODE == 'pool':
-            logger.debug(f"[{entry_index}] Proxy '{current_proxy_name}' failed both Direct and CF modes. Switching to next proxy (not marking as banned)...")
-            global_proxy_pool.mark_failure_and_switch()  # Single failure mark, no ban
-        else:
-            if PROXY_MODE == 'single':
-                logger.debug(f"[{entry_index}] Single proxy mode failed. Cannot switch.")
-            else:
-                logger.debug(f"[{entry_index}] All proxy attempts exhausted.")
+    for attempt in range(max_switches):
+        switched = global_proxy_pool.mark_failure_and_switch()
+        if not switched:
+            logger.warning(f"[{entry_index}] No more proxies available in pool")
             break
+        
+        current_proxy_name = global_proxy_pool.get_current_proxy_name()
+        magnets, actor_info, success, used_cf = try_proxy_direct_then_cf(current_proxy_name, skip_sleep=True)
+        if success:
+            logger.info(f"[{entry_index}] Detail Proxy fallback succeeded (Proxy={current_proxy_name}, CF={used_cf})")
+            return magnets, actor_info, True, True, used_cf
 
-    # Return the last result we got (even if parsing failed), or empty if all fetches failed completely
     logger.warning(f"[{entry_index}] Detail page fallback exhausted. Returning best available result.")
     return last_result[0], last_result[1], last_result[2], use_proxy, use_cf_bypass
+
+
+# ---------------------------------------------------------------------------
+# Parallel detail processing — Producer-Consumer with proxy affinity
+# ---------------------------------------------------------------------------
+
+# Lock protecting login_attempted / refreshed_session_cookie across workers
+_login_lock = threading.Lock()
+
+
+class ProxyWorker(threading.Thread):
+    """Worker thread bound to a single proxy (ARM server + local CF bypass)."""
+
+    def __init__(
+        self,
+        worker_id: int,
+        proxy_config: dict,
+        detail_queue: 'queue_module.Queue[Optional[DetailTask]]',
+        result_queue: 'queue_module.Queue[DetailResult]',
+        total_workers: int,
+        use_cookie: bool,
+        is_adhoc_mode: bool,
+        movie_sleep_min: float,
+        movie_sleep_max: float,
+        fallback_cooldown: float,
+        ban_log_file: str,
+        all_workers: list,
+    ):
+        super().__init__(daemon=True, name=f"ProxyWorker-{proxy_config.get('name', worker_id)}")
+        self.worker_id = worker_id
+        self.proxy_config = proxy_config
+        self.proxy_name: str = proxy_config.get('name', f'Proxy-{worker_id}')
+        self.detail_queue = detail_queue
+        self.result_queue = result_queue
+        self.total_workers = total_workers
+        self.use_cookie = use_cookie
+        self.is_adhoc_mode = is_adhoc_mode
+        self._sleep_mgr = MovieSleepManager(movie_sleep_min, movie_sleep_max)
+        self.fallback_cooldown = fallback_cooldown
+        self.all_workers = all_workers
+
+        self.needs_cf_bypass = False
+        self._first_request = True
+
+        self._proxy_pool = create_proxy_pool_from_config(
+            [proxy_config],
+            cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
+            max_failures=PROXY_POOL_MAX_FAILURES,
+            ban_log_file=ban_log_file,
+        )
+        self._handler = RequestHandler(
+            proxy_pool=self._proxy_pool,
+            config=RequestConfig(
+                base_url=BASE_URL,
+                cf_bypass_service_port=CF_BYPASS_SERVICE_PORT,
+                cf_bypass_enabled=CF_BYPASS_ENABLED,
+                cf_bypass_max_failures=3,
+                cf_turnstile_cooldown=CF_TURNSTILE_COOLDOWN,
+                fallback_cooldown=FALLBACK_COOLDOWN,
+                javdb_session_cookie=JAVDB_SESSION_COOKIE,
+                proxy_http=proxy_config.get('http'),
+                proxy_https=proxy_config.get('https'),
+                proxy_modules=['all'],
+                proxy_mode='single',
+            ),
+        )
+
+    # -- internal helpers --------------------------------------------------
+
+    def _fetch_html(self, url: str, use_cf: bool) -> Optional[str]:
+        return self._handler.get_page(
+            url,
+            use_cookie=self.use_cookie,
+            use_proxy=True,
+            module_name='spider',
+            max_retries=1,
+            use_cf_bypass=use_cf,
+        )
+
+    def _try_fetch_and_parse(self, task: DetailTask, use_cf: bool, context: str):
+        """Attempt fetch + parse_detail; returns (magnets, actor, success)."""
+        logger.debug(f"[W:{self.proxy_name}] [{task.entry_index}] {context}")
+        try:
+            html = self._fetch_html(task.url, use_cf)
+            if html:
+                if is_login_page(html):
+                    logger.warning(
+                        f"[W:{self.proxy_name}] [{task.entry_index}] Login page detected: {context}")
+                    if can_attempt_login(self.is_adhoc_mode, is_index_page=False):
+                        if self._try_login_refresh():
+                            html = self._fetch_html(task.url, use_cf)
+                            if html and not is_login_page(html):
+                                magnets, actor_info, ok = parse_detail(
+                                    html, task.entry_index, skip_sleep=True)
+                                if ok:
+                                    logger.info(
+                                        f"[W:{self.proxy_name}] [{task.entry_index}] "
+                                        f"Login refresh succeeded: {context}")
+                                    return magnets, actor_info, True
+                            else:
+                                logger.warning(
+                                    f"[W:{self.proxy_name}] [{task.entry_index}] "
+                                    f"Still login page after refresh")
+                    return [], '', False
+
+                magnets, actor_info, ok = parse_detail(html, task.entry_index, skip_sleep=True)
+                if ok:
+                    return magnets, actor_info, True
+                logger.debug(f"[W:{self.proxy_name}] [{task.entry_index}] parse failed: {context}")
+            else:
+                logger.debug(f"[W:{self.proxy_name}] [{task.entry_index}] no HTML: {context}")
+        except Exception as e:
+            logger.debug(f"[W:{self.proxy_name}] [{task.entry_index}] error in {context}: {e}")
+        return [], '', False
+
+    def _try_direct_then_cf(self, task: DetailTask):
+        """Try direct, then CF bypass. Returns (magnets, actor, success, used_cf)."""
+        if self.needs_cf_bypass:
+            m, a, ok = self._try_fetch_and_parse(task, True, f"CF Bypass (marked)")
+            return m, a, ok, True
+
+        m, a, ok = self._try_fetch_and_parse(task, False, "Direct")
+        if ok:
+            return m, a, True, False
+
+        m, a, ok = self._try_fetch_and_parse(task, True, "CF Bypass")
+        if ok:
+            self.needs_cf_bypass = True
+            logger.info(f"[W:{self.proxy_name}] CF Bypass succeeded — marking proxy for this runtime")
+            return m, a, True, True
+        return [], '', False, False
+
+    def _try_login_refresh(self):
+        """Thread-safe global login; returns True on success."""
+        with _login_lock:
+            if login_attempted:
+                return refreshed_session_cookie is not None
+            success, new_cookie = attempt_login_refresh()
+            if success and new_cookie:
+                for w in self.all_workers:
+                    w._handler.config.javdb_session_cookie = new_cookie
+                return True
+            return False
+
+    # -- main loop ---------------------------------------------------------
+
+    def run(self):
+        while True:
+            task = self.detail_queue.get()
+            if task is None:
+                break
+
+            if self.proxy_name in task.failed_proxies:
+                if len(task.failed_proxies) >= self.total_workers:
+                    if can_attempt_login(self.is_adhoc_mode, is_index_page=False):
+                        if self._try_login_refresh():
+                            task.failed_proxies.clear()
+                            task.retry_count += 1
+                            self.detail_queue.put(task)
+                            continue
+                    self.result_queue.put(DetailResult(
+                        task=task, magnets=[], actor_info='',
+                        parse_success=False, used_cf_bypass=False,
+                    ))
+                    continue
+                self.detail_queue.put(task)
+                time.sleep(0.1)
+                continue
+
+            if not self._first_request:
+                self._sleep_mgr.sleep()
+            self._first_request = False
+
+            magnets, actor_info, success, used_cf = self._try_direct_then_cf(task)
+            if success:
+                cf_tag = " +CF" if used_cf else ""
+                logger.info(
+                    f"[W:{self.proxy_name}] [{task.entry_index}] "
+                    f"Parsed {task.entry.get('video_code', '')}{cf_tag}"
+                )
+                self.result_queue.put(DetailResult(
+                    task=task, magnets=magnets, actor_info=actor_info,
+                    parse_success=True, used_cf_bypass=used_cf,
+                ))
+            else:
+                task.failed_proxies.add(self.proxy_name)
+                task.retry_count += 1
+                self.detail_queue.put(task)
+                logger.info(
+                    f"[W:{self.proxy_name}] [{task.entry_index}] "
+                    f"Failed {task.entry.get('video_code', '')}, re-queued "
+                    f"(tried {len(task.failed_proxies)}/{self.total_workers} proxies)"
+                )
+
+
+def process_detail_entries_parallel(
+    entries: List[dict],
+    phase: int,
+    history_data: dict,
+    history_file: str,
+    csv_path: str,
+    fieldnames: list,
+    dry_run: bool,
+    use_history_for_saving: bool,
+    use_cookie: bool,
+    is_adhoc_mode: bool,
+    ban_log_file: str,
+) -> dict:
+    """Process detail entries in parallel using one worker per proxy.
+
+    Returns a dict with statistics keys:
+        rows, skipped_history, failed, no_new_torrents
+    """
+    total_entries = len(entries)
+    phase_prefix = '' if phase == 1 else 'P2-'
+
+    detail_queue: queue_module.Queue[Optional[DetailTask]] = queue_module.Queue()
+    result_queue: queue_module.Queue[DetailResult] = queue_module.Queue()
+
+    all_workers: List[ProxyWorker] = []
+    for idx, proxy_cfg in enumerate(PROXY_POOL):
+        w = ProxyWorker(
+            worker_id=idx,
+            proxy_config=proxy_cfg,
+            detail_queue=detail_queue,
+            result_queue=result_queue,
+            total_workers=len(PROXY_POOL),
+            use_cookie=use_cookie,
+            is_adhoc_mode=is_adhoc_mode,
+            movie_sleep_min=MOVIE_SLEEP_MIN,
+            movie_sleep_max=MOVIE_SLEEP_MAX,
+            fallback_cooldown=FALLBACK_COOLDOWN,
+            ban_log_file=ban_log_file,
+            all_workers=all_workers,
+        )
+        all_workers.append(w)
+
+    tasks_submitted = 0
+    local_parsed_links: set = set()
+
+    for i, entry in enumerate(entries, 1):
+        href = entry['href']
+        if href in parsed_links or href in local_parsed_links:
+            continue
+        local_parsed_links.add(href)
+
+        if has_complete_subtitles(href, history_data):
+            logger.info(
+                f"[{phase_prefix}{i}/{total_entries}] [Page {entry['page']}] "
+                f"Skipping {entry['video_code']} — already has subtitle and hacked_subtitle in history"
+            )
+            continue
+
+        detail_url = urljoin(BASE_URL, href)
+        entry_index = f"{phase_prefix}{i}/{total_entries}"
+        logger.debug(f"[{entry_index}] [Page {entry['page']}] Queued {entry['video_code'] or href}")
+        detail_queue.put(DetailTask(
+            url=detail_url,
+            entry=entry,
+            phase=phase,
+            entry_index=entry_index,
+        ))
+        tasks_submitted += 1
+
+    parsed_links.update(local_parsed_links)
+
+    skipped_history = len(local_parsed_links) - tasks_submitted
+
+    if tasks_submitted == 0:
+        logger.info(f"Phase {phase}: No detail tasks to process (all filtered)")
+        return {'rows': [], 'skipped_history': skipped_history, 'failed': 0, 'no_new_torrents': 0}
+
+    logger.info(
+        f"Phase {phase}: Starting {len(all_workers)} workers for {tasks_submitted} detail tasks "
+        f"({skipped_history} skipped by history)"
+    )
+    for w in all_workers:
+        w.start()
+
+    rows: list = []
+    phase_rows: list = []
+    failed = 0
+    no_new_torrents = 0
+    results_received = 0
+
+    while results_received < tasks_submitted:
+        result: DetailResult = result_queue.get()
+        results_received += 1
+        task = result.task
+        entry = task.entry
+        href = entry['href']
+        page_num = entry['page']
+        idx_str = task.entry_index
+
+        if not result.parse_success:
+            logger.error(f"[{idx_str}] [Page {page_num}] Failed after all workers exhausted")
+            failed += 1
+            continue
+
+        magnet_links = extract_magnets(result.magnets, idx_str)
+
+        should_process, history_torrent_types = should_process_movie(
+            href, history_data, phase, magnet_links,
+        )
+        if not should_process:
+            skipped_history += 1
+            continue
+
+        current_torrent_types = determine_torrent_types(magnet_links)
+        row = create_csv_row_with_history_filter(href, entry, page_num, '', magnet_links, history_data)
+        row['video_code'] = entry['video_code']
+
+        has_any_torrents = any([
+            row['hacked_subtitle'], row['hacked_no_subtitle'],
+            row['subtitle'], row['no_subtitle'],
+        ])
+        has_new_torrents = any([
+            row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
+            row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
+            row['subtitle'] and row['subtitle'] != '[DOWNLOADED PREVIOUSLY]',
+            row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
+        ])
+        should_include_in_report = has_new_torrents or (INCLUDE_DOWNLOADED_IN_REPORT and has_any_torrents)
+
+        if should_include_in_report:
+            write_csv([row], csv_path, fieldnames, dry_run, append_mode=True)
+            rows.append(row)
+            phase_rows.append(row)
+
+            if use_history_for_saving and not dry_run and has_new_torrents:
+                new_magnet_links = {}
+                for mtype in ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle'):
+                    if row[mtype] and row[mtype] != '[DOWNLOADED PREVIOUSLY]':
+                        new_magnet_links[mtype] = magnet_links.get(mtype, '')
+                if new_magnet_links:
+                    save_parsed_movie_to_history(
+                        history_file, href, phase, entry['video_code'], new_magnet_links,
+                    )
+        else:
+            no_new_torrents += 1
+
+    for _ in all_workers:
+        detail_queue.put(None)
+    for w in all_workers:
+        w.join(timeout=10)
+
+    logger.info(
+        f"Phase {phase} parallel completed: {total_entries} discovered, "
+        f"{len(phase_rows)} processed, {skipped_history} skipped (history), "
+        f"{no_new_torrents} no new torrents, {failed} failed"
+    )
+    return {
+        'rows': phase_rows,
+        'skipped_history': skipped_history,
+        'failed': failed,
+        'no_new_torrents': no_new_torrents,
+    }
 
 
 def merge_row_data(existing_row, new_row):
@@ -1741,6 +2291,7 @@ def main():
     use_cf_bypass = False  # CF bypass is only activated automatically during fallback
     max_movies_phase1 = args.max_movies_phase1
     max_movies_phase2 = args.max_movies_phase2
+    sequential = args.sequential
     
     # Initialize proxy pool (always initialize if configured, even if not enabled by default)
     # This allows automatic fallback to proxy if direct connection fails
@@ -1866,6 +2417,19 @@ def main():
         else:
             logger.warning("PROXY ENABLED: But no proxy configured in config.py")
 
+    # Determine whether to use parallel detail processing
+    use_parallel = (
+        use_proxy
+        and not sequential
+        and PROXY_MODE == 'pool'
+        and PROXY_POOL
+        and len(PROXY_POOL) > 1
+    )
+    if use_parallel:
+        logger.info(f"PARALLEL MODE: {len(PROXY_POOL)} workers (one per proxy) for detail page processing")
+    elif use_proxy and PROXY_MODE == 'pool' and sequential:
+        logger.info("SEQUENTIAL MODE: Parallel disabled by --sequential flag")
+
     # Ensure reports root directory exists (for history files)
     ensure_reports_dir()
 
@@ -1954,17 +2518,6 @@ def main():
     page_num = start_page
     consecutive_empty_pages = 0
     csv_name_resolved = False  # Track if CSV name has been resolved from first successful page
-    consecutive_fallback_successes = 0  # Track consecutive fallback successes before persisting settings
-    # Thresholds based on fallback type:
-    # - CF bypass only (proxy unchanged): proxies * 1
-    # - Other changes (proxy changed): proxies * 3
-    proxy_count = global_proxy_pool.get_proxy_count() if global_proxy_pool else 1
-    fallback_persist_threshold_cf_only = proxy_count * 1  # Lower threshold for CF bypass only
-    fallback_persist_threshold_full = proxy_count * 3     # Higher threshold for proxy changes
-    current_fallback_threshold = fallback_persist_threshold_full  # Will be set based on fallback type
-    pending_fallback_settings = None  # Store the fallback settings to be persisted (use_proxy, use_cf_bypass)
-    logger.debug(f"Fallback persist thresholds: CF-only={fallback_persist_threshold_cf_only}, Full={fallback_persist_threshold_full} (based on {proxy_count} proxies in pool)")
-    
     # Note: Magnet filtering is now done in parser.py based on HTML tags
     # This avoids the need for ?t=d URL filter which requires authentication
     # The URL-based magnet filter (t=d) is deprecated and disabled
@@ -1984,40 +2537,14 @@ def main():
             is_adhoc_mode=custom_url is not None  # Don't ban proxies in ad hoc mode
         )
         
-        # Track fallback successes and persist settings after reaching threshold
-        if has_movie_list and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass):
-            # Determine fallback type and appropriate threshold
-            is_cf_only_change = (effective_use_proxy == use_proxy) and (effective_use_cf_bypass != use_cf_bypass)
-            
-            # If this is a new fallback type, reset counter and set appropriate threshold
-            if pending_fallback_settings is None or pending_fallback_settings != (effective_use_proxy, effective_use_cf_bypass):
-                consecutive_fallback_successes = 0
-                current_fallback_threshold = fallback_persist_threshold_cf_only if is_cf_only_change else fallback_persist_threshold_full
-            
-            # Fallback was triggered and succeeded
-            consecutive_fallback_successes += 1
-            pending_fallback_settings = (effective_use_proxy, effective_use_cf_bypass)
-            fallback_type = "CF-only" if is_cf_only_change else "Full"
-            logger.info(f"[Page {page_num}] Fallback succeeded ({fallback_type}: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
-                       f"Consecutive successes: {consecutive_fallback_successes}/{current_fallback_threshold}")
-            
-            # Only persist settings after reaching the threshold
-            if consecutive_fallback_successes >= current_fallback_threshold:
-                logger.info(f"[Page {page_num}] Reached {current_fallback_threshold} consecutive {fallback_type} fallback successes. "
-                           f"Persisting settings: use_proxy={effective_use_proxy}, use_cf_bypass={effective_use_cf_bypass}")
-                use_proxy = effective_use_proxy
-                use_cf_bypass = effective_use_cf_bypass
-                consecutive_fallback_successes = 0  # Reset counter after persisting
-                pending_fallback_settings = None
-            
-            logger.info(f"[Page {page_num}] Applying {FALLBACK_COOLDOWN}s cooldown before next page...")
-            time.sleep(FALLBACK_COOLDOWN)
-        elif has_movie_list and pending_fallback_settings is not None:
-            # Initial attempt succeeded but we have pending fallback settings - reset counter
-            # This means the previous fallback mode is no longer consistently needed
-            logger.debug(f"[Page {page_num}] Initial attempt succeeded, resetting fallback counter (was {consecutive_fallback_successes})")
-            consecutive_fallback_successes = 0
-            pending_fallback_settings = None
+        # Per-proxy CF bypass is now tracked inside the fallback functions via
+        # mark_proxy_cf_bypass(). The effective settings are automatically applied
+        # on subsequent requests by checking proxy_needs_cf_bypass().
+        # Update use_cf_bypass to match effective settings for logging/state consistency.
+        if has_movie_list and effective_use_cf_bypass != use_cf_bypass:
+            use_cf_bypass = effective_use_cf_bypass
+        if has_movie_list and effective_use_proxy != use_proxy:
+            use_proxy = effective_use_proxy
         
         if proxy_was_banned:
             any_proxy_banned = True
@@ -2107,6 +2634,18 @@ def main():
     
     logger.info(f"Fetched and parsed {last_valid_page - start_page + 1 if last_valid_page >= start_page else 0} pages")
 
+    # --- Estimate processing volume and apply sleep multiplier ---
+    _est_skip = 0
+    for _e in all_index_results_phase1:
+        if has_complete_subtitles(_e['href'], parsed_movies_history_phase1):
+            _est_skip += 1
+    for _e in all_index_results_phase2:
+        if has_complete_subtitles(_e['href'], parsed_movies_history_phase2):
+            _est_skip += 1
+    _est_n = len(all_index_results_phase1) + len(all_index_results_phase2) - _est_skip
+    logger.info(f"Estimated processing volume: N={_est_n} (total={len(all_index_results_phase1)+len(all_index_results_phase2)}, pre-skip={_est_skip})")
+    movie_sleep_mgr.apply_volume_multiplier(_est_n)
+
     # ========================================
     # Process Phase 1 entries
     # ========================================
@@ -2125,221 +2664,170 @@ def main():
             logger.info(f"PHASE 1: Processing {len(all_index_results_phase1)} entries with subtitle")
         logger.info("=" * 75)
 
-        # Process phase 1 entries
         total_entries_phase1 = len(all_index_results_phase1)
-        
-        # Reset fallback tracking for detail pages (reuse thresholds from index phase)
-        detail_consecutive_fallback_successes = 0
-        detail_pending_fallback_settings = None
-        detail_current_fallback_threshold = fallback_persist_threshold_full
 
-        # Track pending sleep - only sleep before entries that will make network requests
-        pending_movie_sleep = False
-
-        for i, entry in enumerate(all_index_results_phase1, 1):
-            href = entry['href']
-            page_num = entry['page']
-            fallback_triggered = False  # Track if fallback was triggered for this entry
-
-            # Skip duplicate entry in current run
-            if href in parsed_links:
-                logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping duplicate entry in current run")
-                # No sleep needed - pending_movie_sleep stays as-is for next entry that needs processing
-                continue
-
-            # Add to parsed links set for this run
-            parsed_links.add(href)
-
-            # Early skip check: if movie already has both subtitle and hacked_subtitle in history,
-            # skip fetching detail page to avoid unnecessary network requests
-            if has_complete_subtitles(href, parsed_movies_history_phase1):
-                logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history")
-                skipped_history_count += 1
-                phase1_skipped_history_actual += 1
-                # No sleep needed - pending_movie_sleep stays as-is for next entry that needs processing
-                continue
-
-            # This entry needs processing - apply pending sleep before making network request
-            if pending_movie_sleep:
-                time.sleep(MOVIE_SLEEP)
-                pending_movie_sleep = False
-
-            detail_url = urljoin(BASE_URL, href)
-
-            # Fetch detail page with fallback mechanism
-            # Note: video_code is already extracted from index page in entry['video_code']
-            magnets, actor_info, parse_success, effective_use_proxy, effective_use_cf_bypass = fetch_detail_page_with_fallback(
-                detail_url, session,
+        if use_parallel:
+            # --- Parallel detail processing ---
+            p1_result = process_detail_entries_parallel(
+                entries=all_index_results_phase1,
+                phase=1,
+                history_data=parsed_movies_history_phase1,
+                history_file=history_file,
+                csv_path=csv_path,
+                fieldnames=fieldnames,
+                dry_run=dry_run,
+                use_history_for_saving=use_history_for_saving,
                 use_cookie=custom_url is not None,
-                use_proxy=use_proxy,
-                use_cf_bypass=use_cf_bypass,
-                entry_index=f"{i}/{total_entries_phase1}",
-                is_adhoc_mode=custom_url is not None
+                is_adhoc_mode=custom_url is not None,
+                ban_log_file=ban_log_file,
             )
-            
-            # Track fallback successes and persist settings after reaching threshold (same as index phase)
-            fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
-            if fallback_triggered:
-                # Determine fallback type and appropriate threshold
-                is_cf_only_change = (effective_use_proxy == use_proxy) and (effective_use_cf_bypass != use_cf_bypass)
+            phase1_rows = p1_result['rows']
+            rows.extend(phase1_rows)
+            phase1_skipped_history_actual = p1_result['skipped_history']
+            skipped_history_count += phase1_skipped_history_actual
+            phase1_failed = p1_result['failed']
+            failed_count += phase1_failed
+            phase1_no_new_torrents = p1_result['no_new_torrents']
+            no_new_torrents_count += phase1_no_new_torrents
+        else:
+            # --- Sequential detail processing (original logic) ---
+            pending_movie_sleep = False
+
+            for i, entry in enumerate(all_index_results_phase1, 1):
+                href = entry['href']
+                page_num = entry['page']
+
+                if href in parsed_links:
+                    logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping duplicate entry in current run")
+                    continue
+
+                parsed_links.add(href)
+
+                if has_complete_subtitles(href, parsed_movies_history_phase1):
+                    logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history")
+                    skipped_history_count += 1
+                    phase1_skipped_history_actual += 1
+                    continue
+
+                if pending_movie_sleep:
+                    movie_sleep_mgr.sleep()
+                    pending_movie_sleep = False
+
+                detail_url = urljoin(BASE_URL, href)
+                logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Processing {entry['video_code'] or href}")
+
+                magnets, actor_info, parse_success, effective_use_proxy, effective_use_cf_bypass = fetch_detail_page_with_fallback(
+                    detail_url, session,
+                    use_cookie=custom_url is not None,
+                    use_proxy=use_proxy,
+                    use_cf_bypass=use_cf_bypass,
+                    entry_index=f"{i}/{total_entries_phase1}",
+                    is_adhoc_mode=custom_url is not None
+                )
                 
-                # If this is a new fallback type, reset counter and set appropriate threshold
-                if detail_pending_fallback_settings is None or detail_pending_fallback_settings != (effective_use_proxy, effective_use_cf_bypass):
-                    detail_consecutive_fallback_successes = 0
-                    detail_current_fallback_threshold = fallback_persist_threshold_cf_only if is_cf_only_change else fallback_persist_threshold_full
-                
-                detail_consecutive_fallback_successes += 1
-                detail_pending_fallback_settings = (effective_use_proxy, effective_use_cf_bypass)
-                fallback_type = "CF-only" if is_cf_only_change else "Full"
-                logger.info(f"[{i}/{total_entries_phase1}] Fallback succeeded ({fallback_type}: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
-                           f"Consecutive successes: {detail_consecutive_fallback_successes}/{detail_current_fallback_threshold}")
-                
-                # Only persist settings after reaching the threshold
-                if detail_consecutive_fallback_successes >= detail_current_fallback_threshold:
-                    logger.info(f"[{i}/{total_entries_phase1}] Reached {detail_current_fallback_threshold} consecutive {fallback_type} fallback successes. "
-                               f"Persisting settings: use_proxy={effective_use_proxy}, use_cf_bypass={effective_use_cf_bypass}")
-                    use_proxy = effective_use_proxy
+                fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
+                if parse_success and effective_use_cf_bypass != use_cf_bypass:
                     use_cf_bypass = effective_use_cf_bypass
-                    detail_consecutive_fallback_successes = 0  # Reset counter after persisting
-                    detail_pending_fallback_settings = None
-            elif parse_success and detail_pending_fallback_settings is not None:
-                # Initial attempt succeeded but we have pending fallback settings - reset counter
-                logger.debug(f"[{i}/{total_entries_phase1}] Initial attempt succeeded, resetting fallback counter (was {detail_consecutive_fallback_successes})")
-                detail_consecutive_fallback_successes = 0
-                detail_pending_fallback_settings = None
-            
-            if not parse_success and not magnets:
-                logger.error(f"[{i}/{total_entries_phase1}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
-                failed_count += 1
-                phase1_failed += 1
-                # Mark pending sleep - will only execute if next entry needs network request
-                pending_movie_sleep = True
-                continue
-            
-            magnet_links = extract_magnets(magnets, i)
-
-            # Log the processing with video_code from index page
-            logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Processing {entry['video_code'] or href}")
-
-            # Check if we should process this movie based on history and phase rules
-            should_process, history_torrent_types = should_process_movie(href, parsed_movies_history_phase1, 1,
-                                                                         magnet_links)
-
-            if not should_process:
-                # Only skip if both hacked_subtitle and subtitle are present in history
-                if history_torrent_types and 'hacked_subtitle' in history_torrent_types and 'subtitle' in history_torrent_types:
-                    logger.debug(
-                        f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping based on history rules (history types: {history_torrent_types})")
-                else:
-                    logger.debug(
-                        f"[{i}/{total_entries_phase1}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
-                skipped_history_count += 1
-                phase1_skipped_history_actual += 1
-                # Mark pending sleep - network request was made, so respect rate limiting
-                pending_movie_sleep = True
-                continue
-
-            # Count found torrents
-            if magnet_links['subtitle']:
-                subtitle_count += 1
-            if magnet_links['hacked_subtitle'] or magnet_links['hacked_no_subtitle']:
-                hacked_count += 1
-            if magnet_links['no_subtitle']:
-                no_subtitle_count += 1
-
-            # Determine current torrent types and merge with history
-            current_torrent_types = determine_torrent_types(magnet_links)
-            all_torrent_types = list(
-                set(history_torrent_types + current_torrent_types)) if history_torrent_types else current_torrent_types
-
-            # Create row with video_code as title
-            row = create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet_links,
-                                                     parsed_movies_history_phase1)
-            # Override the title with video_code
-            video_code = entry['video_code']
-            row['video_code'] = video_code
-
-            # Check if row has any torrent content (including already downloaded ones)
-            has_any_torrents = any([
-                row['hacked_subtitle'],
-                row['hacked_no_subtitle'],
-                row['subtitle'],
-                row['no_subtitle']
-            ])
-            
-            # Check if there are new torrents (not yet downloaded)
-            has_new_torrents = any([
-                row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
-                row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
-                row['subtitle'] and row['subtitle'] != '[DOWNLOADED PREVIOUSLY]',
-                row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]'
-            ])
-
-            # Determine if we should include this movie in report
-            # If INCLUDE_DOWNLOADED_IN_REPORT is True, include movies even if all torrents are already downloaded
-            should_include_in_report = has_new_torrents or (INCLUDE_DOWNLOADED_IN_REPORT and has_any_torrents)
-
-            if should_include_in_report:
-                # Write to CSV immediately (before updating history)
-                write_csv([row], csv_path, fieldnames, dry_run, append_mode=True)
-                rows.append(row)
-                phase1_rows.append(row)  # Track phase 1 entries
+                if parse_success and effective_use_proxy != use_proxy:
+                    use_proxy = effective_use_proxy
                 
-                if has_new_torrents:
-                    logger.debug(f"[{i}/{total_entries_phase1}] [Page {page_num}] Added to CSV with new torrent categories")
-                else:
-                    # Movie included due to INCLUDE_DOWNLOADED_IN_REPORT=True
-                    # Note: Don't increment no_new_torrents_count here because the movie IS in rows
-                    # no_new_torrents_count is for movies NOT included in report
-                    logger.debug(f"[{i}/{total_entries_phase1}] [Page {page_num}] Added to CSV with all torrents already downloaded (INCLUDE_DOWNLOADED_IN_REPORT=True)")
+                if not parse_success and not magnets:
+                    logger.error(f"[{i}/{total_entries_phase1}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
+                    failed_count += 1
+                    phase1_failed += 1
+                    pending_movie_sleep = True
+                    continue
                 
-                # Save to parsed movies history AFTER writing to CSV (only if new torrents found)
-                # Note: ignore_history only affects reading, not saving
-                if use_history_for_saving and not dry_run and has_new_torrents:
-                    # Only save new magnet links to history (exclude already downloaded ones)
-                    new_magnet_links = {}
-                    if row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
-                        new_magnet_links['hacked_subtitle'] = magnet_links.get('hacked_subtitle', '')
-                    if row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
-                        new_magnet_links['hacked_no_subtitle'] = magnet_links.get('hacked_no_subtitle', '')
-                    if row['subtitle'] and row['subtitle'] != '[DOWNLOADED PREVIOUSLY]':
-                        new_magnet_links['subtitle'] = magnet_links.get('subtitle', '')
-                    if row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
-                        new_magnet_links['no_subtitle'] = magnet_links.get('no_subtitle', '')
+                magnet_links = extract_magnets(magnets, i)
+
+                should_process, history_torrent_types = should_process_movie(href, parsed_movies_history_phase1, 1,
+                                                                             magnet_links)
+
+                if not should_process:
+                    if history_torrent_types and 'hacked_subtitle' in history_torrent_types and 'subtitle' in history_torrent_types:
+                        logger.debug(
+                            f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping based on history rules (history types: {history_torrent_types})")
+                    else:
+                        logger.debug(
+                            f"[{i}/{total_entries_phase1}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
+                    skipped_history_count += 1
+                    phase1_skipped_history_actual += 1
+                    pending_movie_sleep = True
+                    continue
+
+                if magnet_links['subtitle']:
+                    subtitle_count += 1
+                if magnet_links['hacked_subtitle'] or magnet_links['hacked_no_subtitle']:
+                    hacked_count += 1
+                if magnet_links['no_subtitle']:
+                    no_subtitle_count += 1
+
+                current_torrent_types = determine_torrent_types(magnet_links)
+                all_torrent_types = list(
+                    set(history_torrent_types + current_torrent_types)) if history_torrent_types else current_torrent_types
+
+                row = create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet_links,
+                                                         parsed_movies_history_phase1)
+                video_code = entry['video_code']
+                row['video_code'] = video_code
+
+                has_any_torrents = any([
+                    row['hacked_subtitle'],
+                    row['hacked_no_subtitle'],
+                    row['subtitle'],
+                    row['no_subtitle']
+                ])
+                
+                has_new_torrents = any([
+                    row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
+                    row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
+                    row['subtitle'] and row['subtitle'] != '[DOWNLOADED PREVIOUSLY]',
+                    row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]'
+                ])
+
+                should_include_in_report = has_new_torrents or (INCLUDE_DOWNLOADED_IN_REPORT and has_any_torrents)
+
+                if should_include_in_report:
+                    write_csv([row], csv_path, fieldnames, dry_run, append_mode=True)
+                    rows.append(row)
+                    phase1_rows.append(row)
                     
-                    if new_magnet_links:  # Only save if there are actually new magnet links
-                        save_parsed_movie_to_history(history_file, href, 1, video_code, new_magnet_links)
-            else:
-                logger.debug(
-                    f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipped CSV entry - all torrent categories already in history")
-                # Don't update history if no new torrents were found
-                no_new_torrents_count += 1
-                phase1_no_new_torrents += 1
+                    if use_history_for_saving and not dry_run and has_new_torrents:
+                        new_magnet_links = {}
+                        if row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
+                            new_magnet_links['hacked_subtitle'] = magnet_links.get('hacked_subtitle', '')
+                        if row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
+                            new_magnet_links['hacked_no_subtitle'] = magnet_links.get('hacked_no_subtitle', '')
+                        if row['subtitle'] and row['subtitle'] != '[DOWNLOADED PREVIOUSLY]':
+                            new_magnet_links['subtitle'] = magnet_links.get('subtitle', '')
+                        if row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
+                            new_magnet_links['no_subtitle'] = magnet_links.get('no_subtitle', '')
+                        
+                        if new_magnet_links:
+                            save_parsed_movie_to_history(history_file, href, 1, video_code, new_magnet_links)
+                else:
+                    no_new_torrents_count += 1
+                    phase1_no_new_torrents += 1
 
-            # Apply appropriate delay
-            if fallback_triggered:
-                # Extra cooldown after fallback to let Cloudflare/server recover
-                logger.debug(f"[{i}/{total_entries_phase1}] Applying fallback cooldown: {FALLBACK_COOLDOWN}s")
-                time.sleep(FALLBACK_COOLDOWN)
-                pending_movie_sleep = False  # Already waited enough
-            else:
-                # Mark pending sleep - will only execute if next entry needs network request
-                pending_movie_sleep = True
+                if fallback_triggered:
+                    logger.debug(f"[{i}/{total_entries_phase1}] Applying fallback cooldown: {FALLBACK_COOLDOWN}s")
+                    time.sleep(FALLBACK_COOLDOWN)
+                    pending_movie_sleep = False
+                else:
+                    pending_movie_sleep = True
 
-        # Phase 1 statistics - use actual tracked counts
-        # Verify: total_entries_phase1 ~= phase1_skipped_history_actual + len(phase1_rows) + phase1_no_new_torrents + phase1_failed
-        logger.info(f"Phase 1 completed: {total_entries_phase1} movies discovered, {len(phase1_rows)} processed, {phase1_skipped_history_actual} skipped (history), {phase1_no_new_torrents} no new torrents, {phase1_failed} failed")
+            logger.info(f"Phase 1 completed: {total_entries_phase1} movies discovered, {len(phase1_rows)} processed, {phase1_skipped_history_actual} skipped (history), {phase1_no_new_torrents} no new torrents, {phase1_failed} failed")
 
     # ========================================
     # Process Phase 2 entries (already parsed during fetch)
     # ========================================
     # Phase 2: Collect entries with only "今日新種"/"昨日新種" tag (filtered by quality)
     if phase_mode in ['2', 'all']:
-        # Add cooldown delay between phases to avoid triggering Cloudflare protection
         if phase_mode == 'all':
             if total_entries_phase1 > 0:
-                logger.info(f"Waiting {PHASE_TRANSITION_COOLDOWN} seconds before Phase 2")
-                time.sleep(PHASE_TRANSITION_COOLDOWN)
+                t = movie_sleep_mgr.get_sleep_time()
+                logger.info(f"Phase transition cooldown: {t}s before Phase 2")
+                time.sleep(t)
             else:
                 logger.info("Phase 1 had no entries to process, skipping phase transition cooldown")
         
@@ -2352,218 +2840,164 @@ def main():
             all_index_results_phase2 = all_index_results_phase2[:max_movies_phase2]
         
         if custom_url is not None:
-            # Ad hoc mode: all filters disabled
             logger.info(f"PHASE 2: Processing {len(all_index_results_phase2)} entries (AD HOC MODE - all filters disabled)")
         else:
             logger.info(f"PHASE 2: Processing {len(all_index_results_phase2)} entries (rate > {PHASE2_MIN_RATE}, comments > {PHASE2_MIN_COMMENTS})")
         logger.info("=" * 75)
 
-        # all_index_results_phase2 was already populated during the fetch phase
-
-        # Process phase 2 entries
         total_entries_phase2 = len(all_index_results_phase2)
-        
-        # Reset fallback tracking for phase 2 detail pages (reuse thresholds from index phase)
-        detail_consecutive_fallback_successes = 0
-        detail_pending_fallback_settings = None
-        detail_current_fallback_threshold = fallback_persist_threshold_full
 
-        # Track pending sleep - only sleep before entries that will make network requests
-        pending_movie_sleep = False
-
-        for i, entry in enumerate(all_index_results_phase2, 1):
-            href = entry['href']
-            page_num = entry['page']
-            fallback_triggered = False  # Track if fallback was triggered for this entry
-
-            # Skip duplicate entry in current run
-            if href in parsed_links:
-                logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping duplicate entry in current run")
-                # No sleep needed - pending_movie_sleep stays as-is for next entry that needs processing
-                continue
-
-            # Add to parsed links set for this run
-            parsed_links.add(href)
-
-            # Early skip check: if movie already has both subtitle and hacked_subtitle in history,
-            # skip fetching detail page to avoid unnecessary network requests
-            if has_complete_subtitles(href, parsed_movies_history_phase2):
-                logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history")
-                skipped_history_count += 1
-                phase2_skipped_history_actual += 1
-                # No sleep needed - pending_movie_sleep stays as-is for next entry that needs processing
-                continue
-
-            # This entry needs processing - apply pending sleep before making network request
-            if pending_movie_sleep:
-                time.sleep(MOVIE_SLEEP)
-                pending_movie_sleep = False
-
-            detail_url = urljoin(BASE_URL, href)
-
-            # Fetch detail page with fallback mechanism
-            # Note: video_code is already extracted from index page in entry['video_code']
-            magnets, actor_info, parse_success, effective_use_proxy, effective_use_cf_bypass = fetch_detail_page_with_fallback(
-                detail_url, session,
+        if use_parallel:
+            # --- Parallel detail processing ---
+            p2_result = process_detail_entries_parallel(
+                entries=all_index_results_phase2,
+                phase=2,
+                history_data=parsed_movies_history_phase2,
+                history_file=history_file,
+                csv_path=csv_path,
+                fieldnames=fieldnames,
+                dry_run=dry_run,
+                use_history_for_saving=use_history_for_saving,
                 use_cookie=custom_url is not None,
-                use_proxy=use_proxy,
-                use_cf_bypass=use_cf_bypass,
-                entry_index=f"P2-{i}/{total_entries_phase2}",
-                is_adhoc_mode=custom_url is not None
+                is_adhoc_mode=custom_url is not None,
+                ban_log_file=ban_log_file,
             )
-            
-            # Track fallback successes and persist settings after reaching threshold (same as index phase)
-            fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
-            if fallback_triggered:
-                # Determine fallback type and appropriate threshold
-                is_cf_only_change = (effective_use_proxy == use_proxy) and (effective_use_cf_bypass != use_cf_bypass)
+            phase2_rows = p2_result['rows']
+            rows.extend(phase2_rows)
+            phase2_skipped_history_actual = p2_result['skipped_history']
+            skipped_history_count += phase2_skipped_history_actual
+            phase2_failed = p2_result['failed']
+            failed_count += phase2_failed
+            phase2_no_new_torrents = p2_result['no_new_torrents']
+            no_new_torrents_count += phase2_no_new_torrents
+        else:
+            # --- Sequential detail processing (original logic) ---
+            pending_movie_sleep = False
+
+            for i, entry in enumerate(all_index_results_phase2, 1):
+                href = entry['href']
+                page_num = entry['page']
+
+                if href in parsed_links:
+                    logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping duplicate entry in current run")
+                    continue
+
+                parsed_links.add(href)
+
+                if has_complete_subtitles(href, parsed_movies_history_phase2):
+                    logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history")
+                    skipped_history_count += 1
+                    phase2_skipped_history_actual += 1
+                    continue
+
+                if pending_movie_sleep:
+                    movie_sleep_mgr.sleep()
+                    pending_movie_sleep = False
+
+                detail_url = urljoin(BASE_URL, href)
+                logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Processing {entry['video_code']}")
+
+                magnets, actor_info, parse_success, effective_use_proxy, effective_use_cf_bypass = fetch_detail_page_with_fallback(
+                    detail_url, session,
+                    use_cookie=custom_url is not None,
+                    use_proxy=use_proxy,
+                    use_cf_bypass=use_cf_bypass,
+                    entry_index=f"P2-{i}/{total_entries_phase2}",
+                    is_adhoc_mode=custom_url is not None
+                )
                 
-                # If this is a new fallback type, reset counter and set appropriate threshold
-                if detail_pending_fallback_settings is None or detail_pending_fallback_settings != (effective_use_proxy, effective_use_cf_bypass):
-                    detail_consecutive_fallback_successes = 0
-                    detail_current_fallback_threshold = fallback_persist_threshold_cf_only if is_cf_only_change else fallback_persist_threshold_full
-                
-                detail_consecutive_fallback_successes += 1
-                detail_pending_fallback_settings = (effective_use_proxy, effective_use_cf_bypass)
-                fallback_type = "CF-only" if is_cf_only_change else "Full"
-                logger.info(f"[P2-{i}/{total_entries_phase2}] Fallback succeeded ({fallback_type}: Proxy={effective_use_proxy}, CF={effective_use_cf_bypass}). "
-                           f"Consecutive successes: {detail_consecutive_fallback_successes}/{detail_current_fallback_threshold}")
-                
-                # Only persist settings after reaching the threshold
-                if detail_consecutive_fallback_successes >= detail_current_fallback_threshold:
-                    logger.info(f"[P2-{i}/{total_entries_phase2}] Reached {detail_current_fallback_threshold} consecutive {fallback_type} fallback successes. "
-                               f"Persisting settings: use_proxy={effective_use_proxy}, use_cf_bypass={effective_use_cf_bypass}")
-                    use_proxy = effective_use_proxy
+                fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
+                if parse_success and effective_use_cf_bypass != use_cf_bypass:
                     use_cf_bypass = effective_use_cf_bypass
-                    detail_consecutive_fallback_successes = 0  # Reset counter after persisting
-                    detail_pending_fallback_settings = None
-            elif parse_success and detail_pending_fallback_settings is not None:
-                # Initial attempt succeeded but we have pending fallback settings - reset counter
-                logger.debug(f"[P2-{i}/{total_entries_phase2}] Initial attempt succeeded, resetting fallback counter (was {detail_consecutive_fallback_successes})")
-                detail_consecutive_fallback_successes = 0
-                detail_pending_fallback_settings = None
-            
-            if not parse_success and not magnets:
-                logger.error(f"[{i}/{total_entries_phase2}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
-                failed_count += 1
-                phase2_failed += 1
-                # Mark pending sleep - will only execute if next entry needs network request
-                pending_movie_sleep = True
-                continue
-            
-            magnet_links = extract_magnets(magnets, f"P2-{i}")
-
-            # Log the processing with video_code from index page
-            logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Processing {entry['video_code']}")
-
-            # Check if we should process this movie based on history and phase rules
-            should_process, history_torrent_types = should_process_movie(href, parsed_movies_history_phase2, 2,
-                                                                         magnet_links)
-
-            if not should_process:
-                # Only skip if both hacked_subtitle and subtitle are present in history
-                if history_torrent_types and 'hacked_subtitle' in history_torrent_types and 'subtitle' in history_torrent_types:
-                    logger.debug(
-                        f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping based on history rules (history types: {history_torrent_types})")
-                else:
-                    logger.debug(
-                        f"[{i}/{total_entries_phase2}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
-                skipped_history_count += 1
-                phase2_skipped_history_actual += 1
-                # Mark pending sleep - network request was made, so respect rate limiting
-                pending_movie_sleep = True
-                continue
-
-            # Count found torrents
-            if magnet_links['subtitle']:
-                subtitle_count += 1
-            if magnet_links['hacked_subtitle'] or magnet_links['hacked_no_subtitle']:
-                hacked_count += 1
-            if magnet_links['no_subtitle']:
-                no_subtitle_count += 1
-
-            # Determine current torrent types and merge with history
-            current_torrent_types = determine_torrent_types(magnet_links)
-            all_torrent_types = list(
-                set(history_torrent_types + current_torrent_types)) if history_torrent_types else current_torrent_types
-
-            # Create row for Phase 2
-            row = create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet_links,
-                                                     parsed_movies_history_phase2)
-            # Override the title with video_code
-            video_code = entry['video_code']
-            row['video_code'] = video_code
-
-            # Check if row has any torrent content (including already downloaded ones)
-            has_any_torrents = any([
-                row['hacked_subtitle'],
-                row['hacked_no_subtitle'],
-                row['subtitle'],
-                row['no_subtitle']
-            ])
-            
-            # Check if there are new torrents (not yet downloaded)
-            has_new_torrents = any([
-                row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
-                row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
-                row['subtitle'] and row['subtitle'] != '[DOWNLOADED PREVIOUSLY]',
-                row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]'
-            ])
-
-            # Determine if we should include this movie in report
-            # If INCLUDE_DOWNLOADED_IN_REPORT is True, include movies even if all torrents are already downloaded
-            should_include_in_report = has_new_torrents or (INCLUDE_DOWNLOADED_IN_REPORT and has_any_torrents)
-
-            if should_include_in_report:
-                # Write to CSV immediately (before updating history)
-                write_csv([row], csv_path, fieldnames, dry_run, append_mode=True)
-                rows.append(row)
-                phase2_rows.append(row)  # Track phase 2 entries
+                if parse_success and effective_use_proxy != use_proxy:
+                    use_proxy = effective_use_proxy
                 
-                if has_new_torrents:
-                    logger.debug(f"[{i}/{total_entries_phase2}] [Page {page_num}] Added to CSV with new torrent categories")
-                else:
-                    # Movie included due to INCLUDE_DOWNLOADED_IN_REPORT=True
-                    # Note: Don't increment no_new_torrents_count here because the movie IS in rows
-                    # no_new_torrents_count is for movies NOT included in report
-                    logger.debug(f"[{i}/{total_entries_phase2}] [Page {page_num}] Added to CSV with all torrents already downloaded (INCLUDE_DOWNLOADED_IN_REPORT=True)")
+                if not parse_success and not magnets:
+                    logger.error(f"[{i}/{total_entries_phase2}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
+                    failed_count += 1
+                    phase2_failed += 1
+                    pending_movie_sleep = True
+                    continue
                 
-                # Save to parsed movies history AFTER writing to CSV (only if new torrents found)
-                # Note: ignore_history only affects reading, not saving
-                if use_history_for_saving and not dry_run and has_new_torrents:
-                    # Only save new magnet links to history (exclude already downloaded ones)
-                    new_magnet_links = {}
-                    if row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
-                        new_magnet_links['hacked_subtitle'] = magnet_links.get('hacked_subtitle', '')
-                    if row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
-                        new_magnet_links['hacked_no_subtitle'] = magnet_links.get('hacked_no_subtitle', '')
-                    if row['subtitle'] and row['subtitle'] != '[DOWNLOADED PREVIOUSLY]':
-                        new_magnet_links['subtitle'] = magnet_links.get('subtitle', '')
-                    if row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
-                        new_magnet_links['no_subtitle'] = magnet_links.get('no_subtitle', '')
+                magnet_links = extract_magnets(magnets, f"P2-{i}")
+
+                should_process, history_torrent_types = should_process_movie(href, parsed_movies_history_phase2, 2,
+                                                                             magnet_links)
+
+                if not should_process:
+                    if history_torrent_types and 'hacked_subtitle' in history_torrent_types and 'subtitle' in history_torrent_types:
+                        logger.debug(
+                            f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping based on history rules (history types: {history_torrent_types})")
+                    else:
+                        logger.debug(
+                            f"[{i}/{total_entries_phase2}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
+                    skipped_history_count += 1
+                    phase2_skipped_history_actual += 1
+                    pending_movie_sleep = True
+                    continue
+
+                if magnet_links['subtitle']:
+                    subtitle_count += 1
+                if magnet_links['hacked_subtitle'] or magnet_links['hacked_no_subtitle']:
+                    hacked_count += 1
+                if magnet_links['no_subtitle']:
+                    no_subtitle_count += 1
+
+                current_torrent_types = determine_torrent_types(magnet_links)
+                all_torrent_types = list(
+                    set(history_torrent_types + current_torrent_types)) if history_torrent_types else current_torrent_types
+
+                row = create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet_links,
+                                                         parsed_movies_history_phase2)
+                video_code = entry['video_code']
+                row['video_code'] = video_code
+
+                has_any_torrents = any([
+                    row['hacked_subtitle'],
+                    row['hacked_no_subtitle'],
+                    row['subtitle'],
+                    row['no_subtitle']
+                ])
+                
+                has_new_torrents = any([
+                    row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
+                    row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
+                    row['subtitle'] and row['subtitle'] != '[DOWNLOADED PREVIOUSLY]',
+                    row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]'
+                ])
+
+                should_include_in_report = has_new_torrents or (INCLUDE_DOWNLOADED_IN_REPORT and has_any_torrents)
+
+                if should_include_in_report:
+                    write_csv([row], csv_path, fieldnames, dry_run, append_mode=True)
+                    rows.append(row)
+                    phase2_rows.append(row)
                     
-                    if new_magnet_links:  # Only save if there are actually new magnet links
-                        save_parsed_movie_to_history(history_file, href, 2, video_code, new_magnet_links)
-            else:
-                logger.debug(
-                    f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipped CSV entry - all torrent categories already in history")
-                # Don't update history if no new torrents were found
-                no_new_torrents_count += 1
-                phase2_no_new_torrents += 1
+                    if use_history_for_saving and not dry_run and has_new_torrents:
+                        new_magnet_links = {}
+                        if row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
+                            new_magnet_links['hacked_subtitle'] = magnet_links.get('hacked_subtitle', '')
+                        if row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
+                            new_magnet_links['hacked_no_subtitle'] = magnet_links.get('hacked_no_subtitle', '')
+                        if row['subtitle'] and row['subtitle'] != '[DOWNLOADED PREVIOUSLY]':
+                            new_magnet_links['subtitle'] = magnet_links.get('subtitle', '')
+                        if row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
+                            new_magnet_links['no_subtitle'] = magnet_links.get('no_subtitle', '')
+                        
+                        if new_magnet_links:
+                            save_parsed_movie_to_history(history_file, href, 2, video_code, new_magnet_links)
+                else:
+                    no_new_torrents_count += 1
+                    phase2_no_new_torrents += 1
 
-            # Apply appropriate delay
-            if fallback_triggered:
-                # Extra cooldown after fallback to let Cloudflare/server recover
-                logger.debug(f"[P2-{i}/{total_entries_phase2}] Applying fallback cooldown: {FALLBACK_COOLDOWN}s")
-                time.sleep(FALLBACK_COOLDOWN)
-                pending_movie_sleep = False  # Already waited enough
-            else:
-                # Mark pending sleep - will only execute if next entry needs network request
-                pending_movie_sleep = True
+                if fallback_triggered:
+                    logger.debug(f"[P2-{i}/{total_entries_phase2}] Applying fallback cooldown: {FALLBACK_COOLDOWN}s")
+                    time.sleep(FALLBACK_COOLDOWN)
+                    pending_movie_sleep = False
+                else:
+                    pending_movie_sleep = True
 
-        # Phase 2 statistics - use actual tracked counts
-        # Verify: total_entries_phase2 ~= phase2_skipped_history_actual + len(phase2_rows) + phase2_no_new_torrents + phase2_failed
-        logger.info(f"Phase 2 completed: {total_entries_phase2} movies discovered, {len(phase2_rows)} processed, {phase2_skipped_history_actual} skipped (history), {phase2_no_new_torrents} no new torrents, {phase2_failed} failed")
+            logger.info(f"Phase 2 completed: {total_entries_phase2} movies discovered, {len(phase2_rows)} processed, {phase2_skipped_history_actual} skipped (history), {phase2_no_new_torrents} no new torrents, {phase2_failed} failed")
 
     # CSV has been written incrementally during processing
     if not dry_run:

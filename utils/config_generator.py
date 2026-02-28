@@ -96,6 +96,44 @@ def get_env_float(name: str, default: float) -> float:
         return default
 
 
+def get_env_range_min(name: str, default: int) -> int:
+    """Get the minimum value from an 'A,B' range environment variable.
+
+    Falls back to interpreting as a single integer when no comma is present.
+    """
+    val = get_env(name, str(default))
+    if val in EMPTY_PLACEHOLDERS or val == '':
+        return default
+    if ',' in val:
+        try:
+            return int(val.split(',')[0].strip())
+        except (ValueError, TypeError):
+            return default
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return default
+
+
+def get_env_range_max(name: str, default: int) -> int:
+    """Get the maximum value from an 'A,B' range environment variable.
+
+    Falls back to interpreting as a single integer when no comma is present.
+    """
+    val = get_env(name, str(default))
+    if val in EMPTY_PLACEHOLDERS or val == '':
+        return default
+    if ',' in val:
+        try:
+            return int(val.split(',')[1].strip())
+        except (ValueError, TypeError):
+            return default
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return default
+
+
 def get_env_bool(name: str, default: bool) -> bool:
     """Get environment variable as boolean.
     
@@ -235,9 +273,9 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('GPT_API_URL', 'GPT_API_URL', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
         ('GPT_API_KEY', 'GPT_API_KEY', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
         ('PAGE_SLEEP', 'PAGE_SLEEP', get_env_int, 15, 'JAVDB LOGIN CONFIGURATION'),
-        ('MOVIE_SLEEP', 'MOVIE_SLEEP', get_env_int, 15, 'JAVDB LOGIN CONFIGURATION'),
+        ('MOVIE_SLEEP_MIN', 'MOVIE_SLEEP', get_env_range_min, 5, 'JAVDB LOGIN CONFIGURATION'),
+        ('MOVIE_SLEEP_MAX', 'MOVIE_SLEEP', get_env_range_max, 15, 'JAVDB LOGIN CONFIGURATION'),
         ('CF_TURNSTILE_COOLDOWN', 'CF_TURNSTILE_COOLDOWN', get_env_int, 30, 'JAVDB LOGIN CONFIGURATION'),
-        ('PHASE_TRANSITION_COOLDOWN', 'PHASE_TRANSITION_COOLDOWN', get_env_int, 60, 'JAVDB LOGIN CONFIGURATION'),
         ('FALLBACK_COOLDOWN', 'FALLBACK_COOLDOWN', get_env_int, 30, 'JAVDB LOGIN CONFIGURATION'),
         # Logging Configuration
         ('LOG_LEVEL', 'LOG_LEVEL', get_env, 'INFO', 'LOGGING CONFIGURATION'),
