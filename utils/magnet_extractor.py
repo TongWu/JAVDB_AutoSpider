@@ -3,17 +3,13 @@
 Tries to use the high-performance Rust implementation from
 ``javdb_rust_core.extract_magnets``.  Falls back to the pure-Python
 implementation transparently when the Rust extension is unavailable.
+
+Logging: uses get_logger only; does not reconfigure root logging, so that
+spider/pipeline file handlers (e.g. logs/spider.log) are not cleared when
+this module is imported transitively.
 """
+from utils.logging_config import get_logger
 
-import logging
-from utils.logging_config import get_logger, setup_logging
-
-try:
-    from config import LOG_LEVEL
-except ImportError:
-    LOG_LEVEL = 'INFO'
-
-setup_logging(log_level=LOG_LEVEL)
 logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
