@@ -173,11 +173,8 @@ pub fn get_page_url(page_num: i32, base_url: &str, custom_url: Option<&str>) -> 
         return format!("{cu}{sep}page={page_num}");
     }
 
-    if base_url.ends_with(".com") {
-        format!("{base_url}/?page={page_num}")
-    } else {
-        format!("{base_url}&page={page_num}")
-    }
+    let sep = if base_url.contains('?') { '&' } else { '?' };
+    format!("{base_url}{sep}page={page_num}")
 }
 
 #[pyfunction]
