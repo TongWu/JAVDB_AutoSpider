@@ -100,7 +100,9 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
                 return html, False, True
             else:
                 last_failed_html = html
-                logger.debug(f"[Page {page_num}] Validation failed (no movie list, age_modal={age_modal is not None}): {context_msg}")
+                logger.debug(
+                    f"[Page {page_num}] Validation failed (no movie list, age_modal={age_modal is not None}, title={title_text!r}): {context_msg}"
+                )
         return None, False, False
 
     def try_fetch(u_proxy, u_cf, context_msg):
