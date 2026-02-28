@@ -135,6 +135,92 @@ pub fn extract_category_name(document: &Html) -> (String, String) {
     (String::new(), String::new())
 }
 
+/// Check whether the HTML represents a JavDB login page.
+pub fn is_login_page(html_content: &str) -> bool {
+    if html_content.is_empty() {
+        return false;
+    }
+    let document = Html::parse_document(html_content);
+    let title_sel = Selector::parse("title").unwrap();
+    if let Some(title_tag) = document.select(&title_sel).next() {
+        let title_text: String = title_tag.text().collect::<Vec<_>>().join("");
+        let lower = title_text.trim().to_lowercase();
+        if lower.contains("登入") || lower.contains("login") {
+            return true;
+        }
+    }
+    false
+}
+
+/// Validate index page HTML.
+///
+/// Returns ``(has_movie_list, is_valid_empty_page)``.
+pub fn validate_index_html(html_content: &str) -> (bool, bool) {
+    let document = Html::parse_document(html_content);
+
+    // Look for movie-list container
+    let div_sel = Selector::parse("div").unwrap();
+    let has_movie_list = document.select(&div_sel).any(|div| {
+        if class_contains_in_html(&div, "movie-list") {
+            return true;
+        }
+        false
+    });
+
+    if has_movie_list {
+        // Re-find and check item count
+        for div in document.select(&div_sel) {
+            if class_contains_in_html(&div, "movie-list") {
+                let item_sel = Selector::parse("div.item").unwrap();
+                let count = div.select(&item_sel).count();
+                if count > 0 {
+                    return (true, false);
+                } else {
+                    return (false, true);
+                }
+            }
+        }
+    }
+
+    {
+        // Check for empty-message div
+        let empty_sel = Selector::parse("div.empty-message").unwrap();
+        if document.select(&empty_sel).next().is_some() {
+            return (false, true);
+        }
+
+        // Check for no-content text patterns
+        let body_text: String = document.root_element().text().collect();
+        let no_content_patterns = [
+            "No content yet",
+            "No result",
+            "暫無內容",
+            "暂无内容",
+        ];
+        let age_modal_sel = Selector::parse("div.modal.is-active.over18-modal").unwrap();
+        let has_age_modal = document.select(&age_modal_sel).next().is_some();
+
+        if !has_age_modal {
+            for pattern in &no_content_patterns {
+                if body_text.contains(pattern) {
+                    return (false, true);
+                }
+            }
+            if html_content.len() > 20000 {
+                return (false, true); // large HTML without movie list
+            }
+        }
+    }
+
+    (false, false)
+}
+
+fn class_contains_in_html(el: &ElementRef, substr: &str) -> bool {
+    el.value()
+        .attr("class")
+        .map_or(false, |classes| classes.contains(substr))
+}
+
 pub fn get_text_content(el: &ElementRef) -> String {
     el.text().collect::<Vec<_>>().join("")
 }
