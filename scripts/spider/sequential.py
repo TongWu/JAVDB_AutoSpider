@@ -45,8 +45,6 @@ def process_phase_entries_sequential(
         use_proxy, use_cf_bypass
     """
     total_entries = len(entries)
-    phase_prefix = '' if phase == 1 else f'P{phase}-'
-
     phase_rows: list = []
     skipped_history = 0
     failed = 0
@@ -58,14 +56,14 @@ def process_phase_entries_sequential(
         page_num = entry['page']
 
         if href in state.parsed_links:
-            logger.info(f"[{phase_prefix}{i}/{total_entries}] [Page {page_num}] Skipping duplicate entry in current run")
+            logger.info(f"[{i}/{total_entries}] [Page {page_num}] Skipping duplicate entry in current run")
             continue
 
         state.parsed_links.add(href)
 
         if has_complete_subtitles(href, history_data):
             logger.info(
-                f"[{phase_prefix}{i}/{total_entries}] [Page {page_num}] "
+                f"[{i}/{total_entries}] [Page {page_num}] "
                 f"Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history"
             )
             skipped_history += 1
@@ -76,7 +74,7 @@ def process_phase_entries_sequential(
             pending_movie_sleep = False
 
         detail_url = urljoin(BASE_URL, href)
-        entry_index = f"{phase_prefix}{i}/{total_entries}"
+        entry_index = f"{i}/{total_entries}"
         logger.info(f"[{entry_index}] [Page {page_num}] Processing {entry['video_code'] or href}")
 
         magnets, actor_info, parse_success, effective_use_proxy, effective_use_cf_bypass = fetch_detail_page_with_fallback(
