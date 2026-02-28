@@ -37,7 +37,6 @@ def _requeue_front(q: queue_module.Queue, item) -> None:
     """Put *item* at the front of a Queue so it gets picked up next."""
     with q.mutex:
         q.queue.appendleft(item)
-        q.unfinished_tasks += 1
         q.not_empty.notify()
 
 
