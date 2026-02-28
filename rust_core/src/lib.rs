@@ -1,10 +1,13 @@
 use pyo3::prelude::*;
 
+pub mod csv_writer;
 pub mod history;
+pub mod magnet_extractor;
 pub mod models;
 pub mod proxy;
 pub mod requester;
 pub mod scraper;
+pub mod url_helper;
 
 use models::{
     CategoryPageResult, IndexPageResult, MagnetInfo, MovieDetail, MovieIndexEntry, MovieLink,
@@ -23,7 +26,8 @@ use history::manager::{
     load_parsed_movies_history, cleanup_history_file, maintain_history_limit,
     save_parsed_movie_to_history, validate_history_file, determine_torrent_types,
     determine_torrent_type, get_missing_torrent_types, has_complete_subtitles,
-    should_process_movie, check_torrent_in_history, add_downloaded_indicator_to_csv,
+    should_skip_recent_yesterday_release, should_process_movie,
+    check_torrent_in_history, add_downloaded_indicator_to_csv,
     is_downloaded_torrent, mark_torrent_as_downloaded,
 };
 
@@ -60,6 +64,16 @@ fn parse_tag_page(html_content: &str, page_num: i32) -> TagPageResult {
 #[pyfunction]
 fn detect_page_type(html_content: &str) -> String {
     scraper::common::detect_page_type(html_content)
+}
+
+#[pyfunction]
+fn is_login_page(html_content: &str) -> bool {
+    scraper::common::is_login_page(html_content)
+}
+
+#[pyfunction]
+fn validate_index_html(html_content: &str) -> (bool, bool) {
+    scraper::common::validate_index_html(html_content)
 }
 
 #[pymodule]
@@ -109,6 +123,8 @@ fn javdb_rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_top_page, m)?)?;
     m.add_function(wrap_pyfunction!(parse_tag_page, m)?)?;
     m.add_function(wrap_pyfunction!(detect_page_type, m)?)?;
+    m.add_function(wrap_pyfunction!(is_login_page, m)?)?;
+    m.add_function(wrap_pyfunction!(validate_index_html, m)?)?;
 
     // --- History Manager ---
     m.add_function(wrap_pyfunction!(load_parsed_movies_history, m)?)?;
@@ -120,11 +136,28 @@ fn javdb_rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(determine_torrent_type, m)?)?;
     m.add_function(wrap_pyfunction!(get_missing_torrent_types, m)?)?;
     m.add_function(wrap_pyfunction!(has_complete_subtitles, m)?)?;
+    m.add_function(wrap_pyfunction!(should_skip_recent_yesterday_release, m)?)?;
     m.add_function(wrap_pyfunction!(should_process_movie, m)?)?;
     m.add_function(wrap_pyfunction!(check_torrent_in_history, m)?)?;
     m.add_function(wrap_pyfunction!(add_downloaded_indicator_to_csv, m)?)?;
     m.add_function(wrap_pyfunction!(is_downloaded_torrent, m)?)?;
     m.add_function(wrap_pyfunction!(mark_torrent_as_downloaded, m)?)?;
+
+    // --- CSV Writer ---
+    m.add_function(wrap_pyfunction!(csv_writer::merge_row_data, m)?)?;
+    m.add_function(wrap_pyfunction!(csv_writer::create_csv_row, m)?)?;
+
+    // --- URL Helper ---
+    m.add_function(wrap_pyfunction!(url_helper::detect_url_type, m)?)?;
+    m.add_function(wrap_pyfunction!(url_helper::extract_url_identifier, m)?)?;
+    m.add_function(wrap_pyfunction!(url_helper::has_magnet_filter, m)?)?;
+    m.add_function(wrap_pyfunction!(url_helper::add_magnet_filter_to_url, m)?)?;
+    m.add_function(wrap_pyfunction!(url_helper::get_page_url, m)?)?;
+    m.add_function(wrap_pyfunction!(url_helper::sanitize_filename_part, m)?)?;
+    m.add_function(wrap_pyfunction!(url_helper::extract_url_part_after_javdb, m)?)?;
+
+    // --- Magnet Extractor ---
+    m.add_function(wrap_pyfunction!(magnet_extractor::extract_magnets, m)?)?;
 
     Ok(())
 }

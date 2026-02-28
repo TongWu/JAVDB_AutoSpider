@@ -74,25 +74,25 @@ def check_rust_core_status():
         status['history_manager'] = False
     
     # Log summary
-    logger.info("=" * 60)
-    logger.info("RUST CORE STATUS CHECK")
-    logger.info("=" * 60)
+    logger.debug("=" * 60)
+    logger.debug("RUST CORE STATUS CHECK")
+    logger.debug("=" * 60)
     for component, available in status.items():
         icon = "✅" if available else "⚠️ "
         impl = "Rust" if available else "Python"
-        logger.info(f"{icon} {component.replace('_', ' ').title()}: {impl}")
+        logger.debug(f"{icon} {component.replace('_', ' ').title()}: {impl}")
     
     all_rust = all(status.values())
     if all_rust:
-        logger.info("=" * 60)
-        logger.info("🚀 All components using Rust - maximum performance!")
-        logger.info("=" * 60)
+        logger.debug("=" * 60)
+        logger.debug("🚀 All components using Rust - maximum performance!")
+        logger.debug("=" * 60)
     else:
         rust_count = sum(status.values())
         total_count = len(status)
-        logger.info("=" * 60)
-        logger.info(f"📊 Rust components: {rust_count}/{total_count} available")
-        logger.info("=" * 60)
+        logger.debug("=" * 60)
+        logger.debug(f"📊 Rust components: {rust_count}/{total_count} available")
+        logger.debug("=" * 60)
     
     return status
 
@@ -281,7 +281,7 @@ def main():
 
         # 1. Run Spider
         logger.info("Step 1: Running JavDB Spider...")
-        spider_output = run_script('scripts/spider.py', spider_args)
+        spider_output = run_script('scripts/spider', spider_args)
         logger.info("✓ JavDB Spider completed successfully")
         
         # Extract CSV path from spider output if not pre-determined

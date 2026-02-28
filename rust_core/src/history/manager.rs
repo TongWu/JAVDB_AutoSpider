@@ -695,6 +695,41 @@ pub fn has_complete_subtitles(
 }
 
 #[pyfunction]
+#[pyo3(signature = (href, history_data=None, is_yesterday_release=false))]
+pub fn should_skip_recent_yesterday_release(
+    href: &str,
+    history_data: Option<&Bound<'_, PyDict>>,
+    is_yesterday_release: bool,
+) -> PyResult<bool> {
+    if !is_yesterday_release {
+        return Ok(false);
+    }
+    let history_data = match history_data {
+        Some(d) => d,
+        None => return Ok(false),
+    };
+    let entry = match history_data.get_item(href)? {
+        Some(v) => v,
+        None => return Ok(false),
+    };
+    let entry_dict: &Bound<'_, PyDict> = entry.downcast()?;
+    let update_date_str: String = match entry_dict.get_item("update_date")? {
+        Some(v) => v.extract::<String>()?,
+        None => return Ok(false),
+    };
+    if update_date_str.is_empty() {
+        return Ok(false);
+    }
+
+    let cutoff = (Local::now() - chrono::Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    let update_date_prefix = &update_date_str[..update_date_str.len().min(10)];
+
+    Ok(update_date_prefix >= cutoff.as_str())
+}
+
+#[pyfunction]
 pub fn should_process_movie(
     py: Python<'_>,
     href: &str,

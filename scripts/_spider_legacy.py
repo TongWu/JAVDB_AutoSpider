@@ -1,5 +1,4 @@
 import requests
-import csv
 import time
 import re
 import random
@@ -27,8 +26,6 @@ from utils.history_manager import load_parsed_movies_history, save_parsed_movie_
 from utils.parser import parse_index, parse_detail
 from utils.magnet_extractor import extract_magnets
 
-# New API layer – available for direct use by callers
-from api.parsers.common import extract_category_name as _api_extract_category_name
 from api.parsers import parse_index_page as api_parse_index_page
 from api.parsers import parse_detail_page as api_parse_detail_page
 from api.parsers import parse_category_page as api_parse_category_page
@@ -121,23 +118,33 @@ logger = get_logger(__name__)
 try:
     from api.parsers import RUST_PARSERS_AVAILABLE
     if RUST_PARSERS_AVAILABLE:
-        logger.info("✅ Spider using Rust parsers - high-performance HTML parsing enabled")
+        logger.debug("✅ Spider using Rust parsers - high-performance HTML parsing enabled")
     else:
-        logger.info("⚠️  Spider using Python parsers - Rust parsers not available")
+        logger.debug("⚠️  Spider using Python parsers - Rust parsers not available")
 except Exception:
-    logger.info("⚠️  Could not determine parser implementation status")
+    logger.debug("⚠️  Could not determine parser implementation status")
 
 try:
     from utils.history_manager import RUST_HISTORY_AVAILABLE
     if RUST_HISTORY_AVAILABLE:
-        logger.info("✅ Spider using Rust history manager - high-performance CSV I/O enabled")
+        logger.debug("✅ Spider using Rust history manager - high-performance CSV I/O enabled")
     else:
-        logger.info("⚠️  Spider using Python history manager - Rust not available")
+        logger.debug("⚠️  Spider using Python history manager - Rust not available")
 except Exception:
     logger.info("⚠️  Could not determine history manager implementation status")
 
 # Import masking utilities
 from utils.masking import mask_ip_address, mask_username, mask_full, mask_proxy_url
+from utils.url_helper import (
+    detect_url_type, extract_url_identifier, has_magnet_filter,
+    add_magnet_filter_to_url, sanitize_filename_part,
+    extract_url_part_after_javdb,
+    get_page_url as _url_helper_get_page_url,
+)
+from utils.csv_writer import merge_row_data, write_csv
+from utils.filename_helper import (
+    generate_output_csv_name, generate_output_csv_name_from_html,
+)
 
 # Import proxy pool
 from utils.proxy_pool import ProxyPool, create_proxy_pool_from_config
@@ -694,236 +701,9 @@ def can_attempt_login(is_adhoc_mode: bool, is_index_page: bool = False) -> bool:
 # Adhoc URL Magnet Filter Functions
 # ============================================================
 
-def has_magnet_filter(url):
-    """
-    Check if URL already has a magnet/download filter.
-    
-    Different URL types use different filter parameters:
-    - actors: t=d or t=c (download/subtitle filter)
-    - makers/video_codes: f=download
-    
-    Args:
-        url: The URL to check
-    
-    Returns:
-        bool: True if URL already has magnet filter, False otherwise
-    """
-    try:
-        parsed = urlparse(url)
-        if not parsed.query:
-            return False
-        
-        # Parse query parameters
-        from urllib.parse import parse_qs
-        params = parse_qs(parsed.query)
-        
-        # Determine URL type
-        path = parsed.path.strip('/')
-        
-        if path.startswith('actors/'):
-            # For actors: check 't' parameter for 'd' or 'c'
-            if 't' not in params:
-                return False
-            t_values = params['t']
-            for t_val in t_values:
-                # t can be comma-separated like "312,d"
-                parts = t_val.split(',')
-                if 'd' in parts or 'c' in parts:
-                    return True
-            return False
-        
-        elif path.startswith('makers/') or path.startswith('video_codes/'):
-            # For makers/video_codes: check 'f' parameter for 'download'
-            if 'f' not in params:
-                return False
-            f_values = params['f']
-            for f_val in f_values:
-                if f_val == 'download':
-                    return True
-            return False
-        
-        else:
-            # Unknown URL type, no filter check needed
-            return False
-        
-    except Exception as e:
-        logger.debug(f"Error checking magnet filter in URL {url}: {e}")
-        return False
-
-
-def add_magnet_filter_to_url(url):
-    """
-    Add magnet filter to URL for adhoc mode based on URL type.
-    
-    Different URL types use different filter parameters:
-    - actors: t=d (or append ,d to existing t value)
-    - makers/video_codes: f=download
-    
-    Rules for actors (t parameter):
-    1. If URL has no 't' param: add ?t=d or &t=d
-    2. If URL has t=d or t=c: return URL unchanged (already has filter)
-    3. If URL has t=<other> (e.g. t=312): change to t=<other>,d (e.g. t=312,d)
-    
-    Rules for makers/video_codes (f parameter):
-    1. If URL has no 'f' param: add ?f=download or &f=download
-    2. If URL has f=download: return URL unchanged
-    
-    Args:
-        url: The original URL
-    
-    Returns:
-        str: URL with magnet filter added, or original if already has filter
-    """
-    try:
-        # If already has magnet filter, return unchanged
-        if has_magnet_filter(url):
-            logger.debug(f"URL already has magnet filter: {url}")
-            return url
-        
-        parsed = urlparse(url)
-        path = parsed.path.strip('/')
-        
-        # Determine URL type and appropriate filter
-        if path.startswith('actors/'):
-            # For actors: use t=d filter
-            return _add_actors_filter(url, parsed)
-        elif path.startswith('makers/') or path.startswith('video_codes/'):
-            # For makers/video_codes: use f=download filter
-            return _add_download_filter(url, parsed)
-        else:
-            # Unknown URL type, return unchanged
-            logger.debug(f"Unknown URL type, not adding filter: {url}")
-            return url
-            
-    except Exception as e:
-        logger.warning(f"Error adding magnet filter to URL {url}: {e}")
-        return url
-
-
-def _add_actors_filter(url, parsed):
-    """
-    Add t=d filter for actors URLs.
-    
-    Args:
-        url: The original URL
-        parsed: ParseResult from urlparse
-    
-    Returns:
-        str: URL with t=d filter added
-    """
-    from urllib.parse import parse_qs, urlencode, urlunparse
-    
-    # If no query string, simply add ?t=d
-    if not parsed.query:
-        # Handle edge case: URL ends with '?' but has no query params
-        base_url = url.rstrip('?')
-        return f"{base_url}?t=d"
-    
-    params = parse_qs(parsed.query, keep_blank_values=True)
-    
-    if 't' not in params:
-        # No 't' parameter, add t=d to existing query
-        # Handle edge case: URL might end with '&' or have trailing '?'
-        base_url = url.rstrip('&')
-        return f"{base_url}&t=d"
-    else:
-        # Has 't' parameter with other value (e.g. t=312), append ,d
-        t_values = params['t']
-        new_t_values = []
-        for t_val in t_values:
-            parts = t_val.split(',')
-            if 'd' not in parts and 'c' not in parts:
-                new_t_values.append(f"{t_val},d")
-            else:
-                new_t_values.append(t_val)
-        
-        params['t'] = new_t_values
-        
-        # Rebuild URL
-        flat_params = []
-        for key, values in params.items():
-            for val in values:
-                flat_params.append((key, val))
-        
-        new_query = urlencode(flat_params, safe=',')
-        
-        return urlunparse((
-            parsed.scheme,
-            parsed.netloc,
-            parsed.path,
-            parsed.params,
-            new_query,
-            parsed.fragment
-        ))
-
-
-def _add_download_filter(url, parsed):
-    """
-    Add f=download filter for makers/video_codes URLs.
-    
-    Args:
-        url: The original URL
-        parsed: ParseResult from urlparse
-    
-    Returns:
-        str: URL with f=download filter added
-    """
-    from urllib.parse import parse_qs
-    
-    # If no query string, simply add ?f=download
-    if not parsed.query:
-        # Handle edge case: URL ends with '?' but has no query params
-        base_url = url.rstrip('?')
-        return f"{base_url}?f=download"
-    
-    params = parse_qs(parsed.query, keep_blank_values=True)
-    
-    if 'f' not in params:
-        # No 'f' parameter, add f=download to existing query
-        # Handle edge case: URL might end with '&'
-        base_url = url.rstrip('&')
-        return f"{base_url}&f=download"
-    else:
-        # 'f' parameter exists but is not 'download', we should still add it
-        # Actually, if we reach here, has_magnet_filter returned False,
-        # meaning f is not 'download', so we need to handle this case
-        # For simplicity, just append &f=download (the server will use the last value)
-        # Or we can replace it - let's replace it for cleaner URLs
-        from urllib.parse import urlencode, urlunparse
-        
-        params['f'] = ['download']
-        
-        flat_params = []
-        for key, values in params.items():
-            for val in values:
-                flat_params.append((key, val))
-        
-        new_query = urlencode(flat_params)
-        
-        return urlunparse((
-            parsed.scheme,
-            parsed.netloc,
-            parsed.path,
-            parsed.params,
-            new_query,
-            parsed.fragment
-        ))
-
-
 def get_page_url(page_num, phase=1, custom_url=None):
-    """Generate URL for a specific page number and phase"""
-    if custom_url:
-        # If custom URL is provided, just add page parameter
-        if page_num == 1:
-            return custom_url
-        else:
-            separator = '&' if '?' in custom_url else '?'
-            return f"{custom_url}{separator}page={page_num}"
-
-    if BASE_URL.endswith('.com'):
-        return f'{BASE_URL}/?page={page_num}'
-    else:
-        return f'{BASE_URL}&page={page_num}'
+    """Generate URL for a specific page number and phase."""
+    return _url_helper_get_page_url(page_num, BASE_URL, custom_url)
 
 
 def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use_cf_bypass, page_num, is_adhoc_mode=False):
@@ -1124,7 +904,8 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
     max_switches = global_proxy_pool.get_proxy_count() if PROXY_MODE == 'pool' else 1
     max_switches = min(max_switches, 10)
     
-    for attempt in range(max_switches):
+    # If current proxy was already tried in Phase 0, mark it failed before the loop
+    if use_proxy:
         if is_adhoc_mode:
             global_proxy_pool.mark_failure_and_switch()
         else:
@@ -1134,7 +915,8 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
             for _ in range(PROXY_POOL_MAX_FAILURES):
                 global_proxy_pool.mark_failure_and_switch()
             proxy_was_banned = True
-        
+
+    for attempt in range(max_switches):
         current_proxy_name = global_proxy_pool.get_current_proxy_name()
         html, success, is_valid_empty, used_cf = try_proxy_direct_then_cf(current_proxy_name)
         if success:
@@ -1142,6 +924,15 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
             return html, True, proxy_was_banned, True, used_cf, False
         if is_valid_empty:
             return html, False, proxy_was_banned, True, used_cf, True
+
+        if is_adhoc_mode:
+            global_proxy_pool.mark_failure_and_switch()
+        else:
+            if html:
+                save_proxy_ban_html(html, current_proxy_name, page_num)
+            for _ in range(PROXY_POOL_MAX_FAILURES):
+                global_proxy_pool.mark_failure_and_switch()
+            proxy_was_banned = True
 
     logger.error(f"[Page {page_num}] All proxy attempts exhausted.")
     return last_failed_html, False, proxy_was_banned, use_proxy, use_cf_bypass, False
@@ -1423,13 +1214,13 @@ class ProxyWorker(threading.Thread):
 
     def _try_fetch_and_parse(self, task: DetailTask, use_cf: bool, context: str):
         """Attempt fetch + parse_detail; returns (magnets, actor, success)."""
-        logger.debug(f"[W:{self.proxy_name}] [{task.entry_index}] {context}")
+        logger.debug(f"[{self.proxy_name}] [{task.entry_index}] {context}")
         try:
             html = self._fetch_html(task.url, use_cf)
             if html:
                 if is_login_page(html):
                     logger.warning(
-                        f"[W:{self.proxy_name}] [{task.entry_index}] Login page detected: {context}")
+                        f"[{self.proxy_name}] [{task.entry_index}] Login page detected: {context}")
                     if can_attempt_login(self.is_adhoc_mode, is_index_page=False):
                         if self._try_login_refresh():
                             html = self._fetch_html(task.url, use_cf)
@@ -1438,23 +1229,23 @@ class ProxyWorker(threading.Thread):
                                     html, task.entry_index, skip_sleep=True)
                                 if ok:
                                     logger.info(
-                                        f"[W:{self.proxy_name}] [{task.entry_index}] "
+                                        f"[{self.proxy_name}] [{task.entry_index}] "
                                         f"Login refresh succeeded: {context}")
                                     return magnets, actor_info, True
                             else:
                                 logger.warning(
-                                    f"[W:{self.proxy_name}] [{task.entry_index}] "
+                                    f"[{self.proxy_name}] [{task.entry_index}] "
                                     f"Still login page after refresh")
                     return [], '', False
 
                 magnets, actor_info, ok = parse_detail(html, task.entry_index, skip_sleep=True)
                 if ok:
                     return magnets, actor_info, True
-                logger.debug(f"[W:{self.proxy_name}] [{task.entry_index}] parse failed: {context}")
+                logger.debug(f"[{self.proxy_name}] [{task.entry_index}] parse failed: {context}")
             else:
-                logger.debug(f"[W:{self.proxy_name}] [{task.entry_index}] no HTML: {context}")
+                logger.debug(f"[{self.proxy_name}] [{task.entry_index}] no HTML: {context}")
         except Exception as e:
-            logger.debug(f"[W:{self.proxy_name}] [{task.entry_index}] error in {context}: {e}")
+            logger.debug(f"[{self.proxy_name}] [{task.entry_index}] error in {context}: {e}")
         return [], '', False
 
     def _try_direct_then_cf(self, task: DetailTask):
@@ -1470,7 +1261,7 @@ class ProxyWorker(threading.Thread):
         m, a, ok = self._try_fetch_and_parse(task, True, "CF Bypass")
         if ok:
             self.needs_cf_bypass = True
-            logger.info(f"[W:{self.proxy_name}] CF Bypass succeeded — marking proxy for this runtime")
+            logger.info(f"[{self.proxy_name}] CF Bypass succeeded — marking proxy for this runtime")
             return m, a, True, True
         return [], '', False, False
 
@@ -1519,8 +1310,9 @@ class ProxyWorker(threading.Thread):
             if success:
                 cf_tag = " +CF" if used_cf else ""
                 logger.info(
-                    f"[W:{self.proxy_name}] [{task.entry_index}] "
-                    f"Parsed {task.entry.get('video_code', '')}{cf_tag}"
+                    f"[{task.entry_index}] "
+                    f"Parsed {task.entry.get('video_code', '')}{cf_tag} "
+                    f"[{self.proxy_name}]"
                 )
                 self.result_queue.put(DetailResult(
                     task=task, magnets=magnets, actor_info=actor_info,
@@ -1531,7 +1323,7 @@ class ProxyWorker(threading.Thread):
                 task.retry_count += 1
                 self.detail_queue.put(task)
                 logger.info(
-                    f"[W:{self.proxy_name}] [{task.entry_index}] "
+                    f"[{self.proxy_name}] [{task.entry_index}] "
                     f"Failed {task.entry.get('video_code', '')}, re-queued "
                     f"(tried {len(task.failed_proxies)}/{self.total_workers} proxies)"
                 )
@@ -1650,21 +1442,10 @@ def process_detail_entries_parallel(
             skipped_history += 1
             continue
 
-        current_torrent_types = determine_torrent_types(magnet_links)
         row = create_csv_row_with_history_filter(href, entry, page_num, '', magnet_links, history_data)
         row['video_code'] = entry['video_code']
 
-        has_any_torrents = any([
-            row['hacked_subtitle'], row['hacked_no_subtitle'],
-            row['subtitle'], row['no_subtitle'],
-        ])
-        has_new_torrents = any([
-            row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
-            row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
-            row['subtitle'] and row['subtitle'] != '[DOWNLOADED PREVIOUSLY]',
-            row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
-        ])
-        should_include_in_report = has_new_torrents or (INCLUDE_DOWNLOADED_IN_REPORT and has_any_torrents)
+        _has_any, has_new_torrents, should_include_in_report = check_torrent_status(row)
 
         if should_include_in_report:
             write_csv([row], csv_path, fieldnames, dry_run, append_mode=True)
@@ -1672,10 +1453,7 @@ def process_detail_entries_parallel(
             phase_rows.append(row)
 
             if use_history_for_saving and not dry_run and has_new_torrents:
-                new_magnet_links = {}
-                for mtype in ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle'):
-                    if row[mtype] and row[mtype] != '[DOWNLOADED PREVIOUSLY]':
-                        new_magnet_links[mtype] = magnet_links.get(mtype, '')
+                new_magnet_links = collect_new_magnet_links(row, magnet_links)
                 if new_magnet_links:
                     save_parsed_movie_to_history(
                         history_file, href, phase, entry['video_code'], new_magnet_links,
@@ -1701,151 +1479,181 @@ def process_detail_entries_parallel(
     }
 
 
-def merge_row_data(existing_row, new_row):
-    """
-    Merge new row data into existing row.
-    
-    Merge rules:
-    - If existing has data AND new has data -> use new (overwrite)
-    - If existing has data AND new is empty -> keep existing
-    - If existing is empty AND new has data -> use new
-    - Special: '[DOWNLOADED PREVIOUSLY]' is treated as empty to preserve existing magnet URLs
-    
-    Args:
-        existing_row: The existing row from CSV
-        new_row: The new row to merge
-    
+def check_torrent_status(row: dict) -> Tuple[bool, bool, bool]:
+    """Determine download status for a CSV row's torrent fields.
+
     Returns:
-        dict: Merged row data
+        (has_any_torrents, has_new_torrents, should_include_in_report)
     """
-    # Placeholder that should not overwrite actual magnet URLs
-    DOWNLOADED_PLACEHOLDER = '[DOWNLOADED PREVIOUSLY]'
-    
-    merged = existing_row.copy()
-    
-    for key, new_value in new_row.items():
-        existing_value = merged.get(key, '')
-        
-        # Convert to string for comparison (handle None values)
-        new_str = str(new_value) if new_value is not None else ''
-        existing_str = str(existing_value) if existing_value is not None else ''
-        
-        # Treat placeholder as empty - don't let it overwrite actual magnet URLs
-        if new_str == DOWNLOADED_PLACEHOLDER:
-            # Only use placeholder if existing is empty (no data to preserve)
-            if not existing_str:
-                merged[key] = new_value
-            # else: keep existing value (preserve the actual magnet URL)
-        elif new_str:
-            # New has real data - use it (overwrite or fill empty)
-            merged[key] = new_value
-        # else: keep existing value (new is empty)
-    
-    return merged
+    _TORRENT_FIELDS = ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle')
+    has_any = any(row[f] for f in _TORRENT_FIELDS)
+    has_new = any(
+        row[f] and row[f] != '[DOWNLOADED PREVIOUSLY]'
+        for f in _TORRENT_FIELDS
+    )
+    should_include = has_new or (INCLUDE_DOWNLOADED_IN_REPORT and has_any)
+    return has_any, has_new, should_include
 
 
-def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
-    """
-    Write results to CSV file or print if dry-run.
-    
-    When append_mode is True and file exists:
-    - Reads existing data
-    - Merges new rows with existing rows based on video_code
-    - If video_code exists: merge data (new data takes priority, but keeps existing if new is empty)
-    - If video_code is new: append as new row
-    - Writes back the merged data
-    
-    Args:
-        rows: List of row dictionaries to write
-        csv_path: Path to the CSV file
-        fieldnames: List of column names
-        dry_run: If True, only log what would be written
-        append_mode: If True, merge with existing file data
-    """
-    if dry_run:
-        logger.info(f"[DRY RUN] Would write {len(rows)} entries to {csv_path}")
-        logger.info("[DRY RUN] Sample entries:")
-        for i, row in enumerate(rows[:3]):  # Show first 3 entries
-            logger.info(f"[DRY RUN] Entry {i + 1}: {row['video_code']} (Page {row['page']})")
-        if len(rows) > 3:
-            logger.info(f"[DRY RUN] ... and {len(rows) - 3} more entries")
-        return
+def collect_new_magnet_links(row: dict, magnet_links: dict) -> dict:
+    """Extract magnet links that haven't been downloaded previously."""
+    new_magnets = {}
+    for mtype in ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle'):
+        if row[mtype] and row[mtype] != '[DOWNLOADED PREVIOUSLY]':
+            new_magnets[mtype] = magnet_links.get(mtype, '')
+    return new_magnets
 
-    # If append_mode and file exists, read existing data and merge
-    if append_mode and os.path.exists(csv_path):
-        existing_rows = {}  # Keyed by video_code for merge operations
-        rows_without_key = []  # Preserve rows without video_code
-        existing_fieldnames = []  # Track existing CSV columns to preserve them
-        try:
-            with open(csv_path, 'r', newline='', encoding='utf-8-sig') as f:
-                reader = csv.DictReader(f)
-                existing_fieldnames = reader.fieldnames or []
-                for row in reader:
-                    video_code = row.get('video_code', '')
-                    if video_code:
-                        existing_rows[video_code] = row
-                    else:
-                        # Preserve rows without video_code (cannot merge, just keep them)
-                        rows_without_key.append(row)
-            if rows_without_key:
-                logger.warning(f"[CSV] Found {len(rows_without_key)} existing rows without video_code - preserving them")
-        except Exception as e:
-            logger.warning(f"Error reading existing CSV file: {e}. Will create new file.")
-            existing_rows = {}
-            rows_without_key = []
-            existing_fieldnames = []
-        
-        # Merge new rows with existing rows
-        merged_count = 0
-        added_count = 0
-        for new_row in rows:
-            video_code = new_row.get('video_code', '')
-            if not video_code:
-                # New row without video_code - cannot merge, append directly
-                rows_without_key.append(new_row)
-                added_count += 1
-                logger.warning(f"[CSV] Added new entry without video_code (cannot merge)")
-            elif video_code in existing_rows:
-                # Merge with existing row
-                existing_rows[video_code] = merge_row_data(existing_rows[video_code], new_row)
-                merged_count += 1
-                logger.debug(f"[CSV] Merged existing entry: {video_code}")
+
+def process_phase_entries_sequential(
+    entries: List[dict],
+    phase: int,
+    history_data: dict,
+    history_file: str,
+    csv_path: str,
+    fieldnames: list,
+    dry_run: bool,
+    use_history_for_saving: bool,
+    use_cookie: bool,
+    is_adhoc_mode: bool,
+    session,
+    use_proxy: bool,
+    use_cf_bypass: bool,
+) -> dict:
+    """Process detail entries sequentially (single-threaded mode).
+
+    Mirrors the interface of ``process_detail_entries_parallel`` with two
+    additional return keys (``use_proxy``, ``use_cf_bypass``) because
+    sequential fallback may update global proxy/CF state.
+
+    Returns a dict with keys:
+        rows, skipped_history, failed, no_new_torrents,
+        use_proxy, use_cf_bypass
+    """
+    total_entries = len(entries)
+    phase_prefix = '' if phase == 1 else f'P{phase}-'
+
+    phase_rows: list = []
+    skipped_history = 0
+    failed = 0
+    no_new_torrents = 0
+    pending_movie_sleep = False
+
+    for i, entry in enumerate(entries, 1):
+        href = entry['href']
+        page_num = entry['page']
+
+        if href in parsed_links:
+            logger.info(f"[{phase_prefix}{i}/{total_entries}] [Page {page_num}] Skipping duplicate entry in current run")
+            continue
+
+        parsed_links.add(href)
+
+        if has_complete_subtitles(href, history_data):
+            logger.info(
+                f"[{phase_prefix}{i}/{total_entries}] [Page {page_num}] "
+                f"Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history"
+            )
+            skipped_history += 1
+            continue
+
+        if pending_movie_sleep:
+            movie_sleep_mgr.sleep()
+            pending_movie_sleep = False
+
+        detail_url = urljoin(BASE_URL, href)
+        entry_index = f"{phase_prefix}{i}/{total_entries}"
+        logger.info(f"[{entry_index}] [Page {page_num}] Processing {entry['video_code'] or href}")
+
+        magnets, actor_info, parse_success, effective_use_proxy, effective_use_cf_bypass = fetch_detail_page_with_fallback(
+            detail_url, session,
+            use_cookie=use_cookie,
+            use_proxy=use_proxy,
+            use_cf_bypass=use_cf_bypass,
+            entry_index=entry_index,
+            is_adhoc_mode=is_adhoc_mode,
+        )
+
+        fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
+        if parse_success and effective_use_cf_bypass != use_cf_bypass:
+            use_cf_bypass = effective_use_cf_bypass
+        if parse_success and effective_use_proxy != use_proxy:
+            use_proxy = effective_use_proxy
+
+        if not parse_success and not magnets:
+            logger.error(f"[{entry_index}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
+            failed += 1
+            pending_movie_sleep = True
+            continue
+
+        magnet_links = extract_magnets(magnets, entry_index)
+
+        should_process, history_torrent_types = should_process_movie(href, history_data, phase, magnet_links)
+
+        if not should_process:
+            if history_torrent_types and 'hacked_subtitle' in history_torrent_types and 'subtitle' in history_torrent_types:
+                logger.debug(f"[{entry_index}] [Page {page_num}] Skipping based on history rules (history types: {history_torrent_types})")
             else:
-                # Add new row with video_code
-                existing_rows[video_code] = new_row
-                added_count += 1
-                logger.debug(f"[CSV] Added new entry: {video_code}")
-        
-        # Merge fieldnames: preserve existing columns + add any new columns from current fieldnames
-        # This prevents data loss when CSV schema changes (extra columns in existing file are preserved)
-        merged_fieldnames = list(fieldnames)  # Start with current fieldnames
-        for existing_field in existing_fieldnames:
-            if existing_field not in merged_fieldnames:
-                merged_fieldnames.append(existing_field)
-                logger.debug(f"[CSV] Preserving extra column from existing CSV: {existing_field}")
-        
-        # Write all data back to file (keyed rows first, then rows without key)
-        with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
-            writer = csv.DictWriter(f, fieldnames=merged_fieldnames, extrasaction='ignore')
-            writer.writeheader()
-            for row in existing_rows.values():
-                writer.writerow(row)
-            for row in rows_without_key:
-                writer.writerow(row)
-        
-        total_entries = len(existing_rows) + len(rows_without_key)
-        if merged_count > 0 or added_count > 0:
-            logger.debug(f"[CSV] Updated {csv_path}: {merged_count} merged, {added_count} added, {total_entries} total entries")
+                logger.debug(f"[{entry_index}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
+            skipped_history += 1
+            pending_movie_sleep = True
+            continue
+
+        row = create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet_links, history_data)
+        row['video_code'] = entry['video_code']
+
+        _has_any, has_new_torrents, should_include_in_report = check_torrent_status(row)
+
+        if should_include_in_report:
+            write_csv([row], csv_path, fieldnames, dry_run, append_mode=True)
+            phase_rows.append(row)
+
+            if use_history_for_saving and not dry_run and has_new_torrents:
+                new_magnet_links = collect_new_magnet_links(row, magnet_links)
+                if new_magnet_links:
+                    save_parsed_movie_to_history(history_file, href, phase, entry['video_code'], new_magnet_links)
+        else:
+            no_new_torrents += 1
+
+        if fallback_triggered:
+            logger.debug(f"[{entry_index}] Applying fallback cooldown: {FALLBACK_COOLDOWN}s")
+            time.sleep(FALLBACK_COOLDOWN)
+            pending_movie_sleep = False
+        else:
+            pending_movie_sleep = True
+
+    logger.info(
+        f"Phase {phase} completed: {total_entries} movies discovered, "
+        f"{len(phase_rows)} processed, {skipped_history} skipped (history), "
+        f"{no_new_torrents} no new torrents, {failed} failed"
+    )
+    return {
+        'rows': phase_rows,
+        'skipped_history': skipped_history,
+        'failed': failed,
+        'no_new_torrents': no_new_torrents,
+        'use_proxy': use_proxy,
+        'use_cf_bypass': use_cf_bypass,
+    }
+
+
+def log_phase_summary(phase_name: str, phase_rows: list) -> None:
+    """Log torrent type statistics for a single processing phase."""
+    logger.info("=" * 30)
+    logger.info(f"{phase_name} SUMMARY")
+    logger.info("=" * 30)
+    logger.info(f"{phase_name} entries found: {len(phase_rows)}")
+    if phase_rows:
+        n = len(phase_rows)
+        sub = sum(1 for r in phase_rows if r['subtitle'])
+        hsub = sum(1 for r in phase_rows if r['hacked_subtitle'])
+        hnosub = sum(1 for r in phase_rows if r['hacked_no_subtitle'])
+        nosub = sum(1 for r in phase_rows if r['no_subtitle'])
+        logger.info(f"  - Subtitle torrents: {sub} ({sub / n * 100:.1f}%)")
+        logger.info(f"  - Hacked subtitle torrents: {hsub} ({hsub / n * 100:.1f}%)")
+        logger.info(f"  - Hacked no-subtitle torrents: {hnosub} ({hnosub / n * 100:.1f}%)")
+        logger.info(f"  - No-subtitle torrents: {nosub} ({nosub / n * 100:.1f}%)")
     else:
-        # No existing file or not in append mode - write new file
-        logger.debug(f"[CSV] Writing new file: {csv_path}")
-        with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
-            # Use extrasaction='ignore' for consistency
-            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
-            writer.writeheader()
-            for row in rows:
-                writer.writerow(row)
-        logger.info(f"[CSV] Created {csv_path} with {len(rows)} entries")
+        logger.info(f"  - No entries found in {phase_name}")
 
 
 def should_include_torrent_in_csv(href, history_data, magnet_links):
@@ -1975,305 +1783,286 @@ def create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet
     return row
 
 
-# ============================================================
-# URL Type Detection and Page Name Extraction Functions
-# ============================================================
+def fetch_all_index_pages(
+    session, start_page: int, end_page: int, parse_all: bool,
+    phase_mode: str, custom_url: Optional[str], ignore_release_date: bool,
+    use_proxy: bool, use_cf_bypass: bool, max_consecutive_empty: int,
+    output_csv: str, output_dated_dir: str, csv_path: str,
+    user_specified_output: bool,
+    parsed_movies_history_phase1: dict, parsed_movies_history_phase2: dict,
+) -> dict:
+    """Fetch and parse all index pages, collecting entries for both phases.
 
-def detect_url_type(url):
+    Returns a dict with keys:
+        all_index_results_phase1, all_index_results_phase2,
+        any_proxy_banned, use_proxy, use_cf_bypass, csv_path
     """
-    Detect the type of JavDB URL.
-    
-    Args:
-        url: The JavDB URL (e.g., 'https://javdb.com/actors/bkxd')
-    
-    Returns:
-        str: The URL type ('actors', 'makers', 'publishers', 'series', 'directors', 'video_codes', or 'unknown')
-    """
-    if not url or 'javdb.com' not in url:
-        return 'unknown'
-    
-    try:
-        parsed = urlparse(url)
-        path = parsed.path.strip('/')
-        
-        if path.startswith('actors/'):
-            return 'actors'
-        elif path.startswith('makers/'):
-            return 'makers'
-        elif path.startswith('publishers/'):
-            return 'publishers'
-        elif path.startswith('series/'):
-            return 'series'
-        elif path.startswith('directors/'):
-            return 'directors'
-        elif path.startswith('video_codes/'):
-            return 'video_codes'
-        else:
-            return 'unknown'
-    except Exception as e:
-        logger.warning(f"Error detecting URL type for {url}: {e}")
-        return 'unknown'
+    all_index_results_phase1: list = []
+    all_index_results_phase2: list = []
+    any_proxy_banned = False
+    last_valid_page = 0
+
+    logger.info("=" * 75)
+    logger.info("Fetching and parsing index pages")
+    logger.info("=" * 75)
+
+    page_num = start_page
+    consecutive_empty_pages = 0
+    csv_name_resolved = False
+
+    while True:
+        page_url = get_page_url(page_num, phase=1, custom_url=custom_url)
+        logger.debug(f"[Page {page_num}] Fetching: {page_url}")
+
+        index_html, has_movie_list, proxy_was_banned, effective_use_proxy, effective_use_cf_bypass, is_valid_empty_page = fetch_index_page_with_fallback(
+            page_url, session,
+            use_cookie=custom_url is not None,
+            use_proxy=use_proxy,
+            use_cf_bypass=use_cf_bypass,
+            page_num=page_num,
+            is_adhoc_mode=custom_url is not None,
+        )
+
+        if has_movie_list and effective_use_cf_bypass != use_cf_bypass:
+            use_cf_bypass = effective_use_cf_bypass
+        if has_movie_list and effective_use_proxy != use_proxy:
+            use_proxy = effective_use_proxy
+
+        if proxy_was_banned:
+            any_proxy_banned = True
+
+        if is_valid_empty_page:
+            logger.info(f"[Page {page_num}] End of content reached (no more pages available)")
+            break
+
+        if not index_html:
+            logger.info(f"[Page {page_num}] no movie list found (page fetch failed or does not exist)")
+            consecutive_empty_pages += 1
+            if consecutive_empty_pages >= max_consecutive_empty:
+                logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping fetch")
+                break
+            page_num += 1
+            continue
+
+        if not has_movie_list:
+            logger.warning(f"[Page {page_num}] No movie list found after all fallback attempts")
+            consecutive_empty_pages += 1
+            if consecutive_empty_pages >= max_consecutive_empty:
+                logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping fetch")
+                break
+            page_num += 1
+            continue
+
+        p1_count = 0
+        p2_count = 0
+
+        if phase_mode in ['1', 'all']:
+            page_results = parse_index(index_html, page_num, phase=1,
+                                       disable_new_releases_filter=(custom_url is not None or ignore_release_date),
+                                       is_adhoc_mode=(custom_url is not None))
+            p1_count = len(page_results)
+            if p1_count > 0:
+                all_index_results_phase1.extend(page_results)
+
+        if phase_mode in ['2', 'all']:
+            page_results_p2 = parse_index(index_html, page_num, phase=2,
+                                          disable_new_releases_filter=(custom_url is not None or ignore_release_date),
+                                          is_adhoc_mode=(custom_url is not None))
+            p2_count = len(page_results_p2)
+            if p2_count > 0:
+                all_index_results_phase2.extend(page_results_p2)
+
+        if phase_mode == 'all':
+            logger.info(f"[Page {page_num:2d}] Found {p1_count:3d} entries for phase 1, {p2_count:3d} for phase 2")
+        elif phase_mode == '1':
+            logger.info(f"[Page {page_num:2d}] Found {p1_count:3d} entries for phase 1")
+        elif phase_mode == '2':
+            logger.info(f"[Page {page_num:2d}] Found {p2_count:3d} entries for phase 2")
+
+        last_valid_page = page_num
+        consecutive_empty_pages = 0
+
+        if custom_url is not None and not csv_name_resolved and not user_specified_output:
+            url_type = detect_url_type(custom_url)
+            if url_type in ('actors', 'makers', 'publishers', 'series', 'directors', 'video_codes'):
+                resolved_csv_name = generate_output_csv_name_from_html(custom_url, index_html)
+                if resolved_csv_name != output_csv:
+                    output_csv = resolved_csv_name
+                    csv_path = os.path.join(output_dated_dir, output_csv)
+                    logger.info(f"[AdHoc] Updated CSV path: {csv_path}")
+            csv_name_resolved = True
+
+        if not parse_all and page_num >= end_page:
+            break
+
+        page_num += 1
+        time.sleep(PAGE_SLEEP)
+
+    logger.info(f"Fetched and parsed {last_valid_page - start_page + 1 if last_valid_page >= start_page else 0} pages")
+
+    _est_skip = sum(
+        1 for e in all_index_results_phase1 if has_complete_subtitles(e['href'], parsed_movies_history_phase1)
+    ) + sum(
+        1 for e in all_index_results_phase2 if has_complete_subtitles(e['href'], parsed_movies_history_phase2)
+    )
+    _est_n = len(all_index_results_phase1) + len(all_index_results_phase2) - _est_skip
+    logger.info(f"Estimated processing volume: N={_est_n} (total={len(all_index_results_phase1)+len(all_index_results_phase2)}, pre-skip={_est_skip})")
+    movie_sleep_mgr.apply_volume_multiplier(_est_n)
+
+    return {
+        'all_index_results_phase1': all_index_results_phase1,
+        'all_index_results_phase2': all_index_results_phase2,
+        'any_proxy_banned': any_proxy_banned,
+        'use_proxy': use_proxy,
+        'use_cf_bypass': use_cf_bypass,
+        'csv_path': csv_path,
+    }
 
 
-def extract_url_identifier(url):
-    """
-    Extract the identifier from a JavDB URL (e.g., 'bkxd' from '/actors/bkxd').
-    
-    Args:
-        url: The JavDB URL
-    
-    Returns:
-        str: The identifier part of the URL
-    """
-    try:
-        parsed = urlparse(url)
-        path = parsed.path.strip('/')
-        parts = path.split('/')
-        if len(parts) >= 2:
-            return parts[1]
-    except Exception as e:
-        logger.warning(f"Error extracting URL identifier from {url}: {e}")
-    return None
-
-
-def parse_actor_name_from_html(html_content):
-    """
-    Extract actor name from JavDB actor page HTML.
-
-    Delegates to ``api.parsers.common.extract_category_name``.
-
-    Args:
-        html_content: HTML content of the actor page
-
-    Returns:
-        str: Actor name if found, None otherwise
-    """
-    try:
-        soup = BeautifulSoup(html_content, 'html.parser')
-        cat_type, cat_name = _api_extract_category_name(soup)
-        if cat_name:
-            return cat_name
-    except Exception as e:
-        logger.warning(f"Error parsing actor name from HTML: {e}")
-    return None
-
-
-def parse_section_name_from_html(html_content):
-    """
-    Extract section name from JavDB page HTML.
-
-    Delegates to ``api.parsers.common.extract_category_name``.
-
-    This is a generic function that extracts names from pages using the
-    ``<span class="section-name">`` element, which is used by makers,
-    publishers, series, video_codes, and directors.
-
-    Args:
-        html_content: HTML content of the page
-
-    Returns:
-        str: Section name if found, None otherwise
-    """
-    try:
-        soup = BeautifulSoup(html_content, 'html.parser')
-        cat_type, cat_name = _api_extract_category_name(soup)
-        if cat_name:
-            return cat_name
-    except Exception as e:
-        logger.warning(f"Error parsing section name from HTML: {e}")
-    return None
-
-
-def sanitize_filename_part(text, max_length=30):
-    """
-    Sanitize text for use in filename.
-    Removes or replaces characters that are not safe for filenames.
-    
-    Args:
-        text: The text to sanitize
-        max_length: Maximum length of the result
-    
-    Returns:
-        str: Sanitized text safe for filenames
-    """
-    if not text:
-        return ''
-    
-    # Replace or remove unsafe filename characters
-    unsafe_chars = r'<>:"/\|?*'
-    sanitized = text
-    for char in unsafe_chars:
-        sanitized = sanitized.replace(char, '')
-    
-    # Replace whitespace with underscore
-    sanitized = re.sub(r'\s+', '_', sanitized)
-    
-    # Remove any remaining non-alphanumeric characters except underscore, hyphen, and CJK characters
-    # Keep: alphanumeric, CJK characters, underscore, hyphen
-    sanitized = re.sub(r'[^\w\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff-]', '', sanitized)
-    
-    # Truncate to max length
-    if len(sanitized) > max_length:
-        sanitized = sanitized[:max_length]
-    
-    return sanitized
-
-
-def extract_url_part_after_javdb(url):
-    """
-    Extract the part of URL after javdb.com and convert it to a filename-safe format.
-    
-    Converts URL path and query parameters to a safe filename string by replacing
-    special characters (/, ?, &, =) with underscores and collapsing multiple
-    consecutive underscores.
-    
-    Args:
-        url: The custom URL (e.g., 'https://javdb.com/rankings/movies?p=monthly&t=censored')
-    
-    Returns:
-        str: The extracted part converted to filename-safe format 
-             (e.g., 'rankings_movies_p-monthly_t-censored')
-    
-    Examples:
-        - 'https://javdb.com/actors/EvkJ' -> 'actors_EvkJ'
-        - 'https://javdb.com/rankings/movies?p=monthly&t=censored' -> 'rankings_movies_p-monthly_t-censored'
-    """
-    try:
-        if 'javdb.com' in url:
-            domain_pos = url.find('javdb.com')
-            if domain_pos != -1:
-                after_domain = url[domain_pos + len('javdb.com'):]
-                if after_domain.startswith('/'):
-                    after_domain = after_domain[1:]
-                if after_domain.endswith('/'):
-                    after_domain = after_domain[:-1]
-                # Replace URL special characters for filename safety
-                # - / (path separator) -> _
-                # - ? (query start) -> _
-                # - & (param separator) -> _
-                # - = (key-value separator) -> - (hyphen for better readability)
-                filename_part = after_domain
-                for char in ['/', '?', '&']:
-                    filename_part = filename_part.replace(char, '_')
-                filename_part = filename_part.replace('=', '-')
-                # Collapse multiple consecutive underscores into one
-                filename_part = re.sub(r'_+', '_', filename_part)
-                # Remove leading/trailing underscores
-                filename_part = filename_part.strip('_')
-                return filename_part if filename_part else 'custom_url'
-    except Exception as e:
-        logger.warning(f"Error extracting URL part from {url}: {e}")
-    return 'custom_url'
-
-
-def generate_output_csv_name_from_html(custom_url, index_html):
-    """
-    Generate the output CSV filename by parsing display name from already-fetched HTML.
-    
-    This function is called after successfully fetching the first index page,
-    which avoids an extra network request and ensures success.
-    
-    For adhoc mode with custom URLs:
-    - actors: Uses actor name from HTML (e.g., Javdb_AdHoc_actors_森日向子_20251224.csv)
-    - makers: Uses maker name from HTML (e.g., Javdb_AdHoc_makers_MOODYZ_20251224.csv)
-    - publishers: Uses publisher name from HTML (e.g., Javdb_AdHoc_publishers_PRESTIGE_20251224.csv)
-    - series: Uses series name from HTML (e.g., Javdb_AdHoc_series_SeriesName_20251224.csv)
-    - directors: Uses director name from HTML (e.g., Javdb_AdHoc_directors_DirectorName_20251224.csv)
-    - video_codes: Uses code from HTML or URL (e.g., Javdb_AdHoc_video_codes_ABF_20251224.csv)
-    - unknown: Falls back to URL path extraction
-    
-    Args:
-        custom_url: The custom URL being processed
-        index_html: The HTML content of the first index page (already fetched)
-    
-    Returns:
-        str: The generated CSV filename
-    """
-    today_date = datetime.now().strftime("%Y%m%d")
-    url_type = detect_url_type(custom_url)
-    display_name = None
-    raw_name = None
-    
-    # Parse display name based on URL type
-    if url_type == 'actors':
-        raw_name = parse_actor_name_from_html(index_html)
-        if raw_name:
-            display_name = sanitize_filename_part(raw_name)
-            logger.info(f"[AdHoc] Successfully extracted actor name from index page: {raw_name}")
-    elif url_type in ('makers', 'publishers', 'series', 'directors'):
-        raw_name = parse_section_name_from_html(index_html)
-        if raw_name:
-            display_name = sanitize_filename_part(raw_name)
-            logger.info(f"[AdHoc] Successfully extracted {url_type} name from index page: {raw_name}")
-    elif url_type == 'video_codes':
-        # Try to get from HTML first, fallback to URL extraction
-        raw_name = parse_section_name_from_html(index_html)
-        if raw_name:
-            display_name = sanitize_filename_part(raw_name)
-            logger.info(f"[AdHoc] Successfully extracted video code from index page: {raw_name}")
-        else:
-            # Fallback to URL extraction for video_codes
-            url_id = extract_url_identifier(custom_url)
-            if url_id:
-                display_name = sanitize_filename_part(url_id)
-                logger.info(f"[AdHoc] Extracted video code from URL: {url_id}")
-    
-    if display_name:
-        csv_filename = f'Javdb_AdHoc_{url_type}_{display_name}_{today_date}.csv'
-        logger.info(f"[AdHoc] URL type: {url_type}, Display name: {display_name}")
-        logger.info(f"[AdHoc] Generated CSV filename: {csv_filename}")
-        return csv_filename
+def generate_summary_report(
+    *, phase_mode, parse_all, start_page, end_page, max_consecutive_empty,
+    phase1_rows, phase2_rows, rows,
+    use_history_for_loading, ignore_history,
+    skipped_history_count, failed_count, no_new_torrents_count,
+    csv_path, dry_run, use_history_for_saving,
+    use_proxy, any_proxy_banned, any_proxy_banned_phase2,
+) -> None:
+    """Log the final summary report, proxy stats, and check exit conditions."""
+    logger.info("=" * 75)
+    logger.info("SUMMARY REPORT")
+    logger.info("=" * 75)
+    if parse_all:
+        logger.info(f"Pages processed: {start_page} to last page with results")
     else:
-        # Fallback to URL extraction
-        url_part = extract_url_part_after_javdb(custom_url)
-        csv_filename = f'Javdb_AdHoc_{url_part}_{today_date}.csv'
-        logger.warning(f"[AdHoc] Could not extract display name for URL type: {url_type}")
-        logger.info(f"[AdHoc] Fallback CSV filename: {csv_filename}")
-        return csv_filename
+        logger.info(f"Pages processed: {start_page} to {end_page}")
+
+    logger.info(f"Tolerance mechanism: Stops after {max_consecutive_empty} consecutive pages with no HTML content")
+
+    if phase_mode in ['1', 'all']:
+        log_phase_summary("PHASE 1", phase1_rows)
+    if phase_mode in ['2', 'all']:
+        log_phase_summary("PHASE 2", phase2_rows)
+
+    total_discovered = len(rows) + skipped_history_count + no_new_torrents_count + failed_count
+    logger.info("=" * 30)
+    logger.info("OVERALL SUMMARY")
+    logger.info("=" * 30)
+    logger.info(f"Total movies discovered: {total_discovered}")
+    logger.info(f"Successfully processed: {len(rows)}")
+    if use_history_for_loading and not ignore_history:
+        logger.info(f"Skipped already parsed in previous runs: {skipped_history_count}")
+    elif ignore_history:
+        logger.info("History reading was disabled (--ignore-history), but results will still be saved to history")
+    logger.info(f"No new torrents to download: {no_new_torrents_count}")
+    logger.info(f"Failed to fetch/parse: {failed_count}")
+    logger.info(f"Current parsed links in memory: {len(parsed_links)}")
+
+    if rows:
+        n = len(rows)
+        sub = sum(1 for r in rows if r['subtitle'])
+        hsub = sum(1 for r in rows if r['hacked_subtitle'])
+        hnosub = sum(1 for r in rows if r['hacked_no_subtitle'])
+        nosub = sum(1 for r in rows if r['no_subtitle'])
+        logger.info(f"Overall subtitle torrents: {sub} ({sub / n * 100:.1f}%)")
+        logger.info(f"Overall hacked subtitle torrents: {hsub} ({hsub / n * 100:.1f}%)")
+        logger.info(f"Overall hacked no-subtitle torrents: {hnosub} ({hnosub / n * 100:.1f}%)")
+        logger.info(f"Overall no-subtitle torrents: {nosub} ({nosub / n * 100:.1f}%)")
+
+    if not dry_run:
+        logger.info(f"Results saved to: {csv_path}")
+        if use_history_for_saving:
+            logger.info(f"History saved to: {os.path.join(REPORTS_DIR, PARSED_MOVIES_CSV)}")
+        print(f"SPIDER_OUTPUT_CSV={csv_path}")
+    logger.info("=" * 75)
+
+    if use_proxy and PROXY_MODE in ('pool', 'single') and global_proxy_pool is not None:
+        logger.info("")
+        global_proxy_pool.log_statistics(level=logging.INFO)
+        logger.info("")
+        logger.info("=" * 75)
+        logger.info("PROXY BAN STATUS")
+        logger.info("=" * 75)
+        ban_summary = global_proxy_pool.get_ban_summary(include_ip=False)
+        logger.info(ban_summary)
+        logger.info("=" * 75)
+
+    if proxy_ban_html_files:
+        logger.info("")
+        logger.info("=" * 75)
+        logger.info("PROXY BAN HTML FILES")
+        logger.info("=" * 75)
+        logger.info(f"Saved {len(proxy_ban_html_files)} proxy ban HTML file(s) for debugging:")
+        for html_file in proxy_ban_html_files:
+            logger.info(f"  - {html_file}")
+        logger.info("=" * 75)
+        print(f"PROXY_BAN_HTML_FILES={','.join(proxy_ban_html_files)}")
+
+    proxies_were_banned = False
+    if phase_mode in ['1', 'all']:
+        proxies_were_banned = proxies_were_banned or any_proxy_banned
+    if phase_mode in ['2', 'all']:
+        proxies_were_banned = proxies_were_banned or any_proxy_banned_phase2
+
+    if proxies_were_banned:
+        logger.error("=" * 75)
+        logger.error("CRITICAL: PROXY BAN DETECTED DURING THIS RUN")
+        logger.error("=" * 75)
+        logger.error("One or more proxies were marked as BANNED due to failure to retrieve movie list.")
+        logger.error("This indicates the proxy IP may be blocked by JavDB.")
+        logger.error("Please check proxy ban status and consider using different proxies.")
+        sys.exit(2)
+
+    if len(rows) == 0 and use_proxy:
+        logger.warning("=" * 75)
+        logger.warning("WARNING: No entries found while using proxy")
+        logger.warning("=" * 75)
+        logger.warning("This might indicate proxy issues or CF bypass service problems.")
 
 
-def generate_output_csv_name(custom_url=None, use_proxy=False):
-    """
-    Generate the output CSV filename based on whether a custom URL is provided.
-    
-    Note: For adhoc mode, this generates a temporary filename using URL extraction.
-    The actual display name will be resolved later using generate_output_csv_name_from_html()
-    after the first index page is successfully fetched.
-    
-    Args:
-        custom_url: Custom URL if provided, None otherwise
-        use_proxy: Whether to use proxy for fetching page (unused, kept for compatibility)
-    
-    Returns:
-        str: The generated CSV filename
-    """
-    if custom_url:
-        today_date = datetime.now().strftime("%Y%m%d")
-        url_type = detect_url_type(custom_url)
-        
-        # For video_codes, we can get the name directly from URL without fetching HTML
-        if url_type == 'video_codes':
-            url_id = extract_url_identifier(custom_url)
-            if url_id:
-                display_name = sanitize_filename_part(url_id)
-                csv_filename = f'Javdb_AdHoc_{url_type}_{display_name}_{today_date}.csv'
-                logger.info(f"[AdHoc] URL type: {url_type}, Display name: {display_name}")
-                logger.info(f"[AdHoc] Generated CSV filename: {csv_filename}")
-                return csv_filename
-        
-        # For other types (actors, makers), use temporary URL-based filename
-        # The actual name will be resolved after fetching the first index page
-        url_part = extract_url_part_after_javdb(custom_url)
-        csv_filename = f'Javdb_AdHoc_{url_part}_{today_date}.csv'
-        logger.info(f"[AdHoc] Temporary CSV filename (will resolve display name after fetching index page): {csv_filename}")
-        return csv_filename
+def setup_proxy_pool(ban_log_file: str, use_proxy: bool) -> None:
+    """Initialize the global proxy pool from configuration."""
+    global global_proxy_pool
+
+    if PROXY_POOL and len(PROXY_POOL) > 0:
+        if PROXY_MODE == 'pool':
+            logger.info(f"Initializing proxy pool with {len(PROXY_POOL)} proxies...")
+            global_proxy_pool = create_proxy_pool_from_config(
+                PROXY_POOL,
+                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
+                max_failures=PROXY_POOL_MAX_FAILURES,
+                ban_log_file=ban_log_file
+            )
+            logger.info("Proxy pool initialized successfully")
+            logger.info(f"Cooldown: {PROXY_POOL_COOLDOWN_SECONDS}s, Max failures before cooldown: {PROXY_POOL_MAX_FAILURES}")
+        elif PROXY_MODE == 'single':
+            logger.info("Initializing single proxy mode (using first proxy from pool)...")
+            global_proxy_pool = create_proxy_pool_from_config(
+                [PROXY_POOL[0]],
+                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
+                max_failures=PROXY_POOL_MAX_FAILURES,
+                ban_log_file=ban_log_file
+            )
+            logger.info(f"Single proxy initialized: {PROXY_POOL[0].get('name', 'Main-Proxy')}")
+    elif PROXY_HTTP or PROXY_HTTPS:
+        logger.info("Using legacy PROXY_HTTP/PROXY_HTTPS configuration")
+        legacy_proxy = {
+            'name': 'Legacy-Proxy',
+            'http': PROXY_HTTP,
+            'https': PROXY_HTTPS
+        }
+        global_proxy_pool = create_proxy_pool_from_config(
+            [legacy_proxy],
+            cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
+            max_failures=PROXY_POOL_MAX_FAILURES,
+            ban_log_file=ban_log_file
+        )
     else:
-        return f'Javdb_TodayTitle_{datetime.now().strftime("%Y%m%d")}.csv'
+        if use_proxy:
+            logger.warning("Proxy enabled but no proxy configuration found (neither PROXY_POOL nor PROXY_HTTP/PROXY_HTTPS)")
+        global_proxy_pool = None
 
 
 def main():
-    global global_proxy_pool
-    
     # Parse command line arguments
     args = parse_arguments()
 
@@ -2292,55 +2081,9 @@ def main():
     max_movies_phase1 = args.max_movies_phase1
     max_movies_phase2 = args.max_movies_phase2
     sequential = args.sequential
-    
-    # Initialize proxy pool (always initialize if configured, even if not enabled by default)
-    # This allows automatic fallback to proxy if direct connection fails
-    # Ban log file is stored in reports directory
-    ban_log_file = os.path.join(REPORTS_DIR, 'proxy_bans.csv')
-    
-    if PROXY_POOL and len(PROXY_POOL) > 0:
-        if PROXY_MODE == 'pool':
-            # Full proxy pool mode with automatic failover
-            logger.info(f"Initializing proxy pool with {len(PROXY_POOL)} proxies...")
-            global_proxy_pool = create_proxy_pool_from_config(
-                PROXY_POOL,
-                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
-                max_failures=PROXY_POOL_MAX_FAILURES,
-                ban_log_file=ban_log_file
-            )
-            logger.info(f"Proxy pool initialized successfully")
-            logger.info(f"Cooldown: {PROXY_POOL_COOLDOWN_SECONDS}s, Max failures before cooldown: {PROXY_POOL_MAX_FAILURES}")
-        elif PROXY_MODE == 'single':
-            # Single proxy mode - only use first proxy from pool
-            logger.info(f"Initializing single proxy mode (using first proxy from pool)...")
-            global_proxy_pool = create_proxy_pool_from_config(
-                [PROXY_POOL[0]],  # Only use first proxy
-                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
-                max_failures=PROXY_POOL_MAX_FAILURES,
-                ban_log_file=ban_log_file
-            )
-            logger.info(f"Single proxy initialized: {PROXY_POOL[0].get('name', 'Main-Proxy')}")
-    # Fallback to legacy PROXY_HTTP/PROXY_HTTPS if no PROXY_POOL configured
-    elif PROXY_HTTP or PROXY_HTTPS:
-        logger.info("Using legacy PROXY_HTTP/PROXY_HTTPS configuration")
-        # Create a temporary proxy pool entry for consistency
-        legacy_proxy = {
-            'name': 'Legacy-Proxy',
-            'http': PROXY_HTTP,
-            'https': PROXY_HTTPS
-        }
-        global_proxy_pool = create_proxy_pool_from_config(
-            [legacy_proxy],
-            cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
-            max_failures=PROXY_POOL_MAX_FAILURES,
-            ban_log_file=ban_log_file
-        )
-    else:
-        if use_proxy:
-            logger.warning("Proxy enabled but no proxy configuration found (neither PROXY_POOL nor PROXY_HTTP/PROXY_HTTPS)")
-        global_proxy_pool = None
 
-    # Initialize global request handler (must be after proxy pool initialization)
+    ban_log_file = os.path.join(REPORTS_DIR, 'proxy_bans.csv')
+    setup_proxy_pool(ban_log_file, use_proxy)
     initialize_request_handler()
 
     # Determine output directory and filename
@@ -2474,10 +2217,6 @@ def main():
     rows = []
     phase1_rows = []  # Track phase 1 entries separately
     phase2_rows = []  # Track phase 2 entries separately
-    subtitle_count = 0
-    hacked_count = 0
-    no_subtitle_count = 0
-    
     # Define fieldnames for CSV
     fieldnames = ['href', 'video_code', 'page', 'actor', 'rate', 'comment_number', 'hacked_subtitle',
                   'hacked_no_subtitle', 'subtitle', 'no_subtitle', 'size_hacked_subtitle', 'size_hacked_no_subtitle',
@@ -2502,149 +2241,22 @@ def main():
     phase2_failed = 0  # Track entries that failed to fetch/parse in phase 2
     phase2_no_new_torrents = 0  # Track entries with no new torrents in phase 2
 
-    # ========================================
-    # Fetch all index pages and parse immediately
-    # ========================================
-    # This avoids fetching the same pages twice for phase 1 and phase 2
-    # Parse results are cached, not the raw HTML
-    cached_pages = {}  # {page_num: index_html} - for phase 2 parsing
-    all_index_results_phase2 = []  # Pre-collect phase 2 results
-    last_valid_page = 0
-    
-    logger.info("=" * 75)
-    logger.info("Fetching and parsing index pages")
-    logger.info("=" * 75)
-
-    page_num = start_page
-    consecutive_empty_pages = 0
-    csv_name_resolved = False  # Track if CSV name has been resolved from first successful page
-    # Note: Magnet filtering is now done in parser.py based on HTML tags
-    # This avoids the need for ?t=d URL filter which requires authentication
-    # The URL-based magnet filter (t=d) is deprecated and disabled
-        
-    while True:
-        # Generate page URL (no URL-based magnet filter - filtering done in parser)
-        page_url = get_page_url(page_num, phase=1, custom_url=custom_url)
-        logger.debug(f"[Page {page_num}] Fetching: {page_url}")
-
-        # Fetch index page with fallback mechanism
-        index_html, has_movie_list, proxy_was_banned, effective_use_proxy, effective_use_cf_bypass, is_valid_empty_page = fetch_index_page_with_fallback(
-            page_url, session, 
-            use_cookie=custom_url is not None, 
-            use_proxy=use_proxy, 
-            use_cf_bypass=use_cf_bypass,
-            page_num=page_num,
-            is_adhoc_mode=custom_url is not None  # Don't ban proxies in ad hoc mode
-        )
-        
-        # Per-proxy CF bypass is now tracked inside the fallback functions via
-        # mark_proxy_cf_bypass(). The effective settings are automatically applied
-        # on subsequent requests by checking proxy_needs_cf_bypass().
-        # Update use_cf_bypass to match effective settings for logging/state consistency.
-        if has_movie_list and effective_use_cf_bypass != use_cf_bypass:
-            use_cf_bypass = effective_use_cf_bypass
-        if has_movie_list and effective_use_proxy != use_proxy:
-            use_proxy = effective_use_proxy
-        
-        if proxy_was_banned:
-            any_proxy_banned = True
-        
-        # Note: URL-based magnet filter fallback removed - filtering now done in parser.py
-        # based on HTML tags, no authentication required
-        
-        # Handle valid empty page (e.g. "No content yet") - this is the last page
-        if is_valid_empty_page:
-            logger.info(f"[Page {page_num}] End of content reached (no more pages available)")
-            break
-        
-        if not index_html:
-            logger.info(f"[Page {page_num}] no movie list found (page fetch failed or does not exist)")
-            consecutive_empty_pages += 1
-            if consecutive_empty_pages >= max_consecutive_empty:
-                logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping fetch")
-                break
-            page_num += 1
-            continue
-        
-        if not has_movie_list:
-            logger.warning(f"[Page {page_num}] No movie list found after all fallback attempts")
-            consecutive_empty_pages += 1
-            if consecutive_empty_pages >= max_consecutive_empty:
-                logger.info(f"[Page {page_num}] Reached maximum tolerance ({max_consecutive_empty} consecutive empty pages), stopping fetch")
-                break
-            page_num += 1
-            continue
-
-        # Parse immediately after fetching - log results right away
-        p1_count = 0
-        p2_count = 0
-        
-        if phase_mode in ['1', 'all']:
-            page_results = parse_index(index_html, page_num, phase=1,
-                                       disable_new_releases_filter=(custom_url is not None or ignore_release_date),
-                                       is_adhoc_mode=(custom_url is not None))
-            p1_count = len(page_results)
-            if p1_count > 0:
-                all_index_results_phase1.extend(page_results)
-        
-        # Also parse for phase 2 if needed (reuse the same HTML)
-        if phase_mode in ['2', 'all']:
-            page_results_p2 = parse_index(index_html, page_num, phase=2,
-                                          disable_new_releases_filter=(custom_url is not None or ignore_release_date),
-                                          is_adhoc_mode=(custom_url is not None))
-            p2_count = len(page_results_p2)
-            if p2_count > 0:
-                all_index_results_phase2.extend(page_results_p2)
-        
-        # Log combined results with aligned formatting
-        if phase_mode == 'all':
-            logger.info(f"[Page {page_num:2d}] Found {p1_count:3d} entries for phase 1, {p2_count:3d} for phase 2")
-        elif phase_mode == '1':
-            logger.info(f"[Page {page_num:2d}] Found {p1_count:3d} entries for phase 1")
-        elif phase_mode == '2':
-            logger.info(f"[Page {page_num:2d}] Found {p2_count:3d} entries for phase 2")
-        
-        last_valid_page = page_num
-        consecutive_empty_pages = 0  # Reset counter when we find valid page
-        
-        # For ad hoc mode: resolve display name from first successful page's HTML
-        # This updates csv_path with the actual name instead of URL-based fallback
-        # Use csv_name_resolved flag instead of page_num == start_page to handle cases
-        # where the starting page fails but a subsequent page succeeds
-        if custom_url is not None and not csv_name_resolved and not args.output_file:
-            url_type = detect_url_type(custom_url)
-            # Resolve for all types that can extract names from HTML
-            # (actors, makers, publishers, series, directors, video_codes)
-            if url_type in ('actors', 'makers', 'publishers', 'series', 'directors', 'video_codes'):
-                resolved_csv_name = generate_output_csv_name_from_html(custom_url, index_html)
-                if resolved_csv_name != output_csv:
-                    output_csv = resolved_csv_name
-                    csv_path = os.path.join(output_dated_dir, output_csv)
-                    logger.info(f"[AdHoc] Updated CSV path: {csv_path}")
-            csv_name_resolved = True  # Mark as resolved to avoid re-resolving on subsequent pages
-
-        # If not parse_all and reached end_page, stop
-        if not parse_all and page_num >= end_page:
-            break
-
-        page_num += 1
-
-        # Small delay between pages
-        time.sleep(PAGE_SLEEP)
-    
-    logger.info(f"Fetched and parsed {last_valid_page - start_page + 1 if last_valid_page >= start_page else 0} pages")
-
-    # --- Estimate processing volume and apply sleep multiplier ---
-    _est_skip = 0
-    for _e in all_index_results_phase1:
-        if has_complete_subtitles(_e['href'], parsed_movies_history_phase1):
-            _est_skip += 1
-    for _e in all_index_results_phase2:
-        if has_complete_subtitles(_e['href'], parsed_movies_history_phase2):
-            _est_skip += 1
-    _est_n = len(all_index_results_phase1) + len(all_index_results_phase2) - _est_skip
-    logger.info(f"Estimated processing volume: N={_est_n} (total={len(all_index_results_phase1)+len(all_index_results_phase2)}, pre-skip={_est_skip})")
-    movie_sleep_mgr.apply_volume_multiplier(_est_n)
+    idx_result = fetch_all_index_pages(
+        session=session, start_page=start_page, end_page=end_page,
+        parse_all=parse_all, phase_mode=phase_mode, custom_url=custom_url,
+        ignore_release_date=ignore_release_date, use_proxy=use_proxy,
+        use_cf_bypass=use_cf_bypass, max_consecutive_empty=max_consecutive_empty,
+        output_csv=output_csv, output_dated_dir=output_dated_dir,
+        csv_path=csv_path, user_specified_output=bool(args.output_file),
+        parsed_movies_history_phase1=parsed_movies_history_phase1,
+        parsed_movies_history_phase2=parsed_movies_history_phase2,
+    )
+    all_index_results_phase1 = idx_result['all_index_results_phase1']
+    all_index_results_phase2 = idx_result['all_index_results_phase2']
+    any_proxy_banned = idx_result['any_proxy_banned']
+    use_proxy = idx_result['use_proxy']
+    use_cf_bypass = idx_result['use_cf_bypass']
+    csv_path = idx_result['csv_path']
 
     # ========================================
     # Process Phase 1 entries
@@ -2690,133 +2302,32 @@ def main():
             phase1_no_new_torrents = p1_result['no_new_torrents']
             no_new_torrents_count += phase1_no_new_torrents
         else:
-            # --- Sequential detail processing (original logic) ---
-            pending_movie_sleep = False
-
-            for i, entry in enumerate(all_index_results_phase1, 1):
-                href = entry['href']
-                page_num = entry['page']
-
-                if href in parsed_links:
-                    logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping duplicate entry in current run")
-                    continue
-
-                parsed_links.add(href)
-
-                if has_complete_subtitles(href, parsed_movies_history_phase1):
-                    logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history")
-                    skipped_history_count += 1
-                    phase1_skipped_history_actual += 1
-                    continue
-
-                if pending_movie_sleep:
-                    movie_sleep_mgr.sleep()
-                    pending_movie_sleep = False
-
-                detail_url = urljoin(BASE_URL, href)
-                logger.info(f"[{i}/{total_entries_phase1}] [Page {page_num}] Processing {entry['video_code'] or href}")
-
-                magnets, actor_info, parse_success, effective_use_proxy, effective_use_cf_bypass = fetch_detail_page_with_fallback(
-                    detail_url, session,
-                    use_cookie=custom_url is not None,
-                    use_proxy=use_proxy,
-                    use_cf_bypass=use_cf_bypass,
-                    entry_index=f"{i}/{total_entries_phase1}",
-                    is_adhoc_mode=custom_url is not None
-                )
-                
-                fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
-                if parse_success and effective_use_cf_bypass != use_cf_bypass:
-                    use_cf_bypass = effective_use_cf_bypass
-                if parse_success and effective_use_proxy != use_proxy:
-                    use_proxy = effective_use_proxy
-                
-                if not parse_success and not magnets:
-                    logger.error(f"[{i}/{total_entries_phase1}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
-                    failed_count += 1
-                    phase1_failed += 1
-                    pending_movie_sleep = True
-                    continue
-                
-                magnet_links = extract_magnets(magnets, i)
-
-                should_process, history_torrent_types = should_process_movie(href, parsed_movies_history_phase1, 1,
-                                                                             magnet_links)
-
-                if not should_process:
-                    if history_torrent_types and 'hacked_subtitle' in history_torrent_types and 'subtitle' in history_torrent_types:
-                        logger.debug(
-                            f"[{i}/{total_entries_phase1}] [Page {page_num}] Skipping based on history rules (history types: {history_torrent_types})")
-                    else:
-                        logger.debug(
-                            f"[{i}/{total_entries_phase1}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
-                    skipped_history_count += 1
-                    phase1_skipped_history_actual += 1
-                    pending_movie_sleep = True
-                    continue
-
-                if magnet_links['subtitle']:
-                    subtitle_count += 1
-                if magnet_links['hacked_subtitle'] or magnet_links['hacked_no_subtitle']:
-                    hacked_count += 1
-                if magnet_links['no_subtitle']:
-                    no_subtitle_count += 1
-
-                current_torrent_types = determine_torrent_types(magnet_links)
-                all_torrent_types = list(
-                    set(history_torrent_types + current_torrent_types)) if history_torrent_types else current_torrent_types
-
-                row = create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet_links,
-                                                         parsed_movies_history_phase1)
-                video_code = entry['video_code']
-                row['video_code'] = video_code
-
-                has_any_torrents = any([
-                    row['hacked_subtitle'],
-                    row['hacked_no_subtitle'],
-                    row['subtitle'],
-                    row['no_subtitle']
-                ])
-                
-                has_new_torrents = any([
-                    row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
-                    row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
-                    row['subtitle'] and row['subtitle'] != '[DOWNLOADED PREVIOUSLY]',
-                    row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]'
-                ])
-
-                should_include_in_report = has_new_torrents or (INCLUDE_DOWNLOADED_IN_REPORT and has_any_torrents)
-
-                if should_include_in_report:
-                    write_csv([row], csv_path, fieldnames, dry_run, append_mode=True)
-                    rows.append(row)
-                    phase1_rows.append(row)
-                    
-                    if use_history_for_saving and not dry_run and has_new_torrents:
-                        new_magnet_links = {}
-                        if row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
-                            new_magnet_links['hacked_subtitle'] = magnet_links.get('hacked_subtitle', '')
-                        if row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
-                            new_magnet_links['hacked_no_subtitle'] = magnet_links.get('hacked_no_subtitle', '')
-                        if row['subtitle'] and row['subtitle'] != '[DOWNLOADED PREVIOUSLY]':
-                            new_magnet_links['subtitle'] = magnet_links.get('subtitle', '')
-                        if row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
-                            new_magnet_links['no_subtitle'] = magnet_links.get('no_subtitle', '')
-                        
-                        if new_magnet_links:
-                            save_parsed_movie_to_history(history_file, href, 1, video_code, new_magnet_links)
-                else:
-                    no_new_torrents_count += 1
-                    phase1_no_new_torrents += 1
-
-                if fallback_triggered:
-                    logger.debug(f"[{i}/{total_entries_phase1}] Applying fallback cooldown: {FALLBACK_COOLDOWN}s")
-                    time.sleep(FALLBACK_COOLDOWN)
-                    pending_movie_sleep = False
-                else:
-                    pending_movie_sleep = True
-
-            logger.info(f"Phase 1 completed: {total_entries_phase1} movies discovered, {len(phase1_rows)} processed, {phase1_skipped_history_actual} skipped (history), {phase1_no_new_torrents} no new torrents, {phase1_failed} failed")
+            # --- Sequential detail processing ---
+            p1_result = process_phase_entries_sequential(
+                entries=all_index_results_phase1,
+                phase=1,
+                history_data=parsed_movies_history_phase1,
+                history_file=history_file,
+                csv_path=csv_path,
+                fieldnames=fieldnames,
+                dry_run=dry_run,
+                use_history_for_saving=use_history_for_saving,
+                use_cookie=custom_url is not None,
+                is_adhoc_mode=custom_url is not None,
+                session=session,
+                use_proxy=use_proxy,
+                use_cf_bypass=use_cf_bypass,
+            )
+            phase1_rows = p1_result['rows']
+            rows.extend(phase1_rows)
+            phase1_skipped_history_actual = p1_result['skipped_history']
+            skipped_history_count += phase1_skipped_history_actual
+            phase1_failed = p1_result['failed']
+            failed_count += phase1_failed
+            phase1_no_new_torrents = p1_result['no_new_torrents']
+            no_new_torrents_count += phase1_no_new_torrents
+            use_proxy = p1_result['use_proxy']
+            use_cf_bypass = p1_result['use_cf_bypass']
 
     # ========================================
     # Process Phase 2 entries (already parsed during fetch)
@@ -2871,303 +2382,66 @@ def main():
             phase2_no_new_torrents = p2_result['no_new_torrents']
             no_new_torrents_count += phase2_no_new_torrents
         else:
-            # --- Sequential detail processing (original logic) ---
-            pending_movie_sleep = False
+            # --- Sequential detail processing ---
+            p2_result = process_phase_entries_sequential(
+                entries=all_index_results_phase2,
+                phase=2,
+                history_data=parsed_movies_history_phase2,
+                history_file=history_file,
+                csv_path=csv_path,
+                fieldnames=fieldnames,
+                dry_run=dry_run,
+                use_history_for_saving=use_history_for_saving,
+                use_cookie=custom_url is not None,
+                is_adhoc_mode=custom_url is not None,
+                session=session,
+                use_proxy=use_proxy,
+                use_cf_bypass=use_cf_bypass,
+            )
+            phase2_rows = p2_result['rows']
+            rows.extend(phase2_rows)
+            phase2_skipped_history_actual = p2_result['skipped_history']
+            skipped_history_count += phase2_skipped_history_actual
+            phase2_failed = p2_result['failed']
+            failed_count += phase2_failed
+            phase2_no_new_torrents = p2_result['no_new_torrents']
+            no_new_torrents_count += phase2_no_new_torrents
+            use_proxy = p2_result['use_proxy']
+            use_cf_bypass = p2_result['use_cf_bypass']
 
-            for i, entry in enumerate(all_index_results_phase2, 1):
-                href = entry['href']
-                page_num = entry['page']
-
-                if href in parsed_links:
-                    logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping duplicate entry in current run")
-                    continue
-
-                parsed_links.add(href)
-
-                if has_complete_subtitles(href, parsed_movies_history_phase2):
-                    logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history")
-                    skipped_history_count += 1
-                    phase2_skipped_history_actual += 1
-                    continue
-
-                if pending_movie_sleep:
-                    movie_sleep_mgr.sleep()
-                    pending_movie_sleep = False
-
-                detail_url = urljoin(BASE_URL, href)
-                logger.info(f"[{i}/{total_entries_phase2}] [Page {page_num}] Processing {entry['video_code']}")
-
-                magnets, actor_info, parse_success, effective_use_proxy, effective_use_cf_bypass = fetch_detail_page_with_fallback(
-                    detail_url, session,
-                    use_cookie=custom_url is not None,
-                    use_proxy=use_proxy,
-                    use_cf_bypass=use_cf_bypass,
-                    entry_index=f"P2-{i}/{total_entries_phase2}",
-                    is_adhoc_mode=custom_url is not None
-                )
-                
-                fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
-                if parse_success and effective_use_cf_bypass != use_cf_bypass:
-                    use_cf_bypass = effective_use_cf_bypass
-                if parse_success and effective_use_proxy != use_proxy:
-                    use_proxy = effective_use_proxy
-                
-                if not parse_success and not magnets:
-                    logger.error(f"[{i}/{total_entries_phase2}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
-                    failed_count += 1
-                    phase2_failed += 1
-                    pending_movie_sleep = True
-                    continue
-                
-                magnet_links = extract_magnets(magnets, f"P2-{i}")
-
-                should_process, history_torrent_types = should_process_movie(href, parsed_movies_history_phase2, 2,
-                                                                             magnet_links)
-
-                if not should_process:
-                    if history_torrent_types and 'hacked_subtitle' in history_torrent_types and 'subtitle' in history_torrent_types:
-                        logger.debug(
-                            f"[{i}/{total_entries_phase2}] [Page {page_num}] Skipping based on history rules (history types: {history_torrent_types})")
-                    else:
-                        logger.debug(
-                            f"[{i}/{total_entries_phase2}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
-                    skipped_history_count += 1
-                    phase2_skipped_history_actual += 1
-                    pending_movie_sleep = True
-                    continue
-
-                if magnet_links['subtitle']:
-                    subtitle_count += 1
-                if magnet_links['hacked_subtitle'] or magnet_links['hacked_no_subtitle']:
-                    hacked_count += 1
-                if magnet_links['no_subtitle']:
-                    no_subtitle_count += 1
-
-                current_torrent_types = determine_torrent_types(magnet_links)
-                all_torrent_types = list(
-                    set(history_torrent_types + current_torrent_types)) if history_torrent_types else current_torrent_types
-
-                row = create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet_links,
-                                                         parsed_movies_history_phase2)
-                video_code = entry['video_code']
-                row['video_code'] = video_code
-
-                has_any_torrents = any([
-                    row['hacked_subtitle'],
-                    row['hacked_no_subtitle'],
-                    row['subtitle'],
-                    row['no_subtitle']
-                ])
-                
-                has_new_torrents = any([
-                    row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
-                    row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]',
-                    row['subtitle'] and row['subtitle'] != '[DOWNLOADED PREVIOUSLY]',
-                    row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]'
-                ])
-
-                should_include_in_report = has_new_torrents or (INCLUDE_DOWNLOADED_IN_REPORT and has_any_torrents)
-
-                if should_include_in_report:
-                    write_csv([row], csv_path, fieldnames, dry_run, append_mode=True)
-                    rows.append(row)
-                    phase2_rows.append(row)
-                    
-                    if use_history_for_saving and not dry_run and has_new_torrents:
-                        new_magnet_links = {}
-                        if row['hacked_subtitle'] and row['hacked_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
-                            new_magnet_links['hacked_subtitle'] = magnet_links.get('hacked_subtitle', '')
-                        if row['hacked_no_subtitle'] and row['hacked_no_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
-                            new_magnet_links['hacked_no_subtitle'] = magnet_links.get('hacked_no_subtitle', '')
-                        if row['subtitle'] and row['subtitle'] != '[DOWNLOADED PREVIOUSLY]':
-                            new_magnet_links['subtitle'] = magnet_links.get('subtitle', '')
-                        if row['no_subtitle'] and row['no_subtitle'] != '[DOWNLOADED PREVIOUSLY]':
-                            new_magnet_links['no_subtitle'] = magnet_links.get('no_subtitle', '')
-                        
-                        if new_magnet_links:
-                            save_parsed_movie_to_history(history_file, href, 2, video_code, new_magnet_links)
-                else:
-                    no_new_torrents_count += 1
-                    phase2_no_new_torrents += 1
-
-                if fallback_triggered:
-                    logger.debug(f"[P2-{i}/{total_entries_phase2}] Applying fallback cooldown: {FALLBACK_COOLDOWN}s")
-                    time.sleep(FALLBACK_COOLDOWN)
-                    pending_movie_sleep = False
-                else:
-                    pending_movie_sleep = True
-
-            logger.info(f"Phase 2 completed: {total_entries_phase2} movies discovered, {len(phase2_rows)} processed, {phase2_skipped_history_actual} skipped (history), {phase2_no_new_torrents} no new torrents, {phase2_failed} failed")
-
-    # CSV has been written incrementally during processing
     if not dry_run:
         logger.info(f"CSV file written incrementally to: {csv_path}")
 
-    # Generate summary
-    logger.info("=" * 75)
-    logger.info("SUMMARY REPORT")
-    logger.info("=" * 75)
-    if parse_all:
-        logger.info(f"Pages processed: {start_page} to last page with results")
-    else:
-        logger.info(f"Pages processed: {start_page} to {end_page}")
-    
-    logger.info(f"Tolerance mechanism: Stops after {max_consecutive_empty} consecutive pages with no HTML content")
-
-    # Phase 1 Summary
-    if phase_mode in ['1', 'all']:
-        logger.info("=" * 30)
-        logger.info("PHASE 1 SUMMARY")
-        logger.info("=" * 30)
-        logger.info(f"Phase 1 entries found: {len(phase1_rows)}")
-        if len(phase1_rows) > 0:
-            phase1_subtitle_count = sum(1 for row in phase1_rows if row['subtitle'])
-            phase1_hacked_subtitle_count = sum(1 for row in phase1_rows if row['hacked_subtitle'])
-            phase1_hacked_no_subtitle_count = sum(1 for row in phase1_rows if row['hacked_no_subtitle'])
-            phase1_no_subtitle_count = sum(1 for row in phase1_rows if row['no_subtitle'])
-
-            logger.info(
-                f"  - Subtitle torrents: {phase1_subtitle_count} ({(phase1_subtitle_count / len(phase1_rows) * 100):.1f}%)")
-            logger.info(
-                f"  - Hacked subtitle torrents: {phase1_hacked_subtitle_count} ({(phase1_hacked_subtitle_count / len(phase1_rows) * 100):.1f}%)")
-            logger.info(
-                f"  - Hacked no-subtitle torrents: {phase1_hacked_no_subtitle_count} ({(phase1_hacked_no_subtitle_count / len(phase1_rows) * 100):.1f}%)")
-            logger.info(
-                f"  - No-subtitle torrents: {phase1_no_subtitle_count} ({(phase1_no_subtitle_count / len(phase1_rows) * 100):.1f}%)")
-        else:
-            logger.info("  - No entries found in Phase 1")
-
-    # Phase 2 Summary
-    if phase_mode in ['2', 'all']:
-        logger.info("=" * 30)
-        logger.info("PHASE 2 SUMMARY")
-        logger.info("=" * 30)
-        logger.info(f"Phase 2 entries found: {len(phase2_rows)}")
-        if len(phase2_rows) > 0:
-            phase2_subtitle_count = sum(1 for row in phase2_rows if row['subtitle'])
-            phase2_hacked_subtitle_count = sum(1 for row in phase2_rows if row['hacked_subtitle'])
-            phase2_hacked_no_subtitle_count = sum(1 for row in phase2_rows if row['hacked_no_subtitle'])
-            phase2_no_subtitle_count = sum(1 for row in phase2_rows if row['no_subtitle'])
-
-            logger.info(
-                f"  - Subtitle torrents: {phase2_subtitle_count} ({(phase2_subtitle_count / len(phase2_rows) * 100):.1f}%)")
-            logger.info(
-                f"  - Hacked subtitle torrents: {phase2_hacked_subtitle_count} ({(phase2_hacked_subtitle_count / len(phase2_rows) * 100):.1f}%)")
-            logger.info(
-                f"  - Hacked no-subtitle torrents: {phase2_hacked_no_subtitle_count} ({(phase2_hacked_no_subtitle_count / len(phase2_rows) * 100):.1f}%)")
-            logger.info(
-                f"  - No-subtitle torrents: {phase2_no_subtitle_count} ({(phase2_no_subtitle_count / len(phase2_rows) * 100):.1f}%)")
-        else:
-            logger.info("  - No entries found in Phase 2")
-
-    # Overall Summary
-    # Note: "movies" = unique movie pages, each movie can have multiple torrent links
-    # total_discovered = processed + skipped_history + no_new_torrents + failed
-    total_discovered = len(rows) + skipped_history_count + no_new_torrents_count + failed_count
-    logger.info("=" * 30)
-    logger.info("OVERALL SUMMARY")
-    logger.info("=" * 30)
-    logger.info(f"Total movies discovered: {total_discovered}")
-    logger.info(f"Successfully processed: {len(rows)}")
-    if use_history_for_loading and not ignore_history:
-        logger.info(f"Skipped already parsed in previous runs: {skipped_history_count}")
-    elif ignore_history:
-        logger.info("History reading was disabled (--ignore-history), but results will still be saved to history")
-    logger.info(f"No new torrents to download: {no_new_torrents_count}")
-    logger.info(f"Failed to fetch/parse: {failed_count}")
-    logger.info(f"Current parsed links in memory: {len(parsed_links)}")
-
-    # Overall torrent statistics
-    if len(rows) > 0:
-        total_subtitle_count = sum(1 for row in rows if row['subtitle'])
-        total_hacked_subtitle_count = sum(1 for row in rows if row['hacked_subtitle'])
-        total_hacked_no_subtitle_count = sum(1 for row in rows if row['hacked_no_subtitle'])
-        total_no_subtitle_count = sum(1 for row in rows if row['no_subtitle'])
-
-        logger.info(
-            f"Overall subtitle torrents: {total_subtitle_count} ({(total_subtitle_count / len(rows) * 100):.1f}%)")
-        logger.info(
-            f"Overall hacked subtitle torrents: {total_hacked_subtitle_count} ({(total_hacked_subtitle_count / len(rows) * 100):.1f}%)")
-        logger.info(
-            f"Overall hacked no-subtitle torrents: {total_hacked_no_subtitle_count} ({(total_hacked_no_subtitle_count / len(rows) * 100):.1f}%)")
-        logger.info(
-            f"Overall no-subtitle torrents: {total_no_subtitle_count} ({(total_no_subtitle_count / len(rows) * 100):.1f}%)")
-
-    if not dry_run:
-        logger.info(f"Results saved to: {csv_path}")
-        if use_history_for_saving:
-            logger.info(f"History saved to: {os.path.join(REPORTS_DIR, PARSED_MOVIES_CSV)}")
-        # Output the CSV full path in a parseable format for downstream scripts
-        # This allows GitHub Actions or pipeline.py to capture and pass to qb_uploader
-        print(f"SPIDER_OUTPUT_CSV={csv_path}")
-    logger.info("=" * 75)
-    
-    # Log proxy statistics and ban status if using proxy
-    if use_proxy and PROXY_MODE in ('pool', 'single') and global_proxy_pool is not None:
-        logger.info("")
-        global_proxy_pool.log_statistics(level=logging.INFO)
-        
-        # Log ban summary (without IP for logs)
-        logger.info("")
-        logger.info("=" * 75)
-        logger.info("PROXY BAN STATUS")
-        logger.info("=" * 75)
-        ban_summary = global_proxy_pool.get_ban_summary(include_ip=False)
-        logger.info(ban_summary)
-        logger.info("=" * 75)
-    
-    # Log proxy ban HTML files if any were saved
-    if proxy_ban_html_files:
-        logger.info("")
-        logger.info("=" * 75)
-        logger.info("PROXY BAN HTML FILES")
-        logger.info("=" * 75)
-        logger.info(f"Saved {len(proxy_ban_html_files)} proxy ban HTML file(s) for debugging:")
-        for html_file in proxy_ban_html_files:
-            logger.info(f"  - {html_file}")
-        logger.info("=" * 75)
-        # Output file list for downstream scripts (e.g., email notification)
-        print(f"PROXY_BAN_HTML_FILES={','.join(proxy_ban_html_files)}")
-    
-    # Check for critical failures and exit with appropriate code
-    # Track if any proxy was banned during the entire run
-    proxies_were_banned = False
-    if phase_mode in ['1', 'all']:
-        proxies_were_banned = proxies_were_banned or any_proxy_banned
-    if phase_mode in ['2', 'all']:
-        proxies_were_banned = proxies_were_banned or any_proxy_banned_phase2
-    
-    if proxies_were_banned:
-        logger.error("=" * 75)
-        logger.error("CRITICAL: PROXY BAN DETECTED DURING THIS RUN")
-        logger.error("=" * 75)
-        logger.error("One or more proxies were marked as BANNED due to failure to retrieve movie list.")
-        logger.error("This indicates the proxy IP may be blocked by JavDB.")
-        logger.error("Please check proxy ban status and consider using different proxies.")
-        sys.exit(2)  # Exit code 2 indicates proxy ban
-    
-    # Check if we got any results at all (might indicate all proxies are banned)
-    if len(rows) == 0 and use_proxy:
-        logger.warning("=" * 75)
-        logger.warning("WARNING: No entries found while using proxy")
-        logger.warning("=" * 75)
-        logger.warning("This might indicate proxy issues or CF bypass service problems.")
-        # Don't exit with error - it's possible there are legitimately no new entries
+    generate_summary_report(
+        phase_mode=phase_mode, parse_all=parse_all,
+        start_page=start_page, end_page=end_page,
+        max_consecutive_empty=max_consecutive_empty,
+        phase1_rows=phase1_rows, phase2_rows=phase2_rows, rows=rows,
+        use_history_for_loading=use_history_for_loading,
+        ignore_history=ignore_history,
+        skipped_history_count=skipped_history_count,
+        failed_count=failed_count,
+        no_new_torrents_count=no_new_torrents_count,
+        csv_path=csv_path, dry_run=dry_run,
+        use_history_for_saving=use_history_for_saving,
+        use_proxy=use_proxy,
+        any_proxy_banned=any_proxy_banned,
+        any_proxy_banned_phase2=any_proxy_banned_phase2,
+    )
 
     # Git commit spider results (only if credentials are available)
     from_pipeline = args.from_pipeline if hasattr(args, 'from_pipeline') else False
-    
+
     if not dry_run and has_git_credentials(GIT_USERNAME, GIT_PASSWORD):
         logger.info("Committing spider results...")
-        # Flush log handlers to ensure all logs are written before commit
         flush_log_handlers()
-        
+
         files_to_commit = [
-            REPORTS_DIR,  # Includes DailyReport, AdHoc subdirectories and history files
+            REPORTS_DIR,
             'logs/',
         ]
         commit_message = f"Auto-commit: Spider results {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        
+
         git_commit_and_push(
             files_to_add=files_to_commit,
             commit_message=commit_message,
@@ -3175,7 +2449,7 @@ def main():
             git_username=GIT_USERNAME,
             git_password=GIT_PASSWORD,
             git_repo_url=GIT_REPO_URL,
-            git_branch=GIT_BRANCH
+            git_branch=GIT_BRANCH,
         )
     elif not dry_run:
         logger.info("Skipping git commit - no credentials provided (commit will be handled by workflow)")
