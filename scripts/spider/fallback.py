@@ -189,7 +189,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
     # --- Phase 1: Login Refresh ---
     if is_adhoc_mode and can_attempt_login(is_adhoc_mode, is_index_page=True):
         logger.info(f"[Page {page_num}] Attempting login refresh...")
-        login_success, new_cookie = attempt_login_refresh()
+        login_success, _ = attempt_login_refresh()
         if login_success and use_proxy and state.global_proxy_pool:
             current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
             html, success, is_valid_empty, used_cf = try_proxy_direct_then_cf(current_proxy_name)
@@ -202,7 +202,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
         elif login_success and not use_proxy:
             html, success, is_valid_empty = try_fetch(
                 False, use_cf_bypass,
-                f"Fallback: Retry with refreshed cookie (No Proxy)")
+                "Fallback: Retry with refreshed cookie (No Proxy)")
             if success:
                 return html, True, False, False, use_cf_bypass, False
             if is_valid_empty:
@@ -360,7 +360,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
     # --- Phase 1: Login Refresh ---
     if can_attempt_login(is_adhoc_mode, is_index_page=False):
         logger.info(f"[{entry_index}] Attempting login refresh...")
-        login_success, new_cookie = attempt_login_refresh()
+        login_success, _ = attempt_login_refresh()
         if login_success and use_proxy and state.global_proxy_pool:
             current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
             magnets, actor_info, success, used_cf = try_proxy_direct_then_cf(current_proxy_name, skip_sleep=True)
