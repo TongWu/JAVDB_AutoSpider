@@ -105,7 +105,7 @@ def _log_rust_status():
         else:
             _logger.debug("⚠️  Spider using Python parsers - Rust parsers not available")
     except Exception:
-        _logger.debug("⚠️  Could not determine parser implementation status")
+        _logger.info("⚠️  Could not determine parser implementation status")
     try:
         from utils.history_manager import RUST_HISTORY_AVAILABLE
         if RUST_HISTORY_AVAILABLE:
