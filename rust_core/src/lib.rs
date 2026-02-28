@@ -2,6 +2,7 @@ use pyo3::prelude::*;
 
 pub mod csv_writer;
 pub mod history;
+pub mod magnet_extractor;
 pub mod models;
 pub mod proxy;
 pub mod requester;
@@ -64,6 +65,16 @@ fn detect_page_type(html_content: &str) -> String {
     scraper::common::detect_page_type(html_content)
 }
 
+#[pyfunction]
+fn is_login_page(html_content: &str) -> bool {
+    scraper::common::is_login_page(html_content)
+}
+
+#[pyfunction]
+fn validate_index_html(html_content: &str) -> (bool, bool) {
+    scraper::common::validate_index_html(html_content)
+}
+
 #[pymodule]
 fn javdb_rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Initialize logging bridge
@@ -111,6 +122,8 @@ fn javdb_rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_top_page, m)?)?;
     m.add_function(wrap_pyfunction!(parse_tag_page, m)?)?;
     m.add_function(wrap_pyfunction!(detect_page_type, m)?)?;
+    m.add_function(wrap_pyfunction!(is_login_page, m)?)?;
+    m.add_function(wrap_pyfunction!(validate_index_html, m)?)?;
 
     // --- History Manager ---
     m.add_function(wrap_pyfunction!(load_parsed_movies_history, m)?)?;
@@ -140,6 +153,9 @@ fn javdb_rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(url_helper::get_page_url, m)?)?;
     m.add_function(wrap_pyfunction!(url_helper::sanitize_filename_part, m)?)?;
     m.add_function(wrap_pyfunction!(url_helper::extract_url_part_after_javdb, m)?)?;
+
+    // --- Magnet Extractor ---
+    m.add_function(wrap_pyfunction!(magnet_extractor::extract_magnets, m)?)?;
 
     Ok(())
 }
