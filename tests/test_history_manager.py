@@ -18,6 +18,7 @@ from utils.history_manager import (
     determine_torrent_type,
     get_missing_torrent_types,
     has_complete_subtitles,
+    should_skip_recent_yesterday_release,
     should_process_movie,
     check_torrent_in_history,
     is_downloaded_torrent
@@ -250,6 +251,61 @@ class TestHasCompleteSubtitles:
         """Test with None history data."""
         result = has_complete_subtitles('/v/ABC-123', None)
         assert result is False
+
+
+class TestShouldSkipRecentYesterdayRelease:
+    """Test cases for should_skip_recent_yesterday_release function."""
+
+    def test_yesterday_release_recently_updated_should_skip(self):
+        """Yesterday release + updated today → skip."""
+        from datetime import datetime
+        today = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        history_data = {
+            '/v/ABC-123': {'update_date': today, 'torrent_types': ['subtitle']}
+        }
+        assert should_skip_recent_yesterday_release('/v/ABC-123', history_data, True) is True
+
+    def test_yesterday_release_updated_yesterday_should_skip(self):
+        """Yesterday release + updated yesterday → skip."""
+        from datetime import datetime, timedelta
+        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
+        history_data = {
+            '/v/ABC-123': {'update_date': yesterday, 'torrent_types': ['no_subtitle']}
+        }
+        assert should_skip_recent_yesterday_release('/v/ABC-123', history_data, True) is True
+
+    def test_yesterday_release_old_update_should_not_skip(self):
+        """Yesterday release + updated 3 days ago → do not skip."""
+        from datetime import datetime, timedelta
+        old_date = (datetime.now() - timedelta(days=3)).strftime('%Y-%m-%d %H:%M:%S')
+        history_data = {
+            '/v/ABC-123': {'update_date': old_date, 'torrent_types': ['subtitle']}
+        }
+        assert should_skip_recent_yesterday_release('/v/ABC-123', history_data, True) is False
+
+    def test_today_release_recently_updated_should_not_skip(self):
+        """Today release (is_yesterday_release=False) + recent update → do not skip."""
+        from datetime import datetime
+        today = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        history_data = {
+            '/v/ABC-123': {'update_date': today, 'torrent_types': ['subtitle']}
+        }
+        assert should_skip_recent_yesterday_release('/v/ABC-123', history_data, False) is False
+
+    def test_not_in_history_should_not_skip(self):
+        """Movie not in history → do not skip."""
+        assert should_skip_recent_yesterday_release('/v/NEW-001', {}, True) is False
+
+    def test_none_history_should_not_skip(self):
+        """None history data → do not skip."""
+        assert should_skip_recent_yesterday_release('/v/ABC-123', None, True) is False
+
+    def test_empty_update_date_should_not_skip(self):
+        """Empty update_date → do not skip."""
+        history_data = {
+            '/v/ABC-123': {'update_date': '', 'torrent_types': ['subtitle']}
+        }
+        assert should_skip_recent_yesterday_release('/v/ABC-123', history_data, True) is False
 
 
 class TestShouldProcessMovie:
