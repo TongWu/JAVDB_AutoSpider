@@ -336,6 +336,7 @@ jobs:
       - name: Step 1 - Run Spider
         id: spider
         run: |
+          set -o pipefail
           # Capture output AND exit code so we can always extract the CSV filename
           # (even when spider exits non-zero, e.g. proxy ban sys.exit(2))
           SPIDER_OUTPUT=$(python3 scripts/spider --use-proxy | tee /dev/stderr) && SPIDER_EXIT=0 || SPIDER_EXIT=$?
