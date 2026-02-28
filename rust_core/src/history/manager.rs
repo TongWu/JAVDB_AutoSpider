@@ -765,9 +765,9 @@ pub fn should_skip_recent_yesterday_release(
     let cutoff = (Local::now() - chrono::Duration::days(1))
         .format("%Y-%m-%d")
         .to_string();
-    let prefix = &visited_str[..visited_str.len().min(10)];
+    let prefix: String = visited_str.chars().take(10).collect();
 
-    Ok(prefix >= cutoff.as_str())
+    Ok(prefix.as_str() >= cutoff.as_str())
 }
 
 #[pyfunction]
