@@ -659,6 +659,6 @@ try:
         mark_torrent_as_downloaded,
     )
     RUST_HISTORY_AVAILABLE = True
-    logger.info("✅ Rust history manager loaded - using high-performance Rust implementation")
+    logger.debug("✅ Rust history manager loaded - using high-performance Rust implementation")
 except ImportError as e:
     logger.warning(f"⚠️  Rust history manager not available (ImportError: {e}) - using pure-Python implementation")

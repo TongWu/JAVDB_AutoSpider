@@ -41,7 +41,7 @@ from .proxy_ban_manager import get_ban_manager, ProxyBanManager
 logger = logging.getLogger(__name__)
 
 if RUST_PROXY_AVAILABLE:
-    logger.info("✅ Rust proxy pool available - using high-performance Rust implementation")
+    logger.debug("✅ Rust proxy pool available - using high-performance Rust implementation")
 else:
     error_msg = RUST_IMPORT_ERROR if RUST_IMPORT_ERROR else 'unknown'
     logger.warning(f"⚠️  Rust proxy pool not available (ImportError: {error_msg}) - falling back to pure-Python implementation")
