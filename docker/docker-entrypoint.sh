@@ -69,7 +69,7 @@ if [ "$IS_CRON_CMD" = true ]; then
     # ============================================================
     if [ "$ENABLE_SPIDER" = "true" ] && [ ! -z "$CRON_SPIDER" ]; then
         echo "Adding Spider cron job: $CRON_SPIDER"
-        SPIDER_CMD=${SPIDER_COMMAND:-"cd /app && /usr/local/bin/python -m scripts.spider >> /var/log/cron.log 2>&1"}
+        SPIDER_CMD=${SPIDER_COMMAND:-"cd /app && /usr/local/bin/python scripts/spider >> /var/log/cron.log 2>&1"}
         echo "$CRON_SPIDER $SPIDER_CMD" >> $CRONTAB_FILE
     else
         echo "Spider cron job disabled or not configured"

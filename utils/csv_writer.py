@@ -24,21 +24,6 @@ except ImportError:
 _DOWNLOADED_PLACEHOLDER = '[DOWNLOADED PREVIOUSLY]'
 
 
-def _normalize_row_to_str(row):
-    """Convert all dict values to str for Rust merge_row_data (dict[str, str])."""
-    if row is None:
-        return {}
-    return {k: str(v) if v is not None else '' for k, v in row.items()}
-
-
-def _rs_merge_row_data_wrapper(existing_row, new_row):
-    """Thin wrapper that normalizes inputs to str values before calling Rust."""
-    return _rs_merge_row_data(
-        _normalize_row_to_str(existing_row),
-        _normalize_row_to_str(new_row),
-    )
-
-
 def _py_merge_row_data(existing_row, new_row):
     merged = existing_row.copy()
     for key, new_value in new_row.items():
@@ -54,7 +39,7 @@ def _py_merge_row_data(existing_row, new_row):
     return merged
 
 
-merge_row_data = _rs_merge_row_data_wrapper if RUST_CSV_AVAILABLE else _py_merge_row_data
+merge_row_data = _rs_merge_row_data if RUST_CSV_AVAILABLE else _py_merge_row_data
 
 # ---------------------------------------------------------------------------
 # write_csv
@@ -94,8 +79,10 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
             if rows_without_key:
                 logger.warning(f"[CSV] Found {len(rows_without_key)} existing rows without video_code - preserving them")
         except Exception as e:
-            logger.warning("Error reading existing CSV file %s: %s. Refusing to overwrite.", csv_path, e)
-            raise
+            logger.warning(f"Error reading existing CSV file: {e}. Will create new file.")
+            existing_rows = {}
+            rows_without_key = []
+            existing_fieldnames = []
 
         merged_count = 0
         added_count = 0
