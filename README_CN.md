@@ -182,7 +182,7 @@ docker logs -f javdb-spider
 docker exec javdb-spider tail -f /var/log/cron.log
 
 # 手动运行爬虫
-docker exec javdb-spider python scripts/spider.py --use-proxy
+docker exec javdb-spider python -m scripts.spider --use-proxy
 
 # 手动运行流水线
 docker exec javdb-spider python pipeline.py
@@ -227,7 +227,7 @@ docker-compose -f docker/docker-compose.yml up -d
 ```bash
 # 爬虫每天凌晨 3:00 运行
 CRON_SPIDER=0 3 * * *
-SPIDER_COMMAND=cd /app && /usr/local/bin/python scripts/spider.py --use-proxy >> /var/log/cron.log 2>&1
+SPIDER_COMMAND=cd /app && /usr/local/bin/python -m scripts.spider --use-proxy >> /var/log/cron.log 2>&1
 
 # 流水线每天凌晨 4:00 运行
 CRON_PIPELINE=0 4 * * *
