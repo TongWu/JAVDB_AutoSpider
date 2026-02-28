@@ -1,10 +1,12 @@
 use pyo3::prelude::*;
 
+pub mod csv_writer;
 pub mod history;
 pub mod models;
 pub mod proxy;
 pub mod requester;
 pub mod scraper;
+pub mod url_helper;
 
 use models::{
     CategoryPageResult, IndexPageResult, MagnetInfo, MovieDetail, MovieIndexEntry, MovieLink,
@@ -125,6 +127,19 @@ fn javdb_rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(add_downloaded_indicator_to_csv, m)?)?;
     m.add_function(wrap_pyfunction!(is_downloaded_torrent, m)?)?;
     m.add_function(wrap_pyfunction!(mark_torrent_as_downloaded, m)?)?;
+
+    // --- CSV Writer ---
+    m.add_function(wrap_pyfunction!(csv_writer::merge_row_data, m)?)?;
+    m.add_function(wrap_pyfunction!(csv_writer::create_csv_row, m)?)?;
+
+    // --- URL Helper ---
+    m.add_function(wrap_pyfunction!(url_helper::detect_url_type, m)?)?;
+    m.add_function(wrap_pyfunction!(url_helper::extract_url_identifier, m)?)?;
+    m.add_function(wrap_pyfunction!(url_helper::has_magnet_filter, m)?)?;
+    m.add_function(wrap_pyfunction!(url_helper::add_magnet_filter_to_url, m)?)?;
+    m.add_function(wrap_pyfunction!(url_helper::get_page_url, m)?)?;
+    m.add_function(wrap_pyfunction!(url_helper::sanitize_filename_part, m)?)?;
+    m.add_function(wrap_pyfunction!(url_helper::extract_url_part_after_javdb, m)?)?;
 
     Ok(())
 }

@@ -323,7 +323,7 @@ impl ProxyPool {
         };
 
         self.inner.lock().proxies.push(Arc::new(Mutex::new(proxy)));
-        info!(
+        debug!(
             "Added proxy '{}' to pool (HTTP: {}, HTTPS: {})",
             proxy_name, masked_http, masked_https
         );
