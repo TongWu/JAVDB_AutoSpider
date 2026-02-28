@@ -1,5 +1,5 @@
 """
-Unit tests for scripts/spider.py functions.
+Unit tests for scripts/spider package functions.
 These tests use local implementations to avoid module import issues.
 """
 import os
