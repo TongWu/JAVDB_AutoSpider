@@ -125,4 +125,4 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
             writer.writeheader()
             for row in rows:
                 writer.writerow(row)
-        logger.info(f"[CSV] Created {csv_path} with {len(rows)} entries")
+        logger.debug(f"[CSV] Created {csv_path} with {len(rows)} entries")
