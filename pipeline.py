@@ -281,7 +281,7 @@ def main():
 
         # 1. Run Spider
         logger.info("Step 1: Running JavDB Spider...")
-        spider_output = run_script('scripts/spider.py', spider_args)
+        spider_output = run_script('scripts/spider', spider_args)
         logger.info("✓ JavDB Spider completed successfully")
         
         # Extract CSV path from spider output if not pre-determined

@@ -775,7 +775,7 @@ def main():
             logger.info("=" * 60)
             logger.info("The new session cookie has been saved to config.py")
             logger.info("You can now use the spider with --url parameter:")
-            logger.info("  python3 scripts/spider.py --url https://javdb.com/actors/...")
+            logger.info("  python3 scripts/spider --url https://javdb.com/actors/...")
 
             try:
                 if os.path.exists('javdb_captcha.png'):
