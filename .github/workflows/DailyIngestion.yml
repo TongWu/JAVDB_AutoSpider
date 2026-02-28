@@ -336,19 +336,24 @@ jobs:
       - name: Step 1 - Run Spider
         id: spider
         run: |
-          set -e  # Exit on error
-          set -o pipefail  # Exit on error in pipeline (important for tee)
+          set -o pipefail
+          # Capture output AND exit code so we can always extract the CSV filename
+          # (even when spider exits non-zero, e.g. proxy ban sys.exit(2))
+          SPIDER_OUTPUT=$(python3 scripts/spider --use-proxy | tee /dev/stderr) && SPIDER_EXIT=0 || SPIDER_EXIT=$?
           
-          # Capture output to extract the CSV filename
-          SPIDER_OUTPUT=$(python3 scripts/spider --use-proxy | tee /dev/stderr)
-          
-          # Extract CSV filename from spider output (format: SPIDER_OUTPUT_CSV=filename.csv)
-          CSV_FILENAME=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_OUTPUT_CSV=" | cut -d'=' -f2 | tail -1)
+          # Always extract CSV filename before potentially re-raising the error
+          CSV_FILENAME=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_OUTPUT_CSV=" | cut -d'=' -f2 | tail -1 || true)
           if [ -n "$CSV_FILENAME" ]; then
             echo "csv_filename=$CSV_FILENAME" >> $GITHUB_OUTPUT
             echo "Captured CSV filename: $CSV_FILENAME"
           else
             echo "Warning: Could not capture CSV filename from spider output"
+          fi
+          
+          # Re-raise spider exit code so the step is correctly marked as failed
+          if [ $SPIDER_EXIT -ne 0 ]; then
+            echo "Spider exited with code $SPIDER_EXIT"
+            exit $SPIDER_EXIT
           fi
 
       - name: Step 2 - Run qBittorrent Uploader

@@ -214,7 +214,7 @@ class TestAnalyzePipelineLog:
         log_path = os.path.join(temp_dir, 'pipeline.log')
         with open(log_path, 'w') as f:
             f.write("PIPELINE EXECUTION ERROR\n")
-            f.write("Script scripts/spider.py failed with return code 1\n")
+            f.write("Script scripts/spider failed with return code 1\n")
         
         is_critical, error_msg, log_exists = analyze_pipeline_log(log_path)
         assert is_critical is True

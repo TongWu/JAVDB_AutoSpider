@@ -7,19 +7,49 @@ falling back to the pure-Python implementation otherwise.
 
 import csv
 import os
-import logging
 from datetime import datetime, timedelta
 
-try:
-    from config import LOG_LEVEL
-except ImportError:
-    LOG_LEVEL = 'INFO'
+from utils.logging_config import get_logger
 
-from utils.logging_config import get_logger, setup_logging
-setup_logging(log_level=LOG_LEVEL)
 logger = get_logger(__name__)
 
 RUST_HISTORY_AVAILABLE = False
+
+HISTORY_FIELDNAMES = [
+    'href', 'phase', 'video_code', 'create_datetime', 'update_datetime',
+    'last_visited_datetime',
+    'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle',
+]
+
+
+def _normalize_record_columns(record):
+    """Normalize a history record for writing: handle old column names and
+    ensure all required columns exist."""
+    # Backward compat: old column names
+    if 'create_date' in record:
+        record.setdefault('create_datetime', record.pop('create_date'))
+    if 'update_date' in record:
+        record.setdefault('update_datetime', record.pop('update_date'))
+
+    # parsed_date fallback
+    if ('create_datetime' not in record or not record['create_datetime']) and 'parsed_date' in record:
+        record['create_datetime'] = record['parsed_date']
+    if ('update_datetime' not in record or not record['update_datetime']) and 'parsed_date' in record:
+        record['update_datetime'] = record['parsed_date']
+
+    # Ensure last_visited_datetime exists
+    if not record.get('last_visited_datetime'):
+        record['last_visited_datetime'] = record.get('update_datetime', '')
+
+    # Old torrent_type column → individual columns
+    if 'torrent_type' in record:
+        for category in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
+            record.setdefault(category, '')
+        del record['torrent_type']
+
+    # Ensure all torrent columns exist
+    for cat in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
+        record.setdefault(cat, '')
 
 
 def load_parsed_movies_history(history_file, phase=None):
@@ -38,14 +68,15 @@ def load_parsed_movies_history(history_file, phase=None):
                 if href not in href_records:
                     href_records[href] = row
                 else:
-                    existing_date = href_records[href].get('update_date', href_records[href].get('parsed_date', ''))
-                    current_date = row.get('update_date', row.get('parsed_date', ''))
+                    existing_date = href_records[href].get('update_datetime', href_records[href].get('update_date', href_records[href].get('parsed_date', '')))
+                    current_date = row.get('update_datetime', row.get('update_date', row.get('parsed_date', '')))
                     if current_date > existing_date:
                         href_records[href] = row
 
             for href, row in href_records.items():
-                create_date = row.get('create_date', row.get('parsed_date', ''))
-                update_date = row.get('update_date', row.get('parsed_date', ''))
+                create_datetime = row.get('create_datetime', row.get('create_date', row.get('parsed_date', '')))
+                update_datetime = row.get('update_datetime', row.get('update_date', row.get('parsed_date', '')))
+                last_visited_datetime = row.get('last_visited_datetime', '') or update_datetime
 
                 torrent_types = []
                 if 'torrent_type' in row:
@@ -63,43 +94,27 @@ def load_parsed_movies_history(history_file, phase=None):
                             elif magnet_content.startswith('magnet:'):
                                 torrent_types.append(category)
 
-                if phase is None:
-                    history[href] = {
+                def _build_entry():
+                    return {
                         'phase': row['phase'],
                         'video_code': row['video_code'],
-                        'create_date': create_date,
-                        'update_date': update_date,
+                        'create_datetime': create_datetime,
+                        'update_datetime': update_datetime,
+                        'last_visited_datetime': last_visited_datetime,
                         'torrent_types': torrent_types,
                         'hacked_subtitle': row.get('hacked_subtitle', ''),
                         'hacked_no_subtitle': row.get('hacked_no_subtitle', ''),
                         'subtitle': row.get('subtitle', ''),
-                        'no_subtitle': row.get('no_subtitle', '')
+                        'no_subtitle': row.get('no_subtitle', ''),
                     }
+
+                if phase is None:
+                    history[href] = _build_entry()
                 elif phase == 1:
                     if row['phase'] != '2':
-                        history[href] = {
-                            'phase': row['phase'],
-                            'video_code': row['video_code'],
-                            'create_date': create_date,
-                            'update_date': update_date,
-                            'torrent_types': torrent_types,
-                            'hacked_subtitle': row.get('hacked_subtitle', ''),
-                            'hacked_no_subtitle': row.get('hacked_no_subtitle', ''),
-                            'subtitle': row.get('subtitle', ''),
-                            'no_subtitle': row.get('no_subtitle', '')
-                        }
+                        history[href] = _build_entry()
                 elif phase == 2:
-                    history[href] = {
-                        'phase': row['phase'],
-                        'video_code': row['video_code'],
-                        'create_date': create_date,
-                        'update_date': update_date,
-                        'torrent_types': torrent_types,
-                        'hacked_subtitle': row.get('hacked_subtitle', ''),
-                        'hacked_no_subtitle': row.get('hacked_no_subtitle', ''),
-                        'subtitle': row.get('subtitle', ''),
-                        'no_subtitle': row.get('no_subtitle', '')
-                    }
+                    history[href] = _build_entry()
 
             if len(records) != len(href_records):
                 logger.info(f"Found {len(records) - len(href_records)} duplicate records, cleaning up history file")
@@ -124,32 +139,19 @@ def load_parsed_movies_history(history_file, phase=None):
 def cleanup_history_file(history_file, href_records):
     """Clean up history file by removing duplicate records and keeping only the most recent for each href"""
     try:
-        def get_update_date(record):
-            return record.get('update_date', record.get('parsed_date', ''))
+        def _get_update_dt(record):
+            return record.get('update_datetime', record.get('update_date', record.get('parsed_date', '')))
         
-        sorted_records = sorted(href_records.values(), key=lambda x: get_update_date(x), reverse=True)
+        sorted_records = sorted(href_records.values(), key=lambda x: _get_update_dt(x), reverse=True)
 
         with open(history_file, 'w', newline='', encoding='utf-8-sig') as f:
-            fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 
+            fieldnames = ['href', 'phase', 'video_code', 'create_datetime', 'update_datetime',
+                         'last_visited_datetime',
                          'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for record in sorted_records:
-                if 'create_date' not in record and 'parsed_date' in record:
-                    record['create_date'] = record['parsed_date']
-                if 'update_date' not in record and 'parsed_date' in record:
-                    record['update_date'] = record['parsed_date']
-                
-                if 'torrent_type' in record and 'hacked_subtitle' not in record:
-                    torrent_types_str = record.get('torrent_type', '')
-                    torrent_types = [t.strip() for t in torrent_types_str.split(',') if t.strip()]
-                    
-                    for category in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
-                        record[category] = ''
-                
-                if 'torrent_type' in record:
-                    del record['torrent_type']
-                
+                _normalize_record_columns(record)
                 writer.writerow(record)
 
         logger.info(f"Cleaned up history file: removed duplicates, kept {len(sorted_records)} unique records")
@@ -171,30 +173,20 @@ def maintain_history_limit(history_file, max_records=1000):
             records = list(reader)
 
         if len(records) > max_records:
-            def get_update_date(record):
-                return record.get('update_date', record.get('parsed_date', ''))
+            def _get_update_dt(record):
+                return record.get('update_datetime', record.get('update_date', record.get('parsed_date', '')))
             
-            records.sort(key=lambda x: get_update_date(x))
+            records.sort(key=lambda x: _get_update_dt(x))
             records = records[-max_records:]
 
             with open(history_file, 'w', newline='', encoding='utf-8-sig') as f:
-                fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 
+                fieldnames = ['href', 'phase', 'video_code', 'create_datetime', 'update_datetime',
+                             'last_visited_datetime',
                              'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 for record in records:
-                    if 'create_date' not in record and 'parsed_date' in record:
-                        record['create_date'] = record['parsed_date']
-                    if 'update_date' not in record and 'parsed_date' in record:
-                        record['update_date'] = record['parsed_date']
-                    
-                    if 'torrent_type' in record and 'hacked_subtitle' not in record:
-                        for category in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
-                            record[category] = ''
-                    
-                    if 'torrent_type' in record:
-                        del record['torrent_type']
-                    
+                    _normalize_record_columns(record)
                     writer.writerow(record)
 
             logger.info(f"Maintained history limit: kept {len(records)} newest records, removed oldest entries")
@@ -237,7 +229,8 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_l
                             all_torrent_types.sort()
                             
                             row['torrent_type'] = ','.join(all_torrent_types)
-                            row['update_date'] = current_time
+                            row['update_datetime'] = current_time
+                            row['last_visited_datetime'] = current_time
                             row['phase'] = phase
                         else:
                             filtered_links = {}
@@ -275,7 +268,8 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_l
                                         else:
                                             row[torrent_type] = f"[{current_date}]{magnet_link}"
                             
-                            row['update_date'] = current_time
+                            row['update_datetime'] = current_time
+                            row['last_visited_datetime'] = current_time
                             row['phase'] = phase
                         
                         if row.get('hacked_subtitle', '').strip():
@@ -304,12 +298,13 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_l
             'href': href,
             'phase': phase,
             'video_code': video_code,
-            'create_date': current_time,
-            'update_date': current_time,
+            'create_datetime': current_time,
+            'update_datetime': current_time,
+            'last_visited_datetime': current_time,
             'hacked_subtitle': '',
             'hacked_no_subtitle': '',
             'subtitle': '',
-            'no_subtitle': ''
+            'no_subtitle': '',
         }
         
         for torrent_type, magnet_link in magnet_links.items():
@@ -332,23 +327,13 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_l
 
     try:
         with open(history_file, 'w', newline='', encoding='utf-8-sig') as f:
-            fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 
+            fieldnames = ['href', 'phase', 'video_code', 'create_datetime', 'update_datetime',
+                         'last_visited_datetime',
                          'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for record in records:
-                if 'torrent_type' in record:
-                    torrent_types_str = record.get('torrent_type', '')
-                    torrent_types = [t.strip() for t in torrent_types_str.split(',') if t.strip()]
-                    
-                    for category in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
-                        if category in torrent_types:
-                            record[category] = ''
-                        else:
-                            record[category] = ''
-                    
-                    del record['torrent_type']
-                
+                _normalize_record_columns(record)
                 writer.writerow(record)
 
         logger.debug(f"Updated history for {href} with magnet links: {list(magnet_links.keys())} (total records: {len(records)})")
@@ -377,27 +362,12 @@ def validate_history_file(history_file):
             
             converted_records = []
             for record in records:
-                if 'create_date' not in record and 'parsed_date' in record:
-                    record['create_date'] = record['parsed_date']
-                if 'update_date' not in record and 'parsed_date' in record:
-                    record['update_date'] = record['parsed_date']
-                
-                if 'torrent_type' in record:
-                    torrent_types_str = record.get('torrent_type', '')
-                    torrent_types = [t.strip() for t in torrent_types_str.split(',') if t.strip()]
-                    
-                    for category in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
-                        if category in torrent_types:
-                            record[category] = ''
-                        else:
-                            record[category] = ''
-                    
-                    del record['torrent_type']
-                
+                _normalize_record_columns(record)
                 converted_records.append(record)
 
             with open(history_file, 'w', newline='', encoding='utf-8-sig') as f:
-                fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 
+                fieldnames = ['href', 'phase', 'video_code', 'create_datetime', 'update_datetime',
+                             'last_visited_datetime',
                              'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
@@ -483,22 +453,55 @@ def has_complete_subtitles(href, history_data):
 
 
 def should_skip_recent_yesterday_release(href, history_data, is_yesterday_release):
-    """Skip a movie if it was updated recently and is tagged as yesterday's release.
+    """Skip a movie if it was visited recently and is tagged as yesterday's release.
 
     In daily mode the spider only processes "today" and "yesterday" releases.
-    If a movie is still showing as a "yesterday" release and was already
-    processed within the last calendar day, there is almost no chance of new
-    torrents appearing, so we skip it to save network requests.
+    If a movie is still showing as a "yesterday" release and its detail page
+    was already visited within the last calendar day, there is almost no chance
+    of new torrents appearing, so we skip it to save network requests.
     """
     if not is_yesterday_release:
         return False
     if not history_data or href not in history_data:
         return False
-    update_date_str = history_data[href].get('update_date', '')
-    if not update_date_str:
+    entry = history_data[href]
+    visited_str = entry.get('last_visited_datetime', '') or entry.get('update_datetime', '')
+    if not visited_str:
         return False
     cutoff = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-    return update_date_str[:10] >= cutoff
+    return visited_str[:10] >= cutoff
+
+
+def batch_update_last_visited(history_file, visited_hrefs):
+    """Update last_visited_datetime for a set of hrefs in a single CSV read/write pass."""
+    if not visited_hrefs or not os.path.exists(history_file):
+        return
+
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    visited_set = set(visited_hrefs)
+
+    try:
+        with open(history_file, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            records = list(reader)
+
+        updated = 0
+        for record in records:
+            if record.get('href') in visited_set:
+                record['last_visited_datetime'] = current_time
+                updated += 1
+
+        with open(history_file, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.DictWriter(f, fieldnames=HISTORY_FIELDNAMES)
+            writer.writeheader()
+            for record in records:
+                _normalize_record_columns(record)
+                writer.writerow(record)
+
+        if updated:
+            logger.debug(f"Updated last_visited_datetime for {updated} movies")
+    except Exception as e:
+        logger.error(f"Error batch-updating last_visited_datetime: {e}")
 
 
 def should_process_movie(href, history_data, phase, magnet_links):
@@ -672,6 +675,7 @@ try:
         get_missing_torrent_types,
         has_complete_subtitles,
         should_skip_recent_yesterday_release,
+        batch_update_last_visited,
         should_process_movie,
         check_torrent_in_history,
         add_downloaded_indicator_to_csv,

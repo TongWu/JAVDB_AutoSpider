@@ -39,7 +39,14 @@ def _py_merge_row_data(existing_row, new_row):
     return merged
 
 
-merge_row_data = _rs_merge_row_data if RUST_CSV_AVAILABLE else _py_merge_row_data
+def _rs_merge_row_data_safe(existing_row, new_row):
+    return _rs_merge_row_data(
+        {k: str(v) if v is not None else '' for k, v in existing_row.items()},
+        {k: str(v) if v is not None else '' for k, v in new_row.items()},
+    )
+
+
+merge_row_data = _rs_merge_row_data_safe if RUST_CSV_AVAILABLE else _py_merge_row_data
 
 # ---------------------------------------------------------------------------
 # write_csv
@@ -66,6 +73,7 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
         existing_rows = {}
         rows_without_key = []
         existing_fieldnames = []
+        read_failed = False
         try:
             with open(csv_path, 'r', newline='', encoding='utf-8-sig') as f:
                 reader = csv.DictReader(f)
@@ -79,45 +87,50 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
             if rows_without_key:
                 logger.warning(f"[CSV] Found {len(rows_without_key)} existing rows without video_code - preserving them")
         except Exception as e:
-            logger.warning(f"Error reading existing CSV file: {e}. Will create new file.")
-            existing_rows = {}
-            rows_without_key = []
-            existing_fieldnames = []
+            logger.error(f"Error reading existing CSV file: {e}. Falling back to append-only to avoid data loss.")
+            read_failed = True
 
-        merged_count = 0
-        added_count = 0
-        for new_row in rows:
-            video_code = new_row.get('video_code', '')
-            if not video_code:
-                rows_without_key.append(new_row)
-                added_count += 1
-                logger.warning("[CSV] Added new entry without video_code (cannot merge)")
-            elif video_code in existing_rows:
-                existing_rows[video_code] = merge_row_data(existing_rows[video_code], new_row)
-                merged_count += 1
-                logger.debug(f"[CSV] Merged existing entry: {video_code}")
-            else:
-                existing_rows[video_code] = new_row
-                added_count += 1
-                logger.debug(f"[CSV] Added new entry: {video_code}")
+        if read_failed:
+            with open(csv_path, 'a', newline='', encoding='utf-8-sig') as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
+                for row in rows:
+                    writer.writerow(row)
+            logger.info(f"[CSV] Appended {len(rows)} rows to {csv_path} (merge skipped due to read error)")
+        else:
+            merged_count = 0
+            added_count = 0
+            for new_row in rows:
+                video_code = new_row.get('video_code', '')
+                if not video_code:
+                    rows_without_key.append(new_row)
+                    added_count += 1
+                    logger.warning("[CSV] Added new entry without video_code (cannot merge)")
+                elif video_code in existing_rows:
+                    existing_rows[video_code] = merge_row_data(existing_rows[video_code], new_row)
+                    merged_count += 1
+                    logger.debug(f"[CSV] Merged existing entry: {video_code}")
+                else:
+                    existing_rows[video_code] = new_row
+                    added_count += 1
+                    logger.debug(f"[CSV] Added new entry: {video_code}")
 
-        merged_fieldnames = list(fieldnames)
-        for existing_field in existing_fieldnames:
-            if existing_field not in merged_fieldnames:
-                merged_fieldnames.append(existing_field)
-                logger.debug(f"[CSV] Preserving extra column from existing CSV: {existing_field}")
+            merged_fieldnames = list(fieldnames)
+            for existing_field in existing_fieldnames:
+                if existing_field not in merged_fieldnames:
+                    merged_fieldnames.append(existing_field)
+                    logger.debug(f"[CSV] Preserving extra column from existing CSV: {existing_field}")
 
-        with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
-            writer = csv.DictWriter(f, fieldnames=merged_fieldnames, extrasaction='ignore')
-            writer.writeheader()
-            for row in existing_rows.values():
-                writer.writerow(row)
-            for row in rows_without_key:
-                writer.writerow(row)
+            with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
+                writer = csv.DictWriter(f, fieldnames=merged_fieldnames, extrasaction='ignore')
+                writer.writeheader()
+                for row in existing_rows.values():
+                    writer.writerow(row)
+                for row in rows_without_key:
+                    writer.writerow(row)
 
-        total_entries = len(existing_rows) + len(rows_without_key)
-        if merged_count > 0 or added_count > 0:
-            logger.debug(f"[CSV] Updated {csv_path}: {merged_count} merged, {added_count} added, {total_entries} total entries")
+            total_entries = len(existing_rows) + len(rows_without_key)
+            if merged_count > 0 or added_count > 0:
+                logger.debug(f"[CSV] Updated {csv_path}: {merged_count} merged, {added_count} added, {total_entries} total entries")
     else:
         logger.debug(f"[CSV] Writing new file: {csv_path}")
         with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:

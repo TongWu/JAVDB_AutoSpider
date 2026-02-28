@@ -10,14 +10,14 @@ from urllib.parse import urljoin
 from utils.logging_config import get_logger
 from utils.parser import parse_detail
 from utils.magnet_extractor import extract_magnets
-from utils.history_manager import has_complete_subtitles, should_skip_recent_yesterday_release, should_process_movie, save_parsed_movie_to_history
+from utils.history_manager import has_complete_subtitles, should_skip_recent_yesterday_release, should_process_movie, save_parsed_movie_to_history, batch_update_last_visited
 from utils.csv_writer import write_csv
 from utils.proxy_pool import create_proxy_pool_from_config
 from utils.request_handler import RequestHandler, RequestConfig
 
 import scripts.spider.state as state
 from scripts.spider.session import is_login_page, can_attempt_login, attempt_login_refresh
-from scripts.spider.sleep_manager import MovieSleepManager
+from scripts.spider.sleep_manager import MovieSleepManager, movie_sleep_mgr
 from scripts.spider.csv_builder import (
     create_csv_row_with_history_filter, check_torrent_status, collect_new_magnet_links,
 )
@@ -31,6 +31,14 @@ from scripts.spider.config_loader import (
 )
 
 logger = get_logger(__name__)
+
+
+def _requeue_front(q: queue_module.Queue, item) -> None:
+    """Put *item* at the front of a Queue so it gets picked up next."""
+    with q.mutex:
+        q.queue.appendleft(item)
+        q.not_empty.notify()
+
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -214,14 +222,14 @@ class ProxyWorker(threading.Thread):
                         if self._try_login_refresh():
                             task.failed_proxies.clear()
                             task.retry_count += 1
-                            self.detail_queue.put(task)
+                            _requeue_front(self.detail_queue, task)
                             continue
                     self.result_queue.put(DetailResult(
                         task=task, magnets=[], actor_info='',
                         parse_success=False, used_cf_bypass=False,
                     ))
                     continue
-                self.detail_queue.put(task)
+                _requeue_front(self.detail_queue, task)
                 time.sleep(0.1)
                 continue
 
@@ -244,7 +252,7 @@ class ProxyWorker(threading.Thread):
             else:
                 task.failed_proxies.add(self.proxy_name)
                 task.retry_count += 1
-                self.detail_queue.put(task)
+                _requeue_front(self.detail_queue, task)
                 logger.info(
                     f"[{self.proxy_name}] [{task.entry_index}] "
                     f"Failed {task.entry.get('video_code', '')}, re-queued "
@@ -289,8 +297,8 @@ def process_detail_entries_parallel(
             total_workers=len(PROXY_POOL),
             use_cookie=use_cookie,
             is_adhoc_mode=is_adhoc_mode,
-            movie_sleep_min=MOVIE_SLEEP_MIN,
-            movie_sleep_max=MOVIE_SLEEP_MAX,
+            movie_sleep_min=movie_sleep_mgr.sleep_min,
+            movie_sleep_max=movie_sleep_mgr.sleep_max,
             fallback_cooldown=FALLBACK_COOLDOWN,
             ban_log_file=ban_log_file,
             all_workers=all_workers,
@@ -350,6 +358,7 @@ def process_detail_entries_parallel(
 
     rows: list = []
     phase_rows: list = []
+    visited_hrefs: set = set()
     failed = 0
     no_new_torrents = 0
     results_received = 0
@@ -368,6 +377,7 @@ def process_detail_entries_parallel(
             failed += 1
             continue
 
+        visited_hrefs.add(href)
         magnet_links = extract_magnets(result.magnets, idx_str)
 
         should_process, history_torrent_types = should_process_movie(
@@ -400,6 +410,9 @@ def process_detail_entries_parallel(
         detail_queue.put(None)
     for w in all_workers:
         w.join(timeout=10)
+
+    if use_history_for_saving and not dry_run and visited_hrefs:
+        batch_update_last_visited(history_file, visited_hrefs)
 
     logger.info(
         f"Phase {phase} parallel completed: {total_entries} discovered, "
