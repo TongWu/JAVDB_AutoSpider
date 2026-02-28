@@ -10,7 +10,7 @@ from urllib.parse import urljoin
 from utils.logging_config import get_logger
 from utils.parser import parse_detail
 from utils.magnet_extractor import extract_magnets
-from utils.history_manager import has_complete_subtitles, should_process_movie, save_parsed_movie_to_history
+from utils.history_manager import has_complete_subtitles, should_skip_recent_yesterday_release, should_process_movie, save_parsed_movie_to_history
 from utils.csv_writer import write_csv
 from utils.proxy_pool import create_proxy_pool_from_config
 from utils.request_handler import RequestHandler, RequestConfig
@@ -310,6 +310,15 @@ def process_detail_entries_parallel(
             logger.info(
                 f"[{i}/{total_entries}] [Page {entry['page']}] "
                 f"Skipping {entry['video_code']} — already has subtitle and hacked_subtitle in history"
+            )
+            continue
+
+        if not is_adhoc_mode and should_skip_recent_yesterday_release(
+            href, history_data, entry.get('is_yesterday_release', False)
+        ):
+            logger.info(
+                f"[{i}/{total_entries}] [Page {entry['page']}] "
+                f"Skipping {entry['video_code']} — yesterday release, recently updated in history"
             )
             continue
 

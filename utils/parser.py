@@ -43,6 +43,7 @@ logger = get_logger(__name__)
 
 _SUBTITLE_TAGS = frozenset(['含中字磁鏈', '含中字磁链', 'CnSub DL'])
 _MAGNET_TAGS = frozenset(['含磁鏈', '含磁链', 'DL'])
+_YESTERDAY_TAGS = frozenset(['昨日新種', '昨日新种', 'Yesterday'])
 _RELEASE_DATE_TAGS = frozenset([
     '今日新種', '昨日新種',
     '今日新种', '昨日新种',
@@ -60,6 +61,10 @@ def _has_magnet(tags: list) -> bool:
 
 def _has_release_date(tags: list) -> bool:
     return bool(_RELEASE_DATE_TAGS.intersection(tags))
+
+
+def _is_yesterday_release(tags: list) -> bool:
+    return bool(_YESTERDAY_TAGS.intersection(tags))
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +142,7 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                 'actor': '',  # Will be filled from detail page
                 'rate': e.rate,
                 'comment_number': e.comment_count,
+                'is_yesterday_release': _is_yesterday_release(tags),
             }
 
         # ---- AD HOC MODE ----

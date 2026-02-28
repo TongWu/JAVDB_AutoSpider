@@ -8,7 +8,7 @@ falling back to the pure-Python implementation otherwise.
 import csv
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 try:
     from config import LOG_LEVEL
@@ -482,6 +482,25 @@ def has_complete_subtitles(href, history_data):
     return has_subtitle and has_hacked_subtitle
 
 
+def should_skip_recent_yesterday_release(href, history_data, is_yesterday_release):
+    """Skip a movie if it was updated recently and is tagged as yesterday's release.
+
+    In daily mode the spider only processes "today" and "yesterday" releases.
+    If a movie is still showing as a "yesterday" release and was already
+    processed within the last calendar day, there is almost no chance of new
+    torrents appearing, so we skip it to save network requests.
+    """
+    if not is_yesterday_release:
+        return False
+    if not history_data or href not in history_data:
+        return False
+    update_date_str = history_data[href].get('update_date', '')
+    if not update_date_str:
+        return False
+    cutoff = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    return update_date_str[:10] >= cutoff
+
+
 def should_process_movie(href, history_data, phase, magnet_links):
     """Determine if a movie should be processed based on history and phase rules"""
     if href not in history_data:
@@ -652,6 +671,7 @@ try:
         determine_torrent_type,
         get_missing_torrent_types,
         has_complete_subtitles,
+        should_skip_recent_yesterday_release,
         should_process_movie,
         check_torrent_in_history,
         add_downloaded_indicator_to_csv,
