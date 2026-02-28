@@ -36,9 +36,9 @@ def sample_history_csv(temp_dir):
     """Create a sample history CSV file for testing."""
     history_file = os.path.join(temp_dir, 'parsed_movies_history.csv')
     with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
-        f.write('href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
-        f.write('/v/ABC-123,1,ABC-123,2024-01-01 10:00:00,2024-01-01 10:00:00,[2024-01-01]magnet:?xt=urn:btih:abc123,,,\n')
-        f.write('/v/DEF-456,2,DEF-456,2024-01-02 10:00:00,2024-01-02 10:00:00,,,[2024-01-02]magnet:?xt=urn:btih:def456,\n')
+        f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
+        f.write('/v/ABC-123,1,ABC-123,2024-01-01 10:00:00,2024-01-01 10:00:00,2024-01-01 10:00:00,[2024-01-01]magnet:?xt=urn:btih:abc123,,,\n')
+        f.write('/v/DEF-456,2,DEF-456,2024-01-02 10:00:00,2024-01-02 10:00:00,2024-01-02 10:00:00,,,[2024-01-02]magnet:?xt=urn:btih:def456,\n')
     return history_file
 
 
