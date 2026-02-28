@@ -26,7 +26,8 @@ use history::manager::{
     load_parsed_movies_history, cleanup_history_file, maintain_history_limit,
     save_parsed_movie_to_history, validate_history_file, determine_torrent_types,
     determine_torrent_type, get_missing_torrent_types, has_complete_subtitles,
-    should_process_movie, check_torrent_in_history, add_downloaded_indicator_to_csv,
+    should_skip_recent_yesterday_release, should_process_movie,
+    check_torrent_in_history, add_downloaded_indicator_to_csv,
     is_downloaded_torrent, mark_torrent_as_downloaded,
 };
 
@@ -135,6 +136,7 @@ fn javdb_rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(determine_torrent_type, m)?)?;
     m.add_function(wrap_pyfunction!(get_missing_torrent_types, m)?)?;
     m.add_function(wrap_pyfunction!(has_complete_subtitles, m)?)?;
+    m.add_function(wrap_pyfunction!(should_skip_recent_yesterday_release, m)?)?;
     m.add_function(wrap_pyfunction!(should_process_movie, m)?)?;
     m.add_function(wrap_pyfunction!(check_torrent_in_history, m)?)?;
     m.add_function(wrap_pyfunction!(add_downloaded_indicator_to_csv, m)?)?;
