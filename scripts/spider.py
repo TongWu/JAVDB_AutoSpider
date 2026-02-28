@@ -1124,7 +1124,8 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
     max_switches = global_proxy_pool.get_proxy_count() if PROXY_MODE == 'pool' else 1
     max_switches = min(max_switches, 10)
     
-    for attempt in range(max_switches):
+    # If current proxy was already tried in Phase 0, mark it failed before the loop
+    if use_proxy:
         if is_adhoc_mode:
             global_proxy_pool.mark_failure_and_switch()
         else:
@@ -1134,7 +1135,8 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
             for _ in range(PROXY_POOL_MAX_FAILURES):
                 global_proxy_pool.mark_failure_and_switch()
             proxy_was_banned = True
-        
+
+    for attempt in range(max_switches):
         current_proxy_name = global_proxy_pool.get_current_proxy_name()
         html, success, is_valid_empty, used_cf = try_proxy_direct_then_cf(current_proxy_name)
         if success:
@@ -1142,6 +1144,15 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy, use
             return html, True, proxy_was_banned, True, used_cf, False
         if is_valid_empty:
             return html, False, proxy_was_banned, True, used_cf, True
+
+        if is_adhoc_mode:
+            global_proxy_pool.mark_failure_and_switch()
+        else:
+            if html:
+                save_proxy_ban_html(html, current_proxy_name, page_num)
+            for _ in range(PROXY_POOL_MAX_FAILURES):
+                global_proxy_pool.mark_failure_and_switch()
+            proxy_was_banned = True
 
     logger.error(f"[Page {page_num}] All proxy attempts exhausted.")
     return last_failed_html, False, proxy_was_banned, use_proxy, use_cf_bypass, False
@@ -1423,13 +1434,13 @@ class ProxyWorker(threading.Thread):
 
     def _try_fetch_and_parse(self, task: DetailTask, use_cf: bool, context: str):
         """Attempt fetch + parse_detail; returns (magnets, actor, success)."""
-        logger.debug(f"[W:{self.proxy_name}] [{task.entry_index}] {context}")
+        logger.debug(f"[{self.proxy_name}] [{task.entry_index}] {context}")
         try:
             html = self._fetch_html(task.url, use_cf)
             if html:
                 if is_login_page(html):
                     logger.warning(
-                        f"[W:{self.proxy_name}] [{task.entry_index}] Login page detected: {context}")
+                        f"[{self.proxy_name}] [{task.entry_index}] Login page detected: {context}")
                     if can_attempt_login(self.is_adhoc_mode, is_index_page=False):
                         if self._try_login_refresh():
                             html = self._fetch_html(task.url, use_cf)
@@ -1438,23 +1449,23 @@ class ProxyWorker(threading.Thread):
                                     html, task.entry_index, skip_sleep=True)
                                 if ok:
                                     logger.info(
-                                        f"[W:{self.proxy_name}] [{task.entry_index}] "
+                                        f"[{self.proxy_name}] [{task.entry_index}] "
                                         f"Login refresh succeeded: {context}")
                                     return magnets, actor_info, True
                             else:
                                 logger.warning(
-                                    f"[W:{self.proxy_name}] [{task.entry_index}] "
+                                    f"[{self.proxy_name}] [{task.entry_index}] "
                                     f"Still login page after refresh")
                     return [], '', False
 
                 magnets, actor_info, ok = parse_detail(html, task.entry_index, skip_sleep=True)
                 if ok:
                     return magnets, actor_info, True
-                logger.debug(f"[W:{self.proxy_name}] [{task.entry_index}] parse failed: {context}")
+                logger.debug(f"[{self.proxy_name}] [{task.entry_index}] parse failed: {context}")
             else:
-                logger.debug(f"[W:{self.proxy_name}] [{task.entry_index}] no HTML: {context}")
+                logger.debug(f"[{self.proxy_name}] [{task.entry_index}] no HTML: {context}")
         except Exception as e:
-            logger.debug(f"[W:{self.proxy_name}] [{task.entry_index}] error in {context}: {e}")
+            logger.debug(f"[{self.proxy_name}] [{task.entry_index}] error in {context}: {e}")
         return [], '', False
 
     def _try_direct_then_cf(self, task: DetailTask):
@@ -1470,7 +1481,7 @@ class ProxyWorker(threading.Thread):
         m, a, ok = self._try_fetch_and_parse(task, True, "CF Bypass")
         if ok:
             self.needs_cf_bypass = True
-            logger.info(f"[W:{self.proxy_name}] CF Bypass succeeded — marking proxy for this runtime")
+            logger.info(f"[{self.proxy_name}] CF Bypass succeeded — marking proxy for this runtime")
             return m, a, True, True
         return [], '', False, False
 
@@ -1519,8 +1530,9 @@ class ProxyWorker(threading.Thread):
             if success:
                 cf_tag = " +CF" if used_cf else ""
                 logger.info(
-                    f"[W:{self.proxy_name}] [{task.entry_index}] "
-                    f"Parsed {task.entry.get('video_code', '')}{cf_tag}"
+                    f"[{task.entry_index}] "
+                    f"Parsed {task.entry.get('video_code', '')}{cf_tag} "
+                    f"[{self.proxy_name}]"
                 )
                 self.result_queue.put(DetailResult(
                     task=task, magnets=magnets, actor_info=actor_info,
@@ -1531,7 +1543,7 @@ class ProxyWorker(threading.Thread):
                 task.retry_count += 1
                 self.detail_queue.put(task)
                 logger.info(
-                    f"[W:{self.proxy_name}] [{task.entry_index}] "
+                    f"[{self.proxy_name}] [{task.entry_index}] "
                     f"Failed {task.entry.get('video_code', '')}, re-queued "
                     f"(tried {len(task.failed_proxies)}/{self.total_workers} proxies)"
                 )
