@@ -413,7 +413,7 @@ jobs:
           set -o pipefail  # Exit on error in pipeline (important for tee)
           
           # Build spider command with conditional flags
-          SPIDER_CMD="python3 scripts/spider.py"
+          SPIDER_CMD="python3 scripts/spider"
           
           # Add URL
           SPIDER_CMD="$SPIDER_CMD --url '${{ inputs.url }}'"
