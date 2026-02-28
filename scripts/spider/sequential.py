@@ -94,7 +94,7 @@ def process_phase_entries_sequential(
         if parse_success and effective_use_proxy != use_proxy:
             use_proxy = effective_use_proxy
 
-        if not parse_success and not magnets:
+        if not parse_success:
             logger.error(f"[{entry_index}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
             failed += 1
             pending_movie_sleep = True
