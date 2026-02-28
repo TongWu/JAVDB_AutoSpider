@@ -79,7 +79,7 @@ fn write_csv_records(path: &str, records: &[Record]) -> Result<(), String> {
     Ok(())
 }
 
-fn get_update_datetimetime(record: &Record) -> String {
+fn get_update_datetime(record: &Record) -> String {
     record
         .get("update_datetime")
         .filter(|v| !v.is_empty())
