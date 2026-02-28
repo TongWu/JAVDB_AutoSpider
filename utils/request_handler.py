@@ -46,7 +46,7 @@ except ImportError as e:
     RUST_REQUEST_HANDLER_AVAILABLE = False
     logger.warning(f"⚠️  Rust request handler not available (ImportError: {e}) - falling back to pure-Python implementation")
 else:
-    logger.info("✅ Rust request handler available - using high-performance Rust implementation")
+    logger.debug("✅ Rust request handler available - using high-performance Rust implementation")
 
 # Try to import curl_cffi for better TLS fingerprint
 # curl_cffi mimics real browser TLS fingerprints, bypassing Cloudflare detection
@@ -143,7 +143,7 @@ class RequestHandler:
                     impersonate=self.config.curl_cffi_impersonate
                 )
                 self.use_curl_cffi = True
-                logger.info(f"curl_cffi initialized with impersonate='{self.config.curl_cffi_impersonate}' (better TLS fingerprint)")
+                logger.debug(f"curl_cffi initialized with impersonate='{self.config.curl_cffi_impersonate}' (better TLS fingerprint)")
             except Exception as e:
                 logger.warning(f"Failed to initialize curl_cffi session: {e}")
                 self.use_curl_cffi = False

@@ -24,7 +24,7 @@ try:
         detect_page_type,
     )
     RUST_PARSERS_AVAILABLE = True
-    logger.info("✅ Rust parsers loaded successfully - using high-performance Rust implementation")
+    logger.debug("✅ Rust parsers loaded successfully - using high-performance Rust implementation")
 except ImportError as e:
     from api.parsers.index_parser import (
         parse_index_page,
