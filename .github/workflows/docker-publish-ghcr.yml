@@ -11,10 +11,6 @@ on:
   #     - '**.py'
   #     - 'pytest.ini'
   #     - 'docker/**'
-  #     - '**/*.rs'
-  #     - 'Cargo.toml'
-  #     - 'Cargo.lock'
-  #     - 'src/**'
   workflow_dispatch:  # Allow manual trigger
 
 env:

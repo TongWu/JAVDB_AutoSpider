@@ -341,17 +341,6 @@ def process_detail_entries_parallel(
         logger.info(f"Phase {phase}: No detail tasks to process (all filtered)")
         return {'rows': [], 'skipped_history': skipped_history, 'failed': 0, 'no_new_torrents': 0}
 
-    if len(all_workers) == 0:
-        logger.warning(
-            "PROXY_POOL is empty; cannot run parallel detail workers. No tasks will be processed."
-        )
-        return {
-            'rows': [],
-            'skipped_history': skipped_history,
-            'failed': tasks_submitted,
-            'no_new_torrents': 0,
-        }
-
     logger.info(
         f"Phase {phase}: Starting {len(all_workers)} workers for {tasks_submitted} detail tasks "
         f"({skipped_history} skipped by history)"

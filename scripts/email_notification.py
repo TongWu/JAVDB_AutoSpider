@@ -406,8 +406,7 @@ def analyze_pipeline_log(log_path):
     # Check for script execution failures
     script_failures = []
     
-    # Pattern: "Script scripts/xxx.py failed with return code X"
-    failure_pattern = r'Script (scripts/\w+\.py) failed with return code (\d+)'
+    failure_pattern = r'Script (scripts/[\w./]+?) failed with return code (\d+)'
     failures = re.findall(failure_pattern, log_content)
     for script, code in failures:
         script_name = os.path.basename(script).replace('.py', '')

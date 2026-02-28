@@ -7,7 +7,7 @@ from urllib.parse import urljoin
 from utils.logging_config import get_logger
 from utils.magnet_extractor import extract_magnets
 from utils.history_manager import (
-    has_complete_subtitles, should_skip_recent_yesterday_release, should_process_movie,
+    has_complete_subtitles, should_process_movie,
     get_missing_torrent_types, save_parsed_movie_to_history,
     batch_update_last_visited,
 )
@@ -71,16 +71,6 @@ def process_phase_entries_sequential(
             skipped_history += 1
             continue
 
-        if not is_adhoc_mode and should_skip_recent_yesterday_release(
-            href, history_data, entry.get('is_yesterday_release', False)
-        ):
-            logger.info(
-                f"[{i}/{total_entries}] [Page {page_num}] "
-                f"Skipping {entry['video_code']} — yesterday release, recently updated in history"
-            )
-            skipped_history += 1
-            continue
-
         if pending_movie_sleep:
             movie_sleep_mgr.sleep()
             pending_movie_sleep = False
@@ -104,7 +94,7 @@ def process_phase_entries_sequential(
         if parse_success and effective_use_proxy != use_proxy:
             use_proxy = effective_use_proxy
 
-        if not parse_success:
+        if not parse_success and not magnets:
             logger.error(f"[{entry_index}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
             failed += 1
             pending_movie_sleep = True

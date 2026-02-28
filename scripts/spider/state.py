@@ -194,17 +194,17 @@ def save_proxy_ban_html(html_content, proxy_name, page_num):
         filename = f"proxy_ban_{safe_proxy_name}_page{page_num}_{timestamp}.txt"
         filepath = os.path.join(logs_dir, filename)
         with open(filepath, 'w', encoding='utf-8') as f:
-            f.write("# Proxy Ban HTML Capture\n")
+            f.write(f"# Proxy Ban HTML Capture\n")
             f.write(f"# Proxy: {proxy_name}\n")
             f.write(f"# Page: {page_num}\n")
             f.write(f"# Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"# HTML Length: {len(html_content)} bytes\n")
-            f.write("=" * 60 + "\n\n")
+            f.write(f"{'=' * 60}\n\n")
             f.write(html_content)
         logger.info(f"Saved proxy ban HTML to: {filepath}")
         proxy_ban_html_files.append(filepath)
         print(f"PROXY_BAN_HTML={filepath}")
         return filepath
     except Exception as e:
-        logger.exception("Failed to save proxy ban HTML: %s", e)
+        logger.error(f"Failed to save proxy ban HTML: {e}")
         return None

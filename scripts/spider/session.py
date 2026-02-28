@@ -67,6 +67,7 @@ def attempt_login_refresh():
 
         if success and session_cookie:
             logger.info("✓ Login successful, new session cookie obtained")
+            logger.info(f"  Cookie: {session_cookie[:10]}***{session_cookie[-10:]}")
 
             if update_config_file(session_cookie):
                 logger.info("✓ Updated config.py with new session cookie")
@@ -75,7 +76,7 @@ def attempt_login_refresh():
                 importlib.reload(config)
                 new_cookie = getattr(config, 'JAVDB_SESSION_COOKIE', session_cookie)
                 state.refreshed_session_cookie = new_cookie
-                logger.info("✓ Reloaded config.py with new session cookie")
+                logger.info(f"✓ Reloaded config.py, cookie: {new_cookie[:10]}***{new_cookie[-10:]}")
                 if state.global_request_handler:
                     state.global_request_handler.config.javdb_session_cookie = new_cookie
                     logger.info("✓ Updated request handler with new session cookie")
