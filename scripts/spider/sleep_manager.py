@@ -20,12 +20,12 @@ class MovieSleepManager:
     # (threshold, min_multiplier, max_multiplier)
     VOLUME_TIERS = [
         (50,  1.0, 1.0),
-        (75,  1.1, 1.3),
-        (100, 1.2, 1.6),
-        (125, 1.3, 2.0),
-        (150, 1.4, 2.5),
+        (75,  2.0, 2.0),
+        (100, 3.0, 3.0),
+        (125, 4.0, 4.0),
+        (150, 5.0, 5.0),
     ]
-    VOLUME_MAX_MULTIPLIER = (1.5, 3.0)
+    VOLUME_MAX_MULTIPLIER = (5.0, 5.0)
 
     def __init__(self, sleep_min: float, sleep_max: float):
         self.base_min = float(sleep_min)
