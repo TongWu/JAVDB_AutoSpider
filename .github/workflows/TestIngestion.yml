@@ -149,7 +149,7 @@ jobs:
           # - Parse only first 10 pages (--start-page 1 --end-page 10)
           # - Process only first 1 movie for phase 1 (--max-movies-phase1 1)
           # - Process only first 1 movie for phase 2 (--max-movies-phase2 1)
-          SPIDER_OUTPUT=$(python3 scripts/spider.py \
+          SPIDER_OUTPUT=$(python3 scripts/spider \
             --use-proxy \
             --start-page 1 \
             --end-page 10 \
@@ -184,7 +184,7 @@ jobs:
           # - Process only first 1 movie for phase 1 (--max-movies-phase1 1)
           # - Process only first 1 movie for phase 2 (--max-movies-phase2 1)
           # - Ignore release date filter for adhoc mode
-          SPIDER_OUTPUT=$(python3 scripts/spider.py \
+          SPIDER_OUTPUT=$(python3 scripts/spider \
             --use-proxy \
             --url 'https://javdb.com/actors/wm9B?t=d&sort_type=0' \
             --start-page 1 \
