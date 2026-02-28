@@ -371,7 +371,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
         elif login_success and not use_proxy:
             magnets, actor_info, success = try_fetch_and_parse(
                 False, use_cf_bypass,
-                f"Detail: Retry with refreshed cookie (No Proxy)",
+                "Detail: Retry with refreshed cookie (No Proxy)",
                 skip_sleep=True)
             if success:
                 return magnets, actor_info, True, False, use_cf_bypass
@@ -386,7 +386,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
     max_switches = state.global_proxy_pool.get_proxy_count() if PROXY_MODE == 'pool' else 1
     max_switches = min(max_switches, 10)
 
-    for attempt in range(max_switches):
+    for _ in range(max_switches):
         switched = state.global_proxy_pool.mark_failure_and_switch()
         if not switched:
             logger.warning(f"[{entry_index}] No more proxies available in pool")
