@@ -17,7 +17,7 @@ from utils.request_handler import RequestHandler, RequestConfig
 
 import scripts.spider.state as state
 from scripts.spider.session import is_login_page, can_attempt_login, attempt_login_refresh
-from scripts.spider.sleep_manager import MovieSleepManager
+from scripts.spider.sleep_manager import MovieSleepManager, movie_sleep_mgr
 from scripts.spider.csv_builder import (
     create_csv_row_with_history_filter, check_torrent_status, collect_new_magnet_links,
 )
@@ -99,6 +99,9 @@ class ProxyWorker(threading.Thread):
 
         self.needs_cf_bypass = False
         self._first_request = True
+        self._success_count = 0
+        self._batch_cooldown = 120.0
+        self._batch_size = 10
 
         self._proxy_pool = create_proxy_pool_from_config(
             [proxy_config],
@@ -226,11 +229,19 @@ class ProxyWorker(threading.Thread):
                 continue
 
             if not self._first_request:
-                self._sleep_mgr.sleep()
+                if self._success_count > 0 and self._success_count % self._batch_size == 0:
+                    logger.info(
+                        f"[{self.proxy_name}] Batch cooldown after {self._success_count} movies: "
+                        f"{self._batch_cooldown:.0f}s"
+                    )
+                    time.sleep(self._batch_cooldown)
+                else:
+                    self._sleep_mgr.sleep()
             self._first_request = False
 
             magnets, actor_info, success, used_cf = self._try_direct_then_cf(task)
             if success:
+                self._success_count += 1
                 cf_tag = " +CF" if used_cf else ""
                 logger.info(
                     f"[{task.entry_index}] "
@@ -289,8 +300,8 @@ def process_detail_entries_parallel(
             total_workers=len(PROXY_POOL),
             use_cookie=use_cookie,
             is_adhoc_mode=is_adhoc_mode,
-            movie_sleep_min=MOVIE_SLEEP_MIN,
-            movie_sleep_max=MOVIE_SLEEP_MAX,
+            movie_sleep_min=movie_sleep_mgr.sleep_min,
+            movie_sleep_max=movie_sleep_mgr.sleep_max,
             fallback_cooldown=FALLBACK_COOLDOWN,
             ban_log_file=ban_log_file,
             all_workers=all_workers,
