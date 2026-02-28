@@ -8,6 +8,7 @@ Logging: uses get_logger only; does not reconfigure root logging, so that
 spider/pipeline file handlers (e.g. logs/spider.log) are not cleared when
 this module is imported transitively.
 """
+import re
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -52,16 +53,42 @@ def extract_magnets(magnets, index=None):
 # ---------------------------------------------------------------------------
 
 def _parse_size(size_str):
-    if not size_str:
+    """Parse a size string (e.g. '1.5 GB', '1,234 MB') to bytes. Returns 0 on failure."""
+    if size_str is None:
         return 0
-    size_str = size_str.upper()
-    if 'GB' in size_str:
-        return float(size_str.replace('GB', '').strip()) * 1024 * 1024 * 1024
-    elif 'MB' in size_str:
-        return float(size_str.replace('MB', '').strip()) * 1024 * 1024
-    elif 'KB' in size_str:
-        return float(size_str.replace('KB', '').strip()) * 1024
-    return 0
+    s = str(size_str).strip()
+    if not s:
+        return 0
+    s_clean = s.replace(',', '').strip()
+    s_upper = s_clean.upper()
+    try:
+        # Detect unit case-insensitively (longest suffix first so GB before B)
+        if s_upper.endswith('GB'):
+            num_part = s_clean[:-2].strip()
+            factor = 1024 ** 3
+        elif s_upper.endswith('MB'):
+            num_part = s_clean[:-2].strip()
+            factor = 1024 ** 2
+        elif s_upper.endswith('KB'):
+            num_part = s_clean[:-2].strip()
+            factor = 1024
+        elif s_upper.endswith('B'):
+            num_part = s_clean[:-1].strip()
+            factor = 1
+        else:
+            num_part = s_clean
+            factor = 1  # unknown or missing unit: treat as bytes
+        # Strip non-numeric except one decimal point
+        digits_dots = re.sub(r'[^\d.]', '', num_part)
+        if not digits_dots:
+            return 0
+        parts = digits_dots.split('.')
+        if len(parts) > 2:
+            digits_dots = parts[0] + '.' + ''.join(parts[1:])
+        num_val = float(digits_dots)
+        return num_val * factor
+    except (ValueError, TypeError, AttributeError):
+        return 0
 
 
 def _sort_key(m):
