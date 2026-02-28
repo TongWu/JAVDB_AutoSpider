@@ -340,7 +340,7 @@ jobs:
           set -o pipefail  # Exit on error in pipeline (important for tee)
           
           # Capture output to extract the CSV filename
-          SPIDER_OUTPUT=$(python3 scripts/spider.py --use-proxy | tee /dev/stderr)
+          SPIDER_OUTPUT=$(python3 scripts/spider --use-proxy | tee /dev/stderr)
           
           # Extract CSV filename from spider output (format: SPIDER_OUTPUT_CSV=filename.csv)
           CSV_FILENAME=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_OUTPUT_CSV=" | cut -d'=' -f2 | tail -1)

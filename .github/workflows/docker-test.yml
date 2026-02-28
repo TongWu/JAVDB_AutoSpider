@@ -79,7 +79,7 @@ jobs:
             test -f /app/config.py.example && echo '✓ config.py.example exists' &&
             test -d /app/utils && echo '✓ utils directory exists' &&
             test -d /app/scripts && echo '✓ scripts directory exists' &&
-            test -f /app/scripts/spider.py && echo '✓ scripts/spider.py exists' &&
+            test -d /app/scripts/spider && echo '✓ scripts/spider package exists' &&
             test -f /app/scripts/login.py && echo '✓ scripts/login.py exists' &&
             test -f /app/scripts/pikpak_bridge.py && echo '✓ scripts/pikpak_bridge.py exists' &&
             test -f /app/scripts/qb_uploader.py && echo '✓ scripts/qb_uploader.py exists'
@@ -92,7 +92,7 @@ jobs:
       - name: Test Python syntax
         run: |
           docker run --rm javdb-autospider:test python -m py_compile /app/pipeline.py
-          docker run --rm javdb-autospider:test python -m py_compile /app/scripts/spider.py
+          docker run --rm javdb-autospider:test python -m py_compile /app/scripts/spider/__main__.py
           docker run --rm javdb-autospider:test python -m py_compile /app/scripts/login.py
           docker run --rm javdb-autospider:test python -m py_compile /app/scripts/pikpak_bridge.py
           docker run --rm javdb-autospider:test python -m py_compile /app/scripts/qb_uploader.py
