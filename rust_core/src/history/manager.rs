@@ -765,7 +765,7 @@ pub fn should_skip_recent_yesterday_release(
     let cutoff = (Local::now() - chrono::Duration::days(1))
         .format("%Y-%m-%d")
         .to_string();
-    let prefix = &visited_str[..visited_str.len().min(10)];
+    let prefix = visited_str.get(..10).unwrap_or(&visited_str);
 
     Ok(prefix >= cutoff.as_str())
 }

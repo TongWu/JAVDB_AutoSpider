@@ -5,15 +5,8 @@ Tries to use the high-performance Rust implementation from
 implementation transparently when the Rust extension is unavailable.
 """
 
-import logging
-from utils.logging_config import get_logger, setup_logging
+from utils.logging_config import get_logger
 
-try:
-    from config import LOG_LEVEL
-except ImportError:
-    LOG_LEVEL = 'INFO'
-
-setup_logging(log_level=LOG_LEVEL)
 logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -58,14 +51,14 @@ def extract_magnets(magnets, index=None):
 def _parse_size(size_str):
     if not size_str:
         return 0
-    size_str = size_str.upper()
-    if 'GB' in size_str:
-        return float(size_str.replace('GB', '').strip()) * 1024 * 1024 * 1024
-    elif 'MB' in size_str:
-        return float(size_str.replace('MB', '').strip()) * 1024 * 1024
-    elif 'KB' in size_str:
-        return float(size_str.replace('KB', '').strip()) * 1024
-    return 0
+    try:
+        s = size_str.strip().upper().replace(',', '')
+        for suffix, multiplier in (('GB', 1024**3), ('MB', 1024**2), ('KB', 1024)):
+            if suffix in s:
+                return float(s.replace(suffix, '').strip()) * multiplier
+        return 0
+    except (ValueError, TypeError):
+        return 0
 
 
 def _sort_key(m):

@@ -113,7 +113,7 @@ def _log_rust_status():
         else:
             _logger.debug("⚠️  Spider using Python history manager - Rust not available")
     except Exception:
-        _logger.info("⚠️  Could not determine history manager implementation status")
+        _logger.debug("⚠️  Could not determine history manager implementation status")
 
 
 _log_rust_status()
