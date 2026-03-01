@@ -54,7 +54,7 @@ When you see this:
 
 The new session cookie has been saved to config.py
 You can now use the spider with --url parameter:
-  python3 Javdb_Spider.py --url https://javdb.com/actors/...
+  python3 scripts/spider --url https://javdb.com/actors/...
 ```
 
 ## Common Issues

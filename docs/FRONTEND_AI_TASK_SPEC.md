@@ -569,7 +569,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
 
 | 校验对象 | 规则 | 涉及端点 |
 |----------|------|----------|
-| **Adhoc URL** | 必须为合法 URL；**host 白名单**仅允许 `javdb.com`（与 `scripts/spider:1442` 的 `'javdb.com' not in url` 检查对齐）；禁止 `file://`、`javascript:`、内网 IP（`127.0.0.1`、`10.*`、`192.168.*`） | `POST /api/tasks/adhoc` |
+| **Adhoc URL** | 必须为合法 URL；**host 白名单**仅允许 `javdb.com`（与 `utils/url_helper.py:~32` 的 `_py_detect_url_type` 函数中 `'javdb.com' not in url` 检查对齐）；禁止 `file://`、`javascript:`、内网 IP（`127.0.0.1`、`10.*`、`192.168.*`） | `POST /api/tasks/adhoc` |
 | **分页参数** | `start_page` ≥ 1，`end_page` ≥ `start_page`，上限 ≤ 200 | `POST /api/tasks/daily`, `/api/tasks/adhoc` |
 | **phase** | 枚举值 `1` / `2` / `all` | 同上 |
 | **配置字段类型** | 按 `utils/config_generator.py` 的 `get_config_map()` 定义的类型函数校验（`get_env_int` → int、`get_env_bool` → bool、`get_env_float` → float、`get_env_json` → valid JSON） | `PUT /api/config` |
