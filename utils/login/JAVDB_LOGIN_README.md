@@ -96,7 +96,7 @@ Updating config.py...
 
 The new session cookie has been saved to config.py
 You can now use the spider with --url parameter:
-  python3 Javdb_Spider.py --url https://javdb.com/actors/...
+  python3 scripts/spider --url https://javdb.com/actors/...
 ```
 
 ### 3. Use the Spider
@@ -105,7 +105,7 @@ Now you can use custom URLs without worrying about cookie expiration:
 
 ```bash
 # Spider only
-python3 Javdb_Spider.py --url "https://javdb.com/actors/RdEb4"
+python3 scripts/spider --url "https://javdb.com/actors/RdEb4"
 
 # Full pipeline (spider + uploader + pikpak)
 python3 pipeline_run_and_notify.py --url "https://javdb.com/actors/RdEb4"
