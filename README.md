@@ -4,7 +4,7 @@
 [![JavDB Daily Ingestion Pipeline](https://github.com/TongWu/JAVDB_AutoSpider_CICD/actions/workflows/DailyIngestion.yml/badge.svg)](https://github.com/TongWu/JAVDB_AutoSpider_CICD/actions/workflows/DailyIngestion.yml)
 [![codecov](https://codecov.io/gh/TongWu/JAVDB_AutoSpider/branch/main/graph/badge.svg)](https://codecov.io/gh/TongWu/JAVDB_AutoSpider)
 
-A comprehensive Python automation system for extracting torrent links from javdb.com and automatically adding them to qBittorrent. The system includes intelligent history tracking, git integration, automated pipeline execution, and duplicate download prevention.
+A comprehensive Python + Rust automation system for extracting torrent links from javdb.com and automatically adding them to qBittorrent. The system features a high-performance Rust core (via PyO3) for HTML parsing and proxy management, multi-threaded parallel processing, intelligent history tracking, git integration, automated pipeline execution, and duplicate download prevention.
 
 It can be played as an ingestion pipeline before the automated scrapping platform for JAV (e.g. [MDC-NG](https://github.com/mdc-ng/mdc-ng)).
 
@@ -13,6 +13,7 @@ English | [简体中文](README_CN.md)
 ## Features
 
 ### Core Spider Functionality
+- Modular spider package (`scripts/spider/`) with 14 specialized modules
 - Fetches data in real-time from `javdb.com/?vft=2` to `javdb.com/?page=5&vft=2`
 - Filters entries with both "含中字磁鏈" and "今日新種" tags (supports multiple language variations)
 - Extracts magnet links based on specific categories with priority ordering
@@ -20,6 +21,22 @@ English | [简体中文](README_CN.md)
 - Comprehensive logging with different levels (INFO, WARNING, DEBUG, ERROR)
 - Multi-page processing with progress tracking
 - Additional metadata extraction (actor, rating, comment count)
+
+### Rust Acceleration (Optional)
+- High-performance Rust core extension (`javdb_rust_core`) built with PyO3 + maturin
+- **"Rust first, Python fallback"** pattern — all features work without Rust installed
+- HTML parsing 5-10x faster than BeautifulSoup (index, detail, category pages)
+- Thread-safe proxy pool management with `Arc<Mutex>`
+- Accelerated history management, CSV operations, magnet extraction, URL helpers
+- Automatic detection: system uses Rust when available, falls back to pure Python
+
+### Parallel Processing
+- Multi-threaded detail page processing with one worker thread per proxy
+- Activated automatically when using proxy pool mode with 2+ proxies
+- Task queue / result queue architecture for safe concurrent scraping
+- Independent `MovieSleepManager` per worker for rate limiting
+- Thread-safe login refresh with `_login_lock`
+- Force sequential mode with `--sequential` flag
 
 ### Torrent Classification System
 - **字幕 (subtitle)**: Magnet links with "Subtitle" tag
@@ -44,7 +61,7 @@ The spider operates in two modes:
 - **Now checks history by default** to skip already downloaded entries
 - Use `--ignore-history` to re-download everything
 - Uses "Ad Hoc" category in qBittorrent
-- Example: `python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ"`
+- Example: `python3 scripts/spider --url "https://javdb.com/actors/EvkJ"`
 
 ### qBittorrent Integration
 - Automatically reads current date's CSV file
@@ -101,12 +118,25 @@ pip install -r requirements.txt
 pip install requests[socks]
 ```
 
-3. Configure the system by copying and editing the configuration file:
+3. (Optional) Install Rust acceleration extension for 5-10x faster HTML parsing:
+```bash
+# Install Rust toolchain
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Build and install the extension
+cd rust_core
+pip install maturin
+maturin develop --release
+cd ..
+```
+> **Note:** The Rust extension is optional. All features work without it — the system automatically falls back to pure Python implementations.
+
+4. Configure the system by copying and editing the configuration file:
 ```bash
 cp config.py.example config.py
 ```
 
-4. (Optional) For CloudFlare bypass feature, install and run [CloudflareBypassForScraping](https://github.com/sarperavci/CloudflareBypassForScraping) service:
+5. (Optional) For CloudFlare bypass feature, install and run [CloudflareBypassForScraping](https://github.com/sarperavci/CloudflareBypassForScraping) service:
 ```bash
 # See CloudFlare Bypass section below for setup instructions
 ```
@@ -166,7 +196,7 @@ docker-compose -f docker/docker-compose.yml up -d
 docker-compose -f docker/docker-compose.yml logs -f
 ```
 
-For detailed Docker documentation, see [DOCKER_README.md](docs/DOCKER_README.md) or [DOCKER_QUICKSTART.md](docs/DOCKER_QUICKSTART.md).
+The Docker image uses multi-stage builds: a Rust builder stage compiles the `javdb_rust_core` extension, and the runtime stage only includes the compiled wheel.
 
 ## Usage
 
@@ -184,7 +214,7 @@ docker logs -f javdb-spider
 docker exec javdb-spider tail -f /var/log/cron.log
 
 # Run spider manually
-docker exec javdb-spider python scripts/spider --use-proxy
+docker exec javdb-spider python3 scripts/spider --use-proxy
 
 # Run pipeline manually
 docker exec javdb-spider python pipeline.py
@@ -245,7 +275,10 @@ docker-compose -f docker/docker-compose.yml restart
 
 **Run the spider to extract data:**
 ```bash
-python Javdb_Spider.py
+python3 scripts/spider
+
+# Or equivalently:
+python -m scripts.spider
 ```
 
 **Run the qBittorrent uploader:**
@@ -306,79 +339,79 @@ The JavDB Spider supports various command-line arguments for customization:
 #### Basic Options
 ```bash
 # Dry run mode (no CSV file written)
-python Javdb_Spider.py --dry-run
+python3 scripts/spider --dry-run
 
 # Specify custom output filename
-python Javdb_Spider.py --output-file my_results.csv
+python3 scripts/spider --output-file my_results.csv
 
 # Custom page range
-python Javdb_Spider.py --start-page 3 --end-page 10
+python3 scripts/spider --start-page 3 --end-page 10
 
 # Parse all pages until empty page is found
-python Javdb_Spider.py --all
+python3 scripts/spider --all
 ```
 
 #### Phase Control
 ```bash
 # Run only Phase 1 (subtitle + today/yesterday tags)
-python Javdb_Spider.py --phase 1
+python3 scripts/spider --phase 1
 
 # Run only Phase 2 (today/yesterday tags with quality filter)
-python Javdb_Spider.py --phase 2
+python3 scripts/spider --phase 2
 
 # Run both phases (default)
-python Javdb_Spider.py --phase all
+python3 scripts/spider --phase all
 ```
 
 #### History Control
 ```bash
 # Ignore history file and scrape all pages (for both daily and ad hoc modes)
-python Javdb_Spider.py --ignore-history
+python3 scripts/spider --ignore-history
 
 # Custom URL scraping (saves to reports/AdHoc/, checks history by default)
-python Javdb_Spider.py --url "https://javdb.com/?vft=2"
+python3 scripts/spider --url "https://javdb.com/?vft=2"
 
 # Custom URL scraping, ignoring history to re-download everything
-python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --ignore-history
+python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --ignore-history
 
 # Ignore today/yesterday release date tags and process all matching entries
-python Javdb_Spider.py --ignore-release-date
+python3 scripts/spider --ignore-release-date
 
 # Use proxy for all HTTP requests
-python Javdb_Spider.py --use-proxy
+python3 scripts/spider --use-proxy
 ```
 
 #### Complete Examples
 ```bash
 # Quick test run with limited pages
-python Javdb_Spider.py --start-page 1 --end-page 3 --dry-run
+python3 scripts/spider --start-page 1 --end-page 3 --dry-run
 
 # Full scrape ignoring history
-python Javdb_Spider.py --all --ignore-history
+python3 scripts/spider --all --ignore-history
 
 # Custom URL with specific output file
-python Javdb_Spider.py --url "https://javdb.com/?vft=2" --output-file custom_results.csv
+python3 scripts/spider --url "https://javdb.com/?vft=2" --output-file custom_results.csv
 
 # Phase 1 only with custom page range
-python Javdb_Spider.py --phase 1 --start-page 5 --end-page 15
+python3 scripts/spider --phase 1 --start-page 5 --end-page 15
 
 # Download all subtitle entries regardless of release date
-python Javdb_Spider.py --ignore-release-date --phase 1
+python3 scripts/spider --ignore-release-date --phase 1
 
 # Download all high-quality entries regardless of release date
-python Javdb_Spider.py --ignore-release-date --phase 2 --start-page 1 --end-page 10
+python3 scripts/spider --ignore-release-date --phase 2 --start-page 1 --end-page 10
 
 # Ad hoc mode: Download specific actor's movies (skips already downloaded)
-python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --ignore-release-date
+python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --ignore-release-date
 
 # Ad hoc mode: Re-download everything from an actor (ignores history)
-python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --ignore-history --ignore-release-date
+python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --ignore-history --ignore-release-date
 
 # Use proxy to access JavDB (useful for geo-restricted regions)
-python Javdb_Spider.py --use-proxy --start-page 1 --end-page 5
+python3 scripts/spider --use-proxy --start-page 1 --end-page 5
 
 # Combine multiple options: proxy + custom URL + ignore release date
-python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --use-proxy --ignore-release-date
+python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --use-proxy --ignore-release-date
 ```
 
 #### Argument Reference
@@ -395,6 +428,10 @@ python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --use-proxy --ignor
 | `--phase` | Phase to run (1/2/all) | all | `--phase 1` |
 | `--ignore-release-date` | Ignore today/yesterday tags | False | `--ignore-release-date` |
 | `--use-proxy` | Enable proxy from config.py | False | `--use-proxy` |
+| `--sequential` | Force sequential processing (disable parallel) | False | `--sequential` |
+| `--max-movies-phase1` | Limit phase 1 movies (for testing) | None | `--max-movies-phase1 10` |
+| `--max-movies-phase2` | Limit phase 2 movies (for testing) | None | `--max-movies-phase2 5` |
+| `--use-history` | Enable history filter in ad-hoc mode | False | `--use-history` |
 
 ### Additional Tools
 
@@ -467,7 +504,7 @@ The pipeline will:
 7. **Analyze logs for critical errors**
 8. Send email notifications with appropriate status
 
-**Note**: The pipeline accepts the same arguments as `Javdb_Spider.py` and passes them through automatically. Additional pipeline-specific arguments include `--pikpak-individual` for PikPak Bridge mode control.
+**Note**: The pipeline accepts the same arguments as `scripts/spider` and passes them through automatically. Additional pipeline-specific arguments include `--pikpak-individual` for PikPak Bridge mode control.
 
 #### Intelligent Error Detection
 
@@ -568,7 +605,8 @@ IGNORE_RELEASE_DATE_FILTER = False  # Set True to ignore today/yesterday tags
 
 # Sleep time configuration (in seconds)
 PAGE_SLEEP = 2  # Sleep between index pages
-MOVIE_SLEEP = 5  # Sleep between movies (includes detail page rate limiting)
+MOVIE_SLEEP_MIN = 5   # Minimum random sleep between movies
+MOVIE_SLEEP_MAX = 15  # Maximum random sleep between movies
 
 # =============================================================================
 # JAVDB LOGIN CONFIGURATION (for automatic session cookie refresh)
@@ -605,8 +643,9 @@ EMAIL_NOTIFICATION_LOG_FILE = 'logs/email_notification.log'
 # =============================================================================
 # FILE PATHS
 # =============================================================================
-DAILY_REPORT_DIR = 'Daily Report'
-AD_HOC_DIR = 'Ad Hoc'
+REPORTS_DIR = 'reports'
+DAILY_REPORT_DIR = 'reports/DailyReport'
+AD_HOC_DIR = 'reports/AdHoc'
 PARSED_MOVIES_CSV = 'parsed_movies_history.csv'
 
 # =============================================================================
@@ -676,10 +715,11 @@ All report files are organized under the `reports/` directory:
 
 ```
 reports/
-├── DailyReport/YYYY/MM/    # Daily report CSV files
+├── DailyReport/YYYY/MM/         # Daily report CSV files
 │   └── Javdb_TodayTitle_YYYYMMDD.csv
-├── AdHoc/YYYY/MM/          # Ad hoc report CSV files
+├── AdHoc/YYYY/MM/               # Ad hoc report CSV files
 │   └── Javdb_AdHoc_*.csv
+├── Dedup/                       # Rclone dedup reports
 ├── parsed_movies_history.csv    # History tracking
 ├── pikpak_bridge_history.csv    # PikPak transfer history
 └── proxy_bans.csv               # Proxy ban records
@@ -727,7 +767,7 @@ By default, the spider filters entries based on release date tags ("今日新種
 #### Command-Line Argument (Recommended)
 ```bash
 # Ignore release date tags for a single run
-python Javdb_Spider.py --ignore-release-date
+python3 scripts/spider --ignore-release-date
 
 # Or via pipeline
 python pipeline_run_and_notify.py --ignore-release-date
@@ -756,7 +796,7 @@ Configure multiple proxies for automatic failover:
 - **Passive Health Checking**: Only marks proxies as failed on actual failures (no active probing)
 - **Cooldown Mechanism**: Failed proxies are temporarily disabled to allow recovery (8 days default)
 - **Ban Detection**: Automatically detects when proxies are banned by JavDB
-- **Persistent Ban Records**: Ban history stored in `Daily Report/proxy_bans.csv` and persists across runs
+- **Persistent Ban Records**: Ban history stored in `reports/proxy_bans.csv` and persists across runs
 - **Statistics Tracking**: Detailed success rates and usage statistics for each proxy
 - **Perfect for JavDB**: Respects strict rate limiting while providing redundancy
 
@@ -778,7 +818,7 @@ PROXY_POOL_MAX_FAILURES = 3  # Max failures before cooldown
 
 The system includes intelligent ban detection and management:
 - **Automatic Detection**: Detects when JavDB blocks a proxy IP
-- **Persistent Records**: Ban history stored in `Daily Report/proxy_bans.csv`
+- **Persistent Records**: Ban history stored in `reports/proxy_bans.csv`
 - **8-Day Cooldown**: Default cooldown matches JavDB's 7-day ban period
 - **Exit Code 2**: Spider exits with code 2 when proxies are banned (helps with automation)
 - **Ban Summary**: Detailed ban status included in pipeline email reports
@@ -786,7 +826,7 @@ The system includes intelligent ban detection and management:
 **Checking Ban Status:**
 ```bash
 # Ban records are logged in:
-cat "Daily Report/proxy_bans.csv"
+cat "reports/proxy_bans.csv"
 
 # Pipeline emails include ban summary with:
 # - Proxy name and IP
@@ -797,7 +837,7 @@ cat "Daily Report/proxy_bans.csv"
 
 Then run with `--use-proxy` flag:
 ```bash
-python Javdb_Spider.py --use-proxy
+python3 scripts/spider --use-proxy
 ```
 
 #### Single Proxy Mode (Legacy)
@@ -833,7 +873,7 @@ PROXY_MODULES = ['all']  # Enable for all modules
 **2. Enable proxy with command-line flag:**
 ```bash
 # Enable proxy for spider
-python Javdb_Spider.py --use-proxy
+python3 scripts/spider --use-proxy
 
 # Enable proxy for qBittorrent uploader
 python qbtorrent_uploader.py --use-proxy
@@ -842,7 +882,7 @@ python qbtorrent_uploader.py --use-proxy
 python pikpak_bridge.py --use-proxy
 
 # Combine with other options
-python Javdb_Spider.py --use-proxy --url "https://javdb.com/actors/EvkJ"
+python3 scripts/spider --use-proxy --url "https://javdb.com/actors/EvkJ"
 
 # Via pipeline (enables proxy for all components)
 python pipeline_run_and_notify.py --use-proxy
@@ -1107,7 +1147,7 @@ The script will:
 
 ```bash
 # Spider with custom URL
-python3 Javdb_Spider.py --url "https://javdb.com/actors/RdEb4"
+python3 scripts/spider --url "https://javdb.com/actors/RdEb4"
 
 # Pipeline with custom URL
 python3 pipeline_run_and_notify.py --url "https://javdb.com/actors/RdEb4"
@@ -1238,11 +1278,12 @@ href,phase,video_code,parsed_date,torrent_type
 
 **New Format:**
 ```
-href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle
+href,phase,video_code,create_date,update_date,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle
 ```
 
 - `create_date`: When the movie was first discovered and logged
 - `update_date`: When the movie was last updated with new torrent types
+- `last_visited_datetime`: When the movie detail page was last visited
 - `hacked_subtitle`: Download date for hacked version with subtitles (empty if not downloaded)
 - `hacked_no_subtitle`: Download date for hacked version without subtitles (empty if not downloaded)
 - `subtitle`: Download date for subtitle version (empty if not downloaded)
@@ -1288,7 +1329,7 @@ href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle
 
 ### Important Notes
 
-1. **History File Dependency**: Feature depends on `Daily Report/parsed_movies_history.csv` file
+1. **History File Dependency**: Feature depends on `reports/parsed_movies_history.csv` file
 2. **Indicator Format**: Downloaded indicator format is `[DOWNLOADED] ` (note the space)
 3. **Backward Compatibility**: If history file doesn't exist, feature will gracefully degrade without affecting normal use
 4. **Performance Optimization**: History check uses efficient CSV reading, won't significantly impact performance
@@ -1317,6 +1358,14 @@ The `migration/` directory contains utility scripts for maintaining and upgradin
 - Converts `parsed_date` to `create_date`/`update_date`
 - Automatic backward compatibility
 
+**rename_columns_add_last_visited.py**
+- Renames date columns and adds `last_visited_datetime` field
+- Required when upgrading to support the new history format
+
+**migrate_reports_to_dated_dirs.py**
+- Migrates flat report files into `YYYY/MM/` dated subdirectories
+- Required when upgrading to the new reports directory structure
+
 **reclassify_c_hacked_torrents.py**
 - Reclassifies torrents with specific naming patterns
 - Updates torrent type classification
@@ -1336,10 +1385,11 @@ Run migration scripts when:
 cd migration
 python3 cleanup_history_priorities.py
 python3 update_history_format.py
+python3 rename_columns_add_last_visited.py
 python3 reclassify_c_hacked_torrents.py
 ```
 
-**Note:** Always backup your `Daily Report/parsed_movies_history.csv` before running migration scripts.
+**Note:** Always backup your `reports/parsed_movies_history.csv` before running migration scripts.
 
 ## Logging
 
@@ -1361,7 +1411,7 @@ Progress tracking includes:
 **Spider Issues:**
 - **No entries found**: Check if the website structure has changed
 - **Connection errors**: Verify internet connection and website accessibility
-- **CSV not generated**: Check if the "Daily Report" directory exists
+- **CSV not generated**: Check if the `reports/DailyReport` directory exists
 
 **qBittorrent Issues:**
 - **Cannot connect**: Check if qBittorrent is running and Web UI is enabled
@@ -1392,7 +1442,7 @@ Progress tracking includes:
 - **Proxy + CF not working**: Ensure CF bypass service runs on proxy server
 
 **Proxy Ban Issues:**
-- **All proxies banned**: Check `Daily Report/proxy_bans.csv` for ban status
+- **All proxies banned**: Check `reports/proxy_bans.csv` for ban status
 - **Spider exits with code 2**: Indicates proxy ban detected, wait for cooldown or add new proxies
 - **Cooldown not working**: Default is 8 days, adjust PROXY_POOL_COOLDOWN_SECONDS if needed
 - **Ban false positives**: Check if JavDB is actually accessible from proxy IP
@@ -1429,19 +1479,41 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
 ### Rate Limiting and Delays
 - The system includes delays between requests to be respectful to servers:
   - **Index pages**: 2 seconds (configurable via `PAGE_SLEEP`)
-  - **Movies**: 5 seconds (configurable via `MOVIE_SLEEP`)
+  - **Movies**: 5-15 seconds random (configurable via `MOVIE_SLEEP_MIN` / `MOVIE_SLEEP_MAX`)
+  - **Volume-based adjustment**: `MovieSleepManager` automatically increases sleep intervals when processing large batches
   - **qBittorrent additions**: 1 second (configurable via `DELAY_BETWEEN_ADDITIONS`)
   - **PikPak requests**: 3 seconds (configurable via `PIKPAK_REQUEST_DELAY`)
 
 ### System Behavior
 - The system uses proper headers to mimic a real browser
-- CSV files are automatically saved to the `reports/DailyReport/` or `reports/AdHoc/` directory
+- CSV files are automatically saved to the `reports/DailyReport/YYYY/MM/` or `reports/AdHoc/YYYY/MM/` directory
 - The pipeline provides incremental commits for monitoring progress in real-time
 - History file tracks all downloaded movies with timestamps
+- Rust acceleration is automatically detected and used when available
 - Exit code 2 indicates proxy ban detection (useful for automation)
 - Logs automatically mask sensitive information (passwords, tokens, etc.)
 
 ### File Structure
+- **scripts/spider/**: Spider package (modular architecture)
+  - `__main__.py`: Package entry point (`python3 scripts/spider`)
+  - `main.py`: Main orchestration flow
+  - `cli.py`: Command-line argument parsing
+  - `parallel.py`: Multi-threaded detail processing (ProxyWorker)
+  - `sequential.py`: Sequential detail processing
+  - `index_fetcher.py`: Index page fetching
+  - `fallback.py`: Multi-level fallback (proxy/CF/login)
+  - `session.py`: Login and session management
+  - `sleep_manager.py`: Volume-based sleep management
+  - `state.py`: Global state management
+  - `csv_builder.py`: CSV row construction
+  - `report.py`: Summary report generation
+- **rust_core/**: Rust acceleration extension (PyO3 + maturin)
+  - `src/scraper/`: HTML parsing (index, detail, category pages)
+  - `src/proxy/`: Proxy pool, ban manager, masking
+  - `src/requester/`: HTTP request handler
+  - `src/history/`: History CSV management
+  - `src/csv_writer.rs`, `src/magnet_extractor.rs`, `src/url_helper.rs`
+- **api/**: FastAPI REST API layer
 - **reports/**: Contains all report files and history
   - `DailyReport/YYYY/MM/`: Daily scraping results
   - `AdHoc/YYYY/MM/`: Custom URL scraping results
@@ -1457,6 +1529,7 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
 - **migration/**: Contains database migration scripts
 - **utils/**: Utility modules (history, parser, proxy pool, etc.)
 - **utils/login/**: JavDB login related files and documentation
+- **docker/**: Docker configuration files
 
 ## Quick Reference
 
@@ -1464,31 +1537,31 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
 
 ```bash
 # Basic daily scraping
-python3 Javdb_Spider.py
+python3 scripts/spider
 python3 qbtorrent_uploader.py
 
 # Full automated pipeline
 python3 pipeline_run_and_notify.py
 
 # Scrape with proxy
-python3 Javdb_Spider.py --use-proxy
+python3 scripts/spider --use-proxy
 python3 pipeline_run_and_notify.py --use-proxy
 
 # Scrape with proxy (CF bypass activates automatically as fallback)
-python3 Javdb_Spider.py --use-proxy
+python3 scripts/spider --use-proxy
 python3 pipeline_run_and_notify.py --use-proxy
 
 # Custom URL scraping (requires login)
 python3 javdb_login.py  # First time setup
-python3 Javdb_Spider.py --url "https://javdb.com/actors/RdEb4"
+python3 scripts/spider --url "https://javdb.com/actors/RdEb4"
 python3 pipeline_run_and_notify.py --url "https://javdb.com/actors/RdEb4"
 
 # Scrape ignoring release date
-python3 Javdb_Spider.py --ignore-release-date --phase 1
+python3 scripts/spider --ignore-release-date --phase 1
 python3 pipeline_run_and_notify.py --ignore-release-date
 
 # Ad hoc mode
-python3 Javdb_Spider.py --url "https://javdb.com/tags/xyz"
+python3 scripts/spider --url "https://javdb.com/tags/xyz"
 python3 qbtorrent_uploader.py --mode adhoc
 
 # PikPak bridge
@@ -1503,8 +1576,8 @@ python3 scripts/qb_file_filter.py --min-size 100 --days 3 --dry-run  # Preview m
 ### Configuration Files
 
 - **Main config**: `config.py` (copy from `config.py.example`)
-- **History file**: `Daily Report/parsed_movies_history.csv`
-- **Ban records**: `Daily Report/proxy_bans.csv`
+- **History file**: `reports/parsed_movies_history.csv`
+- **Ban records**: `reports/proxy_bans.csv`
 - **Login docs**: `utils/login/JAVDB_LOGIN_README.md`
 
 ### Important Links
@@ -1512,6 +1585,8 @@ python3 scripts/qb_file_filter.py --min-size 100 --days 3 --dry-run  # Preview m
 - [CloudFlare Bypass Service](https://github.com/sarperavci/CloudflareBypassForScraping)
 - [2Captcha API](https://2captcha.com/) (optional, for automatic captcha solving)
 - [JavDB Login Guide](utils/login/JAVDB_LOGIN_README.md)
+- [Rust Installation Guide (macOS)](docs/RUST_INSTALLATION_MAC.md)
+- [API Usage Guide](docs/API_USAGE_GUIDE.md)
 
 ## Contributing
 

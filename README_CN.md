@@ -4,13 +4,14 @@
 ![JadvDB Daily Ingestion](https://cronitor.io/badges/9uDCq6/production/qJMA3fMzsCxqf9S3tKJ0BxkfoBk.svg)
 [![codecov](https://codecov.io/gh/TongWu/JAVDB_AutoSpider/branch/main/graph/badge.svg)](https://codecov.io/gh/TongWu/JAVDB_AutoSpider)
 
-一个全面的 Python 自动化系统,用于从 javdb.com 提取种子链接并自动添加到 qBittorrent。系统包括智能历史记录追踪、Git 集成、自动化流水线执行和重复下载预防功能。
+一个全面的 Python + Rust 自动化系统,用于从 javdb.com 提取种子链接并自动添加到 qBittorrent。系统采用高性能 Rust 核心（基于 PyO3）加速 HTML 解析和代理管理,支持多线程并行处理、智能历史记录追踪、Git 集成、自动化流水线执行和重复下载预防功能。
 
 [English](README.md) | 简体中文
 
 ## 功能特性
 
 ### 核心爬虫功能
+- 模块化爬虫包 (`scripts/spider/`),包含 14 个专用模块
 - 从 `javdb.com/?vft=2` 到 `javdb.com/?page=5&vft=2` 实时获取数据
 - 过滤同时包含"含中字磁鏈"和"今日新種"标签的条目(支持多种语言变体)
 - 根据特定分类和优先级顺序提取磁力链接
@@ -18,6 +19,22 @@
 - 全面的日志记录,支持不同级别(INFO、WARNING、DEBUG、ERROR)
 - 多页面处理,带进度跟踪
 - 提取额外的元数据(演员、评分、评论数)
+
+### Rust 加速（可选）
+- 高性能 Rust 核心扩展 (`javdb_rust_core`),基于 PyO3 + maturin 构建
+- **"Rust 优先,Python 回退"** 模式 — 无需安装 Rust 也能使用所有功能
+- HTML 解析速度比 BeautifulSoup 快 5-10 倍（索引页、详情页、分类页）
+- 基于 `Arc<Mutex>` 的线程安全代理池管理
+- 加速的历史管理、CSV 操作、磁力链接提取、URL 工具
+- 自动检测：系统在 Rust 可用时使用 Rust,否则回退到纯 Python
+
+### 并行处理
+- 多线程详情页处理,每个代理一个 worker 线程
+- 在代理池模式下使用 2+ 代理时自动激活
+- 任务队列 / 结果队列架构,实现安全的并发爬取
+- 每个 worker 独立的 `MovieSleepManager` 进行速率限制
+- 基于 `_login_lock` 的线程安全登录刷新
+- 使用 `--sequential` 标志可强制串行模式
 
 ### 种子分类系统
 - **字幕 (subtitle)**: 带有"Subtitle"标签的磁力链接
@@ -42,7 +59,7 @@
 - **现在默认检查历史记录**以跳过已下载的条目
 - 使用 `--ignore-history` 重新下载所有内容
 - 在 qBittorrent 中使用"Ad Hoc"分类
-- 示例: `python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ"`
+- 示例: `python3 scripts/spider --url "https://javdb.com/actors/EvkJ"`
 
 ### qBittorrent 集成
 - 自动读取当天的 CSV 文件
@@ -99,12 +116,25 @@ pip install -r requirements.txt
 pip install requests[socks]
 ```
 
-3. 复制并编辑配置文件:
+3. (可选)安装 Rust 加速扩展,HTML 解析速度提升 5-10 倍:
+```bash
+# 安装 Rust 工具链
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# 构建并安装扩展
+cd rust_core
+pip install maturin
+maturin develop --release
+cd ..
+```
+> **注意:** Rust 扩展是可选的。无需安装 Rust 也能使用所有功能 — 系统会自动回退到纯 Python 实现。
+
+4. 复制并编辑配置文件:
 ```bash
 cp config.py.example config.py
 ```
 
-4. (可选)如需 CloudFlare 绕过功能,安装并运行 [CloudflareBypassForScraping](https://github.com/sarperavci/CloudflareBypassForScraping) 服务:
+5. (可选)如需 CloudFlare 绕过功能,安装并运行 [CloudflareBypassForScraping](https://github.com/sarperavci/CloudflareBypassForScraping) 服务:
 ```bash
 # 详见下方 CloudFlare 绕过部分的设置说明
 ```
@@ -164,7 +194,7 @@ docker-compose -f docker/docker-compose.yml up -d
 docker-compose -f docker/docker-compose.yml logs -f
 ```
 
-详细 Docker 文档请参考 [DOCKER_README.md](docs/DOCKER_README.md) 或 [DOCKER_QUICKSTART.md](docs/DOCKER_QUICKSTART.md)。
+Docker 镜像使用多阶段构建：Rust 构建阶段编译 `javdb_rust_core` 扩展,运行时阶段仅包含编译好的 wheel。
 
 ## 使用方法
 
@@ -182,7 +212,7 @@ docker logs -f javdb-spider
 docker exec javdb-spider tail -f /var/log/cron.log
 
 # 手动运行爬虫
-docker exec javdb-spider python scripts/spider --use-proxy
+docker exec javdb-spider python3 scripts/spider --use-proxy
 
 # 手动运行流水线
 docker exec javdb-spider python pipeline.py
@@ -243,7 +273,10 @@ docker-compose -f docker/docker-compose.yml restart
 
 **运行爬虫提取数据:**
 ```bash
-python Javdb_Spider.py
+python3 scripts/spider
+
+# 或者等效地:
+python -m scripts.spider
 ```
 
 **运行 qBittorrent 上传器:**
@@ -304,79 +337,79 @@ JavDB Spider 支持各种命令行参数进行自定义:
 #### 基础选项
 ```bash
 # 演练模式(不写入 CSV 文件)
-python Javdb_Spider.py --dry-run
+python3 scripts/spider --dry-run
 
 # 指定自定义输出文件名
-python Javdb_Spider.py --output-file my_results.csv
+python3 scripts/spider --output-file my_results.csv
 
 # 自定义页面范围
-python Javdb_Spider.py --start-page 3 --end-page 10
+python3 scripts/spider --start-page 3 --end-page 10
 
 # 解析所有页面直到找到空页面
-python Javdb_Spider.py --all
+python3 scripts/spider --all
 ```
 
 #### 阶段控制
 ```bash
 # 仅运行阶段 1(字幕 + 今日/昨日标签)
-python Javdb_Spider.py --phase 1
+python3 scripts/spider --phase 1
 
 # 仅运行阶段 2(今日/昨日标签 + 质量过滤)
-python Javdb_Spider.py --phase 2
+python3 scripts/spider --phase 2
 
 # 运行两个阶段(默认)
-python Javdb_Spider.py --phase all
+python3 scripts/spider --phase all
 ```
 
 #### 历史控制
 ```bash
 # 忽略历史文件并爬取所有页面(用于每日和 ad hoc 模式)
-python Javdb_Spider.py --ignore-history
+python3 scripts/spider --ignore-history
 
 # 自定义 URL 爬取(保存到 reports/AdHoc/,默认检查历史)
-python Javdb_Spider.py --url "https://javdb.com/?vft=2"
+python3 scripts/spider --url "https://javdb.com/?vft=2"
 
 # 自定义 URL 爬取,忽略历史重新下载所有内容
-python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --ignore-history
+python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --ignore-history
 
 # 忽略今日/昨日发布日期标签,处理所有匹配条目
-python Javdb_Spider.py --ignore-release-date
+python3 scripts/spider --ignore-release-date
 
 # 为所有 HTTP 请求使用代理
-python Javdb_Spider.py --use-proxy
+python3 scripts/spider --use-proxy
 ```
 
 #### 完整示例
 ```bash
 # 限制页面的快速测试运行
-python Javdb_Spider.py --start-page 1 --end-page 3 --dry-run
+python3 scripts/spider --start-page 1 --end-page 3 --dry-run
 
 # 忽略历史的完整爬取
-python Javdb_Spider.py --all --ignore-history
+python3 scripts/spider --all --ignore-history
 
 # 带特定输出文件的自定义 URL
-python Javdb_Spider.py --url "https://javdb.com/?vft=2" --output-file custom_results.csv
+python3 scripts/spider --url "https://javdb.com/?vft=2" --output-file custom_results.csv
 
 # 仅阶段 1 + 自定义页面范围
-python Javdb_Spider.py --phase 1 --start-page 5 --end-page 15
+python3 scripts/spider --phase 1 --start-page 5 --end-page 15
 
 # 下载所有字幕条目,无论发布日期
-python Javdb_Spider.py --ignore-release-date --phase 1
+python3 scripts/spider --ignore-release-date --phase 1
 
 # 下载所有高质量条目,无论发布日期
-python Javdb_Spider.py --ignore-release-date --phase 2 --start-page 1 --end-page 10
+python3 scripts/spider --ignore-release-date --phase 2 --start-page 1 --end-page 10
 
 # Ad hoc 模式: 下载特定演员的电影(跳过已下载)
-python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --ignore-release-date
+python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --ignore-release-date
 
 # Ad hoc 模式: 重新下载演员的所有内容(忽略历史)
-python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --ignore-history --ignore-release-date
+python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --ignore-history --ignore-release-date
 
 # 使用代理访问 JavDB(适用于地理限制地区)
-python Javdb_Spider.py --use-proxy --start-page 1 --end-page 5
+python3 scripts/spider --use-proxy --start-page 1 --end-page 5
 
 # 组合多个选项: 代理 + 自定义 URL + 忽略发布日期
-python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --use-proxy --ignore-release-date
+python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --use-proxy --ignore-release-date
 ```
 
 #### 参数参考表
@@ -393,6 +426,10 @@ python Javdb_Spider.py --url "https://javdb.com/actors/EvkJ" --use-proxy --ignor
 | `--phase` | 运行的阶段(1/2/all) | all | `--phase 1` |
 | `--ignore-release-date` | 忽略今日/昨日标签 | False | `--ignore-release-date` |
 | `--use-proxy` | 从 config.py 启用代理 | False | `--use-proxy` |
+| `--sequential` | 强制串行处理(禁用并行) | False | `--sequential` |
+| `--max-movies-phase1` | 限制阶段 1 电影数量(测试用) | None | `--max-movies-phase1 10` |
+| `--max-movies-phase2` | 限制阶段 2 电影数量(测试用) | None | `--max-movies-phase2 5` |
+| `--use-history` | 在 ad-hoc 模式下启用历史过滤 | False | `--use-history` |
 
 ### 附加工具
 
@@ -413,7 +450,7 @@ python3 javdb_login.py
 **检查代理禁用状态:**
 ```bash
 # 查看禁用记录
-cat "Daily Report/proxy_bans.csv"
+cat "reports/proxy_bans.csv"
 
 # 禁用信息也包含在流水线电子邮件报告中
 ```
@@ -465,7 +502,7 @@ python pipeline_run_and_notify.py --pikpak-individual
 7. **分析日志中的严重错误**
 8. 发送带有适当状态的电子邮件通知
 
-**注意**: 流水线接受与 `Javdb_Spider.py` 相同的参数并自动传递。额外的流水线特定参数包括 `--pikpak-individual` 用于 PikPak Bridge 模式控制。
+**注意**: 流水线接受与 `scripts/spider` 相同的参数并自动传递。额外的流水线特定参数包括 `--pikpak-individual` 用于 PikPak Bridge 模式控制。
 
 #### 智能错误检测
 
@@ -566,7 +603,8 @@ IGNORE_RELEASE_DATE_FILTER = False  # 设为 True 以忽略今日/昨日标签
 
 # 休眠时间配置(秒)
 PAGE_SLEEP = 2  # 索引页之间休眠
-MOVIE_SLEEP = 5  # 电影之间休眠（包含详情页限速）
+MOVIE_SLEEP_MIN = 5   # 电影之间最小随机休眠
+MOVIE_SLEEP_MAX = 15  # 电影之间最大随机休眠
 
 # =============================================================================
 # JAVDB 登录配置(用于自动会话 cookie 刷新)
@@ -603,8 +641,9 @@ EMAIL_NOTIFICATION_LOG_FILE = 'logs/email_notification.log'
 # =============================================================================
 # 文件路径
 # =============================================================================
-DAILY_REPORT_DIR = 'Daily Report'
-AD_HOC_DIR = 'Ad Hoc'
+REPORTS_DIR = 'reports'
+DAILY_REPORT_DIR = 'reports/DailyReport'
+AD_HOC_DIR = 'reports/AdHoc'
 PARSED_MOVIES_CSV = 'parsed_movies_history.csv'
 
 # =============================================================================
@@ -725,7 +764,7 @@ reports/
 #### 命令行参数(推荐)
 ```bash
 # 单次运行忽略发布日期标签
-python Javdb_Spider.py --ignore-release-date
+python3 scripts/spider --ignore-release-date
 
 # 或通过流水线
 python pipeline_run_and_notify.py --ignore-release-date
@@ -754,7 +793,7 @@ python pipeline_run_and_notify.py --ignore-release-date
 - **被动健康检查**: 仅在实际失败时标记代理为失败(无主动探测)
 - **冷却机制**: 失败的代理暂时禁用以允许恢复(默认 8 天)
 - **禁用检测**: 自动检测代理何时被 JavDB 禁用
-- **持久化禁用记录**: 禁用历史存储在 `Daily Report/proxy_bans.csv` 中,跨运行持久化
+- **持久化禁用记录**: 禁用历史存储在 `reports/proxy_bans.csv` 中,跨运行持久化
 - **统计跟踪**: 每个代理的详细成功率和使用统计
 - **完美适配 JavDB**: 尊重严格的速率限制,同时提供冗余
 
@@ -776,7 +815,7 @@ PROXY_POOL_MAX_FAILURES = 3  # 冷却前的最大失败次数
 
 系统包含智能禁用检测和管理:
 - **自动检测**: 检测 JavDB 何时阻止代理 IP
-- **持久化记录**: 禁用历史存储在 `Daily Report/proxy_bans.csv`
+- **持久化记录**: 禁用历史存储在 `reports/proxy_bans.csv`
 - **8 天冷却期**: 默认冷却期匹配 JavDB 的 7 天禁止期
 - **退出代码 2**: 检测到代理被禁时,爬虫以代码 2 退出(有助于自动化)
 - **禁用摘要**: 流水线电子邮件报告中包含详细的禁用状态
@@ -784,7 +823,7 @@ PROXY_POOL_MAX_FAILURES = 3  # 冷却前的最大失败次数
 **检查禁用状态:**
 ```bash
 # 禁用记录记录在:
-cat "Daily Report/proxy_bans.csv"
+cat "reports/proxy_bans.csv"
 
 # 流水线邮件包含禁用摘要,包括:
 # - 代理名称和 IP
@@ -795,7 +834,7 @@ cat "Daily Report/proxy_bans.csv"
 
 然后使用 `--use-proxy` 标志运行:
 ```bash
-python Javdb_Spider.py --use-proxy
+python3 scripts/spider --use-proxy
 ```
 
 #### 单一代理模式(传统)
@@ -831,7 +870,7 @@ PROXY_MODULES = ['all']  # 为所有模块启用
 **2. 使用命令行标志启用代理:**
 ```bash
 # 为爬虫启用代理
-python Javdb_Spider.py --use-proxy
+python3 scripts/spider --use-proxy
 
 # 为 qBittorrent 上传器启用代理
 python qbtorrent_uploader.py --use-proxy
@@ -840,7 +879,7 @@ python qbtorrent_uploader.py --use-proxy
 python pikpak_bridge.py --use-proxy
 
 # 与其他选项组合
-python Javdb_Spider.py --use-proxy --url "https://javdb.com/actors/EvkJ"
+python3 scripts/spider --use-proxy --url "https://javdb.com/actors/EvkJ"
 
 # 通过流水线(为所有组件启用代理)
 python pipeline_run_and_notify.py --use-proxy
@@ -1105,7 +1144,7 @@ python3 javdb_login.py
 
 ```bash
 # 带自定义 URL 的爬虫
-python3 Javdb_Spider.py --url "https://javdb.com/actors/RdEb4"
+python3 scripts/spider --url "https://javdb.com/actors/RdEb4"
 
 # 带自定义 URL 的流水线
 python3 pipeline_run_and_notify.py --url "https://javdb.com/actors/RdEb4"
@@ -1236,11 +1275,12 @@ href,phase,video_code,parsed_date,torrent_type
 
 **新格式:**
 ```
-href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle
+href,phase,video_code,create_date,update_date,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle
 ```
 
 - `create_date`: 电影首次被发现和记录的时间
 - `update_date`: 电影最后一次用新种子类型更新的时间
+- `last_visited_datetime`: 电影详情页最后一次被访问的时间
 - `hacked_subtitle`: 带字幕的破解版本的下载日期(如果未下载则为空)
 - `hacked_no_subtitle`: 无字幕的破解版本的下载日期(如果未下载则为空)
 - `subtitle`: 字幕版本的下载日期(如果未下载则为空)
@@ -1286,7 +1326,7 @@ href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle
 
 ### 重要说明
 
-1. **历史文件依赖**: 功能依赖于 `Daily Report/parsed_movies_history.csv` 文件
+1. **历史文件依赖**: 功能依赖于 `reports/parsed_movies_history.csv` 文件
 2. **指示器格式**: 下载指示器格式为 `[DOWNLOADED] `(注意空格)
 3. **向后兼容性**: 如果历史文件不存在,功能将优雅降级而不影响正常使用
 4. **性能优化**: 历史检查使用高效的 CSV 读取,不会显著影响性能
@@ -1315,6 +1355,14 @@ href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle
 - 将 `parsed_date` 转换为 `create_date`/`update_date`
 - 自动向后兼容
 
+**rename_columns_add_last_visited.py**
+- 重命名日期列并添加 `last_visited_datetime` 字段
+- 升级到新历史格式时需要
+
+**migrate_reports_to_dated_dirs.py**
+- 将扁平报告文件迁移到 `YYYY/MM/` 日期子目录
+- 升级到新报告目录结构时需要
+
 **reclassify_c_hacked_torrents.py**
 - 重新分类具有特定命名模式的种子
 - 更新种子类型分类
@@ -1334,10 +1382,11 @@ href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle
 cd migration
 python3 cleanup_history_priorities.py
 python3 update_history_format.py
+python3 rename_columns_add_last_visited.py
 python3 reclassify_c_hacked_torrents.py
 ```
 
-**注意:** 运行迁移脚本前务必备份您的 `Daily Report/parsed_movies_history.csv`。
+**注意:** 运行迁移脚本前务必备份您的 `reports/parsed_movies_history.csv`。
 
 ## 日志
 
@@ -1359,7 +1408,7 @@ python3 reclassify_c_hacked_torrents.py
 **爬虫问题:**
 - **未找到条目**: 检查网站结构是否已更改
 - **连接错误**: 验证互联网连接和网站可访问性
-- **CSV 未生成**: 检查"Daily Report"目录是否存在
+- **CSV 未生成**: 检查 `reports/DailyReport` 目录是否存在
 
 **qBittorrent 问题:**
 - **无法连接**: 检查 qBittorrent 是否正在运行且已启用 Web UI
@@ -1390,7 +1439,7 @@ python3 reclassify_c_hacked_torrents.py
 - **代理 + CF 不工作**: 确保 CF 绕过服务在代理服务器上运行
 
 **代理禁用问题:**
-- **所有代理被禁**: 检查 `Daily Report/proxy_bans.csv` 查看禁用状态
+- **所有代理被禁**: 检查 `reports/proxy_bans.csv` 查看禁用状态
 - **爬虫以代码 2 退出**: 表示检测到代理禁用,等待冷却期或添加新代理
 - **冷却不工作**: 默认为 8 天,如需要调整 PROXY_POOL_COOLDOWN_SECONDS
 - **禁用误报**: 检查 JavDB 是否实际上可从代理 IP 访问
@@ -1427,31 +1476,57 @@ LOG_LEVEL = 'DEBUG'  # 显示详细的调试信息
 ### 速率限制和延迟
 - 系统包含请求之间的延迟以尊重服务器:
   - **索引页**: 2 秒(通过 `PAGE_SLEEP` 配置)
-  - **电影**: 5 秒(通过 `MOVIE_SLEEP` 配置)
+  - **电影**: 5-15 秒随机(通过 `MOVIE_SLEEP_MIN` / `MOVIE_SLEEP_MAX` 配置)
+  - **按量调整**: `MovieSleepManager` 在处理大批量时自动增加休眠间隔
   - **qBittorrent 添加**: 1 秒(通过 `DELAY_BETWEEN_ADDITIONS` 配置)
   - **PikPak 请求**: 3 秒(通过 `PIKPAK_REQUEST_DELAY` 配置)
 
 ### 系统行为
 - 系统使用适当的头部来模拟真实浏览器
-- CSV 文件自动保存到"Daily Report"或"Ad Hoc"目录
+- CSV 文件自动保存到 `reports/DailyReport/YYYY/MM/` 或 `reports/AdHoc/YYYY/MM/` 目录
 - 流水线提供增量提交以实时监控进度
 - 历史文件跟踪所有已下载的电影及其时间戳
+- 系统自动检测并使用 Rust 加速（如可用）
 - 退出代码 2 表示检测到代理禁用(对自动化有用)
 - 日志自动屏蔽敏感信息(密码、令牌等)
 
 ### 文件结构
-- **Daily Report/**: 包含每日爬取结果和历史
-- **Ad Hoc/**: 包含自定义 URL 爬取结果
+- **scripts/spider/**: 爬虫包（模块化架构）
+  - `__main__.py`: 包入口点 (`python3 scripts/spider`)
+  - `main.py`: 主编排流程
+  - `cli.py`: 命令行参数解析
+  - `parallel.py`: 多线程详情页处理 (ProxyWorker)
+  - `sequential.py`: 串行详情页处理
+  - `index_fetcher.py`: 索引页抓取
+  - `fallback.py`: 多级 fallback（代理/CF/登录）
+  - `session.py`: 登录与会话管理
+  - `sleep_manager.py`: 按量休眠管理
+  - `state.py`: 全局状态管理
+  - `csv_builder.py`: CSV 行构建
+  - `report.py`: 汇总报告生成
+- **rust_core/**: Rust 加速扩展（PyO3 + maturin）
+  - `src/scraper/`: HTML 解析（索引页、详情页、分类页）
+  - `src/proxy/`: 代理池、禁用管理、脱敏
+  - `src/requester/`: HTTP 请求处理器
+  - `src/history/`: 历史 CSV 管理
+  - `src/csv_writer.rs`, `src/magnet_extractor.rs`, `src/url_helper.rs`
+- **api/**: FastAPI REST API 层
+- **reports/**: 包含所有报告文件和历史
+  - `DailyReport/YYYY/MM/`: 每日爬取结果
+  - `AdHoc/YYYY/MM/`: 自定义 URL 爬取结果
+  - `parsed_movies_history.csv`: 历史记录
+  - `pikpak_bridge_history.csv`: PikPak 传输历史
+  - `proxy_bans.csv`: 代理禁用记录
 - **logs/**: 包含所有日志文件
-  - `Javdb_Spider.log`: 爬虫执行日志
-  - `qbtorrent_uploader.log`: 上传执行日志
-  - `pipeline_run_and_notify.log`: 流水线执行日志
-  - `qb_pikpak.log`: PikPak 桥接执行日志
+  - `spider.log`: 爬虫执行日志
+  - `qb_uploader.log`: 上传执行日志
+  - `pipeline.log`: 流水线执行日志
+  - `pikpak_bridge.log`: PikPak 桥接执行日志
   - `qb_file_filter.log`: 文件过滤器执行日志
-  - `proxy_bans.csv`: 代理禁用历史(跨运行持久化)
 - **migration/**: 包含数据库迁移脚本
 - **utils/**: 实用工具模块(历史、解析器、代理池等)
 - **utils/login/**: JavDB 登录相关文件和文档
+- **docker/**: Docker 配置文件
 
 ## 快速参考
 
@@ -1459,31 +1534,31 @@ LOG_LEVEL = 'DEBUG'  # 显示详细的调试信息
 
 ```bash
 # 基础每日爬取
-python3 Javdb_Spider.py
+python3 scripts/spider
 python3 qbtorrent_uploader.py
 
 # 完整自动化流水线
 python3 pipeline_run_and_notify.py
 
 # 使用代理爬取
-python3 Javdb_Spider.py --use-proxy
+python3 scripts/spider --use-proxy
 python3 pipeline_run_and_notify.py --use-proxy
 
 # 使用代理爬取（CF 绕过会作为 fallback 自动启用）
-python3 Javdb_Spider.py --use-proxy
+python3 scripts/spider --use-proxy
 python3 pipeline_run_and_notify.py --use-proxy
 
 # 自定义 URL 爬取(需要登录)
 python3 javdb_login.py  # 首次设置
-python3 Javdb_Spider.py --url "https://javdb.com/actors/RdEb4"
+python3 scripts/spider --url "https://javdb.com/actors/RdEb4"
 python3 pipeline_run_and_notify.py --url "https://javdb.com/actors/RdEb4"
 
 # 忽略发布日期爬取
-python3 Javdb_Spider.py --ignore-release-date --phase 1
+python3 scripts/spider --ignore-release-date --phase 1
 python3 pipeline_run_and_notify.py --ignore-release-date
 
 # Ad hoc 模式
-python3 Javdb_Spider.py --url "https://javdb.com/tags/xyz"
+python3 scripts/spider --url "https://javdb.com/tags/xyz"
 python3 qbtorrent_uploader.py --mode adhoc
 
 # PikPak 桥接器
@@ -1498,8 +1573,8 @@ python3 scripts/qb_file_filter.py --min-size 100 --days 3 --dry-run  # 预览模
 ### 配置文件
 
 - **主配置**: `config.py`(从 `config.py.example` 复制)
-- **历史文件**: `Daily Report/parsed_movies_history.csv`
-- **禁用记录**: `Daily Report/proxy_bans.csv`
+- **历史文件**: `reports/parsed_movies_history.csv`
+- **禁用记录**: `reports/proxy_bans.csv`
 - **登录文档**: `utils/login/JAVDB_LOGIN_README.md`
 
 ### 重要链接
@@ -1507,6 +1582,8 @@ python3 scripts/qb_file_filter.py --min-size 100 --days 3 --dry-run  # 预览模
 - [CloudFlare 绕过服务](https://github.com/sarperavci/CloudflareBypassForScraping)
 - [2Captcha API](https://2captcha.com/)(可选,用于自动验证码解决)
 - [JavDB 登录指南](utils/login/JAVDB_LOGIN_README.md)
+- [Rust 安装指南 (macOS)](docs/RUST_INSTALLATION_MAC.md)
+- [API 使用指南](docs/API_USAGE_GUIDE.md)
 
 ## 贡献
 
