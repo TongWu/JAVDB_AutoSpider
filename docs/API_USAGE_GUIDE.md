@@ -33,7 +33,9 @@
 pip install -r requirements.txt
 ```
 
-核心依赖：`beautifulsoup4`、`lxml`。REST API 额外需要：`fastapi`、`uvicorn`。
+核心依赖：`beautifulsoup4`、`lxml`、`javdb_rust_core`（可选）。REST API 额外需要：`fastapi`、`uvicorn`。
+
+> **Rust 优先，Python 回退**：当 `javdb_rust_core`（通过 PyO3 + maturin 编译的 Rust 扩展）可用时，系统自动使用 Rust 实现的解析器，性能提升 5–10 倍；当 `javdb_rust_core` 不可用时，自动回退到 `beautifulsoup4` / `lxml` 的纯 Python 实现。此切换对调用者完全透明，无需修改任何 API 调用代码。
 
 ---
 
