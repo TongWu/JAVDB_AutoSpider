@@ -415,7 +415,7 @@ def process_detail_entries_parallel(
         batch_update_last_visited(history_file, visited_hrefs)
 
     logger.info(
-        f"Phase {phase} parallel completed: {total_entries} discovered, "
+        f"Phase {phase} completed: {total_entries} movies discovered, "
         f"{len(phase_rows)} processed, {skipped_history} skipped (history), "
         f"{no_new_torrents} no new torrents, {failed} failed"
     )
