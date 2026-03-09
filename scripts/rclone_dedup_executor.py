@@ -84,9 +84,12 @@ def main() -> int:
         dedup_csv = args.dedup_csv
     else:
         try:
-            from config import REPORTS_DIR, DEDUP_CSV
+            from config import REPORTS_DIR
         except ImportError:
             REPORTS_DIR = 'reports'
+        try:
+            from config import DEDUP_CSV
+        except ImportError:
             DEDUP_CSV = 'dedup.csv'
         dedup_csv = os.path.join(REPORTS_DIR, DEDUP_CSV)
 

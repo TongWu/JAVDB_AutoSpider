@@ -330,9 +330,12 @@ def main() -> int:
         output_path = args.output
     else:
         try:
-            from config import REPORTS_DIR, RCLONE_INVENTORY_CSV
+            from config import REPORTS_DIR
         except ImportError:
             REPORTS_DIR = 'reports'
+        try:
+            from config import RCLONE_INVENTORY_CSV
+        except ImportError:
             RCLONE_INVENTORY_CSV = 'rclone_inventory.csv'
         os.makedirs(REPORTS_DIR, exist_ok=True)
         output_path = os.path.join(REPORTS_DIR, RCLONE_INVENTORY_CSV)
