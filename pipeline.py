@@ -21,23 +21,27 @@ from datetime import datetime
 # Change to script directory
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
-# Import unified configuration
+# Import unified configuration — each variable resolved independently so that
+# a missing new variable never causes established ones to fall back to defaults.
 try:
-    from config import (
-        PIPELINE_LOG_FILE, LOG_LEVEL, DAILY_REPORT_DIR, AD_HOC_DIR
-    )
+    import config as _config_module
 except ImportError:
-    PIPELINE_LOG_FILE = 'logs/pipeline.log'
-    LOG_LEVEL = 'INFO'
-    DAILY_REPORT_DIR = 'reports/DailyReport'
-    AD_HOC_DIR = 'reports/AdHoc'
+    _config_module = None
 
-try:
-    from config import ENABLE_DEDUP, REPORTS_DIR as _REPORTS_DIR, DEDUP_CSV
-except ImportError:
-    ENABLE_DEDUP = False
-    _REPORTS_DIR = 'reports'
-    DEDUP_CSV = 'dedup.csv'
+
+def _cfg(name, default):
+    if _config_module is None:
+        return default
+    return getattr(_config_module, name, default)
+
+
+PIPELINE_LOG_FILE = _cfg('PIPELINE_LOG_FILE', 'logs/pipeline.log')
+LOG_LEVEL = _cfg('LOG_LEVEL', 'INFO')
+DAILY_REPORT_DIR = _cfg('DAILY_REPORT_DIR', 'reports/DailyReport')
+AD_HOC_DIR = _cfg('AD_HOC_DIR', 'reports/AdHoc')
+ENABLE_DEDUP = _cfg('ENABLE_DEDUP', False)
+_REPORTS_DIR = _cfg('REPORTS_DIR', 'reports')
+DEDUP_CSV = _cfg('DEDUP_CSV', 'dedup.csv')
 
 # Import path helper for dated subdirectories
 from utils.path_helper import get_dated_report_path
