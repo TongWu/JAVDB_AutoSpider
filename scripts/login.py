@@ -67,6 +67,7 @@ CF_BYPASS_SERVICE_PORT = cfg('CF_BYPASS_SERVICE_PORT', 8000)
 CF_BYPASS_ENABLED = cfg('CF_BYPASS_ENABLED', True)
 
 PROXY_MODE = cfg('PROXY_MODE', 'single')
+PROXY_POOL = cfg('PROXY_POOL', [])
 PROXY_MODULES = cfg('PROXY_MODULES', ['all'])
 
 CF_TURNSTILE_COOLDOWN = cfg('CF_TURNSTILE_COOLDOWN', 10)
@@ -163,20 +164,16 @@ def _build_proxies_from_config():
             proxies['https'] = PROXY_HTTPS
         return proxies
 
-    try:
-        from config import PROXY_POOL as _pool
-        if _pool and len(_pool) > 0:
-            first = _pool[0]
-            proxies = {}
-            if first.get('http'):
-                proxies['http'] = first['http']
-            if first.get('https'):
-                proxies['https'] = first['https']
-            if proxies:
-                logger.info(f"Using first proxy from pool: {first.get('name', 'unnamed')}")
-                return proxies
-    except ImportError:
-        pass
+    if PROXY_POOL and len(PROXY_POOL) > 0:
+        first = PROXY_POOL[0]
+        proxies = {}
+        if first.get('http'):
+            proxies['http'] = first['http']
+        if first.get('https'):
+            proxies['https'] = first['https']
+        if proxies:
+            logger.info(f"Using first proxy from pool: {first.get('name', 'unnamed')}")
+            return proxies
 
     return None
 
