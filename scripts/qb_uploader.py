@@ -13,52 +13,36 @@ os.chdir(project_root)
 sys.path.insert(0, project_root)
 
 # Import unified configuration
-try:
-    from config import (
-        QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD,
-        TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC, TORRENT_SAVE_PATH, AUTO_START, SKIP_CHECKING,
-        REQUEST_TIMEOUT, DELAY_BETWEEN_ADDITIONS,
-        UPLOADER_LOG_FILE, DAILY_REPORT_DIR, AD_HOC_DIR, LOG_LEVEL,
-        PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES,
-        GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH
-    )
-except ImportError:
-    # Fallback values if config.py doesn't exist
-    QB_HOST = 'your_qbittorrent_ip'
-    QB_PORT = 'your_qbittorrent_port'
-    QB_USERNAME = 'your_qbittorrent_username'
-    QB_PASSWORD = 'your_qbittorrent_password'
-    
-    TORRENT_CATEGORY = 'JavDB'
-    TORRENT_CATEGORY_ADHOC = 'Ad Hoc'
-    TORRENT_SAVE_PATH = ''
-    AUTO_START = True
-    SKIP_CHECKING = False
-    
-    REQUEST_TIMEOUT = 30
-    DELAY_BETWEEN_ADDITIONS = 1
-    
-    UPLOADER_LOG_FILE = 'logs/qb_uploader.log'
-    REPORTS_DIR = 'reports'
-    DAILY_REPORT_DIR = 'reports/DailyReport'
-    AD_HOC_DIR = 'reports/AdHoc'
-    LOG_LEVEL = 'INFO'
-    PROXY_HTTP = None
-    PROXY_HTTPS = None
-    PROXY_MODULES = ['all']
-    GIT_USERNAME = 'github-actions'
-    GIT_PASSWORD = ''
-    GIT_REPO_URL = ''
-    GIT_BRANCH = 'main'
+from utils.config_helper import cfg
 
-# Import proxy pool configuration (with fallback)
-try:
-    from config import PROXY_MODE, PROXY_POOL, PROXY_POOL_COOLDOWN_SECONDS, PROXY_POOL_MAX_FAILURES
-except ImportError:
-    PROXY_MODE = 'single'
-    PROXY_POOL = []
-    PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 days (691200 seconds)
-    PROXY_POOL_MAX_FAILURES = 3
+QB_HOST = cfg('QB_HOST', 'your_qbittorrent_ip')
+QB_PORT = cfg('QB_PORT', 'your_qbittorrent_port')
+QB_USERNAME = cfg('QB_USERNAME', 'your_qbittorrent_username')
+QB_PASSWORD = cfg('QB_PASSWORD', 'your_qbittorrent_password')
+TORRENT_CATEGORY = cfg('TORRENT_CATEGORY', 'JavDB')
+TORRENT_CATEGORY_ADHOC = cfg('TORRENT_CATEGORY_ADHOC', 'Ad Hoc')
+TORRENT_SAVE_PATH = cfg('TORRENT_SAVE_PATH', '')
+AUTO_START = cfg('AUTO_START', True)
+SKIP_CHECKING = cfg('SKIP_CHECKING', False)
+REQUEST_TIMEOUT = cfg('REQUEST_TIMEOUT', 30)
+DELAY_BETWEEN_ADDITIONS = cfg('DELAY_BETWEEN_ADDITIONS', 1)
+UPLOADER_LOG_FILE = cfg('UPLOADER_LOG_FILE', 'logs/qb_uploader.log')
+DAILY_REPORT_DIR = cfg('DAILY_REPORT_DIR', 'reports/DailyReport')
+AD_HOC_DIR = cfg('AD_HOC_DIR', 'reports/AdHoc')
+LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
+PROXY_HTTP = cfg('PROXY_HTTP', None)
+PROXY_HTTPS = cfg('PROXY_HTTPS', None)
+PROXY_MODULES = cfg('PROXY_MODULES', ['all'])
+GIT_USERNAME = cfg('GIT_USERNAME', 'github-actions')
+GIT_PASSWORD = cfg('GIT_PASSWORD', '')
+GIT_REPO_URL = cfg('GIT_REPO_URL', '')
+GIT_BRANCH = cfg('GIT_BRANCH', 'main')
+
+# Proxy pool
+PROXY_MODE = cfg('PROXY_MODE', 'single')
+PROXY_POOL = cfg('PROXY_POOL', [])
+PROXY_POOL_COOLDOWN_SECONDS = cfg('PROXY_POOL_COOLDOWN_SECONDS', 691200)  # 8 days
+PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
 
 # Import history manager functions
 try:

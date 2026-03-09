@@ -25,20 +25,15 @@ from utils.magnet_extractor import extract_magnets
 from utils.logging_config import setup_logging, get_logger
 
 # Import configuration
-try:
-    from config import (
-        BASE_URL, PARSED_MOVIES_CSV, SPIDER_LOG_FILE, LOG_LEVEL,
-        MOVIE_SLEEP_MIN, MOVIE_SLEEP_MAX, JAVDB_SESSION_COOKIE
-    )
-except ImportError:
-    # Fallback values if config.py doesn't exist
-    BASE_URL = 'https://javdb.com'
-    PARSED_MOVIES_CSV = 'parsed_movies_history.csv'
-    SPIDER_LOG_FILE = 'logs/spider.log'
-    LOG_LEVEL = 'INFO'
-    MOVIE_SLEEP_MIN = 5
-    MOVIE_SLEEP_MAX = 15
-    JAVDB_SESSION_COOKIE = None
+from utils.config_helper import cfg
+
+BASE_URL = cfg('BASE_URL', 'https://javdb.com')
+PARSED_MOVIES_CSV = cfg('PARSED_MOVIES_CSV', 'parsed_movies_history.csv')
+SPIDER_LOG_FILE = cfg('SPIDER_LOG_FILE', 'logs/spider.log')
+LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
+MOVIE_SLEEP_MIN = cfg('MOVIE_SLEEP_MIN', 5)
+MOVIE_SLEEP_MAX = cfg('MOVIE_SLEEP_MAX', 15)
+JAVDB_SESSION_COOKIE = cfg('JAVDB_SESSION_COOKIE', None)
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
