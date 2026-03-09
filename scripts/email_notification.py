@@ -27,48 +27,33 @@ os.chdir(project_root)
 sys.path.insert(0, project_root)
 
 # Import unified configuration
-try:
-    from config import (
-        GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH,
-        SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO,
-        PIPELINE_LOG_FILE, SPIDER_LOG_FILE, UPLOADER_LOG_FILE,
-        DAILY_REPORT_DIR, AD_HOC_DIR, LOG_LEVEL,
-        PIKPAK_LOG_FILE
-    )
-except ImportError:
-    # Fallback values if config.py doesn't exist
-    GIT_USERNAME = 'your_github_username'
-    GIT_PASSWORD = 'your_github_password_or_token'
-    GIT_REPO_URL = 'https://github.com/your_username/your_repo_name.git'
-    GIT_BRANCH = 'main'
-    
-    SMTP_SERVER = 'smtp.gmail.com'
-    SMTP_PORT = 587
-    SMTP_USER = 'your_email@gmail.com'
-    SMTP_PASSWORD = 'your_email_password'
-    EMAIL_FROM = 'your_email@gmail.com'
-    EMAIL_TO = 'your_email@gmail.com'
-    
-    PIPELINE_LOG_FILE = 'logs/pipeline.log'
-    SPIDER_LOG_FILE = 'logs/spider.log'
-    UPLOADER_LOG_FILE = 'logs/qb_uploader.log'
-    DAILY_REPORT_DIR = 'reports/DailyReport'
-    AD_HOC_DIR = 'reports/AdHoc'
-    LOG_LEVEL = 'INFO'
-    PIKPAK_LOG_FILE = 'logs/pikpak_bridge.log'
+from utils.config_helper import cfg
 
-try:
-    from config import REPORTS_DIR as _EMAIL_REPORTS_DIR, DEDUP_CSV, DEDUP_LOG_FILE
-except ImportError:
-    _EMAIL_REPORTS_DIR = 'reports'
-    DEDUP_CSV = 'dedup.csv'
-    DEDUP_LOG_FILE = 'logs/rclone_dedup.log'
+GIT_USERNAME = cfg('GIT_USERNAME', 'your_github_username')
+GIT_PASSWORD = cfg('GIT_PASSWORD', 'your_github_password_or_token')
+GIT_REPO_URL = cfg('GIT_REPO_URL', 'https://github.com/your_username/your_repo_name.git')
+GIT_BRANCH = cfg('GIT_BRANCH', 'main')
 
-# Import EMAIL_NOTIFICATION_LOG_FILE with fallback
-try:
-    from config import EMAIL_NOTIFICATION_LOG_FILE
-except ImportError:
-    EMAIL_NOTIFICATION_LOG_FILE = 'logs/email_notification.log'
+SMTP_SERVER = cfg('SMTP_SERVER', 'smtp.gmail.com')
+SMTP_PORT = cfg('SMTP_PORT', 587)
+SMTP_USER = cfg('SMTP_USER', 'your_email@gmail.com')
+SMTP_PASSWORD = cfg('SMTP_PASSWORD', 'your_email_password')
+EMAIL_FROM = cfg('EMAIL_FROM', 'your_email@gmail.com')
+EMAIL_TO = cfg('EMAIL_TO', 'your_email@gmail.com')
+
+PIPELINE_LOG_FILE = cfg('PIPELINE_LOG_FILE', 'logs/pipeline.log')
+SPIDER_LOG_FILE = cfg('SPIDER_LOG_FILE', 'logs/spider.log')
+UPLOADER_LOG_FILE = cfg('UPLOADER_LOG_FILE', 'logs/qb_uploader.log')
+DAILY_REPORT_DIR = cfg('DAILY_REPORT_DIR', 'reports/DailyReport')
+AD_HOC_DIR = cfg('AD_HOC_DIR', 'reports/AdHoc')
+LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
+PIKPAK_LOG_FILE = cfg('PIKPAK_LOG_FILE', 'logs/pikpak_bridge.log')
+
+_EMAIL_REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
+DEDUP_CSV = cfg('DEDUP_CSV', 'dedup.csv')
+DEDUP_LOG_FILE = cfg('DEDUP_LOG_FILE', 'logs/rclone_dedup.log')
+
+EMAIL_NOTIFICATION_LOG_FILE = cfg('EMAIL_NOTIFICATION_LOG_FILE', 'logs/email_notification.log')
 
 # --- LOGGING SETUP ---
 from utils.logging_config import setup_logging, get_logger
