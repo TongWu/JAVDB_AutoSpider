@@ -57,6 +57,13 @@ except ImportError:
     LOG_LEVEL = 'INFO'
     PIKPAK_LOG_FILE = 'logs/pikpak_bridge.log'
 
+try:
+    from config import REPORTS_DIR as _EMAIL_REPORTS_DIR, DEDUP_CSV, DEDUP_LOG_FILE
+except ImportError:
+    _EMAIL_REPORTS_DIR = 'reports'
+    DEDUP_CSV = 'dedup.csv'
+    DEDUP_LOG_FILE = 'logs/rclone_dedup.log'
+
 # Import EMAIL_NOTIFICATION_LOG_FILE with fallback
 try:
     from config import EMAIL_NOTIFICATION_LOG_FILE
@@ -835,9 +842,51 @@ def extract_proxy_ban_summary(html_files):
     return None
 
 
+def extract_dedup_statistics(dedup_csv_path):
+    """Extract dedup statistics from dedup.csv for the email report.
+
+    Returns a dict with keys:
+        detected, deleted, failed, cumulative, deleted_items (list of summary strings)
+    Returns None if dedup.csv doesn't exist.
+    """
+    import csv as _csv
+    if not os.path.exists(dedup_csv_path):
+        return None
+
+    try:
+        with open(dedup_csv_path, 'r', encoding='utf-8') as f:
+            rows = list(_csv.DictReader(f))
+    except Exception as e:
+        logger.warning(f"Failed to read dedup CSV: {e}")
+        return None
+
+    if not rows:
+        return None
+
+    now_date = datetime.now().strftime('%Y-%m-%d')
+    detected_today = sum(1 for r in rows if r.get('detect_datetime', '').startswith(now_date))
+    deleted = sum(1 for r in rows if r.get('is_deleted', 'False') == 'True')
+    deleted_today_items = []
+    for r in rows:
+        if r.get('is_deleted', 'False') == 'True' and r.get('delete_datetime', '').startswith(now_date):
+            deleted_today_items.append(
+                f"  • {r.get('video_code', '?')} [{r.get('existing_sensor', '?')}-{r.get('existing_subtitle', '?')}] "
+                f"-> {r.get('deletion_reason', '?')}"
+            )
+
+    return {
+        'detected': detected_today,
+        'deleted': len(deleted_today_items),
+        'failed': detected_today - len(deleted_today_items) if detected_today > len(deleted_today_items) else 0,
+        'cumulative': len(rows),
+        'deleted_items': deleted_today_items,
+    }
+
+
 def format_email_report(spider_stats, uploader_stats, pikpak_stats, ban_summary,
                         show_spider=True, show_uploader=True, show_pikpak=True,
-                        mode='daily', adhoc_info=None, proxy_ban_html_summary=None):
+                        mode='daily', adhoc_info=None, proxy_ban_html_summary=None,
+                        dedup_stats=None):
     """
     Format a mobile-friendly email report.
     Only includes sections for components that ran successfully.
@@ -940,6 +989,24 @@ Cleanup (>{pikpak_stats['threshold_days']} days)
   Removed from QB: {pikpak_stats['removed_from_qb']}
   Failed: {pikpak_stats['failed']}""")
     
+    # Dedup section
+    if dedup_stats:
+        deleted_list = "\n".join(dedup_stats['deleted_items'][:10]) if dedup_stats['deleted_items'] else "  (none this run)"
+        if len(dedup_stats['deleted_items']) > 10:
+            deleted_list += f"\n  ... and {len(dedup_stats['deleted_items']) - 10} more"
+        sections.append(f"""
+───────────────────────────────
+🗑️ RCLONE DEDUP SUMMARY
+───────────────────────────────
+
+Detected for Dedup: {dedup_stats['detected']}
+Successfully Deleted: {dedup_stats['deleted']}
+Failed: {dedup_stats['failed']}
+Cumulative Records: {dedup_stats['cumulative']}
+
+Deleted This Run:
+{deleted_list}""")
+
     # Proxy ban HTML files section (only show if there are captured files)
     if proxy_ban_html_summary:
         sections.append(f"""
@@ -1137,6 +1204,12 @@ def main():
     uploader_stats = extract_uploader_statistics(UPLOADER_LOG_FILE) if uploader_log_exists else None
     pikpak_stats = extract_pikpak_statistics(PIKPAK_LOG_FILE) if pikpak_log_exists else None
     ban_summary = get_proxy_ban_summary()
+
+    # Extract dedup statistics
+    dedup_csv_path = os.path.join(_EMAIL_REPORTS_DIR, DEDUP_CSV)
+    dedup_stats = extract_dedup_statistics(dedup_csv_path)
+    if dedup_stats:
+        logger.info(f"Dedup stats: detected={dedup_stats['detected']}, deleted={dedup_stats['deleted']}, cumulative={dedup_stats['cumulative']}")
     
     # Determine pipeline mode and CSV path
     mode = args.mode
@@ -1169,7 +1242,7 @@ def main():
     
     # Convert log files to txt for attachment
     txt_attachments = []
-    log_files = [SPIDER_LOG_FILE, UPLOADER_LOG_FILE, PIKPAK_LOG_FILE, PIPELINE_LOG_FILE, EMAIL_NOTIFICATION_LOG_FILE]
+    log_files = [SPIDER_LOG_FILE, UPLOADER_LOG_FILE, PIKPAK_LOG_FILE, PIPELINE_LOG_FILE, EMAIL_NOTIFICATION_LOG_FILE, DEDUP_LOG_FILE]
     
     for log_file in log_files:
         txt_path = convert_log_to_txt(log_file)
@@ -1185,6 +1258,10 @@ def main():
     if os.path.exists(csv_path):
         attachments.insert(0, csv_path)
     
+    # Add dedup.csv if exists
+    if os.path.exists(dedup_csv_path):
+        attachments.append(dedup_csv_path)
+
     # Add proxy ban HTML files to attachments
     for html_file in proxy_ban_html_files:
         if os.path.exists(html_file):
@@ -1229,7 +1306,8 @@ def main():
             show_pikpak=pikpak_log_exists,
             mode=mode,
             adhoc_info=adhoc_info,
-            proxy_ban_html_summary=proxy_ban_summary
+            proxy_ban_html_summary=proxy_ban_summary,
+            dedup_stats=dedup_stats,
         )
         subject = f'✓ SUCCESS - JavDB {mode_display} Report {today_str}{adhoc_subject_suffix}'
     else:
@@ -1241,7 +1319,8 @@ def main():
             show_pikpak=pikpak_log_exists and not pikpak_critical,
             mode=mode,
             adhoc_info=adhoc_info,
-            proxy_ban_html_summary=proxy_ban_summary
+            proxy_ban_html_summary=proxy_ban_summary,
+            dedup_stats=dedup_stats,
         )
         
         # Add mode info to failure report header

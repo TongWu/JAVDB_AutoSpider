@@ -14,6 +14,11 @@ on:
         options:
           - 'ubuntu-latest'
           - 'self-hosted'
+      enable_dedup:
+        description: 'Enable rclone dedup (detect + execute)'
+        required: false
+        default: false
+        type: boolean
   schedule:
     # Run daily at 14:00 UTC (22:00 Beijing Time)
     - cron: '0 14 * * *'
@@ -143,6 +148,11 @@ jobs:
           VAR_PIKPAK_EMAIL: ${{ secrets.PIKPAK_EMAIL }}
           VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE || 'logs/pikpak_bridge.log' }}
           VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
+          # Rclone / Dedup Configuration
+          VAR_RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
+          VAR_RCLONE_DRIVE_NAME: ${{ vars.RCLONE_DRIVE_NAME }}
+          VAR_RCLONE_ROOT_FOLDER: ${{ vars.RCLONE_ROOT_FOLDER }}
+          VAR_ENABLE_DEDUP: ${{ inputs.enable_dedup }}
         run: python3 utils/config_generator.py --github-actions
 
       - name: Pull latest changes from remote
@@ -337,9 +347,14 @@ jobs:
         id: spider
         run: |
           set -o pipefail
+          SPIDER_CMD="python3 scripts/spider --use-proxy"
+          if [ "${{ inputs.enable_dedup }}" == "true" ]; then
+            SPIDER_CMD="$SPIDER_CMD --enable-dedup"
+            echo "🔍 Dedup detection enabled"
+          fi
           # Capture output AND exit code so we can always extract the CSV filename
           # (even when spider exits non-zero, e.g. proxy ban sys.exit(2))
-          SPIDER_OUTPUT=$(python3 scripts/spider --use-proxy | tee /dev/stderr) && SPIDER_EXIT=0 || SPIDER_EXIT=$?
+          SPIDER_OUTPUT=$(eval $SPIDER_CMD | tee /dev/stderr) && SPIDER_EXIT=0 || SPIDER_EXIT=$?
           
           # Always extract CSV filename before potentially re-raising the error
           CSV_FILENAME=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_OUTPUT_CSV=" | cut -d'=' -f2 | tail -1 || true)
@@ -381,6 +396,16 @@ jobs:
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
           python3 scripts/pikpak_bridge.py --days 3
+
+      - name: Step 4 - Run Rclone Dedup Executor
+        id: dedup
+        if: ${{ inputs.enable_dedup == true }}
+        run: |
+          set -e
+          set -o pipefail
+          curl -s https://rclone.org/install.sh | sudo bash
+          python3 scripts/rclone_dedup_executor.py
+        continue-on-error: true
 
       - name: Encrypt and upload logs artifact
         if: always()
@@ -455,7 +480,7 @@ jobs:
           fi
           
           # Add history files if they exist
-          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/pikpak_bridge_history.csv" "$REPORTS_DIR/proxy_bans.csv"; do
+          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/pikpak_bridge_history.csv" "$REPORTS_DIR/proxy_bans.csv" "$REPORTS_DIR/rclone_inventory.csv" "$REPORTS_DIR/dedup.csv"; do
             if [ -f "$HIST_FILE" ]; then
               FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $HIST_FILE"
               echo "Including history: $HIST_FILE"

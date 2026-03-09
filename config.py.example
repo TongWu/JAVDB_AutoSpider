@@ -280,6 +280,36 @@ PIKPAK_LOG_FILE = "logs/pikpak_bridge.log"
 PIKPAK_REQUEST_DELAY = 3
 
 # =============================================================================
+# Rclone Configuration (for Google Drive inventory and dedup)
+# =============================================================================
+
+# Base64-encoded rclone.conf content
+# Generate with: base64 -w0 ~/.config/rclone/rclone.conf
+RCLONE_CONFIG_BASE64 = ''
+
+# Remote name as configured in rclone.conf (e.g., 'gdrive')
+RCLONE_DRIVE_NAME = 'gdrive'
+
+# Root folder path on the remote drive
+RCLONE_ROOT_FOLDER = '/剧集/不可以色色/JAV-Sync'
+
+# =============================================================================
+# Dedup Configuration
+# =============================================================================
+
+# Master toggle for dedup detection in Spider (default OFF)
+ENABLE_DEDUP = False
+
+# Rclone inventory CSV filename (stored in REPORTS_DIR)
+RCLONE_INVENTORY_CSV = 'rclone_inventory.csv'
+
+# Dedup records CSV filename (stored in REPORTS_DIR, persistent across runs)
+DEDUP_CSV = 'dedup.csv'
+
+# Log file for rclone dedup executor
+DEDUP_LOG_FILE = 'logs/rclone_dedup.log'
+
+# =============================================================================
 # qBittorrent File Filter Configuration
 # =============================================================================
 
