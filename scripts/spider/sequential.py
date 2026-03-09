@@ -20,6 +20,11 @@ from scripts.spider.csv_builder import (
     create_csv_row_with_history_filter, check_torrent_status, collect_new_magnet_links,
 )
 from scripts.spider.config_loader import BASE_URL, FALLBACK_COOLDOWN
+from scripts.spider.dedup_checker import (
+    should_skip_from_rclone,
+    check_dedup_upgrade,
+    append_dedup_record,
+)
 
 logger = get_logger(__name__)
 
@@ -38,6 +43,9 @@ def process_phase_entries_sequential(
     session,
     use_proxy: bool,
     use_cf_bypass: bool,
+    rclone_inventory: dict = None,
+    enable_dedup: bool = False,
+    dedup_csv_path: str = '',
 ) -> dict:
     """Process detail entries sequentially (single-threaded mode).
 
@@ -67,6 +75,14 @@ def process_phase_entries_sequential(
             logger.info(
                 f"[{i}/{total_entries}] [Page {page_num}] "
                 f"Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history"
+            )
+            skipped_history += 1
+            continue
+
+        if rclone_inventory and should_skip_from_rclone(entry.get('video_code', ''), rclone_inventory, enable_dedup):
+            logger.info(
+                f"[{i}/{total_entries}] [Page {page_num}] "
+                f"Skipping {entry['video_code']} - already exists in rclone inventory with 中字"
             )
             skipped_history += 1
             continue
@@ -113,6 +129,23 @@ def process_phase_entries_sequential(
             skipped_history += 1
             pending_movie_sleep = True
             continue
+
+        # Dedup upgrade detection against rclone inventory
+        if enable_dedup and rclone_inventory and entry.get('video_code'):
+            vc = entry['video_code'].upper()
+            rclone_entries = rclone_inventory.get(vc, [])
+            if rclone_entries:
+                torrent_types = {
+                    'subtitle': any(m.get('type') == 'subtitle' for m in magnet_links),
+                    'hacked_subtitle': any(m.get('type') == 'hacked_subtitle' for m in magnet_links),
+                    'hacked_no_subtitle': any(m.get('type') == 'hacked_no_subtitle' for m in magnet_links),
+                    'no_subtitle': any(m.get('type') == 'no_subtitle' for m in magnet_links),
+                }
+                dedup_records = check_dedup_upgrade(vc, torrent_types, rclone_entries)
+                for rec in dedup_records:
+                    if not dry_run and dedup_csv_path:
+                        append_dedup_record(dedup_csv_path, rec)
+                    logger.info(f"[{entry_index}] DEDUP: {rec.video_code} – {rec.deletion_reason}")
 
         row = create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet_links, history_data)
         row['video_code'] = entry['video_code']

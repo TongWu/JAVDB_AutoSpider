@@ -22,6 +22,13 @@ from scripts.spider.config_loader import (
     PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS,
     JAVDB_SESSION_COOKIE,
     GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH,
+    ENABLE_DEDUP, RCLONE_INVENTORY_CSV, DEDUP_CSV,
+)
+from scripts.spider.dedup_checker import (
+    load_rclone_inventory,
+    should_skip_from_rclone,
+    check_dedup_upgrade,
+    append_dedup_record,
 )
 from scripts.spider.cli import parse_arguments, OUTPUT_CSV
 from scripts.spider.sleep_manager import movie_sleep_mgr
@@ -50,6 +57,7 @@ def main():
     max_movies_phase1 = args.max_movies_phase1
     max_movies_phase2 = args.max_movies_phase2
     sequential = args.sequential
+    enable_dedup = args.enable_dedup or ENABLE_DEDUP
 
     ban_log_file = os.path.join(REPORTS_DIR, 'proxy_bans.csv')
     state.setup_proxy_pool(ban_log_file, use_proxy)
@@ -156,6 +164,21 @@ def main():
                 f.write('href,phase,video_code,parsed_date,torrent_type\n')
             logger.info(f"Created new history file for ad hoc mode: {history_file}")
 
+    # Load rclone inventory as additional skip data source
+    rclone_inventory_path = os.path.join(REPORTS_DIR, RCLONE_INVENTORY_CSV)
+    dedup_csv_path = os.path.join(REPORTS_DIR, DEDUP_CSV)
+    rclone_inventory = {}
+    if os.path.exists(rclone_inventory_path):
+        rclone_inventory = load_rclone_inventory(rclone_inventory_path)
+        logger.info(f"Loaded rclone inventory: {len(rclone_inventory)} unique video codes")
+    else:
+        logger.info(f"Rclone inventory not found ({rclone_inventory_path}) – rclone skip/dedup disabled")
+
+    if enable_dedup:
+        logger.info("DEDUP MODE: Enabled – will detect upgrade opportunities against rclone inventory")
+    else:
+        logger.info("DEDUP MODE: Disabled")
+
     session = requests.Session()
     logger.info("Initialized requests session")
 
@@ -227,6 +250,9 @@ def main():
                 use_cookie=custom_url is not None,
                 is_adhoc_mode=custom_url is not None,
                 ban_log_file=ban_log_file,
+                rclone_inventory=rclone_inventory,
+                enable_dedup=enable_dedup,
+                dedup_csv_path=dedup_csv_path,
             )
         else:
             p1_result = process_phase_entries_sequential(
@@ -239,6 +265,9 @@ def main():
                 is_adhoc_mode=custom_url is not None,
                 session=session, use_proxy=use_proxy,
                 use_cf_bypass=use_cf_bypass,
+                rclone_inventory=rclone_inventory,
+                enable_dedup=enable_dedup,
+                dedup_csv_path=dedup_csv_path,
             )
             use_proxy = p1_result['use_proxy']
             use_cf_bypass = p1_result['use_cf_bypass']
@@ -283,6 +312,9 @@ def main():
                 use_cookie=custom_url is not None,
                 is_adhoc_mode=custom_url is not None,
                 ban_log_file=ban_log_file,
+                rclone_inventory=rclone_inventory,
+                enable_dedup=enable_dedup,
+                dedup_csv_path=dedup_csv_path,
             )
         else:
             p2_result = process_phase_entries_sequential(
@@ -295,6 +327,9 @@ def main():
                 is_adhoc_mode=custom_url is not None,
                 session=session, use_proxy=use_proxy,
                 use_cf_bypass=use_cf_bypass,
+                rclone_inventory=rclone_inventory,
+                enable_dedup=enable_dedup,
+                dedup_csv_path=dedup_csv_path,
             )
             use_proxy = p2_result['use_proxy']
             use_cf_bypass = p2_result['use_cf_bypass']

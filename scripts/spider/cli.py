@@ -44,5 +44,7 @@ def parse_arguments():
                         help='Limit the number of movies to process in phase 2 (for testing purposes)')
     parser.add_argument('--sequential', action='store_true',
                         help='Force sequential detail processing even in proxy pool mode')
+    parser.add_argument('--enable-dedup', action='store_true',
+                        help='Enable rclone dedup detection (compare against rclone_inventory.csv)')
 
     return parser.parse_args()
