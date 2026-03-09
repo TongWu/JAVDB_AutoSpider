@@ -1,0 +1,191 @@
+name: RClone Inventory Scan
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      root_path:
+        description: 'Rclone root path (format: remote:/path)'
+        required: false
+        default: 'gdrive:/剧集/不可以色色/JAV-Sync'
+        type: string
+      years:
+        description: 'Comma-separated years to scan (empty = all)'
+        required: false
+        default: ''
+        type: string
+      workers:
+        description: 'Number of parallel workers'
+        required: false
+        default: '4'
+        type: string
+      log_level:
+        description: 'Logging level'
+        required: false
+        default: 'INFO'
+        type: choice
+        options:
+          - 'DEBUG'
+          - 'INFO'
+          - 'WARNING'
+          - 'ERROR'
+      runner:
+        description: 'Runner type for the job'
+        required: false
+        default: 'ubuntu-latest'
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'self-hosted'
+
+jobs:
+  # =============================================================================
+  # Job: RClone Inventory Scan
+  # =============================================================================
+  inventory:
+    runs-on: ${{ inputs.runner }}
+    environment: Production
+    permissions:
+      contents: write
+    env:
+      TZ: Asia/Singapore
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
+          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
+
+      - name: Install Rust extension
+        uses: ./.github/actions/install-rust-wheel
+
+      - name: Install rclone
+        run: |
+          curl https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Configure rclone
+        env:
+          RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
+        run: |
+          if [ -z "$RCLONE_CONFIG_BASE64" ]; then
+            echo "❌ Error: RCLONE_CONFIG_BASE64 secret is not set"
+            exit 1
+          fi
+          mkdir -p ~/.config/rclone
+          echo "$RCLONE_CONFIG_BASE64" | base64 -d > ~/.config/rclone/rclone.conf
+          chmod 600 ~/.config/rclone/rclone.conf
+          echo "✓ rclone configured from Base64"
+          rclone listremotes
+
+      - name: Pull latest changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          CURRENT_BRANCH="${GITHUB_REF#refs/heads/}"
+
+          REPO_URL=$(git remote get-url origin)
+          if [[ "$REPO_URL" == https://* ]]; then
+            REPO_SSH=$(echo "$REPO_URL" | sed 's|https://github.com/|git@github.com:|')
+            git remote set-url origin "$REPO_SSH"
+          fi
+
+          git fetch origin "$CURRENT_BRANCH"
+          git pull --rebase origin "$CURRENT_BRANCH" || git pull --no-edit origin "$CURRENT_BRANCH" || true
+
+      - name: Run Inventory Scan
+        run: |
+          set -e
+          set -o pipefail
+
+          ARGS=""
+
+          if [ -n "${{ inputs.root_path }}" ]; then
+            ARGS="$ARGS --root-path '${{ inputs.root_path }}'"
+          fi
+
+          if [ -n "${{ inputs.years }}" ]; then
+            ARGS="$ARGS --years ${{ inputs.years }}"
+            echo "📆 Year filter: ${{ inputs.years }}"
+          fi
+
+          echo "Running: python3 scripts/rclone_inventory.py $ARGS --workers ${{ inputs.workers }} --log-level ${{ inputs.log_level }}"
+          eval python3 scripts/rclone_inventory.py $ARGS --workers ${{ inputs.workers }} --log-level ${{ inputs.log_level }}
+
+      - name: Commit and push inventory
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          CURRENT_BRANCH="${GITHUB_REF#refs/heads/}"
+
+          REPO_URL=$(git remote get-url origin)
+          if [[ "$REPO_URL" == https://* ]]; then
+            REPO_SSH=$(echo "$REPO_URL" | sed 's|https://github.com/|git@github.com:|')
+            git remote set-url origin "$REPO_SSH"
+          fi
+
+          git add reports/rclone_inventory.csv 2>/dev/null || true
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git commit -m "Auto-commit: rclone inventory scan $(date +'%Y-%m-%d %H:%M:%S SGT')"
+
+          MAX_RETRIES=3
+          RETRY_DELAY=3
+          for i in $(seq 1 $MAX_RETRIES); do
+            git fetch origin "$CURRENT_BRANCH"
+            git pull --rebase origin "$CURRENT_BRANCH" || true
+            if git push origin "$CURRENT_BRANCH"; then
+              echo "✓ Inventory committed and pushed"
+              exit 0
+            fi
+            sleep $RETRY_DELAY
+            RETRY_DELAY=$((RETRY_DELAY * 2))
+          done
+          echo "::warning::Failed to push after $MAX_RETRIES attempts."
+          exit 1
+
+      - name: Upload inventory artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rclone-inventory-${{ github.run_number }}
+          path: reports/rclone_inventory.csv
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Inventory Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Root Path**: ${{ inputs.root_path }}" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ inputs.years }}" ]; then
+            echo "- **Year Filter**: ${{ inputs.years }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "- **Workers**: ${{ inputs.workers }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f "reports/rclone_inventory.csv" ]; then
+            LINES=$(wc -l < "reports/rclone_inventory.csv")
+            echo "### Results" >> $GITHUB_STEP_SUMMARY
+            echo "Records: $((LINES - 1))" >> $GITHUB_STEP_SUMMARY
+          fi
