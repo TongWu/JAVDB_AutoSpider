@@ -26,39 +26,27 @@ os.chdir(project_root)
 sys.path.insert(0, project_root)
 
 # Import unified configuration
-try:
-    from config import (
-        QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD,
-        REQUEST_TIMEOUT, LOG_LEVEL,
-        PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES,
-    )
-except ImportError:
-    # Fallback values if config.py doesn't exist
-    QB_HOST = 'your_qbittorrent_ip'
-    QB_PORT = 'your_qbittorrent_port'
-    QB_USERNAME = 'your_qbittorrent_username'
-    QB_PASSWORD = 'your_qbittorrent_password'
-    REQUEST_TIMEOUT = 30
-    LOG_LEVEL = 'INFO'
-    PROXY_HTTP = None
-    PROXY_HTTPS = None
-    PROXY_MODULES = ['all']
+from utils.config_helper import cfg
 
-# Import proxy pool configuration (with fallback)
-try:
-    from config import PROXY_MODE, PROXY_POOL, PROXY_POOL_COOLDOWN_SECONDS, PROXY_POOL_MAX_FAILURES
-except ImportError:
-    PROXY_MODE = 'single'
-    PROXY_POOL = []
-    PROXY_POOL_COOLDOWN_SECONDS = 691200
-    PROXY_POOL_MAX_FAILURES = 3
+QB_HOST = cfg('QB_HOST', 'your_qbittorrent_ip')
+QB_PORT = cfg('QB_PORT', 'your_qbittorrent_port')
+QB_USERNAME = cfg('QB_USERNAME', 'your_qbittorrent_username')
+QB_PASSWORD = cfg('QB_PASSWORD', 'your_qbittorrent_password')
+REQUEST_TIMEOUT = cfg('REQUEST_TIMEOUT', 30)
+LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
+PROXY_HTTP = cfg('PROXY_HTTP', None)
+PROXY_HTTPS = cfg('PROXY_HTTPS', None)
+PROXY_MODULES = cfg('PROXY_MODULES', ['all'])
 
-# Import optional config for file filter
-try:
-    from config import QB_FILE_FILTER_MIN_SIZE_MB, QB_FILE_FILTER_LOG_FILE
-except ImportError:
-    QB_FILE_FILTER_MIN_SIZE_MB = 50  # Default 50MB threshold
-    QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
+# Proxy pool
+PROXY_MODE = cfg('PROXY_MODE', 'single')
+PROXY_POOL = cfg('PROXY_POOL', [])
+PROXY_POOL_COOLDOWN_SECONDS = cfg('PROXY_POOL_COOLDOWN_SECONDS', 691200)
+PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
+
+# File filter
+QB_FILE_FILTER_MIN_SIZE_MB = cfg('QB_FILE_FILTER_MIN_SIZE_MB', 50)
+QB_FILE_FILTER_LOG_FILE = cfg('QB_FILE_FILTER_LOG_FILE', 'logs/qb_file_filter.log')
 
 # Configure logging
 from utils.logging_config import setup_logging, get_logger

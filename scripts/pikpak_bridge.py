@@ -13,39 +13,35 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
-from config import QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD, PIKPAK_EMAIL, PIKPAK_PASSWORD, PIKPAK_LOG_FILE, REPORTS_DIR, TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC
+from utils.config_helper import cfg
 
-# Import GIT configuration with fallback
-try:
-    from config import GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH
-except ImportError:
-    GIT_USERNAME = 'github-actions'
-    GIT_PASSWORD = ''
-    GIT_REPO_URL = ''
-    GIT_BRANCH = 'main'
+QB_HOST = cfg('QB_HOST', 'your_qbittorrent_ip')
+QB_PORT = cfg('QB_PORT', 'your_qbittorrent_port')
+QB_USERNAME = cfg('QB_USERNAME', 'your_qbittorrent_username')
+QB_PASSWORD = cfg('QB_PASSWORD', 'your_qbittorrent_password')
+PIKPAK_EMAIL = cfg('PIKPAK_EMAIL', '')
+PIKPAK_PASSWORD = cfg('PIKPAK_PASSWORD', '')
+PIKPAK_LOG_FILE = cfg('PIKPAK_LOG_FILE', 'logs/pikpak_bridge.log')
+REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
+TORRENT_CATEGORY = cfg('TORRENT_CATEGORY', 'JavDB')
+TORRENT_CATEGORY_ADHOC = cfg('TORRENT_CATEGORY_ADHOC', 'Ad Hoc')
 
-# Import PikPak delay configuration with fallback
-try:
-    from config import PIKPAK_REQUEST_DELAY
-except ImportError:
-    PIKPAK_REQUEST_DELAY = 3  # Default 3 seconds if not configured
+GIT_USERNAME = cfg('GIT_USERNAME', 'github-actions')
+GIT_PASSWORD = cfg('GIT_PASSWORD', '')
+GIT_REPO_URL = cfg('GIT_REPO_URL', '')
+GIT_BRANCH = cfg('GIT_BRANCH', 'main')
 
-# Import proxy configuration with fallback
-try:
-    from config import PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES
-except ImportError:
-    PROXY_HTTP = None
-    PROXY_HTTPS = None
-    PROXY_MODULES = ['all']
+PIKPAK_REQUEST_DELAY = cfg('PIKPAK_REQUEST_DELAY', 3)
 
-# Import proxy pool configuration (with fallback)
-try:
-    from config import PROXY_MODE, PROXY_POOL, PROXY_POOL_COOLDOWN_SECONDS, PROXY_POOL_MAX_FAILURES
-except ImportError:
-    PROXY_MODE = 'single'
-    PROXY_POOL = []
-    PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 days (691200 seconds)
-    PROXY_POOL_MAX_FAILURES = 3
+PROXY_HTTP = cfg('PROXY_HTTP', None)
+PROXY_HTTPS = cfg('PROXY_HTTPS', None)
+PROXY_MODULES = cfg('PROXY_MODULES', ['all'])
+
+# Proxy pool
+PROXY_MODE = cfg('PROXY_MODE', 'single')
+PROXY_POOL = cfg('PROXY_POOL', [])
+PROXY_POOL_COOLDOWN_SECONDS = cfg('PROXY_POOL_COOLDOWN_SECONDS', 691200)  # 8 days
+PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
 
 from utils.logging_config import setup_logging, get_logger
 from utils.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials

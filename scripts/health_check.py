@@ -39,15 +39,20 @@ sys.path.insert(0, project_root)
 from utils.masking import mask_ip_address, mask_username, mask_server, mask_full
 
 # Import configuration
-try:
-    from config import (
-        QB_HOST, QB_PORT, QB_USERNAME, QB_PASSWORD,
-        SMTP_SERVER, SMTP_PORT,
-        PROXY_POOL, PROXY_MODE,
-        LOG_LEVEL
-    )
-except ImportError:
-    print("ERROR: config.py not found. Please run config generator first.")
+from utils.config_helper import cfg
+
+QB_HOST = cfg('QB_HOST', None)
+QB_PORT = cfg('QB_PORT', None)
+QB_USERNAME = cfg('QB_USERNAME', None)
+QB_PASSWORD = cfg('QB_PASSWORD', None)
+SMTP_SERVER = cfg('SMTP_SERVER', None)
+SMTP_PORT = cfg('SMTP_PORT', None)
+PROXY_POOL = cfg('PROXY_POOL', [])
+PROXY_MODE = cfg('PROXY_MODE', 'single')
+LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
+
+if not all([QB_HOST, QB_PORT]):
+    print("ERROR: config.py not found or missing required values. Please run config generator first.")
     sys.exit(1)
 
 # Setup basic logging

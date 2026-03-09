@@ -31,7 +31,14 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
+from utils.config_helper import cfg
 from utils.logging_config import setup_logging, get_logger
+
+RCLONE_DRIVE_NAME = cfg('RCLONE_DRIVE_NAME', None)
+RCLONE_ROOT_FOLDER = cfg('RCLONE_ROOT_FOLDER', None)
+RCLONE_CONFIG_BASE64 = cfg('RCLONE_CONFIG_BASE64', None)
+REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
+RCLONE_INVENTORY_CSV = cfg('RCLONE_INVENTORY_CSV', 'rclone_inventory.csv')
 from scripts.rclone_dedup import (
     SensorCategory,
     SubtitleCategory,
@@ -308,35 +315,23 @@ def main() -> int:
     if args.root_path:
         remote_name, root_folder = parse_root_path(args.root_path)
     else:
-        try:
-            from config import RCLONE_DRIVE_NAME, RCLONE_ROOT_FOLDER
-            remote_name = RCLONE_DRIVE_NAME
-            root_folder = RCLONE_ROOT_FOLDER.strip('/')
-        except ImportError:
-            logger.error("No --root-path provided and config.py not available")
+        if not RCLONE_DRIVE_NAME or not RCLONE_ROOT_FOLDER:
+            logger.error("No --root-path provided and RCLONE_DRIVE_NAME/RCLONE_ROOT_FOLDER not in config")
             return 1
+        remote_name = RCLONE_DRIVE_NAME
+        root_folder = RCLONE_ROOT_FOLDER.strip('/')
 
     # Setup rclone config from Base64 if available
-    try:
-        from config import RCLONE_CONFIG_BASE64
-        if RCLONE_CONFIG_BASE64:
-            if not setup_rclone_config_from_base64(RCLONE_CONFIG_BASE64):
-                return 1
-    except ImportError:
+    if RCLONE_CONFIG_BASE64:
+        if not setup_rclone_config_from_base64(RCLONE_CONFIG_BASE64):
+            return 1
+    else:
         logger.info("No RCLONE_CONFIG_BASE64 in config – assuming rclone is pre-configured")
 
     # Resolve output path
     if args.output:
         output_path = args.output
     else:
-        try:
-            from config import REPORTS_DIR
-        except ImportError:
-            REPORTS_DIR = 'reports'
-        try:
-            from config import RCLONE_INVENTORY_CSV
-        except ImportError:
-            RCLONE_INVENTORY_CSV = 'rclone_inventory.csv'
         os.makedirs(REPORTS_DIR, exist_ok=True)
         output_path = os.path.join(REPORTS_DIR, RCLONE_INVENTORY_CSV)
 
