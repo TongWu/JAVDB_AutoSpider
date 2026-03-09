@@ -109,23 +109,30 @@ jobs:
           git pull --rebase origin "$CURRENT_BRANCH" || git pull --no-edit origin "$CURRENT_BRANCH" || true
 
       - name: Run Inventory Scan
+        env:
+          INPUT_ROOT_PATH: ${{ inputs.root_path }}
+          INPUT_YEARS: ${{ inputs.years }}
+          INPUT_WORKERS: ${{ inputs.workers }}
+          INPUT_LOG_LEVEL: ${{ inputs.log_level }}
         run: |
           set -e
           set -o pipefail
 
-          ARGS=""
+          CMD=(python3 scripts/rclone_inventory.py)
 
-          if [ -n "${{ inputs.root_path }}" ]; then
-            ARGS="$ARGS --root-path '${{ inputs.root_path }}'"
+          if [ -n "$INPUT_ROOT_PATH" ]; then
+            CMD+=(--root-path "$INPUT_ROOT_PATH")
           fi
 
-          if [ -n "${{ inputs.years }}" ]; then
-            ARGS="$ARGS --years ${{ inputs.years }}"
-            echo "📆 Year filter: ${{ inputs.years }}"
+          if [ -n "$INPUT_YEARS" ]; then
+            CMD+=(--years "$INPUT_YEARS")
+            echo "📆 Year filter: $INPUT_YEARS"
           fi
 
-          echo "Running: python3 scripts/rclone_inventory.py $ARGS --workers ${{ inputs.workers }} --log-level ${{ inputs.log_level }}"
-          eval python3 scripts/rclone_inventory.py $ARGS --workers ${{ inputs.workers }} --log-level ${{ inputs.log_level }}
+          CMD+=(--workers "$INPUT_WORKERS" --log-level "$INPUT_LOG_LEVEL")
+
+          echo "Running: ${CMD[*]}"
+          "${CMD[@]}"
 
       - name: Commit and push inventory
         run: |
