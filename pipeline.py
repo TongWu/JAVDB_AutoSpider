@@ -32,6 +32,13 @@ except ImportError:
     DAILY_REPORT_DIR = 'reports/DailyReport'
     AD_HOC_DIR = 'reports/AdHoc'
 
+try:
+    from config import ENABLE_DEDUP, REPORTS_DIR as _REPORTS_DIR, DEDUP_CSV
+except ImportError:
+    ENABLE_DEDUP = False
+    _REPORTS_DIR = 'reports'
+    DEDUP_CSV = 'dedup.csv'
+
 # Import path helper for dated subdirectories
 from utils.path_helper import get_dated_report_path
 
@@ -113,6 +120,8 @@ def parse_arguments():
     parser.add_argument('--use-proxy', action='store_true', help='Enable proxy for all HTTP requests')
     # PikPak Bridge arguments
     parser.add_argument('--pikpak-individual', action='store_true', help='Use individual mode for PikPak Bridge')
+    # Dedup
+    parser.add_argument('--enable-dedup', action='store_true', help='Enable rclone dedup detection and execution')
     return parser.parse_args()
 
 
@@ -245,6 +254,9 @@ def main():
         spider_args.append('--ignore-release-date')
     if args.use_proxy:
         spider_args.append('--use-proxy')
+    enable_dedup = args.enable_dedup or ENABLE_DEDUP
+    if enable_dedup:
+        spider_args.append('--enable-dedup')
     # Build base arguments for uploader (csv filename will be added after spider runs)
     uploader_args = ['--from-pipeline']  # Always pass --from-pipeline
     if is_adhoc_mode:
@@ -305,6 +317,18 @@ def main():
         logger.info("Step 3: Running PikPak Bridge to clean up old torrents...")
         run_script('scripts/pikpak_bridge.py', pikpak_args)
         logger.info("✓ PikPak Bridge completed successfully")
+
+        # 3.5 Run Rclone Dedup Executor (if enabled)
+        dedup_csv_path = os.path.join(_REPORTS_DIR, DEDUP_CSV)
+        if enable_dedup and os.path.exists(dedup_csv_path):
+            logger.info("Step 3.5: Running Rclone Dedup Executor...")
+            try:
+                run_script('scripts/rclone_dedup_executor.py', [])
+                logger.info("✓ Rclone Dedup Executor completed successfully")
+            except Exception as dedup_err:
+                logger.warning(f"Rclone Dedup Executor failed (non-fatal): {dedup_err}")
+        elif enable_dedup:
+            logger.info("Dedup enabled but no dedup.csv found – skipping executor")
 
         # 4. Run Email Notification
         # Build email args after spider runs (csv_path is now known)
