@@ -251,6 +251,37 @@ class TestGetConfigMap:
         }
         assert expected_sections.issubset(sections)
 
+    def test_contains_rclone_section(self):
+        """Should contain RCLONE CONFIGURATION section with expected keys."""
+        config_map = get_config_map()
+        rclone_entries = [item for item in config_map if item[4] == 'RCLONE CONFIGURATION']
+        rclone_keys = {item[0] for item in rclone_entries}
+        assert 'RCLONE_CONFIG_BASE64' in rclone_keys
+        assert 'RCLONE_DRIVE_NAME' in rclone_keys
+        assert 'RCLONE_ROOT_FOLDER' in rclone_keys
+
+    def test_contains_dedup_section(self):
+        """Should contain DEDUP CONFIGURATION section with expected keys."""
+        config_map = get_config_map()
+        dedup_entries = [item for item in config_map if item[4] == 'DEDUP CONFIGURATION']
+        dedup_keys = {item[0] for item in dedup_entries}
+        assert 'ENABLE_DEDUP' in dedup_keys
+        assert 'RCLONE_INVENTORY_CSV' in dedup_keys
+        assert 'DEDUP_CSV' in dedup_keys
+        assert 'DEDUP_LOG_FILE' in dedup_keys
+
+    def test_enable_dedup_default_false(self):
+        """ENABLE_DEDUP should default to False."""
+        config_map = get_config_map()
+        entry = next(item for item in config_map if item[0] == 'ENABLE_DEDUP')
+        assert entry[3] is False
+
+    def test_rclone_drive_name_default(self):
+        """RCLONE_DRIVE_NAME should default to 'gdrive'."""
+        config_map = get_config_map()
+        entry = next(item for item in config_map if item[0] == 'RCLONE_DRIVE_NAME')
+        assert entry[3] == 'gdrive'
+
 
 class TestGenerateConfigContent:
     """Tests for generate_config_content function."""
