@@ -20,8 +20,8 @@ on:
         default: false
         type: boolean
   schedule:
-    # Run daily at 13:00 UTC (21:00 Beijing Time)
-    - cron: '0 13 * * *'
+    # Run daily at 15:00 UTC (23:00 Beijing Time)
+    - cron: '0 15 * * *'
 
 jobs:
   # =============================================================================
