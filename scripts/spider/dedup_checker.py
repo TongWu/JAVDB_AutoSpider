@@ -171,7 +171,7 @@ def check_dedup_upgrade(
 
         # Subtitle upgrade
         if has_subtitle and entry.subtitle_category == '无字':
-            reason = f"Subtitle upgrade (中字 found, replacing 无字)"
+            reason = "Subtitle upgrade (中字 found, replacing 无字)"
 
         # Sensor upgrade: only relevant within 无码 family
         if _is_wuma_category(entry.sensor_category):
