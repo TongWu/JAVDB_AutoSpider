@@ -27,6 +27,16 @@ SCHEMA_VERSION = 1
 _local = threading.local()
 
 
+def _is_valid_sqlite(path: str) -> bool:
+    """Quick check: file must start with the SQLite magic header."""
+    try:
+        with open(path, 'rb') as f:
+            header = f.read(16)
+        return header[:6] == b'SQLite'
+    except OSError:
+        return False
+
+
 def _get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
     """Return a thread-local connection, creating it if needed."""
     path = db_path or DB_PATH
@@ -34,6 +44,12 @@ def _get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
     conn_path = getattr(_local, 'conn_path', None)
     if conn is None or conn_path != path:
         os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+        if os.path.exists(path) and os.path.getsize(path) > 0 and not _is_valid_sqlite(path):
+            logger.warning(
+                f"Database file {path} exists but is not a valid SQLite file "
+                "(possibly a Git LFS pointer). Removing and recreating."
+            )
+            os.remove(path)
         conn = sqlite3.connect(path, timeout=30)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
