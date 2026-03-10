@@ -45,11 +45,10 @@ def _get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
     if conn is None or conn_path != path:
         os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
         if os.path.exists(path) and os.path.getsize(path) > 0 and not _is_valid_sqlite(path):
-            logger.warning(
-                f"Database file {path} exists but is not a valid SQLite file "
-                "(possibly a Git LFS pointer). Removing and recreating."
+            raise sqlite3.DatabaseError(
+                f"Database file {path} is not a valid SQLite file. "
+                "This usually means Git LFS did not pull the real file."
             )
-            os.remove(path)
         conn = sqlite3.connect(path, timeout=30)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
@@ -255,10 +254,24 @@ def init_db(db_path: Optional[str] = None):
     """Create all tables if they don't exist and set the schema version.
 
     In csv-only storage mode this is a no-op (no database file is created).
+    If the database file exists but is invalid (e.g. a Git LFS pointer),
+    the storage mode is downgraded to ``csv`` for the rest of the process.
     """
     from utils.config_helper import use_sqlite
     if not use_sqlite():
         return
+
+    path = db_path or DB_PATH
+    if os.path.exists(path) and os.path.getsize(path) > 0 and not _is_valid_sqlite(path):
+        logger.warning(
+            f"Database file {path} is not a valid SQLite database "
+            "(possibly a Git LFS pointer that was not pulled). "
+            "Falling back to CSV storage mode for this run."
+        )
+        from utils.config_helper import force_storage_mode
+        force_storage_mode('csv')
+        return
+
     with get_db(db_path) as conn:
         conn.executescript(_TABLES_SQL)
         row = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
