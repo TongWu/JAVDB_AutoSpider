@@ -88,40 +88,63 @@ class ProxyBanManager:
             self._cleanup_expired_bans()
     
     def _load_ban_records(self):
-        """Load ban records from CSV file"""
-        if not os.path.exists(self.ban_log_file):
-            logger.info(f"No existing ban log found at {self.ban_log_file}")
-            return
-        
+        """Load ban records from SQLite (with CSV fallback)."""
+        loaded = False
         try:
-            with open(self.ban_log_file, 'r', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    proxy_name = row['proxy_name']
-                    ban_time = datetime.strptime(row['ban_time'], '%Y-%m-%d %H:%M:%S')
-                    unban_time = datetime.strptime(row['unban_time'], '%Y-%m-%d %H:%M:%S')
-                    
-                    record = ProxyBanRecord(proxy_name, ban_time, unban_time)
-                    self.banned_proxies[proxy_name] = record
-            
-            logger.info(f"Loaded {len(self.banned_proxies)} ban records from {self.ban_log_file}")
+            from utils.db import init_db, db_load_proxy_bans
+            init_db()
+            rows = db_load_proxy_bans()
+            for row in rows:
+                proxy_name = row['proxy_name']
+                ban_time = datetime.strptime(row['ban_time'], '%Y-%m-%d %H:%M:%S')
+                unban_time = datetime.strptime(row['unban_time'], '%Y-%m-%d %H:%M:%S')
+                record = ProxyBanRecord(proxy_name, ban_time, unban_time)
+                self.banned_proxies[proxy_name] = record
+            if rows:
+                loaded = True
+                logger.info(f"Loaded {len(self.banned_proxies)} ban records from SQLite")
         except Exception as e:
-            logger.error(f"Error loading ban records: {e}")
-    
+            logger.debug(f"SQLite proxy bans load failed, trying CSV: {e}")
+
+        if not loaded and os.path.exists(self.ban_log_file):
+            try:
+                with open(self.ban_log_file, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        proxy_name = row['proxy_name']
+                        ban_time = datetime.strptime(row['ban_time'], '%Y-%m-%d %H:%M:%S')
+                        unban_time = datetime.strptime(row['unban_time'], '%Y-%m-%d %H:%M:%S')
+                        record = ProxyBanRecord(proxy_name, ban_time, unban_time)
+                        self.banned_proxies[proxy_name] = record
+                logger.info(f"Loaded {len(self.banned_proxies)} ban records from {self.ban_log_file}")
+            except Exception as e:
+                logger.error(f"Error loading ban records: {e}")
+
+        if not loaded and not self.banned_proxies:
+            logger.info(f"No existing ban records found")
+
     def _save_ban_records(self):
-        """Save ban records to CSV file (without IP information)"""
+        """Save ban records to SQLite and CSV."""
+        records = [r.to_dict() for r in self.banned_proxies.values()]
+
+        try:
+            from utils.db import init_db, db_save_proxy_bans
+            init_db()
+            db_save_proxy_bans(records)
+            logger.debug(f"Saved {len(records)} ban records to SQLite")
+        except Exception as e:
+            logger.warning(f"Failed to save ban records to SQLite: {e}")
+
         try:
             with open(self.ban_log_file, 'w', newline='', encoding='utf-8') as f:
                 fieldnames = ['proxy_name', 'ban_time', 'unban_time']
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
-                
-                for record in self.banned_proxies.values():
-                    writer.writerow(record.to_dict())
-            
-            logger.debug(f"Saved {len(self.banned_proxies)} ban records to {self.ban_log_file}")
+                for record_dict in records:
+                    writer.writerow(record_dict)
+            logger.debug(f"Saved {len(records)} ban records to {self.ban_log_file}")
         except Exception as e:
-            logger.error(f"Error saving ban records: {e}")
+            logger.error(f"Error saving ban records to CSV: {e}")
     
     def _cleanup_expired_bans(self):
         """Remove expired ban records (must be called with lock held)"""
