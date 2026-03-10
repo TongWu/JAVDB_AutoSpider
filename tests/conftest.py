@@ -21,6 +21,24 @@ import pytest
 import tempfile
 import shutil
 
+import utils.db as _db_mod
+
+
+@pytest.fixture(autouse=True)
+def _isolate_sqlite(tmp_path):
+    """Give every test a fresh, empty SQLite database.
+
+    This prevents SQLite state from leaking between tests and protects the
+    real ``reports/javdb_autospider.db`` from being modified by the test suite.
+    """
+    test_db = str(tmp_path / "test.db")
+    original = _db_mod.DB_PATH
+    _db_mod.DB_PATH = test_db
+    _db_mod.init_db(test_db)
+    yield test_db
+    _db_mod.close_db()
+    _db_mod.DB_PATH = original
+
 
 @pytest.fixture
 def temp_dir():
