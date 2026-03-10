@@ -3,6 +3,8 @@
 Handles incremental CSV writing with merge-on-write semantics: when
 ``append_mode=True``, existing rows keyed by ``video_code`` are merged
 with new data so that no information is lost.
+
+Also writes report rows to SQLite when a ``session_id`` is provided.
 """
 
 import csv
@@ -10,6 +12,19 @@ import os
 import logging
 
 logger = logging.getLogger(__name__)
+
+_active_session_id = None
+
+
+def set_active_session(session_id):
+    """Set the current session_id for SQLite report_rows writes."""
+    global _active_session_id
+    _active_session_id = session_id
+
+
+def get_active_session():
+    """Return the current active session_id (or None)."""
+    return _active_session_id
 
 try:
     from javdb_rust_core import merge_row_data as _rs_merge_row_data
@@ -139,3 +154,10 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
             for row in rows:
                 writer.writerow(row)
         logger.debug(f"[CSV] Created {csv_path} with {len(rows)} entries")
+
+    if _active_session_id is not None and rows:
+        try:
+            from utils.db import db_insert_report_rows
+            db_insert_report_rows(_active_session_id, rows)
+        except Exception as e:
+            logger.warning(f"[CSV] Failed to write rows to SQLite: {e}")
