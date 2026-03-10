@@ -19,6 +19,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
+from utils.config_helper import cfg
 from utils.logging_config import setup_logging, get_logger
 from scripts.rclone_inventory import setup_rclone_config_from_base64
 from scripts.spider.dedup_checker import (
@@ -26,6 +27,11 @@ from scripts.spider.dedup_checker import (
     load_dedup_csv,
     save_dedup_csv,
 )
+
+RCLONE_CONFIG_BASE64 = cfg('RCLONE_CONFIG_BASE64', None)
+REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
+DEDUP_CSV = cfg('DEDUP_CSV', 'dedup.csv')
+DEDUP_LOG_FILE = cfg('DEDUP_LOG_FILE', 'logs/rclone_dedup.log')
 
 setup_logging()
 logger = get_logger(__name__)
@@ -71,33 +77,19 @@ def main() -> int:
     setup_logging(log_level=args.log_level)
 
     # Setup rclone config from Base64
-    try:
-        from config import RCLONE_CONFIG_BASE64
-        if RCLONE_CONFIG_BASE64:
-            if not setup_rclone_config_from_base64(RCLONE_CONFIG_BASE64):
-                return 1
-    except ImportError:
+    if RCLONE_CONFIG_BASE64:
+        if not setup_rclone_config_from_base64(RCLONE_CONFIG_BASE64):
+            return 1
+    else:
         logger.info("No RCLONE_CONFIG_BASE64 in config – assuming rclone is pre-configured")
 
     # Resolve dedup CSV path
     if args.dedup_csv:
         dedup_csv = args.dedup_csv
     else:
-        try:
-            from config import REPORTS_DIR
-        except ImportError:
-            REPORTS_DIR = 'reports'
-        try:
-            from config import DEDUP_CSV
-        except ImportError:
-            DEDUP_CSV = 'dedup.csv'
         dedup_csv = os.path.join(REPORTS_DIR, DEDUP_CSV)
 
     # Setup dedup log file
-    try:
-        from config import DEDUP_LOG_FILE
-    except ImportError:
-        DEDUP_LOG_FILE = 'logs/rclone_dedup.log'
     os.makedirs(os.path.dirname(DEDUP_LOG_FILE) or '.', exist_ok=True)
     setup_logging(DEDUP_LOG_FILE, args.log_level)
 

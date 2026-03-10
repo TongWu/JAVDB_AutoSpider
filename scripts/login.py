@@ -45,47 +45,33 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 # Import configuration
-try:
-    from config import JAVDB_USERNAME, JAVDB_PASSWORD, BASE_URL
-except ImportError:
-    logger.error("Could not import config.py")
-    logger.error("Make sure config.py exists and contains JAVDB_USERNAME and JAVDB_PASSWORD")
+from utils.config_helper import cfg
+
+JAVDB_USERNAME = cfg('JAVDB_USERNAME', None)
+JAVDB_PASSWORD = cfg('JAVDB_PASSWORD', None)
+BASE_URL = cfg('BASE_URL', None)
+
+if not all([JAVDB_USERNAME, JAVDB_PASSWORD, BASE_URL]):
+    logger.error("Could not import config.py or missing required values")
+    logger.error("Make sure config.py exists and contains JAVDB_USERNAME, JAVDB_PASSWORD, and BASE_URL")
     sys.exit(1)
 
-# Try to import GPT API settings (optional)
-try:
-    from config import GPT_API_KEY, GPT_API_URL
-    GPT_API_AVAILABLE = bool(GPT_API_KEY and GPT_API_URL)
-except ImportError:
-    GPT_API_KEY = None
-    GPT_API_URL = None
-    GPT_API_AVAILABLE = False
+GPT_API_KEY = cfg('GPT_API_KEY', None)
+GPT_API_URL = cfg('GPT_API_URL', None)
+GPT_API_AVAILABLE = bool(GPT_API_KEY and GPT_API_URL)
 
-# Try to import proxy settings (optional)
-try:
-    from config import PROXY_HTTP, PROXY_HTTPS
-except ImportError:
-    PROXY_HTTP = None
-    PROXY_HTTPS = None
+PROXY_HTTP = cfg('PROXY_HTTP', None)
+PROXY_HTTPS = cfg('PROXY_HTTPS', None)
 
-# Try to import CF bypass and proxy pool settings (optional)
-try:
-    from config import CF_BYPASS_SERVICE_PORT, CF_BYPASS_ENABLED
-except ImportError:
-    CF_BYPASS_SERVICE_PORT = 8000
-    CF_BYPASS_ENABLED = True
+CF_BYPASS_SERVICE_PORT = cfg('CF_BYPASS_SERVICE_PORT', 8000)
+CF_BYPASS_ENABLED = cfg('CF_BYPASS_ENABLED', True)
 
-try:
-    from config import PROXY_MODE, PROXY_MODULES
-except ImportError:
-    PROXY_MODE = 'single'
-    PROXY_MODULES = ['all']
+PROXY_MODE = cfg('PROXY_MODE', 'single')
+PROXY_POOL = cfg('PROXY_POOL', [])
+PROXY_MODULES = cfg('PROXY_MODULES', ['all'])
 
-try:
-    from config import CF_TURNSTILE_COOLDOWN, FALLBACK_COOLDOWN
-except ImportError:
-    CF_TURNSTILE_COOLDOWN = 10
-    FALLBACK_COOLDOWN = 30
+CF_TURNSTILE_COOLDOWN = cfg('CF_TURNSTILE_COOLDOWN', 10)
+FALLBACK_COOLDOWN = cfg('FALLBACK_COOLDOWN', 30)
 
 # Import RequestHandler for Cloudflare bypass via curl_cffi TLS fingerprint
 from utils.request_handler import RequestHandler, RequestConfig
@@ -178,20 +164,16 @@ def _build_proxies_from_config():
             proxies['https'] = PROXY_HTTPS
         return proxies
 
-    try:
-        from config import PROXY_POOL as _pool
-        if _pool and len(_pool) > 0:
-            first = _pool[0]
-            proxies = {}
-            if first.get('http'):
-                proxies['http'] = first['http']
-            if first.get('https'):
-                proxies['https'] = first['https']
-            if proxies:
-                logger.info(f"Using first proxy from pool: {first.get('name', 'unnamed')}")
-                return proxies
-    except ImportError:
-        pass
+    if PROXY_POOL and len(PROXY_POOL) > 0:
+        first = PROXY_POOL[0]
+        proxies = {}
+        if first.get('http'):
+            proxies['http'] = first['http']
+        if first.get('https'):
+            proxies['https'] = first['https']
+        if proxies:
+            logger.info(f"Using first proxy from pool: {first.get('name', 'unnamed')}")
+            return proxies
 
     return None
 
