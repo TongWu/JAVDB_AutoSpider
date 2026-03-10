@@ -408,10 +408,10 @@ def process_detail_entries_parallel(
             rclone_entries = rclone_inventory.get(vc, [])
             if rclone_entries:
                 torrent_types = {
-                    'subtitle': any(m.get('type') == 'subtitle' for m in magnet_links),
-                    'hacked_subtitle': any(m.get('type') == 'hacked_subtitle' for m in magnet_links),
-                    'hacked_no_subtitle': any(m.get('type') == 'hacked_no_subtitle' for m in magnet_links),
-                    'no_subtitle': any(m.get('type') == 'no_subtitle' for m in magnet_links),
+                    'subtitle': bool(magnet_links.get('subtitle')),
+                    'hacked_subtitle': bool(magnet_links.get('hacked_subtitle')),
+                    'hacked_no_subtitle': bool(magnet_links.get('hacked_no_subtitle')),
+                    'no_subtitle': bool(magnet_links.get('no_subtitle')),
                 }
                 dedup_records = check_dedup_upgrade(vc, torrent_types, rclone_entries)
                 for rec in dedup_records:
