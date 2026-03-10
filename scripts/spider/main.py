@@ -23,7 +23,7 @@ from scripts.spider.config_loader import (
     PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS,
     JAVDB_SESSION_COOKIE,
     GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH,
-    ENABLE_DEDUP, RCLONE_INVENTORY_CSV, DEDUP_CSV,
+    RCLONE_INVENTORY_CSV, DEDUP_CSV,
 )
 from scripts.spider.dedup_checker import (
     load_rclone_inventory,
@@ -58,7 +58,7 @@ def main():
     max_movies_phase1 = args.max_movies_phase1
     max_movies_phase2 = args.max_movies_phase2
     sequential = args.sequential
-    enable_dedup = args.enable_dedup or ENABLE_DEDUP
+    enable_dedup = args.enable_dedup
 
     ban_log_file = os.path.join(REPORTS_DIR, 'proxy_bans.csv')
     state.setup_proxy_pool(ban_log_file, use_proxy)

@@ -297,9 +297,6 @@ RCLONE_ROOT_FOLDER = '/剧集/不可以色色/JAV-Sync'
 # Dedup Configuration
 # =============================================================================
 
-# Master toggle for dedup detection in Spider (default OFF)
-ENABLE_DEDUP = False
-
 # Rclone inventory CSV filename (stored in REPORTS_DIR)
 RCLONE_INVENTORY_CSV = 'rclone_inventory.csv'
 
