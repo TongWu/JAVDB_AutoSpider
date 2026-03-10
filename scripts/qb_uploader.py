@@ -669,22 +669,24 @@ def main():
     _session_id = getattr(args, 'session_id', None)
     if _session_id:
         try:
-            from utils.db import init_db, db_save_uploader_stats
-            init_db()
-            _rate = (successfully_added / attempted * 100) if attempted > 0 else 0.0
-            db_save_uploader_stats(_session_id, {
-                'total_torrents': total_torrents,
-                'duplicate_count': duplicate_count,
-                'attempted': attempted,
-                'successfully_added': successfully_added,
-                'failed_count': failed_count,
-                'hacked_sub': hacked_subtitle_count,
-                'hacked_nosub': hacked_no_subtitle_count,
-                'subtitle_count': subtitle_count,
-                'no_subtitle_count': no_subtitle_count,
-                'success_rate': _rate,
-            })
-            logger.info(f"Uploader stats saved to SQLite (session_id={_session_id})")
+            from utils.config_helper import use_sqlite as _use_sqlite
+            if _use_sqlite():
+                from utils.db import init_db, db_save_uploader_stats
+                init_db()
+                _rate = (successfully_added / attempted * 100) if attempted > 0 else 0.0
+                db_save_uploader_stats(_session_id, {
+                    'total_torrents': total_torrents,
+                    'duplicate_count': duplicate_count,
+                    'attempted': attempted,
+                    'successfully_added': successfully_added,
+                    'failed_count': failed_count,
+                    'hacked_sub': hacked_subtitle_count,
+                    'hacked_nosub': hacked_no_subtitle_count,
+                    'subtitle_count': subtitle_count,
+                    'no_subtitle_count': no_subtitle_count,
+                    'success_rate': _rate,
+                })
+                logger.info(f"Uploader stats saved to SQLite (session_id={_session_id})")
         except Exception as e:
             logger.warning(f"Failed to save uploader stats to SQLite: {e}")
 

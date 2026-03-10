@@ -95,7 +95,7 @@ class TestExtractVideoCodeFromFilename:
 # ============================================================================
 
 class TestWriteInventoryCsv:
-    def test_writes_correct_csv(self, tmp_path):
+    def test_writes_correct_csv(self, tmp_path, storage_mode_csv):
         folders = [
             FolderInfo(
                 full_path='gdrive:root/2025/Actor/ABC-123 [有码-中字]',
@@ -141,7 +141,7 @@ class TestWriteInventoryCsv:
         count = write_inventory_csv(folders, output, 'gdrive', 'root')
         assert count == 2
 
-    def test_empty_folder_list(self, tmp_path):
+    def test_empty_folder_list(self, tmp_path, storage_mode_csv):
         output = str(tmp_path / 'inventory.csv')
         count = write_inventory_csv([], output, 'gdrive', 'root')
         assert count == 0

@@ -114,6 +114,7 @@ jobs:
           INPUT_YEARS: ${{ inputs.years }}
           INPUT_WORKERS: ${{ inputs.workers }}
           INPUT_LOG_LEVEL: ${{ inputs.log_level }}
+          VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
         run: |
           set -e
           set -o pipefail

@@ -771,3 +771,56 @@ class TestBatchUpdateLastVisited:
 
         assert records[0]['last_visited_datetime'] == '2024-01-01 10:00:00'
 
+
+# ── STORAGE_MODE tests ──────────────────────────────────────────────────
+
+class TestStorageModeDb:
+    """In db mode, writes go to SQLite only."""
+
+    def test_save_writes_sqlite(self, temp_dir, storage_mode_db):
+        hf = os.path.join(temp_dir, 'history.csv')
+        save_parsed_movie_to_history(hf, '/v/SM-001', 1, 'SM-001',
+                                     {'no_subtitle': 'magnet:?xt=urn:btih:sm1'})
+        history = load_parsed_movies_history(hf)
+        assert '/v/SM-001' in history
+        assert not os.path.exists(hf)
+
+    def test_batch_update_sqlite_only(self, temp_dir, storage_mode_db):
+        save_parsed_movie_to_history('', '/v/SM-002', 1, 'SM-002')
+        batch_update_last_visited('', {'/v/SM-002'})
+        history = load_parsed_movies_history('')
+        assert history['/v/SM-002']['last_visited_datetime'] != ''
+
+
+class TestStorageModeCsv:
+    """In csv mode, writes go to CSV only; SQLite reads return empty."""
+
+    def test_save_writes_csv_only(self, temp_dir, storage_mode_csv):
+        hf = os.path.join(temp_dir, 'history.csv')
+        save_parsed_movie_to_history(hf, '/v/CSV-001', 1, 'CSV-001',
+                                     {'no_subtitle': 'magnet:?xt=urn:btih:c1'})
+        assert os.path.exists(hf)
+        with open(hf, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+        assert any(r['href'] == '/v/CSV-001' for r in rows)
+
+    def test_load_reads_csv(self, temp_dir, storage_mode_csv):
+        hf = os.path.join(temp_dir, 'history.csv')
+        save_parsed_movie_to_history(hf, '/v/CSV-002', 1, 'CSV-002',
+                                     {'no_subtitle': 'magnet:?xt=urn:btih:c2'})
+        history = load_parsed_movies_history(hf)
+        assert '/v/CSV-002' in history
+
+
+class TestStorageModeDuo:
+    """In duo mode, both SQLite and CSV are written."""
+
+    def test_save_writes_both(self, temp_dir, storage_mode_duo):
+        hf = os.path.join(temp_dir, 'history.csv')
+        save_parsed_movie_to_history(hf, '/v/DUO-001', 1, 'DUO-001',
+                                     {'no_subtitle': 'magnet:?xt=urn:btih:d1'})
+        history_sqlite = db_mod.db_load_history()
+        assert '/v/DUO-001' in history_sqlite
+        assert os.path.exists(hf)
+

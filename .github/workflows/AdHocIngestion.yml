@@ -202,6 +202,7 @@ jobs:
           VAR_RCLONE_DRIVE_NAME: ${{ vars.RCLONE_DRIVE_NAME }}
           VAR_RCLONE_ROOT_FOLDER: ${{ vars.RCLONE_ROOT_FOLDER }}
           VAR_ENABLE_DEDUP: ${{ inputs.enable_dedup }}
+          VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
         run: python3 utils/config_generator.py --github-actions
 
       - name: Pull latest changes from remote

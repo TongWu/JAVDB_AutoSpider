@@ -143,7 +143,7 @@ class TestProxyBanManager:
         
         assert len(manager.banned_proxies) == 0
     
-    def test_load_existing_ban_records(self, temp_dir):
+    def test_load_existing_ban_records(self, temp_dir, storage_mode_csv):
         """Test loading existing ban records from CSV."""
         ban_log_file = os.path.join(temp_dir, 'proxy_bans.csv')
         
@@ -165,7 +165,7 @@ class TestProxyBanManager:
         assert len(manager.banned_proxies) == 1
         assert 'proxy-1' in manager.banned_proxies
     
-    def test_load_and_cleanup_expired_bans(self, temp_dir):
+    def test_load_and_cleanup_expired_bans(self, temp_dir, storage_mode_csv):
         """Test that expired bans are cleaned up on load."""
         ban_log_file = os.path.join(temp_dir, 'proxy_bans.csv')
         
@@ -187,7 +187,7 @@ class TestProxyBanManager:
         # Expired ban should be cleaned up
         assert len(manager.banned_proxies) == 0
     
-    def test_add_ban(self, temp_dir):
+    def test_add_ban(self, temp_dir, storage_mode_csv):
         """Test adding a new ban."""
         ban_log_file = os.path.join(temp_dir, 'proxy_bans.csv')
         manager = ProxyBanManager(ban_log_file=ban_log_file)
@@ -328,7 +328,7 @@ class TestProxyBanManager:
         
         assert manager.BAN_DURATION_DAYS == 7
     
-    def test_load_ban_records_error_handling(self, temp_dir):
+    def test_load_ban_records_error_handling(self, temp_dir, storage_mode_csv):
         """Test error handling when loading corrupted ban file."""
         ban_log_file = os.path.join(temp_dir, 'proxy_bans.csv')
         

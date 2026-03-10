@@ -223,33 +223,35 @@ def main():
     use_cf_bypass = idx_result['use_cf_bypass']
     csv_path = idx_result['csv_path']
 
-    # Create a report session in SQLite
+    # Create a report session in SQLite (when enabled)
     _session_id = None
     try:
-        from utils.db import init_db, db_create_report_session
-        from utils.url_helper import detect_url_type, extract_url_identifier
-        init_db()
-        report_type = 'adhoc' if custom_url else 'daily'
-        report_date = datetime.now().strftime('%Y%m%d')
-        url_type = None
-        display_name = None
-        if custom_url:
-            try:
-                url_type = detect_url_type(custom_url)
-                display_name = extract_url_identifier(custom_url)
-            except Exception:
-                pass
-        _session_id = db_create_report_session(
-            report_type=report_type,
-            report_date=report_date,
-            csv_filename=os.path.basename(csv_path),
-            url_type=url_type,
-            display_name=display_name,
-            url=custom_url,
-            start_page=start_page,
-        )
-        set_active_session(_session_id)
-        logger.info(f"Created report session: id={_session_id}")
+        from utils.config_helper import use_sqlite as _use_sqlite
+        if _use_sqlite():
+            from utils.db import init_db, db_create_report_session
+            from utils.url_helper import detect_url_type, extract_url_identifier
+            init_db()
+            report_type = 'adhoc' if custom_url else 'daily'
+            report_date = datetime.now().strftime('%Y%m%d')
+            url_type = None
+            display_name = None
+            if custom_url:
+                try:
+                    url_type = detect_url_type(custom_url)
+                    display_name = extract_url_identifier(custom_url)
+                except Exception:
+                    pass
+            _session_id = db_create_report_session(
+                report_type=report_type,
+                report_date=report_date,
+                csv_filename=os.path.basename(csv_path),
+                url_type=url_type,
+                display_name=display_name,
+                url=custom_url,
+                start_page=start_page,
+            )
+            set_active_session(_session_id)
+            logger.info(f"Created report session: id={_session_id}")
     except Exception as e:
         logger.warning(f"Failed to create report session: {e}")
 
@@ -391,7 +393,7 @@ def main():
         any_proxy_banned_phase2=any_proxy_banned_phase2,
     )
 
-    # Save spider stats and end_page to SQLite
+    # Save spider stats and end_page to SQLite (when session exists)
     if _session_id is not None:
         try:
             from utils.db import db_save_spider_stats, get_db
