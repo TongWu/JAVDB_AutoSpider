@@ -265,16 +265,9 @@ class TestGetConfigMap:
         config_map = get_config_map()
         dedup_entries = [item for item in config_map if item[4] == 'DEDUP CONFIGURATION']
         dedup_keys = {item[0] for item in dedup_entries}
-        assert 'ENABLE_DEDUP' in dedup_keys
         assert 'RCLONE_INVENTORY_CSV' in dedup_keys
         assert 'DEDUP_CSV' in dedup_keys
         assert 'DEDUP_LOG_FILE' in dedup_keys
-
-    def test_enable_dedup_default_false(self):
-        """ENABLE_DEDUP should default to False."""
-        config_map = get_config_map()
-        entry = next(item for item in config_map if item[0] == 'ENABLE_DEDUP')
-        assert entry[3] is False
 
     def test_rclone_drive_name_default(self):
         """RCLONE_DRIVE_NAME should default to 'gdrive'."""

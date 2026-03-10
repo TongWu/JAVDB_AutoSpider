@@ -28,7 +28,6 @@ PIPELINE_LOG_FILE = cfg('PIPELINE_LOG_FILE', 'logs/pipeline.log')
 LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
 DAILY_REPORT_DIR = cfg('DAILY_REPORT_DIR', 'reports/DailyReport')
 AD_HOC_DIR = cfg('AD_HOC_DIR', 'reports/AdHoc')
-ENABLE_DEDUP = cfg('ENABLE_DEDUP', False)
 _REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
 DEDUP_CSV = cfg('DEDUP_CSV', 'dedup.csv')
 
@@ -258,7 +257,7 @@ def main():
         spider_args.append('--ignore-release-date')
     if args.use_proxy:
         spider_args.append('--use-proxy')
-    enable_dedup = args.enable_dedup or ENABLE_DEDUP
+    enable_dedup = args.enable_dedup
     if enable_dedup:
         spider_args.append('--enable-dedup')
     # Build base arguments for uploader (csv filename will be added after spider runs)

@@ -306,7 +306,6 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # Storage Mode
         ('STORAGE_MODE', 'STORAGE_MODE', get_env, 'db', 'STORAGE MODE'),
         # Dedup Configuration
-        ('ENABLE_DEDUP', 'ENABLE_DEDUP', get_env_bool, False, 'DEDUP CONFIGURATION'),
         ('RCLONE_INVENTORY_CSV', 'RCLONE_INVENTORY_CSV', get_env, 'rclone_inventory.csv', 'DEDUP CONFIGURATION'),
         ('DEDUP_CSV', 'DEDUP_CSV', get_env, 'dedup.csv', 'DEDUP CONFIGURATION'),
         ('DEDUP_LOG_FILE', 'DEDUP_LOG_FILE', get_env, 'logs/rclone_dedup.log', 'DEDUP CONFIGURATION'),
