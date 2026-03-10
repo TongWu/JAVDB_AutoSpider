@@ -264,6 +264,7 @@ def load_dedup_csv(csv_path: str) -> List[Dict[str, str]]:
         from utils.db import db_load_dedup_records
         rows = db_load_dedup_records()
         for r in rows:
+            r.pop('id', None)
             r['is_deleted'] = 'True' if r.get('is_deleted') in (1, True, 'True', '1') else 'False'
             r['existing_folder_size'] = str(r.get('existing_folder_size', 0))
         return rows
@@ -307,7 +308,7 @@ def save_dedup_csv(csv_path: str, rows: List[Dict[str, str]]) -> None:
     if use_csv():
         os.makedirs(os.path.dirname(csv_path) or '.', exist_ok=True)
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=DEDUP_FIELDNAMES)
+            writer = csv.DictWriter(f, fieldnames=DEDUP_FIELDNAMES, extrasaction='ignore')
             writer.writeheader()
             for row in rows:
                 writer.writerow(row)
