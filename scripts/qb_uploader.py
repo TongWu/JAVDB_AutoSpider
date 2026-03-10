@@ -89,6 +89,7 @@ def parse_arguments():
     parser.add_argument('--use-proxy', action='store_true', help='Enable proxy for qBittorrent API requests (proxy settings from config.py)')
     parser.add_argument('--from-pipeline', action='store_true', help='Running from pipeline.py - use GIT_USERNAME for commits')
     parser.add_argument('--category', type=str, help='Override qBittorrent category (defaults to TORRENT_CATEGORY_ADHOC for adhoc mode, TORRENT_CATEGORY for daily mode)')
+    parser.add_argument('--session-id', type=int, default=None, help='Report session ID for saving uploader stats to SQLite')
     return parser.parse_args()
 
 
@@ -663,7 +664,30 @@ def main():
     else:
         logger.info("Success rate: N/A (all torrents already existed)")
     logger.info("=" * 50)
-    
+
+    # Save uploader stats to SQLite if session_id provided
+    _session_id = getattr(args, 'session_id', None)
+    if _session_id:
+        try:
+            from utils.db import init_db, db_save_uploader_stats
+            init_db()
+            _rate = (successfully_added / attempted * 100) if attempted > 0 else 0.0
+            db_save_uploader_stats(_session_id, {
+                'total_torrents': total_torrents,
+                'duplicate_count': duplicate_count,
+                'attempted': attempted,
+                'successfully_added': successfully_added,
+                'failed_count': failed_count,
+                'hacked_sub': hacked_subtitle_count,
+                'hacked_nosub': hacked_no_subtitle_count,
+                'subtitle_count': subtitle_count,
+                'no_subtitle_count': no_subtitle_count,
+                'success_rate': _rate,
+            })
+            logger.info(f"Uploader stats saved to SQLite (session_id={_session_id})")
+        except Exception as e:
+            logger.warning(f"Failed to save uploader stats to SQLite: {e}")
+
     # Git commit uploader results (only if credentials are available)
     from_pipeline = args.from_pipeline if hasattr(args, 'from_pipeline') else False
     

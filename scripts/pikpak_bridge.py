@@ -260,45 +260,48 @@ async def process_pikpak_single(magnet, email, password):
 # PikPak History Management
 # --------------------------
 def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
-    """Save torrent transfer information to PikPak history CSV"""
+    """Save torrent transfer information to PikPak history (SQLite + CSV)."""
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    # Ensure directory exists
+
+    record = {
+        'torrent_hash': torrent_info['hash'],
+        'torrent_name': torrent_info['name'],
+        'category': torrent_info.get('category', 'Unknown'),
+        'magnet_uri': torrent_info['magnet_uri'],
+        'added_to_qb_date': datetime.fromtimestamp(torrent_info['added_on']).strftime("%Y-%m-%d %H:%M:%S"),
+        'deleted_from_qb_date': current_time if transfer_status in ['success', 'failed_but_deleted'] else '',
+        'uploaded_to_pikpak_date': current_time if transfer_status == 'success' else '',
+        'transfer_status': transfer_status,
+        'error_message': error_msg or ''
+    }
+
+    try:
+        from utils.db import init_db, db_append_pikpak_history
+        init_db()
+        db_append_pikpak_history(record)
+    except Exception as e:
+        logger.warning(f"Failed to write pikpak history to SQLite: {e}")
+
     os.makedirs(os.path.dirname(PIKPAK_HISTORY_FILE), exist_ok=True)
-    
-    # Check if file exists and create header if needed
     file_exists = os.path.exists(PIKPAK_HISTORY_FILE)
-    
+
     with open(PIKPAK_HISTORY_FILE, 'a', newline='', encoding='utf-8-sig') as f:
         fieldnames = [
-            'torrent_hash', 'torrent_name', 'category', 'magnet_uri', 'added_to_qb_date', 
+            'torrent_hash', 'torrent_name', 'category', 'magnet_uri', 'added_to_qb_date',
             'deleted_from_qb_date', 'uploaded_to_pikpak_date', 'transfer_status', 'error_message'
         ]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
-        
         if not file_exists:
             writer.writeheader()
-        
-        record = {
-            'torrent_hash': torrent_info['hash'],
-            'torrent_name': torrent_info['name'],
-            'category': torrent_info.get('category', 'Unknown'),
-            'magnet_uri': torrent_info['magnet_uri'],
-            'added_to_qb_date': datetime.fromtimestamp(torrent_info['added_on']).strftime("%Y-%m-%d %H:%M:%S"),
-            'deleted_from_qb_date': current_time if transfer_status in ['success', 'failed_but_deleted'] else '',
-            'uploaded_to_pikpak_date': current_time if transfer_status == 'success' else '',
-            'transfer_status': transfer_status,  # 'success', 'failed', 'failed_but_deleted'
-            'error_message': error_msg or ''
-        }
-        
         writer.writerow(record)
-        logger.info(f"Saved to PikPak history: {torrent_info['name']} - {transfer_status}")
+
+    logger.info(f"Saved to PikPak history: {torrent_info['name']} - {transfer_status}")
 
 
 # --------------------------
 # Main Logic
 # --------------------------
-def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline=False):
+def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline=False, session_id=None):
     cutoff_date = (datetime.now() - timedelta(days=days)).date()
     logger.info(f"Processing torrents older than {days} days (before {cutoff_date})")
     
@@ -496,7 +499,22 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline
     logger.info("")
     logger.info(f"PikPak transfer history saved to: {PIKPAK_HISTORY_FILE}")
     logger.info("=" * 60)
-    
+
+    if session_id and not dry_run:
+        try:
+            from utils.db import init_db, db_save_pikpak_stats
+            init_db()
+            db_save_pikpak_stats(session_id, {
+                'threshold_days': days,
+                'total_torrents': len(torrents),
+                'filtered_old': len(old_torrents),
+                'successful_count': successful_count,
+                'failed_count': failed_count,
+            })
+            logger.info(f"PikPak stats saved to SQLite (session_id={session_id})")
+        except Exception as e:
+            logger.warning(f"Failed to save pikpak stats to SQLite: {e}")
+
     # Git commit pikpak results (only if credentials are available)
     if not dry_run and has_git_credentials(GIT_USERNAME, GIT_PASSWORD):
         logger.info("Committing PikPak bridge results...")
@@ -529,10 +547,12 @@ if __name__ == "__main__":
     parser.add_argument("--individual", action="store_true", help="Process torrents individually instead of batch mode (default: batch mode)")
     parser.add_argument("--use-proxy", action="store_true", help="Enable proxy for qBittorrent API requests (proxy settings from config.py)")
     parser.add_argument("--from-pipeline", action="store_true", help="Running from pipeline.py - use GIT_USERNAME for commits")
+    parser.add_argument("--session-id", type=int, default=None, help="Report session ID for saving pikpak stats to SQLite")
     args = parser.parse_args()
 
     # Default to batch mode unless --individual is specified
     batch_mode = not args.individual
     
-    pikpak_bridge(args.days, args.dry_run, batch_mode, args.use_proxy, args.from_pipeline)
+    pikpak_bridge(args.days, args.dry_run, batch_mode, args.use_proxy, args.from_pipeline,
+                  session_id=args.session_id)
 

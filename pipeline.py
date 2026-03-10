@@ -196,6 +196,17 @@ def extract_csv_path_from_output(output):
     return None
 
 
+def extract_session_id_from_output(output):
+    """Extract session_id from spider output (SPIDER_SESSION_ID=<id>)."""
+    for line in output.splitlines():
+        if line.startswith('SPIDER_SESSION_ID='):
+            try:
+                return int(line.split('=', 1)[1].strip())
+            except (ValueError, IndexError):
+                return None
+    return None
+
+
 def main():
     args = parse_arguments()
     is_adhoc_mode = args.url is not None
@@ -296,7 +307,14 @@ def main():
                 logger.info(f"Captured CSV path from spider: {csv_path}")
             else:
                 logger.warning("Could not extract CSV path from spider output, uploader will use auto-discovery")
-        
+
+        # Extract session_id for stats persistence
+        session_id = extract_session_id_from_output(spider_output)
+        if session_id:
+            logger.info(f"Captured session ID from spider: {session_id}")
+            uploader_args.extend(['--session-id', str(session_id)])
+            pikpak_args.extend(['--session-id', str(session_id)])
+
         # Add CSV path to uploader args
         if csv_path:
             uploader_args.extend(['--input-file', csv_path])
