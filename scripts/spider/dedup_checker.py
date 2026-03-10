@@ -1,8 +1,9 @@
 """Dedup checker module for Spider.
 
-Loads rclone_inventory.csv and compares torrent categories against existing
+Loads rclone inventory and compares torrent categories against existing
 GDrive entries to detect upgrade opportunities (e.g. subtitle or sensor
-priority upgrades). Results are appended to a persistent dedup.csv.
+priority upgrades). Results are persisted in the SQLite database (with
+CSV fallback).
 """
 
 import csv
@@ -13,6 +14,17 @@ from typing import Dict, List, Optional, NamedTuple
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+_USE_SQLITE = True
+_db_initialised = False
+
+
+def _ensure_db():
+    global _db_initialised
+    if not _db_initialised:
+        from utils.db import init_db
+        init_db()
+        _db_initialised = True
 
 
 class RcloneEntry(NamedTuple):
@@ -74,11 +86,40 @@ def _get_wuma_priority(cat: str) -> int:
 # ---------------------------------------------------------------------------
 
 def load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
-    """Load rclone_inventory.csv and return dict keyed by video_code.
+    """Load rclone inventory and return dict keyed by video_code.
 
     A single video_code may map to multiple entries (multiple GDrive copies).
-    Returns an empty dict if the file does not exist or is empty.
+    Returns an empty dict when the data source is empty.
     """
+    if _USE_SQLITE:
+        _ensure_db()
+        from utils.db import db_load_rclone_inventory
+        raw = db_load_rclone_inventory()
+        inventory: Dict[str, List[RcloneEntry]] = {}
+        for code, entries in raw.items():
+            inventory[code] = [
+                RcloneEntry(
+                    video_code=e.get('video_code', code),
+                    sensor_category=e.get('sensor_category', ''),
+                    subtitle_category=e.get('subtitle_category', ''),
+                    folder_path=e.get('folder_path', ''),
+                    folder_size=int(e.get('folder_size', 0) or 0),
+                    file_count=int(e.get('file_count', 0) or 0),
+                    scan_datetime=e.get('scan_datetime', ''),
+                )
+                for e in entries
+            ]
+        if inventory:
+            logger.info(f"Loaded rclone inventory: {len(inventory)} unique codes from SQLite")
+        else:
+            logger.info("Rclone inventory is empty in SQLite – dedup skipped")
+        return inventory
+
+    return _csv_load_rclone_inventory(csv_path)
+
+
+def _csv_load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
+    """CSV fallback for load_rclone_inventory."""
     if not os.path.exists(csv_path):
         logger.info(f"Rclone inventory not found: {csv_path} – dedup skipped")
         return {}
@@ -218,7 +259,16 @@ def check_dedup_upgrade(
 # ---------------------------------------------------------------------------
 
 def load_dedup_csv(csv_path: str) -> List[Dict[str, str]]:
-    """Load all rows from dedup.csv. Returns empty list if file missing."""
+    """Load all dedup records. Returns empty list when no data exists."""
+    if _USE_SQLITE:
+        _ensure_db()
+        from utils.db import db_load_dedup_records
+        rows = db_load_dedup_records()
+        for r in rows:
+            r['is_deleted'] = 'True' if r.get('is_deleted') in (1, True, 'True', '1') else 'False'
+            r['existing_folder_size'] = str(r.get('existing_folder_size', 0))
+        return rows
+
     if not os.path.exists(csv_path):
         return []
     rows = []
@@ -230,10 +280,14 @@ def load_dedup_csv(csv_path: str) -> List[Dict[str, str]]:
 
 
 def append_dedup_record(dedup_csv_path: str, record: DedupRecord) -> None:
-    """Append a single DedupRecord to the persistent dedup.csv file.
+    """Append a single DedupRecord to persistent storage."""
+    if _USE_SQLITE:
+        _ensure_db()
+        from utils.db import db_append_dedup_record
+        db_append_dedup_record(record._asdict())
+        logger.debug(f"Appended dedup record: {record.video_code} – {record.deletion_reason}")
+        return
 
-    Creates the file (with header) if it does not yet exist.
-    """
     file_exists = os.path.exists(dedup_csv_path) and os.path.getsize(dedup_csv_path) > 0
     os.makedirs(os.path.dirname(dedup_csv_path) or '.', exist_ok=True)
 
@@ -247,7 +301,13 @@ def append_dedup_record(dedup_csv_path: str, record: DedupRecord) -> None:
 
 
 def save_dedup_csv(csv_path: str, rows: List[Dict[str, str]]) -> None:
-    """Overwrite dedup.csv with the provided rows (used after updating is_deleted)."""
+    """Overwrite all dedup records (used after updating is_deleted flags)."""
+    if _USE_SQLITE:
+        _ensure_db()
+        from utils.db import db_save_dedup_records
+        db_save_dedup_records(rows)
+        return
+
     os.makedirs(os.path.dirname(csv_path) or '.', exist_ok=True)
     with open(csv_path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=DEDUP_FIELDNAMES)
