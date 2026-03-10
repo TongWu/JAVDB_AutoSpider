@@ -2,8 +2,7 @@
 
 Loads rclone inventory and compares torrent categories against existing
 GDrive entries to detect upgrade opportunities (e.g. subtitle or sensor
-priority upgrades). Results are persisted in the SQLite database (with
-CSV fallback).
+priority upgrades).  Storage backend is controlled by ``STORAGE_MODE``.
 """
 
 import csv
@@ -11,11 +10,11 @@ import os
 from datetime import datetime
 from typing import Dict, List, Optional, NamedTuple
 
+from utils.config_helper import use_sqlite, use_csv
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-_USE_SQLITE = True
 _db_initialised = False
 
 
@@ -91,7 +90,7 @@ def load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
     A single video_code may map to multiple entries (multiple GDrive copies).
     Returns an empty dict when the data source is empty.
     """
-    if _USE_SQLITE:
+    if use_sqlite():
         _ensure_db()
         from utils.db import db_load_rclone_inventory
         raw = db_load_rclone_inventory()
@@ -260,7 +259,7 @@ def check_dedup_upgrade(
 
 def load_dedup_csv(csv_path: str) -> List[Dict[str, str]]:
     """Load all dedup records. Returns empty list when no data exists."""
-    if _USE_SQLITE:
+    if use_sqlite():
         _ensure_db()
         from utils.db import db_load_dedup_records
         rows = db_load_dedup_records()
@@ -281,36 +280,34 @@ def load_dedup_csv(csv_path: str) -> List[Dict[str, str]]:
 
 def append_dedup_record(dedup_csv_path: str, record: DedupRecord) -> None:
     """Append a single DedupRecord to persistent storage."""
-    if _USE_SQLITE:
+    if use_sqlite():
         _ensure_db()
         from utils.db import db_append_dedup_record
         db_append_dedup_record(record._asdict())
-        logger.debug(f"Appended dedup record: {record.video_code} – {record.deletion_reason}")
-        return
 
-    file_exists = os.path.exists(dedup_csv_path) and os.path.getsize(dedup_csv_path) > 0
-    os.makedirs(os.path.dirname(dedup_csv_path) or '.', exist_ok=True)
-
-    with open(dedup_csv_path, 'a', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=DEDUP_FIELDNAMES)
-        if not file_exists:
-            writer.writeheader()
-        writer.writerow(record._asdict())
+    if use_csv():
+        file_exists = os.path.exists(dedup_csv_path) and os.path.getsize(dedup_csv_path) > 0
+        os.makedirs(os.path.dirname(dedup_csv_path) or '.', exist_ok=True)
+        with open(dedup_csv_path, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=DEDUP_FIELDNAMES)
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(record._asdict())
 
     logger.debug(f"Appended dedup record: {record.video_code} – {record.deletion_reason}")
 
 
 def save_dedup_csv(csv_path: str, rows: List[Dict[str, str]]) -> None:
     """Overwrite all dedup records (used after updating is_deleted flags)."""
-    if _USE_SQLITE:
+    if use_sqlite():
         _ensure_db()
         from utils.db import db_save_dedup_records
         db_save_dedup_records(rows)
-        return
 
-    os.makedirs(os.path.dirname(csv_path) or '.', exist_ok=True)
-    with open(csv_path, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=DEDUP_FIELDNAMES)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(row)
+    if use_csv():
+        os.makedirs(os.path.dirname(csv_path) or '.', exist_ok=True)
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=DEDUP_FIELDNAMES)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)

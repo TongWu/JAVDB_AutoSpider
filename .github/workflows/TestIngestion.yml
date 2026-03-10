@@ -109,6 +109,7 @@ jobs:
           VAR_CF_BYPASS_SERVICE_PORT: '8000'
           VAR_PROXY_POOL_COOLDOWN_SECONDS: '691200'
           VAR_PROXY_POOL_MAX_FAILURES: '3'
+          VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
         run: python3 utils/config_generator.py --github-actions
 
       - name: Display Test Parameters

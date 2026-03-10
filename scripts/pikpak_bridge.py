@@ -260,7 +260,9 @@ async def process_pikpak_single(magnet, email, password):
 # PikPak History Management
 # --------------------------
 def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
-    """Save torrent transfer information to PikPak history (SQLite + CSV)."""
+    """Save torrent transfer information to PikPak history."""
+    from utils.config_helper import use_sqlite, use_csv
+
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     record = {
@@ -275,25 +277,26 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
         'error_message': error_msg or ''
     }
 
-    try:
-        from utils.db import init_db, db_append_pikpak_history
-        init_db()
-        db_append_pikpak_history(record)
-    except Exception as e:
-        logger.warning(f"Failed to write pikpak history to SQLite: {e}")
+    if use_sqlite():
+        try:
+            from utils.db import init_db, db_append_pikpak_history
+            init_db()
+            db_append_pikpak_history(record)
+        except Exception as e:
+            logger.warning(f"Failed to write pikpak history to SQLite: {e}")
 
-    os.makedirs(os.path.dirname(PIKPAK_HISTORY_FILE), exist_ok=True)
-    file_exists = os.path.exists(PIKPAK_HISTORY_FILE)
-
-    with open(PIKPAK_HISTORY_FILE, 'a', newline='', encoding='utf-8-sig') as f:
-        fieldnames = [
-            'torrent_hash', 'torrent_name', 'category', 'magnet_uri', 'added_to_qb_date',
-            'deleted_from_qb_date', 'uploaded_to_pikpak_date', 'transfer_status', 'error_message'
-        ]
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        if not file_exists:
-            writer.writeheader()
-        writer.writerow(record)
+    if use_csv():
+        os.makedirs(os.path.dirname(PIKPAK_HISTORY_FILE), exist_ok=True)
+        file_exists = os.path.exists(PIKPAK_HISTORY_FILE)
+        with open(PIKPAK_HISTORY_FILE, 'a', newline='', encoding='utf-8-sig') as f:
+            fieldnames = [
+                'torrent_hash', 'torrent_name', 'category', 'magnet_uri', 'added_to_qb_date',
+                'deleted_from_qb_date', 'uploaded_to_pikpak_date', 'transfer_status', 'error_message'
+            ]
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(record)
 
     logger.info(f"Saved to PikPak history: {torrent_info['name']} - {transfer_status}")
 
@@ -502,16 +505,18 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline
 
     if session_id and not dry_run:
         try:
-            from utils.db import init_db, db_save_pikpak_stats
-            init_db()
-            db_save_pikpak_stats(session_id, {
-                'threshold_days': days,
-                'total_torrents': len(torrents),
-                'filtered_old': len(old_torrents),
-                'successful_count': successful_count,
-                'failed_count': failed_count,
-            })
-            logger.info(f"PikPak stats saved to SQLite (session_id={session_id})")
+            from utils.config_helper import use_sqlite as _use_sqlite
+            if _use_sqlite():
+                from utils.db import init_db, db_save_pikpak_stats
+                init_db()
+                db_save_pikpak_stats(session_id, {
+                    'threshold_days': days,
+                    'total_torrents': len(torrents),
+                    'filtered_old': len(old_torrents),
+                    'successful_count': successful_count,
+                    'failed_count': failed_count,
+                })
+                logger.info(f"PikPak stats saved to SQLite (session_id={session_id})")
         except Exception as e:
             logger.warning(f"Failed to save pikpak stats to SQLite: {e}")
 

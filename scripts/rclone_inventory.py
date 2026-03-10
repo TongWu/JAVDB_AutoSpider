@@ -255,40 +255,45 @@ def write_inventory_csv(
     remote_name: str,
     root_folder: str,
 ) -> int:
-    """Write the inventory to CSV and SQLite.  Returns number of records written."""
+    """Write the inventory to the active storage backend(s).  Returns number of records."""
+    from utils.config_helper import use_sqlite, use_csv
+
     scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     records_written = 0
 
-    db_entries = []
-    with open(output_path, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=INVENTORY_FIELDNAMES)
-        writer.writeheader()
-        for folder in folders:
-            folder_path = folder.full_path
-            if not folder_path.startswith(f"{remote_name}:"):
-                folder_path = f"{remote_name}:{root_folder}/{folder.year}/{folder.actor}/{folder.folder_name}"
-            row = {
-                'video_code': folder.movie_code,
-                'sensor_category': folder.sensor_category,
-                'subtitle_category': folder.subtitle_category,
-                'folder_path': folder_path,
-                'folder_size': folder.size,
-                'file_count': folder.file_count,
-                'scan_datetime': scan_time,
-            }
-            writer.writerow(row)
-            db_entries.append(row)
-            records_written += 1
+    all_rows = []
+    for folder in folders:
+        folder_path = folder.full_path
+        if not folder_path.startswith(f"{remote_name}:"):
+            folder_path = f"{remote_name}:{root_folder}/{folder.year}/{folder.actor}/{folder.folder_name}"
+        all_rows.append({
+            'video_code': folder.movie_code,
+            'sensor_category': folder.sensor_category,
+            'subtitle_category': folder.subtitle_category,
+            'folder_path': folder_path,
+            'folder_size': folder.size,
+            'file_count': folder.file_count,
+            'scan_datetime': scan_time,
+        })
+    records_written = len(all_rows)
 
-    try:
-        from utils.db import init_db, db_replace_rclone_inventory
-        init_db()
-        db_replace_rclone_inventory(db_entries)
-        logger.info(f"Inventory SQLite updated: {records_written} records")
-    except Exception as e:
-        logger.warning(f"Failed to write inventory to SQLite (CSV still written): {e}")
+    if use_sqlite():
+        try:
+            from utils.db import init_db, db_replace_rclone_inventory
+            init_db()
+            db_replace_rclone_inventory(all_rows)
+            logger.info(f"Inventory SQLite updated: {records_written} records")
+        except Exception as e:
+            logger.warning(f"Failed to write inventory to SQLite: {e}")
 
-    logger.info(f"Inventory CSV written: {output_path} ({records_written} records)")
+    if use_csv():
+        with open(output_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=INVENTORY_FIELDNAMES)
+            writer.writeheader()
+            for row in all_rows:
+                writer.writerow(row)
+        logger.info(f"Inventory CSV written: {output_path} ({records_written} records)")
+
     return records_written
 
 
@@ -379,56 +384,68 @@ def main() -> int:
     logger.info(f"  {msg}")
 
     # Scan & write incrementally to reduce memory usage
+    from utils.config_helper import use_sqlite as _use_sqlite, use_csv as _use_csv
+
     scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     total_written = 0
-    all_db_entries = []
+    all_entries = []
 
-    try:
-        from utils.db import init_db, db_replace_rclone_inventory
-        init_db()
-        _sqlite_ok = True
-    except Exception:
-        _sqlite_ok = False
-
-    with open(output_path, 'w', newline='', encoding='utf-8') as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=INVENTORY_FIELDNAMES)
-        writer.writeheader()
-
-        def flush_batch(batch: List[FolderInfo]):
-            nonlocal total_written
-            get_folder_stats_batch(batch, max_workers=args.workers)
-            for folder in batch:
-                folder_path = folder.full_path
-                if not folder_path.startswith(f"{remote_name}:"):
-                    folder_path = (
-                        f"{remote_name}:{root_folder}/{folder.year}/"
-                        f"{folder.actor}/{folder.folder_name}"
-                    )
-                row = {
-                    'video_code': folder.movie_code,
-                    'sensor_category': folder.sensor_category,
-                    'subtitle_category': folder.subtitle_category,
-                    'folder_path': folder_path,
-                    'folder_size': folder.size,
-                    'file_count': folder.file_count,
-                    'scan_datetime': scan_time,
-                }
-                writer.writerow(row)
-                all_db_entries.append(row)
-                total_written += 1
-            csv_file.flush()
-
-        total_found = scan_inventory(
-            remote_name, root_folder,
-            max_workers=args.workers,
-            year_filter=year_filter,
-            flush_callback=flush_batch,
-        )
-
-    if _sqlite_ok and all_db_entries:
+    _sqlite_ok = False
+    if _use_sqlite():
         try:
-            db_replace_rclone_inventory(all_db_entries)
-            logger.info(f"Inventory SQLite updated: {len(all_db_entries)} records")
+            from utils.db import init_db, db_replace_rclone_inventory
+            init_db()
+            _sqlite_ok = True
+        except Exception:
+            pass
+
+    _csv_file = None
+    _csv_writer = None
+    if _use_csv():
+        _csv_file = open(output_path, 'w', newline='', encoding='utf-8')
+        _csv_writer = csv.DictWriter(_csv_file, fieldnames=INVENTORY_FIELDNAMES)
+        _csv_writer.writeheader()
+
+    def flush_batch(batch: List[FolderInfo]):
+        nonlocal total_written
+        get_folder_stats_batch(batch, max_workers=args.workers)
+        for folder in batch:
+            folder_path = folder.full_path
+            if not folder_path.startswith(f"{remote_name}:"):
+                folder_path = (
+                    f"{remote_name}:{root_folder}/{folder.year}/"
+                    f"{folder.actor}/{folder.folder_name}"
+                )
+            row = {
+                'video_code': folder.movie_code,
+                'sensor_category': folder.sensor_category,
+                'subtitle_category': folder.subtitle_category,
+                'folder_path': folder_path,
+                'folder_size': folder.size,
+                'file_count': folder.file_count,
+                'scan_datetime': scan_time,
+            }
+            if _csv_writer is not None:
+                _csv_writer.writerow(row)
+            all_entries.append(row)
+            total_written += 1
+        if _csv_file is not None:
+            _csv_file.flush()
+
+    total_found = scan_inventory(
+        remote_name, root_folder,
+        max_workers=args.workers,
+        year_filter=year_filter,
+        flush_callback=flush_batch,
+    )
+
+    if _csv_file is not None:
+        _csv_file.close()
+
+    if _sqlite_ok and all_entries:
+        try:
+            db_replace_rclone_inventory(all_entries)
+            logger.info(f"Inventory SQLite updated: {len(all_entries)} records")
         except Exception as e:
             logger.warning(f"Failed to write inventory to SQLite: {e}")
 

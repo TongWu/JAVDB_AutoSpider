@@ -1,15 +1,20 @@
 """
 History Manager for JavDB Spider
 
-Uses SQLite as the primary storage backend (via utils.db).
+Storage backend is controlled by ``STORAGE_MODE`` in config:
+  - ``db``  – SQLite only (via utils.db)
+  - ``csv`` – CSV only (or Rust CSV override when available)
+  - ``duo`` – SQLite first, then CSV
+
 When the Rust extension ``javdb_rust_core`` is available **and** SQLite
-mode is disabled, the Rust implementation takes precedence.
+mode is disabled, the Rust implementation takes precedence for CSV ops.
 """
 
 import csv
 import os
 from datetime import datetime, timedelta
 
+from utils.config_helper import use_sqlite, use_csv
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -21,12 +26,6 @@ HISTORY_FIELDNAMES = [
     'last_visited_datetime',
     'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle',
 ]
-
-# ── SQLite toggle ────────────────────────────────────────────────────────
-# Set to True to route all I/O through utils.db (SQLite).
-# When False, falls back to CSV (or Rust CSV override).
-
-_USE_SQLITE = True
 
 _db_initialised = False
 
@@ -71,7 +70,7 @@ def _normalize_record_columns(record):
 
 def load_parsed_movies_history(history_file, phase=None):
     """Load previously parsed movies from history with phase filtering."""
-    if _USE_SQLITE:
+    if use_sqlite():
         _ensure_db()
         from utils.db import db_load_history
         history = db_load_history(phase=phase)
@@ -91,27 +90,28 @@ def load_parsed_movies_history(history_file, phase=None):
 
 def cleanup_history_file(history_file, href_records):
     """Clean up history file by removing duplicate records."""
-    if _USE_SQLITE:
+    if not use_csv():
         return
     _csv_cleanup_history_file(history_file, href_records)
 
 
 def maintain_history_limit(history_file, max_records=1000):
     """Maintain maximum records in history file (DISABLED)."""
-    if _USE_SQLITE:
+    if not use_csv():
         return
     _csv_maintain_history_limit(history_file, max_records)
 
 
 def save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_links=None):
     """Save a parsed movie to the history, updating existing records with new magnet links."""
-    if _USE_SQLITE:
+    if magnet_links is None:
+        magnet_links = {'no_subtitle': ''}
+    elif isinstance(magnet_links, list):
+        magnet_links = {t: '' for t in magnet_links}
+
+    if use_sqlite():
         _ensure_db()
         from utils.db import db_upsert_history
-        if magnet_links is None:
-            magnet_links = {'no_subtitle': ''}
-        elif isinstance(magnet_links, list):
-            magnet_links = {t: '' for t in magnet_links}
 
         filtered = {}
         if magnet_links.get('hacked_subtitle'):
@@ -125,35 +125,36 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_l
 
         db_upsert_history(href, phase, video_code, filtered)
         logger.debug(f"Saved history for {href} with magnet links: {list(magnet_links.keys())}")
-        return
 
-    _csv_save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_links)
+    if use_csv():
+        _csv_save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_links)
 
 
 def validate_history_file(history_file):
     """Validate and fix history file format."""
-    if _USE_SQLITE:
+    if use_sqlite():
         _ensure_db()
-        return True
+        if not use_csv():
+            return True
     return _csv_validate_history_file(history_file)
 
 
 def batch_update_last_visited(history_file, visited_hrefs):
     """Update last_visited_datetime for a set of hrefs."""
-    if _USE_SQLITE:
+    if use_sqlite():
         _ensure_db()
         from utils.db import db_batch_update_last_visited
         updated = db_batch_update_last_visited(list(visited_hrefs))
         if updated:
             logger.debug(f"Updated last_visited_datetime for {updated} movies")
-        return
 
-    _csv_batch_update_last_visited(history_file, visited_hrefs)
+    if use_csv():
+        _csv_batch_update_last_visited(history_file, visited_hrefs)
 
 
 def check_torrent_in_history(history_file, href, torrent_type):
     """Check if the specified torrent is already in the history record."""
-    if _USE_SQLITE:
+    if use_sqlite():
         _ensure_db()
         from utils.db import db_check_torrent_in_history
         return db_check_torrent_in_history(href, torrent_type)
@@ -328,7 +329,7 @@ def mark_torrent_as_downloaded(history_file, href, video_code, torrent_type):
         return False
 
 
-# ── CSV fallback implementations (used when _USE_SQLITE is False) ────────
+# ── CSV fallback implementations (used when use_csv() is True) ───────────
 
 def _csv_load_parsed_movies_history(history_file, phase=None):
     history = {}
@@ -648,11 +649,11 @@ def _csv_check_torrent_in_history(history_file, href, torrent_type):
         return False
 
 
-# ── Rust-first override (CSV mode only) ─────────────────────────────────
-# When SQLite mode is active, we use the Python SQLite implementation above.
-# The Rust extension only overrides when running in CSV fallback mode.
+# ── Rust-first override (CSV-only mode) ──────────────────────────────────
+# When SQLite is enabled (db / duo), we use the Python implementation above.
+# The Rust extension only overrides when running in pure-CSV mode.
 
-if not _USE_SQLITE:
+if not use_sqlite():
     try:
         from javdb_rust_core import (
             load_parsed_movies_history,
