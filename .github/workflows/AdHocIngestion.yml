@@ -201,7 +201,6 @@ jobs:
           VAR_RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
           VAR_RCLONE_DRIVE_NAME: ${{ vars.RCLONE_DRIVE_NAME }}
           VAR_RCLONE_ROOT_FOLDER: ${{ vars.RCLONE_ROOT_FOLDER }}
-          VAR_ENABLE_DEDUP: ${{ inputs.enable_dedup }}
           VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
         run: python3 utils/config_generator.py --github-actions
 
@@ -471,7 +470,7 @@ jobs:
           SPIDER_OUTPUT=$(eval $SPIDER_CMD | tee /dev/stderr)
           
           # Extract CSV filename and session_id from spider output
-          CSV_FILENAME=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_OUTPUT_CSV=" | cut -d'=' -f2 | tail -1 || true)
+          CSV_FILENAME=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_OUTPUT_CSV=" | cut -d'=' -f2 | tail -1)
           if [ -n "$CSV_FILENAME" ]; then
             echo "csv_filename=$CSV_FILENAME" >> $GITHUB_OUTPUT
             echo "Captured CSV filename: $CSV_FILENAME"
