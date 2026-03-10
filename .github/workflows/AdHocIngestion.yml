@@ -335,6 +335,7 @@ jobs:
       uploader_success: ${{ steps.uploader.outcome == 'success' }}
       pikpak_success: ${{ steps.pikpak.outcome == 'success' }}
       csv_filename: ${{ steps.spider.outputs.csv_filename }}
+      session_id: ${{ steps.spider.outputs.session_id }}
     env:
       TZ: Asia/Singapore
     
@@ -468,13 +469,19 @@ jobs:
           # Capture output to extract the CSV filename
           SPIDER_OUTPUT=$(eval $SPIDER_CMD | tee /dev/stderr)
           
-          # Extract CSV filename from spider output (format: SPIDER_OUTPUT_CSV=filename.csv)
+          # Extract CSV filename and session_id from spider output
           CSV_FILENAME=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_OUTPUT_CSV=" | cut -d'=' -f2 | tail -1)
           if [ -n "$CSV_FILENAME" ]; then
             echo "csv_filename=$CSV_FILENAME" >> $GITHUB_OUTPUT
             echo "Captured CSV filename: $CSV_FILENAME"
           else
             echo "Warning: Could not capture CSV filename from spider output"
+          fi
+          
+          SESSION_ID=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_SESSION_ID=" | cut -d'=' -f2 | tail -1 || true)
+          if [ -n "$SESSION_ID" ]; then
+            echo "session_id=$SESSION_ID" >> $GITHUB_OUTPUT
+            echo "Captured session ID: $SESSION_ID"
           fi
 
       - name: Step 2 - Run qBittorrent Uploader (Ad-Hoc)
@@ -505,6 +512,12 @@ jobs:
             echo "Using custom qBittorrent category: $QB_CATEGORY"
           fi
           
+          # Pass session_id for SQLite stats
+          SESSION_ID="${{ steps.spider.outputs.session_id }}"
+          if [ -n "$SESSION_ID" ]; then
+            CMD="$CMD --session-id $SESSION_ID"
+          fi
+          
           echo "Executing: $CMD"
           eval $CMD
 
@@ -518,6 +531,10 @@ jobs:
           CMD="python3 scripts/pikpak_bridge.py --days 3"
           if [ "${{ inputs.proxy_pikpak }}" == "true" ]; then
             CMD="$CMD --use-proxy"
+          fi
+          SESSION_ID="${{ steps.spider.outputs.session_id }}"
+          if [ -n "$SESSION_ID" ]; then
+            CMD="$CMD --session-id $SESSION_ID"
           fi
           echo "Executing: $CMD"
           eval $CMD
@@ -604,11 +621,11 @@ jobs:
             echo "Including CSV: $CSV_PATH"
           fi
           
-          # Add history files if they exist
-          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/pikpak_bridge_history.csv" "$REPORTS_DIR/proxy_bans.csv" "$REPORTS_DIR/rclone_inventory.csv" "$REPORTS_DIR/dedup.csv"; do
+          # Add history files and database if they exist
+          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/pikpak_bridge_history.csv" "$REPORTS_DIR/proxy_bans.csv" "$REPORTS_DIR/rclone_inventory.csv" "$REPORTS_DIR/dedup.csv" "$REPORTS_DIR/javdb_autospider.db"; do
             if [ -f "$HIST_FILE" ]; then
               FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $HIST_FILE"
-              echo "Including history: $HIST_FILE"
+              echo "Including: $HIST_FILE"
             fi
           done
           
@@ -854,7 +871,7 @@ jobs:
             echo "✓ Reports decrypted successfully (folder structure preserved)"
             # Show what was extracted
             echo "Extracted files:"
-            find reports -type f -name "*.csv" 2>/dev/null | head -20 || echo "No CSV files found"
+            find reports -type f \( -name "*.csv" -o -name "*.db" \) 2>/dev/null | head -20 || echo "No data files found"
           else
             echo "No encrypted reports found"
           fi
@@ -889,10 +906,11 @@ jobs:
           # ============================================================
           echo "Step 1: Staging files..."
           if [[ "$SPIDER_SUCCESS" == "true" && "$UPLOADER_SUCCESS" == "true" ]]; then
-            echo "Spider and Uploader both succeeded - staging all CSV files including history files"
+            echo "Spider and Uploader both succeeded - staging all data files"
             git add "$REPORTS_DIR/parsed_movies_history.csv" 2>/dev/null || true
             git add "$REPORTS_DIR/pikpak_bridge_history.csv" 2>/dev/null || true
             git add "$REPORTS_DIR/proxy_bans.csv" 2>/dev/null || true
+            git add "$REPORTS_DIR/javdb_autospider.db" 2>/dev/null || true
             find "$AD_HOC_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
             find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
           else
