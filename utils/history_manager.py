@@ -276,6 +276,24 @@ def should_skip_recent_yesterday_release(href, history_data, is_yesterday_releas
     return visited_str[:10] >= cutoff
 
 
+def should_skip_recent_today_release(href, history_data, is_today_release):
+    """Skip a movie if it was already visited today and is tagged as today's release.
+
+    This avoids redundant detail-page fetches when the pipeline is re-run on
+    the same day (e.g. manual workflow_dispatch).
+    """
+    if not is_today_release:
+        return False
+    if not history_data or href not in history_data:
+        return False
+    entry = history_data[href]
+    visited_str = entry.get('last_visited_datetime', '') or entry.get('update_datetime', '')
+    if not visited_str:
+        return False
+    cutoff = datetime.now().strftime('%Y-%m-%d')
+    return visited_str[:10] >= cutoff
+
+
 def should_process_movie(href, history_data, phase, magnet_links):
     """Determine if a movie should be processed based on history and phase rules."""
     if href not in history_data:
@@ -666,6 +684,7 @@ if not use_sqlite():
             get_missing_torrent_types,
             has_complete_subtitles,
             should_skip_recent_yesterday_release,
+            should_skip_recent_today_release,
             batch_update_last_visited,
             should_process_movie,
             check_torrent_in_history,
