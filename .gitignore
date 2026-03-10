@@ -80,3 +80,7 @@ rust-analyzer/
 rust_core/target/wheels/
 rust_core/target/dist/
 rust_core/target/sdist/
+
+# SQLite temporary files
+*.db-wal
+*.db-shm
