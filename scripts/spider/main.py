@@ -11,6 +11,7 @@ from utils.logging_config import get_logger
 from utils.history_manager import load_parsed_movies_history, validate_history_file
 from utils.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 from utils.filename_helper import generate_output_csv_name
+from utils.csv_writer import set_active_session
 
 import scripts.spider.state as state
 from scripts.spider.config_loader import (
@@ -222,6 +223,36 @@ def main():
     use_cf_bypass = idx_result['use_cf_bypass']
     csv_path = idx_result['csv_path']
 
+    # Create a report session in SQLite
+    _session_id = None
+    try:
+        from utils.db import init_db, db_create_report_session
+        from utils.url_helper import detect_url_type, extract_url_identifier
+        init_db()
+        report_type = 'adhoc' if custom_url else 'daily'
+        report_date = datetime.now().strftime('%Y%m%d')
+        url_type = None
+        display_name = None
+        if custom_url:
+            try:
+                url_type = detect_url_type(custom_url)
+                display_name = extract_url_identifier(custom_url)
+            except Exception:
+                pass
+        _session_id = db_create_report_session(
+            report_type=report_type,
+            report_date=report_date,
+            csv_filename=os.path.basename(csv_path),
+            url_type=url_type,
+            display_name=display_name,
+            url=custom_url,
+            start_page=start_page,
+        )
+        set_active_session(_session_id)
+        logger.info(f"Created report session: id={_session_id}")
+    except Exception as e:
+        logger.warning(f"Failed to create report session: {e}")
+
     # ======================================================================
     # Process Phase 1 entries
     # ======================================================================
@@ -359,6 +390,46 @@ def main():
         any_proxy_banned=any_proxy_banned,
         any_proxy_banned_phase2=any_proxy_banned_phase2,
     )
+
+    # Save spider stats and end_page to SQLite
+    if _session_id is not None:
+        try:
+            from utils.db import db_save_spider_stats, get_db
+            p1_discovered = len(all_index_results_phase1) if phase_mode in ('1', 'all') else 0
+            p1_processed = len(phase1_rows)
+            _p1 = p1_result if 'p1_result' in locals() else {}
+            p1_skipped = _p1.get('skipped_history', 0) if _p1 else 0
+            p1_no_new = _p1.get('no_new_torrents', 0) if _p1 else 0
+            p1_failed = _p1.get('failed', 0) if _p1 else 0
+
+            p2_discovered = len(all_index_results_phase2) if phase_mode in ('2', 'all') else 0
+            p2_processed = len(phase2_rows)
+            _p2 = p2_result if 'p2_result' in locals() else {}
+            p2_skipped = _p2.get('skipped_history', 0) if _p2 else 0
+            p2_no_new = _p2.get('no_new_torrents', 0) if _p2 else 0
+            p2_failed = _p2.get('failed', 0) if _p2 else 0
+
+            stats = {
+                'phase1_discovered': p1_discovered, 'phase1_processed': p1_processed,
+                'phase1_skipped': p1_skipped, 'phase1_no_new': p1_no_new, 'phase1_failed': p1_failed,
+                'phase2_discovered': p2_discovered, 'phase2_processed': p2_processed,
+                'phase2_skipped': p2_skipped, 'phase2_no_new': p2_no_new, 'phase2_failed': p2_failed,
+                'total_discovered': p1_discovered + p2_discovered,
+                'total_processed': p1_processed + p2_processed,
+                'total_skipped': skipped_history_count,
+                'total_no_new': no_new_torrents_count,
+                'total_failed': failed_count,
+            }
+            db_save_spider_stats(_session_id, stats)
+
+            last_page = idx_result.get('last_valid_page')
+            if last_page is not None:
+                with get_db() as conn:
+                    conn.execute("UPDATE report_sessions SET end_page=? WHERE id=?", (last_page, _session_id))
+        except Exception as e:
+            logger.warning(f"Failed to save spider stats: {e}")
+
+        print(f"SPIDER_SESSION_ID={_session_id}")
 
     from_pipeline = args.from_pipeline if hasattr(args, 'from_pipeline') else False
 
