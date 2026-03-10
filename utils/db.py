@@ -236,7 +236,13 @@ CREATE TABLE IF NOT EXISTS pikpak_stats (
 
 
 def init_db(db_path: Optional[str] = None):
-    """Create all tables if they don't exist and set the schema version."""
+    """Create all tables if they don't exist and set the schema version.
+
+    In csv-only storage mode this is a no-op (no database file is created).
+    """
+    from utils.config_helper import use_sqlite
+    if not use_sqlite():
+        return
     with get_db(db_path) as conn:
         conn.executescript(_TABLES_SQL)
         row = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()

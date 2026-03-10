@@ -36,6 +36,12 @@ class TestInitDb:
         db_mod.init_db(_isolate_sqlite)
         db_mod.init_db(_isolate_sqlite)
 
+    def test_init_db_noop_in_csv_mode(self, tmp_path, storage_mode_csv):
+        """init_db should be a no-op when STORAGE_MODE='csv'."""
+        fresh_db = str(tmp_path / "should_not_exist.db")
+        db_mod.init_db(fresh_db)
+        assert not os.path.exists(fresh_db)
+
 
 # ── parsed_movies_history ─────────────────────────────────────────────────
 

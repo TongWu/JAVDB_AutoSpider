@@ -207,3 +207,56 @@ class TestDedupIO:
 
     def test_load_empty(self):
         assert load_dedup_csv('') == []
+
+
+# ── STORAGE_MODE tests ──────────────────────────────────────────────────
+
+class TestStorageModeDb:
+    """db mode: reads/writes only hit SQLite."""
+
+    def test_append_and_load(self, storage_mode_db):
+        r = DedupRecord('DB-001', 's', 'sub', 'p', 100, 'cat', 'reason', 't', 'False', '')
+        append_dedup_record('/nonexistent.csv', r)
+        rows = load_dedup_csv('/nonexistent.csv')
+        assert len(rows) == 1
+        assert rows[0]['video_code'] == 'DB-001'
+
+    def test_inventory_reads_sqlite(self, storage_mode_db):
+        _seed_inventory([_inventory_row('DB-INV')])
+        inv = load_rclone_inventory('/nonexistent.csv')
+        assert 'DB-INV' in inv
+
+
+class TestStorageModeCsv:
+    """csv mode: reads/writes only hit CSV files."""
+
+    def test_append_and_load_csv(self, tmp_path, storage_mode_csv):
+        csv_path = str(tmp_path / 'dedup.csv')
+        r = DedupRecord('CSV-001', 's', 'sub', 'p', 100, 'cat', 'reason', 't', 'False', '')
+        append_dedup_record(csv_path, r)
+        assert os.path.exists(csv_path)
+
+    def test_inventory_reads_csv(self, tmp_path, storage_mode_csv):
+        csv_path = str(tmp_path / 'inv.csv')
+        import csv as csv_mod
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            w = csv_mod.DictWriter(f, fieldnames=[
+                'video_code', 'sensor_category', 'subtitle_category',
+                'folder_path', 'folder_size', 'file_count', 'scan_datetime',
+            ])
+            w.writeheader()
+            w.writerow(_inventory_row('CSV-INV'))
+        inv = load_rclone_inventory(csv_path)
+        assert 'CSV-INV' in inv
+
+
+class TestStorageModeDuo:
+    """duo mode: both SQLite and CSV are written."""
+
+    def test_append_writes_both(self, tmp_path, storage_mode_duo):
+        csv_path = str(tmp_path / 'dedup.csv')
+        r = DedupRecord('DUO-001', 's', 'sub', 'p', 100, 'cat', 'reason', 't', 'False', '')
+        append_dedup_record(csv_path, r)
+        rows_sqlite = db_mod.db_load_dedup_records()
+        assert any(row['video_code'] == 'DUO-001' for row in rows_sqlite)
+        assert os.path.exists(csv_path)

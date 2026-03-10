@@ -1189,14 +1189,16 @@ def main():
     _db_uploader_stats = None
     _db_pikpak_stats = None
     try:
-        from utils.db import init_db, db_get_latest_session, db_get_spider_stats, db_get_uploader_stats, db_get_pikpak_stats
-        init_db()
-        latest = db_get_latest_session()
-        if latest:
-            _sid = latest['id']
-            _db_spider_stats = db_get_spider_stats(_sid)
-            _db_uploader_stats = db_get_uploader_stats(_sid)
-            _db_pikpak_stats = db_get_pikpak_stats(_sid)
+        from utils.config_helper import use_sqlite as _use_sqlite
+        if _use_sqlite():
+            from utils.db import init_db, db_get_latest_session, db_get_spider_stats, db_get_uploader_stats, db_get_pikpak_stats
+            init_db()
+            latest = db_get_latest_session()
+            if latest:
+                _sid = latest['id']
+                _db_spider_stats = db_get_spider_stats(_sid)
+                _db_uploader_stats = db_get_uploader_stats(_sid)
+                _db_pikpak_stats = db_get_pikpak_stats(_sid)
     except Exception as e:
         logger.debug(f"SQLite stats not available: {e}")
 
