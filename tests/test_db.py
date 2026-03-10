@@ -359,13 +359,13 @@ class TestSessionIdExtraction:
 
 class TestReportMigration:
     def test_parse_daily_filename(self):
-        from migration.csv_reports_to_sqlite import parse_csv_filename
+        from migration.csv_to_sqlite import parse_csv_filename
         result = parse_csv_filename('Javdb_TodayTitle_20240101.csv', is_adhoc_dir=False)
         assert result['report_type'] == 'daily'
         assert result['report_date'] == '20240101'
 
     def test_parse_adhoc_filename(self):
-        from migration.csv_reports_to_sqlite import parse_csv_filename
+        from migration.csv_to_sqlite import parse_csv_filename
         result = parse_csv_filename(
             'Javdb_AdHoc_actors_TestActor_20240201.csv', is_adhoc_dir=True)
         assert result['report_type'] == 'adhoc'
@@ -374,19 +374,19 @@ class TestReportMigration:
         assert result['report_date'] == '20240201'
 
     def test_parse_adhoc_rankings(self):
-        from migration.csv_reports_to_sqlite import parse_csv_filename
+        from migration.csv_to_sqlite import parse_csv_filename
         result = parse_csv_filename(
             'Javdb_AdHoc_rankings_top_20241231.csv', is_adhoc_dir=True)
         assert result['url_type'] == 'rankings'
         assert result['display_name'] == 'top'
 
     def test_parse_today_title_in_adhoc_dir(self):
-        from migration.csv_reports_to_sqlite import parse_csv_filename
+        from migration.csv_to_sqlite import parse_csv_filename
         result = parse_csv_filename('Javdb_TodayTitle_20250629.csv', is_adhoc_dir=True)
         assert result['report_type'] == 'adhoc'
 
     def test_migrate_single_csv(self, _isolate_sqlite, tmp_path):
-        from migration.csv_reports_to_sqlite import migrate_single_csv
+        from migration.csv_to_sqlite import migrate_single_csv
         csv_path = str(tmp_path / "test_report.csv")
         with open(csv_path, 'w', encoding='utf-8-sig') as f:
             f.write('href,video_code,page,actor,rate,comment_number,'
@@ -406,7 +406,7 @@ class TestReportMigration:
         assert rows[0]['video_code'] == 'A-001'
 
     def test_skip_already_migrated(self, _isolate_sqlite, tmp_path):
-        from migration.csv_reports_to_sqlite import migrate_single_csv
+        from migration.csv_to_sqlite import migrate_single_csv
         csv_path = str(tmp_path / "dup.csv")
         with open(csv_path, 'w', encoding='utf-8-sig') as f:
             f.write('href,video_code,page,actor,rate,comment_number,'
