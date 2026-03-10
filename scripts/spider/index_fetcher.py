@@ -160,4 +160,5 @@ def fetch_all_index_pages(
         'use_proxy': use_proxy,
         'use_cf_bypass': use_cf_bypass,
         'csv_path': csv_path,
+        'last_valid_page': last_valid_page,
     }
