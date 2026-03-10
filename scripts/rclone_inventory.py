@@ -255,10 +255,11 @@ def write_inventory_csv(
     remote_name: str,
     root_folder: str,
 ) -> int:
-    """Write the inventory CSV.  Returns number of records written."""
+    """Write the inventory to CSV and SQLite.  Returns number of records written."""
     scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     records_written = 0
 
+    db_entries = []
     with open(output_path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=INVENTORY_FIELDNAMES)
         writer.writeheader()
@@ -266,7 +267,7 @@ def write_inventory_csv(
             folder_path = folder.full_path
             if not folder_path.startswith(f"{remote_name}:"):
                 folder_path = f"{remote_name}:{root_folder}/{folder.year}/{folder.actor}/{folder.folder_name}"
-            writer.writerow({
+            row = {
                 'video_code': folder.movie_code,
                 'sensor_category': folder.sensor_category,
                 'subtitle_category': folder.subtitle_category,
@@ -274,8 +275,18 @@ def write_inventory_csv(
                 'folder_size': folder.size,
                 'file_count': folder.file_count,
                 'scan_datetime': scan_time,
-            })
+            }
+            writer.writerow(row)
+            db_entries.append(row)
             records_written += 1
+
+    try:
+        from utils.db import init_db, db_replace_rclone_inventory
+        init_db()
+        db_replace_rclone_inventory(db_entries)
+        logger.info(f"Inventory SQLite updated: {records_written} records")
+    except Exception as e:
+        logger.warning(f"Failed to write inventory to SQLite (CSV still written): {e}")
 
     logger.info(f"Inventory CSV written: {output_path} ({records_written} records)")
     return records_written
@@ -370,6 +381,14 @@ def main() -> int:
     # Scan & write incrementally to reduce memory usage
     scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     total_written = 0
+    all_db_entries = []
+
+    try:
+        from utils.db import init_db, db_replace_rclone_inventory
+        init_db()
+        _sqlite_ok = True
+    except Exception:
+        _sqlite_ok = False
 
     with open(output_path, 'w', newline='', encoding='utf-8') as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=INVENTORY_FIELDNAMES)
@@ -385,7 +404,7 @@ def main() -> int:
                         f"{remote_name}:{root_folder}/{folder.year}/"
                         f"{folder.actor}/{folder.folder_name}"
                     )
-                writer.writerow({
+                row = {
                     'video_code': folder.movie_code,
                     'sensor_category': folder.sensor_category,
                     'subtitle_category': folder.subtitle_category,
@@ -393,7 +412,9 @@ def main() -> int:
                     'folder_size': folder.size,
                     'file_count': folder.file_count,
                     'scan_datetime': scan_time,
-                })
+                }
+                writer.writerow(row)
+                all_db_entries.append(row)
                 total_written += 1
             csv_file.flush()
 
@@ -403,6 +424,13 @@ def main() -> int:
             year_filter=year_filter,
             flush_callback=flush_batch,
         )
+
+    if _sqlite_ok and all_db_entries:
+        try:
+            db_replace_rclone_inventory(all_db_entries)
+            logger.info(f"Inventory SQLite updated: {len(all_db_entries)} records")
+        except Exception as e:
+            logger.warning(f"Failed to write inventory to SQLite: {e}")
 
     if total_found == 0:
         logger.warning("No movie folders found")
