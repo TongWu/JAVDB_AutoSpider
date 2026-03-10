@@ -21,16 +21,27 @@ from datetime import datetime
 # Change to script directory
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
-# Import unified configuration
+# Import unified configuration — each variable resolved independently so that
+# a missing new variable never causes established ones to fall back to defaults.
 try:
-    from config import (
-        PIPELINE_LOG_FILE, LOG_LEVEL, DAILY_REPORT_DIR, AD_HOC_DIR
-    )
+    import config as _config_module
 except ImportError:
-    PIPELINE_LOG_FILE = 'logs/pipeline.log'
-    LOG_LEVEL = 'INFO'
-    DAILY_REPORT_DIR = 'reports/DailyReport'
-    AD_HOC_DIR = 'reports/AdHoc'
+    _config_module = None
+
+
+def _cfg(name, default):
+    if _config_module is None:
+        return default
+    return getattr(_config_module, name, default)
+
+
+PIPELINE_LOG_FILE = _cfg('PIPELINE_LOG_FILE', 'logs/pipeline.log')
+LOG_LEVEL = _cfg('LOG_LEVEL', 'INFO')
+DAILY_REPORT_DIR = _cfg('DAILY_REPORT_DIR', 'reports/DailyReport')
+AD_HOC_DIR = _cfg('AD_HOC_DIR', 'reports/AdHoc')
+ENABLE_DEDUP = _cfg('ENABLE_DEDUP', False)
+_REPORTS_DIR = _cfg('REPORTS_DIR', 'reports')
+DEDUP_CSV = _cfg('DEDUP_CSV', 'dedup.csv')
 
 # Import path helper for dated subdirectories
 from utils.path_helper import get_dated_report_path
@@ -113,6 +124,8 @@ def parse_arguments():
     parser.add_argument('--use-proxy', action='store_true', help='Enable proxy for all HTTP requests')
     # PikPak Bridge arguments
     parser.add_argument('--pikpak-individual', action='store_true', help='Use individual mode for PikPak Bridge')
+    # Dedup
+    parser.add_argument('--enable-dedup', action='store_true', help='Enable rclone dedup detection and execution')
     return parser.parse_args()
 
 
@@ -245,6 +258,9 @@ def main():
         spider_args.append('--ignore-release-date')
     if args.use_proxy:
         spider_args.append('--use-proxy')
+    enable_dedup = args.enable_dedup or ENABLE_DEDUP
+    if enable_dedup:
+        spider_args.append('--enable-dedup')
     # Build base arguments for uploader (csv filename will be added after spider runs)
     uploader_args = ['--from-pipeline']  # Always pass --from-pipeline
     if is_adhoc_mode:
@@ -305,6 +321,18 @@ def main():
         logger.info("Step 3: Running PikPak Bridge to clean up old torrents...")
         run_script('scripts/pikpak_bridge.py', pikpak_args)
         logger.info("✓ PikPak Bridge completed successfully")
+
+        # 3.5 Run Rclone Dedup Executor (if enabled)
+        dedup_csv_path = os.path.join(_REPORTS_DIR, DEDUP_CSV)
+        if enable_dedup and os.path.exists(dedup_csv_path):
+            logger.info("Step 3.5: Running Rclone Dedup Executor...")
+            try:
+                run_script('scripts/rclone_dedup_executor.py', [])
+                logger.info("✓ Rclone Dedup Executor completed successfully")
+            except Exception as dedup_err:
+                logger.warning(f"Rclone Dedup Executor failed (non-fatal): {dedup_err}")
+        elif enable_dedup:
+            logger.info("Dedup enabled but no dedup.csv found – skipping executor")
 
         # 4. Run Email Notification
         # Build email args after spider runs (csv_path is now known)
