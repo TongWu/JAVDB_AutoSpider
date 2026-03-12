@@ -76,6 +76,7 @@ jobs:
         uses: ./.github/actions/install-rust-wheel
 
       - name: Install rclone
+        if: inputs.runner != 'self-hosted'
         run: |
           curl https://rclone.org/install.sh | sudo bash
           rclone version
