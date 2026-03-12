@@ -699,6 +699,10 @@ def get_movie_folders_with_stats(
         entries = json.loads(result.stdout)
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"Timeout listing {remote_path}")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"Invalid JSON from rclone for {remote_path}: {exc}"
+        ) from exc
 
     top_dirs: set = set()
     dir_sizes: Dict[str, int] = defaultdict(int)
@@ -771,6 +775,10 @@ def get_all_movie_folders_for_year(
         entries = json.loads(result.stdout)
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"Timeout listing {remote_path}")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"Invalid JSON from rclone for {remote_path}: {exc}"
+        ) from exc
 
     movie_dirs: set = set()
     dir_sizes: Dict[Tuple[str, str], int] = defaultdict(int)
