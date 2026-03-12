@@ -473,6 +473,34 @@ def db_replace_rclone_inventory(entries: List[dict], db_path: Optional[str] = No
         return len(entries)
 
 
+def db_clear_rclone_inventory(db_path: Optional[str] = None) -> None:
+    """Delete all rows from rclone_inventory (call once before streaming inserts)."""
+    with get_db(db_path) as conn:
+        conn.execute("DELETE FROM rclone_inventory")
+
+
+def db_append_rclone_inventory(entries: List[dict], db_path: Optional[str] = None) -> int:
+    """Append rows to rclone_inventory using executemany for speed."""
+    if not entries:
+        return 0
+    with get_db(db_path) as conn:
+        conn.executemany(
+            """INSERT INTO rclone_inventory
+               (video_code, sensor_category, subtitle_category,
+                folder_path, folder_size, file_count, scan_datetime)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            [
+                (e.get('video_code', ''), e.get('sensor_category', ''),
+                 e.get('subtitle_category', ''), e.get('folder_path', ''),
+                 int(e.get('folder_size', 0) or 0),
+                 int(e.get('file_count', 0) or 0),
+                 e.get('scan_datetime', ''))
+                for e in entries
+            ],
+        )
+        return len(entries)
+
+
 def db_load_rclone_inventory(db_path: Optional[str] = None) -> Dict[str, list]:
     """Load inventory grouped by video_code (same structure as CSV loader)."""
     inventory: Dict[str, list] = {}
