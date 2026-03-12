@@ -46,7 +46,6 @@ from scripts.rclone_dedup import (
     get_all_movie_folders_for_year,
     check_rclone_installed,
     check_remote_exists,
-    check_remote_folder_access,
     VIDEO_EXTENSIONS,
 )
 
@@ -378,7 +377,7 @@ def main() -> int:
     logger.info(f"Output: {output_path}")
     logger.info("=" * 60)
 
-    # Health checks
+    # Health checks (read-only — skip the slow write-access test)
     ok, msg = check_rclone_installed()
     if not ok:
         logger.error(msg)
@@ -390,12 +389,8 @@ def main() -> int:
         logger.error(msg)
         return 1
     logger.info(f"  {msg}")
-
-    ok, msg = check_remote_folder_access(remote_name, root_folder)
-    if not ok:
-        logger.error(msg)
-        return 1
-    logger.info(f"  {msg}")
+    # Folder access is implicitly verified by get_year_folders inside
+    # scan_inventory; the dedup write-access check is too slow here.
 
     # ── Streaming write setup ────────────────────────────────────────
     from utils.config_helper import use_sqlite as _use_sqlite, use_csv as _use_csv
