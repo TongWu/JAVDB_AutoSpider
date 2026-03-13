@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 _REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
 DB_PATH = cfg('SQLITE_DB_PATH', os.path.join(_REPORTS_DIR, 'javdb_autospider.db'))
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # ── Connection management ────────────────────────────────────────────────
 
@@ -245,6 +245,8 @@ CREATE TABLE IF NOT EXISTS pikpak_stats (
     filtered_old     INTEGER DEFAULT 0,
     successful_count INTEGER DEFAULT 0,
     failed_count     INTEGER DEFAULT 0,
+    uploaded_count      INTEGER DEFAULT 0,
+    delete_failed_count INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
 );
 """
@@ -289,6 +291,12 @@ def init_db(db_path: Optional[str] = None, *, force: bool = False):
                     "CREATE INDEX IF NOT EXISTS idx_sessions_csv "
                     "ON report_sessions(csv_filename)"
                 )
+            if current < 3:
+                for col in ('uploaded_count', 'delete_failed_count'):
+                    try:
+                        conn.execute(f"ALTER TABLE pikpak_stats ADD COLUMN {col} INTEGER DEFAULT 0")
+                    except sqlite3.OperationalError:
+                        pass
             if current < SCHEMA_VERSION:
                 conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
         logger.debug(f"Database initialised at {db_path or DB_PATH} (schema v{SCHEMA_VERSION})")
@@ -834,12 +842,15 @@ def db_save_pikpak_stats(session_id: int, stats: dict, db_path: Optional[str] = 
         cur = conn.execute(
             """INSERT INTO pikpak_stats
                (session_id, threshold_days, total_torrents,
-                filtered_old, successful_count, failed_count)
-               VALUES (?, ?, ?, ?, ?, ?)""",
+                filtered_old, successful_count, failed_count,
+                uploaded_count, delete_failed_count)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (session_id,
              stats.get('threshold_days', 3), stats.get('total_torrents', 0),
              stats.get('filtered_old', 0), stats.get('successful_count', 0),
-             stats.get('failed_count', 0)),
+             stats.get('failed_count', 0),
+             stats.get('uploaded_count', stats.get('successful_count', 0)),
+             stats.get('delete_failed_count', 0)),
         )
         return cur.lastrowid
 

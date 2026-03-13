@@ -1255,8 +1255,8 @@ def main():
         pikpak_stats = {
             'total_torrents': _db_pikpak_stats.get('total_torrents', 0),
             'filtered_old': _db_pikpak_stats.get('filtered_old', 0),
-            'added_to_pikpak': _db_pikpak_stats.get('successful_count', 0),
-            'removed_from_qb': _db_pikpak_stats.get('successful_count', 0),
+        'added_to_pikpak': _db_pikpak_stats.get('uploaded_count', _db_pikpak_stats.get('successful_count', 0)),
+        'removed_from_qb': _db_pikpak_stats.get('successful_count', 0),
             'failed': _db_pikpak_stats.get('failed_count', 0),
             'threshold_days': _db_pikpak_stats.get('threshold_days', 3),
         }
