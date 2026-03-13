@@ -84,3 +84,4 @@ rust_core/target/sdist/
 # SQLite temporary files
 *.db-wal
 *.db-shm
+.cursorrules
