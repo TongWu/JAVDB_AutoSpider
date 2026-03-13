@@ -331,12 +331,8 @@ class TestExecuteMode:
         r = DedupRecord('A-001', 's', 'sub', 'gdrive:/p', 100, 'cat', 'r', 't', 'False', '')
         append_dedup_record(path, r)
 
-        rows = load_dedup_csv(path)
-        for row in rows:
-            if row.get('is_deleted', 'False') == 'True':
-                continue
-            ok = rclone_purge(row['existing_gdrive_path'], dry_run=True)
-            assert ok is True
+        result = run_execute_from_csv(path, dry_run=True)
+        assert result == 0
 
         reloaded = load_dedup_csv(path)
         assert reloaded[0]['is_deleted'] == 'False'
