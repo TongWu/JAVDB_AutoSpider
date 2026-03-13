@@ -177,6 +177,7 @@ jobs:
           git add reports/rclone_inventory.csv 2>/dev/null || true
           git add reports/javdb_autospider.db 2>/dev/null || true
           git add reports/dedup.csv 2>/dev/null || true
+          git add reports/Dedup/*.csv 2>/dev/null || true
 
           if git diff --cached --quiet; then
             echo "No changes to commit"
