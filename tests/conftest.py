@@ -40,7 +40,9 @@ def _isolate_sqlite(tmp_path):
     """
     test_db = str(tmp_path / "test.db")
     original = _db_mod.DB_PATH
+    original_override = _cfg_mod._storage_mode_override
     _db_mod.DB_PATH = test_db
+    _cfg_mod._storage_mode_override = None
 
     # Reset dedup_checker module-level state
     _dedup_mod._db_initialised = False
@@ -53,6 +55,7 @@ def _isolate_sqlite(tmp_path):
 
     _db_mod.close_db()
     _db_mod.DB_PATH = original
+    _cfg_mod._storage_mode_override = original_override
 
 
 @pytest.fixture
