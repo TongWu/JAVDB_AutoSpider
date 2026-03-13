@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 _REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
 DB_PATH = cfg('SQLITE_DB_PATH', os.path.join(_REPORTS_DIR, 'javdb_autospider.db'))
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # ── Connection management ────────────────────────────────────────────────
 
@@ -141,6 +141,9 @@ CREATE TABLE IF NOT EXISTS dedup_records (
     is_deleted INTEGER DEFAULT 0,
     delete_datetime TEXT DEFAULT ''
 );
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dedup_active_path
+    ON dedup_records(existing_gdrive_path)
+    WHERE is_deleted = 0 AND existing_gdrive_path != '';
 
 -- 4. pikpak_history (replaces pikpak_bridge_history.csv)
 CREATE TABLE IF NOT EXISTS pikpak_history (
@@ -302,6 +305,12 @@ def init_db(db_path: Optional[str] = None, *, force: bool = False):
                         conn.execute(f"ALTER TABLE pikpak_stats ADD COLUMN {col} INTEGER DEFAULT 0")
                     except sqlite3.OperationalError:
                         pass
+            if current < 4:
+                conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_dedup_active_path "
+                    "ON dedup_records(existing_gdrive_path) "
+                    "WHERE is_deleted = 0 AND existing_gdrive_path != ''"
+                )
             if current < SCHEMA_VERSION:
                 conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
         logger.debug(f"Database initialised at {db_path or DB_PATH} (schema v{SCHEMA_VERSION})")
@@ -553,19 +562,16 @@ def db_load_dedup_records(db_path: Optional[str] = None) -> List[dict]:
 
 def db_append_dedup_record(record: dict, db_path: Optional[str] = None) -> int:
     """Append a single dedup record. Returns the new row id, or -1 if a
-    pending record for the same ``existing_gdrive_path`` already exists."""
+    pending record for the same ``existing_gdrive_path`` already exists.
+
+    Uniqueness for active (non-deleted, non-empty) paths is enforced by
+    the ``uq_dedup_active_path`` partial unique index; INSERT OR IGNORE
+    makes the check atomic.
+    """
     with get_db(db_path) as conn:
         gdrive_path = record.get('existing_gdrive_path', '')
-        if gdrive_path:
-            existing = conn.execute(
-                "SELECT id FROM dedup_records "
-                "WHERE existing_gdrive_path=? AND is_deleted=0",
-                (gdrive_path,),
-            ).fetchone()
-            if existing:
-                return -1
         cur = conn.execute(
-            """INSERT INTO dedup_records
+            """INSERT OR IGNORE INTO dedup_records
                (video_code, existing_sensor, existing_subtitle,
                 existing_gdrive_path, existing_folder_size,
                 new_torrent_category, deletion_reason,
@@ -582,6 +588,8 @@ def db_append_dedup_record(record: dict, db_path: Optional[str] = None) -> int:
              1 if str(record.get('is_deleted', 'False')).lower() == 'true' else 0,
              record.get('delete_datetime', '')),
         )
+        if cur.rowcount == 0:
+            return -1
         return cur.lastrowid
 
 
