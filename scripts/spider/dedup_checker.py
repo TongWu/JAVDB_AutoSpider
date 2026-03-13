@@ -105,7 +105,7 @@ def load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
         for code, entries in raw.items():
             inventory[code] = [
                 RcloneEntry(
-                    video_code=e.get('video_code', code),
+                    video_code=e.get('video_code', code).upper(),
                     sensor_category=e.get('sensor_category', ''),
                     subtitle_category=e.get('subtitle_category', ''),
                     folder_path=e.get('folder_path', ''),
