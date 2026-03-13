@@ -51,10 +51,6 @@ PROXY_POOL = cfg('PROXY_POOL', [])
 PROXY_MODE = cfg('PROXY_MODE', 'single')
 LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
 
-if not all([QB_HOST, QB_PORT]):
-    print("ERROR: config.py not found or missing required values. Please run config generator first.")
-    sys.exit(1)
-
 # Setup basic logging
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -70,6 +66,9 @@ def check_qbittorrent_connection() -> Tuple[bool, str]:
     Returns:
         Tuple of (success, message)
     """
+    if not QB_HOST or not QB_PORT:
+        return False, "QB_HOST/QB_PORT not configured – qBittorrent checks skipped"
+
     masked_host = mask_ip_address(QB_HOST)
     
     try:
