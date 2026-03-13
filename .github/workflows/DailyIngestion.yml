@@ -373,7 +373,7 @@ jobs:
               echo "session_id=$SESSION_ID" >> $GITHUB_OUTPUT
               echo "Captured session ID: $SESSION_ID"
             else
-              echo "::warning::Ignoring invalid SESSION_ID format: $SESSION_ID"
+              echo "::warning::Ignoring invalid SESSION_ID format"
             fi
           fi
           
