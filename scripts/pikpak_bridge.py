@@ -546,6 +546,10 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline
 
 
 if __name__ == "__main__":
+    import atexit
+    from utils.db import close_db
+    atexit.register(close_db)
+
     parser = argparse.ArgumentParser(description="PikPak Bridge - Transfer torrents from qBittorrent to PikPak")
     parser.add_argument("--days", type=int, default=3, help="Filter torrents older than N days")
     parser.add_argument("--dry-run", action="store_true", help="Test mode: no delete or PikPak add")
