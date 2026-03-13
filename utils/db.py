@@ -43,6 +43,11 @@ def _get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
     conn = getattr(_local, 'conn', None)
     conn_path = getattr(_local, 'conn_path', None)
     if conn is None or conn_path != path:
+        if conn is not None and conn_path != path:
+            try:
+                conn.close()
+            except Exception:
+                pass
         os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
         if os.path.exists(path) and os.path.getsize(path) > 0 and not _is_valid_sqlite(path):
             raise sqlite3.DatabaseError(
