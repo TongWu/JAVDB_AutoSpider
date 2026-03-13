@@ -43,6 +43,8 @@ from scripts.rclone_dedup import (
     FolderInfo,
     parse_folder_name,
     get_year_folders,
+    get_actor_folders,
+    get_movie_folders_with_stats,
     get_all_movie_folders_for_year,
     check_rclone_installed,
     check_remote_exists,
@@ -183,16 +185,61 @@ def _process_year(
     root_folder: str,
     year: str,
     scan_time: str,
+    fallback_workers: int = 8,
 ) -> List[dict]:
-    """Worker: scan an entire year tree in one rclone call, return row dicts."""
+    """Scan a year tree — try year-level first, fall back to actor-level.
+
+    For small/medium years the single ``lsjson -R`` finishes quickly.
+    For very large years the call may timeout; in that case we
+    transparently fall back to per-actor parallelism.
+    """
     try:
         folders = get_all_movie_folders_for_year(
             remote_name, root_folder, year,
         )
+        return [_folder_to_row(f, remote_name, root_folder, scan_time) for f in folders]
+    except RuntimeError as e:
+        if 'Timeout' not in str(e):
+            logger.error(f"Error scanning year {year}: {e}")
+            return []
     except Exception as e:
         logger.error(f"Error scanning year {year}: {e}")
         return []
-    return [_folder_to_row(f, remote_name, root_folder, scan_time) for f in folders]
+
+    logger.warning(
+        f"Year {year} too large for single call — "
+        f"falling back to per-actor scan with {fallback_workers} workers"
+    )
+
+    try:
+        actors = get_actor_folders(remote_name, root_folder, year)
+    except Exception as e:
+        logger.error(f"Error listing actors for year {year}: {e}")
+        return []
+
+    if not actors:
+        return []
+
+    all_rows: List[dict] = []
+    with ThreadPoolExecutor(max_workers=fallback_workers) as executor:
+        futures = {
+            executor.submit(
+                get_movie_folders_with_stats, remote_name, root_folder, year, actor,
+            ): actor
+            for actor in actors
+        }
+        for future in as_completed(futures):
+            actor = futures[future]
+            try:
+                folders = future.result()
+                all_rows.extend(
+                    _folder_to_row(f, remote_name, root_folder, scan_time)
+                    for f in folders
+                )
+            except Exception as exc:
+                logger.debug(f"Error scanning {year}/{actor}: {exc}")
+
+    return all_rows
 
 
 def scan_inventory(
@@ -202,11 +249,11 @@ def scan_inventory(
     year_filter: Optional[List[str]] = None,
     row_callback=None,
 ) -> int:
-    """Scan the full folder tree using year-level parallelism.
+    """Scan the full folder tree using year-level parallelism with fallback.
 
-    Each worker scans an entire year directory with one ``rclone lsjson -R``
-    call, which discovers all actors/movies/files in a single round-trip.
-    This reduces total subprocess calls from O(year*actors) to O(years).
+    Each worker first tries a single ``rclone lsjson -R`` for the entire
+    year directory.  If the year is too large and the call times out,
+    the worker transparently falls back to per-actor parallelism.
 
     *row_callback(rows)* is invoked in the main thread every time a year
     completes, so the caller can stream results to CSV/SQLite immediately.
@@ -231,13 +278,14 @@ def scan_inventory(
 
     logger.info(
         f"Scanning {total} year folders with {max_workers} workers "
-        f"(one rclone call per year)..."
+        f"(year-level with per-actor fallback)..."
     )
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(
                 _process_year, remote_name, root_folder, y, scan_time,
+                max_workers,
             ): y
             for y in years
         }
