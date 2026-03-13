@@ -404,7 +404,6 @@ def mark_records_deleted(
         _atomic_csv_write(csv_path, rows)
 
     # Invalidate cache so next append sees the new state
-    global _pending_paths_cache
     if _pending_paths_cache is not None:
         for path, _ in path_datetime_pairs:
             _pending_paths_cache.discard(path)
