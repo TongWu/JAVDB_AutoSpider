@@ -384,6 +384,8 @@ def _persist_dedup_records(dedup_results: List[DedupResult]) -> None:
         dedup_csv_path = os.path.join(REPORTS_DIR, cfg('DEDUP_CSV', 'dedup.csv'))
 
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        appended = 0
+        skipped = 0
         for result in dedup_results:
             for folder, reason in result.folders_to_delete:
                 rec = DedupRecord(
@@ -398,8 +400,11 @@ def _persist_dedup_records(dedup_results: List[DedupResult]) -> None:
                     is_deleted='False',
                     delete_datetime='',
                 )
-                append_dedup_record(dedup_csv_path, rec)
-        logger.info("Persisted dedup records")
+                if append_dedup_record(dedup_csv_path, rec):
+                    appended += 1
+                else:
+                    skipped += 1
+        logger.info(f"Persisted dedup records: {appended} appended, {skipped} duplicates skipped")
     except Exception as e:
         logger.warning(f"Could not persist dedup records: {e}")
 

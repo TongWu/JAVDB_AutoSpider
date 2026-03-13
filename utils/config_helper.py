@@ -40,20 +40,22 @@ def storage_mode() -> str:
     """Return the active storage mode: ``'db'``, ``'csv'``, or ``'duo'``.
 
     Resolution order: runtime override → config module →
-    ``VAR_STORAGE_MODE`` env var → ``'db'``.
+    ``VAR_STORAGE_MODE`` env var → ``'duo'``.
     The env-var fallback allows workflows that skip ``config_generator.py``
-    (e.g. RcloneInventory) to still control the mode.
+    (e.g. RcloneManager) to still control the mode.  Defaults to ``'duo'``
+    so that both SQLite and CSV outputs are produced — the uploader path
+    requires the spider CSV as input.
     """
     if _storage_mode_override is not None:
         return _storage_mode_override
     import os
     mode = cfg('STORAGE_MODE', None)
     if mode is None:
-        mode = os.environ.get('VAR_STORAGE_MODE', 'db')
+        mode = os.environ.get('VAR_STORAGE_MODE', 'duo')
     if isinstance(mode, str):
         mode = mode.strip().lower()
     if mode not in ('db', 'csv', 'duo'):
-        mode = 'db'
+        mode = 'duo'
     return mode
 
 

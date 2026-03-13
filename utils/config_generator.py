@@ -304,7 +304,7 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('RCLONE_DRIVE_NAME', 'RCLONE_DRIVE_NAME', get_env, 'gdrive', 'RCLONE CONFIGURATION'),
         ('RCLONE_ROOT_FOLDER', 'RCLONE_ROOT_FOLDER', get_env, '', 'RCLONE CONFIGURATION'),
         # Storage Mode
-        ('STORAGE_MODE', 'STORAGE_MODE', get_env, 'db', 'STORAGE MODE'),
+        ('STORAGE_MODE', 'STORAGE_MODE', get_env, 'duo', 'STORAGE MODE'),
         # Dedup Configuration
         ('RCLONE_INVENTORY_CSV', 'RCLONE_INVENTORY_CSV', get_env, 'rclone_inventory.csv', 'DEDUP CONFIGURATION'),
         ('DEDUP_CSV', 'DEDUP_CSV', get_env, 'dedup.csv', 'DEDUP CONFIGURATION'),
