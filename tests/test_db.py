@@ -393,12 +393,15 @@ class TestStats:
     def test_pikpak_stats(self, _isolate_sqlite, session_id):
         stats = {
             'threshold_days': 3, 'total_torrents': 50,
-            'filtered_old': 20, 'successful_count': 18, 'failed_count': 2,
+            'filtered_old': 20, 'successful_count': 15, 'failed_count': 2,
+            'uploaded_count': 18, 'delete_failed_count': 3,
         }
         db_mod.db_save_pikpak_stats(session_id, stats)
         loaded = db_mod.db_get_pikpak_stats(session_id)
         assert loaded is not None
-        assert loaded['successful_count'] == 18
+        assert loaded['successful_count'] == 15
+        assert loaded['uploaded_count'] == 18
+        assert loaded['delete_failed_count'] == 3
 
     def test_stats_missing_session(self, _isolate_sqlite):
         assert db_mod.db_get_spider_stats(9999) is None
