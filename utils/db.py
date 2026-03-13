@@ -250,16 +250,20 @@ CREATE TABLE IF NOT EXISTS pikpak_stats (
 """
 
 
-def init_db(db_path: Optional[str] = None):
+def init_db(db_path: Optional[str] = None, *, force: bool = False):
     """Create all tables if they don't exist and set the schema version.
 
-    In csv-only storage mode this is a no-op (no database file is created).
+    In csv-only storage mode this is a no-op (no database file is created)
+    unless *force* is ``True``.  Dedup records always require SQLite, so
+    callers that manage dedup state should pass ``force=True``.
+
     If the database file exists but is invalid (e.g. a Git LFS pointer),
     the storage mode is downgraded to ``csv`` for the rest of the process.
     """
-    from utils.config_helper import use_sqlite
-    if not use_sqlite():
-        return
+    if not force:
+        from utils.config_helper import use_sqlite
+        if not use_sqlite():
+            return
 
     path = db_path or DB_PATH
     if os.path.exists(path) and os.path.getsize(path) > 0 and not _is_valid_sqlite(path):
@@ -525,8 +529,18 @@ def db_load_dedup_records(db_path: Optional[str] = None) -> List[dict]:
 
 
 def db_append_dedup_record(record: dict, db_path: Optional[str] = None) -> int:
-    """Append a single dedup record. Returns the new row id."""
+    """Append a single dedup record. Returns the new row id, or -1 if a
+    pending record for the same ``existing_gdrive_path`` already exists."""
     with get_db(db_path) as conn:
+        gdrive_path = record.get('existing_gdrive_path', '')
+        if gdrive_path:
+            existing = conn.execute(
+                "SELECT id FROM dedup_records "
+                "WHERE existing_gdrive_path=? AND is_deleted=0",
+                (gdrive_path,),
+            ).fetchone()
+            if existing:
+                return -1
         cur = conn.execute(
             """INSERT INTO dedup_records
                (video_code, existing_sensor, existing_subtitle,
@@ -537,7 +551,7 @@ def db_append_dedup_record(record: dict, db_path: Optional[str] = None) -> int:
             (record.get('video_code', ''),
              record.get('existing_sensor', ''),
              record.get('existing_subtitle', ''),
-             record.get('existing_gdrive_path', ''),
+             gdrive_path,
              int(record.get('existing_folder_size', 0) or 0),
              record.get('new_torrent_category', ''),
              record.get('deletion_reason', ''),
@@ -548,8 +562,53 @@ def db_append_dedup_record(record: dict, db_path: Optional[str] = None) -> int:
         return cur.lastrowid
 
 
+def db_mark_records_deleted(
+    path_datetime_pairs: List[Tuple[str, str]],
+    db_path: Optional[str] = None,
+) -> int:
+    """Mark specific dedup records as deleted by gdrive path (atomic UPDATE)."""
+    with get_db(db_path) as conn:
+        updated = 0
+        for path, dt in path_datetime_pairs:
+            cur = conn.execute(
+                "UPDATE dedup_records SET is_deleted=1, delete_datetime=? "
+                "WHERE existing_gdrive_path=? AND is_deleted=0",
+                (dt, path),
+            )
+            updated += cur.rowcount
+        return updated
+
+
+def db_cleanup_deleted_records(
+    older_than_days: int = 30,
+    db_path: Optional[str] = None,
+) -> int:
+    """Remove dedup records that were deleted more than *older_than_days* ago.
+
+    Records with an empty ``delete_datetime`` are skipped even when
+    ``is_deleted=1`` (data anomaly — don't silently discard).
+    """
+    from datetime import timedelta
+    cutoff = (datetime.now() - timedelta(days=older_than_days)).strftime('%Y-%m-%d %H:%M:%S')
+    with get_db(db_path) as conn:
+        cur = conn.execute(
+            "DELETE FROM dedup_records "
+            "WHERE is_deleted=1 AND delete_datetime != '' AND delete_datetime < ?",
+            (cutoff,),
+        )
+        return cur.rowcount
+
+
 def db_save_dedup_records(rows: List[dict], db_path: Optional[str] = None) -> None:
-    """Overwrite all dedup records (used after updating is_deleted flags)."""
+    """Overwrite all dedup records.
+
+    .. deprecated::
+        Use :func:`db_mark_records_deleted` for targeted updates instead.
+    """
+    logger.warning(
+        "db_save_dedup_records is deprecated — use db_mark_records_deleted "
+        "for targeted updates instead"
+    )
     with get_db(db_path) as conn:
         conn.execute("DELETE FROM dedup_records")
         for r in rows:
