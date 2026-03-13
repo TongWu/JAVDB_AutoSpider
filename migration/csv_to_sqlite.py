@@ -155,6 +155,7 @@ def migrate_dedup(csv_path: str, db_path: str, dry_run: bool = False) -> int:
         return len(rows)
 
     with get_db(db_path) as conn:
+        conn.execute("DELETE FROM dedup_records")
         for row in rows:
             is_del = str(row.get('is_deleted', 'False')).lower() in ('true', '1')
             conn.execute(
@@ -200,6 +201,7 @@ def migrate_pikpak(csv_path: str, db_path: str, dry_run: bool = False) -> int:
         return len(rows)
 
     with get_db(db_path) as conn:
+        conn.execute("DELETE FROM pikpak_history")
         for row in rows:
             conn.execute(
                 """INSERT INTO pikpak_history
