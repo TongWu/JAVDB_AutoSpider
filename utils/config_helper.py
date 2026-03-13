@@ -9,8 +9,11 @@ to its hardcoded default.
 
 try:
     import config as _config_module
-except ImportError:
-    _config_module = None
+except ModuleNotFoundError as exc:
+    if exc.name == 'config':
+        _config_module = None
+    else:
+        raise
 
 
 def cfg(name, default):
