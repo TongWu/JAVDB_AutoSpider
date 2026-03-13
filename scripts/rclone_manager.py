@@ -131,13 +131,8 @@ def _process_year(
     try:
         folders = get_all_movie_folders_for_year(remote_name, root_folder, year)
         return [_folder_to_row(f, remote_name, root_folder, scan_time) for f in folders]
-    except RuntimeError as e:
-        if 'Timeout' not in str(e):
-            logger.error(f"Error scanning year {year}: {e}")
-            return []
     except Exception as e:
-        logger.error(f"Error scanning year {year}: {e}")
-        return []
+        logger.warning(f"Year-level scan failed for {year}: {e}")
 
     logger.warning(
         f"Year {year} too large for single call — "
