@@ -223,7 +223,7 @@ def determine_torrent_types(magnet_links):
         torrent_types.append('subtitle')
     if magnet_links.get('no_subtitle', '').strip():
         torrent_types.append('no_subtitle')
-    return sorted(list(set(torrent_types)))
+    return torrent_types
 
 
 def determine_torrent_type(magnet_links):
