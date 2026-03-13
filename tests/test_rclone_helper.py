@@ -522,7 +522,8 @@ class TestSetupRcloneConfigFromBase64:
         result = setup_rclone_config_from_base64(b64)
         assert result is True
         config_path = os.path.join(str(tmp_path), '.config', 'rclone', 'rclone.conf')
-        written = open(config_path, 'rb').read()
+        with open(config_path, 'rb') as f:
+            written = f.read()
         assert written == config_content
 
     def test_invalid_base64(self):
