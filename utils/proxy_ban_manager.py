@@ -103,9 +103,8 @@ class ProxyBanManager:
                     unban_time = datetime.strptime(row['unban_time'], '%Y-%m-%d %H:%M:%S')
                     record = ProxyBanRecord(proxy_name, ban_time, unban_time)
                     self.banned_proxies[proxy_name] = record
-                if rows:
-                    loaded = True
-                    logger.info(f"Loaded {len(self.banned_proxies)} ban records from SQLite")
+                loaded = bool(self.banned_proxies)
+                logger.info(f"Loaded {len(self.banned_proxies)} ban records from SQLite")
             except Exception as e:
                 logger.debug(f"SQLite proxy bans load failed: {e}")
 

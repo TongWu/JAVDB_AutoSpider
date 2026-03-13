@@ -229,8 +229,10 @@ def parse_arguments():
     parser.add_argument('--mode', type=str, choices=['daily', 'adhoc'], default='daily',
                         help='Pipeline mode: daily or adhoc (default: daily)')
     parser.add_argument('--dry-run', action='store_true', help='Print email content without sending')
-    parser.add_argument('--from-pipeline', action='store_true', 
+    parser.add_argument('--from-pipeline', action='store_true',
                         help='Running from pipeline.py - use GIT_USERNAME for commits')
+    parser.add_argument('--session-id', type=int, default=None,
+                        help='Report session ID for fetching stats from SQLite')
     return parser.parse_args()
 
 
@@ -1193,9 +1195,13 @@ def main():
         if _use_sqlite():
             from utils.db import init_db, db_get_latest_session, db_get_spider_stats, db_get_uploader_stats, db_get_pikpak_stats
             init_db()
-            latest = db_get_latest_session()
-            if latest:
-                _sid = latest['id']
+            _sid = args.session_id
+            if _sid is None:
+                latest = db_get_latest_session()
+                if latest:
+                    _sid = latest['id']
+                    logger.debug(f"No --session-id provided, falling back to latest session: {_sid}")
+            if _sid is not None:
                 _db_spider_stats = db_get_spider_stats(_sid)
                 _db_uploader_stats = db_get_uploader_stats(_sid)
                 _db_pikpak_stats = db_get_pikpak_stats(_sid)
@@ -1249,8 +1255,8 @@ def main():
         pikpak_stats = {
             'total_torrents': _db_pikpak_stats.get('total_torrents', 0),
             'filtered_old': _db_pikpak_stats.get('filtered_old', 0),
-            'added_to_pikpak': _db_pikpak_stats.get('successful_count', 0),
-            'removed_from_qb': _db_pikpak_stats.get('successful_count', 0),
+        'added_to_pikpak': _db_pikpak_stats.get('uploaded_count', _db_pikpak_stats.get('successful_count', 0)),
+        'removed_from_qb': _db_pikpak_stats.get('successful_count', 0),
             'failed': _db_pikpak_stats.get('failed_count', 0),
             'threshold_days': _db_pikpak_stats.get('threshold_days', 3),
         }

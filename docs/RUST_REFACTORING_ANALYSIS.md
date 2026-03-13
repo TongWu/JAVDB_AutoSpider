@@ -69,12 +69,13 @@
 
 ---
 
-#### ❌ `rclone_dedup.py`
-**不建议重构原因：**
+#### ❌ `rclone_manager.py` / `utils/rclone_helper.py`
+**不建议整体重构原因：**
 - **外部命令调用**：主要调用 `rclone` 命令（subprocess）
 - **文件系统操作**：大量文件遍历和元数据读取（系统调用）
 - **并发已优化**：已使用 `ThreadPoolExecutor`，GIL 影响小
 - **Rust 收益低**：主要瓶颈在磁盘 I/O 和网络传输
+- **注**：部分解析函数已移至 `rust_core/src/rclone_ops.rs`（`parse_folder_name`、`parse_lsjson_for_year`、`group_by_movie_code`、`parse_lsd_output`）
 
 ---
 
@@ -106,7 +107,7 @@
 
 ## 三、值得考虑重构的模块（⚠️ 中等收益）
 
-### 3.1 `scripts/rclone_dedup.py` - 并发优化
+### 3.1 `utils/rclone_helper.py` - 并发优化
 
 **重构收益：**
 - ⭐⭐⭐⭐ 性能：Rust 的并发性能优于 Python（避免 GIL）

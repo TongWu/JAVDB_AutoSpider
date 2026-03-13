@@ -76,7 +76,8 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    needs: [rust-check, build-wheel]
+    needs: [build-wheel]
+    if: always() && !cancelled()
 
     strategy:
       matrix:

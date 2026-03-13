@@ -271,8 +271,8 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
         'category': torrent_info.get('category', 'Unknown'),
         'magnet_uri': torrent_info['magnet_uri'],
         'added_to_qb_date': datetime.fromtimestamp(torrent_info['added_on']).strftime("%Y-%m-%d %H:%M:%S"),
-        'deleted_from_qb_date': current_time if transfer_status in ['success', 'failed_but_deleted'] else '',
-        'uploaded_to_pikpak_date': current_time if transfer_status == 'success' else '',
+        'deleted_from_qb_date': current_time if transfer_status == 'success' else '',
+        'uploaded_to_pikpak_date': current_time if transfer_status in ['success', 'failed_but_deleted'] else '',
         'transfer_status': transfer_status,
         'error_message': error_msg or ''
     }
@@ -367,6 +367,7 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline
     
     successfully_transferred = []
     failed_transfers = []
+    delete_failed_count = 0
     
     if batch_mode:
         logger.info("Using batch mode: uploading all torrents in one session")
@@ -387,16 +388,18 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline
             for magnet in success_magnets:
                 torrent = torrent_by_magnet[magnet]
                 logger.info(f"Successfully uploaded to PikPak: {torrent['name']}")
-                save_to_pikpak_history(torrent, 'success')
                 
-                # Now safe to delete from qBittorrent
+                # Try to delete from qBittorrent
                 try:
                     qb.delete_torrents([torrent['hash']], delete_files=True)
                     logger.info(f"Successfully deleted from qBittorrent: {torrent['name']}")
+                    save_to_pikpak_history(torrent, 'success')
                     successfully_transferred.append(torrent)
                 except Exception as delete_error:
                     logger.error(f"Failed to delete from qBittorrent after successful PikPak upload: {torrent['name']}, Error: {delete_error}")
                     save_to_pikpak_history(torrent, 'failed_but_deleted', str(delete_error))
+                    delete_failed_count += 1
+                    failed_transfers.append((torrent, f"qB delete failed: {delete_error}"))
             
             # Process failed uploads
             for magnet, error_msg in failed_magnets:
@@ -427,16 +430,18 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline
                 
                 if success_magnets:  # Upload successful
                     logger.info(f"Successfully uploaded to PikPak: {torrent['name']}")
-                    save_to_pikpak_history(torrent, 'success')
                     
-                    # Now safe to delete from qBittorrent
+                    # Try to delete from qBittorrent
                     try:
                         qb.delete_torrents([torrent['hash']], delete_files=True)
                         logger.info(f"Successfully deleted from qBittorrent: {torrent['name']}")
+                        save_to_pikpak_history(torrent, 'success')
                         successfully_transferred.append(torrent)
                     except Exception as delete_error:
                         logger.error(f"Failed to delete from qBittorrent after successful PikPak upload: {torrent['name']}, Error: {delete_error}")
                         save_to_pikpak_history(torrent, 'failed_but_deleted', str(delete_error))
+                        delete_failed_count += 1
+                        failed_transfers.append((torrent, f"qB delete failed: {delete_error}"))
                         
                 else:  # Upload failed
                     error_msg = failed_magnets[0][1] if failed_magnets else "Unknown error"
@@ -515,6 +520,8 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline
                     'filtered_old': len(old_torrents),
                     'successful_count': successful_count,
                     'failed_count': failed_count,
+                    'uploaded_count': successful_count + delete_failed_count,
+                    'delete_failed_count': delete_failed_count,
                 })
                 logger.info(f"PikPak stats saved to SQLite (session_id={session_id})")
         except Exception as e:
@@ -546,6 +553,10 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline
 
 
 if __name__ == "__main__":
+    import atexit
+    from utils.db import close_db
+    atexit.register(close_db)
+
     parser = argparse.ArgumentParser(description="PikPak Bridge - Transfer torrents from qBittorrent to PikPak")
     parser.add_argument("--days", type=int, default=3, help="Filter torrents older than N days")
     parser.add_argument("--dry-run", action="store_true", help="Test mode: no delete or PikPak add")

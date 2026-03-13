@@ -333,7 +333,7 @@ def main():
         if enable_dedup and os.path.exists(dedup_csv_path):
             logger.info("Step 3.5: Running Rclone Dedup Executor...")
             try:
-                run_script('scripts/rclone_dedup_executor.py', [])
+                run_script('scripts/rclone_manager.py', ['--execute'])
                 logger.info("✓ Rclone Dedup Executor completed successfully")
             except Exception as dedup_err:
                 logger.warning(f"Rclone Dedup Executor failed (non-fatal): {dedup_err}")

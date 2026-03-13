@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 _REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
 DB_PATH = cfg('SQLITE_DB_PATH', os.path.join(_REPORTS_DIR, 'javdb_autospider.db'))
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 4
 
 # ── Connection management ────────────────────────────────────────────────
 
@@ -43,6 +43,11 @@ def _get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
     conn = getattr(_local, 'conn', None)
     conn_path = getattr(_local, 'conn_path', None)
     if conn is None or conn_path != path:
+        if conn is not None and conn_path != path:
+            try:
+                conn.close()
+            except Exception:
+                pass
         os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
         if os.path.exists(path) and os.path.getsize(path) > 0 and not _is_valid_sqlite(path):
             raise sqlite3.DatabaseError(
@@ -136,6 +141,9 @@ CREATE TABLE IF NOT EXISTS dedup_records (
     is_deleted INTEGER DEFAULT 0,
     delete_datetime TEXT DEFAULT ''
 );
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dedup_active_path
+    ON dedup_records(existing_gdrive_path)
+    WHERE is_deleted = 0 AND existing_gdrive_path != '';
 
 -- 4. pikpak_history (replaces pikpak_bridge_history.csv)
 CREATE TABLE IF NOT EXISTS pikpak_history (
@@ -173,7 +181,7 @@ CREATE TABLE IF NOT EXISTS report_sessions (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_type_date ON report_sessions(report_type, report_date);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_csv ON report_sessions(csv_filename);
+CREATE INDEX IF NOT EXISTS idx_sessions_csv ON report_sessions(csv_filename);
 
 -- 7. report_rows
 CREATE TABLE IF NOT EXISTS report_rows (
@@ -245,21 +253,27 @@ CREATE TABLE IF NOT EXISTS pikpak_stats (
     filtered_old     INTEGER DEFAULT 0,
     successful_count INTEGER DEFAULT 0,
     failed_count     INTEGER DEFAULT 0,
+    uploaded_count      INTEGER DEFAULT 0,
+    delete_failed_count INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
 );
 """
 
 
-def init_db(db_path: Optional[str] = None):
+def init_db(db_path: Optional[str] = None, *, force: bool = False):
     """Create all tables if they don't exist and set the schema version.
 
-    In csv-only storage mode this is a no-op (no database file is created).
+    In csv-only storage mode this is a no-op (no database file is created)
+    unless *force* is ``True``.  Dedup records always require SQLite, so
+    callers that manage dedup state should pass ``force=True``.
+
     If the database file exists but is invalid (e.g. a Git LFS pointer),
     the storage mode is downgraded to ``csv`` for the rest of the process.
     """
-    from utils.config_helper import use_sqlite
-    if not use_sqlite():
-        return
+    if not force:
+        from utils.config_helper import use_sqlite
+        if not use_sqlite():
+            return
 
     path = db_path or DB_PATH
     if os.path.exists(path) and os.path.getsize(path) > 0 and not _is_valid_sqlite(path):
@@ -277,6 +291,28 @@ def init_db(db_path: Optional[str] = None):
         row = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
         if row is None:
             conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
+        else:
+            current = row[0]
+            if current < 2:
+                conn.execute("DROP INDEX IF EXISTS idx_sessions_csv")
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_sessions_csv "
+                    "ON report_sessions(csv_filename)"
+                )
+            if current < 3:
+                for col in ('uploaded_count', 'delete_failed_count'):
+                    try:
+                        conn.execute(f"ALTER TABLE pikpak_stats ADD COLUMN {col} INTEGER DEFAULT 0")
+                    except sqlite3.OperationalError:
+                        pass
+            if current < 4:
+                conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_dedup_active_path "
+                    "ON dedup_records(existing_gdrive_path) "
+                    "WHERE is_deleted = 0 AND existing_gdrive_path != ''"
+                )
+            if current < SCHEMA_VERSION:
+                conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
         logger.debug(f"Database initialised at {db_path or DB_PATH} (schema v{SCHEMA_VERSION})")
 
 
@@ -525,10 +561,17 @@ def db_load_dedup_records(db_path: Optional[str] = None) -> List[dict]:
 
 
 def db_append_dedup_record(record: dict, db_path: Optional[str] = None) -> int:
-    """Append a single dedup record. Returns the new row id."""
+    """Append a single dedup record. Returns the new row id, or -1 if a
+    pending record for the same ``existing_gdrive_path`` already exists.
+
+    Uniqueness for active (non-deleted, non-empty) paths is enforced by
+    the ``uq_dedup_active_path`` partial unique index; INSERT OR IGNORE
+    makes the check atomic.
+    """
     with get_db(db_path) as conn:
+        gdrive_path = record.get('existing_gdrive_path', '')
         cur = conn.execute(
-            """INSERT INTO dedup_records
+            """INSERT OR IGNORE INTO dedup_records
                (video_code, existing_sensor, existing_subtitle,
                 existing_gdrive_path, existing_folder_size,
                 new_torrent_category, deletion_reason,
@@ -537,7 +580,7 @@ def db_append_dedup_record(record: dict, db_path: Optional[str] = None) -> int:
             (record.get('video_code', ''),
              record.get('existing_sensor', ''),
              record.get('existing_subtitle', ''),
-             record.get('existing_gdrive_path', ''),
+             gdrive_path,
              int(record.get('existing_folder_size', 0) or 0),
              record.get('new_torrent_category', ''),
              record.get('deletion_reason', ''),
@@ -545,11 +588,58 @@ def db_append_dedup_record(record: dict, db_path: Optional[str] = None) -> int:
              1 if str(record.get('is_deleted', 'False')).lower() == 'true' else 0,
              record.get('delete_datetime', '')),
         )
+        if cur.rowcount == 0:
+            return -1
         return cur.lastrowid
 
 
+def db_mark_records_deleted(
+    path_datetime_pairs: List[Tuple[str, str]],
+    db_path: Optional[str] = None,
+) -> int:
+    """Mark specific dedup records as deleted by gdrive path (atomic UPDATE)."""
+    with get_db(db_path) as conn:
+        updated = 0
+        for path, dt in path_datetime_pairs:
+            cur = conn.execute(
+                "UPDATE dedup_records SET is_deleted=1, delete_datetime=? "
+                "WHERE existing_gdrive_path=? AND is_deleted=0",
+                (dt, path),
+            )
+            updated += cur.rowcount
+        return updated
+
+
+def db_cleanup_deleted_records(
+    older_than_days: int = 30,
+    db_path: Optional[str] = None,
+) -> int:
+    """Remove dedup records that were deleted more than *older_than_days* ago.
+
+    Records with an empty ``delete_datetime`` are skipped even when
+    ``is_deleted=1`` (data anomaly — don't silently discard).
+    """
+    from datetime import timedelta
+    cutoff = (datetime.now() - timedelta(days=older_than_days)).strftime('%Y-%m-%d %H:%M:%S')
+    with get_db(db_path) as conn:
+        cur = conn.execute(
+            "DELETE FROM dedup_records "
+            "WHERE is_deleted=1 AND delete_datetime != '' AND delete_datetime < ?",
+            (cutoff,),
+        )
+        return cur.rowcount
+
+
 def db_save_dedup_records(rows: List[dict], db_path: Optional[str] = None) -> None:
-    """Overwrite all dedup records (used after updating is_deleted flags)."""
+    """Overwrite all dedup records.
+
+    .. deprecated::
+        Use :func:`db_mark_records_deleted` for targeted updates instead.
+    """
+    logger.warning(
+        "db_save_dedup_records is deprecated — use db_mark_records_deleted "
+        "for targeted updates instead"
+    )
     with get_db(db_path) as conn:
         conn.execute("DELETE FROM dedup_records")
         for r in rows:
@@ -765,12 +855,15 @@ def db_save_pikpak_stats(session_id: int, stats: dict, db_path: Optional[str] = 
         cur = conn.execute(
             """INSERT INTO pikpak_stats
                (session_id, threshold_days, total_torrents,
-                filtered_old, successful_count, failed_count)
-               VALUES (?, ?, ?, ?, ?, ?)""",
+                filtered_old, successful_count, failed_count,
+                uploaded_count, delete_failed_count)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (session_id,
              stats.get('threshold_days', 3), stats.get('total_torrents', 0),
              stats.get('filtered_old', 0), stats.get('successful_count', 0),
-             stats.get('failed_count', 0)),
+             stats.get('failed_count', 0),
+             stats.get('uploaded_count', stats.get('successful_count', 0)),
+             stats.get('delete_failed_count', 0)),
         )
         return cur.lastrowid
 

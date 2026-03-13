@@ -155,6 +155,7 @@ def migrate_dedup(csv_path: str, db_path: str, dry_run: bool = False) -> int:
         return len(rows)
 
     with get_db(db_path) as conn:
+        conn.execute("DELETE FROM dedup_records")
         for row in rows:
             is_del = str(row.get('is_deleted', 'False')).lower() in ('true', '1')
             conn.execute(
@@ -200,6 +201,7 @@ def migrate_pikpak(csv_path: str, db_path: str, dry_run: bool = False) -> int:
         return len(rows)
 
     with get_db(db_path) as conn:
+        conn.execute("DELETE FROM pikpak_history")
         for row in rows:
             conn.execute(
                 """INSERT INTO pikpak_history
@@ -368,9 +370,13 @@ def migrate_single_csv(csv_path: str, filename: str, is_adhoc: bool,
                         db_path: str, dry_run: bool) -> dict:
     """Migrate one report CSV → report_sessions + report_rows.
 
+    Session creation and row insertion run inside a single transaction so
+    a failure in row insertion does not leave an orphaned session record.
+
     Returns dict with keys: session_id, row_count, skipped.
     """
-    from utils.db import get_db, db_create_report_session, db_insert_report_rows
+    from datetime import datetime
+    from utils.db import get_db
 
     meta = parse_csv_filename(filename, is_adhoc)
 
@@ -396,17 +402,39 @@ def migrate_single_csv(csv_path: str, filename: str, is_adhoc: bool,
             logger.debug(f"Already migrated: {filename} (session_id={existing[0]})")
             return {'session_id': existing[0], 'row_count': 0, 'skipped': True}
 
-    session_id = db_create_report_session(
-        report_type=meta['report_type'],
-        report_date=meta['report_date'],
-        csv_filename=filename,
-        url_type=meta.get('url_type'),
-        display_name=meta.get('display_name'),
-        db_path=db_path,
-    )
+        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cur = conn.execute(
+            """INSERT INTO report_sessions
+               (report_type, report_date, url_type, display_name,
+                url, start_page, end_page, csv_filename, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (meta['report_type'], meta['report_date'],
+             meta.get('url_type'), meta.get('display_name'),
+             None, None, None, filename, created_at),
+        )
+        session_id = cur.lastrowid
 
-    if rows:
-        db_insert_report_rows(session_id, rows, db_path=db_path)
+        for row in rows:
+            conn.execute(
+                """INSERT INTO report_rows
+                   (session_id, href, video_code, page, actor, rate,
+                    comment_number, hacked_subtitle, hacked_no_subtitle,
+                    subtitle, no_subtitle, size_hacked_subtitle,
+                    size_hacked_no_subtitle, size_subtitle, size_no_subtitle)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (session_id,
+                 row.get('href', ''), row.get('video_code', ''),
+                 int(row['page']) if row.get('page') else None,
+                 row.get('actor', ''),
+                 float(row['rate']) if row.get('rate') else None,
+                 int(row['comment_number']) if row.get('comment_number') else None,
+                 row.get('hacked_subtitle', ''), row.get('hacked_no_subtitle', ''),
+                 row.get('subtitle', ''), row.get('no_subtitle', ''),
+                 row.get('size_hacked_subtitle', ''),
+                 row.get('size_hacked_no_subtitle', ''),
+                 row.get('size_subtitle', ''),
+                 row.get('size_no_subtitle', '')),
+            )
 
     return {'session_id': session_id, 'row_count': len(rows), 'skipped': False}
 
@@ -487,7 +515,7 @@ def main():
 
     import utils.db
     utils.db.DB_PATH = db_path
-    utils.db.init_db(db_path)
+    utils.db.init_db(db_path, force=True)
 
     # ── Phase 1: data tables ─────────────────────────────────────────
     logger.info("-" * 60)
