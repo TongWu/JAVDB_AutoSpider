@@ -20,8 +20,6 @@ sys.modules['pikpakapi'] = mock_pikpakapi
 import pytest
 import tempfile
 import shutil
-from unittest.mock import patch
-
 import utils.db as _db_mod
 import utils.config_helper as _cfg_mod
 import scripts.spider.dedup_checker as _dedup_mod
@@ -42,14 +40,13 @@ def _isolate_sqlite(tmp_path):
     original = _db_mod.DB_PATH
     original_override = _cfg_mod._storage_mode_override
     _db_mod.DB_PATH = test_db
-    _cfg_mod._storage_mode_override = None
+    _cfg_mod._storage_mode_override = 'db'
 
     # Reset dedup_checker module-level state
     _dedup_mod._db_initialised = False
     _dedup_mod._pending_paths_cache = None
 
-    with patch.object(_cfg_mod, 'storage_mode', return_value='db'):
-        _db_mod.init_db(test_db)
+    _db_mod.init_db(test_db)
 
     yield test_db
 
