@@ -17,14 +17,12 @@ from bs4 import BeautifulSoup
 from bs4.element import Tag
 
 # Import configuration
-try:
-    from config import PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS, LOG_LEVEL, IGNORE_RELEASE_DATE_FILTER
-except ImportError:
-    # Fallback values if config.py doesn't exist
-    PHASE2_MIN_RATE = 4.0
-    PHASE2_MIN_COMMENTS = 100
-    LOG_LEVEL = 'INFO'
-    IGNORE_RELEASE_DATE_FILTER = False
+from utils.config_helper import cfg
+
+PHASE2_MIN_RATE = cfg('PHASE2_MIN_RATE', 4.0)
+PHASE2_MIN_COMMENTS = cfg('PHASE2_MIN_COMMENTS', 100)
+LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
+IGNORE_RELEASE_DATE_FILTER = cfg('IGNORE_RELEASE_DATE_FILTER', False)
 
 from utils.logging_config import get_logger
 
@@ -41,6 +39,7 @@ logger = get_logger(__name__)
 
 _SUBTITLE_TAGS = frozenset(['含中字磁鏈', '含中字磁链', 'CnSub DL'])
 _MAGNET_TAGS = frozenset(['含磁鏈', '含磁链', 'DL'])
+_TODAY_TAGS = frozenset(['今日新種', '今日新种', 'Today'])
 _YESTERDAY_TAGS = frozenset(['昨日新種', '昨日新种', 'Yesterday'])
 _RELEASE_DATE_TAGS = frozenset([
     '今日新種', '昨日新種',
@@ -59,6 +58,10 @@ def _has_magnet(tags: list) -> bool:
 
 def _has_release_date(tags: list) -> bool:
     return bool(_RELEASE_DATE_TAGS.intersection(tags))
+
+
+def _is_today_release(tags: list) -> bool:
+    return bool(_TODAY_TAGS.intersection(tags))
 
 
 def _is_yesterday_release(tags: list) -> bool:
@@ -140,6 +143,7 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
                 'actor': '',  # Will be filled from detail page
                 'rate': e.rate,
                 'comment_number': e.comment_count,
+                'is_today_release': _is_today_release(tags),
                 'is_yesterday_release': _is_yesterday_release(tags),
             }
 

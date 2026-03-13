@@ -8,7 +8,7 @@ from utils.logging_config import get_logger
 from utils.parser import parse_index
 from utils.url_helper import detect_url_type
 from utils.filename_helper import generate_output_csv_name_from_html
-from utils.history_manager import has_complete_subtitles, should_skip_recent_yesterday_release
+from utils.history_manager import has_complete_subtitles, should_skip_recent_yesterday_release, should_skip_recent_today_release
 
 import scripts.spider.state as state
 from scripts.spider.fallback import get_page_url, fetch_index_page_with_fallback
@@ -142,6 +142,10 @@ def fetch_all_index_pages(
             e['href'], history, e.get('is_yesterday_release', False)
         ):
             return True
+        if custom_url is None and should_skip_recent_today_release(
+            e['href'], history, e.get('is_today_release', False)
+        ):
+            return True
         return False
 
     _est_skip = sum(
@@ -160,4 +164,5 @@ def fetch_all_index_pages(
         'use_proxy': use_proxy,
         'use_cf_bypass': use_cf_bypass,
         'csv_path': csv_path,
+        'last_valid_page': last_valid_page,
     }

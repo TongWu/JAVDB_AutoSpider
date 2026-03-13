@@ -771,6 +771,53 @@ pub fn should_skip_recent_yesterday_release(
 }
 
 #[pyfunction]
+#[pyo3(signature = (href, history_data=None, is_today_release=false))]
+pub fn should_skip_recent_today_release(
+    href: &str,
+    history_data: Option<&Bound<'_, PyDict>>,
+    is_today_release: bool,
+) -> PyResult<bool> {
+    if !is_today_release {
+        return Ok(false);
+    }
+    let history_data = match history_data {
+        Some(d) => d,
+        None => return Ok(false),
+    };
+    let entry = match history_data.get_item(href)? {
+        Some(v) => v,
+        None => return Ok(false),
+    };
+    let entry_dict: &Bound<'_, PyDict> = entry.downcast()?;
+
+    let visited_str: String = match entry_dict.get_item("last_visited_datetime")? {
+        Some(v) => {
+            let s = v.extract::<String>()?;
+            if s.is_empty() {
+                match entry_dict.get_item("update_datetime")? {
+                    Some(v2) => v2.extract::<String>()?,
+                    None => return Ok(false),
+                }
+            } else {
+                s
+            }
+        }
+        None => match entry_dict.get_item("update_datetime")? {
+            Some(v) => v.extract::<String>()?,
+            None => return Ok(false),
+        },
+    };
+    if visited_str.is_empty() {
+        return Ok(false);
+    }
+
+    let cutoff = Local::now().format("%Y-%m-%d").to_string();
+    let prefix = visited_str.get(..10).unwrap_or(&visited_str);
+
+    Ok(prefix >= cutoff.as_str())
+}
+
+#[pyfunction]
 pub fn batch_update_last_visited(
     py: Python<'_>,
     history_file: &str,

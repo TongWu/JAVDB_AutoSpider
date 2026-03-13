@@ -670,6 +670,157 @@ def get_movie_folders(remote_name: str, root_folder: str, year: str, actor: str)
         raise RuntimeError(f"Timeout listing movie folders from {remote_path}")
 
 
+def get_movie_folders_with_stats(
+    remote_name: str, root_folder: str, year: str, actor: str,
+) -> List[FolderInfo]:
+    """Get movie folders with size/count using a single ``rclone lsjson -R``.
+
+    This replaces the two-phase approach of ``get_movie_folders`` +
+    ``get_folder_stats`` per folder, reducing subprocess calls from
+    O(N+1) to O(1) per year/actor combination.
+    """
+    remote_path = f"{remote_name}:{root_folder}/{year}/{actor}"
+
+    try:
+        result = subprocess.run(
+            ['rclone', 'lsjson', remote_path, '-R', '--fast-list'],
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+
+        if result.returncode != 0:
+            if "directory not found" in result.stderr.lower():
+                return []
+            raise RuntimeError(
+                f"Failed to list {remote_path}: {result.stderr}"
+            )
+
+        entries = json.loads(result.stdout)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"Timeout listing {remote_path}")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"Invalid JSON from rclone for {remote_path}: {exc}"
+        ) from exc
+
+    top_dirs: set = set()
+    dir_sizes: Dict[str, int] = defaultdict(int)
+    dir_counts: Dict[str, int] = defaultdict(int)
+
+    for entry in entries:
+        path = entry.get('Path', '')
+        is_dir = entry.get('IsDir', False)
+
+        if is_dir:
+            if '/' not in path:
+                top_dirs.add(path)
+            continue
+
+        if '/' in path:
+            dir_name = path.split('/', 1)[0]
+            top_dirs.add(dir_name)
+            dir_sizes[dir_name] += entry.get('Size', 0)
+            dir_counts[dir_name] += 1
+
+    folders: List[FolderInfo] = []
+    for dir_name in top_dirs:
+        parsed = parse_folder_name(dir_name)
+        if not parsed:
+            continue
+        movie_code, sensor, subtitle = parsed
+        folders.append(FolderInfo(
+            full_path=f"{remote_path}/{dir_name}",
+            year=year,
+            actor=actor,
+            movie_code=movie_code,
+            sensor_category=sensor,
+            subtitle_category=subtitle,
+            folder_name=dir_name,
+            size=dir_sizes.get(dir_name, 0),
+            file_count=dir_counts.get(dir_name, 0),
+        ))
+
+    return folders
+
+
+def get_all_movie_folders_for_year(
+    remote_name: str, root_folder: str, year: str,
+) -> List[FolderInfo]:
+    """Get ALL movie folders under a year with one ``rclone lsjson -R`` call.
+
+    Scans the entire ``root/year/`` tree recursively.  Paths have the form
+    ``actor/movie_folder/file``, so we group files by their first two path
+    components to derive actor, folder name, size and file count.
+
+    This reduces subprocess calls from O(actors) to O(1) per year.
+    """
+    remote_path = f"{remote_name}:{root_folder}/{year}"
+
+    try:
+        result = subprocess.run(
+            ['rclone', 'lsjson', remote_path, '-R', '--fast-list'],
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+
+        if result.returncode != 0:
+            if "directory not found" in result.stderr.lower():
+                return []
+            raise RuntimeError(
+                f"Failed to list {remote_path}: {result.stderr}"
+            )
+
+        entries = json.loads(result.stdout)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"Timeout listing {remote_path}")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"Invalid JSON from rclone for {remote_path}: {exc}"
+        ) from exc
+
+    movie_dirs: set = set()
+    dir_sizes: Dict[Tuple[str, str], int] = defaultdict(int)
+    dir_counts: Dict[Tuple[str, str], int] = defaultdict(int)
+
+    for entry in entries:
+        path = entry.get('Path', '')
+        is_dir = entry.get('IsDir', False)
+        parts = path.split('/')
+
+        if is_dir and len(parts) == 2:
+            movie_dirs.add((parts[0], parts[1]))
+            continue
+
+        if not is_dir and len(parts) >= 3:
+            key = (parts[0], parts[1])
+            movie_dirs.add(key)
+            dir_sizes[key] += entry.get('Size', 0)
+            dir_counts[key] += 1
+
+    folders: List[FolderInfo] = []
+    for actor, folder_name in movie_dirs:
+        parsed = parse_folder_name(folder_name)
+        if not parsed:
+            continue
+        movie_code, sensor, subtitle = parsed
+        key = (actor, folder_name)
+        folders.append(FolderInfo(
+            full_path=f"{remote_path}/{actor}/{folder_name}",
+            year=year,
+            actor=actor,
+            movie_code=movie_code,
+            sensor_category=sensor,
+            subtitle_category=subtitle,
+            folder_name=folder_name,
+            size=dir_sizes.get(key, 0),
+            file_count=dir_counts.get(key, 0),
+        ))
+
+    return folders
+
+
 def get_folder_stats(remote_path: str) -> Tuple[int, int]:
     """
     Get folder size and file count using rclone.

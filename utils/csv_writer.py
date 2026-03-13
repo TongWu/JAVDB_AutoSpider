@@ -3,6 +3,8 @@
 Handles incremental CSV writing with merge-on-write semantics: when
 ``append_mode=True``, existing rows keyed by ``video_code`` are merged
 with new data so that no information is lost.
+
+Also writes report rows to SQLite when a ``session_id`` is provided.
 """
 
 import csv
@@ -10,6 +12,19 @@ import os
 import logging
 
 logger = logging.getLogger(__name__)
+
+_active_session_id = None
+
+
+def set_active_session(session_id):
+    """Set the current session_id for SQLite report_rows writes."""
+    global _active_session_id
+    _active_session_id = session_id
+
+
+def get_active_session():
+    """Return the current active session_id (or None)."""
+    return _active_session_id
 
 try:
     from javdb_rust_core import merge_row_data as _rs_merge_row_data
@@ -59,7 +74,12 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
     When *append_mode* is True and the file already exists, rows are merged
     by ``video_code``.  New data takes priority, but existing values are
     preserved when the new value is empty.
+
+    Respects ``STORAGE_MODE``: CSV I/O is skipped in ``db``-only mode;
+    SQLite writes are skipped in ``csv``-only mode.
     """
+    from utils.config_helper import use_csv as _use_csv
+
     if dry_run:
         logger.info(f"[DRY RUN] Would write {len(rows)} entries to {csv_path}")
         logger.info("[DRY RUN] Sample entries:")
@@ -69,7 +89,7 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
             logger.info(f"[DRY RUN] ... and {len(rows) - 3} more entries")
         return
 
-    if append_mode and os.path.exists(csv_path):
+    if _use_csv() and append_mode and os.path.exists(csv_path):
         existing_rows = {}
         rows_without_key = []
         existing_fieldnames = []
@@ -131,7 +151,7 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
             total_entries = len(existing_rows) + len(rows_without_key)
             if merged_count > 0 or added_count > 0:
                 logger.debug(f"[CSV] Updated {csv_path}: {merged_count} merged, {added_count} added, {total_entries} total entries")
-    else:
+    elif _use_csv():
         logger.debug(f"[CSV] Writing new file: {csv_path}")
         with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
@@ -139,3 +159,12 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
             for row in rows:
                 writer.writerow(row)
         logger.debug(f"[CSV] Created {csv_path} with {len(rows)} entries")
+
+    if _active_session_id is not None and rows:
+        try:
+            from utils.config_helper import use_sqlite
+            if use_sqlite():
+                from utils.db import db_insert_report_rows
+                db_insert_report_rows(_active_session_id, rows)
+        except Exception as e:
+            logger.warning(f"[CSV] Failed to write rows to SQLite: {e}")

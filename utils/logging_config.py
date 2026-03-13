@@ -2,6 +2,9 @@ import logging
 import os
 import sys
 
+from utils.config_helper import cfg
+
+
 def setup_logging(log_file=None, log_level=None):
     """Setup logging configuration for all modules.
 
@@ -18,13 +21,8 @@ def setup_logging(log_file=None, log_level=None):
         log_file: Log file path (optional).
         log_level: Log level string, e.g. ``"INFO"`` (optional).
     """
-    try:
-        from config import LOG_LEVEL
-        if log_level is None:
-            log_level = LOG_LEVEL
-    except ImportError:
-        if log_level is None:
-            log_level = 'INFO'
+    if log_level is None:
+        log_level = cfg('LOG_LEVEL', 'INFO')
 
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
 

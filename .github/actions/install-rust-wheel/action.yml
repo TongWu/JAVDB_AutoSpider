@@ -43,7 +43,7 @@ runs:
       if: steps.wheel-cache.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        pip install maturin
+        pip install maturin[patchelf]
         mkdir -p /tmp/rust-wheel
         cd rust_core
         maturin build --release --out /tmp/rust-wheel

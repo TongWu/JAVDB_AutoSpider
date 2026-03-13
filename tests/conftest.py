@@ -20,6 +20,57 @@ sys.modules['pikpakapi'] = mock_pikpakapi
 import pytest
 import tempfile
 import shutil
+from unittest.mock import patch
+
+import utils.db as _db_mod
+import utils.config_helper as _cfg_mod
+
+
+@pytest.fixture(autouse=True)
+def _isolate_sqlite(tmp_path):
+    """Give every test a fresh, empty SQLite database.
+
+    This prevents SQLite state from leaking between tests and protects the
+    real ``reports/javdb_autospider.db`` from being modified by the test suite.
+
+    ``STORAGE_MODE`` defaults to ``'db'`` so that ``init_db`` actually
+    creates the schema.  Individual tests can override the mode via
+    the ``storage_mode`` fixture.
+    """
+    test_db = str(tmp_path / "test.db")
+    original = _db_mod.DB_PATH
+    _db_mod.DB_PATH = test_db
+
+    with patch.object(_cfg_mod, 'storage_mode', return_value='db'):
+        _db_mod.init_db(test_db)
+
+    yield test_db
+    _db_mod.close_db()
+    _db_mod.DB_PATH = original
+
+
+@pytest.fixture
+def storage_mode_db(monkeypatch):
+    """Force STORAGE_MODE='db' for the test."""
+    monkeypatch.setattr(_cfg_mod, 'storage_mode', lambda: 'db')
+    monkeypatch.setattr(_cfg_mod, 'use_sqlite', lambda: True)
+    monkeypatch.setattr(_cfg_mod, 'use_csv', lambda: False)
+
+
+@pytest.fixture
+def storage_mode_csv(monkeypatch):
+    """Force STORAGE_MODE='csv' for the test."""
+    monkeypatch.setattr(_cfg_mod, 'storage_mode', lambda: 'csv')
+    monkeypatch.setattr(_cfg_mod, 'use_sqlite', lambda: False)
+    monkeypatch.setattr(_cfg_mod, 'use_csv', lambda: True)
+
+
+@pytest.fixture
+def storage_mode_duo(monkeypatch):
+    """Force STORAGE_MODE='duo' for the test."""
+    monkeypatch.setattr(_cfg_mod, 'storage_mode', lambda: 'duo')
+    monkeypatch.setattr(_cfg_mod, 'use_sqlite', lambda: True)
+    monkeypatch.setattr(_cfg_mod, 'use_csv', lambda: True)
 
 
 @pytest.fixture

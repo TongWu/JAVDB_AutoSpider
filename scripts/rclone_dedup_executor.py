@@ -19,6 +19,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
+from utils.config_helper import cfg
 from utils.logging_config import setup_logging, get_logger
 from scripts.rclone_inventory import setup_rclone_config_from_base64
 from scripts.spider.dedup_checker import (
@@ -26,6 +27,11 @@ from scripts.spider.dedup_checker import (
     load_dedup_csv,
     save_dedup_csv,
 )
+
+RCLONE_CONFIG_BASE64 = cfg('RCLONE_CONFIG_BASE64', None)
+REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
+DEDUP_CSV = cfg('DEDUP_CSV', 'dedup.csv')
+DEDUP_LOG_FILE = cfg('DEDUP_LOG_FILE', 'logs/rclone_dedup.log')
 
 setup_logging()
 logger = get_logger(__name__)
@@ -71,33 +77,19 @@ def main() -> int:
     setup_logging(log_level=args.log_level)
 
     # Setup rclone config from Base64
-    try:
-        from config import RCLONE_CONFIG_BASE64
-        if RCLONE_CONFIG_BASE64:
-            if not setup_rclone_config_from_base64(RCLONE_CONFIG_BASE64):
-                return 1
-    except ImportError:
+    if RCLONE_CONFIG_BASE64:
+        if not setup_rclone_config_from_base64(RCLONE_CONFIG_BASE64):
+            return 1
+    else:
         logger.info("No RCLONE_CONFIG_BASE64 in config – assuming rclone is pre-configured")
 
     # Resolve dedup CSV path
     if args.dedup_csv:
         dedup_csv = args.dedup_csv
     else:
-        try:
-            from config import REPORTS_DIR
-        except ImportError:
-            REPORTS_DIR = 'reports'
-        try:
-            from config import DEDUP_CSV
-        except ImportError:
-            DEDUP_CSV = 'dedup.csv'
         dedup_csv = os.path.join(REPORTS_DIR, DEDUP_CSV)
 
     # Setup dedup log file
-    try:
-        from config import DEDUP_LOG_FILE
-    except ImportError:
-        DEDUP_LOG_FILE = 'logs/rclone_dedup.log'
     os.makedirs(os.path.dirname(DEDUP_LOG_FILE) or '.', exist_ok=True)
     setup_logging(DEDUP_LOG_FILE, args.log_level)
 
@@ -121,21 +113,30 @@ def main() -> int:
 
     success_count = 0
     fail_count = 0
+    skip_count = 0
 
+    # Group pending rows by folder path so each unique path is purged only once.
+    path_to_rows: dict[str, list[dict]] = {}
     for row in rows:
         if row.get('is_deleted', 'False') == 'True':
             continue
-
         folder_path = row.get('existing_gdrive_path', '')
         if not folder_path:
             logger.warning(f"Skipping record with empty path: {row.get('video_code', '?')}")
-            fail_count += 1
+            skip_count += 1
             continue
+        path_to_rows.setdefault(folder_path, []).append(row)
+
+    for folder_path, dup_rows in path_to_rows.items():
+        if len(dup_rows) > 1:
+            logger.info(f"Path has {len(dup_rows)} pending rows, will purge once: {folder_path}")
 
         ok = rclone_purge(folder_path, dry_run=args.dry_run)
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         if ok:
-            row['is_deleted'] = 'True'
-            row['delete_datetime'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            for r in dup_rows:
+                r['is_deleted'] = 'True'
+                r['delete_datetime'] = now_str
             success_count += 1
         else:
             fail_count += 1
@@ -145,14 +146,14 @@ def main() -> int:
         save_dedup_csv(dedup_csv, rows)
         logger.info(f"Updated dedup CSV: {dedup_csv}")
 
+    unique_paths = success_count + fail_count
     logger.info("=" * 60)
     logger.info("DEDUP EXECUTOR COMPLETE")
-    logger.info(f"Attempted: {len(pending)}")
-    logger.info(f"Success: {success_count}")
-    logger.info(f"Failed: {fail_count}")
+    logger.info(f"Pending rows: {len(pending)}, unique paths: {unique_paths}")
+    logger.info(f"Purged: {success_count}, failed: {fail_count}, skipped (empty path): {skip_count}")
     logger.info("=" * 60)
 
-    return 0 if fail_count == 0 else 1
+    return 0 if (fail_count + skip_count) == 0 else 1
 
 
 if __name__ == '__main__':

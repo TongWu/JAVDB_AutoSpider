@@ -21,27 +21,15 @@ from datetime import datetime
 # Change to script directory
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
-# Import unified configuration — each variable resolved independently so that
-# a missing new variable never causes established ones to fall back to defaults.
-try:
-    import config as _config_module
-except ImportError:
-    _config_module = None
+# Import unified configuration
+from utils.config_helper import cfg
 
-
-def _cfg(name, default):
-    if _config_module is None:
-        return default
-    return getattr(_config_module, name, default)
-
-
-PIPELINE_LOG_FILE = _cfg('PIPELINE_LOG_FILE', 'logs/pipeline.log')
-LOG_LEVEL = _cfg('LOG_LEVEL', 'INFO')
-DAILY_REPORT_DIR = _cfg('DAILY_REPORT_DIR', 'reports/DailyReport')
-AD_HOC_DIR = _cfg('AD_HOC_DIR', 'reports/AdHoc')
-ENABLE_DEDUP = _cfg('ENABLE_DEDUP', False)
-_REPORTS_DIR = _cfg('REPORTS_DIR', 'reports')
-DEDUP_CSV = _cfg('DEDUP_CSV', 'dedup.csv')
+PIPELINE_LOG_FILE = cfg('PIPELINE_LOG_FILE', 'logs/pipeline.log')
+LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
+DAILY_REPORT_DIR = cfg('DAILY_REPORT_DIR', 'reports/DailyReport')
+AD_HOC_DIR = cfg('AD_HOC_DIR', 'reports/AdHoc')
+_REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
+DEDUP_CSV = cfg('DEDUP_CSV', 'dedup.csv')
 
 # Import path helper for dated subdirectories
 from utils.path_helper import get_dated_report_path
@@ -207,6 +195,17 @@ def extract_csv_path_from_output(output):
     return None
 
 
+def extract_session_id_from_output(output):
+    """Extract session_id from spider output (SPIDER_SESSION_ID=<id>)."""
+    for line in output.splitlines():
+        if line.startswith('SPIDER_SESSION_ID='):
+            try:
+                return int(line.split('=', 1)[1].strip())
+            except (ValueError, IndexError):
+                return None
+    return None
+
+
 def main():
     args = parse_arguments()
     is_adhoc_mode = args.url is not None
@@ -258,7 +257,7 @@ def main():
         spider_args.append('--ignore-release-date')
     if args.use_proxy:
         spider_args.append('--use-proxy')
-    enable_dedup = args.enable_dedup or ENABLE_DEDUP
+    enable_dedup = args.enable_dedup
     if enable_dedup:
         spider_args.append('--enable-dedup')
     # Build base arguments for uploader (csv filename will be added after spider runs)
@@ -307,7 +306,14 @@ def main():
                 logger.info(f"Captured CSV path from spider: {csv_path}")
             else:
                 logger.warning("Could not extract CSV path from spider output, uploader will use auto-discovery")
-        
+
+        # Extract session_id for stats persistence
+        session_id = extract_session_id_from_output(spider_output)
+        if session_id:
+            logger.info(f"Captured session ID from spider: {session_id}")
+            uploader_args.extend(['--session-id', str(session_id)])
+            pikpak_args.extend(['--session-id', str(session_id)])
+
         # Add CSV path to uploader args
         if csv_path:
             uploader_args.extend(['--input-file', csv_path])

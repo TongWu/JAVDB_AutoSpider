@@ -57,6 +57,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
+          lfs: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -75,6 +76,7 @@ jobs:
         uses: ./.github/actions/install-rust-wheel
 
       - name: Install rclone
+        if: inputs.runner != 'self-hosted'
         run: |
           curl https://rclone.org/install.sh | sudo bash
           rclone version
@@ -114,6 +116,7 @@ jobs:
           INPUT_YEARS: ${{ inputs.years }}
           INPUT_WORKERS: ${{ inputs.workers }}
           INPUT_LOG_LEVEL: ${{ inputs.log_level }}
+          VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
         run: |
           set -e
           set -o pipefail
@@ -147,6 +150,7 @@ jobs:
           fi
 
           git add reports/rclone_inventory.csv 2>/dev/null || true
+          git add reports/javdb_autospider.db 2>/dev/null || true
 
           if git diff --cached --quiet; then
             echo "No changes to commit"
@@ -175,7 +179,9 @@ jobs:
         if: always()
         with:
           name: rclone-inventory-${{ github.run_number }}
-          path: reports/rclone_inventory.csv
+          path: |
+            reports/rclone_inventory.csv
+            reports/javdb_autospider.db
           retention-days: 30
           if-no-files-found: ignore
 

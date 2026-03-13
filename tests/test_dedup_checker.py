@@ -21,25 +21,16 @@ from scripts.spider.dedup_checker import (
     load_dedup_csv,
     save_dedup_csv,
 )
+import utils.db as db_mod
 
 
 # ============================================================================
 # Helpers
 # ============================================================================
 
-def _make_inventory_csv(tmp_path, rows):
-    """Create a rclone_inventory.csv with the given list-of-dicts."""
-    path = str(tmp_path / 'rclone_inventory.csv')
-    fieldnames = [
-        'video_code', 'sensor_category', 'subtitle_category',
-        'folder_path', 'folder_size', 'file_count', 'scan_datetime',
-    ]
-    with open(path, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        for r in rows:
-            writer.writerow(r)
-    return path
+def _seed_inventory(rows):
+    """Seed SQLite rclone_inventory with the given list-of-dicts."""
+    db_mod.db_replace_rclone_inventory(rows)
 
 
 def _inventory_row(code, sensor='有码', subtitle='中字', path='gdrive:/r/2025/a/f', size=1000, count=2):
@@ -48,8 +39,8 @@ def _inventory_row(code, sensor='有码', subtitle='中字', path='gdrive:/r/202
         'sensor_category': sensor,
         'subtitle_category': subtitle,
         'folder_path': path,
-        'folder_size': str(size),
-        'file_count': str(count),
+        'folder_size': size,
+        'file_count': count,
         'scan_datetime': '2026-01-01 00:00:00',
     }
 
@@ -59,40 +50,33 @@ def _inventory_row(code, sensor='有码', subtitle='中字', path='gdrive:/r/202
 # ============================================================================
 
 class TestLoadRcloneInventory:
-    def test_loads_normal_csv(self, tmp_path):
-        path = _make_inventory_csv(tmp_path, [
+    def test_loads_normal(self):
+        _seed_inventory([
             _inventory_row('ABC-123'),
             _inventory_row('XYZ-456', sensor='无码'),
         ])
-        inv = load_rclone_inventory(path)
+        inv = load_rclone_inventory('')
         assert len(inv) == 2
         assert 'ABC-123' in inv
         assert 'XYZ-456' in inv
         assert inv['ABC-123'][0].sensor_category == '有码'
 
-    def test_multiple_entries_same_code(self, tmp_path):
-        path = _make_inventory_csv(tmp_path, [
+    def test_multiple_entries_same_code(self):
+        _seed_inventory([
             _inventory_row('ABC-123', subtitle='无字'),
             _inventory_row('ABC-123', subtitle='中字'),
         ])
-        inv = load_rclone_inventory(path)
+        inv = load_rclone_inventory('')
         assert len(inv) == 1
         assert len(inv['ABC-123']) == 2
 
-    def test_file_not_found(self, tmp_path):
-        inv = load_rclone_inventory(str(tmp_path / 'missing.csv'))
+    def test_empty_inventory(self):
+        inv = load_rclone_inventory('')
         assert inv == {}
 
-    def test_empty_csv(self, tmp_path):
-        path = _make_inventory_csv(tmp_path, [])
-        inv = load_rclone_inventory(path)
-        assert inv == {}
-
-    def test_case_insensitive_code(self, tmp_path):
-        path = _make_inventory_csv(tmp_path, [
-            _inventory_row('abc-123'),
-        ])
-        inv = load_rclone_inventory(path)
+    def test_case_insensitive_code(self):
+        _seed_inventory([_inventory_row('abc-123')])
+        inv = load_rclone_inventory('')
         assert 'ABC-123' in inv
 
 
@@ -179,9 +163,10 @@ class TestCheckDedupUpgrade:
 # Test dedup.csv I/O
 # ============================================================================
 
-class TestDedupCsvIO:
-    def test_append_creates_file(self, tmp_path):
-        csv_path = str(tmp_path / 'dedup.csv')
+class TestDedupIO:
+    """Tests for dedup record I/O (SQLite-backed)."""
+
+    def test_append_and_load(self):
         record = DedupRecord(
             video_code='ABC-123',
             existing_sensor='有码',
@@ -194,42 +179,84 @@ class TestDedupCsvIO:
             is_deleted='False',
             delete_datetime='',
         )
-        append_dedup_record(csv_path, record)
-        rows = load_dedup_csv(csv_path)
+        append_dedup_record('', record)
+        rows = load_dedup_csv('')
         assert len(rows) == 1
         assert rows[0]['video_code'] == 'ABC-123'
 
-    def test_append_preserves_existing(self, tmp_path):
-        csv_path = str(tmp_path / 'dedup.csv')
+    def test_append_preserves_existing(self):
         r1 = DedupRecord('A-001', 's', 'sub', 'p', 100, 'cat', 'reason', 't', 'False', '')
         r2 = DedupRecord('B-002', 's', 'sub', 'p', 200, 'cat', 'reason', 't', 'False', '')
-        append_dedup_record(csv_path, r1)
-        append_dedup_record(csv_path, r2)
-        rows = load_dedup_csv(csv_path)
+        append_dedup_record('', r1)
+        append_dedup_record('', r2)
+        rows = load_dedup_csv('')
         assert len(rows) == 2
 
-    def test_save_overwrites(self, tmp_path):
-        csv_path = str(tmp_path / 'dedup.csv')
+    def test_save_updates_deleted(self):
         r1 = DedupRecord('A-001', 's', 'sub', 'p', 100, 'cat', 'reason', 't', 'False', '')
-        append_dedup_record(csv_path, r1)
+        append_dedup_record('', r1)
 
-        rows = load_dedup_csv(csv_path)
+        rows = load_dedup_csv('')
         rows[0]['is_deleted'] = 'True'
         rows[0]['delete_datetime'] = '2026-01-02 00:00:00'
-        save_dedup_csv(csv_path, rows)
+        save_dedup_csv('', rows)
 
-        reloaded = load_dedup_csv(csv_path)
+        reloaded = load_dedup_csv('')
         assert len(reloaded) == 1
         assert reloaded[0]['is_deleted'] == 'True'
 
-    def test_load_missing_file(self, tmp_path):
-        assert load_dedup_csv(str(tmp_path / 'nonexistent.csv')) == []
+    def test_load_empty(self):
+        assert load_dedup_csv('') == []
 
-    def test_fieldnames_match(self, tmp_path):
+
+# ── STORAGE_MODE tests ──────────────────────────────────────────────────
+
+class TestStorageModeDb:
+    """db mode: reads/writes only hit SQLite."""
+
+    def test_append_and_load(self, storage_mode_db):
+        r = DedupRecord('DB-001', 's', 'sub', 'p', 100, 'cat', 'reason', 't', 'False', '')
+        append_dedup_record('/nonexistent.csv', r)
+        rows = load_dedup_csv('/nonexistent.csv')
+        assert len(rows) == 1
+        assert rows[0]['video_code'] == 'DB-001'
+
+    def test_inventory_reads_sqlite(self, storage_mode_db):
+        _seed_inventory([_inventory_row('DB-INV')])
+        inv = load_rclone_inventory('/nonexistent.csv')
+        assert 'DB-INV' in inv
+
+
+class TestStorageModeCsv:
+    """csv mode: reads/writes only hit CSV files."""
+
+    def test_append_and_load_csv(self, tmp_path, storage_mode_csv):
         csv_path = str(tmp_path / 'dedup.csv')
-        r = DedupRecord('A-001', 's', 'sub', 'p', 100, 'cat', 'reason', 't', 'False', '')
+        r = DedupRecord('CSV-001', 's', 'sub', 'p', 100, 'cat', 'reason', 't', 'False', '')
         append_dedup_record(csv_path, r)
-        with open(csv_path, 'r', encoding='utf-8') as f:
-            reader = csv.reader(f)
-            header = next(reader)
-        assert header == DEDUP_FIELDNAMES
+        assert os.path.exists(csv_path)
+
+    def test_inventory_reads_csv(self, tmp_path, storage_mode_csv):
+        csv_path = str(tmp_path / 'inv.csv')
+        import csv as csv_mod
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            w = csv_mod.DictWriter(f, fieldnames=[
+                'video_code', 'sensor_category', 'subtitle_category',
+                'folder_path', 'folder_size', 'file_count', 'scan_datetime',
+            ])
+            w.writeheader()
+            w.writerow(_inventory_row('CSV-INV'))
+        inv = load_rclone_inventory(csv_path)
+        assert 'CSV-INV' in inv
+
+
+class TestStorageModeDuo:
+    """duo mode: both SQLite and CSV are written."""
+
+    def test_append_writes_both(self, tmp_path, storage_mode_duo):
+        csv_path = str(tmp_path / 'dedup.csv')
+        r = DedupRecord('DUO-001', 's', 'sub', 'p', 100, 'cat', 'reason', 't', 'False', '')
+        append_dedup_record(csv_path, r)
+        rows_sqlite = db_mod.db_load_dedup_records()
+        assert any(row['video_code'] == 'DUO-001' for row in rows_sqlite)
+        assert os.path.exists(csv_path)

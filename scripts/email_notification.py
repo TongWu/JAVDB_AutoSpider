@@ -27,48 +27,33 @@ os.chdir(project_root)
 sys.path.insert(0, project_root)
 
 # Import unified configuration
-try:
-    from config import (
-        GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH,
-        SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO,
-        PIPELINE_LOG_FILE, SPIDER_LOG_FILE, UPLOADER_LOG_FILE,
-        DAILY_REPORT_DIR, AD_HOC_DIR, LOG_LEVEL,
-        PIKPAK_LOG_FILE
-    )
-except ImportError:
-    # Fallback values if config.py doesn't exist
-    GIT_USERNAME = 'your_github_username'
-    GIT_PASSWORD = 'your_github_password_or_token'
-    GIT_REPO_URL = 'https://github.com/your_username/your_repo_name.git'
-    GIT_BRANCH = 'main'
-    
-    SMTP_SERVER = 'smtp.gmail.com'
-    SMTP_PORT = 587
-    SMTP_USER = 'your_email@gmail.com'
-    SMTP_PASSWORD = 'your_email_password'
-    EMAIL_FROM = 'your_email@gmail.com'
-    EMAIL_TO = 'your_email@gmail.com'
-    
-    PIPELINE_LOG_FILE = 'logs/pipeline.log'
-    SPIDER_LOG_FILE = 'logs/spider.log'
-    UPLOADER_LOG_FILE = 'logs/qb_uploader.log'
-    DAILY_REPORT_DIR = 'reports/DailyReport'
-    AD_HOC_DIR = 'reports/AdHoc'
-    LOG_LEVEL = 'INFO'
-    PIKPAK_LOG_FILE = 'logs/pikpak_bridge.log'
+from utils.config_helper import cfg
 
-try:
-    from config import REPORTS_DIR as _EMAIL_REPORTS_DIR, DEDUP_CSV, DEDUP_LOG_FILE
-except ImportError:
-    _EMAIL_REPORTS_DIR = 'reports'
-    DEDUP_CSV = 'dedup.csv'
-    DEDUP_LOG_FILE = 'logs/rclone_dedup.log'
+GIT_USERNAME = cfg('GIT_USERNAME', 'your_github_username')
+GIT_PASSWORD = cfg('GIT_PASSWORD', 'your_github_password_or_token')
+GIT_REPO_URL = cfg('GIT_REPO_URL', 'https://github.com/your_username/your_repo_name.git')
+GIT_BRANCH = cfg('GIT_BRANCH', 'main')
 
-# Import EMAIL_NOTIFICATION_LOG_FILE with fallback
-try:
-    from config import EMAIL_NOTIFICATION_LOG_FILE
-except ImportError:
-    EMAIL_NOTIFICATION_LOG_FILE = 'logs/email_notification.log'
+SMTP_SERVER = cfg('SMTP_SERVER', 'smtp.gmail.com')
+SMTP_PORT = cfg('SMTP_PORT', 587)
+SMTP_USER = cfg('SMTP_USER', 'your_email@gmail.com')
+SMTP_PASSWORD = cfg('SMTP_PASSWORD', 'your_email_password')
+EMAIL_FROM = cfg('EMAIL_FROM', 'your_email@gmail.com')
+EMAIL_TO = cfg('EMAIL_TO', 'your_email@gmail.com')
+
+PIPELINE_LOG_FILE = cfg('PIPELINE_LOG_FILE', 'logs/pipeline.log')
+SPIDER_LOG_FILE = cfg('SPIDER_LOG_FILE', 'logs/spider.log')
+UPLOADER_LOG_FILE = cfg('UPLOADER_LOG_FILE', 'logs/qb_uploader.log')
+DAILY_REPORT_DIR = cfg('DAILY_REPORT_DIR', 'reports/DailyReport')
+AD_HOC_DIR = cfg('AD_HOC_DIR', 'reports/AdHoc')
+LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
+PIKPAK_LOG_FILE = cfg('PIKPAK_LOG_FILE', 'logs/pikpak_bridge.log')
+
+_EMAIL_REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
+DEDUP_CSV = cfg('DEDUP_CSV', 'dedup.csv')
+DEDUP_LOG_FILE = cfg('DEDUP_LOG_FILE', 'logs/rclone_dedup.log')
+
+EMAIL_NOTIFICATION_LOG_FILE = cfg('EMAIL_NOTIFICATION_LOG_FILE', 'logs/email_notification.log')
 
 # --- LOGGING SETUP ---
 from utils.logging_config import setup_logging, get_logger
@@ -1199,10 +1184,79 @@ def main():
     # Determine if we have critical errors (from logs OR from workflow job status)
     has_critical_errors = len(pipeline_errors) > 0 or has_job_failure
     
-    # Extract statistics (only if log exists)
-    spider_stats = extract_spider_statistics(SPIDER_LOG_FILE) if spider_log_exists else None
-    uploader_stats = extract_uploader_statistics(UPLOADER_LOG_FILE) if uploader_log_exists else None
-    pikpak_stats = extract_pikpak_statistics(PIKPAK_LOG_FILE) if pikpak_log_exists else None
+    # Try loading stats from SQLite first, fallback to log parsing
+    _db_spider_stats = None
+    _db_uploader_stats = None
+    _db_pikpak_stats = None
+    try:
+        from utils.config_helper import use_sqlite as _use_sqlite
+        if _use_sqlite():
+            from utils.db import init_db, db_get_latest_session, db_get_spider_stats, db_get_uploader_stats, db_get_pikpak_stats
+            init_db()
+            latest = db_get_latest_session()
+            if latest:
+                _sid = latest['id']
+                _db_spider_stats = db_get_spider_stats(_sid)
+                _db_uploader_stats = db_get_uploader_stats(_sid)
+                _db_pikpak_stats = db_get_pikpak_stats(_sid)
+    except Exception as e:
+        logger.debug(f"SQLite stats not available: {e}")
+
+    if _db_spider_stats:
+        spider_stats = {
+            'phase1': {
+                'discovered': _db_spider_stats.get('phase1_discovered', 0),
+                'processed': _db_spider_stats.get('phase1_processed', 0),
+                'skipped_history': _db_spider_stats.get('phase1_skipped', 0),
+                'no_new_torrents': _db_spider_stats.get('phase1_no_new', 0),
+                'failed': _db_spider_stats.get('phase1_failed', 0),
+            },
+            'phase2': {
+                'discovered': _db_spider_stats.get('phase2_discovered', 0),
+                'processed': _db_spider_stats.get('phase2_processed', 0),
+                'skipped_history': _db_spider_stats.get('phase2_skipped', 0),
+                'no_new_torrents': _db_spider_stats.get('phase2_no_new', 0),
+                'failed': _db_spider_stats.get('phase2_failed', 0),
+            },
+            'overall': {
+                'total_discovered': _db_spider_stats.get('total_discovered', 0),
+                'successfully_processed': _db_spider_stats.get('total_processed', 0),
+                'skipped_history': _db_spider_stats.get('total_skipped', 0),
+                'no_new_torrents': _db_spider_stats.get('total_no_new', 0),
+                'failed': _db_spider_stats.get('total_failed', 0),
+            },
+        }
+        logger.info("Spider stats loaded from SQLite")
+    else:
+        spider_stats = extract_spider_statistics(SPIDER_LOG_FILE) if spider_log_exists else None
+
+    if _db_uploader_stats:
+        uploader_stats = {
+            'total': _db_uploader_stats.get('total_torrents', 0),
+            'success': _db_uploader_stats.get('successfully_added', 0),
+            'failed': _db_uploader_stats.get('failed_count', 0),
+            'hacked_sub': _db_uploader_stats.get('hacked_sub', 0),
+            'hacked_nosub': _db_uploader_stats.get('hacked_nosub', 0),
+            'subtitle': _db_uploader_stats.get('subtitle_count', 0),
+            'no_subtitle': _db_uploader_stats.get('no_subtitle_count', 0),
+            'success_rate': _db_uploader_stats.get('success_rate', 0.0),
+        }
+        logger.info("Uploader stats loaded from SQLite")
+    else:
+        uploader_stats = extract_uploader_statistics(UPLOADER_LOG_FILE) if uploader_log_exists else None
+
+    if _db_pikpak_stats:
+        pikpak_stats = {
+            'total_torrents': _db_pikpak_stats.get('total_torrents', 0),
+            'filtered_old': _db_pikpak_stats.get('filtered_old', 0),
+            'added_to_pikpak': _db_pikpak_stats.get('successful_count', 0),
+            'removed_from_qb': _db_pikpak_stats.get('successful_count', 0),
+            'failed': _db_pikpak_stats.get('failed_count', 0),
+            'threshold_days': _db_pikpak_stats.get('threshold_days', 3),
+        }
+        logger.info("PikPak stats loaded from SQLite")
+    else:
+        pikpak_stats = extract_pikpak_statistics(PIKPAK_LOG_FILE) if pikpak_log_exists else None
     ban_summary = get_proxy_ban_summary()
 
     # Extract dedup statistics
