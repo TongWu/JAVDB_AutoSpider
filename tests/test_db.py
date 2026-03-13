@@ -293,16 +293,16 @@ class TestReportSessions:
         assert sid is not None
         assert isinstance(sid, int)
 
-    def test_unique_csv_filename(self, _isolate_sqlite):
-        db_mod.db_create_report_session(
+    def test_duplicate_csv_filename_allowed(self, _isolate_sqlite):
+        sid1 = db_mod.db_create_report_session(
             report_type='daily', report_date='20240101',
-            csv_filename='unique.csv', db_path=_isolate_sqlite,
+            csv_filename='same.csv', db_path=_isolate_sqlite,
         )
-        with pytest.raises(Exception):
-            db_mod.db_create_report_session(
-                report_type='daily', report_date='20240102',
-                csv_filename='unique.csv', db_path=_isolate_sqlite,
-            )
+        sid2 = db_mod.db_create_report_session(
+            report_type='daily', report_date='20240102',
+            csv_filename='same.csv', db_path=_isolate_sqlite,
+        )
+        assert sid1 != sid2
 
     def test_insert_and_get_rows(self, _isolate_sqlite):
         sid = db_mod.db_create_report_session(
