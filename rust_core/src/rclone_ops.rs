@@ -130,7 +130,7 @@ pub fn parse_lsd_output(output: &str) -> Vec<String> {
         if trimmed.is_empty() {
             continue;
         }
-        let parts: Vec<&str> = trimmed.splitn(5, ' ').collect();
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
         if parts.len() >= 5 {
             folders.push(parts[4..].join(" "));
         }
