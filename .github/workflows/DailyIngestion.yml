@@ -424,7 +424,7 @@ jobs:
           set -e
           set -o pipefail
           curl -s https://rclone.org/install.sh | sudo bash
-          python3 scripts/rclone_dedup_executor.py
+          python3 scripts/rclone_manager.py --execute
         continue-on-error: true
 
       - name: Encrypt and upload logs artifact
