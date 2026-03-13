@@ -21,10 +21,8 @@ import re
 import csv
 import base64
 import argparse
-import gc
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
-from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -43,16 +41,11 @@ from scripts.rclone_dedup import (
     SensorCategory,
     SubtitleCategory,
     FolderInfo,
-    FolderCache,
     parse_folder_name,
     get_year_folders,
-    get_actor_folders,
-    get_movie_folders,
-    get_folder_stats,
-    get_folder_stats_batch,
+    get_all_movie_folders_for_year,
     check_rclone_installed,
     check_remote_exists,
-    check_remote_folder_access,
     VIDEO_EXTENSIONS,
 )
 
@@ -161,19 +154,62 @@ def scan_non_standard_folder_for_codes(
         return []
 
 
+def _folder_to_row(
+    folder: FolderInfo,
+    remote_name: str,
+    root_folder: str,
+    scan_time: str,
+) -> dict:
+    """Convert a FolderInfo to a CSV/DB row dict."""
+    folder_path = folder.full_path
+    if not folder_path.startswith(f"{remote_name}:"):
+        folder_path = (
+            f"{remote_name}:{root_folder}/{folder.year}/"
+            f"{folder.actor}/{folder.folder_name}"
+        )
+    return {
+        'video_code': folder.movie_code,
+        'sensor_category': folder.sensor_category,
+        'subtitle_category': folder.subtitle_category,
+        'folder_path': folder_path,
+        'folder_size': folder.size,
+        'file_count': folder.file_count,
+        'scan_datetime': scan_time,
+    }
+
+
+def _process_year(
+    remote_name: str,
+    root_folder: str,
+    year: str,
+    scan_time: str,
+) -> List[dict]:
+    """Worker: scan an entire year tree in one rclone call, return row dicts."""
+    try:
+        folders = get_all_movie_folders_for_year(
+            remote_name, root_folder, year,
+        )
+    except Exception as e:
+        logger.error(f"Error scanning year {year}: {e}")
+        return []
+    return [_folder_to_row(f, remote_name, root_folder, scan_time) for f in folders]
+
+
 def scan_inventory(
     remote_name: str,
     root_folder: str,
     max_workers: int = 4,
     year_filter: Optional[List[str]] = None,
-    flush_callback=None,
-    flush_interval: int = 100,
+    row_callback=None,
 ) -> int:
-    """Scan the full folder tree and return the total number of folders found.
+    """Scan the full folder tree using year-level parallelism.
 
-    When *flush_callback* is provided, accumulated folders are handed off every
-    *flush_interval* completed year/actor combinations so the caller can persist
-    them incrementally and free memory.
+    Each worker scans an entire year directory with one ``rclone lsjson -R``
+    call, which discovers all actors/movies/files in a single round-trip.
+    This reduces total subprocess calls from O(year*actors) to O(years).
+
+    *row_callback(rows)* is invoked in the main thread every time a year
+    completes, so the caller can stream results to CSV/SQLite immediately.
     """
     logger.info(f"Scanning inventory from {remote_name}:{root_folder}...")
 
@@ -188,65 +224,42 @@ def scan_inventory(
         if not years:
             return 0
 
-    year_actor_map: Dict[str, List[str]] = {}
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_year = {
-            executor.submit(get_actor_folders, remote_name, root_folder, year): year
-            for year in years
-        }
-        for future in as_completed(future_to_year):
-            year = future_to_year[future]
-            try:
-                year_actor_map[year] = future.result()
-            except Exception as e:
-                logger.error(f"Error scanning year {year}: {e}")
-                year_actor_map[year] = []
-
-    pending_folders: List[FolderInfo] = []
-    total_found = 0
-    batch_tasks = [(y, a) for y, actors in year_actor_map.items() for a in actors]
-    total = len(batch_tasks)
+    scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    total_rows = 0
     completed = 0
+    total = len(years)
 
-    logger.info(f"Scanning movie folders for {total} year/actor combinations...")
+    logger.info(
+        f"Scanning {total} year folders with {max_workers} workers "
+        f"(one rclone call per year)..."
+    )
 
-    def _flush():
-        nonlocal total_found
-        if pending_folders:
-            if flush_callback:
-                flush_callback(pending_folders)
-            total_found += len(pending_folders)
-            pending_folders.clear()
-            gc.collect()
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(
+                _process_year, remote_name, root_folder, y, scan_time,
+            ): y
+            for y in years
+        }
+        for future in as_completed(futures):
+            year = futures[future]
+            completed += 1
+            try:
+                rows = future.result()
+                if rows:
+                    if row_callback:
+                        row_callback(rows)
+                    total_rows += len(rows)
+                logger.info(
+                    f"Progress: {completed}/{total} years done — "
+                    f"year {year}: {len(rows)} folders, "
+                    f"total so far: {total_rows}"
+                )
+            except Exception as e:
+                logger.error(f"Error processing year {year}: {e}")
 
-    chunk_size = min(100, max_workers * 10)
-    for i in range(0, len(batch_tasks), chunk_size):
-        chunk = batch_tasks[i:i + chunk_size]
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_path = {
-                executor.submit(get_movie_folders, remote_name, root_folder, y, a): (y, a)
-                for y, a in chunk
-            }
-            for future in as_completed(future_to_path):
-                year, actor = future_to_path[future]
-                completed += 1
-                try:
-                    folders = future.result()
-                    if folders:
-                        pending_folders.extend(folders)
-                    if completed % flush_interval == 0:
-                        pct = completed / total * 100
-                        logger.info(
-                            f"Progress: {completed}/{total} ({pct:.1f}%) combinations, "
-                            f"{total_found + len(pending_folders)} folders"
-                        )
-                        _flush()
-                except Exception as e:
-                    logger.error(f"Error scanning {year}/{actor}: {e}")
-
-    _flush()
-    logger.info(f"Scan complete: {total_found} movie folders found")
-    return total_found
+    logger.info(f"Scan complete: {total_rows} movie folders found")
+    return total_rows
 
 
 def write_inventory_csv(
@@ -255,29 +268,45 @@ def write_inventory_csv(
     remote_name: str,
     root_folder: str,
 ) -> int:
-    """Write the inventory CSV.  Returns number of records written."""
+    """Write the inventory to the active storage backend(s).  Returns number of records."""
+    from utils.config_helper import use_sqlite, use_csv
+
     scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     records_written = 0
 
-    with open(output_path, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=INVENTORY_FIELDNAMES)
-        writer.writeheader()
-        for folder in folders:
-            folder_path = folder.full_path
-            if not folder_path.startswith(f"{remote_name}:"):
-                folder_path = f"{remote_name}:{root_folder}/{folder.year}/{folder.actor}/{folder.folder_name}"
-            writer.writerow({
-                'video_code': folder.movie_code,
-                'sensor_category': folder.sensor_category,
-                'subtitle_category': folder.subtitle_category,
-                'folder_path': folder_path,
-                'folder_size': folder.size,
-                'file_count': folder.file_count,
-                'scan_datetime': scan_time,
-            })
-            records_written += 1
+    all_rows = []
+    for folder in folders:
+        folder_path = folder.full_path
+        if not folder_path.startswith(f"{remote_name}:"):
+            folder_path = f"{remote_name}:{root_folder}/{folder.year}/{folder.actor}/{folder.folder_name}"
+        all_rows.append({
+            'video_code': folder.movie_code,
+            'sensor_category': folder.sensor_category,
+            'subtitle_category': folder.subtitle_category,
+            'folder_path': folder_path,
+            'folder_size': folder.size,
+            'file_count': folder.file_count,
+            'scan_datetime': scan_time,
+        })
+    records_written = len(all_rows)
 
-    logger.info(f"Inventory CSV written: {output_path} ({records_written} records)")
+    if use_sqlite():
+        try:
+            from utils.db import init_db, db_replace_rclone_inventory
+            init_db()
+            db_replace_rclone_inventory(all_rows)
+            logger.info(f"Inventory SQLite updated: {records_written} records")
+        except Exception as e:
+            logger.warning(f"Failed to write inventory to SQLite: {e}")
+
+    if use_csv():
+        with open(output_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=INVENTORY_FIELDNAMES)
+            writer.writeheader()
+            for row in all_rows:
+                writer.writerow(row)
+        logger.info(f"Inventory CSV written: {output_path} ({records_written} records)")
+
     return records_written
 
 
@@ -348,7 +377,7 @@ def main() -> int:
     logger.info(f"Output: {output_path}")
     logger.info("=" * 60)
 
-    # Health checks
+    # Health checks (read-only — skip the slow write-access test)
     ok, msg = check_rclone_installed()
     if not ok:
         logger.error(msg)
@@ -360,49 +389,51 @@ def main() -> int:
         logger.error(msg)
         return 1
     logger.info(f"  {msg}")
+    # Folder access is implicitly verified by get_year_folders inside
+    # scan_inventory; the dedup write-access check is too slow here.
 
-    ok, msg = check_remote_folder_access(remote_name, root_folder)
-    if not ok:
-        logger.error(msg)
-        return 1
-    logger.info(f"  {msg}")
+    # ── Streaming write setup ────────────────────────────────────────
+    from utils.config_helper import use_sqlite as _use_sqlite, use_csv as _use_csv
 
-    # Scan & write incrementally to reduce memory usage
-    scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     total_written = 0
 
-    with open(output_path, 'w', newline='', encoding='utf-8') as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=INVENTORY_FIELDNAMES)
-        writer.writeheader()
+    _sqlite_ok = False
+    if _use_sqlite():
+        try:
+            from utils.db import init_db, db_clear_rclone_inventory, db_append_rclone_inventory
+            init_db()
+            db_clear_rclone_inventory()
+            _sqlite_ok = True
+        except Exception:
+            pass
 
-        def flush_batch(batch: List[FolderInfo]):
-            nonlocal total_written
-            get_folder_stats_batch(batch, max_workers=args.workers)
-            for folder in batch:
-                folder_path = folder.full_path
-                if not folder_path.startswith(f"{remote_name}:"):
-                    folder_path = (
-                        f"{remote_name}:{root_folder}/{folder.year}/"
-                        f"{folder.actor}/{folder.folder_name}"
-                    )
-                writer.writerow({
-                    'video_code': folder.movie_code,
-                    'sensor_category': folder.sensor_category,
-                    'subtitle_category': folder.subtitle_category,
-                    'folder_path': folder_path,
-                    'folder_size': folder.size,
-                    'file_count': folder.file_count,
-                    'scan_datetime': scan_time,
-                })
-                total_written += 1
-            csv_file.flush()
+    _csv_file = None
+    _csv_writer = None
+    if _use_csv():
+        _csv_file = open(output_path, 'w', newline='', encoding='utf-8')
+        _csv_writer = csv.DictWriter(_csv_file, fieldnames=INVENTORY_FIELDNAMES)
+        _csv_writer.writeheader()
 
-        total_found = scan_inventory(
-            remote_name, root_folder,
-            max_workers=args.workers,
-            year_filter=year_filter,
-            flush_callback=flush_batch,
-        )
+    def on_rows(rows: list):
+        """Stream rows to CSV/SQLite as each worker completes."""
+        nonlocal total_written
+        if _csv_writer is not None:
+            for row in rows:
+                _csv_writer.writerow(row)
+            _csv_file.flush()
+        if _sqlite_ok:
+            db_append_rclone_inventory(rows)
+        total_written += len(rows)
+
+    total_found = scan_inventory(
+        remote_name, root_folder,
+        max_workers=args.workers,
+        year_filter=year_filter,
+        row_callback=on_rows,
+    )
+
+    if _csv_file is not None:
+        _csv_file.close()
 
     if total_found == 0:
         logger.warning("No movie folders found")

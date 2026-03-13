@@ -10,7 +10,7 @@ from urllib.parse import urljoin
 from utils.logging_config import get_logger
 from utils.parser import parse_detail
 from utils.magnet_extractor import extract_magnets
-from utils.history_manager import has_complete_subtitles, should_skip_recent_yesterday_release, should_process_movie, save_parsed_movie_to_history, batch_update_last_visited
+from utils.history_manager import has_complete_subtitles, should_skip_recent_yesterday_release, should_skip_recent_today_release, should_process_movie, save_parsed_movie_to_history, batch_update_last_visited
 from utils.csv_writer import write_csv
 from utils.proxy_pool import create_proxy_pool_from_config
 from utils.request_handler import RequestHandler, RequestConfig
@@ -345,6 +345,15 @@ def process_detail_entries_parallel(
             )
             continue
 
+        if not is_adhoc_mode and should_skip_recent_today_release(
+            href, history_data, entry.get('is_today_release', False)
+        ):
+            logger.info(
+                f"[{i}/{total_entries}] [Page {entry['page']}] "
+                f"Skipping {entry['video_code']} — today release, already visited today"
+            )
+            continue
+
         detail_url = urljoin(BASE_URL, href)
         entry_index = f"{i}/{total_entries}"
         logger.debug(f"[{entry_index}] [Page {entry['page']}] Queued {entry['video_code'] or href}")
@@ -408,10 +417,10 @@ def process_detail_entries_parallel(
             rclone_entries = rclone_inventory.get(vc, [])
             if rclone_entries:
                 torrent_types = {
-                    'subtitle': any(m.get('type') == 'subtitle' for m in magnet_links),
-                    'hacked_subtitle': any(m.get('type') == 'hacked_subtitle' for m in magnet_links),
-                    'hacked_no_subtitle': any(m.get('type') == 'hacked_no_subtitle' for m in magnet_links),
-                    'no_subtitle': any(m.get('type') == 'no_subtitle' for m in magnet_links),
+                    'subtitle': bool(magnet_links.get('subtitle')),
+                    'hacked_subtitle': bool(magnet_links.get('hacked_subtitle')),
+                    'hacked_no_subtitle': bool(magnet_links.get('hacked_no_subtitle')),
+                    'no_subtitle': bool(magnet_links.get('no_subtitle')),
                 }
                 dedup_records = check_dedup_upgrade(vc, torrent_types, rclone_entries)
                 for rec in dedup_records:
