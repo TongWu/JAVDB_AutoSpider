@@ -399,6 +399,7 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline
                     logger.error(f"Failed to delete from qBittorrent after successful PikPak upload: {torrent['name']}, Error: {delete_error}")
                     save_to_pikpak_history(torrent, 'failed_but_deleted', str(delete_error))
                     delete_failed_count += 1
+                    failed_transfers.append((torrent, f"qB delete failed: {delete_error}"))
             
             # Process failed uploads
             for magnet, error_msg in failed_magnets:
@@ -440,6 +441,7 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline
                         logger.error(f"Failed to delete from qBittorrent after successful PikPak upload: {torrent['name']}, Error: {delete_error}")
                         save_to_pikpak_history(torrent, 'failed_but_deleted', str(delete_error))
                         delete_failed_count += 1
+                        failed_transfers.append((torrent, f"qB delete failed: {delete_error}"))
                         
                 else:  # Upload failed
                     error_msg = failed_magnets[0][1] if failed_magnets else "Unknown error"
