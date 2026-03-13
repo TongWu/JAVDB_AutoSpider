@@ -158,6 +158,84 @@ class TestDedupRecords:
         deleted = [r for r in reloaded if r.get('is_deleted') in (1, True)]
         assert len(deleted) == 1
 
+    def test_append_skips_duplicate_pending(self, _isolate_sqlite):
+        """Same existing_gdrive_path with is_deleted=0 should be rejected."""
+        r = self._rec('A', existing_gdrive_path='remote:/dup_path')
+        assert db_mod.db_append_dedup_record(r) > 0
+        assert db_mod.db_append_dedup_record(r) == -1
+        assert len(db_mod.db_load_dedup_records()) == 1
+
+    def test_append_allows_after_deleted(self, _isolate_sqlite):
+        """A deleted record should not block re-append of the same path."""
+        r = self._rec('A', existing_gdrive_path='remote:/path')
+        db_mod.db_append_dedup_record(r)
+        db_mod.db_mark_records_deleted([('remote:/path', '2024-06-01 00:00:00')])
+        assert db_mod.db_append_dedup_record(r) > 0
+        assert len(db_mod.db_load_dedup_records()) == 2
+
+    def test_mark_records_deleted(self, _isolate_sqlite):
+        db_mod.db_append_dedup_record(self._rec('A'))
+        db_mod.db_append_dedup_record(self._rec('B'))
+        updated = db_mod.db_mark_records_deleted([
+            ('remote:/A', '2024-06-01 10:00:00'),
+        ])
+        assert updated == 1
+        rows = db_mod.db_load_dedup_records()
+        a_row = [r for r in rows if r['video_code'] == 'A'][0]
+        b_row = [r for r in rows if r['video_code'] == 'B'][0]
+        assert a_row['is_deleted'] == 1
+        assert a_row['delete_datetime'] == '2024-06-01 10:00:00'
+        assert b_row['is_deleted'] == 0
+
+    def test_mark_multiple_pending_same_path(self, _isolate_sqlite):
+        """Edge 1a: multiple pending records with the same path."""
+        r1 = self._rec('A', existing_gdrive_path='remote:/same')
+        db_mod.db_append_dedup_record(r1)
+        # Force a second record with the same path by marking the first deleted first
+        db_mod.db_mark_records_deleted([('remote:/same', '2024-01-01 00:00:00')])
+        db_mod.db_append_dedup_record(r1)
+        # Now re-mark: only the second (pending) row should update
+        updated = db_mod.db_mark_records_deleted([('remote:/same', '2024-06-01 00:00:00')])
+        assert updated == 1
+
+    def test_mark_idempotent(self, _isolate_sqlite):
+        """Marking an already-deleted record should not update again."""
+        db_mod.db_append_dedup_record(self._rec('A'))
+        db_mod.db_mark_records_deleted([('remote:/A', '2024-06-01 00:00:00')])
+        updated = db_mod.db_mark_records_deleted([('remote:/A', '2024-07-01 00:00:00')])
+        assert updated == 0
+
+    def test_cleanup_deleted_records(self, _isolate_sqlite):
+        db_mod.db_append_dedup_record(self._rec('OLD'))
+        db_mod.db_mark_records_deleted([('remote:/OLD', '2020-01-01 00:00:00')])
+        db_mod.db_append_dedup_record(self._rec('FRESH'))
+        db_mod.db_mark_records_deleted([('remote:/FRESH', '2099-01-01 00:00:00')])
+        db_mod.db_append_dedup_record(self._rec('PENDING'))
+
+        removed = db_mod.db_cleanup_deleted_records(older_than_days=30)
+        assert removed == 1
+        rows = db_mod.db_load_dedup_records()
+        codes = {r['video_code'] for r in rows}
+        assert 'OLD' not in codes
+        assert 'FRESH' in codes
+        assert 'PENDING' in codes
+
+    def test_cleanup_skips_empty_delete_datetime(self, _isolate_sqlite):
+        """Edge 3a: is_deleted=1 but delete_datetime='' should be kept."""
+        r = self._rec('ANOMALY', is_deleted=1, delete_datetime='')
+        db_mod.db_append_dedup_record(r)
+        removed = db_mod.db_cleanup_deleted_records(older_than_days=0)
+        assert removed == 0
+        assert len(db_mod.db_load_dedup_records()) == 1
+
+    def test_cleanup_zero_retention(self, _isolate_sqlite):
+        """Edge 3b: retention_days=0 removes all with valid timestamps."""
+        db_mod.db_append_dedup_record(self._rec('A'))
+        db_mod.db_mark_records_deleted([('remote:/A', '2024-06-01 00:00:00')])
+        removed = db_mod.db_cleanup_deleted_records(older_than_days=0)
+        assert removed == 1
+        assert len(db_mod.db_load_dedup_records()) == 0
+
 
 # ── pikpak_history ────────────────────────────────────────────────────────
 

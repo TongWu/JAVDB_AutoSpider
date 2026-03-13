@@ -24,6 +24,7 @@ from unittest.mock import patch
 
 import utils.db as _db_mod
 import utils.config_helper as _cfg_mod
+import scripts.spider.dedup_checker as _dedup_mod
 
 
 @pytest.fixture(autouse=True)
@@ -40,6 +41,10 @@ def _isolate_sqlite(tmp_path):
     test_db = str(tmp_path / "test.db")
     original = _db_mod.DB_PATH
     _db_mod.DB_PATH = test_db
+
+    # Reset dedup_checker module-level state
+    _dedup_mod._db_initialised = False
+    _dedup_mod._pending_paths_cache = None
 
     with patch.object(_cfg_mod, 'storage_mode', return_value='db'):
         _db_mod.init_db(test_db)

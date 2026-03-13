@@ -20,6 +20,9 @@ from scripts.spider.dedup_checker import (
     append_dedup_record,
     load_dedup_csv,
     save_dedup_csv,
+    mark_records_deleted,
+    cleanup_deleted_records,
+    _raw_csv_read,
 )
 import utils.db as db_mod
 
@@ -185,8 +188,8 @@ class TestDedupIO:
         assert rows[0]['video_code'] == 'ABC-123'
 
     def test_append_preserves_existing(self):
-        r1 = DedupRecord('A-001', 's', 'sub', 'p', 100, 'cat', 'reason', 't', 'False', '')
-        r2 = DedupRecord('B-002', 's', 'sub', 'p', 200, 'cat', 'reason', 't', 'False', '')
+        r1 = DedupRecord('A-001', 's', 'sub', 'p1', 100, 'cat', 'reason', 't', 'False', '')
+        r2 = DedupRecord('B-002', 's', 'sub', 'p2', 200, 'cat', 'reason', 't', 'False', '')
         append_dedup_record('', r1)
         append_dedup_record('', r2)
         rows = load_dedup_csv('')
@@ -207,6 +210,116 @@ class TestDedupIO:
 
     def test_load_empty(self):
         assert load_dedup_csv('') == []
+
+    def test_append_skips_duplicate_path(self):
+        """Same existing_gdrive_path should be skipped (Fix 2)."""
+        r1 = DedupRecord('A-001', 's', 'sub', 'gdrive:/same_path', 100, 'cat', 'r', 't1', 'False', '')
+        r2 = DedupRecord('A-001', 's', 'sub', 'gdrive:/same_path', 200, 'cat', 'r', 't2', 'False', '')
+        assert append_dedup_record('', r1) is True
+        assert append_dedup_record('', r2) is False
+        rows = load_dedup_csv('')
+        assert len(rows) == 1
+
+    def test_append_allows_after_deleted(self):
+        """Same path re-append after deletion should succeed (Edge 2b)."""
+        r = DedupRecord('A-001', 's', 'sub', 'gdrive:/path', 100, 'cat', 'r', 't', 'False', '')
+        append_dedup_record('', r)
+        mark_records_deleted('', [('gdrive:/path', '2026-01-01 00:00:00')])
+        assert append_dedup_record('', r) is True
+        rows = load_dedup_csv('')
+        assert len(rows) == 2
+
+    def test_append_same_code_different_paths(self):
+        """Same video_code but different paths are both allowed (Edge 2a)."""
+        r1 = DedupRecord('A-001', 's', 'sub', 'gdrive:/path1', 100, 'cat', 'r', 't', 'False', '')
+        r2 = DedupRecord('A-001', 's', 'sub', 'gdrive:/path2', 200, 'cat', 'r', 't', 'False', '')
+        assert append_dedup_record('', r1) is True
+        assert append_dedup_record('', r2) is True
+        assert len(load_dedup_csv('')) == 2
+
+
+# ── mark_records_deleted tests ───────────────────────────────────────────
+
+class TestMarkRecordsDeleted:
+    def test_marks_pending_record(self):
+        r = DedupRecord('A-001', 's', 'sub', 'gdrive:/p1', 100, 'cat', 'r', 't', 'False', '')
+        append_dedup_record('', r)
+        updated = mark_records_deleted('', [('gdrive:/p1', '2026-01-02 00:00:00')])
+        assert updated == 1
+        rows = load_dedup_csv('')
+        assert rows[0]['is_deleted'] == 'True'
+        assert rows[0]['delete_datetime'] == '2026-01-02 00:00:00'
+
+    def test_idempotent(self):
+        r = DedupRecord('A-001', 's', 'sub', 'gdrive:/p1', 100, 'cat', 'r', 't', 'False', '')
+        append_dedup_record('', r)
+        mark_records_deleted('', [('gdrive:/p1', '2026-01-02 00:00:00')])
+        updated = mark_records_deleted('', [('gdrive:/p1', '2026-01-03 00:00:00')])
+        assert updated == 0
+
+    def test_with_csv_mirror(self, tmp_path, storage_mode_duo):
+        csv_path = str(tmp_path / 'dedup.csv')
+        r = DedupRecord('A-001', 's', 'sub', 'gdrive:/p1', 100, 'cat', 'r', 't', 'False', '')
+        append_dedup_record(csv_path, r)
+        mark_records_deleted(csv_path, [('gdrive:/p1', '2026-01-02 00:00:00')])
+        csv_rows = _raw_csv_read(csv_path)
+        assert csv_rows[0]['is_deleted'] == 'True'
+
+    def test_csv_nonexistent(self, tmp_path, storage_mode_duo):
+        """Edge 1d: CSV doesn't exist — should create with header only."""
+        csv_path = str(tmp_path / 'no_such.csv')
+        r = DedupRecord('A-001', 's', 'sub', 'gdrive:/p1', 100, 'cat', 'r', 't', 'False', '')
+        append_dedup_record(csv_path, r)
+        os.remove(csv_path)
+        mark_records_deleted(csv_path, [('gdrive:/p1', '2026-01-02 00:00:00')])
+        csv_rows = _raw_csv_read(csv_path)
+        assert len(csv_rows) == 0
+
+    def test_invalidates_cache(self):
+        """After marking deleted, append of same path should succeed."""
+        r = DedupRecord('A-001', 's', 'sub', 'gdrive:/p1', 100, 'cat', 'r', 't', 'False', '')
+        append_dedup_record('', r)
+        mark_records_deleted('', [('gdrive:/p1', '2026-01-02 00:00:00')])
+        assert append_dedup_record('', r) is True
+
+
+# ── cleanup_deleted_records tests ────────────────────────────────────────
+
+class TestCleanupDeletedRecords:
+    def test_removes_old_records(self):
+        r1 = DedupRecord('OLD', 's', 'sub', 'gdrive:/old', 100, 'cat', 'r', 't', 'False', '')
+        r2 = DedupRecord('NEW', 's', 'sub', 'gdrive:/new', 200, 'cat', 'r', 't', 'False', '')
+        r3 = DedupRecord('PENDING', 's', 'sub', 'gdrive:/pend', 300, 'cat', 'r', 't', 'False', '')
+        append_dedup_record('', r1)
+        append_dedup_record('', r2)
+        append_dedup_record('', r3)
+        mark_records_deleted('', [
+            ('gdrive:/old', '2020-01-01 00:00:00'),
+            ('gdrive:/new', '2099-01-01 00:00:00'),
+        ])
+        removed = cleanup_deleted_records('', older_than_days=30)
+        assert removed == 1
+        codes = {r['video_code'] for r in load_dedup_csv('')}
+        assert 'OLD' not in codes
+        assert 'NEW' in codes
+        assert 'PENDING' in codes
+
+    def test_csv_cleanup(self, tmp_path, storage_mode_duo):
+        csv_path = str(tmp_path / 'dedup.csv')
+        r = DedupRecord('OLD', 's', 'sub', 'gdrive:/old', 100, 'cat', 'r', 't', 'False', '')
+        append_dedup_record(csv_path, r)
+        mark_records_deleted(csv_path, [('gdrive:/old', '2020-01-01 00:00:00')])
+        cleanup_deleted_records(csv_path, older_than_days=30)
+        csv_rows = _raw_csv_read(csv_path)
+        assert len(csv_rows) == 0
+
+    def test_zero_retention(self):
+        """Edge 3b: retention_days=0 removes everything with valid timestamp."""
+        r = DedupRecord('A', 's', 'sub', 'gdrive:/p', 100, 'cat', 'r', 't', 'False', '')
+        append_dedup_record('', r)
+        mark_records_deleted('', [('gdrive:/p', '2026-03-01 00:00:00')])
+        removed = cleanup_deleted_records('', older_than_days=0)
+        assert removed == 1
 
 
 # ── STORAGE_MODE tests ──────────────────────────────────────────────────
