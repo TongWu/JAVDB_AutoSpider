@@ -343,7 +343,8 @@ def mark_torrent_as_downloaded(history_file, href, video_code, torrent_type):
     """Mark a specific torrent type as downloaded in history."""
     try:
         save_parsed_movie_to_history(
-            history_file, href, "2", video_code, {torrent_type: ''}
+            history_file, href, "2", video_code,
+            {torrent_type: f'magnet:?dn=downloaded&vc={video_code}'},
         )
         logger.debug(f"Marked {torrent_type} as downloaded for {video_code} ({href})")
         return True

@@ -565,7 +565,7 @@ class TestMarkTorrentAsDownloaded:
     
     def test_mark_torrent_as_downloaded(self, temp_dir):
         """Test marking a torrent as downloaded."""
-        from utils.history_manager import mark_torrent_as_downloaded
+        from utils.history_manager import mark_torrent_as_downloaded, check_torrent_in_history
         
         history_file = os.path.join(temp_dir, 'history.csv')
         
@@ -577,6 +577,8 @@ class TestMarkTorrentAsDownloaded:
         
         history = db_mod.db_load_history()
         assert '/v/NEW-001' in history
+        
+        assert check_torrent_in_history(history_file, '/v/NEW-001', 'subtitle') is True
 
 
 class TestLoadParsedMoviesHistoryExtended:
