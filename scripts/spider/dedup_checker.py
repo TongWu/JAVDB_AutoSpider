@@ -282,10 +282,10 @@ def _load_pending_paths_cache() -> Set[str]:
                 p = r.get('existing_gdrive_path', '')
                 if p:
                     paths.add(p)
-    except Exception:
-        pass
-    _pending_paths_cache = paths
-    return _pending_paths_cache
+        _pending_paths_cache = paths
+    except Exception as e:
+        logger.warning(f"Failed to load pending paths cache from DB: {e}")
+    return _pending_paths_cache if _pending_paths_cache is not None else paths
 
 
 def _raw_csv_read(csv_path: str) -> List[Dict[str, str]]:
