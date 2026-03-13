@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 _REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
 DB_PATH = cfg('SQLITE_DB_PATH', os.path.join(_REPORTS_DIR, 'javdb_autospider.db'))
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # ── Connection management ────────────────────────────────────────────────
 
@@ -173,7 +173,7 @@ CREATE TABLE IF NOT EXISTS report_sessions (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_type_date ON report_sessions(report_type, report_date);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_csv ON report_sessions(csv_filename);
+CREATE INDEX IF NOT EXISTS idx_sessions_csv ON report_sessions(csv_filename);
 
 -- 7. report_rows
 CREATE TABLE IF NOT EXISTS report_rows (
@@ -281,6 +281,16 @@ def init_db(db_path: Optional[str] = None, *, force: bool = False):
         row = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
         if row is None:
             conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
+        else:
+            current = row[0]
+            if current < 2:
+                conn.execute("DROP INDEX IF EXISTS idx_sessions_csv")
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_sessions_csv "
+                    "ON report_sessions(csv_filename)"
+                )
+            if current < SCHEMA_VERSION:
+                conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
         logger.debug(f"Database initialised at {db_path or DB_PATH} (schema v{SCHEMA_VERSION})")
 
 
