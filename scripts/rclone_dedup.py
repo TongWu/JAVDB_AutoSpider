@@ -762,7 +762,7 @@ def get_all_movie_folders_for_year(
             ['rclone', 'lsjson', remote_path, '-R', '--fast-list'],
             capture_output=True,
             text=True,
-            timeout=600,
+            timeout=1200,
         )
 
         if result.returncode != 0:
