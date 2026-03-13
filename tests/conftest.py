@@ -48,8 +48,8 @@ def _isolate_sqlite(tmp_path):
 
     with patch.object(_cfg_mod, 'storage_mode', return_value='db'):
         _db_mod.init_db(test_db)
+        yield test_db
 
-    yield test_db
     _db_mod.close_db()
     _db_mod.DB_PATH = original
 
