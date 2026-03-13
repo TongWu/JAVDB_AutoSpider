@@ -369,8 +369,12 @@ jobs:
           
           SESSION_ID=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_SESSION_ID=" | cut -d'=' -f2 | tail -1 || true)
           if [ -n "$SESSION_ID" ]; then
-            echo "session_id=$SESSION_ID" >> $GITHUB_OUTPUT
-            echo "Captured session ID: $SESSION_ID"
+            if echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+              echo "session_id=$SESSION_ID" >> $GITHUB_OUTPUT
+              echo "Captured session ID: $SESSION_ID"
+            else
+              echo "::warning::Ignoring invalid SESSION_ID format: $SESSION_ID"
+            fi
           fi
           
           # Re-raise spider exit code so the step is correctly marked as failed
