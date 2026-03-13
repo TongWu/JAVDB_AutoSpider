@@ -7,10 +7,11 @@ priority upgrades).  Storage backend is controlled by ``STORAGE_MODE``.
 
 import csv
 import os
-from datetime import datetime
-from typing import Dict, List, Optional, NamedTuple
+import tempfile
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Set, Tuple, NamedTuple
 
-from utils.config_helper import use_sqlite, use_csv
+from utils.config_helper import use_sqlite, use_csv, cfg
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -19,10 +20,15 @@ _db_initialised = False
 
 
 def _ensure_db():
+    """Initialise the database, even in csv-only storage mode.
+
+    Dedup records always use SQLite as the authoritative source, so we
+    force database creation regardless of ``STORAGE_MODE``.
+    """
     global _db_initialised
     if not _db_initialised:
         from utils.db import init_db
-        init_db()
+        init_db(force=True)
         _db_initialised = True
 
 
@@ -257,36 +263,105 @@ def check_dedup_upgrade(
 # Persistent dedup.csv I/O
 # ---------------------------------------------------------------------------
 
-def load_dedup_csv(csv_path: str) -> List[Dict[str, str]]:
-    """Load all dedup records. Returns empty list when no data exists."""
-    if use_sqlite():
+_pending_paths_cache: Optional[Set[str]] = None
+
+
+def _load_pending_paths_cache() -> Set[str]:
+    """Build the in-memory set of pending (not-yet-deleted) gdrive paths."""
+    global _pending_paths_cache
+    if _pending_paths_cache is not None:
+        return _pending_paths_cache
+    paths: Set[str] = set()
+    try:
         _ensure_db()
         from utils.db import db_load_dedup_records
-        rows = db_load_dedup_records()
-        for r in rows:
-            r.pop('id', None)
-            r['is_deleted'] = 'True' if r.get('is_deleted') in (1, True, 'True', '1') else 'False'
-            r['existing_folder_size'] = str(r.get('existing_folder_size', 0))
-        return rows
+        for r in db_load_dedup_records():
+            is_del = r.get('is_deleted')
+            if is_del not in (1, True, 'True', '1'):
+                p = r.get('existing_gdrive_path', '')
+                if p:
+                    paths.add(p)
+    except Exception:
+        pass
+    _pending_paths_cache = paths
+    return _pending_paths_cache
 
+
+def _raw_csv_read(csv_path: str) -> List[Dict[str, str]]:
+    """Read all rows from a CSV file (no storage-mode dispatch)."""
     if not os.path.exists(csv_path):
         return []
-    rows = []
+    rows: List[Dict[str, str]] = []
     with open(csv_path, 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
+        for row in csv.DictReader(f):
             rows.append(row)
     return rows
 
 
-def append_dedup_record(dedup_csv_path: str, record: DedupRecord) -> None:
-    """Append a single DedupRecord to persistent storage."""
-    if use_sqlite():
-        _ensure_db()
-        from utils.db import db_append_dedup_record
-        db_append_dedup_record(record._asdict())
+def _atomic_csv_write(csv_path: str, rows: List[Dict[str, str]]) -> None:
+    """Write *rows* to *csv_path* atomically via a temp file + os.replace."""
+    parent = os.path.dirname(csv_path) or '.'
+    os.makedirs(parent, exist_ok=True)
+    fd = tempfile.NamedTemporaryFile(
+        mode='w', newline='', encoding='utf-8',
+        dir=parent, suffix='.tmp', delete=False,
+    )
+    try:
+        writer = csv.DictWriter(fd, fieldnames=DEDUP_FIELDNAMES, extrasaction='ignore')
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+        fd.close()
+        os.replace(fd.name, csv_path)
+    except BaseException:
+        fd.close()
+        try:
+            os.unlink(fd.name)
+        except OSError:
+            pass
+        raise
 
-    if use_csv():
+
+def load_dedup_csv(csv_path: str) -> List[Dict[str, str]]:
+    """Load all dedup records from the authoritative SQLite store.
+
+    Returns empty list when no data exists.
+    """
+    _ensure_db()
+    from utils.db import db_load_dedup_records
+    rows = db_load_dedup_records()
+    for r in rows:
+        r.pop('id', None)
+        r['is_deleted'] = 'True' if r.get('is_deleted') in (1, True, 'True', '1') else 'False'
+        r['existing_folder_size'] = str(r.get('existing_folder_size', 0))
+    return rows
+
+
+def append_dedup_record(dedup_csv_path: str, record: DedupRecord) -> bool:
+    """Append a single DedupRecord to persistent storage.
+
+    Returns ``True`` if the record was appended, ``False`` if a pending
+    record for the same ``existing_gdrive_path`` already exists.
+    """
+    gdrive_path = record.existing_gdrive_path
+
+    # Fast in-memory duplicate check
+    cache = _load_pending_paths_cache()
+    if gdrive_path and gdrive_path in cache:
+        logger.debug(f"Skipped duplicate dedup for path: {gdrive_path}")
+        return False
+
+    appended = True
+
+    # SQLite (authoritative)
+    _ensure_db()
+    from utils.db import db_append_dedup_record
+    row_id = db_append_dedup_record(record._asdict())
+    if row_id == -1:
+        appended = False
+
+    # CSV mirror
+    if appended and use_csv():
         file_exists = os.path.exists(dedup_csv_path) and os.path.getsize(dedup_csv_path) > 0
         os.makedirs(os.path.dirname(dedup_csv_path) or '.', exist_ok=True)
         with open(dedup_csv_path, 'a', newline='', encoding='utf-8') as f:
@@ -295,11 +370,88 @@ def append_dedup_record(dedup_csv_path: str, record: DedupRecord) -> None:
                 writer.writeheader()
             writer.writerow(record._asdict())
 
-    logger.debug(f"Appended dedup record: {record.video_code} – {record.deletion_reason}")
+    if appended:
+        if gdrive_path:
+            cache.add(gdrive_path)
+        logger.debug(f"Appended dedup record: {record.video_code} – {record.deletion_reason}")
+    else:
+        logger.debug(f"Skipped duplicate dedup for path: {gdrive_path}")
+
+    return appended
+
+
+def mark_records_deleted(
+    csv_path: str,
+    path_datetime_pairs: List[Tuple[str, str]],
+) -> int:
+    """Mark specific dedup records as deleted.
+
+    SQLite is always updated (authoritative source).  The CSV mirror is
+    refreshed only when ``use_csv()`` is true.
+    """
+    _ensure_db()
+    from utils.db import db_mark_records_deleted
+    updated = db_mark_records_deleted(path_datetime_pairs)
+
+    if use_csv():
+        lookup = dict(path_datetime_pairs)
+        rows = _raw_csv_read(csv_path)
+        for row in rows:
+            p = row.get('existing_gdrive_path', '')
+            if p in lookup and row.get('is_deleted') != 'True':
+                row['is_deleted'] = 'True'
+                row['delete_datetime'] = lookup[p]
+        _atomic_csv_write(csv_path, rows)
+
+    # Invalidate cache so next append sees the new state
+    global _pending_paths_cache
+    if _pending_paths_cache is not None:
+        for path, _ in path_datetime_pairs:
+            _pending_paths_cache.discard(path)
+
+    return updated
+
+
+def cleanup_deleted_records(
+    csv_path: str,
+    older_than_days: int = 30,
+) -> int:
+    """Remove dedup records deleted more than *older_than_days* ago.
+
+    Records with empty ``delete_datetime`` are skipped even when
+    ``is_deleted`` is true (data anomaly).
+    """
+    _ensure_db()
+    from utils.db import db_cleanup_deleted_records
+    removed = db_cleanup_deleted_records(older_than_days)
+
+    if use_csv():
+        cutoff = (datetime.now() - timedelta(days=older_than_days)).strftime('%Y-%m-%d %H:%M:%S')
+        rows = _raw_csv_read(csv_path)
+        kept = []
+        for row in rows:
+            is_del = row.get('is_deleted', 'False')
+            dt = row.get('delete_datetime', '')
+            if is_del == 'True' and dt and dt < cutoff:
+                continue
+            kept.append(row)
+        if len(kept) != len(rows):
+            _atomic_csv_write(csv_path, kept)
+
+    logger.info(f"Cleaned up {removed} old deleted dedup records (retention={older_than_days}d)")
+    return removed
 
 
 def save_dedup_csv(csv_path: str, rows: List[Dict[str, str]]) -> None:
-    """Overwrite all dedup records (used after updating is_deleted flags)."""
+    """Overwrite all dedup records.
+
+    .. deprecated::
+        Use :func:`mark_records_deleted` for targeted updates instead.
+    """
+    logger.warning(
+        "save_dedup_csv is deprecated — use mark_records_deleted "
+        "for targeted updates instead"
+    )
     if use_sqlite():
         _ensure_db()
         from utils.db import db_save_dedup_records
