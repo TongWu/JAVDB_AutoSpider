@@ -72,6 +72,7 @@ def load_parsed_movies_history(history_file, phase=None):
     """Load previously parsed movies from history with phase filtering."""
     if use_sqlite():
         _ensure_db()
+    if use_sqlite():
         from utils.db import db_load_history
         history = db_load_history(phase=phase)
         if history:
@@ -111,6 +112,7 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_l
 
     if use_sqlite():
         _ensure_db()
+    if use_sqlite():
         from utils.db import db_upsert_history
 
         filtered = {}
@@ -134,6 +136,7 @@ def validate_history_file(history_file):
     """Validate and fix history file format."""
     if use_sqlite():
         _ensure_db()
+    if use_sqlite():
         if not use_csv():
             return True
     return _csv_validate_history_file(history_file)
@@ -143,6 +146,7 @@ def batch_update_last_visited(history_file, visited_hrefs):
     """Update last_visited_datetime for a set of hrefs."""
     if use_sqlite():
         _ensure_db()
+    if use_sqlite():
         from utils.db import db_batch_update_last_visited
         updated = db_batch_update_last_visited(list(visited_hrefs))
         if updated:
@@ -156,6 +160,7 @@ def check_torrent_in_history(history_file, href, torrent_type):
     """Check if the specified torrent is already in the history record."""
     if use_sqlite():
         _ensure_db()
+    if use_sqlite():
         from utils.db import db_check_torrent_in_history
         return db_check_torrent_in_history(href, torrent_type)
     return _csv_check_torrent_in_history(history_file, href, torrent_type)

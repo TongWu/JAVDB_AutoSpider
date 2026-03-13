@@ -98,6 +98,7 @@ def load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
     """
     if use_sqlite():
         _ensure_db()
+    if use_sqlite():
         from utils.db import db_load_rclone_inventory
         raw = db_load_rclone_inventory()
         inventory: Dict[str, List[RcloneEntry]] = {}
