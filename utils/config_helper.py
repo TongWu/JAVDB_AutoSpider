@@ -22,7 +22,9 @@ def cfg(name, default):
 
 # ── Storage-mode helpers ──────────────────────────────────────────────────
 
-_storage_mode_override: str | None = None
+from typing import Optional
+
+_storage_mode_override: Optional[str] = None
 
 
 def force_storage_mode(mode: str) -> None:
