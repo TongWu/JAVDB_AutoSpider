@@ -1,5 +1,9 @@
 name: RClone Manager
 
+concurrency:
+  group: rclone-manager
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
