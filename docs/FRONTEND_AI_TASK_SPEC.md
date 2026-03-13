@@ -448,7 +448,7 @@ Authorization: Bearer <token>
 - **健康检查**：`python3 scripts/health_check.py [--check-smtp] [--use-proxy]`，前端提供按钮，展示输出或“通过/失败”状态。
 - **JAVDB 登录/会话刷新**：`python3 scripts/login.py`，用于刷新 `JAVDB_SESSION_COOKIE`；前端可提供“刷新会话”按钮并提示需要 JAVDB_USERNAME/JAVDB_PASSWORD 与可选 GPT API。
 - **qBittorrent 文件过滤**：`python3 scripts/qb_file_filter.py --min-size N [--days D] [--use-proxy] [--dry-run] [--categories '["Ad Hoc","Daily Ingestion"]']`，可选在 UI 中提供表单并显示最近运行结果。
-- **Rclone 去重**：`scripts/rclone_dedup.py` 参数较多，可作为“高级/工具”页的可选功能，或仅提供文档链接与命令行示例。
+- **Rclone 管理**：`scripts/rclone_manager.py` 通过 `--scan` / `--report` / `--execute` 三个可组合 flag 实现六种模式，参数较多，可作为“高级/工具”页的可选功能，或仅提供文档链接与命令行示例。
 
 ---
 
