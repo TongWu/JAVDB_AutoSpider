@@ -78,7 +78,7 @@ pub fn parse_lsjson_for_year(py: Python<'_>, json_str: &str) -> PyResult<Vec<Py<
     let mut results = Vec::new();
     for ((actor, folder_name), (size, file_count)) in &movie_dirs {
         if let Some((movie_code, sensor, subtitle)) = parse_folder_name(folder_name) {
-            let dict = PyDict::new(py);
+            let dict = PyDict::new_bound(py);
             dict.set_item("actor", &actor)?;
             dict.set_item("folder_name", &folder_name)?;
             dict.set_item("movie_code", movie_code)?;
@@ -100,7 +100,7 @@ pub fn group_by_movie_code<'py>(
     py: Python<'py>,
     entries: Vec<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let result = PyDict::new(py);
+    let result = PyDict::new_bound(py);
 
     for entry in &entries {
         let code: String = entry
@@ -112,7 +112,7 @@ pub fn group_by_movie_code<'py>(
             let list: Bound<'py, pyo3::types::PyList> = existing.downcast_into()?;
             list.append(entry)?;
         } else {
-            let list = pyo3::types::PyList::new(py, &[entry.as_any()])?;
+            let list = pyo3::types::PyList::new_bound(py, &[entry.as_any()]);
             result.set_item(&code, list)?;
         }
     }
