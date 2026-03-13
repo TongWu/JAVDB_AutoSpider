@@ -523,7 +523,7 @@ def get_all_movie_folders_for_year(
     try:
         result = subprocess.run(
             ['rclone', 'lsjson', remote_path, '-R', '--fast-list'],
-            capture_output=True, text=True, timeout=600,
+            capture_output=True, text=True, timeout=300,
         )
         if result.returncode != 0:
             if "directory not found" in result.stderr.lower():
