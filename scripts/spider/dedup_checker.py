@@ -324,17 +324,34 @@ def _atomic_csv_write(csv_path: str, rows: List[Dict[str, str]]) -> None:
 
 
 def load_dedup_csv(csv_path: str) -> List[Dict[str, str]]:
-    """Load all dedup records from the authoritative SQLite store.
+    """Load all dedup records from persistent storage.
 
-    Returns empty list when no data exists.
+    Uses SQLite as the authoritative source when available; falls back
+    to reading *csv_path* when the database is empty or unavailable and
+    CSV mode is active.  Returns an empty list when no data exists in
+    either backend.
     """
-    _ensure_db()
-    from utils.db import db_load_dedup_records
-    rows = db_load_dedup_records()
-    for r in rows:
-        r.pop('id', None)
-        r['is_deleted'] = 'True' if r.get('is_deleted') in (1, True, 'True', '1') else 'False'
-        r['existing_folder_size'] = str(r.get('existing_folder_size', 0))
+    rows: List[Dict[str, str]] = []
+
+    if use_sqlite():
+        _ensure_db()
+        from utils.db import db_load_dedup_records
+        rows = db_load_dedup_records()
+        for r in rows:
+            r.pop('id', None)
+            r['is_deleted'] = 'True' if r.get('is_deleted') in (1, True, 'True', '1') else 'False'
+            r['existing_folder_size'] = str(r.get('existing_folder_size', 0))
+
+    if not rows and use_csv() and csv_path and os.path.exists(csv_path):
+        try:
+            with open(csv_path, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                rows = [dict(r) for r in reader]
+            logger.debug(f"Loaded {len(rows)} dedup records from CSV fallback: {csv_path}")
+        except Exception as e:
+            logger.warning(f"Failed to read dedup CSV {csv_path}: {e}")
+            rows = []
+
     return rows
 
 
