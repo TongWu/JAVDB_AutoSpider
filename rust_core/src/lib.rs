@@ -5,6 +5,7 @@ pub mod history;
 pub mod magnet_extractor;
 pub mod models;
 pub mod proxy;
+pub mod rclone_ops;
 pub mod requester;
 pub mod scraper;
 pub mod url_helper;
@@ -161,6 +162,12 @@ fn javdb_rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // --- Magnet Extractor ---
     m.add_function(wrap_pyfunction!(magnet_extractor::extract_magnets, m)?)?;
+
+    // --- RClone Ops ---
+    m.add_function(wrap_pyfunction!(rclone_ops::parse_folder_name, m)?)?;
+    m.add_function(wrap_pyfunction!(rclone_ops::parse_lsjson_for_year, m)?)?;
+    m.add_function(wrap_pyfunction!(rclone_ops::group_by_movie_code, m)?)?;
+    m.add_function(wrap_pyfunction!(rclone_ops::parse_lsd_output, m)?)?;
 
     Ok(())
 }
