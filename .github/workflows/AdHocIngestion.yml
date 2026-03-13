@@ -470,7 +470,7 @@ jobs:
           SPIDER_OUTPUT=$(eval $SPIDER_CMD | tee /dev/stderr)
           
           # Extract CSV filename and session_id from spider output
-          CSV_FILENAME=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_OUTPUT_CSV=" | cut -d'=' -f2 | tail -1)
+          CSV_FILENAME=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_OUTPUT_CSV=" | cut -d'=' -f2 | tail -1 || true)
           if [ -n "$CSV_FILENAME" ]; then
             echo "csv_filename=$CSV_FILENAME" >> $GITHUB_OUTPUT
             echo "Captured CSV filename: $CSV_FILENAME"
