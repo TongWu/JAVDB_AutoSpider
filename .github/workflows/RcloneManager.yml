@@ -199,7 +199,7 @@ jobs:
           "${CMD[@]}"
 
       - name: Commit and push results
-        if: inputs.scan == true || (inputs.report == true && inputs.execute == true && inputs.dry_run == false)
+        if: inputs.scan == true || inputs.report == true || (inputs.execute == true && inputs.dry_run == false)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
