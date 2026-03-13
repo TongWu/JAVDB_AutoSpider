@@ -622,8 +622,8 @@ def main() -> int:
                 init_db()
                 db_clear_rclone_inventory()
                 _sqlite_ok = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed initializing SQLite for rclone inventory: {e}")
 
         _csv_file = None
         _csv_writer = None
