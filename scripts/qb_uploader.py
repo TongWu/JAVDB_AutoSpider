@@ -526,6 +526,10 @@ def initialize_proxy_helper(use_proxy):
 
 
 def main():
+    import atexit
+    from utils.db import close_db
+    atexit.register(close_db)
+
     args = parse_arguments()
     mode = args.mode
     use_proxy = args.use_proxy
