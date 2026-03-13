@@ -695,6 +695,12 @@ jobs:
             echo "Using CSV file: $CSV_PATH"
           fi
           
+          # Pass session_id for SQLite stats
+          SESSION_ID="${{ needs.run-pipeline.outputs.session_id }}"
+          if [ -n "$SESSION_ID" ]; then
+            CMD="$CMD --session-id $SESSION_ID"
+          fi
+          
           echo "Executing: $CMD"
           eval $CMD
 
