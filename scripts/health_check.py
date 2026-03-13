@@ -67,7 +67,7 @@ def check_qbittorrent_connection() -> Tuple[bool, str]:
         Tuple of (success, message)
     """
     if not QB_HOST or not QB_PORT:
-        return False, "QB_HOST/QB_PORT not configured – qBittorrent checks skipped"
+        return False, "QB_HOST/QB_PORT not configured - qBittorrent checks skipped"
 
     masked_host = mask_ip_address(QB_HOST)
     
