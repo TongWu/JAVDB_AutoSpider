@@ -414,7 +414,9 @@ def run_execute_from_csv(
 ) -> int:
     """Read *dedup_csv*, purge un-deleted entries, and update the CSV.
 
-    Returns 0 on full success, 1 if any purges failed.
+    Returns 0 when at least one purge succeeded (or nothing to do); returns 1
+    only when all attempted purges failed (so the workflow can still commit on
+    partial success).
     """
     from scripts.spider.dedup_checker import (
         load_dedup_csv, mark_records_deleted, cleanup_deleted_records,
@@ -479,7 +481,14 @@ def run_execute_from_csv(
     logger.info(f"Purged: {success_count}, failed: {fail_count}, skipped (empty path): {skip_count}")
     logger.info("=" * 60)
 
-    return 0 if (fail_count + skip_count) == 0 else 1
+    # Partial success (some purged, some failed) is still success — allow workflow to commit.
+    # Only fail when every attempted purge failed (no success at all).
+    if success_count > 0:
+        return 0
+    if fail_count > 0:
+        logger.warning("All purges failed — treating as job failure")
+        return 1
+    return 0
 
 
 # ============================================================================
