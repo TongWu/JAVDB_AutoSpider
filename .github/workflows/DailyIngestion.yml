@@ -17,7 +17,7 @@ on:
       enable_dedup:
         description: 'Enable rclone dedup (detect + execute)'
         required: false
-        default: true
+        default: false
         type: boolean
   schedule:
     # Run daily at 15:30 UTC (23:30 Beijing Time)
