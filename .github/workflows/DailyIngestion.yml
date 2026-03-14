@@ -19,9 +19,9 @@ on:
         required: false
         default: true
         type: boolean
-  schedule:
+  # schedule: # DISABLED FOR PUBLIC REPO
     # Run daily at 15:30 UTC (23:30 Beijing Time)
-    - cron: '30 15 * * *'
+    # - cron: '30 15 * * *'
 
 jobs:
   # =============================================================================
