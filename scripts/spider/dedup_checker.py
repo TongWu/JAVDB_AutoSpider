@@ -368,10 +368,14 @@ def load_dedup_csv(csv_path: str, from_file_only: bool = False) -> List[Dict[str
 
 
 def append_dedup_record(dedup_csv_path: str, record: DedupRecord) -> bool:
-    """Append a single DedupRecord to persistent storage.
+    """Append a single DedupRecord to persistent storage (DB only).
 
     Returns ``True`` if the record was appended, ``False`` if a pending
     record for the same ``existing_gdrive_path`` already exists.
+
+    The *dedup_csv_path* parameter is kept for API compatibility but is
+    no longer written to.  Use :func:`export_dedup_db_to_csv` to produce
+    a CSV snapshot from the DB when needed.
     """
     gdrive_path = record.existing_gdrive_path
 
@@ -381,57 +385,33 @@ def append_dedup_record(dedup_csv_path: str, record: DedupRecord) -> bool:
         logger.debug(f"Skipped duplicate dedup for path: {gdrive_path}")
         return False
 
-    appended = True
-
-    # SQLite (authoritative)
     _ensure_db()
     from utils.db import db_append_dedup_record
     row_id = db_append_dedup_record(record._asdict())
+
     if row_id == -1:
-        appended = False
-
-    # CSV mirror
-    if appended and use_csv():
-        file_exists = os.path.exists(dedup_csv_path) and os.path.getsize(dedup_csv_path) > 0
-        os.makedirs(os.path.dirname(dedup_csv_path) or '.', exist_ok=True)
-        with open(dedup_csv_path, 'a', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=DEDUP_FIELDNAMES)
-            if not file_exists:
-                writer.writeheader()
-            writer.writerow(record._asdict())
-
-    if appended:
-        if gdrive_path:
-            cache.add(gdrive_path)
-        logger.debug(f"Appended dedup record: {record.video_code} – {record.deletion_reason}")
-    else:
         logger.debug(f"Skipped duplicate dedup for path: {gdrive_path}")
+        return False
 
-    return appended
+    if gdrive_path:
+        cache.add(gdrive_path)
+    logger.debug(f"Appended dedup record: {record.video_code} – {record.deletion_reason}")
+    return True
 
 
 def mark_records_deleted(
     csv_path: str,
     path_datetime_pairs: List[Tuple[str, str]],
 ) -> int:
-    """Mark specific dedup records as deleted.
+    """Mark specific dedup records as deleted (DB only).
 
-    SQLite is always updated (authoritative source).  The CSV mirror is
-    refreshed only when ``use_csv()`` is true.
+    The *csv_path* parameter is kept for API compatibility but is no
+    longer written to.  Use :func:`export_dedup_db_to_csv` to produce
+    a CSV snapshot from the DB when needed.
     """
     _ensure_db()
     from utils.db import db_mark_records_deleted
     updated = db_mark_records_deleted(path_datetime_pairs)
-
-    if use_csv():
-        lookup = dict(path_datetime_pairs)
-        rows = _raw_csv_read(csv_path)
-        for row in rows:
-            p = row.get('existing_gdrive_path', '')
-            if p in lookup and row.get('is_deleted') != 'True':
-                row['is_deleted'] = 'True'
-                row['delete_datetime'] = lookup[p]
-        _atomic_csv_write(csv_path, rows)
 
     # Invalidate cache so next append sees the new state
     if _pending_paths_cache is not None:
@@ -445,27 +425,18 @@ def cleanup_deleted_records(
     csv_path: str,
     older_than_days: int = 30,
 ) -> int:
-    """Remove dedup records deleted more than *older_than_days* ago.
+    """Remove dedup records deleted more than *older_than_days* ago (DB only).
 
     Records with empty ``delete_datetime`` are skipped even when
     ``is_deleted`` is true (data anomaly).
+
+    The *csv_path* parameter is kept for API compatibility but is no
+    longer written to.  Use :func:`export_dedup_db_to_csv` to produce
+    a CSV snapshot from the DB when needed.
     """
     _ensure_db()
     from utils.db import db_cleanup_deleted_records
     removed = db_cleanup_deleted_records(older_than_days)
-
-    if use_csv():
-        cutoff = (datetime.now() - timedelta(days=older_than_days)).strftime('%Y-%m-%d %H:%M:%S')
-        rows = _raw_csv_read(csv_path)
-        kept = []
-        for row in rows:
-            is_del = row.get('is_deleted', 'False')
-            dt = row.get('delete_datetime', '')
-            if is_del == 'True' and dt and dt < cutoff:
-                continue
-            kept.append(row)
-        if len(kept) != len(rows):
-            _atomic_csv_write(csv_path, kept)
 
     logger.info(f"Cleaned up {removed} old deleted dedup records (retention={older_than_days}d)")
     return removed
@@ -493,3 +464,31 @@ def save_dedup_csv(csv_path: str, rows: List[Dict[str, str]]) -> None:
             writer.writeheader()
             for row in rows:
                 writer.writerow(row)
+
+
+def export_dedup_db_to_csv(output_path: str) -> int:
+    """Export the dedup_records table from SQLite to a CSV file.
+
+    Mirrors the pattern used by ``rclone_manager.export_db_to_csv`` for
+    the rclone_inventory table.
+    """
+    _ensure_db()
+    from utils.db import db_load_dedup_records
+
+    rows = db_load_dedup_records()
+    if not rows:
+        logger.warning("No dedup records in DB to export to CSV")
+        return 0
+
+    os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
+    with open(output_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=DEDUP_FIELDNAMES, extrasaction='ignore')
+        writer.writeheader()
+        for r in rows:
+            r.pop('id', None)
+            r['is_deleted'] = 'True' if r.get('is_deleted') in (1, True, 'True', '1') else 'False'
+            r['existing_folder_size'] = str(r.get('existing_folder_size', 0))
+            writer.writerow(r)
+
+    logger.info(f"Exported {len(rows)} dedup records from DB to {output_path}")
+    return len(rows)
