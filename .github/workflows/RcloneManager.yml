@@ -217,6 +217,7 @@ jobs:
 
           git add reports/rclone_inventory.csv 2>/dev/null || true
           git add reports/javdb_autospider.db 2>/dev/null || true
+          git add reports/dedup_history.csv 2>/dev/null || true
           find reports/Dedup -name "*.csv" -exec git add {} \; 2>/dev/null || true
 
           if git diff --cached --quiet; then
@@ -255,6 +256,7 @@ jobs:
           path: |
             reports/rclone_inventory.csv
             reports/javdb_autospider.db
+            reports/dedup_history.csv
             reports/Dedup/
           retention-days: 30
           if-no-files-found: ignore

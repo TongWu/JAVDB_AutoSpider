@@ -366,22 +366,22 @@ def run_report_from_inventory(
     print_summary(csv_report, 0, 0, 0, 0, dry_run=True)
 
     _persist_dedup_records(dedup_results)
+    export_dedup_history()
 
     return 0
 
 
 def _persist_dedup_records(dedup_results: List[DedupResult]) -> None:
-    """Save dedup records to spider/dedup_checker storage under DEDUP_DIR/YYYY/MM/.
+    """Save dedup records to DB via spider/dedup_checker.
 
     Records are always written with ``is_deleted=False``.  The execute
     phase is responsible for updating the flag after purging.
+
+    No per-run CSV file is generated; use :func:`export_dedup_history`
+    to produce a consolidated ``dedup_history.csv`` from the DB.
     """
     try:
         from scripts.spider.dedup_checker import DedupRecord, append_dedup_record
-        dedup_dated_dir = ensure_dated_dir(DEDUP_DIR)
-        # Use Dedup_Pending_* so we do not overwrite generate_csv_report's Dedup_Report_*.csv
-        dedup_filename = f"Dedup_Pending_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        dedup_csv_path = os.path.join(dedup_dated_dir, dedup_filename)
 
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         appended = 0
@@ -400,13 +400,25 @@ def _persist_dedup_records(dedup_results: List[DedupResult]) -> None:
                     is_deleted='False',
                     delete_datetime='',
                 )
-                if append_dedup_record(dedup_csv_path, rec):
+                # csv_path arg kept for API compat but no longer written
+                if append_dedup_record('', rec):
                     appended += 1
                 else:
                     skipped += 1
         logger.info(f"Persisted dedup records: {appended} appended, {skipped} duplicates skipped")
     except Exception as e:
         logger.warning(f"Could not persist dedup records: {e}")
+
+
+def export_dedup_history() -> int:
+    """Export the DB dedup_records table to ``reports/dedup_history.csv``.
+
+    Mirrors the pattern used by :func:`export_db_to_csv` for inventory.
+    """
+    from scripts.spider.dedup_checker import export_dedup_db_to_csv
+
+    output_path = os.path.join(REPORTS_DIR, 'dedup_history.csv')
+    return export_dedup_db_to_csv(output_path)
 
 
 # ============================================================================
@@ -437,12 +449,17 @@ def run_execute_from_csv(
     dry_run: bool = False,
     from_file_only: bool = False,
 ) -> int:
-    """Read *dedup_csv*, purge un-deleted entries, and update the CSV.
+    """Read pending dedup records, purge them, and update the DB.
 
-    When from_file_only is True, only the given CSV file is read (per-run file).
-    Returns 0 when at least one purge succeeded (or nothing to do); returns 1
-    only when all attempted purges failed (so the workflow can still commit on
-    partial success).
+    When *from_file_only* is True, only the given CSV file is read
+    (e.g. a per-run CSV passed via ``--dedup-csv``).  Otherwise,
+    records are loaded from the DB (authoritative source).
+
+    After execution (non-dry-run), the DB state is exported to
+    ``reports/dedup_history.csv``.
+
+    Returns 0 when at least one purge succeeded (or nothing to do);
+    returns 1 only when all attempted purges failed.
     """
     from scripts.spider.dedup_checker import (
         load_dedup_csv, mark_records_deleted, cleanup_deleted_records,
@@ -494,11 +511,12 @@ def run_execute_from_csv(
 
     if not dry_run and purged_pairs:
         mark_records_deleted(dedup_csv, purged_pairs)
-        logger.info(f"Marked {len(purged_pairs)} paths as deleted in {dedup_csv}")
+        logger.info(f"Marked {len(purged_pairs)} paths as deleted in DB")
 
     if not dry_run:
         retention = int(cfg('DEDUP_RETENTION_DAYS', '30'))
         cleanup_deleted_records(dedup_csv, older_than_days=retention)
+        export_dedup_history()
 
     total_unique = success_count + fail_count
     logger.info("=" * 60)
@@ -599,8 +617,10 @@ def main() -> int:
             dedup_csv = args.dedup_csv
             from_file_only = True
         else:
-            dedup_csv = resolve_latest_dedup_file(DEDUP_DIR) or os.path.join(REPORTS_DIR, DEDUP_CSV)
-            from_file_only = dedup_csv != os.path.join(REPORTS_DIR, DEDUP_CSV)
+            # Read from DB (authoritative); dedup_csv is only used as
+            # a fallback path inside load_dedup_csv when DB is empty.
+            dedup_csv = os.path.join(REPORTS_DIR, 'dedup_history.csv')
+            from_file_only = False
         return run_execute_from_csv(dedup_csv, dry_run=args.dry_run, from_file_only=from_file_only)
 
     # ── Scan / Report (/ Execute) need a remote ───────────────────────
@@ -733,8 +753,10 @@ def main() -> int:
             dedup_csv = args.dedup_csv
             from_file_only = True
         else:
-            dedup_csv = resolve_latest_dedup_file(DEDUP_DIR) or os.path.join(REPORTS_DIR, DEDUP_CSV)
-            from_file_only = dedup_csv != os.path.join(REPORTS_DIR, DEDUP_CSV)
+            # Records were persisted to DB in the report phase above;
+            # read from DB (authoritative source).
+            dedup_csv = os.path.join(REPORTS_DIR, 'dedup_history.csv')
+            from_file_only = False
         return run_execute_from_csv(dedup_csv, dry_run=args.dry_run, from_file_only=from_file_only)
 
     return 0

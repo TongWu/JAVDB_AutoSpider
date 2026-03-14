@@ -257,23 +257,15 @@ class TestMarkRecordsDeleted:
         updated = mark_records_deleted('', [('gdrive:/p1', '2026-01-03 00:00:00')])
         assert updated == 0
 
-    def test_with_csv_mirror(self, tmp_path, storage_mode_duo):
+    def test_db_only_no_csv(self, tmp_path):
+        """mark_records_deleted updates DB only; no CSV file is written."""
         csv_path = str(tmp_path / 'dedup.csv')
         r = DedupRecord('A-001', 's', 'sub', 'gdrive:/p1', 100, 'cat', 'r', 't', 'False', '')
         append_dedup_record(csv_path, r)
         mark_records_deleted(csv_path, [('gdrive:/p1', '2026-01-02 00:00:00')])
-        csv_rows = _raw_csv_read(csv_path)
-        assert csv_rows[0]['is_deleted'] == 'True'
-
-    def test_csv_nonexistent(self, tmp_path, storage_mode_duo):
-        """Edge 1d: CSV doesn't exist — should create with header only."""
-        csv_path = str(tmp_path / 'no_such.csv')
-        r = DedupRecord('A-001', 's', 'sub', 'gdrive:/p1', 100, 'cat', 'r', 't', 'False', '')
-        append_dedup_record(csv_path, r)
-        os.remove(csv_path)
-        mark_records_deleted(csv_path, [('gdrive:/p1', '2026-01-02 00:00:00')])
-        csv_rows = _raw_csv_read(csv_path)
-        assert len(csv_rows) == 0
+        rows = load_dedup_csv('')
+        assert rows[0]['is_deleted'] == 'True'
+        assert not os.path.exists(csv_path)
 
     def test_invalidates_cache(self):
         """After marking deleted, append of same path should succeed."""
@@ -304,14 +296,16 @@ class TestCleanupDeletedRecords:
         assert 'NEW' in codes
         assert 'PENDING' in codes
 
-    def test_csv_cleanup(self, tmp_path, storage_mode_duo):
+    def test_db_cleanup_no_csv(self, tmp_path):
+        """cleanup_deleted_records operates on DB only; no CSV written."""
         csv_path = str(tmp_path / 'dedup.csv')
         r = DedupRecord('OLD', 's', 'sub', 'gdrive:/old', 100, 'cat', 'r', 't', 'False', '')
         append_dedup_record(csv_path, r)
         mark_records_deleted(csv_path, [('gdrive:/old', '2020-01-01 00:00:00')])
         cleanup_deleted_records(csv_path, older_than_days=30)
-        csv_rows = _raw_csv_read(csv_path)
-        assert len(csv_rows) == 0
+        rows = load_dedup_csv('')
+        assert not any(r['video_code'] == 'OLD' for r in rows)
+        assert not os.path.exists(csv_path)
 
     def test_zero_retention(self):
         """Edge 3b: retention_days=0 removes everything with valid timestamp."""
@@ -341,13 +335,17 @@ class TestStorageModeDb:
 
 
 class TestStorageModeCsv:
-    """csv mode: reads/writes only hit CSV files."""
+    """csv mode: dedup always writes to DB (force=True), no CSV mirror."""
 
-    def test_append_and_load_csv(self, tmp_path, storage_mode_csv):
+    def test_append_db_only(self, tmp_path, storage_mode_csv):
         csv_path = str(tmp_path / 'dedup.csv')
         r = DedupRecord('CSV-001', 's', 'sub', 'p', 100, 'cat', 'reason', 't', 'False', '')
         append_dedup_record(csv_path, r)
-        assert os.path.exists(csv_path)
+        # DB should still be written (dedup forces DB init)
+        rows = db_mod.db_load_dedup_records()
+        assert any(row['video_code'] == 'CSV-001' for row in rows)
+        # CSV is no longer written as a mirror
+        assert not os.path.exists(csv_path)
 
     def test_inventory_reads_csv(self, tmp_path, storage_mode_csv):
         csv_path = str(tmp_path / 'inv.csv')
@@ -364,12 +362,35 @@ class TestStorageModeCsv:
 
 
 class TestStorageModeDuo:
-    """duo mode: both SQLite and CSV are written."""
+    """duo mode: dedup writes to DB only (no CSV mirror)."""
 
-    def test_append_writes_both(self, tmp_path, storage_mode_duo):
+    def test_append_db_only(self, tmp_path, storage_mode_duo):
         csv_path = str(tmp_path / 'dedup.csv')
         r = DedupRecord('DUO-001', 's', 'sub', 'p', 100, 'cat', 'reason', 't', 'False', '')
         append_dedup_record(csv_path, r)
         rows_sqlite = db_mod.db_load_dedup_records()
         assert any(row['video_code'] == 'DUO-001' for row in rows_sqlite)
-        assert os.path.exists(csv_path)
+        assert not os.path.exists(csv_path)
+
+
+class TestExportDedupDbToCsv:
+    """Tests for the export_dedup_db_to_csv function."""
+
+    def test_export_creates_csv(self, tmp_path):
+        from scripts.spider.dedup_checker import export_dedup_db_to_csv
+        r = DedupRecord('EXP-001', 's', 'sub', 'gdrive:/export', 100, 'cat', 'r', 't', 'False', '')
+        append_dedup_record('', r)
+        output = str(tmp_path / 'dedup_history.csv')
+        count = export_dedup_db_to_csv(output)
+        assert count == 1
+        assert os.path.exists(output)
+        rows = _raw_csv_read(output)
+        assert len(rows) == 1
+        assert rows[0]['video_code'] == 'EXP-001'
+
+    def test_export_empty_db(self, tmp_path):
+        from scripts.spider.dedup_checker import export_dedup_db_to_csv
+        output = str(tmp_path / 'dedup_history.csv')
+        count = export_dedup_db_to_csv(output)
+        assert count == 0
+        assert not os.path.exists(output)
