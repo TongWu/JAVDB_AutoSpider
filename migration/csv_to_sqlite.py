@@ -234,8 +234,8 @@ def _load_dedup_report_csv(csv_path: str) -> list:
                     'new_torrent_category': '',
                     'deletion_reason': row.get('Deletion Reason', ''),
                     'detect_datetime': row.get('Delete Datetime', ''),
-                    'is_deleted': 'False',
-                    'delete_datetime': '',
+                    'is_deleted': 'True',
+                    'delete_datetime': row.get('Delete Datetime', ''),
                 })
     except Exception as e:
         logger.warning(f"Failed to read report CSV {csv_path}: {e}")
