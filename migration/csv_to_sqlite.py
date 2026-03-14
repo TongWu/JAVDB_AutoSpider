@@ -182,6 +182,182 @@ def migrate_dedup(csv_path: str, db_path: str, dry_run: bool = False) -> int:
     return count
 
 
+# ── DedupRecord format field names (must match dedup_checker.DEDUP_FIELDNAMES) ─
+_DEDUP_FIELDNAMES = [
+    'video_code', 'existing_sensor', 'existing_subtitle',
+    'existing_gdrive_path', 'existing_folder_size',
+    'new_torrent_category', 'deletion_reason',
+    'detect_datetime', 'is_deleted', 'delete_datetime',
+]
+
+
+def _parse_human_size(size_str: str) -> int:
+    """Parse human-readable size like '4.94 GB' to bytes."""
+    units = {'PB': 1024**5, 'TB': 1024**4, 'GB': 1024**3, 'MB': 1024**2, 'KB': 1024, 'B': 1}
+    size_str = size_str.strip()
+    for unit, multiplier in units.items():
+        if size_str.upper().endswith(unit):
+            try:
+                return int(float(size_str[:len(size_str) - len(unit)].strip()) * multiplier)
+            except (ValueError, TypeError):
+                return 0
+    try:
+        return int(float(size_str))
+    except (ValueError, TypeError):
+        return 0
+
+
+def _load_dedup_pending_csv(csv_path: str) -> list:
+    """Load a Dedup_Pending_*.csv (DedupRecord format) into dicts."""
+    rows = []
+    try:
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            for row in csv.DictReader(f):
+                rows.append(row)
+    except Exception as e:
+        logger.warning(f"Failed to read pending CSV {csv_path}: {e}")
+    return rows
+
+
+def _load_dedup_report_csv(csv_path: str) -> list:
+    """Load a Dedup_Report_*.csv (DeletionRecord format) and map to DedupRecord dicts."""
+    rows = []
+    try:
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            for row in csv.DictReader(f):
+                rows.append({
+                    'video_code': row.get('Movie Code', ''),
+                    'existing_sensor': row.get('Sensor Category', ''),
+                    'existing_subtitle': row.get('Subtitle Category', ''),
+                    'existing_gdrive_path': row.get('Deleted Folder Path', ''),
+                    'existing_folder_size': _parse_human_size(row.get('Folder Size', '0')),
+                    'new_torrent_category': '',
+                    'deletion_reason': row.get('Deletion Reason', ''),
+                    'detect_datetime': row.get('Delete Datetime', ''),
+                    'is_deleted': 'True',
+                    'delete_datetime': row.get('Delete Datetime', ''),
+                })
+    except Exception as e:
+        logger.warning(f"Failed to read report CSV {csv_path}: {e}")
+    return rows
+
+
+def migrate_dedup_all(reports_dir: str, db_path: str, dry_run: bool = False) -> int:
+    """Merge all dedup CSV files and import into dedup_records table.
+
+    Sources (in order):
+      1. reports/dedup.csv                          (legacy, DedupRecord format)
+      2. reports/Dedup/**/Dedup_Pending_*.csv       (DedupRecord format)
+      3. reports/Dedup/**/Dedup_Report_*.csv        (DeletionRecord format, mapped)
+
+    Deduplication uses ``existing_gdrive_path`` as a unique key.  Records
+    already present in the DB are skipped (INSERT OR IGNORE).
+
+    After import the merged data is exported to ``reports/dedup_history.csv``.
+    """
+    from utils.db import get_db
+    import glob as _glob
+
+    all_rows: list = []
+    seen_paths: set = set()
+    dedup_dir = os.path.join(reports_dir, 'Dedup')
+
+    # 1. Legacy dedup.csv
+    legacy_path = os.path.join(reports_dir, 'dedup.csv')
+    if os.path.exists(legacy_path):
+        legacy_rows = _load_dedup_pending_csv(legacy_path)
+        logger.info(f"Legacy dedup.csv: {len(legacy_rows)} rows")
+        for row in legacy_rows:
+            p = row.get('existing_gdrive_path', '')
+            if p and p not in seen_paths:
+                seen_paths.add(p)
+                all_rows.append(row)
+
+    # 2. Dedup_Pending_*.csv files (DedupRecord format)
+    for csv_file in sorted(_glob.glob(os.path.join(dedup_dir, '**', 'Dedup_Pending_*.csv'), recursive=True)):
+        rows = _load_dedup_pending_csv(csv_file)
+        added = 0
+        for row in rows:
+            p = row.get('existing_gdrive_path', '')
+            if p and p not in seen_paths:
+                seen_paths.add(p)
+                all_rows.append(row)
+                added += 1
+        if rows:
+            logger.info(f"Pending CSV {csv_file}: {len(rows)} rows, {added} new")
+
+    # 3. Dedup_Report_*.csv files (DeletionRecord format, mapped)
+    for csv_file in sorted(_glob.glob(os.path.join(dedup_dir, '**', 'Dedup_Report_*.csv'), recursive=True)):
+        rows = _load_dedup_report_csv(csv_file)
+        added = 0
+        for row in rows:
+            p = row.get('existing_gdrive_path', '')
+            if p and p not in seen_paths:
+                seen_paths.add(p)
+                all_rows.append(row)
+                added += 1
+        if rows:
+            logger.info(f"Report CSV {csv_file}: {len(rows)} rows, {added} new")
+
+    logger.info(f"Dedup merge total: {len(all_rows)} unique records from all sources")
+
+    if not all_rows:
+        logger.info("No dedup records found to migrate")
+        return 0
+
+    if dry_run:
+        logger.info(f"[DRY RUN] Would insert {len(all_rows)} merged dedup records")
+        return len(all_rows)
+
+    # Import into DB using INSERT OR IGNORE to preserve existing records
+    count = 0
+    with get_db(db_path) as conn:
+        for row in all_rows:
+            is_del = str(row.get('is_deleted', 'False')).lower() in ('true', '1')
+            cur = conn.execute(
+                """INSERT OR IGNORE INTO dedup_records
+                   (video_code, existing_sensor, existing_subtitle,
+                    existing_gdrive_path, existing_folder_size,
+                    new_torrent_category, deletion_reason,
+                    detect_datetime, is_deleted, delete_datetime)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (row.get('video_code', ''),
+                 row.get('existing_sensor', ''),
+                 row.get('existing_subtitle', ''),
+                 row.get('existing_gdrive_path', ''),
+                 int(row.get('existing_folder_size', 0) or 0),
+                 row.get('new_torrent_category', ''),
+                 row.get('deletion_reason', ''),
+                 row.get('detect_datetime', ''),
+                 1 if is_del else 0,
+                 row.get('delete_datetime', '')),
+            )
+            if cur.rowcount > 0:
+                count += 1
+
+    logger.info(f"Imported {count} new dedup records into DB ({len(all_rows) - count} already existed)")
+
+    # Export merged data to dedup_history.csv
+    output_csv = os.path.join(reports_dir, 'dedup_history.csv')
+    with get_db(db_path) as conn:
+        db_rows = conn.execute(
+            "SELECT video_code, existing_sensor, existing_subtitle, "
+            "existing_gdrive_path, existing_folder_size, new_torrent_category, "
+            "deletion_reason, detect_datetime, is_deleted, delete_datetime "
+            "FROM dedup_records ORDER BY id"
+        ).fetchall()
+    with open(output_csv, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=_DEDUP_FIELDNAMES)
+        writer.writeheader()
+        for r in db_rows:
+            d = dict(r)
+            d['is_deleted'] = 'True' if d.get('is_deleted') in (1, True) else 'False'
+            writer.writerow(d)
+    logger.info(f"Exported {len(db_rows)} merged dedup records to {output_csv}")
+
+    return count
+
+
 def migrate_pikpak(csv_path: str, db_path: str, dry_run: bool = False) -> int:
     """Migrate pikpak_bridge_history.csv → pikpak_history table."""
     if not os.path.exists(csv_path):
@@ -527,8 +703,7 @@ def main():
         os.path.join(reports_dir, 'parsed_movies_history.csv'), db_path, args.dry_run)
     table_totals['inventory'] = migrate_inventory(
         os.path.join(reports_dir, 'rclone_inventory.csv'), db_path, args.dry_run)
-    table_totals['dedup'] = migrate_dedup(
-        os.path.join(reports_dir, 'dedup.csv'), db_path, args.dry_run)
+    table_totals['dedup'] = migrate_dedup_all(reports_dir, db_path, args.dry_run)
     table_totals['pikpak'] = migrate_pikpak(
         os.path.join(reports_dir, 'pikpak_bridge_history.csv'), db_path, args.dry_run)
     table_totals['proxy_bans'] = migrate_proxy_bans(

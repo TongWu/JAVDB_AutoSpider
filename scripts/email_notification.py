@@ -831,29 +831,56 @@ def extract_proxy_ban_summary(html_files):
 
 
 def extract_dedup_statistics(dedup_csv_path):
-    """Extract dedup statistics from dedup.csv for the email report.
+    """Extract dedup statistics for the email report.
+
+    Reads from the SQLite DB first (authoritative source).  Falls back to
+    the CSV file at *dedup_csv_path* when the DB is unavailable or empty.
 
     Returns a dict with keys:
         detected, deleted, failed, cumulative, deleted_items (list of summary strings)
-    Returns None if dedup.csv doesn't exist.
+    Returns None when no data exists.
     """
-    import csv as _csv
-    if not os.path.exists(dedup_csv_path):
-        return None
+    rows = None
 
+    # Try DB first
     try:
-        with open(dedup_csv_path, 'r', encoding='utf-8') as f:
-            rows = list(_csv.DictReader(f))
+        from utils.config_helper import use_sqlite
+        if use_sqlite():
+            from utils.db import init_db, db_load_dedup_records
+            init_db()
+            db_rows = db_load_dedup_records()
+            if db_rows:
+                rows = []
+                for r in db_rows:
+                    rows.append({
+                        'video_code': r.get('video_code', ''),
+                        'existing_sensor': r.get('existing_sensor', ''),
+                        'existing_subtitle': r.get('existing_subtitle', ''),
+                        'detect_datetime': r.get('detect_datetime', ''),
+                        'is_deleted': 'True' if r.get('is_deleted') in (1, True, 'True', '1') else 'False',
+                        'delete_datetime': r.get('delete_datetime', ''),
+                        'deletion_reason': r.get('deletion_reason', ''),
+                    })
     except Exception as e:
-        logger.warning(f"Failed to read dedup CSV: {e}")
-        return None
+        logger.debug(f"Could not load dedup records from DB: {e}")
+
+    # CSV fallback
+    if rows is None:
+        import csv as _csv
+        if not os.path.exists(dedup_csv_path):
+            return None
+        try:
+            with open(dedup_csv_path, 'r', encoding='utf-8') as f:
+                rows = list(_csv.DictReader(f))
+        except Exception as e:
+            logger.warning(f"Failed to read dedup CSV: {e}")
+            return None
 
     if not rows:
         return None
 
     now_date = datetime.now().strftime('%Y-%m-%d')
     detected_today = sum(1 for r in rows if r.get('detect_datetime', '').startswith(now_date))
-    deleted = sum(1 for r in rows if r.get('is_deleted', 'False') == 'True')
     deleted_today_items = []
     for r in rows:
         if r.get('is_deleted', 'False') == 'True' and r.get('delete_datetime', '').startswith(now_date):
@@ -1266,11 +1293,8 @@ def main():
         pikpak_stats = extract_pikpak_statistics(PIKPAK_LOG_FILE) if pikpak_log_exists else None
     ban_summary = get_proxy_ban_summary()
 
-    # Extract dedup statistics (latest Dedup_Report_* or Dedup_Pending_* under DEDUP_DIR, or legacy dedup.csv)
-    latest_report = find_latest_report_in_dated_dirs(DEDUP_DIR, 'Dedup_Report_*.csv')
-    latest_pending = find_latest_report_in_dated_dirs(DEDUP_DIR, 'Dedup_Pending_*.csv')
-    candidates = [p for p in (latest_report, latest_pending) if p]
-    dedup_csv_path = max(candidates, key=os.path.getmtime) if candidates else os.path.join(_EMAIL_REPORTS_DIR, DEDUP_CSV)
+    # Extract dedup statistics (DB first, CSV fallback)
+    dedup_csv_path = os.path.join(_EMAIL_REPORTS_DIR, 'dedup_history.csv')
     dedup_stats = extract_dedup_statistics(dedup_csv_path)
     if dedup_stats:
         logger.info(f"Dedup stats: detected={dedup_stats['detected']}, deleted={dedup_stats['deleted']}, cumulative={dedup_stats['cumulative']}")

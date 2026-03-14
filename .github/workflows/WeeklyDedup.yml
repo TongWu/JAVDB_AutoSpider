@@ -88,6 +88,14 @@ jobs:
       - name: Install Rust extension
         uses: ./.github/actions/install-rust-wheel
 
+      - name: Set report paths
+        run: |
+          REPORTS_DIR="${{ vars.REPORTS_DIR || 'reports' }}"
+          DEDUP_DIR="${{ vars.DEDUP_DIR }}"
+          if [ -z "$DEDUP_DIR" ]; then DEDUP_DIR="$REPORTS_DIR/Dedup"; fi
+          echo "REPORTS_DIR=$REPORTS_DIR" >> $GITHUB_ENV
+          echo "DEDUP_DIR=$DEDUP_DIR" >> $GITHUB_ENV
+
       - name: Install rclone
         if: inputs.runner != 'self-hosted'
         run: |
@@ -174,9 +182,10 @@ jobs:
             git remote set-url origin "$REPO_SSH"
           fi
 
-          git add reports/rclone_inventory.csv 2>/dev/null || true
-          git add reports/javdb_autospider.db 2>/dev/null || true
-          find reports/Dedup -name "*.csv" -exec git add {} \; 2>/dev/null || true
+          git add "$REPORTS_DIR/rclone_inventory.csv" 2>/dev/null || true
+          git add "$REPORTS_DIR/javdb_autospider.db" 2>/dev/null || true
+          git add "$REPORTS_DIR/dedup_history.csv" 2>/dev/null || true
+          find "$DEDUP_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
 
           if git diff --cached --quiet; then
             echo "No changes to commit"
@@ -212,9 +221,10 @@ jobs:
         with:
           name: weekly-dedup-${{ github.run_number }}
           path: |
-            reports/rclone_inventory.csv
-            reports/javdb_autospider.db
-            reports/Dedup/
+            ${{ env.REPORTS_DIR }}/rclone_inventory.csv
+            ${{ env.REPORTS_DIR }}/javdb_autospider.db
+            ${{ env.REPORTS_DIR }}/dedup_history.csv
+            ${{ env.DEDUP_DIR }}/
           retention-days: 30
           if-no-files-found: ignore
 
@@ -238,14 +248,14 @@ jobs:
           echo "- **Runner**: ${{ inputs.runner || 'ubuntu-latest' }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          if [ -f "reports/rclone_inventory.csv" ]; then
-            LINES=$(wc -l < "reports/rclone_inventory.csv")
+          if [ -f "$REPORTS_DIR/rclone_inventory.csv" ]; then
+            LINES=$(wc -l < "$REPORTS_DIR/rclone_inventory.csv")
             echo "### Inventory" >> $GITHUB_STEP_SUMMARY
             echo "Records: $((LINES - 1))" >> $GITHUB_STEP_SUMMARY
           fi
 
-          if [ -d "reports/Dedup" ]; then
-            REPORT_FILE=$(find reports/Dedup -name "*.csv" -type f | sort -r | head -1)
+          if [ -d "$DEDUP_DIR" ]; then
+            REPORT_FILE=$(find "$DEDUP_DIR" -name "*.csv" -type f | sort -r | head -1)
             if [ -n "$REPORT_FILE" ]; then
               echo "" >> $GITHUB_STEP_SUMMARY
               echo "### Dedup Report" >> $GITHUB_STEP_SUMMARY
