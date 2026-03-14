@@ -323,15 +323,26 @@ def _atomic_csv_write(csv_path: str, rows: List[Dict[str, str]]) -> None:
         raise
 
 
-def load_dedup_csv(csv_path: str) -> List[Dict[str, str]]:
+def load_dedup_csv(csv_path: str, from_file_only: bool = False) -> List[Dict[str, str]]:
     """Load all dedup records from persistent storage.
 
-    Uses SQLite as the authoritative source when available; falls back
+    When from_file_only is True, reads only from *csv_path* (for per-run execute).
+    Otherwise: uses SQLite as the authoritative source when available; falls back
     to reading *csv_path* when the database is empty or unavailable and
-    CSV mode is active.  Returns an empty list when no data exists in
-    either backend.
+    CSV mode is active.  Returns an empty list when no data exists.
     """
     rows: List[Dict[str, str]] = []
+
+    if from_file_only and csv_path and os.path.exists(csv_path):
+        try:
+            with open(csv_path, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                rows = [dict(r) for r in reader]
+            logger.debug(f"Loaded {len(rows)} dedup records from CSV: {csv_path}")
+        except Exception as e:
+            logger.warning(f"Failed to read dedup CSV {csv_path}: {e}")
+            rows = []
+        return rows
 
     if use_sqlite():
         _ensure_db()
