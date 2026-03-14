@@ -308,6 +308,7 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # Dedup Configuration
         ('RCLONE_INVENTORY_CSV', 'RCLONE_INVENTORY_CSV', get_env, 'rclone_inventory.csv', 'DEDUP CONFIGURATION'),
         ('DEDUP_CSV', 'DEDUP_CSV', get_env, 'dedup.csv', 'DEDUP CONFIGURATION'),
+        ('DEDUP_DIR', 'DEDUP_DIR', get_env, 'reports/Dedup', 'DEDUP CONFIGURATION'),
         ('DEDUP_LOG_FILE', 'DEDUP_LOG_FILE', get_env, 'logs/rclone_dedup.log', 'DEDUP CONFIGURATION'),
     ]
 
