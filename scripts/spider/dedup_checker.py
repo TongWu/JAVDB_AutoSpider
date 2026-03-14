@@ -118,7 +118,7 @@ def load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
         if inventory:
             logger.info(f"Loaded rclone inventory: {len(inventory)} unique codes from SQLite")
         else:
-            logger.info("Rclone inventory is empty in SQLite – dedup skipped")
+            logger.info("Rclone inventory is empty in SQLite - dedup skipped")
         return inventory
 
     return _csv_load_rclone_inventory(csv_path)
@@ -127,7 +127,7 @@ def load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
 def _csv_load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
     """CSV fallback for load_rclone_inventory."""
     if not os.path.exists(csv_path):
-        logger.info(f"Rclone inventory not found: {csv_path} – dedup skipped")
+        logger.info(f"Rclone inventory not found: {csv_path} - dedup skipped")
         return {}
 
     inventory: Dict[str, List[RcloneEntry]] = {}
@@ -395,7 +395,7 @@ def append_dedup_record(dedup_csv_path: str, record: DedupRecord) -> bool:
 
     if gdrive_path:
         cache.add(gdrive_path)
-    logger.debug(f"Appended dedup record: {record.video_code} – {record.deletion_reason}")
+    logger.debug(f"Appended dedup record: {record.video_code} - {record.deletion_reason}")
     return True
 
 
@@ -449,7 +449,7 @@ def save_dedup_csv(csv_path: str, rows: List[Dict[str, str]]) -> None:
         Use :func:`mark_records_deleted` for targeted updates instead.
     """
     logger.warning(
-        "save_dedup_csv is deprecated — use mark_records_deleted "
+        "save_dedup_csv is deprecated - use mark_records_deleted "
         "for targeted updates instead"
     )
     if use_sqlite():
