@@ -11,4 +11,10 @@ uvicorn>=0.27.0
 #   pip install requests[socks]
 # For OCR-based captcha solving (optional):
 #   pip install pytesseract Pillow
-#   Also requires: tesseract-ocr system package 
+#   Also requires: tesseract-ocr system package
+
+# --- Test / dev dependencies (optional for CI and local testing) ---
+pytest>=7.0.0
+pytest-cov>=4.0.0
+coverage>=7.0.0
+flake8>=6.0.0
