@@ -350,7 +350,7 @@ jobs:
         run: |
           set -o pipefail
           SPIDER_CMD=(python3 scripts/spider --use-proxy)
-          if [ "${{ inputs.enable_dedup }}" == "true" ]; then
+          if [ "${{ inputs.enable_dedup == true || github.event_name == 'schedule' }}" == "true" ]; then
             SPIDER_CMD+=(--enable-dedup)
             echo "🔍 Dedup detection enabled"
           fi
@@ -373,8 +373,14 @@ jobs:
               echo "session_id=$SESSION_ID" >> $GITHUB_OUTPUT
               echo "Captured session ID: $SESSION_ID"
             else
-              echo "::warning::Ignoring invalid SESSION_ID format: $SESSION_ID"
+              echo "::warning::Ignoring invalid SESSION_ID format"
             fi
+          fi
+          
+          DEDUP_CSV_PATH=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_DEDUP_CSV=" | cut -d'=' -f2 | tail -1 || true)
+          if [ -n "$DEDUP_CSV_PATH" ]; then
+            echo "dedup_csv_path=$DEDUP_CSV_PATH" >> $GITHUB_OUTPUT
+            echo "Captured dedup CSV path: $DEDUP_CSV_PATH"
           fi
           
           # Re-raise spider exit code so the step is correctly marked as failed
@@ -431,12 +437,17 @@ jobs:
 
       - name: Step 4 - Run Rclone Dedup Executor
         id: dedup
-        if: ${{ inputs.enable_dedup == true }}
+        if: ${{ inputs.enable_dedup == true || github.event_name == 'schedule' }}
         run: |
           set -e
           set -o pipefail
           curl -s https://rclone.org/install.sh | sudo bash
-          python3 scripts/rclone_manager.py --execute
+          DEDUP_CSV="${{ steps.spider.outputs.dedup_csv_path }}"
+          if [ -n "$DEDUP_CSV" ] && [ -f "$DEDUP_CSV" ]; then
+            python3 scripts/rclone_manager.py --execute --dedup-csv "$DEDUP_CSV"
+          else
+            python3 scripts/rclone_manager.py --execute
+          fi
         continue-on-error: true
 
       - name: Encrypt and upload logs artifact
@@ -512,12 +523,19 @@ jobs:
           fi
           
           # Add history files and database if they exist
-          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/pikpak_bridge_history.csv" "$REPORTS_DIR/proxy_bans.csv" "$REPORTS_DIR/rclone_inventory.csv" "$REPORTS_DIR/dedup.csv" "$REPORTS_DIR/javdb_autospider.db"; do
+          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/pikpak_bridge_history.csv" "$REPORTS_DIR/proxy_bans.csv" "$REPORTS_DIR/rclone_inventory.csv" "$REPORTS_DIR/javdb_autospider.db"; do
             if [ -f "$HIST_FILE" ]; then
               FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $HIST_FILE"
               echo "Including: $HIST_FILE"
             fi
           done
+          # Add dedup reports (reports/Dedup/YYYY/MM/*.csv)
+          if [ -d "$REPORTS_DIR/Dedup" ]; then
+            while IFS= read -r f; do
+              FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $f"
+              echo "Including: $f"
+            done < <(find "$REPORTS_DIR/Dedup" -name "*.csv" -type f 2>/dev/null || true)
+          fi
           
           if [ -n "$FILES_TO_ARCHIVE" ]; then
             # Use tar with explicit file list to preserve folder structure
@@ -807,6 +825,8 @@ jobs:
             git add "$REPORTS_DIR/pikpak_bridge_history.csv" 2>/dev/null || true
             git add "$REPORTS_DIR/proxy_bans.csv" 2>/dev/null || true
             git add "$REPORTS_DIR/javdb_autospider.db" 2>/dev/null || true
+            git add "$REPORTS_DIR/rclone_inventory.csv" 2>/dev/null || true
+            find "$REPORTS_DIR/Dedup" -name "*.csv" -exec git add {} \; 2>/dev/null || true
             find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
           else
             echo "Spider or Uploader failed/cancelled - skipping history files commit"

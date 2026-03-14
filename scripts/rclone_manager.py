@@ -53,6 +53,7 @@ sys.path.insert(0, project_root)
 
 from utils.config_helper import cfg
 from utils.logging_config import setup_logging, get_logger
+from utils.path_helper import find_latest_report_in_dated_dirs, ensure_dated_dir
 
 from utils.rclone_helper import (
     FolderInfo,
@@ -83,6 +84,7 @@ RCLONE_CONFIG_BASE64 = cfg('RCLONE_CONFIG_BASE64', None)
 REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
 RCLONE_INVENTORY_CSV = cfg('RCLONE_INVENTORY_CSV', 'rclone_inventory.csv')
 DEDUP_CSV = cfg('DEDUP_CSV', 'dedup.csv')
+DEDUP_DIR = cfg('DEDUP_DIR', os.path.join(REPORTS_DIR, 'Dedup'))
 DEDUP_LOG_FILE = cfg('DEDUP_LOG_FILE', 'logs/rclone_dedup.log')
 
 setup_logging()
@@ -369,14 +371,17 @@ def run_report_from_inventory(
 
 
 def _persist_dedup_records(dedup_results: List[DedupResult]) -> None:
-    """Save dedup records to spider/dedup_checker storage.
+    """Save dedup records to spider/dedup_checker storage under DEDUP_DIR/YYYY/MM/.
 
     Records are always written with ``is_deleted=False``.  The execute
     phase is responsible for updating the flag after purging.
     """
     try:
         from scripts.spider.dedup_checker import DedupRecord, append_dedup_record
-        dedup_csv_path = os.path.join(REPORTS_DIR, cfg('DEDUP_CSV', 'dedup.csv'))
+        dedup_dated_dir = ensure_dated_dir(DEDUP_DIR)
+        # Use Dedup_Pending_* so we do not overwrite generate_csv_report's Dedup_Report_*.csv
+        dedup_filename = f"Dedup_Pending_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        dedup_csv_path = os.path.join(dedup_dated_dir, dedup_filename)
 
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         appended = 0
@@ -408,13 +413,36 @@ def _persist_dedup_records(dedup_results: List[DedupResult]) -> None:
 # Execute mode — purge folders from a dedup CSV
 # ============================================================================
 
+def resolve_latest_dedup_file(dedup_dir: str) -> Optional[str]:
+    """Resolve the dedup CSV to use for execute: choose the newest by mtime
+    between the latest Dedup_Pending_* and latest Dedup_Report_* so we never
+    run against stale data.  When mtime is tied, prefer Dedup_Pending_* so
+    mark_records_deleted() mutates the pending file.
+    """
+    latest_pending = find_latest_report_in_dated_dirs(dedup_dir, 'Dedup_Pending_*.csv')
+    latest_report = find_latest_report_in_dated_dirs(dedup_dir, 'Dedup_Report_*.csv')
+    candidates = []
+    if latest_pending:
+        candidates.append((latest_pending, os.path.getmtime(latest_pending), 0))
+    if latest_report:
+        candidates.append((latest_report, os.path.getmtime(latest_report), 1))
+    if not candidates:
+        return None
+    # Max by (mtime, -prefer): prefer pending (0) over report (1) when tied
+    return max(candidates, key=lambda x: (x[1], -x[2]))[0]
+
+
 def run_execute_from_csv(
     dedup_csv: str,
     dry_run: bool = False,
+    from_file_only: bool = False,
 ) -> int:
     """Read *dedup_csv*, purge un-deleted entries, and update the CSV.
 
-    Returns 0 on full success, 1 if any purges failed.
+    When from_file_only is True, only the given CSV file is read (per-run file).
+    Returns 0 when at least one purge succeeded (or nothing to do); returns 1
+    only when all attempted purges failed (so the workflow can still commit on
+    partial success).
     """
     from scripts.spider.dedup_checker import (
         load_dedup_csv, mark_records_deleted, cleanup_deleted_records,
@@ -429,7 +457,7 @@ def run_execute_from_csv(
     logger.info(f"Dry run: {dry_run}")
     logger.info("=" * 60)
 
-    rows = load_dedup_csv(dedup_csv)
+    rows = load_dedup_csv(dedup_csv, from_file_only=from_file_only)
     if not rows:
         logger.info("No dedup records found — nothing to do")
         return 0
@@ -479,7 +507,14 @@ def run_execute_from_csv(
     logger.info(f"Purged: {success_count}, failed: {fail_count}, skipped (empty path): {skip_count}")
     logger.info("=" * 60)
 
-    return 0 if (fail_count + skip_count) == 0 else 1
+    # Partial success (some purged, some failed) is still success — allow workflow to commit.
+    # Only fail when every attempted purge failed (no success at all).
+    if success_count > 0:
+        return 0
+    if fail_count > 0:
+        logger.warning("All purges failed — treating as job failure")
+        return 1
+    return 0
 
 
 # ============================================================================
@@ -560,8 +595,13 @@ def main() -> int:
 
     # ── Execute-only (independent of remote/inventory) ────────────────
     if args.execute and not args.scan and not args.report:
-        dedup_csv = args.dedup_csv or os.path.join(REPORTS_DIR, DEDUP_CSV)
-        return run_execute_from_csv(dedup_csv, dry_run=args.dry_run)
+        if args.dedup_csv:
+            dedup_csv = args.dedup_csv
+            from_file_only = True
+        else:
+            dedup_csv = resolve_latest_dedup_file(DEDUP_DIR) or os.path.join(REPORTS_DIR, DEDUP_CSV)
+            from_file_only = dedup_csv != os.path.join(REPORTS_DIR, DEDUP_CSV)
+        return run_execute_from_csv(dedup_csv, dry_run=args.dry_run, from_file_only=from_file_only)
 
     # ── Scan / Report (/ Execute) need a remote ───────────────────────
     if args.root_path:
@@ -689,8 +729,13 @@ def main() -> int:
         logger.info("EXECUTE PHASE — purging duplicates")
         logger.info("=" * 60)
 
-        dedup_csv = args.dedup_csv or os.path.join(REPORTS_DIR, DEDUP_CSV)
-        return run_execute_from_csv(dedup_csv, dry_run=args.dry_run)
+        if args.dedup_csv:
+            dedup_csv = args.dedup_csv
+            from_file_only = True
+        else:
+            dedup_csv = resolve_latest_dedup_file(DEDUP_DIR) or os.path.join(REPORTS_DIR, DEDUP_CSV)
+            from_file_only = dedup_csv != os.path.join(REPORTS_DIR, DEDUP_CSV)
+        return run_execute_from_csv(dedup_csv, dry_run=args.dry_run, from_file_only=from_file_only)
 
     return 0
 

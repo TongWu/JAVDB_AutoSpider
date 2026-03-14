@@ -42,6 +42,7 @@ def generate_summary_report(
     skipped_history_count, failed_count, no_new_torrents_count,
     csv_path, dry_run, use_history_for_saving,
     use_proxy, any_proxy_banned, any_proxy_banned_phase2,
+    dedup_csv_path=None,
 ) -> None:
     """Log the final summary report, proxy stats, and check exit conditions."""
     logger.info("=" * 75)
@@ -89,6 +90,8 @@ def generate_summary_report(
         if use_history_for_saving:
             logger.info(f"History saved to: {os.path.join(REPORTS_DIR, PARSED_MOVIES_CSV)}")
         print(f"SPIDER_OUTPUT_CSV={csv_path}")
+        if dedup_csv_path:
+            print(f"SPIDER_DEDUP_CSV={dedup_csv_path}")
     logger.info("=" * 75)
 
     if use_proxy and PROXY_MODE in ('pool', 'single') and state.global_proxy_pool is not None:

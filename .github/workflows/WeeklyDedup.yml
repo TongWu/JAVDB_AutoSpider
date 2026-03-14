@@ -1,4 +1,4 @@
-name: RClone Manager
+name: Weekly Dedup
 
 concurrency:
   group: rclone-manager
@@ -8,35 +8,32 @@ permissions:
   contents: write
 
 on:
+  # schedule: # DISABLED FOR PUBLIC REPO
+    # Sunday 04:00 UTC+8 = Saturday 20:00 UTC
+    # - cron: '0 20 * * 1'
+
   workflow_dispatch:
     inputs:
-      scan:
-        description: 'Scan remote folder tree into DB/CSV'
+      runner:
+        description: 'Runner type for the job'
         required: false
-        default: false
-        type: boolean
-      report:
-        description: 'Generate dedup report from inventory'
-        required: false
-        default: false
-        type: boolean
-      execute:
-        description: 'Execute pending deletions from dedup CSV'
-        required: false
-        default: false
-        type: boolean
+        default: 'self-hosted'
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'self-hosted'
       root_path:
         description: 'Rclone root path (format: remote:/path)'
         required: false
         default: 'gdrive:/剧集/不可以色色/JAV-Sync'
         type: string
       dry_run:
-        description: 'Dry run mode — execute only (simulate without deleting)'
+        description: 'Dry run mode — simulate execute without deleting'
         required: false
-        default: true
+        default: false
         type: boolean
       incremental:
-        description: 'Incremental mode — report only (only process recent changes)'
+        description: 'Incremental mode — only process recent changes in report'
         required: false
         default: false
         type: boolean
@@ -60,39 +57,15 @@ on:
           - 'INFO'
           - 'WARNING'
           - 'ERROR'
-      runner:
-        description: 'Runner type for the job'
-        required: false
-        default: 'ubuntu-latest'
-        type: choice
-        options:
-          - 'ubuntu-latest'
-          - 'self-hosted'
 
 jobs:
-  rclone-manager:
-    runs-on: ${{ inputs.runner }}
+  weekly-dedup:
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     environment: Production
     env:
       TZ: Asia/Singapore
 
     steps:
-      - name: Validate inputs
-        run: |
-          SCAN="${{ inputs.scan }}"
-          REPORT="${{ inputs.report }}"
-          EXECUTE="${{ inputs.execute }}"
-
-          if [ "$SCAN" != "true" ] && [ "$REPORT" != "true" ] && [ "$EXECUTE" != "true" ]; then
-            echo "❌ At least one of scan, report, execute must be enabled"
-            exit 1
-          fi
-          if [ "$SCAN" = "true" ] && [ "$EXECUTE" = "true" ] && [ "$REPORT" != "true" ]; then
-            echo "❌ scan + execute requires report (enable all three)"
-            exit 1
-          fi
-          echo "✓ Input validation passed"
-
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -150,33 +123,20 @@ jobs:
           git fetch origin "$CURRENT_BRANCH"
           git pull --rebase origin "$CURRENT_BRANCH" || git pull --no-edit origin "$CURRENT_BRANCH" || true
 
-      - name: Run rclone_manager.py
+      - name: Run scan + report + execute
         env:
-          INPUT_SCAN: ${{ inputs.scan }}
-          INPUT_REPORT: ${{ inputs.report }}
-          INPUT_EXECUTE: ${{ inputs.execute }}
-          INPUT_ROOT_PATH: ${{ inputs.root_path }}
-          INPUT_YEARS: ${{ inputs.years }}
-          INPUT_WORKERS: ${{ inputs.workers }}
-          INPUT_LOG_LEVEL: ${{ inputs.log_level }}
-          INPUT_DRY_RUN: ${{ inputs.dry_run }}
-          INPUT_INCREMENTAL: ${{ inputs.incremental }}
+          INPUT_ROOT_PATH: ${{ inputs.root_path || 'gdrive:/剧集/不可以色色/JAV-Sync' }}
+          INPUT_YEARS: ${{ inputs.years || '' }}
+          INPUT_WORKERS: ${{ inputs.workers || '4' }}
+          INPUT_LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run || 'false' }}
+          INPUT_INCREMENTAL: ${{ inputs.incremental || 'false' }}
           VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
         run: |
           set -e
           set -o pipefail
 
-          CMD=(python3 scripts/rclone_manager.py)
-
-          if [ "$INPUT_SCAN" = "true" ]; then
-            CMD+=(--scan)
-          fi
-          if [ "$INPUT_REPORT" = "true" ]; then
-            CMD+=(--report)
-          fi
-          if [ "$INPUT_EXECUTE" = "true" ]; then
-            CMD+=(--execute)
-          fi
+          CMD=(python3 scripts/rclone_manager.py --scan --report --execute)
 
           if [ -n "$INPUT_ROOT_PATH" ]; then
             CMD+=(--root-path "$INPUT_ROOT_PATH")
@@ -189,12 +149,12 @@ jobs:
 
           CMD+=(--workers "$INPUT_WORKERS" --log-level "$INPUT_LOG_LEVEL")
 
-          if [ "$INPUT_EXECUTE" = "true" ] && [ "$INPUT_DRY_RUN" = "true" ]; then
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
             CMD+=(--dry-run)
             echo "🔍 Execute in DRY-RUN mode"
           fi
 
-          if [ "$INPUT_REPORT" = "true" ] && [ "$INPUT_INCREMENTAL" = "true" ]; then
+          if [ "$INPUT_INCREMENTAL" = "true" ]; then
             CMD+=(--incremental)
             echo "📅 Incremental mode enabled"
           fi
@@ -203,7 +163,6 @@ jobs:
           "${CMD[@]}"
 
       - name: Commit and push results
-        if: inputs.scan == true || inputs.report == true || (inputs.execute == true && inputs.dry_run == false)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -224,13 +183,13 @@ jobs:
             exit 0
           fi
 
-          LABEL=""
-          [ "${{ inputs.scan }}" = "true" ] && LABEL="${LABEL}scan+"
-          [ "${{ inputs.report }}" = "true" ] && LABEL="${LABEL}report+"
-          [ "${{ inputs.execute }}" = "true" ] && LABEL="${LABEL}execute+"
-          LABEL="${LABEL%+}"
+          DRY_RUN="${{ inputs.dry_run }}"
+          LABEL="scan+report+execute"
+          if [ "$DRY_RUN" = "true" ]; then
+            LABEL="scan+report+execute(dry-run)"
+          fi
 
-          git commit -m "Auto-commit: rclone ${LABEL} $(date +'%Y-%m-%d %H:%M:%S SGT')"
+          git commit -m "Auto-commit: weekly dedup ${LABEL} $(date +'%Y-%m-%d %H:%M:%S SGT')"
 
           MAX_RETRIES=3
           RETRY_DELAY=3
@@ -251,7 +210,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: rclone-${{ github.run_number }}
+          name: weekly-dedup-${{ github.run_number }}
           path: |
             reports/rclone_inventory.csv
             reports/javdb_autospider.db
@@ -262,28 +221,21 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          echo "## RClone Manager Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## Weekly Dedup Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Phases**: scan → report → execute" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dry Run**: ${{ inputs.dry_run == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Incremental**: ${{ inputs.incremental == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Root Path**: ${{ inputs.root_path || 'gdrive:/剧集/不可以色色/JAV-Sync' }}" >> $GITHUB_STEP_SUMMARY
 
-          PHASES=""
-          [ "${{ inputs.scan }}" = "true" ] && PHASES="${PHASES}scan "
-          [ "${{ inputs.report }}" = "true" ] && PHASES="${PHASES}report "
-          [ "${{ inputs.execute }}" = "true" ] && PHASES="${PHASES}execute "
-          echo "- **Phases**: ${PHASES}" >> $GITHUB_STEP_SUMMARY
-
-          if [ "${{ inputs.execute }}" = "true" ]; then
-            echo "- **Dry Run**: ${{ inputs.dry_run == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ "${{ inputs.report }}" = "true" ]; then
-            echo "- **Incremental**: ${{ inputs.incremental == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          YEARS="${{ inputs.years }}"
+          if [ -n "$YEARS" ]; then
+            echo "- **Year Filter**: $YEARS" >> $GITHUB_STEP_SUMMARY
           fi
 
-          echo "- **Root Path**: ${{ inputs.root_path }}" >> $GITHUB_STEP_SUMMARY
-          if [ -n "${{ inputs.years }}" ]; then
-            echo "- **Year Filter**: ${{ inputs.years }}" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "- **Workers**: ${{ inputs.workers }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Log Level**: ${{ inputs.log_level }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Workers**: ${{ inputs.workers || '4' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Log Level**: ${{ inputs.log_level || 'INFO' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Runner**: ${{ inputs.runner || 'ubuntu-latest' }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ -f "reports/rclone_inventory.csv" ]; then

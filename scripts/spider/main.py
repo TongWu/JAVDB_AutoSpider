@@ -11,6 +11,7 @@ from utils.logging_config import get_logger
 from utils.history_manager import load_parsed_movies_history, validate_history_file
 from utils.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 from utils.filename_helper import generate_output_csv_name
+from utils.path_helper import ensure_dated_dir
 from utils.csv_writer import set_active_session
 
 import scripts.spider.state as state
@@ -23,7 +24,7 @@ from scripts.spider.config_loader import (
     PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS,
     JAVDB_SESSION_COOKIE,
     GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH,
-    RCLONE_INVENTORY_CSV, DEDUP_CSV,
+    RCLONE_INVENTORY_CSV, DEDUP_CSV, DEDUP_DIR,
 )
 from scripts.spider.dedup_checker import (
     load_rclone_inventory,
@@ -167,7 +168,12 @@ def main():
 
     # Load rclone inventory as additional skip data source
     rclone_inventory_path = os.path.join(REPORTS_DIR, RCLONE_INVENTORY_CSV)
-    dedup_csv_path = os.path.join(REPORTS_DIR, DEDUP_CSV)
+    if enable_dedup:
+        dedup_dated_dir = ensure_dated_dir(DEDUP_DIR)
+        dedup_filename = f"Dedup_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        dedup_csv_path = os.path.join(dedup_dated_dir, dedup_filename)
+    else:
+        dedup_csv_path = os.path.join(REPORTS_DIR, DEDUP_CSV)
     rclone_inventory = {}
     if os.path.exists(rclone_inventory_path):
         rclone_inventory = load_rclone_inventory(rclone_inventory_path)
@@ -391,6 +397,7 @@ def main():
         use_proxy=use_proxy,
         any_proxy_banned=any_proxy_banned,
         any_proxy_banned_phase2=any_proxy_banned_phase2,
+        dedup_csv_path=dedup_csv_path if enable_dedup else None,
     )
 
     # Save spider stats and end_page to SQLite (when session exists)

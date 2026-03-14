@@ -71,6 +71,7 @@ INCLUDE_DOWNLOADED_IN_REPORT = cfg('INCLUDE_DOWNLOADED_IN_REPORT', False)
 # Dedup
 RCLONE_INVENTORY_CSV = cfg('RCLONE_INVENTORY_CSV', 'rclone_inventory.csv')
 DEDUP_CSV = cfg('DEDUP_CSV', 'dedup.csv')
+DEDUP_DIR = cfg('DEDUP_DIR', 'reports/Dedup')
 
 # ---------------------------------------------------------------------------
 # Logging
