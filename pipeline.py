@@ -329,16 +329,13 @@ def main():
         logger.info("✓ PikPak Bridge completed successfully")
 
         # 3.5 Run Rclone Dedup Executor (if enabled)
-        dedup_csv_path = os.path.join(_REPORTS_DIR, DEDUP_CSV)
-        if enable_dedup and os.path.exists(dedup_csv_path):
+        if enable_dedup:
             logger.info("Step 3.5: Running Rclone Dedup Executor...")
             try:
                 run_script('scripts/rclone_manager.py', ['--execute'])
                 logger.info("✓ Rclone Dedup Executor completed successfully")
             except Exception as dedup_err:
                 logger.warning(f"Rclone Dedup Executor failed (non-fatal): {dedup_err}")
-        elif enable_dedup:
-            logger.info("Dedup enabled but no dedup.csv found – skipping executor")
 
         # 4. Run Email Notification
         # Build email args after spider runs (csv_path is now known)
