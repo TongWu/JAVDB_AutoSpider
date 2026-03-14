@@ -267,6 +267,7 @@ class TestGetConfigMap:
         dedup_keys = {item[0] for item in dedup_entries}
         assert 'RCLONE_INVENTORY_CSV' in dedup_keys
         assert 'DEDUP_CSV' in dedup_keys
+        assert 'DEDUP_DIR' in dedup_keys
         assert 'DEDUP_LOG_FILE' in dedup_keys
 
     def test_rclone_drive_name_default(self):
