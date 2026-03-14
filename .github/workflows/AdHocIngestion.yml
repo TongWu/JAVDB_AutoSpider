@@ -622,12 +622,19 @@ jobs:
           fi
           
           # Add history files and database if they exist
-          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/pikpak_bridge_history.csv" "$REPORTS_DIR/proxy_bans.csv" "$REPORTS_DIR/rclone_inventory.csv" "$REPORTS_DIR/dedup.csv" "$REPORTS_DIR/javdb_autospider.db"; do
+          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/pikpak_bridge_history.csv" "$REPORTS_DIR/proxy_bans.csv" "$REPORTS_DIR/rclone_inventory.csv" "$REPORTS_DIR/javdb_autospider.db"; do
             if [ -f "$HIST_FILE" ]; then
               FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $HIST_FILE"
               echo "Including: $HIST_FILE"
             fi
           done
+          # Add dedup reports (reports/Dedup/YYYY/MM/*.csv)
+          if [ -d "$REPORTS_DIR/Dedup" ]; then
+            while IFS= read -r f; do
+              FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $f"
+              echo "Including: $f"
+            done < <(find "$REPORTS_DIR/Dedup" -name "*.csv" -type f 2>/dev/null || true)
+          fi
           
           if [ -n "$FILES_TO_ARCHIVE" ]; then
             # Use tar with explicit file list to preserve folder structure
