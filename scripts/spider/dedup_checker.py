@@ -333,15 +333,16 @@ def load_dedup_csv(csv_path: str, from_file_only: bool = False) -> List[Dict[str
     """
     rows: List[Dict[str, str]] = []
 
-    if from_file_only and csv_path and os.path.exists(csv_path):
-        try:
-            with open(csv_path, 'r', newline='', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                rows = [dict(r) for r in reader]
-            logger.debug(f"Loaded {len(rows)} dedup records from CSV: {csv_path}")
-        except Exception as e:
-            logger.warning(f"Failed to read dedup CSV {csv_path}: {e}")
-            rows = []
+    if from_file_only:
+        if csv_path and os.path.exists(csv_path):
+            try:
+                with open(csv_path, 'r', newline='', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    rows = [dict(r) for r in reader]
+                logger.debug(f"Loaded {len(rows)} dedup records from CSV: {csv_path}")
+            except Exception as e:
+                logger.warning(f"Failed to read dedup CSV {csv_path}: {e}")
+                rows = []
         return rows
 
     if use_sqlite():
