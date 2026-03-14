@@ -413,6 +413,20 @@ def _persist_dedup_records(dedup_results: List[DedupResult]) -> None:
 # Execute mode — purge folders from a dedup CSV
 # ============================================================================
 
+def resolve_latest_dedup_file(dedup_dir: str) -> Optional[str]:
+    """Resolve the dedup CSV file to use for execute: prefer newest Dedup_Pending_*
+    if present, otherwise newest Dedup_Report_*.  Ensures mark_records_deleted()
+    always mutates the chosen (pending) file instead of a report file.
+    """
+    latest_pending = find_latest_report_in_dated_dirs(dedup_dir, 'Dedup_Pending_*.csv')
+    if latest_pending:
+        return latest_pending
+    latest_report = find_latest_report_in_dated_dirs(dedup_dir, 'Dedup_Report_*.csv')
+    if latest_report:
+        return latest_report
+    return None
+
+
 def run_execute_from_csv(
     dedup_csv: str,
     dry_run: bool = False,
@@ -580,10 +594,7 @@ def main() -> int:
             dedup_csv = args.dedup_csv
             from_file_only = True
         else:
-            latest_report = find_latest_report_in_dated_dirs(DEDUP_DIR, 'Dedup_Report_*.csv')
-            latest_pending = find_latest_report_in_dated_dirs(DEDUP_DIR, 'Dedup_Pending_*.csv')
-            candidates = [p for p in (latest_report, latest_pending) if p]
-            dedup_csv = max(candidates, key=os.path.getmtime) if candidates else os.path.join(REPORTS_DIR, DEDUP_CSV)
+            dedup_csv = resolve_latest_dedup_file(DEDUP_DIR) or os.path.join(REPORTS_DIR, DEDUP_CSV)
             from_file_only = dedup_csv != os.path.join(REPORTS_DIR, DEDUP_CSV)
         return run_execute_from_csv(dedup_csv, dry_run=args.dry_run, from_file_only=from_file_only)
 
@@ -717,10 +728,7 @@ def main() -> int:
             dedup_csv = args.dedup_csv
             from_file_only = True
         else:
-            latest_report = find_latest_report_in_dated_dirs(DEDUP_DIR, 'Dedup_Report_*.csv')
-            latest_pending = find_latest_report_in_dated_dirs(DEDUP_DIR, 'Dedup_Pending_*.csv')
-            candidates = [p for p in (latest_report, latest_pending) if p]
-            dedup_csv = max(candidates, key=os.path.getmtime) if candidates else os.path.join(REPORTS_DIR, DEDUP_CSV)
+            dedup_csv = resolve_latest_dedup_file(DEDUP_DIR) or os.path.join(REPORTS_DIR, DEDUP_CSV)
             from_file_only = dedup_csv != os.path.join(REPORTS_DIR, DEDUP_CSV)
         return run_execute_from_csv(dedup_csv, dry_run=args.dry_run, from_file_only=from_file_only)
 
