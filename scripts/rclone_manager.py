@@ -84,7 +84,7 @@ RCLONE_CONFIG_BASE64 = cfg('RCLONE_CONFIG_BASE64', None)
 REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
 RCLONE_INVENTORY_CSV = cfg('RCLONE_INVENTORY_CSV', 'rclone_inventory.csv')
 DEDUP_CSV = cfg('DEDUP_CSV', 'dedup.csv')
-DEDUP_DIR = cfg('DEDUP_DIR', 'reports/Dedup')
+DEDUP_DIR = cfg('DEDUP_DIR', os.path.join(REPORTS_DIR, 'Dedup'))
 DEDUP_LOG_FILE = cfg('DEDUP_LOG_FILE', 'logs/rclone_dedup.log')
 
 setup_logging()
