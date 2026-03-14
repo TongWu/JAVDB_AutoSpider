@@ -414,17 +414,22 @@ def _persist_dedup_records(dedup_results: List[DedupResult]) -> None:
 # ============================================================================
 
 def resolve_latest_dedup_file(dedup_dir: str) -> Optional[str]:
-    """Resolve the dedup CSV file to use for execute: prefer newest Dedup_Pending_*
-    if present, otherwise newest Dedup_Report_*.  Ensures mark_records_deleted()
-    always mutates the chosen (pending) file instead of a report file.
+    """Resolve the dedup CSV to use for execute: choose the newest by mtime
+    between the latest Dedup_Pending_* and latest Dedup_Report_* so we never
+    run against stale data.  When mtime is tied, prefer Dedup_Pending_* so
+    mark_records_deleted() mutates the pending file.
     """
     latest_pending = find_latest_report_in_dated_dirs(dedup_dir, 'Dedup_Pending_*.csv')
-    if latest_pending:
-        return latest_pending
     latest_report = find_latest_report_in_dated_dirs(dedup_dir, 'Dedup_Report_*.csv')
+    candidates = []
+    if latest_pending:
+        candidates.append((latest_pending, os.path.getmtime(latest_pending), 0))
     if latest_report:
-        return latest_report
-    return None
+        candidates.append((latest_report, os.path.getmtime(latest_report), 1))
+    if not candidates:
+        return None
+    # Max by (mtime, -prefer): prefer pending (0) over report (1) when tied
+    return max(candidates, key=lambda x: (x[1], -x[2]))[0]
 
 
 def run_execute_from_csv(
