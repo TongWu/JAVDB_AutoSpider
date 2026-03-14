@@ -51,6 +51,7 @@ PIKPAK_LOG_FILE = cfg('PIKPAK_LOG_FILE', 'logs/pikpak_bridge.log')
 
 _EMAIL_REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
 DEDUP_CSV = cfg('DEDUP_CSV', 'dedup.csv')
+DEDUP_DIR = cfg('DEDUP_DIR', 'reports/Dedup')
 DEDUP_LOG_FILE = cfg('DEDUP_LOG_FILE', 'logs/rclone_dedup.log')
 
 EMAIL_NOTIFICATION_LOG_FILE = cfg('EMAIL_NOTIFICATION_LOG_FILE', 'logs/email_notification.log')
@@ -1265,8 +1266,11 @@ def main():
         pikpak_stats = extract_pikpak_statistics(PIKPAK_LOG_FILE) if pikpak_log_exists else None
     ban_summary = get_proxy_ban_summary()
 
-    # Extract dedup statistics
-    dedup_csv_path = os.path.join(_EMAIL_REPORTS_DIR, DEDUP_CSV)
+    # Extract dedup statistics (latest Dedup_Report_* or Dedup_Pending_* under DEDUP_DIR, or legacy dedup.csv)
+    latest_report = find_latest_report_in_dated_dirs(DEDUP_DIR, 'Dedup_Report_*.csv')
+    latest_pending = find_latest_report_in_dated_dirs(DEDUP_DIR, 'Dedup_Pending_*.csv')
+    candidates = [p for p in (latest_report, latest_pending) if p]
+    dedup_csv_path = max(candidates, key=os.path.getmtime) if candidates else os.path.join(_EMAIL_REPORTS_DIR, DEDUP_CSV)
     dedup_stats = extract_dedup_statistics(dedup_csv_path)
     if dedup_stats:
         logger.info(f"Dedup stats: detected={dedup_stats['detected']}, deleted={dedup_stats['deleted']}, cumulative={dedup_stats['cumulative']}")
