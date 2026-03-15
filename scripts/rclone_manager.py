@@ -227,9 +227,11 @@ def export_db_to_csv(output_path: str) -> int:
 
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT video_code, sensor_category, subtitle_category, "
-            "folder_path, folder_size, file_count, scan_datetime "
-            "FROM rclone_inventory ORDER BY video_code"
+            "SELECT VideoCode AS video_code, SensorCategory AS sensor_category, "
+            "SubtitleCategory AS subtitle_category, FolderPath AS folder_path, "
+            "FolderSize AS folder_size, FileCount AS file_count, "
+            "DateTimeScanned AS scan_datetime "
+            "FROM RcloneInventory ORDER BY VideoCode"
         ).fetchall()
 
     if not rows:
@@ -289,7 +291,7 @@ def load_inventory_as_folder_structure(
 
     structure: Dict[str, Dict[str, List[FolderInfo]]] = {}
     for row in rows:
-        folder_path = row.get('folder_path', '')
+        folder_path = row.get('FolderPath', row.get('folder_path', ''))
         parts = folder_path.split('/')
         # typical: remote:root/YYYY/Actor/FolderName
         # We need year and actor from the path.
@@ -301,7 +303,7 @@ def load_inventory_as_folder_structure(
             actor = parts[-2]
             year = parts[-3]
 
-        code = row.get('video_code', '').strip().upper()
+        code = row.get('VideoCode', row.get('video_code', '')).strip().upper()
         if not code:
             continue
 
@@ -310,11 +312,11 @@ def load_inventory_as_folder_structure(
             year=year,
             actor=actor,
             movie_code=code,
-            sensor_category=row.get('sensor_category', ''),
-            subtitle_category=row.get('subtitle_category', ''),
+            sensor_category=row.get('SensorCategory', row.get('sensor_category', '')),
+            subtitle_category=row.get('SubtitleCategory', row.get('subtitle_category', '')),
             folder_name=folder_name,
-            size=int(row.get('folder_size', 0) or 0),
-            file_count=int(row.get('file_count', 0) or 0),
+            size=int(row.get('FolderSize', row.get('folder_size', 0)) or 0),
+            file_count=int(row.get('FileCount', row.get('file_count', 0)) or 0),
         )
         structure.setdefault(year, {}).setdefault(actor, []).append(fi)
 
@@ -492,9 +494,9 @@ def run_execute_from_csv(
 
     unique_paths: Dict[str, bool] = {}
     for row in pending:
-        folder_path = row.get('existing_gdrive_path', '')
+        folder_path = row.get('ExistingGdrivePath', row.get('existing_gdrive_path', ''))
         if not folder_path:
-            logger.warning(f"Skipping record with empty path: {row.get('video_code', '?')}")
+            logger.warning(f"Skipping record with empty path: {row.get('VideoCode', row.get('video_code', '?'))}")
             skip_count += 1
             continue
         unique_paths.setdefault(folder_path, True)
