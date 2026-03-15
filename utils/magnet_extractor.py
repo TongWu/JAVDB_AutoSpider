@@ -48,6 +48,36 @@ def extract_magnets(magnets, index=None):
 # Pure-Python fallback
 # ---------------------------------------------------------------------------
 
+def infer_resolution(name, tags):
+    """Infer video resolution from torrent tags and filename.
+
+    Returns an int (720, 1080, 2560, 3840, 7680) or None.
+    """
+    tag_text = ' '.join(tags) if tags else ''
+    if '8K' in tag_text:
+        return 7680
+    if '4K' in tag_text:
+        return 3840
+    if '2K' in tag_text:
+        return 2560
+    if '高清' in tag_text:
+        return 1080
+
+    if name:
+        low = name.lower()
+        if '8k' in low:
+            return 7680
+        if '4k' in low:
+            return 3840
+        if '2k' in low:
+            return 2560
+        if '1080p' in low or '1080' in low:
+            return 1080
+        if '720p' in low or '720' in low:
+            return 720
+    return None
+
+
 def _parse_size(size_str):
     if not size_str:
         return 0
@@ -75,6 +105,14 @@ def _python_extract_magnets(magnets, index=None):
         'size_hacked_no_subtitle': '',
         'size_subtitle': '',
         'size_no_subtitle': '',
+        'file_count_hacked_subtitle': 0,
+        'file_count_hacked_no_subtitle': 0,
+        'file_count_subtitle': 0,
+        'file_count_no_subtitle': 0,
+        'resolution_hacked_subtitle': None,
+        'resolution_hacked_no_subtitle': None,
+        'resolution_subtitle': None,
+        'resolution_no_subtitle': None,
     }
 
     prefix = f"[{index}]" if index is not None else ""
@@ -90,6 +128,8 @@ def _python_extract_magnets(magnets, index=None):
         best = subtitle_magnets[0]
         result['subtitle'] = best['href']
         result['size_subtitle'] = best['size']
+        result['file_count_subtitle'] = best.get('file_count', 0)
+        result['resolution_subtitle'] = infer_resolution(best['name'], best.get('tags', []))
         logger.debug(f"{prefix} Found subtitle magnet: {best['name']} (size: {best['size']}, time: {best['timestamp']})")
 
     # --- hacked ---
@@ -107,12 +147,16 @@ def _python_extract_magnets(magnets, index=None):
         best = hacked_subtitle_magnets[0]
         result['hacked_subtitle'] = best['href']
         result['size_hacked_subtitle'] = best['size']
+        result['file_count_hacked_subtitle'] = best.get('file_count', 0)
+        result['resolution_hacked_subtitle'] = infer_resolution(best['name'], best.get('tags', []))
         logger.debug(f"{prefix} Found hacked_subtitle magnet: {best['name']} (size: {best['size']}, time: {best['timestamp']})")
     elif hacked_no_subtitle_magnets:
         hacked_no_subtitle_magnets.sort(key=_sort_key, reverse=True)
         best = hacked_no_subtitle_magnets[0]
         result['hacked_no_subtitle'] = best['href']
         result['size_hacked_no_subtitle'] = best['size']
+        result['file_count_hacked_no_subtitle'] = best.get('file_count', 0)
+        result['resolution_hacked_no_subtitle'] = infer_resolution(best['name'], best.get('tags', []))
         logger.debug(f"{prefix} Found hacked_no_subtitle magnet: {best['name']} (size: {best['size']}, time: {best['timestamp']})")
 
     # --- no_subtitle (prefer 4k) ---
@@ -133,12 +177,16 @@ def _python_extract_magnets(magnets, index=None):
         best = k4_magnets[0]
         result['no_subtitle'] = best['href']
         result['size_no_subtitle'] = best['size']
+        result['file_count_no_subtitle'] = best.get('file_count', 0)
+        result['resolution_no_subtitle'] = infer_resolution(best['name'], best.get('tags', []))
         logger.debug(f"{prefix} Found 4K magnet for no_subtitle: {best['name']} (size: {best['size']}, time: {best['timestamp']})")
     elif normal_magnets:
         normal_magnets.sort(key=_sort_key, reverse=True)
         best = normal_magnets[0]
         result['no_subtitle'] = best['href']
         result['size_no_subtitle'] = best['size']
+        result['file_count_no_subtitle'] = best.get('file_count', 0)
+        result['resolution_no_subtitle'] = infer_resolution(best['name'], best.get('tags', []))
         logger.debug(f"{prefix} Found normal magnet for no_subtitle: {best['name']} (size: {best['size']}, time: {best['timestamp']})")
 
     if not any(result[k] for k in ('subtitle', 'hacked_subtitle', 'hacked_no_subtitle', 'no_subtitle')):

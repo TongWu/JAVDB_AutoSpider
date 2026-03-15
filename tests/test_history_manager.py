@@ -37,8 +37,7 @@ def _seed_history_sqlite(records):
                 magnets[t] = r[t]
         if not magnets:
             magnets = {'no_subtitle': ''}
-        db_mod.db_upsert_history(r['href'], int(r.get('phase', 1)), r['video_code'],
-                                  magnet_links=magnets)
+        db_mod.db_upsert_history(r['href'], r['video_code'], magnet_links=magnets)
 
 
 class TestLoadParsedMoviesHistory:
@@ -100,7 +99,8 @@ class TestSaveParsedMovieToHistory:
         
         history = db_mod.db_load_history()
         assert '/v/NEW-001' in history
-        assert 'magnet:?xt=urn:btih:abc123' in history['/v/NEW-001'].get('subtitle', '')
+        magnets = [t.get('MagnetUri', '') for t in history['/v/NEW-001']['torrents'].values()]
+        assert 'magnet:?xt=urn:btih:abc123' in ''.join(magnets)
     
     def test_update_existing_record(self, temp_dir):
         """Test updating an existing movie in history."""
@@ -114,7 +114,8 @@ class TestSaveParsedMovieToHistory:
         
         history = db_mod.db_load_history()
         assert len(history) == 1
-        assert 'magnet:?xt=urn:btih:new123' in history['/v/EXIST-001'].get('hacked_subtitle', '')
+        magnets = [t.get('MagnetUri', '') for t in history['/v/EXIST-001']['torrents'].values()]
+        assert 'magnet:?xt=urn:btih:new123' in ''.join(magnets)
 
 
 class TestValidateHistoryFile:
@@ -504,7 +505,7 @@ class TestMaintainHistoryLimit:
         
         # Seed SQLite with 10 records
         for i in range(10):
-            db_mod.db_upsert_history(f'/v/TEST-{i:03d}', 1, f'TEST-{i:03d}')
+            db_mod.db_upsert_history(f'/v/TEST-{i:03d}', f'TEST-{i:03d}')
         
         maintain_history_limit(history_file, max_records=5)
         
@@ -599,8 +600,8 @@ class TestLoadParsedMoviesHistoryExtended:
     
     def test_load_dedup_by_href(self, temp_dir):
         """Test that SQLite UPSERT keeps only one entry per href."""
-        db_mod.db_upsert_history('/v/DUP-001', 1, 'DUP-001')
-        db_mod.db_upsert_history('/v/DUP-001', 1, 'DUP-001',
+        db_mod.db_upsert_history('/v/DUP-001', 'DUP-001')
+        db_mod.db_upsert_history('/v/DUP-001', 'DUP-001',
                                   magnet_links={'hacked_subtitle': 'magnet:abc'})
         
         history_file = os.path.join(temp_dir, 'history.csv')
@@ -759,7 +760,7 @@ class TestMaintainHistoryLimitExtended:
         from utils.history_manager import maintain_history_limit
         
         for i in range(10):
-            db_mod.db_upsert_history(f'/v/TEST-{i:03d}', 1, f'TEST-{i:03d}')
+            db_mod.db_upsert_history(f'/v/TEST-{i:03d}', f'TEST-{i:03d}')
         
         history_file = os.path.join(temp_dir, 'history_preserve.csv')
         maintain_history_limit(history_file, max_records=5)
@@ -801,7 +802,7 @@ class TestBatchUpdateLastVisited:
 
         history = db_mod.db_load_history()
         # ABC-123 should have an updated timestamp (not the seed default)
-        assert history['/v/ABC-123']['last_visited_datetime'] != ''
+        assert history['/v/ABC-123']['DateTimeVisited'] != ''
 
     def test_empty_visited_set(self, temp_dir):
         """Test that empty visited set is a no-op."""
@@ -856,7 +857,7 @@ class TestStorageModeDb:
         save_parsed_movie_to_history('', '/v/SM-002', 1, 'SM-002')
         batch_update_last_visited('', {'/v/SM-002'})
         history = load_parsed_movies_history('')
-        assert history['/v/SM-002']['last_visited_datetime'] != ''
+        assert history['/v/SM-002']['DateTimeVisited'] != ''
 
 
 class TestStorageModeCsv:

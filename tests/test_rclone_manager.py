@@ -288,7 +288,7 @@ class TestDedupCsvFiltering:
         rows = load_dedup_csv(path)
         pending = [r for r in rows if r.get('is_deleted', 'False') != 'True']
         assert len(pending) == 1
-        assert pending[0]['video_code'] == 'B-002'
+        assert pending[0].get('VideoCode', pending[0].get('video_code')) == 'B-002'
 
     def test_all_deleted(self, tmp_path):
         path = self._create_dedup_csv(tmp_path, [
@@ -314,9 +314,9 @@ class TestIsDeletedUpdate:
 
         reloaded = load_dedup_csv(path)
         assert reloaded[0]['is_deleted'] == 'True'
-        assert reloaded[0]['delete_datetime'] == '2026-03-09 12:00:00'
-        assert reloaded[0]['video_code'] == 'A-001'
-        assert reloaded[0]['existing_sensor'] == 'sensor'
+        assert reloaded[0].get('DateTimeDeleted', reloaded[0].get('delete_datetime')) == '2026-03-09 12:00:00'
+        assert reloaded[0].get('VideoCode', reloaded[0].get('video_code')) == 'A-001'
+        assert reloaded[0].get('ExistingSensor', reloaded[0].get('existing_sensor')) == 'sensor'
 
 
 # ============================================================================
@@ -354,7 +354,7 @@ class TestExecuteMode:
 
         reloaded = load_dedup_csv(path)
         assert reloaded[0]['is_deleted'] == 'True'
-        assert reloaded[0]['delete_datetime'] != ''
+        assert reloaded[0].get('DateTimeDeleted', reloaded[0].get('delete_datetime', '')) != ''
 
     def test_run_execute_all_already_deleted(self, tmp_path):
         path = str(tmp_path / 'dedup.csv')

@@ -20,10 +20,10 @@ class TestInitDb:
                 "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
             ).fetchall()]
         expected = {
-            'dedup_records', 'parsed_movies_history', 'pikpak_history',
-            'pikpak_stats', 'proxy_bans', 'rclone_inventory',
-            'report_rows', 'report_sessions', 'schema_version',
-            'spider_stats', 'uploader_stats',
+            'DedupRecords', 'MovieHistory', 'TorrentHistory', 'PikpakHistory',
+            'PikpakStats', 'ProxyBans', 'RcloneInventory',
+            'ReportMovies', 'ReportTorrents', 'ReportSessions', 'SchemaVersion',
+            'SpiderStats', 'UploaderStats',
         }
         assert expected.issubset(set(tables))
 
@@ -46,21 +46,21 @@ class TestInitDb:
 # ── parsed_movies_history ─────────────────────────────────────────────────
 
 class TestHistory:
-    def _upsert(self, href='/v/ABC-123', phase=1, code='ABC-123', magnets=None):
-        db_mod.db_upsert_history(href, phase, code, magnet_links=magnets)
+    def _upsert(self, href='/v/ABC-123', code='ABC-123', magnets=None):
+        db_mod.db_upsert_history(href, code, magnet_links=magnets)
 
     def test_upsert_and_load(self, _isolate_sqlite):
         self._upsert()
         history = db_mod.db_load_history()
         assert '/v/ABC-123' in history
-        assert history['/v/ABC-123']['video_code'] == 'ABC-123'
+        assert history['/v/ABC-123']['VideoCode'] == 'ABC-123'
 
     def test_upsert_updates_existing(self, _isolate_sqlite):
         self._upsert()
         self._upsert(magnets={'subtitle': 'magnet:new'})
         history = db_mod.db_load_history()
         assert len(history) == 1
-        assert 'magnet:new' in history['/v/ABC-123'].get('subtitle', '')
+        assert any('magnet:new' in t.get('MagnetUri', '') for t in history['/v/ABC-123'].get('torrents', {}).values())
 
     def test_multiple_records(self, _isolate_sqlite):
         self._upsert(href='/v/A', code='A')
@@ -79,7 +79,7 @@ class TestHistory:
         self._upsert(href='/v/B', code='B')
         db_mod.db_batch_update_last_visited(['/v/A'])
         history = db_mod.db_load_history()
-        assert history['/v/A']['last_visited_datetime'] != ''
+        assert history['/v/A']['DateTimeVisited'] != ''
 
     def test_get_all_history_records(self, _isolate_sqlite):
         self._upsert(href='/v/A', code='A')
@@ -141,7 +141,7 @@ class TestDedupRecords:
         db_mod.db_append_dedup_record(self._rec())
         rows = db_mod.db_load_dedup_records()
         assert len(rows) == 1
-        assert rows[0]['video_code'] == 'DUP-001'
+        assert rows[0]['VideoCode'] == 'DUP-001'
 
     def test_save_overwrites(self, _isolate_sqlite):
         db_mod.db_append_dedup_record(self._rec('A'))
@@ -149,13 +149,13 @@ class TestDedupRecords:
         rows = db_mod.db_load_dedup_records()
         assert len(rows) == 2
 
-        rows[0]['is_deleted'] = 1
-        rows[0]['delete_datetime'] = '2024-06-01'
+        rows[0]['IsDeleted'] = 1
+        rows[0]['DateTimeDeleted'] = '2024-06-01'
         db_mod.db_save_dedup_records(rows)
 
         reloaded = db_mod.db_load_dedup_records()
         assert len(reloaded) == 2
-        deleted = [r for r in reloaded if r.get('is_deleted') in (1, True)]
+        deleted = [r for r in reloaded if r.get('IsDeleted') in (1, True)]
         assert len(deleted) == 1
 
     def test_append_skips_duplicate_pending(self, _isolate_sqlite):
@@ -181,11 +181,11 @@ class TestDedupRecords:
         ])
         assert updated == 1
         rows = db_mod.db_load_dedup_records()
-        a_row = [r for r in rows if r['video_code'] == 'A'][0]
-        b_row = [r for r in rows if r['video_code'] == 'B'][0]
-        assert a_row['is_deleted'] == 1
-        assert a_row['delete_datetime'] == '2024-06-01 10:00:00'
-        assert b_row['is_deleted'] == 0
+        a_row = [r for r in rows if r['VideoCode'] == 'A'][0]
+        b_row = [r for r in rows if r['VideoCode'] == 'B'][0]
+        assert a_row['IsDeleted'] == 1
+        assert a_row['DateTimeDeleted'] == '2024-06-01 10:00:00'
+        assert b_row['IsDeleted'] == 0
 
     def test_mark_multiple_pending_same_path(self, _isolate_sqlite):
         """Edge 1a: multiple pending records with the same path."""
@@ -215,7 +215,7 @@ class TestDedupRecords:
         removed = db_mod.db_cleanup_deleted_records(older_than_days=30)
         assert removed == 1
         rows = db_mod.db_load_dedup_records()
-        codes = {r['video_code'] for r in rows}
+        codes = {r['VideoCode'] for r in rows}
         assert 'OLD' not in codes
         assert 'FRESH' in codes
         assert 'PENDING' in codes
@@ -251,9 +251,9 @@ class TestPikpakHistory:
         db_mod.db_append_pikpak_history(rec)
 
         with db_mod.get_db(_isolate_sqlite) as conn:
-            rows = conn.execute("SELECT * FROM pikpak_history").fetchall()
+            rows = conn.execute("SELECT * FROM PikpakHistory").fetchall()
         assert len(rows) == 1
-        assert dict(rows[0])['torrent_hash'] == 'abc123'
+        assert dict(rows[0])['TorrentHash'] == 'abc123'
 
 
 # ── proxy_bans ────────────────────────────────────────────────────────────
@@ -267,7 +267,7 @@ class TestProxyBans:
         db_mod.db_save_proxy_bans(bans)
         loaded = db_mod.db_load_proxy_bans()
         assert len(loaded) == 2
-        names = {r['proxy_name'] for r in loaded}
+        names = {r['ProxyName'] for r in loaded}
         assert names == {'proxy1', 'proxy2'}
 
     def test_save_replaces(self, _isolate_sqlite):
@@ -279,7 +279,7 @@ class TestProxyBans:
         ])
         loaded = db_mod.db_load_proxy_bans()
         assert len(loaded) == 1
-        assert loaded[0]['proxy_name'] == 'new'
+        assert loaded[0]['ProxyName'] == 'new'
 
 
 # ── report_sessions + report_rows ─────────────────────────────────────────
@@ -333,10 +333,10 @@ class TestReportSessions:
             csv_filename='second.csv', db_path=_isolate_sqlite,
         )
         latest = db_mod.db_get_latest_session(db_path=_isolate_sqlite)
-        assert latest['id'] == sid2
+        assert latest['Id'] == sid2
 
         latest_daily = db_mod.db_get_latest_session(report_type='daily', db_path=_isolate_sqlite)
-        assert latest_daily['csv_filename'] == 'first.csv'
+        assert latest_daily['CsvFilename'] == 'first.csv'
 
     def test_get_sessions_by_date(self, _isolate_sqlite):
         db_mod.db_create_report_session(
@@ -373,8 +373,8 @@ class TestStats:
         db_mod.db_save_spider_stats(session_id, stats)
         loaded = db_mod.db_get_spider_stats(session_id)
         assert loaded is not None
-        assert loaded['phase1_discovered'] == 50
-        assert loaded['total_failed'] == 3
+        assert loaded['Phase1Discovered'] == 50
+        assert loaded['TotalFailed'] == 3
 
     def test_uploader_stats(self, _isolate_sqlite, session_id):
         stats = {
@@ -387,8 +387,8 @@ class TestStats:
         db_mod.db_save_uploader_stats(session_id, stats)
         loaded = db_mod.db_get_uploader_stats(session_id)
         assert loaded is not None
-        assert loaded['total_torrents'] == 100
-        assert loaded['success_rate'] == pytest.approx(94.4, rel=0.01)
+        assert loaded['TotalTorrents'] == 100
+        assert loaded['SuccessRate'] == pytest.approx(94.4, rel=0.01)
 
     def test_pikpak_stats(self, _isolate_sqlite, session_id):
         stats = {
@@ -399,9 +399,9 @@ class TestStats:
         db_mod.db_save_pikpak_stats(session_id, stats)
         loaded = db_mod.db_get_pikpak_stats(session_id)
         assert loaded is not None
-        assert loaded['successful_count'] == 15
-        assert loaded['uploaded_count'] == 18
-        assert loaded['delete_failed_count'] == 3
+        assert loaded['SuccessfulCount'] == 15
+        assert loaded['UploadedCount'] == 18
+        assert loaded['DeleteFailedCount'] == 3
 
     def test_stats_missing_session(self, _isolate_sqlite):
         assert db_mod.db_get_spider_stats(9999) is None

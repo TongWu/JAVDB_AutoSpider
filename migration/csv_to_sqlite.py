@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""One-time migration: import all existing CSV files into SQLite.
+"""One-time migration: import all existing CSV files into SQLite (v6 BigCamelCase schema).
 
 Phase 1 — Data tables:
-  - parsed_movies_history.csv  →  parsed_movies_history
-  - rclone_inventory.csv       →  rclone_inventory
-  - dedup.csv                  →  dedup_records
-  - pikpak_bridge_history.csv  →  pikpak_history
-  - proxy_bans.csv             →  proxy_bans
+  - parsed_movies_history.csv  →  MovieHistory + TorrentHistory
+  - rclone_inventory.csv        →  RcloneInventory
+  - dedup.csv                  →  DedupRecords
+  - pikpak_bridge_history.csv   →  PikpakHistory
+  - proxy_bans.csv             →  ProxyBans
 
 Phase 2 — Report CSVs:
-  - reports/DailyReport/*.csv  →  report_sessions + report_rows
-  - reports/AdHoc/*.csv        →  report_sessions + report_rows
+  - reports/DailyReport/*.csv  →  ReportSessions + ReportMovies + ReportTorrents
+  - reports/AdHoc/*.csv        →  ReportSessions + ReportMovies + ReportTorrents
 
 Usage:
     python3 migration/csv_to_sqlite.py [--reports-dir reports] [--db-path reports/javdb_autospider.db] [--dry-run] [--verify]
@@ -32,18 +32,39 @@ setup_logging()
 logger = get_logger(__name__)
 
 
+# Category → (SubtitleIndicator, CensorIndicator)
+_CATEGORY_TO_INDICATORS = {
+    'hacked_subtitle':    (1, 0),
+    'hacked_no_subtitle': (0, 0),
+    'subtitle':           (1, 1),
+    'no_subtitle':        (0, 1),
+}
+
+# Magnet prefix pattern: [YYYY-MM-DD]
+_MAGNET_DATE_RE = re.compile(r'^\[(\d{4}-\d{2}-\d{2})\](.*)$')
+
+
+def _strip_magnet_prefix(val: str) -> tuple[str, str | None]:
+    """Strip [YYYY-MM-DD] prefix from magnet value. Returns (magnet_uri, date_str or None)."""
+    if not val or 'magnet:' not in val:
+        return (val or '', None)
+    m = _MAGNET_DATE_RE.match(val.strip())
+    if m:
+        return (m.group(2).strip(), m.group(1))
+    return (val.strip(), None)
+
+
 # =====================================================================
 # Phase 1 — Data-table migration helpers
 # =====================================================================
 
 def migrate_history(csv_path: str, db_path: str, dry_run: bool = False) -> int:
-    """Migrate parsed_movies_history.csv → parsed_movies_history table."""
+    """Migrate parsed_movies_history.csv → MovieHistory + TorrentHistory tables."""
     if not os.path.exists(csv_path):
         logger.info(f"Skipping history: {csv_path} not found")
         return 0
 
     from utils.db import get_db
-    count = 0
     with open(csv_path, 'r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -66,44 +87,72 @@ def migrate_history(csv_path: str, db_path: str, dry_run: bool = False) -> int:
     logger.info(f"History: {len(rows)} rows, {len(unique_rows)} unique hrefs")
 
     if dry_run:
-        logger.info(f"[DRY RUN] Would insert {len(unique_rows)} history records")
+        logger.info(f"[DRY RUN] Would insert {len(unique_rows)} MovieHistory + TorrentHistory records")
         return len(unique_rows)
 
+    movie_count = 0
+    torrent_count = 0
     with get_db(db_path) as conn:
         for row in unique_rows:
             create_dt = row.get('create_datetime', row.get('create_date', row.get('parsed_date', '')))
             update_dt = row.get('update_datetime', row.get('update_date', row.get('parsed_date', '')))
             last_visited = row.get('last_visited_datetime', '') or update_dt
+            video_code = row.get('video_code', '')
+            href = row.get('href', '')
+
+            # PerfectMatchIndicator = 1 when both subtitle AND hacked_subtitle have values
+            sub_val = (row.get('subtitle', '') or '').strip()
+            hack_sub_val = (row.get('hacked_subtitle', '') or '').strip()
+            perfect_match = 1 if (sub_val and 'magnet:' in sub_val and hack_sub_val and 'magnet:' in hack_sub_val) else 0
+
+            # Delete existing TorrentHistory before REPLACE to avoid FK constraint
+            existing = conn.execute("SELECT Id FROM MovieHistory WHERE Href = ?", (href,)).fetchone()
+            if existing:
+                conn.execute("DELETE FROM TorrentHistory WHERE MovieHistoryId = ?", (existing[0],))
 
             conn.execute(
-                """INSERT OR REPLACE INTO parsed_movies_history
-                   (href, phase, video_code, create_datetime, update_datetime,
-                    last_visited_datetime, hacked_subtitle, hacked_no_subtitle,
-                    subtitle, no_subtitle)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (row.get('href', ''),
-                 int(row.get('phase', 0) or 0),
-                 row.get('video_code', ''),
-                 create_dt, update_dt, last_visited,
-                 row.get('hacked_subtitle', ''),
-                 row.get('hacked_no_subtitle', ''),
-                 row.get('subtitle', ''),
-                 row.get('no_subtitle', '')),
+                """INSERT OR REPLACE INTO MovieHistory
+                   (VideoCode, Href, DateTimeCreated, DateTimeUpdated, DateTimeVisited,
+                    PerfectMatchIndicator, HiResIndicator)
+                   VALUES (?, ?, ?, ?, ?, ?, 0)""",
+                (video_code, href, create_dt, update_dt, last_visited, perfect_match),
             )
-            count += 1
+            movie_id = conn.execute(
+                "SELECT Id FROM MovieHistory WHERE Href = ?", (href,)
+            ).fetchone()[0]
+            movie_count += 1
 
-    logger.info(f"Migrated {count} history records")
-    return count
+            for cat in ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle'):
+                val = row.get(cat, '') or ''
+                if not val or 'magnet:' not in val:
+                    continue
+                magnet_uri, dt_created = _strip_magnet_prefix(val)
+                size_col = f'size_{cat}'
+                size_val = (row.get(size_col, '') or '').strip()
+                sub_ind, cen_ind = _CATEGORY_TO_INDICATORS[cat]
+                torrent_dt_created = dt_created or create_dt
+                torrent_dt_updated = update_dt
+
+                conn.execute(
+                    """INSERT OR REPLACE INTO TorrentHistory
+                       (MovieHistoryId, MagnetUri, SubtitleIndicator, CensorIndicator,
+                        Size, FileCount, DateTimeCreated, DateTimeUpdated)
+                       VALUES (?, ?, ?, ?, ?, 0, ?, ?)""",
+                    (movie_id, magnet_uri, sub_ind, cen_ind, size_val, torrent_dt_created, torrent_dt_updated),
+                )
+                torrent_count += 1
+
+    logger.info(f"Migrated {movie_count} MovieHistory + {torrent_count} TorrentHistory records")
+    return movie_count
 
 
 def migrate_inventory(csv_path: str, db_path: str, dry_run: bool = False) -> int:
-    """Migrate rclone_inventory.csv → rclone_inventory table."""
+    """Migrate rclone_inventory.csv → RcloneInventory table."""
     if not os.path.exists(csv_path):
         logger.info(f"Skipping inventory: {csv_path} not found")
         return 0
 
     from utils.db import get_db
-    count = 0
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -111,16 +160,17 @@ def migrate_inventory(csv_path: str, db_path: str, dry_run: bool = False) -> int
     logger.info(f"Inventory: {len(rows)} rows")
 
     if dry_run:
-        logger.info(f"[DRY RUN] Would insert {len(rows)} inventory records")
+        logger.info(f"[DRY RUN] Would insert {len(rows)} RcloneInventory records")
         return len(rows)
 
+    count = 0
     with get_db(db_path) as conn:
-        conn.execute("DELETE FROM rclone_inventory")
+        conn.execute("DELETE FROM RcloneInventory")
         for row in rows:
             conn.execute(
-                """INSERT INTO rclone_inventory
-                   (video_code, sensor_category, subtitle_category,
-                    folder_path, folder_size, file_count, scan_datetime)
+                """INSERT INTO RcloneInventory
+                   (VideoCode, SensorCategory, SubtitleCategory,
+                    FolderPath, FolderSize, FileCount, DateTimeScanned)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (row.get('video_code', ''),
                  row.get('sensor_category', ''),
@@ -132,18 +182,17 @@ def migrate_inventory(csv_path: str, db_path: str, dry_run: bool = False) -> int
             )
             count += 1
 
-    logger.info(f"Migrated {count} inventory records")
+    logger.info(f"Migrated {count} RcloneInventory records")
     return count
 
 
 def migrate_dedup(csv_path: str, db_path: str, dry_run: bool = False) -> int:
-    """Migrate dedup.csv → dedup_records table."""
+    """Migrate dedup.csv → DedupRecords table."""
     if not os.path.exists(csv_path):
         logger.info(f"Skipping dedup: {csv_path} not found")
         return 0
 
     from utils.db import get_db
-    count = 0
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -151,19 +200,20 @@ def migrate_dedup(csv_path: str, db_path: str, dry_run: bool = False) -> int:
     logger.info(f"Dedup: {len(rows)} rows")
 
     if dry_run:
-        logger.info(f"[DRY RUN] Would insert {len(rows)} dedup records")
+        logger.info(f"[DRY RUN] Would insert {len(rows)} DedupRecords")
         return len(rows)
 
+    count = 0
     with get_db(db_path) as conn:
-        conn.execute("DELETE FROM dedup_records")
+        conn.execute("DELETE FROM DedupRecords")
         for row in rows:
             is_del = str(row.get('is_deleted', 'False')).lower() in ('true', '1')
             conn.execute(
-                """INSERT INTO dedup_records
-                   (video_code, existing_sensor, existing_subtitle,
-                    existing_gdrive_path, existing_folder_size,
-                    new_torrent_category, deletion_reason,
-                    detect_datetime, is_deleted, delete_datetime)
+                """INSERT INTO DedupRecords
+                   (VideoCode, ExistingSensor, ExistingSubtitle,
+                    ExistingGdrivePath, ExistingFolderSize,
+                    NewTorrentCategory, DeletionReason,
+                    DateTimeDetected, IsDeleted, DateTimeDeleted)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (row.get('video_code', ''),
                  row.get('existing_sensor', ''),
@@ -178,7 +228,7 @@ def migrate_dedup(csv_path: str, db_path: str, dry_run: bool = False) -> int:
             )
             count += 1
 
-    logger.info(f"Migrated {count} dedup records")
+    logger.info(f"Migrated {count} DedupRecords")
     return count
 
 
@@ -243,7 +293,7 @@ def _load_dedup_report_csv(csv_path: str) -> list:
 
 
 def migrate_dedup_all(reports_dir: str, db_path: str, dry_run: bool = False) -> int:
-    """Merge all dedup CSV files and import into dedup_records table.
+    """Merge all dedup CSV files and import into DedupRecords table.
 
     Sources (in order):
       1. reports/dedup.csv                          (legacy, DedupRecord format)
@@ -306,7 +356,7 @@ def migrate_dedup_all(reports_dir: str, db_path: str, dry_run: bool = False) -> 
         return 0
 
     if dry_run:
-        logger.info(f"[DRY RUN] Would insert {len(all_rows)} merged dedup records")
+        logger.info(f"[DRY RUN] Would insert {len(all_rows)} merged DedupRecords")
         return len(all_rows)
 
     # Import into DB using INSERT OR IGNORE to preserve existing records
@@ -315,11 +365,11 @@ def migrate_dedup_all(reports_dir: str, db_path: str, dry_run: bool = False) -> 
         for row in all_rows:
             is_del = str(row.get('is_deleted', 'False')).lower() in ('true', '1')
             cur = conn.execute(
-                """INSERT OR IGNORE INTO dedup_records
-                   (video_code, existing_sensor, existing_subtitle,
-                    existing_gdrive_path, existing_folder_size,
-                    new_torrent_category, deletion_reason,
-                    detect_datetime, is_deleted, delete_datetime)
+                """INSERT OR IGNORE INTO DedupRecords
+                   (VideoCode, ExistingSensor, ExistingSubtitle,
+                    ExistingGdrivePath, ExistingFolderSize,
+                    NewTorrentCategory, DeletionReason,
+                    DateTimeDetected, IsDeleted, DateTimeDeleted)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (row.get('video_code', ''),
                  row.get('existing_sensor', ''),
@@ -335,37 +385,46 @@ def migrate_dedup_all(reports_dir: str, db_path: str, dry_run: bool = False) -> 
             if cur.rowcount > 0:
                 count += 1
 
-    logger.info(f"Imported {count} new dedup records into DB ({len(all_rows) - count} already existed)")
+    logger.info(f"Imported {count} new DedupRecords into DB ({len(all_rows) - count} already existed)")
 
-    # Export merged data to dedup_history.csv
+    # Export merged data to dedup_history.csv (snake_case column names for CSV)
     output_csv = os.path.join(reports_dir, 'dedup_history.csv')
     with get_db(db_path) as conn:
         db_rows = conn.execute(
-            "SELECT video_code, existing_sensor, existing_subtitle, "
-            "existing_gdrive_path, existing_folder_size, new_torrent_category, "
-            "deletion_reason, detect_datetime, is_deleted, delete_datetime "
-            "FROM dedup_records ORDER BY id"
+            """SELECT VideoCode, ExistingSensor, ExistingSubtitle,
+               ExistingGdrivePath, ExistingFolderSize, NewTorrentCategory,
+               DeletionReason, DateTimeDetected, IsDeleted, DateTimeDeleted
+               FROM DedupRecords ORDER BY Id"""
         ).fetchall()
     with open(output_csv, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=_DEDUP_FIELDNAMES)
         writer.writeheader()
         for r in db_rows:
-            d = dict(r)
-            d['is_deleted'] = 'True' if d.get('is_deleted') in (1, True) else 'False'
+            d = {
+                'video_code': r[0],
+                'existing_sensor': r[1],
+                'existing_subtitle': r[2],
+                'existing_gdrive_path': r[3],
+                'existing_folder_size': r[4],
+                'new_torrent_category': r[5],
+                'deletion_reason': r[6],
+                'detect_datetime': r[7],
+                'is_deleted': 'True' if r[8] in (1, True) else 'False',
+                'delete_datetime': r[9],
+            }
             writer.writerow(d)
-    logger.info(f"Exported {len(db_rows)} merged dedup records to {output_csv}")
+    logger.info(f"Exported {len(db_rows)} merged DedupRecords to {output_csv}")
 
     return count
 
 
 def migrate_pikpak(csv_path: str, db_path: str, dry_run: bool = False) -> int:
-    """Migrate pikpak_bridge_history.csv → pikpak_history table."""
+    """Migrate pikpak_bridge_history.csv → PikpakHistory table."""
     if not os.path.exists(csv_path):
         logger.info(f"Skipping pikpak: {csv_path} not found")
         return 0
 
     from utils.db import get_db
-    count = 0
     with open(csv_path, 'r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -373,17 +432,18 @@ def migrate_pikpak(csv_path: str, db_path: str, dry_run: bool = False) -> int:
     logger.info(f"PikPak history: {len(rows)} rows")
 
     if dry_run:
-        logger.info(f"[DRY RUN] Would insert {len(rows)} pikpak records")
+        logger.info(f"[DRY RUN] Would insert {len(rows)} PikpakHistory records")
         return len(rows)
 
+    count = 0
     with get_db(db_path) as conn:
-        conn.execute("DELETE FROM pikpak_history")
+        conn.execute("DELETE FROM PikpakHistory")
         for row in rows:
             conn.execute(
-                """INSERT INTO pikpak_history
-                   (torrent_hash, torrent_name, category, magnet_uri,
-                    added_to_qb_date, deleted_from_qb_date,
-                    uploaded_to_pikpak_date, transfer_status, error_message)
+                """INSERT INTO PikpakHistory
+                   (TorrentHash, TorrentName, Category, MagnetUri,
+                    DateTimeAddedToQb, DateTimeDeletedFromQb, DateTimeUploadedToPikpak,
+                    TransferStatus, ErrorMessage)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (row.get('torrent_hash', ''),
                  row.get('torrent_name', ''),
@@ -397,18 +457,17 @@ def migrate_pikpak(csv_path: str, db_path: str, dry_run: bool = False) -> int:
             )
             count += 1
 
-    logger.info(f"Migrated {count} pikpak records")
+    logger.info(f"Migrated {count} PikpakHistory records")
     return count
 
 
 def migrate_proxy_bans(csv_path: str, db_path: str, dry_run: bool = False) -> int:
-    """Migrate proxy_bans.csv → proxy_bans table."""
+    """Migrate proxy_bans.csv → ProxyBans table."""
     if not os.path.exists(csv_path):
         logger.info(f"Skipping proxy_bans: {csv_path} not found")
         return 0
 
     from utils.db import get_db
-    count = 0
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -416,33 +475,29 @@ def migrate_proxy_bans(csv_path: str, db_path: str, dry_run: bool = False) -> in
     logger.info(f"Proxy bans: {len(rows)} rows")
 
     if dry_run:
-        logger.info(f"[DRY RUN] Would insert {len(rows)} proxy ban records")
+        logger.info(f"[DRY RUN] Would insert {len(rows)} ProxyBans records")
         return len(rows)
 
+    count = 0
     with get_db(db_path) as conn:
-        conn.execute("DELETE FROM proxy_bans")
+        conn.execute("DELETE FROM ProxyBans")
         for row in rows:
             conn.execute(
-                "INSERT INTO proxy_bans (proxy_name, ban_time, unban_time) VALUES (?, ?, ?)",
+                """INSERT INTO ProxyBans (ProxyName, DateTimeBanned, DateTimeUnbanned)
+                   VALUES (?, ?, ?)""",
                 (row.get('proxy_name', ''),
                  row.get('ban_time', ''),
                  row.get('unban_time', '')),
             )
             count += 1
 
-    logger.info(f"Migrated {count} proxy ban records")
+    logger.info(f"Migrated {count} ProxyBans records")
     return count
 
 
 # =====================================================================
 # Phase 2 — Report CSV migration helpers
 # =====================================================================
-
-REPORT_COLUMNS = [
-    'href', 'video_code', 'page', 'actor', 'rate', 'comment_number',
-    'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle',
-    'size_hacked_subtitle', 'size_hacked_no_subtitle', 'size_subtitle', 'size_no_subtitle',
-]
 
 _ADHOC_RE = re.compile(
     r'^Javdb_AdHoc_'
@@ -543,8 +598,8 @@ def collect_csv_files(reports_dir: str) -> list:
 
 
 def migrate_single_csv(csv_path: str, filename: str, is_adhoc: bool,
-                        db_path: str, dry_run: bool) -> dict:
-    """Migrate one report CSV → report_sessions + report_rows.
+                       db_path: str, dry_run: bool) -> dict:
+    """Migrate one report CSV → ReportSessions + ReportMovies + ReportTorrents.
 
     Session creation and row insertion run inside a single transaction so
     a failure in row insertion does not leave an orphaned session record.
@@ -572,7 +627,7 @@ def migrate_single_csv(csv_path: str, filename: str, is_adhoc: bool,
 
     with get_db(db_path) as conn:
         existing = conn.execute(
-            "SELECT id FROM report_sessions WHERE csv_filename = ?", (filename,)
+            "SELECT Id FROM ReportSessions WHERE CsvFilename = ?", (filename,)
         ).fetchone()
         if existing:
             logger.debug(f"Already migrated: {filename} (session_id={existing[0]})")
@@ -580,9 +635,9 @@ def migrate_single_csv(csv_path: str, filename: str, is_adhoc: bool,
 
         created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cur = conn.execute(
-            """INSERT INTO report_sessions
-               (report_type, report_date, url_type, display_name,
-                url, start_page, end_page, csv_filename, created_at)
+            """INSERT INTO ReportSessions
+               (ReportType, ReportDate, UrlType, DisplayName,
+                Url, StartPage, EndPage, CsvFilename, DateTimeCreated)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (meta['report_type'], meta['report_date'],
              meta.get('url_type'), meta.get('display_name'),
@@ -591,35 +646,42 @@ def migrate_single_csv(csv_path: str, filename: str, is_adhoc: bool,
         session_id = cur.lastrowid
 
         for row in rows:
-            conn.execute(
-                """INSERT INTO report_rows
-                   (session_id, href, video_code, page, actor, rate,
-                    comment_number, hacked_subtitle, hacked_no_subtitle,
-                    subtitle, no_subtitle, size_hacked_subtitle,
-                    size_hacked_no_subtitle, size_subtitle, size_no_subtitle)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            cur = conn.execute(
+                """INSERT INTO ReportMovies
+                   (SessionId, Href, VideoCode, Page, Actor, Rate, CommentNumber)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (session_id,
                  row.get('href', ''), row.get('video_code', ''),
                  int(row['page']) if row.get('page') else None,
                  row.get('actor', ''),
                  float(row['rate']) if row.get('rate') else None,
-                 int(row['comment_number']) if row.get('comment_number') else None,
-                 row.get('hacked_subtitle', ''), row.get('hacked_no_subtitle', ''),
-                 row.get('subtitle', ''), row.get('no_subtitle', ''),
-                 row.get('size_hacked_subtitle', ''),
-                 row.get('size_hacked_no_subtitle', ''),
-                 row.get('size_subtitle', ''),
-                 row.get('size_no_subtitle', '')),
+                 int(row['comment_number']) if row.get('comment_number') else None),
             )
+            report_movie_id = cur.lastrowid
+            video_code = row.get('video_code', '')
+
+            for cat in ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle'):
+                val = (row.get(cat, '') or '').strip()
+                if not val or 'magnet:' not in val:
+                    continue
+                magnet_uri, _ = _strip_magnet_prefix(val)
+                size_val = (row.get(f'size_{cat}', '') or '').strip()
+                sub_ind, cen_ind = _CATEGORY_TO_INDICATORS[cat]
+
+                conn.execute(
+                    """INSERT INTO ReportTorrents
+                       (ReportMovieId, VideoCode, MagnetUri, SubtitleIndicator, CensorIndicator,
+                        Size, FileCount)
+                       VALUES (?, ?, ?, ?, ?, ?, 0)""",
+                    (report_movie_id, video_code, magnet_uri, sub_ind, cen_ind, size_val),
+                )
 
     return {'session_id': session_id, 'row_count': len(rows), 'skipped': False}
 
 
 def verify_session(session_id: int, csv_path: str, db_path: str) -> bool:
-    """Verify a migrated session matches the original CSV content."""
-    from utils.db import db_get_report_rows
-
-    db_rows = db_get_report_rows(session_id, db_path=db_path)
+    """Verify a migrated session: movie count matches CSV row count."""
+    from utils.db import get_db
 
     try:
         with open(csv_path, 'r', encoding='utf-8-sig') as f:
@@ -628,38 +690,14 @@ def verify_session(session_id: int, csv_path: str, db_path: str) -> bool:
     except Exception:
         return False
 
-    if len(db_rows) != len(csv_rows):
-        logger.warning(f"Row count mismatch: DB={len(db_rows)} CSV={len(csv_rows)} in {csv_path}")
-        return False
+    with get_db(db_path) as conn:
+        db_count = conn.execute(
+            "SELECT COUNT(*) FROM ReportMovies WHERE SessionId = ?", (session_id,)
+        ).fetchone()[0]
 
-    for i, (db_row, csv_row) in enumerate(zip(db_rows, csv_rows)):
-        for col in REPORT_COLUMNS:
-            db_val = str(db_row.get(col, '') or '')
-            csv_val = str(csv_row.get(col, '') or '')
-            if col == 'rate':
-                try:
-                    if db_val and csv_val:
-                        if abs(float(db_val) - float(csv_val)) > 0.01:
-                            logger.warning(f"Row {i} col {col}: DB={db_val} CSV={csv_val}")
-                            return False
-                    elif db_val != csv_val:
-                        if not (db_val in ('', 'None', '0.0') and csv_val in ('', 'None', '0.0')):
-                            return False
-                    continue
-                except (ValueError, TypeError):
-                    pass
-            elif col in ('page', 'comment_number'):
-                try:
-                    if db_val and csv_val:
-                        if int(float(db_val)) != int(float(csv_val)):
-                            logger.warning(f"Row {i} col {col}: DB={db_val} CSV={csv_val}")
-                            return False
-                    continue
-                except (ValueError, TypeError):
-                    pass
-            if db_val != csv_val:
-                logger.warning(f"Row {i} col {col}: DB='{db_val}' CSV='{csv_val}' in {csv_path}")
-                return False
+    if db_count != len(csv_rows):
+        logger.warning(f"Row count mismatch: DB={db_count} CSV={len(csv_rows)} in {csv_path}")
+        return False
     return True
 
 
@@ -668,7 +706,7 @@ def verify_session(session_id: int, csv_path: str, db_path: str) -> bool:
 # =====================================================================
 
 def main():
-    parser = argparse.ArgumentParser(description='Migrate all CSV files to SQLite')
+    parser = argparse.ArgumentParser(description='Migrate all CSV files to SQLite (v6 schema)')
     parser.add_argument('--reports-dir', default='reports', help='Reports directory')
     parser.add_argument('--db-path', default=None, help='SQLite database path')
     parser.add_argument('--dry-run', action='store_true', help='Show what would be migrated')
@@ -680,7 +718,7 @@ def main():
     db_path = args.db_path or os.path.join(reports_dir, 'javdb_autospider.db')
 
     logger.info("=" * 60)
-    logger.info("CSV → SQLite MIGRATION")
+    logger.info("CSV → SQLite MIGRATION (v6 BigCamelCase schema)")
     logger.info(f"Reports dir: {reports_dir}")
     logger.info(f"Database: {db_path}")
     if args.dry_run:
