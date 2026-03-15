@@ -369,6 +369,7 @@ def process_detail_entries_parallel(
     is_adhoc_mode: bool,
     ban_log_file: str,
     rclone_inventory: dict = None,
+    rclone_filter: bool = True,
     enable_dedup: bool = False,
     dedup_csv_path: str = '',
     enable_redownload: bool = False,
@@ -451,7 +452,7 @@ def process_detail_entries_parallel(
                 )
                 continue
 
-        if rclone_inventory and should_skip_from_rclone(entry.get('video_code', ''), rclone_inventory, enable_dedup):
+        if rclone_filter and rclone_inventory and should_skip_from_rclone(entry.get('video_code', ''), rclone_inventory, enable_dedup):
             logger.info(
                 f"[{i}/{total_entries}] [Page {entry['page']}] "
                 f"Skipping {entry['video_code']} — already exists in rclone inventory with 中字"

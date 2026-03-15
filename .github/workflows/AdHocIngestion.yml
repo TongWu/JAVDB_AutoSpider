@@ -67,6 +67,11 @@ on:
         options:
           - 'ubuntu-latest'
           - 'self-hosted'
+      enable_rclone_filter:
+        description: 'Enable rclone inventory filter (skip entries already in rclone inventory with 中字)'
+        required: false
+        default: true
+        type: boolean
       enable_dedup:
         description: 'Enable rclone dedup (detect + execute)'
         required: false
@@ -425,6 +430,7 @@ jobs:
           echo "Proxy Spider: ${{ inputs.proxy_spider }}"
           echo "Proxy Uploader: ${{ inputs.proxy_uploader }}"
           echo "Proxy PikPak: ${{ inputs.proxy_pikpak }}"
+          echo "Rclone Filter: ${{ inputs.enable_rclone_filter }}"
           echo "QB Category: ${{ inputs.qb_category || 'Default (Ad Hoc)' }}"
           echo "============================================"
 
@@ -471,6 +477,11 @@ jobs:
             SPIDER_CMD="$SPIDER_CMD --use-proxy"
           fi
           
+          # Add no-rclone-filter flag if rclone filter is disabled
+          if [ "${{ inputs.enable_rclone_filter }}" == "false" ]; then
+            SPIDER_CMD="$SPIDER_CMD --no-rclone-filter"
+          fi
+
           # Add dedup flag if enabled
           if [ "${{ inputs.enable_dedup }}" == "true" ]; then
             SPIDER_CMD="$SPIDER_CMD --enable-dedup"

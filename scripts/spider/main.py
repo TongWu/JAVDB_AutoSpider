@@ -62,6 +62,7 @@ def main():
     max_movies_phase2 = args.max_movies_phase2
     sequential = args.sequential
     enable_dedup = args.enable_dedup
+    rclone_filter = not args.no_rclone_filter
     enable_redownload = args.enable_redownload or ENABLE_REDOWNLOAD
     redownload_threshold = args.redownload_threshold if args.redownload_threshold is not None else REDOWNLOAD_SIZE_THRESHOLD
 
@@ -185,6 +186,11 @@ def main():
     else:
         logger.info(f"Rclone inventory not found ({rclone_inventory_path}) – rclone skip/dedup disabled")
 
+    if rclone_filter:
+        logger.info("RCLONE FILTER: Enabled – will skip entries already in rclone inventory with 中字")
+    else:
+        logger.info("RCLONE FILTER: Disabled – all entries will be processed regardless of rclone inventory")
+
     if enable_dedup:
         logger.info("DEDUP MODE: Enabled – will detect upgrade opportunities against rclone inventory")
     else:
@@ -303,6 +309,7 @@ def main():
                 is_adhoc_mode=custom_url is not None,
                 ban_log_file=ban_log_file,
                 rclone_inventory=rclone_inventory,
+                rclone_filter=rclone_filter,
                 enable_dedup=enable_dedup,
                 dedup_csv_path=dedup_csv_path,
                 enable_redownload=enable_redownload,
@@ -320,6 +327,7 @@ def main():
                 session=session, use_proxy=use_proxy,
                 use_cf_bypass=use_cf_bypass,
                 rclone_inventory=rclone_inventory,
+                rclone_filter=rclone_filter,
                 enable_dedup=enable_dedup,
                 dedup_csv_path=dedup_csv_path,
                 enable_redownload=enable_redownload,
@@ -370,6 +378,7 @@ def main():
                 is_adhoc_mode=custom_url is not None,
                 ban_log_file=ban_log_file,
                 rclone_inventory=rclone_inventory,
+                rclone_filter=rclone_filter,
                 enable_dedup=enable_dedup,
                 dedup_csv_path=dedup_csv_path,
                 enable_redownload=enable_redownload,
@@ -387,6 +396,7 @@ def main():
                 session=session, use_proxy=use_proxy,
                 use_cf_bypass=use_cf_bypass,
                 rclone_inventory=rclone_inventory,
+                rclone_filter=rclone_filter,
                 enable_dedup=enable_dedup,
                 dedup_csv_path=dedup_csv_path,
                 enable_redownload=enable_redownload,
