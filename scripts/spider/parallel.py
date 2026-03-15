@@ -239,7 +239,6 @@ class ProxyWorker(threading.Thread):
 
     def _handle_login_required(self, task: DetailTask):
         """Route a login-required task to the logged-in worker, or login self."""
-        global _logged_in_worker_id
         with _login_lock:
             if _logged_in_worker_id is not None:
                 logged_in_proxy = self.all_workers[_logged_in_worker_id].proxy_name
