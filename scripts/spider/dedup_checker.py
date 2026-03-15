@@ -105,13 +105,13 @@ def load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
         for code, entries in raw.items():
             inventory[code] = [
                 RcloneEntry(
-                    video_code=e.get('video_code', code).upper(),
-                    sensor_category=e.get('sensor_category', ''),
-                    subtitle_category=e.get('subtitle_category', ''),
-                    folder_path=e.get('folder_path', ''),
-                    folder_size=int(e.get('folder_size', 0) or 0),
-                    file_count=int(e.get('file_count', 0) or 0),
-                    scan_datetime=e.get('scan_datetime', ''),
+                    video_code=e.get('VideoCode', e.get('video_code', code)).upper(),
+                    sensor_category=e.get('SensorCategory', e.get('sensor_category', '')),
+                    subtitle_category=e.get('SubtitleCategory', e.get('subtitle_category', '')),
+                    folder_path=e.get('FolderPath', e.get('folder_path', '')),
+                    folder_size=int(e.get('FolderSize', e.get('folder_size', 0)) or 0),
+                    file_count=int(e.get('FileCount', e.get('file_count', 0)) or 0),
+                    scan_datetime=e.get('DateTimeScanned', e.get('scan_datetime', '')),
                 )
                 for e in entries
             ]
@@ -277,9 +277,9 @@ def _load_pending_paths_cache() -> Set[str]:
         _ensure_db()
         from utils.db import db_load_dedup_records
         for r in db_load_dedup_records():
-            is_del = r.get('is_deleted')
+            is_del = r.get('IsDeleted', r.get('is_deleted'))
             if is_del not in (1, True, 'True', '1'):
-                p = r.get('existing_gdrive_path', '')
+                p = r.get('ExistingGdrivePath', r.get('existing_gdrive_path', ''))
                 if p:
                     paths.add(p)
         _pending_paths_cache = paths
@@ -350,9 +350,10 @@ def load_dedup_csv(csv_path: str, from_file_only: bool = False) -> List[Dict[str
         from utils.db import db_load_dedup_records
         rows = db_load_dedup_records()
         for r in rows:
+            r.pop('Id', None)
             r.pop('id', None)
-            r['is_deleted'] = 'True' if r.get('is_deleted') in (1, True, 'True', '1') else 'False'
-            r['existing_folder_size'] = str(r.get('existing_folder_size', 0))
+            r['is_deleted'] = 'True' if r.get('IsDeleted', r.get('is_deleted')) in (1, True, 'True', '1') else 'False'
+            r['existing_folder_size'] = str(r.get('ExistingFolderSize', r.get('existing_folder_size', 0)))
 
     if not rows and use_csv() and csv_path and os.path.exists(csv_path):
         try:
@@ -485,9 +486,18 @@ def export_dedup_db_to_csv(output_path: str) -> int:
         writer = csv.DictWriter(f, fieldnames=DEDUP_FIELDNAMES, extrasaction='ignore')
         writer.writeheader()
         for r in rows:
+            r.pop('Id', None)
             r.pop('id', None)
-            r['is_deleted'] = 'True' if r.get('is_deleted') in (1, True, 'True', '1') else 'False'
-            r['existing_folder_size'] = str(r.get('existing_folder_size', 0))
+            r['video_code'] = r.get('VideoCode', r.get('video_code', ''))
+            r['existing_sensor'] = r.get('ExistingSensor', r.get('existing_sensor', ''))
+            r['existing_subtitle'] = r.get('ExistingSubtitle', r.get('existing_subtitle', ''))
+            r['existing_gdrive_path'] = r.get('ExistingGdrivePath', r.get('existing_gdrive_path', ''))
+            r['existing_folder_size'] = str(r.get('ExistingFolderSize', r.get('existing_folder_size', 0)))
+            r['new_torrent_category'] = r.get('NewTorrentCategory', r.get('new_torrent_category', ''))
+            r['deletion_reason'] = r.get('DeletionReason', r.get('deletion_reason', ''))
+            r['detect_datetime'] = r.get('DateTimeDetected', r.get('detect_datetime', ''))
+            r['is_deleted'] = 'True' if r.get('IsDeleted', r.get('is_deleted')) in (1, True, 'True', '1') else 'False'
+            r['delete_datetime'] = r.get('DateTimeDeleted', r.get('delete_datetime', ''))
             writer.writerow(r)
 
     logger.info(f"Exported {len(rows)} dedup records from DB to {output_path}")

@@ -98,9 +98,11 @@ class ProxyBanManager:
                 init_db()
                 rows = db_load_proxy_bans()
                 for row in rows:
-                    proxy_name = row['proxy_name']
-                    ban_time = datetime.strptime(row['ban_time'], '%Y-%m-%d %H:%M:%S')
-                    unban_time = datetime.strptime(row['unban_time'], '%Y-%m-%d %H:%M:%S')
+                    proxy_name = row.get('ProxyName', row.get('proxy_name', ''))
+                    ban_time = datetime.strptime(
+                        row.get('DateTimeBanned', row.get('ban_time', '')), '%Y-%m-%d %H:%M:%S')
+                    unban_time = datetime.strptime(
+                        row.get('DateTimeUnbanned', row.get('unban_time', '')), '%Y-%m-%d %H:%M:%S')
                     record = ProxyBanRecord(proxy_name, ban_time, unban_time)
                     self.banned_proxies[proxy_name] = record
                 loaded = bool(self.banned_proxies)
