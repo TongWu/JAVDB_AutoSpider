@@ -453,6 +453,8 @@ def _migrate_v5_to_v6(conn):
         conn.execute("DROP TABLE proxy_bans")
         logger.info("Migrated proxy_bans → ProxyBans")
 
+    session_map: dict[int, int] = {}
+
     # ── Step 6: report_sessions → ReportSessions ──
     if _has_table(conn, 'report_sessions'):
         conn.execute("""
@@ -516,7 +518,7 @@ def _migrate_v5_to_v6(conn):
         rows = conn.execute("SELECT * FROM spider_stats ORDER BY id").fetchall()
         for r in rows:
             r = dict(r)
-            new_sid = session_map.get(r['session_id']) if 'session_map' in dir() else None
+            new_sid = session_map.get(r['session_id'])
             if new_sid is None:
                 continue
             conn.execute(
@@ -548,7 +550,7 @@ def _migrate_v5_to_v6(conn):
         rows = conn.execute("SELECT * FROM uploader_stats ORDER BY id").fetchall()
         for r in rows:
             r = dict(r)
-            new_sid = session_map.get(r['session_id']) if 'session_map' in dir() else None
+            new_sid = session_map.get(r['session_id'])
             if new_sid is None:
                 continue
             conn.execute(
@@ -572,7 +574,7 @@ def _migrate_v5_to_v6(conn):
         rows = conn.execute("SELECT * FROM pikpak_stats ORDER BY id").fetchall()
         for r in rows:
             r = dict(r)
-            new_sid = session_map.get(r['session_id']) if 'session_map' in dir() else None
+            new_sid = session_map.get(r['session_id'])
             if new_sid is None:
                 continue
             conn.execute(
