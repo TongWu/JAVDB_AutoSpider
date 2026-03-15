@@ -10,6 +10,9 @@ from utils.history_manager import (
     has_complete_subtitles, should_process_movie,
     get_missing_torrent_types, save_parsed_movie_to_history,
     batch_update_last_visited,
+    check_redownload_upgrade,
+    should_skip_recent_today_release,
+    should_skip_recent_yesterday_release,
 )
 from utils.csv_writer import write_csv
 
@@ -18,6 +21,7 @@ from scripts.spider.fallback import fetch_detail_page_with_fallback
 from scripts.spider.sleep_manager import movie_sleep_mgr
 from scripts.spider.csv_builder import (
     create_csv_row_with_history_filter, check_torrent_status, collect_new_magnet_links,
+    create_redownload_row,
 )
 from scripts.spider.config_loader import BASE_URL, FALLBACK_COOLDOWN
 from scripts.spider.dedup_checker import (
@@ -46,6 +50,8 @@ def process_phase_entries_sequential(
     rclone_inventory: dict = None,
     enable_dedup: bool = False,
     dedup_csv_path: str = '',
+    enable_redownload: bool = False,
+    redownload_threshold: float = 0.30,
 ) -> dict:
     """Process detail entries sequentially (single-threaded mode).
 
@@ -72,12 +78,24 @@ def process_phase_entries_sequential(
         state.parsed_links.add(href)
 
         if has_complete_subtitles(href, history_data):
-            logger.info(
-                f"[{i}/{total_entries}] [Page {page_num}] "
-                f"Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history"
-            )
-            skipped_history += 1
-            continue
+            skip_complete = True
+            if enable_redownload and not is_adhoc_mode:
+                is_today = entry.get('is_today_release', False)
+                is_yesterday = entry.get('is_yesterday_release', False)
+                if not (should_skip_recent_today_release(href, history_data, is_today)
+                        or should_skip_recent_yesterday_release(href, history_data, is_yesterday)):
+                    skip_complete = False
+                    logger.debug(
+                        f"[{i}/{total_entries}] [Page {page_num}] "
+                        f"{entry['video_code']} has complete subtitles but re-download check enabled"
+                    )
+            if skip_complete:
+                logger.info(
+                    f"[{i}/{total_entries}] [Page {page_num}] "
+                    f"Skipping {entry['video_code']} - already has subtitle and hacked_subtitle in history"
+                )
+                skipped_history += 1
+                continue
 
         if rclone_inventory and should_skip_from_rclone(entry.get('video_code', ''), rclone_inventory, enable_dedup):
             logger.info(
@@ -121,14 +139,24 @@ def process_phase_entries_sequential(
 
         should_process, history_torrent_types = should_process_movie(href, history_data, phase, magnet_links)
 
+        redownload_cats = []
         if not should_process:
-            if history_torrent_types and 'hacked_subtitle' in history_torrent_types and 'subtitle' in history_torrent_types:
-                logger.debug(f"[{entry_index}] [Page {page_num}] Skipping based on history rules (history types: {history_torrent_types})")
-            else:
-                logger.debug(f"[{entry_index}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
-            skipped_history += 1
-            pending_movie_sleep = True
-            continue
+            if enable_redownload and not is_adhoc_mode:
+                is_today = entry.get('is_today_release', False)
+                is_yesterday = entry.get('is_yesterday_release', False)
+                if not (should_skip_recent_today_release(href, history_data, is_today)
+                        or should_skip_recent_yesterday_release(href, history_data, is_yesterday)):
+                    redownload_cats = check_redownload_upgrade(
+                        href, history_data, magnet_links, redownload_threshold,
+                    )
+            if not redownload_cats:
+                if history_torrent_types and 'hacked_subtitle' in history_torrent_types and 'subtitle' in history_torrent_types:
+                    logger.debug(f"[{entry_index}] [Page {page_num}] Skipping based on history rules (history types: {history_torrent_types})")
+                else:
+                    logger.debug(f"[{entry_index}] [Page {page_num}] Should process, missing preferred types: {get_missing_torrent_types(history_torrent_types, [])}")
+                skipped_history += 1
+                pending_movie_sleep = True
+                continue
 
         # Dedup upgrade detection against rclone inventory
         if enable_dedup and rclone_inventory and entry.get('video_code'):
@@ -147,7 +175,10 @@ def process_phase_entries_sequential(
                         append_dedup_record(dedup_csv_path, rec)
                     logger.info(f"[{entry_index}] DEDUP: {rec.video_code} – {rec.deletion_reason}")
 
-        row = create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet_links, history_data)
+        if redownload_cats:
+            row = create_redownload_row(href, entry, page_num, actor_info, magnet_links, redownload_cats)
+        else:
+            row = create_csv_row_with_history_filter(href, entry, page_num, actor_info, magnet_links, history_data)
         row['video_code'] = entry['video_code']
 
         _has_any, has_new_torrents, should_include_in_report = check_torrent_status(row)
@@ -157,9 +188,12 @@ def process_phase_entries_sequential(
             phase_rows.append(row)
 
             if use_history_for_saving and not dry_run and has_new_torrents:
-                new_magnet_links = collect_new_magnet_links(row, magnet_links)
+                new_magnet_links, new_sizes = collect_new_magnet_links(row, magnet_links)
                 if new_magnet_links:
-                    save_parsed_movie_to_history(history_file, href, phase, entry['video_code'], new_magnet_links)
+                    save_parsed_movie_to_history(
+                        history_file, href, phase, entry['video_code'],
+                        new_magnet_links, size_links=new_sizes,
+                    )
         else:
             no_new_torrents += 1
 
