@@ -17,6 +17,7 @@ import os
 import sys
 import re
 import shutil
+import html as html_module
 import argparse
 from datetime import datetime
 from email.message import EmailMessage
@@ -442,7 +443,8 @@ def extract_spider_statistics(log_path):
     stats = {
         'phase1': {'discovered': None, 'processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0},
         'phase2': {'discovered': None, 'processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0},
-        'overall': {'total_discovered': None, 'successfully_processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0}
+        'overall': {'total_discovered': None, 'successfully_processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0},
+        'failed_movies': [],
     }
     
     if not os.path.exists(log_path):
@@ -623,7 +625,15 @@ def extract_spider_statistics(log_path):
                 stats['overall']['no_new_torrents'] +
                 stats['overall']['failed']
             )
-        
+
+        # Parse failed movie details from log lines like:
+        #   [1/50] [Page 1] Failed: ABC-123 (https://javdb.com/v/xxx)
+        for m in re.finditer(r'\[Page (\d+)\] Failed: (\S+) \((https?://\S+)\)', content):
+            stats['failed_movies'].append({
+                'video_code': m.group(2),
+                'url': m.group(3),
+            })
+
         return stats
         
     except Exception as e:
@@ -830,14 +840,36 @@ def extract_proxy_ban_summary(html_files):
     return None
 
 
-def extract_dedup_statistics(dedup_csv_path):
+def _is_dedup_enabled(log_path):
+    """Check spider log for 'DEDUP MODE: Enabled' to determine if dedup ran."""
+    if not os.path.exists(log_path):
+        return False
+    try:
+        with open(log_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if 'DEDUP MODE: Enabled' in line:
+                    return True
+                if 'DEDUP MODE: Disabled' in line:
+                    return False
+    except Exception:
+        pass
+    return False
+
+
+def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
     """Extract dedup statistics for the email report.
 
     Reads from the SQLite DB first (authoritative source).  Falls back to
     the CSV file at *dedup_csv_path* when the DB is unavailable or empty.
 
+    Args:
+        dedup_csv_path: Path to the dedup CSV file (fallback source).
+        session_start_time: ISO datetime string (e.g. '2026-03-15 00:05:00').
+            When provided, only records with detect_datetime >= this value
+            are included (current-session scope).  Falls back to today's date.
+
     Returns a dict with keys:
-        detected, deleted, failed, cumulative, deleted_items (list of summary strings)
+        detected, deleted, failed, deleted_items (list of summary strings)
     Returns None when no data exists.
     """
     rows = None
@@ -879,22 +911,28 @@ def extract_dedup_statistics(dedup_csv_path):
     if not rows:
         return None
 
-    now_date = datetime.now().strftime('%Y-%m-%d')
-    detected_today = sum(1 for r in rows if r.get('detect_datetime', '').startswith(now_date))
-    deleted_today_items = []
+    # Determine the cutoff for "current session" records
+    if session_start_time:
+        cutoff = session_start_time
+    else:
+        cutoff = datetime.now().strftime('%Y-%m-%d')
+
+    detected_session = sum(1 for r in rows if r.get('detect_datetime', '') >= cutoff)
+    deleted_session_items = []
     for r in rows:
-        if r.get('is_deleted', 'False') == 'True' and r.get('delete_datetime', '').startswith(now_date):
-            deleted_today_items.append(
+        if (r.get('detect_datetime', '') >= cutoff
+                and r.get('is_deleted', 'False') == 'True'
+                and r.get('delete_datetime', '') >= cutoff):
+            deleted_session_items.append(
                 f"  • {r.get('video_code', '?')} [{r.get('existing_sensor', '?')}-{r.get('existing_subtitle', '?')}] "
                 f"-> {r.get('deletion_reason', '?')}"
             )
 
     return {
-        'detected': detected_today,
-        'deleted': len(deleted_today_items),
-        'failed': detected_today - len(deleted_today_items) if detected_today > len(deleted_today_items) else 0,
-        'cumulative': len(rows),
-        'deleted_items': deleted_today_items,
+        'detected': detected_session,
+        'deleted': len(deleted_session_items),
+        'failed': detected_session - len(deleted_session_items) if detected_session > len(deleted_session_items) else 0,
+        'deleted_items': deleted_session_items,
     }
 
 
@@ -940,37 +978,46 @@ JavDB Pipeline Report ({mode_display})
         p1_total = spider_stats['phase1']['processed'] + spider_stats['phase1']['skipped_history'] + spider_stats['phase1']['failed'] + spider_stats['phase1'].get('no_new_torrents', 0)
         p2_total = spider_stats['phase2']['processed'] + spider_stats['phase2']['skipped_history'] + spider_stats['phase2']['failed'] + spider_stats['phase2'].get('no_new_torrents', 0)
         overall_total = spider_stats['overall']['successfully_processed'] + spider_stats['overall']['skipped_history'] + spider_stats['overall']['failed'] + spider_stats['overall'].get('no_new_torrents', 0)
-        
+
         # Use None check instead of `or` to handle 0 correctly
-        # `or` treats 0 as falsy and would incorrectly fall back to calculated total
         p1_discovered = spider_stats['phase1']['discovered'] if spider_stats['phase1']['discovered'] is not None else p1_total
         p2_discovered = spider_stats['phase2']['discovered'] if spider_stats['phase2']['discovered'] is not None else p2_total
         overall_discovered = spider_stats['overall']['total_discovered'] if spider_stats['overall']['total_discovered'] is not None else overall_total
-        
-        sections.append(f"""
+
+        p1_proc = spider_stats['phase1']['processed']
+        p2_proc = spider_stats['phase2']['processed']
+        p1_skip = spider_stats['phase1']['skipped_history']
+        p2_skip = spider_stats['phase2']['skipped_history']
+        p1_nonew = spider_stats['phase1'].get('no_new_torrents', 0)
+        p2_nonew = spider_stats['phase2'].get('no_new_torrents', 0)
+        p1_fail = spider_stats['phase1']['failed']
+        p2_fail = spider_stats['phase2']['failed']
+
+        overall_proc = spider_stats['overall']['successfully_processed']
+        overall_skip = spider_stats['overall']['skipped_history']
+        overall_nonew = spider_stats['overall'].get('no_new_torrents', 0)
+        overall_fail = spider_stats['overall']['failed']
+
+        spider_block = f"""
 📊 SPIDER STATISTICS (Movies)
 ───────────────────────────────
 
-Phase 1 (Subtitle + Today/Yesterday)
-  Discovered: {p1_discovered}
-  Processed:  {spider_stats['phase1']['processed']}
-  Skipped (History): {spider_stats['phase1']['skipped_history']}
-  No New Torrents: {spider_stats['phase1'].get('no_new_torrents', 0)}
-  Failed: {spider_stats['phase1']['failed']}
+  Discovered:        {overall_discovered} (P1: {p1_discovered}, P2: {p2_discovered})
+  Processed:         {overall_proc} (P1: {p1_proc}, P2: {p2_proc})
+  Skipped (History): {overall_skip} (P1: {p1_skip}, P2: {p2_skip})
+  No New Torrents:   {overall_nonew} (P1: {p1_nonew}, P2: {p2_nonew})
+  Failed:            {overall_fail} (P1: {p1_fail}, P2: {p2_fail})"""
 
-Phase 2 (Rate>4.0, Comments>85)
-  Discovered: {p2_discovered}
-  Processed:  {spider_stats['phase2']['processed']}
-  Skipped (History): {spider_stats['phase2']['skipped_history']}
-  No New Torrents: {spider_stats['phase2'].get('no_new_torrents', 0)}
-  Failed: {spider_stats['phase2']['failed']}
+        failed_movies = spider_stats.get('failed_movies') or []
+        if failed_movies:
+            lines = ["\n\n  Failed Movies:"]
+            for fm in failed_movies:
+                vc = fm.get('video_code', '?')
+                url = fm.get('url', '')
+                lines.append(f"    • {vc}  {url}")
+            spider_block += "\n".join(lines)
 
-Overall Summary
-  Total Discovered: {overall_discovered}
-  Processed:  {spider_stats['overall']['successfully_processed']}
-  Skipped (History): {spider_stats['overall']['skipped_history']}
-  No New Torrents: {spider_stats['overall'].get('no_new_torrents', 0)}
-  Failed: {spider_stats['overall']['failed']}""")
+        sections.append(spider_block)
     
     # Uploader section
     if show_uploader:
@@ -1017,7 +1064,6 @@ Cleanup (>{pikpak_stats['threshold_days']} days)
 Detected for Dedup: {dedup_stats['detected']}
 Successfully Deleted: {dedup_stats['deleted']}
 Failed: {dedup_stats['failed']}
-Cumulative Records: {dedup_stats['cumulative']}
 
 Deleted This Run:
 {deleted_list}""")
@@ -1069,6 +1115,22 @@ def convert_log_to_txt(log_path):
     return txt_path
 
 
+def _plain_to_html(text):
+    """Convert plain-text report body to HTML with clickable URLs."""
+    escaped = html_module.escape(text)
+    linked = re.sub(
+        r'(https?://\S+)',
+        r'<a href="\1">\1</a>',
+        escaped,
+    )
+    return (
+        '<html><body>'
+        '<pre style="font-family:monospace;white-space:pre-wrap;">'
+        f'{linked}'
+        '</pre></body></html>'
+    )
+
+
 def send_email(subject, body, attachments=None, dry_run=False):
     """Send email with attachments"""
     if dry_run:
@@ -1083,12 +1145,13 @@ def send_email(subject, body, attachments=None, dry_run=False):
             logger.info(f"Attachments: {attachments}")
         logger.info("=" * 60)
         return True
-    
+
     msg = EmailMessage()
     msg['Subject'] = subject
     msg['From'] = EMAIL_FROM
     msg['To'] = EMAIL_TO
     msg.set_content(body)
+    msg.add_alternative(_plain_to_html(body), subtype='html')
 
     if attachments:
         for file_path in attachments:
@@ -1260,6 +1323,15 @@ def main():
                 'failed': _db_spider_stats.get('TotalFailed', _db_spider_stats.get('total_failed', 0)),
             },
         }
+        import json as _json
+        _fm_raw = _db_spider_stats.get('FailedMovies', '')
+        if _fm_raw:
+            try:
+                spider_stats['failed_movies'] = _json.loads(_fm_raw)
+            except (ValueError, TypeError):
+                spider_stats['failed_movies'] = []
+        else:
+            spider_stats['failed_movies'] = []
         logger.info("Spider stats loaded from SQLite")
     else:
         spider_stats = extract_spider_statistics(SPIDER_LOG_FILE) if spider_log_exists else None
@@ -1293,11 +1365,28 @@ def main():
         pikpak_stats = extract_pikpak_statistics(PIKPAK_LOG_FILE) if pikpak_log_exists else None
     ban_summary = get_proxy_ban_summary()
 
-    # Extract dedup statistics (DB first, CSV fallback)
+    # Extract dedup statistics (only when dedup was enabled this session)
     dedup_csv_path = os.path.join(_EMAIL_REPORTS_DIR, 'dedup_history.csv')
-    dedup_stats = extract_dedup_statistics(dedup_csv_path)
-    if dedup_stats:
-        logger.info(f"Dedup stats: detected={dedup_stats['detected']}, deleted={dedup_stats['deleted']}, cumulative={dedup_stats['cumulative']}")
+    dedup_enabled = _is_dedup_enabled(SPIDER_LOG_FILE)
+    dedup_stats = None
+    if dedup_enabled:
+        session_start_time = None
+        if _sid is not None:
+            try:
+                from utils.db import get_db, REPORTS_DB_PATH
+                with get_db(REPORTS_DB_PATH) as _conn:
+                    _row = _conn.execute(
+                        "SELECT DateTimeCreated FROM ReportSessions WHERE Id = ?", (_sid,)
+                    ).fetchone()
+                    if _row:
+                        session_start_time = _row[0]
+            except Exception as e:
+                logger.debug(f"Could not fetch session start time: {e}")
+        dedup_stats = extract_dedup_statistics(dedup_csv_path, session_start_time=session_start_time)
+        if dedup_stats:
+            logger.info(f"Dedup stats: detected={dedup_stats['detected']}, deleted={dedup_stats['deleted']}")
+    else:
+        logger.info("Dedup was not enabled this session — skipping dedup section")
     
     # Determine pipeline mode and CSV path
     mode = args.mode
@@ -1346,8 +1435,8 @@ def main():
     if os.path.exists(csv_path):
         attachments.insert(0, csv_path)
     
-    # Add dedup.csv if exists
-    if os.path.exists(dedup_csv_path):
+    # Add dedup.csv if dedup was enabled and file exists
+    if dedup_enabled and os.path.exists(dedup_csv_path):
         attachments.append(dedup_csv_path)
 
     # Add proxy ban HTML files to attachments
@@ -1359,7 +1448,8 @@ def main():
     default_spider_stats = {
         'phase1': {'discovered': 0, 'processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0},
         'phase2': {'discovered': 0, 'processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0},
-        'overall': {'total_discovered': 0, 'successfully_processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0}
+        'overall': {'total_discovered': 0, 'successfully_processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0},
+        'failed_movies': [],
     }
     default_uploader_stats = {
         'total': 0, 'success': 0, 'failed': 0, 'hacked_sub': 0,
