@@ -18,6 +18,10 @@ const CSV_HEADER: &[&str] = &[
     "hacked_no_subtitle",
     "subtitle",
     "no_subtitle",
+    "size_hacked_subtitle",
+    "size_hacked_no_subtitle",
+    "size_subtitle",
+    "size_no_subtitle",
 ];
 
 const TORRENT_CATEGORIES: &[&str] = &[
@@ -131,6 +135,7 @@ fn normalize_record(record: &mut Record) {
     // Ensure all required columns exist
     for cat in TORRENT_CATEGORIES {
         record.entry(cat.to_string()).or_default();
+        record.entry(format!("size_{}", cat)).or_default();
     }
 }
 
@@ -196,6 +201,8 @@ fn build_history_entry(record: &Record) -> Record {
 
     for cat in TORRENT_CATEGORIES {
         entry.insert(cat.to_string(), record.get(*cat).cloned().unwrap_or_default());
+        let size_key = format!("size_{}", cat);
+        entry.insert(size_key.clone(), record.get(&size_key).cloned().unwrap_or_default());
     }
     entry
 }
@@ -388,7 +395,7 @@ fn maintain_history_limit_impl(history_file: &str, max_records: usize) -> Result
 }
 
 #[pyfunction]
-#[pyo3(signature = (history_file, href, phase, video_code, magnet_links=None))]
+#[pyo3(signature = (history_file, href, phase, video_code, magnet_links=None, size_links=None, file_count_links=None, resolution_links=None))]
 pub fn save_parsed_movie_to_history(
     py: Python<'_>,
     history_file: &str,
@@ -396,6 +403,9 @@ pub fn save_parsed_movie_to_history(
     phase: &Bound<'_, pyo3::types::PyAny>,
     video_code: &str,
     magnet_links: Option<HashMap<String, String>>,
+    size_links: Option<HashMap<String, String>>,
+    #[allow(unused)] file_count_links: Option<HashMap<String, i64>>,
+    #[allow(unused)] resolution_links: Option<HashMap<String, String>>,
 ) -> PyResult<()> {
     let phase_str = phase.str()?.to_string();
     let links = magnet_links.unwrap_or_else(|| {
@@ -403,9 +413,10 @@ pub fn save_parsed_movie_to_history(
         m.insert("no_subtitle".into(), String::new());
         m
     });
+    let sizes = size_links.unwrap_or_default();
 
     py.allow_threads(|| {
-        if let Err(e) = save_history_impl(history_file, href, &phase_str, video_code, &links) {
+        if let Err(e) = save_history_impl(history_file, href, &phase_str, video_code, &links, &sizes) {
             error!("Error writing to history file: {}", e);
         }
     });
@@ -418,6 +429,7 @@ fn save_history_impl(
     phase: &str,
     video_code: &str,
     magnet_links: &HashMap<String, String>,
+    size_links: &HashMap<String, String>,
 ) -> Result<(), String> {
     let current_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let current_date = Local::now().format("%Y-%m-%d").to_string();
@@ -431,7 +443,7 @@ fn save_history_impl(
         for mut row in existing {
             if row.get("href").map(|s| s.as_str()) == Some(href) {
                 existing_count += 1;
-                update_existing_record(&mut row, phase, magnet_links, &current_time, &current_date);
+                update_existing_record(&mut row, phase, magnet_links, size_links, &current_time, &current_date);
                 apply_priority_cleanup(&mut row);
                 updated_record = Some(row);
             } else {
@@ -441,7 +453,7 @@ fn save_history_impl(
     }
 
     if existing_count == 0 {
-        let new_rec = create_new_record(href, phase, video_code, magnet_links, &current_time, &current_date);
+        let new_rec = create_new_record(href, phase, video_code, magnet_links, size_links, &current_time, &current_date);
         records.insert(0, new_rec);
         debug!("Added new record for {} with magnet links", href);
     } else {
@@ -474,6 +486,7 @@ fn update_existing_record(
     row: &mut Record,
     phase: &str,
     magnet_links: &HashMap<String, String>,
+    size_links: &HashMap<String, String>,
     current_time: &str,
     current_date: &str,
 ) {
@@ -532,9 +545,11 @@ fn update_existing_record(
             if let Some(od) = old_date {
                 if current_date > od.as_str() {
                     row.insert(torrent_type.to_string(), format!("[{}]{}", current_date, magnet_link));
+                    row.insert(format!("size_{}", torrent_type), size_links.get(*torrent_type).cloned().unwrap_or_default());
                 }
             } else {
                 row.insert(torrent_type.to_string(), format!("[{}]{}", current_date, magnet_link));
+                row.insert(format!("size_{}", torrent_type), size_links.get(*torrent_type).cloned().unwrap_or_default());
             }
         }
 
@@ -549,6 +564,7 @@ fn create_new_record(
     phase: &str,
     video_code: &str,
     magnet_links: &HashMap<String, String>,
+    size_links: &HashMap<String, String>,
     current_time: &str,
     current_date: &str,
 ) -> Record {
@@ -564,8 +580,10 @@ fn create_new_record(
         let link = magnet_links.get(*cat).cloned().unwrap_or_default();
         if !link.is_empty() {
             rec.insert(cat.to_string(), format!("[{}]{}", current_date, link));
+            rec.insert(format!("size_{}", cat), size_links.get(*cat).cloned().unwrap_or_default());
         } else {
             rec.insert(cat.to_string(), String::new());
+            rec.insert(format!("size_{}", cat), String::new());
         }
     }
 
@@ -580,6 +598,7 @@ fn apply_priority_cleanup(record: &mut Record) {
         .unwrap_or(false)
     {
         record.insert("hacked_no_subtitle".into(), String::new());
+        record.insert("size_hacked_no_subtitle".into(), String::new());
     }
     if record
         .get("subtitle")
@@ -587,6 +606,7 @@ fn apply_priority_cleanup(record: &mut Record) {
         .unwrap_or(false)
     {
         record.insert("no_subtitle".into(), String::new());
+        record.insert("size_no_subtitle".into(), String::new());
     }
 }
 
@@ -1116,7 +1136,8 @@ pub fn mark_torrent_as_downloaded(
         format!("magnet:?dn=downloaded&vc={}", video_code),
     );
 
-    let result = py.allow_threads(|| save_history_impl(history_file, href, "2", video_code, &links));
+    let empty_sizes = HashMap::new();
+    let result = py.allow_threads(|| save_history_impl(history_file, href, "2", video_code, &links, &empty_sizes));
 
     match result {
         Ok(()) => {
