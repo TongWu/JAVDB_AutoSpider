@@ -16,6 +16,8 @@ Usage:
     python3 migration/csv_to_sqlite.py [--reports-dir reports] [--db-path reports/javdb_autospider.db] [--dry-run] [--verify]
 """
 
+from __future__ import annotations
+
 import argparse
 import csv
 import os
