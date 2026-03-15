@@ -655,11 +655,24 @@ def _migrate_single_to_split():
     if not _is_valid_sqlite(old_path):
         return False
 
-    # All three target DBs must not yet exist
-    if (os.path.exists(HISTORY_DB_PATH) or
-            os.path.exists(REPORTS_DB_PATH) or
-            os.path.exists(OPERATIONS_DB_PATH)):
+    split_exists = [
+        os.path.exists(HISTORY_DB_PATH),
+        os.path.exists(REPORTS_DB_PATH),
+        os.path.exists(OPERATIONS_DB_PATH),
+    ]
+    if all(split_exists):
         return False
+    if any(split_exists):
+        # Partial split detected — clean up incomplete files and re-migrate
+        logger.warning(
+            "Partial DB split detected (legacy DB still present but only "
+            "some split DBs exist). Removing incomplete split files and "
+            "re-running migration ..."
+        )
+        for p in (HISTORY_DB_PATH, REPORTS_DB_PATH, OPERATIONS_DB_PATH):
+            if os.path.exists(p):
+                os.remove(p)
+                logger.info(f"  Removed partial split file: {p}")
 
     # Close any thread-local connections to the old DB before attaching it
     conns: dict = getattr(_local, 'conns', None)
