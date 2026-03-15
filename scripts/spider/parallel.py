@@ -217,7 +217,10 @@ class ProxyWorker(threading.Thread):
         global _logged_in_worker_id
         with _login_lock:
             if state.login_attempted:
-                return state.refreshed_session_cookie is not None
+                if state.refreshed_session_cookie is not None:
+                    self._handler.config.javdb_session_cookie = state.refreshed_session_cookie
+                    return True
+                return False
 
             proxy_for_login = {
                 'http': self.proxy_config.get('http'),
@@ -239,6 +242,7 @@ class ProxyWorker(threading.Thread):
 
     def _handle_login_required(self, task: DetailTask):
         """Route a login-required task to the logged-in worker, or login self."""
+        global _logged_in_worker_id
         with _login_lock:
             if _logged_in_worker_id is not None:
                 logged_in_proxy = self.all_workers[_logged_in_worker_id].proxy_name
@@ -257,7 +261,7 @@ class ProxyWorker(threading.Thread):
                     f"[{self.proxy_name}] Logged in successfully, "
                     f"becoming the logged-in worker for login-required pages"
                 )
-                _requeue_front(self.detail_queue, task)
+                self.login_queue.put(task)
                 return
 
         logger.warning(
