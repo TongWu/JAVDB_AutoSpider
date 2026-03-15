@@ -185,7 +185,7 @@ class TestDedupIO:
         append_dedup_record('', record)
         rows = load_dedup_csv('')
         assert len(rows) == 1
-        assert rows[0]['video_code'] == 'ABC-123'
+        assert rows[0].get('VideoCode', rows[0].get('video_code')) == 'ABC-123'
 
     def test_append_preserves_existing(self):
         r1 = DedupRecord('A-001', 's', 'sub', 'p1', 100, 'cat', 'reason', 't', 'False', '')
@@ -200,8 +200,8 @@ class TestDedupIO:
         append_dedup_record('', r1)
 
         rows = load_dedup_csv('')
-        rows[0]['is_deleted'] = 'True'
-        rows[0]['delete_datetime'] = '2026-01-02 00:00:00'
+        rows[0]['IsDeleted'] = 1
+        rows[0]['DateTimeDeleted'] = '2026-01-02 00:00:00'
         save_dedup_csv('', rows)
 
         reloaded = load_dedup_csv('')
@@ -248,7 +248,7 @@ class TestMarkRecordsDeleted:
         assert updated == 1
         rows = load_dedup_csv('')
         assert rows[0]['is_deleted'] == 'True'
-        assert rows[0]['delete_datetime'] == '2026-01-02 00:00:00'
+        assert rows[0].get('DateTimeDeleted', rows[0].get('delete_datetime')) == '2026-01-02 00:00:00'
 
     def test_idempotent(self):
         r = DedupRecord('A-001', 's', 'sub', 'gdrive:/p1', 100, 'cat', 'r', 't', 'False', '')
@@ -291,7 +291,7 @@ class TestCleanupDeletedRecords:
         ])
         removed = cleanup_deleted_records('', older_than_days=30)
         assert removed == 1
-        codes = {r['video_code'] for r in load_dedup_csv('')}
+        codes = {r.get('VideoCode', r.get('video_code')) for r in load_dedup_csv('')}
         assert 'OLD' not in codes
         assert 'NEW' in codes
         assert 'PENDING' in codes
@@ -304,7 +304,7 @@ class TestCleanupDeletedRecords:
         mark_records_deleted(csv_path, [('gdrive:/old', '2020-01-01 00:00:00')])
         cleanup_deleted_records(csv_path, older_than_days=30)
         rows = load_dedup_csv('')
-        assert not any(r['video_code'] == 'OLD' for r in rows)
+        assert not any(r.get('VideoCode', r.get('video_code')) == 'OLD' for r in rows)
         assert not os.path.exists(csv_path)
 
     def test_zero_retention(self):
@@ -326,7 +326,7 @@ class TestStorageModeDb:
         append_dedup_record('/nonexistent.csv', r)
         rows = load_dedup_csv('/nonexistent.csv')
         assert len(rows) == 1
-        assert rows[0]['video_code'] == 'DB-001'
+        assert rows[0].get('VideoCode', rows[0].get('video_code')) == 'DB-001'
 
     def test_inventory_reads_sqlite(self, storage_mode_db):
         _seed_inventory([_inventory_row('DB-INV')])
@@ -343,7 +343,7 @@ class TestStorageModeCsv:
         append_dedup_record(csv_path, r)
         # DB should still be written (dedup forces DB init)
         rows = db_mod.db_load_dedup_records()
-        assert any(row['video_code'] == 'CSV-001' for row in rows)
+        assert any(row.get('VideoCode', row.get('video_code')) == 'CSV-001' for row in rows)
         # CSV is no longer written as a mirror
         assert not os.path.exists(csv_path)
 
@@ -369,7 +369,7 @@ class TestStorageModeDuo:
         r = DedupRecord('DUO-001', 's', 'sub', 'p', 100, 'cat', 'reason', 't', 'False', '')
         append_dedup_record(csv_path, r)
         rows_sqlite = db_mod.db_load_dedup_records()
-        assert any(row['video_code'] == 'DUO-001' for row in rows_sqlite)
+        assert any(row.get('VideoCode', row.get('video_code')) == 'DUO-001' for row in rows_sqlite)
         assert not os.path.exists(csv_path)
 
 
