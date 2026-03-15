@@ -841,19 +841,21 @@ def extract_proxy_ban_summary(html_files):
 
 
 def _is_dedup_enabled(log_path):
-    """Check spider log for 'DEDUP MODE: Enabled' to determine if dedup ran."""
+    """Check spider log for the last 'DEDUP MODE' marker to determine if dedup ran."""
     if not os.path.exists(log_path):
         return False
     try:
+        last_enabled = None
         with open(log_path, 'r', encoding='utf-8') as f:
             for line in f:
                 if 'DEDUP MODE: Enabled' in line:
-                    return True
-                if 'DEDUP MODE: Disabled' in line:
-                    return False
-    except Exception:
-        pass
-    return False
+                    last_enabled = True
+                elif 'DEDUP MODE: Disabled' in line:
+                    last_enabled = False
+        return last_enabled if last_enabled is not None else False
+    except Exception as e:
+        logger.debug(f"Could not read spider log for dedup status: {e}")
+        return False
 
 
 def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
