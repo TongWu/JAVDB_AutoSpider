@@ -417,7 +417,7 @@ def main():
     # Save spider stats and end_page to SQLite (when session exists)
     if _session_id is not None:
         try:
-            from utils.db import db_save_spider_stats, get_db
+            from utils.db import db_save_spider_stats, get_db, REPORTS_DB_PATH
             p1_discovered = len(all_index_results_phase1) if phase_mode in ('1', 'all') else 0
             p1_processed = len(phase1_rows)
             _p1 = p1_result if 'p1_result' in locals() else {}
@@ -447,7 +447,7 @@ def main():
 
             last_page = idx_result.get('last_valid_page')
             if last_page is not None:
-                with get_db() as conn:
+                with get_db(REPORTS_DB_PATH) as conn:
                     conn.execute("UPDATE ReportSessions SET EndPage=? WHERE Id=?", (last_page, _session_id))
         except Exception as e:
             logger.warning(f"Failed to save spider stats: {e}")
