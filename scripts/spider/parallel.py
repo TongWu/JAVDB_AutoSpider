@@ -219,6 +219,7 @@ class ProxyWorker(threading.Thread):
             if state.login_attempted:
                 if state.refreshed_session_cookie is not None:
                     self._handler.config.javdb_session_cookie = state.refreshed_session_cookie
+                    _logged_in_worker_id = self.worker_id
                     return True
                 return False
 
