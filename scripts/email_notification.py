@@ -856,9 +856,9 @@ def extract_dedup_statistics(dedup_csv_path):
                         'video_code': r.get('VideoCode', r.get('video_code', '')),
                         'existing_sensor': r.get('ExistingSensor', r.get('existing_sensor', '')),
                         'existing_subtitle': r.get('ExistingSubtitle', r.get('existing_subtitle', '')),
-                        'detect_datetime': r.get('DateTimeDetected', r.get('detect_datetime', '')),
+                        'detect_datetime': r.get('DateTimeDetected') or r.get('detect_datetime') or '',
                         'is_deleted': 'True' if r.get('IsDeleted', r.get('is_deleted')) in (1, True, 'True', '1') else 'False',
-                        'delete_datetime': r.get('DateTimeDeleted', r.get('delete_datetime', '')),
+                        'delete_datetime': r.get('DateTimeDeleted') or r.get('delete_datetime') or '',
                         'deletion_reason': r.get('DeletionReason', r.get('deletion_reason', '')),
                     })
     except Exception as e:
