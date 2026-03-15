@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 _REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
 DB_PATH = cfg('SQLITE_DB_PATH', os.path.join(_REPORTS_DIR, 'javdb_autospider.db'))
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # ── Connection management ────────────────────────────────────────────────
 
@@ -109,7 +109,11 @@ CREATE TABLE IF NOT EXISTS parsed_movies_history (
     hacked_subtitle TEXT DEFAULT '',
     hacked_no_subtitle TEXT DEFAULT '',
     subtitle TEXT DEFAULT '',
-    no_subtitle TEXT DEFAULT ''
+    no_subtitle TEXT DEFAULT '',
+    size_hacked_subtitle TEXT DEFAULT '',
+    size_hacked_no_subtitle TEXT DEFAULT '',
+    size_subtitle TEXT DEFAULT '',
+    size_no_subtitle TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_history_video_code ON parsed_movies_history(video_code);
 CREATE INDEX IF NOT EXISTS idx_history_phase ON parsed_movies_history(phase);
@@ -311,6 +315,45 @@ def init_db(db_path: Optional[str] = None, *, force: bool = False):
                     "ON dedup_records(existing_gdrive_path) "
                     "WHERE is_deleted = 0 AND existing_gdrive_path != ''"
                 )
+            if current < 5:
+                for col in (
+                    'size_hacked_subtitle', 'size_hacked_no_subtitle',
+                    'size_subtitle', 'size_no_subtitle',
+                ):
+                    try:
+                        conn.execute(
+                            f"ALTER TABLE parsed_movies_history ADD COLUMN {col} TEXT DEFAULT ''"
+                        )
+                    except sqlite3.OperationalError:
+                        pass
+                conn.execute("""
+                    UPDATE parsed_movies_history SET
+                        size_hacked_subtitle = COALESCE((
+                            SELECT r.size_hacked_subtitle FROM report_rows r
+                            WHERE r.href = parsed_movies_history.href
+                            ORDER BY r.id DESC LIMIT 1
+                        ), ''),
+                        size_hacked_no_subtitle = COALESCE((
+                            SELECT r.size_hacked_no_subtitle FROM report_rows r
+                            WHERE r.href = parsed_movies_history.href
+                            ORDER BY r.id DESC LIMIT 1
+                        ), ''),
+                        size_subtitle = COALESCE((
+                            SELECT r.size_subtitle FROM report_rows r
+                            WHERE r.href = parsed_movies_history.href
+                            ORDER BY r.id DESC LIMIT 1
+                        ), ''),
+                        size_no_subtitle = COALESCE((
+                            SELECT r.size_no_subtitle FROM report_rows r
+                            WHERE r.href = parsed_movies_history.href
+                            ORDER BY r.id DESC LIMIT 1
+                        ), '')
+                    WHERE EXISTS (
+                        SELECT 1 FROM report_rows r
+                        WHERE r.href = parsed_movies_history.href
+                    )
+                """)
+                logger.info("Migrated parsed_movies_history: added size columns and backfilled from report_rows")
             if current < SCHEMA_VERSION:
                 conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
         logger.debug(f"Database initialised at {db_path or DB_PATH} (schema v{SCHEMA_VERSION})")
@@ -348,6 +391,10 @@ def db_load_history(db_path: Optional[str] = None, phase: Optional[int] = None) 
             'hacked_no_subtitle': r.get('hacked_no_subtitle', ''),
             'subtitle': r.get('subtitle', ''),
             'no_subtitle': r.get('no_subtitle', ''),
+            'size_hacked_subtitle': r.get('size_hacked_subtitle', ''),
+            'size_hacked_no_subtitle': r.get('size_hacked_no_subtitle', ''),
+            'size_subtitle': r.get('size_subtitle', ''),
+            'size_no_subtitle': r.get('size_no_subtitle', ''),
         }
     return history
 
@@ -357,14 +404,19 @@ def db_upsert_history(
     phase: int,
     video_code: str,
     magnet_links: Optional[Dict[str, str]] = None,
+    size_links: Optional[Dict[str, str]] = None,
     db_path: Optional[str] = None,
 ) -> None:
     """Insert or update a single history record (replaces CSV full-rewrite)."""
     if magnet_links is None:
         magnet_links = {}
+    if size_links is None:
+        size_links = {}
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     today = datetime.now().strftime("%Y-%m-%d")
+
+    _TORRENT_CATS = ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle')
 
     with get_db(db_path) as conn:
         existing = conn.execute(
@@ -383,32 +435,43 @@ def db_upsert_history(
                 'hacked_no_subtitle': '',
                 'subtitle': '',
                 'no_subtitle': '',
+                'size_hacked_subtitle': '',
+                'size_hacked_no_subtitle': '',
+                'size_subtitle': '',
+                'size_no_subtitle': '',
             }
             for tt, magnet in magnet_links.items():
-                if tt in cols and magnet:
+                if tt in _TORRENT_CATS and magnet:
                     cols[tt] = f"[{today}]{magnet}"
+                    cols[f'size_{tt}'] = size_links.get(tt, '')
 
             if cols['hacked_subtitle']:
                 cols['hacked_no_subtitle'] = ''
+                cols['size_hacked_no_subtitle'] = ''
             if cols['subtitle']:
                 cols['no_subtitle'] = ''
+                cols['size_no_subtitle'] = ''
 
             conn.execute(
                 """INSERT INTO parsed_movies_history
                    (href, phase, video_code, create_datetime, update_datetime,
                     last_visited_datetime, hacked_subtitle, hacked_no_subtitle,
-                    subtitle, no_subtitle)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    subtitle, no_subtitle,
+                    size_hacked_subtitle, size_hacked_no_subtitle,
+                    size_subtitle, size_no_subtitle)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (cols['href'], cols['phase'], cols['video_code'],
                  cols['create_datetime'], cols['update_datetime'],
                  cols['last_visited_datetime'],
                  cols['hacked_subtitle'], cols['hacked_no_subtitle'],
-                 cols['subtitle'], cols['no_subtitle']),
+                 cols['subtitle'], cols['no_subtitle'],
+                 cols['size_hacked_subtitle'], cols['size_hacked_no_subtitle'],
+                 cols['size_subtitle'], cols['size_no_subtitle']),
             )
         else:
             row = dict(existing)
             for tt, magnet in magnet_links.items():
-                if tt not in ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle'):
+                if tt not in _TORRENT_CATS:
                     continue
                 if not magnet:
                     continue
@@ -425,25 +488,34 @@ def db_upsert_history(
                         new_dt = datetime.strptime(today, "%Y-%m-%d")
                         if new_dt > old_dt:
                             row[tt] = f"[{today}]{magnet}"
+                            row[f'size_{tt}'] = size_links.get(tt, '')
                     except Exception:
                         row[tt] = f"[{today}]{magnet}"
+                        row[f'size_{tt}'] = size_links.get(tt, '')
                 else:
                     row[tt] = f"[{today}]{magnet}"
+                    row[f'size_{tt}'] = size_links.get(tt, '')
 
             if (row.get('hacked_subtitle') or '').strip():
                 row['hacked_no_subtitle'] = ''
+                row['size_hacked_no_subtitle'] = ''
             if (row.get('subtitle') or '').strip():
                 row['no_subtitle'] = ''
+                row['size_no_subtitle'] = ''
 
             conn.execute(
                 """UPDATE parsed_movies_history
                    SET phase=?, update_datetime=?, last_visited_datetime=?,
                        hacked_subtitle=?, hacked_no_subtitle=?,
-                       subtitle=?, no_subtitle=?
+                       subtitle=?, no_subtitle=?,
+                       size_hacked_subtitle=?, size_hacked_no_subtitle=?,
+                       size_subtitle=?, size_no_subtitle=?
                    WHERE href=?""",
                 (phase, now, now,
                  row.get('hacked_subtitle', ''), row.get('hacked_no_subtitle', ''),
                  row.get('subtitle', ''), row.get('no_subtitle', ''),
+                 row.get('size_hacked_subtitle', ''), row.get('size_hacked_no_subtitle', ''),
+                 row.get('size_subtitle', ''), row.get('size_no_subtitle', ''),
                  href),
             )
 
