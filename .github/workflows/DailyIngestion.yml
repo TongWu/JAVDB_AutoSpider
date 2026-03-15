@@ -6,6 +6,11 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
+      disable_all_filters:
+        description: 'Disable ALL filters (history, rclone inventory, release date) — process every entry from index'
+        required: false
+        default: false
+        type: boolean
       runner:
         description: 'Runner type for pipeline jobs (health-check and run-pipeline)'
         required: false
@@ -365,9 +370,14 @@ jobs:
         run: |
           set -o pipefail
           SPIDER_CMD=(python3 scripts/spider --use-proxy)
-          if [ "${{ inputs.enable_rclone_filter }}" == "false" ]; then
-            SPIDER_CMD+=(--no-rclone-filter)
-            echo "📋 Rclone inventory filter disabled"
+          if [ "${{ inputs.disable_all_filters }}" == "true" ]; then
+            SPIDER_CMD+=(--disable-all-filters)
+            echo "⚠️ ALL FILTERS DISABLED: history, rclone inventory, release date filters are all bypassed"
+          else
+            if [ "${{ inputs.enable_rclone_filter }}" == "false" ]; then
+              SPIDER_CMD+=(--no-rclone-filter)
+              echo "📋 Rclone inventory filter disabled"
+            fi
           fi
           if [ "${{ inputs.enable_dedup == true || github.event_name == 'schedule' }}" == "true" ]; then
             SPIDER_CMD+=(--enable-dedup)

@@ -66,6 +66,12 @@ def main():
     enable_redownload = args.enable_redownload or ENABLE_REDOWNLOAD
     redownload_threshold = args.redownload_threshold if args.redownload_threshold is not None else REDOWNLOAD_SIZE_THRESHOLD
 
+    if args.disable_all_filters:
+        ignore_history = True
+        use_history = False
+        ignore_release_date = True
+        rclone_filter = False
+
     ban_log_file = os.path.join(REPORTS_DIR, 'proxy_bans.csv')
     state.setup_proxy_pool(ban_log_file, use_proxy)
     state.initialize_request_handler()
@@ -84,10 +90,12 @@ def main():
         output_dated_dir = state.ensure_report_dated_dir(DAILY_REPORT_DIR)
         output_csv = args.output_file if args.output_file else OUTPUT_CSV
         csv_path = os.path.join(output_dated_dir, output_csv)
-        use_history_for_loading = True
+        use_history_for_loading = not args.disable_all_filters
         use_history_for_saving = True
 
     logger.info("Starting JavDB spider...")
+    if args.disable_all_filters:
+        logger.info("⚠️  ALL FILTERS DISABLED: history, rclone inventory, release date filters are all bypassed")
     logger.info(f"Arguments: start_page={start_page}, end_page={end_page}, phase={phase_mode}")
     if custom_url:
         logger.info(f"Custom URL: {custom_url}")
