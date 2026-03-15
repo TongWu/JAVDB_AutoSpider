@@ -62,8 +62,15 @@ def main():
     max_movies_phase2 = args.max_movies_phase2
     sequential = args.sequential
     enable_dedup = args.enable_dedup
+    rclone_filter = not args.no_rclone_filter
     enable_redownload = args.enable_redownload or ENABLE_REDOWNLOAD
     redownload_threshold = args.redownload_threshold if args.redownload_threshold is not None else REDOWNLOAD_SIZE_THRESHOLD
+
+    if args.disable_all_filters:
+        ignore_history = True
+        use_history = False
+        ignore_release_date = True
+        rclone_filter = False
 
     ban_log_file = os.path.join(REPORTS_DIR, 'proxy_bans.csv')
     state.setup_proxy_pool(ban_log_file, use_proxy)
@@ -83,10 +90,12 @@ def main():
         output_dated_dir = state.ensure_report_dated_dir(DAILY_REPORT_DIR)
         output_csv = args.output_file if args.output_file else OUTPUT_CSV
         csv_path = os.path.join(output_dated_dir, output_csv)
-        use_history_for_loading = True
+        use_history_for_loading = not args.disable_all_filters
         use_history_for_saving = True
 
     logger.info("Starting JavDB spider...")
+    if args.disable_all_filters:
+        logger.info("⚠️  ALL FILTERS DISABLED: history, rclone inventory, release date filters are all bypassed")
     logger.info(f"Arguments: start_page={start_page}, end_page={end_page}, phase={phase_mode}")
     if custom_url:
         logger.info(f"Custom URL: {custom_url}")
@@ -184,6 +193,11 @@ def main():
         logger.info(f"Loaded rclone inventory: {len(rclone_inventory)} unique video codes")
     else:
         logger.info(f"Rclone inventory not found ({rclone_inventory_path}) – rclone skip/dedup disabled")
+
+    if rclone_filter:
+        logger.info("RCLONE FILTER: Enabled - will skip entries already in rclone inventory with 中字")
+    else:
+        logger.info("RCLONE FILTER: Disabled - all entries will be processed regardless of rclone inventory")
 
     if enable_dedup:
         logger.info("DEDUP MODE: Enabled – will detect upgrade opportunities against rclone inventory")
@@ -303,6 +317,7 @@ def main():
                 is_adhoc_mode=custom_url is not None,
                 ban_log_file=ban_log_file,
                 rclone_inventory=rclone_inventory,
+                rclone_filter=rclone_filter,
                 enable_dedup=enable_dedup,
                 dedup_csv_path=dedup_csv_path,
                 enable_redownload=enable_redownload,
@@ -320,6 +335,7 @@ def main():
                 session=session, use_proxy=use_proxy,
                 use_cf_bypass=use_cf_bypass,
                 rclone_inventory=rclone_inventory,
+                rclone_filter=rclone_filter,
                 enable_dedup=enable_dedup,
                 dedup_csv_path=dedup_csv_path,
                 enable_redownload=enable_redownload,
@@ -370,6 +386,7 @@ def main():
                 is_adhoc_mode=custom_url is not None,
                 ban_log_file=ban_log_file,
                 rclone_inventory=rclone_inventory,
+                rclone_filter=rclone_filter,
                 enable_dedup=enable_dedup,
                 dedup_csv_path=dedup_csv_path,
                 enable_redownload=enable_redownload,
@@ -387,6 +404,7 @@ def main():
                 session=session, use_proxy=use_proxy,
                 use_cf_bypass=use_cf_bypass,
                 rclone_inventory=rclone_inventory,
+                rclone_filter=rclone_filter,
                 enable_dedup=enable_dedup,
                 dedup_csv_path=dedup_csv_path,
                 enable_redownload=enable_redownload,

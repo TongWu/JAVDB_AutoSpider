@@ -6,6 +6,11 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
+      disable_all_filters:
+        description: 'Disable ALL filters (history, rclone inventory, release date) — process every entry from index'
+        required: false
+        default: false
+        type: boolean
       url:
         description: 'Target URL to scrape (e.g., https://javdb.com/actors/xxx or https://javdb.com/video_codes/xxx)'
         required: true
@@ -67,6 +72,11 @@ on:
         options:
           - 'ubuntu-latest'
           - 'self-hosted'
+      enable_rclone_filter:
+        description: 'Enable rclone inventory filter (skip entries already in rclone inventory with 中字)'
+        required: false
+        default: true
+        type: boolean
       enable_dedup:
         description: 'Enable rclone dedup (detect + execute)'
         required: false
@@ -420,8 +430,10 @@ jobs:
           echo "Start Page: ${{ inputs.start_page }}"
           echo "End Page: ${{ inputs.end_page || 'All pages (--all flag)' }}"
           echo "Phase: ${{ inputs.phase || 'all' }}"
+          echo "Disable All Filters: ${{ inputs.disable_all_filters }}"
           echo "History Filter: ${{ inputs.history_filter }}"
           echo "Date Filter: ${{ inputs.date_filter }}"
+          echo "Rclone Filter: ${{ inputs.enable_rclone_filter }}"
           echo "Proxy Spider: ${{ inputs.proxy_spider }}"
           echo "Proxy Uploader: ${{ inputs.proxy_uploader }}"
           echo "Proxy PikPak: ${{ inputs.proxy_pikpak }}"
@@ -454,23 +466,34 @@ jobs:
           # Add phase flag
           SPIDER_CMD="$SPIDER_CMD --phase ${{ inputs.phase || 'all' }}"
           
-          # Add use-history flag if history filter is enabled
-          # Note: Ad hoc mode defaults to NOT checking history (process all entries)
-          # Only add --use-history when explicitly requested to skip already-parsed entries
-          if [ "${{ inputs.history_filter }}" == "true" ]; then
-            SPIDER_CMD="$SPIDER_CMD --use-history"
-          fi
-          
-          # Add ignore release date flag if date filter is disabled
-          if [ "${{ inputs.date_filter }}" == "false" ]; then
-            SPIDER_CMD="$SPIDER_CMD --ignore-release-date"
+          # Disable all filters overrides individual filter settings
+          if [ "${{ inputs.disable_all_filters }}" == "true" ]; then
+            SPIDER_CMD="$SPIDER_CMD --disable-all-filters"
+            echo "⚠️ ALL FILTERS DISABLED: history, rclone inventory, release date filters are all bypassed"
+          else
+            # Add use-history flag if history filter is enabled
+            # Note: Ad hoc mode defaults to NOT checking history (process all entries)
+            # Only add --use-history when explicitly requested to skip already-parsed entries
+            if [ "${{ inputs.history_filter }}" == "true" ]; then
+              SPIDER_CMD="$SPIDER_CMD --use-history"
+            fi
+            
+            # Add ignore release date flag if date filter is disabled
+            if [ "${{ inputs.date_filter }}" == "false" ]; then
+              SPIDER_CMD="$SPIDER_CMD --ignore-release-date"
+            fi
+            
+            # Add no-rclone-filter flag if rclone filter is disabled
+            if [ "${{ inputs.enable_rclone_filter }}" == "false" ]; then
+              SPIDER_CMD="$SPIDER_CMD --no-rclone-filter"
+            fi
           fi
           
           # Add proxy flag if enabled
           if [ "${{ inputs.proxy_spider }}" == "true" ]; then
             SPIDER_CMD="$SPIDER_CMD --use-proxy"
           fi
-          
+
           # Add dedup flag if enabled
           if [ "${{ inputs.enable_dedup }}" == "true" ]; then
             SPIDER_CMD="$SPIDER_CMD --enable-dedup"

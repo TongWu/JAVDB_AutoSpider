@@ -6,6 +6,11 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
+      disable_all_filters:
+        description: 'Disable ALL filters (history, rclone inventory, release date) — process every entry from index'
+        required: false
+        default: false
+        type: boolean
       runner:
         description: 'Runner type for pipeline jobs (health-check and run-pipeline)'
         required: false
@@ -14,6 +19,11 @@ on:
         options:
           - 'ubuntu-latest'
           - 'self-hosted'
+      enable_rclone_filter:
+        description: 'Enable rclone inventory filter (skip entries already in rclone inventory with 中字)'
+        required: false
+        default: true
+        type: boolean
       enable_dedup:
         description: 'Enable rclone dedup (detect + execute)'
         required: false
@@ -360,6 +370,15 @@ jobs:
         run: |
           set -o pipefail
           SPIDER_CMD=(python3 scripts/spider --use-proxy)
+          if [ "${{ inputs.disable_all_filters }}" == "true" ]; then
+            SPIDER_CMD+=(--disable-all-filters)
+            echo "⚠️ ALL FILTERS DISABLED: history, rclone inventory, release date filters are all bypassed"
+          else
+            if [ "${{ inputs.enable_rclone_filter }}" == "false" ]; then
+              SPIDER_CMD+=(--no-rclone-filter)
+              echo "📋 Rclone inventory filter disabled"
+            fi
+          fi
           if [ "${{ inputs.enable_dedup == true || github.event_name == 'schedule' }}" == "true" ]; then
             SPIDER_CMD+=(--enable-dedup)
             echo "🔍 Dedup detection enabled"
