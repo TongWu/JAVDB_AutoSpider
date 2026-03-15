@@ -291,6 +291,9 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('DAILY_REPORT_DIR', 'DAILY_REPORT_DIR', get_env, 'reports/DailyReport', 'FILE PATHS'),
         ('AD_HOC_DIR', 'AD_HOC_DIR', get_env, 'reports/AdHoc', 'FILE PATHS'),
         ('PARSED_MOVIES_CSV', 'PARSED_MOVIES_CSV', get_env, 'parsed_movies_history.csv', 'FILE PATHS'),
+        ('HISTORY_DB_PATH', 'HISTORY_DB_PATH', get_env, 'reports/history.db', 'FILE PATHS'),
+        ('REPORTS_DB_PATH', 'REPORTS_DB_PATH', get_env, 'reports/reports.db', 'FILE PATHS'),
+        ('OPERATIONS_DB_PATH', 'OPERATIONS_DB_PATH', get_env, 'reports/operations.db', 'FILE PATHS'),
         # PikPak Configuration
         ('PIKPAK_EMAIL', 'PIKPAK_EMAIL', get_env, '', 'PIKPAK CONFIGURATION'),
         ('PIKPAK_PASSWORD', 'PIKPAK_PASSWORD', get_env, '', 'PIKPAK CONFIGURATION'),
