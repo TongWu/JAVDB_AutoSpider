@@ -631,6 +631,256 @@ class TestAdhocLoginFailedOnIndexPage:
         assert result == 'proxy_fallback'
 
 
+class TestPerProxyLoginRouting:
+    """Test per-proxy login routing logic for parallel mode.
+
+    Cookie is bound to the machine that performed login. Workers that
+    encounter a login page should route the task to the logged-in worker
+    instead of sharing the cookie globally.
+    """
+
+    def test_attempt_login_refresh_returns_three_tuple(self):
+        """attempt_login_refresh returns (success, cookie, proxy_name)."""
+        import scripts.spider.state as st
+
+        original = st.login_attempted
+        st.login_attempted = True
+        try:
+            from scripts.spider.session import attempt_login_refresh
+            result = attempt_login_refresh()
+            assert len(result) == 3
+            success, cookie, proxy_name = result
+            assert success is False
+            assert cookie is None
+            assert proxy_name is None
+        finally:
+            st.login_attempted = original
+
+    def test_attempt_login_refresh_accepts_explicit_proxies(self):
+        """attempt_login_refresh accepts explicit_proxies / explicit_proxy_name."""
+        import scripts.spider.state as st
+
+        original = st.login_attempted
+        st.login_attempted = True
+        try:
+            from scripts.spider.session import attempt_login_refresh
+            result = attempt_login_refresh(
+                explicit_proxies={'http': 'http://1.2.3.4:8080'},
+                explicit_proxy_name='TestProxy',
+            )
+            assert len(result) == 3
+            assert result[0] is False
+        finally:
+            st.login_attempted = original
+
+    def test_logged_in_proxy_name_set_on_state(self):
+        """state.logged_in_proxy_name starts as None."""
+        import scripts.spider.state as st
+        assert hasattr(st, 'logged_in_proxy_name')
+        original = st.logged_in_proxy_name
+        try:
+            st.logged_in_proxy_name = 'ARM-Proxy-1'
+            assert st.logged_in_proxy_name == 'ARM-Proxy-1'
+        finally:
+            st.logged_in_proxy_name = original
+
+    def test_worker_login_page_returns_needs_login(self):
+        """_try_fetch_and_parse returns needs_login=True on login page."""
+        from scripts.spider.parallel import ProxyWorker, DetailTask
+        import queue as queue_module
+
+        dq = queue_module.Queue()
+        rq = queue_module.Queue()
+        lq = queue_module.Queue()
+
+        proxy_cfg = {'name': 'TestProxy', 'http': 'http://1.2.3.4:8080'}
+        w = ProxyWorker(
+            worker_id=0, proxy_config=proxy_cfg,
+            detail_queue=dq, result_queue=rq, login_queue=lq,
+            total_workers=1, use_cookie=True, is_adhoc_mode=True,
+            movie_sleep_min=0, movie_sleep_max=0, fallback_cooldown=0,
+            ban_log_file='', all_workers=[],
+        )
+
+        task = DetailTask(url='http://example.com/v/abc',
+                          entry={'video_code': 'ABC-123', 'href': '/v/abc', 'page': 1},
+                          phase=1, entry_index='1/10')
+
+        login_html = '<html><head><title>登入 JavDB</title></head><body></body></html>'
+        original_fetch = w._fetch_html
+        w._fetch_html = lambda url, use_cf: login_html
+
+        try:
+            magnets, actor, success, needs_login = w._try_fetch_and_parse(
+                task, False, "test")
+            assert success is False
+            assert needs_login is True
+        finally:
+            w._fetch_html = original_fetch
+
+    def test_try_direct_then_cf_short_circuits_on_login(self):
+        """_try_direct_then_cf returns needs_login=True and skips CF bypass."""
+        from scripts.spider.parallel import ProxyWorker, DetailTask
+        import queue as queue_module
+
+        dq = queue_module.Queue()
+        rq = queue_module.Queue()
+        lq = queue_module.Queue()
+
+        proxy_cfg = {'name': 'TestProxy', 'http': 'http://1.2.3.4:8080'}
+        w = ProxyWorker(
+            worker_id=0, proxy_config=proxy_cfg,
+            detail_queue=dq, result_queue=rq, login_queue=lq,
+            total_workers=1, use_cookie=True, is_adhoc_mode=True,
+            movie_sleep_min=0, movie_sleep_max=0, fallback_cooldown=0,
+            ban_log_file='', all_workers=[],
+        )
+
+        task = DetailTask(url='http://example.com/v/abc',
+                          entry={'video_code': 'ABC-123', 'href': '/v/abc', 'page': 1},
+                          phase=1, entry_index='1/10')
+
+        login_html = '<html><head><title>登入 JavDB</title></head><body></body></html>'
+        call_count = {'n': 0}
+        def mock_fetch(url, use_cf):
+            call_count['n'] += 1
+            return login_html
+
+        w._fetch_html = mock_fetch
+
+        m, a, success, used_cf, needs_login = w._try_direct_then_cf(task)
+        assert success is False
+        assert needs_login is True
+        assert call_count['n'] == 1, "Should short-circuit after Direct detects login page"
+
+    def test_handle_login_required_routes_to_login_queue(self):
+        """When a logged-in worker exists, tasks are routed to login_queue."""
+        import scripts.spider.parallel as parallel
+        from scripts.spider.parallel import ProxyWorker, DetailTask
+        import queue as queue_module
+
+        dq = queue_module.Queue()
+        rq = queue_module.Queue()
+        lq = queue_module.Queue()
+
+        all_workers = []
+        for i, name in enumerate(['ProxyA', 'ProxyB']):
+            cfg = {'name': name, 'http': f'http://10.0.0.{i+1}:8080'}
+            w = ProxyWorker(
+                worker_id=i, proxy_config=cfg,
+                detail_queue=dq, result_queue=rq, login_queue=lq,
+                total_workers=2, use_cookie=True, is_adhoc_mode=True,
+                movie_sleep_min=0, movie_sleep_max=0, fallback_cooldown=0,
+                ban_log_file='', all_workers=all_workers,
+            )
+            all_workers.append(w)
+
+        task = DetailTask(url='http://example.com/v/abc',
+                          entry={'video_code': 'ABC-123', 'href': '/v/abc', 'page': 1},
+                          phase=1, entry_index='1/10')
+
+        original_id = parallel._logged_in_worker_id
+        try:
+            parallel._logged_in_worker_id = 0  # ProxyA is logged in
+
+            worker_b = all_workers[1]
+            worker_b._handle_login_required(task)
+
+            assert not lq.empty(), "Task should be in login_queue"
+            routed_task = lq.get_nowait()
+            assert routed_task is task
+            assert 'ProxyA' not in task.failed_proxies
+        finally:
+            parallel._logged_in_worker_id = original_id
+
+    def test_handle_login_required_clears_logged_in_proxy_from_failed(self):
+        """Routing to login_queue clears the logged-in proxy from failed_proxies."""
+        import scripts.spider.parallel as parallel
+        from scripts.spider.parallel import ProxyWorker, DetailTask
+        import queue as queue_module
+
+        dq = queue_module.Queue()
+        rq = queue_module.Queue()
+        lq = queue_module.Queue()
+
+        all_workers = []
+        for i, name in enumerate(['ProxyA', 'ProxyB']):
+            cfg = {'name': name, 'http': f'http://10.0.0.{i+1}:8080'}
+            w = ProxyWorker(
+                worker_id=i, proxy_config=cfg,
+                detail_queue=dq, result_queue=rq, login_queue=lq,
+                total_workers=2, use_cookie=True, is_adhoc_mode=True,
+                movie_sleep_min=0, movie_sleep_max=0, fallback_cooldown=0,
+                ban_log_file='', all_workers=all_workers,
+            )
+            all_workers.append(w)
+
+        task = DetailTask(url='http://example.com/v/abc',
+                          entry={'video_code': 'ABC-123', 'href': '/v/abc', 'page': 1},
+                          phase=1, entry_index='1/10',
+                          failed_proxies={'ProxyA'})
+
+        original_id = parallel._logged_in_worker_id
+        try:
+            parallel._logged_in_worker_id = 0  # ProxyA is logged in
+
+            worker_b = all_workers[1]
+            worker_b._handle_login_required(task)
+
+            routed_task = lq.get_nowait()
+            assert 'ProxyA' not in routed_task.failed_proxies, \
+                "logged-in proxy should be cleared from failed_proxies"
+        finally:
+            parallel._logged_in_worker_id = original_id
+
+    def test_index_login_handoff_to_parallel_worker(self):
+        """When index page login happened, matching parallel worker inherits it."""
+        import scripts.spider.state as st
+        import scripts.spider.parallel as parallel
+        from scripts.spider.parallel import ProxyWorker
+        import queue as queue_module
+
+        dq = queue_module.Queue()
+        rq = queue_module.Queue()
+        lq = queue_module.Queue()
+
+        orig_proxy = st.logged_in_proxy_name
+        orig_cookie = st.refreshed_session_cookie
+        orig_id = parallel._logged_in_worker_id
+        try:
+            st.logged_in_proxy_name = 'ARM-2'
+            st.refreshed_session_cookie = 'test_cookie_value'
+            parallel._logged_in_worker_id = None
+
+            all_workers = []
+            for i, name in enumerate(['ARM-1', 'ARM-2', 'ARM-3']):
+                cfg = {'name': name, 'http': f'http://10.0.0.{i+1}:8080'}
+                w = ProxyWorker(
+                    worker_id=i, proxy_config=cfg,
+                    detail_queue=dq, result_queue=rq, login_queue=lq,
+                    total_workers=3, use_cookie=True, is_adhoc_mode=True,
+                    movie_sleep_min=0, movie_sleep_max=0, fallback_cooldown=0,
+                    ban_log_file='', all_workers=all_workers,
+                )
+                all_workers.append(w)
+
+            # Simulate the handoff logic from process_detail_entries_parallel
+            if st.logged_in_proxy_name and st.refreshed_session_cookie:
+                for w in all_workers:
+                    if w.proxy_name == st.logged_in_proxy_name:
+                        w._handler.config.javdb_session_cookie = st.refreshed_session_cookie
+                        parallel._logged_in_worker_id = w.worker_id
+                        break
+
+            assert parallel._logged_in_worker_id == 1, "ARM-2 is worker_id=1"
+            assert all_workers[1]._handler.config.javdb_session_cookie == 'test_cookie_value'
+            assert all_workers[0]._handler.config.javdb_session_cookie != 'test_cookie_value'
+        finally:
+            st.logged_in_proxy_name = orig_proxy
+            st.refreshed_session_cookie = orig_cookie
+            parallel._logged_in_worker_id = orig_id
+
+
 # Use temp_dir fixture
 @pytest.fixture
 def temp_dir():
