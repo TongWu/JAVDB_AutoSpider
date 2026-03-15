@@ -188,11 +188,12 @@ def process_phase_entries_sequential(
             phase_rows.append(row)
 
             if use_history_for_saving and not dry_run and has_new_torrents:
-                new_magnet_links, new_sizes = collect_new_magnet_links(row, magnet_links)
+                new_magnet_links, new_sizes, new_fc, new_res = collect_new_magnet_links(row, magnet_links)
                 if new_magnet_links:
                     save_parsed_movie_to_history(
                         history_file, href, phase, entry['video_code'],
                         new_magnet_links, size_links=new_sizes,
+                        file_count_links=new_fc, resolution_links=new_res,
                     )
         else:
             no_new_torrents += 1
