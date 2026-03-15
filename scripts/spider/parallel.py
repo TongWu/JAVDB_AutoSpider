@@ -262,6 +262,8 @@ class ProxyWorker(threading.Thread):
                     f"but own session is stale — requeueing as proxy failure"
                 )
                 _logged_in_worker_id = None
+                state.refreshed_session_cookie = None
+                state.logged_in_proxy_name = None
                 task.failed_proxies.add(self.proxy_name)
                 _requeue_front(self.detail_queue, task)
                 return
