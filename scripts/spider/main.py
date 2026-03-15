@@ -25,6 +25,7 @@ from scripts.spider.config_loader import (
     JAVDB_SESSION_COOKIE,
     GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH,
     RCLONE_INVENTORY_CSV, DEDUP_CSV, DEDUP_DIR,
+    ENABLE_REDOWNLOAD, REDOWNLOAD_SIZE_THRESHOLD,
 )
 from scripts.spider.dedup_checker import (
     load_rclone_inventory,
@@ -60,6 +61,8 @@ def main():
     max_movies_phase2 = args.max_movies_phase2
     sequential = args.sequential
     enable_dedup = args.enable_dedup
+    enable_redownload = args.enable_redownload or ENABLE_REDOWNLOAD
+    redownload_threshold = args.redownload_threshold if args.redownload_threshold is not None else REDOWNLOAD_SIZE_THRESHOLD
 
     ban_log_file = os.path.join(REPORTS_DIR, 'proxy_bans.csv')
     state.setup_proxy_pool(ban_log_file, use_proxy)
@@ -186,6 +189,11 @@ def main():
     else:
         logger.info("DEDUP MODE: Disabled")
 
+    if enable_redownload:
+        logger.info(f"RE-DOWNLOAD (洗版): Enabled – threshold {redownload_threshold * 100:.0f}%")
+    else:
+        logger.info("RE-DOWNLOAD (洗版): Disabled")
+
     session = requests.Session()
     logger.info("Initialized requests session")
 
@@ -292,6 +300,8 @@ def main():
                 rclone_inventory=rclone_inventory,
                 enable_dedup=enable_dedup,
                 dedup_csv_path=dedup_csv_path,
+                enable_redownload=enable_redownload,
+                redownload_threshold=redownload_threshold,
             )
         else:
             p1_result = process_phase_entries_sequential(
@@ -307,6 +317,8 @@ def main():
                 rclone_inventory=rclone_inventory,
                 enable_dedup=enable_dedup,
                 dedup_csv_path=dedup_csv_path,
+                enable_redownload=enable_redownload,
+                redownload_threshold=redownload_threshold,
             )
             use_proxy = p1_result['use_proxy']
             use_cf_bypass = p1_result['use_cf_bypass']
@@ -354,6 +366,8 @@ def main():
                 rclone_inventory=rclone_inventory,
                 enable_dedup=enable_dedup,
                 dedup_csv_path=dedup_csv_path,
+                enable_redownload=enable_redownload,
+                redownload_threshold=redownload_threshold,
             )
         else:
             p2_result = process_phase_entries_sequential(
@@ -369,6 +383,8 @@ def main():
                 rclone_inventory=rclone_inventory,
                 enable_dedup=enable_dedup,
                 dedup_csv_path=dedup_csv_path,
+                enable_redownload=enable_redownload,
+                redownload_threshold=redownload_threshold,
             )
             use_proxy = p2_result['use_proxy']
             use_cf_bypass = p2_result['use_cf_bypass']
