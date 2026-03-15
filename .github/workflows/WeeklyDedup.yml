@@ -183,7 +183,7 @@ jobs:
           fi
 
           git add "$REPORTS_DIR/rclone_inventory.csv" 2>/dev/null || true
-          git add "$REPORTS_DIR/javdb_autospider.db" 2>/dev/null || true
+          git add "$REPORTS_DIR/operations.db" 2>/dev/null || true
           git add "$REPORTS_DIR/dedup_history.csv" 2>/dev/null || true
           find "$DEDUP_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
 
@@ -222,7 +222,7 @@ jobs:
           name: weekly-dedup-${{ github.run_number }}
           path: |
             ${{ env.REPORTS_DIR }}/rclone_inventory.csv
-            ${{ env.REPORTS_DIR }}/javdb_autospider.db
+            ${{ env.REPORTS_DIR }}/operations.db
             ${{ env.REPORTS_DIR }}/dedup_history.csv
             ${{ env.DEDUP_DIR }}/
           retention-days: 30
