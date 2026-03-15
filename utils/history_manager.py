@@ -80,13 +80,7 @@ def load_parsed_movies_history(history_file, phase=None):
         from utils.db import db_load_history
         history = db_load_history(phase=phase)
         if history:
-            phase_counts = {}
-            for record in history.values():
-                p = record['phase']
-                phase_counts[p] = phase_counts.get(p, 0) + 1
-            if phase is None:
-                phase_details = ", ".join([f"phase {p}: {c}" for p, c in sorted(phase_counts.items(), key=lambda x: str(x[0]))])
-                logger.info(f"Loaded {len(history)} previously parsed movies from history ({phase_details})")
+            logger.info(f"Loaded {len(history)} previously parsed movies from history")
         else:
             logger.info("No parsed movies history found, starting fresh")
         return history
@@ -107,7 +101,9 @@ def maintain_history_limit(history_file, max_records=1000):
     _csv_maintain_history_limit(history_file, max_records)
 
 
-def save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_links=None, size_links=None):
+def save_parsed_movie_to_history(history_file, href, phase, video_code,
+                                  magnet_links=None, size_links=None,
+                                  file_count_links=None, resolution_links=None):
     """Save a parsed movie to the history, updating existing records with new magnet links."""
     if magnet_links is None:
         magnet_links = {'no_subtitle': ''}
@@ -115,6 +111,10 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_l
         magnet_links = {t: '' for t in magnet_links}
     if size_links is None:
         size_links = {}
+    if file_count_links is None:
+        file_count_links = {}
+    if resolution_links is None:
+        resolution_links = {}
 
     if use_sqlite():
         _ensure_db()
@@ -123,20 +123,33 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_l
 
         filtered = {}
         filtered_sizes = {}
+        filtered_fc = {}
+        filtered_res = {}
         if magnet_links.get('hacked_subtitle'):
             filtered['hacked_subtitle'] = magnet_links['hacked_subtitle']
             filtered_sizes['hacked_subtitle'] = size_links.get('hacked_subtitle', '')
+            filtered_fc['hacked_subtitle'] = file_count_links.get('hacked_subtitle', 0)
+            filtered_res['hacked_subtitle'] = resolution_links.get('hacked_subtitle')
         else:
             filtered['hacked_no_subtitle'] = magnet_links.get('hacked_no_subtitle', '')
             filtered_sizes['hacked_no_subtitle'] = size_links.get('hacked_no_subtitle', '')
+            filtered_fc['hacked_no_subtitle'] = file_count_links.get('hacked_no_subtitle', 0)
+            filtered_res['hacked_no_subtitle'] = resolution_links.get('hacked_no_subtitle')
         if magnet_links.get('subtitle'):
             filtered['subtitle'] = magnet_links['subtitle']
             filtered_sizes['subtitle'] = size_links.get('subtitle', '')
+            filtered_fc['subtitle'] = file_count_links.get('subtitle', 0)
+            filtered_res['subtitle'] = resolution_links.get('subtitle')
         else:
             filtered['no_subtitle'] = magnet_links.get('no_subtitle', '')
             filtered_sizes['no_subtitle'] = size_links.get('no_subtitle', '')
+            filtered_fc['no_subtitle'] = file_count_links.get('no_subtitle', 0)
+            filtered_res['no_subtitle'] = resolution_links.get('no_subtitle')
 
-        db_upsert_history(href, phase, video_code, filtered, size_links=filtered_sizes)
+        db_upsert_history(href, video_code, filtered,
+                          size_links=filtered_sizes,
+                          file_count_links=filtered_fc,
+                          resolution_links=filtered_res)
         logger.debug(f"Saved history for {href} with magnet links: {list(magnet_links.keys())}")
 
     if use_csv():
@@ -274,8 +287,19 @@ def has_complete_subtitles(href, history_data):
     """Check if a movie already has both subtitle and hacked_subtitle in history."""
     if not history_data or href not in history_data:
         return False
-    torrent_types = history_data[href].get('torrent_types', [])
+    entry = history_data[href]
+    if entry.get('PerfectMatchIndicator'):
+        return True
+    torrent_types = entry.get('torrent_types', [])
     return 'subtitle' in torrent_types and 'hacked_subtitle' in torrent_types
+
+
+def _get_visited_datetime(entry):
+    """Get the last visited datetime from a history entry (handles both key styles)."""
+    return (entry.get('DateTimeVisited', '')
+            or entry.get('last_visited_datetime', '')
+            or entry.get('DateTimeUpdated', '')
+            or entry.get('update_datetime', ''))
 
 
 def should_skip_recent_yesterday_release(href, history_data, is_yesterday_release):
@@ -284,8 +308,7 @@ def should_skip_recent_yesterday_release(href, history_data, is_yesterday_releas
         return False
     if not history_data or href not in history_data:
         return False
-    entry = history_data[href]
-    visited_str = entry.get('last_visited_datetime', '') or entry.get('update_datetime', '')
+    visited_str = _get_visited_datetime(history_data[href])
     if not visited_str:
         return False
     cutoff = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
@@ -293,17 +316,12 @@ def should_skip_recent_yesterday_release(href, history_data, is_yesterday_releas
 
 
 def should_skip_recent_today_release(href, history_data, is_today_release):
-    """Skip a movie if it was already visited today and is tagged as today's release.
-
-    This avoids redundant detail-page fetches when the pipeline is re-run on
-    the same day (e.g. manual workflow_dispatch).
-    """
+    """Skip a movie if it was already visited today and is tagged as today's release."""
     if not is_today_release:
         return False
     if not history_data or href not in history_data:
         return False
-    entry = history_data[href]
-    visited_str = entry.get('last_visited_datetime', '') or entry.get('update_datetime', '')
+    visited_str = _get_visited_datetime(history_data[href])
     if not visited_str:
         return False
     cutoff = datetime.now().strftime('%Y-%m-%d')
@@ -360,18 +378,28 @@ def check_redownload_upgrade(href, history_data, magnet_links, threshold=0.30):
         return []
 
     from utils.magnet_extractor import _parse_size
+    from utils.db import category_to_indicators
 
     entry = history_data[href]
+    torrents = entry.get('torrents', {})
     upgrade_categories = []
 
     for cat in ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle'):
         new_magnet = magnet_links.get(cat, '')
         if not new_magnet:
             continue
-        old_size_str = entry.get(f'size_{cat}', '')
+
         new_size_str = magnet_links.get(f'size_{cat}', '')
-        if not old_size_str or not new_size_str:
+        if not new_size_str:
             continue
+
+        # Look up old size from the torrents dict
+        key = category_to_indicators(cat)
+        old_torrent = torrents.get(key, {})
+        old_size_str = old_torrent.get('Size', '')
+        if not old_size_str:
+            continue
+
         old_bytes = _parse_size(old_size_str)
         new_bytes = _parse_size(new_size_str)
         if old_bytes <= 0:
