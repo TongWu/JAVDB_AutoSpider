@@ -210,6 +210,7 @@ CREATE TABLE IF NOT EXISTS SpiderStats (
     TotalSkipped     INTEGER DEFAULT 0,
     TotalNoNew       INTEGER DEFAULT 0,
     TotalFailed      INTEGER DEFAULT 0,
+    FailedMovies     TEXT DEFAULT '',
     DateTimeCreated TEXT DEFAULT (datetime('now'))
 );
 
@@ -623,6 +624,12 @@ def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
     with get_db(db_path) as conn:
         current = _detect_version(conn)
         conn.executescript(ddl)
+
+        # Forward-compat migration: add FailedMovies to SpiderStats
+        try:
+            conn.execute("ALTER TABLE SpiderStats ADD COLUMN FailedMovies TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
 
         if current == 0:
             conn.execute("INSERT INTO SchemaVersion (Version) VALUES (?)", (SCHEMA_VERSION,))
@@ -1431,6 +1438,8 @@ def db_get_sessions_by_date(report_date: str, report_type: Optional[str] = None,
 
 def db_save_spider_stats(session_id: int, stats: dict, db_path: Optional[str] = None) -> int:
     """Save spider statistics for a session."""
+    import json as _json
+    failed_movies_json = _json.dumps(stats.get('failed_movies', []), ensure_ascii=False) if stats.get('failed_movies') else ''
     with get_db(db_path or REPORTS_DB_PATH) as conn:
         cur = conn.execute(
             """INSERT INTO SpiderStats
@@ -1440,8 +1449,8 @@ def db_save_spider_stats(session_id: int, stats: dict, db_path: Optional[str] = 
                 Phase2Discovered, Phase2Processed, Phase2Skipped,
                 Phase2NoNew, Phase2Failed,
                 TotalDiscovered, TotalProcessed, TotalSkipped,
-                TotalNoNew, TotalFailed)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                TotalNoNew, TotalFailed, FailedMovies)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (session_id,
              stats.get('phase1_discovered', 0), stats.get('phase1_processed', 0),
              stats.get('phase1_skipped', 0), stats.get('phase1_no_new', 0),
@@ -1451,7 +1460,7 @@ def db_save_spider_stats(session_id: int, stats: dict, db_path: Optional[str] = 
              stats.get('phase2_failed', 0),
              stats.get('total_discovered', 0), stats.get('total_processed', 0),
              stats.get('total_skipped', 0), stats.get('total_no_new', 0),
-             stats.get('total_failed', 0)),
+             stats.get('total_failed', 0), failed_movies_json),
         )
         return cur.lastrowid
 
