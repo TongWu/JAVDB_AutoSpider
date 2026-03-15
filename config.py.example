@@ -269,6 +269,14 @@ REDOWNLOAD_SIZE_THRESHOLD = 0.30
 # Reports root directory (contains history files and report subdirectories)
 REPORTS_DIR = 'reports'
 
+# Database file paths (three separate databases for concurrency and isolation)
+# history.db — MovieHistory, TorrentHistory (spider core data)
+# reports.db — ReportSessions, ReportMovies, ReportTorrents, SpiderStats, UploaderStats, PikpakStats
+# operations.db — RcloneInventory, DedupRecords, PikpakHistory, ProxyBans
+HISTORY_DB_PATH = 'reports/history.db'
+REPORTS_DB_PATH = 'reports/reports.db'
+OPERATIONS_DB_PATH = 'reports/operations.db'
+
 # Output directories for CSV reports (inside REPORTS_DIR)
 # Reports are stored in REPORTS_DIR/DailyReport/YYYY/MM/ and REPORTS_DIR/AdHoc/YYYY/MM/
 DAILY_REPORT_DIR = 'reports/DailyReport'
