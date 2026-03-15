@@ -866,7 +866,8 @@ def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
         dedup_csv_path: Path to the dedup CSV file (fallback source).
         session_start_time: ISO datetime string (e.g. '2026-03-15 00:05:00').
             When provided, only records with detect_datetime >= this value
-            are included (current-session scope).  Falls back to today's date.
+            are included (current-session scope).  When absent, all rows are
+            treated as in-session (no date filtering).
 
     Returns a dict with keys:
         detected, deleted, failed, deleted_items (list of summary strings)
@@ -911,18 +912,22 @@ def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
     if not rows:
         return None
 
-    # Determine the cutoff for "current session" records
-    if session_start_time:
-        cutoff = session_start_time
-    else:
-        cutoff = datetime.now().strftime('%Y-%m-%d')
+    # Determine the cutoff for "current session" records.
+    # When session_start_time is unavailable, cutoff stays None and all rows
+    # are treated as in-session (avoids dropping pre-midnight rows on
+    # cross-midnight runs).
+    cutoff = session_start_time or None
 
-    detected_session = sum(1 for r in rows if r.get('detect_datetime', '') >= cutoff)
+    detected_session = sum(
+        1 for r in rows
+        if cutoff is None or r.get('detect_datetime', '') >= cutoff
+    )
     deleted_session_items = []
     for r in rows:
-        if (r.get('detect_datetime', '') >= cutoff
+        in_session = cutoff is None or r.get('detect_datetime', '') >= cutoff
+        if (in_session
                 and r.get('is_deleted', 'False') == 'True'
-                and r.get('delete_datetime', '') >= cutoff):
+                and (cutoff is None or r.get('delete_datetime', '') >= cutoff)):
             deleted_session_items.append(
                 f"  • {r.get('video_code', '?')} [{r.get('existing_sensor', '?')}-{r.get('existing_subtitle', '?')}] "
                 f"-> {r.get('deletion_reason', '?')}"
