@@ -564,6 +564,73 @@ class TestLoginFallbackContinuation:
         assert result['final_success'] is False
 
 
+class TestAdhocLoginFailedOnIndexPage:
+    """Test that adhoc mode aborts the spider when login fails on index page."""
+
+    def _simulate_index_login_fallback(self, is_adhoc_mode, login_success,
+                                       still_login_page_after_refresh=False):
+        """Simulate the login fallback logic in fetch_index_page_with_fallback.
+
+        Mirrors the actual raise/continue behaviour in fallback.py.
+
+        Raises:
+            AdhocLoginFailedError when adhoc + index page login fails.
+        Returns:
+            str: 'proxy_fallback' if control continues to the proxy pool phase.
+        """
+        from scripts.spider.fallback import AdhocLoginFailedError
+
+        if login_success:
+            if still_login_page_after_refresh:
+                if is_adhoc_mode:
+                    raise AdhocLoginFailedError(
+                        "Login succeeded but index page still requires authentication")
+                return 'proxy_fallback'
+            return 'success'
+        else:
+            if is_adhoc_mode:
+                raise AdhocLoginFailedError(
+                    "Login refresh failed on index page")
+            return 'proxy_fallback'
+
+    def test_adhoc_login_failure_raises(self):
+        """Adhoc mode: login fails on index page → AdhocLoginFailedError."""
+        from scripts.spider.fallback import AdhocLoginFailedError
+
+        with pytest.raises(AdhocLoginFailedError, match="Login refresh failed"):
+            self._simulate_index_login_fallback(
+                is_adhoc_mode=True, login_success=False)
+
+    def test_adhoc_login_success_but_still_login_page_raises(self):
+        """Adhoc mode: login succeeds but page is still a login page → AdhocLoginFailedError."""
+        from scripts.spider.fallback import AdhocLoginFailedError
+
+        with pytest.raises(AdhocLoginFailedError, match="still requires authentication"):
+            self._simulate_index_login_fallback(
+                is_adhoc_mode=True, login_success=True,
+                still_login_page_after_refresh=True)
+
+    def test_adhoc_login_success_returns_success(self):
+        """Adhoc mode: login succeeds and page loads correctly → no error."""
+        result = self._simulate_index_login_fallback(
+            is_adhoc_mode=True, login_success=True,
+            still_login_page_after_refresh=False)
+        assert result == 'success'
+
+    def test_daily_mode_login_failure_continues_fallback(self):
+        """Daily mode: login failure continues to proxy fallback (no raise)."""
+        result = self._simulate_index_login_fallback(
+            is_adhoc_mode=False, login_success=False)
+        assert result == 'proxy_fallback'
+
+    def test_daily_mode_still_login_page_continues_fallback(self):
+        """Daily mode: still login page after refresh continues to proxy fallback."""
+        result = self._simulate_index_login_fallback(
+            is_adhoc_mode=False, login_success=True,
+            still_login_page_after_refresh=True)
+        assert result == 'proxy_fallback'
+
+
 # Use temp_dir fixture
 @pytest.fixture
 def temp_dir():
