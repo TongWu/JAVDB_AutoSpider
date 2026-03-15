@@ -253,6 +253,15 @@ IGNORE_RELEASE_DATE_FILTER = False
 # If False: Skip movies where all available torrent categories are already in history (default)
 INCLUDE_DOWNLOADED_IN_REPORT = False
 
+# Whether to enable re-download (洗版) mode.
+# When enabled, the spider will check if a same-category torrent is significantly
+# larger than the previously downloaded one and trigger a re-download.
+ENABLE_REDOWNLOAD = False
+
+# Size increase threshold for re-download.
+# 0.30 means a new torrent must be at least 30% larger to trigger re-download.
+REDOWNLOAD_SIZE_THRESHOLD = 0.30
+
 # =============================================================================
 # FILE PATHS
 # =============================================================================
