@@ -48,6 +48,7 @@ def process_phase_entries_sequential(
     use_proxy: bool,
     use_cf_bypass: bool,
     rclone_inventory: dict = None,
+    rclone_filter: bool = True,
     enable_dedup: bool = False,
     dedup_csv_path: str = '',
     enable_redownload: bool = False,
@@ -98,7 +99,7 @@ def process_phase_entries_sequential(
                 skipped_history += 1
                 continue
 
-        if rclone_inventory and should_skip_from_rclone(entry.get('video_code', ''), rclone_inventory, enable_dedup):
+        if rclone_filter and rclone_inventory and should_skip_from_rclone(entry.get('video_code', ''), rclone_inventory, enable_dedup):
             logger.info(
                 f"[{i}/{total_entries}] [Page {page_num}] "
                 f"Skipping {entry['video_code']} - already exists in rclone inventory with 中字"
