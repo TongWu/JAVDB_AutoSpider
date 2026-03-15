@@ -299,6 +299,7 @@ def migrate_dedup_all(reports_dir: str, db_path: str, dry_run: bool = False) -> 
       1. reports/dedup.csv                          (legacy, DedupRecord format)
       2. reports/Dedup/**/Dedup_Pending_*.csv       (DedupRecord format)
       3. reports/Dedup/**/Dedup_Report_*.csv        (DeletionRecord format, mapped)
+      4. reports/dedup_history.csv                  (runtime-generated, preserves records)
 
     Deduplication uses ``existing_gdrive_path`` as a unique key.  Records
     already present in the DB are skipped (INSERT OR IGNORE).
@@ -348,6 +349,20 @@ def migrate_dedup_all(reports_dir: str, db_path: str, dry_run: bool = False) -> 
                 added += 1
         if rows:
             logger.info(f"Report CSV {csv_file}: {len(rows)} rows, {added} new")
+
+    # 4. Existing dedup_history.csv (preserve records added at runtime)
+    history_csv = os.path.join(reports_dir, 'dedup_history.csv')
+    if os.path.exists(history_csv):
+        history_rows = _load_dedup_pending_csv(history_csv)
+        added = 0
+        for row in history_rows:
+            p = row.get('existing_gdrive_path', '')
+            if p and p not in seen_paths:
+                seen_paths.add(p)
+                all_rows.append(row)
+                added += 1
+        if history_rows:
+            logger.info(f"Existing dedup_history.csv: {len(history_rows)} rows, {added} new")
 
     logger.info(f"Dedup merge total: {len(all_rows)} unique records from all sources")
 
