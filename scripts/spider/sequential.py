@@ -57,13 +57,14 @@ def process_phase_entries_sequential(
 
     Returns a dict with keys:
         rows, skipped_history, failed, no_new_torrents,
-        use_proxy, use_cf_bypass
+        failed_movies, use_proxy, use_cf_bypass
     """
     total_entries = len(entries)
     phase_rows: list = []
     visited_hrefs: set = set()
     skipped_history = 0
     failed = 0
+    failed_movies: list = []
     no_new_torrents = 0
     pending_movie_sleep = False
 
@@ -129,8 +130,9 @@ def process_phase_entries_sequential(
             use_proxy = effective_use_proxy
 
         if not parse_success:
-            logger.error(f"[{entry_index}] [Page {page_num}] Failed to fetch/parse detail page after all fallback attempts")
+            logger.error(f"[{entry_index}] [Page {page_num}] Failed: {entry.get('video_code', '?')} ({detail_url})")
             failed += 1
+            failed_movies.append({'video_code': entry.get('video_code', '?'), 'url': detail_url, 'phase': phase})
             pending_movie_sleep = True
             continue
 
@@ -217,6 +219,7 @@ def process_phase_entries_sequential(
         'rows': phase_rows,
         'skipped_history': skipped_history,
         'failed': failed,
+        'failed_movies': failed_movies,
         'no_new_torrents': no_new_torrents,
         'use_proxy': use_proxy,
         'use_cf_bypass': use_cf_bypass,

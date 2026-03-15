@@ -213,6 +213,7 @@ def main():
 
     skipped_history_count = 0
     failed_count = 0
+    failed_movies_list = []
     no_new_torrents_count = 0
     total_entries_phase1 = 0
 
@@ -331,6 +332,7 @@ def main():
         rows.extend(phase1_rows)
         skipped_history_count += p1_result['skipped_history']
         failed_count += p1_result['failed']
+        failed_movies_list.extend(p1_result.get('failed_movies', []))
         no_new_torrents_count += p1_result['no_new_torrents']
 
     # ======================================================================
@@ -397,6 +399,7 @@ def main():
         rows.extend(phase2_rows)
         skipped_history_count += p2_result['skipped_history']
         failed_count += p2_result['failed']
+        failed_movies_list.extend(p2_result.get('failed_movies', []))
         no_new_torrents_count += p2_result['no_new_torrents']
 
     if not dry_run:
@@ -448,6 +451,7 @@ def main():
                 'total_skipped': skipped_history_count,
                 'total_no_new': no_new_torrents_count,
                 'total_failed': failed_count,
+                'failed_movies': failed_movies_list,
             }
             db_save_spider_stats(_session_id, stats)
 
