@@ -32,18 +32,22 @@ def check_torrent_status(row: dict) -> Tuple[bool, bool, bool]:
 
 
 def collect_new_magnet_links(row: dict, magnet_links: dict):
-    """Extract magnet links and sizes that haven't been downloaded previously.
+    """Extract magnet links, sizes, file counts, and resolutions for new torrents.
 
     Returns:
-        (new_magnets, new_sizes)
+        (new_magnets, new_sizes, new_file_counts, new_resolutions)
     """
     new_magnets = {}
     new_sizes = {}
+    new_file_counts = {}
+    new_resolutions = {}
     for mtype in ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle'):
-        if row[mtype] and row[mtype] != '[DOWNLOADED PREVIOUSLY]':
+        if row.get(mtype) and row[mtype] != '[DOWNLOADED PREVIOUSLY]':
             new_magnets[mtype] = magnet_links.get(mtype, '')
             new_sizes[mtype] = magnet_links.get(f'size_{mtype}', '')
-    return new_magnets, new_sizes
+            new_file_counts[mtype] = magnet_links.get(f'file_count_{mtype}', 0)
+            new_resolutions[mtype] = magnet_links.get(f'resolution_{mtype}')
+    return new_magnets, new_sizes, new_file_counts, new_resolutions
 
 
 def should_include_torrent_in_csv(href, history_data, magnet_links):

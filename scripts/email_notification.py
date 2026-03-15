@@ -853,13 +853,13 @@ def extract_dedup_statistics(dedup_csv_path):
                 rows = []
                 for r in db_rows:
                     rows.append({
-                        'video_code': r.get('video_code', ''),
-                        'existing_sensor': r.get('existing_sensor', ''),
-                        'existing_subtitle': r.get('existing_subtitle', ''),
-                        'detect_datetime': r.get('detect_datetime', ''),
-                        'is_deleted': 'True' if r.get('is_deleted') in (1, True, 'True', '1') else 'False',
-                        'delete_datetime': r.get('delete_datetime', ''),
-                        'deletion_reason': r.get('deletion_reason', ''),
+                        'video_code': r.get('VideoCode', r.get('video_code', '')),
+                        'existing_sensor': r.get('ExistingSensor', r.get('existing_sensor', '')),
+                        'existing_subtitle': r.get('ExistingSubtitle', r.get('existing_subtitle', '')),
+                        'detect_datetime': r.get('DateTimeDetected', r.get('detect_datetime', '')),
+                        'is_deleted': 'True' if r.get('IsDeleted', r.get('is_deleted')) in (1, True, 'True', '1') else 'False',
+                        'delete_datetime': r.get('DateTimeDeleted', r.get('delete_datetime', '')),
+                        'deletion_reason': r.get('DeletionReason', r.get('deletion_reason', '')),
                     })
     except Exception as e:
         logger.debug(f"Could not load dedup records from DB: {e}")
@@ -1227,7 +1227,7 @@ def main():
             if _sid is None:
                 latest = db_get_latest_session()
                 if latest:
-                    _sid = latest['id']
+                    _sid = latest.get('Id', latest.get('id'))
                     logger.debug(f"No --session-id provided, falling back to latest session: {_sid}")
             if _sid is not None:
                 _db_spider_stats = db_get_spider_stats(_sid)
@@ -1239,25 +1239,25 @@ def main():
     if _db_spider_stats:
         spider_stats = {
             'phase1': {
-                'discovered': _db_spider_stats.get('phase1_discovered', 0),
-                'processed': _db_spider_stats.get('phase1_processed', 0),
-                'skipped_history': _db_spider_stats.get('phase1_skipped', 0),
-                'no_new_torrents': _db_spider_stats.get('phase1_no_new', 0),
-                'failed': _db_spider_stats.get('phase1_failed', 0),
+                'discovered': _db_spider_stats.get('Phase1Discovered', _db_spider_stats.get('phase1_discovered', 0)),
+                'processed': _db_spider_stats.get('Phase1Processed', _db_spider_stats.get('phase1_processed', 0)),
+                'skipped_history': _db_spider_stats.get('Phase1Skipped', _db_spider_stats.get('phase1_skipped', 0)),
+                'no_new_torrents': _db_spider_stats.get('Phase1NoNew', _db_spider_stats.get('phase1_no_new', 0)),
+                'failed': _db_spider_stats.get('Phase1Failed', _db_spider_stats.get('phase1_failed', 0)),
             },
             'phase2': {
-                'discovered': _db_spider_stats.get('phase2_discovered', 0),
-                'processed': _db_spider_stats.get('phase2_processed', 0),
-                'skipped_history': _db_spider_stats.get('phase2_skipped', 0),
-                'no_new_torrents': _db_spider_stats.get('phase2_no_new', 0),
-                'failed': _db_spider_stats.get('phase2_failed', 0),
+                'discovered': _db_spider_stats.get('Phase2Discovered', _db_spider_stats.get('phase2_discovered', 0)),
+                'processed': _db_spider_stats.get('Phase2Processed', _db_spider_stats.get('phase2_processed', 0)),
+                'skipped_history': _db_spider_stats.get('Phase2Skipped', _db_spider_stats.get('phase2_skipped', 0)),
+                'no_new_torrents': _db_spider_stats.get('Phase2NoNew', _db_spider_stats.get('phase2_no_new', 0)),
+                'failed': _db_spider_stats.get('Phase2Failed', _db_spider_stats.get('phase2_failed', 0)),
             },
             'overall': {
-                'total_discovered': _db_spider_stats.get('total_discovered', 0),
-                'successfully_processed': _db_spider_stats.get('total_processed', 0),
-                'skipped_history': _db_spider_stats.get('total_skipped', 0),
-                'no_new_torrents': _db_spider_stats.get('total_no_new', 0),
-                'failed': _db_spider_stats.get('total_failed', 0),
+                'total_discovered': _db_spider_stats.get('TotalDiscovered', _db_spider_stats.get('total_discovered', 0)),
+                'successfully_processed': _db_spider_stats.get('TotalProcessed', _db_spider_stats.get('total_processed', 0)),
+                'skipped_history': _db_spider_stats.get('TotalSkipped', _db_spider_stats.get('total_skipped', 0)),
+                'no_new_torrents': _db_spider_stats.get('TotalNoNew', _db_spider_stats.get('total_no_new', 0)),
+                'failed': _db_spider_stats.get('TotalFailed', _db_spider_stats.get('total_failed', 0)),
             },
         }
         logger.info("Spider stats loaded from SQLite")
@@ -1266,14 +1266,14 @@ def main():
 
     if _db_uploader_stats:
         uploader_stats = {
-            'total': _db_uploader_stats.get('total_torrents', 0),
-            'success': _db_uploader_stats.get('successfully_added', 0),
-            'failed': _db_uploader_stats.get('failed_count', 0),
-            'hacked_sub': _db_uploader_stats.get('hacked_sub', 0),
-            'hacked_nosub': _db_uploader_stats.get('hacked_nosub', 0),
-            'subtitle': _db_uploader_stats.get('subtitle_count', 0),
-            'no_subtitle': _db_uploader_stats.get('no_subtitle_count', 0),
-            'success_rate': _db_uploader_stats.get('success_rate', 0.0),
+            'total': _db_uploader_stats.get('TotalTorrents', _db_uploader_stats.get('total_torrents', 0)),
+            'success': _db_uploader_stats.get('SuccessfullyAdded', _db_uploader_stats.get('successfully_added', 0)),
+            'failed': _db_uploader_stats.get('FailedCount', _db_uploader_stats.get('failed_count', 0)),
+            'hacked_sub': _db_uploader_stats.get('HackedSub', _db_uploader_stats.get('hacked_sub', 0)),
+            'hacked_nosub': _db_uploader_stats.get('HackedNosub', _db_uploader_stats.get('hacked_nosub', 0)),
+            'subtitle': _db_uploader_stats.get('SubtitleCount', _db_uploader_stats.get('subtitle_count', 0)),
+            'no_subtitle': _db_uploader_stats.get('NoSubtitleCount', _db_uploader_stats.get('no_subtitle_count', 0)),
+            'success_rate': _db_uploader_stats.get('SuccessRate', _db_uploader_stats.get('success_rate', 0.0)),
         }
         logger.info("Uploader stats loaded from SQLite")
     else:
@@ -1281,12 +1281,12 @@ def main():
 
     if _db_pikpak_stats:
         pikpak_stats = {
-            'total_torrents': _db_pikpak_stats.get('total_torrents', 0),
-            'filtered_old': _db_pikpak_stats.get('filtered_old', 0),
-        'added_to_pikpak': _db_pikpak_stats.get('uploaded_count', _db_pikpak_stats.get('successful_count', 0)),
-        'removed_from_qb': _db_pikpak_stats.get('successful_count', 0),
-            'failed': _db_pikpak_stats.get('failed_count', 0),
-            'threshold_days': _db_pikpak_stats.get('threshold_days', 3),
+            'total_torrents': _db_pikpak_stats.get('TotalTorrents', _db_pikpak_stats.get('total_torrents', 0)),
+            'filtered_old': _db_pikpak_stats.get('FilteredOld', _db_pikpak_stats.get('filtered_old', 0)),
+            'added_to_pikpak': _db_pikpak_stats.get('UploadedCount', _db_pikpak_stats.get('uploaded_count', _db_pikpak_stats.get('SuccessfulCount', _db_pikpak_stats.get('successful_count', 0)))),
+            'removed_from_qb': _db_pikpak_stats.get('SuccessfulCount', _db_pikpak_stats.get('successful_count', 0)),
+            'failed': _db_pikpak_stats.get('FailedCount', _db_pikpak_stats.get('failed_count', 0)),
+            'threshold_days': _db_pikpak_stats.get('ThresholdDays', _db_pikpak_stats.get('threshold_days', 3)),
         }
         logger.info("PikPak stats loaded from SQLite")
     else:
