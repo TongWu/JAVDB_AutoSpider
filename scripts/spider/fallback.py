@@ -13,6 +13,11 @@ from scripts.spider.config_loader import (
 
 logger = get_logger(__name__)
 
+
+class AdhocLoginFailedError(Exception):
+    """Raised when login fails on an index page in adhoc mode, causing the spider to abort."""
+    pass
+
 try:
     from javdb_rust_core import validate_index_html as _rust_validate_index_html
     _RUST_VALIDATE = True
@@ -124,9 +129,18 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
                                 return _validate_index_html(html, context_msg)
                             else:
                                 logger.warning(f"[Page {page_num}] Still login page after refresh")
+                                if is_adhoc_mode:
+                                    raise AdhocLoginFailedError(
+                                        "Login succeeded but index page still requires authentication")
+                        else:
+                            if is_adhoc_mode:
+                                raise AdhocLoginFailedError(
+                                    "Login refresh failed on index page")
                     last_failed_html = html
                     return None, False, False
                 return _validate_index_html(html, context_msg)
+        except AdhocLoginFailedError:
+            raise
         except Exception as e:
             logger.debug(f"[Page {page_num}] Failed {context_msg}: {e}")
         return None, False, False
@@ -206,6 +220,8 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
             if is_valid_empty:
                 return html, False, False, False, use_cf_bypass, True
         elif not login_success:
+            if is_adhoc_mode:
+                raise AdhocLoginFailedError("Login refresh failed on index page")
             logger.warning(f"[Page {page_num}] Login refresh failed, continuing with proxy pool fallback...")
 
     # --- Phase 2: Iterate through remaining proxies ---
