@@ -16,36 +16,48 @@ except ImportError:
     _RUST_LOGIN_CHECK = False
 
 
-def attempt_login_refresh():
+def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None):
     """Attempt to refresh session cookie by logging in via login.py.
 
     This function can only be called ONCE per spider run.  After successful
     login, login.py updates config.py with the new cookie, then we reload
     config.py to get the updated cookie value.
 
+    The cookie obtained is bound to the proxy/server that performed the login.
+    ``state.logged_in_proxy_name`` is set so that parallel workers know which
+    server holds the valid session.
+
+    Args:
+        explicit_proxies: If provided, use these proxies for login instead of
+            the global proxy pool.  Used by parallel workers to login through
+            their own proxy.
+        explicit_proxy_name: Human-readable name of the proxy being used.
+
     Returns:
-        tuple: (success: bool, new_cookie: str or None)
+        tuple: (success: bool, new_cookie: str or None, proxy_name: str or None)
     """
     if state.login_attempted:
         logger.debug("Login already attempted in this run, skipping")
-        return False, None
+        return False, None, None
 
     state.login_attempted = True
 
     if not LOGIN_FEATURE_AVAILABLE:
         logger.warning("Login feature not available (GPT_API_KEY/GPT_API_URL not configured)")
-        return False, None
+        return False, None, None
 
     if not JAVDB_USERNAME or not JAVDB_PASSWORD:
         logger.warning("Login credentials not configured (JAVDB_USERNAME/JAVDB_PASSWORD)")
-        return False, None
+        return False, None, None
 
     logger.info("=" * 60)
     logger.info("ATTEMPTING SESSION COOKIE REFRESH VIA LOGIN")
     logger.info("=" * 60)
 
-    login_proxies = None
-    if state.global_proxy_pool is not None:
+    login_proxies = explicit_proxies
+    used_proxy_name = explicit_proxy_name
+
+    if login_proxies is None and state.global_proxy_pool is not None:
         current_proxy = state.global_proxy_pool.get_current_proxy()
         if current_proxy:
             login_proxies = {
@@ -54,9 +66,12 @@ def attempt_login_refresh():
             }
             login_proxies = {k: v for k, v in login_proxies.items() if v}
             if login_proxies:
-                logger.info(f"Login will use proxy: {state.global_proxy_pool.get_current_proxy_name()}")
+                used_proxy_name = state.global_proxy_pool.get_current_proxy_name()
             else:
                 login_proxies = None
+
+    if login_proxies and used_proxy_name:
+        logger.info(f"Login will use proxy: {used_proxy_name}")
 
     try:
         from scripts.login import login_with_retry, update_config_file
@@ -67,6 +82,7 @@ def attempt_login_refresh():
 
         if success and session_cookie:
             logger.info("✓ Login successful, new session cookie obtained")
+            state.logged_in_proxy_name = used_proxy_name
 
             if update_config_file(session_cookie):
                 logger.info("✓ Updated config.py with new session cookie")
@@ -80,7 +96,7 @@ def attempt_login_refresh():
                     state.global_request_handler.config.javdb_session_cookie = new_cookie
                     logger.info("✓ Updated request handler with new session cookie")
                 logger.info("=" * 60)
-                return True, new_cookie
+                return True, new_cookie, used_proxy_name
             else:
                 logger.warning("Failed to update config.py, using cookie directly for this run")
                 state.refreshed_session_cookie = session_cookie
@@ -88,18 +104,18 @@ def attempt_login_refresh():
                     state.global_request_handler.config.javdb_session_cookie = session_cookie
                     logger.info("✓ Updated request handler with new session cookie")
                 logger.info("=" * 60)
-                return True, session_cookie
+                return True, session_cookie, used_proxy_name
         else:
             logger.error(f"✗ Login failed: {message}")
             logger.info("=" * 60)
-            return False, None
+            return False, None, None
 
     except ImportError as e:
         logger.error(f"Failed to import login module: {e}")
-        return False, None
+        return False, None, None
     except Exception as e:
         logger.error(f"Unexpected error during login: {e}")
-        return False, None
+        return False, None, None
 
 
 def is_login_page(html: str) -> bool:
