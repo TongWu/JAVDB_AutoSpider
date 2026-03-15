@@ -223,9 +223,9 @@ def scan_inventory(
 
 def export_db_to_csv(output_path: str) -> int:
     """Export the rclone_inventory table from SQLite to a CSV file."""
-    from utils.db import get_db
+    from utils.db import get_db, OPERATIONS_DB_PATH
 
-    with get_db() as conn:
+    with get_db(OPERATIONS_DB_PATH) as conn:
         rows = conn.execute(
             "SELECT VideoCode AS video_code, SensorCategory AS sensor_category, "
             "SubtitleCategory AS subtitle_category, FolderPath AS folder_path, "

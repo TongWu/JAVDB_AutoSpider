@@ -216,7 +216,7 @@ jobs:
           fi
 
           git add reports/rclone_inventory.csv 2>/dev/null || true
-          git add reports/javdb_autospider.db 2>/dev/null || true
+          git add reports/operations.db 2>/dev/null || true
           git add reports/dedup_history.csv 2>/dev/null || true
           find reports/Dedup -name "*.csv" -exec git add {} \; 2>/dev/null || true
 
@@ -255,7 +255,7 @@ jobs:
           name: rclone-${{ github.run_number }}
           path: |
             reports/rclone_inventory.csv
-            reports/javdb_autospider.db
+            reports/operations.db
             reports/dedup_history.csv
             reports/Dedup/
           retention-days: 30

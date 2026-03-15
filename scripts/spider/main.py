@@ -39,6 +39,7 @@ from scripts.spider.index_fetcher import fetch_all_index_pages
 from scripts.spider.parallel import process_detail_entries_parallel
 from scripts.spider.sequential import process_phase_entries_sequential
 from scripts.spider.report import generate_summary_report
+from scripts.spider.fallback import AdhocLoginFailedError
 
 logger = get_logger(__name__)
 
@@ -218,16 +219,21 @@ def main():
     # ======================================================================
     # Fetch all index pages
     # ======================================================================
-    idx_result = fetch_all_index_pages(
-        session=session, start_page=start_page, end_page=end_page,
-        parse_all=parse_all, phase_mode=phase_mode, custom_url=custom_url,
-        ignore_release_date=ignore_release_date, use_proxy=use_proxy,
-        use_cf_bypass=use_cf_bypass, max_consecutive_empty=max_consecutive_empty,
-        output_csv=output_csv, output_dated_dir=output_dated_dir,
-        csv_path=csv_path, user_specified_output=bool(args.output_file),
-        parsed_movies_history_phase1=parsed_movies_history_phase1,
-        parsed_movies_history_phase2=parsed_movies_history_phase2,
-    )
+    try:
+        idx_result = fetch_all_index_pages(
+            session=session, start_page=start_page, end_page=end_page,
+            parse_all=parse_all, phase_mode=phase_mode, custom_url=custom_url,
+            ignore_release_date=ignore_release_date, use_proxy=use_proxy,
+            use_cf_bypass=use_cf_bypass, max_consecutive_empty=max_consecutive_empty,
+            output_csv=output_csv, output_dated_dir=output_dated_dir,
+            csv_path=csv_path, user_specified_output=bool(args.output_file),
+            parsed_movies_history_phase1=parsed_movies_history_phase1,
+            parsed_movies_history_phase2=parsed_movies_history_phase2,
+        )
+    except AdhocLoginFailedError as e:
+        logger.error(f"ADHOC SPIDER FAILED: Login failed during index page fetch — {e}")
+        logger.error("Aborting spider run. Please check your session cookie or login credentials.")
+        sys.exit(1)
     all_index_results_phase1 = idx_result['all_index_results_phase1']
     all_index_results_phase2 = idx_result['all_index_results_phase2']
     any_proxy_banned = idx_result['any_proxy_banned']
@@ -417,7 +423,7 @@ def main():
     # Save spider stats and end_page to SQLite (when session exists)
     if _session_id is not None:
         try:
-            from utils.db import db_save_spider_stats, get_db
+            from utils.db import db_save_spider_stats, get_db, REPORTS_DB_PATH
             p1_discovered = len(all_index_results_phase1) if phase_mode in ('1', 'all') else 0
             p1_processed = len(phase1_rows)
             _p1 = p1_result if 'p1_result' in locals() else {}
@@ -447,7 +453,7 @@ def main():
 
             last_page = idx_result.get('last_valid_page')
             if last_page is not None:
-                with get_db() as conn:
+                with get_db(REPORTS_DB_PATH) as conn:
                     conn.execute("UPDATE ReportSessions SET EndPage=? WHERE Id=?", (last_page, _session_id))
         except Exception as e:
             logger.warning(f"Failed to save spider stats: {e}")

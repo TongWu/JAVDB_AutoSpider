@@ -19,6 +19,16 @@ on:
         required: false
         default: false
         type: boolean
+      enable_redownload:
+        description: 'Enable torrent re-download (洗版) when a same-category torrent is significantly larger'
+        required: false
+        default: false
+        type: boolean
+      redownload_threshold:
+        description: 'Size increase threshold for re-download (e.g. 0.30 = 30%)'
+        required: false
+        default: '0.30'
+        type: string
   # schedule: # DISABLED FOR PUBLIC REPO
     # Run daily at 15:30 UTC (23:30 Beijing Time)
     # - cron: '30 15 * * *'
@@ -354,6 +364,14 @@ jobs:
             SPIDER_CMD+=(--enable-dedup)
             echo "🔍 Dedup detection enabled"
           fi
+          if [ "${{ inputs.enable_redownload }}" == "true" ]; then
+            SPIDER_CMD+=(--enable-redownload)
+            THRESHOLD="${{ inputs.redownload_threshold }}"
+            if [ -n "$THRESHOLD" ] && [ "$THRESHOLD" != "0.30" ]; then
+              SPIDER_CMD+=(--redownload-threshold "$THRESHOLD")
+            fi
+            echo "🔄 Re-download (洗版) enabled (threshold: ${THRESHOLD:-0.30})"
+          fi
           # Capture output AND exit code so we can always extract the CSV filename
           # (even when spider exits non-zero, e.g. proxy ban sys.exit(2))
           SPIDER_OUTPUT=$("${SPIDER_CMD[@]}" | tee /dev/stderr) && SPIDER_EXIT=0 || SPIDER_EXIT=$?
@@ -523,7 +541,7 @@ jobs:
           fi
           
           # Add history files and database if they exist
-          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/pikpak_bridge_history.csv" "$REPORTS_DIR/proxy_bans.csv" "$REPORTS_DIR/rclone_inventory.csv" "$REPORTS_DIR/javdb_autospider.db"; do
+          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/pikpak_bridge_history.csv" "$REPORTS_DIR/proxy_bans.csv" "$REPORTS_DIR/rclone_inventory.csv" "$REPORTS_DIR/history.db" "$REPORTS_DIR/reports.db" "$REPORTS_DIR/operations.db"; do
             if [ -f "$HIST_FILE" ]; then
               FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $HIST_FILE"
               echo "Including: $HIST_FILE"
@@ -824,7 +842,9 @@ jobs:
             git add "$REPORTS_DIR/parsed_movies_history.csv" 2>/dev/null || true
             git add "$REPORTS_DIR/pikpak_bridge_history.csv" 2>/dev/null || true
             git add "$REPORTS_DIR/proxy_bans.csv" 2>/dev/null || true
-            git add "$REPORTS_DIR/javdb_autospider.db" 2>/dev/null || true
+            git add "$REPORTS_DIR/history.db" 2>/dev/null || true
+            git add "$REPORTS_DIR/reports.db" 2>/dev/null || true
+            git add "$REPORTS_DIR/operations.db" 2>/dev/null || true
             git add "$REPORTS_DIR/rclone_inventory.csv" 2>/dev/null || true
             git add "$REPORTS_DIR/dedup_history.csv" 2>/dev/null || true
             find "$REPORTS_DIR/Dedup" -name "*.csv" -exec git add {} \; 2>/dev/null || true

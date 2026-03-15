@@ -72,6 +72,16 @@ on:
         required: false
         default: false
         type: boolean
+      enable_redownload:
+        description: 'Enable torrent re-download (洗版) when a same-category torrent is significantly larger'
+        required: false
+        default: false
+        type: boolean
+      redownload_threshold:
+        description: 'Size increase threshold for re-download (e.g. 0.30 = 30%)'
+        required: false
+        default: '0.30'
+        type: string
 
 jobs:
   # =============================================================================
@@ -344,6 +354,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
+          lfs: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -464,7 +475,17 @@ jobs:
           if [ "${{ inputs.enable_dedup }}" == "true" ]; then
             SPIDER_CMD="$SPIDER_CMD --enable-dedup"
           fi
-          
+
+          # Add redownload (洗版) flag if enabled
+          if [ "${{ inputs.enable_redownload }}" == "true" ]; then
+            SPIDER_CMD="$SPIDER_CMD --enable-redownload"
+            THRESHOLD="${{ inputs.redownload_threshold }}"
+            if [ -n "$THRESHOLD" ] && [ "$THRESHOLD" != "0.30" ]; then
+              SPIDER_CMD="$SPIDER_CMD --redownload-threshold $THRESHOLD"
+            fi
+            echo "🔄 Re-download (洗版) enabled (threshold: ${THRESHOLD:-0.30})"
+          fi
+
           echo "Executing: $SPIDER_CMD"
           # Capture output to extract the CSV filename
           SPIDER_OUTPUT=$(eval $SPIDER_CMD | tee /dev/stderr)
@@ -622,7 +643,7 @@ jobs:
           fi
           
           # Add history files and database if they exist
-          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/pikpak_bridge_history.csv" "$REPORTS_DIR/proxy_bans.csv" "$REPORTS_DIR/rclone_inventory.csv" "$REPORTS_DIR/javdb_autospider.db"; do
+          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/pikpak_bridge_history.csv" "$REPORTS_DIR/proxy_bans.csv" "$REPORTS_DIR/rclone_inventory.csv" "$REPORTS_DIR/history.db" "$REPORTS_DIR/reports.db" "$REPORTS_DIR/operations.db"; do
             if [ -f "$HIST_FILE" ]; then
               FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $HIST_FILE"
               echo "Including: $HIST_FILE"
@@ -856,6 +877,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
+          lfs: true
 
       - name: Download encrypted reports
         uses: actions/download-artifact@v4
@@ -882,7 +904,6 @@ jobs:
               -pass pass:"$ARTIFACT_KEY" | tar -xzf -
             rm -rf encrypted_artifacts
             echo "✓ Reports decrypted successfully (folder structure preserved)"
-            # Show what was extracted
             echo "Extracted files:"
             find reports -type f \( -name "*.csv" -o -name "*.db" \) 2>/dev/null | head -20 || echo "No data files found"
           else
@@ -923,7 +944,9 @@ jobs:
             git add "$REPORTS_DIR/parsed_movies_history.csv" 2>/dev/null || true
             git add "$REPORTS_DIR/pikpak_bridge_history.csv" 2>/dev/null || true
             git add "$REPORTS_DIR/proxy_bans.csv" 2>/dev/null || true
-            git add "$REPORTS_DIR/javdb_autospider.db" 2>/dev/null || true
+            git add "$REPORTS_DIR/history.db" 2>/dev/null || true
+            git add "$REPORTS_DIR/reports.db" 2>/dev/null || true
+            git add "$REPORTS_DIR/operations.db" 2>/dev/null || true
             git add "$REPORTS_DIR/dedup_history.csv" 2>/dev/null || true
             find "$AD_HOC_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
             find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true

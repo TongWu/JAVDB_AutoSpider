@@ -228,6 +228,8 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
             ('GIT_BRANCH', 'GIT_BRANCH', get_env, 'main', 'GIT CONFIGURATION'),
         ]
     
+    reports_dir = get_env('REPORTS_DIR', 'reports')
+
     return git_config + [
         # qBittorrent Configuration
         ('QB_HOST', 'QB_HOST', get_env, 'localhost', 'QBITTORRENT CONFIGURATION'),
@@ -288,9 +290,12 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('INCLUDE_DOWNLOADED_IN_REPORT', 'INCLUDE_DOWNLOADED_IN_REPORT', get_env_bool, False, 'PARSING CONFIGURATION'),
         # File Paths
         ('REPORTS_DIR', 'REPORTS_DIR', get_env, 'reports', 'FILE PATHS'),
-        ('DAILY_REPORT_DIR', 'DAILY_REPORT_DIR', get_env, 'reports/DailyReport', 'FILE PATHS'),
-        ('AD_HOC_DIR', 'AD_HOC_DIR', get_env, 'reports/AdHoc', 'FILE PATHS'),
+        ('DAILY_REPORT_DIR', 'DAILY_REPORT_DIR', get_env, os.path.join(reports_dir, 'DailyReport'), 'FILE PATHS'),
+        ('AD_HOC_DIR', 'AD_HOC_DIR', get_env, os.path.join(reports_dir, 'AdHoc'), 'FILE PATHS'),
         ('PARSED_MOVIES_CSV', 'PARSED_MOVIES_CSV', get_env, 'parsed_movies_history.csv', 'FILE PATHS'),
+        ('HISTORY_DB_PATH', 'HISTORY_DB_PATH', get_env, os.path.join(reports_dir, 'history.db'), 'FILE PATHS'),
+        ('REPORTS_DB_PATH', 'REPORTS_DB_PATH', get_env, os.path.join(reports_dir, 'reports.db'), 'FILE PATHS'),
+        ('OPERATIONS_DB_PATH', 'OPERATIONS_DB_PATH', get_env, os.path.join(reports_dir, 'operations.db'), 'FILE PATHS'),
         # PikPak Configuration
         ('PIKPAK_EMAIL', 'PIKPAK_EMAIL', get_env, '', 'PIKPAK CONFIGURATION'),
         ('PIKPAK_PASSWORD', 'PIKPAK_PASSWORD', get_env, '', 'PIKPAK CONFIGURATION'),

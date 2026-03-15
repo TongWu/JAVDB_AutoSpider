@@ -1,8 +1,15 @@
 """SQLite database management layer for JAVDB AutoSpider.
 
-Replaces CSV-based storage with a single SQLite database file.
-All tables are created on first access; WAL mode is enabled for
-concurrent-read safety.
+Data is stored across three independent SQLite databases, each
+holding a logically separate group of tables:
+
+- **history.db** — MovieHistory, TorrentHistory
+- **reports.db** — ReportSessions, ReportMovies, ReportTorrents,
+  SpiderStats, UploaderStats, PikpakStats
+- **operations.db** — RcloneInventory, DedupRecords, PikpakHistory,
+  ProxyBans
+
+WAL mode is enabled on every connection for concurrent-read safety.
 """
 
 import os
@@ -18,9 +25,15 @@ from utils.logging_config import get_logger
 logger = get_logger(__name__)
 
 _REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
+
+HISTORY_DB_PATH = cfg('HISTORY_DB_PATH', os.path.join(_REPORTS_DIR, 'history.db'))
+REPORTS_DB_PATH = cfg('REPORTS_DB_PATH', os.path.join(_REPORTS_DIR, 'reports.db'))
+OPERATIONS_DB_PATH = cfg('OPERATIONS_DB_PATH', os.path.join(_REPORTS_DIR, 'operations.db'))
+
+# Legacy single-DB path — kept for migration source detection
 DB_PATH = cfg('SQLITE_DB_PATH', os.path.join(_REPORTS_DIR, 'javdb_autospider.db'))
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # ── Connection management ────────────────────────────────────────────────
 
@@ -37,37 +50,43 @@ def _is_valid_sqlite(path: str) -> bool:
         return False
 
 
-def _get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
-    """Return a thread-local connection, creating it if needed."""
-    path = db_path or DB_PATH
-    conn = getattr(_local, 'conn', None)
-    conn_path = getattr(_local, 'conn_path', None)
-    if conn is None or conn_path != path:
-        if conn is not None and conn_path != path:
-            try:
-                conn.close()
-            except Exception:
-                pass
-        os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
-        if os.path.exists(path) and os.path.getsize(path) > 0 and not _is_valid_sqlite(path):
-            raise sqlite3.DatabaseError(
-                f"Database file {path} is not a valid SQLite file. "
-                "This usually means Git LFS did not pull the real file."
-            )
-        conn = sqlite3.connect(path, timeout=30)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.execute("PRAGMA busy_timeout=5000")
-        _local.conn = conn
-        _local.conn_path = path
+def _get_connection(db_path: str) -> sqlite3.Connection:
+    """Return a thread-local connection for *db_path*, creating it if needed.
+
+    Multiple connections (one per distinct path) are cached per thread.
+    """
+    conns: dict = getattr(_local, 'conns', None)
+    if conns is None:
+        conns = {}
+        _local.conns = conns
+
+    conn = conns.get(db_path)
+    if conn is not None:
+        return conn
+
+    os.makedirs(os.path.dirname(db_path) or '.', exist_ok=True)
+    if os.path.exists(db_path) and os.path.getsize(db_path) > 0 and not _is_valid_sqlite(db_path):
+        raise sqlite3.DatabaseError(
+            f"Database file {db_path} is not a valid SQLite file. "
+            "This usually means Git LFS did not pull the real file."
+        )
+    conn = sqlite3.connect(db_path, timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=5000")
+    conns[db_path] = conn
     return conn
 
 
 @contextmanager
 def get_db(db_path: Optional[str] = None):
-    """Context manager yielding a SQLite connection with auto-commit."""
-    conn = _get_connection(db_path)
+    """Context manager yielding a SQLite connection with auto-commit.
+
+    *db_path* defaults to ``HISTORY_DB_PATH`` when ``None``; callers
+    that need a specific DB should always pass the path explicitly.
+    """
+    conn = _get_connection(db_path or HISTORY_DB_PATH)
     try:
         yield conn
         conn.commit()
@@ -77,27 +96,31 @@ def get_db(db_path: Optional[str] = None):
 
 
 def close_db():
-    """Close the thread-local connection (call before process exit)."""
-    conn = getattr(_local, 'conn', None)
-    if conn is not None:
+    """Close all thread-local connections (call before process exit)."""
+    conns: dict = getattr(_local, 'conns', None)
+    if not conns:
+        return
+    for path, conn in list(conns.items()):
         try:
             conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         except Exception:
             pass
-        conn.close()
-        _local.conn = None
-        _local.conn_path = None
+        try:
+            conn.close()
+        except Exception:
+            pass
+    conns.clear()
 
 
-# ── Schema DDL ───────────────────────────────────────────────────────────
+# ── Schema DDL (split across three databases) ────────────────────────────
 
-_TABLES_SQL = """
--- Schema version tracking
+_SCHEMA_VERSION_DDL = """
 CREATE TABLE IF NOT EXISTS SchemaVersion (
     Version INTEGER NOT NULL
 );
+"""
 
--- 1. MovieHistory (movie-level history)
+_HISTORY_DDL = _SCHEMA_VERSION_DDL + """
 CREATE TABLE IF NOT EXISTS MovieHistory (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     VideoCode TEXT NOT NULL,
@@ -110,7 +133,6 @@ CREATE TABLE IF NOT EXISTS MovieHistory (
 );
 CREATE INDEX IF NOT EXISTS idx_movie_history_video_code ON MovieHistory(VideoCode);
 
--- 2. TorrentHistory (torrent-level history, one row per torrent type per movie)
 CREATE TABLE IF NOT EXISTS TorrentHistory (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     MovieHistoryId INTEGER NOT NULL REFERENCES MovieHistory(Id),
@@ -125,61 +147,9 @@ CREATE TABLE IF NOT EXISTS TorrentHistory (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_torrent_type
     ON TorrentHistory(MovieHistoryId, SubtitleIndicator, CensorIndicator);
+"""
 
--- 3. RcloneInventory
-CREATE TABLE IF NOT EXISTS RcloneInventory (
-    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-    VideoCode TEXT NOT NULL,
-    SensorCategory TEXT DEFAULT '',
-    SubtitleCategory TEXT DEFAULT '',
-    FolderPath TEXT DEFAULT '',
-    FolderSize INTEGER DEFAULT 0,
-    FileCount INTEGER DEFAULT 0,
-    DateTimeScanned TEXT DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_rclone_inventory_video_code ON RcloneInventory(VideoCode);
-
--- 4. DedupRecords
-CREATE TABLE IF NOT EXISTS DedupRecords (
-    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-    VideoCode TEXT DEFAULT '',
-    ExistingSensor TEXT DEFAULT '',
-    ExistingSubtitle TEXT DEFAULT '',
-    ExistingGdrivePath TEXT DEFAULT '',
-    ExistingFolderSize INTEGER DEFAULT 0,
-    NewTorrentCategory TEXT DEFAULT '',
-    DeletionReason TEXT DEFAULT '',
-    DateTimeDetected TEXT DEFAULT '',
-    IsDeleted INTEGER DEFAULT 0,
-    DateTimeDeleted TEXT DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dedup_active_path
-    ON DedupRecords(ExistingGdrivePath)
-    WHERE IsDeleted = 0 AND ExistingGdrivePath != '';
-
--- 5. PikpakHistory
-CREATE TABLE IF NOT EXISTS PikpakHistory (
-    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-    TorrentHash TEXT DEFAULT '',
-    TorrentName TEXT DEFAULT '',
-    Category TEXT DEFAULT '',
-    MagnetUri TEXT DEFAULT '',
-    DateTimeAddedToQb TEXT DEFAULT '',
-    DateTimeDeletedFromQb TEXT DEFAULT '',
-    DateTimeUploadedToPikpak TEXT DEFAULT '',
-    TransferStatus TEXT DEFAULT '',
-    ErrorMessage TEXT DEFAULT ''
-);
-
--- 6. ProxyBans
-CREATE TABLE IF NOT EXISTS ProxyBans (
-    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ProxyName TEXT DEFAULT '',
-    DateTimeBanned TEXT DEFAULT '',
-    DateTimeUnbanned TEXT DEFAULT ''
-);
-
--- 7. ReportSessions
+_REPORTS_DDL = _SCHEMA_VERSION_DDL + """
 CREATE TABLE IF NOT EXISTS ReportSessions (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     ReportType TEXT NOT NULL,
@@ -195,7 +165,6 @@ CREATE TABLE IF NOT EXISTS ReportSessions (
 CREATE INDEX IF NOT EXISTS idx_report_sessions_type_date ON ReportSessions(ReportType, ReportDate);
 CREATE INDEX IF NOT EXISTS idx_report_sessions_csv ON ReportSessions(CsvFilename);
 
--- 8. ReportMovies (movie-level report rows)
 CREATE TABLE IF NOT EXISTS ReportMovies (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     SessionId INTEGER NOT NULL REFERENCES ReportSessions(Id),
@@ -209,7 +178,6 @@ CREATE TABLE IF NOT EXISTS ReportMovies (
 CREATE INDEX IF NOT EXISTS idx_report_movies_session ON ReportMovies(SessionId);
 CREATE INDEX IF NOT EXISTS idx_report_movies_video_code ON ReportMovies(VideoCode);
 
--- 9. ReportTorrents (torrent-level report rows)
 CREATE TABLE IF NOT EXISTS ReportTorrents (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     ReportMovieId INTEGER NOT NULL REFERENCES ReportMovies(Id),
@@ -224,7 +192,6 @@ CREATE TABLE IF NOT EXISTS ReportTorrents (
 CREATE INDEX IF NOT EXISTS idx_report_torrents_movie ON ReportTorrents(ReportMovieId);
 CREATE INDEX IF NOT EXISTS idx_report_torrents_video_code ON ReportTorrents(VideoCode);
 
--- 10. SpiderStats
 CREATE TABLE IF NOT EXISTS SpiderStats (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     SessionId INTEGER NOT NULL REFERENCES ReportSessions(Id),
@@ -246,7 +213,6 @@ CREATE TABLE IF NOT EXISTS SpiderStats (
     DateTimeCreated TEXT DEFAULT (datetime('now'))
 );
 
--- 11. UploaderStats
 CREATE TABLE IF NOT EXISTS UploaderStats (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     SessionId INTEGER NOT NULL REFERENCES ReportSessions(Id),
@@ -263,7 +229,6 @@ CREATE TABLE IF NOT EXISTS UploaderStats (
     DateTimeCreated TEXT DEFAULT (datetime('now'))
 );
 
--- 12. PikpakStats
 CREATE TABLE IF NOT EXISTS PikpakStats (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     SessionId INTEGER NOT NULL REFERENCES ReportSessions(Id),
@@ -277,6 +242,60 @@ CREATE TABLE IF NOT EXISTS PikpakStats (
     DateTimeCreated TEXT DEFAULT (datetime('now'))
 );
 """
+
+_OPERATIONS_DDL = _SCHEMA_VERSION_DDL + """
+CREATE TABLE IF NOT EXISTS RcloneInventory (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    VideoCode TEXT NOT NULL,
+    SensorCategory TEXT DEFAULT '',
+    SubtitleCategory TEXT DEFAULT '',
+    FolderPath TEXT DEFAULT '',
+    FolderSize INTEGER DEFAULT 0,
+    FileCount INTEGER DEFAULT 0,
+    DateTimeScanned TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_rclone_inventory_video_code ON RcloneInventory(VideoCode);
+
+CREATE TABLE IF NOT EXISTS DedupRecords (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    VideoCode TEXT DEFAULT '',
+    ExistingSensor TEXT DEFAULT '',
+    ExistingSubtitle TEXT DEFAULT '',
+    ExistingGdrivePath TEXT DEFAULT '',
+    ExistingFolderSize INTEGER DEFAULT 0,
+    NewTorrentCategory TEXT DEFAULT '',
+    DeletionReason TEXT DEFAULT '',
+    DateTimeDetected TEXT DEFAULT '',
+    IsDeleted INTEGER DEFAULT 0,
+    DateTimeDeleted TEXT DEFAULT ''
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dedup_active_path
+    ON DedupRecords(ExistingGdrivePath)
+    WHERE IsDeleted = 0 AND ExistingGdrivePath != '';
+
+CREATE TABLE IF NOT EXISTS PikpakHistory (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    TorrentHash TEXT DEFAULT '',
+    TorrentName TEXT DEFAULT '',
+    Category TEXT DEFAULT '',
+    MagnetUri TEXT DEFAULT '',
+    DateTimeAddedToQb TEXT DEFAULT '',
+    DateTimeDeletedFromQb TEXT DEFAULT '',
+    DateTimeUploadedToPikpak TEXT DEFAULT '',
+    TransferStatus TEXT DEFAULT '',
+    ErrorMessage TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS ProxyBans (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ProxyName TEXT DEFAULT '',
+    DateTimeBanned TEXT DEFAULT '',
+    DateTimeUnbanned TEXT DEFAULT ''
+);
+"""
+
+# Combined DDL for single-DB mode (backward compat, csv_to_sqlite, testing)
+_TABLES_SQL = _HISTORY_DDL + _REPORTS_DDL + _OPERATIONS_DDL
 
 
 # ── Category ↔ Indicator mapping ─────────────────────────────────────────
@@ -434,6 +453,8 @@ def _migrate_v5_to_v6(conn):
         conn.execute("DROP TABLE proxy_bans")
         logger.info("Migrated proxy_bans → ProxyBans")
 
+    session_map: dict[int, int] = {}
+
     # ── Step 6: report_sessions → ReportSessions ──
     if _has_table(conn, 'report_sessions'):
         conn.execute("""
@@ -497,7 +518,7 @@ def _migrate_v5_to_v6(conn):
         rows = conn.execute("SELECT * FROM spider_stats ORDER BY id").fetchall()
         for r in rows:
             r = dict(r)
-            new_sid = session_map.get(r['session_id']) if 'session_map' in dir() else None
+            new_sid = session_map.get(r['session_id'])
             if new_sid is None:
                 continue
             conn.execute(
@@ -529,7 +550,7 @@ def _migrate_v5_to_v6(conn):
         rows = conn.execute("SELECT * FROM uploader_stats ORDER BY id").fetchall()
         for r in rows:
             r = dict(r)
-            new_sid = session_map.get(r['session_id']) if 'session_map' in dir() else None
+            new_sid = session_map.get(r['session_id'])
             if new_sid is None:
                 continue
             conn.execute(
@@ -553,7 +574,7 @@ def _migrate_v5_to_v6(conn):
         rows = conn.execute("SELECT * FROM pikpak_stats ORDER BY id").fetchall()
         for r in rows:
             r = dict(r)
-            new_sid = session_map.get(r['session_id']) if 'session_map' in dir() else None
+            new_sid = session_map.get(r['session_id'])
             if new_sid is None:
                 continue
             conn.execute(
@@ -582,25 +603,16 @@ def _migrate_v5_to_v6(conn):
     logger.info("Schema migration v5 → v6 complete")
 
 
-def init_db(db_path: Optional[str] = None, *, force: bool = False):
-    """Create all tables if they don't exist and set the schema version.
-
-    In csv-only storage mode this is a no-op (no database file is created)
-    unless *force* is ``True``.  Dedup records always require SQLite, so
-    callers that manage dedup state should pass ``force=True``.
-
-    If the database file exists but is invalid (e.g. a Git LFS pointer),
-    the storage mode is downgraded to ``csv`` for the rest of the process.
-    """
+def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
+    """Initialise one database file: create tables and set schema version."""
     if not force:
         from utils.config_helper import use_sqlite
         if not use_sqlite():
             return
 
-    path = db_path or DB_PATH
-    if os.path.exists(path) and os.path.getsize(path) > 0 and not _is_valid_sqlite(path):
+    if os.path.exists(db_path) and os.path.getsize(db_path) > 0 and not _is_valid_sqlite(db_path):
         logger.warning(
-            f"Database file {path} is not a valid SQLite database "
+            f"Database file {db_path} is not a valid SQLite database "
             "(possibly a Git LFS pointer that was not pulled). "
             "Falling back to CSV storage mode for this run."
         )
@@ -609,33 +621,235 @@ def init_db(db_path: Optional[str] = None, *, force: bool = False):
         return
 
     with get_db(db_path) as conn:
-        # Detect current version from whichever version table exists
-        current = 0
-        if _has_table(conn, 'schema_version'):
-            row = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
-            if row:
-                current = row[0]
-        elif _has_table(conn, 'SchemaVersion'):
-            row = conn.execute("SELECT Version FROM SchemaVersion LIMIT 1").fetchone()
-            if row:
-                current = row[0]
+        current = _detect_version(conn)
+        conn.executescript(ddl)
 
-        # Create new-schema tables (IF NOT EXISTS — safe for fresh or migrated DBs)
+        if current == 0:
+            conn.execute("INSERT INTO SchemaVersion (Version) VALUES (?)", (SCHEMA_VERSION,))
+        elif current < SCHEMA_VERSION:
+            conn.execute("UPDATE SchemaVersion SET Version = ?", (SCHEMA_VERSION,))
+
+    logger.debug(f"Database initialised at {db_path} (schema v{SCHEMA_VERSION})")
+
+
+def _detect_version(conn) -> int:
+    """Read schema version from whichever version table exists."""
+    if _has_table(conn, 'schema_version'):
+        row = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
+        return row[0] if row else 0
+    if _has_table(conn, 'SchemaVersion'):
+        row = conn.execute("SELECT Version FROM SchemaVersion LIMIT 1").fetchone()
+        return row[0] if row else 0
+    return 0
+
+
+def _backfill_torrent_sizes_after_split(history_db: str, reports_db: str):
+    """Backfill empty TorrentHistory.Size from ReportTorrents.Size.
+
+    Uses ATTACH to join across history.db and reports.db.  Only updates
+    rows where Size is NULL or empty, picking the most recent matching
+    ReportTorrents entry.
+    """
+    try:
+        conn = sqlite3.connect(history_db)
+        conn.row_factory = sqlite3.Row
+        conn.execute("ATTACH DATABASE ? AS rpt", (reports_db,))
+        cur = conn.execute("""
+            UPDATE TorrentHistory
+            SET Size = (
+                SELECT rt.Size
+                FROM rpt.ReportTorrents rt
+                JOIN rpt.ReportMovies rm ON rt.ReportMovieId = rm.Id
+                JOIN MovieHistory mh ON rm.Href = mh.Href
+                WHERE mh.Id = TorrentHistory.MovieHistoryId
+                  AND rt.SubtitleIndicator = TorrentHistory.SubtitleIndicator
+                  AND rt.CensorIndicator = TorrentHistory.CensorIndicator
+                  AND rt.Size IS NOT NULL AND rt.Size != ''
+                ORDER BY rt.Id DESC
+                LIMIT 1
+            )
+            WHERE (TorrentHistory.Size IS NULL OR TorrentHistory.Size = '')
+              AND EXISTS (
+                SELECT 1
+                FROM rpt.ReportTorrents rt
+                JOIN rpt.ReportMovies rm ON rt.ReportMovieId = rm.Id
+                JOIN MovieHistory mh ON rm.Href = mh.Href
+                WHERE mh.Id = TorrentHistory.MovieHistoryId
+                  AND rt.SubtitleIndicator = TorrentHistory.SubtitleIndicator
+                  AND rt.CensorIndicator = TorrentHistory.CensorIndicator
+                  AND rt.Size IS NOT NULL AND rt.Size != ''
+              )
+        """)
+        updated = cur.rowcount
+        conn.commit()
+        conn.execute("DETACH DATABASE rpt")
+        conn.close()
+        if updated > 0:
+            logger.info(f"Backfilled {updated} TorrentHistory.Size values from ReportTorrents")
+    except Exception as e:
+        logger.warning(f"TorrentHistory.Size backfill skipped: {e}")
+
+
+def _migrate_single_to_split():
+    """Migrate a legacy single-DB (v6) into three separate databases.
+
+    Uses ``ATTACH DATABASE`` to copy tables from the old DB into the
+    correct new DB.  The old file is renamed to ``.v6.bak`` on success.
+    """
+    old_path = DB_PATH
+    if not os.path.exists(old_path) or os.path.getsize(old_path) == 0:
+        return False
+    if not _is_valid_sqlite(old_path):
+        return False
+
+    split_exists = [
+        os.path.exists(HISTORY_DB_PATH),
+        os.path.exists(REPORTS_DB_PATH),
+        os.path.exists(OPERATIONS_DB_PATH),
+    ]
+    if all(split_exists):
+        return False
+    if any(split_exists):
+        # Partial split detected — clean up incomplete files and re-migrate
+        logger.warning(
+            "Partial DB split detected (legacy DB still present but only "
+            "some split DBs exist). Removing incomplete split files and "
+            "re-running migration ..."
+        )
+        for p in (HISTORY_DB_PATH, REPORTS_DB_PATH, OPERATIONS_DB_PATH):
+            if os.path.exists(p):
+                os.remove(p)
+                logger.info(f"  Removed partial split file: {p}")
+
+    # Close any thread-local connections to the old DB before attaching it
+    conns: dict = getattr(_local, 'conns', None)
+    if conns:
+        old_conn = conns.pop(old_path, None)
+        if old_conn is not None:
+            try:
+                old_conn.close()
+            except Exception:
+                pass
+
+    # Detect version in old DB
+    tmp_conn = sqlite3.connect(old_path)
+    tmp_conn.row_factory = sqlite3.Row
+    old_version = _detect_version(tmp_conn)
+    tmp_conn.close()
+
+    if old_version < 6:
+        # Need v5→v6 migration first (run on old single DB)
+        logger.info("Old single DB is below v6 — running v5→v6 migration first ...")
+        with get_db(old_path) as conn:
+            conn.executescript(_TABLES_SQL)
+            _migrate_v5_to_v6(conn)
+            existing = conn.execute("SELECT Version FROM SchemaVersion LIMIT 1").fetchone()
+            if existing is None:
+                conn.execute("INSERT INTO SchemaVersion (Version) VALUES (6)")
+            else:
+                conn.execute("UPDATE SchemaVersion SET Version = 6")
+
+    logger.info("Splitting single DB into three databases ...")
+
+    _DB_SPLIT_MAP = [
+        (HISTORY_DB_PATH, _HISTORY_DDL, ['MovieHistory', 'TorrentHistory']),
+        (REPORTS_DB_PATH, _REPORTS_DDL, [
+            'ReportSessions', 'ReportMovies', 'ReportTorrents',
+            'SpiderStats', 'UploaderStats', 'PikpakStats',
+        ]),
+        (OPERATIONS_DB_PATH, _OPERATIONS_DDL, [
+            'RcloneInventory', 'DedupRecords', 'PikpakHistory', 'ProxyBans',
+        ]),
+    ]
+
+    for new_path, ddl, tables in _DB_SPLIT_MAP:
+        os.makedirs(os.path.dirname(new_path) or '.', exist_ok=True)
+        new_conn = sqlite3.connect(new_path)
+        new_conn.execute("PRAGMA journal_mode=WAL")
+        new_conn.execute("PRAGMA foreign_keys=OFF")
+        new_conn.executescript(ddl)
+        new_conn.execute("ATTACH DATABASE ? AS old_db", (old_path,))
+        for table in tables:
+            try:
+                new_conn.execute(f"INSERT INTO main.[{table}] SELECT * FROM old_db.[{table}]")
+            except sqlite3.OperationalError:
+                logger.debug(f"Table {table} not found in old DB, skipping")
+        new_conn.execute("INSERT OR REPLACE INTO SchemaVersion (Version) VALUES (?)",
+                         (SCHEMA_VERSION,))
+        new_conn.commit()
+        new_conn.execute("DETACH DATABASE old_db")
+        new_conn.execute("PRAGMA foreign_keys=ON")
+        new_conn.close()
+        logger.info(f"  Created {new_path} with tables: {', '.join(tables)}")
+
+    # Backfill TorrentHistory.Size from ReportTorrents.Size
+    _backfill_torrent_sizes_after_split(HISTORY_DB_PATH, REPORTS_DB_PATH)
+
+    backup_path = old_path + '.v6.bak'
+    os.rename(old_path, backup_path)
+    logger.info(f"Old single DB backed up to {backup_path}")
+    return True
+
+
+def init_db(db_path: Optional[str] = None, *, force: bool = False):
+    """Initialise all databases (or a single one when *db_path* is given).
+
+    In csv-only storage mode this is a no-op unless *force* is True.
+
+    When called without *db_path*, the three split databases are initialised.
+    If a legacy single-DB file exists and the split files do not, an
+    automatic migration is performed first.
+
+    When called **with** *db_path*, only that single file is initialised
+    using the combined DDL (backward compat for csv_to_sqlite.py and tests).
+    """
+    if not force:
+        from utils.config_helper import use_sqlite
+        if not use_sqlite():
+            return
+
+    if db_path is not None:
+        # Single-DB mode (testing, csv_to_sqlite, explicit path)
+        _init_single_legacy_db(db_path, force=True)
+        return
+
+    # Try automatic split migration from legacy single DB
+    _migrate_single_to_split()
+
+    _init_single_db(HISTORY_DB_PATH, _HISTORY_DDL, force=True)
+    _init_single_db(REPORTS_DB_PATH, _REPORTS_DDL, force=True)
+    _init_single_db(OPERATIONS_DB_PATH, _OPERATIONS_DDL, force=True)
+
+
+def _init_single_legacy_db(db_path: str, *, force: bool = False):
+    """Initialise a single DB with all tables (legacy / testing mode)."""
+    if os.path.exists(db_path) and os.path.getsize(db_path) > 0 and not _is_valid_sqlite(db_path):
+        logger.warning(
+            f"Database file {db_path} is not a valid SQLite database "
+            "(possibly a Git LFS pointer that was not pulled). "
+            "Falling back to CSV storage mode for this run."
+        )
+        from utils.config_helper import force_storage_mode
+        force_storage_mode('csv')
+        return
+
+    with get_db(db_path) as conn:
+        current = _detect_version(conn)
         conn.executescript(_TABLES_SQL)
 
         if current == 0:
-            # Fresh database
             conn.execute("INSERT INTO SchemaVersion (Version) VALUES (?)", (SCHEMA_VERSION,))
         elif current < 6:
             _migrate_v5_to_v6(conn)
-            # Set version in new table
             existing = conn.execute("SELECT Version FROM SchemaVersion LIMIT 1").fetchone()
             if existing is None:
                 conn.execute("INSERT INTO SchemaVersion (Version) VALUES (?)", (SCHEMA_VERSION,))
             else:
                 conn.execute("UPDATE SchemaVersion SET Version = ?", (SCHEMA_VERSION,))
+        elif current < SCHEMA_VERSION:
+            conn.execute("UPDATE SchemaVersion SET Version = ?", (SCHEMA_VERSION,))
 
-        logger.debug(f"Database initialised at {db_path or DB_PATH} (schema v{SCHEMA_VERSION})")
+    logger.debug(f"Legacy single-DB initialised at {db_path} (schema v{SCHEMA_VERSION})")
 
 
 # ── MovieHistory + TorrentHistory helpers ────────────────────────────────
@@ -647,7 +861,7 @@ def db_load_history(db_path: Optional[str] = None, phase: Optional[int] = None) 
     (the new schema does not store phase).
     """
     history: Dict[str, dict] = {}
-    with get_db(db_path) as conn:
+    with get_db(db_path or HISTORY_DB_PATH) as conn:
         movies = conn.execute("SELECT * FROM MovieHistory").fetchall()
         for m in movies:
             m = dict(m)
@@ -707,7 +921,7 @@ def db_upsert_history(
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     _TORRENT_CATS = ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle')
 
-    with get_db(db_path) as conn:
+    with get_db(db_path or HISTORY_DB_PATH) as conn:
         existing = conn.execute(
             "SELECT Id FROM MovieHistory WHERE Href = ?", (href,)
         ).fetchone()
@@ -811,7 +1025,7 @@ def db_batch_update_last_visited(hrefs: List[str], db_path: Optional[str] = None
     if not hrefs:
         return 0
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with get_db(db_path) as conn:
+    with get_db(db_path or HISTORY_DB_PATH) as conn:
         placeholders = ','.join('?' for _ in hrefs)
         cur = conn.execute(
             f"UPDATE MovieHistory SET DateTimeVisited=? WHERE Href IN ({placeholders})",
@@ -823,7 +1037,7 @@ def db_batch_update_last_visited(hrefs: List[str], db_path: Optional[str] = None
 def db_check_torrent_in_history(href: str, torrent_type: str, db_path: Optional[str] = None) -> bool:
     """Check if a specific torrent type exists for href."""
     sub_ind, cen_ind = category_to_indicators(torrent_type)
-    with get_db(db_path) as conn:
+    with get_db(db_path or HISTORY_DB_PATH) as conn:
         row = conn.execute("""
             SELECT t.MagnetUri FROM TorrentHistory t
             JOIN MovieHistory m ON t.MovieHistoryId = m.Id
@@ -836,7 +1050,7 @@ def db_check_torrent_in_history(href: str, torrent_type: str, db_path: Optional[
 
 def db_get_all_history_records(db_path: Optional[str] = None) -> List[dict]:
     """Return all MovieHistory records as dicts (for migration verification)."""
-    with get_db(db_path) as conn:
+    with get_db(db_path or HISTORY_DB_PATH) as conn:
         rows = conn.execute("SELECT * FROM MovieHistory ORDER BY Id").fetchall()
         return [dict(r) for r in rows]
 
@@ -845,7 +1059,7 @@ def db_get_all_history_records(db_path: Optional[str] = None) -> List[dict]:
 
 def db_replace_rclone_inventory(entries: List[dict], db_path: Optional[str] = None) -> int:
     """Replace the entire RcloneInventory table (full scan refresh)."""
-    with get_db(db_path) as conn:
+    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         conn.execute("DELETE FROM RcloneInventory")
         for e in entries:
             conn.execute(
@@ -866,7 +1080,7 @@ def db_replace_rclone_inventory(entries: List[dict], db_path: Optional[str] = No
 
 def db_clear_rclone_inventory(db_path: Optional[str] = None) -> None:
     """Delete all rows from RcloneInventory."""
-    with get_db(db_path) as conn:
+    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         conn.execute("DELETE FROM RcloneInventory")
 
 
@@ -874,7 +1088,7 @@ def db_append_rclone_inventory(entries: List[dict], db_path: Optional[str] = Non
     """Append rows to RcloneInventory using executemany for speed."""
     if not entries:
         return 0
-    with get_db(db_path) as conn:
+    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         conn.executemany(
             """INSERT INTO RcloneInventory
                (VideoCode, SensorCategory, SubtitleCategory,
@@ -897,7 +1111,7 @@ def db_append_rclone_inventory(entries: List[dict], db_path: Optional[str] = Non
 def db_load_rclone_inventory(db_path: Optional[str] = None) -> Dict[str, list]:
     """Load inventory grouped by VideoCode."""
     inventory: Dict[str, list] = {}
-    with get_db(db_path) as conn:
+    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         rows = conn.execute("SELECT * FROM RcloneInventory").fetchall()
     for row in rows:
         r = dict(row)
@@ -912,14 +1126,14 @@ def db_load_rclone_inventory(db_path: Optional[str] = None) -> Dict[str, list]:
 
 def db_load_dedup_records(db_path: Optional[str] = None) -> List[dict]:
     """Load all dedup records."""
-    with get_db(db_path) as conn:
+    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         rows = conn.execute("SELECT * FROM DedupRecords ORDER BY Id").fetchall()
         return [dict(r) for r in rows]
 
 
 def db_append_dedup_record(record: dict, db_path: Optional[str] = None) -> int:
     """Append a single dedup record. Returns the new row id, or -1 if duplicate."""
-    with get_db(db_path) as conn:
+    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         cur = conn.execute(
             """INSERT OR IGNORE INTO DedupRecords
                (VideoCode, ExistingSensor, ExistingSubtitle,
@@ -948,7 +1162,7 @@ def db_mark_records_deleted(
     db_path: Optional[str] = None,
 ) -> int:
     """Mark specific dedup records as deleted by gdrive path."""
-    with get_db(db_path) as conn:
+    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         updated = 0
         for path, dt in path_datetime_pairs:
             cur = conn.execute(
@@ -967,7 +1181,7 @@ def db_cleanup_deleted_records(
     """Remove dedup records that were deleted more than *older_than_days* ago."""
     from datetime import timedelta
     cutoff = (datetime.now() - timedelta(days=older_than_days)).strftime('%Y-%m-%d %H:%M:%S')
-    with get_db(db_path) as conn:
+    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         cur = conn.execute(
             "DELETE FROM DedupRecords "
             "WHERE IsDeleted=1 AND DateTimeDeleted != '' AND DateTimeDeleted < ?",
@@ -982,7 +1196,7 @@ def db_save_dedup_records(rows: List[dict], db_path: Optional[str] = None) -> No
         "db_save_dedup_records is deprecated — use db_mark_records_deleted "
         "for targeted updates instead"
     )
-    with get_db(db_path) as conn:
+    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         conn.execute("DELETE FROM DedupRecords")
         for r in rows:
             conn.execute(
@@ -1009,7 +1223,7 @@ def db_save_dedup_records(rows: List[dict], db_path: Optional[str] = None) -> No
 
 def db_append_pikpak_history(record: dict, db_path: Optional[str] = None) -> int:
     """Append a PikPak transfer record."""
-    with get_db(db_path) as conn:
+    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         cur = conn.execute(
             """INSERT INTO PikpakHistory
                (TorrentHash, TorrentName, Category, MagnetUri,
@@ -1033,14 +1247,14 @@ def db_append_pikpak_history(record: dict, db_path: Optional[str] = None) -> int
 
 def db_load_proxy_bans(db_path: Optional[str] = None) -> List[dict]:
     """Load all proxy ban records."""
-    with get_db(db_path) as conn:
+    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         rows = conn.execute("SELECT * FROM ProxyBans ORDER BY Id").fetchall()
         return [dict(r) for r in rows]
 
 
 def db_save_proxy_bans(records: List[dict], db_path: Optional[str] = None) -> None:
     """Replace all proxy ban records."""
-    with get_db(db_path) as conn:
+    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         conn.execute("DELETE FROM ProxyBans")
         for r in records:
             conn.execute(
@@ -1070,7 +1284,7 @@ def db_create_report_session(
     """Create a new report session and return its id."""
     if created_at is None:
         created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with get_db(db_path) as conn:
+    with get_db(db_path or REPORTS_DB_PATH) as conn:
         cur = conn.execute(
             """INSERT INTO ReportSessions
                (ReportType, ReportDate, UrlType, DisplayName,
@@ -1095,7 +1309,7 @@ def db_insert_report_rows(session_id: int, rows: List[dict], db_path: Optional[s
         ('subtitle',           'size_subtitle',           'file_count_subtitle',           'resolution_subtitle',           1, 1),
         ('no_subtitle',        'size_no_subtitle',        'file_count_no_subtitle',        'resolution_no_subtitle',        0, 1),
     ]
-    with get_db(db_path) as conn:
+    with get_db(db_path or REPORTS_DB_PATH) as conn:
         for row in rows:
             cur = conn.execute(
                 """INSERT INTO ReportMovies
@@ -1133,7 +1347,7 @@ def db_get_report_rows(session_id: int, db_path: Optional[str] = None) -> List[d
     Aggregates ReportMovies + ReportTorrents back into the legacy format
     with ``hacked_subtitle``, ``subtitle``, etc. columns.
     """
-    with get_db(db_path) as conn:
+    with get_db(db_path or REPORTS_DB_PATH) as conn:
         movies = conn.execute(
             "SELECT * FROM ReportMovies WHERE SessionId = ? ORDER BY Id",
             (session_id,),
@@ -1157,6 +1371,14 @@ def db_get_report_rows(session_id: int, db_path: Optional[str] = None) -> List[d
                 'size_hacked_no_subtitle': '',
                 'size_subtitle': '',
                 'size_no_subtitle': '',
+                'file_count_hacked_subtitle': 0,
+                'file_count_hacked_no_subtitle': 0,
+                'file_count_subtitle': 0,
+                'file_count_no_subtitle': 0,
+                'resolution_hacked_subtitle': None,
+                'resolution_hacked_no_subtitle': None,
+                'resolution_subtitle': None,
+                'resolution_no_subtitle': None,
             }
             torrents = conn.execute(
                 "SELECT * FROM ReportTorrents WHERE ReportMovieId = ?",
@@ -1167,13 +1389,15 @@ def db_get_report_rows(session_id: int, db_path: Optional[str] = None) -> List[d
                 cat = indicators_to_category(t['SubtitleIndicator'], t['CensorIndicator'])
                 flat[cat] = t.get('MagnetUri', '')
                 flat[f'size_{cat}'] = t.get('Size', '')
+                flat[f'file_count_{cat}'] = t.get('FileCount', 0)
+                flat[f'resolution_{cat}'] = t.get('ResolutionType')
             result.append(flat)
         return result
 
 
 def db_get_latest_session(report_type: Optional[str] = None, db_path: Optional[str] = None) -> Optional[dict]:
     """Get the most recent report session, optionally filtered by type."""
-    with get_db(db_path) as conn:
+    with get_db(db_path or REPORTS_DB_PATH) as conn:
         if report_type:
             row = conn.execute(
                 "SELECT * FROM ReportSessions WHERE ReportType = ? ORDER BY Id DESC LIMIT 1",
@@ -1189,7 +1413,7 @@ def db_get_latest_session(report_type: Optional[str] = None, db_path: Optional[s
 def db_get_sessions_by_date(report_date: str, report_type: Optional[str] = None,
                             db_path: Optional[str] = None) -> List[dict]:
     """Get all sessions for a given date."""
-    with get_db(db_path) as conn:
+    with get_db(db_path or REPORTS_DB_PATH) as conn:
         if report_type:
             rows = conn.execute(
                 "SELECT * FROM ReportSessions WHERE ReportDate = ? AND ReportType = ? ORDER BY Id",
@@ -1207,7 +1431,7 @@ def db_get_sessions_by_date(report_date: str, report_type: Optional[str] = None,
 
 def db_save_spider_stats(session_id: int, stats: dict, db_path: Optional[str] = None) -> int:
     """Save spider statistics for a session."""
-    with get_db(db_path) as conn:
+    with get_db(db_path or REPORTS_DB_PATH) as conn:
         cur = conn.execute(
             """INSERT INTO SpiderStats
                (SessionId,
@@ -1234,7 +1458,7 @@ def db_save_spider_stats(session_id: int, stats: dict, db_path: Optional[str] = 
 
 def db_save_uploader_stats(session_id: int, stats: dict, db_path: Optional[str] = None) -> int:
     """Save uploader statistics for a session."""
-    with get_db(db_path) as conn:
+    with get_db(db_path or REPORTS_DB_PATH) as conn:
         cur = conn.execute(
             """INSERT INTO UploaderStats
                (SessionId, TotalTorrents, DuplicateCount, Attempted,
@@ -1253,7 +1477,7 @@ def db_save_uploader_stats(session_id: int, stats: dict, db_path: Optional[str] 
 
 def db_save_pikpak_stats(session_id: int, stats: dict, db_path: Optional[str] = None) -> int:
     """Save PikPak bridge statistics for a session."""
-    with get_db(db_path) as conn:
+    with get_db(db_path or REPORTS_DB_PATH) as conn:
         cur = conn.execute(
             """INSERT INTO PikpakStats
                (SessionId, ThresholdDays, TotalTorrents,
@@ -1272,7 +1496,7 @@ def db_save_pikpak_stats(session_id: int, stats: dict, db_path: Optional[str] = 
 
 def db_get_spider_stats(session_id: int, db_path: Optional[str] = None) -> Optional[dict]:
     """Get spider stats for a session."""
-    with get_db(db_path) as conn:
+    with get_db(db_path or REPORTS_DB_PATH) as conn:
         row = conn.execute(
             "SELECT * FROM SpiderStats WHERE SessionId = ?", (session_id,)
         ).fetchone()
@@ -1281,7 +1505,7 @@ def db_get_spider_stats(session_id: int, db_path: Optional[str] = None) -> Optio
 
 def db_get_uploader_stats(session_id: int, db_path: Optional[str] = None) -> Optional[dict]:
     """Get uploader stats for a session."""
-    with get_db(db_path) as conn:
+    with get_db(db_path or REPORTS_DB_PATH) as conn:
         row = conn.execute(
             "SELECT * FROM UploaderStats WHERE SessionId = ?", (session_id,)
         ).fetchone()
@@ -1290,7 +1514,7 @@ def db_get_uploader_stats(session_id: int, db_path: Optional[str] = None) -> Opt
 
 def db_get_pikpak_stats(session_id: int, db_path: Optional[str] = None) -> Optional[dict]:
     """Get PikPak stats for a session."""
-    with get_db(db_path) as conn:
+    with get_db(db_path or REPORTS_DB_PATH) as conn:
         row = conn.execute(
             "SELECT * FROM PikpakStats WHERE SessionId = ?", (session_id,)
         ).fetchone()
