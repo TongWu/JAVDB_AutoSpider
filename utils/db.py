@@ -1308,6 +1308,14 @@ def db_get_report_rows(session_id: int, db_path: Optional[str] = None) -> List[d
                 'size_hacked_no_subtitle': '',
                 'size_subtitle': '',
                 'size_no_subtitle': '',
+                'file_count_hacked_subtitle': 0,
+                'file_count_hacked_no_subtitle': 0,
+                'file_count_subtitle': 0,
+                'file_count_no_subtitle': 0,
+                'resolution_hacked_subtitle': None,
+                'resolution_hacked_no_subtitle': None,
+                'resolution_subtitle': None,
+                'resolution_no_subtitle': None,
             }
             torrents = conn.execute(
                 "SELECT * FROM ReportTorrents WHERE ReportMovieId = ?",
@@ -1318,6 +1326,8 @@ def db_get_report_rows(session_id: int, db_path: Optional[str] = None) -> List[d
                 cat = indicators_to_category(t['SubtitleIndicator'], t['CensorIndicator'])
                 flat[cat] = t.get('MagnetUri', '')
                 flat[f'size_{cat}'] = t.get('Size', '')
+                flat[f'file_count_{cat}'] = t.get('FileCount', 0)
+                flat[f'resolution_{cat}'] = t.get('ResolutionType')
             result.append(flat)
         return result
 
