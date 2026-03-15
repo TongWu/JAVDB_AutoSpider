@@ -31,13 +31,19 @@ def check_torrent_status(row: dict) -> Tuple[bool, bool, bool]:
     return has_any, has_new, should_include
 
 
-def collect_new_magnet_links(row: dict, magnet_links: dict) -> dict:
-    """Extract magnet links that haven't been downloaded previously."""
+def collect_new_magnet_links(row: dict, magnet_links: dict):
+    """Extract magnet links and sizes that haven't been downloaded previously.
+
+    Returns:
+        (new_magnets, new_sizes)
+    """
     new_magnets = {}
+    new_sizes = {}
     for mtype in ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle'):
         if row[mtype] and row[mtype] != '[DOWNLOADED PREVIOUSLY]':
             new_magnets[mtype] = magnet_links.get(mtype, '')
-    return new_magnets
+            new_sizes[mtype] = magnet_links.get(f'size_{mtype}', '')
+    return new_magnets, new_sizes
 
 
 def should_include_torrent_in_csv(href, history_data, magnet_links):
@@ -170,4 +176,29 @@ def create_csv_row_with_history_filter(href, entry, page_num, actor_info,
         row['size_no_subtitle'] = magnet_links['size_no_subtitle']
         logger.debug(f"Marking no_subtitle as downloaded for {entry['video_code']}")
 
+    return row
+
+
+def create_redownload_row(href, entry, page_num, actor_info,
+                          magnet_links, redownload_categories):
+    """Create a CSV row containing only the re-download upgrade categories."""
+    row = {
+        'href': href,
+        'video_code': entry['video_code'],
+        'page': page_num,
+        'actor': actor_info,
+        'rate': entry['rate'],
+        'comment_number': entry['comment_number'],
+        'hacked_subtitle': '',
+        'hacked_no_subtitle': '',
+        'subtitle': '',
+        'no_subtitle': '',
+        'size_hacked_subtitle': '',
+        'size_hacked_no_subtitle': '',
+        'size_subtitle': '',
+        'size_no_subtitle': '',
+    }
+    for cat in redownload_categories:
+        row[cat] = magnet_links.get(cat, '')
+        row[f'size_{cat}'] = magnet_links.get(f'size_{cat}', '')
     return row
