@@ -844,6 +844,12 @@ def _init_single_legacy_db(db_path: str, *, force: bool = False):
         current = _detect_version(conn)
         conn.executescript(_TABLES_SQL)
 
+        # Forward-compat migration: add FailedMovies to SpiderStats
+        try:
+            conn.execute("ALTER TABLE SpiderStats ADD COLUMN FailedMovies TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
+
         if current == 0:
             conn.execute("INSERT INTO SchemaVersion (Version) VALUES (?)", (SCHEMA_VERSION,))
         elif current < 6:
