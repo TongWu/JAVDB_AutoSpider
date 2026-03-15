@@ -643,6 +643,53 @@ def _detect_version(conn) -> int:
     return 0
 
 
+def _backfill_torrent_sizes_after_split(history_db: str, reports_db: str):
+    """Backfill empty TorrentHistory.Size from ReportTorrents.Size.
+
+    Uses ATTACH to join across history.db and reports.db.  Only updates
+    rows where Size is NULL or empty, picking the most recent matching
+    ReportTorrents entry.
+    """
+    try:
+        conn = sqlite3.connect(history_db)
+        conn.row_factory = sqlite3.Row
+        conn.execute("ATTACH DATABASE ? AS rpt", (reports_db,))
+        cur = conn.execute("""
+            UPDATE TorrentHistory
+            SET Size = (
+                SELECT rt.Size
+                FROM rpt.ReportTorrents rt
+                JOIN rpt.ReportMovies rm ON rt.ReportMovieId = rm.Id
+                JOIN MovieHistory mh ON rm.Href = mh.Href
+                WHERE mh.Id = TorrentHistory.MovieHistoryId
+                  AND rt.SubtitleIndicator = TorrentHistory.SubtitleIndicator
+                  AND rt.CensorIndicator = TorrentHistory.CensorIndicator
+                  AND rt.Size IS NOT NULL AND rt.Size != ''
+                ORDER BY rt.Id DESC
+                LIMIT 1
+            )
+            WHERE (TorrentHistory.Size IS NULL OR TorrentHistory.Size = '')
+              AND EXISTS (
+                SELECT 1
+                FROM rpt.ReportTorrents rt
+                JOIN rpt.ReportMovies rm ON rt.ReportMovieId = rm.Id
+                JOIN MovieHistory mh ON rm.Href = mh.Href
+                WHERE mh.Id = TorrentHistory.MovieHistoryId
+                  AND rt.SubtitleIndicator = TorrentHistory.SubtitleIndicator
+                  AND rt.CensorIndicator = TorrentHistory.CensorIndicator
+                  AND rt.Size IS NOT NULL AND rt.Size != ''
+              )
+        """)
+        updated = cur.rowcount
+        conn.commit()
+        conn.execute("DETACH DATABASE rpt")
+        conn.close()
+        if updated > 0:
+            logger.info(f"Backfilled {updated} TorrentHistory.Size values from ReportTorrents")
+    except Exception as e:
+        logger.warning(f"TorrentHistory.Size backfill skipped: {e}")
+
+
 def _migrate_single_to_split():
     """Migrate a legacy single-DB (v6) into three separate databases.
 
@@ -734,6 +781,9 @@ def _migrate_single_to_split():
         new_conn.execute("PRAGMA foreign_keys=ON")
         new_conn.close()
         logger.info(f"  Created {new_path} with tables: {', '.join(tables)}")
+
+    # Backfill TorrentHistory.Size from ReportTorrents.Size
+    _backfill_torrent_sizes_after_split(HISTORY_DB_PATH, REPORTS_DB_PATH)
 
     backup_path = old_path + '.v6.bak'
     os.rename(old_path, backup_path)
