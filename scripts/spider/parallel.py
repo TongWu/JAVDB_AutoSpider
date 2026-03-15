@@ -245,14 +245,23 @@ class ProxyWorker(threading.Thread):
         """Route a login-required task to the logged-in worker, or login self."""
         with _login_lock:
             if _logged_in_worker_id is not None:
-                logged_in_proxy = self.all_workers[_logged_in_worker_id].proxy_name
-                task.failed_proxies.discard(logged_in_proxy)
-                self.login_queue.put(task)
-                logger.info(
+                if _logged_in_worker_id != self.worker_id:
+                    logged_in_proxy = self.all_workers[_logged_in_worker_id].proxy_name
+                    task.failed_proxies.discard(logged_in_proxy)
+                    self.login_queue.put(task)
+                    logger.info(
+                        f"[{self.proxy_name}] [{task.entry_index}] "
+                        f"Login required for {task.entry.get('video_code', '')}, "
+                        f"routing to logged-in worker [{logged_in_proxy}]"
+                    )
+                    return
+                logger.warning(
                     f"[{self.proxy_name}] [{task.entry_index}] "
-                    f"Login required for {task.entry.get('video_code', '')}, "
-                    f"routing to logged-in worker [{logged_in_proxy}]"
+                    f"Login required for {task.entry.get('video_code', '')} "
+                    f"but own session is stale — requeueing as proxy failure"
                 )
+                task.failed_proxies.add(self.proxy_name)
+                _requeue_front(self.detail_queue, task)
                 return
 
         if can_attempt_login(self.is_adhoc_mode, is_index_page=False):
@@ -364,7 +373,7 @@ def process_detail_entries_parallel(
     """Process detail entries in parallel using one worker per proxy.
 
     Returns a dict with statistics keys:
-        rows, skipped_history, failed, no_new_torrents
+        rows, skipped_history, failed, failed_movies, no_new_torrents
     """
     global _logged_in_worker_id
     _logged_in_worker_id = None
@@ -480,7 +489,7 @@ def process_detail_entries_parallel(
 
     if tasks_submitted == 0:
         logger.info(f"Phase {phase}: No detail tasks to process (all filtered)")
-        return {'rows': [], 'skipped_history': skipped_history, 'failed': 0, 'no_new_torrents': 0}
+        return {'rows': [], 'skipped_history': skipped_history, 'failed': 0, 'failed_movies': [], 'no_new_torrents': 0}
 
     logger.info(
         f"Phase {phase}: Starting {len(all_workers)} workers for {tasks_submitted} detail tasks "
@@ -493,6 +502,7 @@ def process_detail_entries_parallel(
     phase_rows: list = []
     visited_hrefs: set = set()
     failed = 0
+    failed_movies: list = []
     no_new_torrents = 0
     results_received = 0
 
@@ -506,8 +516,10 @@ def process_detail_entries_parallel(
         idx_str = task.entry_index
 
         if not result.parse_success:
-            logger.error(f"[{idx_str}] [Page {page_num}] Failed after all workers exhausted")
+            detail_url = urljoin(BASE_URL, href)
+            logger.error(f"[{idx_str}] [Page {page_num}] Failed: {entry.get('video_code', '?')} ({detail_url})")
             failed += 1
+            failed_movies.append({'video_code': entry.get('video_code', '?'), 'url': detail_url, 'phase': phase})
             continue
 
         visited_hrefs.add(href)
@@ -589,5 +601,6 @@ def process_detail_entries_parallel(
         'rows': phase_rows,
         'skipped_history': skipped_history,
         'failed': failed,
+        'failed_movies': failed_movies,
         'no_new_torrents': no_new_torrents,
     }
