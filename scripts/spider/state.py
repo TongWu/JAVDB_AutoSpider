@@ -39,6 +39,7 @@ proxy_ban_html_files: list = []
 
 login_attempted: bool = False
 refreshed_session_cookie: Optional[str] = None
+logged_in_proxy_name: Optional[str] = None
 
 proxies_requiring_cf_bypass: set = set()
 

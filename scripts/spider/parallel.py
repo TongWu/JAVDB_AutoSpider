@@ -80,6 +80,9 @@ class DetailResult:
 # Lock protecting login_attempted / refreshed_session_cookie across workers
 _login_lock = threading.Lock()
 
+# Which worker performed login (cookie bound to that proxy's machine)
+_logged_in_worker_id: Optional[int] = None
+
 # ---------------------------------------------------------------------------
 # ProxyWorker
 # ---------------------------------------------------------------------------
@@ -94,6 +97,7 @@ class ProxyWorker(threading.Thread):
         proxy_config: dict,
         detail_queue: 'queue_module.Queue[Optional[DetailTask]]',
         result_queue: 'queue_module.Queue[DetailResult]',
+        login_queue: 'queue_module.Queue[DetailTask]',
         total_workers: int,
         use_cookie: bool,
         is_adhoc_mode: bool,
@@ -109,6 +113,7 @@ class ProxyWorker(threading.Thread):
         self.proxy_name: str = proxy_config.get('name', f'Proxy-{worker_id}')
         self.detail_queue = detail_queue
         self.result_queue = result_queue
+        self.login_queue = login_queue
         self.total_workers = total_workers
         self.use_cookie = use_cookie
         self.is_adhoc_mode = is_adhoc_mode
@@ -155,7 +160,11 @@ class ProxyWorker(threading.Thread):
         )
 
     def _try_fetch_and_parse(self, task: DetailTask, use_cf: bool, context: str):
-        """Attempt fetch + parse_detail; returns (magnets, actor, success)."""
+        """Attempt fetch + parse_detail.
+
+        Returns (magnets, actor_info, success, needs_login).
+        Login decisions are made at the run() level, not here.
+        """
         logger.debug(f"[{self.proxy_name}] [{task.entry_index}] {context}")
         try:
             html = self._fetch_html(task.url, use_cf)
@@ -163,78 +172,132 @@ class ProxyWorker(threading.Thread):
                 if is_login_page(html):
                     logger.warning(
                         f"[{self.proxy_name}] [{task.entry_index}] Login page detected: {context}")
-                    if can_attempt_login(self.is_adhoc_mode, is_index_page=False):
-                        if self._try_login_refresh():
-                            html = self._fetch_html(task.url, use_cf)
-                            if html and not is_login_page(html):
-                                magnets, actor_info, ok = parse_detail(
-                                    html, task.entry_index, skip_sleep=True)
-                                if ok:
-                                    logger.info(
-                                        f"[{self.proxy_name}] [{task.entry_index}] "
-                                        f"Login refresh succeeded: {context}")
-                                    return magnets, actor_info, True
-                            else:
-                                logger.warning(
-                                    f"[{self.proxy_name}] [{task.entry_index}] "
-                                    f"Still login page after refresh")
-                    return [], '', False
+                    return [], '', False, True
 
                 magnets, actor_info, ok = parse_detail(html, task.entry_index, skip_sleep=True)
                 if ok:
-                    return magnets, actor_info, True
+                    return magnets, actor_info, True, False
                 logger.debug(f"[{self.proxy_name}] [{task.entry_index}] parse failed: {context}")
             else:
                 logger.debug(f"[{self.proxy_name}] [{task.entry_index}] no HTML: {context}")
         except Exception as e:
             logger.debug(f"[{self.proxy_name}] [{task.entry_index}] error in {context}: {e}")
-        return [], '', False
+        return [], '', False, False
 
     def _try_direct_then_cf(self, task: DetailTask):
-        """Try direct, then CF bypass. Returns (magnets, actor, success, used_cf)."""
+        """Try direct, then CF bypass.
+
+        Returns (magnets, actor, success, used_cf, needs_login).
+        Short-circuits CF bypass if login is required (CF won't fix auth).
+        """
         if self.needs_cf_bypass:
-            m, a, ok = self._try_fetch_and_parse(task, True, "CF Bypass (marked)")
-            return m, a, ok, True
+            m, a, ok, needs_login = self._try_fetch_and_parse(task, True, "CF Bypass (marked)")
+            return m, a, ok, True, needs_login
 
-        m, a, ok = self._try_fetch_and_parse(task, False, "Direct")
+        m, a, ok, needs_login = self._try_fetch_and_parse(task, False, "Direct")
         if ok:
-            return m, a, True, False
+            return m, a, True, False, False
+        if needs_login:
+            return m, a, False, False, True
 
-        m, a, ok = self._try_fetch_and_parse(task, True, "CF Bypass")
+        m, a, ok, needs_login = self._try_fetch_and_parse(task, True, "CF Bypass")
         if ok:
             self.needs_cf_bypass = True
             logger.info(f"[{self.proxy_name}] CF Bypass succeeded — marking proxy for this runtime")
-            return m, a, True, True
-        return [], '', False, False
+            return m, a, True, True, False
+        return [], '', False, False, needs_login
 
     def _try_login_refresh(self):
-        """Thread-safe global login; returns True on success."""
+        """Per-worker login using this worker's own proxy.
+
+        Only updates THIS worker's cookie (not all workers), since
+        the cookie is bound to the machine that performed the login.
+        Returns True on success.
+        """
+        global _logged_in_worker_id
         with _login_lock:
             if state.login_attempted:
                 return state.refreshed_session_cookie is not None
-            success, new_cookie = attempt_login_refresh()
+
+            proxy_for_login = {
+                'http': self.proxy_config.get('http'),
+                'https': self.proxy_config.get('https'),
+            }
+            proxy_for_login = {k: v for k, v in proxy_for_login.items() if v}
+            if not proxy_for_login:
+                proxy_for_login = None
+
+            success, new_cookie, _proxy_name = attempt_login_refresh(
+                explicit_proxies=proxy_for_login,
+                explicit_proxy_name=self.proxy_name,
+            )
             if success and new_cookie:
-                for w in self.all_workers:
-                    w._handler.config.javdb_session_cookie = new_cookie
+                self._handler.config.javdb_session_cookie = new_cookie
+                _logged_in_worker_id = self.worker_id
                 return True
             return False
+
+    def _handle_login_required(self, task: DetailTask):
+        """Route a login-required task to the logged-in worker, or login self."""
+        global _logged_in_worker_id
+        with _login_lock:
+            if _logged_in_worker_id is not None:
+                logged_in_proxy = self.all_workers[_logged_in_worker_id].proxy_name
+                task.failed_proxies.discard(logged_in_proxy)
+                self.login_queue.put(task)
+                logger.info(
+                    f"[{self.proxy_name}] [{task.entry_index}] "
+                    f"Login required for {task.entry.get('video_code', '')}, "
+                    f"routing to logged-in worker [{logged_in_proxy}]"
+                )
+                return
+
+        if can_attempt_login(self.is_adhoc_mode, is_index_page=False):
+            if self._try_login_refresh():
+                logger.info(
+                    f"[{self.proxy_name}] Logged in successfully, "
+                    f"becoming the logged-in worker for login-required pages"
+                )
+                _requeue_front(self.detail_queue, task)
+                return
+
+        logger.warning(
+            f"[{self.proxy_name}] [{task.entry_index}] "
+            f"Login required but login unavailable, marking as failed"
+        )
+        self.result_queue.put(DetailResult(
+            task=task, magnets=[], actor_info='',
+            parse_success=False, used_cf_bypass=False,
+        ))
+
+    def _get_next_task(self) -> Optional[DetailTask]:
+        """Get next task. Logged-in worker checks login_queue with priority."""
+        while True:
+            with _login_lock:
+                am_logged_in = (_logged_in_worker_id == self.worker_id)
+
+            if am_logged_in:
+                try:
+                    return self.login_queue.get_nowait()
+                except queue_module.Empty:
+                    pass
+
+            try:
+                task = self.detail_queue.get(timeout=0.3 if am_logged_in else None)
+                return task
+            except queue_module.Empty:
+                continue
 
     # -- main loop ---------------------------------------------------------
 
     def run(self):
         while True:
-            task = self.detail_queue.get()
+            task = self._get_next_task()
             if task is None:
                 break
 
             if self.proxy_name in task.failed_proxies:
                 if len(task.failed_proxies) >= self.total_workers:
-                    if can_attempt_login(self.is_adhoc_mode, is_index_page=False):
-                        if self._try_login_refresh():
-                            task.failed_proxies.clear()
-                            task.retry_count += 1
-                            _requeue_front(self.detail_queue, task)
-                            continue
                     self.result_queue.put(DetailResult(
                         task=task, magnets=[], actor_info='',
                         parse_success=False, used_cf_bypass=False,
@@ -248,7 +311,7 @@ class ProxyWorker(threading.Thread):
                 self._sleep_mgr.sleep()
             self._first_request = False
 
-            magnets, actor_info, success, used_cf = self._try_direct_then_cf(task)
+            magnets, actor_info, success, used_cf, needs_login = self._try_direct_then_cf(task)
             if success:
                 cf_tag = " +CF" if used_cf else ""
                 logger.info(
@@ -260,6 +323,8 @@ class ProxyWorker(threading.Thread):
                     task=task, magnets=magnets, actor_info=actor_info,
                     parse_success=True, used_cf_bypass=used_cf,
                 ))
+            elif needs_login:
+                self._handle_login_required(task)
             else:
                 task.failed_proxies.add(self.proxy_name)
                 task.retry_count += 1
@@ -298,10 +363,14 @@ def process_detail_entries_parallel(
     Returns a dict with statistics keys:
         rows, skipped_history, failed, no_new_torrents
     """
+    global _logged_in_worker_id
+    _logged_in_worker_id = None
+
     total_entries = len(entries)
 
     detail_queue: queue_module.Queue[Optional[DetailTask]] = queue_module.Queue()
     result_queue: queue_module.Queue[DetailResult] = queue_module.Queue()
+    login_queue: queue_module.Queue[DetailTask] = queue_module.Queue()
 
     all_workers: List[ProxyWorker] = []
     for idx, proxy_cfg in enumerate(PROXY_POOL):
@@ -310,6 +379,7 @@ def process_detail_entries_parallel(
             proxy_config=proxy_cfg,
             detail_queue=detail_queue,
             result_queue=result_queue,
+            login_queue=login_queue,
             total_workers=len(PROXY_POOL),
             use_cookie=use_cookie,
             is_adhoc_mode=is_adhoc_mode,
@@ -320,6 +390,22 @@ def process_detail_entries_parallel(
             all_workers=all_workers,
         )
         all_workers.append(w)
+
+    if state.logged_in_proxy_name and state.refreshed_session_cookie:
+        for w in all_workers:
+            if w.proxy_name == state.logged_in_proxy_name:
+                w._handler.config.javdb_session_cookie = state.refreshed_session_cookie
+                _logged_in_worker_id = w.worker_id
+                logger.info(
+                    f"Index page login inherited: worker [{w.proxy_name}] "
+                    f"set as the logged-in worker for login-required pages"
+                )
+                break
+        if _logged_in_worker_id is None:
+            logger.warning(
+                f"Index page logged in via [{state.logged_in_proxy_name}] "
+                f"but no matching parallel worker found"
+            )
 
     tasks_submitted = 0
     local_parsed_links: set = set()
