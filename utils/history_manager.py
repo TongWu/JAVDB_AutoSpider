@@ -393,10 +393,10 @@ def check_redownload_upgrade(href, history_data, magnet_links, threshold=0.30):
         if not new_size_str:
             continue
 
-        # Look up old size from the torrents dict
+        # Look up old size from the torrents dict (SQLite) or flat keys (CSV)
         key = category_to_indicators(cat)
         old_torrent = torrents.get(key, {})
-        old_size_str = old_torrent.get('Size', '')
+        old_size_str = old_torrent.get('Size', '') or entry.get(f'size_{cat}', '')
         if not old_size_str:
             continue
 
