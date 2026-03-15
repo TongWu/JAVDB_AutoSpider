@@ -1283,6 +1283,7 @@ def main():
     has_critical_errors = len(pipeline_errors) > 0 or has_job_failure
     
     # Try loading stats from SQLite first, fallback to log parsing
+    _sid = None
     _db_spider_stats = None
     _db_uploader_stats = None
     _db_pikpak_stats = None
