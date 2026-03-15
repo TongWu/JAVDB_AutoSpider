@@ -29,17 +29,25 @@ import scripts.spider.dedup_checker as _dedup_mod
 def _isolate_sqlite(tmp_path):
     """Give every test a fresh, empty SQLite database.
 
-    This prevents SQLite state from leaking between tests and protects the
-    real ``reports/javdb_autospider.db`` from being modified by the test suite.
+    All three DB path constants are pointed at the same single file
+    so that existing tests (which pass ``_isolate_sqlite`` as an
+    explicit ``db_path``) continue to work transparently.
 
     ``STORAGE_MODE`` defaults to ``'db'`` so that ``init_db`` actually
-    creates the schema.  Individual tests can override the mode via
-    the ``storage_mode`` fixture.
+    creates the schema.
     """
     test_db = str(tmp_path / "test.db")
-    original = _db_mod.DB_PATH
-    original_override = _cfg_mod._storage_mode_override
+
+    orig_db_path = _db_mod.DB_PATH
+    orig_history = _db_mod.HISTORY_DB_PATH
+    orig_reports = _db_mod.REPORTS_DB_PATH
+    orig_operations = _db_mod.OPERATIONS_DB_PATH
+    orig_override = _cfg_mod._storage_mode_override
+
     _db_mod.DB_PATH = test_db
+    _db_mod.HISTORY_DB_PATH = test_db
+    _db_mod.REPORTS_DB_PATH = test_db
+    _db_mod.OPERATIONS_DB_PATH = test_db
     _cfg_mod._storage_mode_override = 'db'
 
     # Reset dedup_checker module-level state
@@ -51,8 +59,11 @@ def _isolate_sqlite(tmp_path):
     yield test_db
 
     _db_mod.close_db()
-    _db_mod.DB_PATH = original
-    _cfg_mod._storage_mode_override = original_override
+    _db_mod.DB_PATH = orig_db_path
+    _db_mod.HISTORY_DB_PATH = orig_history
+    _db_mod.REPORTS_DB_PATH = orig_reports
+    _db_mod.OPERATIONS_DB_PATH = orig_operations
+    _cfg_mod._storage_mode_override = orig_override
 
 
 @pytest.fixture

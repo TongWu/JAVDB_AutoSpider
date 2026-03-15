@@ -42,6 +42,115 @@ class TestInitDb:
         db_mod.init_db(fresh_db)
         assert not os.path.exists(fresh_db)
 
+    def test_split_db_init(self, tmp_path):
+        """init_db() without db_path should create three separate DB files."""
+        import utils.config_helper as _cfg_mod
+        orig_override = _cfg_mod._storage_mode_override
+        _cfg_mod._storage_mode_override = 'db'
+
+        orig_db = db_mod.DB_PATH
+        orig_h = db_mod.HISTORY_DB_PATH
+        orig_r = db_mod.REPORTS_DB_PATH
+        orig_o = db_mod.OPERATIONS_DB_PATH
+
+        db_mod.DB_PATH = str(tmp_path / 'old.db')
+        db_mod.HISTORY_DB_PATH = str(tmp_path / 'history.db')
+        db_mod.REPORTS_DB_PATH = str(tmp_path / 'reports.db')
+        db_mod.OPERATIONS_DB_PATH = str(tmp_path / 'operations.db')
+
+        try:
+            db_mod.init_db(force=True)
+
+            assert os.path.exists(db_mod.HISTORY_DB_PATH)
+            assert os.path.exists(db_mod.REPORTS_DB_PATH)
+            assert os.path.exists(db_mod.OPERATIONS_DB_PATH)
+
+            def _tables(path):
+                conn = sqlite3.connect(path)
+                t = {r[0] for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()}
+                conn.close()
+                return t
+
+            h_tables = _tables(db_mod.HISTORY_DB_PATH)
+            assert 'MovieHistory' in h_tables
+            assert 'TorrentHistory' in h_tables
+            assert 'ReportSessions' not in h_tables
+
+            r_tables = _tables(db_mod.REPORTS_DB_PATH)
+            assert 'ReportSessions' in r_tables
+            assert 'SpiderStats' in r_tables
+            assert 'MovieHistory' not in r_tables
+
+            o_tables = _tables(db_mod.OPERATIONS_DB_PATH)
+            assert 'RcloneInventory' in o_tables
+            assert 'DedupRecords' in o_tables
+            assert 'MovieHistory' not in o_tables
+        finally:
+            db_mod.close_db()
+            db_mod.DB_PATH = orig_db
+            db_mod.HISTORY_DB_PATH = orig_h
+            db_mod.REPORTS_DB_PATH = orig_r
+            db_mod.OPERATIONS_DB_PATH = orig_o
+            _cfg_mod._storage_mode_override = orig_override
+
+    def test_split_migration_from_single_db(self, tmp_path):
+        """Placing a v6 single DB at DB_PATH triggers automatic split."""
+        import utils.config_helper as _cfg_mod
+        orig_override = _cfg_mod._storage_mode_override
+        _cfg_mod._storage_mode_override = 'db'
+
+        orig_db = db_mod.DB_PATH
+        orig_h = db_mod.HISTORY_DB_PATH
+        orig_r = db_mod.REPORTS_DB_PATH
+        orig_o = db_mod.OPERATIONS_DB_PATH
+
+        single_db = str(tmp_path / 'javdb_autospider.db')
+        db_mod.DB_PATH = single_db
+        db_mod.HISTORY_DB_PATH = str(tmp_path / 'history.db')
+        db_mod.REPORTS_DB_PATH = str(tmp_path / 'reports.db')
+        db_mod.OPERATIONS_DB_PATH = str(tmp_path / 'operations.db')
+
+        try:
+            # Create v6 single DB with some data
+            db_mod.init_db(single_db, force=True)
+            db_mod.db_upsert_history('/v/T1', 'T1',
+                                     magnet_links={'subtitle': 'magnet:?xt=urn:btih:test1'},
+                                     db_path=single_db)
+            sid = db_mod.db_create_report_session(
+                'daily', '20240101', 'test.csv', db_path=single_db)
+            db_mod.db_append_dedup_record(
+                {'video_code': 'T1', 'existing_gdrive_path': 'p'},
+                db_path=single_db)
+            db_mod.close_db()
+
+            # Now init_db() without db_path should detect + split
+            db_mod.init_db(force=True)
+
+            assert os.path.exists(db_mod.HISTORY_DB_PATH)
+            assert os.path.exists(db_mod.REPORTS_DB_PATH)
+            assert os.path.exists(db_mod.OPERATIONS_DB_PATH)
+            assert not os.path.exists(single_db)
+            assert os.path.exists(single_db + '.v6.bak')
+
+            # Verify data made it into the correct DBs
+            history = db_mod.db_load_history()
+            assert '/v/T1' in history
+
+            latest = db_mod.db_get_latest_session()
+            assert latest is not None
+
+            dedup = db_mod.db_load_dedup_records()
+            assert len(dedup) >= 1
+        finally:
+            db_mod.close_db()
+            db_mod.DB_PATH = orig_db
+            db_mod.HISTORY_DB_PATH = orig_h
+            db_mod.REPORTS_DB_PATH = orig_r
+            db_mod.OPERATIONS_DB_PATH = orig_o
+            _cfg_mod._storage_mode_override = orig_override
+
 
 # ── parsed_movies_history ─────────────────────────────────────────────────
 
