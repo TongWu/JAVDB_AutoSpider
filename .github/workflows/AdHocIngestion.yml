@@ -72,6 +72,16 @@ on:
         required: false
         default: false
         type: boolean
+      enable_redownload:
+        description: 'Enable torrent re-download (洗版) when a same-category torrent is significantly larger'
+        required: false
+        default: false
+        type: boolean
+      redownload_threshold:
+        description: 'Size increase threshold for re-download (e.g. 0.30 = 30%)'
+        required: false
+        default: '0.30'
+        type: string
 
 jobs:
   # =============================================================================
@@ -465,7 +475,17 @@ jobs:
           if [ "${{ inputs.enable_dedup }}" == "true" ]; then
             SPIDER_CMD="$SPIDER_CMD --enable-dedup"
           fi
-          
+
+          # Add redownload (洗版) flag if enabled
+          if [ "${{ inputs.enable_redownload }}" == "true" ]; then
+            SPIDER_CMD="$SPIDER_CMD --enable-redownload"
+            THRESHOLD="${{ inputs.redownload_threshold }}"
+            if [ -n "$THRESHOLD" ] && [ "$THRESHOLD" != "0.30" ]; then
+              SPIDER_CMD="$SPIDER_CMD --redownload-threshold $THRESHOLD"
+            fi
+            echo "🔄 Re-download (洗版) enabled (threshold: ${THRESHOLD:-0.30})"
+          fi
+
           echo "Executing: $SPIDER_CMD"
           # Capture output to extract the CSV filename
           SPIDER_OUTPUT=$(eval $SPIDER_CMD | tee /dev/stderr)
