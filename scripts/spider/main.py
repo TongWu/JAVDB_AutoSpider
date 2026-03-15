@@ -195,9 +195,9 @@ def main():
         logger.info(f"Rclone inventory not found ({rclone_inventory_path}) – rclone skip/dedup disabled")
 
     if rclone_filter:
-        logger.info("RCLONE FILTER: Enabled – will skip entries already in rclone inventory with 中字")
+        logger.info("RCLONE FILTER: Enabled - will skip entries already in rclone inventory with 中字")
     else:
-        logger.info("RCLONE FILTER: Disabled – all entries will be processed regardless of rclone inventory")
+        logger.info("RCLONE FILTER: Disabled - all entries will be processed regardless of rclone inventory")
 
     if enable_dedup:
         logger.info("DEDUP MODE: Enabled – will detect upgrade opportunities against rclone inventory")
