@@ -776,6 +776,10 @@ def _migrate_single_to_split():
         new_conn.execute("PRAGMA foreign_keys=OFF")
         new_conn.executescript(ddl)
         new_conn.execute("ATTACH DATABASE ? AS old_db", (old_path,))
+        try:
+            new_conn.execute("ALTER TABLE old_db.SpiderStats ADD COLUMN FailedMovies TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
         for table in tables:
             try:
                 new_conn.execute(f"INSERT INTO main.[{table}] SELECT * FROM old_db.[{table}]")
