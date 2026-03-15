@@ -204,8 +204,6 @@ def main():
     fieldnames = [
         'href', 'video_code', 'page', 'actor', 'rate', 'comment_number',
         'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle',
-        'size_hacked_subtitle', 'size_hacked_no_subtitle',
-        'size_subtitle', 'size_no_subtitle',
     ]
 
     max_consecutive_empty = 3
@@ -450,7 +448,7 @@ def main():
             last_page = idx_result.get('last_valid_page')
             if last_page is not None:
                 with get_db() as conn:
-                    conn.execute("UPDATE report_sessions SET end_page=? WHERE id=?", (last_page, _session_id))
+                    conn.execute("UPDATE ReportSessions SET EndPage=? WHERE Id=?", (last_page, _session_id))
         except Exception as e:
             logger.warning(f"Failed to save spider stats: {e}")
 
