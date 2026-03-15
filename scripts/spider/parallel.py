@@ -243,6 +243,7 @@ class ProxyWorker(threading.Thread):
 
     def _handle_login_required(self, task: DetailTask):
         """Route a login-required task to the logged-in worker, or login self."""
+        global _logged_in_worker_id
         with _login_lock:
             if _logged_in_worker_id is not None:
                 if _logged_in_worker_id != self.worker_id:
@@ -260,6 +261,7 @@ class ProxyWorker(threading.Thread):
                     f"Login required for {task.entry.get('video_code', '')} "
                     f"but own session is stale — requeueing as proxy failure"
                 )
+                _logged_in_worker_id = None
                 task.failed_proxies.add(self.proxy_name)
                 _requeue_front(self.detail_queue, task)
                 return
