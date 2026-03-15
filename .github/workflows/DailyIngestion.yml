@@ -22,7 +22,7 @@ on:
       enable_redownload:
         description: 'Enable torrent re-download (洗版) when a same-category torrent is significantly larger'
         required: false
-        default: false
+        default: true
         type: boolean
       redownload_threshold:
         description: 'Size increase threshold for re-download (e.g. 0.30 = 30%)'
