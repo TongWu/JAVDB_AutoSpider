@@ -100,14 +100,18 @@ def _parse_magnets(soup: BeautifulSoup) -> tuple:
         name_span = magnet_a.find('span', class_='name')
         name = name_span.get_text(strip=True) if name_span else ''
 
-        # Size
+        # Size and file count
         size = ''
+        file_count = 0
         meta_span = magnet_a.find('span', class_='meta')
         if meta_span:
             meta_text = meta_span.get_text(strip=True)
-            size_match = re.search(r'([\d.]+(?:GB|MB|KB|TB))', meta_text)
+            size_match = re.search(r'([\d.]+\s*(?:GB|MB|KB|TB))', meta_text)
             if size_match:
-                size = size_match.group(1)
+                size = size_match.group(1).replace(' ', '')
+            fc_match = re.search(r'(\d+)\s*個文件', meta_text)
+            if fc_match:
+                file_count = int(fc_match.group(1))
 
         # Timestamp
         timestamp = ''
@@ -128,6 +132,7 @@ def _parse_magnets(soup: BeautifulSoup) -> tuple:
             name=name,
             tags=tags,
             size=size,
+            file_count=file_count,
             timestamp=timestamp,
         ))
 

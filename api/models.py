@@ -36,6 +36,7 @@ class MagnetInfo:
     name: str
     tags: List[str] = field(default_factory=list)
     size: str = ''
+    file_count: int = 0
     timestamp: str = ''
 
     def to_dict(self) -> dict:
