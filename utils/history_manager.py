@@ -25,6 +25,8 @@ HISTORY_FIELDNAMES = [
     'href', 'phase', 'video_code', 'create_datetime', 'update_datetime',
     'last_visited_datetime',
     'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle',
+    'size_hacked_subtitle', 'size_hacked_no_subtitle',
+    'size_subtitle', 'size_no_subtitle',
 ]
 
 _db_initialised = False
@@ -63,6 +65,8 @@ def _normalize_record_columns(record):
         del record['torrent_type']
 
     for cat in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
+        record.setdefault(cat, '')
+    for cat in ['size_hacked_subtitle', 'size_hacked_no_subtitle', 'size_subtitle', 'size_no_subtitle']:
         record.setdefault(cat, '')
 
 
@@ -103,12 +107,14 @@ def maintain_history_limit(history_file, max_records=1000):
     _csv_maintain_history_limit(history_file, max_records)
 
 
-def save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_links=None):
+def save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_links=None, size_links=None):
     """Save a parsed movie to the history, updating existing records with new magnet links."""
     if magnet_links is None:
         magnet_links = {'no_subtitle': ''}
     elif isinstance(magnet_links, list):
         magnet_links = {t: '' for t in magnet_links}
+    if size_links is None:
+        size_links = {}
 
     if use_sqlite():
         _ensure_db()
@@ -116,20 +122,25 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_l
         from utils.db import db_upsert_history
 
         filtered = {}
+        filtered_sizes = {}
         if magnet_links.get('hacked_subtitle'):
             filtered['hacked_subtitle'] = magnet_links['hacked_subtitle']
+            filtered_sizes['hacked_subtitle'] = size_links.get('hacked_subtitle', '')
         else:
             filtered['hacked_no_subtitle'] = magnet_links.get('hacked_no_subtitle', '')
+            filtered_sizes['hacked_no_subtitle'] = size_links.get('hacked_no_subtitle', '')
         if magnet_links.get('subtitle'):
             filtered['subtitle'] = magnet_links['subtitle']
+            filtered_sizes['subtitle'] = size_links.get('subtitle', '')
         else:
             filtered['no_subtitle'] = magnet_links.get('no_subtitle', '')
+            filtered_sizes['no_subtitle'] = size_links.get('no_subtitle', '')
 
-        db_upsert_history(href, phase, video_code, filtered)
+        db_upsert_history(href, phase, video_code, filtered, size_links=filtered_sizes)
         logger.debug(f"Saved history for {href} with magnet links: {list(magnet_links.keys())}")
 
     if use_csv():
-        _csv_save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_links)
+        _csv_save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_links, size_links)
 
 
 def validate_history_file(history_file):
@@ -334,6 +345,48 @@ def should_process_movie(href, history_data, phase, magnet_links):
     return False, history_torrent_types
 
 
+def check_redownload_upgrade(href, history_data, magnet_links, threshold=0.30):
+    """Check if any same-category torrent qualifies for re-download (洗版).
+
+    Compares the size of each torrent category in *magnet_links* against the
+    size recorded in *history_data*.  If a new torrent is larger than the
+    existing one by at least *threshold* (e.g. 0.30 = 30 %), that category
+    is returned as an upgrade candidate.
+
+    Returns:
+        list of category names that qualify for re-download.
+    """
+    if not history_data or href not in history_data:
+        return []
+
+    from utils.magnet_extractor import _parse_size
+
+    entry = history_data[href]
+    upgrade_categories = []
+
+    for cat in ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle'):
+        new_magnet = magnet_links.get(cat, '')
+        if not new_magnet:
+            continue
+        old_size_str = entry.get(f'size_{cat}', '')
+        new_size_str = magnet_links.get(f'size_{cat}', '')
+        if not old_size_str or not new_size_str:
+            continue
+        old_bytes = _parse_size(old_size_str)
+        new_bytes = _parse_size(new_size_str)
+        if old_bytes <= 0:
+            continue
+        if new_bytes > old_bytes * (1 + threshold):
+            logger.info(
+                f"Re-download upgrade for {href} [{cat}]: "
+                f"{old_size_str} -> {new_size_str} "
+                f"(+{((new_bytes / old_bytes) - 1) * 100:.0f}%, threshold {threshold * 100:.0f}%)"
+            )
+            upgrade_categories.append(cat)
+
+    return upgrade_categories
+
+
 def is_downloaded_torrent(torrent_content):
     """Check if torrent content contains downloaded indicator."""
     return torrent_content.strip().startswith("[DOWNLOADED PREVIOUSLY]")
@@ -406,6 +459,10 @@ def _csv_load_parsed_movies_history(history_file, phase=None):
                         'hacked_no_subtitle': row.get('hacked_no_subtitle', ''),
                         'subtitle': row.get('subtitle', ''),
                         'no_subtitle': row.get('no_subtitle', ''),
+                        'size_hacked_subtitle': row.get('size_hacked_subtitle', ''),
+                        'size_hacked_no_subtitle': row.get('size_hacked_no_subtitle', ''),
+                        'size_subtitle': row.get('size_subtitle', ''),
+                        'size_no_subtitle': row.get('size_no_subtitle', ''),
                     }
 
                 if phase is None:
@@ -482,11 +539,13 @@ def _csv_maintain_history_limit(history_file, max_records=1000):
         logger.error(f"Error maintaining history limit: {e}")
 
 
-def _csv_save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_links=None):
+def _csv_save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_links=None, size_links=None):
     if magnet_links is None:
         magnet_links = {'no_subtitle': ''}
     elif isinstance(magnet_links, list):
         magnet_links = {t: '' for t in magnet_links}
+    if size_links is None:
+        size_links = {}
 
     records = []
     file_exists = os.path.exists(history_file)
@@ -543,10 +602,13 @@ def _csv_save_parsed_movie_to_history(history_file, href, phase, video_code, mag
                                                 new_dt = datetime.strptime(current_date, "%Y-%m-%d")
                                                 if new_dt > old_dt:
                                                     row[torrent_type] = f"[{current_date}]{magnet_link}"
+                                                    row[f'size_{torrent_type}'] = size_links.get(torrent_type, '')
                                             except Exception:
                                                 row[torrent_type] = f"[{current_date}]{magnet_link}"
+                                                row[f'size_{torrent_type}'] = size_links.get(torrent_type, '')
                                         else:
                                             row[torrent_type] = f"[{current_date}]{magnet_link}"
+                                            row[f'size_{torrent_type}'] = size_links.get(torrent_type, '')
 
                             row['update_datetime'] = current_time
                             row['last_visited_datetime'] = current_time
@@ -554,8 +616,10 @@ def _csv_save_parsed_movie_to_history(history_file, href, phase, video_code, mag
 
                         if row.get('hacked_subtitle', '').strip():
                             row['hacked_no_subtitle'] = ''
+                            row['size_hacked_no_subtitle'] = ''
                         if row.get('subtitle', '').strip():
                             row['no_subtitle'] = ''
+                            row['size_no_subtitle'] = ''
 
                         updated_record = row.copy()
                     else:
@@ -571,14 +635,19 @@ def _csv_save_parsed_movie_to_history(history_file, href, phase, video_code, mag
             'last_visited_datetime': current_time,
             'hacked_subtitle': '', 'hacked_no_subtitle': '',
             'subtitle': '', 'no_subtitle': '',
+            'size_hacked_subtitle': '', 'size_hacked_no_subtitle': '',
+            'size_subtitle': '', 'size_no_subtitle': '',
         }
         for torrent_type, magnet_link in magnet_links.items():
             if torrent_type in ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']:
                 new_record[torrent_type] = f"[{current_date}]{magnet_link}" if magnet_link else ''
+                new_record[f'size_{torrent_type}'] = size_links.get(torrent_type, '')
         if new_record.get('hacked_subtitle', '').strip():
             new_record['hacked_no_subtitle'] = ''
+            new_record['size_hacked_no_subtitle'] = ''
         if new_record.get('subtitle', '').strip():
             new_record['no_subtitle'] = ''
+            new_record['size_no_subtitle'] = ''
         records.insert(0, new_record)
     else:
         if updated_record:
