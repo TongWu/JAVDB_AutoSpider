@@ -12,7 +12,7 @@ Databases created:
   - operations.db — RcloneInventory, DedupRecords, PikpakHistory, ProxyBans
 
 Usage:
-    python3 migration/migrate_v6_to_v7_split.py [--db-path PATH] [--backup] [--verify] [--dry-run]
+    python3 migration/migrate_v6_to_v7_split.py [--db-path PATH] [--backup] [--verify] [--dry-run] [--normalize-datetimes]
 """
 
 import argparse
@@ -73,6 +73,20 @@ def backup_db(db_path: str) -> str:
     return backup_path
 
 
+def _normalize_three_dbs(history_path: str, reports_path: str, operations_path: str) -> None:
+    from utils.sqlite_datetime import rewrite_datetime_text_columns
+
+    logger.info("Normalizing DateTime TEXT columns ...")
+    for p in (history_path, reports_path, operations_path):
+        if not os.path.exists(p):
+            continue
+        scanned, updated, skipped = rewrite_datetime_text_columns(p, dry_run=False)
+        logger.info(
+            "  %s: scanned=%d updated=%d still_noncanonical=%d",
+            p, scanned, updated, skipped,
+        )
+
+
 def verify_split(reports_dir: str) -> bool:
     import utils.db as db_mod
 
@@ -129,6 +143,11 @@ def main():
                         help='Run integrity checks after migration')
     parser.add_argument('--dry-run', action='store_true',
                         help='Show current state without migrating')
+    parser.add_argument(
+        '--normalize-datetimes',
+        action='store_true',
+        help='After split, normalize TEXT DateTime columns to YYYY-MM-DD HH:MM:SS',
+    )
     args = parser.parse_args()
 
     db_path = args.db_path or DEFAULT_DB_PATH
@@ -162,6 +181,9 @@ def main():
 
     if already_split:
         logger.info("All three target databases already exist. No migration needed.")
+        if args.normalize_datetimes:
+            _normalize_three_dbs(
+                db_mod.HISTORY_DB_PATH, db_mod.REPORTS_DB_PATH, db_mod.OPERATIONS_DB_PATH)
         if args.verify:
             ok = verify_split(reports_dir)
             sys.exit(0 if ok else 1)
@@ -201,6 +223,11 @@ def main():
         else:
             logger.error("Verification FAILED")
             sys.exit(1)
+
+    if args.normalize_datetimes:
+        logger.info("-" * 60)
+        _normalize_three_dbs(
+            db_mod.HISTORY_DB_PATH, db_mod.REPORTS_DB_PATH, db_mod.OPERATIONS_DB_PATH)
 
     logger.info("=" * 60)
     logger.info("Done.")
