@@ -29,6 +29,7 @@ os.chdir(project_root)
 sys.path.insert(0, project_root)
 
 from utils.logging_config import setup_logging, get_logger
+from utils.sqlite_datetime import normalize_storage_datetime
 
 setup_logging()
 logger = get_logger(__name__)
@@ -96,9 +97,14 @@ def migrate_history(csv_path: str, db_path: str, dry_run: bool = False) -> int:
     torrent_count = 0
     with get_db(db_path) as conn:
         for row in unique_rows:
-            create_dt = row.get('create_datetime', row.get('create_date', row.get('parsed_date', '')))
-            update_dt = row.get('update_datetime', row.get('update_date', row.get('parsed_date', '')))
+            create_dt = normalize_storage_datetime(
+                row.get('create_datetime', row.get('create_date', row.get('parsed_date', ''))) or ''
+            )
+            update_dt = normalize_storage_datetime(
+                row.get('update_datetime', row.get('update_date', row.get('parsed_date', ''))) or ''
+            )
             last_visited = row.get('last_visited_datetime', '') or update_dt
+            last_visited = normalize_storage_datetime(last_visited or '')
             video_code = row.get('video_code', '')
             href = row.get('href', '')
 
@@ -132,8 +138,8 @@ def migrate_history(csv_path: str, db_path: str, dry_run: bool = False) -> int:
                 size_col = f'size_{cat}'
                 size_val = (row.get(size_col, '') or '').strip()
                 sub_ind, cen_ind = _CATEGORY_TO_INDICATORS[cat]
-                torrent_dt_created = dt_created or create_dt
-                torrent_dt_updated = update_dt
+                torrent_dt_created = normalize_storage_datetime((dt_created or create_dt or ''))
+                torrent_dt_updated = normalize_storage_datetime(update_dt or '')
 
                 conn.execute(
                     """INSERT OR REPLACE INTO TorrentHistory
@@ -466,9 +472,9 @@ def migrate_pikpak(csv_path: str, db_path: str, dry_run: bool = False) -> int:
                  row.get('torrent_name', ''),
                  row.get('category', ''),
                  row.get('magnet_uri', ''),
-                 row.get('added_to_qb_date', ''),
-                 row.get('deleted_from_qb_date', ''),
-                 row.get('uploaded_to_pikpak_date', ''),
+                 normalize_storage_datetime(row.get('added_to_qb_date', '') or ''),
+                 normalize_storage_datetime(row.get('deleted_from_qb_date', '') or ''),
+                 normalize_storage_datetime(row.get('uploaded_to_pikpak_date', '') or ''),
                  row.get('transfer_status', ''),
                  row.get('error_message', '')),
             )
