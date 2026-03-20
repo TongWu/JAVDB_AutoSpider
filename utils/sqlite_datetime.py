@@ -127,6 +127,15 @@ def rewrite_datetime_text_columns(db_path: str, dry_run: bool = False) -> tuple[
                 scanned += 1
                 s = str(raw).strip()
                 if _CANONICAL_RE.match(s):
+                    # Strip-only fix: DB may still hold leading/trailing whitespace.
+                    if str(raw) == s:
+                        continue
+                    updated += 1
+                    if not dry_run:
+                        conn.execute(
+                            f'UPDATE "{table}" SET "{col}" = ? WHERE rowid = ?',
+                            (s, rowid),
+                        )
                     continue
                 new_val = normalize_storage_datetime(s)
                 if new_val == s:
