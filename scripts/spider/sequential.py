@@ -5,7 +5,9 @@ from typing import List
 from urllib.parse import urljoin
 
 from utils.logging_config import get_logger
+from utils.config_helper import use_sqlite
 from utils.magnet_extractor import extract_magnets
+from utils.db import db_batch_update_movie_actors
 from utils.history_manager import (
     has_complete_subtitles, should_process_movie,
     get_missing_torrent_types, save_parsed_movie_to_history,
@@ -63,6 +65,7 @@ def process_phase_entries_sequential(
     total_entries = len(entries)
     phase_rows: list = []
     visited_hrefs: set = set()
+    actor_updates: list = []
     skipped_history = 0
     failed = 0
     failed_movies: list = []
@@ -115,13 +118,15 @@ def process_phase_entries_sequential(
         entry_index = f"{i}/{total_entries}"
         logger.info(f"[{entry_index}] [Page {page_num}] Processing {entry['video_code'] or href}")
 
-        magnets, actor_info, parse_success, effective_use_proxy, effective_use_cf_bypass = fetch_detail_page_with_fallback(
-            detail_url, session,
-            use_cookie=use_cookie,
-            use_proxy=use_proxy,
-            use_cf_bypass=use_cf_bypass,
-            entry_index=entry_index,
-            is_adhoc_mode=is_adhoc_mode,
+        magnets, actor_info, actor_link, parse_success, effective_use_proxy, effective_use_cf_bypass = (
+            fetch_detail_page_with_fallback(
+                detail_url, session,
+                use_cookie=use_cookie,
+                use_proxy=use_proxy,
+                use_cf_bypass=use_cf_bypass,
+                entry_index=entry_index,
+                is_adhoc_mode=is_adhoc_mode,
+            )
         )
 
         fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
@@ -138,6 +143,7 @@ def process_phase_entries_sequential(
             continue
 
         visited_hrefs.add(href)
+        actor_updates.append((href, actor_info or '', actor_link or ''))
         magnet_links = extract_magnets(magnets, entry_index)
 
         should_process, history_torrent_types = should_process_movie(href, history_data, phase, magnet_links)
@@ -197,6 +203,8 @@ def process_phase_entries_sequential(
                         history_file, href, phase, entry['video_code'],
                         new_magnet_links, size_links=new_sizes,
                         file_count_links=new_fc, resolution_links=new_res,
+                        actor_name=actor_info or '',
+                        actor_link=actor_link or '',
                     )
         else:
             no_new_torrents += 1
@@ -209,6 +217,8 @@ def process_phase_entries_sequential(
             pending_movie_sleep = True
 
     if use_history_for_saving and not dry_run and visited_hrefs:
+        if use_sqlite() and actor_updates:
+            db_batch_update_movie_actors(actor_updates)
         batch_update_last_visited(history_file, visited_hrefs)
 
     logger.info(
