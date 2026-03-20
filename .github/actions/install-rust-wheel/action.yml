@@ -11,7 +11,7 @@ runs:
   steps:
     - name: Restore Rust wheel from cache
       id: wheel-cache
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: /tmp/rust-wheel
         key: rust-wheel-${{ runner.os }}-${{ hashFiles('rust_core/src/**', 'rust_core/Cargo.toml', 'rust_core/Cargo.lock') }}
@@ -29,7 +29,7 @@ runs:
 
     - name: Cache Cargo dependencies
       if: steps.wheel-cache.outputs.cache-hit != 'true'
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~/.cargo/registry
