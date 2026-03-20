@@ -1002,7 +1002,12 @@ def format_email_report(spider_stats, uploader_stats, pikpak_stats, ban_summary,
     """
     sections = []
     start_dt = report_dt if report_dt is not None else datetime.now()
-    end_dt = report_end_dt if report_end_dt is not None else datetime.now()
+    if report_end_dt is not None:
+        end_dt = report_end_dt
+    elif start_dt.tzinfo is not None:
+        end_dt = datetime.now(tz=start_dt.tzinfo)
+    else:
+        end_dt = datetime.now()
     start_str = start_dt.strftime('%Y-%m-%d %H:%M:%S')
     end_str = end_dt.strftime('%Y-%m-%d %H:%M:%S')
     
@@ -1533,8 +1538,10 @@ def main():
         short_name = adhoc_display_name[:20] + "..." if len(adhoc_display_name) > 20 else adhoc_display_name
         adhoc_subject_suffix = f" [{short_name}]"
     
-    # End time when composing email (actual send may be moments later)
-    report_end_dt = datetime.now()
+    # End time when composing email (actual send may be moments later); match report_dt tz for display
+    report_end_dt = (
+        datetime.now(tz=report_dt.tzinfo) if report_dt.tzinfo is not None else datetime.now()
+    )
     
     # Send email based on status
     if not has_critical_errors:
