@@ -129,6 +129,12 @@ class TestMovieDetail:
         ])
         assert detail.get_first_actor_name() == 'Actor One'
 
+    def test_get_first_actor_href(self):
+        detail = MovieDetail(actors=[
+            MovieLink(name='A', href='https://javdb.com/actors/450wJ'),
+        ])
+        assert detail.get_first_actor_href() == '/actors/450wJ'
+
     def test_get_magnets_as_legacy(self):
         detail = MovieDetail(magnets=[
             MagnetInfo(href='magnet:?abc', name='test', tags=['HD'], size='1GB', timestamp='2024-01-01'),

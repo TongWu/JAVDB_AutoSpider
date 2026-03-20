@@ -195,16 +195,19 @@ class TestParseDetail:
     
     def test_parse_detail_with_magnets(self, sample_detail_html):
         """Test parsing detail page with magnets."""
-        magnets, actor_info, parse_success = parse_detail(sample_detail_html, index=1, skip_sleep=True)
-        
+        magnets, actor_info, actor_link, parse_success = parse_detail(
+            sample_detail_html, index=1, skip_sleep=True)
+
         assert parse_success is True
         assert len(magnets) == 3
         assert actor_info == 'Sample Actor'
+        assert actor_link == '/actors/xyz'
     
     def test_parse_detail_magnet_structure(self, sample_detail_html):
         """Test that parsed magnets have correct structure."""
-        magnets, actor_info, parse_success = parse_detail(sample_detail_html, index=1, skip_sleep=True)
-        
+        magnets, _actor_info, _actor_link, _parse_success = parse_detail(
+            sample_detail_html, index=1, skip_sleep=True)
+
         for magnet in magnets:
             assert 'href' in magnet
             assert 'name' in magnet
@@ -229,16 +232,17 @@ class TestParseDetail:
         </body>
         </html>
         '''
-        magnets, actor_info, parse_success = parse_detail(html, index=1, skip_sleep=True)
-        
+        magnets, actor_info, actor_link, parse_success = parse_detail(html, index=1, skip_sleep=True)
+
         assert parse_success is False
         assert magnets == []
         assert actor_info == 'Test Actor'
+        assert actor_link == '/actors/xyz'
     
     def test_parse_detail_extracts_size(self, sample_detail_html):
         """Test that size is extracted correctly."""
-        magnets, _, _ = parse_detail(sample_detail_html, index=1, skip_sleep=True)
-        
+        magnets, _, _, _ = parse_detail(sample_detail_html, index=1, skip_sleep=True)
+
         # Find the subtitle magnet
         subtitle_magnet = next((m for m in magnets if 'subtitle' in m['name'].lower()), None)
         if subtitle_magnet:
@@ -246,10 +250,22 @@ class TestParseDetail:
     
     def test_parse_detail_extracts_tags(self, sample_detail_html):
         """Test that tags are extracted correctly."""
-        magnets, _, _ = parse_detail(sample_detail_html, index=1, skip_sleep=True)
+        magnets, _, _, _ = parse_detail(sample_detail_html, index=1, skip_sleep=True)
         
         # Find the subtitle magnet
         subtitle_magnet = next((m for m in magnets if 'subtitle' in m['name'].lower()), None)
         if subtitle_magnet:
             assert '字幕' in subtitle_magnet['tags']
+
+    def test_parse_detail_vdd201_fixture_html(self):
+        html_path = os.path.join(project_root, 'html', 'detailed_page_VDD-201.html')
+        if not os.path.isfile(html_path):
+            pytest.skip('fixture HTML not present')
+        with open(html_path, encoding='utf-8') as f:
+            html = f.read()
+        magnets, actor_info, actor_link, parse_success = parse_detail(html, index=1, skip_sleep=True)
+        assert actor_info == '真北祈'
+        assert actor_link == '/actors/450wJ'
+        assert parse_success is True
+        assert len(magnets) >= 1
 

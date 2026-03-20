@@ -155,8 +155,12 @@ class TestInitDb:
 # ── parsed_movies_history ─────────────────────────────────────────────────
 
 class TestHistory:
-    def _upsert(self, href='/v/ABC-123', code='ABC-123', magnets=None):
-        db_mod.db_upsert_history(href, code, magnet_links=magnets)
+    def _upsert(self, href='/v/ABC-123', code='ABC-123', magnets=None,
+                actor_name=None, actor_link=None):
+        db_mod.db_upsert_history(
+            href, code, magnet_links=magnets,
+            actor_name=actor_name, actor_link=actor_link,
+        )
 
     def test_upsert_and_load(self, _isolate_sqlite):
         self._upsert()
@@ -189,6 +193,19 @@ class TestHistory:
         db_mod.db_batch_update_last_visited(['/v/A'])
         history = db_mod.db_load_history()
         assert history['/v/A']['DateTimeVisited'] != ''
+
+    def test_upsert_sets_actor_columns(self, _isolate_sqlite):
+        self._upsert(actor_name='Actor One', actor_link='/actors/xyz')
+        history = db_mod.db_load_history()
+        assert history['/v/ABC-123']['ActorName'] == 'Actor One'
+        assert history['/v/ABC-123']['ActorLink'] == '/actors/xyz'
+
+    def test_batch_update_movie_actors(self, _isolate_sqlite):
+        self._upsert(href='/v/A', code='A')
+        assert db_mod.db_batch_update_movie_actors([('/v/A', 'N1', '/actors/1')]) == 1
+        history = db_mod.db_load_history()
+        assert history['/v/A']['ActorName'] == 'N1'
+        assert history['/v/A']['ActorLink'] == '/actors/1'
 
     def test_get_all_history_records(self, _isolate_sqlite):
         self._upsert(href='/v/A', code='A')
