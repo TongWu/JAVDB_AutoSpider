@@ -121,8 +121,8 @@ def migrate_history(csv_path: str, db_path: str, dry_run: bool = False) -> int:
             conn.execute(
                 """INSERT OR REPLACE INTO MovieHistory
                    (VideoCode, Href, DateTimeCreated, DateTimeUpdated, DateTimeVisited,
-                    PerfectMatchIndicator, HiResIndicator)
-                   VALUES (?, ?, ?, ?, ?, ?, 0)""",
+                    PerfectMatchIndicator, HiResIndicator, ActorName, ActorLink)
+                   VALUES (?, ?, ?, ?, ?, ?, 0, '', '')""",
                 (video_code, href, create_dt, update_dt, last_visited, perfect_match),
             )
             movie_id = conn.execute(
