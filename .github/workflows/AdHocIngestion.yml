@@ -75,12 +75,12 @@ on:
       enable_rclone_filter:
         description: 'Enable rclone inventory filter (skip entries already in rclone inventory with 中字)'
         required: false
-        default: true
+        default: false
         type: boolean
       enable_dedup:
         description: 'Enable rclone dedup (detect + execute)'
         required: false
-        default: false
+        default: true
         type: boolean
       enable_redownload:
         description: 'Enable torrent re-download (洗版) when a same-category torrent is significantly larger'
