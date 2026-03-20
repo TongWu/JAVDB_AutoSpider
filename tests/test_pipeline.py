@@ -5,6 +5,8 @@ import os
 import sys
 import pytest
 import tempfile
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -19,7 +21,8 @@ from scripts.email_notification import (
     extract_spider_statistics,
     extract_uploader_statistics,
     extract_pikpak_statistics,
-    format_email_report
+    format_email_report,
+    get_report_display_datetime,
 )
 
 # Import mask_sensitive_info from git_helper (it's now the canonical location)
@@ -394,6 +397,22 @@ class TestExtractPikpakStatistics:
         assert stats['failed'] == 1
 
 
+class TestReportDisplayDatetime:
+    """Workflow run start is used for email date when PIPELINE_WORKFLOW_RUN_STARTED_AT is set."""
+
+    def test_subject_date_matches_trigger_day_across_midnight(self, monkeypatch):
+        monkeypatch.setenv('PIPELINE_WORKFLOW_RUN_STARTED_AT', '2025-03-20T15:30:00Z')
+        monkeypatch.setenv('TZ', 'Asia/Singapore')
+        dt = get_report_display_datetime()
+        assert dt.strftime('%Y%m%d') == '20250320'
+
+    def test_fallback_when_env_unset(self, monkeypatch):
+        monkeypatch.delenv('PIPELINE_WORKFLOW_RUN_STARTED_AT', raising=False)
+        monkeypatch.delenv('TZ', raising=False)
+        dt = get_report_display_datetime()
+        assert dt.strftime('%Y-%m-%d')  # naive now(), still valid
+
+
 class TestFormatEmailReport:
     """Test cases for format_email_report function."""
     
@@ -436,3 +455,28 @@ class TestFormatEmailReport:
         assert 'No banned proxies' in result
         assert 'No New Torrents' in result  # new field
         assert 'Skipped (Session)' not in result
+
+    def test_format_email_report_uses_report_dt_in_header(self):
+        spider_stats = {
+            'phase1': {'discovered': 0, 'processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0},
+            'phase2': {'discovered': 0, 'processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0},
+            'overall': {'total_discovered': 0, 'successfully_processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0}
+        }
+        uploader_stats = {
+            'total': 0, 'success': 0, 'failed': 0, 'hacked_sub': 0, 'hacked_nosub': 0,
+            'subtitle': 0, 'no_subtitle': 0, 'success_rate': 0.0
+        }
+        pikpak_stats = {
+            'total_torrents': 0, 'filtered_old': 0, 'added_to_pikpak': 0,
+            'removed_from_qb': 0, 'failed': 0, 'threshold_days': 3
+        }
+        fixed_start = datetime(2025, 3, 20, 23, 30, 0, tzinfo=ZoneInfo('Asia/Singapore'))
+        fixed_end = datetime(2025, 3, 21, 1, 15, 0, tzinfo=ZoneInfo('Asia/Singapore'))
+        out = format_email_report(
+            spider_stats, uploader_stats, pikpak_stats, 'none',
+            show_spider=False, show_uploader=False, show_pikpak=False,
+            report_dt=fixed_start,
+            report_end_dt=fixed_end,
+        )
+        assert 'Started:  2025-03-20 23:30:00' in out
+        assert 'Finished: 2025-03-21 01:15:00' in out
