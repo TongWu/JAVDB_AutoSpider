@@ -115,6 +115,14 @@ class MovieDetail:
         """Return the name of the first actor, or empty string."""
         return self.actors[0].name if self.actors else ''
 
+    def get_first_actor_href(self) -> str:
+        """Return the normalized path for the first actor link, or empty string."""
+        if not self.actors:
+            return ''
+        from api.parsers.common import normalize_javdb_href_path
+
+        return normalize_javdb_href_path(self.actors[0].href)
+
     def get_magnets_as_legacy(self) -> list:
         """Return magnets in the legacy list-of-dicts format."""
         return [m.to_dict() for m in self.magnets]
