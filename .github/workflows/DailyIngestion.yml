@@ -606,6 +606,8 @@ jobs:
     if: always()
     env:
       TZ: Asia/Singapore
+      # Email subject/body date = workflow start, not send time (avoids wrong day after midnight)
+      PIPELINE_WORKFLOW_RUN_STARTED_AT: ${{ github.run_started_at }}
     
     steps:
       - name: Checkout repository
