@@ -19,7 +19,7 @@ import re
 import shutil
 import html as html_module
 import argparse
-from datetime import datetime
+from datetime import datetime, timezone
 from email.message import EmailMessage
 
 # Change to project root directory (parent of scripts folder)
@@ -70,6 +70,48 @@ from utils.git_helper import git_commit_and_push, flush_log_handlers, has_git_cr
 
 # Import path helper for dated subdirectories
 from utils.path_helper import get_dated_report_path, find_latest_report_in_dated_dirs
+
+
+def _parse_github_workflow_run_started_at():
+    """
+    Parse PIPELINE_WORKFLOW_RUN_STARTED_AT (ISO 8601 from github.run_started_at).
+    Returns timezone-aware UTC datetime, or None if unset/invalid.
+    """
+    raw = os.environ.get('PIPELINE_WORKFLOW_RUN_STARTED_AT', '').strip()
+    if not raw:
+        return None
+    s = raw.replace('Z', '+00:00') if raw.endswith('Z') else raw
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        logger.warning('Invalid PIPELINE_WORKFLOW_RUN_STARTED_AT: %r', raw)
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt
+
+
+def get_report_display_datetime():
+    """
+    Wall-clock moment for email subject (YYYYMMDD) and report headers.
+
+    When GitHub Actions sets PIPELINE_WORKFLOW_RUN_STARTED_AT from
+    github.run_started_at, use that instant so long runs that cross midnight
+    still show the workflow trigger day. Otherwise fall back to datetime.now().
+    """
+    parsed = _parse_github_workflow_run_started_at()
+    if parsed is None:
+        return datetime.now()
+    tz_name = os.environ.get('TZ', '').strip()
+    if tz_name:
+        try:
+            from zoneinfo import ZoneInfo
+            return parsed.astimezone(ZoneInfo(tz_name))
+        except Exception:
+            logger.debug('Could not apply TZ=%r for report display', tz_name)
+    return parsed.astimezone(timezone.utc)
 
 
 def extract_adhoc_info_from_csv(csv_path):
@@ -946,7 +988,7 @@ def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
 def format_email_report(spider_stats, uploader_stats, pikpak_stats, ban_summary,
                         show_spider=True, show_uploader=True, show_pikpak=True,
                         mode='daily', adhoc_info=None, proxy_ban_html_summary=None,
-                        dedup_stats=None):
+                        dedup_stats=None, report_dt=None, report_end_dt=None):
     """
     Format a mobile-friendly email report.
     Only includes sections for components that ran successfully.
@@ -955,8 +997,14 @@ def format_email_report(spider_stats, uploader_stats, pikpak_stats, ban_summary,
         mode: 'daily' or 'adhoc'
         adhoc_info: Formatted Ad-Hoc info string (e.g., "Actor: 森日向子")
         proxy_ban_html_summary: Summary of proxy ban HTML files captured (if any)
+        report_dt: Pipeline / workflow start time for header (default: now)
+        report_end_dt: Email compose / send-side end time (default: now at format time)
     """
     sections = []
+    start_dt = report_dt if report_dt is not None else datetime.now()
+    end_dt = report_end_dt if report_end_dt is not None else datetime.now()
+    start_str = start_dt.strftime('%Y-%m-%d %H:%M:%S')
+    end_str = end_dt.strftime('%Y-%m-%d %H:%M:%S')
     
     # Determine mode display
     if mode == 'adhoc':
@@ -973,7 +1021,8 @@ def format_email_report(spider_stats, uploader_stats, pikpak_stats, ban_summary,
     sections.append(f"""
 ═══════════════════════════════
 JavDB Pipeline Report ({mode_display})
-{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Started:  {start_str}
+Finished: {end_str}
 ═══════════════════════════════
 
 {mode_detail}""")
@@ -1398,7 +1447,8 @@ def main():
     
     # Determine pipeline mode and CSV path
     mode = args.mode
-    today_str = datetime.now().strftime('%Y%m%d')  # For email subject display
+    report_dt = get_report_display_datetime()
+    today_str = report_dt.strftime('%Y%m%d')  # Subject date = workflow start when set (CI)
     
     # Determine CSV path (using dated subdirectory YYYY/MM)
     # Note: We use wildcard-based discovery (not date-specific) to handle cross-midnight
@@ -1483,6 +1533,9 @@ def main():
         short_name = adhoc_display_name[:20] + "..." if len(adhoc_display_name) > 20 else adhoc_display_name
         adhoc_subject_suffix = f" [{short_name}]"
     
+    # End time when composing email (actual send may be moments later)
+    report_end_dt = datetime.now()
+    
     # Send email based on status
     if not has_critical_errors:
         body = format_email_report(
@@ -1494,6 +1547,8 @@ def main():
             adhoc_info=adhoc_info,
             proxy_ban_html_summary=proxy_ban_summary,
             dedup_stats=dedup_stats,
+            report_dt=report_dt,
+            report_end_dt=report_end_dt,
         )
         subject = f'✓ SUCCESS - JavDB {mode_display} Report {today_str}{adhoc_subject_suffix}'
     else:
@@ -1507,6 +1562,8 @@ def main():
             adhoc_info=adhoc_info,
             proxy_ban_html_summary=proxy_ban_summary,
             dedup_stats=dedup_stats,
+            report_dt=report_dt,
+            report_end_dt=report_end_dt,
         )
         
         # Add mode info to failure report header
@@ -1517,7 +1574,8 @@ def main():
         body = f"""
 ═══════════════════════════════
 ⚠️  PIPELINE FAILED ({mode_display})  ⚠️
-{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Started:  {report_dt.strftime('%Y-%m-%d %H:%M:%S')}
+Finished: {report_end_dt.strftime('%Y-%m-%d %H:%M:%S')}
 ═══════════════════════════════
 
 {mode_info_line}
