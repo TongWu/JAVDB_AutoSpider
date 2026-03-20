@@ -51,10 +51,16 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      pipeline_workflow_run_started_at: ${{ steps.capture_run_started_at.outputs.started_at }}
     env:
       TZ: Asia/Singapore
     
     steps:
+      - name: Capture workflow run start (UTC ISO)
+        id: capture_run_started_at
+        run: echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -606,6 +612,8 @@ jobs:
     if: always()
     env:
       TZ: Asia/Singapore
+      # Email subject/body date ≈ workflow start (first job UTC timestamp), not send time
+      PIPELINE_WORKFLOW_RUN_STARTED_AT: ${{ needs.build-rust.outputs.pipeline_workflow_run_started_at }}
     
     steps:
       - name: Checkout repository
