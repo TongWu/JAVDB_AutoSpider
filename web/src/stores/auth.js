@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8100";
+const DESKTOP_API_BASE = globalThis.desktopEnv?.apiBase ?? "";
 function jwtSub(token) {
     try {
         const part = token.split(".")[1];
@@ -26,7 +27,7 @@ export const useAuthStore = defineStore("auth", {
             const t = localStorage.getItem("access_token");
             return t ? jwtSub(t) : "";
         })(),
-        apiBase: API_BASE,
+        apiBase: DESKTOP_API_BASE || API_BASE,
     }),
     actions: {
         setSession(resp) {

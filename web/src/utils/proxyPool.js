@@ -1,5 +1,5 @@
 /**
- * 与后端 PROXY_POOL 一致：{ name?, http?, https? }[]
+ * Matches backend PROXY_POOL shape: { name?, http?, https? }[]
  */
 function newId() {
     return crypto.randomUUID?.() ?? `p-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;

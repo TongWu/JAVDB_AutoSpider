@@ -18,16 +18,18 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { useRunningJobStore } from "../stores/runningJob";
 
 const store = useRunningJobStore();
 const router = useRouter();
+const { t } = useI18n();
 
-const kindLabel = computed(() => (store.kind === "adhoc" ? "手动任务运行中" : "定期任务运行中"));
+const kindLabel = computed(() => (store.kind === "adhoc" ? t("taskFloat.adhocRunning") : t("taskFloat.dailyRunning")));
 
 const statusLabel = computed(() => {
-  if (store.pollStopped) return `${store.status || "运行中"} · 已暂停刷新`;
-  return store.status || "运行中";
+  if (store.pollStopped) return `${store.status || t("taskFloat.running")}${t("taskFloat.pollPausedSuffix")}`;
+  return store.status || t("taskFloat.running");
 });
 
 const shortId = computed(() => {
@@ -36,7 +38,7 @@ const shortId = computed(() => {
   return id.length > 28 ? `${id.slice(0, 14)}…${id.slice(-10)}` : id;
 });
 
-const titleText = computed(() => `点击查看实时日志 · ${store.jobId}`);
+const titleText = computed(() => t("taskFloat.title", { id: store.jobId }));
 
 function goToLog() {
   if (store.kind === "adhoc") {
@@ -62,11 +64,17 @@ function goToLog() {
   cursor: pointer;
   border: 1px solid var(--mdc-border-strong);
   border-radius: 8px;
-  background: var(--mdc-bg-page);
+  background: var(--mdc-bg-subtle);
+  color: var(--mdc-text);
   box-shadow: 0 4px 24px rgb(0 0 0 / 0.12);
   transition:
     box-shadow 0.15s ease,
     transform 0.15s ease;
+}
+
+.theme-dark .task-float {
+  background: #1f1f1f;
+  border-color: #525252;
 }
 
 .task-float:hover {

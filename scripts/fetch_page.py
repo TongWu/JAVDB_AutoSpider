@@ -49,6 +49,7 @@ def load_config():
         "PROXY_POOL_MAX_FAILURES": getattr(cfg, "PROXY_POOL_MAX_FAILURES", 3),
         "BASE_URL": getattr(cfg, "BASE_URL", "https://javdb.com"),
         "CF_BYPASS_SERVICE_PORT": getattr(cfg, "CF_BYPASS_SERVICE_PORT", 8000),
+        "CF_BYPASS_PORT_MAP": getattr(cfg, "CF_BYPASS_PORT_MAP", {}),
         "CF_BYPASS_ENABLED": getattr(cfg, "CF_BYPASS_ENABLED", True),
         "CF_TURNSTILE_COOLDOWN": getattr(cfg, "CF_TURNSTILE_COOLDOWN", 30),
         "FALLBACK_COOLDOWN": getattr(cfg, "FALLBACK_COOLDOWN", 15),
@@ -152,6 +153,7 @@ def main():
     config = RequestConfig(
         base_url=cfg["BASE_URL"],
         cf_bypass_service_port=cfg["CF_BYPASS_SERVICE_PORT"],
+        cf_bypass_port_map=cfg["CF_BYPASS_PORT_MAP"],
         cf_bypass_enabled=cfg["CF_BYPASS_ENABLED"],
         cf_bypass_max_failures=3,
         cf_turnstile_cooldown=cfg["CF_TURNSTILE_COOLDOWN"],

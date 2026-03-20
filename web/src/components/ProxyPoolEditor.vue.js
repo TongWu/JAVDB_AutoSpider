@@ -1,5 +1,7 @@
+import { useI18n } from "vue-i18n";
 import { emptyProxyRow } from "../utils/proxyPool";
 const __VLS_props = defineProps();
+const { t } = useI18n();
 const model = defineModel({ required: true });
 function addRow() {
     const nextPrio = model.value.length ? Math.max(...model.value.map((r) => r.priority)) + 10 : 0;
@@ -25,9 +27,7 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.d
 __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
     ...{ class: "proxy-pool-editor__hint" },
 });
-__VLS_asFunctionalElement(__VLS_intrinsicElements.code, __VLS_intrinsicElements.code)({});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.code, __VLS_intrinsicElements.code)({});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.strong, __VLS_intrinsicElements.strong)({});
+(__VLS_ctx.t("proxyEditor.hint"));
 for (const [row, idx] of __VLS_getVForSourceType((__VLS_ctx.model))) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         key: (row._id),
@@ -39,7 +39,7 @@ for (const [row, idx] of __VLS_getVForSourceType((__VLS_ctx.model))) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
         ...{ class: "proxy-card__title" },
     });
-    (idx + 1);
+    (__VLS_ctx.t("proxyEditor.cardTitle", { n: idx + 1 }));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
         ...{ onClick: (...[$event]) => {
                 __VLS_ctx.removeRow(idx);
@@ -48,6 +48,7 @@ for (const [row, idx] of __VLS_getVForSourceType((__VLS_ctx.model))) {
         ...{ class: "proxy-card__remove btn-text-link" },
         disabled: (__VLS_ctx.readonly),
     });
+    (__VLS_ctx.t("proxyEditor.remove"));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "proxy-grid" },
     });
@@ -55,17 +56,19 @@ for (const [row, idx] of __VLS_getVForSourceType((__VLS_ctx.model))) {
         ...{ class: "proxy-field" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+    (__VLS_ctx.t("proxyEditor.displayName"));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
         value: (row.name),
         ...{ class: "field-input" },
         type: "text",
         readonly: (__VLS_ctx.readonly),
-        placeholder: "例如 Singapore-1",
+        placeholder: (__VLS_ctx.t('proxyEditor.namePlaceholder')),
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
         ...{ class: "proxy-field" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+    (__VLS_ctx.t("proxyEditor.priority"));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
         ...{ class: "field-input" },
         type: "number",
@@ -77,6 +80,7 @@ for (const [row, idx] of __VLS_getVForSourceType((__VLS_ctx.model))) {
         ...{ class: "proxy-field" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+    (__VLS_ctx.t("proxyEditor.protocol"));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElements.select)({
         value: (row.scheme),
         ...{ class: "field-input field-input--select" },
@@ -94,10 +98,12 @@ for (const [row, idx] of __VLS_getVForSourceType((__VLS_ctx.model))) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
         value: "socks5h",
     });
+    (__VLS_ctx.t("proxyEditor.socks5h"));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
         ...{ class: "proxy-field" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+    (__VLS_ctx.t("proxyEditor.host"));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
         value: (row.host),
         ...{ class: "field-input" },
@@ -109,6 +115,7 @@ for (const [row, idx] of __VLS_getVForSourceType((__VLS_ctx.model))) {
         ...{ class: "proxy-field" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+    (__VLS_ctx.t("proxyEditor.port"));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
         value: (row.port),
         ...{ class: "field-input" },
@@ -120,6 +127,7 @@ for (const [row, idx] of __VLS_getVForSourceType((__VLS_ctx.model))) {
         ...{ class: "proxy-field" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+    (__VLS_ctx.t("proxyEditor.username"));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
         value: (row.username),
         ...{ class: "field-input" },
@@ -131,12 +139,13 @@ for (const [row, idx] of __VLS_getVForSourceType((__VLS_ctx.model))) {
         ...{ class: "proxy-field" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+    (__VLS_ctx.t("proxyEditor.password"));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
         ...{ class: "field-input" },
         type: "password",
         readonly: (__VLS_ctx.readonly),
         autocomplete: "new-password",
-        placeholder: "脱敏加载后需重填",
+        placeholder: (__VLS_ctx.t('proxyEditor.passwordPlaceholder')),
     });
     (row.password);
     __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
@@ -148,11 +157,13 @@ for (const [row, idx] of __VLS_getVForSourceType((__VLS_ctx.model))) {
     });
     (row.sameForHttps);
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+    (__VLS_ctx.t("proxyEditor.sameHttps"));
     if (!row.sameForHttps) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
             ...{ class: "proxy-field" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+        (__VLS_ctx.t("proxyEditor.httpsHost"));
         __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
             value: (row.httpsHost),
             ...{ class: "field-input" },
@@ -163,6 +174,7 @@ for (const [row, idx] of __VLS_getVForSourceType((__VLS_ctx.model))) {
             ...{ class: "proxy-field" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+        (__VLS_ctx.t("proxyEditor.httpsPort"));
         __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
             value: (row.httpsPort),
             ...{ class: "field-input" },
@@ -177,6 +189,7 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElement
     ...{ class: "ghost proxy-add" },
     disabled: (__VLS_ctx.readonly),
 });
+(__VLS_ctx.t("proxyEditor.add"));
 /** @type {__VLS_StyleScopedClasses['proxy-pool-editor']} */ ;
 /** @type {__VLS_StyleScopedClasses['proxy-pool-editor__hint']} */ ;
 /** @type {__VLS_StyleScopedClasses['proxy-card']} */ ;
@@ -212,6 +225,7 @@ var __VLS_dollars;
 const __VLS_self = (await import('vue')).defineComponent({
     setup() {
         return {
+            t: t,
             model: model,
             addRow: addRow,
             removeRow: removeRow,

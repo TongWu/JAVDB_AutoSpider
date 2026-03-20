@@ -314,12 +314,12 @@ button {
     opacity 0.15s ease;
 }
 
-button:not(.ghost):not(.btn-text):not(.config-tab):not(.btn-text-link):not(.btn-folder):not(.nav-item--btn) {
+button:not(.ghost):not(.btn-text):not(.config-tab):not(.btn-text-link):not(.btn-folder):not(.nav-item--btn):not(.lang-switch__btn):not(.task-float) {
   background: var(--mdc-primary);
   color: #fff;
 }
 
-button:not(.ghost):not(.btn-text):not(.config-tab):not(.btn-text-link):not(.btn-folder):not(.nav-item--btn):hover {
+button:not(.ghost):not(.btn-text):not(.config-tab):not(.btn-text-link):not(.btn-folder):not(.nav-item--btn):not(.lang-switch__btn):not(.task-float):hover {
   background: var(--mdc-primary-hover);
 }
 
