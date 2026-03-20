@@ -74,7 +74,7 @@ from utils.path_helper import get_dated_report_path, find_latest_report_in_dated
 
 def _parse_github_workflow_run_started_at():
     """
-    Parse PIPELINE_WORKFLOW_RUN_STARTED_AT (ISO 8601 from github.run_started_at).
+    Parse PIPELINE_WORKFLOW_RUN_STARTED_AT (ISO 8601 UTC, set by CI workflows).
     Returns timezone-aware UTC datetime, or None if unset/invalid.
     """
     raw = os.environ.get('PIPELINE_WORKFLOW_RUN_STARTED_AT', '').strip()
@@ -97,9 +97,9 @@ def get_report_display_datetime():
     """
     Wall-clock moment for email subject (YYYYMMDD) and report headers.
 
-    When GitHub Actions sets PIPELINE_WORKFLOW_RUN_STARTED_AT from
-    github.run_started_at, use that instant so long runs that cross midnight
-    still show the workflow trigger day. Otherwise fall back to datetime.now().
+    When CI sets PIPELINE_WORKFLOW_RUN_STARTED_AT to the captured workflow start
+    (UTC ISO), use that instant so long runs that cross midnight still show the
+    trigger day. Otherwise fall back to datetime.now().
     """
     parsed = _parse_github_workflow_run_started_at()
     if parsed is None:
