@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: javdb-api
+    working_dir: /app
+    command: ["python3", "-m", "uvicorn", "api.server:app", "--host", "0.0.0.0", "--port", "8100"]
+    ports:
+      - "8100:8100"
+    environment:
+      - TZ=Asia/Shanghai
+      - API_SECRET_KEY=${API_SECRET_KEY:-change-me-api-secret-key-32chars-min}
+      - SECRETS_ENCRYPTION_KEY=${SECRETS_ENCRYPTION_KEY:-}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123456}
+    volumes:
+      - ../reports:/app/reports
+      - ../logs:/app/logs
+      - ../.env:/app/.env
+
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+    container_name: javdb-web
+    ports:
+      - "8088:80"
+    depends_on:
+      - api
