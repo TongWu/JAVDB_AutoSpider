@@ -80,7 +80,8 @@ def extract_magnet_links_from_detail(detail_html, video_code):
     try:
         # Parse detail page (ignore parse_success flag for migration script)
         # Note: video_code is passed for logging purposes only, not extracted from detail page
-        magnets, actor_info, _ = parse_detail(detail_html, video_code, skip_sleep=True)
+        magnets, actor_info, _actor_link, _ = parse_detail(
+            detail_html, video_code, skip_sleep=True)
         
         if not magnets:
             logger.warning(f"No magnets found for {video_code}")
