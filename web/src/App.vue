@@ -1,6 +1,6 @@
 <template>
   <div class="app-root" :class="{ 'app-root--authed': isAuthed }">
-    <aside v-if="isAuthed" class="side-nav" aria-label="主导航">
+    <aside v-if="isAuthed" class="side-nav" :aria-label="t('app.navAria')">
       <div class="side-nav__brand">
         <span class="side-nav__title">JAVDB Spider</span>
         <span class="side-nav__ver">v0.2.0</span>
@@ -9,39 +9,46 @@
       <nav class="side-nav__main">
         <router-link to="/" class="nav-item" active-class="nav-item--active">
           <NavIcon name="home" />
-          <span>主界面</span>
+          <span>{{ t("nav.home") }}</span>
         </router-link>
         <router-link to="/daily" class="nav-item" active-class="nav-item--active">
           <NavIcon name="calendar" />
-          <span>定期任务</span>
+          <span>{{ t("nav.daily") }}</span>
         </router-link>
         <router-link to="/adhoc" class="nav-item" active-class="nav-item--active">
           <NavIcon name="bolt" />
-          <span>手动任务</span>
+          <span>{{ t("nav.adhoc") }}</span>
+        </router-link>
+        <router-link to="/explore" class="nav-item" active-class="nav-item--active">
+          <NavIcon name="search" />
+          <span>{{ t("nav.explore") }}</span>
         </router-link>
         <router-link to="/config" class="nav-item" active-class="nav-item--active">
           <NavIcon name="layers" />
-          <span>配置管理</span>
+          <span>{{ t("nav.config") }}</span>
         </router-link>
         <router-link to="/tasks" class="nav-item" active-class="nav-item--active">
           <NavIcon name="doc" />
-          <span>任务日志</span>
+          <span>{{ t("nav.tasks") }}</span>
         </router-link>
       </nav>
 
-      <div class="side-nav__label">系统</div>
+      <div class="side-nav__label">{{ t("app.system") }}</div>
       <div class="side-nav__system">
-        <button type="button" class="nav-item nav-item--btn" disabled title="占位">
+        <button type="button" class="nav-item nav-item--btn" disabled :title="t('app.safeModeTitle')">
           <NavIcon name="shield" />
-          <span>安全模式</span>
+          <span>{{ t("app.safeMode") }}</span>
         </button>
         <button type="button" class="nav-item nav-item--btn" @click="toggleTheme">
           <NavIcon name="moon" />
           <span>{{ themeLabel }}</span>
         </button>
+        <div class="side-nav__lang-row">
+          <LanguageSwitcher />
+        </div>
         <button type="button" class="nav-item nav-item--btn" @click="logout">
           <NavIcon name="power" />
-          <span>退出</span>
+          <span>{{ t("app.logout") }}</span>
         </button>
       </div>
 
@@ -64,19 +71,22 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { useAuthStore } from "./stores/auth";
 import { useRunningJobStore } from "./stores/runningJob";
 import NavIcon from "./components/NavIcon.vue";
 import TaskRunningFloat from "./components/TaskRunningFloat.vue";
+import LanguageSwitcher from "./components/LanguageSwitcher.vue";
 
 const auth = useAuthStore();
 const runningJob = useRunningJobStore();
 const router = useRouter();
+const { t } = useI18n();
 const isAuthed = computed(() => !!auth.accessToken);
-const displayName = computed(() => auth.username || "用户");
+const displayName = computed(() => auth.username || t("meta.userFallback"));
 
 const themeDark = ref(false);
-const themeLabel = computed(() => (themeDark.value ? "浅色主题" : "切换主题"));
+const themeLabel = computed(() => (themeDark.value ? t("app.themeLight") : t("app.themeToggle")));
 
 watch(
   isAuthed,
@@ -102,3 +112,9 @@ onMounted(() => {
   themeDark.value = document.documentElement.classList.contains("theme-dark");
 });
 </script>
+
+<style scoped>
+.side-nav__lang-row {
+  padding: 6px 12px 8px;
+}
+</style>

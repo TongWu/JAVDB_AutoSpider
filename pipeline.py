@@ -131,7 +131,8 @@ def run_script(script_path, args=None):
     Raises:
         RuntimeError: If the script fails with non-zero exit code
     """
-    cmd = ['python3', script_path]
+    # Use unbuffered Python output so child-script logs stream in real time.
+    cmd = ['python3', '-u', script_path]
     if args:
         cmd += args
     logger.info(f'Running: {" ".join(cmd)}')
@@ -158,8 +159,9 @@ def run_script(script_path, args=None):
     if process.stdout:
         for line in iter(process.stdout.readline, ''):
             if line:
-                line_stripped = line.rstrip()
-                print(line_stripped)  # Print to console
+                # Forward child output immediately to pipeline stdout.
+                sys.stdout.write(line)
+                sys.stdout.flush()
                 output_lines.append(line)
                 # Write directly to log file (preserving original format from subprocess)
                 if file_handler:

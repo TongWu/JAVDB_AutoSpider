@@ -65,6 +65,7 @@ class RequestConfig:
     """Configuration for request handler"""
     base_url: str = 'https://javdb.com'
     cf_bypass_service_port: int = 8000
+    cf_bypass_port_map: Dict[str, Any] = None
     cf_bypass_enabled: bool = True
     cf_bypass_max_failures: int = 3
     cf_turnstile_cooldown: int = 10
@@ -81,6 +82,8 @@ class RequestConfig:
     def __post_init__(self):
         if self.proxy_modules is None:
             self.proxy_modules = ['all']
+        if self.cf_bypass_port_map is None or not isinstance(self.cf_bypass_port_map, dict):
+            self.cf_bypass_port_map = {}
 
 
 class RequestHandler:
@@ -206,10 +209,29 @@ class RequestHandler:
             - Without proxy: http://127.0.0.1:{CF_BYPASS_SERVICE_PORT}
             - With proxy: http://{proxy_ip}:{CF_BYPASS_SERVICE_PORT}
         """
+        port = self.config.cf_bypass_service_port
+        mapping = self.config.cf_bypass_port_map or {}
         if proxy_ip:
-            return f"http://{proxy_ip}:{self.config.cf_bypass_service_port}"
-        else:
-            return f"http://127.0.0.1:{self.config.cf_bypass_service_port}"
+            # Priority: explicit proxy IP -> "proxies" sub-map -> default fallback
+            raw = mapping.get(proxy_ip)
+            if raw is None and isinstance(mapping.get("proxies"), dict):
+                raw = mapping["proxies"].get(proxy_ip)
+            if raw is not None:
+                try:
+                    port = int(raw)
+                except (TypeError, ValueError):
+                    pass
+            return f"http://{proxy_ip}:{port}"
+        # Local access priority: local -> default -> global configured service port
+        raw_local = mapping.get("local")
+        raw_default = mapping.get("default")
+        chosen = raw_local if raw_local is not None else raw_default
+        if chosen is not None:
+            try:
+                port = int(chosen)
+            except (TypeError, ValueError):
+                pass
+        return f"http://127.0.0.1:{port}"
     
     @staticmethod
     def is_cf_bypass_failure(html_content: str) -> bool:

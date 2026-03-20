@@ -141,6 +141,33 @@ cp config.py.example config.py
 # See CloudFlare Bypass section below for setup instructions
 ```
 
+## Electron Shell (MVP, Dev Mode)
+
+This repository now includes an Electron shell for desktop development.  
+Current scope is MVP only (dev runtime), without packaging/release installer.
+
+### Prerequisites
+
+- Node.js installed
+- Python 3 available as `python3`
+- Project dependencies installed (`pip install -r requirements.txt`)
+
+### Start Electron dev
+
+From repository root:
+
+```bash
+npm install
+cd web && npm install && cd ..
+npm run electron:dev
+```
+
+What it does:
+
+- Starts Vite dev server at `http://127.0.0.1:5173`
+- Electron main process auto-starts FastAPI backend at `http://127.0.0.1:8100`
+- Opens desktop window and loads the existing frontend
+
 ### Docker Installation (Alternative)
 
 You can also run the application using Docker containers, which simplifies dependency management and deployment.

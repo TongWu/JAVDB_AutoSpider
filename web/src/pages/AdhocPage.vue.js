@@ -1,9 +1,11 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { apiFetch } from "../lib/api";
 import { useRunningJobStore } from "../stores/runningJob";
 const store = useRunningJobStore();
 const route = useRoute();
+const { t } = useI18n();
 const taskTab = ref("params");
 const logEl = ref(null);
 const submitError = ref("");
@@ -29,7 +31,7 @@ const logDisplay = computed(() => {
         return submitError.value;
     if (store.kind === "adhoc" && store.logText)
         return store.logText;
-    return "提交任务后将在此显示日志…";
+    return t("adhoc.logPlaceholder");
 });
 watch([() => store.logText, () => submitError.value], async () => {
     if (store.kind !== "adhoc" && !submitError.value)
@@ -47,6 +49,12 @@ watch(() => route.query.tab, (t) => {
             store.resumePolling();
         }
     }
+}, { immediate: true });
+watch(() => route.query.url, (v) => {
+    const url = String(v || "").trim();
+    if (!url)
+        return;
+    form.url = url;
 }, { immediate: true });
 watch(taskTab, (t) => {
     store.setAdhocTaskTab(t);
@@ -77,7 +85,7 @@ async function submit() {
         taskTab.value = "log";
     }
     catch (e) {
-        submitError.value = `[提交失败] ${e instanceof Error ? e.message : String(e)}`;
+        submitError.value = t("adhoc.submitFail", { msg: e instanceof Error ? e.message : String(e) });
         taskTab.value = "log";
     }
 }
@@ -97,13 +105,16 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.d
 __VLS_asFunctionalElement(__VLS_intrinsicElements.h1, __VLS_intrinsicElements.h1)({
     ...{ class: "page-head__title" },
 });
+(__VLS_ctx.t("adhoc.title"));
 __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
     ...{ class: "page-head__sub" },
 });
+(__VLS_ctx.t("adhoc.subtitle"));
 if (__VLS_ctx.jobForPage) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
         ...{ class: "page-head__meta" },
     });
+    (__VLS_ctx.t("adhoc.jobMeta"));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.code, __VLS_intrinsicElements.code)({
         ...{ class: "meta-code" },
     });
@@ -126,6 +137,7 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElement
     ...{ class: "config-tab" },
     ...{ class: ({ 'config-tab--active': __VLS_ctx.taskTab === 'params' }) },
 });
+(__VLS_ctx.t("adhoc.tabParams"));
 __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
     ...{ onClick: (__VLS_ctx.openLogTab) },
     type: "button",
@@ -133,32 +145,11 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElement
     ...{ class: "config-tab" },
     ...{ class: ({ 'config-tab--active': __VLS_ctx.taskTab === 'log' }) },
 });
+(__VLS_ctx.t("adhoc.tabLog"));
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "task-form-card__body" },
 });
 __VLS_asFunctionalDirective(__VLS_directives.vShow)(null, { ...__VLS_directiveBindingRestFields, value: (__VLS_ctx.taskTab === 'params') }, null, null);
-__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-    ...{ class: "toolbar-row" },
-    ...{ style: {} },
-});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
-    ...{ onClick: (__VLS_ctx.submit) },
-    type: "button",
-});
-if (__VLS_ctx.jobForPage) {
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
-        ...{ onClick: (__VLS_ctx.store.stopPolling) },
-        type: "button",
-        ...{ class: "ghost" },
-    });
-}
-if (__VLS_ctx.jobForPage && __VLS_ctx.store.pollStopped && !__VLS_ctx.isTerminal) {
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
-        ...{ onClick: (__VLS_ctx.store.resumePolling) },
-        type: "button",
-        ...{ class: "ghost" },
-    });
-}
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "grid" },
 });
@@ -196,7 +187,7 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElement
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({});
 __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
-    placeholder: "可选",
+    placeholder: (__VLS_ctx.t('adhoc.qbCategoryPh')),
 });
 (__VLS_ctx.form.qb_category);
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
@@ -238,15 +229,43 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
 });
 (__VLS_ctx.form.ignore_release_date);
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "actions" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+    ...{ onClick: (__VLS_ctx.submit) },
+    type: "button",
+});
+(__VLS_ctx.t("adhoc.submit"));
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "task-form-card__body task-form-card__body--log" },
 });
 __VLS_asFunctionalDirective(__VLS_directives.vShow)(null, { ...__VLS_directiveBindingRestFields, value: (__VLS_ctx.taskTab === 'log') }, null, null);
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "toolbar-row toolbar-row--log" },
+});
+if (__VLS_ctx.jobForPage) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+        ...{ onClick: (__VLS_ctx.store.stopPolling) },
+        type: "button",
+        ...{ class: "ghost" },
+    });
+    (__VLS_ctx.t("adhoc.stopPoll"));
+}
+if (__VLS_ctx.jobForPage && __VLS_ctx.store.pollStopped && !__VLS_ctx.isTerminal) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+        ...{ onClick: (__VLS_ctx.store.resumePolling) },
+        type: "button",
+        ...{ class: "ghost" },
+    });
+    (__VLS_ctx.t("adhoc.resumePoll"));
+}
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "log-panel-wrap" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "log-panel-header" },
 });
+(__VLS_ctx.t("adhoc.logHeader"));
 __VLS_asFunctionalElement(__VLS_intrinsicElements.pre, __VLS_intrinsicElements.pre)({
     ref: "logEl",
     ...{ class: "log-live" },
@@ -266,14 +285,16 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.pre, __VLS_intrinsicElements.p
 /** @type {__VLS_StyleScopedClasses['config-tab']} */ ;
 /** @type {__VLS_StyleScopedClasses['config-tab']} */ ;
 /** @type {__VLS_StyleScopedClasses['task-form-card__body']} */ ;
-/** @type {__VLS_StyleScopedClasses['toolbar-row']} */ ;
-/** @type {__VLS_StyleScopedClasses['ghost']} */ ;
-/** @type {__VLS_StyleScopedClasses['ghost']} */ ;
 /** @type {__VLS_StyleScopedClasses['grid']} */ ;
 /** @type {__VLS_StyleScopedClasses['span-2']} */ ;
 /** @type {__VLS_StyleScopedClasses['checkbox-row']} */ ;
+/** @type {__VLS_StyleScopedClasses['actions']} */ ;
 /** @type {__VLS_StyleScopedClasses['task-form-card__body']} */ ;
 /** @type {__VLS_StyleScopedClasses['task-form-card__body--log']} */ ;
+/** @type {__VLS_StyleScopedClasses['toolbar-row']} */ ;
+/** @type {__VLS_StyleScopedClasses['toolbar-row--log']} */ ;
+/** @type {__VLS_StyleScopedClasses['ghost']} */ ;
+/** @type {__VLS_StyleScopedClasses['ghost']} */ ;
 /** @type {__VLS_StyleScopedClasses['log-panel-wrap']} */ ;
 /** @type {__VLS_StyleScopedClasses['log-panel-header']} */ ;
 /** @type {__VLS_StyleScopedClasses['log-live']} */ ;
@@ -282,6 +303,7 @@ const __VLS_self = (await import('vue')).defineComponent({
     setup() {
         return {
             store: store,
+            t: t,
             taskTab: taskTab,
             logEl: logEl,
             form: form,

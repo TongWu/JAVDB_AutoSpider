@@ -1,75 +1,86 @@
 <template>
   <div class="proxy-pool-editor">
     <p class="proxy-pool-editor__hint">
-      每条代理对应配置中的 <code>http</code> / <code>https</code> URL。列表按<strong>优先级</strong>升序排列（数字越小越靠前）。若从服务器加载的地址已脱敏，修改后请补全用户名与密码再保存。
+      {{ t("proxyEditor.hint") }}
     </p>
 
     <div v-for="(row, idx) in model" :key="row._id" class="proxy-card">
       <div class="proxy-card__head">
-        <span class="proxy-card__title">代理 {{ idx + 1 }}</span>
-        <button type="button" class="proxy-card__remove btn-text-link" :disabled="readonly" @click="removeRow(idx)">删除</button>
+        <span class="proxy-card__title">{{ t("proxyEditor.cardTitle", { n: idx + 1 }) }}</span>
+        <button type="button" class="proxy-card__remove btn-text-link" :disabled="readonly" @click="removeRow(idx)">
+          {{ t("proxyEditor.remove") }}
+        </button>
       </div>
 
       <div class="proxy-grid">
         <label class="proxy-field">
-          <span>显示名称</span>
-          <input v-model="row.name" class="field-input" type="text" :readonly="readonly" placeholder="例如 Singapore-1" />
+          <span>{{ t("proxyEditor.displayName") }}</span>
+          <input v-model="row.name" class="field-input" type="text" :readonly="readonly" :placeholder="t('proxyEditor.namePlaceholder')" />
         </label>
         <label class="proxy-field">
-          <span>优先级</span>
+          <span>{{ t("proxyEditor.priority") }}</span>
           <input v-model.number="row.priority" class="field-input" type="number" step="1" :readonly="readonly" />
         </label>
         <label class="proxy-field">
-          <span>协议</span>
+          <span>{{ t("proxyEditor.protocol") }}</span>
           <select v-model="row.scheme" class="field-input field-input--select" :disabled="readonly">
             <option value="http">HTTP</option>
             <option value="https">HTTPS</option>
             <option value="socks5">SOCKS5</option>
-            <option value="socks5h">SOCKS5h（远程 DNS）</option>
+            <option value="socks5h">{{ t("proxyEditor.socks5h") }}</option>
           </select>
         </label>
         <label class="proxy-field">
-          <span>主机 / IP</span>
+          <span>{{ t("proxyEditor.host") }}</span>
           <input v-model="row.host" class="field-input" type="text" :readonly="readonly" placeholder="127.0.0.1" />
         </label>
         <label class="proxy-field">
-          <span>端口</span>
+          <span>{{ t("proxyEditor.port") }}</span>
           <input v-model="row.port" class="field-input" type="text" :readonly="readonly" placeholder="8080" />
         </label>
         <label class="proxy-field">
-          <span>用户名</span>
+          <span>{{ t("proxyEditor.username") }}</span>
           <input v-model="row.username" class="field-input" type="text" :readonly="readonly" autocomplete="off" />
         </label>
         <label class="proxy-field">
-          <span>密码</span>
-          <input v-model="row.password" class="field-input" type="password" :readonly="readonly" autocomplete="new-password" placeholder="脱敏加载后需重填" />
+          <span>{{ t("proxyEditor.password") }}</span>
+          <input
+            v-model="row.password"
+            class="field-input"
+            type="password"
+            :readonly="readonly"
+            autocomplete="new-password"
+            :placeholder="t('proxyEditor.passwordPlaceholder')"
+          />
         </label>
         <label class="proxy-field proxy-field--check">
           <input v-model="row.sameForHttps" type="checkbox" :disabled="readonly" />
-          <span>HTTPS 与 HTTP 使用相同地址</span>
+          <span>{{ t("proxyEditor.sameHttps") }}</span>
         </label>
         <template v-if="!row.sameForHttps">
           <label class="proxy-field">
-            <span>HTTPS 主机</span>
+            <span>{{ t("proxyEditor.httpsHost") }}</span>
             <input v-model="row.httpsHost" class="field-input" type="text" :readonly="readonly" />
           </label>
           <label class="proxy-field">
-            <span>HTTPS 端口</span>
+            <span>{{ t("proxyEditor.httpsPort") }}</span>
             <input v-model="row.httpsPort" class="field-input" type="text" :readonly="readonly" />
           </label>
         </template>
       </div>
     </div>
 
-    <button type="button" class="ghost proxy-add" :disabled="readonly" @click="addRow">+ 添加代理</button>
+    <button type="button" class="ghost proxy-add" :disabled="readonly" @click="addRow">{{ t("proxyEditor.add") }}</button>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
 import type { ProxyEditorRow } from "../utils/proxyPool";
 import { emptyProxyRow } from "../utils/proxyPool";
 
 defineProps<{ readonly?: boolean }>();
+const { t } = useI18n();
 
 const model = defineModel<ProxyEditorRow[]>({ required: true });
 

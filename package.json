@@ -1,0 +1,17 @@
+{
+  "name": "javdb-autospider-electron-shell",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Electron shell for JAVDB AutoSpider",
+  "scripts": {
+    "web:dev": "npm --prefix web run dev -- --host 127.0.0.1 --port 5173",
+    "electron:main": "cross-env ELECTRON_RENDERER_URL=http://127.0.0.1:5173 ELECTRON_API_BASE=http://127.0.0.1:8100 electron electron/main.js",
+    "electron:dev": "concurrently -k -n WEB,ELECTRON -c cyan,green \"npm run web:dev\" \"wait-on tcp:127.0.0.1:5173 && npm run electron:main\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^38.0.0",
+    "wait-on": "^8.0.5"
+  }
+}
