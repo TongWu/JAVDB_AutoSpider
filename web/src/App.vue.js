@@ -1,16 +1,19 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { useAuthStore } from "./stores/auth";
 import { useRunningJobStore } from "./stores/runningJob";
 import NavIcon from "./components/NavIcon.vue";
 import TaskRunningFloat from "./components/TaskRunningFloat.vue";
+import LanguageSwitcher from "./components/LanguageSwitcher.vue";
 const auth = useAuthStore();
 const runningJob = useRunningJobStore();
 const router = useRouter();
+const { t } = useI18n();
 const isAuthed = computed(() => !!auth.accessToken);
-const displayName = computed(() => auth.username || "用户");
+const displayName = computed(() => auth.username || t("meta.userFallback"));
 const themeDark = ref(false);
-const themeLabel = computed(() => (themeDark.value ? "浅色主题" : "切换主题"));
+const themeLabel = computed(() => (themeDark.value ? t("app.themeLight") : t("app.themeToggle")));
 watch(isAuthed, (v) => {
     if (v)
         runningJob.restoreFromStorage();
@@ -33,6 +36,8 @@ debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
 let __VLS_components;
 let __VLS_directives;
+// CSS variable injection 
+// CSS variable injection end 
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "app-root" },
     ...{ class: ({ 'app-root--authed': __VLS_ctx.isAuthed }) },
@@ -40,7 +45,7 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.d
 if (__VLS_ctx.isAuthed) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.aside, __VLS_intrinsicElements.aside)({
         ...{ class: "side-nav" },
-        'aria-label': "主导航",
+        'aria-label': (__VLS_ctx.t('app.navAria')),
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "side-nav__brand" },
@@ -77,6 +82,7 @@ if (__VLS_ctx.isAuthed) {
         name: "home",
     }, ...__VLS_functionalComponentArgsRest(__VLS_4));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+    (__VLS_ctx.t("nav.home"));
     var __VLS_3;
     const __VLS_7 = {}.RouterLink;
     /** @type {[typeof __VLS_components.RouterLink, typeof __VLS_components.routerLink, typeof __VLS_components.RouterLink, typeof __VLS_components.routerLink, ]} */ ;
@@ -101,6 +107,7 @@ if (__VLS_ctx.isAuthed) {
         name: "calendar",
     }, ...__VLS_functionalComponentArgsRest(__VLS_11));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+    (__VLS_ctx.t("nav.daily"));
     var __VLS_10;
     const __VLS_14 = {}.RouterLink;
     /** @type {[typeof __VLS_components.RouterLink, typeof __VLS_components.routerLink, typeof __VLS_components.RouterLink, typeof __VLS_components.routerLink, ]} */ ;
@@ -125,17 +132,18 @@ if (__VLS_ctx.isAuthed) {
         name: "bolt",
     }, ...__VLS_functionalComponentArgsRest(__VLS_18));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+    (__VLS_ctx.t("nav.adhoc"));
     var __VLS_17;
     const __VLS_21 = {}.RouterLink;
     /** @type {[typeof __VLS_components.RouterLink, typeof __VLS_components.routerLink, typeof __VLS_components.RouterLink, typeof __VLS_components.routerLink, ]} */ ;
     // @ts-ignore
     const __VLS_22 = __VLS_asFunctionalComponent(__VLS_21, new __VLS_21({
-        to: "/config",
+        to: "/explore",
         ...{ class: "nav-item" },
         activeClass: "nav-item--active",
     }));
     const __VLS_23 = __VLS_22({
-        to: "/config",
+        to: "/explore",
         ...{ class: "nav-item" },
         activeClass: "nav-item--active",
     }, ...__VLS_functionalComponentArgsRest(__VLS_22));
@@ -143,23 +151,24 @@ if (__VLS_ctx.isAuthed) {
     /** @type {[typeof NavIcon, ]} */ ;
     // @ts-ignore
     const __VLS_25 = __VLS_asFunctionalComponent(NavIcon, new NavIcon({
-        name: "layers",
+        name: "search",
     }));
     const __VLS_26 = __VLS_25({
-        name: "layers",
+        name: "search",
     }, ...__VLS_functionalComponentArgsRest(__VLS_25));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+    (__VLS_ctx.t("nav.explore"));
     var __VLS_24;
     const __VLS_28 = {}.RouterLink;
     /** @type {[typeof __VLS_components.RouterLink, typeof __VLS_components.routerLink, typeof __VLS_components.RouterLink, typeof __VLS_components.routerLink, ]} */ ;
     // @ts-ignore
     const __VLS_29 = __VLS_asFunctionalComponent(__VLS_28, new __VLS_28({
-        to: "/tasks",
+        to: "/config",
         ...{ class: "nav-item" },
         activeClass: "nav-item--active",
     }));
     const __VLS_30 = __VLS_29({
-        to: "/tasks",
+        to: "/config",
         ...{ class: "nav-item" },
         activeClass: "nav-item--active",
     }, ...__VLS_functionalComponentArgsRest(__VLS_29));
@@ -167,16 +176,43 @@ if (__VLS_ctx.isAuthed) {
     /** @type {[typeof NavIcon, ]} */ ;
     // @ts-ignore
     const __VLS_32 = __VLS_asFunctionalComponent(NavIcon, new NavIcon({
-        name: "doc",
+        name: "layers",
     }));
     const __VLS_33 = __VLS_32({
-        name: "doc",
+        name: "layers",
     }, ...__VLS_functionalComponentArgsRest(__VLS_32));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+    (__VLS_ctx.t("nav.config"));
     var __VLS_31;
+    const __VLS_35 = {}.RouterLink;
+    /** @type {[typeof __VLS_components.RouterLink, typeof __VLS_components.routerLink, typeof __VLS_components.RouterLink, typeof __VLS_components.routerLink, ]} */ ;
+    // @ts-ignore
+    const __VLS_36 = __VLS_asFunctionalComponent(__VLS_35, new __VLS_35({
+        to: "/tasks",
+        ...{ class: "nav-item" },
+        activeClass: "nav-item--active",
+    }));
+    const __VLS_37 = __VLS_36({
+        to: "/tasks",
+        ...{ class: "nav-item" },
+        activeClass: "nav-item--active",
+    }, ...__VLS_functionalComponentArgsRest(__VLS_36));
+    __VLS_38.slots.default;
+    /** @type {[typeof NavIcon, ]} */ ;
+    // @ts-ignore
+    const __VLS_39 = __VLS_asFunctionalComponent(NavIcon, new NavIcon({
+        name: "doc",
+    }));
+    const __VLS_40 = __VLS_39({
+        name: "doc",
+    }, ...__VLS_functionalComponentArgsRest(__VLS_39));
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+    (__VLS_ctx.t("nav.tasks"));
+    var __VLS_38;
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "side-nav__label" },
     });
+    (__VLS_ctx.t("app.system"));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "side-nav__system" },
     });
@@ -184,17 +220,18 @@ if (__VLS_ctx.isAuthed) {
         type: "button",
         ...{ class: "nav-item nav-item--btn" },
         disabled: true,
-        title: "占位",
+        title: (__VLS_ctx.t('app.safeModeTitle')),
     });
     /** @type {[typeof NavIcon, ]} */ ;
     // @ts-ignore
-    const __VLS_35 = __VLS_asFunctionalComponent(NavIcon, new NavIcon({
+    const __VLS_42 = __VLS_asFunctionalComponent(NavIcon, new NavIcon({
         name: "shield",
     }));
-    const __VLS_36 = __VLS_35({
+    const __VLS_43 = __VLS_42({
         name: "shield",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_35));
+    }, ...__VLS_functionalComponentArgsRest(__VLS_42));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+    (__VLS_ctx.t("app.safeMode"));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
         ...{ onClick: (__VLS_ctx.toggleTheme) },
         type: "button",
@@ -202,14 +239,21 @@ if (__VLS_ctx.isAuthed) {
     });
     /** @type {[typeof NavIcon, ]} */ ;
     // @ts-ignore
-    const __VLS_38 = __VLS_asFunctionalComponent(NavIcon, new NavIcon({
+    const __VLS_45 = __VLS_asFunctionalComponent(NavIcon, new NavIcon({
         name: "moon",
     }));
-    const __VLS_39 = __VLS_38({
+    const __VLS_46 = __VLS_45({
         name: "moon",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_38));
+    }, ...__VLS_functionalComponentArgsRest(__VLS_45));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
     (__VLS_ctx.themeLabel);
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "side-nav__lang-row" },
+    });
+    /** @type {[typeof LanguageSwitcher, ]} */ ;
+    // @ts-ignore
+    const __VLS_48 = __VLS_asFunctionalComponent(LanguageSwitcher, new LanguageSwitcher({}));
+    const __VLS_49 = __VLS_48({}, ...__VLS_functionalComponentArgsRest(__VLS_48));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
         ...{ onClick: (__VLS_ctx.logout) },
         type: "button",
@@ -217,13 +261,14 @@ if (__VLS_ctx.isAuthed) {
     });
     /** @type {[typeof NavIcon, ]} */ ;
     // @ts-ignore
-    const __VLS_41 = __VLS_asFunctionalComponent(NavIcon, new NavIcon({
+    const __VLS_51 = __VLS_asFunctionalComponent(NavIcon, new NavIcon({
         name: "power",
     }));
-    const __VLS_42 = __VLS_41({
+    const __VLS_52 = __VLS_51({
         name: "power",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_41));
+    }, ...__VLS_functionalComponentArgsRest(__VLS_51));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+    (__VLS_ctx.t("app.logout"));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "side-nav__user" },
     });
@@ -233,12 +278,12 @@ if (__VLS_ctx.isAuthed) {
     });
     /** @type {[typeof NavIcon, ]} */ ;
     // @ts-ignore
-    const __VLS_44 = __VLS_asFunctionalComponent(NavIcon, new NavIcon({
+    const __VLS_54 = __VLS_asFunctionalComponent(NavIcon, new NavIcon({
         name: "user",
     }));
-    const __VLS_45 = __VLS_44({
+    const __VLS_55 = __VLS_54({
         name: "user",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_44));
+    }, ...__VLS_functionalComponentArgsRest(__VLS_54));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
         ...{ class: "side-nav__username" },
     });
@@ -248,16 +293,16 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.main, __VLS_intrinsicElements.
     ...{ class: "main-area" },
     ...{ class: ({ 'main-area--login': !__VLS_ctx.isAuthed }) },
 });
-const __VLS_47 = {}.RouterView;
+const __VLS_57 = {}.RouterView;
 /** @type {[typeof __VLS_components.RouterView, typeof __VLS_components.routerView, ]} */ ;
 // @ts-ignore
-const __VLS_48 = __VLS_asFunctionalComponent(__VLS_47, new __VLS_47({}));
-const __VLS_49 = __VLS_48({}, ...__VLS_functionalComponentArgsRest(__VLS_48));
+const __VLS_58 = __VLS_asFunctionalComponent(__VLS_57, new __VLS_57({}));
+const __VLS_59 = __VLS_58({}, ...__VLS_functionalComponentArgsRest(__VLS_58));
 if (__VLS_ctx.isAuthed) {
     /** @type {[typeof TaskRunningFloat, ]} */ ;
     // @ts-ignore
-    const __VLS_51 = __VLS_asFunctionalComponent(TaskRunningFloat, new TaskRunningFloat({}));
-    const __VLS_52 = __VLS_51({}, ...__VLS_functionalComponentArgsRest(__VLS_51));
+    const __VLS_61 = __VLS_asFunctionalComponent(TaskRunningFloat, new TaskRunningFloat({}));
+    const __VLS_62 = __VLS_61({}, ...__VLS_functionalComponentArgsRest(__VLS_61));
 }
 /** @type {__VLS_StyleScopedClasses['app-root']} */ ;
 /** @type {__VLS_StyleScopedClasses['side-nav']} */ ;
@@ -270,12 +315,14 @@ if (__VLS_ctx.isAuthed) {
 /** @type {__VLS_StyleScopedClasses['nav-item']} */ ;
 /** @type {__VLS_StyleScopedClasses['nav-item']} */ ;
 /** @type {__VLS_StyleScopedClasses['nav-item']} */ ;
+/** @type {__VLS_StyleScopedClasses['nav-item']} */ ;
 /** @type {__VLS_StyleScopedClasses['side-nav__label']} */ ;
 /** @type {__VLS_StyleScopedClasses['side-nav__system']} */ ;
 /** @type {__VLS_StyleScopedClasses['nav-item']} */ ;
 /** @type {__VLS_StyleScopedClasses['nav-item--btn']} */ ;
 /** @type {__VLS_StyleScopedClasses['nav-item']} */ ;
 /** @type {__VLS_StyleScopedClasses['nav-item--btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['side-nav__lang-row']} */ ;
 /** @type {__VLS_StyleScopedClasses['nav-item']} */ ;
 /** @type {__VLS_StyleScopedClasses['nav-item--btn']} */ ;
 /** @type {__VLS_StyleScopedClasses['side-nav__user']} */ ;
@@ -288,6 +335,8 @@ const __VLS_self = (await import('vue')).defineComponent({
         return {
             NavIcon: NavIcon,
             TaskRunningFloat: TaskRunningFloat,
+            LanguageSwitcher: LanguageSwitcher,
+            t: t,
             isAuthed: isAuthed,
             displayName: displayName,
             themeLabel: themeLabel,

@@ -1,13 +1,15 @@
 import { computed } from "vue";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { useRunningJobStore } from "../stores/runningJob";
 const store = useRunningJobStore();
 const router = useRouter();
-const kindLabel = computed(() => (store.kind === "adhoc" ? "手动任务运行中" : "定期任务运行中"));
+const { t } = useI18n();
+const kindLabel = computed(() => (store.kind === "adhoc" ? t("taskFloat.adhocRunning") : t("taskFloat.dailyRunning")));
 const statusLabel = computed(() => {
     if (store.pollStopped)
-        return `${store.status || "运行中"} · 已暂停刷新`;
-    return store.status || "运行中";
+        return `${store.status || t("taskFloat.running")}${t("taskFloat.pollPausedSuffix")}`;
+    return store.status || t("taskFloat.running");
 });
 const shortId = computed(() => {
     const id = store.jobId;
@@ -15,7 +17,7 @@ const shortId = computed(() => {
         return "";
     return id.length > 28 ? `${id.slice(0, 14)}…${id.slice(-10)}` : id;
 });
-const titleText = computed(() => `点击查看实时日志 · ${store.jobId}`);
+const titleText = computed(() => t("taskFloat.title", { id: store.jobId }));
 function goToLog() {
     if (store.kind === "adhoc") {
         void router.push({ path: "/adhoc", query: { tab: "log" } });
@@ -29,6 +31,8 @@ const __VLS_ctx = {};
 let __VLS_components;
 let __VLS_directives;
 /** @type {__VLS_StyleScopedClasses['task-float']} */ ;
+/** @type {__VLS_StyleScopedClasses['task-float']} */ ;
+/** @type {__VLS_StyleScopedClasses['theme-dark']} */ ;
 /** @type {__VLS_StyleScopedClasses['task-float__spin']} */ ;
 // CSS variable injection 
 // CSS variable injection end 

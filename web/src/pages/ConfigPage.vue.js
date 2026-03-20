@@ -1,21 +1,31 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { apiFetch } from "../lib/api";
 import { useAuthStore } from "../stores/auth";
 import ProxyPoolEditor from "../components/ProxyPoolEditor.vue";
-import { SELECT_OPTIONS, fieldDescription, fieldLabel, isPathLikeField, sectionTabLabel, } from "../config/configUiLabels";
+import { SELECT_OPTION_KEYS } from "../config/configFormConstants";
+import { isPathLikeField, useConfigFormLabels } from "../composables/useConfigFormLabels";
 import { poolFromWire, poolToWire } from "../utils/proxyPool";
 const auth = useAuthStore();
 const canSave = computed(() => auth.role === "admin");
-const sensitivePlaceholder = "留空则不修改已保存的敏感值";
+const { t } = useI18n();
+const sensitivePlaceholder = computed(() => t("config.sensitivePlaceholder"));
+const { sectionTabLabel, fieldLabel, fieldDescription, selectOptionsFor } = useConfigFormLabels();
 const metaFields = ref([]);
 const form = reactive({});
 const initialJsonSnapshots = ref({});
 const message = ref("");
+const messageIsError = ref(false);
 const loading = ref(true);
 const activeSection = ref("");
 const proxyPoolRows = ref([]);
 const proxyPoolTouched = ref(false);
 const syncingProxyFromApi = ref(false);
+const rclonePlaintext = ref("");
+const rcloneBase64Preview = ref("");
+const cfBypassLocalPort = ref("");
+const cfBypassDefaultPort = ref("");
+const cfBypassProxyPorts = reactive({});
 const sections = computed(() => {
     const map = new Map();
     for (const f of metaFields.value) {
@@ -29,6 +39,7 @@ const currentFields = computed(() => {
     const hit = sections.value.find(([name]) => name === activeSection.value);
     return hit ? hit[1] : [];
 });
+const visibleCurrentFields = computed(() => currentFields.value.filter((f) => !["PROXY_HTTP", "PROXY_HTTPS"].includes(f.key)));
 watch(sections, (list) => {
     if (!list.length)
         return;
@@ -41,18 +52,34 @@ watch(proxyPoolRows, () => {
         return;
     proxyPoolTouched.value = true;
 }, { deep: true });
-function selectOptionsFor(key) {
-    const opts = SELECT_OPTIONS[key];
-    if (!opts?.length)
-        return [];
-    const cur = String(form[key] ?? "");
-    const has = opts.some((o) => o.value === cur);
-    if (cur && !has)
-        return [...opts, { value: cur, label: `${cur}（当前值）` }];
-    return opts;
-}
 function focusField(id) {
     document.getElementById(id)?.focus();
+}
+function decodeBase64ToText(raw) {
+    const v = String(raw ?? "").trim();
+    if (!v)
+        return "";
+    try {
+        return decodeURIComponent(Array.prototype.map
+            .call(atob(v), (ch) => `%${(`00${ch.charCodeAt(0).toString(16)}`).slice(-2)}`)
+            .join(""));
+    }
+    catch {
+        return "";
+    }
+}
+function encodeTextToBase64(raw) {
+    const text = String(raw ?? "");
+    const bytes = encodeURIComponent(text).replace(/%([0-9A-F]{2})/g, (_m, p1) => String.fromCharCode(parseInt(p1, 16)));
+    return btoa(bytes);
+}
+function decodeRcloneFromCurrent() {
+    rcloneBase64Preview.value = "";
+    const decoded = decodeBase64ToText(String(form["RCLONE_CONFIG_BASE64"] ?? ""));
+    rclonePlaintext.value = decoded || String(form["RCLONE_CONFIG_BASE64"] ?? "");
+}
+function showRcloneBase64Preview() {
+    rcloneBase64Preview.value = encodeTextToBase64(rclonePlaintext.value);
 }
 function setFormFromApi(data) {
     const m = metaFields.value;
@@ -87,6 +114,28 @@ function setFormFromApi(data) {
     }
     Object.assign(form, next);
     initialJsonSnapshots.value = snaps;
+    const rcloneDecoded = decodeBase64ToText(String(next["RCLONE_CONFIG_BASE64"] ?? ""));
+    rclonePlaintext.value = rcloneDecoded || String(next["RCLONE_CONFIG_BASE64"] ?? "");
+    rcloneBase64Preview.value = "";
+    cfBypassLocalPort.value = "";
+    cfBypassDefaultPort.value = "";
+    for (const k of Object.keys(cfBypassProxyPorts))
+        delete cfBypassProxyPorts[k];
+    try {
+        const cfMap = JSON.parse(String(next["CF_BYPASS_PORT_MAP"] || "{}"));
+        if (cfMap && typeof cfMap === "object") {
+            cfBypassLocalPort.value = cfMap.local === undefined ? "" : String(cfMap.local);
+            cfBypassDefaultPort.value = cfMap.default === undefined ? "" : String(cfMap.default);
+            if (cfMap.proxies && typeof cfMap.proxies === "object") {
+                for (const [name, port] of Object.entries(cfMap.proxies)) {
+                    cfBypassProxyPorts[name] = String(port ?? "");
+                }
+            }
+        }
+    }
+    catch {
+        /* ignore malformed json */
+    }
     syncingProxyFromApi.value = true;
     try {
         const poolRaw = form["PROXY_POOL"];
@@ -111,6 +160,7 @@ function setFormFromApi(data) {
 async function load() {
     loading.value = true;
     message.value = "";
+    messageIsError.value = false;
     try {
         const [meta, data] = await Promise.all([
             apiFetch("/api/config/meta"),
@@ -121,6 +171,7 @@ async function load() {
     }
     catch (e) {
         message.value = e instanceof Error ? e.message : String(e);
+        messageIsError.value = true;
     }
     finally {
         loading.value = false;
@@ -162,6 +213,38 @@ function buildPayload() {
                 payload[key] = poolToWire(proxyPoolRows.value);
                 continue;
             }
+            if (key === "RCLONE_CONFIG_BASE64") {
+                const encoded = encodeTextToBase64(rclonePlaintext.value);
+                const origEncoded = String(form["RCLONE_CONFIG_BASE64"] ?? "");
+                if (encoded === origEncoded)
+                    continue;
+                payload[key] = encoded;
+                continue;
+            }
+            if (key === "CF_BYPASS_PORT_MAP") {
+                const nextMap = {};
+                const localPort = parseInt(String(cfBypassLocalPort.value || "").trim(), 10);
+                if (!Number.isNaN(localPort))
+                    nextMap.local = localPort;
+                const defaultPort = parseInt(String(cfBypassDefaultPort.value || "").trim(), 10);
+                if (!Number.isNaN(defaultPort))
+                    nextMap.default = defaultPort;
+                const proxyMap = {};
+                for (const [name, value] of Object.entries(cfBypassProxyPorts)) {
+                    const n = parseInt(String(value || "").trim(), 10);
+                    if (!name || Number.isNaN(n))
+                        continue;
+                    proxyMap[name] = n;
+                }
+                if (Object.keys(proxyMap).length)
+                    nextMap.proxies = proxyMap;
+                const nextJson = JSON.stringify(nextMap, null, 2);
+                const orig = initialJsonSnapshots.value[key] ?? "";
+                if (nextJson !== orig) {
+                    payload[key] = nextMap;
+                }
+                continue;
+            }
             const s = String(raw ?? "").trim();
             const orig = initialJsonSnapshots.value[key] ?? "";
             if (s === orig)
@@ -182,17 +265,19 @@ function buildPayload() {
 }
 async function save() {
     message.value = "";
+    messageIsError.value = false;
     try {
         const payload = buildPayload();
         await apiFetch("/api/config", {
             method: "PUT",
             body: JSON.stringify(payload),
         });
-        message.value = "保存成功";
+        message.value = t("config.saveSuccess");
         await load();
     }
     catch (e) {
         message.value = e instanceof Error ? e.message : String(e);
+        messageIsError.value = true;
     }
 }
 onMounted(load);
@@ -212,16 +297,16 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.d
 __VLS_asFunctionalElement(__VLS_intrinsicElements.h1, __VLS_intrinsicElements.h1)({
     ...{ class: "page-head__title" },
 });
+(__VLS_ctx.t("config.title"));
 __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
     ...{ class: "page-head__sub" },
 });
-__VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-    ...{ class: "mono-tip" },
-});
+(__VLS_ctx.t("config.subtitle"));
 if (__VLS_ctx.loading) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "card config-loading-card" },
     });
+    (__VLS_ctx.t("config.loading"));
 }
 else {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
@@ -251,14 +336,14 @@ else {
     }
     if (__VLS_ctx.message) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
-            ...{ class: (['config-msg', __VLS_ctx.message.includes('失败') || __VLS_ctx.message.includes('错误') ? 'config-msg--err' : '']) },
+            ...{ class: (['config-msg', __VLS_ctx.messageIsError ? 'config-msg--err' : '']) },
         });
         (__VLS_ctx.message);
     }
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "setting-rows" },
     });
-    for (const [f] of __VLS_getVForSourceType((__VLS_ctx.currentFields))) {
+    for (const [f] of __VLS_getVForSourceType((__VLS_ctx.visibleCurrentFields))) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
             key: (f.key),
             ...{ class: "setting-row" },
@@ -285,11 +370,13 @@ else {
             __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
                 ...{ class: "badge badge--ghost" },
             });
+            (__VLS_ctx.t("config.badgeReadonly"));
         }
         if (f.sensitive) {
             __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
                 ...{ class: "badge badge--warn" },
             });
+            (__VLS_ctx.t("config.badgeSensitive"));
         }
         __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
             ...{ class: "badge badge--ghost" },
@@ -326,7 +413,7 @@ else {
             __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
                 ...{ class: "switch-text" },
             });
-            (__VLS_ctx.form[f.key] ? "开启" : "关闭");
+            (__VLS_ctx.form[f.key] ? __VLS_ctx.t("config.on") : __VLS_ctx.t("config.off"));
         }
         else if (f.key === 'PROXY_POOL') {
             /** @type {[typeof ProxyPoolEditor, ]} */ ;
@@ -341,23 +428,103 @@ else {
             }, ...__VLS_functionalComponentArgsRest(__VLS_0));
         }
         else if (f.type === 'json') {
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.textarea)({
-                id: ('cfg-' + f.key),
-                value: (__VLS_ctx.form[f.key]),
-                ...{ class: "field-input field-input--code" },
-                rows: "8",
-                readonly: (f.readonly || !__VLS_ctx.canSave),
-                spellcheck: "false",
-            });
+            if (f.key === 'RCLONE_CONFIG_BASE64') {
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                    ...{ class: "rclone-config-editor" },
+                });
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.textarea)({
+                    id: ('cfg-' + f.key),
+                    value: (__VLS_ctx.rclonePlaintext),
+                    ...{ class: "field-input field-input--code" },
+                    rows: "8",
+                    readonly: (f.readonly || !__VLS_ctx.canSave),
+                    spellcheck: "false",
+                    placeholder: "\u005b\u0072\u0065\u006d\u006f\u0074\u0065\u005d\u005c\u006e\u0074\u0079\u0070\u0065\u0020\u003d\u0020\u0064\u0072\u0069\u0076\u0065\u005c\u006e\u0073\u0063\u006f\u0070\u0065\u0020\u003d\u0020\u0064\u0072\u0069\u0076\u0065",
+                });
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                    ...{ class: "actions" },
+                });
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+                    ...{ onClick: (__VLS_ctx.decodeRcloneFromCurrent) },
+                    type: "button",
+                    ...{ class: "ghost" },
+                    disabled: (f.readonly || !__VLS_ctx.canSave),
+                });
+                (__VLS_ctx.t("config.rcloneDecodeCurrent"));
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+                    ...{ onClick: (__VLS_ctx.showRcloneBase64Preview) },
+                    type: "button",
+                    ...{ class: "ghost" },
+                    disabled: (f.readonly || !__VLS_ctx.canSave),
+                });
+                (__VLS_ctx.t("config.rcloneShowEncoded"));
+                if (__VLS_ctx.rcloneBase64Preview) {
+                    __VLS_asFunctionalElement(__VLS_intrinsicElements.pre, __VLS_intrinsicElements.pre)({
+                        ...{ class: "rclone-base64-preview" },
+                    });
+                    (__VLS_ctx.rcloneBase64Preview);
+                }
+            }
+            else if (f.key === 'CF_BYPASS_PORT_MAP') {
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                    ...{ class: "rclone-config-editor" },
+                });
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                    ...{ class: "grid" },
+                });
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({});
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
+                    ...{ class: "field-input" },
+                    type: "number",
+                    min: "1",
+                    max: "65535",
+                });
+                (__VLS_ctx.cfBypassLocalPort);
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({});
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
+                    ...{ class: "field-input" },
+                    type: "number",
+                    min: "1",
+                    max: "65535",
+                });
+                (__VLS_ctx.cfBypassDefaultPort);
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                    ...{ class: "grid" },
+                    ...{ style: {} },
+                });
+                for (const [row] of __VLS_getVForSourceType((__VLS_ctx.proxyPoolRows))) {
+                    __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
+                        key: (`cf-port-${row._id}`),
+                    });
+                    (row.name || row.host || row._id);
+                    __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
+                        ...{ class: "field-input" },
+                        type: "number",
+                        min: "1",
+                        max: "65535",
+                    });
+                    (__VLS_ctx.cfBypassProxyPorts[row.name || row.host || row._id]);
+                }
+            }
+            else {
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.textarea)({
+                    id: ('cfg-' + f.key),
+                    value: (__VLS_ctx.form[f.key]),
+                    ...{ class: "field-input field-input--code" },
+                    rows: "8",
+                    readonly: (f.readonly || !__VLS_ctx.canSave),
+                    spellcheck: "false",
+                });
+            }
         }
-        else if (__VLS_ctx.SELECT_OPTIONS[f.key]) {
+        else if (__VLS_ctx.SELECT_OPTION_KEYS[f.key]) {
             __VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElements.select)({
                 id: ('cfg-' + f.key),
                 value: (__VLS_ctx.form[f.key]),
                 ...{ class: "field-input field-input--select" },
                 disabled: (f.readonly || !__VLS_ctx.canSave),
             });
-            for (const [o] of __VLS_getVForSourceType((__VLS_ctx.selectOptionsFor(f.key)))) {
+            for (const [o] of __VLS_getVForSourceType((__VLS_ctx.selectOptionsFor(f.key, __VLS_ctx.form[f.key])))) {
                 __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
                     key: (o.value),
                     value: (o.value),
@@ -396,7 +563,7 @@ else {
             });
             (__VLS_ctx.form[f.key]);
         }
-        else if (__VLS_ctx.isPathLikeField(f.key, f.type, f.sensitive)) {
+        else if (__VLS_ctx.isPathLikeField(f.key, f.type, f.sensitive) && f.key !== 'GIT_REPO_URL') {
             __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
                 ...{ class: "path-input-group" },
             });
@@ -417,7 +584,7 @@ else {
                             return;
                         if (!!(f.type === 'json'))
                             return;
-                        if (!!(__VLS_ctx.SELECT_OPTIONS[f.key]))
+                        if (!!(__VLS_ctx.SELECT_OPTION_KEYS[f.key]))
                             return;
                         if (!!(f.type === 'int'))
                             return;
@@ -425,13 +592,13 @@ else {
                             return;
                         if (!!(f.sensitive))
                             return;
-                        if (!(__VLS_ctx.isPathLikeField(f.key, f.type, f.sensitive)))
+                        if (!(__VLS_ctx.isPathLikeField(f.key, f.type, f.sensitive) && f.key !== 'GIT_REPO_URL'))
                             return;
                         __VLS_ctx.focusField('cfg-' + f.key);
                     } },
                 type: "button",
                 ...{ class: "btn-folder" },
-                title: "聚焦输入框（路径请手动填写）",
+                title: (__VLS_ctx.t('config.pathFolderTitle')),
                 disabled: (f.readonly || !__VLS_ctx.canSave),
             });
             __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
@@ -466,6 +633,7 @@ else {
         type: "button",
         ...{ class: "btn-text-link" },
     });
+    (__VLS_ctx.t("config.refresh"));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "config-footer__actions" },
     });
@@ -475,11 +643,13 @@ else {
             type: "button",
             ...{ class: "config-save-btn" },
         });
+        (__VLS_ctx.t("config.save"));
     }
     else {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
             ...{ class: "badge badge--warn" },
         });
+        (__VLS_ctx.t("config.readOnlyCannotSave"));
     }
 }
 /** @type {__VLS_StyleScopedClasses['page-shell']} */ ;
@@ -487,7 +657,6 @@ else {
 /** @type {__VLS_StyleScopedClasses['page-head']} */ ;
 /** @type {__VLS_StyleScopedClasses['page-head__title']} */ ;
 /** @type {__VLS_StyleScopedClasses['page-head__sub']} */ ;
-/** @type {__VLS_StyleScopedClasses['mono-tip']} */ ;
 /** @type {__VLS_StyleScopedClasses['card']} */ ;
 /** @type {__VLS_StyleScopedClasses['config-loading-card']} */ ;
 /** @type {__VLS_StyleScopedClasses['card']} */ ;
@@ -515,6 +684,19 @@ else {
 /** @type {__VLS_StyleScopedClasses['switch-track']} */ ;
 /** @type {__VLS_StyleScopedClasses['switch-thumb']} */ ;
 /** @type {__VLS_StyleScopedClasses['switch-text']} */ ;
+/** @type {__VLS_StyleScopedClasses['rclone-config-editor']} */ ;
+/** @type {__VLS_StyleScopedClasses['field-input']} */ ;
+/** @type {__VLS_StyleScopedClasses['field-input--code']} */ ;
+/** @type {__VLS_StyleScopedClasses['actions']} */ ;
+/** @type {__VLS_StyleScopedClasses['ghost']} */ ;
+/** @type {__VLS_StyleScopedClasses['ghost']} */ ;
+/** @type {__VLS_StyleScopedClasses['rclone-base64-preview']} */ ;
+/** @type {__VLS_StyleScopedClasses['rclone-config-editor']} */ ;
+/** @type {__VLS_StyleScopedClasses['grid']} */ ;
+/** @type {__VLS_StyleScopedClasses['field-input']} */ ;
+/** @type {__VLS_StyleScopedClasses['field-input']} */ ;
+/** @type {__VLS_StyleScopedClasses['grid']} */ ;
+/** @type {__VLS_StyleScopedClasses['field-input']} */ ;
 /** @type {__VLS_StyleScopedClasses['field-input']} */ ;
 /** @type {__VLS_StyleScopedClasses['field-input--code']} */ ;
 /** @type {__VLS_StyleScopedClasses['field-input']} */ ;
@@ -539,22 +721,31 @@ const __VLS_self = (await import('vue')).defineComponent({
     setup() {
         return {
             ProxyPoolEditor: ProxyPoolEditor,
-            SELECT_OPTIONS: SELECT_OPTIONS,
-            fieldDescription: fieldDescription,
-            fieldLabel: fieldLabel,
+            SELECT_OPTION_KEYS: SELECT_OPTION_KEYS,
             isPathLikeField: isPathLikeField,
-            sectionTabLabel: sectionTabLabel,
             canSave: canSave,
+            t: t,
             sensitivePlaceholder: sensitivePlaceholder,
+            sectionTabLabel: sectionTabLabel,
+            fieldLabel: fieldLabel,
+            fieldDescription: fieldDescription,
+            selectOptionsFor: selectOptionsFor,
             form: form,
             message: message,
+            messageIsError: messageIsError,
             loading: loading,
             activeSection: activeSection,
             proxyPoolRows: proxyPoolRows,
+            rclonePlaintext: rclonePlaintext,
+            rcloneBase64Preview: rcloneBase64Preview,
+            cfBypassLocalPort: cfBypassLocalPort,
+            cfBypassDefaultPort: cfBypassDefaultPort,
+            cfBypassProxyPorts: cfBypassProxyPorts,
             sections: sections,
-            currentFields: currentFields,
-            selectOptionsFor: selectOptionsFor,
+            visibleCurrentFields: visibleCurrentFields,
             focusField: focusField,
+            decodeRcloneFromCurrent: decodeRcloneFromCurrent,
+            showRcloneBase64Preview: showRcloneBase64Preview,
             load: load,
             save: save,
         };

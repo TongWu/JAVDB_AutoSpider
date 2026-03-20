@@ -1,9 +1,12 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
+import LanguageSwitcher from "../components/LanguageSwitcher.vue";
 import { apiFetch } from "../lib/api";
 import { useAuthStore } from "../stores/auth";
 const router = useRouter();
 const auth = useAuthStore();
+const { t } = useI18n();
 const username = ref("admin");
 const password = ref("");
 const error = ref("");
@@ -19,16 +22,25 @@ async function submit() {
         router.push("/");
     }
     catch (e) {
-        error.value = e instanceof Error ? e.message : "登录失败";
+        error.value = e instanceof Error ? e.message : t("login.fail");
     }
 }
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
 let __VLS_components;
 let __VLS_directives;
+// CSS variable injection 
+// CSS variable injection end 
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "login-minimal" },
 });
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "login-lang" },
+});
+/** @type {[typeof LanguageSwitcher, ]} */ ;
+// @ts-ignore
+const __VLS_0 = __VLS_asFunctionalComponent(LanguageSwitcher, new LanguageSwitcher({}));
+const __VLS_1 = __VLS_0({}, ...__VLS_functionalComponentArgsRest(__VLS_0));
 __VLS_asFunctionalElement(__VLS_intrinsicElements.h1, __VLS_intrinsicElements.h1)({
     ...{ class: "login-brand" },
 });
@@ -42,6 +54,7 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements
 __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
     ...{ class: "login-field__label" },
 });
+(__VLS_ctx.t("login.username"));
 __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
     value: (__VLS_ctx.username),
     ...{ class: "login-input" },
@@ -56,6 +69,7 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements
 __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
     ...{ class: "login-field__label" },
 });
+(__VLS_ctx.t("login.password"));
 __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
     ...{ class: "login-input" },
     type: "password",
@@ -75,7 +89,9 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElement
     type: "submit",
     ...{ class: "login-submit" },
 });
+(__VLS_ctx.t("login.submit"));
 /** @type {__VLS_StyleScopedClasses['login-minimal']} */ ;
+/** @type {__VLS_StyleScopedClasses['login-lang']} */ ;
 /** @type {__VLS_StyleScopedClasses['login-brand']} */ ;
 /** @type {__VLS_StyleScopedClasses['login-form']} */ ;
 /** @type {__VLS_StyleScopedClasses['login-field']} */ ;
@@ -91,6 +107,8 @@ var __VLS_dollars;
 const __VLS_self = (await import('vue')).defineComponent({
     setup() {
         return {
+            LanguageSwitcher: LanguageSwitcher,
+            t: t,
             username: username,
             password: password,
             error: error,

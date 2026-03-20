@@ -70,3 +70,39 @@
 - 除 `/api/health` 与 `/api/auth/login` 外，匿名请求均不可访问。
 - `GET /api/config` 敏感值必须为脱敏结果。
 - 审计日志存在 `logs/audit.log`，且包含登录/配置修改/任务触发记录。
+
+## 6.5 Electron MVP 检查
+
+- 依赖安装：
+  - 根目录执行 `npm install`
+  - 前端目录执行 `cd web && npm install`
+- 开发启动：
+  - 根目录执行 `npm run electron:dev`
+  - 预期：自动拉起 Vite、自动拉起 FastAPI（8100），并打开 Electron 窗口
+- 健康检查：
+  - Electron 打开后可正常登录；Dashboard / Config / Daily / Adhoc / Explore 可访问
+  - 在 Electron 内触发 API 请求时应访问 `http://127.0.0.1:8100`（非浏览器跨域错误）
+- 进程回收：
+  - 关闭 Electron 后，不应残留由 Electron 启动的 uvicorn 子进程
+
+## 7. R2 探索能力专项检查
+
+- 探索入口：
+  - 左侧导航出现 `探索`，点击可进入探索页。
+  - 地址栏输入 `https://javdb.com` 页面后，点击“访问并解析”有返回结果（详情页或索引页）。
+- Cookie 同步：
+  - 在探索页粘贴 `_jdb_session` 值后点击“同步 Cookie 到配置”。
+  - 再次进入配置页确认 `JAVDB_SESSION_COOKIE` 已更新（脱敏显示即可）。
+- 详情页下载：
+  - 详情页解析后可看到种子列表。
+  - 点击“使用 qBittorrent 下载”后，qB 中应出现对应任务。
+  - 点击“一键下载（最优组合）”后，qB 中应新增一条最优磁链任务。
+- 索引页能力：
+  - 索引页解析后可看到电影列表。
+  - 单条“一键下载”可提交下载；“整页一键下载”可批量提交。
+  - 点击“刷新标签”后，能看到“有无码/已下载”标签变化。
+- 任务联动：
+  - 探索页非详情 URL 时，“跳转至 adhoc 任务创建”可用。
+  - 跳转后 `Adhoc` 页 URL 自动带入，可直接提交任务。
+- 日志实时性：
+  - 提交 `Daily(mode=pipeline)` 后，运行日志应持续增量更新，不再一次性刷出。

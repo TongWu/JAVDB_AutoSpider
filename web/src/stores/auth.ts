@@ -9,6 +9,7 @@ type LoginResp = {
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8100";
+const DESKTOP_API_BASE = (globalThis as { desktopEnv?: { apiBase?: string } }).desktopEnv?.apiBase ?? "";
 
 function jwtSub(token: string): string {
   try {
@@ -34,7 +35,7 @@ export const useAuthStore = defineStore("auth", {
       const t = localStorage.getItem("access_token");
       return t ? jwtSub(t) : "";
     })(),
-    apiBase: API_BASE,
+    apiBase: DESKTOP_API_BASE || API_BASE,
   }),
   actions: {
     setSession(resp: LoginResp) {

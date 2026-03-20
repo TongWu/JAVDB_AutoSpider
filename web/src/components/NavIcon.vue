@@ -69,6 +69,12 @@
       stroke-linejoin="round"
       d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
     />
+    <path
+      v-else-if="name === 'search'"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z"
+    />
   </svg>
 </template>
 
@@ -84,6 +90,7 @@ defineProps<{
     | "shield"
     | "moon"
     | "power"
-    | "user";
+    | "user"
+    | "search";
 }>();
 </script>
