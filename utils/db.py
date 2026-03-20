@@ -33,7 +33,7 @@ OPERATIONS_DB_PATH = cfg('OPERATIONS_DB_PATH', os.path.join(_REPORTS_DIR, 'opera
 # Legacy single-DB path — kept for migration source detection
 DB_PATH = cfg('SQLITE_DB_PATH', os.path.join(_REPORTS_DIR, 'javdb_autospider.db'))
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 # ── Connection management ────────────────────────────────────────────────
 
@@ -125,6 +125,8 @@ CREATE TABLE IF NOT EXISTS MovieHistory (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     VideoCode TEXT NOT NULL,
     Href TEXT NOT NULL UNIQUE,
+    ActorName TEXT DEFAULT '',
+    ActorLink TEXT DEFAULT '',
     DateTimeCreated TEXT,
     DateTimeUpdated TEXT,
     DateTimeVisited TEXT,
@@ -604,6 +606,20 @@ def _migrate_v5_to_v6(conn):
     logger.info("Schema migration v5 → v6 complete")
 
 
+def _ensure_moviehistory_actor_columns(conn: sqlite3.Connection) -> None:
+    """Add ActorName / ActorLink to MovieHistory when missing (v7 → v8)."""
+    if not _has_table(conn, 'MovieHistory'):
+        return
+    try:
+        conn.execute("ALTER TABLE MovieHistory ADD COLUMN ActorName TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("ALTER TABLE MovieHistory ADD COLUMN ActorLink TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
+
+
 def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
     """Initialise one database file: create tables and set schema version."""
     if not force:
@@ -630,6 +646,8 @@ def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
             conn.execute("ALTER TABLE SpiderStats ADD COLUMN FailedMovies TEXT DEFAULT ''")
         except sqlite3.OperationalError:
             pass
+
+        _ensure_moviehistory_actor_columns(conn)
 
         if current == 0:
             conn.execute("INSERT INTO SchemaVersion (Version) VALUES (?)", (SCHEMA_VERSION,))
@@ -782,7 +800,21 @@ def _migrate_single_to_split():
             pass
         for table in tables:
             try:
-                new_conn.execute(f"INSERT INTO main.[{table}] SELECT * FROM old_db.[{table}]")
+                if table == 'MovieHistory':
+                    new_conn.execute(
+                        """INSERT INTO main.MovieHistory (
+                            Id, VideoCode, Href, ActorName, ActorLink,
+                            DateTimeCreated, DateTimeUpdated, DateTimeVisited,
+                            PerfectMatchIndicator, HiResIndicator)
+                        SELECT Id, VideoCode, Href, '', '',
+                               DateTimeCreated, DateTimeUpdated, DateTimeVisited,
+                               PerfectMatchIndicator, HiResIndicator
+                        FROM old_db.MovieHistory"""
+                    )
+                else:
+                    new_conn.execute(
+                        f"INSERT INTO main.[{table}] SELECT * FROM old_db.[{table}]"
+                    )
             except sqlite3.OperationalError:
                 logger.debug(f"Table {table} not found in old DB, skipping")
         new_conn.execute("INSERT OR REPLACE INTO SchemaVersion (Version) VALUES (?)",
@@ -854,6 +886,8 @@ def _init_single_legacy_db(db_path: str, *, force: bool = False):
         except sqlite3.OperationalError:
             pass
 
+        _ensure_moviehistory_actor_columns(conn)
+
         if current == 0:
             conn.execute("INSERT INTO SchemaVersion (Version) VALUES (?)", (SCHEMA_VERSION,))
         elif current < 6:
@@ -910,6 +944,8 @@ def db_load_history(db_path: Optional[str] = None, phase: Optional[int] = None) 
                 'DateTimeVisited': m.get('DateTimeVisited', ''),
                 'PerfectMatchIndicator': bool(m.get('PerfectMatchIndicator', 0)),
                 'HiResIndicator': bool(m.get('HiResIndicator', 0)),
+                'ActorName': m.get('ActorName') or '',
+                'ActorLink': m.get('ActorLink') or '',
                 'torrent_types': torrent_types,
                 'torrents': torrents,
             }
@@ -923,9 +959,16 @@ def db_upsert_history(
     size_links: Optional[Dict[str, str]] = None,
     file_count_links: Optional[Dict[str, int]] = None,
     resolution_links: Optional[Dict[str, Optional[int]]] = None,
+    actor_name: Optional[str] = None,
+    actor_link: Optional[str] = None,
     db_path: Optional[str] = None,
 ) -> None:
-    """Insert or update history across MovieHistory + TorrentHistory."""
+    """Insert or update history across MovieHistory + TorrentHistory.
+
+    *actor_name* / *actor_link*: when ``None``, existing MovieHistory values are
+    left unchanged on update; use ``''`` to clear. On insert, ``None`` becomes
+    empty string.
+    """
     if magnet_links is None:
         magnet_links = {}
     if size_links is None:
@@ -944,19 +987,39 @@ def db_upsert_history(
         ).fetchone()
 
         if existing is None:
+            ins_an = actor_name if actor_name is not None else ''
+            ins_al = actor_link if actor_link is not None else ''
             cur = conn.execute(
                 """INSERT INTO MovieHistory
-                   (VideoCode, Href, DateTimeCreated, DateTimeUpdated, DateTimeVisited)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (video_code, href, now, now, now),
+                   (VideoCode, Href, DateTimeCreated, DateTimeUpdated, DateTimeVisited,
+                    ActorName, ActorLink)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (video_code, href, now, now, now, ins_an, ins_al),
             )
             movie_id = cur.lastrowid
         else:
             movie_id = existing['Id']
-            conn.execute(
-                "UPDATE MovieHistory SET DateTimeUpdated=?, DateTimeVisited=? WHERE Id=?",
-                (now, now, movie_id),
-            )
+            if actor_name is not None or actor_link is not None:
+                row_m = conn.execute(
+                    "SELECT ActorName, ActorLink FROM MovieHistory WHERE Id=?",
+                    (movie_id,),
+                ).fetchone()
+                new_an = (
+                    actor_name if actor_name is not None else (row_m['ActorName'] or '')
+                )
+                new_al = (
+                    actor_link if actor_link is not None else (row_m['ActorLink'] or '')
+                )
+                conn.execute(
+                    """UPDATE MovieHistory SET DateTimeUpdated=?, DateTimeVisited=?,
+                       ActorName=?, ActorLink=? WHERE Id=?""",
+                    (now, now, new_an, new_al, movie_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE MovieHistory SET DateTimeUpdated=?, DateTimeVisited=? WHERE Id=?",
+                    (now, now, movie_id),
+                )
 
         # Upsert torrents
         has_hacked_subtitle = False
@@ -1049,6 +1112,29 @@ def db_batch_update_last_visited(hrefs: List[str], db_path: Optional[str] = None
             [now] + list(hrefs),
         )
         return cur.rowcount
+
+
+def db_batch_update_movie_actors(
+    updates: List[Tuple[str, str, str]],
+    db_path: Optional[str] = None,
+) -> int:
+    """Set ActorName, ActorLink and DateTimeUpdated for each (href, actor_name, actor_link).
+
+    Returns the number of rows matched by UPDATE (may be 0 for unknown hrefs).
+    """
+    if not updates:
+        return 0
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    total = 0
+    with get_db(db_path or HISTORY_DB_PATH) as conn:
+        for href, an, al in updates:
+            cur = conn.execute(
+                """UPDATE MovieHistory SET ActorName=?, ActorLink=?, DateTimeUpdated=?
+                   WHERE Href=?""",
+                (an, al, now, href),
+            )
+            total += cur.rowcount
+    return total
 
 
 def db_check_torrent_in_history(href: str, torrent_type: str, db_path: Optional[str] = None) -> bool:

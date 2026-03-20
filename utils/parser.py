@@ -236,9 +236,10 @@ def parse_detail(html_content, index=None, skip_sleep=False):
             ``MOVIE_SLEEP_MIN`` / ``MOVIE_SLEEP_MAX``).
 
     Returns:
-        tuple: (magnets, actor_info, parse_success)
+        tuple: (magnets, actor_info, actor_link, parse_success)
             - magnets: List of magnet link dictionaries
-            - actor_info: Actor name string
+            - actor_info: First actor name
+            - actor_link: First actor href as site path (e.g. ``/actors/...``)
             - parse_success: True if magnets_content was found
     """
     prefix = f"[{index}]" if index is not None else ""
@@ -248,6 +249,7 @@ def parse_detail(html_content, index=None, skip_sleep=False):
 
     # Convert actor info
     actor_info = detail.get_first_actor_name()
+    actor_link = detail.get_first_actor_href()
     if actor_info:
         logger.debug(f"{prefix} Found actor: {actor_info}")
 
@@ -259,4 +261,4 @@ def parse_detail(html_content, index=None, skip_sleep=False):
         logger.debug(f"{prefix} No magnets content found in detail page")
 
     logger.debug(f"{prefix} Found {len(magnets)} magnet links")
-    return magnets, actor_info, parse_success
+    return magnets, actor_info, actor_link, parse_success

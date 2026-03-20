@@ -103,8 +103,13 @@ def maintain_history_limit(history_file, max_records=1000):
 
 def save_parsed_movie_to_history(history_file, href, phase, video_code,
                                   magnet_links=None, size_links=None,
-                                  file_count_links=None, resolution_links=None):
-    """Save a parsed movie to the history, updating existing records with new magnet links."""
+                                  file_count_links=None, resolution_links=None,
+                                  actor_name=None, actor_link=None):
+    """Save a parsed movie to the history, updating existing records with new magnet links.
+
+    *actor_name* / *actor_link*: passed to SQLite upsert when set (including ``''``);
+    ``None`` leaves existing DB values unchanged on update.
+    """
     if magnet_links is None:
         magnet_links = {'no_subtitle': ''}
     elif isinstance(magnet_links, list):
@@ -146,10 +151,14 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code,
             filtered_fc['no_subtitle'] = file_count_links.get('no_subtitle', 0)
             filtered_res['no_subtitle'] = resolution_links.get('no_subtitle')
 
-        db_upsert_history(href, video_code, filtered,
-                          size_links=filtered_sizes,
-                          file_count_links=filtered_fc,
-                          resolution_links=filtered_res)
+        db_upsert_history(
+            href, video_code, filtered,
+            size_links=filtered_sizes,
+            file_count_links=filtered_fc,
+            resolution_links=filtered_res,
+            actor_name=actor_name,
+            actor_link=actor_link,
+        )
         logger.debug(f"Saved history for {href} with magnet links: {list(magnet_links.keys())}")
 
     if use_csv():
