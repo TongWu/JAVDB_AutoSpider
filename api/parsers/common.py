@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 import logging
 from typing import Tuple, Optional
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 from bs4.element import Tag
@@ -47,6 +48,23 @@ def extract_rate_and_comments(score_text: str) -> Tuple[str, str]:
 # ---------------------------------------------------------------------------
 # MovieLink helpers
 # ---------------------------------------------------------------------------
+
+def normalize_javdb_href_path(href: str) -> str:
+    """Turn actor/director links into a site path like ``/actors/xyz``.
+
+    Absolute ``https://javdb.com/...`` URLs become their ``path``; relative
+    paths get a leading ``/`` when missing.
+    """
+    if not href:
+        return ''
+    h = href.strip()
+    if h.startswith('http://') or h.startswith('https://'):
+        path = urlparse(h).path or ''
+        if not path:
+            return ''
+        return path if path.startswith('/') else f'/{path}'
+    return h if h.startswith('/') else (f'/{h}' if h else '')
+
 
 def extract_movie_link(a_tag: Tag) -> Optional[MovieLink]:
     """Build a ``MovieLink`` from a ``<a>`` tag.  Returns *None* if the tag
