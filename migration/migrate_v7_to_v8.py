@@ -241,6 +241,8 @@ class BackfillResult:
     actor_name: str
     actor_link: str
     parse_success: bool
+    is_skipped: bool = False
+    batch_hrefs: list = field(default_factory=list)
 
 
 _backfill_login_lock = threading.Lock()
@@ -270,6 +272,8 @@ class BackfillWorker(threading.Thread):
         movie_sleep_max: float,
         ban_log_file: str,
         all_workers: list,
+        completed_ids: set | None = None,
+        completed_lock: threading.Lock | None = None,
     ):
         super().__init__(daemon=True, name=f"BackfillWorker-{proxy_config.get('name', worker_id)}")
         self.worker_id = worker_id
@@ -281,6 +285,8 @@ class BackfillWorker(threading.Thread):
         self.total_workers = total_workers
         self.use_cookie = use_cookie
         self.all_workers = all_workers
+        self.completed_ids = completed_ids if completed_ids is not None else set()
+        self.completed_lock = completed_lock if completed_lock is not None else threading.Lock()
 
         self.needs_cf_bypass = use_cf_bypass
         self._first_request = True
@@ -327,6 +333,61 @@ class BackfillWorker(threading.Thread):
             url, use_cookie=self.use_cookie, use_proxy=True,
             module_name='spider', max_retries=1, use_cf_bypass=use_cf,
         )
+
+    def _fetch_actor_page_movies(self, actor_link: str) -> list[str]:
+        """Fetch all pages of an actor's index and return their movie hrefs.
+
+        Returns an empty list on any failure so the caller can fall back to
+        single-movie mode.
+        """
+        from api.parsers.index_parser import parse_index_page
+        from scripts.spider.session import is_login_page
+        from scripts.spider.config_loader import BASE_URL
+        from utils.url_helper import get_page_url
+
+        actor_url = urljoin(BASE_URL, actor_link)
+        all_hrefs: list[str] = []
+
+        _MAX_ACTOR_PAGES = 100
+        for page_num in range(1, _MAX_ACTOR_PAGES + 1):
+            page_url = get_page_url(page_num, BASE_URL, actor_url)
+            try:
+                html = self._fetch_html(page_url, self.needs_cf_bypass)
+            except Exception as exc:
+                logger.debug("[%s] Actor page %s fetch error: %s", self.proxy_name, page_url, exc)
+                break
+
+            if not html:
+                break
+
+            if is_login_page(html):
+                logger.warning(
+                    "[%s] Login page on actor index %s p%d, skipping batch",
+                    self.proxy_name, actor_link, page_num,
+                )
+                return []
+
+            result = parse_index_page(html, page_num)
+            if not result.movies:
+                break
+
+            for movie in result.movies:
+                all_hrefs.append(movie.href)
+
+            logger.debug(
+                "[%s] Actor %s p%d: %d movies (total %d)",
+                self.proxy_name, actor_link, page_num, len(result.movies), len(all_hrefs),
+            )
+
+            if page_num < _MAX_ACTOR_PAGES:
+                self._sleep_mgr.sleep()
+
+        if all_hrefs:
+            logger.info(
+                "[%s] Actor %s: fetched %d movies across pages",
+                self.proxy_name, actor_link, len(all_hrefs),
+            )
+        return all_hrefs
 
     def _try_fetch_and_parse(self, task: BackfillTask, use_cf: bool, context: str):
         """Returns ``(actor_name, actor_link, success, needs_login)``."""
@@ -461,6 +522,14 @@ class BackfillWorker(threading.Thread):
             if task is None:
                 break
 
+            with self.completed_lock:
+                if task.movie_id in self.completed_ids:
+                    self.result_queue.put(BackfillResult(
+                        task=task, actor_name='', actor_link='',
+                        parse_success=False, is_skipped=True,
+                    ))
+                    continue
+
             if self.proxy_name in task.failed_proxies:
                 if len(task.failed_proxies) >= self.total_workers:
                     self.result_queue.put(BackfillResult(
@@ -482,8 +551,12 @@ class BackfillWorker(threading.Thread):
                     "[%s] Parsed %s%s [%s]",
                     task.entry_index, task.video_code, cf_tag, self.proxy_name,
                 )
+                batch_hrefs: list[str] = []
+                if al:
+                    batch_hrefs = self._fetch_actor_page_movies(al)
                 self.result_queue.put(BackfillResult(
-                    task=task, actor_name=an, actor_link=al, parse_success=True,
+                    task=task, actor_name=an, actor_link=al,
+                    parse_success=True, batch_hrefs=batch_hrefs,
                 ))
             elif needs_login:
                 self._handle_login_required(task)
@@ -566,7 +639,13 @@ def run_actor_backfill(
     # Parallel mode: one BackfillWorker per proxy
     # ------------------------------------------------------------------
     if use_proxy and PROXY_POOL:
+        from utils.db import db_batch_update_movie_actors
+
         _backfill_logged_in_worker_id = None
+
+        pending_by_href: dict[str, int] = {row["Href"]: row["Id"] for row in rows}
+        completed_ids: set[int] = set()
+        completed_lock = threading.Lock()
 
         task_queue: queue_module.Queue[BackfillTask | None] = queue_module.Queue()
         result_queue: queue_module.Queue[BackfillResult] = queue_module.Queue()
@@ -587,6 +666,8 @@ def run_actor_backfill(
                 movie_sleep_max=movie_sleep_mgr.sleep_max,
                 ban_log_file=ban_log_file,
                 all_workers=all_workers,
+                completed_ids=completed_ids,
+                completed_lock=completed_lock,
             )
             all_workers.append(w)
 
@@ -600,7 +681,7 @@ def run_actor_backfill(
             ))
 
         logger.info(
-            "Starting %d workers for %d backfill tasks",
+            "Starting %d workers for %d backfill tasks (actor-batch mode)",
             len(all_workers), total,
         )
         for w in all_workers:
@@ -608,12 +689,18 @@ def run_actor_backfill(
 
         processed = 0
         failed = 0
+        skipped = 0
+        batch_fills = 0
         results_received = 0
 
         while results_received < total:
             result: BackfillResult = result_queue.get()
             results_received += 1
             task = result.task
+
+            if result.is_skipped:
+                skipped += 1
+                continue
 
             if not result.parse_success:
                 logger.warning(
@@ -629,14 +716,40 @@ def run_actor_backfill(
             if not an and not al:
                 continue
 
-            logger.info("[%s] %s -> %r %r", task.entry_index, task.video_code, an, al)
-            if not dry_run:
-                conn.execute(
-                    "UPDATE MovieHistory SET ActorName=?, ActorLink=?, DateTimeUpdated=? WHERE Id=?",
-                    (an, al, now_fmt, task.movie_id),
-                )
-                conn.commit()
-            processed += 1
+            if result.batch_hrefs:
+                with completed_lock:
+                    new_hrefs = [
+                        h for h in result.batch_hrefs
+                        if h in pending_by_href
+                        and pending_by_href[h] not in completed_ids
+                    ]
+                    if task.href not in new_hrefs:
+                        if task.movie_id not in completed_ids:
+                            new_hrefs.append(task.href)
+                    for h in new_hrefs:
+                        completed_ids.add(pending_by_href[h])
+
+                updates = [(h, an, al) for h in new_hrefs]
+                if updates:
+                    logger.info(
+                        "[%s] Batch update: actor %r (%s) -> %d movies",
+                        task.entry_index, an, al, len(updates),
+                    )
+                    if not dry_run:
+                        db_batch_update_movie_actors(updates, history_db)
+                    processed += len(updates)
+                    batch_fills += 1
+            else:
+                logger.info("[%s] %s -> %r %r", task.entry_index, task.video_code, an, al)
+                with completed_lock:
+                    completed_ids.add(task.movie_id)
+                if not dry_run:
+                    conn.execute(
+                        "UPDATE MovieHistory SET ActorName=?, ActorLink=?, DateTimeUpdated=? WHERE Id=?",
+                        (an, al, now_fmt, task.movie_id),
+                    )
+                    conn.commit()
+                processed += 1
 
         for _ in all_workers:
             task_queue.put(None)
@@ -645,8 +758,9 @@ def run_actor_backfill(
 
         conn.close()
         logger.info(
-            "Backfill done (parallel, %d workers). Updated: %d, Failed: %d",
-            len(all_workers), processed, failed,
+            "Backfill done (parallel, %d workers). "
+            "Updated: %d, Batch fills: %d, Skipped (batch): %d, Failed: %d",
+            len(all_workers), processed, batch_fills, skipped, failed,
         )
         return 0
 
@@ -654,10 +768,19 @@ def run_actor_backfill(
     # Sequential fallback (--no-proxy or no PROXY_POOL configured)
     # ------------------------------------------------------------------
     from scripts.spider.fallback import fetch_detail_page_with_fallback
+    from api.parsers.index_parser import parse_index_page
+    from utils.url_helper import get_page_url
+    from utils.db import db_batch_update_movie_actors
+    from scripts.spider.session import is_login_page
 
     session = requests.Session()
     processed = 0
     failed = 0
+    skipped = 0
+    batch_fills = 0
+
+    pending_by_href: dict[str, int] = {row["Href"]: row["Id"] for row in rows}
+    completed_ids: set[int] = set()
 
     for i, row in enumerate(rows, 1):
         mid = row["Id"]
@@ -665,6 +788,10 @@ def run_actor_backfill(
         video_code = row["VideoCode"]
         detail_url = urljoin(BASE_URL, href)
         entry_index = f"backfill-{i}/{total}"
+
+        if mid in completed_ids:
+            skipped += 1
+            continue
 
         magnets, actor_name, actor_link, parse_ok, _ep, _ecf = fetch_detail_page_with_fallback(
             detail_url, session,
@@ -683,20 +810,72 @@ def run_actor_backfill(
             )
             if not parse_ok:
                 failed += 1
-        else:
-            logger.info("[%s] %s -> %r %r", entry_index, video_code, an, al)
-            if not dry_run:
-                conn.execute(
-                    "UPDATE MovieHistory SET ActorName=?, ActorLink=?, DateTimeUpdated=? WHERE Id=?",
-                    (an, al, now_fmt, mid),
-                )
-                conn.commit()
-            processed += 1
+            movie_sleep_mgr.sleep()
+            continue
 
+        if al:
+            actor_url = urljoin(BASE_URL, al)
+            actor_hrefs: list[str] = []
+            for page_num in range(1, 101):
+                page_url = get_page_url(page_num, BASE_URL, actor_url)
+                html = state.request_handler.get_page(
+                    page_url, use_cookie=True, use_proxy=use_proxy,
+                    module_name='spider', max_retries=2,
+                    use_cf_bypass=use_cf_bypass,
+                )
+                if not html:
+                    break
+                if is_login_page(html):
+                    logger.warning("[%s] Login page on actor index %s p%d", entry_index, al, page_num)
+                    actor_hrefs = []
+                    break
+                idx_result = parse_index_page(html, page_num)
+                if not idx_result.movies:
+                    break
+                for m in idx_result.movies:
+                    actor_hrefs.append(m.href)
+                movie_sleep_mgr.sleep()
+
+            if actor_hrefs:
+                new_hrefs = [
+                    h for h in actor_hrefs
+                    if h in pending_by_href
+                    and pending_by_href[h] not in completed_ids
+                ]
+                if href not in new_hrefs and mid not in completed_ids:
+                    new_hrefs.append(href)
+                updates = [(h, an, al) for h in new_hrefs]
+                if updates:
+                    logger.info(
+                        "[%s] Batch update: actor %r (%s) -> %d movies",
+                        entry_index, an, al, len(updates),
+                    )
+                    if not dry_run:
+                        db_batch_update_movie_actors(updates, history_db)
+                    for h in new_hrefs:
+                        completed_ids.add(pending_by_href[h])
+                    processed += len(updates)
+                    batch_fills += 1
+                movie_sleep_mgr.sleep()
+                continue
+
+        logger.info("[%s] %s -> %r %r", entry_index, video_code, an, al)
+        if not dry_run:
+            conn.execute(
+                "UPDATE MovieHistory SET ActorName=?, ActorLink=?, DateTimeUpdated=? WHERE Id=?",
+                (an, al, now_fmt, mid),
+            )
+            conn.commit()
+        completed_ids.add(mid)
+        processed += 1
         movie_sleep_mgr.sleep()
 
     conn.close()
-    logger.info("Backfill done (sequential). Updated: %d, Failed: %d", processed, failed)
+    logger.info(
+        "Backfill done (sequential). "
+        "Updated: %d, Batch fills: %d, Skipped (batch): %d, Failed: %d",
+        processed, batch_fills, skipped, failed,
+    )
     return 0
 
 
