@@ -711,7 +711,7 @@ class TestPerProxyLoginRouting:
         w._fetch_html = lambda url, use_cf: login_html
 
         try:
-            magnets, actor, actor_link, success, needs_login = w._try_fetch_and_parse(
+            magnets, actor, ag, al, sup, success, needs_login = w._try_fetch_and_parse(
                 task, False, "test")
             assert success is False
             assert needs_login is True
@@ -748,7 +748,7 @@ class TestPerProxyLoginRouting:
 
         w._fetch_html = mock_fetch
 
-        m, a, al, success, used_cf, needs_login = w._try_direct_then_cf(task)
+        m, a, ag, al, sup, success, used_cf, needs_login = w._try_direct_then_cf(task)
         assert success is False
         assert needs_login is True
         assert call_count['n'] == 1, "Should short-circuit after Direct detects login page"
