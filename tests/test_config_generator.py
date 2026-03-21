@@ -276,6 +276,14 @@ class TestGetConfigMap:
         entry = next(item for item in config_map if item[0] == 'RCLONE_DRIVE_NAME')
         assert entry[3] == 'gdrive'
 
+    def test_contains_login_proxy_name(self):
+        """Should expose LOGIN_PROXY_NAME under PROXY CONFIGURATION."""
+        config_map = get_config_map()
+        entry = next((item for item in config_map if item[0] == 'LOGIN_PROXY_NAME'), None)
+        assert entry is not None
+        assert entry[4] == 'PROXY CONFIGURATION'
+        assert entry[1] == 'LOGIN_PROXY_NAME'
+
 
 class TestGenerateConfigContent:
     """Tests for generate_config_content function."""
