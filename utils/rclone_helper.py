@@ -531,11 +531,8 @@ def get_all_movie_folders_for_year(
             if "directory not found" in result.stderr.lower():
                 return []
             raise RuntimeError(f"Failed to list {remote_path}: {result.stderr}")
-        entries = json.loads(result.stdout)
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"Timeout listing {remote_path}")
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Invalid JSON from rclone for {remote_path}: {exc}") from exc
 
     if _RUST_RCLONE_PARSE:
         try:
@@ -558,6 +555,11 @@ def get_all_movie_folders_for_year(
             return folders
         except Exception as exc:
             logger.debug(f"Rust parse_lsjson_for_year failed: {exc}, falling back to Python parser")
+
+    try:
+        entries = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid JSON from rclone for {remote_path}: {exc}") from exc
 
     movie_dirs: set = set()
     dir_sizes: Dict[Tuple[str, str], int] = defaultdict(int)
