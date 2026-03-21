@@ -42,14 +42,14 @@ jobs:
         run: echo "name=$(echo '${{ github.ref_name }}' | sed 's/[^a-zA-Z0-9._-]/-/g')" >> $GITHUB_OUTPUT
 
       - name: Upload Rust extension wheel artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: rust-extension-wheel-${{ github.sha }}
           path: /tmp/rust-wheel/*.whl
           retention-days: 30
 
       - name: Upload Rust extension wheel artifact (branch latest)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: rust-extension-wheel-latest-${{ steps.branch.outputs.name }}
           path: /tmp/rust-wheel/*.whl
