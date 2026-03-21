@@ -22,7 +22,7 @@ def check_torrent_status(row: dict) -> Tuple[bool, bool, bool]:
     Returns:
         (has_any_torrents, has_new_torrents, should_include_in_report)
     """
-    rust_result = None if INCLUDE_DOWNLOADED_IN_REPORT else rust_check_torrent_status(row)
+    rust_result = rust_check_torrent_status(row, INCLUDE_DOWNLOADED_IN_REPORT)
     if rust_result is not None:
         return rust_result
 
