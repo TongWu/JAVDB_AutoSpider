@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 try:
     from javdb_rust_core import (
@@ -28,7 +28,9 @@ def rust_create_csv_row(*args, **kwargs):
         return None
 
 
-def rust_check_torrent_status(row: dict, include_downloaded: bool = False) -> Optional[Tuple[bool, bool, bool]]:
+def rust_check_torrent_status(
+    row: dict, include_downloaded: bool = False,
+) -> Optional[Tuple[bool, bool, bool]]:
     if not RUST_CSV_AVAILABLE:
         return None
     try:
@@ -40,7 +42,9 @@ def rust_check_torrent_status(row: dict, include_downloaded: bool = False) -> Op
     return None
 
 
-def rust_collect_new_magnet_links(row: dict, magnet_links: dict) -> Tuple[Dict, Dict, Dict, Dict] | None:
+def rust_collect_new_magnet_links(
+    row: dict, magnet_links: dict,
+) -> Optional[Tuple[Dict, Dict, Dict, Dict]]:
     if not RUST_CSV_AVAILABLE:
         return None
     try:
@@ -50,4 +54,3 @@ def rust_collect_new_magnet_links(row: dict, magnet_links: dict) -> Tuple[Dict, 
     except Exception:
         pass
     return None
-

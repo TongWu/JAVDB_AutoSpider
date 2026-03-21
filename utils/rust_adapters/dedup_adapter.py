@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 try:
     from javdb_rust_core import should_skip_from_rclone as _rs_should_skip_from_rclone
@@ -15,16 +15,21 @@ except ImportError:
     _rs_check_dedup_upgrade = None
 
 
-def rust_should_skip_from_rclone(video_code: str, entries: List[dict], enable_dedup: bool) -> bool:
+def rust_should_skip_from_rclone(
+    video_code: str, entries: List[dict], enable_dedup: bool,
+) -> Optional[bool]:
+    """Return True/False when Rust gives a definitive answer, None if unavailable."""
     if not RUST_DEDUP_AVAILABLE:
-        return False
+        return None
     try:
         return bool(_rs_should_skip_from_rclone(video_code, entries, enable_dedup))
     except Exception:
-        return False
+        return None
 
 
-def rust_check_dedup_upgrade(video_code: str, new_torrent_types: Dict[str, bool], entries: List[dict]) -> List[dict]:
+def rust_check_dedup_upgrade(
+    video_code: str, new_torrent_types: Dict[str, bool], entries: List[dict],
+) -> List[dict]:
     if not RUST_DEDUP_AVAILABLE:
         return []
     try:
@@ -34,4 +39,3 @@ def rust_check_dedup_upgrade(video_code: str, new_torrent_types: Dict[str, bool]
     except Exception:
         pass
     return []
-
