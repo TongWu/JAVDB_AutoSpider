@@ -17,7 +17,7 @@ from typing import Optional
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 
-from api.models import ActorCredit, MovieDetail, MovieLink, MagnetInfo
+from api.models import ActorCredit, MovieDetail, MovieLink, MagnetInfo, NO_ACTOR_LISTING_ACTOR_NAME
 from api.parsers.common import (
     extract_rate_and_comments,
     extract_movie_link,
@@ -25,6 +25,20 @@ from api.parsers.common import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Plain-text values in 演員 span.value when there are no /actors/ links (normalised to NO_ACTOR_LISTING_ACTOR_NAME in DB).
+_NO_ACTOR_LISTING_PLACEHOLDERS = frozenset({
+    'N/A',
+    'n/a',
+    '无',
+    '無',
+    '—',
+    '–',
+    '-',
+    '－',
+    '暂无',
+    '暂无演员',
+})
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +117,41 @@ def _extract_actors_with_gender(panel_blocks) -> list:
         gender = _actor_gender_from_following_marker(a_tag)
         actors.append(ActorCredit(name=ml.name, href=ml.href, gender=gender))
     return actors
+
+
+def _value_span_has_actor_link(value_span) -> bool:
+    if not value_span:
+        return False
+    for a_tag in value_span.find_all('a'):
+        if not isinstance(a_tag, Tag):
+            continue
+        href = (a_tag.get('href') or '').strip()
+        if '/actors/' in href:
+            return True
+    return False
+
+
+def _is_no_actor_placeholder_text(text: str) -> bool:
+    t = text.strip()
+    if not t:
+        return False
+    if t.casefold() == 'n/a':
+        return True
+    return t in _NO_ACTOR_LISTING_PLACEHOLDERS
+
+
+def _detect_no_actor_listing(panel_blocks) -> bool:
+    """True when 演員 panel exists, has no actor links, and value text is a known placeholder."""
+    block = _find_panel_block(panel_blocks, '演員:')
+    if not block:
+        return False
+    value_span = block.find('span', class_='value')
+    if not value_span:
+        return False
+    if _value_span_has_actor_link(value_span):
+        return False
+    raw = value_span.get_text(strip=True)
+    return _is_no_actor_placeholder_text(raw)
 
 
 def _extract_text_from_panel(panel_blocks, label: str) -> str:
@@ -246,6 +295,13 @@ def parse_detail_page(html_content: str) -> MovieDetail:
 
     # --- Actors (演員) — include gender from adjacent symbol markers ---
     detail.actors = _extract_actors_with_gender(panel_blocks)
+    if not detail.actors:
+        detail.no_actor_listing = _detect_no_actor_listing(panel_blocks)
+        if detail.no_actor_listing:
+            logger.debug(
+                'Detail: no actor links; placeholder 演員 text → %r',
+                NO_ACTOR_LISTING_ACTOR_NAME,
+            )
 
     # --- Poster URL (cover image) ---
     if video_meta_panel:
