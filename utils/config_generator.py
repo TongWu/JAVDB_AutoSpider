@@ -258,6 +258,7 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('PROXY_HTTP', None, lambda n, d: None, None, 'PROXY CONFIGURATION'),  # Hardcoded None
         ('PROXY_HTTPS', None, lambda n, d: None, None, 'PROXY CONFIGURATION'),  # Hardcoded None
         ('PROXY_MODULES', 'PROXY_MODULES_JSON', get_env_json, ['spider'], 'PROXY CONFIGURATION'),
+        ('LOGIN_PROXY_NAME', 'LOGIN_PROXY_NAME', get_env, '', 'PROXY CONFIGURATION'),
         # Cloudflare Bypass Configuration
         ('CF_BYPASS_SERVICE_PORT', 'CF_BYPASS_SERVICE_PORT', get_env_int, 8000, 'CLOUDFLARE BYPASS CONFIGURATION'),
         ('CF_BYPASS_ENABLED', 'CF_BYPASS_ENABLED', get_env_bool, True, 'CLOUDFLARE BYPASS CONFIGURATION'),
