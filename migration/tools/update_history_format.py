@@ -4,15 +4,21 @@ Adhoc script to update existing history movie entries to new format
 Updates existing date/time data columns with magnet links in [YYYY-MM-DD]magnet_link format
 """
 
-import os
-import sys
-import csv
-import time
-import random
-import logging
+from __future__ import annotations
+
 import argparse
+import csv
+import logging
+import os
+import random
+import sys
+import time
 from datetime import datetime
 from urllib.parse import urljoin
+
+_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.chdir(_project_root)
+sys.path.insert(0, _project_root)
 
 # Import existing modules
 from utils.history_manager import (
@@ -34,8 +40,6 @@ LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
 MOVIE_SLEEP_MIN = cfg('MOVIE_SLEEP_MIN', 5)
 MOVIE_SLEEP_MAX = cfg('MOVIE_SLEEP_MAX', 15)
 JAVDB_SESSION_COOKIE = cfg('JAVDB_SESSION_COOKIE', None)
-
-os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
 # Configure logging
 setup_logging(SPIDER_LOG_FILE, LOG_LEVEL)
@@ -80,7 +84,7 @@ def extract_magnet_links_from_detail(detail_html, video_code):
     try:
         # Parse detail page (ignore parse_success flag for migration script)
         # Note: video_code is passed for logging purposes only, not extracted from detail page
-        magnets, actor_info, _actor_link, _ = parse_detail(
+        magnets, actor_info, _ag, _al, _sup, _ = parse_detail(
             detail_html, video_code, skip_sleep=True)
         
         if not magnets:

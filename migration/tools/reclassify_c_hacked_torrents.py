@@ -1,28 +1,29 @@
 #!/usr/bin/env python3
 """
-Ad hoc script to clean up existing history CSV file by applying priority rules:
-- If hacked_subtitle has content, clear hacked_no_subtitle
-- If subtitle has content, clear no_subtitle
+Ad hoc script to reclassify -C.无码破解 torrents in history CSV from no_subtitle to hacked_subtitle
 """
 
 import csv
-import os
 import logging
+import os
 from datetime import datetime
+
+_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.chdir(_project_root)
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def cleanup_history_priorities(history_file):
-    """Clean up history CSV by applying priority rules"""
+def reclassify_c_hacked_torrents(history_file):
+    """Reclassify -C.无码破解 torrents from no_subtitle to hacked_subtitle"""
     
     if not os.path.exists(history_file):
         logger.error(f"History file not found: {history_file}")
         return False
     
     # Create backup
-    backup_file = f"{history_file}.backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    backup_file = f"{history_file}.backup_reclassify_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     logger.info(f"Creating backup: {backup_file}")
     
     try:
@@ -42,26 +43,19 @@ def cleanup_history_priorities(history_file):
         
         logger.info(f"Backup created successfully with {len(records)} records")
         
-        # Apply cleanup rules
-        cleaned_count = 0
+        # Reclassify torrents
+        reclassified_count = 0
         for record in records:
-            original_record = record.copy()
-            
-            # Rule 1: If hacked_subtitle has content, clear hacked_no_subtitle
-            if record.get('hacked_subtitle', '').strip():
-                if record.get('hacked_no_subtitle', '').strip():
-                    logger.debug(f"Clearing hacked_no_subtitle for {record.get('video_code', 'unknown')}")
-                    record['hacked_no_subtitle'] = ''
-                    cleaned_count += 1
-            
-            # Rule 2: If subtitle has content, clear no_subtitle
-            if record.get('subtitle', '').strip():
-                if record.get('no_subtitle', '').strip():
-                    logger.debug(f"Clearing no_subtitle for {record.get('video_code', 'unknown')}")
-                    record['no_subtitle'] = ''
-                    cleaned_count += 1
+            # Check if no_subtitle contains -C.无码破解
+            no_subtitle_content = record.get('no_subtitle', '').strip()
+            if no_subtitle_content and '-C.无码破解' in no_subtitle_content:
+                # Move from no_subtitle to hacked_subtitle
+                record['hacked_subtitle'] = no_subtitle_content
+                record['no_subtitle'] = ''
+                reclassified_count += 1
+                logger.info(f"Reclassified {record.get('video_code', 'unknown')}: moved -C.无码破解 from no_subtitle to hacked_subtitle")
         
-        # Write cleaned records back
+        # Write updated records back
         with open(history_file, 'w', newline='', encoding='utf-8-sig') as f:
             fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 
                          'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']
@@ -70,24 +64,24 @@ def cleanup_history_priorities(history_file):
             for record in records:
                 writer.writerow(record)
         
-        logger.info(f"Cleanup completed. Processed {len(records)} records, cleaned {cleaned_count} conflicts")
+        logger.info(f"Reclassification completed. Processed {len(records)} records, reclassified {reclassified_count} torrents")
         return True
         
     except Exception as e:
-        logger.error(f"Error during cleanup: {e}")
+        logger.error(f"Error during reclassification: {e}")
         return False
 
 def main():
     """Main function"""
-    history_file = "Daily Report/parsed_movies_history.csv"
+    history_file = os.path.join("reports", "parsed_movies_history.csv")
     
-    logger.info("Starting history CSV cleanup...")
+    logger.info("Starting -C.无码破解 torrent reclassification...")
     logger.info(f"Target file: {history_file}")
     
-    if cleanup_history_priorities(history_file):
-        logger.info("Cleanup completed successfully!")
+    if reclassify_c_hacked_torrents(history_file):
+        logger.info("Reclassification completed successfully!")
     else:
-        logger.error("Cleanup failed!")
+        logger.error("Reclassification failed!")
 
 if __name__ == "__main__":
     main() 

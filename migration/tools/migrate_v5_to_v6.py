@@ -25,7 +25,7 @@ Changes performed:
   - All column names      → BigCamelCase
 
 Usage:
-    python3 migration/migrate_v5_to_v6.py [--db-path PATH] [--backup] [--verify] [--dry-run]
+    python3 migration/tools/migrate_v5_to_v6.py [--db-path PATH] [--backup] [--verify] [--dry-run]
 """
 
 import argparse
@@ -35,7 +35,7 @@ import sqlite3
 import sys
 from datetime import datetime
 
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 

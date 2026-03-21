@@ -13,7 +13,7 @@ Phase 2 — Report CSVs:
   - reports/AdHoc/*.csv        →  ReportSessions + ReportMovies + ReportTorrents
 
 Usage:
-    python3 migration/csv_to_sqlite.py [--reports-dir reports] [--db-path reports/javdb_autospider.db] [--dry-run] [--verify]
+    python3 migration/tools/csv_to_sqlite.py [--reports-dir reports] [--db-path reports/javdb_autospider.db] [--dry-run] [--verify]
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ import os
 import re
 import sys
 
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
@@ -121,8 +121,8 @@ def migrate_history(csv_path: str, db_path: str, dry_run: bool = False) -> int:
             conn.execute(
                 """INSERT OR REPLACE INTO MovieHistory
                    (VideoCode, Href, DateTimeCreated, DateTimeUpdated, DateTimeVisited,
-                    PerfectMatchIndicator, HiResIndicator, ActorName, ActorLink)
-                   VALUES (?, ?, ?, ?, ?, ?, 0, '', '')""",
+                    PerfectMatchIndicator, HiResIndicator, ActorName, ActorGender, ActorLink, SupportingActors)
+                   VALUES (?, ?, ?, ?, ?, ?, 0, '', '', '', '')""",
                 (video_code, href, create_dt, update_dt, last_visited, perfect_match),
             )
             movie_id = conn.execute(
