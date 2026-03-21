@@ -94,3 +94,67 @@ pub fn create_csv_row(
 
     row
 }
+
+#[pyfunction]
+#[pyo3(signature = (row, include_downloaded_in_report=false))]
+pub fn check_torrent_status(
+    row: HashMap<String, String>,
+    include_downloaded_in_report: bool,
+) -> (bool, bool, bool) {
+    let fields = ["hacked_subtitle", "hacked_no_subtitle", "subtitle", "no_subtitle"];
+    let has_any = fields
+        .iter()
+        .any(|f| !row.get(*f).cloned().unwrap_or_default().is_empty());
+    let has_new = fields.iter().any(|f| {
+        let v = row.get(*f).cloned().unwrap_or_default();
+        !v.is_empty() && v != DOWNLOADED_PLACEHOLDER
+    });
+    let should_include = has_new || (include_downloaded_in_report && has_any);
+    (has_any, has_new, should_include)
+}
+
+#[pyfunction]
+pub fn collect_new_magnet_links(
+    row: HashMap<String, String>,
+    magnet_links: HashMap<String, String>,
+) -> (
+    HashMap<String, String>,
+    HashMap<String, String>,
+    HashMap<String, i32>,
+    HashMap<String, Option<i32>>,
+) {
+    let mut new_magnets: HashMap<String, String> = HashMap::new();
+    let mut new_sizes: HashMap<String, String> = HashMap::new();
+    let mut new_file_counts: HashMap<String, i32> = HashMap::new();
+    let mut new_resolutions: HashMap<String, Option<i32>> = HashMap::new();
+
+    for mtype in ["hacked_subtitle", "hacked_no_subtitle", "subtitle", "no_subtitle"] {
+        let value = row.get(mtype).cloned().unwrap_or_default();
+        if value.is_empty() || value == DOWNLOADED_PLACEHOLDER {
+            continue;
+        }
+
+        new_magnets.insert(
+            mtype.to_string(),
+            magnet_links.get(mtype).cloned().unwrap_or_default(),
+        );
+        new_sizes.insert(
+            mtype.to_string(),
+            magnet_links
+                .get(&format!("size_{mtype}"))
+                .cloned()
+                .unwrap_or_default(),
+        );
+        let fc = magnet_links
+            .get(&format!("file_count_{mtype}"))
+            .and_then(|s| s.parse::<i32>().ok())
+            .unwrap_or(0);
+        new_file_counts.insert(mtype.to_string(), fc);
+        let res = magnet_links
+            .get(&format!("resolution_{mtype}"))
+            .and_then(|s| s.parse::<i32>().ok());
+        new_resolutions.insert(mtype.to_string(), res);
+    }
+
+    (new_magnets, new_sizes, new_file_counts, new_resolutions)
+}
