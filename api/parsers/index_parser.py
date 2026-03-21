@@ -159,7 +159,7 @@ def parse_index_page(html_content: str, page_num: int = 1) -> IndexPageResult:
     # section and the main listing.  We parse items from all of them.
     movie_lists = soup.find_all('div', class_=lambda x: x and 'movie-list' in x)
     if not movie_lists:
-        logger.warning('[Page %d] No movie list found', page_num)
+        logger.debug('[Page %d] No movie list found', page_num)
         return IndexPageResult(has_movie_list=False, page_title=page_title)
 
     movies = []
