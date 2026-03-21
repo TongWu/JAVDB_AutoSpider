@@ -95,11 +95,20 @@ class MovieIndexEntry:
 
 # Canonical DB/API value when the 演員 panel has no /actors/ links but shows a placeholder (e.g. N/A).
 NO_ACTOR_LISTING_ACTOR_NAME = 'N/A'
+# Same sentinel as name: lead gender when the page confirms no actor links (ActorLink stays empty).
+NO_ACTOR_LISTING_ACTOR_GENDER = 'N/A'
 
 
 @dataclass
 class MovieDetail:
-    """All metadata extracted from a single movie's detail page."""
+    """All metadata extracted from a single movie's detail page.
+
+    Actor columns (DB / ``parse_detail``):
+    - When ``no_actor_listing`` is True: ``ActorName`` and ``ActorGender`` are ``N/A``;
+      ``ActorLink`` is empty; ``SupportingActors`` is the JSON string ``[]``.
+    - When there is only a lead actor (one ``/actors/`` link): ``SupportingActors`` is
+      still ``[]`` (never empty string for “no supporting cast”).
+    """
     title: str = ''
     video_code: str = ''
     code_prefix_link: str = ''
@@ -132,7 +141,7 @@ class MovieDetail:
             d['lead_actor'] = {
                 'name': NO_ACTOR_LISTING_ACTOR_NAME,
                 'href': '',
-                'gender': '',
+                'gender': NO_ACTOR_LISTING_ACTOR_GENDER,
             }
         else:
             d['lead_actor'] = None
@@ -150,9 +159,11 @@ class MovieDetail:
         return ''
 
     def get_first_actor_gender(self) -> str:
-        """Return gender of the first actor: ``female``, ``male``, or ``''``."""
+        """Return gender of the first actor: ``female``, ``male``, ``''``, or ``N/A`` when no listing."""
         if self.actors:
             return self.actors[0].gender
+        if self.no_actor_listing:
+            return NO_ACTOR_LISTING_ACTOR_GENDER
         return ''
 
     def get_first_actor_href(self) -> str:
@@ -164,11 +175,15 @@ class MovieDetail:
         return normalize_javdb_href_path(self.actors[0].href)
 
     def get_supporting_actors_json(self) -> str:
-        """JSON array of supporting actors for DB: ``[{name, gender, link}, ...]``."""
+        """JSON array of supporting actors for DB: ``[{name, gender, link}, ...]``.
+
+        Always ``[]`` when there is no supporting cast (including ``no_actor_listing``
+        and exactly one lead actor).
+        """
         if self.no_actor_listing:
             return '[]'
         if len(self.actors) <= 1:
-            return ''
+            return '[]'
         from api.parsers.common import normalize_javdb_href_path
 
         items = [
