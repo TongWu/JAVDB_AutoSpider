@@ -250,7 +250,7 @@ class TestHistory:
         history = db_mod.db_load_history()
         assert history['/v/ABC-123']['ActorName'] == 'Actor One'
         assert history['/v/ABC-123']['ActorGender'] == 'female'
-        assert history['/v/ABC-123']['ActorLink'] == '/actors/xyz'
+        assert history['/v/ABC-123']['ActorLink'] == 'https://javdb.com/actors/xyz'
         assert history['/v/ABC-123']['SupportingActors'] == '[]'
 
     def test_batch_update_movie_actors(self, _isolate_sqlite):
@@ -261,8 +261,9 @@ class TestHistory:
         history = db_mod.db_load_history()
         assert history['/v/A']['ActorName'] == 'N1'
         assert history['/v/A']['ActorGender'] == 'male'
-        assert history['/v/A']['ActorLink'] == '/actors/1'
+        assert history['/v/A']['ActorLink'] == 'https://javdb.com/actors/1'
         assert 'X' in history['/v/A']['SupportingActors']
+        assert 'https://javdb.com/actors/x' in history['/v/A']['SupportingActors']
 
     def test_get_all_history_records(self, _isolate_sqlite):
         self._upsert(href='/v/A', code='A')
