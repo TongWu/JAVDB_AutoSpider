@@ -17,7 +17,7 @@ from typing import Optional
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 
-from api.models import MovieDetail, MovieLink, MagnetInfo
+from api.models import ActorCredit, MovieDetail, MovieLink, MagnetInfo
 from api.parsers.common import (
     extract_rate_and_comments,
     extract_movie_link,
@@ -63,6 +63,46 @@ def _extract_links_from_panel(panel_blocks, label: str) -> list:
     if not value_span:
         return []
     return extract_all_movie_links(value_span)
+
+
+def _actor_gender_from_following_marker(a_tag: Tag) -> str:
+    """Read ``female`` / ``male`` from the ``<strong class=\"symbol …\">`` after *a_tag*."""
+    sib = a_tag.next_sibling
+    while sib is not None and not isinstance(sib, Tag):
+        sib = sib.next_sibling
+    if sib is None or sib.name != 'strong':
+        return ''
+    classes = sib.get('class') or []
+    if isinstance(classes, str):
+        classes = classes.split()
+    if 'female' in classes:
+        return 'female'
+    if 'male' in classes:
+        return 'male'
+    return ''
+
+
+def _extract_actors_with_gender(panel_blocks) -> list:
+    """Actors from the 演員 panel, in order, with gender from ♀/♂ markers."""
+    block = _find_panel_block(panel_blocks, '演員:')
+    if not block:
+        return []
+    value_span = block.find('span', class_='value')
+    if not value_span:
+        return []
+    actors: list = []
+    for a_tag in value_span.find_all('a'):
+        if not isinstance(a_tag, Tag):
+            continue
+        href = (a_tag.get('href') or '').strip()
+        if '/actors/' not in href:
+            continue
+        ml = extract_movie_link(a_tag)
+        if not ml:
+            continue
+        gender = _actor_gender_from_following_marker(a_tag)
+        actors.append(ActorCredit(name=ml.name, href=ml.href, gender=gender))
+    return actors
 
 
 def _extract_text_from_panel(panel_blocks, label: str) -> str:
@@ -204,8 +244,8 @@ def parse_detail_page(html_content: str) -> MovieDetail:
     # --- Tags (類別) ---
     detail.tags = _extract_links_from_panel(panel_blocks, '類別:')
 
-    # --- Actors (演員) ---
-    detail.actors = _extract_links_from_panel(panel_blocks, '演員:')
+    # --- Actors (演員) — include gender from adjacent symbol markers ---
+    detail.actors = _extract_actors_with_gender(panel_blocks)
 
     # --- Poster URL (cover image) ---
     if video_meta_panel:
