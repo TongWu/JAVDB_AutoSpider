@@ -178,7 +178,7 @@ def should_skip_from_rclone(
     if not entries:
         return False
 
-    rust_skip = rust_should_skip_from_rclone(
+    rust_result = rust_should_skip_from_rclone(
         code,
         [
             {
@@ -189,8 +189,8 @@ def should_skip_from_rclone(
         ],
         enable_dedup,
     )
-    if rust_skip:
-        return True
+    if rust_result is not None:
+        return rust_result
 
     if enable_dedup:
         return False
