@@ -231,7 +231,7 @@ def sample_detail_html():
             <div class="panel-block">
                 <strong>演員:</strong>
                 <span class="value">
-                    <a href="/actors/xyz">Sample Actor</a>
+                    <a href="/actors/xyz">Sample Actor</a><strong class="symbol female">♀</strong>&nbsp;
                 </span>
             </div>
         </div>

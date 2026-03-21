@@ -10,6 +10,7 @@ sys.path.insert(0, project_root)
 from dataclasses import asdict
 
 from api.models import (
+    ActorCredit,
     MovieLink,
     MagnetInfo,
     MovieIndexEntry,
@@ -124,14 +125,28 @@ class TestMovieDetail:
 
     def test_get_first_actor_name(self):
         detail = MovieDetail(actors=[
-            MovieLink(name='Actor One', href='/actors/1'),
-            MovieLink(name='Actor Two', href='/actors/2'),
+            ActorCredit(name='Actor One', href='/actors/1', gender='female'),
+            ActorCredit(name='Actor Two', href='/actors/2', gender='male'),
         ])
         assert detail.get_first_actor_name() == 'Actor One'
 
+    def test_get_first_actor_gender(self):
+        detail = MovieDetail(actors=[
+            ActorCredit(name='A', href='/actors/1', gender='female'),
+        ])
+        assert detail.get_first_actor_gender() == 'female'
+
+    def test_get_supporting_actors_json(self):
+        detail = MovieDetail(actors=[
+            ActorCredit(name='Lead', href='/actors/l', gender='female'),
+            ActorCredit(name='Sup', href='/actors/s', gender='male'),
+        ])
+        raw = detail.get_supporting_actors_json()
+        assert 'Sup' in raw and 'male' in raw and '/actors/s' in raw
+
     def test_get_first_actor_href(self):
         detail = MovieDetail(actors=[
-            MovieLink(name='A', href='https://javdb.com/actors/450wJ'),
+            ActorCredit(name='A', href='https://javdb.com/actors/450wJ', gender=''),
         ])
         assert detail.get_first_actor_href() == '/actors/450wJ'
 
