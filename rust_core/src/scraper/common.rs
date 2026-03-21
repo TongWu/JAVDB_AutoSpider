@@ -2,6 +2,7 @@ use log::debug;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use scraper::{ElementRef, Html, Selector};
+use url::Url;
 
 use crate::models::MovieLink;
 
@@ -57,6 +58,32 @@ pub fn extract_all_movie_links(parent: &ElementRef) -> Vec<MovieLink> {
         .select(&sel)
         .filter_map(|a| extract_movie_link(&a))
         .collect()
+}
+
+/// Match ``api.parsers.common.normalize_javdb_href_path`` (site path ``/actors/...``).
+pub fn normalize_javdb_href_path(href: &str) -> String {
+    let h = href.trim();
+    if h.is_empty() {
+        return String::new();
+    }
+    if h.starts_with("http://") || h.starts_with("https://") {
+        return Url::parse(h)
+            .ok()
+            .and_then(|u| {
+                let p = u.path();
+                if p.is_empty() {
+                    None
+                } else {
+                    Some(p.to_string())
+                }
+            })
+            .unwrap_or_default();
+    }
+    if h.starts_with('/') {
+        h.to_string()
+    } else {
+        format!("/{h}")
+    }
 }
 
 pub fn extract_video_code(a_tag: &ElementRef) -> String {

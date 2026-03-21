@@ -41,6 +41,45 @@ impl MovieLink {
 }
 
 // ---------------------------------------------------------------------------
+// ActorCredit (detail page actor + gender marker)
+// ---------------------------------------------------------------------------
+
+#[pyclass(name = "RustActorCredit")]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ActorCredit {
+    #[pyo3(get, set)]
+    pub name: String,
+    #[pyo3(get, set)]
+    pub href: String,
+    #[pyo3(get, set)]
+    pub gender: String,
+}
+
+#[pymethods]
+impl ActorCredit {
+    #[new]
+    #[pyo3(signature = (name, href, gender=String::new()))]
+    fn new(name: String, href: String, gender: String) -> Self {
+        Self { name, href, gender }
+    }
+
+    fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let dict = new_dict(py);
+        dict.set_item("name", &self.name)?;
+        dict.set_item("href", &self.href)?;
+        dict.set_item("gender", &self.gender)?;
+        Ok(dict)
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "RustActorCredit(name='{}', gender='{}')",
+            self.name, self.gender
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
 // MagnetInfo
 // ---------------------------------------------------------------------------
 
@@ -220,7 +259,7 @@ pub struct MovieDetail {
     #[pyo3(get, set)]
     pub trailer_url: Option<String>,
     #[pyo3(get, set)]
-    pub actors: Vec<MovieLink>,
+    pub actors: Vec<ActorCredit>,
     #[pyo3(get, set)]
     pub magnets: Vec<MagnetInfo>,
     #[pyo3(get, set)]
@@ -313,6 +352,21 @@ impl MovieDetail {
             .collect::<Result<_, _>>()?;
         dict.set_item("actors", actor_dicts)?;
 
+        let lead = self
+            .actors
+            .first()
+            .map(|a| a.to_dict(py))
+            .transpose()?;
+        dict.set_item("lead_actor", lead)?;
+
+        let supporting: Vec<_> = self
+            .actors
+            .iter()
+            .skip(1)
+            .map(|a| a.to_dict(py))
+            .collect::<Result<_, _>>()?;
+        dict.set_item("supporting_actors", supporting)?;
+
         let magnet_dicts: Vec<_> = self
             .magnets
             .iter()
@@ -329,6 +383,43 @@ impl MovieDetail {
 
     fn get_first_actor_name(&self) -> String {
         self.actors.first().map_or(String::new(), |a| a.name.clone())
+    }
+
+    fn get_first_actor_gender(&self) -> String {
+        self.actors
+            .first()
+            .map_or(String::new(), |a| a.gender.clone())
+    }
+
+    fn get_first_actor_href(&self) -> String {
+        self.actors.first().map_or(String::new(), |a| {
+            crate::scraper::common::normalize_javdb_href_path(&a.href)
+        })
+    }
+
+    fn get_supporting_actors_json(&self) -> PyResult<String> {
+        if self.actors.len() <= 1 {
+            return Ok(String::new());
+        }
+        #[derive(Serialize)]
+        struct Row<'a> {
+            name: &'a str,
+            gender: &'a str,
+            link: String,
+        }
+        let rows: Vec<Row> = self
+            .actors
+            .iter()
+            .skip(1)
+            .map(|a| Row {
+                name: a.name.as_str(),
+                gender: a.gender.as_str(),
+                link: crate::scraper::common::normalize_javdb_href_path(&a.href),
+            })
+            .collect();
+        serde_json::to_string(&rows).map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("json encode: {e}"))
+        })
     }
 
     fn get_magnets_as_legacy<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyDict>>> {
