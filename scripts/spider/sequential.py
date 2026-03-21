@@ -118,15 +118,16 @@ def process_phase_entries_sequential(
         entry_index = f"{i}/{total_entries}"
         logger.info(f"[{entry_index}] [Page {page_num}] Processing {entry['video_code'] or href}")
 
-        magnets, actor_info, actor_link, parse_success, effective_use_proxy, effective_use_cf_bypass = (
-            fetch_detail_page_with_fallback(
-                detail_url, session,
-                use_cookie=use_cookie,
-                use_proxy=use_proxy,
-                use_cf_bypass=use_cf_bypass,
-                entry_index=entry_index,
-                is_adhoc_mode=is_adhoc_mode,
-            )
+        (
+            magnets, actor_info, actor_gender, actor_link, supporting_actors, parse_success,
+            effective_use_proxy, effective_use_cf_bypass,
+        ) = fetch_detail_page_with_fallback(
+            detail_url, session,
+            use_cookie=use_cookie,
+            use_proxy=use_proxy,
+            use_cf_bypass=use_cf_bypass,
+            entry_index=entry_index,
+            is_adhoc_mode=is_adhoc_mode,
         )
 
         fallback_triggered = parse_success and (effective_use_proxy != use_proxy or effective_use_cf_bypass != use_cf_bypass)
@@ -143,7 +144,10 @@ def process_phase_entries_sequential(
             continue
 
         visited_hrefs.add(href)
-        actor_updates.append((href, actor_info or '', actor_link or ''))
+        actor_updates.append((
+            href, actor_info or '', actor_gender or '', actor_link or '',
+            supporting_actors or '',
+        ))
         magnet_links = extract_magnets(magnets, entry_index)
 
         should_process, history_torrent_types = should_process_movie(href, history_data, phase, magnet_links)
@@ -204,7 +208,9 @@ def process_phase_entries_sequential(
                         new_magnet_links, size_links=new_sizes,
                         file_count_links=new_fc, resolution_links=new_res,
                         actor_name=actor_info or '',
+                        actor_gender=actor_gender or '',
                         actor_link=actor_link or '',
+                        supporting_actors=supporting_actors or '',
                     )
         else:
             no_new_torrents += 1
