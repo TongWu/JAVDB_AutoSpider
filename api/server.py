@@ -27,8 +27,18 @@ from api.parsers import (
     RUST_PARSERS_AVAILABLE,
 )
 from utils.rust_adapters.parser_adapter import result_to_dict
+from utils.spider_gateway import SpiderGateway, create_gateway
 
 RUST_CORE_AVAILABLE = RUST_PARSERS_AVAILABLE
+
+_gateway: Optional[SpiderGateway] = None
+
+
+def _get_gateway() -> SpiderGateway:
+    global _gateway
+    if _gateway is None:
+        _gateway = create_gateway(use_proxy=True, use_cf_bypass=True, use_cookie=False)
+    return _gateway
 
 
 app = FastAPI(
@@ -46,6 +56,15 @@ class HtmlPayload(BaseModel):
     """POST body for all parse endpoints."""
     html: str
     page_num: int = 1
+
+
+class UrlPayload(BaseModel):
+    """POST body for the fetch-and-parse endpoint."""
+    url: str
+    page_num: int = 1
+    use_proxy: bool = True
+    use_cf_bypass: bool = True
+    use_cookie: bool = False
 
 
 class HealthResponse(BaseModel):
@@ -120,5 +139,16 @@ async def api_detect_page_type(payload: HtmlPayload):
     try:
         page_type = detect_page_type(payload.html)
         return {'page_type': page_type}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post('/api/parse/url')
+async def api_parse_url(payload: UrlPayload):
+    """Fetch a JavDB URL, auto-detect page type, parse and return structured data."""
+    try:
+        gw = _get_gateway()
+        gr = gw.fetch_and_parse(payload.url, page_num=payload.page_num)
+        return gr.to_dict()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
