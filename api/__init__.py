@@ -15,6 +15,7 @@ Quick start (REST)::
 """
 
 from api.models import (
+    ActorCredit,
     MovieLink,
     MagnetInfo,
     MovieIndexEntry,
@@ -37,6 +38,7 @@ from api.parsers import (
 
 __all__ = [
     # Models
+    'ActorCredit',
     'MovieLink',
     'MagnetInfo',
     'MovieIndexEntry',
