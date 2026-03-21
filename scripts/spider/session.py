@@ -5,10 +5,46 @@ from utils.rust_adapters.parser_adapter import is_login_page
 import scripts.spider.state as state
 from scripts.spider.config_loader import (
     LOGIN_FEATURE_AVAILABLE,
-    JAVDB_USERNAME, JAVDB_PASSWORD,
+    JAVDB_USERNAME,
+    JAVDB_PASSWORD,
+    LOGIN_PROXY_NAME,
+    PROXY_POOL,
 )
 
 logger = get_logger(__name__)
+
+
+def resolve_login_proxy_endpoints():
+    """Return ``(proxies_dict, proxy_name)`` for :data:`LOGIN_PROXY_NAME` in ``PROXY_POOL``.
+
+    If ``LOGIN_PROXY_NAME`` is unset, returns ``(None, None)``.
+    If set but not found or has no http/https URLs, logs a warning and returns ``(None, None)``.
+    """
+    if not LOGIN_PROXY_NAME:
+        return None, None
+    for entry in PROXY_POOL or []:
+        if entry.get('name') == LOGIN_PROXY_NAME:
+            proxies = {
+                k: v
+                for k, v in (
+                    ('http', entry.get('http')),
+                    ('https', entry.get('https')),
+                )
+                if v
+            }
+            if proxies:
+                return proxies, entry.get('name') or LOGIN_PROXY_NAME
+            logger.warning(
+                "LOGIN_PROXY_NAME %r matches a pool entry but it has no http/https URLs",
+                LOGIN_PROXY_NAME,
+            )
+            return None, None
+    logger.warning(
+        "LOGIN_PROXY_NAME %r not found in PROXY_POOL; ignoring named login proxy",
+        LOGIN_PROXY_NAME,
+    )
+    return None, None
+
 
 def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None):
     """Attempt to refresh session cookie by logging in via login.py.
@@ -50,6 +86,12 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None):
 
     login_proxies = explicit_proxies
     used_proxy_name = explicit_proxy_name
+
+    if login_proxies is None:
+        named_proxies, named_nm = resolve_login_proxy_endpoints()
+        if named_proxies:
+            login_proxies = named_proxies
+            used_proxy_name = named_nm
 
     if login_proxies is None and state.global_proxy_pool is not None:
         current_proxy = state.global_proxy_pool.get_current_proxy()

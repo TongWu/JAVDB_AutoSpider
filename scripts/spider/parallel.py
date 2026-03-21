@@ -24,6 +24,7 @@ from utils.request_handler import RequestHandler, RequestConfig
 
 import scripts.spider.state as state
 from scripts.spider.session import is_login_page, can_attempt_login, attempt_login_refresh
+from scripts.spider.parallel_login import should_delegate_login_task, use_login_queue_priority
 from scripts.spider.sleep_manager import MovieSleepManager, movie_sleep_mgr
 from scripts.spider.csv_builder import (
     create_csv_row_with_history_filter, check_torrent_status, collect_new_magnet_links,
@@ -36,6 +37,7 @@ from scripts.spider.config_loader import (
     JAVDB_SESSION_COOKIE,
     MOVIE_SLEEP_MIN, MOVIE_SLEEP_MAX,
     PROXY_POOL, PROXY_POOL_COOLDOWN_SECONDS, PROXY_POOL_MAX_FAILURES,
+    LOGIN_PROXY_NAME,
 )
 from scripts.spider.dedup_checker import (
     should_skip_from_rclone,
@@ -125,6 +127,7 @@ class ProxyWorker(threading.Thread):
         self._sleep_mgr = MovieSleepManager(movie_sleep_min, movie_sleep_max)
         self.fallback_cooldown = fallback_cooldown
         self.all_workers = all_workers
+        self.login_proxy_name: Optional[str] = LOGIN_PROXY_NAME
 
         self.needs_cf_bypass = False
         self._first_request = True
@@ -223,6 +226,9 @@ class ProxyWorker(threading.Thread):
         """
         global _logged_in_worker_id
         with _login_lock:
+            if self.login_proxy_name and self.proxy_name != self.login_proxy_name:
+                return False
+
             if state.login_attempted:
                 if state.refreshed_session_cookie is not None:
                     self._handler.config.javdb_session_cookie = state.refreshed_session_cookie
@@ -230,18 +236,21 @@ class ProxyWorker(threading.Thread):
                     return True
                 return False
 
-            proxy_for_login = {
-                'http': self.proxy_config.get('http'),
-                'https': self.proxy_config.get('https'),
-            }
-            proxy_for_login = {k: v for k, v in proxy_for_login.items() if v}
-            if not proxy_for_login:
-                proxy_for_login = None
+            if self.login_proxy_name:
+                success, new_cookie, _proxy_name = attempt_login_refresh(None, None)
+            else:
+                proxy_for_login = {
+                    'http': self.proxy_config.get('http'),
+                    'https': self.proxy_config.get('https'),
+                }
+                proxy_for_login = {k: v for k, v in proxy_for_login.items() if v}
+                if not proxy_for_login:
+                    proxy_for_login = None
 
-            success, new_cookie, _proxy_name = attempt_login_refresh(
-                explicit_proxies=proxy_for_login,
-                explicit_proxy_name=self.proxy_name,
-            )
+                success, new_cookie, _proxy_name = attempt_login_refresh(
+                    explicit_proxies=proxy_for_login,
+                    explicit_proxy_name=self.proxy_name,
+                )
             if success and new_cookie:
                 self._handler.config.javdb_session_cookie = new_cookie
                 _logged_in_worker_id = self.worker_id
@@ -251,6 +260,21 @@ class ProxyWorker(threading.Thread):
     def _handle_login_required(self, task: DetailTask):
         """Route a login-required task to the logged-in worker, or login self."""
         global _logged_in_worker_id
+        if should_delegate_login_task(self.login_proxy_name, self.proxy_name):
+            with _login_lock:
+                if _logged_in_worker_id is not None:
+                    li_nm = self.all_workers[_logged_in_worker_id].proxy_name
+                    task.failed_proxies.discard(li_nm)
+                if self.login_proxy_name:
+                    task.failed_proxies.discard(self.login_proxy_name)
+            self.login_queue.put(task)
+            logger.info(
+                f"[{self.proxy_name}] [{task.entry_index}] "
+                f"Login required for {task.entry.get('video_code', '')}, "
+                f"routing to LOGIN_PROXY_NAME worker [{self.login_proxy_name}]"
+            )
+            return
+
         with _login_lock:
             if _logged_in_worker_id is not None:
                 if _logged_in_worker_id != self.worker_id:
@@ -297,7 +321,12 @@ class ProxyWorker(threading.Thread):
         """Get next task. Logged-in worker checks login_queue with priority."""
         while True:
             with _login_lock:
-                am_logged_in = (_logged_in_worker_id == self.worker_id)
+                am_logged_in = use_login_queue_priority(
+                    self.login_proxy_name,
+                    self.proxy_name,
+                    _logged_in_worker_id,
+                    self.worker_id,
+                )
 
             if am_logged_in:
                 try:
@@ -418,6 +447,11 @@ def process_detail_entries_parallel(
         all_workers.append(w)
 
     if state.logged_in_proxy_name and state.refreshed_session_cookie:
+        if LOGIN_PROXY_NAME and state.logged_in_proxy_name != LOGIN_PROXY_NAME:
+            logger.warning(
+                f"Index login proxy [{state.logged_in_proxy_name}] differs from "
+                f"LOGIN_PROXY_NAME [{LOGIN_PROXY_NAME}] — session may not match detail workers"
+            )
         for w in all_workers:
             if w.proxy_name == state.logged_in_proxy_name:
                 w._handler.config.javdb_session_cookie = state.refreshed_session_cookie
