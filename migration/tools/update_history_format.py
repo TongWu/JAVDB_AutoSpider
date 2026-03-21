@@ -13,6 +13,8 @@ import os
 import random
 import sys
 import time
+
+import requests
 from datetime import datetime
 from urllib.parse import urljoin
 
