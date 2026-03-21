@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 
+from utils.contracts import UNCENSORED_SENSOR_PRIORITY
 from utils.logging_config import get_logger
 from utils.path_helper import ensure_dated_dir
 
@@ -38,19 +39,15 @@ class SensorCategory:
     WUMA_LIUCHU = "无码流出"
     WUMA_POJIE = "无码破解"
 
-    WUMA_PRIORITY = {
-        WUMA_LIUCHU: 3,
-        WUMA: 2,
-        WUMA_POJIE: 1,
-    }
+    WUMA_PRIORITY = UNCENSORED_SENSOR_PRIORITY
 
     @classmethod
     def is_wuma_category(cls, category: str) -> bool:
-        return category in cls.WUMA_PRIORITY
+        return category in UNCENSORED_SENSOR_PRIORITY
 
     @classmethod
     def get_priority(cls, category: str) -> int:
-        return cls.WUMA_PRIORITY.get(category, 0)
+        return UNCENSORED_SENSOR_PRIORITY.get(category, 0)
 
 
 class SubtitleCategory:
@@ -365,12 +362,17 @@ def _py_parse_folder_name(folder_name: str) -> Optional[Tuple[str, str, str]]:
 
 
 try:
-    from javdb_rust_core import parse_folder_name as _rs_parse_folder_name
+    from javdb_rust_core import (
+        parse_folder_name as _rs_parse_folder_name,
+        parse_lsjson_for_year as _rs_parse_lsjson_for_year,
+    )
+    _RUST_RCLONE_PARSE = True
 
     def parse_folder_name(folder_name: str) -> Optional[Tuple[str, str, str]]:
         """Parse a movie folder name (Rust-accelerated)."""
         return _rs_parse_folder_name(folder_name)
 except ImportError:
+    _RUST_RCLONE_PARSE = False
     parse_folder_name = _py_parse_folder_name
 
 
@@ -534,6 +536,28 @@ def get_all_movie_folders_for_year(
         raise RuntimeError(f"Timeout listing {remote_path}")
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"Invalid JSON from rclone for {remote_path}: {exc}") from exc
+
+    if _RUST_RCLONE_PARSE:
+        try:
+            parsed_items = _rs_parse_lsjson_for_year(result.stdout)
+            folders: List[FolderInfo] = []
+            for item in parsed_items:
+                actor = item.get('actor', '')
+                folder_name = item.get('folder_name', '')
+                folders.append(FolderInfo(
+                    full_path=f"{remote_path}/{actor}/{folder_name}",
+                    year=year,
+                    actor=actor,
+                    movie_code=item.get('movie_code', ''),
+                    sensor_category=item.get('sensor', ''),
+                    subtitle_category=item.get('subtitle', ''),
+                    folder_name=folder_name,
+                    size=int(item.get('size', 0) or 0),
+                    file_count=int(item.get('file_count', 0) or 0),
+                ))
+            return folders
+        except Exception as exc:
+            logger.debug(f"Rust parse_lsjson_for_year failed: {exc}, falling back to Python parser")
 
     movie_dirs: set = set()
     dir_sizes: Dict[Tuple[str, str], int] = defaultdict(int)
