@@ -294,7 +294,7 @@ class TestParseDetailPageInline:
         assert detail.magnets == []
 
     def test_actors_panel_na_placeholder(self):
-        from api.models import NO_ACTOR_LISTING_ACTOR_NAME
+        from api.models import NO_ACTOR_LISTING_ACTOR_NAME, NO_ACTOR_LISTING_ACTOR_GENDER
 
         html = '''
         <html><body>
@@ -324,7 +324,38 @@ class TestParseDetailPageInline:
         assert detail.actors == []
         assert detail.no_actor_listing is True
         assert detail.get_first_actor_name() == NO_ACTOR_LISTING_ACTOR_NAME
+        assert detail.get_first_actor_gender() == NO_ACTOR_LISTING_ACTOR_GENDER
         assert detail.get_first_actor_href() == ''
+        assert detail.get_supporting_actors_json() == '[]'
+
+    def test_single_actor_supporting_json_is_empty_array(self):
+        html = '''
+        <html><body>
+        <div class="video-meta-panel">
+          <div class="panel-block">
+            <strong>演員:</strong>
+            &nbsp;<span class="value">
+                <a href="/actors/solo">Solo Star</a>
+                <strong class="symbol female">♀</strong>
+            </span>
+          </div>
+        </div>
+        <div id="magnets-content">
+            <div class="item columns is-desktop">
+                <div class="magnet-name">
+                    <a href="magnet:?xt=urn:btih:solotest">
+                        <span class="name">SOLO-1.torrent</span>
+                        <span class="meta">1GB, 1個文件</span>
+                    </a>
+                </div>
+                <span class="time">2024-01-01</span>
+            </div>
+        </div>
+        </body></html>
+        '''
+        detail = parse_detail_page(html)
+        assert detail.parse_success is True
+        assert len(detail.actors) == 1
         assert detail.get_supporting_actors_json() == '[]'
 
 
