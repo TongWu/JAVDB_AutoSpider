@@ -93,6 +93,10 @@ class MovieIndexEntry:
 # Detail-page full movie info
 # ---------------------------------------------------------------------------
 
+# Canonical DB/API value when the 演員 panel has no /actors/ links but shows a placeholder (e.g. N/A).
+NO_ACTOR_LISTING_ACTOR_NAME = 'N/A'
+
+
 @dataclass
 class MovieDetail:
     """All metadata extracted from a single movie's detail page."""
@@ -112,6 +116,8 @@ class MovieDetail:
     fanart_urls: List[str] = field(default_factory=list)
     trailer_url: Optional[str] = None
     actors: List[ActorCredit] = field(default_factory=list)
+    # True when 演員 panel has placeholder text (e.g. N/A) and no /actors/ links.
+    no_actor_listing: bool = False
     magnets: List[MagnetInfo] = field(default_factory=list)
     review_count: int = 0
     want_count: int = 0
@@ -120,19 +126,34 @@ class MovieDetail:
 
     def to_dict(self) -> dict:
         d = asdict(self)
-        d['lead_actor'] = self.actors[0].to_dict() if self.actors else None
+        if self.actors:
+            d['lead_actor'] = self.actors[0].to_dict()
+        elif self.no_actor_listing:
+            d['lead_actor'] = {
+                'name': NO_ACTOR_LISTING_ACTOR_NAME,
+                'href': '',
+                'gender': '',
+            }
+        else:
+            d['lead_actor'] = None
         d['supporting_actors'] = [a.to_dict() for a in self.actors[1:]]
         return d
 
     # Convenience helpers for backward compatibility with spider.py ----------
 
     def get_first_actor_name(self) -> str:
-        """Return the name of the first (lead) actor, or empty string."""
-        return self.actors[0].name if self.actors else ''
+        """Return the name of the first (lead) actor, or ``NO_ACTOR_LISTING_ACTOR_NAME`` if confirmed placeholder."""
+        if self.actors:
+            return self.actors[0].name
+        if self.no_actor_listing:
+            return NO_ACTOR_LISTING_ACTOR_NAME
+        return ''
 
     def get_first_actor_gender(self) -> str:
         """Return gender of the first actor: ``female``, ``male``, or ``''``."""
-        return self.actors[0].gender if self.actors else ''
+        if self.actors:
+            return self.actors[0].gender
+        return ''
 
     def get_first_actor_href(self) -> str:
         """Return the normalized path for the first actor link, or empty string."""
@@ -144,6 +165,8 @@ class MovieDetail:
 
     def get_supporting_actors_json(self) -> str:
         """JSON array of supporting actors for DB: ``[{name, gender, link}, ...]``."""
+        if self.no_actor_listing:
+            return '[]'
         if len(self.actors) <= 1:
             return ''
         from api.parsers.common import normalize_javdb_href_path
