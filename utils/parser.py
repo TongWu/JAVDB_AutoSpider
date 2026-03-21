@@ -241,7 +241,8 @@ def parse_detail(html_content, index=None, skip_sleep=False):
             - actor_info: Lead (first) actor name
             - actor_gender: ``female`` / ``male`` / ``''``
             - actor_link: Lead actor href as site path (e.g. ``/actors/...``)
-            - supporting_actors: JSON array string for supporting cast (DB column)
+            - supporting_actors: JSON array string for supporting cast (DB column);
+              ``[]`` when there is no supporting cast, including a single lead actor only
             - parse_success: True if magnets_content was found
     """
     prefix = f"[{index}]" if index is not None else ""
