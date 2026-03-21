@@ -13,6 +13,7 @@ WAL mode is enabled on every connection for concurrent-read safety.
 """
 
 import os
+import re
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -33,7 +34,7 @@ OPERATIONS_DB_PATH = cfg('OPERATIONS_DB_PATH', os.path.join(_REPORTS_DIR, 'opera
 # Legacy single-DB path — kept for migration source detection
 DB_PATH = cfg('SQLITE_DB_PATH', os.path.join(_REPORTS_DIR, 'javdb_autospider.db'))
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 # ── Connection management ────────────────────────────────────────────────
 
@@ -125,27 +126,27 @@ CREATE TABLE IF NOT EXISTS MovieHistory (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     VideoCode TEXT NOT NULL,
     Href TEXT NOT NULL UNIQUE,
-    ActorName TEXT DEFAULT '',
-    ActorGender TEXT DEFAULT '',
-    ActorLink TEXT DEFAULT '',
-    SupportingActors TEXT DEFAULT '',
+    ActorName TEXT,
+    ActorGender TEXT,
+    ActorLink TEXT,
+    SupportingActors TEXT,
     DateTimeCreated TEXT,
     DateTimeUpdated TEXT,
     DateTimeVisited TEXT,
-    PerfectMatchIndicator INTEGER DEFAULT 0,
-    HiResIndicator INTEGER DEFAULT 0
+    PerfectMatchIndicator INTEGER,
+    HiResIndicator INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_movie_history_video_code ON MovieHistory(VideoCode);
 
 CREATE TABLE IF NOT EXISTS TorrentHistory (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     MovieHistoryId INTEGER NOT NULL REFERENCES MovieHistory(Id),
-    MagnetUri TEXT DEFAULT '',
-    SubtitleIndicator INTEGER DEFAULT 0,
-    CensorIndicator INTEGER DEFAULT 1,
+    MagnetUri TEXT,
+    SubtitleIndicator INTEGER,
+    CensorIndicator INTEGER,
     ResolutionType INTEGER,
-    Size TEXT DEFAULT '',
-    FileCount INTEGER DEFAULT 0,
+    Size TEXT,
+    FileCount INTEGER,
     DateTimeCreated TEXT,
     DateTimeUpdated TEXT
 );
@@ -172,10 +173,10 @@ CREATE INDEX IF NOT EXISTS idx_report_sessions_csv ON ReportSessions(CsvFilename
 CREATE TABLE IF NOT EXISTS ReportMovies (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     SessionId INTEGER NOT NULL REFERENCES ReportSessions(Id),
-    Href TEXT DEFAULT '',
-    VideoCode TEXT DEFAULT '',
+    Href TEXT,
+    VideoCode TEXT,
     Page INTEGER,
-    Actor TEXT DEFAULT '',
+    Actor TEXT,
     Rate REAL,
     CommentNumber INTEGER
 );
@@ -185,13 +186,13 @@ CREATE INDEX IF NOT EXISTS idx_report_movies_video_code ON ReportMovies(VideoCod
 CREATE TABLE IF NOT EXISTS ReportTorrents (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     ReportMovieId INTEGER NOT NULL REFERENCES ReportMovies(Id),
-    VideoCode TEXT DEFAULT '',
-    MagnetUri TEXT DEFAULT '',
-    SubtitleIndicator INTEGER DEFAULT 0,
-    CensorIndicator INTEGER DEFAULT 1,
+    VideoCode TEXT,
+    MagnetUri TEXT,
+    SubtitleIndicator INTEGER,
+    CensorIndicator INTEGER,
     ResolutionType INTEGER,
-    Size TEXT DEFAULT '',
-    FileCount INTEGER DEFAULT 0
+    Size TEXT,
+    FileCount INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_report_torrents_movie ON ReportTorrents(ReportMovieId);
 CREATE INDEX IF NOT EXISTS idx_report_torrents_video_code ON ReportTorrents(VideoCode);
@@ -199,52 +200,52 @@ CREATE INDEX IF NOT EXISTS idx_report_torrents_video_code ON ReportTorrents(Vide
 CREATE TABLE IF NOT EXISTS SpiderStats (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     SessionId INTEGER NOT NULL REFERENCES ReportSessions(Id),
-    Phase1Discovered INTEGER DEFAULT 0,
-    Phase1Processed  INTEGER DEFAULT 0,
-    Phase1Skipped    INTEGER DEFAULT 0,
-    Phase1NoNew      INTEGER DEFAULT 0,
-    Phase1Failed     INTEGER DEFAULT 0,
-    Phase2Discovered INTEGER DEFAULT 0,
-    Phase2Processed  INTEGER DEFAULT 0,
-    Phase2Skipped    INTEGER DEFAULT 0,
-    Phase2NoNew      INTEGER DEFAULT 0,
-    Phase2Failed     INTEGER DEFAULT 0,
-    TotalDiscovered  INTEGER DEFAULT 0,
-    TotalProcessed   INTEGER DEFAULT 0,
-    TotalSkipped     INTEGER DEFAULT 0,
-    TotalNoNew       INTEGER DEFAULT 0,
-    TotalFailed      INTEGER DEFAULT 0,
-    FailedMovies     TEXT DEFAULT '',
-    DateTimeCreated TEXT DEFAULT (datetime('now'))
+    Phase1Discovered INTEGER,
+    Phase1Processed  INTEGER,
+    Phase1Skipped    INTEGER,
+    Phase1NoNew      INTEGER,
+    Phase1Failed     INTEGER,
+    Phase2Discovered INTEGER,
+    Phase2Processed  INTEGER,
+    Phase2Skipped    INTEGER,
+    Phase2NoNew      INTEGER,
+    Phase2Failed     INTEGER,
+    TotalDiscovered  INTEGER,
+    TotalProcessed   INTEGER,
+    TotalSkipped     INTEGER,
+    TotalNoNew       INTEGER,
+    TotalFailed      INTEGER,
+    FailedMovies     TEXT,
+    DateTimeCreated  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS UploaderStats (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     SessionId INTEGER NOT NULL REFERENCES ReportSessions(Id),
-    TotalTorrents     INTEGER DEFAULT 0,
-    DuplicateCount    INTEGER DEFAULT 0,
-    Attempted         INTEGER DEFAULT 0,
-    SuccessfullyAdded INTEGER DEFAULT 0,
-    FailedCount       INTEGER DEFAULT 0,
-    HackedSub         INTEGER DEFAULT 0,
-    HackedNosub       INTEGER DEFAULT 0,
-    SubtitleCount     INTEGER DEFAULT 0,
-    NoSubtitleCount   INTEGER DEFAULT 0,
-    SuccessRate       REAL DEFAULT 0.0,
-    DateTimeCreated TEXT DEFAULT (datetime('now'))
+    TotalTorrents     INTEGER,
+    DuplicateCount    INTEGER,
+    Attempted         INTEGER,
+    SuccessfullyAdded INTEGER,
+    FailedCount       INTEGER,
+    HackedSub         INTEGER,
+    HackedNosub       INTEGER,
+    SubtitleCount     INTEGER,
+    NoSubtitleCount   INTEGER,
+    SuccessRate       REAL,
+    DateTimeCreated   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS PikpakStats (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     SessionId INTEGER NOT NULL REFERENCES ReportSessions(Id),
-    ThresholdDays   INTEGER DEFAULT 3,
-    TotalTorrents   INTEGER DEFAULT 0,
-    FilteredOld     INTEGER DEFAULT 0,
-    SuccessfulCount INTEGER DEFAULT 0,
-    FailedCount     INTEGER DEFAULT 0,
-    UploadedCount      INTEGER DEFAULT 0,
-    DeleteFailedCount INTEGER DEFAULT 0,
-    DateTimeCreated TEXT DEFAULT (datetime('now'))
+    ThresholdDays     INTEGER,
+    TotalTorrents     INTEGER,
+    FilteredOld       INTEGER,
+    SuccessfulCount   INTEGER,
+    FailedCount       INTEGER,
+    UploadedCount     INTEGER,
+    DeleteFailedCount INTEGER,
+    DateTimeCreated   TEXT
 );
 """
 
@@ -252,27 +253,27 @@ _OPERATIONS_DDL = _SCHEMA_VERSION_DDL + """
 CREATE TABLE IF NOT EXISTS RcloneInventory (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     VideoCode TEXT NOT NULL,
-    SensorCategory TEXT DEFAULT '',
-    SubtitleCategory TEXT DEFAULT '',
-    FolderPath TEXT DEFAULT '',
-    FolderSize INTEGER DEFAULT 0,
-    FileCount INTEGER DEFAULT 0,
-    DateTimeScanned TEXT DEFAULT ''
+    SensorCategory TEXT,
+    SubtitleCategory TEXT,
+    FolderPath TEXT,
+    FolderSize INTEGER,
+    FileCount INTEGER,
+    DateTimeScanned TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_rclone_inventory_video_code ON RcloneInventory(VideoCode);
 
 CREATE TABLE IF NOT EXISTS DedupRecords (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
-    VideoCode TEXT DEFAULT '',
-    ExistingSensor TEXT DEFAULT '',
-    ExistingSubtitle TEXT DEFAULT '',
-    ExistingGdrivePath TEXT DEFAULT '',
-    ExistingFolderSize INTEGER DEFAULT 0,
-    NewTorrentCategory TEXT DEFAULT '',
-    DeletionReason TEXT DEFAULT '',
-    DateTimeDetected TEXT DEFAULT '',
-    IsDeleted INTEGER DEFAULT 0,
-    DateTimeDeleted TEXT DEFAULT ''
+    VideoCode TEXT,
+    ExistingSensor TEXT,
+    ExistingSubtitle TEXT,
+    ExistingGdrivePath TEXT,
+    ExistingFolderSize INTEGER,
+    NewTorrentCategory TEXT,
+    DeletionReason TEXT,
+    DateTimeDetected TEXT,
+    IsDeleted INTEGER,
+    DateTimeDeleted TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dedup_active_path
     ON DedupRecords(ExistingGdrivePath)
@@ -280,22 +281,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_dedup_active_path
 
 CREATE TABLE IF NOT EXISTS PikpakHistory (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
-    TorrentHash TEXT DEFAULT '',
-    TorrentName TEXT DEFAULT '',
-    Category TEXT DEFAULT '',
-    MagnetUri TEXT DEFAULT '',
-    DateTimeAddedToQb TEXT DEFAULT '',
-    DateTimeDeletedFromQb TEXT DEFAULT '',
-    DateTimeUploadedToPikpak TEXT DEFAULT '',
-    TransferStatus TEXT DEFAULT '',
-    ErrorMessage TEXT DEFAULT ''
+    TorrentHash TEXT,
+    TorrentName TEXT,
+    Category TEXT,
+    MagnetUri TEXT,
+    DateTimeAddedToQb TEXT,
+    DateTimeDeletedFromQb TEXT,
+    DateTimeUploadedToPikpak TEXT,
+    TransferStatus TEXT,
+    ErrorMessage TEXT
 );
 
 CREATE TABLE IF NOT EXISTS ProxyBans (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ProxyName TEXT DEFAULT '',
-    DateTimeBanned TEXT DEFAULT '',
-    DateTimeUnbanned TEXT DEFAULT ''
+    ProxyName TEXT,
+    DateTimeBanned TEXT,
+    DateTimeUnbanned TEXT
 );
 """
 
@@ -349,7 +350,7 @@ def _migrate_v5_to_v6(conn):
                      'size_subtitle', 'size_no_subtitle'):
             try:
                 conn.execute(
-                    f"ALTER TABLE parsed_movies_history ADD COLUMN {col} TEXT DEFAULT ''"
+                    f"ALTER TABLE parsed_movies_history ADD COLUMN {col} TEXT"
                 )
             except sqlite3.OperationalError:
                 pass
@@ -617,19 +618,19 @@ def _ensure_moviehistory_actor_columns(conn: sqlite3.Connection) -> None:
     if not _has_table(conn, 'MovieHistory'):
         return
     try:
-        conn.execute("ALTER TABLE MovieHistory ADD COLUMN ActorName TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE MovieHistory ADD COLUMN ActorName TEXT")
     except sqlite3.OperationalError:
         pass
     try:
-        conn.execute("ALTER TABLE MovieHistory ADD COLUMN ActorGender TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE MovieHistory ADD COLUMN ActorGender TEXT")
     except sqlite3.OperationalError:
         pass
     try:
-        conn.execute("ALTER TABLE MovieHistory ADD COLUMN ActorLink TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE MovieHistory ADD COLUMN ActorLink TEXT")
     except sqlite3.OperationalError:
         pass
     try:
-        conn.execute("ALTER TABLE MovieHistory ADD COLUMN SupportingActors TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE MovieHistory ADD COLUMN SupportingActors TEXT")
     except sqlite3.OperationalError:
         pass
 
@@ -679,15 +680,15 @@ def _normalize_moviehistory_actor_column_order(conn: sqlite3.Connection) -> None
             Id INTEGER PRIMARY KEY AUTOINCREMENT,
             VideoCode TEXT NOT NULL,
             Href TEXT NOT NULL UNIQUE,
-            ActorName TEXT DEFAULT '',
-            ActorGender TEXT DEFAULT '',
-            ActorLink TEXT DEFAULT '',
-            SupportingActors TEXT DEFAULT '',
+            ActorName TEXT,
+            ActorGender TEXT,
+            ActorLink TEXT,
+            SupportingActors TEXT,
             DateTimeCreated TEXT,
             DateTimeUpdated TEXT,
             DateTimeVisited TEXT,
-            PerfectMatchIndicator INTEGER DEFAULT 0,
-            HiResIndicator INTEGER DEFAULT 0
+            PerfectMatchIndicator INTEGER,
+            HiResIndicator INTEGER
         );
         INSERT INTO MovieHistory__colorder (
             Id, VideoCode, Href, ActorName, ActorGender, ActorLink, SupportingActors,
@@ -695,10 +696,10 @@ def _normalize_moviehistory_actor_column_order(conn: sqlite3.Connection) -> None
             PerfectMatchIndicator, HiResIndicator
         )
         SELECT Id, VideoCode, Href,
-            COALESCE(ActorName, ''), COALESCE(ActorGender, ''), COALESCE(ActorLink, ''),
-            COALESCE(SupportingActors, ''),
+            ActorName, ActorGender, ActorLink,
+            SupportingActors,
             DateTimeCreated, DateTimeUpdated, DateTimeVisited,
-            COALESCE(PerfectMatchIndicator, 0), COALESCE(HiResIndicator, 0)
+            PerfectMatchIndicator, HiResIndicator
         FROM MovieHistory;
         DROP TABLE MovieHistory;
         ALTER TABLE MovieHistory__colorder RENAME TO MovieHistory;
@@ -716,6 +717,37 @@ def moviehistory_actor_layout_ok(conn: sqlite3.Connection) -> bool:
     return _moviehistory_actor_columns_all_present(names) and _moviehistory_actor_columns_physical_order_ok(
         names
     )
+
+
+_DEFAULT_RE = re.compile(
+    r'\s+DEFAULT\s+(?:\'[^\']*\'|\([^()]*(?:\([^()]*\)[^()]*)*\)|\d+(?:\.\d+)?)',
+    re.IGNORECASE,
+)
+
+
+def _migrate_defaults_to_null(conn: sqlite3.Connection) -> None:
+    """Remove all non-NULL DEFAULT clauses from every table schema (v9 -> v10).
+
+    Uses PRAGMA writable_schema to rewrite CREATE TABLE statements in
+    sqlite_master directly — no table rebuild required.
+    """
+    conn.execute("PRAGMA writable_schema = ON")
+    rows = conn.execute(
+        "SELECT name, sql FROM sqlite_master WHERE type='table' AND sql IS NOT NULL"
+    ).fetchall()
+    for row in rows:
+        name, sql = row[0], row[1]
+        new_sql = _DEFAULT_RE.sub('', sql)
+        if new_sql != sql:
+            conn.execute(
+                "UPDATE sqlite_master SET sql = ? WHERE type='table' AND name = ?",
+                (new_sql, name),
+            )
+            logger.info(f"Removed DEFAULT clauses from table {name}")
+    conn.execute("PRAGMA writable_schema = OFF")
+    integrity = conn.execute("PRAGMA integrity_check").fetchone()
+    if integrity[0] != 'ok':
+        logger.warning(f"Integrity check after schema update: {integrity[0]}")
 
 
 def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
@@ -741,12 +773,15 @@ def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
 
         # Forward-compat migration: add FailedMovies to SpiderStats
         try:
-            conn.execute("ALTER TABLE SpiderStats ADD COLUMN FailedMovies TEXT DEFAULT ''")
+            conn.execute("ALTER TABLE SpiderStats ADD COLUMN FailedMovies TEXT")
         except sqlite3.OperationalError:
             pass
 
         _ensure_moviehistory_actor_columns(conn)
         _normalize_moviehistory_actor_column_order(conn)
+
+        if current > 0 and current < 10:
+            _migrate_defaults_to_null(conn)
 
         if current == 0:
             conn.execute("INSERT INTO SchemaVersion (Version) VALUES (?)", (SCHEMA_VERSION,))
@@ -828,9 +863,9 @@ def _moviehistory_actor_select_exprs_from_attached_old_db(conn: sqlite3.Connecti
     parts: List[str] = []
     for col in ("ActorName", "ActorGender", "ActorLink", "SupportingActors"):
         if col in names:
-            parts.append(f"COALESCE({col}, '')")
+            parts.append(col)
         else:
-            parts.append("''")
+            parts.append("NULL")
     return ", ".join(parts)
 
 
@@ -914,7 +949,7 @@ def _migrate_single_to_split():
         new_conn.executescript(ddl)
         new_conn.execute("ATTACH DATABASE ? AS old_db", (old_path,))
         try:
-            new_conn.execute("ALTER TABLE old_db.SpiderStats ADD COLUMN FailedMovies TEXT DEFAULT ''")
+            new_conn.execute("ALTER TABLE old_db.SpiderStats ADD COLUMN FailedMovies TEXT")
         except sqlite3.OperationalError:
             pass
         for table in tables:
@@ -1004,12 +1039,15 @@ def _init_single_legacy_db(db_path: str, *, force: bool = False):
 
         # Forward-compat migration: add FailedMovies to SpiderStats
         try:
-            conn.execute("ALTER TABLE SpiderStats ADD COLUMN FailedMovies TEXT DEFAULT ''")
+            conn.execute("ALTER TABLE SpiderStats ADD COLUMN FailedMovies TEXT")
         except sqlite3.OperationalError:
             pass
 
         _ensure_moviehistory_actor_columns(conn)
         _normalize_moviehistory_actor_column_order(conn)
+
+        if current > 0 and current < 10:
+            _migrate_defaults_to_null(conn)
 
         if current == 0:
             conn.execute("INSERT INTO SchemaVersion (Version) VALUES (?)", (SCHEMA_VERSION,))
@@ -1067,10 +1105,10 @@ def db_load_history(db_path: Optional[str] = None, phase: Optional[int] = None) 
                 'DateTimeVisited': m.get('DateTimeVisited', ''),
                 'PerfectMatchIndicator': bool(m.get('PerfectMatchIndicator', 0)),
                 'HiResIndicator': bool(m.get('HiResIndicator', 0)),
-                'ActorName': m.get('ActorName') or '',
-                'ActorGender': m.get('ActorGender') or '',
-                'ActorLink': m.get('ActorLink') or '',
-                'SupportingActors': m.get('SupportingActors') or '',
+                'ActorName': m.get('ActorName'),
+                'ActorGender': m.get('ActorGender'),
+                'ActorLink': m.get('ActorLink'),
+                'SupportingActors': m.get('SupportingActors'),
                 'torrent_types': torrent_types,
                 'torrents': torrents,
             }
@@ -1093,7 +1131,7 @@ def db_upsert_history(
     """Insert or update history across MovieHistory + TorrentHistory.
 
     Actor fields: when ``None``, existing MovieHistory values are left unchanged
-    on update; use ``''`` to clear. On insert, ``None`` becomes empty string.
+    on update; use ``''`` to clear. On insert, ``None`` stays NULL.
     """
     if magnet_links is None:
         magnet_links = {}
@@ -1113,16 +1151,13 @@ def db_upsert_history(
         ).fetchone()
 
         if existing is None:
-            ins_an = actor_name if actor_name is not None else ''
-            ins_ag = actor_gender if actor_gender is not None else ''
-            ins_al = actor_link if actor_link is not None else ''
-            ins_sup = supporting_actors if supporting_actors is not None else ''
             cur = conn.execute(
                 """INSERT INTO MovieHistory
                    (VideoCode, Href, DateTimeCreated, DateTimeUpdated, DateTimeVisited,
                     ActorName, ActorGender, ActorLink, SupportingActors)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (video_code, href, now, now, now, ins_an, ins_ag, ins_al, ins_sup),
+                (video_code, href, now, now, now,
+                 actor_name, actor_gender, actor_link, supporting_actors),
             )
             movie_id = cur.lastrowid
         else:
@@ -1139,17 +1174,17 @@ def db_upsert_history(
                     (movie_id,),
                 ).fetchone()
                 new_an = (
-                    actor_name if actor_name is not None else (row_m['ActorName'] or '')
+                    actor_name if actor_name is not None else row_m['ActorName']
                 )
                 new_ag = (
-                    actor_gender if actor_gender is not None else (row_m['ActorGender'] or '')
+                    actor_gender if actor_gender is not None else row_m['ActorGender']
                 )
                 new_al = (
-                    actor_link if actor_link is not None else (row_m['ActorLink'] or '')
+                    actor_link if actor_link is not None else row_m['ActorLink']
                 )
                 new_sup = (
                     supporting_actors if supporting_actors is not None
-                    else (row_m['SupportingActors'] or '')
+                    else row_m['SupportingActors']
                 )
                 conn.execute(
                     """UPDATE MovieHistory SET DateTimeUpdated=?, DateTimeVisited=?,
@@ -1314,12 +1349,12 @@ def db_replace_rclone_inventory(entries: List[dict], db_path: Optional[str] = No
                     FolderPath, FolderSize, FileCount, DateTimeScanned)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (e.get('VideoCode', e.get('video_code', '')),
-                 e.get('SensorCategory', e.get('sensor_category', '')),
-                 e.get('SubtitleCategory', e.get('subtitle_category', '')),
-                 e.get('FolderPath', e.get('folder_path', '')),
+                 e.get('SensorCategory', e.get('sensor_category')),
+                 e.get('SubtitleCategory', e.get('subtitle_category')),
+                 e.get('FolderPath', e.get('folder_path')),
                  int(e.get('FolderSize', e.get('folder_size', 0)) or 0),
                  int(e.get('FileCount', e.get('file_count', 0)) or 0),
-                 e.get('DateTimeScanned', e.get('scan_datetime', ''))),
+                 e.get('DateTimeScanned', e.get('scan_datetime'))),
             )
         return len(entries)
 
@@ -1342,12 +1377,12 @@ def db_append_rclone_inventory(entries: List[dict], db_path: Optional[str] = Non
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             [
                 (e.get('VideoCode', e.get('video_code', '')),
-                 e.get('SensorCategory', e.get('sensor_category', '')),
-                 e.get('SubtitleCategory', e.get('subtitle_category', '')),
-                 e.get('FolderPath', e.get('folder_path', '')),
+                 e.get('SensorCategory', e.get('sensor_category')),
+                 e.get('SubtitleCategory', e.get('subtitle_category')),
+                 e.get('FolderPath', e.get('folder_path')),
                  int(e.get('FolderSize', e.get('folder_size', 0)) or 0),
                  int(e.get('FileCount', e.get('file_count', 0)) or 0),
-                 e.get('DateTimeScanned', e.get('scan_datetime', '')))
+                 e.get('DateTimeScanned', e.get('scan_datetime')))
                 for e in entries
             ],
         )
@@ -1387,16 +1422,16 @@ def db_append_dedup_record(record: dict, db_path: Optional[str] = None) -> int:
                 NewTorrentCategory, DeletionReason,
                 DateTimeDetected, IsDeleted, DateTimeDeleted)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (record.get('VideoCode', record.get('video_code', '')),
-             record.get('ExistingSensor', record.get('existing_sensor', '')),
-             record.get('ExistingSubtitle', record.get('existing_subtitle', '')),
-             record.get('ExistingGdrivePath', record.get('existing_gdrive_path', '')),
+            (record.get('VideoCode', record.get('video_code')),
+             record.get('ExistingSensor', record.get('existing_sensor')),
+             record.get('ExistingSubtitle', record.get('existing_subtitle')),
+             record.get('ExistingGdrivePath', record.get('existing_gdrive_path')),
              int(record.get('ExistingFolderSize', record.get('existing_folder_size', 0)) or 0),
-             record.get('NewTorrentCategory', record.get('new_torrent_category', '')),
-             record.get('DeletionReason', record.get('deletion_reason', '')),
-             record.get('DateTimeDetected', record.get('detect_datetime', '')),
+             record.get('NewTorrentCategory', record.get('new_torrent_category')),
+             record.get('DeletionReason', record.get('deletion_reason')),
+             record.get('DateTimeDetected', record.get('detect_datetime')),
              1 if str(record.get('IsDeleted', record.get('is_deleted', 'False'))).lower() in ('true', '1') else 0,
-             record.get('DateTimeDeleted', record.get('delete_datetime', ''))),
+             record.get('DateTimeDeleted', record.get('delete_datetime'))),
         )
         if cur.rowcount == 0:
             return -1
@@ -1430,7 +1465,7 @@ def db_cleanup_deleted_records(
     with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         cur = conn.execute(
             "DELETE FROM DedupRecords "
-            "WHERE IsDeleted=1 AND DateTimeDeleted != '' AND DateTimeDeleted < ?",
+            "WHERE IsDeleted=1 AND DateTimeDeleted IS NOT NULL AND DateTimeDeleted < ?",
             (cutoff,),
         )
         return cur.rowcount
@@ -1452,16 +1487,16 @@ def db_save_dedup_records(rows: List[dict], db_path: Optional[str] = None) -> No
                     NewTorrentCategory, DeletionReason,
                     DateTimeDetected, IsDeleted, DateTimeDeleted)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (r.get('VideoCode', r.get('video_code', '')),
-                 r.get('ExistingSensor', r.get('existing_sensor', '')),
-                 r.get('ExistingSubtitle', r.get('existing_subtitle', '')),
-                 r.get('ExistingGdrivePath', r.get('existing_gdrive_path', '')),
+                (r.get('VideoCode', r.get('video_code')),
+                 r.get('ExistingSensor', r.get('existing_sensor')),
+                 r.get('ExistingSubtitle', r.get('existing_subtitle')),
+                 r.get('ExistingGdrivePath', r.get('existing_gdrive_path')),
                  int(r.get('ExistingFolderSize', r.get('existing_folder_size', 0)) or 0),
-                 r.get('NewTorrentCategory', r.get('new_torrent_category', '')),
-                 r.get('DeletionReason', r.get('deletion_reason', '')),
-                 r.get('DateTimeDetected', r.get('detect_datetime', '')),
+                 r.get('NewTorrentCategory', r.get('new_torrent_category')),
+                 r.get('DeletionReason', r.get('deletion_reason')),
+                 r.get('DateTimeDetected', r.get('detect_datetime')),
                  1 if str(r.get('IsDeleted', r.get('is_deleted', 'False'))).lower() in ('true', '1') else 0,
-                 r.get('DateTimeDeleted', r.get('delete_datetime', ''))),
+                 r.get('DateTimeDeleted', r.get('delete_datetime'))),
             )
 
 
@@ -1476,15 +1511,15 @@ def db_append_pikpak_history(record: dict, db_path: Optional[str] = None) -> int
                 DateTimeAddedToQb, DateTimeDeletedFromQb,
                 DateTimeUploadedToPikpak, TransferStatus, ErrorMessage)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (record.get('TorrentHash', record.get('torrent_hash', '')),
-             record.get('TorrentName', record.get('torrent_name', '')),
-             record.get('Category', record.get('category', '')),
-             record.get('MagnetUri', record.get('magnet_uri', '')),
-             record.get('DateTimeAddedToQb', record.get('added_to_qb_date', '')),
-             record.get('DateTimeDeletedFromQb', record.get('deleted_from_qb_date', '')),
-             record.get('DateTimeUploadedToPikpak', record.get('uploaded_to_pikpak_date', '')),
-             record.get('TransferStatus', record.get('transfer_status', '')),
-             record.get('ErrorMessage', record.get('error_message', ''))),
+            (record.get('TorrentHash', record.get('torrent_hash')),
+             record.get('TorrentName', record.get('torrent_name')),
+             record.get('Category', record.get('category')),
+             record.get('MagnetUri', record.get('magnet_uri')),
+             record.get('DateTimeAddedToQb', record.get('added_to_qb_date')),
+             record.get('DateTimeDeletedFromQb', record.get('deleted_from_qb_date')),
+             record.get('DateTimeUploadedToPikpak', record.get('uploaded_to_pikpak_date')),
+             record.get('TransferStatus', record.get('transfer_status')),
+             record.get('ErrorMessage', record.get('error_message'))),
         )
         return cur.lastrowid
 
@@ -1506,9 +1541,9 @@ def db_save_proxy_bans(records: List[dict], db_path: Optional[str] = None) -> No
             conn.execute(
                 "INSERT INTO ProxyBans (ProxyName, DateTimeBanned, DateTimeUnbanned) "
                 "VALUES (?, ?, ?)",
-                (r.get('ProxyName', r.get('proxy_name', '')),
-                 r.get('DateTimeBanned', r.get('ban_time', '')),
-                 r.get('DateTimeUnbanned', r.get('unban_time', ''))),
+                (r.get('ProxyName', r.get('proxy_name')),
+                 r.get('DateTimeBanned', r.get('ban_time')),
+                 r.get('DateTimeUnbanned', r.get('unban_time'))),
             )
 
 
@@ -1562,14 +1597,14 @@ def db_insert_report_rows(session_id: int, rows: List[dict], db_path: Optional[s
                    (SessionId, Href, VideoCode, Page, Actor, Rate, CommentNumber)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (session_id,
-                 row.get('href', ''), row.get('video_code', ''),
+                 row.get('href'), row.get('video_code'),
                  int(row['page']) if row.get('page') else None,
-                 row.get('actor', ''),
+                 row.get('actor'),
                  float(row['rate']) if row.get('rate') else None,
                  int(row['comment_number']) if row.get('comment_number') else None),
             )
             rm_id = cur.lastrowid
-            vc = row.get('video_code', '')
+            vc = row.get('video_code')
             for cat, size_cat, fc_cat, res_cat, sub_ind, cen_ind in _CATS:
                 magnet = (row.get(cat) or '').strip()
                 if magnet:
@@ -1581,7 +1616,7 @@ def db_insert_report_rows(session_id: int, rows: List[dict], db_path: Optional[s
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                         (rm_id, vc, magnet, sub_ind, cen_ind,
                          row.get(res_cat),
-                         row.get(size_cat, ''),
+                         row.get(size_cat),
                          int(row.get(fc_cat, 0) or 0)),
                     )
         return len(rows)
