@@ -263,6 +263,40 @@ class TestParseDetailPageInline:
         assert detail.parse_success is False
         assert detail.magnets == []
 
+    def test_actors_panel_na_placeholder(self):
+        from api.models import NO_ACTOR_LISTING_ACTOR_NAME
+
+        html = '''
+        <html><body>
+        <div class="video-meta-panel">
+          <div class="panel-block">
+            <strong>演員:</strong>
+            &nbsp;<span class="value">
+                N/A
+            </span>
+          </div>
+        </div>
+        <div id="magnets-content">
+            <div class="item columns is-desktop">
+                <div class="magnet-name">
+                    <a href="magnet:?xt=urn:btih:naactortest">
+                        <span class="name">TEST-1.torrent</span>
+                        <span class="meta">1GB, 1個文件</span>
+                    </a>
+                </div>
+                <span class="time">2024-01-01</span>
+            </div>
+        </div>
+        </body></html>
+        '''
+        detail = parse_detail_page(html)
+        assert detail.parse_success is True
+        assert detail.actors == []
+        assert detail.no_actor_listing is True
+        assert detail.get_first_actor_name() == NO_ACTOR_LISTING_ACTOR_NAME
+        assert detail.get_first_actor_href() == ''
+        assert detail.get_supporting_actors_json() == '[]'
+
 
 # ===================================================================
 # Detail parser – real HTML file

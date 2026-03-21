@@ -17,6 +17,7 @@ from api.models import (
     MovieDetail,
     IndexPageResult,
     CategoryPageResult,
+    NO_ACTOR_LISTING_ACTOR_NAME,
     TopPageResult,
 )
 
@@ -116,12 +117,26 @@ class TestMovieDetail:
         detail = MovieDetail()
         assert detail.title == ''
         assert detail.actors == []
+        assert detail.no_actor_listing is False
         assert detail.magnets == []
         assert detail.parse_success is True
 
     def test_get_first_actor_name_empty(self):
         detail = MovieDetail()
         assert detail.get_first_actor_name() == ''
+
+    def test_no_actor_listing_placeholder(self):
+        detail = MovieDetail(no_actor_listing=True)
+        assert detail.get_first_actor_name() == NO_ACTOR_LISTING_ACTOR_NAME
+        assert detail.get_first_actor_gender() == ''
+        assert detail.get_first_actor_href() == ''
+        assert detail.get_supporting_actors_json() == '[]'
+        d = detail.to_dict()
+        assert d['lead_actor'] == {
+            'name': NO_ACTOR_LISTING_ACTOR_NAME,
+            'href': '',
+            'gender': '',
+        }
 
     def test_get_first_actor_name(self):
         detail = MovieDetail(actors=[
