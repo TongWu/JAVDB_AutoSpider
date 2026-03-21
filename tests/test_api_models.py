@@ -18,6 +18,7 @@ from api.models import (
     IndexPageResult,
     CategoryPageResult,
     NO_ACTOR_LISTING_ACTOR_NAME,
+    NO_ACTOR_LISTING_ACTOR_GENDER,
     TopPageResult,
 )
 
@@ -128,14 +129,14 @@ class TestMovieDetail:
     def test_no_actor_listing_placeholder(self):
         detail = MovieDetail(no_actor_listing=True)
         assert detail.get_first_actor_name() == NO_ACTOR_LISTING_ACTOR_NAME
-        assert detail.get_first_actor_gender() == ''
+        assert detail.get_first_actor_gender() == NO_ACTOR_LISTING_ACTOR_GENDER
         assert detail.get_first_actor_href() == ''
         assert detail.get_supporting_actors_json() == '[]'
         d = detail.to_dict()
         assert d['lead_actor'] == {
             'name': NO_ACTOR_LISTING_ACTOR_NAME,
             'href': '',
-            'gender': '',
+            'gender': NO_ACTOR_LISTING_ACTOR_GENDER,
         }
 
     def test_get_first_actor_name(self):
@@ -150,6 +151,12 @@ class TestMovieDetail:
             ActorCredit(name='A', href='/actors/1', gender='female'),
         ])
         assert detail.get_first_actor_gender() == 'female'
+
+    def test_supporting_json_empty_array_when_only_lead(self):
+        detail = MovieDetail(actors=[
+            ActorCredit(name='OnlyLead', href='/actors/only', gender='female'),
+        ])
+        assert detail.get_supporting_actors_json() == '[]'
 
     def test_get_supporting_actors_json(self):
         detail = MovieDetail(actors=[
