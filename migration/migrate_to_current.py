@@ -15,6 +15,7 @@ Usage::
     python3 migration/migrate_to_current.py [--backup] [--verify] [--dry-run]
     python3 migration/migrate_to_current.py --normalize-datetimes
     python3 migration/migrate_to_current.py --backfill-actors [--limit N] [--no-proxy]
+    python3 migration/migrate_to_current.py --align-inventory-history [--align-limit N] [--align-use-proxy]
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from types import SimpleNamespace
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(project_root)
@@ -75,12 +77,74 @@ def main() -> int:
         action="store_true",
         help="Backfill: enable CF bypass on first fetch attempt",
     )
+    parser.add_argument(
+        "--align-inventory-history",
+        action="store_true",
+        help="Align inventory-only codes into MovieHistory with JavDB search/detail enrichment",
+    )
+    parser.add_argument(
+        "--align-limit",
+        type=int,
+        default=0,
+        help="Alignment: max missing codes to process (0 = all)",
+    )
+    parser.add_argument(
+        "--align-codes",
+        type=str,
+        default='',
+        help="Alignment: comma-separated video codes override",
+    )
+    parser.add_argument(
+        "--align-max-search-pages",
+        type=int,
+        default=3,
+        help="Alignment: max search pages per code",
+    )
+    parser.add_argument(
+        "--align-use-proxy",
+        action="store_true",
+        help="Alignment: use spider proxy pool",
+    )
+    parser.add_argument(
+        "--align-use-cf-bypass",
+        action="store_true",
+        help="Alignment: enable CF bypass for search/detail fetching",
+    )
+    parser.add_argument(
+        "--align-enqueue-qb",
+        action="store_true",
+        help="Alignment: enqueue upgrade magnets to qBittorrent",
+    )
+    parser.add_argument(
+        "--align-execute-soft-delete",
+        action="store_true",
+        help="Alignment: execute rclone soft-delete move using generated plan CSV",
+    )
+    parser.add_argument(
+        "--align-soft-delete-backup-prefix",
+        type=str,
+        default='',
+        help="Alignment: backup prefix for rclone soft-delete destination",
+    )
+    parser.add_argument(
+        "--align-output-dir",
+        type=str,
+        default='',
+        help="Alignment: output directory for generated reports/plan files",
+    )
+    parser.add_argument(
+        "--align-qb-category",
+        type=str,
+        default='',
+        help="Alignment: qBittorrent category override for upgrade enqueue",
+    )
     args = parser.parse_args()
 
     import utils.db as db_mod
-    from utils.config_helper import use_sqlite
+    from utils.config_helper import use_sqlite, cfg
 
     from migration.tools.migrate_v6_to_v7_split import _normalize_three_dbs
+    from migration.tools.align_inventory_with_moviehistory import run_alignment
     from migration.tools.migrate_v7_to_v8 import (
         backup_db_file,
         run_actor_backfill,
@@ -138,7 +202,31 @@ def main() -> int:
         if brc != 0:
             return brc
 
-    if not args.backfill_actors and not args.skip_schema and not args.dry_run:
+    if args.align_inventory_history:
+        align_output_dir = args.align_output_dir or os.path.join(cfg('REPORTS_DIR', 'reports'), 'Migration')
+        align_ns = SimpleNamespace(
+            dry_run=args.dry_run,
+            limit=args.align_limit,
+            codes=args.align_codes,
+            max_search_pages=args.align_max_search_pages,
+            use_proxy=args.align_use_proxy,
+            use_cf_bypass=args.align_use_cf_bypass,
+            output_dir=align_output_dir,
+            enqueue_qb=args.align_enqueue_qb,
+            qb_category=args.align_qb_category,
+            execute_soft_delete=args.align_execute_soft_delete,
+            soft_delete_backup_prefix=args.align_soft_delete_backup_prefix,
+        )
+        arc = run_alignment(align_ns)
+        if arc != 0:
+            return arc
+
+    if (
+        not args.backfill_actors
+        and not args.align_inventory_history
+        and not args.skip_schema
+        and not args.dry_run
+    ):
         logger.info("Tip: use --backfill-actors to populate actor fields from the site.")
 
     logger.info("migrate_to_current finished.")
