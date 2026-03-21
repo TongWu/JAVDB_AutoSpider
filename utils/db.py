@@ -814,6 +814,26 @@ def _backfill_torrent_sizes_after_split(history_db: str, reports_db: str):
         logger.warning(f"TorrentHistory.Size backfill skipped: {e}")
 
 
+def _moviehistory_actor_select_exprs_from_attached_old_db(conn: sqlite3.Connection) -> str:
+    """SQL expressions for ActorName…SupportingActors when copying ``old_db.MovieHistory``.
+
+    Legacy single DBs may predate some actor columns; missing columns become ``''``.
+    Existing values are preserved via ``COALESCE(col, '')``.
+    """
+    try:
+        rows = conn.execute("PRAGMA old_db.table_info(MovieHistory)").fetchall()
+    except sqlite3.OperationalError:
+        rows = []
+    names = {r[1] for r in rows}
+    parts: List[str] = []
+    for col in ("ActorName", "ActorGender", "ActorLink", "SupportingActors"):
+        if col in names:
+            parts.append(f"COALESCE({col}, '')")
+        else:
+            parts.append("''")
+    return ", ".join(parts)
+
+
 def _migrate_single_to_split():
     """Migrate a legacy single-DB (v6) into three separate databases.
 
@@ -900,12 +920,15 @@ def _migrate_single_to_split():
         for table in tables:
             try:
                 if table == 'MovieHistory':
+                    actor_exprs = _moviehistory_actor_select_exprs_from_attached_old_db(
+                        new_conn,
+                    )
                     new_conn.execute(
-                        """INSERT INTO main.MovieHistory (
+                        f"""INSERT INTO main.MovieHistory (
                             Id, VideoCode, Href, ActorName, ActorGender, ActorLink, SupportingActors,
                             DateTimeCreated, DateTimeUpdated, DateTimeVisited,
                             PerfectMatchIndicator, HiResIndicator)
-                        SELECT Id, VideoCode, Href, '', '', '', '',
+                        SELECT Id, VideoCode, Href, {actor_exprs},
                                DateTimeCreated, DateTimeUpdated, DateTimeVisited,
                                PerfectMatchIndicator, HiResIndicator
                         FROM old_db.MovieHistory"""
