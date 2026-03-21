@@ -9,7 +9,12 @@ sys.path.insert(0, project_root)
 
 import pytest
 
-from api.parsers.index_parser import parse_index_page, parse_category_page, parse_top_page
+from api.parsers.index_parser import (
+    parse_index_page,
+    parse_category_page,
+    parse_top_page,
+    find_exact_video_code_match,
+)
 from api.parsers.detail_parser import parse_detail_page
 from api.parsers.common import (
     extract_rate_and_comments,
@@ -98,6 +103,10 @@ class TestDetectPageType:
     def test_unknown(self):
         assert detect_page_type('<html></html>') == 'unknown'
 
+    def test_search_page(self):
+        html = '<!-- saved from url=(0038)https://javdb.com/search?q=JAC-228&f=all -->'
+        assert detect_page_type(html) == 'search'
+
 
 # ===================================================================
 # Index parser – inline HTML
@@ -171,6 +180,27 @@ class TestParseIndexPageRealHTML:
         result = parse_index_page(html, page_num=1)
         entries_with_dates = [m for m in result.movies if m.release_date]
         assert len(entries_with_dates) > 0
+
+
+class TestParseSearchPageRealHTML:
+    def test_search_page_parses_entries(self):
+        html = _load_html('search_JAC-228.html')
+        result = parse_index_page(html, page_num=1)
+        assert result.has_movie_list is True
+        assert len(result.movies) > 0
+
+    def test_search_page_exact_video_code_match(self):
+        html = _load_html('search_JAC-228.html')
+        result = parse_index_page(html, page_num=1)
+        matched = find_exact_video_code_match(result.movies, 'JAC-228')
+        assert matched is not None
+        assert matched.video_code == 'JAC-228'
+
+    def test_search_page_no_exact_match(self):
+        html = _load_html('search_JAC-228.html')
+        result = parse_index_page(html, page_num=1)
+        matched = find_exact_video_code_match(result.movies, 'JAC-999')
+        assert matched is None
 
 
 class TestParseCategoryPageRealHTML:
