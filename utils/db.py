@@ -33,7 +33,7 @@ OPERATIONS_DB_PATH = cfg('OPERATIONS_DB_PATH', os.path.join(_REPORTS_DIR, 'opera
 # Legacy single-DB path — kept for migration source detection
 DB_PATH = cfg('SQLITE_DB_PATH', os.path.join(_REPORTS_DIR, 'javdb_autospider.db'))
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 # ── Connection management ────────────────────────────────────────────────
 
@@ -126,7 +126,9 @@ CREATE TABLE IF NOT EXISTS MovieHistory (
     VideoCode TEXT NOT NULL,
     Href TEXT NOT NULL UNIQUE,
     ActorName TEXT DEFAULT '',
+    ActorGender TEXT DEFAULT '',
     ActorLink TEXT DEFAULT '',
+    SupportingActors TEXT DEFAULT '',
     DateTimeCreated TEXT,
     DateTimeUpdated TEXT,
     DateTimeVisited TEXT,
@@ -607,7 +609,11 @@ def _migrate_v5_to_v6(conn):
 
 
 def _ensure_moviehistory_actor_columns(conn: sqlite3.Connection) -> None:
-    """Add ActorName / ActorLink to MovieHistory when missing (v7 → v8)."""
+    """Add actor-related columns to MovieHistory when missing (v7 → v8 → v9).
+
+    Storage order must match ``_HISTORY_DDL``: ActorName, ActorGender, ActorLink,
+    SupportingActors (Gender between Name and Link; supporting cast after Link).
+    """
     if not _has_table(conn, 'MovieHistory'):
         return
     try:
@@ -615,9 +621,101 @@ def _ensure_moviehistory_actor_columns(conn: sqlite3.Connection) -> None:
     except sqlite3.OperationalError:
         pass
     try:
+        conn.execute("ALTER TABLE MovieHistory ADD COLUMN ActorGender TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
+    try:
         conn.execute("ALTER TABLE MovieHistory ADD COLUMN ActorLink TEXT DEFAULT ''")
     except sqlite3.OperationalError:
         pass
+    try:
+        conn.execute("ALTER TABLE MovieHistory ADD COLUMN SupportingActors TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
+
+
+def _moviehistory_actor_column_names(conn: sqlite3.Connection) -> List[str]:
+    rows = conn.execute("PRAGMA table_info(MovieHistory)").fetchall()
+    return [r[1] for r in rows]
+
+
+def _moviehistory_actor_columns_all_present(names: List[str]) -> bool:
+    req = frozenset(
+        ("ActorName", "ActorGender", "ActorLink", "SupportingActors"),
+    )
+    return req.issubset(set(names))
+
+
+def _moviehistory_actor_columns_physical_order_ok(names: List[str]) -> bool:
+    """True iff the four actor columns appear in storage order: Name < Gender < Link < Supporting."""
+    if not _moviehistory_actor_columns_all_present(names):
+        return False
+    idx = {k: names.index(k) for k in ("ActorName", "ActorGender", "ActorLink", "SupportingActors")}
+    return (
+        idx["ActorName"]
+        < idx["ActorGender"]
+        < idx["ActorLink"]
+        < idx["SupportingActors"]
+    )
+
+
+def _normalize_moviehistory_actor_column_order(conn: sqlite3.Connection) -> None:
+    """Rebuild MovieHistory if actor columns were added in a non-canonical order (legacy ALTER)."""
+    if not _has_table(conn, 'MovieHistory'):
+        return
+    names = _moviehistory_actor_column_names(conn)
+    if not _moviehistory_actor_columns_all_present(names):
+        return
+    if _moviehistory_actor_columns_physical_order_ok(names):
+        return
+    logger.info(
+        "MovieHistory: rebuilding table so columns are ordered "
+        "ActorName, ActorGender, ActorLink, SupportingActors (SQLite storage order)",
+    )
+    conn.execute("PRAGMA foreign_keys=OFF")
+    conn.executescript(
+        """
+        CREATE TABLE MovieHistory__colorder (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            VideoCode TEXT NOT NULL,
+            Href TEXT NOT NULL UNIQUE,
+            ActorName TEXT DEFAULT '',
+            ActorGender TEXT DEFAULT '',
+            ActorLink TEXT DEFAULT '',
+            SupportingActors TEXT DEFAULT '',
+            DateTimeCreated TEXT,
+            DateTimeUpdated TEXT,
+            DateTimeVisited TEXT,
+            PerfectMatchIndicator INTEGER DEFAULT 0,
+            HiResIndicator INTEGER DEFAULT 0
+        );
+        INSERT INTO MovieHistory__colorder (
+            Id, VideoCode, Href, ActorName, ActorGender, ActorLink, SupportingActors,
+            DateTimeCreated, DateTimeUpdated, DateTimeVisited,
+            PerfectMatchIndicator, HiResIndicator
+        )
+        SELECT Id, VideoCode, Href,
+            COALESCE(ActorName, ''), COALESCE(ActorGender, ''), COALESCE(ActorLink, ''),
+            COALESCE(SupportingActors, ''),
+            DateTimeCreated, DateTimeUpdated, DateTimeVisited,
+            COALESCE(PerfectMatchIndicator, 0), COALESCE(HiResIndicator, 0)
+        FROM MovieHistory;
+        DROP TABLE MovieHistory;
+        ALTER TABLE MovieHistory__colorder RENAME TO MovieHistory;
+        CREATE INDEX IF NOT EXISTS idx_movie_history_video_code ON MovieHistory(VideoCode);
+        """
+    )
+    conn.execute("PRAGMA foreign_keys=ON")
+
+
+def moviehistory_actor_layout_ok(conn: sqlite3.Connection) -> bool:
+    """True if MovieHistory exists with ActorName, ActorGender, ActorLink, SupportingActors in that storage order."""
+    if not _has_table(conn, "MovieHistory"):
+        return False
+    names = _moviehistory_actor_column_names(conn)
+    return _moviehistory_actor_columns_all_present(names) and _moviehistory_actor_columns_physical_order_ok(
+        names
+    )
 
 
 def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
@@ -648,6 +746,7 @@ def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
             pass
 
         _ensure_moviehistory_actor_columns(conn)
+        _normalize_moviehistory_actor_column_order(conn)
 
         if current == 0:
             conn.execute("INSERT INTO SchemaVersion (Version) VALUES (?)", (SCHEMA_VERSION,))
@@ -803,10 +902,10 @@ def _migrate_single_to_split():
                 if table == 'MovieHistory':
                     new_conn.execute(
                         """INSERT INTO main.MovieHistory (
-                            Id, VideoCode, Href, ActorName, ActorLink,
+                            Id, VideoCode, Href, ActorName, ActorGender, ActorLink, SupportingActors,
                             DateTimeCreated, DateTimeUpdated, DateTimeVisited,
                             PerfectMatchIndicator, HiResIndicator)
-                        SELECT Id, VideoCode, Href, '', '',
+                        SELECT Id, VideoCode, Href, '', '', '', '',
                                DateTimeCreated, DateTimeUpdated, DateTimeVisited,
                                PerfectMatchIndicator, HiResIndicator
                         FROM old_db.MovieHistory"""
@@ -887,6 +986,7 @@ def _init_single_legacy_db(db_path: str, *, force: bool = False):
             pass
 
         _ensure_moviehistory_actor_columns(conn)
+        _normalize_moviehistory_actor_column_order(conn)
 
         if current == 0:
             conn.execute("INSERT INTO SchemaVersion (Version) VALUES (?)", (SCHEMA_VERSION,))
@@ -945,7 +1045,9 @@ def db_load_history(db_path: Optional[str] = None, phase: Optional[int] = None) 
                 'PerfectMatchIndicator': bool(m.get('PerfectMatchIndicator', 0)),
                 'HiResIndicator': bool(m.get('HiResIndicator', 0)),
                 'ActorName': m.get('ActorName') or '',
+                'ActorGender': m.get('ActorGender') or '',
                 'ActorLink': m.get('ActorLink') or '',
+                'SupportingActors': m.get('SupportingActors') or '',
                 'torrent_types': torrent_types,
                 'torrents': torrents,
             }
@@ -960,14 +1062,15 @@ def db_upsert_history(
     file_count_links: Optional[Dict[str, int]] = None,
     resolution_links: Optional[Dict[str, Optional[int]]] = None,
     actor_name: Optional[str] = None,
+    actor_gender: Optional[str] = None,
     actor_link: Optional[str] = None,
+    supporting_actors: Optional[str] = None,
     db_path: Optional[str] = None,
 ) -> None:
     """Insert or update history across MovieHistory + TorrentHistory.
 
-    *actor_name* / *actor_link*: when ``None``, existing MovieHistory values are
-    left unchanged on update; use ``''`` to clear. On insert, ``None`` becomes
-    empty string.
+    Actor fields: when ``None``, existing MovieHistory values are left unchanged
+    on update; use ``''`` to clear. On insert, ``None`` becomes empty string.
     """
     if magnet_links is None:
         magnet_links = {}
@@ -988,32 +1091,47 @@ def db_upsert_history(
 
         if existing is None:
             ins_an = actor_name if actor_name is not None else ''
+            ins_ag = actor_gender if actor_gender is not None else ''
             ins_al = actor_link if actor_link is not None else ''
+            ins_sup = supporting_actors if supporting_actors is not None else ''
             cur = conn.execute(
                 """INSERT INTO MovieHistory
                    (VideoCode, Href, DateTimeCreated, DateTimeUpdated, DateTimeVisited,
-                    ActorName, ActorLink)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (video_code, href, now, now, now, ins_an, ins_al),
+                    ActorName, ActorGender, ActorLink, SupportingActors)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (video_code, href, now, now, now, ins_an, ins_ag, ins_al, ins_sup),
             )
             movie_id = cur.lastrowid
         else:
             movie_id = existing['Id']
-            if actor_name is not None or actor_link is not None:
+            if (
+                actor_name is not None
+                or actor_gender is not None
+                or actor_link is not None
+                or supporting_actors is not None
+            ):
                 row_m = conn.execute(
-                    "SELECT ActorName, ActorLink FROM MovieHistory WHERE Id=?",
+                    """SELECT ActorName, ActorGender, ActorLink, SupportingActors
+                       FROM MovieHistory WHERE Id=?""",
                     (movie_id,),
                 ).fetchone()
                 new_an = (
                     actor_name if actor_name is not None else (row_m['ActorName'] or '')
                 )
+                new_ag = (
+                    actor_gender if actor_gender is not None else (row_m['ActorGender'] or '')
+                )
                 new_al = (
                     actor_link if actor_link is not None else (row_m['ActorLink'] or '')
                 )
+                new_sup = (
+                    supporting_actors if supporting_actors is not None
+                    else (row_m['SupportingActors'] or '')
+                )
                 conn.execute(
                     """UPDATE MovieHistory SET DateTimeUpdated=?, DateTimeVisited=?,
-                       ActorName=?, ActorLink=? WHERE Id=?""",
-                    (now, now, new_an, new_al, movie_id),
+                       ActorName=?, ActorGender=?, ActorLink=?, SupportingActors=? WHERE Id=?""",
+                    (now, now, new_an, new_ag, new_al, new_sup, movie_id),
                 )
             else:
                 conn.execute(
@@ -1115,10 +1233,11 @@ def db_batch_update_last_visited(hrefs: List[str], db_path: Optional[str] = None
 
 
 def db_batch_update_movie_actors(
-    updates: List[Tuple[str, str, str]],
+    updates: List[Tuple[str, str, str, str, str]],
     db_path: Optional[str] = None,
 ) -> int:
-    """Set ActorName, ActorLink and DateTimeUpdated for each (href, actor_name, actor_link).
+    """Set actor columns and DateTimeUpdated for each
+    ``(href, actor_name, actor_gender, actor_link, supporting_actors)``.
 
     Returns the number of rows matched by UPDATE (may be 0 for unknown hrefs).
     """
@@ -1127,11 +1246,12 @@ def db_batch_update_movie_actors(
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     total = 0
     with get_db(db_path or HISTORY_DB_PATH) as conn:
-        for href, an, al in updates:
+        for href, an, ag, al, sup in updates:
             cur = conn.execute(
-                """UPDATE MovieHistory SET ActorName=?, ActorLink=?, DateTimeUpdated=?
+                """UPDATE MovieHistory SET ActorName=?, ActorGender=?, ActorLink=?,
+                   SupportingActors=?, DateTimeUpdated=?
                    WHERE Href=?""",
-                (an, al, now, href),
+                (an, ag, al, sup, now, href),
             )
             total += cur.rowcount
     return total
