@@ -131,6 +131,7 @@ _PAGE_TYPE_PATTERNS = {
     'series': re.compile(r'/series/'),
     'directors': re.compile(r'/directors/'),
     'video_codes': re.compile(r'/video_codes/'),
+    'search': re.compile(r'/search(?:\?|$)'),
     'tags': re.compile(r'/tags'),
 }
 
