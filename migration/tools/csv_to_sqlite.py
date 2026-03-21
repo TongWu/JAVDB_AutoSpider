@@ -118,12 +118,25 @@ def migrate_history(csv_path: str, db_path: str, dry_run: bool = False) -> int:
             if existing:
                 conn.execute("DELETE FROM TorrentHistory WHERE MovieHistoryId = ?", (existing[0],))
 
+            # Eleven columns ↔ eleven bound values (actor fields empty for legacy CSV import).
             conn.execute(
                 """INSERT OR REPLACE INTO MovieHistory
                    (VideoCode, Href, DateTimeCreated, DateTimeUpdated, DateTimeVisited,
                     PerfectMatchIndicator, HiResIndicator, ActorName, ActorGender, ActorLink, SupportingActors)
-                   VALUES (?, ?, ?, ?, ?, ?, 0, '', '', '', '')""",
-                (video_code, href, create_dt, update_dt, last_visited, perfect_match),
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    video_code,
+                    href,
+                    create_dt,
+                    update_dt,
+                    last_visited,
+                    perfect_match,
+                    0,
+                    '',
+                    '',
+                    '',
+                    '',
+                ),
             )
             movie_id = conn.execute(
                 "SELECT Id FROM MovieHistory WHERE Href = ?", (href,)
