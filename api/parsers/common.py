@@ -4,6 +4,7 @@ Shared parsing utilities used by both index and detail parsers.
 
 from __future__ import annotations
 
+import json
 import re
 import logging
 from typing import Tuple, Optional
@@ -64,6 +65,61 @@ def normalize_javdb_href_path(href: str) -> str:
             return ''
         return path if path.startswith('/') else f'/{path}'
     return h if h.startswith('/') else (f'/{h}' if h else '')
+
+
+def javdb_absolute_url(href_or_path: str, base_url: str) -> str:
+    """Return an absolute JavDB URL for a site path or JavDB absolute URL.
+
+    Non-site links like ``magnet:`` are returned unchanged.
+    """
+    if not href_or_path:
+        return ''
+    h = href_or_path.strip()
+    if not h:
+        return ''
+    if h.startswith('magnet:'):
+        return h
+    path = normalize_javdb_href_path(h)
+    if not path:
+        return ''
+    return f"{base_url.rstrip('/')}{path}"
+
+
+def movie_href_lookup_values(href: str, base_url: str) -> Tuple[str, str]:
+    """Return both path-form and absolute-form values for Href lookup."""
+    path = normalize_javdb_href_path(href)
+    if not path:
+        return '', ''
+    return path, javdb_absolute_url(path, base_url)
+
+
+def absolutize_supporting_actors_json(json_str: str, base_url: str) -> str:
+    """Absolutize supporting-actor URL keys in JSON array payload.
+
+    Handles both ``link`` (current writer) and ``href`` (legacy/imported).
+    """
+    if not json_str:
+        return json_str
+    raw = json_str.strip()
+    if not raw:
+        return json_str
+    try:
+        payload = json.loads(raw)
+    except (ValueError, TypeError):
+        logger.warning("Invalid SupportingActors JSON, keep original payload")
+        return json_str
+    if not isinstance(payload, list):
+        logger.warning("SupportingActors is not a JSON array, keep original payload")
+        return json_str
+
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        for key in ('link', 'href'):
+            value = item.get(key)
+            if isinstance(value, str) and value.strip():
+                item[key] = javdb_absolute_url(value, base_url)
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def extract_movie_link(a_tag: Tag) -> Optional[MovieLink]:
