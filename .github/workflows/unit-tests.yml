@@ -120,6 +120,12 @@ jobs:
       run: |
         pytest tests/ -v --tb=short --cov=. --cov-report=xml --cov-report=term-missing
 
+    - name: Run fallback tests without Rust extension
+      run: |
+        pip uninstall -y javdb-rust-core || true
+        pip uninstall -y javdb_rust_core || true
+        pytest tests/test_rust_adapters_fallback.py tests/test_dedup_checker_rust_adapter.py -v --tb=short
+
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v5
       if: matrix.python-version == '3.12'
