@@ -49,13 +49,13 @@ class TestInitDb:
               DateTimeCreated TEXT,
               DateTimeUpdated TEXT,
               DateTimeVisited TEXT,
-              PerfectMatchIndicator INTEGER DEFAULT 0,
-              HiResIndicator INTEGER DEFAULT 0
+              PerfectMatchIndicator INTEGER,
+              HiResIndicator INTEGER
             );
-            ALTER TABLE MovieHistory ADD COLUMN ActorName TEXT DEFAULT '';
-            ALTER TABLE MovieHistory ADD COLUMN ActorLink TEXT DEFAULT '';
-            ALTER TABLE MovieHistory ADD COLUMN ActorGender TEXT DEFAULT '';
-            ALTER TABLE MovieHistory ADD COLUMN SupportingActors TEXT DEFAULT '';
+            ALTER TABLE MovieHistory ADD COLUMN ActorName TEXT;
+            ALTER TABLE MovieHistory ADD COLUMN ActorLink TEXT;
+            ALTER TABLE MovieHistory ADD COLUMN ActorGender TEXT;
+            ALTER TABLE MovieHistory ADD COLUMN SupportingActors TEXT;
             """
         )
         conn.commit()
@@ -315,7 +315,7 @@ class TestDedupRecords:
             'existing_subtitle': '无字', 'existing_gdrive_path': f'remote:/{code}',
             'existing_folder_size': 2048, 'new_torrent_category': '有码',
             'deletion_reason': 'Subtitle upgrade', 'detect_datetime': '2024-01-01',
-            'is_deleted': 0, 'delete_datetime': '',
+            'is_deleted': 0, 'delete_datetime': None,
         }
         row.update(kw)
         return row
@@ -404,8 +404,8 @@ class TestDedupRecords:
         assert 'PENDING' in codes
 
     def test_cleanup_skips_empty_delete_datetime(self, _isolate_sqlite):
-        """Edge 3a: is_deleted=1 but delete_datetime='' should be kept."""
-        r = self._rec('ANOMALY', is_deleted=1, delete_datetime='')
+        """Edge 3a: is_deleted=1 but delete_datetime=NULL should be kept."""
+        r = self._rec('ANOMALY', is_deleted=1, delete_datetime=None)
         db_mod.db_append_dedup_record(r)
         removed = db_mod.db_cleanup_deleted_records(older_than_days=0)
         assert removed == 0

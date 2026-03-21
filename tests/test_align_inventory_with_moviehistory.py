@@ -7,7 +7,7 @@ sys.path.insert(0, project_root)
 from migration.tools.align_inventory_with_moviehistory import (
     compute_missing_codes,
     _best_parsed_category,
-    _to_soft_delete_rows,
+    _to_purge_plan_rows,
 )
 
 
@@ -33,7 +33,7 @@ def test_best_parsed_category_prefers_hacked_subtitle():
     assert _best_parsed_category(magnet_links) == 'hacked_subtitle'
 
 
-def test_soft_delete_rows_only_lower_rank_entries():
+def test_purge_plan_rows_only_lower_rank_entries():
     entries = [
         {
             'FolderPath': 'drive:/root/2026/A/JAC-228 [有码-无字]',
@@ -52,14 +52,13 @@ def test_soft_delete_rows_only_lower_rank_entries():
         },
     ]
 
-    rows = _to_soft_delete_rows(
+    rows = _to_purge_plan_rows(
         video_code='JAC-228',
         inventory_entries=entries,
         parsed_best_rank=20,  # subtitle
         new_torrent_category='subtitle',
-        backup_prefix='drive:/backup_low',
     )
 
     assert len(rows) == 1
     assert rows[0]['source_path'].endswith('[有码-无字]')
-    assert rows[0]['destination_path'].startswith('drive:/backup_low/')
+    assert 'destination_path' not in rows[0]

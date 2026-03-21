@@ -203,7 +203,7 @@ class TestParseDetail:
         assert actor_info == 'Sample Actor'
         assert actor_gender == 'female'
         assert actor_link == '/actors/xyz'
-        assert supporting == ''
+        assert supporting == '[]'
     
     def test_parse_detail_magnet_structure(self, sample_detail_html):
         """Test that parsed magnets have correct structure."""
@@ -242,7 +242,7 @@ class TestParseDetail:
         assert actor_info == 'Test Actor'
         assert actor_gender == ''
         assert actor_link == '/actors/xyz'
-        assert supporting == ''
+        assert supporting == '[]'
     
     def test_parse_detail_extracts_size(self, sample_detail_html):
         """Test that size is extracted correctly."""
