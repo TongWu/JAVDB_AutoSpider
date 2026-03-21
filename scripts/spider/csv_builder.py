@@ -49,8 +49,8 @@ def collect_new_magnet_links(row: dict, magnet_links: dict):
     new_sizes = {}
     new_file_counts = {}
     new_resolutions = {}
-    for mtype in ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle'):
-        if row.get(mtype) and row[mtype] != '[DOWNLOADED PREVIOUSLY]':
+    for mtype in TORRENT_CATEGORIES:
+        if row.get(mtype) and row[mtype] != DOWNLOADED_PLACEHOLDER:
             new_magnets[mtype] = magnet_links.get(mtype, '')
             new_sizes[mtype] = magnet_links.get(f'size_{mtype}', '')
             new_file_counts[mtype] = magnet_links.get(f'file_count_{mtype}', 0)
