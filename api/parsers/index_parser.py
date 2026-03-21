@@ -177,6 +177,17 @@ def parse_index_page(html_content: str, page_num: int = 1) -> IndexPageResult:
     )
 
 
+def find_exact_video_code_match(entries: list[MovieIndexEntry], target_code: str) -> Optional[MovieIndexEntry]:
+    """Return the first entry whose video_code exactly matches *target_code*."""
+    normalized_target = (target_code or '').strip().upper()
+    if not normalized_target:
+        return None
+    for entry in entries:
+        if (entry.video_code or '').strip().upper() == normalized_target:
+            return entry
+    return None
+
+
 def parse_category_page(html_content: str, page_num: int = 1) -> CategoryPageResult:
     """Parse a category page (actors, makers, publishers, series, directors,
     video_codes, tags) and return entries plus category metadata."""
