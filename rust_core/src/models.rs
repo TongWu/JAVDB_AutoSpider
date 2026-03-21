@@ -225,6 +225,9 @@ impl MovieIndexEntry {
 // MovieDetail
 // ---------------------------------------------------------------------------
 
+/// Canonical value when 演員 panel has placeholder text and no /actors/ links (matches Python).
+pub const NO_ACTOR_LISTING_ACTOR_NAME: &str = "N/A";
+
 #[pyclass(name = "RustMovieDetail")]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MovieDetail {
@@ -260,6 +263,9 @@ pub struct MovieDetail {
     pub trailer_url: Option<String>,
     #[pyo3(get, set)]
     pub actors: Vec<ActorCredit>,
+    #[serde(default)]
+    #[pyo3(get, set)]
+    pub no_actor_listing: bool,
     #[pyo3(get, set)]
     pub magnets: Vec<MagnetInfo>,
     #[pyo3(get, set)]
@@ -291,6 +297,7 @@ impl Default for MovieDetail {
             fanart_urls: Vec::new(),
             trailer_url: None,
             actors: Vec::new(),
+            no_actor_listing: false,
             magnets: Vec::new(),
             review_count: 0,
             want_count: 0,
@@ -351,12 +358,19 @@ impl MovieDetail {
             .map(|a| a.to_dict(py))
             .collect::<Result<_, _>>()?;
         dict.set_item("actors", actor_dicts)?;
+        dict.set_item("no_actor_listing", self.no_actor_listing)?;
 
-        let lead = self
-            .actors
-            .first()
-            .map(|a| a.to_dict(py))
-            .transpose()?;
+        let lead: Option<Bound<'py, PyDict>> = if let Some(a) = self.actors.first() {
+            Some(a.to_dict(py)?)
+        } else if self.no_actor_listing {
+            let d = new_dict(py);
+            d.set_item("name", NO_ACTOR_LISTING_ACTOR_NAME)?;
+            d.set_item("href", "")?;
+            d.set_item("gender", "")?;
+            Some(d)
+        } else {
+            None
+        };
         dict.set_item("lead_actor", lead)?;
 
         let supporting: Vec<_> = self
@@ -382,7 +396,13 @@ impl MovieDetail {
     }
 
     fn get_first_actor_name(&self) -> String {
-        self.actors.first().map_or(String::new(), |a| a.name.clone())
+        if let Some(a) = self.actors.first() {
+            return a.name.clone();
+        }
+        if self.no_actor_listing {
+            return NO_ACTOR_LISTING_ACTOR_NAME.to_string();
+        }
+        String::new()
     }
 
     fn get_first_actor_gender(&self) -> String {
@@ -398,6 +418,9 @@ impl MovieDetail {
     }
 
     fn get_supporting_actors_json(&self) -> PyResult<String> {
+        if self.no_actor_listing {
+            return Ok("[]".to_string());
+        }
         if self.actors.len() <= 1 {
             return Ok(String::new());
         }
