@@ -1,3 +1,10 @@
+"""Deprecated legacy spider entry.
+
+This module is kept for rollback compatibility only.
+All new spider features should be implemented in `scripts/spider/`.
+See `docs/SPIDER_BASELINE_MAPPING.md` for capability mapping.
+"""
+
 import requests
 import time
 import re
