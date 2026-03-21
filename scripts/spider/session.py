@@ -1,6 +1,7 @@
 """Login / session-cookie management for the spider."""
 
 from utils.logging_config import get_logger
+from utils.rust_adapters.parser_adapter import is_login_page
 import scripts.spider.state as state
 from scripts.spider.config_loader import (
     LOGIN_FEATURE_AVAILABLE,
@@ -8,13 +9,6 @@ from scripts.spider.config_loader import (
 )
 
 logger = get_logger(__name__)
-
-try:
-    from javdb_rust_core import is_login_page as _rust_is_login_page
-    _RUST_LOGIN_CHECK = True
-except ImportError:
-    _RUST_LOGIN_CHECK = False
-
 
 def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None):
     """Attempt to refresh session cookie by logging in via login.py.
@@ -116,25 +110,6 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None):
     except Exception as e:
         logger.error(f"Unexpected error during login: {e}")
         return False, None, None
-
-
-def is_login_page(html: str) -> bool:
-    """Detect whether the returned HTML is a JavDB login page."""
-    if not html:
-        return False
-    if _RUST_LOGIN_CHECK:
-        try:
-            return _rust_is_login_page(html)
-        except Exception:
-            pass
-    from bs4 import BeautifulSoup
-    soup = BeautifulSoup(html, 'html.parser')
-    title_tag = soup.find('title')
-    if title_tag:
-        title_text = title_tag.get_text().strip().lower()
-        if '登入' in title_text or 'login' in title_text:
-            return True
-    return False
 
 
 def can_attempt_login(is_adhoc_mode: bool, is_index_page: bool = False) -> bool:

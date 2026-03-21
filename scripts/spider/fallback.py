@@ -2,6 +2,7 @@
 
 from utils.logging_config import get_logger
 from utils.parser import parse_detail
+from utils.rust_adapters.parser_adapter import validate_index_html as _validate_index_html_fast
 from utils.url_helper import get_page_url as _url_helper_get_page_url
 
 import scripts.spider.state as state
@@ -17,13 +18,6 @@ logger = get_logger(__name__)
 class AdhocLoginFailedError(Exception):
     """Raised when login fails on an index page in adhoc mode, causing the spider to abort."""
     pass
-
-try:
-    from javdb_rust_core import validate_index_html as _rust_validate_index_html
-    _RUST_VALIDATE = True
-except ImportError:
-    _RUST_VALIDATE = False
-
 
 def get_page_url(page_num, custom_url=None):
     """Generate URL for a specific page number."""
@@ -53,20 +47,13 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
         """Validate index page HTML. Returns (html, has_movie_list, is_valid_empty)."""
         nonlocal last_failed_html
 
-        if _RUST_VALIDATE:
-            try:
-                has_movie_list, is_valid_empty = _rust_validate_index_html(html)
-                if has_movie_list:
-                    logger.debug(f"[Page {page_num}] Success: {context_msg}")
-                    return html, True, False
-                if is_valid_empty:
-                    logger.info(f"[Page {page_num}] Valid empty page detected: {context_msg}")
-                    return html, False, True
-                last_failed_html = html
-                logger.debug(f"[Page {page_num}] Validation failed: {context_msg}")
-                return None, False, False
-            except Exception:
-                pass  # fall through to Python
+        has_movie_list, is_valid_empty = _validate_index_html_fast(html)
+        if has_movie_list:
+            logger.debug(f"[Page {page_num}] Success: {context_msg}")
+            return html, True, False
+        if is_valid_empty:
+            logger.info(f"[Page {page_num}] Valid empty page detected: {context_msg}")
+            return html, False, True
 
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(html, 'html.parser')
