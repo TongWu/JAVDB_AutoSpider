@@ -27,6 +27,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import queue as queue_module
 import shutil
@@ -252,6 +253,78 @@ class BackfillResult:
     is_skipped: bool = False
 
 
+def _promote_single_female_actor(
+    actor_name: str,
+    actor_gender: str,
+    actor_link: str,
+    supporting_actors: str,
+) -> tuple[str, str, str, str]:
+    """Promote the only female actor to lead when current lead is not female.
+
+    Rule applies only when:
+      1) every actor has explicit gender in {female, male}
+      2) exactly one actor is female
+      3) current lead is not female
+
+    Supporting actor relative order is preserved for everyone except the promoted
+    female actor and the original lead (which becomes the second actor).
+    """
+    lead_name = (actor_name or '').strip()
+    lead_gender = (actor_gender or '').strip().lower()
+    lead_link = (actor_link or '').strip()
+    supporting_raw = (supporting_actors or '').strip()
+
+    if not lead_name:
+        return lead_name, lead_gender, lead_link, supporting_raw
+    if lead_gender == 'female':
+        return lead_name, lead_gender, lead_link, supporting_raw
+    if not supporting_raw:
+        return lead_name, lead_gender, lead_link, supporting_raw
+
+    try:
+        supporting_list = json.loads(supporting_raw)
+    except (json.JSONDecodeError, TypeError):
+        return lead_name, lead_gender, lead_link, supporting_raw
+    if not isinstance(supporting_list, list) or not supporting_list:
+        return lead_name, lead_gender, lead_link, supporting_raw
+
+    actors = [{
+        'name': lead_name,
+        'gender': lead_gender,
+        'link': lead_link,
+    }]
+    for item in supporting_list:
+        if not isinstance(item, dict):
+            return lead_name, lead_gender, lead_link, supporting_raw
+        actors.append({
+            'name': str(item.get('name') or '').strip(),
+            'gender': str(item.get('gender') or '').strip().lower(),
+            'link': str(item.get('link') or '').strip(),
+        })
+
+    genders = [a['gender'] for a in actors]
+    if any(g not in {'female', 'male'} for g in genders):
+        return lead_name, lead_gender, lead_link, supporting_raw
+    if genders.count('female') != 1:
+        return lead_name, lead_gender, lead_link, supporting_raw
+
+    female_idx = genders.index('female')
+    if female_idx == 0:
+        return lead_name, lead_gender, lead_link, supporting_raw
+
+    promoted = actors[female_idx]
+    original_lead = actors[0]
+    others = [a for idx, a in enumerate(actors[1:], start=1) if idx != female_idx]
+    reordered = [promoted, original_lead, *others]
+    new_supporting = json.dumps(reordered[1:], ensure_ascii=False)
+    return (
+        reordered[0]['name'],
+        reordered[0]['gender'],
+        reordered[0]['link'],
+        new_supporting,
+    )
+
+
 def _apply_one_parallel_backfill_result(
     result: BackfillResult,
     *,
@@ -276,7 +349,13 @@ def _apply_one_parallel_backfill_result(
     ag = result.actor_gender.strip()
     al = result.actor_link.strip()
     sup = result.supporting_actors.strip()
+    an, ag, al, sup = _promote_single_female_actor(an, ag, al, sup)
     if not an and not al and not sup:
+        logger.debug(
+            "[%s] Skip UPDATE: empty actor fields (parse_success=%s)",
+            task.entry_index,
+            result.parse_success,
+        )
         return 0, 0, 0
 
     logger.debug("[%s] %s -> %r %r", task.entry_index, task.video_code, an, al)
@@ -657,10 +736,19 @@ class BackfillWorker(threading.Thread):
             an, ag, al, sup, success, used_cf, needs_login = self._try_direct_then_cf(task)
             if success:
                 cf_tag = " +CF" if used_cf else ""
-                logger.info(
-                    "[%s] Parsed %s%s [%s]",
-                    task.entry_index, task.video_code, cf_tag, self.proxy_name,
-                )
+                has_actor_row = bool(an.strip() or al.strip() or sup.strip())
+                if has_actor_row:
+                    logger.info(
+                        "[%s] Parsed %s%s [%s]",
+                        task.entry_index, task.video_code, cf_tag, self.proxy_name,
+                    )
+                else:
+                    logger.warning(
+                        "[%s] Page loaded%s [%s] but actor name/link/supporting are empty "
+                        "(parse_detail succeeded on magnets only; CF or HTML may differ from normal). "
+                        "%s",
+                        task.entry_index, cf_tag, self.proxy_name, task.video_code,
+                    )
                 self.result_queue.put(BackfillResult(
                     task=task, actor_name=an, actor_gender=ag, actor_link=al,
                     supporting_actors=sup, parse_success=True,
@@ -914,6 +1002,7 @@ def run_actor_backfill(
             ag = (actor_gender or "").strip()
             al = (actor_link or "").strip()
             sup = (supporting_actors or "").strip()
+            an, ag, al, sup = _promote_single_female_actor(an, ag, al, sup)
 
             if not an and not al and not sup:
                 logger.warning(
