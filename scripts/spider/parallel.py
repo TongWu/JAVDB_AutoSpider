@@ -75,7 +75,9 @@ class DetailResult:
     task: DetailTask
     magnets: list
     actor_info: str
+    actor_gender: str
     actor_link: str
+    supporting_actors: str
     parse_success: bool
     used_cf_bypass: bool
 
@@ -165,7 +167,7 @@ class ProxyWorker(threading.Thread):
     def _try_fetch_and_parse(self, task: DetailTask, use_cf: bool, context: str):
         """Attempt fetch + parse_detail.
 
-        Returns (magnets, actor_info, actor_link, success, needs_login).
+        Returns (magnets, actor_info, actor_gender, actor_link, supporting, success, needs_login).
         Login decisions are made at the run() level, not here.
         """
         logger.debug(f"[{self.proxy_name}] [{task.entry_index}] {context}")
@@ -175,41 +177,42 @@ class ProxyWorker(threading.Thread):
                 if is_login_page(html):
                     logger.warning(
                         f"[{self.proxy_name}] [{task.entry_index}] Login page detected: {context}")
-                    return [], '', '', False, True
+                    return [], '', '', '', '', False, True
 
-                magnets, actor_info, actor_link, ok = parse_detail(
-                    html, task.entry_index, skip_sleep=True)
+                m = parse_detail(html, task.entry_index, skip_sleep=True)
+                magnets, actor_info, actor_gender, actor_link, supporting, ok = m
                 if ok:
-                    return magnets, actor_info, actor_link, True, False
+                    return magnets, actor_info, actor_gender, actor_link, supporting, True, False
                 logger.debug(f"[{self.proxy_name}] [{task.entry_index}] parse failed: {context}")
             else:
                 logger.debug(f"[{self.proxy_name}] [{task.entry_index}] no HTML: {context}")
         except Exception as e:
             logger.debug(f"[{self.proxy_name}] [{task.entry_index}] error in {context}: {e}")
-        return [], '', '', False, False
+        return [], '', '', '', '', False, False
 
     def _try_direct_then_cf(self, task: DetailTask):
         """Try direct, then CF bypass.
 
-        Returns (magnets, actor_info, actor_link, success, used_cf, needs_login).
+        Returns (magnets, actor_info, actor_gender, actor_link, supporting, success, used_cf, needs_login).
         Short-circuits CF bypass if login is required (CF won't fix auth).
         """
         if self.needs_cf_bypass:
-            m, a, al, ok, needs_login = self._try_fetch_and_parse(task, True, "CF Bypass (marked)")
-            return m, a, al, ok, True, needs_login
+            m, a, ag, al, sup, ok, needs_login = self._try_fetch_and_parse(
+                task, True, "CF Bypass (marked)")
+            return m, a, ag, al, sup, ok, True, needs_login
 
-        m, a, al, ok, needs_login = self._try_fetch_and_parse(task, False, "Direct")
+        m, a, ag, al, sup, ok, needs_login = self._try_fetch_and_parse(task, False, "Direct")
         if ok:
-            return m, a, al, True, False, False
+            return m, a, ag, al, sup, True, False, False
         if needs_login:
-            return m, a, al, False, False, True
+            return m, a, ag, al, sup, False, False, True
 
-        m, a, al, ok, needs_login = self._try_fetch_and_parse(task, True, "CF Bypass")
+        m, a, ag, al, sup, ok, needs_login = self._try_fetch_and_parse(task, True, "CF Bypass")
         if ok:
             self.needs_cf_bypass = True
             logger.info(f"[{self.proxy_name}] CF Bypass succeeded — marking proxy for this runtime")
-            return m, a, al, True, True, False
-        return [], '', '', False, False, needs_login
+            return m, a, ag, al, sup, True, True, False
+        return [], '', '', '', '', False, False, needs_login
 
     def _try_login_refresh(self):
         """Per-worker login using this worker's own proxy.
@@ -286,8 +289,8 @@ class ProxyWorker(threading.Thread):
             f"Login required but login unavailable, marking as failed"
         )
         self.result_queue.put(DetailResult(
-            task=task, magnets=[], actor_info='', actor_link='',
-            parse_success=False, used_cf_bypass=False,
+            task=task, magnets=[], actor_info='', actor_gender='', actor_link='',
+            supporting_actors='', parse_success=False, used_cf_bypass=False,
         ))
 
     def _get_next_task(self) -> Optional[DetailTask]:
@@ -319,8 +322,8 @@ class ProxyWorker(threading.Thread):
             if self.proxy_name in task.failed_proxies:
                 if len(task.failed_proxies) >= self.total_workers:
                     self.result_queue.put(DetailResult(
-                        task=task, magnets=[], actor_info='', actor_link='',
-                        parse_success=False, used_cf_bypass=False,
+                        task=task, magnets=[], actor_info='', actor_gender='', actor_link='',
+                        supporting_actors='', parse_success=False, used_cf_bypass=False,
                     ))
                     continue
                 _requeue_front(self.detail_queue, task)
@@ -331,7 +334,8 @@ class ProxyWorker(threading.Thread):
                 self._sleep_mgr.sleep()
             self._first_request = False
 
-            magnets, actor_info, actor_link, success, used_cf, needs_login = self._try_direct_then_cf(task)
+            magnets, actor_info, actor_gender, actor_link, supporting, success, used_cf, needs_login = (
+                self._try_direct_then_cf(task))
             if success:
                 cf_tag = " +CF" if used_cf else ""
                 logger.info(
@@ -340,8 +344,9 @@ class ProxyWorker(threading.Thread):
                     f"[{self.proxy_name}]"
                 )
                 self.result_queue.put(DetailResult(
-                    task=task, magnets=magnets, actor_info=actor_info, actor_link=actor_link or '',
-                    parse_success=True, used_cf_bypass=used_cf,
+                    task=task, magnets=magnets, actor_info=actor_info,
+                    actor_gender=actor_gender or '', actor_link=actor_link or '',
+                    supporting_actors=supporting or '', parse_success=True, used_cf_bypass=used_cf,
                 ))
             elif needs_login:
                 self._handle_login_required(task)
@@ -533,7 +538,10 @@ def process_detail_entries_parallel(
             continue
 
         visited_hrefs.add(href)
-        actor_updates.append((href, result.actor_info or '', result.actor_link or ''))
+        actor_updates.append((
+            href, result.actor_info or '', result.actor_gender or '',
+            result.actor_link or '', result.supporting_actors or '',
+        ))
         magnet_links = extract_magnets(result.magnets, idx_str)
 
         should_process, history_torrent_types = should_process_movie(
@@ -594,7 +602,9 @@ def process_detail_entries_parallel(
                         new_magnet_links, size_links=new_sizes,
                         file_count_links=new_fc, resolution_links=new_res,
                         actor_name=result.actor_info or '',
+                        actor_gender=result.actor_gender or '',
                         actor_link=result.actor_link or '',
+                        supporting_actors=result.supporting_actors or '',
                     )
         else:
             no_new_torrents += 1
