@@ -11,8 +11,8 @@ pub mod scraper;
 pub mod url_helper;
 
 use models::{
-    CategoryPageResult, IndexPageResult, MagnetInfo, MovieDetail, MovieIndexEntry, MovieLink,
-    TagCategory, TagOption, TagPageResult, TopPageResult,
+    ActorCredit, CategoryPageResult, IndexPageResult, MagnetInfo, MovieDetail, MovieIndexEntry,
+    MovieLink, TagCategory, TagOption, TagPageResult, TopPageResult,
 };
 use proxy::ban_manager::{get_global_ban_manager, ProxyBanManager};
 use proxy::masking::{
@@ -85,6 +85,7 @@ fn javdb_rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // --- Models ---
     m.add_class::<MovieLink>()?;
+    m.add_class::<ActorCredit>()?;
     m.add_class::<MagnetInfo>()?;
     m.add_class::<MovieIndexEntry>()?;
     m.add_class::<MovieDetail>()?;
