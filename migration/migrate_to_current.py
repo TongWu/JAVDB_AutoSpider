@@ -15,7 +15,7 @@ Usage::
     python3 migration/migrate_to_current.py [--backup] [--verify] [--dry-run]
     python3 migration/migrate_to_current.py --normalize-datetimes
     python3 migration/migrate_to_current.py --backfill-actors [--limit N] [--no-proxy]
-    python3 migration/migrate_to_current.py --align-inventory-history [--align-limit N] [--align-use-proxy]
+    python3 migration/migrate_to_current.py --align-inventory-history [--align-limit N] [--align-use-proxy] [--align-execute-delete]
 """
 
 from __future__ import annotations
@@ -95,20 +95,9 @@ def main() -> int:
         help="Alignment: comma-separated video codes override",
     )
     parser.add_argument(
-        "--align-max-search-pages",
-        type=int,
-        default=3,
-        help="Alignment: max search pages per code",
-    )
-    parser.add_argument(
         "--align-use-proxy",
         action="store_true",
         help="Alignment: use spider proxy pool",
-    )
-    parser.add_argument(
-        "--align-use-cf-bypass",
-        action="store_true",
-        help="Alignment: enable CF bypass for search/detail fetching",
     )
     parser.add_argument(
         "--align-enqueue-qb",
@@ -116,15 +105,9 @@ def main() -> int:
         help="Alignment: enqueue upgrade magnets to qBittorrent",
     )
     parser.add_argument(
-        "--align-execute-soft-delete",
+        "--align-execute-delete",
         action="store_true",
-        help="Alignment: execute rclone soft-delete move using generated plan CSV",
-    )
-    parser.add_argument(
-        "--align-soft-delete-backup-prefix",
-        type=str,
-        default='',
-        help="Alignment: backup prefix for rclone soft-delete destination",
+        help="Alignment: run rclone purge on purge-plan CSV (destructive)",
     )
     parser.add_argument(
         "--align-output-dir",
@@ -208,14 +191,11 @@ def main() -> int:
             dry_run=args.dry_run,
             limit=args.align_limit,
             codes=args.align_codes,
-            max_search_pages=args.align_max_search_pages,
             use_proxy=args.align_use_proxy,
-            use_cf_bypass=args.align_use_cf_bypass,
             output_dir=align_output_dir,
             enqueue_qb=args.align_enqueue_qb,
             qb_category=args.align_qb_category,
-            execute_soft_delete=args.align_execute_soft_delete,
-            soft_delete_backup_prefix=args.align_soft_delete_backup_prefix,
+            execute_delete=args.align_execute_delete,
         )
         arc = run_alignment(align_ns)
         if arc != 0:
