@@ -55,6 +55,10 @@ PROXY_MODE = cfg('PROXY_MODE', 'single')
 PROXY_POOL = cfg('PROXY_POOL', [])
 PROXY_POOL_COOLDOWN_SECONDS = cfg('PROXY_POOL_COOLDOWN_SECONDS', 691200)  # 8 days
 PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
+_raw_login_proxy_name = cfg('LOGIN_PROXY_NAME', None)
+LOGIN_PROXY_NAME = (
+    _raw_login_proxy_name.strip() if isinstance(_raw_login_proxy_name, str) and _raw_login_proxy_name.strip() else None
+)
 
 # GPT / Login
 GPT_API_KEY = cfg('GPT_API_KEY', None)
