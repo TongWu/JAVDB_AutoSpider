@@ -131,6 +131,46 @@ fn extract_actors_with_gender(panel_blocks: &[ElementRef]) -> Vec<ActorCredit> {
     actors
 }
 
+fn value_span_has_actor_link(value_span: ElementRef) -> bool {
+    for a_tag in value_span.select(&SEL_A) {
+        let href = a_tag.value().attr("href").unwrap_or("");
+        if href.contains("/actors/") {
+            return true;
+        }
+    }
+    false
+}
+
+fn is_no_actor_placeholder_text(text: &str) -> bool {
+    let t = text.trim();
+    if t.is_empty() {
+        return false;
+    }
+    if t.eq_ignore_ascii_case("n/a") {
+        return true;
+    }
+    matches!(
+        t,
+        "N/A" | "无" | "無" | "—" | "–" | "-" | "－" | "暂无" | "暂无演员"
+    )
+}
+
+fn detect_no_actor_listing(panel_blocks: &[ElementRef]) -> bool {
+    let block = match find_panel_block(panel_blocks, "演員:") {
+        Some(b) => b,
+        None => return false,
+    };
+    let value_span = match block.select(&SEL_VALUE).next() {
+        Some(v) => v,
+        None => return false,
+    };
+    if value_span_has_actor_link(value_span) {
+        return false;
+    }
+    let raw = get_text_content(&value_span).trim().to_string();
+    is_no_actor_placeholder_text(&raw)
+}
+
 fn extract_text_from_panel(panel_blocks: &[ElementRef], label: &str) -> String {
     let block = match find_panel_block(panel_blocks, label) {
         Some(b) => b,
@@ -269,6 +309,9 @@ pub fn parse_detail_page(html_content: &str) -> MovieDetail {
     // Tags, Actors (with ♀/♂ markers)
     detail.tags = extract_links_from_panel(&panel_blocks, "類別:");
     detail.actors = extract_actors_with_gender(&panel_blocks);
+    if detail.actors.is_empty() {
+        detail.no_actor_listing = detect_no_actor_listing(&panel_blocks);
+    }
 
     // Poster URL
     if let Some(vmp) = video_meta_panel {
