@@ -25,6 +25,11 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
+from api.parsers.common import (  # noqa: E402
+    movie_href_lookup_values,
+    absolutize_supporting_actors_json,
+)
+from utils.config_helper import cfg  # noqa: E402
 from utils.db import HISTORY_DB_PATH  # noqa: E402
 
 _IDX_HREF = 2
@@ -60,6 +65,7 @@ def main() -> int:
     conn = sqlite3.connect(db_path)
     try:
         cur = conn.cursor()
+        base_url = cfg('BASE_URL', 'https://javdb.com')
         updated = 0
         missing_href = 0
         skipped_short = 0
@@ -70,10 +76,18 @@ def main() -> int:
                     skipped_short += 1
                     continue
                 href = row[_IDX_HREF]
-                supporting = row[_IDX_SUPPORTING]
+                supporting = absolutize_supporting_actors_json(row[_IDX_SUPPORTING], base_url)
+                path_href, abs_href = movie_href_lookup_values(href, base_url)
+                if path_href and abs_href:
+                    params = (supporting, path_href, abs_href)
+                    sql = "UPDATE MovieHistory SET SupportingActors = ? WHERE Href IN (?, ?)"
+                else:
+                    lookup = path_href or abs_href or href
+                    params = (supporting, lookup)
+                    sql = "UPDATE MovieHistory SET SupportingActors = ? WHERE Href = ?"
                 cur.execute(
-                    "UPDATE MovieHistory SET SupportingActors = ? WHERE Href = ?",
-                    (supporting, href),
+                    sql,
+                    params,
                 )
                 if cur.rowcount:
                     updated += cur.rowcount
