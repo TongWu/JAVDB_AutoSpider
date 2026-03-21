@@ -1016,6 +1016,33 @@ def rclone_purge(folder_path: str, dry_run: bool = False) -> bool:
         return False
 
 
+def rclone_move(folder_path: str, destination_path: str, dry_run: bool = False) -> bool:
+    """Execute ``rclone move <folder_path> <destination_path>``."""
+    if dry_run:
+        logger.info(f"[DRY-RUN] Would move: {folder_path} -> {destination_path}")
+        return True
+    cmd = ['rclone', 'move', folder_path, destination_path]
+    logger.info(f"Executing: {' '.join(cmd)}")
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        if result.returncode == 0:
+            logger.info(f"  ✓ Moved: {folder_path} -> {destination_path}")
+            return True
+        logger.error(
+            "  ✗ Failed to move %s -> %s: %s",
+            folder_path,
+            destination_path,
+            result.stderr.strip(),
+        )
+        return False
+    except subprocess.TimeoutExpired:
+        logger.error(f"  ✗ Timeout moving {folder_path} -> {destination_path}")
+        return False
+    except Exception as e:
+        logger.error(f"  ✗ Error moving {folder_path} -> {destination_path}: {e}")
+        return False
+
+
 def delete_folder(remote_path: str, dry_run: bool = True) -> Tuple[bool, str]:
     """Delete a folder from remote storage using ``rclone purge``."""
     try:
