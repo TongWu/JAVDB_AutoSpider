@@ -5,6 +5,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Dict, List, Tuple
 
+from api.parsers.common import (
+    normalize_javdb_href_path,
+    movie_href_lookup_values,
+    javdb_absolute_url,
+    absolutize_supporting_actors_json,
+)
+from utils.config_helper import cfg
 from utils.contracts import indicators_to_category as _indicators_to_category
 
 
@@ -42,7 +49,7 @@ def load_history_joined(conn) -> Dict[str, dict]:
     history: Dict[str, dict] = {}
     for row in rows:
         r = dict(row)
-        href = r["Href"]
+        href = normalize_javdb_href_path(r["Href"]) or r["Href"]
         item = history.get(href)
         if item is None:
             item = {
@@ -84,13 +91,28 @@ def batch_update_movie_actors(conn, updates: List[Tuple[str, str, str, str, str]
     if not updates:
         return 0
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    payload = [(an, ag, al, sup, now, href) for href, an, ag, al, sup in updates]
+    base_url = cfg('BASE_URL', 'https://javdb.com')
+    payload = []
+    for href, an, ag, al, sup in updates:
+        path_href, abs_href = movie_href_lookup_values(href, base_url)
+        if not path_href and not abs_href:
+            path_href = href
+            abs_href = href
+        payload.append((
+            an,
+            ag,
+            javdb_absolute_url(al, base_url) if al else al,
+            absolutize_supporting_actors_json(sup, base_url) if sup else sup,
+            now,
+            path_href,
+            abs_href,
+        ))
     before = conn.total_changes
     conn.executemany(
         """
         UPDATE MovieHistory
         SET ActorName=?, ActorGender=?, ActorLink=?, SupportingActors=?, DateTimeUpdated=?
-        WHERE Href=?
+        WHERE Href IN (?, ?)
         """,
         payload,
     )
