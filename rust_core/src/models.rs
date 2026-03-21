@@ -227,6 +227,8 @@ impl MovieIndexEntry {
 
 /// Canonical value when 演員 panel has placeholder text and no /actors/ links (matches Python).
 pub const NO_ACTOR_LISTING_ACTOR_NAME: &str = "N/A";
+/// Canonical gender value for the no-actor-listing case (matches Python ``NO_ACTOR_LISTING_ACTOR_GENDER``).
+pub const NO_ACTOR_LISTING_ACTOR_GENDER: &str = "N/A";
 
 #[pyclass(name = "RustMovieDetail")]
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -366,7 +368,7 @@ impl MovieDetail {
             let d = new_dict(py);
             d.set_item("name", NO_ACTOR_LISTING_ACTOR_NAME)?;
             d.set_item("href", "")?;
-            d.set_item("gender", "")?;
+            d.set_item("gender", NO_ACTOR_LISTING_ACTOR_GENDER)?;
             Some(d)
         } else {
             None
@@ -406,9 +408,13 @@ impl MovieDetail {
     }
 
     fn get_first_actor_gender(&self) -> String {
-        self.actors
-            .first()
-            .map_or(String::new(), |a| a.gender.clone())
+        if let Some(a) = self.actors.first() {
+            return a.gender.clone();
+        }
+        if self.no_actor_listing {
+            return NO_ACTOR_LISTING_ACTOR_GENDER.to_string();
+        }
+        String::new()
     }
 
     fn get_first_actor_href(&self) -> String {
