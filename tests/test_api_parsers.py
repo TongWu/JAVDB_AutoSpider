@@ -17,8 +17,6 @@ from api.parsers.common import (
     detect_page_type,
     extract_category_name,
 )
-from api.models import MovieLink
-
 HTML_DIR = os.path.join(project_root, 'html')
 
 
@@ -248,6 +246,7 @@ class TestParseDetailPageInline:
         assert len(detail.actors) == 1
         assert detail.actors[0].name == 'Sample Actor'
         assert detail.actors[0].href == '/actors/xyz'
+        assert detail.actors[0].gender == 'female'
 
     def test_magnet_fields(self, sample_detail_html):
         detail = parse_detail_page(sample_detail_html)
@@ -351,8 +350,12 @@ class TestParseDetailPageRealHTML:
     def test_vdd201_actors(self):
         html = _load_html('detailed_page_VDD-201.html')
         detail = parse_detail_page(html)
-        assert len(detail.actors) > 0
+        assert len(detail.actors) >= 4
         assert '真北祈' in detail.actors[0].name or '真野祈' in detail.actors[0].name
+        assert detail.actors[0].gender == 'female'
+        assert detail.actors[1].gender == 'male'
+        sup_json = detail.get_supporting_actors_json()
+        assert 'マッスル澤野' in sup_json
 
     def test_vdd201_magnets(self):
         html = _load_html('detailed_page_VDD-201.html')
