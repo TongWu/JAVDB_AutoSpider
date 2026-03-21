@@ -7,6 +7,7 @@ serialisation to dicts / JSON (for the FastAPI REST layer).
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional
 
@@ -14,6 +15,17 @@ from typing import List, Optional
 # ---------------------------------------------------------------------------
 # Primitive link model – reused for actors, directors, makers, tags, etc.
 # ---------------------------------------------------------------------------
+
+@dataclass
+class ActorCredit:
+    """One actor on the detail page (name, link, gender from ♀/♂ marker)."""
+    name: str
+    href: str
+    gender: str = ''  # 'female' | 'male' | ''
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
 
 @dataclass
 class MovieLink:
@@ -99,7 +111,7 @@ class MovieDetail:
     poster_url: str = ''
     fanart_urls: List[str] = field(default_factory=list)
     trailer_url: Optional[str] = None
-    actors: List[MovieLink] = field(default_factory=list)
+    actors: List[ActorCredit] = field(default_factory=list)
     magnets: List[MagnetInfo] = field(default_factory=list)
     review_count: int = 0
     want_count: int = 0
@@ -107,13 +119,20 @@ class MovieDetail:
     parse_success: bool = True
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        d['lead_actor'] = self.actors[0].to_dict() if self.actors else None
+        d['supporting_actors'] = [a.to_dict() for a in self.actors[1:]]
+        return d
 
     # Convenience helpers for backward compatibility with spider.py ----------
 
     def get_first_actor_name(self) -> str:
-        """Return the name of the first actor, or empty string."""
+        """Return the name of the first (lead) actor, or empty string."""
         return self.actors[0].name if self.actors else ''
+
+    def get_first_actor_gender(self) -> str:
+        """Return gender of the first actor: ``female``, ``male``, or ``''``."""
+        return self.actors[0].gender if self.actors else ''
 
     def get_first_actor_href(self) -> str:
         """Return the normalized path for the first actor link, or empty string."""
@@ -122,6 +141,22 @@ class MovieDetail:
         from api.parsers.common import normalize_javdb_href_path
 
         return normalize_javdb_href_path(self.actors[0].href)
+
+    def get_supporting_actors_json(self) -> str:
+        """JSON array of supporting actors for DB: ``[{name, gender, link}, ...]``."""
+        if len(self.actors) <= 1:
+            return ''
+        from api.parsers.common import normalize_javdb_href_path
+
+        items = [
+            {
+                'name': a.name,
+                'gender': a.gender,
+                'link': normalize_javdb_href_path(a.href),
+            }
+            for a in self.actors[1:]
+        ]
+        return json.dumps(items, ensure_ascii=False)
 
     def get_magnets_as_legacy(self) -> list:
         """Return magnets in the legacy list-of-dicts format."""
