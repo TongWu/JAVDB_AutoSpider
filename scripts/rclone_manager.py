@@ -603,6 +603,60 @@ def run_execute_soft_delete_from_csv(
     return 0
 
 
+def run_execute_inventory_purge_from_csv(
+    purge_plan_csv: str,
+    *,
+    dry_run: bool = False,
+) -> int:
+    """Purge folders listed in an inventory-alignment plan CSV (``rclone purge``).
+
+    Expects rows with a ``source_path`` (or ``SourcePath``) column — the same
+    shape produced by ``migration/tools/align_inventory_with_moviehistory.py``.
+    """
+    if not os.path.exists(purge_plan_csv):
+        logger.info(f"Purge-plan CSV not found: {purge_plan_csv}")
+        return 0
+
+    with open(purge_plan_csv, 'r', newline='', encoding='utf-8') as f:
+        rows = list(csv.DictReader(f))
+
+    if not rows:
+        logger.info("No purge-plan rows found — nothing to do")
+        return 0
+
+    success = 0
+    failed = 0
+    skipped = 0
+    seen_sources: set[str] = set()
+
+    for row in rows:
+        source_path = (row.get('source_path') or row.get('SourcePath') or '').strip()
+        if not source_path:
+            skipped += 1
+            continue
+        if source_path in seen_sources:
+            skipped += 1
+            continue
+        seen_sources.add(source_path)
+
+        if rclone_purge(source_path, dry_run=dry_run):
+            success += 1
+        else:
+            failed += 1
+
+    logger.info("=" * 60)
+    logger.info("INVENTORY PURGE EXECUTION COMPLETE")
+    logger.info(f"Rows: {len(rows)}, unique sources: {len(seen_sources)}")
+    logger.info(f"Purged: {success}, failed: {failed}, skipped: {skipped}")
+    logger.info("=" * 60)
+
+    if success > 0:
+        return 0
+    if failed > 0:
+        return 1
+    return 0
+
+
 # ============================================================================
 # CLI
 # ============================================================================
