@@ -1,35 +1,27 @@
 #!/usr/bin/env python3
-"""Standalone migration: upgrade split SQLite layout from schema v7 to v8.
+"""Standalone migration: align split SQLite DBs with current schema (v9).
 
 The same schema steps run automatically on every ``utils.db.init_db()`` when
-any database file's ``SchemaVersion`` is below 8 (add ``ActorName`` /
-``ActorLink`` on ``MovieHistory``, bump version). This script adds:
+any database file's ``SchemaVersion`` is below ``utils.db.SCHEMA_VERSION``.
+
+**MovieHistory actor columns (history.db):**
+
+  - ``ActorName``, ``ActorGender``, ``ActorLink``, ``SupportingActors`` (lead + JSON supporting cast)
+
+For **datetime normalization** after split, prefer ``migration/migrate_to_current.py --normalize-datetimes``.
+
+This script adds:
 
   - Optional ``--backup`` before mutating files.
   - Optional ``--verify`` (integrity + version + columns).
   - Schema ``--dry-run`` (report only, no writes).
-  - Optional ``--backfill-actors`` to fetch detail pages and fill empty
-    ``ActorName`` / ``ActorLink`` (same stack as the spider: proxy pool,
-    ``fetch_detail_page_with_fallback``, ``movie_sleep_mgr``).
-    On **Ctrl+C** during parallel backfill, the main thread drains the
-    result queue and writes any pending actor updates before stopping workers
-    (in-flight worker fetches may still be lost).
-
-**v8 changes (history.db only, data columns):**
-
-  - ``MovieHistory.ActorName TEXT DEFAULT ''``
-  - ``MovieHistory.ActorLink TEXT DEFAULT ''``
-  - ``SchemaVersion`` set to 8 on **all** open DB files (history / reports /
-    operations) via ``init_db(force=True)`` so versions stay aligned.
+  - Optional ``--backfill-actors`` to fetch detail pages and fill empty actor fields.
 
 Usage:
 
-    python3 migration/migrate_v7_to_v8.py [--backup] [--verify] [--dry-run]
-    python3 migration/migrate_v7_to_v8.py --backfill-actors [--limit N] [--no-proxy] [--dry-run]
-    python3 migration/migrate_v7_to_v8.py [--backup] --backfill-actors
-
-    # Only refill actors, schema already v8:
-    python3 migration/migrate_v7_to_v8.py --skip-schema --backfill-actors
+    python3 migration/tools/migrate_v7_to_v8.py [--backup] [--verify] [--dry-run]
+    python3 migration/tools/migrate_v7_to_v8.py --backfill-actors [--limit N] [--no-proxy] [--dry-run]
+    python3 migration/migrate_to_current.py [--normalize-datetimes]   # unified entry
 """
 
 from __future__ import annotations
@@ -47,7 +39,7 @@ from datetime import datetime
 from typing import Optional
 from urllib.parse import urljoin
 
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
@@ -58,7 +50,9 @@ from utils.logging_config import setup_logging, get_logger  # noqa: E402
 setup_logging()
 logger = get_logger(__name__)
 
-EXPECTED_VERSION = 8
+from utils.db import moviehistory_actor_layout_ok  # noqa: E402
+
+EXPECTED_VERSION = 9
 
 
 def _detect_version(db_path: str) -> int:
@@ -79,12 +73,13 @@ def _detect_version(db_path: str) -> int:
 
 
 def _moviehistory_has_actor_columns(db_path: str) -> bool:
+    """All four actor columns present *and* SQLite storage order: Name, Gender, Link, Supporting."""
     if not os.path.exists(db_path):
         return False
     conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
     try:
-        cols = {r[1] for r in conn.execute("PRAGMA table_info(MovieHistory)").fetchall()}
-        return 'ActorName' in cols and 'ActorLink' in cols
+        return moviehistory_actor_layout_ok(conn)
     except sqlite3.OperationalError:
         return False
     finally:
@@ -124,10 +119,15 @@ def verify_v8_layout(
 
     if os.path.exists(history_path):
         if not _moviehistory_has_actor_columns(history_path):
-            logger.error("history.db: MovieHistory missing ActorName/ActorLink columns")
+            logger.error(
+                "history.db: MovieHistory actor layout incomplete or wrong column order "
+                "(expected ActorName, ActorGender, ActorLink, SupportingActors)",
+            )
             ok = False
         else:
-            logger.info("history.db: MovieHistory has ActorName / ActorLink")
+            logger.info(
+                "history.db: MovieHistory actor columns OK (Name → Gender → Link → SupportingActors)",
+            )
 
         conn = sqlite3.connect(history_path)
         try:
@@ -159,7 +159,7 @@ def run_schema_migration(
     h, r, o = db_mod.HISTORY_DB_PATH, db_mod.REPORTS_DB_PATH, db_mod.OPERATIONS_DB_PATH
 
     logger.info("=" * 60)
-    logger.info("SCHEMA MIGRATION v7 → v8 (split DB layout)")
+    logger.info("SCHEMA MIGRATION → current (split DB layout + MovieHistory v9)")
     for label, p in (("history", h), ("reports", r), ("operations", o)):
         if os.path.exists(p):
             logger.info("  %s: %s (version=%s)", label, p, _detect_version(p))
@@ -169,29 +169,32 @@ def run_schema_migration(
 
     if not os.path.exists(h):
         logger.error("history.db not found: %s", h)
-        logger.info("If you still use a single legacy DB, run migrate_v6_to_v7_split first.")
+        logger.info("If you still use a single legacy DB, run migration/tools/migrate_v6_to_v7_split.py first.")
         return 1
 
     hist_ver = _detect_version(h)
     if hist_ver >= EXPECTED_VERSION and _moviehistory_has_actor_columns(h):
-        logger.info("history.db already at v%s with actor columns. No schema migration needed.", EXPECTED_VERSION)
+        logger.info(
+            "history.db already at v%s with canonical MovieHistory actor column order. No schema migration needed.",
+            EXPECTED_VERSION,
+        )
         if verify:
             return 0 if verify_v8_layout(h, r, o) else 1
         return 0
 
     if hist_ver >= EXPECTED_VERSION and not _moviehistory_has_actor_columns(h):
         logger.warning(
-            "SchemaVersion is %s but MovieHistory lacks actor columns; applying fixes via init_db.",
+            "SchemaVersion is %s but MovieHistory needs actor columns or column reorder; applying init_db(force=True).",
             hist_ver,
         )
 
     if hist_ver < 7:
         logger.error("history.db version is %s; expected at least 7 (split layout).", hist_ver)
-        logger.info("Run migrate_v6_to_v7_split (or init_db) before v7→v8.")
+        logger.info("Run migration/tools/migrate_v6_to_v7_split.py (or init_db) before upgrade.")
         return 1
 
     if dry_run:
-        logger.info("[DRY RUN] Would run init_db(force=True) to apply v8 schema on all DB files.")
+        logger.info("[DRY RUN] Would run init_db(force=True) to apply current schema on all DB files.")
         return 0
 
     if backup:
@@ -211,7 +214,7 @@ def run_schema_migration(
             return 1
         logger.info("Verification PASSED")
 
-    logger.info("Schema migration v7 → v8 complete.")
+    logger.info("Schema migration to current version complete.")
     return 0
 
 
@@ -242,7 +245,9 @@ class BackfillTask:
 class BackfillResult:
     task: BackfillTask
     actor_name: str
+    actor_gender: str
     actor_link: str
+    supporting_actors: str
     parse_success: bool
     is_skipped: bool = False
     batch_hrefs: list = field(default_factory=list)
@@ -273,8 +278,10 @@ def _apply_one_parallel_backfill_result(
         return 0, 1, 0, 0
 
     an = result.actor_name.strip()
+    ag = result.actor_gender.strip()
     al = result.actor_link.strip()
-    if not an and not al:
+    sup = result.supporting_actors.strip()
+    if not an and not al and not sup:
         return 0, 0, 0, 0
 
     if result.batch_hrefs:
@@ -290,7 +297,7 @@ def _apply_one_parallel_backfill_result(
             for h in new_hrefs:
                 completed_ids.add(pending_by_href[h])
 
-        updates = [(h, an, al) for h in new_hrefs]
+        updates = [(h, an, ag, al, sup) for h in new_hrefs]
         if updates:
             logger.info(
                 "[%s] Batch update: actor %r (%s) -> %d movies",
@@ -306,8 +313,9 @@ def _apply_one_parallel_backfill_result(
         completed_ids.add(task.movie_id)
     if not dry_run:
         conn.execute(
-            "UPDATE MovieHistory SET ActorName=?, ActorLink=?, DateTimeUpdated=? WHERE Id=?",
-            (an, al, now_fmt, task.movie_id),
+            """UPDATE MovieHistory SET ActorName=?, ActorGender=?, ActorLink=?,
+               SupportingActors=?, DateTimeUpdated=? WHERE Id=?""",
+            (an, ag, al, sup, now_fmt, task.movie_id),
         )
         conn.commit()
     return 1, 0, 0, 0
@@ -512,7 +520,7 @@ class BackfillWorker(threading.Thread):
         return all_hrefs
 
     def _try_fetch_and_parse(self, task: BackfillTask, use_cf: bool, context: str):
-        """Returns ``(actor_name, actor_link, success, needs_login)``."""
+        """Returns ``(actor_name, actor_gender, actor_link, supporting, success, needs_login)``."""
         from utils.parser import parse_detail
         from scripts.spider.session import is_login_page
 
@@ -522,35 +530,39 @@ class BackfillWorker(threading.Thread):
             if html:
                 if is_login_page(html):
                     logger.warning("[%s] [%s] Login page: %s", self.proxy_name, task.entry_index, context)
-                    return '', '', False, True
-                _, actor_name, actor_link, ok = parse_detail(html, task.entry_index, skip_sleep=True)
+                    return '', '', '', '', False, True
+                _m, actor_name, actor_gender, actor_link, supporting, ok = parse_detail(
+                    html, task.entry_index, skip_sleep=True)
                 if ok:
-                    return actor_name or '', actor_link or '', True, False
+                    return (
+                        actor_name or '', actor_gender or '', actor_link or '',
+                        supporting or '', True, False,
+                    )
                 logger.debug("[%s] [%s] parse failed: %s", self.proxy_name, task.entry_index, context)
             else:
                 logger.debug("[%s] [%s] no HTML: %s", self.proxy_name, task.entry_index, context)
         except Exception as e:
             logger.debug("[%s] [%s] error in %s: %s", self.proxy_name, task.entry_index, context, e)
-        return '', '', False, False
+        return '', '', '', '', False, False
 
     def _try_direct_then_cf(self, task: BackfillTask):
-        """Returns ``(actor_name, actor_link, success, used_cf, needs_login)``."""
+        """Returns ``(actor_name, actor_gender, actor_link, supporting, success, used_cf, needs_login)``."""
         if self.needs_cf_bypass:
-            an, al, ok, login = self._try_fetch_and_parse(task, True, "CF Bypass (marked)")
-            return an, al, ok, True, login
+            an, ag, al, sup, ok, login = self._try_fetch_and_parse(task, True, "CF Bypass (marked)")
+            return an, ag, al, sup, ok, True, login
 
-        an, al, ok, login = self._try_fetch_and_parse(task, False, "Direct")
+        an, ag, al, sup, ok, login = self._try_fetch_and_parse(task, False, "Direct")
         if ok:
-            return an, al, True, False, False
+            return an, ag, al, sup, True, False, False
         if login:
-            return an, al, False, False, True
+            return an, ag, al, sup, False, False, True
 
-        an, al, ok, login = self._try_fetch_and_parse(task, True, "CF Bypass")
+        an, ag, al, sup, ok, login = self._try_fetch_and_parse(task, True, "CF Bypass")
         if ok:
             self.needs_cf_bypass = True
             logger.info("[%s] CF Bypass succeeded — marked for runtime", self.proxy_name)
-            return an, al, True, True, False
-        return '', '', False, False, login
+            return an, ag, al, sup, True, True, False
+        return '', '', '', '', False, False, login
 
     def _try_login_refresh(self) -> bool:
         global _backfill_logged_in_worker_id
@@ -617,7 +629,8 @@ class BackfillWorker(threading.Thread):
 
         logger.warning("[%s] [%s] Login unavailable, marking failed", self.proxy_name, task.entry_index)
         self.result_queue.put(BackfillResult(
-            task=task, actor_name='', actor_link='', parse_success=False,
+            task=task, actor_name='', actor_gender='', actor_link='',
+            supporting_actors='', parse_success=False,
         ))
 
     def _get_next_task(self) -> BackfillTask | None:
@@ -647,15 +660,16 @@ class BackfillWorker(threading.Thread):
             with self.completed_lock:
                 if task.movie_id in self.completed_ids:
                     self.result_queue.put(BackfillResult(
-                        task=task, actor_name='', actor_link='',
-                        parse_success=False, is_skipped=True,
+                        task=task, actor_name='', actor_gender='', actor_link='',
+                        supporting_actors='', parse_success=False, is_skipped=True,
                     ))
                     continue
 
             if self.proxy_name in task.failed_proxies:
                 if len(task.failed_proxies) >= self.total_workers:
                     self.result_queue.put(BackfillResult(
-                        task=task, actor_name='', actor_link='', parse_success=False,
+                        task=task, actor_name='', actor_gender='', actor_link='',
+                        supporting_actors='', parse_success=False,
                     ))
                     continue
                 _requeue_front(self.task_queue, task)
@@ -666,7 +680,7 @@ class BackfillWorker(threading.Thread):
                 self._sleep_mgr.sleep()
             self._first_request = False
 
-            an, al, success, used_cf, needs_login = self._try_direct_then_cf(task)
+            an, ag, al, sup, success, used_cf, needs_login = self._try_direct_then_cf(task)
             if success:
                 cf_tag = " +CF" if used_cf else ""
                 logger.info(
@@ -677,8 +691,8 @@ class BackfillWorker(threading.Thread):
                 if al:
                     batch_hrefs = self._fetch_actor_page_movies(al)
                 self.result_queue.put(BackfillResult(
-                    task=task, actor_name=an, actor_link=al,
-                    parse_success=True, batch_hrefs=batch_hrefs,
+                    task=task, actor_name=an, actor_gender=ag, actor_link=al,
+                    supporting_actors=sup, parse_success=True, batch_hrefs=batch_hrefs,
                 ))
             elif needs_login:
                 self._handle_login_required(task)
@@ -925,17 +939,20 @@ def run_actor_backfill(
                 skipped += 1
                 continue
 
-            magnets, actor_name, actor_link, parse_ok, _ep, _ecf = fetch_detail_page_with_fallback(
+            m = fetch_detail_page_with_fallback(
                 detail_url, session,
                 use_cookie=True, use_proxy=use_proxy,
                 use_cf_bypass=use_cf_bypass,
                 entry_index=entry_index, is_adhoc_mode=True,
             )
+            magnets, actor_name, actor_gender, actor_link, supporting_actors, parse_ok, _ep, _ecf = m
 
             an = (actor_name or "").strip()
+            ag = (actor_gender or "").strip()
             al = (actor_link or "").strip()
+            sup = (supporting_actors or "").strip()
 
-            if not an and not al:
+            if not an and not al and not sup:
                 logger.warning(
                     "[%s] No actor for %s (%s, parse_ok=%s, magnets=%d)",
                     entry_index, video_code, href, parse_ok, len(magnets or []),
@@ -976,7 +993,7 @@ def run_actor_backfill(
                     ]
                     if href not in new_hrefs and mid not in completed_ids:
                         new_hrefs.append(href)
-                    updates = [(h, an, al) for h in new_hrefs]
+                    updates = [(h, an, ag, al, sup) for h in new_hrefs]
                     if updates:
                         logger.info(
                             "[%s] Batch update: actor %r (%s) -> %d movies",
@@ -994,8 +1011,9 @@ def run_actor_backfill(
             logger.info("[%s] %s -> %r %r", entry_index, video_code, an, al)
             if not dry_run:
                 conn.execute(
-                    "UPDATE MovieHistory SET ActorName=?, ActorLink=?, DateTimeUpdated=? WHERE Id=?",
-                    (an, al, now_fmt, mid),
+                    """UPDATE MovieHistory SET ActorName=?, ActorGender=?, ActorLink=?,
+                       SupportingActors=?, DateTimeUpdated=? WHERE Id=?""",
+                    (an, ag, al, sup, now_fmt, mid),
                 )
                 conn.commit()
             completed_ids.add(mid)
@@ -1022,7 +1040,7 @@ def run_actor_backfill(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Migrate SQLite schema v7 → v8 (MovieHistory actors) and optional actor backfill.",
+        description="Migrate SQLite schema to current (MovieHistory actors v9) and optional actor backfill.",
     )
     parser.add_argument(
         "--history-db",
@@ -1033,7 +1051,7 @@ def main() -> int:
     parser.add_argument(
         "--verify",
         action="store_true",
-        help="After schema migration, verify version 8 and MovieHistory columns",
+        help="After schema migration, verify SchemaVersion and MovieHistory actor columns",
     )
     parser.add_argument(
         "--dry-run",
@@ -1074,7 +1092,7 @@ def main() -> int:
     if args.backfill_actors:
         if args.dry_run and not args.skip_schema:
             logger.warning(
-                "Schema was not applied (--dry-run). Backfill still runs; ensure DB is already v8.",
+                "Schema was not applied (--dry-run). Backfill still runs; ensure DB is already current.",
             )
         brc = run_actor_backfill(
             history_db,
