@@ -22,6 +22,14 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from utils.config_helper import cfg
 from utils.logging_config import get_logger
+from utils.db_layer.history_repo import (
+    load_history_joined as _load_history_joined,
+    batch_update_movie_actors as _batch_update_movie_actors,
+)
+from utils.db_layer.operations_repo import (
+    replace_rclone_inventory as _replace_rclone_inventory,
+    save_proxy_bans as _save_proxy_bans,
+)
 
 logger = get_logger(__name__)
 
@@ -304,25 +312,9 @@ CREATE TABLE IF NOT EXISTS ProxyBans (
 _TABLES_SQL = _HISTORY_DDL + _REPORTS_DDL + _OPERATIONS_DDL
 
 
-# ── Category ↔ Indicator mapping ─────────────────────────────────────────
+# ── Category ↔ Indicator mapping (delegated to contracts) ────────────────
 
-_CATEGORY_TO_INDICATORS = {
-    'hacked_subtitle':    (1, 0),  # SubtitleIndicator=True, CensorIndicator=False
-    'hacked_no_subtitle': (0, 0),
-    'subtitle':           (1, 1),
-    'no_subtitle':        (0, 1),
-}
-_INDICATORS_TO_CATEGORY = {v: k for k, v in _CATEGORY_TO_INDICATORS.items()}
-
-
-def category_to_indicators(category: str) -> Tuple[int, int]:
-    """Convert a legacy category name to (SubtitleIndicator, CensorIndicator)."""
-    return _CATEGORY_TO_INDICATORS.get(category, (0, 1))
-
-
-def indicators_to_category(subtitle_ind: int, censor_ind: int) -> str:
-    """Convert indicator pair back to legacy category name."""
-    return _INDICATORS_TO_CATEGORY.get((subtitle_ind, censor_ind), 'no_subtitle')
+from utils.contracts import category_to_indicators, indicators_to_category  # noqa: E402
 
 
 def _has_table(conn, name: str) -> bool:
@@ -1072,47 +1064,8 @@ def db_load_history(db_path: Optional[str] = None, phase: Optional[int] = None) 
     The *phase* parameter is accepted for backward compatibility but ignored
     (the new schema does not store phase).
     """
-    history: Dict[str, dict] = {}
     with get_db(db_path or HISTORY_DB_PATH) as conn:
-        movies = conn.execute("SELECT * FROM MovieHistory").fetchall()
-        for m in movies:
-            m = dict(m)
-            href = m['Href']
-            torrents: Dict[Tuple[int, int], dict] = {}
-            torrent_types: List[str] = []
-
-            t_rows = conn.execute(
-                "SELECT * FROM TorrentHistory WHERE MovieHistoryId = ?", (m['Id'],)
-            ).fetchall()
-            for t in t_rows:
-                t = dict(t)
-                key = (t['SubtitleIndicator'], t['CensorIndicator'])
-                torrents[key] = {
-                    'MagnetUri': t.get('MagnetUri', ''),
-                    'Size': t.get('Size', ''),
-                    'FileCount': t.get('FileCount', 0),
-                    'ResolutionType': t.get('ResolutionType'),
-                    'DateTimeCreated': t.get('DateTimeCreated', ''),
-                    'DateTimeUpdated': t.get('DateTimeUpdated', ''),
-                }
-                cat = indicators_to_category(key[0], key[1])
-                torrent_types.append(cat)
-
-            history[href] = {
-                'VideoCode': m['VideoCode'],
-                'DateTimeCreated': m.get('DateTimeCreated', ''),
-                'DateTimeUpdated': m.get('DateTimeUpdated', ''),
-                'DateTimeVisited': m.get('DateTimeVisited', ''),
-                'PerfectMatchIndicator': bool(m.get('PerfectMatchIndicator', 0)),
-                'HiResIndicator': bool(m.get('HiResIndicator', 0)),
-                'ActorName': m.get('ActorName'),
-                'ActorGender': m.get('ActorGender'),
-                'ActorLink': m.get('ActorLink'),
-                'SupportingActors': m.get('SupportingActors'),
-                'torrent_types': torrent_types,
-                'torrents': torrents,
-            }
-    return history
+        return _load_history_joined(conn)
 
 
 def db_upsert_history(
@@ -1301,18 +1254,8 @@ def db_batch_update_movie_actors(
     """
     if not updates:
         return 0
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    total = 0
     with get_db(db_path or HISTORY_DB_PATH) as conn:
-        for href, an, ag, al, sup in updates:
-            cur = conn.execute(
-                """UPDATE MovieHistory SET ActorName=?, ActorGender=?, ActorLink=?,
-                   SupportingActors=?, DateTimeUpdated=?
-                   WHERE Href=?""",
-                (an, ag, al, sup, now, href),
-            )
-            total += cur.rowcount
-    return total
+        return _batch_update_movie_actors(conn, updates)
 
 
 def db_check_torrent_in_history(href: str, torrent_type: str, db_path: Optional[str] = None) -> bool:
@@ -1341,22 +1284,7 @@ def db_get_all_history_records(db_path: Optional[str] = None) -> List[dict]:
 def db_replace_rclone_inventory(entries: List[dict], db_path: Optional[str] = None) -> int:
     """Replace the entire RcloneInventory table (full scan refresh)."""
     with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        conn.execute("DELETE FROM RcloneInventory")
-        for e in entries:
-            conn.execute(
-                """INSERT INTO RcloneInventory
-                   (VideoCode, SensorCategory, SubtitleCategory,
-                    FolderPath, FolderSize, FileCount, DateTimeScanned)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (e.get('VideoCode', e.get('video_code', '')),
-                 e.get('SensorCategory', e.get('sensor_category')),
-                 e.get('SubtitleCategory', e.get('subtitle_category')),
-                 e.get('FolderPath', e.get('folder_path')),
-                 int(e.get('FolderSize', e.get('folder_size', 0)) or 0),
-                 int(e.get('FileCount', e.get('file_count', 0)) or 0),
-                 e.get('DateTimeScanned', e.get('scan_datetime'))),
-            )
-        return len(entries)
+        return _replace_rclone_inventory(conn, entries)
 
 
 def db_clear_rclone_inventory(db_path: Optional[str] = None) -> None:
@@ -1536,15 +1464,7 @@ def db_load_proxy_bans(db_path: Optional[str] = None) -> List[dict]:
 def db_save_proxy_bans(records: List[dict], db_path: Optional[str] = None) -> None:
     """Replace all proxy ban records."""
     with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        conn.execute("DELETE FROM ProxyBans")
-        for r in records:
-            conn.execute(
-                "INSERT INTO ProxyBans (ProxyName, DateTimeBanned, DateTimeUnbanned) "
-                "VALUES (?, ?, ?)",
-                (r.get('ProxyName', r.get('proxy_name')),
-                 r.get('DateTimeBanned', r.get('ban_time')),
-                 r.get('DateTimeUnbanned', r.get('unban_time'))),
-            )
+        _save_proxy_bans(conn, records)
 
 
 # ── ReportSessions + ReportMovies + ReportTorrents helpers ───────────────
