@@ -20,6 +20,11 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+from api.parsers.common import (
+    movie_href_lookup_values,
+    javdb_absolute_url,
+    absolutize_supporting_actors_json,
+)
 from utils.config_helper import cfg
 from utils.logging_config import get_logger
 from utils.db_layer.history_repo import (
@@ -1095,13 +1100,38 @@ def db_upsert_history(
     if resolution_links is None:
         resolution_links = {}
 
+    base_url = cfg('BASE_URL', 'https://javdb.com')
+    path_href, absolute_href = movie_href_lookup_values(href, base_url)
+    lookup_hrefs = [h for h in (path_href, absolute_href) if h]
+    normalized_href = absolute_href or href
+    prepared_actor_link = (
+        javdb_absolute_url(actor_link, base_url) if actor_link is not None else None
+    )
+    prepared_supporting_actors = (
+        absolutize_supporting_actors_json(supporting_actors, base_url)
+        if supporting_actors is not None
+        else None
+    )
+
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     _TORRENT_CATS = ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle')
 
     with get_db(db_path or HISTORY_DB_PATH) as conn:
-        existing = conn.execute(
-            "SELECT Id FROM MovieHistory WHERE Href = ?", (href,)
-        ).fetchone()
+        if len(lookup_hrefs) == 2:
+            existing = conn.execute(
+                "SELECT Id FROM MovieHistory WHERE Href IN (?, ?)",
+                (lookup_hrefs[0], lookup_hrefs[1]),
+            ).fetchone()
+        elif len(lookup_hrefs) == 1:
+            existing = conn.execute(
+                "SELECT Id FROM MovieHistory WHERE Href = ?",
+                (lookup_hrefs[0],),
+            ).fetchone()
+        else:
+            existing = conn.execute(
+                "SELECT Id FROM MovieHistory WHERE Href = ?",
+                (href,),
+            ).fetchone()
 
         if existing is None:
             cur = conn.execute(
@@ -1109,8 +1139,8 @@ def db_upsert_history(
                    (VideoCode, Href, DateTimeCreated, DateTimeUpdated, DateTimeVisited,
                     ActorName, ActorGender, ActorLink, SupportingActors)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (video_code, href, now, now, now,
-                 actor_name, actor_gender, actor_link, supporting_actors),
+                (video_code, normalized_href, now, now, now,
+                 actor_name, actor_gender, prepared_actor_link, prepared_supporting_actors),
             )
             movie_id = cur.lastrowid
         else:
@@ -1133,21 +1163,21 @@ def db_upsert_history(
                     actor_gender if actor_gender is not None else row_m['ActorGender']
                 )
                 new_al = (
-                    actor_link if actor_link is not None else row_m['ActorLink']
+                    prepared_actor_link if actor_link is not None else row_m['ActorLink']
                 )
                 new_sup = (
-                    supporting_actors if supporting_actors is not None
+                    prepared_supporting_actors if supporting_actors is not None
                     else row_m['SupportingActors']
                 )
                 conn.execute(
                     """UPDATE MovieHistory SET DateTimeUpdated=?, DateTimeVisited=?,
-                       ActorName=?, ActorGender=?, ActorLink=?, SupportingActors=? WHERE Id=?""",
-                    (now, now, new_an, new_ag, new_al, new_sup, movie_id),
+                       Href=?, ActorName=?, ActorGender=?, ActorLink=?, SupportingActors=? WHERE Id=?""",
+                    (now, now, normalized_href, new_an, new_ag, new_al, new_sup, movie_id),
                 )
             else:
                 conn.execute(
-                    "UPDATE MovieHistory SET DateTimeUpdated=?, DateTimeVisited=? WHERE Id=?",
-                    (now, now, movie_id),
+                    "UPDATE MovieHistory SET DateTimeUpdated=?, DateTimeVisited=?, Href=? WHERE Id=?",
+                    (now, now, normalized_href, movie_id),
                 )
 
         # Upsert torrents
@@ -1233,12 +1263,25 @@ def db_batch_update_last_visited(hrefs: List[str], db_path: Optional[str] = None
     """Update DateTimeVisited for a batch of hrefs."""
     if not hrefs:
         return 0
+    base_url = cfg('BASE_URL', 'https://javdb.com')
+    lookup_hrefs: List[str] = []
+    for href in hrefs:
+        path_href, abs_href = movie_href_lookup_values(href, base_url)
+        if path_href:
+            lookup_hrefs.append(path_href)
+        if abs_href:
+            lookup_hrefs.append(abs_href)
+        if not path_href and not abs_href and href:
+            lookup_hrefs.append(href)
+    lookup_hrefs = list(dict.fromkeys(lookup_hrefs))
+    if not lookup_hrefs:
+        return 0
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with get_db(db_path or HISTORY_DB_PATH) as conn:
-        placeholders = ','.join('?' for _ in hrefs)
+        placeholders = ','.join('?' for _ in lookup_hrefs)
         cur = conn.execute(
             f"UPDATE MovieHistory SET DateTimeVisited=? WHERE Href IN ({placeholders})",
-            [now] + list(hrefs),
+            [now] + lookup_hrefs,
         )
         return cur.rowcount
 
@@ -1261,12 +1304,29 @@ def db_batch_update_movie_actors(
 def db_check_torrent_in_history(href: str, torrent_type: str, db_path: Optional[str] = None) -> bool:
     """Check if a specific torrent type exists for href."""
     sub_ind, cen_ind = category_to_indicators(torrent_type)
+    base_url = cfg('BASE_URL', 'https://javdb.com')
+    path_href, abs_href = movie_href_lookup_values(href, base_url)
     with get_db(db_path or HISTORY_DB_PATH) as conn:
-        row = conn.execute("""
-            SELECT t.MagnetUri FROM TorrentHistory t
-            JOIN MovieHistory m ON t.MovieHistoryId = m.Id
-            WHERE m.Href = ? AND t.SubtitleIndicator = ? AND t.CensorIndicator = ?
-        """, (href, sub_ind, cen_ind)).fetchone()
+        if path_href and abs_href:
+            row = conn.execute(
+                """
+                SELECT t.MagnetUri FROM TorrentHistory t
+                JOIN MovieHistory m ON t.MovieHistoryId = m.Id
+                WHERE m.Href IN (?, ?)
+                  AND t.SubtitleIndicator = ? AND t.CensorIndicator = ?
+                """,
+                (path_href, abs_href, sub_ind, cen_ind),
+            ).fetchone()
+        else:
+            lookup = path_href or abs_href or href
+            row = conn.execute(
+                """
+                SELECT t.MagnetUri FROM TorrentHistory t
+                JOIN MovieHistory m ON t.MovieHistoryId = m.Id
+                WHERE m.Href = ? AND t.SubtitleIndicator = ? AND t.CensorIndicator = ?
+                """,
+                (lookup, sub_ind, cen_ind),
+            ).fetchone()
         if row is None:
             return False
         return bool(row['MagnetUri'] and row['MagnetUri'].startswith('magnet:'))
@@ -1510,14 +1570,16 @@ def db_insert_report_rows(session_id: int, rows: List[dict], db_path: Optional[s
         ('subtitle',           'size_subtitle',           'file_count_subtitle',           'resolution_subtitle',           1, 1),
         ('no_subtitle',        'size_no_subtitle',        'file_count_no_subtitle',        'resolution_no_subtitle',        0, 1),
     ]
+    base_url = cfg('BASE_URL', 'https://javdb.com')
     with get_db(db_path or REPORTS_DB_PATH) as conn:
         for row in rows:
+            href = javdb_absolute_url(row.get('href') or '', base_url)
             cur = conn.execute(
                 """INSERT INTO ReportMovies
                    (SessionId, Href, VideoCode, Page, Actor, Rate, CommentNumber)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (session_id,
-                 row.get('href'), row.get('video_code'),
+                 href, row.get('video_code'),
                  int(row['page']) if row.get('page') else None,
                  row.get('actor'),
                  float(row['rate']) if row.get('rate') else None,
