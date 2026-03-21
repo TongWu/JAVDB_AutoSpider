@@ -270,13 +270,13 @@ def _promote_single_female_actor(
     female actor and the original lead (which becomes the second actor).
     """
     lead_name = (actor_name or '').strip()
-    lead_gender = (actor_gender or '').strip().lower()
+    lead_gender = (actor_gender or '').strip()
     lead_link = (actor_link or '').strip()
     supporting_raw = (supporting_actors or '').strip()
 
     if not lead_name:
         return lead_name, lead_gender, lead_link, supporting_raw
-    if lead_gender == 'female':
+    if lead_gender.lower() == 'female':
         return lead_name, lead_gender, lead_link, supporting_raw
     if not supporting_raw:
         return lead_name, lead_gender, lead_link, supporting_raw
@@ -298,17 +298,17 @@ def _promote_single_female_actor(
             return lead_name, lead_gender, lead_link, supporting_raw
         actors.append({
             'name': str(item.get('name') or '').strip(),
-            'gender': str(item.get('gender') or '').strip().lower(),
+            'gender': str(item.get('gender') or '').strip(),
             'link': str(item.get('link') or '').strip(),
         })
 
-    genders = [a['gender'] for a in actors]
-    if any(g not in {'female', 'male'} for g in genders):
+    genders_lower = [a['gender'].lower() for a in actors]
+    if any(g not in {'female', 'male'} for g in genders_lower):
         return lead_name, lead_gender, lead_link, supporting_raw
-    if genders.count('female') != 1:
+    if genders_lower.count('female') != 1:
         return lead_name, lead_gender, lead_link, supporting_raw
 
-    female_idx = genders.index('female')
+    female_idx = genders_lower.index('female')
     if female_idx == 0:
         return lead_name, lead_gender, lead_link, supporting_raw
 
