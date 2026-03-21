@@ -503,16 +503,21 @@ class BackfillWorker(threading.Thread):
         self._first_request = True
 
         from scripts.spider.sleep_manager import MovieSleepManager
-        self._sleep_mgr = MovieSleepManager(movie_sleep_min, movie_sleep_max)
-
         from utils.proxy_pool import create_proxy_pool_from_config
         from utils.request_handler import RequestHandler, RequestConfig
         from scripts.spider.config_loader import (
-            BASE_URL, CF_BYPASS_SERVICE_PORT, CF_BYPASS_ENABLED,
-            CF_TURNSTILE_COOLDOWN, FALLBACK_COOLDOWN,
-            JAVDB_SESSION_COOKIE, PROXY_POOL_COOLDOWN_SECONDS,
+            BASE_URL,
+            CF_BYPASS_SERVICE_PORT,
+            CF_BYPASS_ENABLED,
+            CF_TURNSTILE_COOLDOWN,
+            FALLBACK_COOLDOWN,
+            JAVDB_SESSION_COOKIE,
+            PROXY_POOL_COOLDOWN_SECONDS,
             PROXY_POOL_MAX_FAILURES,
+            LOGIN_PROXY_NAME,
         )
+        self._sleep_mgr = MovieSleepManager(movie_sleep_min, movie_sleep_max)
+        self.login_proxy_name: str | None = LOGIN_PROXY_NAME
 
         self._proxy_pool = create_proxy_pool_from_config(
             [proxy_config],
@@ -617,6 +622,9 @@ class BackfillWorker(threading.Thread):
         from scripts.spider.session import attempt_login_refresh
 
         with _backfill_login_lock:
+            if self.login_proxy_name and self.proxy_name != self.login_proxy_name:
+                return False
+
             if st.login_attempted:
                 if st.refreshed_session_cookie is not None:
                     self._handler.config.javdb_session_cookie = st.refreshed_session_cookie
@@ -624,17 +632,20 @@ class BackfillWorker(threading.Thread):
                     return True
                 return False
 
-            proxy_for_login = {
-                k: v for k, v in {
-                    'http': self.proxy_config.get('http'),
-                    'https': self.proxy_config.get('https'),
-                }.items() if v
-            } or None
+            if self.login_proxy_name:
+                success, new_cookie, _ = attempt_login_refresh(None, None)
+            else:
+                proxy_for_login = {
+                    k: v for k, v in {
+                        'http': self.proxy_config.get('http'),
+                        'https': self.proxy_config.get('https'),
+                    }.items() if v
+                } or None
 
-            success, new_cookie, _ = attempt_login_refresh(
-                explicit_proxies=proxy_for_login,
-                explicit_proxy_name=self.proxy_name,
-            )
+                success, new_cookie, _ = attempt_login_refresh(
+                    explicit_proxies=proxy_for_login,
+                    explicit_proxy_name=self.proxy_name,
+                )
             if success and new_cookie:
                 self._handler.config.javdb_session_cookie = new_cookie
                 _backfill_logged_in_worker_id = self.worker_id
@@ -645,6 +656,21 @@ class BackfillWorker(threading.Thread):
         global _backfill_logged_in_worker_id
         import scripts.spider.state as st
         from scripts.spider.session import can_attempt_login
+        from scripts.spider.parallel_login import should_delegate_login_task
+
+        if should_delegate_login_task(self.login_proxy_name, self.proxy_name):
+            with _backfill_login_lock:
+                if _backfill_logged_in_worker_id is not None:
+                    li_nm = self.all_workers[_backfill_logged_in_worker_id].proxy_name
+                    task.failed_proxies.discard(li_nm)
+                if self.login_proxy_name:
+                    task.failed_proxies.discard(self.login_proxy_name)
+            self.login_queue.put(task)
+            logger.info(
+                "[%s] [%s] Login required for %s, routing to LOGIN_PROXY_NAME worker [%s]",
+                self.proxy_name, task.entry_index, task.video_code, self.login_proxy_name,
+            )
+            return
 
         with _backfill_login_lock:
             if _backfill_logged_in_worker_id is not None:
@@ -681,9 +707,16 @@ class BackfillWorker(threading.Thread):
         ))
 
     def _get_next_task(self) -> BackfillTask | None:
+        from scripts.spider.parallel_login import use_login_queue_priority
+
         while True:
             with _backfill_login_lock:
-                am_logged_in = (_backfill_logged_in_worker_id == self.worker_id)
+                am_logged_in = use_login_queue_priority(
+                    self.login_proxy_name,
+                    self.proxy_name,
+                    _backfill_logged_in_worker_id,
+                    self.worker_id,
+                )
 
             if am_logged_in:
                 try:
