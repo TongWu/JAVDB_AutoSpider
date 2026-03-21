@@ -71,6 +71,7 @@ from utils.rclone_helper import (
     analyze_all_duplicates,
     analyze_duplicates_for_code,
     rclone_purge,
+    rclone_move,
     format_size,
     generate_csv_report,
     print_summary,
@@ -86,6 +87,8 @@ RCLONE_INVENTORY_CSV = cfg('RCLONE_INVENTORY_CSV', 'rclone_inventory.csv')
 DEDUP_CSV = cfg('DEDUP_CSV', 'dedup.csv')
 DEDUP_DIR = cfg('DEDUP_DIR', os.path.join(REPORTS_DIR, 'Dedup'))
 DEDUP_LOG_FILE = cfg('DEDUP_LOG_FILE', 'logs/rclone_dedup.log')
+SOFT_DELETE_CSV = cfg('SOFT_DELETE_CSV', 'soft_delete_plan.csv')
+RCLONE_SOFT_DELETE_BACKUP_PREFIX = cfg('RCLONE_SOFT_DELETE_BACKUP_PREFIX', '')
 
 setup_logging()
 logger = get_logger(__name__)
@@ -537,6 +540,69 @@ def run_execute_from_csv(
     return 0
 
 
+def run_execute_soft_delete_from_csv(
+    soft_delete_csv: str,
+    dry_run: bool = False,
+    backup_prefix: str = '',
+) -> int:
+    """Move lower-version folders to backup path (soft delete)."""
+    if not os.path.exists(soft_delete_csv):
+        logger.info(f"Soft-delete CSV not found: {soft_delete_csv}")
+        return 0
+
+    with open(soft_delete_csv, 'r', newline='', encoding='utf-8') as f:
+        rows = list(csv.DictReader(f))
+
+    if not rows:
+        logger.info("No soft-delete rows found — nothing to do")
+        return 0
+
+    success = 0
+    failed = 0
+    skipped = 0
+    seen_sources = set()
+
+    for row in rows:
+        source_path = (row.get('source_path') or row.get('SourcePath') or '').strip()
+        if not source_path:
+            skipped += 1
+            continue
+        if source_path in seen_sources:
+            skipped += 1
+            continue
+        seen_sources.add(source_path)
+
+        destination_path = (row.get('destination_path') or row.get('DestinationPath') or '').strip()
+        if not destination_path:
+            if not backup_prefix:
+                logger.warning("Missing destination_path and no backup_prefix set for source: %s", source_path)
+                failed += 1
+                continue
+            if ':' in source_path:
+                _, src_rel = source_path.split(':', 1)
+            else:
+                src_rel = source_path
+            src_rel = src_rel.lstrip('/')
+            destination_path = f"{backup_prefix.rstrip('/')}/{src_rel}"
+
+        if rclone_move(source_path, destination_path, dry_run=dry_run):
+            success += 1
+        else:
+            failed += 1
+
+    logger.info("=" * 60)
+    logger.info("SOFT DELETE EXECUTION COMPLETE")
+    logger.info(f"Rows: {len(rows)}, unique sources: {len(seen_sources)}")
+    logger.info(f"Moved: {success}, failed: {failed}, skipped: {skipped}")
+    logger.info("=" * 60)
+
+    if success > 0:
+        return 0
+    if failed > 0:
+        return 1
+    return 0
+
+
 # ============================================================================
 # CLI
 # ============================================================================
@@ -550,6 +616,8 @@ def _describe_mode(args: argparse.Namespace) -> str:
         parts.append('REPORT')
     if args.execute:
         parts.append('EXECUTE')
+    if args.execute_soft_delete:
+        parts.append('EXECUTE_SOFT_DELETE')
     return '+'.join(parts) or 'NONE'
 
 
@@ -573,6 +641,7 @@ Examples:
     mode_group.add_argument('--scan', action='store_true', help='Scan remote folder tree into DB/CSV')
     mode_group.add_argument('--report', action='store_true', help='Generate dedup report from inventory')
     mode_group.add_argument('--execute', action='store_true', help='Execute pending deletions from dedup CSV')
+    mode_group.add_argument('--execute-soft-delete', action='store_true', help='Execute soft-delete moves from CSV plan')
 
     parser.add_argument('--root-path', type=str, default=None, help='rclone path (remote:/path)')
     parser.add_argument('--years', type=str, default=None, help='Comma-separated years')
@@ -589,11 +658,19 @@ Examples:
         '--dedup-csv', type=str, default=None,
         help='Override dedup CSV path (default: REPORTS_DIR/DEDUP_CSV)',
     )
+    execute_group.add_argument(
+        '--soft-delete-csv', type=str, default=None,
+        help='Soft-delete CSV path (default: REPORTS_DIR/SOFT_DELETE_CSV)',
+    )
+    execute_group.add_argument(
+        '--soft-delete-backup-prefix', type=str, default='',
+        help='Backup destination prefix for rows without destination_path',
+    )
 
     args = parser.parse_args(argv)
 
-    if not (args.scan or args.report or args.execute):
-        parser.error('At least one of --scan, --report, --execute is required')
+    if not (args.scan or args.report or args.execute or args.execute_soft_delete):
+        parser.error('At least one mode flag is required')
     if args.scan and args.execute and not args.report:
         parser.error('--scan --execute requires --report (use --scan --report --execute)')
 
@@ -614,7 +691,7 @@ def main() -> int:
         logger.info("No RCLONE_CONFIG_BASE64 in config — assuming rclone is pre-configured")
 
     # ── Execute-only (independent of remote/inventory) ────────────────
-    if args.execute and not args.scan and not args.report:
+    if args.execute and not args.scan and not args.report and not args.execute_soft_delete:
         if args.dedup_csv:
             dedup_csv = args.dedup_csv
             from_file_only = True
@@ -624,6 +701,15 @@ def main() -> int:
             dedup_csv = os.path.join(REPORTS_DIR, 'dedup_history.csv')
             from_file_only = False
         return run_execute_from_csv(dedup_csv, dry_run=args.dry_run, from_file_only=from_file_only)
+
+    if args.execute_soft_delete and not args.scan and not args.report and not args.execute:
+        soft_delete_csv = args.soft_delete_csv or os.path.join(REPORTS_DIR, SOFT_DELETE_CSV)
+        backup_prefix = args.soft_delete_backup_prefix or RCLONE_SOFT_DELETE_BACKUP_PREFIX
+        return run_execute_soft_delete_from_csv(
+            soft_delete_csv,
+            dry_run=args.dry_run,
+            backup_prefix=backup_prefix,
+        )
 
     # ── Scan / Report (/ Execute) need a remote ───────────────────────
     if args.root_path:
@@ -656,6 +742,8 @@ def main() -> int:
         logger.info(f"Incremental: {args.incremental}")
     if args.execute:
         logger.info(f"Dry run: {args.dry_run}")
+    if args.execute_soft_delete:
+        logger.info(f"Soft delete dry run: {args.dry_run}")
     logger.info(f"Output: {output_path}")
     logger.info("=" * 60)
 
@@ -760,6 +848,19 @@ def main() -> int:
             dedup_csv = os.path.join(REPORTS_DIR, 'dedup_history.csv')
             from_file_only = False
         return run_execute_from_csv(dedup_csv, dry_run=args.dry_run, from_file_only=from_file_only)
+
+    if args.execute_soft_delete:
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info("EXECUTE SOFT DELETE PHASE — moving lower versions")
+        logger.info("=" * 60)
+        soft_delete_csv = args.soft_delete_csv or os.path.join(REPORTS_DIR, SOFT_DELETE_CSV)
+        backup_prefix = args.soft_delete_backup_prefix or RCLONE_SOFT_DELETE_BACKUP_PREFIX
+        return run_execute_soft_delete_from_csv(
+            soft_delete_csv,
+            dry_run=args.dry_run,
+            backup_prefix=backup_prefix,
+        )
 
     return 0
 
