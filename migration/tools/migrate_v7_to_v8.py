@@ -46,6 +46,8 @@ sys.path.insert(0, project_root)
 
 import requests  # noqa: E402
 
+from api.parsers.common import javdb_absolute_url, absolutize_supporting_actors_json  # noqa: E402
+from utils.config_helper import cfg  # noqa: E402
 from utils.logging_config import setup_logging, get_logger  # noqa: E402
 
 setup_logging()
@@ -350,6 +352,9 @@ def _apply_one_parallel_backfill_result(
     al = result.actor_link.strip()
     sup = result.supporting_actors.strip()
     an, ag, al, sup = _promote_single_female_actor(an, ag, al, sup)
+    base_url = cfg('BASE_URL', 'https://javdb.com')
+    al = javdb_absolute_url(al, base_url) if al else al
+    sup = absolutize_supporting_actors_json(sup, base_url) if sup else sup
     if not an and not al and not sup:
         logger.debug(
             "[%s] Skip UPDATE: empty actor fields (parse_success=%s)",
@@ -1036,6 +1041,9 @@ def run_actor_backfill(
             al = (actor_link or "").strip()
             sup = (supporting_actors or "").strip()
             an, ag, al, sup = _promote_single_female_actor(an, ag, al, sup)
+            base_url = cfg('BASE_URL', 'https://javdb.com')
+            al = javdb_absolute_url(al, base_url) if al else al
+            sup = absolutize_supporting_actors_json(sup, base_url) if sup else sup
 
             if not an and not al and not sup:
                 logger.warning(
