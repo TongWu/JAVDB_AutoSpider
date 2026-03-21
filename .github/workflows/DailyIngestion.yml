@@ -40,8 +40,8 @@ on:
         default: '0.30'
         type: string
   schedule:
-    # Run daily at 15:30 UTC (23:30 Beijing Time)
-    - cron: '30 15 * * *'
+    # Run daily at 15:15 UTC (23:15 Beijing Time)
+    - cron: '15 15 * * *'
 
 jobs:
   # =============================================================================
