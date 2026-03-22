@@ -658,6 +658,19 @@ class AlignWorker(threading.Thread):
 
         # 3) Parse detail page
         detail = parse_detail_page(html)
+        if not detail.parse_success:
+            return AlignResult(
+                task=task,
+                process_result=MissingProcessResult(
+                    video_code=task.video_code,
+                    status='detail_parse_failed',
+                    href=detail_href,
+                    detail_href=detail_href,
+                    message='parse_detail_page returned parse_success=False',
+                ),
+                qb_rows=[], purge_plan_rows=[],
+                db_upsert_kwargs=None, parse_success=False,
+            ), False
         magnets_payload = [m.to_dict() for m in detail.magnets]
         magnet_links = extract_magnets(magnets_payload, index=task.video_code)
         actor_name = detail.get_first_actor_name()
@@ -1119,6 +1132,18 @@ def run_alignment(args: argparse.Namespace) -> int:
                 continue
 
             detail = parse_detail_page(detail_html)
+            if not detail.parse_success:
+                process_results.append(
+                    MissingProcessResult(
+                        video_code=code,
+                        status='detail_parse_failed',
+                        href=detail_href,
+                        detail_href=detail_href,
+                        message='parse_detail_page returned parse_success=False',
+                    )
+                )
+                continue
+
             magnets_payload = [m.to_dict() for m in detail.magnets]
             magnet_links = extract_magnets(magnets_payload, index=code)
             actor_name = detail.get_first_actor_name()
