@@ -2,6 +2,7 @@
 
 from utils.logging_config import get_logger
 from utils.parser import parse_detail
+from utils.rust_adapters.parser_adapter import validate_index_html as _validate_index_html_fast
 from utils.url_helper import get_page_url as _url_helper_get_page_url
 
 import scripts.spider.state as state
@@ -17,13 +18,6 @@ logger = get_logger(__name__)
 class AdhocLoginFailedError(Exception):
     """Raised when login fails on an index page in adhoc mode, causing the spider to abort."""
     pass
-
-try:
-    from javdb_rust_core import validate_index_html as _rust_validate_index_html
-    _RUST_VALIDATE = True
-except ImportError:
-    _RUST_VALIDATE = False
-
 
 def get_page_url(page_num, custom_url=None):
     """Generate URL for a specific page number."""
@@ -53,20 +47,13 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
         """Validate index page HTML. Returns (html, has_movie_list, is_valid_empty)."""
         nonlocal last_failed_html
 
-        if _RUST_VALIDATE:
-            try:
-                has_movie_list, is_valid_empty = _rust_validate_index_html(html)
-                if has_movie_list:
-                    logger.debug(f"[Page {page_num}] Success: {context_msg}")
-                    return html, True, False
-                if is_valid_empty:
-                    logger.info(f"[Page {page_num}] Valid empty page detected: {context_msg}")
-                    return html, False, True
-                last_failed_html = html
-                logger.debug(f"[Page {page_num}] Validation failed: {context_msg}")
-                return None, False, False
-            except Exception:
-                pass  # fall through to Python
+        has_movie_list, is_valid_empty = _validate_index_html_fast(html)
+        if has_movie_list:
+            logger.debug(f"[Page {page_num}] Success: {context_msg}")
+            return html, True, False
+        if is_valid_empty:
+            logger.info(f"[Page {page_num}] Valid empty page detected: {context_msg}")
+            return html, False, True
 
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(html, 'html.parser')
@@ -269,10 +256,10 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
     """Fetch detail page with smart multi-level fallback mechanism.
 
     Returns:
-        tuple: (magnets, actor_info, parse_success,
+        tuple: (magnets, actor_info, actor_gender, actor_link, supporting_actors, parse_success,
                 effective_use_proxy, effective_use_cf_bypass)
     """
-    last_result = ([], '', False)
+    last_result = ([], '', '', '', '', False)
 
     def try_fetch_and_parse(u_proxy, u_cf, context_msg, skip_sleep=False):
         nonlocal last_result
@@ -292,81 +279,83 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
                                                   use_proxy=u_proxy, module_name='spider',
                                                   max_retries=1, use_cf_bypass=u_cf)
                             if html and not is_login_page(html):
-                                magnets, actor_info, parse_success = parse_detail(html, entry_index, skip_sleep=skip_sleep)
+                                m = parse_detail(html, entry_index, skip_sleep=skip_sleep)
+                                magnets, actor_info, actor_gender, actor_link, supporting, parse_success = m
                                 if parse_success:
                                     logger.info(f"[{entry_index}] Login refresh succeeded: {context_msg}")
-                                    return magnets, actor_info, True
-                                else:
-                                    last_result = (magnets, actor_info, False)
+                                    return magnets, actor_info, actor_gender, actor_link, supporting, True
+                                last_result = (
+                                    magnets, actor_info, actor_gender, actor_link, supporting, False,
+                                )
                             else:
                                 logger.warning(f"[{entry_index}] Still login page after refresh")
-                    return [], '', False
+                    return [], '', '', '', '', False
 
-                magnets, actor_info, parse_success = parse_detail(html, entry_index, skip_sleep=skip_sleep)
+                m = parse_detail(html, entry_index, skip_sleep=skip_sleep)
+                magnets, actor_info, actor_gender, actor_link, supporting, parse_success = m
                 if parse_success:
                     logger.debug(f"[{entry_index}] Success: {context_msg}")
-                    return magnets, actor_info, True
-                else:
-                    last_result = (magnets, actor_info, False)
-                    logger.debug(f"[{entry_index}] Parse validation failed (missing magnets): {context_msg}")
+                    return magnets, actor_info, actor_gender, actor_link, supporting, True
+                last_result = (magnets, actor_info, actor_gender, actor_link, supporting, False)
+                logger.debug(f"[{entry_index}] Parse validation failed (missing magnets): {context_msg}")
             else:
                 logger.debug(f"[{entry_index}] Failed to fetch HTML: {context_msg}")
         except Exception as e:
             logger.debug(f"[{entry_index}] Failed {context_msg}: {e}")
-        return [], '', False
+        return [], '', '', '', '', False
 
     def try_proxy_direct_then_cf(proxy_name, skip_sleep=True):
         needs_cf = state.proxy_needs_cf_bypass(proxy_name)
         if needs_cf:
-            magnets, actor_info, success = try_fetch_and_parse(
+            magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
                 True, True,
                 f"Detail: Proxy={proxy_name} + CF Bypass (marked)",
                 skip_sleep=skip_sleep)
             if success:
-                return magnets, actor_info, True, True
-            return [], '', False, True
-        magnets, actor_info, success = try_fetch_and_parse(
+                return magnets, actor_info, ag, al, sup, True, True
+            return [], '', '', '', '', False, True
+        magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
             True, False,
             f"Detail: Proxy={proxy_name} Direct",
             skip_sleep=skip_sleep)
         if success:
-            return magnets, actor_info, True, False
-        magnets, actor_info, success = try_fetch_and_parse(
+            return magnets, actor_info, ag, al, sup, True, False
+        magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
             True, True,
             f"Detail: Proxy={proxy_name} + CF Bypass",
             skip_sleep=skip_sleep)
         if success:
             state.mark_proxy_cf_bypass(proxy_name)
-            return magnets, actor_info, True, True
-        return [], '', False, False
+            return magnets, actor_info, ag, al, sup, True, True
+        return [], '', '', '', '', False, False
 
     # --- Phase 0: Initial Attempt ---
     if use_proxy and state.global_proxy_pool:
         current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
         initial_cf = use_cf_bypass or state.proxy_needs_cf_bypass(current_proxy_name)
-        magnets, actor_info, success = try_fetch_and_parse(
+        magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
             True, initial_cf,
             f"Detail Initial (Proxy={current_proxy_name}, CF={initial_cf})",
             skip_sleep=False)
         if success:
-            return magnets, actor_info, True, True, initial_cf
+            return magnets, actor_info, ag, al, sup, True, True, initial_cf
         if not initial_cf:
-            magnets, actor_info, success = try_fetch_and_parse(
+            magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
                 True, True,
                 f"Detail: Proxy={current_proxy_name} + CF Bypass",
                 skip_sleep=True)
             if success:
                 state.mark_proxy_cf_bypass(current_proxy_name)
                 logger.info(f"[{entry_index}] Detail CF Bypass succeeded with initial proxy={current_proxy_name}")
-                return magnets, actor_info, True, True, True
+                return magnets, actor_info, ag, al, sup, True, True, True
         logger.warning(f"[{entry_index}] Detail page initial attempt failed. Starting fallback...")
     elif not use_proxy:
-        magnets, actor_info, success = try_fetch_and_parse(
+        magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
             False, use_cf_bypass,
             f"Detail Initial (No Proxy, CF={use_cf_bypass})",
             skip_sleep=False)
         if success:
-            return magnets, actor_info, True, False, use_cf_bypass
+            return magnets, actor_info, ag, al, sup, True, False, use_cf_bypass
         logger.warning(f"[{entry_index}] Detail page initial attempt failed (no proxy). Starting fallback...")
     else:
         logger.warning(f"[{entry_index}] No proxy pool configured for initial attempt.")
@@ -377,25 +366,29 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
         login_success, _new_cookie, _proxy = attempt_login_refresh()
         if login_success and use_proxy and state.global_proxy_pool:
             current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
-            magnets, actor_info, success, used_cf = try_proxy_direct_then_cf(current_proxy_name, skip_sleep=True)
+            magnets, actor_info, ag, al, sup, success, used_cf = try_proxy_direct_then_cf(
+                current_proxy_name, skip_sleep=True)
             if success:
                 logger.info(f"[{entry_index}] Login refresh + retry succeeded (Proxy={current_proxy_name}, CF={used_cf})")
-                return magnets, actor_info, True, True, used_cf
+                return magnets, actor_info, ag, al, sup, True, True, used_cf
             logger.warning(f"[{entry_index}] Login refresh completed but detail page still failed")
         elif login_success and not use_proxy:
-            magnets, actor_info, success = try_fetch_and_parse(
+            magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
                 False, use_cf_bypass,
                 "Detail: Retry with refreshed cookie (No Proxy)",
                 skip_sleep=True)
             if success:
-                return magnets, actor_info, True, False, use_cf_bypass
+                return magnets, actor_info, ag, al, sup, True, False, use_cf_bypass
         elif not login_success:
             logger.warning(f"[{entry_index}] Login refresh failed, continuing with proxy pool fallback...")
 
     # --- Phase 2: Iterate through remaining proxies ---
     if state.global_proxy_pool is None:
         logger.error(f"[{entry_index}] Fallback failed: No proxy pool configured")
-        return last_result[0], last_result[1], last_result[2], use_proxy, use_cf_bypass
+        return (
+            last_result[0], last_result[1], last_result[2], last_result[3], last_result[4],
+            last_result[5], use_proxy, use_cf_bypass,
+        )
 
     max_switches = state.global_proxy_pool.get_proxy_count() if PROXY_MODE == 'pool' else 1
     max_switches = min(max_switches, 10)
@@ -406,10 +399,14 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
             logger.warning(f"[{entry_index}] No more proxies available in pool")
             break
         current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
-        magnets, actor_info, success, used_cf = try_proxy_direct_then_cf(current_proxy_name, skip_sleep=True)
+        magnets, actor_info, ag, al, sup, success, used_cf = try_proxy_direct_then_cf(
+            current_proxy_name, skip_sleep=True)
         if success:
             logger.info(f"[{entry_index}] Detail Proxy fallback succeeded (Proxy={current_proxy_name}, CF={used_cf})")
-            return magnets, actor_info, True, True, used_cf
+            return magnets, actor_info, ag, al, sup, True, True, used_cf
 
     logger.warning(f"[{entry_index}] Detail page fallback exhausted. Returning best available result.")
-    return last_result[0], last_result[1], last_result[2], use_proxy, use_cf_bypass
+    return (
+        last_result[0], last_result[1], last_result[2], last_result[3], last_result[4],
+        last_result[5], use_proxy, use_cf_bypass,
+    )

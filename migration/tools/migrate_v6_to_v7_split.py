@@ -12,7 +12,7 @@ Databases created:
   - operations.db — RcloneInventory, DedupRecords, PikpakHistory, ProxyBans
 
 Usage:
-    python3 migration/migrate_v6_to_v7_split.py [--db-path PATH] [--backup] [--verify] [--dry-run] [--normalize-datetimes]
+    python3 migration/tools/migrate_v6_to_v7_split.py [--db-path PATH] [--backup] [--verify] [--dry-run] [--normalize-datetimes]
 """
 
 import argparse
@@ -22,7 +22,7 @@ import sqlite3
 import sys
 from datetime import datetime
 
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
@@ -165,7 +165,7 @@ def main():
     logger.info("=" * 60)
 
     if current < 6:
-        logger.info("Database is below v6. Run migrate_v5_to_v6.py first.")
+        logger.info("Database is below v6. Run migration/tools/migrate_v5_to_v6.py first.")
         sys.exit(1)
 
     import utils.db as db_mod

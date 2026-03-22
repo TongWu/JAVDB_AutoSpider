@@ -236,9 +236,13 @@ def parse_detail(html_content, index=None, skip_sleep=False):
             ``MOVIE_SLEEP_MIN`` / ``MOVIE_SLEEP_MAX``).
 
     Returns:
-        tuple: (magnets, actor_info, parse_success)
+        tuple: (magnets, actor_info, actor_gender, actor_link, supporting_actors, parse_success)
             - magnets: List of magnet link dictionaries
-            - actor_info: Actor name string
+            - actor_info: Lead (first) actor name
+            - actor_gender: ``female`` / ``male`` / ``''``
+            - actor_link: Lead actor href as site path (e.g. ``/actors/...``)
+            - supporting_actors: JSON array string for supporting cast (DB column);
+              ``[]`` when there is no supporting cast, including a single lead actor only
             - parse_success: True if magnets_content was found
     """
     prefix = f"[{index}]" if index is not None else ""
@@ -246,8 +250,11 @@ def parse_detail(html_content, index=None, skip_sleep=False):
     # Delegate to the new API parser
     detail = _api_parse_detail(html_content)
 
-    # Convert actor info
+    # Convert actor info (lead + supporting JSON)
     actor_info = detail.get_first_actor_name()
+    actor_gender = detail.get_first_actor_gender()
+    actor_link = detail.get_first_actor_href()
+    supporting_actors = detail.get_supporting_actors_json()
     if actor_info:
         logger.debug(f"{prefix} Found actor: {actor_info}")
 
@@ -259,4 +266,4 @@ def parse_detail(html_content, index=None, skip_sleep=False):
         logger.debug(f"{prefix} No magnets content found in detail page")
 
     logger.debug(f"{prefix} Found {len(magnets)} magnet links")
-    return magnets, actor_info, parse_success
+    return magnets, actor_info, actor_gender, actor_link, supporting_actors, parse_success

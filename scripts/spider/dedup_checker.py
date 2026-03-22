@@ -12,7 +12,16 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Set, Tuple, NamedTuple
 
 from utils.config_helper import use_sqlite, use_csv, cfg
+from utils.contracts import (
+    UNCENSORED_SENSOR_PRIORITY,
+    is_uncensored_category,
+    get_uncensored_priority,
+)
 from utils.logging_config import get_logger
+from utils.rust_adapters.dedup_adapter import (
+    rust_should_skip_from_rclone,
+    rust_check_dedup_upgrade,
+)
 
 logger = get_logger(__name__)
 
@@ -70,20 +79,9 @@ DEDUP_FIELDNAMES = [
     'delete_datetime',
 ]
 
-# Priority maps (replicating rclone_dedup.SensorCategory logic to avoid heavy import)
-WUMA_PRIORITY: Dict[str, int] = {
-    '无码流出': 3,
-    '无码': 2,
-    '无码破解': 1,
-}
-
-
-def _is_wuma_category(cat: str) -> bool:
-    return cat in WUMA_PRIORITY
-
-
-def _get_wuma_priority(cat: str) -> int:
-    return WUMA_PRIORITY.get(cat, 0)
+# Priority aliases — delegated to utils.contracts
+_is_wuma_category = is_uncensored_category
+_get_wuma_priority = get_uncensored_priority
 
 
 # ---------------------------------------------------------------------------
@@ -180,6 +178,20 @@ def should_skip_from_rclone(
     if not entries:
         return False
 
+    rust_result = rust_should_skip_from_rclone(
+        code,
+        [
+            {
+                'video_code': e.video_code,
+                'subtitle_category': e.subtitle_category,
+            }
+            for e in entries
+        ],
+        enable_dedup,
+    )
+    if rust_result is not None:
+        return rust_result
+
     if enable_dedup:
         return False
 
@@ -208,6 +220,37 @@ def check_dedup_upgrade(
       - Subtitle upgrade: GDrive has 无字, spider found 中字 torrent
       - Sensor upgrade: GDrive has 无码破解, spider found 无码 or 无码流出
     """
+    rust_records = rust_check_dedup_upgrade(
+        video_code,
+        new_torrent_types,
+        [
+            {
+                'video_code': e.video_code,
+                'sensor_category': e.sensor_category,
+                'subtitle_category': e.subtitle_category,
+                'folder_path': e.folder_path,
+                'folder_size': e.folder_size,
+            }
+            for e in rclone_entries
+        ],
+    )
+    if rust_records:
+        return [
+            DedupRecord(
+                video_code=r.get('video_code', video_code.upper()),
+                existing_sensor=r.get('existing_sensor', ''),
+                existing_subtitle=r.get('existing_subtitle', ''),
+                existing_gdrive_path=r.get('existing_gdrive_path', ''),
+                existing_folder_size=int(r.get('existing_folder_size', 0) or 0),
+                new_torrent_category=r.get('new_torrent_category', ''),
+                deletion_reason=r.get('deletion_reason', ''),
+                detect_datetime=r.get('detect_datetime', ''),
+                is_deleted=r.get('is_deleted', 'False'),
+                delete_datetime=r.get('delete_datetime', ''),
+            )
+            for r in rust_records
+        ]
+
     records: List[DedupRecord] = []
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 

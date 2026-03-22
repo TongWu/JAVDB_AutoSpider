@@ -4,9 +4,12 @@ Ad hoc script to reclassify -C.无码破解 torrents in history CSV from no_subt
 """
 
 import csv
-import os
 import logging
+import os
 from datetime import datetime
+
+_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.chdir(_project_root)
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -24,15 +27,18 @@ def reclassify_c_hacked_torrents(history_file):
     logger.info(f"Creating backup: {backup_file}")
     
     try:
-        # Read all records
+        # Read all records, preserving original headers
         with open(history_file, 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
+            fieldnames = reader.fieldnames or []
             records = list(reader)
         
+        if not fieldnames:
+            logger.error("Could not read fieldnames from %s", history_file)
+            return False
+
         # Create backup
         with open(backup_file, 'w', newline='', encoding='utf-8-sig') as f:
-            fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 
-                         'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for record in records:
@@ -54,8 +60,6 @@ def reclassify_c_hacked_torrents(history_file):
         
         # Write updated records back
         with open(history_file, 'w', newline='', encoding='utf-8-sig') as f:
-            fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 
-                         'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for record in records:
@@ -70,7 +74,7 @@ def reclassify_c_hacked_torrents(history_file):
 
 def main():
     """Main function"""
-    history_file = "Daily Report/parsed_movies_history.csv"
+    history_file = os.path.join("reports", "parsed_movies_history.csv")
     
     logger.info("Starting -C.无码破解 torrent reclassification...")
     logger.info(f"Target file: {history_file}")

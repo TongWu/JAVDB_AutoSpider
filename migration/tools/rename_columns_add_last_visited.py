@@ -16,8 +16,10 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-HISTORY_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                            'reports', 'parsed_movies_history.csv')
+HISTORY_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    'reports', 'parsed_movies_history.csv',
+)
 
 OLD_FIELDNAMES = [
     'href', 'phase', 'video_code', 'create_date', 'update_date',

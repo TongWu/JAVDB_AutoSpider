@@ -159,7 +159,7 @@ def parse_index_page(html_content: str, page_num: int = 1) -> IndexPageResult:
     # section and the main listing.  We parse items from all of them.
     movie_lists = soup.find_all('div', class_=lambda x: x and 'movie-list' in x)
     if not movie_lists:
-        logger.warning('[Page %d] No movie list found', page_num)
+        logger.debug('[Page %d] No movie list found', page_num)
         return IndexPageResult(has_movie_list=False, page_title=page_title)
 
     movies = []
@@ -175,6 +175,17 @@ def parse_index_page(html_content: str, page_num: int = 1) -> IndexPageResult:
         movies=movies,
         page_title=page_title,
     )
+
+
+def find_exact_video_code_match(entries: list[MovieIndexEntry], target_code: str) -> Optional[MovieIndexEntry]:
+    """Return the first entry whose video_code exactly matches *target_code*."""
+    normalized_target = (target_code or '').strip().upper()
+    if not normalized_target:
+        return None
+    for entry in entries:
+        if (entry.video_code or '').strip().upper() == normalized_target:
+            return entry
+    return None
 
 
 def parse_category_page(html_content: str, page_num: int = 1) -> CategoryPageResult:

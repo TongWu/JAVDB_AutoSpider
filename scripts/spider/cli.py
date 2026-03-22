@@ -3,7 +3,7 @@
 import argparse
 from datetime import datetime
 
-from scripts.spider.config_loader import START_PAGE, END_PAGE
+from scripts.spider.config_loader import PAGE_START, PAGE_END
 
 OUTPUT_CSV = f'Javdb_TodayTitle_{datetime.now().strftime("%Y%m%d")}.csv'
 
@@ -18,10 +18,10 @@ def parse_arguments():
                         help='Print items that would be written without changing CSV file')
     parser.add_argument('--output-file', type=str,
                         help='Specify output CSV file name (without changing directory)')
-    parser.add_argument('--start-page', type=int, default=START_PAGE,
-                        help=f'Starting page number (default: {START_PAGE})')
-    parser.add_argument('--end-page', type=int, default=END_PAGE,
-                        help=f'Ending page number (default: {END_PAGE})')
+    parser.add_argument('--start-page', type=int, default=PAGE_START,
+                        help=f'Starting page number (default: {PAGE_START})')
+    parser.add_argument('--end-page', type=int, default=PAGE_END,
+                        help=f'Ending page number (default: {PAGE_END})')
     parser.add_argument('--all', action='store_true',
                         help='Parse all pages until an empty page is found (ignores --end-page)')
     parser.add_argument('--ignore-history', action='store_true',
@@ -36,6 +36,8 @@ def parse_arguments():
                         help='Ignore today/yesterday tags and download all entries matching phase criteria')
     parser.add_argument('--use-proxy', action='store_true',
                         help='Enable proxy for all HTTP requests (proxy settings from config.py)')
+    parser.add_argument('--always-bypass-time', type=int, nargs='?', const=0, default=None,
+                        help='Minutes to keep using CF bypass after fallback success (0 or no value = whole session)')
     parser.add_argument('--from-pipeline', action='store_true',
                         help='Running from pipeline.py - use GIT_USERNAME for commits')
     parser.add_argument('--max-movies-phase1', type=int, default=None,

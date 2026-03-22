@@ -2,17 +2,18 @@
 
 from typing import Tuple
 
+from utils.contracts import TORRENT_CATEGORIES, DOWNLOADED_PLACEHOLDER
 from utils.logging_config import get_logger
 from utils.history_manager import determine_torrent_types, get_missing_torrent_types
+from utils.rust_adapters.csv_adapter import (
+    rust_create_csv_row,
+    rust_check_torrent_status,
+    rust_collect_new_magnet_links,
+    RUST_CSV_AVAILABLE,
+)
 from scripts.spider.config_loader import INCLUDE_DOWNLOADED_IN_REPORT
 
 logger = get_logger(__name__)
-
-try:
-    from javdb_rust_core import create_csv_row as _rust_create_csv_row
-    _RUST_CSV_ROW = True
-except ImportError:
-    _RUST_CSV_ROW = False
 
 
 def check_torrent_status(row: dict) -> Tuple[bool, bool, bool]:
@@ -21,11 +22,14 @@ def check_torrent_status(row: dict) -> Tuple[bool, bool, bool]:
     Returns:
         (has_any_torrents, has_new_torrents, should_include_in_report)
     """
-    _TORRENT_FIELDS = ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle')
-    has_any = any(row[f] for f in _TORRENT_FIELDS)
+    rust_result = rust_check_torrent_status(row, INCLUDE_DOWNLOADED_IN_REPORT)
+    if rust_result is not None:
+        return rust_result
+
+    has_any = any(row[f] for f in TORRENT_CATEGORIES)
     has_new = any(
-        row[f] and row[f] != '[DOWNLOADED PREVIOUSLY]'
-        for f in _TORRENT_FIELDS
+        row[f] and row[f] != DOWNLOADED_PLACEHOLDER
+        for f in TORRENT_CATEGORIES
     )
     should_include = has_new or (INCLUDE_DOWNLOADED_IN_REPORT and has_any)
     return has_any, has_new, should_include
@@ -37,12 +41,16 @@ def collect_new_magnet_links(row: dict, magnet_links: dict):
     Returns:
         (new_magnets, new_sizes, new_file_counts, new_resolutions)
     """
+    rust_result = rust_collect_new_magnet_links(row, magnet_links)
+    if rust_result is not None:
+        return rust_result
+
     new_magnets = {}
     new_sizes = {}
     new_file_counts = {}
     new_resolutions = {}
-    for mtype in ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle'):
-        if row.get(mtype) and row[mtype] != '[DOWNLOADED PREVIOUSLY]':
+    for mtype in TORRENT_CATEGORIES:
+        if row.get(mtype) and row[mtype] != DOWNLOADED_PLACEHOLDER:
             new_magnets[mtype] = magnet_links.get(mtype, '')
             new_sizes[mtype] = magnet_links.get(f'size_{mtype}', '')
             new_file_counts[mtype] = magnet_links.get(f'file_count_{mtype}', 0)
@@ -65,7 +73,7 @@ def should_include_torrent_in_csv(href, history_data, magnet_links):
 def create_csv_row_with_history_filter(href, entry, page_num, actor_info,
                                        magnet_links, history_data):
     """Create CSV row with torrent categories, marking downloaded ones."""
-    if _RUST_CSV_ROW:
+    if RUST_CSV_AVAILABLE:
         if not history_data or href not in history_data:
             hist_types: list = []
             miss_types: list = []
@@ -73,20 +81,20 @@ def create_csv_row_with_history_filter(href, entry, page_num, actor_info,
             hist_types = history_data[href].get('torrent_types', [])
             current_types = determine_torrent_types(magnet_links)
             miss_types = get_missing_torrent_types(hist_types, current_types)
-        try:
-            return _rust_create_csv_row(
-                href,
-                entry['video_code'],
-                int(page_num) if page_num else 0,
-                actor_info or '',
-                entry.get('rate', ''),
-                entry.get('comment_number', ''),
-                magnet_links,
-                hist_types,
-                miss_types,
-            )
-        except Exception as e:
-            logger.debug(f"Rust create_csv_row failed ({e}), falling back to Python")
+        rust_row = rust_create_csv_row(
+            href,
+            entry["video_code"],
+            int(page_num) if page_num else 0,
+            actor_info or "",
+            entry.get("rate", ""),
+            entry.get("comment_number", ""),
+            magnet_links,
+            hist_types,
+            miss_types,
+        )
+        if rust_row is not None:
+            return rust_row
+        logger.debug("Rust create_csv_row failed, falling back to Python")
 
     if not history_data or href not in history_data:
         row = {

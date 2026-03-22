@@ -3,7 +3,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use scraper::{ElementRef, Html, Selector};
 
-use crate::models::{MagnetInfo, MovieDetail, MovieLink};
+use crate::models::{ActorCredit, MagnetInfo, MovieDetail, MovieLink};
 use crate::scraper::common::{
     extract_all_movie_links, extract_movie_link, extract_rate_and_comments, get_text_content,
 };
@@ -79,6 +79,96 @@ fn extract_links_from_panel(panel_blocks: &[ElementRef], label: &str) -> Vec<Mov
         None => return Vec::new(),
     };
     extract_all_movie_links(&value_span)
+}
+
+/// Gender from ``<strong class="symbol female|male">`` immediately after each actor ``<a>``.
+fn gender_after_actor(actor: &ElementRef<'_>) -> String {
+    for sib in actor.next_siblings() {
+        if let Some(el) = ElementRef::wrap(sib) {
+            if el.value().name() == "strong" {
+                let class = el.value().attr("class").unwrap_or("");
+                if class.contains("female") {
+                    return "female".into();
+                }
+                if class.contains("male") {
+                    return "male".into();
+                }
+                return String::new();
+            }
+            if el.value().name() == "a" {
+                break;
+            }
+        }
+    }
+    String::new()
+}
+
+fn extract_actors_with_gender(panel_blocks: &[ElementRef]) -> Vec<ActorCredit> {
+    let block = match find_panel_block(panel_blocks, "演員:") {
+        Some(b) => b,
+        None => return Vec::new(),
+    };
+    let value_span = match block.select(&SEL_VALUE).next() {
+        Some(v) => v,
+        None => return Vec::new(),
+    };
+    let mut actors = Vec::new();
+    for a_tag in value_span.select(&SEL_A) {
+        let href = a_tag.value().attr("href").unwrap_or("");
+        if !href.contains("/actors/") {
+            continue;
+        }
+        let Some(ml) = extract_movie_link(&a_tag) else {
+            continue;
+        };
+        let gender = gender_after_actor(&a_tag);
+        actors.push(ActorCredit {
+            name: ml.name,
+            href: ml.href,
+            gender,
+        });
+    }
+    actors
+}
+
+fn value_span_has_actor_link(value_span: ElementRef) -> bool {
+    for a_tag in value_span.select(&SEL_A) {
+        let href = a_tag.value().attr("href").unwrap_or("");
+        if href.contains("/actors/") {
+            return true;
+        }
+    }
+    false
+}
+
+fn is_no_actor_placeholder_text(text: &str) -> bool {
+    let t = text.trim();
+    if t.is_empty() {
+        return false;
+    }
+    if t.eq_ignore_ascii_case("n/a") {
+        return true;
+    }
+    matches!(
+        t,
+        "N/A" | "无" | "無" | "—" | "–" | "-" | "－" | "暂无" | "暂无演员"
+    )
+}
+
+fn detect_no_actor_listing(panel_blocks: &[ElementRef]) -> bool {
+    let block = match find_panel_block(panel_blocks, "演員:") {
+        Some(b) => b,
+        None => return false,
+    };
+    let value_span = match block.select(&SEL_VALUE).next() {
+        Some(v) => v,
+        None => return false,
+    };
+    if value_span_has_actor_link(value_span) {
+        return false;
+    }
+    let raw = get_text_content(&value_span).trim().to_string();
+    is_no_actor_placeholder_text(&raw)
 }
 
 fn extract_text_from_panel(panel_blocks: &[ElementRef], label: &str) -> String {
@@ -216,9 +306,12 @@ pub fn parse_detail_page(html_content: &str) -> MovieDetail {
         }
     }
 
-    // Tags, Actors
+    // Tags, Actors (with ♀/♂ markers)
     detail.tags = extract_links_from_panel(&panel_blocks, "類別:");
-    detail.actors = extract_links_from_panel(&panel_blocks, "演員:");
+    detail.actors = extract_actors_with_gender(&panel_blocks);
+    if detail.actors.is_empty() {
+        detail.no_actor_listing = detect_no_actor_listing(&panel_blocks);
+    }
 
     // Poster URL
     if let Some(vmp) = video_meta_panel {
