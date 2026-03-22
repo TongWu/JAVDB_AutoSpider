@@ -497,6 +497,16 @@ _CORS_ORIGINS = [
     if o.strip()
 ]
 
+def _infer_cookie_secure() -> bool:
+    explicit = os.getenv("COOKIE_SECURE", "").strip().lower()
+    if explicit in {"1", "true", "yes"}:
+        return True
+    if explicit in {"0", "false", "no"}:
+        return False
+    return any(o.startswith("https://") for o in _CORS_ORIGINS)
+
+COOKIE_SECURE = _infer_cookie_secure()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_CORS_ORIGINS,
@@ -1417,7 +1427,7 @@ async def login(payload: LoginPayload, request: Request, response: Response):
         sessions.append((access_claims["jti"], access_claims["exp"]))
         ACTIVE_TOKENS[payload.username] = sessions
     csrf = secrets.token_urlsafe(24)
-    response.set_cookie("csrf_token", csrf, httponly=False, samesite="lax", secure=True)
+    response.set_cookie("csrf_token", csrf, httponly=False, samesite="lax", secure=COOKIE_SECURE)
     audit_logger.info(
         "login_success username=%s ip=%s role=%s",
         payload.username,
