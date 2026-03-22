@@ -263,8 +263,8 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('CF_BYPASS_SERVICE_PORT', 'CF_BYPASS_SERVICE_PORT', get_env_int, 8000, 'CLOUDFLARE BYPASS CONFIGURATION'),
         ('CF_BYPASS_ENABLED', 'CF_BYPASS_ENABLED', get_env_bool, True, 'CLOUDFLARE BYPASS CONFIGURATION'),
         # Spider Configuration
-        ('START_PAGE', 'START_PAGE', get_env_int, 1, 'SPIDER CONFIGURATION'),
-        ('END_PAGE', 'END_PAGE', get_env_int, 10, 'SPIDER CONFIGURATION'),
+        ('PAGE_START', 'PAGE_START', get_env_int, 1, 'SPIDER CONFIGURATION'),
+        ('PAGE_END', 'PAGE_END', get_env_int, 10, 'SPIDER CONFIGURATION'),
         ('PHASE2_MIN_RATE', 'PHASE2_MIN_RATE', get_env_float, 4.0, 'SPIDER CONFIGURATION'),
         ('PHASE2_MIN_COMMENTS', 'PHASE2_MIN_COMMENTS', get_env_int, 85, 'SPIDER CONFIGURATION'),
         ('BASE_URL', 'BASE_URL', get_env, 'https://javdb.com', 'SPIDER CONFIGURATION'),
@@ -275,11 +275,11 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # GPT API Configuration (optional - for automatic captcha solving during login)
         ('GPT_API_URL', 'GPT_API_URL', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
         ('GPT_API_KEY', 'GPT_API_KEY', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
-        ('PAGE_SLEEP', 'PAGE_SLEEP', get_env_int, 15, 'JAVDB LOGIN CONFIGURATION'),
-        ('MOVIE_SLEEP_MIN', 'MOVIE_SLEEP', get_env_range_min, 5, 'JAVDB LOGIN CONFIGURATION'),
-        ('MOVIE_SLEEP_MAX', 'MOVIE_SLEEP', get_env_range_max, 15, 'JAVDB LOGIN CONFIGURATION'),
-        ('CF_TURNSTILE_COOLDOWN', 'CF_TURNSTILE_COOLDOWN', get_env_int, 30, 'JAVDB LOGIN CONFIGURATION'),
-        ('FALLBACK_COOLDOWN', 'FALLBACK_COOLDOWN', get_env_int, 30, 'JAVDB LOGIN CONFIGURATION'),
+        ('PAGE_SLEEP', 'PAGE_SLEEP', get_env_int, 5, 'JAVDB LOGIN CONFIGURATION'),
+        ('MOVIE_SLEEP_MIN', 'MOVIE_SLEEP', get_env_range_min, None, 'JAVDB LOGIN CONFIGURATION'),
+        ('MOVIE_SLEEP_MAX', 'MOVIE_SLEEP', get_env_range_max, None, 'JAVDB LOGIN CONFIGURATION'),
+        ('CF_TURNSTILE_COOLDOWN', 'CF_TURNSTILE_COOLDOWN', get_env_int, 5, 'JAVDB LOGIN CONFIGURATION'),
+        ('FALLBACK_COOLDOWN', 'FALLBACK_COOLDOWN', get_env_int, 15, 'JAVDB LOGIN CONFIGURATION'),
         # Logging Configuration
         ('LOG_LEVEL', 'LOG_LEVEL', get_env, 'INFO', 'LOGGING CONFIGURATION'),
         ('SPIDER_LOG_FILE', 'SPIDER_LOG_FILE', get_env, 'logs/spider.log', 'LOGGING CONFIGURATION'),
@@ -301,14 +301,13 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('PIKPAK_EMAIL', 'PIKPAK_EMAIL', get_env, '', 'PIKPAK CONFIGURATION'),
         ('PIKPAK_PASSWORD', 'PIKPAK_PASSWORD', get_env, '', 'PIKPAK CONFIGURATION'),
         ('PIKPAK_LOG_FILE', 'PIKPAK_LOG_FILE', get_env, 'logs/pikpak_bridge.log', 'PIKPAK CONFIGURATION'),
-        ('PIKPAK_REQUEST_DELAY', 'PIKPAK_REQUEST_DELAY', get_env_int, 3, 'PIKPAK CONFIGURATION'),
+        ('PIKPAK_REQUEST_DELAY', 'PIKPAK_REQUEST_DELAY', get_env_int, 2, 'PIKPAK CONFIGURATION'),
         # qBittorrent File Filter Configuration
-        ('QB_FILE_FILTER_MIN_SIZE_MB', 'QB_FILE_FILTER_MIN_SIZE_MB', get_env_int, 50, 'QBITTORRENT FILE FILTER CONFIGURATION'),
+        ('QB_FILE_FILTER_MIN_SIZE_MB', 'QB_FILE_FILTER_MIN_SIZE_MB', get_env_int, 100, 'QBITTORRENT FILE FILTER CONFIGURATION'),
         ('QB_FILE_FILTER_LOG_FILE', 'QB_FILE_FILTER_LOG_FILE', get_env, 'logs/qb_file_filter.log', 'QBITTORRENT FILE FILTER CONFIGURATION'),
         # Rclone Configuration
         ('RCLONE_CONFIG_BASE64', 'RCLONE_CONFIG_BASE64', get_env, '', 'RCLONE CONFIGURATION'),
-        ('RCLONE_DRIVE_NAME', 'RCLONE_DRIVE_NAME', get_env, 'gdrive', 'RCLONE CONFIGURATION'),
-        ('RCLONE_ROOT_FOLDER', 'RCLONE_ROOT_FOLDER', get_env, '', 'RCLONE CONFIGURATION'),
+        ('RCLONE_FOLDER_PATH', 'RCLONE_FOLDER_PATH', get_env, 'gdrive:', 'RCLONE CONFIGURATION'),
         # Storage Mode
         ('STORAGE_MODE', 'STORAGE_MODE', get_env, 'duo', 'STORAGE MODE'),
         # Dedup Configuration

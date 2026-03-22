@@ -91,8 +91,8 @@ jobs:
           VAR_GPT_API_KEY: ${{ secrets.GPT_API_KEY }}
           # ============ DEFAULT VALUES FOR OTHER CONFIGS ============
           VAR_BASE_URL: 'https://javdb.com'
-          VAR_START_PAGE: '1'
-          VAR_END_PAGE: '20'
+          VAR_PAGE_START: '1'
+          VAR_PAGE_END: '20'
           VAR_PHASE2_MIN_RATE: '4.0'
           VAR_PHASE2_MIN_COMMENTS: '85'
           VAR_PAGE_SLEEP: '2'
@@ -257,7 +257,7 @@ jobs:
 
       - name: Upload encrypted logs artifact
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: pipeline-logs-encrypted
           path: encrypted_artifacts/logs.tar.gz.enc
@@ -315,7 +315,7 @@ jobs:
 
       - name: Upload encrypted reports artifact
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: pipeline-reports-encrypted
           path: encrypted_artifacts/reports.tar.gz.enc
@@ -341,7 +341,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download encrypted reports
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: pipeline-reports-encrypted
           path: encrypted_artifacts

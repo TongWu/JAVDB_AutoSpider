@@ -72,7 +72,7 @@ The spider operates in two modes:
 
 ### qBittorrent File Filter
 - Automatically filters small files from recently added torrents
-- Configurable minimum file size threshold (default: 50MB)
+- Configurable minimum file size threshold (default: 100MB from `QB_FILE_FILTER_MIN_SIZE_MB`)
 - Sets priority to 0 (do not download) for files below threshold
 - Filters out NFO files, samples, screenshots, etc.
 - Supports dry-run mode for preview
@@ -295,20 +295,21 @@ python qbtorrent_uploader.py --use-proxy
 
 **Run the qBittorrent File Filter (filter out small files):**
 ```bash
-# Default: filter files smaller than 50MB from last 2 days
-python scripts/qb_file_filter.py --min-size 50
+# Default: uses QB_FILE_FILTER_MIN_SIZE_MB from config (100 if unset)
+python scripts/qb_file_filter.py
 
-# Custom threshold and days
+# Override threshold (e.g. 50MB) and days
+python scripts/qb_file_filter.py --min-size 50
 python scripts/qb_file_filter.py --min-size 100 --days 3
 
 # Dry run (preview without changes)
-python scripts/qb_file_filter.py --min-size 50 --dry-run
+python scripts/qb_file_filter.py --dry-run
 
 # Filter specific category only
-python scripts/qb_file_filter.py --min-size 50 --category JavDB
+python scripts/qb_file_filter.py --category JavDB
 
 # With proxy
-python scripts/qb_file_filter.py --min-size 50 --use-proxy
+python scripts/qb_file_filter.py --use-proxy
 ```
 
 **Run the PikPak bridge (transfer old torrents from qBittorrent to PikPak):**
@@ -590,8 +591,8 @@ PROXY_MODULES = ['all']  # 'all' or list: 'spider', 'qbittorrent', 'pikpak'
 # =============================================================================
 # SPIDER CONFIGURATION
 # =============================================================================
-START_PAGE = 1
-END_PAGE = 20
+PAGE_START = 1
+PAGE_END = 20
 BASE_URL = 'https://javdb.com'
 
 # Phase 2 filtering criteria
@@ -656,7 +657,7 @@ PIKPAK_PASSWORD = 'your_pikpak_password'
 
 # PikPak settings
 PIKPAK_LOG_FILE = 'logs/pikpak_bridge.log'
-PIKPAK_REQUEST_DELAY = 3  # Delay between requests (seconds) to avoid rate limiting
+PIKPAK_REQUEST_DELAY = 2  # Delay between requests (seconds) to avoid rate limiting
 
 # =============================================================================
 # qBittorrent File Filter Configuration
@@ -665,7 +666,7 @@ PIKPAK_REQUEST_DELAY = 3  # Delay between requests (seconds) to avoid rate limit
 # Minimum file size threshold in MB
 # Files smaller than this will be set to "do not download" priority
 # This helps filter out small files like NFO, samples, screenshots, etc.
-QB_FILE_FILTER_MIN_SIZE_MB = 50
+QB_FILE_FILTER_MIN_SIZE_MB = 100
 
 # Log file for the file filter script
 QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
@@ -1483,7 +1484,7 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
   - **Movies**: 5-15 seconds random (configurable via `MOVIE_SLEEP_MIN` / `MOVIE_SLEEP_MAX`)
   - **Volume-based adjustment**: `MovieSleepManager` automatically increases sleep intervals when processing large batches
   - **qBittorrent additions**: 1 second (configurable via `DELAY_BETWEEN_ADDITIONS`)
-  - **PikPak requests**: 3 seconds (configurable via `PIKPAK_REQUEST_DELAY`)
+  - **PikPak requests**: 2 seconds default (configurable via `PIKPAK_REQUEST_DELAY`)
 
 ### System Behavior
 - The system uses proper headers to mimic a real browser
@@ -1570,7 +1571,8 @@ python3 pikpak_bridge.py  # Default: 3 days, batch mode
 python3 pikpak_bridge.py --days 7 --individual  # Custom days, individual mode
 
 # qBittorrent File Filter
-python3 scripts/qb_file_filter.py --min-size 50  # Filter files < 50MB
+python3 scripts/qb_file_filter.py  # Default threshold from config (100MB if unset)
+python3 scripts/qb_file_filter.py --min-size 50  # Stricter: < 50MB
 python3 scripts/qb_file_filter.py --min-size 100 --days 3 --dry-run  # Preview mode
 ```
 

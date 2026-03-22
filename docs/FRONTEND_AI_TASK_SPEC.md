@@ -197,7 +197,7 @@ Authorization: Bearer <token>
 | 代理封禁时长 | 7 天 | `ProxyBanManager::BAN_DURATION_DAYS` |
 | 翻页间隔 | `PAGE_SLEEP`（默认 5 s） | `config.py` |
 | 影片间隔 | `MOVIE_SLEEP`（默认 5 s） | `config.py` |
-| Turnstile 冷却 | `CF_TURNSTILE_COOLDOWN`（默认 30 s） | `config.py` |
+| Turnstile 冷却 | `CF_TURNSTILE_COOLDOWN`（默认 5 s） | `config.py` |
 | 回退冷却 | `FALLBACK_COOLDOWN`（默认 15 s） | `config.py` |
 | 历史记录上限 | 默认 1000 条（`maintain_history_limit`） | `history/manager.rs` |
 | 线程安全 | `parking_lot::Mutex` + `Arc`，Rust 端 GIL 释放（`py.allow_threads`） | 全部 Rust 模块 |
@@ -299,8 +299,8 @@ Authorization: Bearer <token>
 
 | 配置名 | 类型 | 说明 | 默认/示例 |
 |--------|------|------|-----------|
-| START_PAGE | int | 起始页 | `1` |
-| END_PAGE | int | 结束页 | `10` 或 `20` |
+| PAGE_START | int | 起始页 | `1` |
+| PAGE_END | int | 结束页 | `10` 或 `20` |
 | PHASE2_MIN_RATE | float | Phase2 最低评分 | `4.0` |
 | PHASE2_MIN_COMMENTS | int | Phase2 最低评论数 | `85` 或 `100` |
 | BASE_URL | string | JAVDB 基础 URL | `https://javdb.com` |
@@ -314,11 +314,11 @@ Authorization: Bearer <token>
 | JAVDB_SESSION_COOKIE | string | 会话 Cookie（敏感） | 空 |
 | GPT_API_URL | string | GPT 兼容 API URL（验证码） | 空 |
 | GPT_API_KEY | string | API Key（敏感） | 空 |
-| PAGE_SLEEP | int | 翻页间隔（秒） | `2`–`15` |
+| PAGE_SLEEP | int | 翻页间隔（秒） | 默认 `5`（建议 `2`–`15`） |
 | MOVIE_SLEEP | int | 影片间间隔（秒，含详情页限速） | `5`–`30` |
-| CF_TURNSTILE_COOLDOWN | int | Turnstile 冷却（秒） | `10`–`30` |
+| CF_TURNSTILE_COOLDOWN | int | Turnstile 冷却（秒） | 默认 `5`（建议 `5`–`60`；过短可能增加触发风控概率） |
 | PHASE_TRANSITION_COOLDOWN | int | 阶段切换冷却（秒） | `30`–`60` |
-| FALLBACK_COOLDOWN | int | 回退冷却（秒） | `30` |
+| FALLBACK_COOLDOWN | int | 回退冷却（秒） | 默认 `15`（建议 `15`–`60`） |
 
 ### 2.8 LOGGING CONFIGURATION
 
@@ -353,13 +353,13 @@ Authorization: Bearer <token>
 | PIKPAK_EMAIL | string | PikPak 邮箱 | 空 |
 | PIKPAK_PASSWORD | string | 密码（敏感） | 空 |
 | PIKPAK_LOG_FILE | string | 日志路径 | `logs/pikpak_bridge.log` |
-| PIKPAK_REQUEST_DELAY | int | 请求间隔（秒） | `3` |
+| PIKPAK_REQUEST_DELAY | int | 请求间隔（秒） | 默认 `2`（过短可能触发 API 限流） |
 
 ### 2.12 QBITTORRENT FILE FILTER CONFIGURATION
 
 | 配置名 | 类型 | 说明 | 默认/示例 |
 |--------|------|------|-----------|
-| QB_FILE_FILTER_MIN_SIZE_MB | int | 最小文件大小（MB），小于则设为不下载 | `50` 或 `100` |
+| QB_FILE_FILTER_MIN_SIZE_MB | int | 最小文件大小（MB），小于则设为不下载 | 默认 `100`（与 `config_generator` / `qb_file_filter` 无 config 回退一致） |
 | QB_FILE_FILTER_LOG_FILE | string | 文件过滤日志路径 | `logs/qb_file_filter.log` |
 
 ---
@@ -379,8 +379,8 @@ Authorization: Bearer <token>
 
 | 参数 | 类型 | 说明 | 默认 |
 |------|------|------|------|
-| start_page | int | 起始页 | config 中 START_PAGE |
-| end_page | int | 结束页 | config 中 END_PAGE |
+| start_page | int | 起始页 | config 中 `PAGE_START`（旧键 `START_PAGE` 仍可由 `config_loader` 回退读取） |
+| end_page | int | 结束页 | config 中 `PAGE_END`（旧键 `END_PAGE` 同上） |
 | all | bool | 是否抓取到空页为止（忽略 end_page） | false |
 | ignore_history | bool | 是否忽略历史文件仍写入历史 | false |
 | phase | choice | `1` / `2` / `all` | `all` |
