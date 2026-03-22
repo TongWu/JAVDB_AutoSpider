@@ -29,15 +29,18 @@ def cleanup_history_priorities(history_file):
     logger.info(f"Creating backup: {backup_file}")
     
     try:
-        # Read all records
+        # Read all records, preserving original headers
         with open(history_file, 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
+            fieldnames = reader.fieldnames or []
             records = list(reader)
         
+        if not fieldnames:
+            logger.error("Could not read fieldnames from %s", history_file)
+            return False
+
         # Create backup
         with open(backup_file, 'w', newline='', encoding='utf-8-sig') as f:
-            fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 
-                         'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for record in records:
@@ -66,8 +69,6 @@ def cleanup_history_priorities(history_file):
         
         # Write cleaned records back
         with open(history_file, 'w', newline='', encoding='utf-8-sig') as f:
-            fieldnames = ['href', 'phase', 'video_code', 'create_date', 'update_date', 
-                         'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for record in records:
