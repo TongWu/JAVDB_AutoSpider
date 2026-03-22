@@ -552,6 +552,8 @@ def _rate_limit(scope: str, request: Request, user: Optional[Dict[str, Any]] = N
 def _require_auth(request: Request) -> Dict[str, Any]:
     token = _bearer_token(request)
     payload = _jwt_decode(token)
+    if payload.get("typ") != "access":
+        raise HTTPException(status_code=401, detail="Access token required")
     _rate_limit("auth", request, payload)
     return payload
 
@@ -564,6 +566,8 @@ def _require_auth_or_token(request: Request, token: str = "") -> Dict[str, Any]:
     if not token:
         raise HTTPException(status_code=401, detail="Missing bearer token")
     payload = _jwt_decode(token)
+    if payload.get("typ") != "access":
+        raise HTTPException(status_code=401, detail="Access token required")
     _rate_limit("auth", request, payload)
     return payload
 
@@ -1354,7 +1358,7 @@ def _inject_explore_enhancer(html: str, source_url: str) -> str:
 
 @app.middleware("http")
 async def auth_csrf_middleware(request: Request, call_next):
-    if request.url.path in {"/api/health", "/api/auth/login", "/api/explore/proxy-page"}:
+    if request.url.path in {"/api/health", "/api/auth/login", "/api/auth/refresh", "/api/explore/proxy-page"}:
         return await call_next(request)
     # CORS preflight requests omit Authorization; must pass through for CORSMiddleware
     if request.method == "OPTIONS":
@@ -1411,6 +1415,35 @@ async def login(payload: LoginPayload, request: Request, response: Response):
         "expires_in": ACCESS_TOKEN_EXPIRE_SECONDS,
         "csrf_token": csrf,
         "role": user["role"],
+    }
+
+
+@app.post("/api/auth/refresh")
+async def refresh_token(request: Request):
+    """Exchange a valid refresh token for a new access token."""
+    token = _bearer_token(request)
+    payload = _jwt_decode(token)
+    if payload.get("typ") != "refresh":
+        raise HTTPException(status_code=401, detail="Refresh token required")
+    _rate_limit("preauth", request)
+    username = payload.get("sub", "")
+    user = USERS.get(username)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unknown user")
+    access = _jwt_encode(
+        {"sub": username, "role": user["role"], "typ": "access"},
+        ACCESS_TOKEN_EXPIRE_SECONDS,
+    )
+    access_claims = jwt.decode(access, API_SECRET_KEY, algorithms=["HS256"])
+    sessions = ACTIVE_TOKENS.setdefault(username, [])
+    if len(sessions) >= MAX_SESSIONS_PER_USER:
+        sessions.pop(0)
+    sessions.append(access_claims["jti"])
+    audit_logger.info("token_refresh username=%s", username)
+    return {
+        "access_token": access,
+        "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_EXPIRE_SECONDS,
     }
 
 
