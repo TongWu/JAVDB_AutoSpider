@@ -672,39 +672,41 @@ def _normalize_moviehistory_actor_column_order(conn: sqlite3.Connection) -> None
         "ActorName, ActorGender, ActorLink, SupportingActors (SQLite storage order)",
     )
     conn.execute("PRAGMA foreign_keys=OFF")
-    conn.executescript(
-        """
-        CREATE TABLE MovieHistory__colorder (
-            Id INTEGER PRIMARY KEY AUTOINCREMENT,
-            VideoCode TEXT NOT NULL,
-            Href TEXT NOT NULL UNIQUE,
-            ActorName TEXT,
-            ActorGender TEXT,
-            ActorLink TEXT,
-            SupportingActors TEXT,
-            DateTimeCreated TEXT,
-            DateTimeUpdated TEXT,
-            DateTimeVisited TEXT,
-            PerfectMatchIndicator INTEGER,
-            HiResIndicator INTEGER
-        );
-        INSERT INTO MovieHistory__colorder (
-            Id, VideoCode, Href, ActorName, ActorGender, ActorLink, SupportingActors,
-            DateTimeCreated, DateTimeUpdated, DateTimeVisited,
-            PerfectMatchIndicator, HiResIndicator
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE MovieHistory__colorder (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                VideoCode TEXT NOT NULL,
+                Href TEXT NOT NULL UNIQUE,
+                ActorName TEXT,
+                ActorGender TEXT,
+                ActorLink TEXT,
+                SupportingActors TEXT,
+                DateTimeCreated TEXT,
+                DateTimeUpdated TEXT,
+                DateTimeVisited TEXT,
+                PerfectMatchIndicator INTEGER,
+                HiResIndicator INTEGER
+            );
+            INSERT INTO MovieHistory__colorder (
+                Id, VideoCode, Href, ActorName, ActorGender, ActorLink, SupportingActors,
+                DateTimeCreated, DateTimeUpdated, DateTimeVisited,
+                PerfectMatchIndicator, HiResIndicator
+            )
+            SELECT Id, VideoCode, Href,
+                ActorName, ActorGender, ActorLink,
+                SupportingActors,
+                DateTimeCreated, DateTimeUpdated, DateTimeVisited,
+                PerfectMatchIndicator, HiResIndicator
+            FROM MovieHistory;
+            DROP TABLE MovieHistory;
+            ALTER TABLE MovieHistory__colorder RENAME TO MovieHistory;
+            CREATE INDEX IF NOT EXISTS idx_movie_history_video_code ON MovieHistory(VideoCode);
+            """
         )
-        SELECT Id, VideoCode, Href,
-            ActorName, ActorGender, ActorLink,
-            SupportingActors,
-            DateTimeCreated, DateTimeUpdated, DateTimeVisited,
-            PerfectMatchIndicator, HiResIndicator
-        FROM MovieHistory;
-        DROP TABLE MovieHistory;
-        ALTER TABLE MovieHistory__colorder RENAME TO MovieHistory;
-        CREATE INDEX IF NOT EXISTS idx_movie_history_video_code ON MovieHistory(VideoCode);
-        """
-    )
-    conn.execute("PRAGMA foreign_keys=ON")
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
 
 
 def moviehistory_actor_layout_ok(conn: sqlite3.Connection) -> bool:
@@ -730,19 +732,21 @@ def _migrate_defaults_to_null(conn: sqlite3.Connection) -> None:
     sqlite_master directly — no table rebuild required.
     """
     conn.execute("PRAGMA writable_schema = ON")
-    rows = conn.execute(
-        "SELECT name, sql FROM sqlite_master WHERE type='table' AND sql IS NOT NULL"
-    ).fetchall()
-    for row in rows:
-        name, sql = row[0], row[1]
-        new_sql = _DEFAULT_RE.sub('', sql)
-        if new_sql != sql:
-            conn.execute(
-                "UPDATE sqlite_master SET sql = ? WHERE type='table' AND name = ?",
-                (new_sql, name),
-            )
-            logger.info(f"Removed DEFAULT clauses from table {name}")
-    conn.execute("PRAGMA writable_schema = OFF")
+    try:
+        rows = conn.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type='table' AND sql IS NOT NULL"
+        ).fetchall()
+        for row in rows:
+            name, sql = row[0], row[1]
+            new_sql = _DEFAULT_RE.sub('', sql)
+            if new_sql != sql:
+                conn.execute(
+                    "UPDATE sqlite_master SET sql = ? WHERE type='table' AND name = ?",
+                    (new_sql, name),
+                )
+                logger.info(f"Removed DEFAULT clauses from table {name}")
+    finally:
+        conn.execute("PRAGMA writable_schema = OFF")
     integrity = conn.execute("PRAGMA integrity_check").fetchone()
     if integrity[0] != 'ok':
         logger.warning(f"Integrity check after schema update: {integrity[0]}")
