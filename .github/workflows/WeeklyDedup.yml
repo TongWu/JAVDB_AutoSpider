@@ -8,9 +8,9 @@ permissions:
   contents: write
 
 on:
-  schedule:
+  # schedule: # DISABLED FOR PUBLIC REPO
     # Sunday 04:00 UTC+8 = Saturday 20:00 UTC
-    - cron: '0 20 * * 1'
+    # - cron: '0 20 * * 1'
 
   workflow_dispatch:
     inputs:
