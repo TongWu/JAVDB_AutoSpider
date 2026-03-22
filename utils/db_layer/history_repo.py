@@ -86,14 +86,31 @@ def load_history_joined(conn) -> Dict[str, dict]:
     return history
 
 
+def _has_meaningful_actor_data(an: str, al: str, sup: str) -> bool:
+    """True when at least one actor field carries real content (not just ``'[]'``)."""
+    if an.strip():
+        return True
+    if al.strip():
+        return True
+    s = sup.strip()
+    return bool(s and s != '[]')
+
+
 def batch_update_movie_actors(conn, updates: List[Tuple[str, str, str, str, str]]) -> int:
-    """Batch update actor fields using executemany."""
+    """Batch update actor fields using executemany.
+
+    Entries with no meaningful actor data (empty name/link and only ``'[]'``
+    supporting actors) are silently skipped to avoid overwriting existing
+    good data with empty values.
+    """
     if not updates:
         return 0
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     base_url = cfg('BASE_URL', 'https://javdb.com')
     payload = []
     for href, an, ag, al, sup in updates:
+        if not _has_meaningful_actor_data(an, al, sup):
+            continue
         path_href, abs_href = movie_href_lookup_values(href, base_url)
         if not path_href and not abs_href:
             path_href = href
@@ -107,6 +124,8 @@ def batch_update_movie_actors(conn, updates: List[Tuple[str, str, str, str, str]
             path_href,
             abs_href,
         ))
+    if not payload:
+        return 0
     before = conn.total_changes
     conn.executemany(
         """

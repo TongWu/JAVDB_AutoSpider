@@ -30,6 +30,7 @@ from utils.logging_config import get_logger
 from utils.db_layer.history_repo import (
     load_history_joined as _load_history_joined,
     batch_update_movie_actors as _batch_update_movie_actors,
+    _has_meaningful_actor_data,
 )
 from utils.db_layer.operations_repo import (
     replace_rclone_inventory as _replace_rclone_inventory,
@@ -1169,6 +1170,14 @@ def db_upsert_history(
                     prepared_supporting_actors if supporting_actors is not None
                     else row_m['SupportingActors']
                 )
+                existing_an = (row_m['ActorName'] or '').strip()
+                if existing_an and not _has_meaningful_actor_data(
+                    new_an or '', new_al or '', new_sup or '',
+                ):
+                    new_an = row_m['ActorName']
+                    new_ag = row_m['ActorGender']
+                    new_al = row_m['ActorLink']
+                    new_sup = row_m['SupportingActors']
                 conn.execute(
                     """UPDATE MovieHistory SET DateTimeUpdated=?, DateTimeVisited=?,
                        Href=?, ActorName=?, ActorGender=?, ActorLink=?, SupportingActors=? WHERE Id=?""",
