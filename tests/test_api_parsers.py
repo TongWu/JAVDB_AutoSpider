@@ -59,6 +59,16 @@ class TestExtractRateAndComments:
         assert rate == '3.95'
         assert count == ''
 
+    def test_english_format(self):
+        rate, count = extract_rate_and_comments('4.2, by 101 users')
+        assert rate == '4.2'
+        assert count == '101'
+
+    def test_english_partial_rate_only(self):
+        rate, count = extract_rate_and_comments('4.2, by')
+        assert rate == '4.2'
+        assert count == ''
+
 
 class TestExtractVideoCode:
     def test_with_strong_tag(self):
@@ -483,3 +493,186 @@ class TestParseDetailPageRealHTML:
         assert isinstance(magnets, list)
         assert all(isinstance(m, dict) for m in magnets)
         assert all('href' in m for m in magnets)
+
+
+# ===================================================================
+# Detail parser – AVSW-067 Traditional Chinese HTML
+# ===================================================================
+
+class TestParseDetailPageAVSW067ZH:
+    """Parse AVSW-067 detail page in Traditional Chinese."""
+
+    @pytest.fixture(autouse=True)
+    def _load(self):
+        self.detail = parse_detail_page(_load_html('detail_page_AVSW-067.html'))
+
+    def test_parse_success(self):
+        assert self.detail.parse_success is True
+
+    def test_title(self):
+        assert '田中ねね' in self.detail.title
+        assert 'SPECIAL BEST' in self.detail.title
+
+    def test_video_code(self):
+        assert self.detail.video_code == 'AVSW-067'
+
+    def test_code_prefix_link(self):
+        assert self.detail.code_prefix_link == '/video_codes/AVSW'
+
+    def test_release_date(self):
+        assert self.detail.release_date == '2025-10-28'
+
+    def test_duration(self):
+        assert '304' in self.detail.duration
+        assert '分鍾' in self.detail.duration
+
+    def test_maker(self):
+        assert self.detail.maker is not None
+        assert self.detail.maker.name == 'AVS'
+        assert '/makers/' in self.detail.maker.href
+
+    def test_series(self):
+        assert self.detail.series is not None
+        assert '○○の世界' in self.detail.series.name
+        assert '/series/' in self.detail.series.href
+
+    def test_rating(self):
+        assert self.detail.rate == '4.2'
+        assert self.detail.comment_count == '101'
+
+    def test_tags(self):
+        tag_names = [t.name for t in self.detail.tags]
+        assert '巨乳' in tag_names
+        assert len(self.detail.tags) == 6
+
+    def test_actors(self):
+        assert len(self.detail.actors) == 1
+        assert self.detail.actors[0].name == '田中ねね'
+        assert self.detail.actors[0].href == '/actors/d78g'
+        assert self.detail.actors[0].gender == 'female'
+
+    def test_no_actor_listing_false(self):
+        assert self.detail.no_actor_listing is False
+
+    def test_magnets(self):
+        assert len(self.detail.magnets) == 4
+        first = self.detail.magnets[0]
+        assert first.href.startswith('magnet:')
+        assert first.size == '12.79GB'
+        assert first.file_count == 5
+
+    def test_poster(self):
+        assert 'a8z5ar' in self.detail.poster_url
+
+    def test_fanart(self):
+        assert len(self.detail.fanart_urls) == 11
+
+    def test_trailer(self):
+        assert self.detail.trailer_url is not None
+
+    def test_review_count(self):
+        assert self.detail.review_count == 2
+
+    def test_want_watched_counts(self):
+        assert self.detail.want_count == 455
+        assert self.detail.watched_count == 101
+
+
+# ===================================================================
+# Detail parser – AVSW-067 English HTML
+# ===================================================================
+
+class TestParseDetailPageAVSW067EN:
+    """Parse AVSW-067 detail page in English – validates locale-independent parsing."""
+
+    @pytest.fixture(autouse=True)
+    def _load(self):
+        self.detail = parse_detail_page(_load_html('detail_page_AVSW-067_EN.html'))
+
+    def test_parse_success(self):
+        assert self.detail.parse_success is True
+
+    def test_title(self):
+        assert '田中ねね' in self.detail.title
+        assert 'SPECIAL BEST' in self.detail.title
+
+    def test_video_code(self):
+        assert self.detail.video_code == 'AVSW-067'
+
+    def test_code_prefix_link(self):
+        assert self.detail.code_prefix_link == '/video_codes/AVSW'
+
+    def test_release_date(self):
+        assert self.detail.release_date == '2025-10-28'
+
+    def test_duration(self):
+        assert '304' in self.detail.duration
+        assert 'minute' in self.detail.duration
+
+    def test_maker(self):
+        assert self.detail.maker is not None
+        assert self.detail.maker.name == 'AVS'
+        assert '/makers/' in self.detail.maker.href
+
+    def test_series(self):
+        assert self.detail.series is not None
+        assert '○○の世界' in self.detail.series.name
+        assert '/series/' in self.detail.series.href
+
+    def test_rating(self):
+        assert self.detail.rate == '4.2'
+        assert self.detail.comment_count == '101'
+
+    def test_tags(self):
+        tag_names = [t.name for t in self.detail.tags]
+        assert 'Big Tits' in tag_names
+        assert len(self.detail.tags) == 6
+
+    def test_actors(self):
+        assert len(self.detail.actors) == 1
+        assert self.detail.actors[0].name == '田中ねね'
+        assert self.detail.actors[0].href == '/actors/d78g'
+        assert self.detail.actors[0].gender == 'female'
+
+    def test_no_actor_listing_false(self):
+        assert self.detail.no_actor_listing is False
+
+    def test_magnets(self):
+        assert len(self.detail.magnets) == 4
+        first = self.detail.magnets[0]
+        assert first.href.startswith('magnet:')
+        assert first.size == '12.79GB'
+        assert first.file_count == 5
+
+    def test_poster(self):
+        assert 'a8z5ar' in self.detail.poster_url
+
+    def test_fanart(self):
+        assert len(self.detail.fanart_urls) == 11
+
+    def test_trailer(self):
+        assert self.detail.trailer_url is not None
+
+    def test_review_count(self):
+        assert self.detail.review_count == 2
+
+    def test_want_watched_counts(self):
+        assert self.detail.want_count == 455
+        assert self.detail.watched_count == 101
+
+    def test_same_core_data_as_zh(self):
+        """English and Traditional Chinese pages should yield identical core data."""
+        zh = parse_detail_page(_load_html('detail_page_AVSW-067.html'))
+        assert self.detail.video_code == zh.video_code
+        assert self.detail.release_date == zh.release_date
+        assert self.detail.rate == zh.rate
+        assert self.detail.comment_count == zh.comment_count
+        assert self.detail.maker.name == zh.maker.name
+        assert self.detail.series.name == zh.series.name
+        assert len(self.detail.actors) == len(zh.actors)
+        assert self.detail.actors[0].name == zh.actors[0].name
+        assert self.detail.actors[0].gender == zh.actors[0].gender
+        assert len(self.detail.magnets) == len(zh.magnets)
+        assert self.detail.review_count == zh.review_count
+        assert self.detail.want_count == zh.want_count
+        assert self.detail.watched_count == zh.watched_count
