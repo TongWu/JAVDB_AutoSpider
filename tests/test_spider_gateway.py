@@ -12,8 +12,10 @@ sys.path.insert(0, project_root)
 from utils.spider_gateway import (
     SpiderGateway,
     GatewayResult,
+    CrawlResult,
     create_gateway,
     _PARSER_MAP,
+    _build_page_url,
 )
 from utils.rust_adapters.parser_adapter import result_to_dict
 
@@ -268,3 +270,216 @@ class TestApiParseUrl:
         assert p.use_proxy is True
         assert p.use_cf_bypass is True
         assert p.use_cookie is False
+
+    def test_parse_url_respects_payload_params(self):
+        """Verify that /api/parse/url creates a gateway with request params
+        instead of using a hardcoded singleton."""
+        from api.server import app
+        from fastapi.testclient import TestClient
+
+        with patch('api.server.create_gateway') as mock_create:
+            mock_gw = MagicMock()
+            mock_gw.fetch_and_parse.return_value = GatewayResult(
+                ok=True, page_type='index', url='u', html_len=10, result={},
+            )
+            mock_create.return_value = mock_gw
+
+            client = TestClient(app)
+            client.post('/api/parse/url', json={
+                'url': 'https://javdb.com/',
+                'use_proxy': False,
+                'use_cf_bypass': False,
+                'use_cookie': True,
+            })
+
+            mock_create.assert_called_once_with(
+                use_proxy=False,
+                use_cf_bypass=False,
+                use_cookie=True,
+            )
+
+
+# ---------------------------------------------------------------------------
+# _build_page_url helper
+# ---------------------------------------------------------------------------
+
+class TestBuildPageUrl:
+    def test_page_1_returns_original(self):
+        assert _build_page_url('https://javdb.com/', 1) == 'https://javdb.com/'
+
+    def test_page_n_appends_query(self):
+        assert _build_page_url('https://javdb.com/', 3) == 'https://javdb.com/?page=3'
+
+    def test_existing_query_uses_ampersand(self):
+        url = 'https://javdb.com/tags?c6=1'
+        assert _build_page_url(url, 2) == 'https://javdb.com/tags?c6=1&page=2'
+
+
+# ---------------------------------------------------------------------------
+# SDK: crawl_pages — multi-page crawl (mocked fetch)
+# ---------------------------------------------------------------------------
+
+class TestCrawlPages:
+    def test_crawl_fixed_range(self, index_html):
+        gw = _make_gateway(return_html=index_html)
+        cr = gw.crawl_pages(
+            'https://javdb.com/', start_page=1, end_page=3, page_delay=0,
+        )
+        assert cr.ok is True
+        assert cr.total_pages == 3
+        assert len(cr.pages) == 3
+        assert all(p.ok for p in cr.pages)
+
+    def test_crawl_all_stops_on_empty(self, empty_html):
+        gw = _make_gateway(return_html=empty_html)
+        cr = gw.crawl_pages(
+            'https://javdb.com/', crawl_all=True,
+            max_consecutive_empty=2, page_delay=0,
+        )
+        assert cr.ok is True
+        assert cr.total_pages == 2
+
+    def test_crawl_all_mixed_pages(self, index_html, empty_html):
+        mock_handler = MagicMock()
+        responses = [index_html, index_html, empty_html, empty_html]
+        mock_handler.get_page.side_effect = responses
+        gw = SpiderGateway(mock_handler, use_proxy=True, use_cf_bypass=True)
+
+        cr = gw.crawl_pages(
+            'https://javdb.com/', crawl_all=True,
+            max_consecutive_empty=2, page_delay=0,
+        )
+        assert cr.total_pages == 4
+        assert cr.pages[0].ok is True
+        assert cr.pages[1].ok is True
+
+    def test_crawl_result_to_dict(self):
+        cr = CrawlResult(ok=True, total_pages=1, pages=[
+            GatewayResult(ok=True, page_type='index', url='u', html_len=10),
+        ])
+        d = cr.to_dict()
+        assert d['ok'] is True
+        assert d['total_pages'] == 1
+        assert len(d['pages']) == 1
+        assert d['pages'][0]['page_type'] == 'index'
+
+
+# ---------------------------------------------------------------------------
+# API endpoint: /api/crawl/index
+# ---------------------------------------------------------------------------
+
+class TestApiCrawlIndex:
+    def test_endpoint_exists(self):
+        from api.server import app
+        routes = [r.path for r in app.routes]
+        assert '/api/crawl/index' in routes
+
+    def test_crawl_index_schema(self):
+        from api.server import CrawlIndexPayload
+        p = CrawlIndexPayload(url='https://javdb.com/')
+        assert p.start_page == 1
+        assert p.end_page is None
+        assert p.crawl_all is False
+        assert p.use_proxy is True
+
+
+# ---------------------------------------------------------------------------
+# API endpoint: /api/jobs/spider
+# ---------------------------------------------------------------------------
+
+class TestApiSpiderJob:
+    def test_endpoints_exist(self):
+        from api.server import app
+        routes = [r.path for r in app.routes]
+        assert '/api/jobs/spider' in routes
+        assert '/api/jobs/{job_id}/status' in routes
+
+    def test_spider_job_payload_defaults(self):
+        from api.server import SpiderJobPayload
+        p = SpiderJobPayload()
+        assert p.url is None
+        assert p.start_page == 1
+        assert p.phase == 'all'
+        assert p.use_proxy is True
+        assert p.dry_run is False
+        assert p.disable_all_filters is False
+
+    def test_spider_job_payload_custom(self):
+        from api.server import SpiderJobPayload
+        p = SpiderJobPayload(
+            url='https://javdb.com/tags?c6=1',
+            start_page=2,
+            end_page=5,
+            phase='1',
+            ignore_history=True,
+            enable_redownload=True,
+            redownload_threshold=0.50,
+            dry_run=True,
+        )
+        assert p.url == 'https://javdb.com/tags?c6=1'
+        assert p.phase == '1'
+        assert p.redownload_threshold == 0.50
+
+    def test_payload_to_cli_args_minimal(self):
+        from api.server import SpiderJobPayload, _payload_to_cli_args
+        p = SpiderJobPayload()
+        args = _payload_to_cli_args(p)
+        assert '--use-proxy' in args
+        assert '--url' not in args
+        assert '--dry-run' not in args
+
+    def test_payload_to_cli_args_full(self):
+        from api.server import SpiderJobPayload, _payload_to_cli_args
+        p = SpiderJobPayload(
+            url='https://javdb.com/tags?c6=1',
+            start_page=3,
+            end_page=10,
+            phase='1',
+            ignore_history=True,
+            use_history=True,
+            ignore_release_date=True,
+            no_rclone_filter=True,
+            disable_all_filters=True,
+            enable_dedup=True,
+            enable_redownload=True,
+            redownload_threshold=0.40,
+            dry_run=True,
+            max_movies_phase1=5,
+            max_movies_phase2=10,
+        )
+        args = _payload_to_cli_args(p)
+        assert args[:2] == ['--url', 'https://javdb.com/tags?c6=1']
+        assert '--start-page' in args
+        assert args[args.index('--start-page') + 1] == '3'
+        assert '--end-page' in args
+        assert args[args.index('--end-page') + 1] == '10'
+        assert '--phase' in args
+        assert args[args.index('--phase') + 1] == '1'
+        assert '--ignore-history' in args
+        assert '--use-history' in args
+        assert '--ignore-release-date' in args
+        assert '--no-rclone-filter' in args
+        assert '--disable-all-filters' in args
+        assert '--enable-dedup' in args
+        assert '--enable-redownload' in args
+        assert '--redownload-threshold' in args
+        assert args[args.index('--redownload-threshold') + 1] == '0.4'
+        assert '--dry-run' in args
+        assert '--max-movies-phase1' in args
+        assert args[args.index('--max-movies-phase1') + 1] == '5'
+        assert '--max-movies-phase2' in args
+        assert args[args.index('--max-movies-phase2') + 1] == '10'
+
+    def test_payload_to_cli_args_crawl_all(self):
+        from api.server import SpiderJobPayload, _payload_to_cli_args
+        p = SpiderJobPayload(crawl_all=True, use_proxy=False)
+        args = _payload_to_cli_args(p)
+        assert '--all' in args
+        assert '--use-proxy' not in args
+
+    def test_job_not_found_returns_404(self):
+        from api.server import app
+        from fastapi.testclient import TestClient
+        client = TestClient(app)
+        resp = client.get('/api/jobs/nonexistent/status')
+        assert resp.status_code == 404
