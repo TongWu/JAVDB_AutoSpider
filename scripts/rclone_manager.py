@@ -79,8 +79,7 @@ from utils.rclone_helper import (
 )
 
 # Config defaults
-RCLONE_DRIVE_NAME = cfg('RCLONE_DRIVE_NAME', None)
-RCLONE_ROOT_FOLDER = cfg('RCLONE_ROOT_FOLDER', None)
+RCLONE_FOLDER_PATH = cfg('RCLONE_FOLDER_PATH', None)
 RCLONE_CONFIG_BASE64 = cfg('RCLONE_CONFIG_BASE64', None)
 REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
 RCLONE_INVENTORY_CSV = cfg('RCLONE_INVENTORY_CSV', 'rclone_inventory.csv')
@@ -109,6 +108,27 @@ def parse_root_path(root_path: str):
         raise ValueError(f"Invalid root path (missing ':'): {root_path}")
     remote_name, folder_path = root_path.split(':', 1)
     return remote_name.strip(), folder_path.strip().strip('/')
+
+
+def resolve_rclone_root(cli_root_path: Optional[str]) -> Optional[Tuple[str, str]]:
+    """Resolve ``(remote_name, root_folder)`` from ``--root-path`` or config.
+
+    Config: ``RCLONE_FOLDER_PATH`` (e.g. ``gdrive:/folder``). Legacy
+    ``RCLONE_DRIVE_NAME`` + ``RCLONE_ROOT_FOLDER`` is still accepted if the new
+    variable is unset.
+    """
+    if cli_root_path and cli_root_path.strip():
+        return parse_root_path(cli_root_path.strip())
+    path = RCLONE_FOLDER_PATH
+    if path and str(path).strip():
+        return parse_root_path(str(path).strip())
+    drive = cfg('RCLONE_DRIVE_NAME', None)
+    root = cfg('RCLONE_ROOT_FOLDER', None)
+    if drive and root is not None:
+        r = str(root).strip().strip('/')
+        combined = f"{str(drive).strip()}:/{r}" if r else f"{str(drive).strip()}:"
+        return parse_root_path(combined)
+    return None
 
 
 def _folder_to_row(folder: FolderInfo, remote_name: str, root_folder: str, scan_time: str) -> dict:
@@ -766,14 +786,14 @@ def main() -> int:
         )
 
     # ── Scan / Report (/ Execute) need a remote ───────────────────────
-    if args.root_path:
-        remote_name, root_folder = parse_root_path(args.root_path)
-    else:
-        if not RCLONE_DRIVE_NAME or not RCLONE_ROOT_FOLDER:
-            logger.error("No --root-path provided and RCLONE_DRIVE_NAME/RCLONE_ROOT_FOLDER not in config")
-            return 1
-        remote_name = RCLONE_DRIVE_NAME
-        root_folder = RCLONE_ROOT_FOLDER.strip('/')
+    resolved = resolve_rclone_root(args.root_path)
+    if not resolved:
+        logger.error(
+            "No --root-path provided and RCLONE_FOLDER_PATH not set in config "
+            "(expected form: gdrive:/folder)"
+        )
+        return 1
+    remote_name, root_folder = resolved
 
     if args.output:
         output_path = args.output

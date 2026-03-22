@@ -181,8 +181,7 @@ jobs:
           VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
           # Rclone / Dedup Configuration
           VAR_RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
-          VAR_RCLONE_DRIVE_NAME: ${{ vars.RCLONE_DRIVE_NAME }}
-          VAR_RCLONE_ROOT_FOLDER: ${{ vars.RCLONE_ROOT_FOLDER }}
+          VAR_RCLONE_FOLDER_PATH: ${{ vars.RCLONE_FOLDER_PATH }}
           VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
         run: python3 utils/config_generator.py --github-actions
 
