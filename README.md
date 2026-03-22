@@ -428,6 +428,7 @@ python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --use-proxy --ignor
 | `--phase` | Phase to run (1/2/all) | all | `--phase 1` |
 | `--ignore-release-date` | Ignore today/yesterday tags | False | `--ignore-release-date` |
 | `--use-proxy` | Enable proxy from config.py | False | `--use-proxy` |
+| `--always-bypass-time [MINUTES]` | Keep using CF bypass after fallback success (omit value or 0 = whole session; omit flag = always direct-first) | None | `--always-bypass-time 30` |
 | `--sequential` | Force sequential processing (disable parallel) | False | `--sequential` |
 | `--max-movies-phase1` | Limit phase 1 movies (for testing) | None | `--max-movies-phase1 10` |
 | `--max-movies-phase2` | Limit phase 2 movies (for testing) | None | `--max-movies-phase2 5` |
@@ -457,18 +458,15 @@ cat "reports/proxy_bans.csv"
 # Ban information is also included in pipeline email reports
 ```
 
-**Run Migration Scripts:**
+**Run Migration Scripts** (from repository root):
 ```bash
-cd migration
+# SQLite schema / actor backfill (primary entry)
+python3 migration/migrate_to_current.py --help
 
-# Clean up duplicate history entries
-python3 cleanup_history_priorities.py
-
-# Update history file format (if upgrading from older version)
-python3 update_history_format.py
-
-# Reclassify torrents (after classification rule changes)
-python3 reclassify_c_hacked_torrents.py
+# Ad hoc CSV / legacy helpers live under migration/tools/
+python3 migration/tools/cleanup_history_priorities.py
+python3 migration/tools/update_history_format.py
+python3 migration/tools/reclassify_c_hacked_torrents.py
 ```
 
 ### Automated Pipeline
@@ -1033,7 +1031,7 @@ CF_BYPASS_SERVICE_PORT = 8000  # Must match the service port
 
 **4. CF Bypass Behavior:**
 
-CF bypass is automatically activated as a fallback when direct requests fail during the proxy pool fallback mechanism. No command-line flag is needed.
+CF bypass is automatically activated as a fallback when direct requests fail during the proxy pool fallback mechanism. By default, each request still starts with direct mode first; you can add `--always-bypass-time [MINUTES]` to temporarily (or session-wide with `0`) keep a proxy on bypass mode after a fallback success.
 
 #### How It Works
 
@@ -1344,9 +1342,10 @@ This feature ensures system stability and efficiency, avoiding duplicate downloa
 
 ## Migration Scripts
 
-The `migration/` directory contains utility scripts for maintaining and upgrading the system:
+- **`migration/migrate_to_current.py`** — primary entry for SQLite schema upgrades, optional datetime normalization, and actor backfill (see `--help`).
+- **`migration/tools/`** — one-off and legacy helpers (CSV cleanup, old format conversion, `csv_to_sqlite`, older version jumps, etc.).
 
-### Available Scripts
+### Available Scripts (tools/)
 
 **cleanup_history_priorities.py**
 - Removes duplicate entries from history file
@@ -1381,12 +1380,14 @@ Run migration scripts when:
 
 ### How to Run
 
+From the repository root:
+
 ```bash
-cd migration
-python3 cleanup_history_priorities.py
-python3 update_history_format.py
-python3 rename_columns_add_last_visited.py
-python3 reclassify_c_hacked_torrents.py
+python3 migration/tools/cleanup_history_priorities.py
+python3 migration/tools/update_history_format.py
+python3 migration/tools/rename_columns_add_last_visited.py
+python3 migration/tools/reclassify_c_hacked_torrents.py
+python3 migration/tools/migrate_reports_to_dated_dirs.py --dry-run
 ```
 
 **Note:** Always backup your `reports/parsed_movies_history.csv` before running migration scripts.
@@ -1526,7 +1527,7 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
   - `pipeline.log`: Pipeline execution logs
   - `pikpak_bridge.log`: PikPak bridge execution logs
   - `qb_file_filter.log`: File filter execution logs
-- **migration/**: Contains database migration scripts
+- **migration/**: `migrate_to_current.py` (main DB migration); **migration/tools/** for ad hoc / legacy scripts
 - **utils/**: Utility modules (history, parser, proxy pool, etc.)
 - **utils/login/**: JavDB login related files and documentation
 - **docker/**: Docker configuration files

@@ -1,3 +1,10 @@
+"""Deprecated legacy spider entry.
+
+This module is kept for rollback compatibility only.
+All new spider features should be implemented in `scripts/spider/`.
+See `docs/SPIDER_BASELINE_MAPPING.md` for capability mapping.
+"""
+
 import requests
 import time
 import re
@@ -23,6 +30,8 @@ sys.path.insert(0, project_root)
 # Import utility functions
 from utils.history_manager import load_parsed_movies_history, save_parsed_movie_to_history, should_process_movie, \
     determine_torrent_types, get_missing_torrent_types, validate_history_file, has_complete_subtitles
+from utils.config_helper import use_sqlite
+from utils.db import db_batch_update_movie_actors
 from utils.parser import parse_index, parse_detail
 from utils.magnet_extractor import extract_magnets
 
@@ -292,6 +301,9 @@ class DetailResult:
     task: DetailTask
     magnets: list
     actor_info: str
+    actor_gender: str
+    actor_link: str
+    supporting_actors: str
     parse_success: bool
     used_cf_bypass: bool
 
@@ -968,10 +980,11 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
         is_adhoc_mode: Unused, kept for API compatibility
     
     Returns:
-        tuple: (magnets, actor_info, parse_success, effective_use_proxy, effective_use_cf_bypass)
+        tuple: (magnets, actor_info, actor_gender, actor_link, supporting_actors, parse_success,
+                effective_use_proxy, effective_use_cf_bypass)
     """
-    last_result = ([], '', False)
-    
+    last_result = ([], '', '', '', '', False)
+
     def try_fetch_and_parse(u_proxy, u_cf, context_msg, skip_sleep=False):
         nonlocal last_result
         logger.debug(f"[{entry_index}] {context_msg}...")
@@ -990,82 +1003,79 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
                                             use_proxy=u_proxy, module_name='spider',
                                             max_retries=1, use_cf_bypass=u_cf)
                             if html and not is_login_page(html):
-                                magnets, actor_info, parse_success = parse_detail(html, entry_index, skip_sleep=skip_sleep)
+                                m = parse_detail(html, entry_index, skip_sleep=skip_sleep)
+                                magnets, actor_info, actor_gender, actor_link, supporting, parse_success = m
                                 if parse_success:
                                     logger.info(f"[{entry_index}] Login refresh succeeded: {context_msg}")
-                                    return magnets, actor_info, True
-                                else:
-                                    last_result = (magnets, actor_info, False)
+                                    return magnets, actor_info, actor_gender, actor_link, supporting, True
+                                last_result = (
+                                    magnets, actor_info, actor_gender, actor_link, supporting, False,
+                                )
                             else:
                                 logger.warning(f"[{entry_index}] Still login page after refresh")
-                    return [], '', False
+                    return [], '', '', '', '', False
 
-                magnets, actor_info, parse_success = parse_detail(html, entry_index, skip_sleep=skip_sleep)
+                m = parse_detail(html, entry_index, skip_sleep=skip_sleep)
+                magnets, actor_info, actor_gender, actor_link, supporting, parse_success = m
                 if parse_success:
                     logger.debug(f"[{entry_index}] Success: {context_msg}")
-                    return magnets, actor_info, True
-                else:
-                    last_result = (magnets, actor_info, False)
-                    logger.debug(f"[{entry_index}] Parse validation failed (missing magnets): {context_msg}")
+                    return magnets, actor_info, actor_gender, actor_link, supporting, True
+                last_result = (magnets, actor_info, actor_gender, actor_link, supporting, False)
+                logger.debug(f"[{entry_index}] Parse validation failed (missing magnets): {context_msg}")
             else:
                 logger.debug(f"[{entry_index}] Failed to fetch HTML: {context_msg}")
         except Exception as e:
             logger.debug(f"[{entry_index}] Failed {context_msg}: {e}")
-        return [], '', False
+        return [], '', '', '', '', False
 
     def try_proxy_direct_then_cf(proxy_name, skip_sleep=True):
-        """Try a single proxy: direct first (unless marked for CF), then CF bypass.
-        Returns (magnets, actor_info, success, used_cf_bypass)."""
+        """Try direct then CF. Returns (magnets, name, gender, link, supporting, ok, used_cf)."""
         needs_cf = proxy_needs_cf_bypass(proxy_name)
-        
+
         if needs_cf:
-            # This proxy is marked as needing CF bypass, skip direct attempt
-            magnets, actor_info, success = try_fetch_and_parse(
+            magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
                 True, True,
                 f"Detail: Proxy={proxy_name} + CF Bypass (marked)",
                 skip_sleep=skip_sleep
             )
             if success:
-                return magnets, actor_info, True, True
-            return [], '', False, True
-        
-        # Step a: Direct request with this proxy
-        magnets, actor_info, success = try_fetch_and_parse(
+                return magnets, actor_info, ag, al, sup, True, True
+            return [], '', '', '', '', False, True
+
+        magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
             True, False,
             f"Detail: Proxy={proxy_name} Direct",
             skip_sleep=skip_sleep
         )
         if success:
-            return magnets, actor_info, True, False
-        
-        # Step b: CF bypass with this proxy
-        magnets, actor_info, success = try_fetch_and_parse(
+            return magnets, actor_info, ag, al, sup, True, False
+
+        magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
             True, True,
             f"Detail: Proxy={proxy_name} + CF Bypass",
             skip_sleep=skip_sleep
         )
         if success:
             mark_proxy_cf_bypass(proxy_name)
-            return magnets, actor_info, True, True
-        
-        return [], '', False, False
+            return magnets, actor_info, ag, al, sup, True, True
+
+        return [], '', '', '', '', False, False
 
     # --- Phase 0: Initial Attempt with current proxy ---
     if use_proxy and global_proxy_pool:
         current_proxy_name = global_proxy_pool.get_current_proxy_name()
         initial_cf = use_cf_bypass or proxy_needs_cf_bypass(current_proxy_name)
-        
-        magnets, actor_info, success = try_fetch_and_parse(
+
+        magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
             True, initial_cf,
             f"Detail Initial (Proxy={current_proxy_name}, CF={initial_cf})",
             skip_sleep=False
         )
         if success:
-            return magnets, actor_info, True, True, initial_cf
-        
-        # Phase 0.5: If initial was direct, try CF bypass with same proxy
+            return magnets, actor_info, ag, al, sup, True, True, initial_cf
+
         if not initial_cf:
-            magnets, actor_info, success = try_fetch_and_parse(
+            magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
                 True, True,
                 f"Detail: Proxy={current_proxy_name} + CF Bypass",
                 skip_sleep=True
@@ -1073,18 +1083,17 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
             if success:
                 mark_proxy_cf_bypass(current_proxy_name)
                 logger.info(f"[{entry_index}] Detail CF Bypass succeeded with initial proxy={current_proxy_name}")
-                return magnets, actor_info, True, True, True
-        
+                return magnets, actor_info, ag, al, sup, True, True, True
+
         logger.warning(f"[{entry_index}] Detail page initial attempt failed. Starting fallback...")
     elif not use_proxy:
-        # No proxy mode: single direct attempt
-        magnets, actor_info, success = try_fetch_and_parse(
+        magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
             False, use_cf_bypass,
             f"Detail Initial (No Proxy, CF={use_cf_bypass})",
             skip_sleep=False
         )
         if success:
-            return magnets, actor_info, True, False, use_cf_bypass
+            return magnets, actor_info, ag, al, sup, True, False, use_cf_bypass
         logger.warning(f"[{entry_index}] Detail page initial attempt failed (no proxy). Starting fallback...")
     else:
         logger.warning(f"[{entry_index}] No proxy pool configured for initial attempt.")
@@ -1095,44 +1104,52 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
         login_success, new_cookie = attempt_login_refresh()
         if login_success and use_proxy and global_proxy_pool:
             current_proxy_name = global_proxy_pool.get_current_proxy_name()
-            magnets, actor_info, success, used_cf = try_proxy_direct_then_cf(current_proxy_name, skip_sleep=True)
+            magnets, actor_info, ag, al, sup, success, used_cf = try_proxy_direct_then_cf(
+                current_proxy_name, skip_sleep=True)
             if success:
                 logger.info(f"[{entry_index}] Login refresh + retry succeeded (Proxy={current_proxy_name}, CF={used_cf})")
-                return magnets, actor_info, True, True, used_cf
+                return magnets, actor_info, ag, al, sup, True, True, used_cf
             logger.warning(f"[{entry_index}] Login refresh completed but detail page still failed")
         elif login_success and not use_proxy:
-            magnets, actor_info, success = try_fetch_and_parse(
+            magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
                 False, use_cf_bypass,
                 f"Detail: Retry with refreshed cookie (No Proxy)",
                 skip_sleep=True
             )
             if success:
-                return magnets, actor_info, True, False, use_cf_bypass
+                return magnets, actor_info, ag, al, sup, True, False, use_cf_bypass
         elif not login_success:
             logger.warning(f"[{entry_index}] Login refresh failed, continuing with proxy pool fallback...")
 
     # --- Phase 2: Iterate through remaining proxies ---
     if global_proxy_pool is None:
         logger.error(f"[{entry_index}] Fallback failed: No proxy pool configured")
-        return last_result[0], last_result[1], last_result[2], use_proxy, use_cf_bypass
+        return (
+            last_result[0], last_result[1], last_result[2], last_result[3], last_result[4],
+            last_result[5], use_proxy, use_cf_bypass,
+        )
 
     max_switches = global_proxy_pool.get_proxy_count() if PROXY_MODE == 'pool' else 1
     max_switches = min(max_switches, 10)
-    
+
     for attempt in range(max_switches):
         switched = global_proxy_pool.mark_failure_and_switch()
         if not switched:
             logger.warning(f"[{entry_index}] No more proxies available in pool")
             break
-        
+
         current_proxy_name = global_proxy_pool.get_current_proxy_name()
-        magnets, actor_info, success, used_cf = try_proxy_direct_then_cf(current_proxy_name, skip_sleep=True)
+        magnets, actor_info, ag, al, sup, success, used_cf = try_proxy_direct_then_cf(
+            current_proxy_name, skip_sleep=True)
         if success:
             logger.info(f"[{entry_index}] Detail Proxy fallback succeeded (Proxy={current_proxy_name}, CF={used_cf})")
-            return magnets, actor_info, True, True, used_cf
+            return magnets, actor_info, ag, al, sup, True, True, used_cf
 
     logger.warning(f"[{entry_index}] Detail page fallback exhausted. Returning best available result.")
-    return last_result[0], last_result[1], last_result[2], use_proxy, use_cf_bypass
+    return (
+        last_result[0], last_result[1], last_result[2], last_result[3], last_result[4],
+        last_result[5], use_proxy, use_cf_bypass,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1213,7 +1230,7 @@ class ProxyWorker(threading.Thread):
         )
 
     def _try_fetch_and_parse(self, task: DetailTask, use_cf: bool, context: str):
-        """Attempt fetch + parse_detail; returns (magnets, actor, success)."""
+        """Returns (magnets, actor_info, actor_gender, actor_link, supporting, success)."""
         logger.debug(f"[{self.proxy_name}] [{task.entry_index}] {context}")
         try:
             html = self._fetch_html(task.url, use_cf)
@@ -1225,45 +1242,46 @@ class ProxyWorker(threading.Thread):
                         if self._try_login_refresh():
                             html = self._fetch_html(task.url, use_cf)
                             if html and not is_login_page(html):
-                                magnets, actor_info, ok = parse_detail(
-                                    html, task.entry_index, skip_sleep=True)
+                                m = parse_detail(html, task.entry_index, skip_sleep=True)
+                                magnets, actor_info, ag, al, sup, ok = m
                                 if ok:
                                     logger.info(
                                         f"[{self.proxy_name}] [{task.entry_index}] "
                                         f"Login refresh succeeded: {context}")
-                                    return magnets, actor_info, True
+                                    return magnets, actor_info, ag, al, sup, True
                             else:
                                 logger.warning(
                                     f"[{self.proxy_name}] [{task.entry_index}] "
                                     f"Still login page after refresh")
-                    return [], '', False
+                    return [], '', '', '', '', False
 
-                magnets, actor_info, ok = parse_detail(html, task.entry_index, skip_sleep=True)
+                m = parse_detail(html, task.entry_index, skip_sleep=True)
+                magnets, actor_info, ag, al, sup, ok = m
                 if ok:
-                    return magnets, actor_info, True
+                    return magnets, actor_info, ag, al, sup, True
                 logger.debug(f"[{self.proxy_name}] [{task.entry_index}] parse failed: {context}")
             else:
                 logger.debug(f"[{self.proxy_name}] [{task.entry_index}] no HTML: {context}")
         except Exception as e:
             logger.debug(f"[{self.proxy_name}] [{task.entry_index}] error in {context}: {e}")
-        return [], '', False
+        return [], '', '', '', '', False
 
     def _try_direct_then_cf(self, task: DetailTask):
-        """Try direct, then CF bypass. Returns (magnets, actor, success, used_cf)."""
+        """Returns (magnets, actor_info, ag, al, sup, success, used_cf)."""
         if self.needs_cf_bypass:
-            m, a, ok = self._try_fetch_and_parse(task, True, f"CF Bypass (marked)")
-            return m, a, ok, True
+            m, a, ag, al, sup, ok = self._try_fetch_and_parse(task, True, f"CF Bypass (marked)")
+            return m, a, ag, al, sup, ok, True
 
-        m, a, ok = self._try_fetch_and_parse(task, False, "Direct")
+        m, a, ag, al, sup, ok = self._try_fetch_and_parse(task, False, "Direct")
         if ok:
-            return m, a, True, False
+            return m, a, ag, al, sup, True, False
 
-        m, a, ok = self._try_fetch_and_parse(task, True, "CF Bypass")
+        m, a, ag, al, sup, ok = self._try_fetch_and_parse(task, True, "CF Bypass")
         if ok:
             self.needs_cf_bypass = True
             logger.info(f"[{self.proxy_name}] CF Bypass succeeded — marking proxy for this runtime")
-            return m, a, True, True
-        return [], '', False, False
+            return m, a, ag, al, sup, True, True
+        return [], '', '', '', '', False, False
 
     def _try_login_refresh(self):
         """Thread-safe global login; returns True on success."""
@@ -1294,8 +1312,8 @@ class ProxyWorker(threading.Thread):
                             self.detail_queue.put(task)
                             continue
                     self.result_queue.put(DetailResult(
-                        task=task, magnets=[], actor_info='',
-                        parse_success=False, used_cf_bypass=False,
+                        task=task, magnets=[], actor_info='', actor_gender='', actor_link='',
+                        supporting_actors='', parse_success=False, used_cf_bypass=False,
                     ))
                     continue
                 self.detail_queue.put(task)
@@ -1306,7 +1324,7 @@ class ProxyWorker(threading.Thread):
                 self._sleep_mgr.sleep()
             self._first_request = False
 
-            magnets, actor_info, success, used_cf = self._try_direct_then_cf(task)
+            magnets, actor_info, ag, al, sup, success, used_cf = self._try_direct_then_cf(task)
             if success:
                 cf_tag = " +CF" if used_cf else ""
                 logger.info(
@@ -1316,6 +1334,7 @@ class ProxyWorker(threading.Thread):
                 )
                 self.result_queue.put(DetailResult(
                     task=task, magnets=magnets, actor_info=actor_info,
+                    actor_gender=ag or '', actor_link=al or '', supporting_actors=sup or '',
                     parse_success=True, used_cf_bypass=used_cf,
                 ))
             else:
@@ -1415,6 +1434,8 @@ def process_detail_entries_parallel(
 
     rows: list = []
     phase_rows: list = []
+    visited_hrefs: set = set()
+    actor_updates: List[tuple] = []
     failed = 0
     no_new_torrents = 0
     results_received = 0
@@ -1433,6 +1454,11 @@ def process_detail_entries_parallel(
             failed += 1
             continue
 
+        visited_hrefs.add(href)
+        actor_updates.append((
+            href, result.actor_info or '', result.actor_gender or '',
+            result.actor_link or '', result.supporting_actors or '',
+        ))
         magnet_links = extract_magnets(result.magnets, idx_str)
 
         should_process, history_torrent_types = should_process_movie(
@@ -1442,7 +1468,8 @@ def process_detail_entries_parallel(
             skipped_history += 1
             continue
 
-        row = create_csv_row_with_history_filter(href, entry, page_num, '', magnet_links, history_data)
+        row = create_csv_row_with_history_filter(
+            href, entry, page_num, result.actor_info, magnet_links, history_data)
         row['video_code'] = entry['video_code']
 
         _has_any, has_new_torrents, should_include_in_report = check_torrent_status(row)
@@ -1457,6 +1484,10 @@ def process_detail_entries_parallel(
                 if new_magnet_links:
                     save_parsed_movie_to_history(
                         history_file, href, phase, entry['video_code'], new_magnet_links,
+                        actor_name=result.actor_info or '',
+                        actor_gender=result.actor_gender or '',
+                        actor_link=result.actor_link or '',
+                        supporting_actors=result.supporting_actors or '',
                     )
         else:
             no_new_torrents += 1
@@ -1465,6 +1496,10 @@ def process_detail_entries_parallel(
         detail_queue.put(None)
     for w in all_workers:
         w.join(timeout=10)
+
+    if use_history_for_saving and not dry_run and visited_hrefs:
+        if use_sqlite() and actor_updates:
+            db_batch_update_movie_actors(actor_updates)
 
     logger.info(
         f"Phase {phase} parallel completed: {total_entries} discovered, "
@@ -1533,6 +1568,8 @@ def process_phase_entries_sequential(
     phase_prefix = '' if phase == 1 else f'P{phase}-'
 
     phase_rows: list = []
+    visited_hrefs: set = set()
+    actor_updates: List[tuple] = []
     skipped_history = 0
     failed = 0
     no_new_torrents = 0
@@ -1564,7 +1601,10 @@ def process_phase_entries_sequential(
         entry_index = f"{phase_prefix}{i}/{total_entries}"
         logger.info(f"[{entry_index}] [Page {page_num}] Processing {entry['video_code'] or href}")
 
-        magnets, actor_info, parse_success, effective_use_proxy, effective_use_cf_bypass = fetch_detail_page_with_fallback(
+        (
+            magnets, actor_info, actor_gender, actor_link, supporting_actors, parse_success,
+            effective_use_proxy, effective_use_cf_bypass,
+        ) = fetch_detail_page_with_fallback(
             detail_url, session,
             use_cookie=use_cookie,
             use_proxy=use_proxy,
@@ -1584,6 +1624,12 @@ def process_phase_entries_sequential(
             failed += 1
             pending_movie_sleep = True
             continue
+
+        visited_hrefs.add(href)
+        actor_updates.append((
+            href, actor_info or '', actor_gender or '', actor_link or '',
+            supporting_actors or '',
+        ))
 
         magnet_links = extract_magnets(magnets, entry_index)
 
@@ -1610,7 +1656,13 @@ def process_phase_entries_sequential(
             if use_history_for_saving and not dry_run and has_new_torrents:
                 new_magnet_links = collect_new_magnet_links(row, magnet_links)
                 if new_magnet_links:
-                    save_parsed_movie_to_history(history_file, href, phase, entry['video_code'], new_magnet_links)
+                    save_parsed_movie_to_history(
+                        history_file, href, phase, entry['video_code'], new_magnet_links,
+                        actor_name=actor_info or '',
+                        actor_gender=actor_gender or '',
+                        actor_link=actor_link or '',
+                        supporting_actors=supporting_actors or '',
+                    )
         else:
             no_new_torrents += 1
 
@@ -1620,6 +1672,10 @@ def process_phase_entries_sequential(
             pending_movie_sleep = False
         else:
             pending_movie_sleep = True
+
+    if use_history_for_saving and not dry_run and visited_hrefs:
+        if use_sqlite() and actor_updates:
+            db_batch_update_movie_actors(actor_updates)
 
     logger.info(
         f"Phase {phase} completed: {total_entries} movies discovered, "

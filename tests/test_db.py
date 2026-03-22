@@ -36,6 +36,52 @@ class TestInitDb:
         db_mod.init_db(_isolate_sqlite)
         db_mod.init_db(_isolate_sqlite)
 
+    def test_moviehistory_actor_column_order_normalize(self, tmp_path):
+        """Legacy ALTER order Name→Link→Gender is rebuilt as Name→Gender→Link→Supporting."""
+        p = str(tmp_path / "order_test.db")
+        conn = sqlite3.connect(p)
+        conn.executescript(
+            """
+            CREATE TABLE MovieHistory (
+              Id INTEGER PRIMARY KEY AUTOINCREMENT,
+              VideoCode TEXT NOT NULL,
+              Href TEXT NOT NULL UNIQUE,
+              DateTimeCreated TEXT,
+              DateTimeUpdated TEXT,
+              DateTimeVisited TEXT,
+              PerfectMatchIndicator INTEGER,
+              HiResIndicator INTEGER
+            );
+            ALTER TABLE MovieHistory ADD COLUMN ActorName TEXT;
+            ALTER TABLE MovieHistory ADD COLUMN ActorLink TEXT;
+            ALTER TABLE MovieHistory ADD COLUMN ActorGender TEXT;
+            ALTER TABLE MovieHistory ADD COLUMN SupportingActors TEXT;
+            """
+        )
+        conn.commit()
+        conn.close()
+
+        c2 = sqlite3.connect(p)
+        try:
+            assert not db_mod.moviehistory_actor_layout_ok(c2)
+        finally:
+            c2.close()
+
+        with db_mod.get_db(p) as gconn:
+            db_mod._normalize_moviehistory_actor_column_order(gconn)
+
+        c3 = sqlite3.connect(p)
+        try:
+            assert db_mod.moviehistory_actor_layout_ok(c3)
+            names = [r[1] for r in c3.execute("PRAGMA table_info(MovieHistory)").fetchall()]
+            i_n = names.index("ActorName")
+            i_g = names.index("ActorGender")
+            i_l = names.index("ActorLink")
+            i_s = names.index("SupportingActors")
+            assert i_n < i_g < i_l < i_s
+        finally:
+            c3.close()
+
     def test_init_db_noop_in_csv_mode(self, tmp_path, storage_mode_csv):
         """init_db should be a no-op when STORAGE_MODE='csv'."""
         fresh_db = str(tmp_path / "should_not_exist.db")
@@ -155,8 +201,14 @@ class TestInitDb:
 # ── parsed_movies_history ─────────────────────────────────────────────────
 
 class TestHistory:
-    def _upsert(self, href='/v/ABC-123', code='ABC-123', magnets=None):
-        db_mod.db_upsert_history(href, code, magnet_links=magnets)
+    def _upsert(self, href='/v/ABC-123', code='ABC-123', magnets=None,
+                actor_name=None, actor_gender=None, actor_link=None,
+                supporting_actors=None):
+        db_mod.db_upsert_history(
+            href, code, magnet_links=magnets,
+            actor_name=actor_name, actor_gender=actor_gender,
+            actor_link=actor_link, supporting_actors=supporting_actors,
+        )
 
     def test_upsert_and_load(self, _isolate_sqlite):
         self._upsert()
@@ -189,6 +241,29 @@ class TestHistory:
         db_mod.db_batch_update_last_visited(['/v/A'])
         history = db_mod.db_load_history()
         assert history['/v/A']['DateTimeVisited'] != ''
+
+    def test_upsert_sets_actor_columns(self, _isolate_sqlite):
+        self._upsert(
+            actor_name='Actor One', actor_gender='female', actor_link='/actors/xyz',
+            supporting_actors='[]',
+        )
+        history = db_mod.db_load_history()
+        assert history['/v/ABC-123']['ActorName'] == 'Actor One'
+        assert history['/v/ABC-123']['ActorGender'] == 'female'
+        assert history['/v/ABC-123']['ActorLink'] == 'https://javdb.com/actors/xyz'
+        assert history['/v/ABC-123']['SupportingActors'] == '[]'
+
+    def test_batch_update_movie_actors(self, _isolate_sqlite):
+        self._upsert(href='/v/A', code='A')
+        assert db_mod.db_batch_update_movie_actors([
+            ('/v/A', 'N1', 'male', '/actors/1', '[{"name":"X","gender":"","link":"/actors/x"}]'),
+        ]) == 1
+        history = db_mod.db_load_history()
+        assert history['/v/A']['ActorName'] == 'N1'
+        assert history['/v/A']['ActorGender'] == 'male'
+        assert history['/v/A']['ActorLink'] == 'https://javdb.com/actors/1'
+        assert 'X' in history['/v/A']['SupportingActors']
+        assert 'https://javdb.com/actors/x' in history['/v/A']['SupportingActors']
 
     def test_get_all_history_records(self, _isolate_sqlite):
         self._upsert(href='/v/A', code='A')
@@ -241,7 +316,7 @@ class TestDedupRecords:
             'existing_subtitle': '无字', 'existing_gdrive_path': f'remote:/{code}',
             'existing_folder_size': 2048, 'new_torrent_category': '有码',
             'deletion_reason': 'Subtitle upgrade', 'detect_datetime': '2024-01-01',
-            'is_deleted': 0, 'delete_datetime': '',
+            'is_deleted': 0, 'delete_datetime': None,
         }
         row.update(kw)
         return row
@@ -330,8 +405,8 @@ class TestDedupRecords:
         assert 'PENDING' in codes
 
     def test_cleanup_skips_empty_delete_datetime(self, _isolate_sqlite):
-        """Edge 3a: is_deleted=1 but delete_datetime='' should be kept."""
-        r = self._rec('ANOMALY', is_deleted=1, delete_datetime='')
+        """Edge 3a: is_deleted=1 but delete_datetime=NULL should be kept."""
+        r = self._rec('ANOMALY', is_deleted=1, delete_datetime=None)
         db_mod.db_append_dedup_record(r)
         removed = db_mod.db_cleanup_deleted_records(older_than_days=0)
         assert removed == 0
@@ -549,13 +624,13 @@ class TestSessionIdExtraction:
 
 class TestReportMigration:
     def test_parse_daily_filename(self):
-        from migration.csv_to_sqlite import parse_csv_filename
+        from migration.tools.csv_to_sqlite import parse_csv_filename
         result = parse_csv_filename('Javdb_TodayTitle_20240101.csv', is_adhoc_dir=False)
         assert result['report_type'] == 'daily'
         assert result['report_date'] == '20240101'
 
     def test_parse_adhoc_filename(self):
-        from migration.csv_to_sqlite import parse_csv_filename
+        from migration.tools.csv_to_sqlite import parse_csv_filename
         result = parse_csv_filename(
             'Javdb_AdHoc_actors_TestActor_20240201.csv', is_adhoc_dir=True)
         assert result['report_type'] == 'adhoc'
@@ -564,19 +639,19 @@ class TestReportMigration:
         assert result['report_date'] == '20240201'
 
     def test_parse_adhoc_rankings(self):
-        from migration.csv_to_sqlite import parse_csv_filename
+        from migration.tools.csv_to_sqlite import parse_csv_filename
         result = parse_csv_filename(
             'Javdb_AdHoc_rankings_top_20241231.csv', is_adhoc_dir=True)
         assert result['url_type'] == 'rankings'
         assert result['display_name'] == 'top'
 
     def test_parse_today_title_in_adhoc_dir(self):
-        from migration.csv_to_sqlite import parse_csv_filename
+        from migration.tools.csv_to_sqlite import parse_csv_filename
         result = parse_csv_filename('Javdb_TodayTitle_20250629.csv', is_adhoc_dir=True)
         assert result['report_type'] == 'adhoc'
 
     def test_migrate_single_csv(self, _isolate_sqlite, tmp_path):
-        from migration.csv_to_sqlite import migrate_single_csv
+        from migration.tools.csv_to_sqlite import migrate_single_csv
         csv_path = str(tmp_path / "test_report.csv")
         with open(csv_path, 'w', encoding='utf-8-sig') as f:
             f.write('href,video_code,page,actor,rate,comment_number,'
@@ -596,7 +671,7 @@ class TestReportMigration:
         assert rows[0]['video_code'] == 'A-001'
 
     def test_skip_already_migrated(self, _isolate_sqlite, tmp_path):
-        from migration.csv_to_sqlite import migrate_single_csv
+        from migration.tools.csv_to_sqlite import migrate_single_csv
         csv_path = str(tmp_path / "dup.csv")
         with open(csv_path, 'w', encoding='utf-8-sig') as f:
             f.write('href,video_code,page,actor,rate,comment_number,'

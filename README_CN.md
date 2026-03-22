@@ -426,6 +426,7 @@ python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --use-proxy --ignor
 | `--phase` | 运行的阶段(1/2/all) | all | `--phase 1` |
 | `--ignore-release-date` | 忽略今日/昨日标签 | False | `--ignore-release-date` |
 | `--use-proxy` | 从 config.py 启用代理 | False | `--use-proxy` |
+| `--always-bypass-time [分钟]` | fallback 成功后持续使用 CF bypass（不带值或 0 表示本次 session 一直使用；不传该参数则始终 direct-first） | None | `--always-bypass-time 30` |
 | `--sequential` | 强制串行处理(禁用并行) | False | `--sequential` |
 | `--max-movies-phase1` | 限制阶段 1 电影数量(测试用) | None | `--max-movies-phase1 10` |
 | `--max-movies-phase2` | 限制阶段 2 电影数量(测试用) | None | `--max-movies-phase2 5` |
@@ -455,18 +456,15 @@ cat "reports/proxy_bans.csv"
 # 禁用信息也包含在流水线电子邮件报告中
 ```
 
-**运行迁移脚本:**
+**运行迁移脚本**（在仓库根目录执行）:
 ```bash
-cd migration
+# SQLite 结构 / 演员回填（主入口）
+python3 migration/migrate_to_current.py --help
 
-# 清理重复的历史条目
-python3 cleanup_history_priorities.py
-
-# 更新历史文件格式(从旧版本升级时)
-python3 update_history_format.py
-
-# 重新分类种子(分类规则更改后)
-python3 reclassify_c_hacked_torrents.py
+# 一次性或历史辅助脚本在 migration/tools/
+python3 migration/tools/cleanup_history_priorities.py
+python3 migration/tools/update_history_format.py
+python3 migration/tools/reclassify_c_hacked_torrents.py
 ```
 
 ### 自动化流水线
@@ -1030,7 +1028,7 @@ CF_BYPASS_SERVICE_PORT = 8000  # 必须匹配服务端口
 
 **4. CF 绕过行为:**
 
-CF 绕过会在代理池 fallback 机制中直接请求失败时自动启用，无需命令行参数。
+CF 绕过会在代理池 fallback 机制中直接请求失败时自动启用。默认每次请求仍会先尝试 direct；可通过 `--always-bypass-time [分钟]` 在 fallback 成功后让该代理持续使用 bypass（传 0 则本次 session 持续使用）。
 
 #### 工作原理
 
@@ -1341,9 +1339,10 @@ href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle
 
 ## 迁移脚本
 
-`migration/` 目录包含用于维护和升级系统的实用脚本:
+- **`migration/migrate_to_current.py`** — SQLite 结构升级、可选时间列规范化与演员回填的主入口（见 `--help`）。
+- **`migration/tools/`** — 一次性或旧版辅助脚本（CSV 清理、旧格式转换、`csv_to_sqlite`、跨大版本迁移等）。
 
-### 可用脚本
+### 可用脚本（tools/）
 
 **cleanup_history_priorities.py**
 - 从历史文件中删除重复条目
@@ -1378,12 +1377,14 @@ href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle
 
 ### 如何运行
 
+在仓库根目录执行:
+
 ```bash
-cd migration
-python3 cleanup_history_priorities.py
-python3 update_history_format.py
-python3 rename_columns_add_last_visited.py
-python3 reclassify_c_hacked_torrents.py
+python3 migration/tools/cleanup_history_priorities.py
+python3 migration/tools/update_history_format.py
+python3 migration/tools/rename_columns_add_last_visited.py
+python3 migration/tools/reclassify_c_hacked_torrents.py
+python3 migration/tools/migrate_reports_to_dated_dirs.py --dry-run
 ```
 
 **注意:** 运行迁移脚本前务必备份您的 `reports/parsed_movies_history.csv`。
@@ -1523,7 +1524,7 @@ LOG_LEVEL = 'DEBUG'  # 显示详细的调试信息
   - `pipeline.log`: 流水线执行日志
   - `pikpak_bridge.log`: PikPak 桥接执行日志
   - `qb_file_filter.log`: 文件过滤器执行日志
-- **migration/**: 包含数据库迁移脚本
+- **migration/**: `migrate_to_current.py`（主数据库迁移）；**migration/tools/** 存放一次性/历史脚本
 - **utils/**: 实用工具模块(历史、解析器、代理池等)
 - **utils/login/**: JavDB 登录相关文件和文档
 - **docker/**: Docker 配置文件

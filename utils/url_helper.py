@@ -7,7 +7,7 @@ equivalent pure-Python logic kicks in.
 """
 
 import re
-from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse, quote_plus
 
 try:
     from javdb_rust_core import (
@@ -32,7 +32,7 @@ def _py_detect_url_type(url: str) -> str:
         return 'unknown'
     try:
         path = urlparse(url).path.strip('/')
-        for prefix in ('actors', 'makers', 'publishers', 'series', 'directors', 'video_codes'):
+        for prefix in ('actors', 'makers', 'publishers', 'series', 'directors', 'video_codes', 'search'):
             if path.startswith(prefix + '/') or path == prefix:
                 return prefix
         return 'unknown'
@@ -129,6 +129,16 @@ def _py_get_page_url(page_num: int, base_url: str, custom_url=None) -> str:
     return f'{base_url}{sep}page={page_num}'
 
 
+def _py_build_search_url(base_url: str, video_code: str, f: str = 'all') -> str:
+    base = (base_url or '').rstrip('/')
+    encoded_code = quote_plus((video_code or '').strip())
+    if not encoded_code:
+        return f"{base}/search"
+    if f:
+        return f"{base}/search?q={encoded_code}&f={quote_plus(str(f))}"
+    return f"{base}/search?q={encoded_code}"
+
+
 def _py_sanitize_filename_part(text: str, max_length: int = 30) -> str:
     if not text:
         return ''
@@ -160,7 +170,13 @@ def _py_extract_url_part_after_javdb(url: str) -> str:
 # ---------------------------------------------------------------------------
 
 if RUST_URL_HELPER_AVAILABLE:
-    detect_url_type = _rs_detect_url_type
+    def detect_url_type(url: str) -> str:
+        detected = _rs_detect_url_type(url)
+        if detected == 'unknown':
+            # Keep parity with newly-added Python support (e.g. /search)
+            return _py_detect_url_type(url)
+        return detected
+
     extract_url_identifier = _rs_extract_url_identifier
     has_magnet_filter = _rs_has_magnet_filter
     add_magnet_filter_to_url = _rs_add_magnet_filter_to_url
@@ -179,3 +195,8 @@ else:
 
     def get_page_url(page_num, base_url, custom_url=None):
         return _py_get_page_url(page_num, base_url, custom_url)
+
+
+def build_search_url(video_code: str, f: str = 'all', base_url: str = 'https://javdb.com') -> str:
+    """Build a JavDB search URL for an exact video code lookup."""
+    return _py_build_search_url(base_url, video_code, f=f)

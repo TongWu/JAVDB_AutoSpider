@@ -8,8 +8,10 @@ from typing import Optional, List
 from urllib.parse import urljoin
 
 from utils.logging_config import get_logger
+from utils.config_helper import use_sqlite
 from utils.parser import parse_detail
 from utils.magnet_extractor import extract_magnets
+from utils.db import db_batch_update_movie_actors
 from utils.history_manager import (
     has_complete_subtitles, should_skip_recent_yesterday_release,
     should_skip_recent_today_release, should_process_movie,
@@ -22,6 +24,7 @@ from utils.request_handler import RequestHandler, RequestConfig
 
 import scripts.spider.state as state
 from scripts.spider.session import is_login_page, can_attempt_login, attempt_login_refresh
+from scripts.spider.parallel_login import should_delegate_login_task, use_login_queue_priority
 from scripts.spider.sleep_manager import MovieSleepManager, movie_sleep_mgr
 from scripts.spider.csv_builder import (
     create_csv_row_with_history_filter, check_torrent_status, collect_new_magnet_links,
@@ -34,6 +37,7 @@ from scripts.spider.config_loader import (
     JAVDB_SESSION_COOKIE,
     MOVIE_SLEEP_MIN, MOVIE_SLEEP_MAX,
     PROXY_POOL, PROXY_POOL_COOLDOWN_SECONDS, PROXY_POOL_MAX_FAILURES,
+    LOGIN_PROXY_NAME,
 )
 from scripts.spider.dedup_checker import (
     should_skip_from_rclone,
@@ -73,6 +77,9 @@ class DetailResult:
     task: DetailTask
     magnets: list
     actor_info: str
+    actor_gender: str
+    actor_link: str
+    supporting_actors: str
     parse_success: bool
     used_cf_bypass: bool
 
@@ -120,8 +127,9 @@ class ProxyWorker(threading.Thread):
         self._sleep_mgr = MovieSleepManager(movie_sleep_min, movie_sleep_max)
         self.fallback_cooldown = fallback_cooldown
         self.all_workers = all_workers
+        self.login_proxy_name: Optional[str] = LOGIN_PROXY_NAME
 
-        self.needs_cf_bypass = False
+        self._cf_bypass_since: Optional[float] = None
         self._first_request = True
 
         self._proxy_pool = create_proxy_pool_from_config(
@@ -162,7 +170,7 @@ class ProxyWorker(threading.Thread):
     def _try_fetch_and_parse(self, task: DetailTask, use_cf: bool, context: str):
         """Attempt fetch + parse_detail.
 
-        Returns (magnets, actor_info, success, needs_login).
+        Returns (magnets, actor_info, actor_gender, actor_link, supporting, success, needs_login).
         Login decisions are made at the run() level, not here.
         """
         logger.debug(f"[{self.proxy_name}] [{task.entry_index}] {context}")
@@ -172,40 +180,60 @@ class ProxyWorker(threading.Thread):
                 if is_login_page(html):
                     logger.warning(
                         f"[{self.proxy_name}] [{task.entry_index}] Login page detected: {context}")
-                    return [], '', False, True
+                    return [], '', '', '', '', False, True
 
-                magnets, actor_info, ok = parse_detail(html, task.entry_index, skip_sleep=True)
+                m = parse_detail(html, task.entry_index, skip_sleep=True)
+                magnets, actor_info, actor_gender, actor_link, supporting, ok = m
                 if ok:
-                    return magnets, actor_info, True, False
+                    return magnets, actor_info, actor_gender, actor_link, supporting, True, False
                 logger.debug(f"[{self.proxy_name}] [{task.entry_index}] parse failed: {context}")
             else:
                 logger.debug(f"[{self.proxy_name}] [{task.entry_index}] no HTML: {context}")
         except Exception as e:
             logger.debug(f"[{self.proxy_name}] [{task.entry_index}] error in {context}: {e}")
-        return [], '', False, False
+        return [], '', '', '', '', False, False
 
     def _try_direct_then_cf(self, task: DetailTask):
         """Try direct, then CF bypass.
 
-        Returns (magnets, actor, success, used_cf, needs_login).
+        Returns (magnets, actor_info, actor_gender, actor_link, supporting, success, used_cf, needs_login).
         Short-circuits CF bypass if login is required (CF won't fix auth).
         """
-        if self.needs_cf_bypass:
-            m, a, ok, needs_login = self._try_fetch_and_parse(task, True, "CF Bypass (marked)")
-            return m, a, ok, True, needs_login
+        always_bypass_time = state.always_bypass_time
+        should_short_circuit = False
+        if always_bypass_time is not None and self._cf_bypass_since is not None:
+            if always_bypass_time == 0:
+                should_short_circuit = True
+            else:
+                window_seconds = always_bypass_time * 60
+                if time.time() - self._cf_bypass_since <= window_seconds:
+                    should_short_circuit = True
+                else:
+                    self._cf_bypass_since = None
 
-        m, a, ok, needs_login = self._try_fetch_and_parse(task, False, "Direct")
+        if should_short_circuit:
+            m, a, ag, al, sup, ok, needs_login = self._try_fetch_and_parse(
+                task, True, "CF Bypass (marked)")
+            return m, a, ag, al, sup, ok, True, needs_login
+
+        m, a, ag, al, sup, ok, needs_login = self._try_fetch_and_parse(task, False, "Direct")
         if ok:
-            return m, a, True, False, False
+            return m, a, ag, al, sup, True, False, False
         if needs_login:
-            return m, a, False, False, True
+            return m, a, ag, al, sup, False, False, True
 
-        m, a, ok, needs_login = self._try_fetch_and_parse(task, True, "CF Bypass")
+        m, a, ag, al, sup, ok, needs_login = self._try_fetch_and_parse(task, True, "CF Bypass")
         if ok:
-            self.needs_cf_bypass = True
-            logger.info(f"[{self.proxy_name}] CF Bypass succeeded — marking proxy for this runtime")
-            return m, a, True, True, False
-        return [], '', False, False, needs_login
+            if always_bypass_time is not None:
+                self._cf_bypass_since = time.time()
+                if always_bypass_time == 0:
+                    logger.info(f"[{self.proxy_name}] CF Bypass succeeded — marking proxy for this runtime")
+                else:
+                    logger.info(
+                        f"[{self.proxy_name}] CF Bypass succeeded — marking proxy for {always_bypass_time} minute(s)"
+                    )
+            return m, a, ag, al, sup, True, True, False
+        return [], '', '', '', '', False, False, needs_login
 
     def _try_login_refresh(self):
         """Per-worker login using this worker's own proxy.
@@ -216,6 +244,9 @@ class ProxyWorker(threading.Thread):
         """
         global _logged_in_worker_id
         with _login_lock:
+            if self.login_proxy_name and self.proxy_name != self.login_proxy_name:
+                return False
+
             if state.login_attempted:
                 if state.refreshed_session_cookie is not None:
                     self._handler.config.javdb_session_cookie = state.refreshed_session_cookie
@@ -223,18 +254,21 @@ class ProxyWorker(threading.Thread):
                     return True
                 return False
 
-            proxy_for_login = {
-                'http': self.proxy_config.get('http'),
-                'https': self.proxy_config.get('https'),
-            }
-            proxy_for_login = {k: v for k, v in proxy_for_login.items() if v}
-            if not proxy_for_login:
-                proxy_for_login = None
+            if self.login_proxy_name:
+                success, new_cookie, _proxy_name = attempt_login_refresh(None, None)
+            else:
+                proxy_for_login = {
+                    'http': self.proxy_config.get('http'),
+                    'https': self.proxy_config.get('https'),
+                }
+                proxy_for_login = {k: v for k, v in proxy_for_login.items() if v}
+                if not proxy_for_login:
+                    proxy_for_login = None
 
-            success, new_cookie, _proxy_name = attempt_login_refresh(
-                explicit_proxies=proxy_for_login,
-                explicit_proxy_name=self.proxy_name,
-            )
+                success, new_cookie, _proxy_name = attempt_login_refresh(
+                    explicit_proxies=proxy_for_login,
+                    explicit_proxy_name=self.proxy_name,
+                )
             if success and new_cookie:
                 self._handler.config.javdb_session_cookie = new_cookie
                 _logged_in_worker_id = self.worker_id
@@ -244,6 +278,21 @@ class ProxyWorker(threading.Thread):
     def _handle_login_required(self, task: DetailTask):
         """Route a login-required task to the logged-in worker, or login self."""
         global _logged_in_worker_id
+        if should_delegate_login_task(self.login_proxy_name, self.proxy_name):
+            with _login_lock:
+                if _logged_in_worker_id is not None:
+                    li_nm = self.all_workers[_logged_in_worker_id].proxy_name
+                    task.failed_proxies.discard(li_nm)
+                if self.login_proxy_name:
+                    task.failed_proxies.discard(self.login_proxy_name)
+            self.login_queue.put(task)
+            logger.info(
+                f"[{self.proxy_name}] [{task.entry_index}] "
+                f"Login required for {task.entry.get('video_code', '')}, "
+                f"routing to LOGIN_PROXY_NAME worker [{self.login_proxy_name}]"
+            )
+            return
+
         with _login_lock:
             if _logged_in_worker_id is not None:
                 if _logged_in_worker_id != self.worker_id:
@@ -282,15 +331,20 @@ class ProxyWorker(threading.Thread):
             f"Login required but login unavailable, marking as failed"
         )
         self.result_queue.put(DetailResult(
-            task=task, magnets=[], actor_info='',
-            parse_success=False, used_cf_bypass=False,
+            task=task, magnets=[], actor_info='', actor_gender='', actor_link='',
+            supporting_actors='', parse_success=False, used_cf_bypass=False,
         ))
 
     def _get_next_task(self) -> Optional[DetailTask]:
         """Get next task. Logged-in worker checks login_queue with priority."""
         while True:
             with _login_lock:
-                am_logged_in = (_logged_in_worker_id == self.worker_id)
+                am_logged_in = use_login_queue_priority(
+                    self.login_proxy_name,
+                    self.proxy_name,
+                    _logged_in_worker_id,
+                    self.worker_id,
+                )
 
             if am_logged_in:
                 try:
@@ -315,8 +369,8 @@ class ProxyWorker(threading.Thread):
             if self.proxy_name in task.failed_proxies:
                 if len(task.failed_proxies) >= self.total_workers:
                     self.result_queue.put(DetailResult(
-                        task=task, magnets=[], actor_info='',
-                        parse_success=False, used_cf_bypass=False,
+                        task=task, magnets=[], actor_info='', actor_gender='', actor_link='',
+                        supporting_actors='', parse_success=False, used_cf_bypass=False,
                     ))
                     continue
                 _requeue_front(self.detail_queue, task)
@@ -327,7 +381,8 @@ class ProxyWorker(threading.Thread):
                 self._sleep_mgr.sleep()
             self._first_request = False
 
-            magnets, actor_info, success, used_cf, needs_login = self._try_direct_then_cf(task)
+            magnets, actor_info, actor_gender, actor_link, supporting, success, used_cf, needs_login = (
+                self._try_direct_then_cf(task))
             if success:
                 cf_tag = " +CF" if used_cf else ""
                 logger.info(
@@ -337,7 +392,8 @@ class ProxyWorker(threading.Thread):
                 )
                 self.result_queue.put(DetailResult(
                     task=task, magnets=magnets, actor_info=actor_info,
-                    parse_success=True, used_cf_bypass=used_cf,
+                    actor_gender=actor_gender or '', actor_link=actor_link or '',
+                    supporting_actors=supporting or '', parse_success=True, used_cf_bypass=used_cf,
                 ))
             elif needs_login:
                 self._handle_login_required(task)
@@ -409,6 +465,11 @@ def process_detail_entries_parallel(
         all_workers.append(w)
 
     if state.logged_in_proxy_name and state.refreshed_session_cookie:
+        if LOGIN_PROXY_NAME and state.logged_in_proxy_name != LOGIN_PROXY_NAME:
+            logger.warning(
+                f"Index login proxy [{state.logged_in_proxy_name}] differs from "
+                f"LOGIN_PROXY_NAME [{LOGIN_PROXY_NAME}] — session may not match detail workers"
+            )
         for w in all_workers:
             if w.proxy_name == state.logged_in_proxy_name:
                 w._handler.config.javdb_session_cookie = state.refreshed_session_cookie
@@ -506,6 +567,7 @@ def process_detail_entries_parallel(
     rows: list = []
     phase_rows: list = []
     visited_hrefs: set = set()
+    actor_updates: List[tuple] = []
     failed = 0
     failed_movies: list = []
     no_new_torrents = 0
@@ -528,6 +590,10 @@ def process_detail_entries_parallel(
             continue
 
         visited_hrefs.add(href)
+        actor_updates.append((
+            href, result.actor_info or '', result.actor_gender or '',
+            result.actor_link or '', result.supporting_actors or '',
+        ))
         magnet_links = extract_magnets(result.magnets, idx_str)
 
         should_process, history_torrent_types = should_process_movie(
@@ -566,9 +632,11 @@ def process_detail_entries_parallel(
                     logger.info(f"[{idx_str}] DEDUP: {rec.video_code} – {rec.deletion_reason}")
 
         if redownload_cats:
-            row = create_redownload_row(href, entry, page_num, '', magnet_links, redownload_cats)
+            row = create_redownload_row(
+                href, entry, page_num, result.actor_info, magnet_links, redownload_cats)
         else:
-            row = create_csv_row_with_history_filter(href, entry, page_num, '', magnet_links, history_data)
+            row = create_csv_row_with_history_filter(
+                href, entry, page_num, result.actor_info, magnet_links, history_data)
         row['video_code'] = entry['video_code']
 
         _has_any, has_new_torrents, should_include_in_report = check_torrent_status(row)
@@ -585,6 +653,10 @@ def process_detail_entries_parallel(
                         history_file, href, phase, entry['video_code'],
                         new_magnet_links, size_links=new_sizes,
                         file_count_links=new_fc, resolution_links=new_res,
+                        actor_name=result.actor_info or '',
+                        actor_gender=result.actor_gender or '',
+                        actor_link=result.actor_link or '',
+                        supporting_actors=result.supporting_actors or '',
                     )
         else:
             no_new_torrents += 1
@@ -595,6 +667,8 @@ def process_detail_entries_parallel(
         w.join(timeout=10)
 
     if use_history_for_saving and not dry_run and visited_hrefs:
+        if use_sqlite() and actor_updates:
+            db_batch_update_movie_actors(actor_updates)
         batch_update_last_visited(history_file, visited_hrefs)
 
     logger.info(

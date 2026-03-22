@@ -41,6 +41,8 @@ class TestParseArguments:
                             help='Ignore today/yesterday tags')
         parser.add_argument('--use-proxy', action='store_true',
                             help='Enable proxy for all HTTP requests')
+        parser.add_argument('--always-bypass-time', type=int, nargs='?', const=0, default=None,
+                            help='Minutes to keep using CF bypass after fallback success')
         parser.add_argument('--from-pipeline', action='store_true',
                             help='Running from pipeline.py')
         
@@ -58,6 +60,7 @@ class TestParseArguments:
         assert args.phase == 'all'
         assert args.start_page == 1
         assert args.end_page == 10
+        assert args.always_bypass_time is None
     
     def test_dry_run_flag(self):
         """Test --dry-run flag."""
@@ -117,6 +120,18 @@ class TestParseArguments:
         args = parser.parse_args(['--use-proxy'])
         
         assert args.use_proxy is True
+
+    def test_always_bypass_time_flag_without_value(self):
+        """Test --always-bypass-time without value."""
+        parser = self.create_parser()
+        args = parser.parse_args(['--always-bypass-time'])
+        assert args.always_bypass_time == 0
+
+    def test_always_bypass_time_flag_with_value(self):
+        """Test --always-bypass-time with explicit minutes."""
+        parser = self.create_parser()
+        args = parser.parse_args(['--always-bypass-time', '30'])
+        assert args.always_bypass_time == 30
     
 class TestEnsureDailyReportDir:
     """Test cases for ensure_daily_report_dir function logic."""

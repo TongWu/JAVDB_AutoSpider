@@ -7,6 +7,7 @@ serialisation to dicts / JSON (for the FastAPI REST layer).
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional
 
@@ -14,6 +15,17 @@ from typing import List, Optional
 # ---------------------------------------------------------------------------
 # Primitive link model – reused for actors, directors, makers, tags, etc.
 # ---------------------------------------------------------------------------
+
+@dataclass
+class ActorCredit:
+    """One actor on the detail page (name, link, gender from ♀/♂ marker)."""
+    name: str
+    href: str
+    gender: str = ''  # 'female' | 'male' | ''
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
 
 @dataclass
 class MovieLink:
@@ -81,9 +93,22 @@ class MovieIndexEntry:
 # Detail-page full movie info
 # ---------------------------------------------------------------------------
 
+# Canonical DB/API value when the 演員 panel has no /actors/ links but shows a placeholder (e.g. N/A).
+NO_ACTOR_LISTING_ACTOR_NAME = 'N/A'
+# Same sentinel as name: lead gender when the page confirms no actor links (ActorLink stays empty).
+NO_ACTOR_LISTING_ACTOR_GENDER = 'N/A'
+
+
 @dataclass
 class MovieDetail:
-    """All metadata extracted from a single movie's detail page."""
+    """All metadata extracted from a single movie's detail page.
+
+    Actor columns (DB / ``parse_detail``):
+    - When ``no_actor_listing`` is True: ``ActorName`` and ``ActorGender`` are ``N/A``;
+      ``ActorLink`` is empty; ``SupportingActors`` is the JSON string ``[]``.
+    - When there is only a lead actor (one ``/actors/`` link): ``SupportingActors`` is
+      still ``[]`` (never empty string for “no supporting cast”).
+    """
     title: str = ''
     video_code: str = ''
     code_prefix_link: str = ''
@@ -99,7 +124,9 @@ class MovieDetail:
     poster_url: str = ''
     fanart_urls: List[str] = field(default_factory=list)
     trailer_url: Optional[str] = None
-    actors: List[MovieLink] = field(default_factory=list)
+    actors: List[ActorCredit] = field(default_factory=list)
+    # True when 演員 panel has placeholder text (e.g. N/A) and no /actors/ links.
+    no_actor_listing: bool = False
     magnets: List[MagnetInfo] = field(default_factory=list)
     review_count: int = 0
     want_count: int = 0
@@ -107,13 +134,67 @@ class MovieDetail:
     parse_success: bool = True
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        if self.actors:
+            d['lead_actor'] = self.actors[0].to_dict()
+        elif self.no_actor_listing:
+            d['lead_actor'] = {
+                'name': NO_ACTOR_LISTING_ACTOR_NAME,
+                'href': '',
+                'gender': NO_ACTOR_LISTING_ACTOR_GENDER,
+            }
+        else:
+            d['lead_actor'] = None
+        d['supporting_actors'] = [a.to_dict() for a in self.actors[1:]]
+        return d
 
     # Convenience helpers for backward compatibility with spider.py ----------
 
     def get_first_actor_name(self) -> str:
-        """Return the name of the first actor, or empty string."""
-        return self.actors[0].name if self.actors else ''
+        """Return the name of the first (lead) actor, or ``NO_ACTOR_LISTING_ACTOR_NAME`` if confirmed placeholder."""
+        if self.actors:
+            return self.actors[0].name
+        if self.no_actor_listing:
+            return NO_ACTOR_LISTING_ACTOR_NAME
+        return ''
+
+    def get_first_actor_gender(self) -> str:
+        """Return gender of the first actor: ``female``, ``male``, ``''``, or ``N/A`` when no listing."""
+        if self.actors:
+            return self.actors[0].gender
+        if self.no_actor_listing:
+            return NO_ACTOR_LISTING_ACTOR_GENDER
+        return ''
+
+    def get_first_actor_href(self) -> str:
+        """Return the normalized path for the first actor link, or empty string."""
+        if not self.actors:
+            return ''
+        from api.parsers.common import normalize_javdb_href_path
+
+        return normalize_javdb_href_path(self.actors[0].href)
+
+    def get_supporting_actors_json(self) -> str:
+        """JSON array of supporting actors for DB: ``[{name, gender, link}, ...]``.
+
+        Always ``[]`` when there is no supporting cast (including ``no_actor_listing``
+        and exactly one lead actor).
+        """
+        if self.no_actor_listing:
+            return '[]'
+        if len(self.actors) <= 1:
+            return '[]'
+        from api.parsers.common import normalize_javdb_href_path
+
+        items = [
+            {
+                'name': a.name,
+                'gender': a.gender,
+                'link': normalize_javdb_href_path(a.href),
+            }
+            for a in self.actors[1:]
+        ]
+        return json.dumps(items, ensure_ascii=False)
 
     def get_magnets_as_legacy(self) -> list:
         """Return magnets in the legacy list-of-dicts format."""

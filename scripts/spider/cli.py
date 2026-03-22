@@ -36,6 +36,8 @@ def parse_arguments():
                         help='Ignore today/yesterday tags and download all entries matching phase criteria')
     parser.add_argument('--use-proxy', action='store_true',
                         help='Enable proxy for all HTTP requests (proxy settings from config.py)')
+    parser.add_argument('--always-bypass-time', type=int, nargs='?', const=0, default=None,
+                        help='Minutes to keep using CF bypass after fallback success (0 or no value = whole session)')
     parser.add_argument('--from-pipeline', action='store_true',
                         help='Running from pipeline.py - use GIT_USERNAME for commits')
     parser.add_argument('--max-movies-phase1', type=int, default=None,

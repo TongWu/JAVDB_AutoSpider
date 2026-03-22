@@ -49,6 +49,10 @@ on:
         required: false
         default: true
         type: boolean
+      always_bypass_time:
+        description: 'Spider CF bypass sticky window in minutes (empty=disabled, 0=entire session)'
+        required: false
+        type: number
       proxy_uploader:
         description: 'Enable proxy for qBittorrent Uploader requests'
         required: false
@@ -75,12 +79,12 @@ on:
       enable_rclone_filter:
         description: 'Enable rclone inventory filter (skip entries already in rclone inventory with 中字)'
         required: false
-        default: true
+        default: false
         type: boolean
       enable_dedup:
         description: 'Enable rclone dedup (detect + execute)'
         required: false
-        default: false
+        default: true
         type: boolean
       enable_redownload:
         description: 'Enable torrent re-download (洗版) when a same-category torrent is significantly larger'
@@ -112,10 +116,10 @@ jobs:
         run: echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -138,7 +142,7 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
 
@@ -150,7 +154,7 @@ jobs:
           echo "branch=$CURRENT_BRANCH" >> $GITHUB_OUTPUT
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -196,6 +200,7 @@ jobs:
           VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS || '691200' }}
           VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES || 3 }}
           VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
           VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
           VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED || 'True' }}
           VAR_START_PAGE: ${{ vars.START_PAGE }}
@@ -273,7 +278,7 @@ jobs:
           echo "✓ Config encrypted successfully"
 
       - name: Upload encrypted config artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: config-encrypted
           path: config.py.enc
@@ -293,10 +298,10 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -312,7 +317,7 @@ jobs:
         uses: ./.github/actions/install-rust-wheel
 
       - name: Download encrypted config
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: config-encrypted
           path: .
@@ -367,13 +372,13 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
           lfs: true
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -389,7 +394,7 @@ jobs:
         uses: ./.github/actions/install-rust-wheel
 
       - name: Download encrypted config
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: config-encrypted
           path: .
@@ -498,6 +503,15 @@ jobs:
           # Add proxy flag if enabled
           if [ "${{ inputs.proxy_spider }}" == "true" ]; then
             SPIDER_CMD="$SPIDER_CMD --use-proxy"
+          fi
+
+          ALWAYS_BYPASS_TIME="${{ inputs.always_bypass_time }}"
+          if [ -n "$ALWAYS_BYPASS_TIME" ]; then
+            if [ "$ALWAYS_BYPASS_TIME" = "0" ]; then
+              SPIDER_CMD="$SPIDER_CMD --always-bypass-time"
+            else
+              SPIDER_CMD="$SPIDER_CMD --always-bypass-time $ALWAYS_BYPASS_TIME"
+            fi
           fi
 
           # Add dedup flag if enabled
@@ -636,7 +650,7 @@ jobs:
 
       - name: Upload encrypted logs artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pipeline-logs-encrypted
           path: encrypted_artifacts/logs.tar.gz.enc
@@ -698,7 +712,7 @@ jobs:
 
       - name: Upload encrypted reports artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pipeline-reports-encrypted
           path: encrypted_artifacts/reports.tar.gz.enc
@@ -722,10 +736,10 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -741,7 +755,7 @@ jobs:
         uses: ./.github/actions/install-rust-wheel
 
       - name: Download encrypted config
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: config-encrypted
           path: .
@@ -765,7 +779,7 @@ jobs:
           echo "✓ Config decrypted successfully"
 
       - name: Download encrypted logs (if available)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: pipeline-logs-encrypted
           path: encrypted_artifacts
@@ -794,7 +808,7 @@ jobs:
           fi
 
       - name: Download encrypted reports (if available)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: pipeline-reports-encrypted
           path: encrypted_artifacts
@@ -904,13 +918,13 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
           lfs: true
 
       - name: Download encrypted reports
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: pipeline-reports-encrypted
           path: encrypted_artifacts

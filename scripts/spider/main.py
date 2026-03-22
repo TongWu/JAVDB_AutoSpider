@@ -58,6 +58,7 @@ def main():
     ignore_release_date = args.ignore_release_date
     use_proxy = args.use_proxy
     use_cf_bypass = False
+    always_bypass_time = args.always_bypass_time
     max_movies_phase1 = args.max_movies_phase1
     max_movies_phase2 = args.max_movies_phase2
     sequential = args.sequential
@@ -65,6 +66,12 @@ def main():
     rclone_filter = not args.no_rclone_filter
     enable_redownload = args.enable_redownload or ENABLE_REDOWNLOAD
     redownload_threshold = args.redownload_threshold if args.redownload_threshold is not None else REDOWNLOAD_SIZE_THRESHOLD
+
+    if always_bypass_time is not None and always_bypass_time < 0:
+        logger.error("--always-bypass-time must be >= 0")
+        sys.exit(2)
+
+    state.always_bypass_time = always_bypass_time
 
     if args.disable_all_filters:
         ignore_history = True
@@ -118,6 +125,14 @@ def main():
         logger.info("MODE: Direct (CF bypass available as automatic fallback)")
     if CF_BYPASS_ENABLED:
         logger.info(f"CF Bypass: Enabled as fallback (service port: {CF_BYPASS_SERVICE_PORT})")
+        if always_bypass_time is None:
+            logger.info("CF Bypass sticky mode: disabled (always direct-first)")
+        elif always_bypass_time == 0:
+            logger.info("CF Bypass sticky mode: enabled for full runtime when fallback succeeds")
+        else:
+            logger.info(
+                f"CF Bypass sticky mode: enabled for {always_bypass_time} minute(s) when fallback succeeds"
+            )
     else:
         logger.info("CF Bypass: Globally disabled via CF_BYPASS_ENABLED=False in config.py")
 

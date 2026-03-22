@@ -342,8 +342,9 @@ class TestExecuteMode:
         result = run_execute_from_csv(path)
         assert result == 0
 
+    @patch('scripts.rclone_manager.export_dedup_history')
     @patch('utils.rclone_helper.subprocess.run')
-    def test_run_execute_live(self, mock_run, tmp_path):
+    def test_run_execute_live(self, mock_run, mock_export, tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
         path = str(tmp_path / 'dedup.csv')
         r = DedupRecord('A-001', 's', 'sub', 'gdrive:/test/path', 100, 'cat', 'r', 't', 'False', '')
