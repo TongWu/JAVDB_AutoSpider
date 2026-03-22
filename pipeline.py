@@ -110,6 +110,14 @@ def parse_arguments():
     parser.add_argument('--dry-run', action='store_true', help='Print items that would be written without changing CSV file')
     parser.add_argument('--ignore-release-date', action='store_true', help='Ignore today/yesterday tags')
     parser.add_argument('--use-proxy', action='store_true', help='Enable proxy for all HTTP requests')
+    parser.add_argument(
+        '--always-bypass-time',
+        type=int,
+        nargs='?',
+        const=0,
+        default=None,
+        help='Minutes to keep using CF bypass after fallback success (0 or no value = whole session)',
+    )
     # PikPak Bridge arguments
     parser.add_argument('--pikpak-individual', action='store_true', help='Use individual mode for PikPak Bridge')
     # Dedup
@@ -208,6 +216,10 @@ def extract_session_id_from_output(output):
 
 def main():
     args = parse_arguments()
+    if args.always_bypass_time is not None and args.always_bypass_time < 0:
+        logger.error("--always-bypass-time must be >= 0")
+        sys.exit(2)
+
     is_adhoc_mode = args.url is not None
     
     # For adhoc mode, let spider generate the filename dynamically
@@ -257,6 +269,10 @@ def main():
         spider_args.append('--ignore-release-date')
     if args.use_proxy:
         spider_args.append('--use-proxy')
+    if args.always_bypass_time is not None:
+        spider_args.append('--always-bypass-time')
+        if args.always_bypass_time > 0:
+            spider_args.append(str(args.always_bypass_time))
     enable_dedup = args.enable_dedup
     if enable_dedup:
         spider_args.append('--enable-dedup')
