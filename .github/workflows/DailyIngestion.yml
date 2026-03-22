@@ -11,6 +11,10 @@ on:
         required: false
         default: false
         type: boolean
+      always_bypass_time:
+        description: 'Spider CF bypass sticky window in minutes (empty=disabled, 0=entire session)'
+        required: false
+        type: number
       runner:
         description: 'Runner type for pipeline jobs (health-check and run-pipeline)'
         required: false
@@ -397,6 +401,14 @@ jobs:
               SPIDER_CMD+=(--redownload-threshold "$THRESHOLD")
             fi
             echo "🔄 Re-download (洗版) enabled (threshold: ${THRESHOLD:-0.30})"
+          fi
+          ALWAYS_BYPASS_TIME="${{ inputs.always_bypass_time }}"
+          if [ -n "$ALWAYS_BYPASS_TIME" ]; then
+            if [ "$ALWAYS_BYPASS_TIME" = "0" ]; then
+              SPIDER_CMD+=(--always-bypass-time)
+            else
+              SPIDER_CMD+=(--always-bypass-time "$ALWAYS_BYPASS_TIME")
+            fi
           fi
           # Capture output AND exit code so we can always extract the CSV filename
           # (even when spider exits non-zero, e.g. proxy ban sys.exit(2))
