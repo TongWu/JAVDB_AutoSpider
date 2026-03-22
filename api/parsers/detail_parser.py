@@ -238,7 +238,7 @@ def _parse_magnets(soup: BeautifulSoup) -> tuple:
             size_match = re.search(r'([\d.]+\s*(?:GB|MB|KB|TB))', meta_text)
             if size_match:
                 size = size_match.group(1).replace(' ', '')
-            fc_match = re.search(r'(\d+)\s*(?:個文件|file)', meta_text)
+            fc_match = re.search(r'(\d+)\s*(?:個文件|files?)', meta_text)
             if fc_match:
                 file_count = int(fc_match.group(1))
 
