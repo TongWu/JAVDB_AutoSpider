@@ -351,10 +351,10 @@ class TestMaskSensitiveValues:
     
     def test_preserves_non_sensitive_values(self):
         """Should preserve non-sensitive values."""
-        content = "LOG_LEVEL = 'INFO'\nSTART_PAGE = 1"
+        content = "LOG_LEVEL = 'INFO'\nPAGE_START = 1"
         masked = mask_sensitive_values(content)
         assert "LOG_LEVEL = 'INFO'" in masked
-        assert "START_PAGE = 1" in masked
+        assert "PAGE_START = 1" in masked
 
 
 class TestWriteConfig:

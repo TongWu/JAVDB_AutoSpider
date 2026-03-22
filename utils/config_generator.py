@@ -263,8 +263,8 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('CF_BYPASS_SERVICE_PORT', 'CF_BYPASS_SERVICE_PORT', get_env_int, 8000, 'CLOUDFLARE BYPASS CONFIGURATION'),
         ('CF_BYPASS_ENABLED', 'CF_BYPASS_ENABLED', get_env_bool, True, 'CLOUDFLARE BYPASS CONFIGURATION'),
         # Spider Configuration
-        ('START_PAGE', 'START_PAGE', get_env_int, 1, 'SPIDER CONFIGURATION'),
-        ('END_PAGE', 'END_PAGE', get_env_int, 10, 'SPIDER CONFIGURATION'),
+        ('PAGE_START', 'PAGE_START', get_env_int, 1, 'SPIDER CONFIGURATION'),
+        ('PAGE_END', 'PAGE_END', get_env_int, 10, 'SPIDER CONFIGURATION'),
         ('PHASE2_MIN_RATE', 'PHASE2_MIN_RATE', get_env_float, 4.0, 'SPIDER CONFIGURATION'),
         ('PHASE2_MIN_COMMENTS', 'PHASE2_MIN_COMMENTS', get_env_int, 85, 'SPIDER CONFIGURATION'),
         ('BASE_URL', 'BASE_URL', get_env, 'https://javdb.com', 'SPIDER CONFIGURATION'),
