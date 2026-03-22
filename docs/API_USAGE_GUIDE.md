@@ -132,7 +132,8 @@ if detail.series:
 for d in detail.directors:
     print(f"导演: {d.name}")
 for a in detail.actors:
-    print(f"演员: {a.name} ({a.href})")
+    # ActorCredit: name, href, gender ('female' / 'male' / '')
+    print(f"演员: {a.name} ({a.href}) [{a.gender}]")
 for t in detail.tags:
     print(f"类别标签: {t.name}")
 
@@ -153,8 +154,11 @@ for m in detail.magnets:
     print(f"磁力: {m.name} | 大小: {m.size} | 标签: {m.tags} | 时间: {m.timestamp}")
     print(f"  链接: {m.href}")
 
-# ---- 兼容旧接口 ----
-actor_name = detail.get_first_actor_name()       # 第一个演员名
+# ---- 兼容旧接口 / 主角与配角 ----
+actor_name = detail.get_first_actor_name()        # 第一位（主角）姓名
+actor_gender = detail.get_first_actor_gender()    # 主角性别
+supporting_json = detail.get_supporting_actors_json()  # 配角 JSON（入库用）
+d = detail.to_dict()  # 含 lead_actor、supporting_actors 便捷字段
 magnets_list = detail.get_magnets_as_legacy()     # List[dict] 格式
 ```
 
@@ -177,7 +181,9 @@ magnets_list = detail.get_magnets_as_legacy()     # List[dict] 格式
 | `poster_url` | `str` | 海报 URL |
 | `fanart_urls` | `List[str]` | 剧照 URL 列表 |
 | `trailer_url` | `Optional[str]` | 预告片 URL |
-| `actors` | `List[MovieLink]` | 演员列表 |
+| `actors` | `List[ActorCredit]` | 演员列表（顺序与页面一致；含 `gender`） |
+| `lead_actor` | `Optional[dict]` | `to_dict()` 中主角 `{name, href, gender}` |
+| `supporting_actors` | `List[dict]` | `to_dict()` 中其余演员 |
 | `magnets` | `List[MagnetInfo]` | 磁力链接列表 |
 | `review_count` | `int` | 短评数量 |
 | `want_count` | `int` | 想看人数 |
@@ -435,7 +441,9 @@ curl -X POST http://localhost:8100/api/parse/detail \
   "poster_url": "https://.../cover.jpg",
   "fanart_urls": ["https://.../sample1.jpg", "https://.../sample2.jpg"],
   "trailer_url": "https://.../preview.mp4",
-  "actors": [{"name": "真野祈", "href": "/actors/..."}],
+  "actors": [{"name": "真北祈", "href": "/actors/450wJ", "gender": "female"}],
+  "lead_actor": {"name": "真北祈", "href": "/actors/450wJ", "gender": "female"},
+  "supporting_actors": [{"name": "マッスル澤野", "href": "...", "gender": "male"}],
   "magnets": [
     {
       "href": "magnet:?xt=urn:btih:...",

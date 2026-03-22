@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 
 pub mod csv_writer;
+pub mod dedup_ops;
 pub mod history;
 pub mod magnet_extractor;
 pub mod models;
@@ -11,8 +12,8 @@ pub mod scraper;
 pub mod url_helper;
 
 use models::{
-    CategoryPageResult, IndexPageResult, MagnetInfo, MovieDetail, MovieIndexEntry, MovieLink,
-    TagCategory, TagOption, TagPageResult, TopPageResult,
+    ActorCredit, CategoryPageResult, IndexPageResult, MagnetInfo, MovieDetail, MovieIndexEntry,
+    MovieLink, TagCategory, TagOption, TagPageResult, TopPageResult,
 };
 use proxy::ban_manager::{get_global_ban_manager, ProxyBanManager};
 use proxy::masking::{
@@ -85,6 +86,7 @@ fn javdb_rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // --- Models ---
     m.add_class::<MovieLink>()?;
+    m.add_class::<ActorCredit>()?;
     m.add_class::<MagnetInfo>()?;
     m.add_class::<MovieIndexEntry>()?;
     m.add_class::<MovieDetail>()?;
@@ -150,6 +152,8 @@ fn javdb_rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // --- CSV Writer ---
     m.add_function(wrap_pyfunction!(csv_writer::merge_row_data, m)?)?;
     m.add_function(wrap_pyfunction!(csv_writer::create_csv_row, m)?)?;
+    m.add_function(wrap_pyfunction!(csv_writer::check_torrent_status, m)?)?;
+    m.add_function(wrap_pyfunction!(csv_writer::collect_new_magnet_links, m)?)?;
 
     // --- URL Helper ---
     m.add_function(wrap_pyfunction!(url_helper::detect_url_type, m)?)?;
@@ -168,6 +172,10 @@ fn javdb_rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rclone_ops::parse_lsjson_for_year, m)?)?;
     m.add_function(wrap_pyfunction!(rclone_ops::group_by_movie_code, m)?)?;
     m.add_function(wrap_pyfunction!(rclone_ops::parse_lsd_output, m)?)?;
+
+    // --- Dedup Ops ---
+    m.add_function(wrap_pyfunction!(dedup_ops::should_skip_from_rclone, m)?)?;
+    m.add_function(wrap_pyfunction!(dedup_ops::check_dedup_upgrade, m)?)?;
 
     Ok(())
 }

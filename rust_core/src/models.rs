@@ -41,6 +41,45 @@ impl MovieLink {
 }
 
 // ---------------------------------------------------------------------------
+// ActorCredit (detail page actor + gender marker)
+// ---------------------------------------------------------------------------
+
+#[pyclass(name = "RustActorCredit")]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ActorCredit {
+    #[pyo3(get, set)]
+    pub name: String,
+    #[pyo3(get, set)]
+    pub href: String,
+    #[pyo3(get, set)]
+    pub gender: String,
+}
+
+#[pymethods]
+impl ActorCredit {
+    #[new]
+    #[pyo3(signature = (name, href, gender=String::new()))]
+    fn new(name: String, href: String, gender: String) -> Self {
+        Self { name, href, gender }
+    }
+
+    fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let dict = new_dict(py);
+        dict.set_item("name", &self.name)?;
+        dict.set_item("href", &self.href)?;
+        dict.set_item("gender", &self.gender)?;
+        Ok(dict)
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "RustActorCredit(name='{}', gender='{}')",
+            self.name, self.gender
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
 // MagnetInfo
 // ---------------------------------------------------------------------------
 
@@ -186,6 +225,11 @@ impl MovieIndexEntry {
 // MovieDetail
 // ---------------------------------------------------------------------------
 
+/// Canonical value when 演員 panel has placeholder text and no /actors/ links (matches Python).
+pub const NO_ACTOR_LISTING_ACTOR_NAME: &str = "N/A";
+/// Canonical gender value for the no-actor-listing case (matches Python ``NO_ACTOR_LISTING_ACTOR_GENDER``).
+pub const NO_ACTOR_LISTING_ACTOR_GENDER: &str = "N/A";
+
 #[pyclass(name = "RustMovieDetail")]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MovieDetail {
@@ -220,7 +264,10 @@ pub struct MovieDetail {
     #[pyo3(get, set)]
     pub trailer_url: Option<String>,
     #[pyo3(get, set)]
-    pub actors: Vec<MovieLink>,
+    pub actors: Vec<ActorCredit>,
+    #[serde(default)]
+    #[pyo3(get, set)]
+    pub no_actor_listing: bool,
     #[pyo3(get, set)]
     pub magnets: Vec<MagnetInfo>,
     #[pyo3(get, set)]
@@ -252,6 +299,7 @@ impl Default for MovieDetail {
             fanart_urls: Vec::new(),
             trailer_url: None,
             actors: Vec::new(),
+            no_actor_listing: false,
             magnets: Vec::new(),
             review_count: 0,
             want_count: 0,
@@ -312,6 +360,28 @@ impl MovieDetail {
             .map(|a| a.to_dict(py))
             .collect::<Result<_, _>>()?;
         dict.set_item("actors", actor_dicts)?;
+        dict.set_item("no_actor_listing", self.no_actor_listing)?;
+
+        let lead: Option<Bound<'py, PyDict>> = if let Some(a) = self.actors.first() {
+            Some(a.to_dict(py)?)
+        } else if self.no_actor_listing {
+            let d = new_dict(py);
+            d.set_item("name", NO_ACTOR_LISTING_ACTOR_NAME)?;
+            d.set_item("href", "")?;
+            d.set_item("gender", NO_ACTOR_LISTING_ACTOR_GENDER)?;
+            Some(d)
+        } else {
+            None
+        };
+        dict.set_item("lead_actor", lead)?;
+
+        let supporting: Vec<_> = self
+            .actors
+            .iter()
+            .skip(1)
+            .map(|a| a.to_dict(py))
+            .collect::<Result<_, _>>()?;
+        dict.set_item("supporting_actors", supporting)?;
 
         let magnet_dicts: Vec<_> = self
             .magnets
@@ -328,7 +398,57 @@ impl MovieDetail {
     }
 
     fn get_first_actor_name(&self) -> String {
-        self.actors.first().map_or(String::new(), |a| a.name.clone())
+        if let Some(a) = self.actors.first() {
+            return a.name.clone();
+        }
+        if self.no_actor_listing {
+            return NO_ACTOR_LISTING_ACTOR_NAME.to_string();
+        }
+        String::new()
+    }
+
+    fn get_first_actor_gender(&self) -> String {
+        if let Some(a) = self.actors.first() {
+            return a.gender.clone();
+        }
+        if self.no_actor_listing {
+            return NO_ACTOR_LISTING_ACTOR_GENDER.to_string();
+        }
+        String::new()
+    }
+
+    fn get_first_actor_href(&self) -> String {
+        self.actors.first().map_or(String::new(), |a| {
+            crate::scraper::common::normalize_javdb_href_path(&a.href)
+        })
+    }
+
+    fn get_supporting_actors_json(&self) -> PyResult<String> {
+        if self.no_actor_listing {
+            return Ok("[]".to_string());
+        }
+        if self.actors.len() <= 1 {
+            return Ok("[]".to_string());
+        }
+        #[derive(Serialize)]
+        struct Row<'a> {
+            name: &'a str,
+            gender: &'a str,
+            link: String,
+        }
+        let rows: Vec<Row> = self
+            .actors
+            .iter()
+            .skip(1)
+            .map(|a| Row {
+                name: a.name.as_str(),
+                gender: a.gender.as_str(),
+                link: crate::scraper::common::normalize_javdb_href_path(&a.href),
+            })
+            .collect();
+        serde_json::to_string(&rows).map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("json encode: {e}"))
+        })
     }
 
     fn get_magnets_as_legacy<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyDict>>> {

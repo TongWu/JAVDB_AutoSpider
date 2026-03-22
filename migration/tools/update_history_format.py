@@ -4,15 +4,23 @@ Adhoc script to update existing history movie entries to new format
 Updates existing date/time data columns with magnet links in [YYYY-MM-DD]magnet_link format
 """
 
-import os
-import sys
-import csv
-import time
-import random
-import logging
+from __future__ import annotations
+
 import argparse
+import csv
+import logging
+import os
+import random
+import sys
+import time
+
+import requests
 from datetime import datetime
 from urllib.parse import urljoin
+
+_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.chdir(_project_root)
+sys.path.insert(0, _project_root)
 
 # Import existing modules
 from utils.history_manager import (
@@ -23,6 +31,7 @@ from utils.history_manager import (
 from utils.parser import parse_detail
 from utils.magnet_extractor import extract_magnets
 from utils.logging_config import setup_logging, get_logger
+from utils.spider_gateway import create_gateway
 
 # Import configuration
 from utils.config_helper import cfg
@@ -33,46 +42,17 @@ SPIDER_LOG_FILE = cfg('SPIDER_LOG_FILE', 'logs/spider.log')
 LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
 MOVIE_SLEEP_MIN = cfg('MOVIE_SLEEP_MIN', 5)
 MOVIE_SLEEP_MAX = cfg('MOVIE_SLEEP_MAX', 15)
-JAVDB_SESSION_COOKIE = cfg('JAVDB_SESSION_COOKIE', None)
-
-os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
 # Configure logging
 setup_logging(SPIDER_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
-# Import requests after logging setup
-import requests
-from bs4 import BeautifulSoup
+_gateway = create_gateway(use_proxy=True, use_cf_bypass=True, use_cookie=True)
 
 
 def get_page(url, session=None, use_cookie=False):
-    """Fetch a webpage with proper headers and age verification bypass"""
-    if session is None:
-        session = requests.Session()
-    
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-    }
-    
-    if use_cookie and JAVDB_SESSION_COOKIE:
-        session.cookies.set('over18', '1', domain='javdb.com')
-        session.cookies.set('theme', 'auto', domain='javdb.com')
-        if JAVDB_SESSION_COOKIE:
-            session.cookies.set('session', JAVDB_SESSION_COOKIE, domain='javdb.com')
-    
-    try:
-        response = session.get(url, headers=headers, timeout=30)
-        response.raise_for_status()
-        return response.text
-    except requests.RequestException as e:
-        logger.error(f"Error fetching {url}: {e}")
-        return None
+    """Fetch a webpage via the unified gateway (proxy + CF bypass)."""
+    return _gateway.fetch_html(url)
 
 
 def extract_magnet_links_from_detail(detail_html, video_code):
@@ -80,7 +60,8 @@ def extract_magnet_links_from_detail(detail_html, video_code):
     try:
         # Parse detail page (ignore parse_success flag for migration script)
         # Note: video_code is passed for logging purposes only, not extracted from detail page
-        magnets, actor_info, _ = parse_detail(detail_html, video_code, skip_sleep=True)
+        magnets, actor_info, _ag, _al, _sup, _ = parse_detail(
+            detail_html, video_code, skip_sleep=True)
         
         if not magnets:
             logger.warning(f"No magnets found for {video_code}")

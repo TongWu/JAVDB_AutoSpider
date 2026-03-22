@@ -83,4 +83,4 @@ docker/.env.example
 
 # GitHub
 .github/
-
+.cursor/

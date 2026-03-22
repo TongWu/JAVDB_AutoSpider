@@ -27,13 +27,13 @@ New Structure:
 
 Usage:
     # Dry run (preview changes without moving files)
-    python migration/migrate_reports_to_dated_dirs.py --dry-run
+    python migration/tools/migrate_reports_to_dated_dirs.py --dry-run
     
     # Execute migration
-    python migration/migrate_reports_to_dated_dirs.py
+    python migration/tools/migrate_reports_to_dated_dirs.py
     
     # Force migration even if target exists
-    python migration/migrate_reports_to_dated_dirs.py --force
+    python migration/tools/migrate_reports_to_dated_dirs.py --force
 """
 
 import os
@@ -357,13 +357,13 @@ def parse_arguments():
         epilog="""
 Examples:
     # Preview what would be migrated (recommended first step)
-    python migration/migrate_reports_to_dated_dirs.py --dry-run
+    python migration/tools/migrate_reports_to_dated_dirs.py --dry-run
     
     # Execute the migration
-    python migration/migrate_reports_to_dated_dirs.py
+    python migration/tools/migrate_reports_to_dated_dirs.py
     
     # Force migration (overwrite existing files)
-    python migration/migrate_reports_to_dated_dirs.py --force
+    python migration/tools/migrate_reports_to_dated_dirs.py --force
 
 Migration Details:
     1. Daily Report/*.csv → reports/DailyReport/YYYY/MM/*.csv
@@ -385,9 +385,9 @@ Migration Details:
 
 
 def main():
-    # Change to project root directory
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(script_dir)
+    # Change to project root directory (migration/tools/ -> repo root)
+    _here = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(os.path.dirname(_here))
     os.chdir(project_root)
     
     args = parse_arguments()

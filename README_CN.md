@@ -70,7 +70,7 @@
 
 ### qBittorrent 文件过滤器
 - 自动过滤最近添加的种子中的小文件
-- 可配置的最小文件大小阈值（默认：50MB）
+- 可配置的最小文件大小阈值（默认：100MB，来自 `QB_FILE_FILTER_MIN_SIZE_MB`）
 - 为低于阈值的文件设置优先级为 0（不下载）
 - 过滤 NFO 文件、样本、截图等
 - 支持预览模式（dry-run）
@@ -293,20 +293,21 @@ python qbtorrent_uploader.py --use-proxy
 
 **运行 qBittorrent 文件过滤器(过滤小文件):**
 ```bash
-# 默认: 过滤最近 2 天内添加的小于 50MB 的文件
-python scripts/qb_file_filter.py --min-size 50
+# 默认：使用 config 中 QB_FILE_FILTER_MIN_SIZE_MB（未配置时为 100MB）
+python scripts/qb_file_filter.py
 
-# 自定义阈值和天数
+# 覆盖阈值（如 50MB）与天数
+python scripts/qb_file_filter.py --min-size 50
 python scripts/qb_file_filter.py --min-size 100 --days 3
 
 # 演练模式(预览而不实际更改)
-python scripts/qb_file_filter.py --min-size 50 --dry-run
+python scripts/qb_file_filter.py --dry-run
 
 # 仅过滤特定分类
-python scripts/qb_file_filter.py --min-size 50 --category JavDB
+python scripts/qb_file_filter.py --category JavDB
 
 # 使用代理
-python scripts/qb_file_filter.py --min-size 50 --use-proxy
+python scripts/qb_file_filter.py --use-proxy
 ```
 
 **运行 PikPak 桥接器(将旧种子从 qBittorrent 转移到 PikPak):**
@@ -426,6 +427,7 @@ python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --use-proxy --ignor
 | `--phase` | 运行的阶段(1/2/all) | all | `--phase 1` |
 | `--ignore-release-date` | 忽略今日/昨日标签 | False | `--ignore-release-date` |
 | `--use-proxy` | 从 config.py 启用代理 | False | `--use-proxy` |
+| `--always-bypass-time [分钟]` | fallback 成功后持续使用 CF bypass（不带值或 0 表示本次 session 一直使用；不传该参数则始终 direct-first） | None | `--always-bypass-time 30` |
 | `--sequential` | 强制串行处理(禁用并行) | False | `--sequential` |
 | `--max-movies-phase1` | 限制阶段 1 电影数量(测试用) | None | `--max-movies-phase1 10` |
 | `--max-movies-phase2` | 限制阶段 2 电影数量(测试用) | None | `--max-movies-phase2 5` |
@@ -455,18 +457,15 @@ cat "reports/proxy_bans.csv"
 # 禁用信息也包含在流水线电子邮件报告中
 ```
 
-**运行迁移脚本:**
+**运行迁移脚本**（在仓库根目录执行）:
 ```bash
-cd migration
+# SQLite 结构 / 演员回填（主入口）
+python3 migration/migrate_to_current.py --help
 
-# 清理重复的历史条目
-python3 cleanup_history_priorities.py
-
-# 更新历史文件格式(从旧版本升级时)
-python3 update_history_format.py
-
-# 重新分类种子(分类规则更改后)
-python3 reclassify_c_hacked_torrents.py
+# 一次性或历史辅助脚本在 migration/tools/
+python3 migration/tools/cleanup_history_priorities.py
+python3 migration/tools/update_history_format.py
+python3 migration/tools/reclassify_c_hacked_torrents.py
 ```
 
 ### 自动化流水线
@@ -590,8 +589,8 @@ PROXY_MODULES = ['all']  # 'all' 或列表: 'spider', 'qbittorrent', 'pikpak'
 # =============================================================================
 # 爬虫配置
 # =============================================================================
-START_PAGE = 1
-END_PAGE = 20
+PAGE_START = 1
+PAGE_END = 20
 BASE_URL = 'https://javdb.com'
 
 # 阶段 2 过滤标准
@@ -656,7 +655,7 @@ PIKPAK_PASSWORD = 'your_pikpak_password'
 
 # PikPak 设置
 PIKPAK_LOG_FILE = 'logs/pikpak_bridge.log'
-PIKPAK_REQUEST_DELAY = 3  # 请求之间的延迟(秒)以避免速率限制
+PIKPAK_REQUEST_DELAY = 2  # 请求之间的延迟(秒)以避免速率限制
 
 # =============================================================================
 # qBittorrent 文件过滤器配置
@@ -665,7 +664,7 @@ PIKPAK_REQUEST_DELAY = 3  # 请求之间的延迟(秒)以避免速率限制
 # 最小文件大小阈值(MB)
 # 小于此值的文件将被设置为"不下载"优先级
 # 这有助于过滤 NFO 文件、样本、截图等小文件
-QB_FILE_FILTER_MIN_SIZE_MB = 50
+QB_FILE_FILTER_MIN_SIZE_MB = 100
 
 # 文件过滤器的日志文件
 QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
@@ -1030,7 +1029,7 @@ CF_BYPASS_SERVICE_PORT = 8000  # 必须匹配服务端口
 
 **4. CF 绕过行为:**
 
-CF 绕过会在代理池 fallback 机制中直接请求失败时自动启用，无需命令行参数。
+CF 绕过会在代理池 fallback 机制中直接请求失败时自动启用。默认每次请求仍会先尝试 direct；可通过 `--always-bypass-time [分钟]` 在 fallback 成功后让该代理持续使用 bypass（传 0 则本次 session 持续使用）。
 
 #### 工作原理
 
@@ -1341,9 +1340,10 @@ href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle
 
 ## 迁移脚本
 
-`migration/` 目录包含用于维护和升级系统的实用脚本:
+- **`migration/migrate_to_current.py`** — SQLite 结构升级、可选时间列规范化与演员回填的主入口（见 `--help`）。
+- **`migration/tools/`** — 一次性或旧版辅助脚本（CSV 清理、旧格式转换、`csv_to_sqlite`、跨大版本迁移等）。
 
-### 可用脚本
+### 可用脚本（tools/）
 
 **cleanup_history_priorities.py**
 - 从历史文件中删除重复条目
@@ -1378,12 +1378,14 @@ href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle
 
 ### 如何运行
 
+在仓库根目录执行:
+
 ```bash
-cd migration
-python3 cleanup_history_priorities.py
-python3 update_history_format.py
-python3 rename_columns_add_last_visited.py
-python3 reclassify_c_hacked_torrents.py
+python3 migration/tools/cleanup_history_priorities.py
+python3 migration/tools/update_history_format.py
+python3 migration/tools/rename_columns_add_last_visited.py
+python3 migration/tools/reclassify_c_hacked_torrents.py
+python3 migration/tools/migrate_reports_to_dated_dirs.py --dry-run
 ```
 
 **注意:** 运行迁移脚本前务必备份您的 `reports/parsed_movies_history.csv`。
@@ -1479,7 +1481,7 @@ LOG_LEVEL = 'DEBUG'  # 显示详细的调试信息
   - **电影**: 5-15 秒随机(通过 `MOVIE_SLEEP_MIN` / `MOVIE_SLEEP_MAX` 配置)
   - **按量调整**: `MovieSleepManager` 在处理大批量时自动增加休眠间隔
   - **qBittorrent 添加**: 1 秒(通过 `DELAY_BETWEEN_ADDITIONS` 配置)
-  - **PikPak 请求**: 3 秒(通过 `PIKPAK_REQUEST_DELAY` 配置)
+  - **PikPak 请求**: 默认 2 秒(通过 `PIKPAK_REQUEST_DELAY` 配置)
 
 ### 系统行为
 - 系统使用适当的头部来模拟真实浏览器
@@ -1523,7 +1525,7 @@ LOG_LEVEL = 'DEBUG'  # 显示详细的调试信息
   - `pipeline.log`: 流水线执行日志
   - `pikpak_bridge.log`: PikPak 桥接执行日志
   - `qb_file_filter.log`: 文件过滤器执行日志
-- **migration/**: 包含数据库迁移脚本
+- **migration/**: `migrate_to_current.py`（主数据库迁移）；**migration/tools/** 存放一次性/历史脚本
 - **utils/**: 实用工具模块(历史、解析器、代理池等)
 - **utils/login/**: JavDB 登录相关文件和文档
 - **docker/**: Docker 配置文件
@@ -1566,7 +1568,8 @@ python3 pikpak_bridge.py  # 默认: 3 天,批量模式
 python3 pikpak_bridge.py --days 7 --individual  # 自定义天数,单个模式
 
 # qBittorrent 文件过滤器
-python3 scripts/qb_file_filter.py --min-size 50  # 过滤 < 50MB 的文件
+python3 scripts/qb_file_filter.py  # 默认阈值来自 config（未配置时为 100MB）
+python3 scripts/qb_file_filter.py --min-size 50  # 更严：< 50MB
 python3 scripts/qb_file_filter.py --min-size 100 --days 3 --dry-run  # 预览模式
 ```
 

@@ -13,7 +13,7 @@ Phase 2 — Report CSVs:
   - reports/AdHoc/*.csv        →  ReportSessions + ReportMovies + ReportTorrents
 
 Usage:
-    python3 migration/csv_to_sqlite.py [--reports-dir reports] [--db-path reports/javdb_autospider.db] [--dry-run] [--verify]
+    python3 migration/tools/csv_to_sqlite.py [--reports-dir reports] [--db-path reports/javdb_autospider.db] [--dry-run] [--verify]
 """
 
 from __future__ import annotations
@@ -24,12 +24,14 @@ import os
 import re
 import sys
 
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
 from utils.logging_config import setup_logging, get_logger
 from utils.sqlite_datetime import normalize_storage_datetime
+from api.parsers.common import javdb_absolute_url
+from utils.config_helper import cfg
 
 setup_logging()
 logger = get_logger(__name__)
@@ -45,6 +47,7 @@ _CATEGORY_TO_INDICATORS = {
 
 # Magnet prefix pattern: [YYYY-MM-DD]
 _MAGNET_DATE_RE = re.compile(r'^\[(\d{4}-\d{2}-\d{2})\](.*)$')
+_BASE_URL = cfg('BASE_URL', 'https://javdb.com')
 
 
 def _strip_magnet_prefix(val: str) -> tuple[str, str | None]:
@@ -74,17 +77,21 @@ def migrate_history(csv_path: str, db_path: str, dry_run: bool = False) -> int:
 
     href_seen = {}
     for row in rows:
-        href = row.get('href', '')
+        href = javdb_absolute_url(row.get('href', ''), _BASE_URL)
         if not href:
             continue
         existing = href_seen.get(href)
         if existing is None:
-            href_seen[href] = row
+            clone = dict(row)
+            clone['href'] = href
+            href_seen[href] = clone
         else:
             existing_date = existing.get('update_datetime', existing.get('update_date', ''))
             current_date = row.get('update_datetime', row.get('update_date', ''))
             if current_date > existing_date:
-                href_seen[href] = row
+                clone = dict(row)
+                clone['href'] = href
+                href_seen[href] = clone
 
     unique_rows = list(href_seen.values())
     logger.info(f"History: {len(rows)} rows, {len(unique_rows)} unique hrefs")
@@ -106,7 +113,7 @@ def migrate_history(csv_path: str, db_path: str, dry_run: bool = False) -> int:
             last_visited = row.get('last_visited_datetime', '') or update_dt
             last_visited = normalize_storage_datetime(last_visited or '')
             video_code = row.get('video_code', '')
-            href = row.get('href', '')
+            href = javdb_absolute_url(row.get('href', ''), _BASE_URL)
 
             # PerfectMatchIndicator = 1 when both subtitle AND hacked_subtitle have values
             sub_val = (row.get('subtitle', '') or '').strip()
@@ -118,12 +125,25 @@ def migrate_history(csv_path: str, db_path: str, dry_run: bool = False) -> int:
             if existing:
                 conn.execute("DELETE FROM TorrentHistory WHERE MovieHistoryId = ?", (existing[0],))
 
+            # Eleven columns ↔ eleven bound values (actor fields empty for legacy CSV import).
             conn.execute(
                 """INSERT OR REPLACE INTO MovieHistory
                    (VideoCode, Href, DateTimeCreated, DateTimeUpdated, DateTimeVisited,
-                    PerfectMatchIndicator, HiResIndicator)
-                   VALUES (?, ?, ?, ?, ?, ?, 0)""",
-                (video_code, href, create_dt, update_dt, last_visited, perfect_match),
+                    PerfectMatchIndicator, HiResIndicator, ActorName, ActorGender, ActorLink, SupportingActors)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    video_code,
+                    href,
+                    create_dt,
+                    update_dt,
+                    last_visited,
+                    perfect_match,
+                    0,
+                    '',
+                    '',
+                    '',
+                    '',
+                ),
             )
             movie_id = conn.execute(
                 "SELECT Id FROM MovieHistory WHERE Href = ?", (href,)
@@ -669,12 +689,13 @@ def migrate_single_csv(csv_path: str, filename: str, is_adhoc: bool,
         session_id = cur.lastrowid
 
         for row in rows:
+            href = javdb_absolute_url(row.get('href', ''), _BASE_URL)
             cur = conn.execute(
                 """INSERT INTO ReportMovies
                    (SessionId, Href, VideoCode, Page, Actor, Rate, CommentNumber)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (session_id,
-                 row.get('href', ''), row.get('video_code', ''),
+                 href, row.get('video_code', ''),
                  int(row['page']) if row.get('page') else None,
                  row.get('actor', ''),
                  float(row['rate']) if row.get('rate') else None,

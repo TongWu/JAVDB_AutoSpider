@@ -9,7 +9,7 @@ Href + SubtitleIndicator + CensorIndicator, taking the most recent
 non-empty size value.
 
 Usage:
-    python3 migration/backfill_torrent_size.py [--history-db PATH] [--reports-db PATH] [--dry-run]
+    python3 migration/tools/backfill_torrent_size.py [--history-db PATH] [--reports-db PATH] [--dry-run]
 """
 
 import argparse
@@ -17,7 +17,7 @@ import os
 import sqlite3
 import sys
 
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 

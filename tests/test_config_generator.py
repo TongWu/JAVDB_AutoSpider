@@ -257,8 +257,7 @@ class TestGetConfigMap:
         rclone_entries = [item for item in config_map if item[4] == 'RCLONE CONFIGURATION']
         rclone_keys = {item[0] for item in rclone_entries}
         assert 'RCLONE_CONFIG_BASE64' in rclone_keys
-        assert 'RCLONE_DRIVE_NAME' in rclone_keys
-        assert 'RCLONE_ROOT_FOLDER' in rclone_keys
+        assert 'RCLONE_FOLDER_PATH' in rclone_keys
 
     def test_contains_dedup_section(self):
         """Should contain DEDUP CONFIGURATION section with expected keys."""
@@ -270,11 +269,19 @@ class TestGetConfigMap:
         assert 'DEDUP_DIR' in dedup_keys
         assert 'DEDUP_LOG_FILE' in dedup_keys
 
-    def test_rclone_drive_name_default(self):
-        """RCLONE_DRIVE_NAME should default to 'gdrive'."""
+    def test_rclone_folder_path_default(self):
+        """RCLONE_FOLDER_PATH should default to 'gdrive:' (remote root)."""
         config_map = get_config_map()
-        entry = next(item for item in config_map if item[0] == 'RCLONE_DRIVE_NAME')
-        assert entry[3] == 'gdrive'
+        entry = next(item for item in config_map if item[0] == 'RCLONE_FOLDER_PATH')
+        assert entry[3] == 'gdrive:'
+
+    def test_contains_login_proxy_name(self):
+        """Should expose LOGIN_PROXY_NAME under PROXY CONFIGURATION."""
+        config_map = get_config_map()
+        entry = next((item for item in config_map if item[0] == 'LOGIN_PROXY_NAME'), None)
+        assert entry is not None
+        assert entry[4] == 'PROXY CONFIGURATION'
+        assert entry[1] == 'LOGIN_PROXY_NAME'
 
 
 class TestGenerateConfigContent:
@@ -344,10 +351,10 @@ class TestMaskSensitiveValues:
     
     def test_preserves_non_sensitive_values(self):
         """Should preserve non-sensitive values."""
-        content = "LOG_LEVEL = 'INFO'\nSTART_PAGE = 1"
+        content = "LOG_LEVEL = 'INFO'\nPAGE_START = 1"
         masked = mask_sensitive_values(content)
         assert "LOG_LEVEL = 'INFO'" in masked
-        assert "START_PAGE = 1" in masked
+        assert "PAGE_START = 1" in masked
 
 
 class TestWriteConfig:
