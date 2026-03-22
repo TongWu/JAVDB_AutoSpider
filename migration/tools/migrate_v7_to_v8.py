@@ -58,7 +58,18 @@ from utils.db import moviehistory_actor_layout_ok  # noqa: E402
 EXPECTED_VERSION = 9
 
 
+def _is_valid_sqlite(path: str) -> bool:
+    try:
+        with open(path, 'rb') as f:
+            return f.read(6) == b'SQLite'
+    except OSError:
+        return False
+
+
 def _detect_version(db_path: str) -> int:
+    if os.path.exists(db_path) and os.path.getsize(db_path) > 0 and not _is_valid_sqlite(db_path):
+        logger.warning("%s is not a valid SQLite database (Git LFS pointer?)", db_path)
+        return -1
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
