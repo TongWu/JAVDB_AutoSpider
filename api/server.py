@@ -135,6 +135,7 @@ MAX_SESSIONS_PER_USER = int(os.getenv("MAX_SESSIONS_PER_USER", "3"))
 
 ACTIVE_TOKENS: Dict[str, list[tuple[str, int]]] = {}
 REVOKED_JTI: set[str] = set()
+_AUTH_LOCK = threading.Lock()
 RATE_BUCKETS: Dict[str, list[float]] = {}
 JOBS: Dict[str, Dict[str, Any]] = {}
 JOB_LOCK = threading.Lock()
@@ -143,7 +144,10 @@ JOB_STREAM_MAX_BYTES = 64 * 1024
 
 
 def _prune_sessions(username: str) -> list[tuple[str, int]]:
-    """Remove expired and revoked JTIs from a user's session list, return the pruned list."""
+    """Remove expired and revoked JTIs from a user's session list.
+
+    Caller MUST hold ``_AUTH_LOCK``.
+    """
     now = int(datetime.now(timezone.utc).timestamp())
     sessions = ACTIVE_TOKENS.get(username, [])
     active = [(jti, exp) for jti, exp in sessions if exp > now and jti not in REVOKED_JTI]
@@ -525,7 +529,9 @@ def _jwt_decode(token: str) -> Dict[str, Any]:
         payload = jwt.decode(token, API_SECRET_KEY, algorithms=["HS256"])
     except jwt.InvalidTokenError as exc:
         raise HTTPException(status_code=401, detail="Invalid token") from exc
-    if payload.get("jti") in REVOKED_JTI:
+    with _AUTH_LOCK:
+        revoked = payload.get("jti") in REVOKED_JTI
+    if revoked:
         raise HTTPException(status_code=401, detail="Token revoked")
     return payload
 
@@ -1402,13 +1408,14 @@ async def login(payload: LoginPayload, request: Request, response: Response):
             request.client.host if request.client else "unknown",
         )
         raise HTTPException(status_code=401, detail="Invalid username/password")
-    sessions = _prune_sessions(payload.username)
-    if len(sessions) >= MAX_SESSIONS_PER_USER:
-        raise HTTPException(status_code=403, detail="Too many active sessions")
     access = _jwt_encode({"sub": payload.username, "role": user["role"], "typ": "access"}, ACCESS_TOKEN_EXPIRE_SECONDS)
     refresh = _jwt_encode({"sub": payload.username, "role": user["role"], "typ": "refresh"}, REFRESH_TOKEN_EXPIRE_SECONDS)
     access_claims = jwt.decode(access, API_SECRET_KEY, algorithms=["HS256"])
-    sessions.append((access_claims["jti"], access_claims["exp"]))
+    with _AUTH_LOCK:
+        sessions = _prune_sessions(payload.username)
+        if len(sessions) >= MAX_SESSIONS_PER_USER:
+            raise HTTPException(status_code=403, detail="Too many active sessions")
+        sessions.append((access_claims["jti"], access_claims["exp"]))
     csrf = secrets.token_urlsafe(24)
     response.set_cookie("csrf_token", csrf, httponly=False, samesite="lax", secure=True)
     audit_logger.info(
@@ -1444,10 +1451,11 @@ async def refresh_token(request: Request):
         ACCESS_TOKEN_EXPIRE_SECONDS,
     )
     access_claims = jwt.decode(access, API_SECRET_KEY, algorithms=["HS256"])
-    sessions = _prune_sessions(username)
-    if len(sessions) >= MAX_SESSIONS_PER_USER:
-        sessions.pop(0)
-    sessions.append((access_claims["jti"], access_claims["exp"]))
+    with _AUTH_LOCK:
+        sessions = _prune_sessions(username)
+        if len(sessions) >= MAX_SESSIONS_PER_USER:
+            sessions.pop(0)
+        sessions.append((access_claims["jti"], access_claims["exp"]))
     audit_logger.info("token_refresh username=%s", username)
     return {
         "access_token": access,
@@ -1460,9 +1468,10 @@ async def refresh_token(request: Request):
 async def logout(current=Depends(_require_auth)):
     jti = current.get("jti")
     if jti:
-        REVOKED_JTI.add(jti)
-        sessions = ACTIVE_TOKENS.get(current["sub"], [])
-        ACTIVE_TOKENS[current["sub"]] = [(s, exp) for s, exp in sessions if s != jti]
+        with _AUTH_LOCK:
+            REVOKED_JTI.add(jti)
+            sessions = ACTIVE_TOKENS.get(current["sub"], [])
+            ACTIVE_TOKENS[current["sub"]] = [(s, exp) for s, exp in sessions if s != jti]
     audit_logger.info("logout username=%s", current["sub"])
     return {"status": "ok"}
 
