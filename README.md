@@ -72,7 +72,7 @@ The spider operates in two modes:
 
 ### qBittorrent File Filter
 - Automatically filters small files from recently added torrents
-- Configurable minimum file size threshold (default: 50MB)
+- Configurable minimum file size threshold (default: 100MB from `QB_FILE_FILTER_MIN_SIZE_MB`)
 - Sets priority to 0 (do not download) for files below threshold
 - Filters out NFO files, samples, screenshots, etc.
 - Supports dry-run mode for preview
@@ -322,20 +322,21 @@ python qbtorrent_uploader.py --use-proxy
 
 **Run the qBittorrent File Filter (filter out small files):**
 ```bash
-# Default: filter files smaller than 50MB from last 2 days
-python scripts/qb_file_filter.py --min-size 50
+# Default: uses QB_FILE_FILTER_MIN_SIZE_MB from config (100 if unset)
+python scripts/qb_file_filter.py
 
-# Custom threshold and days
+# Override threshold (e.g. 50MB) and days
+python scripts/qb_file_filter.py --min-size 50
 python scripts/qb_file_filter.py --min-size 100 --days 3
 
 # Dry run (preview without changes)
-python scripts/qb_file_filter.py --min-size 50 --dry-run
+python scripts/qb_file_filter.py --dry-run
 
 # Filter specific category only
-python scripts/qb_file_filter.py --min-size 50 --category JavDB
+python scripts/qb_file_filter.py --category JavDB
 
 # With proxy
-python scripts/qb_file_filter.py --min-size 50 --use-proxy
+python scripts/qb_file_filter.py --use-proxy
 ```
 
 **Run the PikPak bridge (transfer old torrents from qBittorrent to PikPak):**
@@ -455,6 +456,7 @@ python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --use-proxy --ignor
 | `--phase` | Phase to run (1/2/all) | all | `--phase 1` |
 | `--ignore-release-date` | Ignore today/yesterday tags | False | `--ignore-release-date` |
 | `--use-proxy` | Enable proxy from config.py | False | `--use-proxy` |
+| `--always-bypass-time [MINUTES]` | Keep using CF bypass after fallback success (omit value or 0 = whole session; omit flag = always direct-first) | None | `--always-bypass-time 30` |
 | `--sequential` | Force sequential processing (disable parallel) | False | `--sequential` |
 | `--max-movies-phase1` | Limit phase 1 movies (for testing) | None | `--max-movies-phase1 10` |
 | `--max-movies-phase2` | Limit phase 2 movies (for testing) | None | `--max-movies-phase2 5` |
@@ -484,18 +486,15 @@ cat "reports/proxy_bans.csv"
 # Ban information is also included in pipeline email reports
 ```
 
-**Run Migration Scripts:**
+**Run Migration Scripts** (from repository root):
 ```bash
-cd migration
+# SQLite schema / actor backfill (primary entry)
+python3 migration/migrate_to_current.py --help
 
-# Clean up duplicate history entries
-python3 cleanup_history_priorities.py
-
-# Update history file format (if upgrading from older version)
-python3 update_history_format.py
-
-# Reclassify torrents (after classification rule changes)
-python3 reclassify_c_hacked_torrents.py
+# Ad hoc CSV / legacy helpers live under migration/tools/
+python3 migration/tools/cleanup_history_priorities.py
+python3 migration/tools/update_history_format.py
+python3 migration/tools/reclassify_c_hacked_torrents.py
 ```
 
 ### Automated Pipeline
@@ -619,8 +618,8 @@ PROXY_MODULES = ['all']  # 'all' or list: 'spider', 'qbittorrent', 'pikpak'
 # =============================================================================
 # SPIDER CONFIGURATION
 # =============================================================================
-START_PAGE = 1
-END_PAGE = 20
+PAGE_START = 1
+PAGE_END = 20
 BASE_URL = 'https://javdb.com'
 
 # Phase 2 filtering criteria
@@ -685,7 +684,7 @@ PIKPAK_PASSWORD = 'your_pikpak_password'
 
 # PikPak settings
 PIKPAK_LOG_FILE = 'logs/pikpak_bridge.log'
-PIKPAK_REQUEST_DELAY = 3  # Delay between requests (seconds) to avoid rate limiting
+PIKPAK_REQUEST_DELAY = 2  # Delay between requests (seconds) to avoid rate limiting
 
 # =============================================================================
 # qBittorrent File Filter Configuration
@@ -694,7 +693,7 @@ PIKPAK_REQUEST_DELAY = 3  # Delay between requests (seconds) to avoid rate limit
 # Minimum file size threshold in MB
 # Files smaller than this will be set to "do not download" priority
 # This helps filter out small files like NFO, samples, screenshots, etc.
-QB_FILE_FILTER_MIN_SIZE_MB = 50
+QB_FILE_FILTER_MIN_SIZE_MB = 100
 
 # Log file for the file filter script
 QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
@@ -1060,7 +1059,7 @@ CF_BYPASS_SERVICE_PORT = 8000  # Must match the service port
 
 **4. CF Bypass Behavior:**
 
-CF bypass is automatically activated as a fallback when direct requests fail during the proxy pool fallback mechanism. No command-line flag is needed.
+CF bypass is automatically activated as a fallback when direct requests fail during the proxy pool fallback mechanism. By default, each request still starts with direct mode first; you can add `--always-bypass-time [MINUTES]` to temporarily (or session-wide with `0`) keep a proxy on bypass mode after a fallback success.
 
 #### How It Works
 
@@ -1371,9 +1370,10 @@ This feature ensures system stability and efficiency, avoiding duplicate downloa
 
 ## Migration Scripts
 
-The `migration/` directory contains utility scripts for maintaining and upgrading the system:
+- **`migration/migrate_to_current.py`** — primary entry for SQLite schema upgrades, optional datetime normalization, and actor backfill (see `--help`).
+- **`migration/tools/`** — one-off and legacy helpers (CSV cleanup, old format conversion, `csv_to_sqlite`, older version jumps, etc.).
 
-### Available Scripts
+### Available Scripts (tools/)
 
 **cleanup_history_priorities.py**
 - Removes duplicate entries from history file
@@ -1408,12 +1408,14 @@ Run migration scripts when:
 
 ### How to Run
 
+From the repository root:
+
 ```bash
-cd migration
-python3 cleanup_history_priorities.py
-python3 update_history_format.py
-python3 rename_columns_add_last_visited.py
-python3 reclassify_c_hacked_torrents.py
+python3 migration/tools/cleanup_history_priorities.py
+python3 migration/tools/update_history_format.py
+python3 migration/tools/rename_columns_add_last_visited.py
+python3 migration/tools/reclassify_c_hacked_torrents.py
+python3 migration/tools/migrate_reports_to_dated_dirs.py --dry-run
 ```
 
 **Note:** Always backup your `reports/parsed_movies_history.csv` before running migration scripts.
@@ -1509,7 +1511,7 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
   - **Movies**: 5-15 seconds random (configurable via `MOVIE_SLEEP_MIN` / `MOVIE_SLEEP_MAX`)
   - **Volume-based adjustment**: `MovieSleepManager` automatically increases sleep intervals when processing large batches
   - **qBittorrent additions**: 1 second (configurable via `DELAY_BETWEEN_ADDITIONS`)
-  - **PikPak requests**: 3 seconds (configurable via `PIKPAK_REQUEST_DELAY`)
+  - **PikPak requests**: 2 seconds default (configurable via `PIKPAK_REQUEST_DELAY`)
 
 ### System Behavior
 - The system uses proper headers to mimic a real browser
@@ -1553,7 +1555,7 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
   - `pipeline.log`: Pipeline execution logs
   - `pikpak_bridge.log`: PikPak bridge execution logs
   - `qb_file_filter.log`: File filter execution logs
-- **migration/**: Contains database migration scripts
+- **migration/**: `migrate_to_current.py` (main DB migration); **migration/tools/** for ad hoc / legacy scripts
 - **utils/**: Utility modules (history, parser, proxy pool, etc.)
 - **utils/login/**: JavDB login related files and documentation
 - **docker/**: Docker configuration files
@@ -1596,7 +1598,8 @@ python3 pikpak_bridge.py  # Default: 3 days, batch mode
 python3 pikpak_bridge.py --days 7 --individual  # Custom days, individual mode
 
 # qBittorrent File Filter
-python3 scripts/qb_file_filter.py --min-size 50  # Filter files < 50MB
+python3 scripts/qb_file_filter.py  # Default threshold from config (100MB if unset)
+python3 scripts/qb_file_filter.py --min-size 50  # Stricter: < 50MB
 python3 scripts/qb_file_filter.py --min-size 100 --days 3 --dry-run  # Preview mode
 ```
 

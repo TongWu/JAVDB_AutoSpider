@@ -1,0 +1,422 @@
+name: Database Migration
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      # ---- Core Options ----
+      dry_run:
+        description: 'Dry run — preview only, no database writes'
+        required: false
+        default: false
+        type: boolean
+      backup:
+        description: 'Backup DB files before migration'
+        required: false
+        default: false
+        type: boolean
+      verify:
+        description: 'Verify schema version and MovieHistory actor columns after migration'
+        required: false
+        default: false
+        type: boolean
+      skip_schema:
+        description: 'Skip schema init (use with --backfill-actors or --normalize-datetimes only)'
+        required: false
+        default: false
+        type: boolean
+      # ---- Operations ----
+      normalize_datetimes:
+        description: 'Normalize DateTime TEXT columns (history / reports / operations)'
+        required: false
+        default: false
+        type: boolean
+      backfill_actors:
+        description: 'Fill empty ActorName (and related columns) from live detail pages'
+        required: false
+        default: false
+        type: boolean
+      align_inventory_history:
+        description: 'Align inventory-only codes into MovieHistory with JavDB search/detail enrichment'
+        required: false
+        default: false
+        type: boolean
+      # ---- Backfill Options ----
+      backfill_limit:
+        description: 'Backfill: max rows to process (0 = all)'
+        required: false
+        default: '0'
+        type: string
+      no_proxy:
+        description: 'Backfill: direct HTTP without proxy (debug)'
+        required: false
+        default: false
+        type: boolean
+      use_cf_bypass:
+        description: 'Backfill: enable CF bypass on first fetch attempt'
+        required: false
+        default: false
+        type: boolean
+      # ---- Align Options ----
+      align_limit:
+        description: 'Alignment: max missing codes to process (0 = all)'
+        required: false
+        default: '0'
+        type: string
+      align_codes:
+        description: 'Alignment: comma-separated video codes override'
+        required: false
+        default: ''
+        type: string
+      align_use_proxy:
+        description: 'Alignment: use spider proxy pool'
+        required: false
+        default: false
+        type: boolean
+      align_enqueue_qb:
+        description: 'Alignment: enqueue upgrade magnets to qBittorrent'
+        required: false
+        default: false
+        type: boolean
+      align_execute_delete:
+        description: 'Alignment: run rclone purge on purge-plan CSV (destructive)'
+        required: false
+        default: false
+        type: boolean
+      align_qb_category:
+        description: 'Alignment: qBittorrent category override for upgrade enqueue'
+        required: false
+        default: ''
+        type: string
+      # ---- Runner ----
+      runner:
+        description: 'Runner type'
+        required: false
+        default: 'ubuntu-latest'
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'self-hosted'
+
+jobs:
+  run-migration:
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    environment: Production
+    env:
+      TZ: Asia/Singapore
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          lfs: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
+          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
+
+      - name: Install Rust extension
+        uses: ./.github/actions/install-rust-wheel
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          # ============ SECRETS (sensitive: passwords, tokens, IPs) ============
+          VAR_QB_HOST: ${{ secrets.QB_HOST }}
+          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
+          VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
+          VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
+          VAR_JAVDB_SESSION_COOKIE: ${{ secrets.JAVDB_SESSION_COOKIE }}
+          VAR_PIKPAK_PASSWORD: ${{ secrets.PIKPAK_PASSWORD }}
+          # ============ VARIABLES (non-sensitive) ============
+          VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
+          VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
+          VAR_QB_PORT: ${{ vars.QB_PORT }}
+          VAR_QB_USERNAME: ${{ secrets.QB_USERNAME }}
+          VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
+          VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
+          VAR_TORRENT_SAVE_PATH: ${{ vars.TORRENT_SAVE_PATH }}
+          VAR_AUTO_START: ${{ vars.AUTO_START }}
+          VAR_SKIP_CHECKING: ${{ vars.SKIP_CHECKING || 'False' }}
+          VAR_REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT || '30' }}
+          VAR_DELAY_BETWEEN_ADDITIONS: ${{ vars.DELAY_BETWEEN_ADDITIONS }}
+          VAR_SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          VAR_SMTP_PORT: ${{ vars.SMTP_PORT }}
+          VAR_SMTP_USER: ${{ secrets.SMTP_USER }}
+          VAR_EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          VAR_EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
+          VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS || '691200' }}
+          VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES || 3 }}
+          VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
+          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
+          VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED || 'True' }}
+          VAR_PAGE_START: ${{ vars.PAGE_START }}
+          VAR_PAGE_END: ${{ vars.PAGE_END }}
+          VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}
+          VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
+          VAR_BASE_URL: ${{ vars.BASE_URL || 'https://javdb.com' }}
+          VAR_JAVDB_USERNAME: ${{ secrets.JAVDB_USERNAME }}
+          VAR_GPT_API_URL: ${{ secrets.GPT_API_URL }}
+          VAR_GPT_API_KEY: ${{ secrets.GPT_API_KEY }}
+          VAR_PAGE_SLEEP: ${{ vars.PAGE_SLEEP }}
+          VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
+          VAR_CF_TURNSTILE_COOLDOWN: ${{ vars.CF_TURNSTILE_COOLDOWN }}
+          VAR_FALLBACK_COOLDOWN: ${{ vars.FALLBACK_COOLDOWN }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+          VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE || 'logs/spider.log' }}
+          VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE || 'logs/qb_uploader.log' }}
+          VAR_PIPELINE_LOG_FILE: ${{ vars.PIPELINE_LOG_FILE || 'logs/pipeline.log' }}
+          VAR_EMAIL_NOTIFICATION_LOG_FILE: ${{ vars.EMAIL_NOTIFICATION_LOG_FILE || 'logs/email_notification.log' }}
+          VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER || 'False' }}
+          VAR_INCLUDE_DOWNLOADED_IN_REPORT: ${{ vars.INCLUDE_DOWNLOADED_IN_REPORT || 'False' }}
+          VAR_REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+          VAR_DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'reports/DailyReport' }}
+          VAR_AD_HOC_DIR: ${{ vars.AD_HOC_DIR || 'reports/AdHoc' }}
+          VAR_PARSED_MOVIES_CSV: ${{ vars.PARSED_MOVIES_CSV }}
+          VAR_PIKPAK_EMAIL: ${{ secrets.PIKPAK_EMAIL }}
+          VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE || 'logs/pikpak_bridge.log' }}
+          VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
+          # Rclone / Dedup Configuration
+          VAR_RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
+          VAR_RCLONE_FOLDER_PATH: ${{ vars.RCLONE_FOLDER_PATH }}
+          VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
+        run: python3 utils/config_generator.py --github-actions
+
+      - name: Pull latest changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          CURRENT_BRANCH="${GITHUB_REF#refs/heads/}"
+
+          REPO_URL=$(git remote get-url origin)
+          if [[ "$REPO_URL" == https://* ]]; then
+            REPO_SSH=$(echo "$REPO_URL" | sed 's|https://github.com/|git@github.com:|')
+            git remote set-url origin "$REPO_SSH"
+          fi
+
+          git fetch origin "$CURRENT_BRANCH"
+          git pull --rebase origin "$CURRENT_BRANCH" || git pull --no-edit origin "$CURRENT_BRANCH" || true
+
+      - name: Install rclone
+        if: ${{ inputs.align_execute_delete == true }}
+        run: |
+          curl -s https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Configure rclone
+        if: ${{ inputs.align_execute_delete == true }}
+        env:
+          RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
+        run: |
+          if [ -z "$RCLONE_CONFIG_BASE64" ]; then
+            echo "::error::RCLONE_CONFIG_BASE64 secret is not set"
+            exit 1
+          fi
+          mkdir -p ~/.config/rclone
+          echo "$RCLONE_CONFIG_BASE64" | base64 -d > ~/.config/rclone/rclone.conf
+          chmod 600 ~/.config/rclone/rclone.conf
+          echo "rclone configured from Base64"
+
+      - name: Display parameters
+        run: |
+          echo "============================================"
+          echo "Migration Parameters:"
+          echo "============================================"
+          echo "Dry Run:                ${{ inputs.dry_run }}"
+          echo "Backup:                 ${{ inputs.backup }}"
+          echo "Verify:                 ${{ inputs.verify }}"
+          echo "Skip Schema:            ${{ inputs.skip_schema }}"
+          echo "Normalize Datetimes:    ${{ inputs.normalize_datetimes }}"
+          echo "Backfill Actors:        ${{ inputs.backfill_actors }}"
+          echo "  Limit:                ${{ inputs.backfill_limit || '0 (all)' }}"
+          echo "  No Proxy:             ${{ inputs.no_proxy }}"
+          echo "  CF Bypass:            ${{ inputs.use_cf_bypass }}"
+          echo "Align Inventory:        ${{ inputs.align_inventory_history }}"
+          echo "  Limit:                ${{ inputs.align_limit || '0 (all)' }}"
+          echo "  Codes:                ${{ inputs.align_codes || '(none)' }}"
+          echo "  Use Proxy:            ${{ inputs.align_use_proxy }}"
+          echo "  Enqueue QB:           ${{ inputs.align_enqueue_qb }}"
+          echo "  Execute Delete:       ${{ inputs.align_execute_delete }}"
+          echo "  QB Category:          ${{ inputs.align_qb_category || '(default)' }}"
+          echo "Runner:                 ${{ inputs.runner || 'ubuntu-latest' }}"
+          echo "============================================"
+
+      - name: Run migration
+        run: |
+          set -e
+          set -o pipefail
+
+          CMD=(python3 migration/migrate_to_current.py)
+
+          if [ "${{ inputs.dry_run }}" == "true" ]; then
+            CMD+=(--dry-run)
+          fi
+
+          if [ "${{ inputs.backup }}" == "true" ]; then
+            CMD+=(--backup)
+          fi
+
+          if [ "${{ inputs.verify }}" == "true" ]; then
+            CMD+=(--verify)
+          fi
+
+          if [ "${{ inputs.skip_schema }}" == "true" ]; then
+            CMD+=(--skip-schema)
+          fi
+
+          if [ "${{ inputs.normalize_datetimes }}" == "true" ]; then
+            CMD+=(--normalize-datetimes)
+          fi
+
+          if [ "${{ inputs.backfill_actors }}" == "true" ]; then
+            CMD+=(--backfill-actors)
+
+            LIMIT="${{ inputs.backfill_limit }}"
+            if [ -n "$LIMIT" ] && [ "$LIMIT" != "0" ]; then
+              CMD+=(--limit "$LIMIT")
+            fi
+
+            if [ "${{ inputs.no_proxy }}" == "true" ]; then
+              CMD+=(--no-proxy)
+            fi
+
+            if [ "${{ inputs.use_cf_bypass }}" == "true" ]; then
+              CMD+=(--use-cf-bypass)
+            fi
+          fi
+
+          if [ "${{ inputs.align_inventory_history }}" == "true" ]; then
+            CMD+=(--align-inventory-history)
+
+            ALIGN_LIMIT="${{ inputs.align_limit }}"
+            if [ -n "$ALIGN_LIMIT" ] && [ "$ALIGN_LIMIT" != "0" ]; then
+              CMD+=(--align-limit "$ALIGN_LIMIT")
+            fi
+
+            ALIGN_CODES="${{ inputs.align_codes }}"
+            if [ -n "$ALIGN_CODES" ]; then
+              CMD+=(--align-codes "$ALIGN_CODES")
+            fi
+
+            if [ "${{ inputs.align_use_proxy }}" == "true" ]; then
+              CMD+=(--align-use-proxy)
+            fi
+
+            if [ "${{ inputs.align_enqueue_qb }}" == "true" ]; then
+              CMD+=(--align-enqueue-qb)
+            fi
+
+            if [ "${{ inputs.align_execute_delete }}" == "true" ]; then
+              CMD+=(--align-execute-delete)
+            fi
+
+            QB_CATEGORY="${{ inputs.align_qb_category }}"
+            if [ -n "$QB_CATEGORY" ]; then
+              CMD+=(--align-qb-category "$QB_CATEGORY")
+            fi
+          fi
+
+          echo "Executing: ${CMD[*]}"
+          "${CMD[@]}"
+
+      - name: Commit and push results
+        if: ${{ inputs.dry_run != true }}
+        env:
+          REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+        run: |
+          set -e
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          CURRENT_BRANCH="${GITHUB_REF#refs/heads/}"
+
+          REPO_URL=$(git remote get-url origin)
+          if [[ "$REPO_URL" == https://* ]]; then
+            REPO_SSH=$(echo "$REPO_URL" | sed 's|https://github.com/|git@github.com:|')
+            git remote set-url origin "$REPO_SSH"
+          fi
+
+          git add "$REPORTS_DIR/history.db" 2>/dev/null || true
+          git add "$REPORTS_DIR/reports.db" 2>/dev/null || true
+          git add "$REPORTS_DIR/operations.db" 2>/dev/null || true
+          find "$REPORTS_DIR/Migration" -type f -exec git add {} \; 2>/dev/null || true
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          echo "Files to be committed:"
+          git diff --cached --name-only
+
+          LABEL="schema migration"
+          if [ "${{ inputs.backfill_actors }}" == "true" ]; then
+            LABEL="$LABEL + backfill-actors"
+          fi
+          if [ "${{ inputs.normalize_datetimes }}" == "true" ]; then
+            LABEL="$LABEL + normalize-datetimes"
+          fi
+          if [ "${{ inputs.align_inventory_history }}" == "true" ]; then
+            LABEL="$LABEL + align-inventory"
+          fi
+
+          git commit -m "Auto-commit: migration (${LABEL}) $(date +'%Y-%m-%d %H:%M:%S SGT')"
+
+          MAX_RETRIES=3
+          RETRY_DELAY=3
+          for i in $(seq 1 $MAX_RETRIES); do
+            git fetch origin "$CURRENT_BRANCH"
+            git pull --rebase origin "$CURRENT_BRANCH" || true
+            if git push origin "$CURRENT_BRANCH"; then
+              echo "Results committed and pushed"
+              exit 0
+            fi
+            sleep $RETRY_DELAY
+            RETRY_DELAY=$((RETRY_DELAY * 2))
+          done
+          echo "::warning::Failed to push after $MAX_RETRIES attempts."
+          exit 1
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Database Migration Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dry Run**: ${{ inputs.dry_run == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Backup**: ${{ inputs.backup == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Verify**: ${{ inputs.verify == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Skip Schema**: ${{ inputs.skip_schema == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Operations" >> $GITHUB_STEP_SUMMARY
+          echo "- **Normalize Datetimes**: ${{ inputs.normalize_datetimes == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Backfill Actors**: ${{ inputs.backfill_actors == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.backfill_actors }}" == "true" ]; then
+            echo "  - Limit: ${{ inputs.backfill_limit || '0 (all)' }}" >> $GITHUB_STEP_SUMMARY
+            echo "  - No Proxy: ${{ inputs.no_proxy == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+            echo "  - CF Bypass: ${{ inputs.use_cf_bypass == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "- **Align Inventory**: ${{ inputs.align_inventory_history == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.align_inventory_history }}" == "true" ]; then
+            echo "  - Limit: ${{ inputs.align_limit || '0 (all)' }}" >> $GITHUB_STEP_SUMMARY
+            echo "  - Codes: ${{ inputs.align_codes || '(none)' }}" >> $GITHUB_STEP_SUMMARY
+            echo "  - Use Proxy: ${{ inputs.align_use_proxy == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+            echo "  - Enqueue QB: ${{ inputs.align_enqueue_qb == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+            echo "  - Execute Delete: ${{ inputs.align_execute_delete == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+            echo "  - QB Category: ${{ inputs.align_qb_category || '(default)' }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Runner**: ${{ inputs.runner || 'ubuntu-latest' }}" >> $GITHUB_STEP_SUMMARY

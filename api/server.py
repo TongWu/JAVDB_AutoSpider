@@ -232,6 +232,49 @@ class HtmlPayload(BaseModel):
     page_num: int = Field(1, ge=1, le=9999)
 
 
+class UrlPayload(BaseModel):
+    """POST body for the fetch-and-parse endpoint."""
+    url: str
+    page_num: int = 1
+    use_proxy: bool = True
+    use_cf_bypass: bool = True
+    use_cookie: bool = False
+
+
+class CrawlIndexPayload(BaseModel):
+    """POST body for multi-page index crawl."""
+    url: str
+    start_page: int = 1
+    end_page: Optional[int] = None
+    crawl_all: bool = False
+    use_proxy: bool = True
+    use_cf_bypass: bool = True
+    use_cookie: bool = False
+    max_consecutive_empty: int = 2
+    page_delay: float = 1.0
+
+
+class SpiderJobPayload(BaseModel):
+    """POST body to submit a full spider run."""
+    url: Optional[str] = None
+    start_page: int = 1
+    end_page: Optional[int] = None
+    crawl_all: bool = False
+    phase: Literal['1', '2', 'all'] = 'all'
+    ignore_history: bool = False
+    use_history: bool = False
+    ignore_release_date: bool = False
+    use_proxy: bool = True
+    no_rclone_filter: bool = False
+    disable_all_filters: bool = False
+    enable_dedup: bool = False
+    enable_redownload: bool = False
+    redownload_threshold: Optional[float] = None
+    dry_run: bool = False
+    max_movies_phase1: Optional[int] = None
+    max_movies_phase2: Optional[int] = None
+
+
 class HealthResponse(BaseModel):
     status: str = "ok"
     rust_core_available: bool = False
@@ -1667,7 +1710,7 @@ async def refresh_javdb_session(current=Depends(require_role("admin"))):
 async def api_parse_index(payload: HtmlPayload, _: Dict[str, Any] = Depends(_require_auth)):
     try:
         result = parse_index_page(payload.html, payload.page_num)
-        return _result_to_dict(result)
+        return result_to_dict(result)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -1676,7 +1719,7 @@ async def api_parse_index(payload: HtmlPayload, _: Dict[str, Any] = Depends(_req
 async def api_parse_detail(payload: HtmlPayload, _: Dict[str, Any] = Depends(_require_auth)):
     try:
         result = parse_detail_page(payload.html)
-        return _result_to_dict(result)
+        return result_to_dict(result)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -1685,7 +1728,7 @@ async def api_parse_detail(payload: HtmlPayload, _: Dict[str, Any] = Depends(_re
 async def api_parse_category(payload: HtmlPayload, _: Dict[str, Any] = Depends(_require_auth)):
     try:
         result = parse_category_page(payload.html, payload.page_num)
-        return _result_to_dict(result)
+        return result_to_dict(result)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -1694,7 +1737,7 @@ async def api_parse_category(payload: HtmlPayload, _: Dict[str, Any] = Depends(_
 async def api_parse_top(payload: HtmlPayload, _: Dict[str, Any] = Depends(_require_auth)):
     try:
         result = parse_top_page(payload.html, payload.page_num)
-        return _result_to_dict(result)
+        return result_to_dict(result)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -1703,7 +1746,7 @@ async def api_parse_top(payload: HtmlPayload, _: Dict[str, Any] = Depends(_requi
 async def api_parse_tags(payload: HtmlPayload, _: Dict[str, Any] = Depends(_require_auth)):
     try:
         result = parse_tag_page(payload.html, payload.page_num)
-        return _result_to_dict(result)
+        return result_to_dict(result)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -1733,6 +1776,9 @@ async def api_parse_url(payload: UrlPayload, _: Dict[str, Any] = Depends(_requir
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+# ---------------------------------------------------------------------------
+# Crawl endpoints (multi-page fetch + parse)
+# ---------------------------------------------------------------------------
 @app.post('/api/crawl/index')
 async def api_crawl_index(payload: CrawlIndexPayload, _: Dict[str, Any] = Depends(_require_auth)):
     """Crawl multiple index pages and return aggregated results."""
