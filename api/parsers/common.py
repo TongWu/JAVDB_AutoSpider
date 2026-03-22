@@ -25,9 +25,9 @@ logger = logging.getLogger(__name__)
 def extract_rate_and_comments(score_text: str) -> Tuple[str, str]:
     """Extract numeric rating and comment count from a score string.
 
-    Expected formats (Traditional / Simplified / English variations):
-        ``4.47分, 由595人評價``
-        ``3.95分, 由191人評價``
+    Expected formats:
+        Traditional Chinese: ``4.47分, 由595人評價``
+        English:             ``4.2, by 101 users``
 
     Returns:
         (rate, comment_count) – both as strings, empty when not found.
@@ -36,10 +36,14 @@ def extract_rate_and_comments(score_text: str) -> Tuple[str, str]:
     comment_count = ''
 
     rate_match = re.search(r'(\d+\.?\d*)分', score_text)
+    if not rate_match:
+        rate_match = re.search(r'(\d+\.?\d*),\s*by\b', score_text)
     if rate_match:
         rate = rate_match.group(1)
 
     comment_match = re.search(r'由(\d+)人評價', score_text)
+    if not comment_match:
+        comment_match = re.search(r'by\s+(\d+)\s+user', score_text)
     if comment_match:
         comment_count = comment_match.group(1)
 
