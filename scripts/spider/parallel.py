@@ -1,5 +1,6 @@
 """Parallel detail-page processing with one worker per proxy."""
 
+import random
 import time
 import threading
 import queue as queue_module
@@ -23,9 +24,14 @@ from utils.proxy_pool import create_proxy_pool_from_config
 from utils.request_handler import RequestHandler, RequestConfig
 
 import scripts.spider.state as state
-from scripts.spider.session import is_login_page, attempt_login_refresh
-from scripts.spider.parallel_login import use_login_queue_priority
-from scripts.spider.sleep_manager import MovieSleepManager, movie_sleep_mgr
+from scripts.spider.session import is_login_page, can_attempt_login, attempt_login_refresh
+from scripts.spider.parallel_login import should_delegate_login_task, use_login_queue_priority
+from scripts.spider.sleep_manager import (
+    MovieSleepManager, movie_sleep_mgr,
+    penalty_tracker as _shared_penalty_tracker,
+    dual_window_throttle as _shared_throttle,
+    PenaltyTracker, DualWindowThrottle,
+)
 from scripts.spider.csv_builder import (
     create_csv_row_with_history_filter, check_torrent_status, collect_new_magnet_links,
     create_redownload_row,
@@ -35,7 +41,6 @@ from scripts.spider.config_loader import (
     CF_BYPASS_SERVICE_PORT, CF_BYPASS_ENABLED,
     CF_TURNSTILE_COOLDOWN, FALLBACK_COOLDOWN,
     JAVDB_SESSION_COOKIE,
-    MOVIE_SLEEP_MIN, MOVIE_SLEEP_MAX,
     PROXY_POOL, PROXY_POOL_COOLDOWN_SECONDS, PROXY_POOL_MAX_FAILURES,
     LOGIN_PROXY_NAME,
     LOGIN_ATTEMPTS_PER_PROXY_LIMIT, LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH,
@@ -114,6 +119,8 @@ class ProxyWorker(threading.Thread):
         fallback_cooldown: float,
         ban_log_file: str,
         all_workers: list,
+        shared_penalty_tracker: PenaltyTracker = None,
+        shared_throttle: DualWindowThrottle = None,
     ):
         super().__init__(daemon=True, name=f"ProxyWorker-{proxy_config.get('name', worker_id)}")
         self.worker_id = worker_id
@@ -125,13 +132,18 @@ class ProxyWorker(threading.Thread):
         self.total_workers = total_workers
         self.use_cookie = use_cookie
         self.is_adhoc_mode = is_adhoc_mode
-        self._sleep_mgr = MovieSleepManager(movie_sleep_min, movie_sleep_max)
+        self._sleep_mgr = MovieSleepManager(
+            movie_sleep_min, movie_sleep_max,
+            penalty_tracker=shared_penalty_tracker,
+            throttle=shared_throttle,
+        )
         self.fallback_cooldown = fallback_cooldown
         self.all_workers = all_workers
         self.login_proxy_name: Optional[str] = LOGIN_PROXY_NAME
 
         self._cf_bypass_since: Optional[float] = None
         self._first_request = True
+        self._startup_jitter = random.uniform(0.5, 2.0) + worker_id * random.uniform(1.5, 3.0)
 
         self._proxy_pool = create_proxy_pool_from_config(
             [proxy_config],
@@ -154,6 +166,7 @@ class ProxyWorker(threading.Thread):
                 proxy_modules=['all'],
                 proxy_mode='single',
             ),
+            penalty_tracker=shared_penalty_tracker,
         )
 
     # -- internal helpers --------------------------------------------------
@@ -480,12 +493,18 @@ class ProxyWorker(threading.Thread):
                     ))
                     continue
                 _requeue_front(self.detail_queue, task)
-                time.sleep(0.1)
+                backoff = min(2.0, 0.3 * len(task.failed_proxies))
+                time.sleep(backoff)
                 continue
 
-            if not self._first_request:
+            if self._first_request:
+                logger.debug(
+                    "[%s] Startup jitter: %.1fs", self.proxy_name, self._startup_jitter,
+                )
+                time.sleep(self._startup_jitter)
+                self._first_request = False
+            else:
                 self._sleep_mgr.sleep()
-            self._first_request = False
 
             magnets, actor_info, actor_gender, actor_link, supporting, success, used_cf, needs_login = (
                 self._try_direct_then_cf(task))
@@ -567,6 +586,8 @@ def process_detail_entries_parallel(
             fallback_cooldown=FALLBACK_COOLDOWN,
             ban_log_file=ban_log_file,
             all_workers=all_workers,
+            shared_penalty_tracker=_shared_penalty_tracker,
+            shared_throttle=_shared_throttle,
         )
         all_workers.append(w)
 
