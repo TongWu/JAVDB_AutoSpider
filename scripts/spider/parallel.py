@@ -129,7 +129,7 @@ class ProxyWorker(threading.Thread):
         self.all_workers = all_workers
         self.login_proxy_name: Optional[str] = LOGIN_PROXY_NAME
 
-        self.needs_cf_bypass = False
+        self._cf_bypass_since: Optional[float] = None
         self._first_request = True
 
         self._proxy_pool = create_proxy_pool_from_config(
@@ -199,7 +199,19 @@ class ProxyWorker(threading.Thread):
         Returns (magnets, actor_info, actor_gender, actor_link, supporting, success, used_cf, needs_login).
         Short-circuits CF bypass if login is required (CF won't fix auth).
         """
-        if self.needs_cf_bypass:
+        always_bypass_time = state.always_bypass_time
+        should_short_circuit = False
+        if always_bypass_time is not None and self._cf_bypass_since is not None:
+            if always_bypass_time == 0:
+                should_short_circuit = True
+            else:
+                window_seconds = always_bypass_time * 60
+                if time.time() - self._cf_bypass_since <= window_seconds:
+                    should_short_circuit = True
+                else:
+                    self._cf_bypass_since = None
+
+        if should_short_circuit:
             m, a, ag, al, sup, ok, needs_login = self._try_fetch_and_parse(
                 task, True, "CF Bypass (marked)")
             return m, a, ag, al, sup, ok, True, needs_login
@@ -212,8 +224,14 @@ class ProxyWorker(threading.Thread):
 
         m, a, ag, al, sup, ok, needs_login = self._try_fetch_and_parse(task, True, "CF Bypass")
         if ok:
-            self.needs_cf_bypass = True
-            logger.info(f"[{self.proxy_name}] CF Bypass succeeded — marking proxy for this runtime")
+            if always_bypass_time is not None:
+                self._cf_bypass_since = time.time()
+                if always_bypass_time == 0:
+                    logger.info(f"[{self.proxy_name}] CF Bypass succeeded — marking proxy for this runtime")
+                else:
+                    logger.info(
+                        f"[{self.proxy_name}] CF Bypass succeeded — marking proxy for {always_bypass_time} minute(s)"
+                    )
             return m, a, ag, al, sup, True, True, False
         return [], '', '', '', '', False, False, needs_login
 
