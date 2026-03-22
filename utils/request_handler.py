@@ -826,8 +826,6 @@ class RequestHandler:
                 logger.warning(f"[{module_name}] Initial CF bypass returned small response ({len(result)} bytes), continuing to fallback")
         
         turnstile_detected = is_turnstile
-        if is_turnstile and self.penalty_tracker:
-            self.penalty_tracker.record_event()
         logger.warning(f"[{module_name}] CF Bypass initial attempt failed. Starting fallback sequence (cooldown: {self.config.fallback_cooldown}s between steps)...")
         self.cf_bypass_failure_count += 1
         if self.penalty_tracker:
@@ -854,6 +852,8 @@ class RequestHandler:
             elif result:
                 logger.warning(f"[{module_name}] Step (a) returned small response ({len(result)} bytes), continuing to next step")
         
+        if is_turnstile and self.penalty_tracker:
+            self.penalty_tracker.record_event()
         turnstile_detected = turnstile_detected or is_turnstile
         
         # Refresh bypass cache between step (a) and (b) if turnstile detected
@@ -879,6 +879,8 @@ class RequestHandler:
                     if use_proxy_pool_mode and self.proxy_pool:
                         self.proxy_pool.mark_success()
                     return result
+            if is_turnstile and self.penalty_tracker:
+                self.penalty_tracker.record_event()
             turnstile_detected = turnstile_detected or is_turnstile
         
         # Step (c) & (d): Try other proxies if in pool mode
@@ -908,6 +910,8 @@ class RequestHandler:
                     if result and len(result) >= 10000:
                         self.proxy_pool.mark_success()
                         return result
+                if is_turnstile and self.penalty_tracker:
+                    self.penalty_tracker.record_event()
                 turnstile_detected = turnstile_detected or is_turnstile
                 
                 if self.config.fallback_cooldown > 0:
@@ -929,6 +933,8 @@ class RequestHandler:
                     elif result:
                         logger.warning(f"[{module_name}] Step (d) returned small response ({len(result)} bytes), continuing to next proxy")
                 
+                if is_turnstile and self.penalty_tracker:
+                    self.penalty_tracker.record_event()
                 turnstile_detected = turnstile_detected or is_turnstile
                 
                 # Refresh bypass cache after step (d) if turnstile detected
