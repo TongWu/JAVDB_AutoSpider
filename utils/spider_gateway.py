@@ -265,7 +265,12 @@ class SpiderGateway:
         """
         pages: List[GatewayResult] = []
         consecutive_empty = 0
-        effective_end = end_page if end_page is not None else (start_page + 99)
+        if end_page is not None:
+            effective_end = end_page
+        elif crawl_all:
+            effective_end = start_page + 99
+        else:
+            effective_end = start_page
 
         for page_num in range(start_page, effective_end + 1):
             page_url = _build_page_url(url, page_num)
