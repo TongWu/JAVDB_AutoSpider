@@ -49,6 +49,10 @@ on:
         required: false
         default: true
         type: boolean
+      always_bypass_time:
+        description: 'Spider CF bypass sticky window in minutes (empty=disabled, 0=entire session)'
+        required: false
+        type: number
       proxy_uploader:
         description: 'Enable proxy for qBittorrent Uploader requests'
         required: false
@@ -499,6 +503,15 @@ jobs:
           # Add proxy flag if enabled
           if [ "${{ inputs.proxy_spider }}" == "true" ]; then
             SPIDER_CMD="$SPIDER_CMD --use-proxy"
+          fi
+
+          ALWAYS_BYPASS_TIME="${{ inputs.always_bypass_time }}"
+          if [ -n "$ALWAYS_BYPASS_TIME" ]; then
+            if [ "$ALWAYS_BYPASS_TIME" = "0" ]; then
+              SPIDER_CMD="$SPIDER_CMD --always-bypass-time"
+            else
+              SPIDER_CMD="$SPIDER_CMD --always-bypass-time $ALWAYS_BYPASS_TIME"
+            fi
           fi
 
           # Add dedup flag if enabled
