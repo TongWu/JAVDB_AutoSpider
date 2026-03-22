@@ -24,6 +24,7 @@ from scripts.spider.config_loader import (
     PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES, PROXY_MODE,
     PROXY_POOL, PROXY_POOL_COOLDOWN_SECONDS, PROXY_POOL_MAX_FAILURES,
     REPORTS_DIR,
+    LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
 )
 
 logger = get_logger(__name__)
@@ -41,6 +42,12 @@ proxy_ban_html_files: list = []
 login_attempted: bool = False
 refreshed_session_cookie: Optional[str] = None
 logged_in_proxy_name: Optional[str] = None
+
+# Per-proxy and global login budget tracking
+login_attempts_per_proxy: Dict[str, int] = {}
+login_failures_per_proxy: Dict[str, int] = {}
+login_total_attempts: int = 0
+login_total_budget: int = len(PROXY_POOL) * LOGIN_ATTEMPTS_PER_PROXY_LIMIT if PROXY_POOL else 0
 
 always_bypass_time: Optional[int] = None
 proxies_requiring_cf_bypass: Dict[str, float] = {}
