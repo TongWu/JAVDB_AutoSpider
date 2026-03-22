@@ -388,6 +388,7 @@ Authorization: Bearer <token>
 | dry_run | bool | 只打印不写 CSV/不实际上传 | false |
 | ignore_release_date | bool | 忽略今日/昨日标签 | false |
 | use_proxy | bool | 启用代理 | false |
+| always_bypass_time | int | fallback 成功后持续使用 bypass 的分钟数（空=禁用，0=本次 session） | 空 |
 | max_movies_phase1 | int | Phase1 最大处理影片数（测试用） | 无限制 |
 | max_movies_phase2 | int | Phase2 最大处理影片数（测试用） | 无限制 |
 | pikpak_individual | bool | PikPak 是否按单个种子处理 | false |
@@ -425,6 +426,7 @@ Authorization: Bearer <token>
 | date_filter | bool | 是否启用发布日期过滤（仅今日/昨日） | false（adhoc 常为 false） |
 | phase | choice | `1` / `2` / `all` | `all` |
 | use_proxy | bool | Spider 使用代理 | true |
+| always_bypass_time | int | fallback 成功后持续使用 bypass 的分钟数（空=禁用，0=本次 session） | 空 |
 | proxy_uploader | bool | 上传器使用代理 | false |
 | proxy_pikpak | bool | PikPak 使用代理 | false |
 | qb_category | string | 覆盖 qBittorrent 分类（空则用 TORRENT_CATEGORY_ADHOC） | 空 |
