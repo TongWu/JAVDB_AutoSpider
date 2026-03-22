@@ -384,26 +384,36 @@ async def api_submit_spider_job(payload: SpiderJobPayload):
     job_id = uuid.uuid4().hex[:12]
     cli_args = _payload_to_cli_args(payload)
 
-    with _jobs_lock:
-        _cleanup_expired_jobs()
-        _jobs[job_id] = {
-            'job_id': job_id,
-            'status': 'running',
-            'pid': None,
-            'cli_args': cli_args,
-            'started_at': datetime.now(timezone.utc).isoformat(),
-            'finished_at': None,
-            'return_code': None,
-            'output': [],
-            'csv_path': None,
-            'session_id': None,
-            'error': None,
-        }
+    try:
+        with _jobs_lock:
+            _cleanup_expired_jobs()
+            _jobs[job_id] = {
+                'job_id': job_id,
+                'status': 'running',
+                'pid': None,
+                'cli_args': cli_args,
+                'started_at': datetime.now(timezone.utc).isoformat(),
+                'finished_at': None,
+                'return_code': None,
+                'output': [],
+                'csv_path': None,
+                'session_id': None,
+                'error': None,
+            }
 
-    thread = threading.Thread(
-        target=_run_spider_job, args=(job_id, cli_args), daemon=True,
-    )
-    thread.start()
+        thread = threading.Thread(
+            target=_run_spider_job, args=(job_id, cli_args), daemon=True,
+        )
+        thread.start()
+    except Exception as exc:
+        logger.error('Failed to start spider job %s: %s', job_id, exc)
+        with _jobs_lock:
+            _jobs.pop(job_id, None)
+        _job_semaphore.release()
+        raise HTTPException(
+            status_code=503,
+            detail='Failed to start spider job, please try again later',
+        )
 
     return {'job_id': job_id, 'status': 'running', 'cli_args': cli_args}
 
