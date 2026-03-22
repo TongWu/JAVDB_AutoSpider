@@ -307,8 +307,7 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('QB_FILE_FILTER_LOG_FILE', 'QB_FILE_FILTER_LOG_FILE', get_env, 'logs/qb_file_filter.log', 'QBITTORRENT FILE FILTER CONFIGURATION'),
         # Rclone Configuration
         ('RCLONE_CONFIG_BASE64', 'RCLONE_CONFIG_BASE64', get_env, '', 'RCLONE CONFIGURATION'),
-        ('RCLONE_DRIVE_NAME', 'RCLONE_DRIVE_NAME', get_env, 'gdrive', 'RCLONE CONFIGURATION'),
-        ('RCLONE_ROOT_FOLDER', 'RCLONE_ROOT_FOLDER', get_env, '', 'RCLONE CONFIGURATION'),
+        ('RCLONE_FOLDER_PATH', 'RCLONE_FOLDER_PATH', get_env, 'gdrive:', 'RCLONE CONFIGURATION'),
         # Storage Mode
         ('STORAGE_MODE', 'STORAGE_MODE', get_env, 'duo', 'STORAGE MODE'),
         # Dedup Configuration

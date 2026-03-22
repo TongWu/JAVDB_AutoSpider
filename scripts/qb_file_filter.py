@@ -7,10 +7,11 @@ It sets the download priority to 0 (do not download) for files below the thresho
 Optionally, it can also delete local files that have already been downloaded.
 
 Usage:
-    python3 scripts/qb_file_filter.py --min-size 50  # Filter files smaller than 50MB
-    python3 scripts/qb_file_filter.py --min-size 100 --days 2  # Filter files smaller than 100MB from last 2 days
-    python3 scripts/qb_file_filter.py --min-size 50 --use-proxy  # With proxy
-    python3 scripts/qb_file_filter.py --min-size 50 --delete-local-files  # Also delete downloaded files
+    python3 scripts/qb_file_filter.py  # Uses QB_FILE_FILTER_MIN_SIZE_MB from config (default 100MB if no config)
+    python3 scripts/qb_file_filter.py --min-size 50  # Override threshold to 50MB
+    python3 scripts/qb_file_filter.py --min-size 100 --days 2  # Explicit 100MB, last 2 days
+    python3 scripts/qb_file_filter.py --min-size 100 --use-proxy  # With proxy
+    python3 scripts/qb_file_filter.py --min-size 100 --delete-local-files  # Also delete downloaded files
 """
 
 import requests
@@ -45,7 +46,7 @@ PROXY_POOL_COOLDOWN_SECONDS = cfg('PROXY_POOL_COOLDOWN_SECONDS', 691200)
 PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
 
 # File filter
-QB_FILE_FILTER_MIN_SIZE_MB = cfg('QB_FILE_FILTER_MIN_SIZE_MB', 50)
+QB_FILE_FILTER_MIN_SIZE_MB = cfg('QB_FILE_FILTER_MIN_SIZE_MB', 100)
 QB_FILE_FILTER_LOG_FILE = cfg('QB_FILE_FILTER_LOG_FILE', 'logs/qb_file_filter.log')
 
 # Configure logging
