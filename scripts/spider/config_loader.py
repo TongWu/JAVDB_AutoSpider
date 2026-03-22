@@ -22,8 +22,9 @@ from utils.config_helper import cfg
 
 # Core spider settings
 BASE_URL = cfg('BASE_URL', 'https://javdb.com')
-START_PAGE = cfg('START_PAGE', 1)
-END_PAGE = cfg('END_PAGE', 20)
+# Prefer PAGE_START / PAGE_END; fall back to legacy START_PAGE / END_PAGE if unset
+PAGE_START = cfg('PAGE_START', cfg('START_PAGE', 1))
+PAGE_END = cfg('PAGE_END', cfg('END_PAGE', 20))
 REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
 DAILY_REPORT_DIR = cfg('DAILY_REPORT_DIR', 'reports/DailyReport')
 AD_HOC_DIR = cfg('AD_HOC_DIR', 'reports/AdHoc')

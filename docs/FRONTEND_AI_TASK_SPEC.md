@@ -299,8 +299,8 @@ Authorization: Bearer <token>
 
 | 配置名 | 类型 | 说明 | 默认/示例 |
 |--------|------|------|-----------|
-| START_PAGE | int | 起始页 | `1` |
-| END_PAGE | int | 结束页 | `10` 或 `20` |
+| PAGE_START | int | 起始页 | `1` |
+| PAGE_END | int | 结束页 | `10` 或 `20` |
 | PHASE2_MIN_RATE | float | Phase2 最低评分 | `4.0` |
 | PHASE2_MIN_COMMENTS | int | Phase2 最低评论数 | `85` 或 `100` |
 | BASE_URL | string | JAVDB 基础 URL | `https://javdb.com` |
@@ -379,8 +379,8 @@ Authorization: Bearer <token>
 
 | 参数 | 类型 | 说明 | 默认 |
 |------|------|------|------|
-| start_page | int | 起始页 | config 中 START_PAGE |
-| end_page | int | 结束页 | config 中 END_PAGE |
+| start_page | int | 起始页 | config 中 `PAGE_START`（旧键 `START_PAGE` 仍可由 `config_loader` 回退读取） |
+| end_page | int | 结束页 | config 中 `PAGE_END`（旧键 `END_PAGE` 同上） |
 | all | bool | 是否抓取到空页为止（忽略 end_page） | false |
 | ignore_history | bool | 是否忽略历史文件仍写入历史 | false |
 | phase | choice | `1` / `2` / `all` | `all` |

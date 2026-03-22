@@ -45,7 +45,7 @@ from utils.path_helper import get_dated_report_path, ensure_dated_dir, get_dated
 # Import unified configuration
 try:
     from config import (
-        BASE_URL, START_PAGE, END_PAGE,
+        BASE_URL, PAGE_START, PAGE_END,
         REPORTS_DIR, DAILY_REPORT_DIR, AD_HOC_DIR, PARSED_MOVIES_CSV,
         SPIDER_LOG_FILE, LOG_LEVEL, PAGE_SLEEP, MOVIE_SLEEP_MIN, MOVIE_SLEEP_MAX,
         JAVDB_SESSION_COOKIE, PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS,
@@ -56,8 +56,8 @@ try:
 except ImportError:
     # Fallback values if config.py doesn't exist
     BASE_URL = 'https://javdb.com'
-    START_PAGE = 1
-    END_PAGE = 20
+    PAGE_START = 1
+    PAGE_END = 20
     REPORTS_DIR = 'reports'
     DAILY_REPORT_DIR = 'reports/DailyReport'
     AD_HOC_DIR = 'reports/AdHoc'
@@ -322,11 +322,11 @@ def parse_arguments():
     parser.add_argument('--output-file', type=str,
                         help='Specify output CSV file name (without changing directory)')
 
-    parser.add_argument('--start-page', type=int, default=START_PAGE,
-                        help=f'Starting page number (default: {START_PAGE})')
+    parser.add_argument('--start-page', type=int, default=PAGE_START,
+                        help=f'Starting page number (default: {PAGE_START})')
 
-    parser.add_argument('--end-page', type=int, default=END_PAGE,
-                        help=f'Ending page number (default: {END_PAGE})')
+    parser.add_argument('--end-page', type=int, default=PAGE_END,
+                        help=f'Ending page number (default: {PAGE_END})')
 
     parser.add_argument('--all', action='store_true',
                         help='Parse all pages until an empty page is found (ignores --end-page)')

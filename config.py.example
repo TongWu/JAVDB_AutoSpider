@@ -187,8 +187,8 @@ CF_BYPASS_SERVICE_PORT = 8000
 # =============================================================================
 
 # Page range for spider
-START_PAGE = 1
-END_PAGE = 20
+PAGE_START = 1
+PAGE_END = 20
 
 # Phase 2 config
 PHASE2_MIN_RATE = 4.0
