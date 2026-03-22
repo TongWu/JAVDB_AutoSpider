@@ -275,11 +275,11 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # GPT API Configuration (optional - for automatic captcha solving during login)
         ('GPT_API_URL', 'GPT_API_URL', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
         ('GPT_API_KEY', 'GPT_API_KEY', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
-        ('PAGE_SLEEP', 'PAGE_SLEEP', get_env_int, 2, 'JAVDB LOGIN CONFIGURATION'),
+        ('PAGE_SLEEP', 'PAGE_SLEEP', get_env_int, 5, 'JAVDB LOGIN CONFIGURATION'),
         ('MOVIE_SLEEP_MIN', 'MOVIE_SLEEP', get_env_range_min, None, 'JAVDB LOGIN CONFIGURATION'),
         ('MOVIE_SLEEP_MAX', 'MOVIE_SLEEP', get_env_range_max, None, 'JAVDB LOGIN CONFIGURATION'),
-        ('CF_TURNSTILE_COOLDOWN', 'CF_TURNSTILE_COOLDOWN', get_env_int, 10, 'JAVDB LOGIN CONFIGURATION'),
-        ('FALLBACK_COOLDOWN', 'FALLBACK_COOLDOWN', get_env_int, 30, 'JAVDB LOGIN CONFIGURATION'),
+        ('CF_TURNSTILE_COOLDOWN', 'CF_TURNSTILE_COOLDOWN', get_env_int, 5, 'JAVDB LOGIN CONFIGURATION'),
+        ('FALLBACK_COOLDOWN', 'FALLBACK_COOLDOWN', get_env_int, 15, 'JAVDB LOGIN CONFIGURATION'),
         # Logging Configuration
         ('LOG_LEVEL', 'LOG_LEVEL', get_env, 'INFO', 'LOGGING CONFIGURATION'),
         ('SPIDER_LOG_FILE', 'SPIDER_LOG_FILE', get_env, 'logs/spider.log', 'LOGGING CONFIGURATION'),
@@ -301,9 +301,9 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('PIKPAK_EMAIL', 'PIKPAK_EMAIL', get_env, '', 'PIKPAK CONFIGURATION'),
         ('PIKPAK_PASSWORD', 'PIKPAK_PASSWORD', get_env, '', 'PIKPAK CONFIGURATION'),
         ('PIKPAK_LOG_FILE', 'PIKPAK_LOG_FILE', get_env, 'logs/pikpak_bridge.log', 'PIKPAK CONFIGURATION'),
-        ('PIKPAK_REQUEST_DELAY', 'PIKPAK_REQUEST_DELAY', get_env_int, 3, 'PIKPAK CONFIGURATION'),
+        ('PIKPAK_REQUEST_DELAY', 'PIKPAK_REQUEST_DELAY', get_env_int, 2, 'PIKPAK CONFIGURATION'),
         # qBittorrent File Filter Configuration
-        ('QB_FILE_FILTER_MIN_SIZE_MB', 'QB_FILE_FILTER_MIN_SIZE_MB', get_env_int, 50, 'QBITTORRENT FILE FILTER CONFIGURATION'),
+        ('QB_FILE_FILTER_MIN_SIZE_MB', 'QB_FILE_FILTER_MIN_SIZE_MB', get_env_int, 100, 'QBITTORRENT FILE FILTER CONFIGURATION'),
         ('QB_FILE_FILTER_LOG_FILE', 'QB_FILE_FILTER_LOG_FILE', get_env, 'logs/qb_file_filter.log', 'QBITTORRENT FILE FILTER CONFIGURATION'),
         # Rclone Configuration
         ('RCLONE_CONFIG_BASE64', 'RCLONE_CONFIG_BASE64', get_env, '', 'RCLONE CONFIGURATION'),
