@@ -9,6 +9,7 @@ from scripts.spider.config_loader import (
     JAVDB_PASSWORD,
     LOGIN_PROXY_NAME,
     PROXY_POOL,
+    LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
 )
 
 logger = get_logger(__name__)
@@ -49,9 +50,10 @@ def resolve_login_proxy_endpoints():
 def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None):
     """Attempt to refresh session cookie by logging in via login.py.
 
-    This function can only be called ONCE per spider run.  After successful
-    login, login.py updates config.py with the new cookie, then we reload
-    config.py to get the updated cookie value.
+    Can be called multiple times within a session, subject to per-proxy
+    (``LOGIN_ATTEMPTS_PER_PROXY_LIMIT``) and global
+    (``state.login_total_budget``) budget constraints.  Counters are tracked
+    in ``state.login_attempts_per_proxy`` / ``state.login_total_attempts``.
 
     The cookie obtained is bound to the proxy/server that performed the login.
     ``state.logged_in_proxy_name`` is set so that parallel workers know which
@@ -66,12 +68,6 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None):
     Returns:
         tuple: (success: bool, new_cookie: str or None, proxy_name: str or None)
     """
-    if state.login_attempted:
-        logger.debug("Login already attempted in this run, skipping")
-        return False, None, None
-
-    state.login_attempted = True
-
     if not LOGIN_FEATURE_AVAILABLE:
         logger.warning("Login feature not available (GPT_API_KEY/GPT_API_URL not configured)")
         return False, None, None
@@ -80,9 +76,12 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None):
         logger.warning("Login credentials not configured (JAVDB_USERNAME/JAVDB_PASSWORD)")
         return False, None, None
 
-    logger.info("=" * 60)
-    logger.info("ATTEMPTING SESSION COOKIE REFRESH VIA LOGIN")
-    logger.info("=" * 60)
+    if state.login_total_budget > 0 and state.login_total_attempts >= state.login_total_budget:
+        logger.warning(
+            "Login budget exhausted (%d/%d)",
+            state.login_total_attempts, state.login_total_budget,
+        )
+        return False, None, None
 
     login_proxies = explicit_proxies
     used_proxy_name = explicit_proxy_name
@@ -106,8 +105,35 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None):
             else:
                 login_proxies = None
 
+    if used_proxy_name:
+        proxy_count = state.login_attempts_per_proxy.get(used_proxy_name, 0)
+        if proxy_count >= LOGIN_ATTEMPTS_PER_PROXY_LIMIT:
+            logger.warning(
+                "Proxy %s reached login limit (%d/%d)",
+                used_proxy_name, proxy_count, LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
+            )
+            return False, None, None
+
+    attempt_num = state.login_total_attempts + 1
+    budget_str = str(state.login_total_budget) if state.login_total_budget > 0 else 'unlimited'
+    proxy_attempt = (
+        state.login_attempts_per_proxy.get(used_proxy_name, 0) + 1
+        if used_proxy_name else '?'
+    )
+
+    logger.info("=" * 60)
+    logger.info(
+        "ATTEMPTING SESSION COOKIE REFRESH VIA LOGIN "
+        "(attempt %s/%s, proxy %s: %s/%s)",
+        attempt_num, budget_str,
+        used_proxy_name or 'default', proxy_attempt, LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
+    )
+    logger.info("=" * 60)
+
     if login_proxies and used_proxy_name:
         logger.info(f"Login will use proxy: {used_proxy_name}")
+
+    state.login_attempted = True
 
     try:
         from scripts.login import login_with_retry, update_config_file
@@ -116,9 +142,17 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None):
             JAVDB_USERNAME, JAVDB_PASSWORD, max_retries=10, proxies=login_proxies,
         )
 
+        state.login_total_attempts += 1
+        if used_proxy_name:
+            state.login_attempts_per_proxy[used_proxy_name] = (
+                state.login_attempts_per_proxy.get(used_proxy_name, 0) + 1
+            )
+
         if success and session_cookie:
             logger.info("✓ Login successful, new session cookie obtained")
             state.logged_in_proxy_name = used_proxy_name
+            if used_proxy_name:
+                state.login_failures_per_proxy[used_proxy_name] = 0
 
             if update_config_file(session_cookie):
                 logger.info("✓ Updated config.py with new session cookie")
