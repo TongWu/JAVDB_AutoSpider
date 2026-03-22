@@ -428,6 +428,7 @@ python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --use-proxy --ignor
 | `--phase` | Phase to run (1/2/all) | all | `--phase 1` |
 | `--ignore-release-date` | Ignore today/yesterday tags | False | `--ignore-release-date` |
 | `--use-proxy` | Enable proxy from config.py | False | `--use-proxy` |
+| `--always-bypass-time [MINUTES]` | Keep using CF bypass after fallback success (omit value or 0 = whole session; omit flag = always direct-first) | None | `--always-bypass-time 30` |
 | `--sequential` | Force sequential processing (disable parallel) | False | `--sequential` |
 | `--max-movies-phase1` | Limit phase 1 movies (for testing) | None | `--max-movies-phase1 10` |
 | `--max-movies-phase2` | Limit phase 2 movies (for testing) | None | `--max-movies-phase2 5` |
@@ -1030,7 +1031,7 @@ CF_BYPASS_SERVICE_PORT = 8000  # Must match the service port
 
 **4. CF Bypass Behavior:**
 
-CF bypass is automatically activated as a fallback when direct requests fail during the proxy pool fallback mechanism. No command-line flag is needed.
+CF bypass is automatically activated as a fallback when direct requests fail during the proxy pool fallback mechanism. By default, each request still starts with direct mode first; you can add `--always-bypass-time [MINUTES]` to temporarily (or session-wide with `0`) keep a proxy on bypass mode after a fallback success.
 
 #### How It Works
 
