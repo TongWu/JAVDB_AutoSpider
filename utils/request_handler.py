@@ -828,7 +828,7 @@ class RequestHandler:
         turnstile_detected = is_turnstile
         logger.warning(f"[{module_name}] CF Bypass initial attempt failed. Starting fallback sequence (cooldown: {self.config.fallback_cooldown}s between steps)...")
         self.cf_bypass_failure_count += 1
-        if self.penalty_tracker:
+        if is_turnstile and self.penalty_tracker:
             self.penalty_tracker.record_event()
         
         # Cooldown before entering fallback
