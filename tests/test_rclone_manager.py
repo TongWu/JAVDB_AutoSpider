@@ -12,6 +12,7 @@ sys.path.insert(0, project_root)
 from scripts.rclone_manager import (
     parse_arguments,
     parse_root_path,
+    resolve_rclone_root,
     load_inventory_as_folder_structure,
     run_report_from_inventory,
     run_execute_from_csv,
@@ -131,6 +132,43 @@ class TestParseRootPath:
     def test_missing_colon(self):
         with pytest.raises(ValueError):
             parse_root_path('no-colon')
+
+
+# ============================================================================
+# Test resolve_rclone_root
+# ============================================================================
+
+
+class TestResolveRcloneRoot:
+    def test_cli_root_path(self):
+        assert resolve_rclone_root('remote:/a/b') == ('remote', 'a/b')
+
+    def test_cli_empty_falls_through_to_config(self):
+        import scripts.rclone_manager as rm
+
+        with patch.object(rm, 'RCLONE_FOLDER_PATH', 'gdrive:/x'):
+            assert resolve_rclone_root('  ') == ('gdrive', 'x')
+
+    def test_from_rclone_folder_path(self):
+        import scripts.rclone_manager as rm
+
+        with patch.object(rm, 'RCLONE_FOLDER_PATH', 'gdrive:/shows/jav'):
+            assert resolve_rclone_root(None) == ('gdrive', 'shows/jav')
+
+    def test_legacy_drive_and_root(self):
+        import scripts.rclone_manager as rm
+
+        with patch.object(rm, 'RCLONE_FOLDER_PATH', None):
+
+            def fake_cfg(name, default):
+                if name == 'RCLONE_DRIVE_NAME':
+                    return 'gdrive'
+                if name == 'RCLONE_ROOT_FOLDER':
+                    return '/legacy/path'
+                return default
+
+            with patch.object(rm, 'cfg', side_effect=fake_cfg):
+                assert resolve_rclone_root(None) == ('gdrive', 'legacy/path')
 
 
 # ============================================================================
