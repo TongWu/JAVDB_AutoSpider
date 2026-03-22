@@ -426,6 +426,7 @@ python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --use-proxy --ignor
 | `--phase` | 运行的阶段(1/2/all) | all | `--phase 1` |
 | `--ignore-release-date` | 忽略今日/昨日标签 | False | `--ignore-release-date` |
 | `--use-proxy` | 从 config.py 启用代理 | False | `--use-proxy` |
+| `--always-bypass-time [分钟]` | fallback 成功后持续使用 CF bypass（不带值或 0 表示本次 session 一直使用；不传该参数则始终 direct-first） | None | `--always-bypass-time 30` |
 | `--sequential` | 强制串行处理(禁用并行) | False | `--sequential` |
 | `--max-movies-phase1` | 限制阶段 1 电影数量(测试用) | None | `--max-movies-phase1 10` |
 | `--max-movies-phase2` | 限制阶段 2 电影数量(测试用) | None | `--max-movies-phase2 5` |
@@ -1027,7 +1028,7 @@ CF_BYPASS_SERVICE_PORT = 8000  # 必须匹配服务端口
 
 **4. CF 绕过行为:**
 
-CF 绕过会在代理池 fallback 机制中直接请求失败时自动启用，无需命令行参数。
+CF 绕过会在代理池 fallback 机制中直接请求失败时自动启用。默认每次请求仍会先尝试 direct；可通过 `--always-bypass-time [分钟]` 在 fallback 成功后让该代理持续使用 bypass（传 0 则本次 session 持续使用）。
 
 #### 工作原理
 
