@@ -105,6 +105,15 @@ def _validate_target_url(url: str) -> None:
         )
 
 
+def _is_valid_javdb_host(url: str) -> bool:
+    """Return True if *url* targets a known JavDB hostname (exact/suffix match)."""
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    hostname = (parsed.hostname or "").lower()
+    return hostname in _ALLOWED_HOSTS
+
+
 audit_logger = logging.getLogger("audit")
 if not audit_logger.handlers:
     audit_handler = logging.FileHandler(LOG_DIR / "audit.log")
@@ -362,15 +371,8 @@ class AdhocTaskPayload(BaseModel):
     @field_validator("url")
     @classmethod
     def valid_url(cls, value: str) -> str:
-        parsed = urlparse(value)
-        if parsed.scheme not in {"http", "https"}:
-            raise ValueError("url scheme must be http/https")
-        host = parsed.netloc.lower()
-        if "javdb.com" not in host:
-            raise ValueError("url host must include javdb.com")
-        blocked = ("127.", "10.", "192.168.", "localhost")
-        if any(host.startswith(prefix) for prefix in blocked):
-            raise ValueError("url host is not allowed")
+        if not _is_valid_javdb_host(value):
+            raise ValueError("url must target a valid javdb.com host")
         return value
 
     @field_validator("end_page")
@@ -396,15 +398,8 @@ class ExploreResolvePayload(BaseModel):
     @field_validator("url")
     @classmethod
     def valid_url(cls, value: str) -> str:
-        parsed = urlparse(value)
-        if parsed.scheme not in {"http", "https"}:
-            raise ValueError("url scheme must be http/https")
-        host = parsed.netloc.lower()
-        if "javdb.com" not in host:
-            raise ValueError("url host must include javdb.com")
-        blocked = ("127.", "10.", "192.168.", "localhost")
-        if any(host.startswith(prefix) for prefix in blocked):
-            raise ValueError("url host is not allowed")
+        if not _is_valid_javdb_host(value):
+            raise ValueError("url must target a valid javdb.com host")
         return value
 
 
@@ -434,12 +429,8 @@ class ExploreOneClickPayload(BaseModel):
     @field_validator("detail_url")
     @classmethod
     def valid_detail_url(cls, value: str) -> str:
-        parsed = urlparse(value)
-        if parsed.scheme not in {"http", "https"}:
-            raise ValueError("detail_url scheme must be http/https")
-        host = parsed.netloc.lower()
-        if "javdb.com" not in host:
-            raise ValueError("detail_url host must include javdb.com")
+        if not _is_valid_javdb_host(value):
+            raise ValueError("detail_url must target a valid javdb.com host")
         return value
 
 
@@ -1647,10 +1638,8 @@ async def explore_sync_cookie(payload: ExploreCookiePayload, current=Depends(req
 
 @app.get("/api/explore/proxy-page", response_class=HTMLResponse)
 async def explore_proxy_page(url: str, token: str = "", current=Depends(_require_auth_or_token)):
-    parsed = urlparse(url)
-    host = parsed.netloc.lower()
-    if parsed.scheme not in {"http", "https"} or "javdb.com" not in host:
-        raise HTTPException(status_code=422, detail="url host must include javdb.com")
+    if not _is_valid_javdb_host(url):
+        raise HTTPException(status_code=422, detail="url must target a valid javdb.com host")
     html = _fetch_javdb_html(url, use_proxy=False, use_cookie=True)
     injected = _inject_explore_enhancer(html, url)
     audit_logger.info("explore_proxy_page username=%s", current["sub"])
