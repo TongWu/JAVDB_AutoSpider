@@ -591,8 +591,8 @@ PROXY_MODULES = ['all']  # 'all' or list: 'spider', 'qbittorrent', 'pikpak'
 # =============================================================================
 # SPIDER CONFIGURATION
 # =============================================================================
-START_PAGE = 1
-END_PAGE = 20
+PAGE_START = 1
+PAGE_END = 20
 BASE_URL = 'https://javdb.com'
 
 # Phase 2 filtering criteria
