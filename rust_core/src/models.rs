@@ -428,7 +428,7 @@ impl MovieDetail {
             return Ok("[]".to_string());
         }
         if self.actors.len() <= 1 {
-            return Ok(String::new());
+            return Ok("[]".to_string());
         }
         #[derive(Serialize)]
         struct Row<'a> {
