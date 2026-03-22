@@ -15,6 +15,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, Literal, Optional
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -34,6 +35,40 @@ from utils.rust_adapters.parser_adapter import result_to_dict
 from utils.spider_gateway import create_gateway
 
 RUST_CORE_AVAILABLE = RUST_PARSERS_AVAILABLE
+
+
+def _build_allowed_hosts() -> frozenset[str]:
+    """Derive allowed target hosts from config.BASE_URL + javdb.com defaults."""
+    hosts = {'javdb.com', 'www.javdb.com'}
+    try:
+        import config as cfg
+        base_url = getattr(cfg, 'BASE_URL', '')
+        if base_url:
+            parsed = urlparse(base_url)
+            if parsed.hostname:
+                hosts.add(parsed.hostname.lower())
+    except ImportError:
+        pass
+    return frozenset(hosts)
+
+
+_ALLOWED_HOSTS = _build_allowed_hosts()
+
+
+def _validate_target_url(url: str) -> None:
+    """Reject URLs whose scheme/host fall outside the allowlist (SSRF guard)."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ('http', 'https'):
+        raise HTTPException(
+            status_code=400,
+            detail=f'URL scheme must be http or https, got {parsed.scheme!r}',
+        )
+    host = (parsed.hostname or '').lower()
+    if host not in _ALLOWED_HOSTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f'Host {host!r} is not in the allowed domain list',
+        )
 
 
 app = FastAPI(
@@ -175,6 +210,7 @@ async def api_detect_page_type(payload: HtmlPayload):
 @app.post('/api/parse/url')
 async def api_parse_url(payload: UrlPayload):
     """Fetch a JavDB URL, auto-detect page type, parse and return structured data."""
+    _validate_target_url(payload.url)
     try:
         gw = create_gateway(
             use_proxy=payload.use_proxy,
@@ -194,6 +230,7 @@ async def api_parse_url(payload: UrlPayload):
 @app.post('/api/crawl/index')
 async def api_crawl_index(payload: CrawlIndexPayload):
     """Crawl multiple index pages and return aggregated results."""
+    _validate_target_url(payload.url)
     try:
         gw = create_gateway(
             use_proxy=payload.use_proxy,
@@ -217,8 +254,25 @@ async def api_crawl_index(payload: CrawlIndexPayload):
 # Spider Job API (async subprocess execution)
 # ---------------------------------------------------------------------------
 
+_MAX_CONCURRENT_JOBS = 2
+_job_semaphore = threading.Semaphore(_MAX_CONCURRENT_JOBS)
+_MAX_OUTPUT_LINES = 5000
+_JOB_TTL_SECONDS = 24 * 3600
+
 _jobs: Dict[str, dict] = {}
 _jobs_lock = threading.Lock()
+
+
+def _cleanup_expired_jobs() -> None:
+    """Remove finished jobs older than _JOB_TTL_SECONDS (caller must hold _jobs_lock)."""
+    now = datetime.now(timezone.utc)
+    expired = [
+        jid for jid, job in _jobs.items()
+        if job.get('finished_at') and
+        (now - datetime.fromisoformat(job['finished_at'])).total_seconds() > _JOB_TTL_SECONDS
+    ]
+    for jid in expired:
+        del _jobs[jid]
 
 
 def _payload_to_cli_args(payload: SpiderJobPayload) -> list[str]:
@@ -299,7 +353,7 @@ def _run_spider_job(job_id: str, cli_args: list[str]) -> None:
             job['status'] = 'completed' if return_code == 0 else 'failed'
             job['return_code'] = return_code
             job['finished_at'] = datetime.now(timezone.utc).isoformat()
-            job['output'] = output_lines
+            job['output'] = output_lines[-_MAX_OUTPUT_LINES:]
             if csv_path:
                 job['csv_path'] = csv_path
             if session_id:
@@ -311,33 +365,55 @@ def _run_spider_job(job_id: str, cli_args: list[str]) -> None:
             job['status'] = 'failed'
             job['error'] = str(exc)
             job['finished_at'] = datetime.now(timezone.utc).isoformat()
+    finally:
+        _job_semaphore.release()
 
 
 @app.post('/api/jobs/spider')
 async def api_submit_spider_job(payload: SpiderJobPayload):
     """Submit a full spider run as an async background job."""
+    if payload.url:
+        _validate_target_url(payload.url)
+
+    if not _job_semaphore.acquire(blocking=False):
+        raise HTTPException(
+            status_code=429,
+            detail=f'Maximum concurrent spider jobs ({_MAX_CONCURRENT_JOBS}) reached, try again later',
+        )
+
     job_id = uuid.uuid4().hex[:12]
     cli_args = _payload_to_cli_args(payload)
 
-    with _jobs_lock:
-        _jobs[job_id] = {
-            'job_id': job_id,
-            'status': 'running',
-            'pid': None,
-            'cli_args': cli_args,
-            'started_at': datetime.now(timezone.utc).isoformat(),
-            'finished_at': None,
-            'return_code': None,
-            'output': [],
-            'csv_path': None,
-            'session_id': None,
-            'error': None,
-        }
+    try:
+        with _jobs_lock:
+            _cleanup_expired_jobs()
+            _jobs[job_id] = {
+                'job_id': job_id,
+                'status': 'running',
+                'pid': None,
+                'cli_args': cli_args,
+                'started_at': datetime.now(timezone.utc).isoformat(),
+                'finished_at': None,
+                'return_code': None,
+                'output': [],
+                'csv_path': None,
+                'session_id': None,
+                'error': None,
+            }
 
-    thread = threading.Thread(
-        target=_run_spider_job, args=(job_id, cli_args), daemon=True,
-    )
-    thread.start()
+        thread = threading.Thread(
+            target=_run_spider_job, args=(job_id, cli_args), daemon=True,
+        )
+        thread.start()
+    except Exception as exc:
+        logger.error('Failed to start spider job %s: %s', job_id, exc)
+        with _jobs_lock:
+            _jobs.pop(job_id, None)
+        _job_semaphore.release()
+        raise HTTPException(
+            status_code=503,
+            detail='Failed to start spider job, please try again later',
+        )
 
     return {'job_id': job_id, 'status': 'running', 'cli_args': cli_args}
 

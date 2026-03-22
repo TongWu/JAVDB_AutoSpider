@@ -66,8 +66,13 @@ pub fn normalize_javdb_href_path(href: &str) -> String {
     if h.is_empty() {
         return String::new();
     }
-    if h.starts_with("http://") || h.starts_with("https://") {
-        return Url::parse(h)
+    if h.starts_with("http://") || h.starts_with("https://") || h.starts_with("//") {
+        let full = if h.starts_with("//") {
+            format!("https:{h}")
+        } else {
+            h.to_string()
+        };
+        return Url::parse(&full)
             .ok()
             .and_then(|u| {
                 let p = u.path();
