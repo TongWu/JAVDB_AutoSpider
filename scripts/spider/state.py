@@ -7,7 +7,8 @@ Every module that needs to read or *mutate* shared state should
 import os
 import re
 import logging
-from typing import Optional
+import time
+from typing import Optional, Dict
 from datetime import datetime
 
 from utils.logging_config import get_logger
@@ -41,7 +42,8 @@ login_attempted: bool = False
 refreshed_session_cookie: Optional[str] = None
 logged_in_proxy_name: Optional[str] = None
 
-proxies_requiring_cf_bypass: set = set()
+always_bypass_time: Optional[int] = None
+proxies_requiring_cf_bypass: Dict[str, float] = {}
 
 # ---------------------------------------------------------------------------
 # CF bypass helpers
@@ -49,15 +51,38 @@ proxies_requiring_cf_bypass: set = set()
 
 
 def proxy_needs_cf_bypass(proxy_name: str) -> bool:
-    """Check if a proxy has been marked as requiring CF bypass."""
-    return proxy_name in proxies_requiring_cf_bypass
+    """Check if a proxy is still within the configured CF bypass window."""
+    if always_bypass_time is None:
+        return False
+
+    marked_at = proxies_requiring_cf_bypass.get(proxy_name)
+    if marked_at is None:
+        return False
+
+    if always_bypass_time == 0:
+        return True
+
+    window_seconds = always_bypass_time * 60
+    if time.time() - marked_at <= window_seconds:
+        return True
+
+    # Expired: fall back to direct-first behavior.
+    proxies_requiring_cf_bypass.pop(proxy_name, None)
+    return False
 
 
 def mark_proxy_cf_bypass(proxy_name: str):
-    """Mark a proxy as requiring CF bypass for all future requests in this runtime."""
-    if proxy_name not in proxies_requiring_cf_bypass:
-        proxies_requiring_cf_bypass.add(proxy_name)
+    """Mark a proxy for CF bypass reuse according to --always-bypass-time."""
+    if always_bypass_time is None:
+        return
+
+    proxies_requiring_cf_bypass[proxy_name] = time.time()
+    if always_bypass_time == 0:
         logger.info(f"Proxy '{proxy_name}' marked as requiring CF bypass for this runtime")
+    else:
+        logger.info(
+            f"Proxy '{proxy_name}' marked for CF bypass reuse for {always_bypass_time} minute(s)"
+        )
 
 # ---------------------------------------------------------------------------
 # Request delegation
