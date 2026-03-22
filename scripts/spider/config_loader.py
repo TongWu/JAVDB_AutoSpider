@@ -60,6 +60,10 @@ LOGIN_PROXY_NAME = (
     _raw_login_proxy_name.strip() if isinstance(_raw_login_proxy_name, str) and _raw_login_proxy_name.strip() else None
 )
 
+# Login retry policy
+LOGIN_ATTEMPTS_PER_PROXY_LIMIT = cfg('LOGIN_ATTEMPTS_PER_PROXY_LIMIT', 6)
+LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH = cfg('LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH', 3)
+
 # GPT / Login
 GPT_API_KEY = cfg('GPT_API_KEY', None)
 GPT_API_URL = cfg('GPT_API_URL', None)
