@@ -32,30 +32,7 @@ logging.basicConfig(
 logger = logging.getLogger("fetch_page")
 
 # Import after path is set
-from utils.proxy_pool import create_proxy_pool_from_config
-from utils.request_handler import RequestConfig, RequestHandler
-
-
-def load_config():
-    """Load proxy and request config from config.py."""
-    import config as cfg
-    return {
-        "PROXY_POOL": getattr(cfg, "PROXY_POOL", None),
-        "PROXY_MODE": getattr(cfg, "PROXY_MODE", "single"),
-        "PROXY_HTTP": getattr(cfg, "PROXY_HTTP", None),
-        "PROXY_HTTPS": getattr(cfg, "PROXY_HTTPS", None),
-        "PROXY_MODULES": getattr(cfg, "PROXY_MODULES", ["all"]),
-        "PROXY_POOL_COOLDOWN_SECONDS": getattr(cfg, "PROXY_POOL_COOLDOWN_SECONDS", 300),
-        "PROXY_POOL_MAX_FAILURES": getattr(cfg, "PROXY_POOL_MAX_FAILURES", 3),
-        "BASE_URL": getattr(cfg, "BASE_URL", "https://javdb.com"),
-        "CF_BYPASS_SERVICE_PORT": getattr(cfg, "CF_BYPASS_SERVICE_PORT", 8000),
-        "CF_BYPASS_PORT_MAP": getattr(cfg, "CF_BYPASS_PORT_MAP", {}),
-        "CF_BYPASS_ENABLED": getattr(cfg, "CF_BYPASS_ENABLED", True),
-        "CF_TURNSTILE_COOLDOWN": getattr(cfg, "CF_TURNSTILE_COOLDOWN", 30),
-        "FALLBACK_COOLDOWN": getattr(cfg, "FALLBACK_COOLDOWN", 15),
-        "JAVDB_SESSION_COOKIE": getattr(cfg, "JAVDB_SESSION_COOKIE", None),
-        "REPORTS_DIR": getattr(cfg, "REPORTS_DIR", "reports"),
-    }
+from utils.spider_gateway import create_gateway
 
 
 def default_output_path(url: str) -> str:
@@ -107,85 +84,14 @@ def main():
     use_proxy = not args.no_proxy
     use_cf_bypass = not args.no_cf_bypass
 
-    cfg = load_config()
-    reports_dir = cfg["REPORTS_DIR"]
-    ban_log_file = os.path.join(reports_dir, "proxy_bans.csv")
-    os.makedirs(reports_dir, exist_ok=True)
-
-    # Initialize proxy pool (same logic as spider)
-    proxy_pool = None
-    if use_proxy:
-        if cfg["PROXY_POOL"] and len(cfg["PROXY_POOL"]) > 0:
-            if cfg["PROXY_MODE"] == "pool":
-                proxy_pool = create_proxy_pool_from_config(
-                    cfg["PROXY_POOL"],
-                    cooldown_seconds=cfg["PROXY_POOL_COOLDOWN_SECONDS"],
-                    max_failures=cfg["PROXY_POOL_MAX_FAILURES"],
-                    ban_log_file=ban_log_file,
-                )
-                logger.info("Proxy pool initialized (pool mode)")
-            else:
-                proxy_pool = create_proxy_pool_from_config(
-                    [cfg["PROXY_POOL"][0]],
-                    cooldown_seconds=cfg["PROXY_POOL_COOLDOWN_SECONDS"],
-                    max_failures=cfg["PROXY_POOL_MAX_FAILURES"],
-                    ban_log_file=ban_log_file,
-                )
-                logger.info("Single proxy initialized")
-        elif cfg["PROXY_HTTP"] or cfg["PROXY_HTTPS"]:
-            legacy = {
-                "name": "Legacy-Proxy",
-                "http": cfg["PROXY_HTTP"],
-                "https": cfg["PROXY_HTTPS"],
-            }
-            proxy_pool = create_proxy_pool_from_config(
-                [legacy],
-                cooldown_seconds=cfg["PROXY_POOL_COOLDOWN_SECONDS"],
-                max_failures=cfg["PROXY_POOL_MAX_FAILURES"],
-                ban_log_file=ban_log_file,
-            )
-            logger.info("Legacy proxy initialized")
-        else:
-            logger.warning("Proxy requested but no PROXY_POOL or PROXY_HTTP/HTTPS in config; falling back to direct")
-            use_proxy = False
-
-    # Request config (same as spider's initialize_request_handler)
-    config = RequestConfig(
-        base_url=cfg["BASE_URL"],
-        cf_bypass_service_port=cfg["CF_BYPASS_SERVICE_PORT"],
-        cf_bypass_port_map=cfg["CF_BYPASS_PORT_MAP"],
-        cf_bypass_enabled=cfg["CF_BYPASS_ENABLED"],
-        cf_bypass_max_failures=3,
-        cf_turnstile_cooldown=cfg["CF_TURNSTILE_COOLDOWN"],
-        fallback_cooldown=cfg["FALLBACK_COOLDOWN"],
-        javdb_session_cookie=cfg["JAVDB_SESSION_COOKIE"],
-        proxy_http=cfg["PROXY_HTTP"],
-        proxy_https=cfg["PROXY_HTTPS"],
-        proxy_modules=cfg["PROXY_MODULES"],
-        proxy_mode=cfg["PROXY_MODE"],
+    gw = create_gateway(
+        use_proxy=use_proxy,
+        use_cf_bypass=use_cf_bypass,
+        use_cookie=args.use_cookie,
     )
-
-    handler = RequestHandler(proxy_pool=proxy_pool, config=config)
-
-    # Single-shot fetch: no fallback, no retry, return whatever HTML we get
     logger.info("Fetching: %s (use_proxy=%s, use_cf_bypass=%s)", url, use_proxy, use_cf_bypass)
 
-    proxies, _ = handler._get_proxies_config("spider", use_proxy)
-    proxy_name = proxy_pool.get_current_proxy_name() if proxy_pool else "None"
-
-    html = None
-    if use_cf_bypass and config.cf_bypass_enabled:
-        force_local = use_cf_bypass and not use_proxy
-        use_proxy_bypass = use_cf_bypass and use_proxy
-        html, _ok, _ts = handler._fetch_with_cf_bypass(
-            url, proxies, f"Proxy={proxy_name}",
-            force_local=force_local, use_proxy_bypass=use_proxy_bypass,
-        )
-    if html is None:
-        html, _ok, _ts = handler._fetch_direct(
-            url, proxies, f"Proxy={proxy_name}", use_cookie=args.use_cookie,
-        )
-
+    html = gw.fetch_html(url)
     if html is None:
         logger.error("Failed to fetch URL (no response)")
         sys.exit(1)

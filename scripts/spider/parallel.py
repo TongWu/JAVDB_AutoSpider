@@ -1,5 +1,6 @@
 """Parallel detail-page processing with one worker per proxy."""
 
+import random
 import time
 import threading
 import queue as queue_module
@@ -8,8 +9,10 @@ from typing import Optional, List
 from urllib.parse import urljoin
 
 from utils.logging_config import get_logger
+from utils.config_helper import use_sqlite
 from utils.parser import parse_detail
 from utils.magnet_extractor import extract_magnets
+from utils.db import db_batch_update_movie_actors
 from utils.history_manager import (
     has_complete_subtitles, should_skip_recent_yesterday_release,
     should_skip_recent_today_release, should_process_movie,
@@ -22,7 +25,13 @@ from utils.request_handler import RequestHandler, RequestConfig
 
 import scripts.spider.state as state
 from scripts.spider.session import is_login_page, can_attempt_login, attempt_login_refresh
-from scripts.spider.sleep_manager import MovieSleepManager, movie_sleep_mgr
+from scripts.spider.parallel_login import should_delegate_login_task, use_login_queue_priority
+from scripts.spider.sleep_manager import (
+    MovieSleepManager, movie_sleep_mgr,
+    penalty_tracker as _shared_penalty_tracker,
+    dual_window_throttle as _shared_throttle,
+    PenaltyTracker, DualWindowThrottle,
+)
 from scripts.spider.csv_builder import (
     create_csv_row_with_history_filter, check_torrent_status, collect_new_magnet_links,
     create_redownload_row,
@@ -33,8 +42,9 @@ from scripts.spider.config_loader import (
     CF_BYPASS_PORT_MAP,
     CF_TURNSTILE_COOLDOWN, FALLBACK_COOLDOWN,
     JAVDB_SESSION_COOKIE,
-    MOVIE_SLEEP_MIN, MOVIE_SLEEP_MAX,
     PROXY_POOL, PROXY_POOL_COOLDOWN_SECONDS, PROXY_POOL_MAX_FAILURES,
+    LOGIN_PROXY_NAME,
+    LOGIN_ATTEMPTS_PER_PROXY_LIMIT, LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH,
 )
 from scripts.spider.dedup_checker import (
     should_skip_from_rclone,
@@ -74,6 +84,9 @@ class DetailResult:
     task: DetailTask
     magnets: list
     actor_info: str
+    actor_gender: str
+    actor_link: str
+    supporting_actors: str
     parse_success: bool
     used_cf_bypass: bool
 
@@ -107,6 +120,8 @@ class ProxyWorker(threading.Thread):
         fallback_cooldown: float,
         ban_log_file: str,
         all_workers: list,
+        shared_penalty_tracker: PenaltyTracker = None,
+        shared_throttle: DualWindowThrottle = None,
     ):
         super().__init__(daemon=True, name=f"ProxyWorker-{proxy_config.get('name', worker_id)}")
         self.worker_id = worker_id
@@ -118,12 +133,18 @@ class ProxyWorker(threading.Thread):
         self.total_workers = total_workers
         self.use_cookie = use_cookie
         self.is_adhoc_mode = is_adhoc_mode
-        self._sleep_mgr = MovieSleepManager(movie_sleep_min, movie_sleep_max)
+        self._sleep_mgr = MovieSleepManager(
+            movie_sleep_min, movie_sleep_max,
+            penalty_tracker=shared_penalty_tracker,
+            throttle=shared_throttle,
+        )
         self.fallback_cooldown = fallback_cooldown
         self.all_workers = all_workers
+        self.login_proxy_name: Optional[str] = LOGIN_PROXY_NAME
 
-        self.needs_cf_bypass = False
+        self._cf_bypass_since: Optional[float] = None
         self._first_request = True
+        self._startup_jitter = random.uniform(0.5, 2.0) + worker_id * random.uniform(1.5, 3.0)
 
         self._proxy_pool = create_proxy_pool_from_config(
             [proxy_config],
@@ -147,6 +168,7 @@ class ProxyWorker(threading.Thread):
                 proxy_modules=['all'],
                 proxy_mode='single',
             ),
+            penalty_tracker=shared_penalty_tracker,
         )
 
     # -- internal helpers --------------------------------------------------
@@ -164,7 +186,7 @@ class ProxyWorker(threading.Thread):
     def _try_fetch_and_parse(self, task: DetailTask, use_cf: bool, context: str):
         """Attempt fetch + parse_detail.
 
-        Returns (magnets, actor_info, success, needs_login).
+        Returns (magnets, actor_info, actor_gender, actor_link, supporting, success, needs_login).
         Login decisions are made at the run() level, not here.
         """
         logger.debug(f"[{self.proxy_name}] [{task.entry_index}] {context}")
@@ -174,94 +196,131 @@ class ProxyWorker(threading.Thread):
                 if is_login_page(html):
                     logger.warning(
                         f"[{self.proxy_name}] [{task.entry_index}] Login page detected: {context}")
-                    return [], '', False, True
+                    return [], '', '', '', '', False, True
 
-                magnets, actor_info, ok = parse_detail(html, task.entry_index, skip_sleep=True)
+                m = parse_detail(html, task.entry_index, skip_sleep=True)
+                magnets, actor_info, actor_gender, actor_link, supporting, ok = m
                 if ok:
-                    return magnets, actor_info, True, False
+                    return magnets, actor_info, actor_gender, actor_link, supporting, True, False
                 logger.debug(f"[{self.proxy_name}] [{task.entry_index}] parse failed: {context}")
             else:
                 logger.debug(f"[{self.proxy_name}] [{task.entry_index}] no HTML: {context}")
         except Exception as e:
             logger.debug(f"[{self.proxy_name}] [{task.entry_index}] error in {context}: {e}")
-        return [], '', False, False
+        return [], '', '', '', '', False, False
 
     def _try_direct_then_cf(self, task: DetailTask):
         """Try direct, then CF bypass.
 
-        Returns (magnets, actor, success, used_cf, needs_login).
+        Returns (magnets, actor_info, actor_gender, actor_link, supporting, success, used_cf, needs_login).
         Short-circuits CF bypass if login is required (CF won't fix auth).
         """
-        if self.needs_cf_bypass:
-            m, a, ok, needs_login = self._try_fetch_and_parse(task, True, "CF Bypass (marked)")
-            return m, a, ok, True, needs_login
+        always_bypass_time = state.always_bypass_time
+        should_short_circuit = False
+        if always_bypass_time is not None and self._cf_bypass_since is not None:
+            if always_bypass_time == 0:
+                should_short_circuit = True
+            else:
+                window_seconds = always_bypass_time * 60
+                if time.time() - self._cf_bypass_since <= window_seconds:
+                    should_short_circuit = True
+                else:
+                    self._cf_bypass_since = None
 
-        m, a, ok, needs_login = self._try_fetch_and_parse(task, False, "Direct")
+        if should_short_circuit:
+            m, a, ag, al, sup, ok, needs_login = self._try_fetch_and_parse(
+                task, True, "CF Bypass (marked)")
+            return m, a, ag, al, sup, ok, True, needs_login
+
+        m, a, ag, al, sup, ok, needs_login = self._try_fetch_and_parse(task, False, "Direct")
         if ok:
-            return m, a, True, False, False
+            return m, a, ag, al, sup, True, False, False
         if needs_login:
-            return m, a, False, False, True
+            return m, a, ag, al, sup, False, False, True
 
-        m, a, ok, needs_login = self._try_fetch_and_parse(task, True, "CF Bypass")
+        m, a, ag, al, sup, ok, needs_login = self._try_fetch_and_parse(task, True, "CF Bypass")
         if ok:
-            self.needs_cf_bypass = True
-            logger.info(f"[{self.proxy_name}] CF Bypass succeeded — marking proxy for this runtime")
-            return m, a, True, True, False
-        return [], '', False, False, needs_login
+            if always_bypass_time is not None:
+                self._cf_bypass_since = time.time()
+                if always_bypass_time == 0:
+                    logger.info(f"[{self.proxy_name}] CF Bypass succeeded — marking proxy for this runtime")
+                else:
+                    logger.info(
+                        f"[{self.proxy_name}] CF Bypass succeeded — marking proxy for {always_bypass_time} minute(s)"
+                    )
+            return m, a, ag, al, sup, True, True, False
+        return [], '', '', '', '', False, False, needs_login
 
-    def _try_login_refresh(self):
-        """Per-worker login using this worker's own proxy.
+    def _do_login_for_proxy(self, proxy_config, proxy_name):
+        """Call ``attempt_login_refresh`` for a specific proxy.
 
-        Only updates THIS worker's cookie (not all workers), since
-        the cookie is bound to the machine that performed the login.
-        Returns True on success.
+        Must be called while holding ``_login_lock``.
+        Returns ``(success, new_cookie, proxy_name)`` from the underlying call.
+        """
+        if self.login_proxy_name and proxy_name == self.login_proxy_name:
+            return attempt_login_refresh(None, None)
+
+        proxy_for_login = {
+            'http': proxy_config.get('http'),
+            'https': proxy_config.get('https'),
+        }
+        proxy_for_login = {k: v for k, v in proxy_for_login.items() if v}
+        if not proxy_for_login:
+            proxy_for_login = None
+
+        return attempt_login_refresh(
+            explicit_proxies=proxy_for_login,
+            explicit_proxy_name=proxy_name,
+        )
+
+    def _find_and_login_next_worker(self, exclude=None):
+        """Find the next proxy with remaining budget, login through it.
+
+        Must be called while holding ``_login_lock``.
+        On success sets ``_logged_in_worker_id`` and updates the winning
+        worker's cookie.  Returns the worker id, or ``None`` on failure.
         """
         global _logged_in_worker_id
-        with _login_lock:
-            if state.login_attempted:
-                if state.refreshed_session_cookie is not None:
-                    self._handler.config.javdb_session_cookie = state.refreshed_session_cookie
-                    _logged_in_worker_id = self.worker_id
-                    return True
-                return False
+        exclude = exclude or set()
 
-            proxy_for_login = {
-                'http': self.proxy_config.get('http'),
-                'https': self.proxy_config.get('https'),
-            }
-            proxy_for_login = {k: v for k, v in proxy_for_login.items() if v}
-            if not proxy_for_login:
-                proxy_for_login = None
+        for w in self.all_workers:
+            if w.proxy_name in exclude:
+                continue
+            proxy_attempts = state.login_attempts_per_proxy.get(w.proxy_name, 0)
+            if proxy_attempts >= LOGIN_ATTEMPTS_PER_PROXY_LIMIT:
+                continue
 
-            success, new_cookie, _proxy_name = attempt_login_refresh(
-                explicit_proxies=proxy_for_login,
-                explicit_proxy_name=self.proxy_name,
+            state.login_failures_per_proxy[w.proxy_name] = 0
+            logger.info(
+                f"Switching login proxy to [{w.proxy_name}] "
+                f"(logins: {proxy_attempts}/{LOGIN_ATTEMPTS_PER_PROXY_LIMIT})"
             )
+            success, new_cookie, _ = self._do_login_for_proxy(w.proxy_config, w.proxy_name)
             if success and new_cookie:
-                self._handler.config.javdb_session_cookie = new_cookie
-                _logged_in_worker_id = self.worker_id
-                return True
-            return False
+                w._handler.config.javdb_session_cookie = new_cookie
+                _logged_in_worker_id = w.worker_id
+                logger.info(
+                    f"[{w.proxy_name}] Logged in successfully, "
+                    f"becoming the logged-in worker for login-required pages"
+                )
+                return w.worker_id
+
+        return None
 
     def _handle_login_required(self, task: DetailTask):
-        """Route a login-required task to the logged-in worker, or login self."""
+        """Route a login-required task to the logged-in worker, or attempt
+        login with proxy-level retry and fallback to the next proxy."""
         global _logged_in_worker_id
+        vc = task.entry.get('video_code', '')
+
         with _login_lock:
-            if _logged_in_worker_id is not None:
-                if _logged_in_worker_id != self.worker_id:
-                    logged_in_proxy = self.all_workers[_logged_in_worker_id].proxy_name
-                    task.failed_proxies.discard(logged_in_proxy)
-                    self.login_queue.put(task)
-                    logger.info(
-                        f"[{self.proxy_name}] [{task.entry_index}] "
-                        f"Login required for {task.entry.get('video_code', '')}, "
-                        f"routing to logged-in worker [{logged_in_proxy}]"
-                    )
-                    return
+            # Budget exhausted → treat as normal proxy failure so other
+            # proxies still get a chance to fetch the page.
+            if state.login_total_budget > 0 and state.login_total_attempts >= state.login_total_budget:
                 logger.warning(
                     f"[{self.proxy_name}] [{task.entry_index}] "
-                    f"Login required for {task.entry.get('video_code', '')} "
-                    f"but own session is stale — requeueing as proxy failure"
+                    f"Login budget exhausted ({state.login_total_attempts}/"
+                    f"{state.login_total_budget}), treating {vc} as normal failure"
                 )
                 _logged_in_worker_id = None
                 state.refreshed_session_cookie = None
@@ -270,29 +329,143 @@ class ProxyWorker(threading.Thread):
                 _requeue_front(self.detail_queue, task)
                 return
 
-        if can_attempt_login(self.is_adhoc_mode, is_index_page=False):
-            if self._try_login_refresh():
+            # ---- Route to existing logged-in worker (not self) ----
+            if _logged_in_worker_id is not None and _logged_in_worker_id != self.worker_id:
+                logged_in_proxy = self.all_workers[_logged_in_worker_id].proxy_name
+                task.failed_proxies.discard(logged_in_proxy)
+                self.login_queue.put(task)
                 logger.info(
-                    f"[{self.proxy_name}] Logged in successfully, "
-                    f"becoming the logged-in worker for login-required pages"
+                    f"[{self.proxy_name}] [{task.entry_index}] "
+                    f"Login required for {vc}, "
+                    f"routing to logged-in worker [{logged_in_proxy}]"
                 )
+                return
+
+            # ---- Self is the logged-in worker but session went stale ----
+            if _logged_in_worker_id == self.worker_id:
+                stale_count = state.login_failures_per_proxy.get(self.proxy_name, 0) + 1
+                state.login_failures_per_proxy[self.proxy_name] = stale_count
+                proxy_attempts = state.login_attempts_per_proxy.get(self.proxy_name, 0)
+
+                need_switch = (
+                    stale_count >= LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH
+                    or proxy_attempts >= LOGIN_ATTEMPTS_PER_PROXY_LIMIT
+                )
+
+                if not need_switch:
+                    logger.info(
+                        f"[{self.proxy_name}] [{task.entry_index}] "
+                        f"Session stale for {vc}, attempting re-login "
+                        f"(stale: {stale_count}/{LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH}, "
+                        f"logins: {proxy_attempts}/{LOGIN_ATTEMPTS_PER_PROXY_LIMIT})"
+                    )
+                    success, new_cookie, _ = self._do_login_for_proxy(
+                        self.proxy_config, self.proxy_name)
+                    if success and new_cookie:
+                        self._handler.config.javdb_session_cookie = new_cookie
+                        _logged_in_worker_id = self.worker_id
+                        self.login_queue.put(task)
+                        return
+                    logger.warning(f"[{self.proxy_name}] Re-login failed, switching proxy")
+                else:
+                    logger.info(
+                        f"[{self.proxy_name}] [{task.entry_index}] "
+                        f"Proxy reached switch threshold for {vc} "
+                        f"(stale: {stale_count}, logins: {proxy_attempts}), "
+                        f"switching to next proxy"
+                    )
+
+                # Try to switch to another proxy
+                _logged_in_worker_id = None
+                state.refreshed_session_cookie = None
+                state.logged_in_proxy_name = None
+
+                next_wid = self._find_and_login_next_worker(
+                    exclude={self.proxy_name})
+                if next_wid is not None:
+                    task.failed_proxies.discard(
+                        self.all_workers[next_wid].proxy_name)
+                    self.login_queue.put(task)
+                    return
+
+                # No other proxy available — give current proxy another
+                # round if it still has budget.
+                cur_attempts = state.login_attempts_per_proxy.get(self.proxy_name, 0)
+                if cur_attempts < LOGIN_ATTEMPTS_PER_PROXY_LIMIT:
+                    state.login_failures_per_proxy[self.proxy_name] = 0
+                    success, new_cookie, _ = self._do_login_for_proxy(
+                        self.proxy_config, self.proxy_name)
+                    if success and new_cookie:
+                        self._handler.config.javdb_session_cookie = new_cookie
+                        _logged_in_worker_id = self.worker_id
+                        self.login_queue.put(task)
+                        return
+
+                # Exhausted — normal proxy failure path
+                task.failed_proxies.add(self.proxy_name)
+                _requeue_front(self.detail_queue, task)
+                return
+
+            # ---- No logged-in worker yet — try to become one ----
+
+            # Honour LOGIN_PROXY_NAME delegation if that proxy is still viable
+            if self.login_proxy_name and self.proxy_name != self.login_proxy_name:
+                lp_attempts = state.login_attempts_per_proxy.get(
+                    self.login_proxy_name, 0)
+                if lp_attempts < LOGIN_ATTEMPTS_PER_PROXY_LIMIT:
+                    task.failed_proxies.discard(self.login_proxy_name)
+                    self.login_queue.put(task)
+                    logger.info(
+                        f"[{self.proxy_name}] [{task.entry_index}] "
+                        f"Login required for {vc}, "
+                        f"routing to LOGIN_PROXY_NAME worker "
+                        f"[{self.login_proxy_name}]"
+                    )
+                    return
+
+            # Try login on own proxy
+            own_attempts = state.login_attempts_per_proxy.get(self.proxy_name, 0)
+            if own_attempts < LOGIN_ATTEMPTS_PER_PROXY_LIMIT:
+                success, new_cookie, _ = self._do_login_for_proxy(
+                    self.proxy_config, self.proxy_name)
+                if success and new_cookie:
+                    self._handler.config.javdb_session_cookie = new_cookie
+                    _logged_in_worker_id = self.worker_id
+                    logger.info(
+                        f"[{self.proxy_name}] Logged in successfully, "
+                        f"becoming the logged-in worker for login-required pages"
+                    )
+                    self.login_queue.put(task)
+                    return
+
+            # Try every other proxy
+            next_wid = self._find_and_login_next_worker(
+                exclude={self.proxy_name})
+            if next_wid is not None:
+                task.failed_proxies.discard(
+                    self.all_workers[next_wid].proxy_name)
                 self.login_queue.put(task)
                 return
 
-        logger.warning(
-            f"[{self.proxy_name}] [{task.entry_index}] "
-            f"Login required but login unavailable, marking as failed"
-        )
-        self.result_queue.put(DetailResult(
-            task=task, magnets=[], actor_info='',
-            parse_success=False, used_cf_bypass=False,
-        ))
+            # Nothing worked — normal proxy failure path
+            logger.warning(
+                f"[{self.proxy_name}] [{task.entry_index}] "
+                f"Login required for {vc} but no proxy available, "
+                f"treating as normal failure"
+            )
+            task.failed_proxies.add(self.proxy_name)
+            _requeue_front(self.detail_queue, task)
 
     def _get_next_task(self) -> Optional[DetailTask]:
         """Get next task. Logged-in worker checks login_queue with priority."""
         while True:
             with _login_lock:
-                am_logged_in = (_logged_in_worker_id == self.worker_id)
+                am_logged_in = use_login_queue_priority(
+                    self.login_proxy_name,
+                    self.proxy_name,
+                    _logged_in_worker_id,
+                    self.worker_id,
+                )
 
             if am_logged_in:
                 try:
@@ -317,19 +490,26 @@ class ProxyWorker(threading.Thread):
             if self.proxy_name in task.failed_proxies:
                 if len(task.failed_proxies) >= self.total_workers:
                     self.result_queue.put(DetailResult(
-                        task=task, magnets=[], actor_info='',
-                        parse_success=False, used_cf_bypass=False,
+                        task=task, magnets=[], actor_info='', actor_gender='', actor_link='',
+                        supporting_actors='', parse_success=False, used_cf_bypass=False,
                     ))
                     continue
                 _requeue_front(self.detail_queue, task)
-                time.sleep(0.1)
+                backoff = min(2.0, 0.3 * len(task.failed_proxies))
+                time.sleep(backoff)
                 continue
 
-            if not self._first_request:
+            if self._first_request:
+                logger.debug(
+                    "[%s] Startup jitter: %.1fs", self.proxy_name, self._startup_jitter,
+                )
+                time.sleep(self._startup_jitter)
+                self._first_request = False
+            else:
                 self._sleep_mgr.sleep()
-            self._first_request = False
 
-            magnets, actor_info, success, used_cf, needs_login = self._try_direct_then_cf(task)
+            magnets, actor_info, actor_gender, actor_link, supporting, success, used_cf, needs_login = (
+                self._try_direct_then_cf(task))
             if success:
                 cf_tag = " +CF" if used_cf else ""
                 logger.info(
@@ -339,7 +519,8 @@ class ProxyWorker(threading.Thread):
                 )
                 self.result_queue.put(DetailResult(
                     task=task, magnets=magnets, actor_info=actor_info,
-                    parse_success=True, used_cf_bypass=used_cf,
+                    actor_gender=actor_gender or '', actor_link=actor_link or '',
+                    supporting_actors=supporting or '', parse_success=True, used_cf_bypass=used_cf,
                 ))
             elif needs_login:
                 self._handle_login_required(task)
@@ -407,10 +588,17 @@ def process_detail_entries_parallel(
             fallback_cooldown=FALLBACK_COOLDOWN,
             ban_log_file=ban_log_file,
             all_workers=all_workers,
+            shared_penalty_tracker=_shared_penalty_tracker,
+            shared_throttle=_shared_throttle,
         )
         all_workers.append(w)
 
     if state.logged_in_proxy_name and state.refreshed_session_cookie:
+        if LOGIN_PROXY_NAME and state.logged_in_proxy_name != LOGIN_PROXY_NAME:
+            logger.warning(
+                f"Index login proxy [{state.logged_in_proxy_name}] differs from "
+                f"LOGIN_PROXY_NAME [{LOGIN_PROXY_NAME}] — session may not match detail workers"
+            )
         for w in all_workers:
             if w.proxy_name == state.logged_in_proxy_name:
                 w._handler.config.javdb_session_cookie = state.refreshed_session_cookie
@@ -508,6 +696,7 @@ def process_detail_entries_parallel(
     rows: list = []
     phase_rows: list = []
     visited_hrefs: set = set()
+    actor_updates: List[tuple] = []
     failed = 0
     failed_movies: list = []
     no_new_torrents = 0
@@ -530,6 +719,10 @@ def process_detail_entries_parallel(
             continue
 
         visited_hrefs.add(href)
+        actor_updates.append((
+            href, result.actor_info or '', result.actor_gender or '',
+            result.actor_link or '', result.supporting_actors or '',
+        ))
         magnet_links = extract_magnets(result.magnets, idx_str)
 
         should_process, history_torrent_types = should_process_movie(
@@ -568,9 +761,11 @@ def process_detail_entries_parallel(
                     logger.info(f"[{idx_str}] DEDUP: {rec.video_code} – {rec.deletion_reason}")
 
         if redownload_cats:
-            row = create_redownload_row(href, entry, page_num, '', magnet_links, redownload_cats)
+            row = create_redownload_row(
+                href, entry, page_num, result.actor_info, magnet_links, redownload_cats)
         else:
-            row = create_csv_row_with_history_filter(href, entry, page_num, '', magnet_links, history_data)
+            row = create_csv_row_with_history_filter(
+                href, entry, page_num, result.actor_info, magnet_links, history_data)
         row['video_code'] = entry['video_code']
 
         _has_any, has_new_torrents, should_include_in_report = check_torrent_status(row)
@@ -587,6 +782,10 @@ def process_detail_entries_parallel(
                         history_file, href, phase, entry['video_code'],
                         new_magnet_links, size_links=new_sizes,
                         file_count_links=new_fc, resolution_links=new_res,
+                        actor_name=result.actor_info or '',
+                        actor_gender=result.actor_gender or '',
+                        actor_link=result.actor_link or '',
+                        supporting_actors=result.supporting_actors or '',
                     )
         else:
             no_new_torrents += 1
@@ -597,6 +796,8 @@ def process_detail_entries_parallel(
         w.join(timeout=10)
 
     if use_history_for_saving and not dry_run and visited_hrefs:
+        if use_sqlite() and actor_updates:
+            db_batch_update_movie_actors(actor_updates)
         batch_update_last_visited(history_file, visited_hrefs)
 
     logger.info(
