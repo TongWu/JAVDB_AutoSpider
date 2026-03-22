@@ -1067,7 +1067,23 @@ def _simple_fetch_javdb_html(cfg: Dict[str, Any], url: str, use_cookie: bool = T
     return html
 
 
+def _validate_javdb_url_or_422(url: str) -> None:
+    """
+    Ensure the given URL targets an allowed javdb host and scheme.
+    Raises HTTPException(422) if invalid.
+    """
+    parsed = urlparse(url)
+    # Require an explicit HTTP/HTTPS scheme to avoid unexpected behavior.
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=422, detail="url must use http or https scheme")
+    if not parsed.netloc:
+        raise HTTPException(status_code=422, detail="url must include a host")
+    if not _is_valid_javdb_host(url):
+        raise HTTPException(status_code=422, detail="url must target a valid javdb.com host")
+
+
 def _fetch_javdb_html(url: str, use_proxy: bool = True, use_cookie: bool = True) -> str:
+    _validate_javdb_url_or_422(url)
     cfg = _load_runtime_config()
     errors: list[str] = []
     try:
@@ -1555,12 +1571,19 @@ async def trigger_daily(payload: DailyTaskPayload, current=Depends(require_role(
 
 @app.post("/api/tasks/adhoc")
 async def trigger_adhoc(payload: AdhocTaskPayload, current=Depends(require_role("admin"))):
+    # Validate and normalize the URL before using it in a subprocess command.
+    raw_url = (payload.url or "").strip()
+    parsed = urlparse(raw_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise HTTPException(status_code=422, detail="Invalid URL for adhoc task")
+    safe_url = parsed.geturl()
+
     command = [
         "python3",
         "-u",
         "pipeline.py",
         "--url",
-        payload.url,
+        safe_url,
         "--start-page",
         str(payload.start_page),
         "--end-page",
@@ -1580,7 +1603,7 @@ async def trigger_adhoc(payload: AdhocTaskPayload, current=Depends(require_role(
         command.extend(["--max-movies-phase1", str(payload.max_movies_phase1)])
     if payload.max_movies_phase2:
         command.extend(["--max-movies-phase2", str(payload.max_movies_phase2)])
-    job = _spawn_job("adhoc", command, {"url": payload.url, "mode": "pipeline"})
+    job = _spawn_job("adhoc", command, {"url": safe_url, "mode": "pipeline"})
     audit_logger.info("task_adhoc username=%s job=%s", current["sub"], job["job_id"])
     return job
 
