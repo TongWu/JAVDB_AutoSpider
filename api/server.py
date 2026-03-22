@@ -498,9 +498,17 @@ app = FastAPI(
     description="Fullstack API for config, tasks and parsing.",
 )
 
+_CORS_ORIGINS = [
+    o.strip()
+    for o in os.getenv(
+        "CORS_ORIGINS", "http://127.0.0.1:5173,http://localhost:5173"
+    ).split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1416,6 +1424,7 @@ async def login(payload: LoginPayload, request: Request, response: Response):
         if len(sessions) >= MAX_SESSIONS_PER_USER:
             raise HTTPException(status_code=403, detail="Too many active sessions")
         sessions.append((access_claims["jti"], access_claims["exp"]))
+        ACTIVE_TOKENS[payload.username] = sessions
     csrf = secrets.token_urlsafe(24)
     response.set_cookie("csrf_token", csrf, httponly=False, samesite="lax", secure=True)
     audit_logger.info(
@@ -1456,6 +1465,7 @@ async def refresh_token(request: Request):
         if len(sessions) >= MAX_SESSIONS_PER_USER:
             sessions.pop(0)
         sessions.append((access_claims["jti"], access_claims["exp"]))
+        ACTIVE_TOKENS[username] = sessions
     audit_logger.info("token_refresh username=%s", username)
     return {
         "access_token": access,
