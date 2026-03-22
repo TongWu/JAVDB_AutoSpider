@@ -140,6 +140,7 @@ def is_cf_bypass_failure(html_content: str) -> bool:
 def initialize_request_handler():
     """Create the global RequestHandler from configuration."""
     global global_request_handler
+    from scripts.spider.sleep_manager import penalty_tracker as _pt
     config = RequestConfig(
         base_url=BASE_URL,
         cf_bypass_service_port=CF_BYPASS_SERVICE_PORT,
@@ -153,7 +154,9 @@ def initialize_request_handler():
         proxy_modules=PROXY_MODULES,
         proxy_mode=PROXY_MODE,
     )
-    global_request_handler = RequestHandler(proxy_pool=global_proxy_pool, config=config)
+    global_request_handler = RequestHandler(
+        proxy_pool=global_proxy_pool, config=config, penalty_tracker=_pt,
+    )
     logger.info("Request handler initialized successfully")
 
 

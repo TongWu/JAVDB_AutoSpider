@@ -275,10 +275,10 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # GPT API Configuration (optional - for automatic captcha solving during login)
         ('GPT_API_URL', 'GPT_API_URL', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
         ('GPT_API_KEY', 'GPT_API_KEY', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
-        ('PAGE_SLEEP', 'PAGE_SLEEP', get_env_int, 15, 'JAVDB LOGIN CONFIGURATION'),
-        ('MOVIE_SLEEP_MIN', 'MOVIE_SLEEP', get_env_range_min, 5, 'JAVDB LOGIN CONFIGURATION'),
-        ('MOVIE_SLEEP_MAX', 'MOVIE_SLEEP', get_env_range_max, 15, 'JAVDB LOGIN CONFIGURATION'),
-        ('CF_TURNSTILE_COOLDOWN', 'CF_TURNSTILE_COOLDOWN', get_env_int, 30, 'JAVDB LOGIN CONFIGURATION'),
+        ('PAGE_SLEEP', 'PAGE_SLEEP', get_env_int, 2, 'JAVDB LOGIN CONFIGURATION'),
+        ('MOVIE_SLEEP_MIN', 'MOVIE_SLEEP', get_env_range_min, None, 'JAVDB LOGIN CONFIGURATION'),
+        ('MOVIE_SLEEP_MAX', 'MOVIE_SLEEP', get_env_range_max, None, 'JAVDB LOGIN CONFIGURATION'),
+        ('CF_TURNSTILE_COOLDOWN', 'CF_TURNSTILE_COOLDOWN', get_env_int, 10, 'JAVDB LOGIN CONFIGURATION'),
         ('FALLBACK_COOLDOWN', 'FALLBACK_COOLDOWN', get_env_int, 30, 'JAVDB LOGIN CONFIGURATION'),
         # Logging Configuration
         ('LOG_LEVEL', 'LOG_LEVEL', get_env, 'INFO', 'LOGGING CONFIGURATION'),
