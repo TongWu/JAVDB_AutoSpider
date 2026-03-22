@@ -43,7 +43,7 @@ def extract_rate_and_comments(score_text: str) -> Tuple[str, str]:
 
     comment_match = re.search(r'由(\d+)人評價', score_text)
     if not comment_match:
-        comment_match = re.search(r'by\s+(\d+)\s+user', score_text)
+        comment_match = re.search(r'by\s+(\d+)\s+users?', score_text)
     if comment_match:
         comment_count = comment_match.group(1)
 
