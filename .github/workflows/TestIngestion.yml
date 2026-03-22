@@ -257,7 +257,7 @@ jobs:
 
       - name: Upload encrypted logs artifact
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: pipeline-logs-encrypted
           path: encrypted_artifacts/logs.tar.gz.enc
@@ -315,7 +315,7 @@ jobs:
 
       - name: Upload encrypted reports artifact
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: pipeline-reports-encrypted
           path: encrypted_artifacts/reports.tar.gz.enc
@@ -341,7 +341,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download encrypted reports
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: pipeline-reports-encrypted
           path: encrypted_artifacts
