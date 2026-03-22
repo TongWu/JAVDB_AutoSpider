@@ -229,7 +229,7 @@ jobs:
           echo "✓ Config encrypted successfully"
 
       - name: Upload encrypted config artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: config-encrypted
           path: config.py.enc
@@ -268,7 +268,7 @@ jobs:
         uses: ./.github/actions/install-rust-wheel
 
       - name: Download encrypted config
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: config-encrypted
           path: .
@@ -338,7 +338,7 @@ jobs:
         uses: ./.github/actions/install-rust-wheel
 
       - name: Download encrypted config
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: config-encrypted
           path: .
@@ -543,7 +543,7 @@ jobs:
 
       - name: Upload encrypted logs artifact
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: pipeline-logs-encrypted
           path: encrypted_artifacts/logs.tar.gz.enc
@@ -605,7 +605,7 @@ jobs:
 
       - name: Upload encrypted reports artifact
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: pipeline-reports-encrypted
           path: encrypted_artifacts/reports.tar.gz.enc
@@ -649,7 +649,7 @@ jobs:
         uses: ./.github/actions/install-rust-wheel
 
       - name: Download encrypted config
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: config-encrypted
           path: .
@@ -673,7 +673,7 @@ jobs:
           echo "✓ Config decrypted successfully"
 
       - name: Download encrypted logs (if available)
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: pipeline-logs-encrypted
           path: encrypted_artifacts
@@ -702,7 +702,7 @@ jobs:
           fi
 
       - name: Download encrypted reports (if available)
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: pipeline-reports-encrypted
           path: encrypted_artifacts
@@ -818,7 +818,7 @@ jobs:
           lfs: true
 
       - name: Download encrypted reports
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: pipeline-reports-encrypted
           path: encrypted_artifacts
