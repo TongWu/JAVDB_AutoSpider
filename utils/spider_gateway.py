@@ -21,8 +21,10 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
 
 from api.parsers import (
     parse_index_page,
@@ -80,6 +82,21 @@ class GatewayResult:
             'used_cf_bypass': self.used_cf_bypass,
             'result': self.result,
             'error': self.error,
+        }
+
+
+@dataclass
+class CrawlResult:
+    """Aggregated result from :meth:`SpiderGateway.crawl_pages`."""
+    ok: bool
+    total_pages: int = 0
+    pages: List['GatewayResult'] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            'ok': self.ok,
+            'total_pages': self.total_pages,
+            'pages': [p.to_dict() for p in self.pages],
         }
 
 
@@ -148,6 +165,14 @@ def _build_handler(cfg: dict, proxy_pool) -> RequestHandler:
             proxy_mode=cfg.get('PROXY_MODE', 'single'),
         ),
     )
+
+
+def _build_page_url(base_url: str, page_num: int) -> str:
+    """Append ``page=<N>`` to *base_url* (page 1 returns the URL as-is)."""
+    if page_num <= 1:
+        return base_url
+    sep = '&' if '?' in base_url else '?'
+    return f'{base_url}{sep}page={page_num}'
 
 
 class SpiderGateway:
@@ -221,6 +246,59 @@ class SpiderGateway:
         gr.used_proxy = self._use_proxy
         gr.used_cf_bypass = self._use_cf_bypass
         return gr
+
+    def crawl_pages(
+        self,
+        url: str,
+        *,
+        start_page: int = 1,
+        end_page: Optional[int] = None,
+        crawl_all: bool = False,
+        max_consecutive_empty: int = 2,
+        page_delay: float = 1.0,
+    ) -> CrawlResult:
+        """Fetch and parse multiple pages, aggregating results.
+
+        When *crawl_all* is True, pages are fetched until
+        *max_consecutive_empty* pages return no movie entries.
+        Otherwise pages from *start_page* to *end_page* are fetched.
+        """
+        pages: List[GatewayResult] = []
+        consecutive_empty = 0
+        effective_end = end_page if end_page is not None else (start_page + 99)
+
+        for page_num in range(start_page, effective_end + 1):
+            page_url = _build_page_url(url, page_num)
+            gr = self.fetch_and_parse(page_url, page_num=page_num)
+            pages.append(gr)
+
+            if not gr.ok:
+                consecutive_empty += 1
+            else:
+                movies = (gr.result or {}).get('movies', [])
+                if not movies:
+                    consecutive_empty += 1
+                else:
+                    consecutive_empty = 0
+
+            if crawl_all and consecutive_empty >= max_consecutive_empty:
+                logger.info(
+                    'crawl_pages: stopping after %d consecutive empty pages '
+                    'at page %d', max_consecutive_empty, page_num,
+                )
+                break
+
+            if not crawl_all and page_num >= effective_end:
+                break
+
+            if page_num < effective_end:
+                time.sleep(page_delay)
+
+        return CrawlResult(
+            ok=True,
+            total_pages=len(pages),
+            pages=pages,
+        )
 
 
 def create_gateway(
