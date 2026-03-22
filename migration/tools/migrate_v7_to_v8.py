@@ -884,7 +884,7 @@ def run_actor_backfill(
     sql = (
         "SELECT Id, Href, VideoCode FROM MovieHistory "
         "WHERE (ActorName IS NULL OR ActorName = '') "
-        "AND (SupportingActors IS NULL OR SupportingActors = '') "
+        "AND (SupportingActors IS NULL OR SupportingActors = '' OR SupportingActors = '[]') "
         "ORDER BY Id"
     )
     params: tuple = ()
