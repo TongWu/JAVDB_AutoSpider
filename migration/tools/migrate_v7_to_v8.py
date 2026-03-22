@@ -255,6 +255,16 @@ class BackfillResult:
     is_skipped: bool = False
 
 
+def _is_meaningful_actor_data(an: str, al: str, sup: str) -> bool:
+    """True when at least one actor field carries real content (not just ``'[]'``)."""
+    if an.strip():
+        return True
+    if al.strip():
+        return True
+    s = sup.strip()
+    return bool(s and s != '[]')
+
+
 def _promote_single_female_actor(
     actor_name: str,
     actor_gender: str,
@@ -355,7 +365,21 @@ def _apply_one_parallel_backfill_result(
     base_url = cfg('BASE_URL', 'https://javdb.com')
     al = javdb_absolute_url(al, base_url) if al else al
     sup = absolutize_supporting_actors_json(sup, base_url) if sup else sup
-    if not an and not al and not sup:
+    if not _is_meaningful_actor_data(an, al, sup):
+        if result.parse_success:
+            logger.debug(
+                "[%s] Mark attempted (no actor data): %s",
+                task.entry_index, task.video_code,
+            )
+            with completed_lock:
+                completed_ids.add(task.movie_id)
+            if not dry_run:
+                conn.execute(
+                    "UPDATE MovieHistory SET SupportingActors=?, DateTimeUpdated=? WHERE Id=?",
+                    ('[]', now_fmt, task.movie_id),
+                )
+                conn.commit()
+            return 0, 0, 1
         logger.debug(
             "[%s] Skip UPDATE: empty actor fields (parse_success=%s)",
             task.entry_index,
@@ -774,7 +798,7 @@ class BackfillWorker(threading.Thread):
             an, ag, al, sup, success, used_cf, needs_login = self._try_direct_then_cf(task)
             if success:
                 cf_tag = " +CF" if used_cf else ""
-                has_actor_row = bool(an.strip() or al.strip() or sup.strip())
+                has_actor_row = _is_meaningful_actor_data(an, al, sup)
                 if has_actor_row:
                     logger.info(
                         "[%s] Parsed %s%s [%s]",
@@ -782,9 +806,8 @@ class BackfillWorker(threading.Thread):
                     )
                 else:
                     logger.warning(
-                        "[%s] Page loaded%s [%s] but actor name/link/supporting are empty "
-                        "(parse_detail succeeded on magnets only; CF or HTML may differ from normal). "
-                        "%s",
+                        "[%s] Page loaded%s [%s] but no meaningful actor data "
+                        "(magnets OK, actor panel empty or missing). %s",
                         task.entry_index, cf_tag, self.proxy_name, task.video_code,
                     )
                 self.result_queue.put(BackfillResult(
@@ -849,7 +872,8 @@ def run_actor_backfill(
 
     sql = (
         "SELECT Id, Href, VideoCode FROM MovieHistory "
-        "WHERE ActorName IS NULL OR ActorName = '' "
+        "WHERE (ActorName IS NULL OR ActorName = '') "
+        "AND (SupportingActors IS NULL OR SupportingActors = '') "
         "ORDER BY Id"
     )
     params: tuple = ()
@@ -1045,11 +1069,17 @@ def run_actor_backfill(
             al = javdb_absolute_url(al, base_url) if al else al
             sup = absolutize_supporting_actors_json(sup, base_url) if sup else sup
 
-            if not an and not al and not sup:
+            if not _is_meaningful_actor_data(an, al, sup):
                 logger.warning(
                     "[%s] No actor for %s (%s, parse_ok=%s, magnets=%d)",
                     entry_index, video_code, href, parse_ok, len(magnets or []),
                 )
+                if parse_ok and not dry_run:
+                    conn.execute(
+                        "UPDATE MovieHistory SET SupportingActors=?, DateTimeUpdated=? WHERE Id=?",
+                        ('[]', now_fmt, mid),
+                    )
+                    conn.commit()
                 if not parse_ok:
                     failed += 1
                 movie_sleep_mgr.sleep()
