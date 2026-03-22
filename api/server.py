@@ -1869,7 +1869,7 @@ def _cleanup_expired_spider_jobs() -> None:
         del _spider_jobs[jid]
 
 
-def _spider_payload_to_cli_args(payload: SpiderJobPayload) -> list[str]:
+def _payload_to_cli_args(payload: SpiderJobPayload) -> list[str]:
     """Convert a SpiderJobPayload to CLI argument list."""
     args: list[str] = []
     if payload.url:
@@ -1976,7 +1976,7 @@ async def api_submit_spider_job(payload: SpiderJobPayload, _: Dict[str, Any] = D
         )
 
     job_id = uuid.uuid4().hex[:12]
-    cli_args = _spider_payload_to_cli_args(payload)
+    cli_args = _payload_to_cli_args(payload)
 
     try:
         with _spider_jobs_lock:
