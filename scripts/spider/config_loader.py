@@ -22,8 +22,9 @@ from utils.config_helper import cfg
 
 # Core spider settings
 BASE_URL = cfg('BASE_URL', 'https://javdb.com')
-START_PAGE = cfg('START_PAGE', 1)
-END_PAGE = cfg('END_PAGE', 20)
+# Prefer PAGE_START / PAGE_END; fall back to legacy START_PAGE / END_PAGE if unset
+PAGE_START = cfg('PAGE_START', cfg('START_PAGE', 1))
+PAGE_END = cfg('PAGE_END', cfg('END_PAGE', 20))
 REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
 DAILY_REPORT_DIR = cfg('DAILY_REPORT_DIR', 'reports/DailyReport')
 AD_HOC_DIR = cfg('AD_HOC_DIR', 'reports/AdHoc')
@@ -31,8 +32,8 @@ PARSED_MOVIES_CSV = cfg('PARSED_MOVIES_CSV', 'parsed_movies_history.csv')
 SPIDER_LOG_FILE = cfg('SPIDER_LOG_FILE', 'logs/spider.log')
 LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
 PAGE_SLEEP = cfg('PAGE_SLEEP', 2)
-MOVIE_SLEEP_MIN = cfg('MOVIE_SLEEP_MIN', 5)
-MOVIE_SLEEP_MAX = cfg('MOVIE_SLEEP_MAX', 15)
+MOVIE_SLEEP_MIN = cfg('MOVIE_SLEEP_MIN', None)
+MOVIE_SLEEP_MAX = cfg('MOVIE_SLEEP_MAX', None)
 JAVDB_SESSION_COOKIE = cfg('JAVDB_SESSION_COOKIE', None)
 PHASE2_MIN_RATE = cfg('PHASE2_MIN_RATE', 4.0)
 PHASE2_MIN_COMMENTS = cfg('PHASE2_MIN_COMMENTS', 100)
@@ -56,6 +57,14 @@ PROXY_MODE = cfg('PROXY_MODE', 'single')
 PROXY_POOL = cfg('PROXY_POOL', [])
 PROXY_POOL_COOLDOWN_SECONDS = cfg('PROXY_POOL_COOLDOWN_SECONDS', 691200)  # 8 days
 PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
+_raw_login_proxy_name = cfg('LOGIN_PROXY_NAME', None)
+LOGIN_PROXY_NAME = (
+    _raw_login_proxy_name.strip() if isinstance(_raw_login_proxy_name, str) and _raw_login_proxy_name.strip() else None
+)
+
+# Login retry policy
+LOGIN_ATTEMPTS_PER_PROXY_LIMIT = cfg('LOGIN_ATTEMPTS_PER_PROXY_LIMIT', 6)
+LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH = cfg('LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH', 3)
 
 # GPT / Login
 GPT_API_KEY = cfg('GPT_API_KEY', None)

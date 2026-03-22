@@ -158,6 +158,16 @@ def _attempt_cf_warmup(handler, url, proxies=None):
 
 def _build_proxies_from_config():
     """Build a proxies dict from config settings for standalone usage."""
+    try:
+        from scripts.spider.session import resolve_login_proxy_endpoints
+
+        named_proxies, named_nm = resolve_login_proxy_endpoints()
+        if named_proxies:
+            logger.info(f"Using LOGIN_PROXY_NAME proxy for login: {named_nm}")
+            return named_proxies
+    except ImportError:
+        pass
+
     if PROXY_HTTP or PROXY_HTTPS:
         proxies = {}
         if PROXY_HTTP:
@@ -650,6 +660,7 @@ def login_with_retry(username, password, max_retries=5, proxies=None):
                     logger.warning("Captcha error detected, retrying with new captcha...")
                 elif is_cf_error:
                     logger.warning("Cloudflare error detected, retrying after cooldown...")
+                    logger.warning(f"Error message: {message}")
                     time.sleep(CF_TURNSTILE_COOLDOWN)
                 else:
                     logger.warning(f"Login failed: {message}")

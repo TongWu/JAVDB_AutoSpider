@@ -121,17 +121,20 @@ class RequestHandler:
     # The bypass service handles its own headers (User-Agent, cookies, etc.)
     BYPASS_HEADERS = {}
     
-    def __init__(self, proxy_pool=None, config: Optional[RequestConfig] = None):
+    def __init__(self, proxy_pool=None, config: Optional[RequestConfig] = None,
+                 penalty_tracker=None):
         """
         Initialize request handler.
         
         Args:
             proxy_pool: ProxyPool instance for proxy management
             config: RequestConfig instance with configuration settings
+            penalty_tracker: Optional PenaltyTracker for CF event feedback
         """
         self.proxy_pool = proxy_pool
         self.config = config or RequestConfig()
         self.session = requests.Session()
+        self.penalty_tracker = penalty_tracker
         
         # Counter for consecutive CF bypass failures (small responses)
         self.cf_bypass_failure_count: int = 0
@@ -212,7 +215,6 @@ class RequestHandler:
         port = self.config.cf_bypass_service_port
         mapping = self.config.cf_bypass_port_map or {}
         if proxy_ip:
-            # Priority: explicit proxy IP -> "proxies" sub-map -> default fallback
             raw = mapping.get(proxy_ip)
             if raw is None and isinstance(mapping.get("proxies"), dict):
                 raw = mapping["proxies"].get(proxy_ip)
@@ -222,7 +224,6 @@ class RequestHandler:
                 except (TypeError, ValueError):
                     pass
             return f"http://{proxy_ip}:{port}"
-        # Local access priority: local -> default -> global configured service port
         raw_local = mapping.get("local")
         raw_default = mapping.get("default")
         chosen = raw_local if raw_local is not None else raw_default
@@ -847,6 +848,8 @@ class RequestHandler:
         turnstile_detected = is_turnstile
         logger.warning(f"[{module_name}] CF Bypass initial attempt failed. Starting fallback sequence (cooldown: {self.config.fallback_cooldown}s between steps)...")
         self.cf_bypass_failure_count += 1
+        if is_turnstile and self.penalty_tracker:
+            self.penalty_tracker.record_event()
         
         # Cooldown before entering fallback
         if self.config.fallback_cooldown > 0:
@@ -869,6 +872,8 @@ class RequestHandler:
             elif result:
                 logger.warning(f"[{module_name}] Step (a) returned small response ({len(result)} bytes), continuing to next step")
         
+        if is_turnstile and self.penalty_tracker:
+            self.penalty_tracker.record_event()
         turnstile_detected = turnstile_detected or is_turnstile
         
         # Refresh bypass cache between step (a) and (b) if turnstile detected
@@ -894,6 +899,8 @@ class RequestHandler:
                     if use_proxy_pool_mode and self.proxy_pool:
                         self.proxy_pool.mark_success()
                     return result
+            if is_turnstile and self.penalty_tracker:
+                self.penalty_tracker.record_event()
             turnstile_detected = turnstile_detected or is_turnstile
         
         # Step (c) & (d): Try other proxies if in pool mode
@@ -923,6 +930,8 @@ class RequestHandler:
                     if result and len(result) >= 10000:
                         self.proxy_pool.mark_success()
                         return result
+                if is_turnstile and self.penalty_tracker:
+                    self.penalty_tracker.record_event()
                 turnstile_detected = turnstile_detected or is_turnstile
                 
                 if self.config.fallback_cooldown > 0:
@@ -944,6 +953,8 @@ class RequestHandler:
                     elif result:
                         logger.warning(f"[{module_name}] Step (d) returned small response ({len(result)} bytes), continuing to next proxy")
                 
+                if is_turnstile and self.penalty_tracker:
+                    self.penalty_tracker.record_event()
                 turnstile_detected = turnstile_detected or is_turnstile
                 
                 # Refresh bypass cache after step (d) if turnstile detected
@@ -957,6 +968,8 @@ class RequestHandler:
         # All fallbacks failed
         logger.error(f"[{module_name}] All CF bypass fallback attempts exhausted for {url}")
         self.cf_bypass_failure_count += 1
+        if self.penalty_tracker:
+            self.penalty_tracker.record_event()
         if self.cf_bypass_failure_count >= self.config.cf_bypass_max_failures:
             logger.error(f"[{module_name}] CF Bypass has failed {self.cf_bypass_failure_count} times. Service may not be working properly.")
         return None
@@ -991,6 +1004,8 @@ class RequestHandler:
                         return result
             
             if is_turnstile:
+                if self.penalty_tracker:
+                    self.penalty_tracker.record_event()
                 if retry_count < max_retries - 1:
                     logger.warning(f"[{module_name}] Turnstile detected, waiting {self.config.cf_turnstile_cooldown}s before retry...")
                     time.sleep(self.config.cf_turnstile_cooldown)

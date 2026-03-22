@@ -7,7 +7,8 @@ Every module that needs to read or *mutate* shared state should
 import os
 import re
 import logging
-from typing import Optional
+import time
+from typing import Optional, Dict
 from datetime import datetime
 
 from utils.logging_config import get_logger
@@ -24,6 +25,7 @@ from scripts.spider.config_loader import (
     PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES, PROXY_MODE,
     PROXY_POOL, PROXY_POOL_COOLDOWN_SECONDS, PROXY_POOL_MAX_FAILURES,
     REPORTS_DIR,
+    LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
 )
 
 logger = get_logger(__name__)
@@ -42,7 +44,14 @@ login_attempted: bool = False
 refreshed_session_cookie: Optional[str] = None
 logged_in_proxy_name: Optional[str] = None
 
-proxies_requiring_cf_bypass: set = set()
+# Per-proxy and global login budget tracking
+login_attempts_per_proxy: Dict[str, int] = {}
+login_failures_per_proxy: Dict[str, int] = {}
+login_total_attempts: int = 0
+login_total_budget: int = len(PROXY_POOL) * LOGIN_ATTEMPTS_PER_PROXY_LIMIT if PROXY_POOL else 0
+
+always_bypass_time: Optional[int] = None
+proxies_requiring_cf_bypass: Dict[str, float] = {}
 
 # ---------------------------------------------------------------------------
 # CF bypass helpers
@@ -50,15 +59,38 @@ proxies_requiring_cf_bypass: set = set()
 
 
 def proxy_needs_cf_bypass(proxy_name: str) -> bool:
-    """Check if a proxy has been marked as requiring CF bypass."""
-    return proxy_name in proxies_requiring_cf_bypass
+    """Check if a proxy is still within the configured CF bypass window."""
+    if always_bypass_time is None:
+        return False
+
+    marked_at = proxies_requiring_cf_bypass.get(proxy_name)
+    if marked_at is None:
+        return False
+
+    if always_bypass_time == 0:
+        return True
+
+    window_seconds = always_bypass_time * 60
+    if time.time() - marked_at <= window_seconds:
+        return True
+
+    # Expired: fall back to direct-first behavior.
+    proxies_requiring_cf_bypass.pop(proxy_name, None)
+    return False
 
 
 def mark_proxy_cf_bypass(proxy_name: str):
-    """Mark a proxy as requiring CF bypass for all future requests in this runtime."""
-    if proxy_name not in proxies_requiring_cf_bypass:
-        proxies_requiring_cf_bypass.add(proxy_name)
+    """Mark a proxy for CF bypass reuse according to --always-bypass-time."""
+    if always_bypass_time is None:
+        return
+
+    proxies_requiring_cf_bypass[proxy_name] = time.time()
+    if always_bypass_time == 0:
         logger.info(f"Proxy '{proxy_name}' marked as requiring CF bypass for this runtime")
+    else:
+        logger.info(
+            f"Proxy '{proxy_name}' marked for CF bypass reuse for {always_bypass_time} minute(s)"
+        )
 
 # ---------------------------------------------------------------------------
 # Request delegation
@@ -109,6 +141,7 @@ def is_cf_bypass_failure(html_content: str) -> bool:
 def initialize_request_handler():
     """Create the global RequestHandler from configuration."""
     global global_request_handler
+    from scripts.spider.sleep_manager import penalty_tracker as _pt
     config = RequestConfig(
         base_url=BASE_URL,
         cf_bypass_service_port=CF_BYPASS_SERVICE_PORT,
@@ -123,7 +156,9 @@ def initialize_request_handler():
         proxy_modules=PROXY_MODULES,
         proxy_mode=PROXY_MODE,
     )
-    global_request_handler = RequestHandler(proxy_pool=global_proxy_pool, config=config)
+    global_request_handler = RequestHandler(
+        proxy_pool=global_proxy_pool, config=config, penalty_tracker=_pt,
+    )
     logger.info("Request handler initialized successfully")
 
 
