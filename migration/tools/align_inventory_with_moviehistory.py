@@ -1207,6 +1207,7 @@ def run_alignment(args: argparse.Namespace) -> int:
         'processed_ok': sum(1 for r in process_results if r.status == 'ok'),
         'search_miss': sum(1 for r in process_results if r.status == 'search_miss'),
         'detail_fetch_failed': sum(1 for r in process_results if r.status == 'detail_fetch_failed'),
+        'detail_parse_failed': sum(1 for r in process_results if r.status == 'detail_parse_failed'),
         'qb_upgrade_rows': len(qb_rows),
         'purge_plan_rows': len(purge_plan_rows),
         'dry_run': args.dry_run,
