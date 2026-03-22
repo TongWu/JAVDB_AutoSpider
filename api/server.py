@@ -133,13 +133,22 @@ REFRESH_TOKEN_EXPIRE_SECONDS = int(
 )
 MAX_SESSIONS_PER_USER = int(os.getenv("MAX_SESSIONS_PER_USER", "3"))
 
-ACTIVE_TOKENS: Dict[str, list[str]] = {}
+ACTIVE_TOKENS: Dict[str, list[tuple[str, int]]] = {}
 REVOKED_JTI: set[str] = set()
 RATE_BUCKETS: Dict[str, list[float]] = {}
 JOBS: Dict[str, Dict[str, Any]] = {}
 JOB_LOCK = threading.Lock()
 DEFAULT_TASK_LIST_LIMIT = 200
 JOB_STREAM_MAX_BYTES = 64 * 1024
+
+
+def _prune_sessions(username: str) -> list[tuple[str, int]]:
+    """Remove expired and revoked JTIs from a user's session list, return the pruned list."""
+    now = int(datetime.now(timezone.utc).timestamp())
+    sessions = ACTIVE_TOKENS.get(username, [])
+    active = [(jti, exp) for jti, exp in sessions if exp > now and jti not in REVOKED_JTI]
+    ACTIVE_TOKENS[username] = active
+    return active
 
 
 def _build_fernet() -> Optional[Fernet]:
@@ -1393,13 +1402,13 @@ async def login(payload: LoginPayload, request: Request, response: Response):
             request.client.host if request.client else "unknown",
         )
         raise HTTPException(status_code=401, detail="Invalid username/password")
-    sessions = ACTIVE_TOKENS.setdefault(payload.username, [])
+    sessions = _prune_sessions(payload.username)
     if len(sessions) >= MAX_SESSIONS_PER_USER:
         raise HTTPException(status_code=403, detail="Too many active sessions")
     access = _jwt_encode({"sub": payload.username, "role": user["role"], "typ": "access"}, ACCESS_TOKEN_EXPIRE_SECONDS)
     refresh = _jwt_encode({"sub": payload.username, "role": user["role"], "typ": "refresh"}, REFRESH_TOKEN_EXPIRE_SECONDS)
     access_claims = jwt.decode(access, API_SECRET_KEY, algorithms=["HS256"])
-    sessions.append(access_claims["jti"])
+    sessions.append((access_claims["jti"], access_claims["exp"]))
     csrf = secrets.token_urlsafe(24)
     response.set_cookie("csrf_token", csrf, httponly=False, samesite="lax", secure=True)
     audit_logger.info(
@@ -1435,10 +1444,10 @@ async def refresh_token(request: Request):
         ACCESS_TOKEN_EXPIRE_SECONDS,
     )
     access_claims = jwt.decode(access, API_SECRET_KEY, algorithms=["HS256"])
-    sessions = ACTIVE_TOKENS.setdefault(username, [])
+    sessions = _prune_sessions(username)
     if len(sessions) >= MAX_SESSIONS_PER_USER:
         sessions.pop(0)
-    sessions.append(access_claims["jti"])
+    sessions.append((access_claims["jti"], access_claims["exp"]))
     audit_logger.info("token_refresh username=%s", username)
     return {
         "access_token": access,
@@ -1453,7 +1462,7 @@ async def logout(current=Depends(_require_auth)):
     if jti:
         REVOKED_JTI.add(jti)
         sessions = ACTIVE_TOKENS.get(current["sub"], [])
-        ACTIVE_TOKENS[current["sub"]] = [s for s in sessions if s != jti]
+        ACTIVE_TOKENS[current["sub"]] = [(s, exp) for s, exp in sessions if s != jti]
     audit_logger.info("logout username=%s", current["sub"])
     return {"status": "ok"}
 
