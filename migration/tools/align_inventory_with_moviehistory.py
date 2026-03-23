@@ -25,8 +25,7 @@ import os
 import queue as queue_module
 import sys
 import threading
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional
 from urllib.parse import urljoin
@@ -302,509 +301,101 @@ def _enqueue_qb_from_csv(csv_path: str, use_proxy: bool, category_override: str 
     return True
 
 
-# ---------------------------------------------------------------------------
-# Parallel alignment — one worker per proxy (mirrors BackfillWorker)
-# ---------------------------------------------------------------------------
+def _make_align_process_fn(inventory_map):
+    """Build the ``process_fn`` for FetchEngine (advanced mode).
 
-from scripts.spider.parallel_login import (  # noqa: E402
-    LoginCoordinator,
-    requeue_front as _requeue_front,
-)
-
-
-@dataclass
-class AlignTask:
-    video_code: str
-    inventory_entries: list
-    search_url: str
-    base_url: str
-    entry_index: str
-    retry_count: int = 0
-    failed_proxies: set = field(default_factory=set)
-
-
-@dataclass
-class AlignResult:
-    task: AlignTask
-    process_result: MissingProcessResult
-    qb_rows: list
-    purge_plan_rows: list
-    db_upsert_kwargs: dict | None
-    parse_success: bool
-    is_skipped: bool = False
-
-
-def _apply_one_parallel_align_result(
-    result: AlignResult,
-    *,
-    completed_codes: set[str],
-    completed_lock: threading.Lock,
-    dry_run: bool,
-    process_results: list[MissingProcessResult],
-    qb_rows: list[dict],
-    purge_plan_rows: list[dict],
-) -> tuple[int, int, int]:
-    """Persist one worker result. Returns ``(processed, failed, skipped)``."""
-    task = result.task
-    if result.is_skipped:
-        return 0, 0, 1
-
-    process_results.append(result.process_result)
-
-    if not result.parse_success:
-        logger.warning(
-            "[%s] Failed alignment for %s: %s",
-            task.entry_index, task.video_code, result.process_result.message,
-        )
-        return 0, 1, 0
-
-    with completed_lock:
-        completed_codes.add(task.video_code)
-
-    if result.db_upsert_kwargs and not dry_run:
-        db_upsert_history(**result.db_upsert_kwargs)
-
-    qb_rows.extend(result.qb_rows)
-    purge_plan_rows.extend(result.purge_plan_rows)
-    return 1, 0, 0
-
-
-def _drain_parallel_align_result_queue_on_interrupt(
-    result_queue: queue_module.Queue,
-    *,
-    completed_codes: set[str],
-    completed_lock: threading.Lock,
-    dry_run: bool,
-    process_results: list[MissingProcessResult],
-    qb_rows: list[dict],
-    purge_plan_rows: list[dict],
-    phase: str,
-) -> tuple[int, int, int]:
-    """Apply every ``AlignResult`` currently waiting on *result_queue* (non-blocking)."""
-    dp = df = ds = 0
-    drained = 0
-    while True:
-        try:
-            try:
-                result: AlignResult = result_queue.get_nowait()
-            except queue_module.Empty:
-                break
-        except KeyboardInterrupt:
-            logger.warning(
-                "Second interrupt while draining result queue (%s); stopping flush early",
-                phase,
-            )
-            break
-        drained += 1
-        p, f, s = _apply_one_parallel_align_result(
-            result,
-            completed_codes=completed_codes,
-            completed_lock=completed_lock,
-            dry_run=dry_run,
-            process_results=process_results,
-            qb_rows=qb_rows,
-            purge_plan_rows=purge_plan_rows,
-        )
-        dp += p
-        df += f
-        ds += s
-    if drained:
-        logger.info(
-            "Flushed %d pending align result(s) from queue (%s)",
-            drained, phase,
-        )
-    return dp, df, ds
-
-
-def _drain_align_task_queue_preserve(
-    q: queue_module.Queue,
-    sink: List[AlignTask],
-) -> None:
-    """Remove all pending ``AlignTask`` items from *q* (skip stray ``None``)."""
-    while True:
-        try:
-            item = q.get_nowait()
-        except queue_module.Empty:
-            break
-        if item is not None:
-            sink.append(item)
-
-
-def _parallel_align_signal_shutdown(
-    *,
-    stop_event: threading.Event,
-    task_queue: queue_module.Queue[AlignTask | None],
-    login_queue: queue_module.Queue[AlignTask],
-    num_workers: int,
-    not_started_tasks: List[AlignTask],
-) -> None:
-    """Wake workers, reclaim queued work, send stop sentinels."""
-    stop_event.set()
-    _drain_align_task_queue_preserve(task_queue, not_started_tasks)
-    _drain_align_task_queue_preserve(login_queue, not_started_tasks)
-    for _ in range(num_workers):
-        task_queue.put(None)
-
-
-class AlignWorker(threading.Thread):
-    """Worker thread bound to a single proxy for inventory-history alignment.
-
-    Architecture mirrors ``BackfillWorker`` from ``migrate_v7_to_v8``:
-    each proxy gets its own ``RequestHandler``, ``MovieSleepManager``,
-    and CF-bypass tracking.  Workers share a task queue and result queue;
-    the main thread collects results and writes to the DB.
+    Multi-step: search JavDB by code → fetch detail → parse → compare ranks.
+    Returns a non-None dict on success or definitive miss; ``None`` signals a
+    proxy-level fetch failure so the engine re-queues to another proxy.
     """
+    from scripts.spider.engine import LoginRequired, WorkerContext, EngineTask
 
-    def __init__(
-        self,
-        worker_id: int,
-        proxy_config: dict,
-        task_queue: queue_module.Queue[AlignTask | None],
-        result_queue: queue_module.Queue[AlignResult],
-        login_queue: queue_module.Queue[AlignTask],
-        total_workers: int,
-        use_cookie: bool,
-        movie_sleep_min: float,
-        movie_sleep_max: float,
-        ban_log_file: str,
-        all_workers: list,
-        coordinator,
-        completed_codes: set | None = None,
-        completed_lock: threading.Lock | None = None,
-        stop_event: threading.Event | None = None,
-        shutdown_orphan_tasks: list[AlignTask] | None = None,
-        shutdown_orphan_lock: threading.Lock | None = None,
-    ):
-        super().__init__(daemon=True, name=f"AlignWorker-{proxy_config.get('name', worker_id)}")
-        self.worker_id = worker_id
-        self.proxy_config = proxy_config
-        self.proxy_name: str = proxy_config.get('name', f'Proxy-{worker_id}')
-        self.task_queue = task_queue
-        self.result_queue = result_queue
-        self.login_queue = login_queue
-        self.total_workers = total_workers
-        self.use_cookie = use_cookie
-        self.all_workers = all_workers
-        self._coordinator = coordinator
-        self.completed_codes = completed_codes if completed_codes is not None else set()
-        self.completed_lock = completed_lock if completed_lock is not None else threading.Lock()
-        self._stop_event = stop_event or threading.Event()
-        self._shutdown_orphan_tasks = shutdown_orphan_tasks
-        self._shutdown_orphan_lock = shutdown_orphan_lock
-
-        # Match spider main: start without forced CF; enable after successful bypass fallback.
-        self.needs_cf_bypass = False
-        self._first_request = True
-
-        from scripts.spider.sleep_manager import MovieSleepManager
-        from utils.proxy_pool import create_proxy_pool_from_config
-        from utils.request_handler import RequestHandler, RequestConfig
-        from scripts.spider.config_loader import (
-            BASE_URL as _cfg_base_url,
-            CF_BYPASS_SERVICE_PORT,
-            CF_BYPASS_ENABLED,
-            CF_TURNSTILE_COOLDOWN,
-            FALLBACK_COOLDOWN,
-            JAVDB_SESSION_COOKIE,
-            PROXY_POOL_COOLDOWN_SECONDS,
-            PROXY_POOL_MAX_FAILURES,
-        )
-
-        self._sleep_mgr = MovieSleepManager(movie_sleep_min, movie_sleep_max)
-
-        self._proxy_pool = create_proxy_pool_from_config(
-            [proxy_config],
-            cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
-            max_failures=PROXY_POOL_MAX_FAILURES,
-            ban_log_file=ban_log_file,
-        )
-        self._handler = RequestHandler(
-            proxy_pool=self._proxy_pool,
-            config=RequestConfig(
-                base_url=_cfg_base_url,
-                cf_bypass_service_port=CF_BYPASS_SERVICE_PORT,
-                cf_bypass_enabled=CF_BYPASS_ENABLED,
-                cf_bypass_max_failures=3,
-                cf_turnstile_cooldown=CF_TURNSTILE_COOLDOWN,
-                fallback_cooldown=FALLBACK_COOLDOWN,
-                javdb_session_cookie=JAVDB_SESSION_COOKIE,
-                proxy_http=proxy_config.get('http'),
-                proxy_https=proxy_config.get('https'),
-                proxy_modules=['all'],
-                proxy_mode='single',
-            ),
-        )
-
-    # -- internal helpers --------------------------------------------------
-
-    def _fetch_html_raw(self, url: str, use_cf: bool) -> str | None:
-        return self._handler.get_page(
-            url, use_cookie=self.use_cookie, use_proxy=True,
-            module_name='spider', max_retries=1, use_cf_bypass=use_cf,
-        )
-
-    def _orphan_current_task(self, task: AlignTask) -> None:
-        if self._shutdown_orphan_tasks is None or self._shutdown_orphan_lock is None:
-            return
-        with self._shutdown_orphan_lock:
-            self._shutdown_orphan_tasks.append(task)
-
-    def _interruptible_movie_sleep(self) -> bool:
-        """Sleep like ``MovieSleepManager`` but return True if shutdown was requested."""
-        t = self._sleep_mgr.get_sleep_time()
-        logger.debug("[%s] Movie sleep: %.1fs (interruptible)", self.proxy_name, t)
-        deadline = time.monotonic() + t
-        chunk = 0.5
-        while time.monotonic() < deadline:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            if self._stop_event.wait(timeout=min(chunk, remaining)):
-                return True
-        return False
-
-    def _try_fetch_page(self, url: str, use_cf: bool, context: str):
-        """Fetch URL with login detection. Returns ``(html, needs_login)``."""
-        from scripts.spider.session import is_login_page
-
-        logger.debug("[%s] %s", self.proxy_name, context)
-        try:
-            html = self._fetch_html_raw(url, use_cf)
-            if html:
-                if is_login_page(html):
-                    logger.warning("[%s] Login page: %s", self.proxy_name, context)
-                    return None, True
-                return html, False
-            logger.debug("[%s] No HTML: %s", self.proxy_name, context)
-        except Exception as e:
-            logger.debug("[%s] Error in %s: %s", self.proxy_name, context, e)
-        return None, False
-
-    def _fetch_with_cf_fallback(self, url: str, context: str):
-        """Try direct then CF bypass. Returns ``(html, used_cf, needs_login)``."""
-        if self.needs_cf_bypass:
-            html, login = self._try_fetch_page(url, True, f"{context} CF Bypass (marked)")
-            return html, True, login
-
-        html, login = self._try_fetch_page(url, False, f"{context} Direct")
-        if html:
-            return html, False, False
-        if login:
-            return None, False, True
-
-        html, login = self._try_fetch_page(url, True, f"{context} CF Bypass")
-        if html:
-            self.needs_cf_bypass = True
-            logger.info("[%s] CF Bypass succeeded — marked for runtime", self.proxy_name)
-            return html, True, False
-        return None, False, login
-
-    # -- task processing ---------------------------------------------------
-
-    def _process_task(self, task: AlignTask) -> tuple[AlignResult | None, bool]:
-        """Full search → detail → parse pipeline.
-
-        Returns ``(result, needs_login)``:
-        * ``result`` is set → put on result_queue (success or definitive miss)
-        * ``result is None, needs_login=True`` → route to login queue
-        * ``result is None, needs_login=False`` → proxy failure, re-queue
-        """
+    def _align_process(ctx: WorkerContext, task: EngineTask):
         from utils.url_helper import get_page_url as _get_page_url
 
-        # 1) Search for exact video code match (first results page only)
+        meta = task.meta
+        video_code = meta['video_code']
+        search_url = meta['search_url']
+        base_url = meta['base_url']
+        inventory_entries = inventory_map.get(video_code, [])
+
+        # 1) Search first results page
         page_num = 1
-        paged_url = _get_page_url(page_num, task.base_url, custom_url=task.search_url)
-        html, _used_cf, needs_login = self._fetch_with_cf_fallback(
-            paged_url, f"[{task.entry_index}] search p{page_num} {task.video_code}",
-        )
+        paged_url = _get_page_url(page_num, base_url, custom_url=search_url)
+        search_html = ctx.fetch(paged_url)
+        if not search_html:
+            return None
+
+        parsed = parse_index_page(search_html, page_num=page_num)
         exact_entry = None
-        if needs_login:
-            return None, True
-        if html:
-            parsed = parse_index_page(html, page_num=page_num)
-            if parsed.has_movie_list and parsed.movies:
-                exact_entry = find_exact_video_code_match(parsed.movies, task.video_code)
-        else:
-            return None, False
+        if parsed.has_movie_list and parsed.movies:
+            exact_entry = find_exact_video_code_match(parsed.movies, video_code)
 
         if exact_entry is None:
-            return AlignResult(
-                task=task,
-                process_result=MissingProcessResult(
-                    video_code=task.video_code,
-                    status='search_miss',
-                    message='exact_video_code_not_found',
-                ),
-                qb_rows=[], purge_plan_rows=[],
-                db_upsert_kwargs=None, parse_success=True,
-            ), False
+            return {
+                'status': 'search_miss',
+                'video_code': video_code,
+                'message': 'exact_video_code_not_found',
+            }
 
         # 2) Fetch detail page
         detail_href = normalize_javdb_href_path(exact_entry.href)
-        detail_url = urljoin(task.base_url + '/', detail_href.lstrip('/'))
-        html, _used_cf, needs_login = self._fetch_with_cf_fallback(
-            detail_url, f"[{task.entry_index}] detail {task.video_code}",
-        )
-        if needs_login:
-            return None, True
-        if not html:
-            return None, False
+        detail_url = urljoin(base_url + '/', detail_href.lstrip('/'))
+        detail_html = ctx.fetch(detail_url)
+        if not detail_html:
+            return None
 
         # 3) Parse detail page
-        detail = parse_detail_page(html)
+        detail = parse_detail_page(detail_html)
         if not detail.parse_success:
-            return AlignResult(
-                task=task,
-                process_result=MissingProcessResult(
-                    video_code=task.video_code,
-                    status='detail_parse_failed',
-                    href=detail_href,
-                    detail_href=detail_href,
-                    message='parse_detail_page returned parse_success=False',
-                ),
-                qb_rows=[], purge_plan_rows=[],
-                db_upsert_kwargs=None, parse_success=False,
-            ), False
+            return {
+                'status': 'detail_parse_failed',
+                'video_code': video_code,
+                'href': detail_href,
+                'detail_href': detail_href,
+                'message': 'parse_detail_page returned parse_success=False',
+            }
+
         magnets_payload = [m.to_dict() for m in detail.magnets]
-        magnet_links = extract_magnets(magnets_payload, index=task.video_code)
+        magnet_links = extract_magnets(magnets_payload, index=video_code)
         actor_name = detail.get_first_actor_name()
         actor_gender = detail.get_first_actor_gender()
         actor_link = detail.get_first_actor_href()
         supporting_actors = detail.get_supporting_actors_json()
 
         db_kwargs = _build_db_upsert_kwargs(
-            detail_href, task.video_code, magnet_links,
+            detail_href, video_code, magnet_links,
             actor_name, actor_gender, actor_link, supporting_actors,
         )
 
-        # 4) Compare ranks
+        # 4) Compare ranks and build upgrade plan
         qb_rows: list[dict] = []
         purge_plan_rows: list[dict] = []
         parsed_best_cat = _best_parsed_category(magnet_links)
         parsed_best_rank = _parsed_category_rank(parsed_best_cat)
-        inventory_best_rank = _best_inventory_rank(task.inventory_entries)
+        inventory_best_rank = _best_inventory_rank(inventory_entries)
 
         chosen_upgrade = ''
         if parsed_best_cat and parsed_best_rank > inventory_best_rank:
             chosen_upgrade = parsed_best_cat
-            qb_rows.append(_to_qb_row(detail_href, task.video_code, parsed_best_cat, magnet_links))
+            qb_rows.append(_to_qb_row(detail_href, video_code, parsed_best_cat, magnet_links))
             purge_plan_rows.extend(_to_purge_plan_rows(
-                task.video_code, task.inventory_entries, parsed_best_rank,
-                parsed_best_cat,
+                video_code, inventory_entries, parsed_best_rank, parsed_best_cat,
             ))
 
-        return AlignResult(
-            task=task,
-            process_result=MissingProcessResult(
-                video_code=task.video_code, status='ok',
-                href=detail_href, detail_href=detail_href,
-                actor_name=actor_name,
-                chosen_upgrade_category=chosen_upgrade,
-            ),
-            qb_rows=qb_rows, purge_plan_rows=purge_plan_rows,
-            db_upsert_kwargs=db_kwargs, parse_success=True,
-        ), False
+        return {
+            'status': 'ok',
+            'video_code': video_code,
+            'href': detail_href,
+            'detail_href': detail_href,
+            'actor_name': actor_name,
+            'chosen_upgrade_category': chosen_upgrade,
+            'db_upsert_kwargs': db_kwargs,
+            'qb_rows': qb_rows,
+            'purge_plan_rows': purge_plan_rows,
+        }
 
-    # -- login helpers (delegated to shared LoginCoordinator) ---------------
-
-    def _handle_login_required(self, task: AlignTask):
-        """Delegate to the shared LoginCoordinator."""
-        self._coordinator.handle_login_required(
-            worker=self,
-            task=task,
-            video_code=task.video_code,
-            login_queue=self.login_queue,
-            task_queue=self.task_queue,
-        )
-
-    def _get_next_task(self) -> AlignTask | None:
-        while True:
-            with self._coordinator.lock:
-                am_logged_in = self._coordinator.is_login_worker(
-                    self.proxy_name, self.worker_id,
-                )
-
-            if am_logged_in:
-                try:
-                    return self.login_queue.get_nowait()
-                except queue_module.Empty:
-                    pass
-
-            try:
-                return self.task_queue.get(timeout=0.3 if am_logged_in else None)
-            except queue_module.Empty:
-                continue
-
-    # -- main loop ---------------------------------------------------------
-
-    def run(self):
-        while True:
-            task = self._get_next_task()
-            if task is None:
-                break
-
-            with self.completed_lock:
-                if task.video_code in self.completed_codes:
-                    self.result_queue.put(AlignResult(
-                        task=task,
-                        process_result=MissingProcessResult(
-                            video_code=task.video_code, status='skipped',
-                        ),
-                        qb_rows=[], purge_plan_rows=[],
-                        db_upsert_kwargs=None, parse_success=False, is_skipped=True,
-                    ))
-                    continue
-
-            if self.proxy_name in task.failed_proxies:
-                if len(task.failed_proxies) >= self.total_workers:
-                    self.result_queue.put(AlignResult(
-                        task=task,
-                        process_result=MissingProcessResult(
-                            video_code=task.video_code, status='all_proxies_failed',
-                            message=f'failed on {len(task.failed_proxies)} proxies',
-                        ),
-                        qb_rows=[], purge_plan_rows=[],
-                        db_upsert_kwargs=None, parse_success=False,
-                    ))
-                    continue
-                _requeue_front(self.task_queue, task)
-                time.sleep(0.1)
-                continue
-
-            if not self._first_request:
-                if self._interruptible_movie_sleep():
-                    self._orphan_current_task(task)
-                    continue
-            self._first_request = False
-
-            if self._stop_event.is_set():
-                self._orphan_current_task(task)
-                continue
-
-            result, needs_login = self._process_task(task)
-            if result is not None:
-                if result.parse_success and result.process_result.status == 'ok':
-                    logger.info(
-                        "[%s] Parsed %s [%s]",
-                        task.entry_index, task.video_code, self.proxy_name,
-                    )
-                elif result.process_result.status == 'search_miss':
-                    logger.info(
-                        "[%s] No exact match for %s [%s]",
-                        task.entry_index, task.video_code, self.proxy_name,
-                    )
-                self.result_queue.put(result)
-            elif needs_login:
-                self._handle_login_required(task)
-            else:
-                task.failed_proxies.add(self.proxy_name)
-                task.retry_count += 1
-                _requeue_front(self.task_queue, task)
-                logger.info(
-                    "[%s] [%s] Failed %s, re-queued (%d/%d proxies)",
-                    self.proxy_name, task.entry_index, task.video_code,
-                    len(task.failed_proxies), self.total_workers,
-                )
+    return _align_process
 
 
 # ---------------------------------------------------------------------------
@@ -847,151 +438,124 @@ def run_alignment(args: argparse.Namespace) -> int:
     from scripts.spider.sleep_manager import movie_sleep_mgr
 
     # ------------------------------------------------------------------
-    # Parallel mode: one AlignWorker per proxy
+    # Parallel mode: FetchEngine (advanced) with one worker per proxy
     # ------------------------------------------------------------------
     if use_proxy and PROXY_POOL:
-        from scripts.spider.config_loader import LOGIN_PROXY_NAME
+        from scripts.spider.engine import FetchEngine
 
         movie_sleep_mgr.apply_volume_multiplier(total)
-
-        completed_codes: set[str] = set()
-        completed_lock = threading.Lock()
         stop_event = threading.Event()
-        shutdown_orphan_tasks: list[AlignTask] = []
-        shutdown_orphan_lock = threading.Lock()
 
-        task_queue: queue_module.Queue[AlignTask | None] = queue_module.Queue()
-        result_queue: queue_module.Queue[AlignResult] = queue_module.Queue()
-        login_queue: queue_module.Queue[AlignTask] = queue_module.Queue()
-
-        all_workers: list[AlignWorker] = []
-        coordinator = LoginCoordinator(
-            all_workers=all_workers, login_proxy_name=LOGIN_PROXY_NAME,
+        engine = FetchEngine(
+            process_fn=_make_align_process_fn(inventory),
+            use_cookie=True,
+            ban_log_file=ban_log,
+            stop_event=stop_event,
+            sleep_min=movie_sleep_mgr.sleep_min,
+            sleep_max=movie_sleep_mgr.sleep_max,
         )
-
-        for idx, proxy_cfg in enumerate(PROXY_POOL):
-            w = AlignWorker(
-                worker_id=idx,
-                proxy_config=proxy_cfg,
-                task_queue=task_queue,
-                result_queue=result_queue,
-                login_queue=login_queue,
-                total_workers=len(PROXY_POOL),
-                use_cookie=True,
-                movie_sleep_min=movie_sleep_mgr.sleep_min,
-                movie_sleep_max=movie_sleep_mgr.sleep_max,
-                ban_log_file=ban_log,
-                all_workers=all_workers,
-                coordinator=coordinator,
-                completed_codes=completed_codes,
-                completed_lock=completed_lock,
-                stop_event=stop_event,
-                shutdown_orphan_tasks=shutdown_orphan_tasks,
-                shutdown_orphan_lock=shutdown_orphan_lock,
-            )
-            all_workers.append(w)
+        engine.start()
 
         for i, code in enumerate(missing_codes, 1):
-            task_queue.put(AlignTask(
-                video_code=code,
-                inventory_entries=inventory.get(code, []),
-                search_url=build_search_url(code, f='all', base_url=base_url),
-                base_url=base_url,
+            engine.submit(
+                build_search_url(code, f='all', base_url=base_url),
                 entry_index=f"align-{i}/{total}",
-            ))
+                meta={
+                    'video_code': code,
+                    'search_url': build_search_url(code, f='all', base_url=base_url),
+                    'base_url': base_url,
+                },
+            )
+        engine.mark_done()
 
         logger.info(
             "Starting %d workers for %d alignment tasks (search + detail per code)",
-            len(all_workers), total,
+            len(engine._workers), total,
         )
-        for w in all_workers:
-            w.start()
 
         processed = 0
         failed = 0
         skipped = 0
-        results_received = 0
         parallel_interrupted = False
 
+        def _apply_align_result(result):
+            nonlocal processed, failed, skipped
+            video_code = result.task.meta['video_code']
+            idx_str = result.task.entry_index
+
+            if not result.success:
+                logger.warning("[%s] All proxies failed for %s", idx_str, video_code)
+                process_results.append(MissingProcessResult(
+                    video_code=video_code, status='all_proxies_failed',
+                    message=f'failed on all proxies',
+                ))
+                failed += 1
+                return
+
+            data = result.data
+            status = data['status']
+
+            if status == 'search_miss':
+                process_results.append(MissingProcessResult(
+                    video_code=video_code, status='search_miss',
+                    message=data.get('message', ''),
+                ))
+                logger.info("[%s] No exact match for %s", idx_str, video_code)
+                skipped += 1
+                return
+
+            if status == 'detail_parse_failed':
+                process_results.append(MissingProcessResult(
+                    video_code=video_code, status='detail_parse_failed',
+                    href=data.get('href', ''),
+                    detail_href=data.get('detail_href', ''),
+                    message=data.get('message', ''),
+                ))
+                failed += 1
+                return
+
+            if data.get('db_upsert_kwargs') and not args.dry_run:
+                db_upsert_history(**data['db_upsert_kwargs'])
+            qb_rows.extend(data.get('qb_rows', []))
+            purge_plan_rows.extend(data.get('purge_plan_rows', []))
+
+            process_results.append(MissingProcessResult(
+                video_code=video_code, status='ok',
+                href=data.get('href', ''),
+                detail_href=data.get('detail_href', ''),
+                actor_name=data.get('actor_name', ''),
+                chosen_upgrade_category=data.get('chosen_upgrade_category', ''),
+            ))
+            logger.info("[%s] Parsed %s", idx_str, video_code)
+            processed += 1
+
         try:
-            while results_received < total:
-                result: AlignResult = result_queue.get()
-                results_received += 1
-                p, f, s = _apply_one_parallel_align_result(
-                    result,
-                    completed_codes=completed_codes,
-                    completed_lock=completed_lock,
-                    dry_run=args.dry_run,
-                    process_results=process_results,
-                    qb_rows=qb_rows,
-                    purge_plan_rows=purge_plan_rows,
-                )
-                processed += p
-                failed += f
-                skipped += s
+            for result in engine.results():
+                _apply_align_result(result)
         except KeyboardInterrupt:
             parallel_interrupted = True
-            not_started: list[AlignTask] = []
-            logger.warning(
-                "Keyboard interrupt — signalling workers, draining queues …",
-            )
-            _parallel_align_signal_shutdown(
-                stop_event=stop_event,
-                task_queue=task_queue,
-                login_queue=login_queue,
-                num_workers=len(all_workers),
-                not_started_tasks=not_started,
-            )
-            ep, ef, es = _drain_parallel_align_result_queue_on_interrupt(
-                result_queue,
-                completed_codes=completed_codes,
-                completed_lock=completed_lock,
-                dry_run=args.dry_run,
-                process_results=process_results,
-                qb_rows=qb_rows,
-                purge_plan_rows=purge_plan_rows,
-                phase="before worker shutdown",
-            )
-            processed += ep
-            failed += ef
-            skipped += es
+            logger.warning("Keyboard interrupt — shutting down engine …")
+            orphaned = engine.shutdown(timeout=30)
 
-            for w in all_workers:
-                w.join(timeout=30)
+            while True:
+                try:
+                    result = engine._result_queue.get_nowait()
+                except queue_module.Empty:
+                    break
+                _apply_align_result(result)
 
-            ep2, ef2, es2 = _drain_parallel_align_result_queue_on_interrupt(
-                result_queue,
-                completed_codes=completed_codes,
-                completed_lock=completed_lock,
-                dry_run=args.dry_run,
-                process_results=process_results,
-                qb_rows=qb_rows,
-                purge_plan_rows=purge_plan_rows,
-                phase="after worker shutdown",
-            )
-            processed += ep2
-            failed += ef2
-            skipped += es2
-
-            with shutdown_orphan_lock:
-                n_orphan = len(shutdown_orphan_tasks)
-            n_queued = len(not_started)
             logger.info(
                 "Alignment interrupted (parallel, %d workers). "
                 "Processed: %d, Skipped: %d, Failed: %d — "
-                "%d tasks reclaimed, %d released mid-worker",
-                len(all_workers), processed, skipped, failed, n_queued, n_orphan,
+                "%d tasks orphaned",
+                len(engine._workers), processed, skipped, failed, len(orphaned),
             )
         else:
-            for _ in all_workers:
-                task_queue.put(None)
-            for w in all_workers:
-                w.join(timeout=10)
-
+            engine.shutdown()
             logger.info(
                 "Alignment done (parallel, %d workers). "
                 "Processed: %d, Skipped: %d, Failed: %d",
-                len(all_workers), processed, skipped, failed,
+                len(engine._workers), processed, skipped, failed,
             )
 
         if parallel_interrupted:
