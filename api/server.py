@@ -885,12 +885,16 @@ def _validate_job_id(job_id: str) -> None:
     """Reject job IDs that contain path-traversal characters or unexpected patterns."""
     if not _JOB_ID_RE.match(job_id):
         raise HTTPException(status_code=422, detail="Invalid job_id")
+    # Single path-segment guard (redundant with regex; explicit for path-safety analysis).
+    for sep in (os.sep, os.altsep):
+        if sep and sep in job_id:
+            raise HTTPException(status_code=422, detail="Invalid job_id")
 
 
 def _safe_log_path(job_id: str) -> Path:
     """Build and anchor-check a log file path for *job_id* under JOB_LOG_DIR."""
     _validate_job_id(job_id)
-    candidate = (JOB_LOG_DIR / f"{job_id}.log").resolve()
+    candidate = (_RESOLVED_JOB_LOG_DIR / f"{job_id}.log").resolve()
     try:
         candidate.relative_to(_RESOLVED_JOB_LOG_DIR)
     except ValueError:
