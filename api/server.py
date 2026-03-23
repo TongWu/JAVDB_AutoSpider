@@ -1480,6 +1480,7 @@ async def auth_csrf_middleware(request: Request, call_next):
         try:
             if not request.url.path.startswith("/api/explore/"):
                 _verify_csrf(request)
+            _require_auth(request)
         except HTTPException as exc:
             return JSONResponse(
                 status_code=exc.status_code,
