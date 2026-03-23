@@ -55,7 +55,7 @@ function httpReady(url) {
   return new Promise((resolve) => {
     const req = http.get(url, (res) => {
       res.resume();
-      resolve(res.statusCode && res.statusCode >= 200 && res.statusCode < 500);
+      resolve(Boolean(res.statusCode && res.statusCode >= 200 && res.statusCode < 300));
     });
     req.on("error", () => resolve(false));
     req.setTimeout(1200, () => {
