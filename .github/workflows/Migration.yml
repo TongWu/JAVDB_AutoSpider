@@ -103,6 +103,8 @@ on:
 jobs:
   run-migration:
     runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    # GitHub-hosted runners are capped at 6h regardless; self-hosted allows up to ~5 days.
+    timeout-minutes: 1440
     environment: Production
     env:
       TZ: Asia/Singapore

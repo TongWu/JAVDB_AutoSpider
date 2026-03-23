@@ -39,6 +39,7 @@ from scripts.spider.csv_builder import (
 from scripts.spider.config_loader import (
     BASE_URL,
     CF_BYPASS_SERVICE_PORT, CF_BYPASS_ENABLED,
+    CF_BYPASS_PORT_MAP,
     CF_TURNSTILE_COOLDOWN, FALLBACK_COOLDOWN,
     JAVDB_SESSION_COOKIE,
     PROXY_POOL, PROXY_POOL_COOLDOWN_SECONDS, PROXY_POOL_MAX_FAILURES,
@@ -156,6 +157,7 @@ class ProxyWorker(threading.Thread):
             config=RequestConfig(
                 base_url=BASE_URL,
                 cf_bypass_service_port=CF_BYPASS_SERVICE_PORT,
+                cf_bypass_port_map=CF_BYPASS_PORT_MAP,
                 cf_bypass_enabled=CF_BYPASS_ENABLED,
                 cf_bypass_max_failures=3,
                 cf_turnstile_cooldown=CF_TURNSTILE_COOLDOWN,

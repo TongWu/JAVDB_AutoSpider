@@ -262,9 +262,11 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # Cloudflare Bypass Configuration
         ('CF_BYPASS_SERVICE_PORT', 'CF_BYPASS_SERVICE_PORT', get_env_int, 8000, 'CLOUDFLARE BYPASS CONFIGURATION'),
         ('CF_BYPASS_ENABLED', 'CF_BYPASS_ENABLED', get_env_bool, True, 'CLOUDFLARE BYPASS CONFIGURATION'),
+        ('CF_BYPASS_PORT_MAP', 'CF_BYPASS_PORT_MAP_JSON', get_env_json, {}, 'CLOUDFLARE BYPASS CONFIGURATION'),
         # Spider Configuration
-        ('PAGE_START', 'PAGE_START', get_env_int, 1, 'SPIDER CONFIGURATION'),
-        ('PAGE_END', 'PAGE_END', get_env_int, 10, 'SPIDER CONFIGURATION'),
+        # Fall back to legacy START_PAGE / END_PAGE env vars for backward compatibility
+        ('PAGE_START', 'PAGE_START', get_env_int, get_env_int('START_PAGE', 1), 'SPIDER CONFIGURATION'),
+        ('PAGE_END', 'PAGE_END', get_env_int, get_env_int('END_PAGE', 10), 'SPIDER CONFIGURATION'),
         ('PHASE2_MIN_RATE', 'PHASE2_MIN_RATE', get_env_float, 4.0, 'SPIDER CONFIGURATION'),
         ('PHASE2_MIN_COMMENTS', 'PHASE2_MIN_COMMENTS', get_env_int, 85, 'SPIDER CONFIGURATION'),
         ('BASE_URL', 'BASE_URL', get_env, 'https://javdb.com', 'SPIDER CONFIGURATION'),
@@ -275,11 +277,12 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # GPT API Configuration (optional - for automatic captcha solving during login)
         ('GPT_API_URL', 'GPT_API_URL', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
         ('GPT_API_KEY', 'GPT_API_KEY', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
-        ('PAGE_SLEEP', 'PAGE_SLEEP', get_env_int, 5, 'JAVDB LOGIN CONFIGURATION'),
-        ('MOVIE_SLEEP_MIN', 'MOVIE_SLEEP', get_env_range_min, None, 'JAVDB LOGIN CONFIGURATION'),
-        ('MOVIE_SLEEP_MAX', 'MOVIE_SLEEP', get_env_range_max, None, 'JAVDB LOGIN CONFIGURATION'),
-        ('CF_TURNSTILE_COOLDOWN', 'CF_TURNSTILE_COOLDOWN', get_env_int, 5, 'JAVDB LOGIN CONFIGURATION'),
-        ('FALLBACK_COOLDOWN', 'FALLBACK_COOLDOWN', get_env_int, 15, 'JAVDB LOGIN CONFIGURATION'),
+        # Request Timing Configuration
+        ('PAGE_SLEEP', 'PAGE_SLEEP', get_env_int, 5, 'REQUEST TIMING CONFIGURATION'),
+        ('MOVIE_SLEEP_MIN', 'MOVIE_SLEEP', get_env_range_min, None, 'REQUEST TIMING CONFIGURATION'),
+        ('MOVIE_SLEEP_MAX', 'MOVIE_SLEEP', get_env_range_max, None, 'REQUEST TIMING CONFIGURATION'),
+        ('CF_TURNSTILE_COOLDOWN', 'CF_TURNSTILE_COOLDOWN', get_env_int, 5, 'REQUEST TIMING CONFIGURATION'),
+        ('FALLBACK_COOLDOWN', 'FALLBACK_COOLDOWN', get_env_int, 15, 'REQUEST TIMING CONFIGURATION'),
         # Logging Configuration
         ('LOG_LEVEL', 'LOG_LEVEL', get_env, 'INFO', 'LOGGING CONFIGURATION'),
         ('SPIDER_LOG_FILE', 'SPIDER_LOG_FILE', get_env, 'logs/spider.log', 'LOGGING CONFIGURATION'),
@@ -343,6 +346,8 @@ def generate_config_content(github_actions_mode: bool = False) -> str:
             value = type_func(env_name, default)
         else:
             value = type_func(None, default) if callable(type_func) else default
+        if config_name == 'CF_BYPASS_PORT_MAP' and not isinstance(value, dict):
+            value = {}
         sections[section].append((config_name, value))
     
     # Build config file content
@@ -395,6 +400,8 @@ def mask_sensitive_values(content: str) -> str:
     masked = re.sub(r'(COOKIE\s*=\s*")[^"]*(")', r"\1***MASKED***\2", masked)
     # Mask proxy pool (may contain IPs and passwords)
     masked = re.sub(r"(PROXY_POOL\s*=\s*\[)[^\]]*(\])", r"\1***MASKED***\2", masked)
+    # Mask CF bypass port map (may expose internal topology)
+    masked = re.sub(r"(CF_BYPASS_PORT_MAP\s*=\s*)\{[^}]*\}", r"\1***MASKED***", masked)
     return masked
 
 

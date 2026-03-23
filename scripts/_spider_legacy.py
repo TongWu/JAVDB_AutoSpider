@@ -185,9 +185,12 @@ class MovieSleepManager:
     ]
     VOLUME_MAX_MULTIPLIER = (1.5, 3.0)
 
-    def __init__(self, sleep_min: float, sleep_max: float):
-        self.base_min = float(sleep_min)
-        self.base_max = float(sleep_max)
+    _DEFAULT_MIN = 5
+    _DEFAULT_MAX = 15
+
+    def __init__(self, sleep_min: float = None, sleep_max: float = None):
+        self.base_min = float(sleep_min if sleep_min is not None else self._DEFAULT_MIN)
+        self.base_max = float(sleep_max if sleep_max is not None else self._DEFAULT_MAX)
         self.sleep_min = self.base_min
         self.sleep_max = self.base_max
         self._force_high = False
@@ -1172,8 +1175,8 @@ class ProxyWorker(threading.Thread):
         total_workers: int,
         use_cookie: bool,
         is_adhoc_mode: bool,
-        movie_sleep_min: float,
-        movie_sleep_max: float,
+        movie_sleep_min: Optional[float],
+        movie_sleep_max: Optional[float],
         fallback_cooldown: float,
         ban_log_file: str,
         all_workers: list,

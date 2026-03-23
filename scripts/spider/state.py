@@ -19,6 +19,7 @@ from utils.path_helper import ensure_dated_dir
 from scripts.spider.config_loader import (
     BASE_URL,
     CF_BYPASS_SERVICE_PORT, CF_BYPASS_ENABLED,
+    CF_BYPASS_PORT_MAP,
     CF_TURNSTILE_COOLDOWN, FALLBACK_COOLDOWN,
     JAVDB_SESSION_COOKIE,
     PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES, PROXY_MODE,
@@ -144,6 +145,7 @@ def initialize_request_handler():
     config = RequestConfig(
         base_url=BASE_URL,
         cf_bypass_service_port=CF_BYPASS_SERVICE_PORT,
+        cf_bypass_port_map=CF_BYPASS_PORT_MAP,
         cf_bypass_enabled=CF_BYPASS_ENABLED,
         cf_bypass_max_failures=3,
         cf_turnstile_cooldown=CF_TURNSTILE_COOLDOWN,

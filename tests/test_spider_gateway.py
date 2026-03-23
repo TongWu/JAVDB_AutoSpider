@@ -274,8 +274,15 @@ class TestApiParseUrl:
     def test_parse_url_respects_payload_params(self):
         """Verify that /api/parse/url creates a gateway with request params
         instead of using a hardcoded singleton."""
-        from api.server import app
+        from api.server import app, _jwt_encode
         from fastapi.testclient import TestClient
+
+        token = _jwt_encode({"sub": "admin", "role": "admin", "typ": "access"}, 3600)
+        csrf = "test-csrf-value"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "X-CSRF-Token": csrf,
+        }
 
         with patch('api.server.create_gateway') as mock_create:
             mock_gw = MagicMock()
@@ -284,13 +291,13 @@ class TestApiParseUrl:
             )
             mock_create.return_value = mock_gw
 
-            client = TestClient(app)
+            client = TestClient(app, cookies={"csrf_token": csrf})
             client.post('/api/parse/url', json={
                 'url': 'https://javdb.com/',
                 'use_proxy': False,
                 'use_cf_bypass': False,
                 'use_cookie': True,
-            })
+            }, headers=headers)
 
             mock_create.assert_called_once_with(
                 use_proxy=False,
@@ -478,8 +485,11 @@ class TestApiSpiderJob:
         assert '--use-proxy' not in args
 
     def test_job_not_found_returns_404(self):
-        from api.server import app
+        from api.server import app, _jwt_encode
         from fastapi.testclient import TestClient
+
+        token = _jwt_encode({"sub": "admin", "role": "admin", "typ": "access"}, 3600)
+        headers = {"Authorization": f"Bearer {token}"}
         client = TestClient(app)
-        resp = client.get('/api/jobs/nonexistent/status')
+        resp = client.get('/api/jobs/nonexistent/status', headers=headers)
         assert resp.status_code == 404

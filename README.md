@@ -141,6 +141,48 @@ cp config.py.example config.py
 # See CloudFlare Bypass section below for setup instructions
 ```
 
+## Electron Shell (MVP, Dev Mode)
+
+This repository now includes an Electron shell for desktop development.  
+Current scope is MVP only (dev runtime), without packaging/release installer.
+
+### Prerequisites
+
+- Node.js installed
+- Python 3 available (`python`, `python3`, or set `PYTHON` env)
+- Project dependencies installed (`pip install -r requirements.txt`)
+
+### Start Electron dev
+
+From repository root:
+
+```bash
+npm install
+cd web && npm install && cd ..
+npm run electron:dev
+```
+
+What it does:
+
+- Starts Vite dev server at `http://127.0.0.1:5173`
+- Electron main process auto-starts FastAPI backend at `http://127.0.0.1:8100`
+- Opens desktop window and loads the existing frontend
+
+### Electron security tradeoffs
+
+The Electron shell currently keeps a minimal-but-pragmatic setup for the Explore flow:
+
+- `BrowserWindow.webPreferences.webviewTag = true` is enabled because `ExplorePage.vue` renders an embedded `<webview>` for in-app browsing.
+- `BrowserWindow.webPreferences.sandbox = false` is currently required because `preload.js` reads `process.argv` to extract the `--api-base` value passed from `additionalArguments`.
+- `contextIsolation` remains enabled and `nodeIntegration` remains disabled.
+- `preload.js` exposes only a minimal `contextBridge` surface: `isElectron` and `apiBase`.
+
+Risk and mitigation notes for maintainers:
+
+- Keep the preload bridge surface minimal; do not expose arbitrary IPC helpers.
+- Treat `<webview>` navigation as untrusted content and keep allowlists/validation in `ExplorePage.vue` and backend URL validators.
+- Revisit sandboxing if `apiBase` passing can be moved away from `process.argv` (for example via safer IPC/bootstrap handoff).
+
 ### Docker Installation (Alternative)
 
 You can also run the application using Docker containers, which simplifies dependency management and deployment.

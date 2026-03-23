@@ -116,6 +116,7 @@ def _load_config() -> dict:
         'PROXY_POOL_MAX_FAILURES': 3,
         'BASE_URL': 'https://javdb.com',
         'CF_BYPASS_SERVICE_PORT': 8000,
+        'CF_BYPASS_PORT_MAP': {},
         'CF_BYPASS_ENABLED': True,
         'CF_TURNSTILE_COOLDOWN': 30,
         'FALLBACK_COOLDOWN': 15,
@@ -154,6 +155,7 @@ def _build_handler(cfg: dict, proxy_pool) -> RequestHandler:
         config=RequestConfig(
             base_url=cfg.get('BASE_URL', 'https://javdb.com'),
             cf_bypass_service_port=cfg.get('CF_BYPASS_SERVICE_PORT', 8000),
+            cf_bypass_port_map=cfg.get('CF_BYPASS_PORT_MAP', {}),
             cf_bypass_enabled=cfg.get('CF_BYPASS_ENABLED', True),
             cf_bypass_max_failures=3,
             cf_turnstile_cooldown=cfg.get('CF_TURNSTILE_COOLDOWN', 30),
@@ -351,6 +353,7 @@ def create_handler_for_proxy(
         config=RequestConfig(
             base_url=cfg.get('BASE_URL', 'https://javdb.com'),
             cf_bypass_service_port=cfg.get('CF_BYPASS_SERVICE_PORT', 8000),
+            cf_bypass_port_map=cfg.get('CF_BYPASS_PORT_MAP', {}),
             cf_bypass_enabled=cfg.get('CF_BYPASS_ENABLED', True),
             cf_bypass_max_failures=3,
             cf_turnstile_cooldown=cfg.get('CF_TURNSTILE_COOLDOWN', 30),

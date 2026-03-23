@@ -139,7 +139,7 @@ def run_script(script_path, args=None):
     Raises:
         RuntimeError: If the script fails with non-zero exit code
     """
-    cmd = ['python3', script_path]
+    cmd = ['python3', '-u', script_path]
     if args:
         cmd += args
     logger.info(f'Running: {" ".join(cmd)}')
@@ -166,8 +166,8 @@ def run_script(script_path, args=None):
     if process.stdout:
         for line in iter(process.stdout.readline, ''):
             if line:
-                line_stripped = line.rstrip()
-                print(line_stripped)  # Print to console
+                sys.stdout.write(line)
+                sys.stdout.flush()
                 output_lines.append(line)
                 # Write directly to log file (preserving original format from subprocess)
                 if file_handler:
