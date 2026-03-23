@@ -34,10 +34,8 @@ import shutil
 import sqlite3
 import sys
 import threading
-import time
-from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional
+from typing import List
 from urllib.parse import urljoin
 
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -233,35 +231,8 @@ def run_schema_migration(
 
 
 # ---------------------------------------------------------------------------
-# Parallel actor backfill — one worker per proxy (mirrors ProxyWorker)
+# Parallel actor backfill — powered by FetchEngine
 # ---------------------------------------------------------------------------
-
-from scripts.spider.parallel_login import (  # noqa: E402
-    LoginCoordinator,
-    requeue_front as _requeue_front,
-)
-
-
-@dataclass
-class BackfillTask:
-    url: str
-    movie_id: int
-    href: str
-    video_code: str
-    entry_index: str
-    retry_count: int = 0
-    failed_proxies: set = field(default_factory=set)
-
-
-@dataclass
-class BackfillResult:
-    task: BackfillTask
-    actor_name: str
-    actor_gender: str
-    actor_link: str
-    supporting_actors: str
-    parse_success: bool
-    is_skipped: bool = False
 
 
 def _is_meaningful_actor_data(an: str, al: str, sup: str) -> bool:
@@ -346,406 +317,56 @@ def _promote_single_female_actor(
     )
 
 
-def _apply_one_parallel_backfill_result(
-    result: BackfillResult,
+def _apply_backfill_result(
+    result,
     *,
     completed_ids: set[int],
-    completed_lock: threading.Lock,
     dry_run: bool,
     conn: sqlite3.Connection,
     now_fmt: str,
 ) -> tuple[int, int, int]:
-    """Persist one worker result. Returns ``(processed_delta, failed, skipped)``."""
-    task = result.task
-    if result.is_skipped:
-        return 0, 0, 1
-    if not result.parse_success:
-        logger.warning(
-            "[%s] Failed to get actor for %s (%s)",
-            task.entry_index, task.video_code, task.href,
-        )
+    """Persist one engine result.  Returns ``(processed, failed, skipped)``."""
+    meta = result.task.meta
+    movie_id = meta['movie_id']
+    video_code = meta['video_code']
+    href = meta['href']
+    idx_str = result.task.entry_index
+
+    if not result.success:
+        logger.warning("[%s] Failed to get actor for %s (%s)", idx_str, video_code, href)
         return 0, 1, 0
 
-    an = result.actor_name.strip()
-    ag = result.actor_gender.strip()
-    al = result.actor_link.strip()
-    sup = result.supporting_actors.strip()
+    data = result.data
+    an = (data['actor_name'] or '').strip()
+    ag = (data['actor_gender'] or '').strip()
+    al = (data['actor_link'] or '').strip()
+    sup = (data['supporting'] or '').strip()
     an, ag, al, sup = _promote_single_female_actor(an, ag, al, sup)
     base_url = cfg('BASE_URL', 'https://javdb.com')
     al = javdb_absolute_url(al, base_url) if al else al
     sup = absolutize_supporting_actors_json(sup, base_url) if sup else sup
-    if not _is_meaningful_actor_data(an, al, sup):
-        if result.parse_success:
-            logger.debug(
-                "[%s] Mark attempted (no actor data): %s",
-                task.entry_index, task.video_code,
-            )
-            with completed_lock:
-                completed_ids.add(task.movie_id)
-            if not dry_run:
-                conn.execute(
-                    "UPDATE MovieHistory SET SupportingActors=?, DateTimeUpdated=? WHERE Id=?",
-                    ('[]', now_fmt, task.movie_id),
-                )
-                conn.commit()
-            return 0, 0, 1
-        logger.debug(
-            "[%s] Skip UPDATE: empty actor fields (parse_success=%s)",
-            task.entry_index,
-            result.parse_success,
-        )
-        return 0, 0, 0
 
-    logger.debug("[%s] %s -> %r %r", task.entry_index, task.video_code, an, al)
-    with completed_lock:
-        completed_ids.add(task.movie_id)
+    if not _is_meaningful_actor_data(an, al, sup):
+        logger.debug("[%s] Mark attempted (no actor data): %s", idx_str, video_code)
+        completed_ids.add(movie_id)
+        if not dry_run:
+            conn.execute(
+                "UPDATE MovieHistory SET SupportingActors=?, DateTimeUpdated=? WHERE Id=?",
+                ('[]', now_fmt, movie_id),
+            )
+            conn.commit()
+        return 0, 0, 1
+
+    logger.debug("[%s] %s -> %r %r", idx_str, video_code, an, al)
+    completed_ids.add(movie_id)
     if not dry_run:
         conn.execute(
             """UPDATE MovieHistory SET ActorName=?, ActorGender=?, ActorLink=?,
                SupportingActors=?, DateTimeUpdated=? WHERE Id=?""",
-            (an, ag, al, sup, now_fmt, task.movie_id),
+            (an, ag, al, sup, now_fmt, movie_id),
         )
         conn.commit()
     return 1, 0, 0
-
-
-def _drain_parallel_result_queue_on_interrupt(
-    result_queue: queue_module.Queue,
-    *,
-    completed_ids: set[int],
-    completed_lock: threading.Lock,
-    dry_run: bool,
-    conn: sqlite3.Connection,
-    now_fmt: str,
-    phase: str,
-) -> tuple[int, int, int]:
-    """Apply every ``BackfillResult`` currently waiting on *result_queue* (non-blocking).
-
-    Returns aggregate ``(processed, failed, skipped)`` deltas.
-    A second ``KeyboardInterrupt`` during draining stops the drain early.
-    """
-    dp = df = ds = 0
-    drained = 0
-    while True:
-        try:
-            try:
-                result: BackfillResult = result_queue.get_nowait()
-            except queue_module.Empty:
-                break
-        except KeyboardInterrupt:
-            logger.warning(
-                "Second interrupt while draining result queue (%s); stopping flush early",
-                phase,
-            )
-            break
-        drained += 1
-        p, f, s = _apply_one_parallel_backfill_result(
-            result,
-            completed_ids=completed_ids,
-            completed_lock=completed_lock,
-            dry_run=dry_run,
-            conn=conn,
-            now_fmt=now_fmt,
-        )
-        dp += p
-        df += f
-        ds += s
-    if drained:
-        logger.info(
-            "Flushed %d pending backfill result(s) from queue (%s)",
-            drained, phase,
-        )
-    return dp, df, ds
-
-
-def _drain_task_queue_preserve_tasks(
-    q: queue_module.Queue,
-    sink: List[BackfillTask],
-) -> None:
-    """Remove all pending ``BackfillTask`` items from *q* (skip stray ``None``)."""
-    while True:
-        try:
-            item = q.get_nowait()
-        except queue_module.Empty:
-            break
-        if item is not None:
-            sink.append(item)
-
-
-def _parallel_signal_shutdown(
-    *,
-    stop_event: threading.Event,
-    task_queue: queue_module.Queue[BackfillTask | None],
-    login_queue: queue_module.Queue[BackfillTask],
-    num_workers: int,
-    not_started_tasks: List[BackfillTask],
-) -> None:
-    """Wake workers (interruptible sleep), reclaim queued work, send stop sentinels."""
-    stop_event.set()
-    _drain_task_queue_preserve_tasks(task_queue, not_started_tasks)
-    _drain_task_queue_preserve_tasks(login_queue, not_started_tasks)
-    for _ in range(num_workers):
-        task_queue.put(None)
-
-
-
-class BackfillWorker(threading.Thread):
-    """Worker thread bound to a single proxy for actor backfill.
-
-    Architecture mirrors ``scripts.spider.parallel.ProxyWorker``:
-    each proxy gets its own ``RequestHandler``, ``MovieSleepManager``,
-    and CF-bypass tracking.  Workers share a task queue and result queue;
-    the main thread collects results and writes to the DB.
-    """
-
-    def __init__(
-        self,
-        worker_id: int,
-        proxy_config: dict,
-        task_queue: queue_module.Queue[BackfillTask | None],
-        result_queue: queue_module.Queue[BackfillResult],
-        login_queue: queue_module.Queue[BackfillTask],
-        total_workers: int,
-        use_cookie: bool,
-        use_cf_bypass: bool,
-        movie_sleep_min: float,
-        movie_sleep_max: float,
-        ban_log_file: str,
-        all_workers: list,
-        coordinator,
-        completed_ids: set | None = None,
-        completed_lock: threading.Lock | None = None,
-        stop_event: threading.Event | None = None,
-        shutdown_orphan_tasks: list[BackfillTask] | None = None,
-        shutdown_orphan_lock: threading.Lock | None = None,
-    ):
-        super().__init__(daemon=True, name=f"BackfillWorker-{proxy_config.get('name', worker_id)}")
-        self.worker_id = worker_id
-        self.proxy_config = proxy_config
-        self.proxy_name: str = proxy_config.get('name', f'Proxy-{worker_id}')
-        self.task_queue = task_queue
-        self.result_queue = result_queue
-        self.login_queue = login_queue
-        self.total_workers = total_workers
-        self.use_cookie = use_cookie
-        self.all_workers = all_workers
-        self._coordinator = coordinator
-        self.completed_ids = completed_ids if completed_ids is not None else set()
-        self.completed_lock = completed_lock if completed_lock is not None else threading.Lock()
-        self._stop_event = stop_event or threading.Event()
-        self._shutdown_orphan_tasks = shutdown_orphan_tasks
-        self._shutdown_orphan_lock = shutdown_orphan_lock
-
-        self.needs_cf_bypass = use_cf_bypass
-        self._first_request = True
-
-        from scripts.spider.sleep_manager import MovieSleepManager
-        from utils.proxy_pool import create_proxy_pool_from_config
-        from utils.request_handler import RequestHandler, RequestConfig
-        from scripts.spider.config_loader import (
-            BASE_URL,
-            CF_BYPASS_SERVICE_PORT,
-            CF_BYPASS_ENABLED,
-            CF_TURNSTILE_COOLDOWN,
-            FALLBACK_COOLDOWN,
-            JAVDB_SESSION_COOKIE,
-            PROXY_POOL_COOLDOWN_SECONDS,
-            PROXY_POOL_MAX_FAILURES,
-        )
-        self._sleep_mgr = MovieSleepManager(movie_sleep_min, movie_sleep_max)
-
-        self._proxy_pool = create_proxy_pool_from_config(
-            [proxy_config],
-            cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
-            max_failures=PROXY_POOL_MAX_FAILURES,
-            ban_log_file=ban_log_file,
-        )
-        self._handler = RequestHandler(
-            proxy_pool=self._proxy_pool,
-            config=RequestConfig(
-                base_url=BASE_URL,
-                cf_bypass_service_port=CF_BYPASS_SERVICE_PORT,
-                cf_bypass_enabled=CF_BYPASS_ENABLED,
-                cf_bypass_max_failures=3,
-                cf_turnstile_cooldown=CF_TURNSTILE_COOLDOWN,
-                fallback_cooldown=FALLBACK_COOLDOWN,
-                javdb_session_cookie=JAVDB_SESSION_COOKIE,
-                proxy_http=proxy_config.get('http'),
-                proxy_https=proxy_config.get('https'),
-                proxy_modules=['all'],
-                proxy_mode='single',
-            ),
-        )
-
-    # -- internal helpers --------------------------------------------------
-
-    def _fetch_html(self, url: str, use_cf: bool) -> str | None:
-        return self._handler.get_page(
-            url, use_cookie=self.use_cookie, use_proxy=True,
-            module_name='spider', max_retries=1, use_cf_bypass=use_cf,
-        )
-
-    def _orphan_current_task(self, task: BackfillTask) -> None:
-        """Release a claimed task so it can be retried on the next backfill run."""
-        if self._shutdown_orphan_tasks is None or self._shutdown_orphan_lock is None:
-            return
-        with self._shutdown_orphan_lock:
-            self._shutdown_orphan_tasks.append(task)
-
-    def _interruptible_movie_sleep(self) -> bool:
-        """Sleep like ``MovieSleepManager`` but return True if shutdown was requested."""
-        t = self._sleep_mgr.get_sleep_time()
-        logger.debug("[%s] Movie sleep: %.1fs (interruptible)", self.proxy_name, t)
-        deadline = time.monotonic() + t
-        chunk = 0.5
-        while time.monotonic() < deadline:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            if self._stop_event.wait(timeout=min(chunk, remaining)):
-                return True
-        return False
-
-    def _try_fetch_and_parse(self, task: BackfillTask, use_cf: bool, context: str):
-        """Returns ``(actor_name, actor_gender, actor_link, supporting, success, needs_login)``."""
-        from utils.parser import parse_detail
-        from scripts.spider.session import is_login_page
-
-        logger.debug("[%s] [%s] %s", self.proxy_name, task.entry_index, context)
-        try:
-            html = self._fetch_html(task.url, use_cf)
-            if html:
-                if is_login_page(html):
-                    logger.warning("[%s] [%s] Login page: %s", self.proxy_name, task.entry_index, context)
-                    return '', '', '', '', False, True
-                _m, actor_name, actor_gender, actor_link, supporting, ok = parse_detail(
-                    html, task.entry_index, skip_sleep=True)
-                if ok:
-                    return (
-                        actor_name or '', actor_gender or '', actor_link or '',
-                        supporting or '', True, False,
-                    )
-                logger.debug("[%s] [%s] parse failed: %s", self.proxy_name, task.entry_index, context)
-            else:
-                logger.debug("[%s] [%s] no HTML: %s", self.proxy_name, task.entry_index, context)
-        except Exception as e:
-            logger.debug("[%s] [%s] error in %s: %s", self.proxy_name, task.entry_index, context, e)
-        return '', '', '', '', False, False
-
-    def _try_direct_then_cf(self, task: BackfillTask):
-        """Returns ``(actor_name, actor_gender, actor_link, supporting, success, used_cf, needs_login)``."""
-        if self.needs_cf_bypass:
-            an, ag, al, sup, ok, login = self._try_fetch_and_parse(task, True, "CF Bypass (marked)")
-            return an, ag, al, sup, ok, True, login
-
-        an, ag, al, sup, ok, login = self._try_fetch_and_parse(task, False, "Direct")
-        if ok:
-            return an, ag, al, sup, True, False, False
-        if login:
-            return an, ag, al, sup, False, False, True
-
-        an, ag, al, sup, ok, login = self._try_fetch_and_parse(task, True, "CF Bypass")
-        if ok:
-            self.needs_cf_bypass = True
-            logger.info("[%s] CF Bypass succeeded — marked for runtime", self.proxy_name)
-            return an, ag, al, sup, True, True, False
-        return '', '', '', '', False, False, login
-
-    def _handle_login_required(self, task: BackfillTask):
-        """Delegate to the shared LoginCoordinator."""
-        self._coordinator.handle_login_required(
-            worker=self,
-            task=task,
-            video_code=task.video_code,
-            login_queue=self.login_queue,
-            task_queue=self.task_queue,
-        )
-
-    def _get_next_task(self) -> BackfillTask | None:
-        while True:
-            with self._coordinator.lock:
-                am_logged_in = self._coordinator.is_login_worker(
-                    self.proxy_name, self.worker_id,
-                )
-
-            if am_logged_in:
-                try:
-                    return self.login_queue.get_nowait()
-                except queue_module.Empty:
-                    pass
-
-            try:
-                return self.task_queue.get(timeout=0.3 if am_logged_in else None)
-            except queue_module.Empty:
-                continue
-
-    # -- main loop ---------------------------------------------------------
-
-    def run(self):
-        while True:
-            task = self._get_next_task()
-            if task is None:
-                break
-
-            with self.completed_lock:
-                if task.movie_id in self.completed_ids:
-                    self.result_queue.put(BackfillResult(
-                        task=task, actor_name='', actor_gender='', actor_link='',
-                        supporting_actors='', parse_success=False, is_skipped=True,
-                    ))
-                    continue
-
-            if self.proxy_name in task.failed_proxies:
-                if len(task.failed_proxies) >= self.total_workers:
-                    self.result_queue.put(BackfillResult(
-                        task=task, actor_name='', actor_gender='', actor_link='',
-                        supporting_actors='', parse_success=False,
-                    ))
-                    continue
-                _requeue_front(self.task_queue, task)
-                time.sleep(0.1)
-                continue
-
-            if not self._first_request:
-                if self._interruptible_movie_sleep():
-                    self._orphan_current_task(task)
-                    continue
-            self._first_request = False
-
-            if self._stop_event.is_set():
-                self._orphan_current_task(task)
-                continue
-
-            an, ag, al, sup, success, used_cf, needs_login = self._try_direct_then_cf(task)
-            if success:
-                cf_tag = " +CF" if used_cf else ""
-                has_actor_row = _is_meaningful_actor_data(an, al, sup)
-                if has_actor_row:
-                    logger.info(
-                        "[%s] Parsed %s%s [%s]",
-                        task.entry_index, task.video_code, cf_tag, self.proxy_name,
-                    )
-                else:
-                    logger.warning(
-                        "[%s] Page loaded%s [%s] but no meaningful actor data "
-                        "(magnets OK, actor panel empty or missing). %s",
-                        task.entry_index, cf_tag, self.proxy_name, task.video_code,
-                    )
-                self.result_queue.put(BackfillResult(
-                    task=task, actor_name=an, actor_gender=ag, actor_link=al,
-                    supporting_actors=sup, parse_success=True,
-                ))
-            elif needs_login:
-                self._handle_login_required(task)
-            else:
-                task.failed_proxies.add(self.proxy_name)
-                task.retry_count += 1
-                _requeue_front(self.task_queue, task)
-                logger.info(
-                    "[%s] [%s] Failed %s, re-queued (%d/%d proxies)",
-                    self.proxy_name, task.entry_index, task.video_code,
-                    len(task.failed_proxies), self.total_workers,
-                )
 
 
 # ---------------------------------------------------------------------------
@@ -812,79 +433,65 @@ def run_actor_backfill(
     now_fmt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # ------------------------------------------------------------------
-    # Parallel mode: one BackfillWorker per proxy
+    # Parallel mode: FetchEngine with one worker per proxy
     # ------------------------------------------------------------------
     if use_proxy and PROXY_POOL:
-        from scripts.spider.config_loader import LOGIN_PROXY_NAME
+        from scripts.spider.engine import FetchEngine, EngineTask
+        from utils.parser import parse_detail
 
         completed_ids: set[int] = set()
-        completed_lock = threading.Lock()
         stop_event = threading.Event()
-        shutdown_orphan_tasks: list[BackfillTask] = []
-        shutdown_orphan_lock = threading.Lock()
 
-        task_queue: queue_module.Queue[BackfillTask | None] = queue_module.Queue()
-        result_queue: queue_module.Queue[BackfillResult] = queue_module.Queue()
-        login_queue: queue_module.Queue[BackfillTask] = queue_module.Queue()
-
-        all_workers: list[BackfillWorker] = []
-        coordinator = LoginCoordinator(
-            all_workers=all_workers, login_proxy_name=LOGIN_PROXY_NAME,
-        )
-
-        for idx, proxy_cfg in enumerate(PROXY_POOL):
-            w = BackfillWorker(
-                worker_id=idx,
-                proxy_config=proxy_cfg,
-                task_queue=task_queue,
-                result_queue=result_queue,
-                login_queue=login_queue,
-                total_workers=len(PROXY_POOL),
-                use_cookie=True,
-                use_cf_bypass=use_cf_bypass,
-                movie_sleep_min=movie_sleep_mgr.sleep_min,
-                movie_sleep_max=movie_sleep_mgr.sleep_max,
-                ban_log_file=ban_log_file,
-                all_workers=all_workers,
-                coordinator=coordinator,
-                completed_ids=completed_ids,
-                completed_lock=completed_lock,
-                stop_event=stop_event,
-                shutdown_orphan_tasks=shutdown_orphan_tasks,
-                shutdown_orphan_lock=shutdown_orphan_lock,
+        def _backfill_parse(html: str, task: EngineTask):
+            _m, actor_name, actor_gender, actor_link, supporting, ok = (
+                parse_detail(html, task.entry_index, skip_sleep=True)
             )
-            all_workers.append(w)
+            if not ok:
+                return None
+            return {
+                'actor_name': actor_name or '',
+                'actor_gender': actor_gender or '',
+                'actor_link': actor_link or '',
+                'supporting': supporting or '',
+            }
+
+        engine = FetchEngine.simple(
+            parse_fn=_backfill_parse,
+            use_cookie=True,
+            ban_log_file=ban_log_file,
+            stop_event=stop_event,
+            sleep_min=movie_sleep_mgr.sleep_min,
+            sleep_max=movie_sleep_mgr.sleep_max,
+        )
+        engine.start()
 
         for i, row in enumerate(rows, 1):
-            task_queue.put(BackfillTask(
-                url=urljoin(BASE_URL, row["Href"]),
-                movie_id=row["Id"],
-                href=row["Href"],
-                video_code=row["VideoCode"],
+            engine.submit(
+                urljoin(BASE_URL, row["Href"]),
                 entry_index=f"backfill-{i}/{total}",
-            ))
+                meta={
+                    'movie_id': row["Id"],
+                    'href': row["Href"],
+                    'video_code': row["VideoCode"],
+                },
+            )
+        engine.mark_done()
 
         logger.info(
             "Starting %d workers for %d backfill tasks (one detail page per row)",
-            len(all_workers), total,
+            len(engine._workers), total,
         )
-        for w in all_workers:
-            w.start()
 
         processed = 0
         failed = 0
         skipped = 0
-        results_received = 0
         parallel_interrupted = False
 
         try:
-            while results_received < total:
-                result: BackfillResult = result_queue.get()
-                results_received += 1
-                p, f, s = _apply_one_parallel_backfill_result(
+            for result in engine.results():
+                p, f, s = _apply_backfill_result(
                     result,
                     completed_ids=completed_ids,
-                    completed_lock=completed_lock,
                     dry_run=dry_run,
                     conn=conn,
                     now_fmt=now_fmt,
@@ -894,65 +501,41 @@ def run_actor_backfill(
                 skipped += s
         except KeyboardInterrupt:
             parallel_interrupted = True
-            not_started: list[BackfillTask] = []
-            logger.warning(
-                "Keyboard interrupt — signalling workers, draining task queues, flushing results …",
-            )
-            _parallel_signal_shutdown(
-                stop_event=stop_event,
-                task_queue=task_queue,
-                login_queue=login_queue,
-                num_workers=len(all_workers),
-                not_started_tasks=not_started,
-            )
-            ep, ef, es = _drain_parallel_result_queue_on_interrupt(
-                result_queue,
-                completed_ids=completed_ids,
-                completed_lock=completed_lock,
-                dry_run=dry_run,
-                conn=conn,
-                now_fmt=now_fmt,
-                phase="before worker shutdown",
-            )
-            processed += ep
-            failed += ef
-            skipped += es
+            logger.warning("Keyboard interrupt — shutting down engine …")
+            orphaned = engine.shutdown(timeout=30)
 
-            for w in all_workers:
-                w.join(timeout=30)
+            drained = 0
+            while True:
+                try:
+                    result = engine._result_queue.get_nowait()
+                except queue_module.Empty:
+                    break
+                drained += 1
+                p, f, s = _apply_backfill_result(
+                    result,
+                    completed_ids=completed_ids,
+                    dry_run=dry_run,
+                    conn=conn,
+                    now_fmt=now_fmt,
+                )
+                processed += p
+                failed += f
+                skipped += s
+            if drained:
+                logger.info("Flushed %d pending result(s) after shutdown", drained)
 
-            ep2, ef2, es2 = _drain_parallel_result_queue_on_interrupt(
-                result_queue,
-                completed_ids=completed_ids,
-                completed_lock=completed_lock,
-                dry_run=dry_run,
-                conn=conn,
-                now_fmt=now_fmt,
-                phase="after worker shutdown",
-            )
-            processed += ep2
-            failed += ef2
-            skipped += es2
-
-            with shutdown_orphan_lock:
-                n_orphan = len(shutdown_orphan_tasks)
-            n_queued = len(not_started)
             logger.info(
                 "Backfill interrupted (parallel, %d workers). "
                 "Updated: %d, Skipped: %d, Failed: %d — "
-                "%d tasks reclaimed from queues, %d released mid-worker (re-run backfill to continue)",
-                len(all_workers), processed, skipped, failed, n_queued, n_orphan,
+                "%d tasks orphaned (re-run backfill to continue)",
+                len(engine._workers), processed, skipped, failed, len(orphaned),
             )
         else:
-            for _ in all_workers:
-                task_queue.put(None)
-            for w in all_workers:
-                w.join(timeout=10)
-
+            engine.shutdown()
             logger.info(
                 "Backfill done (parallel, %d workers). "
                 "Updated: %d, Skipped: %d, Failed: %d",
-                len(all_workers), processed, skipped, failed,
+                len(engine._workers), processed, skipped, failed,
             )
 
         conn.close()
