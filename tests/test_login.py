@@ -687,20 +687,25 @@ class TestPerProxyLoginRouting:
     def test_worker_login_page_returns_needs_login(self):
         """_try_fetch_and_parse returns needs_login=True on login page."""
         from scripts.spider.parallel import ProxyWorker, DetailTask
+        from scripts.spider.parallel_login import LoginCoordinator
         import queue as queue_module
 
         dq = queue_module.Queue()
         rq = queue_module.Queue()
         lq = queue_module.Queue()
 
+        all_workers = []
+        coordinator = LoginCoordinator(all_workers=all_workers)
         proxy_cfg = {'name': 'TestProxy', 'http': 'http://1.2.3.4:8080'}
         w = ProxyWorker(
             worker_id=0, proxy_config=proxy_cfg,
             detail_queue=dq, result_queue=rq, login_queue=lq,
             total_workers=1, use_cookie=True, is_adhoc_mode=True,
             movie_sleep_min=0, movie_sleep_max=0, fallback_cooldown=0,
-            ban_log_file='', all_workers=[],
+            ban_log_file='', all_workers=all_workers,
+            coordinator=coordinator,
         )
+        all_workers.append(w)
 
         task = DetailTask(url='http://example.com/v/abc',
                           entry={'video_code': 'ABC-123', 'href': '/v/abc', 'page': 1},
@@ -721,20 +726,25 @@ class TestPerProxyLoginRouting:
     def test_try_direct_then_cf_short_circuits_on_login(self):
         """_try_direct_then_cf returns needs_login=True and skips CF bypass."""
         from scripts.spider.parallel import ProxyWorker, DetailTask
+        from scripts.spider.parallel_login import LoginCoordinator
         import queue as queue_module
 
         dq = queue_module.Queue()
         rq = queue_module.Queue()
         lq = queue_module.Queue()
 
+        all_workers = []
+        coordinator = LoginCoordinator(all_workers=all_workers)
         proxy_cfg = {'name': 'TestProxy', 'http': 'http://1.2.3.4:8080'}
         w = ProxyWorker(
             worker_id=0, proxy_config=proxy_cfg,
             detail_queue=dq, result_queue=rq, login_queue=lq,
             total_workers=1, use_cookie=True, is_adhoc_mode=True,
             movie_sleep_min=0, movie_sleep_max=0, fallback_cooldown=0,
-            ban_log_file='', all_workers=[],
+            ban_log_file='', all_workers=all_workers,
+            coordinator=coordinator,
         )
+        all_workers.append(w)
 
         task = DetailTask(url='http://example.com/v/abc',
                           entry={'video_code': 'ABC-123', 'href': '/v/abc', 'page': 1},
@@ -755,8 +765,8 @@ class TestPerProxyLoginRouting:
 
     def test_handle_login_required_routes_to_login_queue(self):
         """When a logged-in worker exists, tasks are routed to login_queue."""
-        import scripts.spider.parallel as parallel
         from scripts.spider.parallel import ProxyWorker, DetailTask
+        from scripts.spider.parallel_login import LoginCoordinator
         import queue as queue_module
 
         dq = queue_module.Queue()
@@ -764,6 +774,7 @@ class TestPerProxyLoginRouting:
         lq = queue_module.Queue()
 
         all_workers = []
+        coordinator = LoginCoordinator(all_workers=all_workers)
         for i, name in enumerate(['ProxyA', 'ProxyB']):
             cfg = {'name': name, 'http': f'http://10.0.0.{i+1}:8080'}
             w = ProxyWorker(
@@ -772,6 +783,7 @@ class TestPerProxyLoginRouting:
                 total_workers=2, use_cookie=True, is_adhoc_mode=True,
                 movie_sleep_min=0, movie_sleep_max=0, fallback_cooldown=0,
                 ban_log_file='', all_workers=all_workers,
+                coordinator=coordinator,
             )
             all_workers.append(w)
 
@@ -779,24 +791,20 @@ class TestPerProxyLoginRouting:
                           entry={'video_code': 'ABC-123', 'href': '/v/abc', 'page': 1},
                           phase=1, entry_index='1/10')
 
-        original_id = parallel._logged_in_worker_id
-        try:
-            parallel._logged_in_worker_id = 0  # ProxyA is logged in
+        coordinator.logged_in_worker_id = 0  # ProxyA is logged in
 
-            worker_b = all_workers[1]
-            worker_b._handle_login_required(task)
+        worker_b = all_workers[1]
+        worker_b._handle_login_required(task)
 
-            assert not lq.empty(), "Task should be in login_queue"
-            routed_task = lq.get_nowait()
-            assert routed_task is task
-            assert 'ProxyA' not in task.failed_proxies
-        finally:
-            parallel._logged_in_worker_id = original_id
+        assert not lq.empty(), "Task should be in login_queue"
+        routed_task = lq.get_nowait()
+        assert routed_task is task
+        assert 'ProxyA' not in task.failed_proxies
 
     def test_handle_login_required_clears_logged_in_proxy_from_failed(self):
         """Routing to login_queue clears the logged-in proxy from failed_proxies."""
-        import scripts.spider.parallel as parallel
         from scripts.spider.parallel import ProxyWorker, DetailTask
+        from scripts.spider.parallel_login import LoginCoordinator
         import queue as queue_module
 
         dq = queue_module.Queue()
@@ -804,6 +812,7 @@ class TestPerProxyLoginRouting:
         lq = queue_module.Queue()
 
         all_workers = []
+        coordinator = LoginCoordinator(all_workers=all_workers)
         for i, name in enumerate(['ProxyA', 'ProxyB']):
             cfg = {'name': name, 'http': f'http://10.0.0.{i+1}:8080'}
             w = ProxyWorker(
@@ -812,6 +821,7 @@ class TestPerProxyLoginRouting:
                 total_workers=2, use_cookie=True, is_adhoc_mode=True,
                 movie_sleep_min=0, movie_sleep_max=0, fallback_cooldown=0,
                 ban_log_file='', all_workers=all_workers,
+                coordinator=coordinator,
             )
             all_workers.append(w)
 
@@ -820,24 +830,20 @@ class TestPerProxyLoginRouting:
                           phase=1, entry_index='1/10',
                           failed_proxies={'ProxyA'})
 
-        original_id = parallel._logged_in_worker_id
-        try:
-            parallel._logged_in_worker_id = 0  # ProxyA is logged in
+        coordinator.logged_in_worker_id = 0  # ProxyA is logged in
 
-            worker_b = all_workers[1]
-            worker_b._handle_login_required(task)
+        worker_b = all_workers[1]
+        worker_b._handle_login_required(task)
 
-            routed_task = lq.get_nowait()
-            assert 'ProxyA' not in routed_task.failed_proxies, \
-                "logged-in proxy should be cleared from failed_proxies"
-        finally:
-            parallel._logged_in_worker_id = original_id
+        routed_task = lq.get_nowait()
+        assert 'ProxyA' not in routed_task.failed_proxies, \
+            "logged-in proxy should be cleared from failed_proxies"
 
     def test_index_login_handoff_to_parallel_worker(self):
         """When index page login happened, matching parallel worker inherits it."""
         import scripts.spider.state as st
-        import scripts.spider.parallel as parallel
         from scripts.spider.parallel import ProxyWorker
+        from scripts.spider.parallel_login import LoginCoordinator
         import queue as queue_module
 
         dq = queue_module.Queue()
@@ -846,13 +852,12 @@ class TestPerProxyLoginRouting:
 
         orig_proxy = st.logged_in_proxy_name
         orig_cookie = st.refreshed_session_cookie
-        orig_id = parallel._logged_in_worker_id
         try:
             st.logged_in_proxy_name = 'ARM-2'
             st.refreshed_session_cookie = 'test_cookie_value'
-            parallel._logged_in_worker_id = None
 
             all_workers = []
+            coordinator = LoginCoordinator(all_workers=all_workers)
             for i, name in enumerate(['ARM-1', 'ARM-2', 'ARM-3']):
                 cfg = {'name': name, 'http': f'http://10.0.0.{i+1}:8080'}
                 w = ProxyWorker(
@@ -861,6 +866,7 @@ class TestPerProxyLoginRouting:
                     total_workers=3, use_cookie=True, is_adhoc_mode=True,
                     movie_sleep_min=0, movie_sleep_max=0, fallback_cooldown=0,
                     ban_log_file='', all_workers=all_workers,
+                    coordinator=coordinator,
                 )
                 all_workers.append(w)
 
@@ -869,16 +875,15 @@ class TestPerProxyLoginRouting:
                 for w in all_workers:
                     if w.proxy_name == st.logged_in_proxy_name:
                         w._handler.config.javdb_session_cookie = st.refreshed_session_cookie
-                        parallel._logged_in_worker_id = w.worker_id
+                        coordinator.logged_in_worker_id = w.worker_id
                         break
 
-            assert parallel._logged_in_worker_id == 1, "ARM-2 is worker_id=1"
+            assert coordinator.logged_in_worker_id == 1, "ARM-2 is worker_id=1"
             assert all_workers[1]._handler.config.javdb_session_cookie == 'test_cookie_value'
             assert all_workers[0]._handler.config.javdb_session_cookie != 'test_cookie_value'
         finally:
             st.logged_in_proxy_name = orig_proxy
             st.refreshed_session_cookie = orig_cookie
-            parallel._logged_in_worker_id = orig_id
 
 
 # Use temp_dir fixture
