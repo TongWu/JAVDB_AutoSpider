@@ -1149,8 +1149,12 @@ def _validate_javdb_url_or_422(url: str) -> None:
                     status_code=422,
                     detail="url must not resolve to a private or reserved IP address",
                 )
-    except socket.gaierror:
-        pass
+    except socket.gaierror as exc:
+        # Fail closed: if DNS cannot be resolved, do not bypass SSRF IP checks.
+        raise HTTPException(
+            status_code=422,
+            detail="url host DNS resolution failed",
+        ) from exc
 
 
 def _fetch_javdb_html(url: str, use_proxy: bool = True, use_cookie: bool = True) -> str:
