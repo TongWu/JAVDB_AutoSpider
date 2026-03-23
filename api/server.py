@@ -1486,9 +1486,8 @@ async def auth_csrf_middleware(request: Request, call_next):
         try:
             if not request.url.path.startswith("/api/explore/"):
                 _verify_csrf(request)
-                # Explore routes use Depends(_require_auth) / require_role in handlers;
-                # calling _require_auth here too would double-count auth rate limits.
-                _require_auth(request)
+                # Auth + auth rate limiting run only in Depends(_require_auth) / require_role
+                # on each route; middleware must not call _require_auth or limits apply twice.
         except HTTPException as exc:
             return JSONResponse(
                 status_code=exc.status_code,
