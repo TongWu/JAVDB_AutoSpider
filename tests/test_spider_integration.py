@@ -106,6 +106,12 @@ def create_workers(
     if coordinator is None:
         coord._all_workers = all_workers
 
+    shared_pt = PenaltyTracker()
+    shared_dwt = DualWindowThrottle(
+        short_window_sec=0.5, short_max=100,
+        long_window_sec=5.0, long_max=500,
+    )
+
     for idx, name in enumerate(proxy_names):
         cfg = {"name": name, "http": f"http://10.0.0.{idx + 1}:8080"}
         w = ProxyWorker(
@@ -123,11 +129,8 @@ def create_workers(
             ban_log_file="",
             all_workers=all_workers,
             coordinator=coord,
-            shared_penalty_tracker=PenaltyTracker(),
-            shared_throttle=DualWindowThrottle(
-                short_window_sec=0.5, short_max=100,
-                long_window_sec=5.0, long_max=500,
-            ),
+            shared_penalty_tracker=shared_pt,
+            shared_throttle=shared_dwt,
         )
         all_workers.append(w)
 
