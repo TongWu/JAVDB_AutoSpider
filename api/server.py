@@ -754,10 +754,15 @@ def _run_config_generator(config_values: Dict[str, Any]) -> None:
 
 
 def _job_meta_path(job_id: str) -> Path:
-    return JOB_LOG_DIR / f"{job_id}.meta.json"
+    _validate_job_id(job_id)
+    candidate = (JOB_LOG_DIR / f"{job_id}.meta.json").resolve()
+    if not candidate.parent == JOB_LOG_DIR.resolve():
+        raise HTTPException(status_code=400, detail="Invalid job_id")
+    return candidate
 
 
 def _read_job_meta(job_id: str) -> Dict[str, Any]:
+    _validate_job_id(job_id)
     path = _job_meta_path(job_id)
     if not path.exists():
         return {}
@@ -841,6 +846,24 @@ def _infer_created_at_from_job_id(job_id: str) -> str:
         return ""
 
 
+_JOB_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+
+
+def _validate_job_id(job_id: str) -> None:
+    """Reject job IDs that contain path-traversal characters or unexpected patterns."""
+    if not _JOB_ID_RE.match(job_id):
+        raise HTTPException(status_code=422, detail="Invalid job_id")
+
+
+def _safe_log_path(job_id: str) -> Path:
+    """Build and anchor-check a log file path for *job_id* under JOB_LOG_DIR."""
+    _validate_job_id(job_id)
+    candidate = (JOB_LOG_DIR / f"{job_id}.log").resolve()
+    if not candidate.parent == JOB_LOG_DIR.resolve():
+        raise HTTPException(status_code=400, detail="Invalid job_id")
+    return candidate
+
+
 def _normalize_job_kind(job_id: str) -> str:
     if job_id.startswith("daily-"):
         return "daily"
@@ -861,10 +884,10 @@ def _job_summary(job_id: str, job: Optional[Dict[str, Any]] = None) -> Dict[str,
         kind = str(job.get("kind", _normalize_job_kind(job_id)))
         mode = str(job.get("mode", _extract_task_mode(kind, command)))
         url = str(job.get("url", _extract_url_from_command(command)))
-        log_path = Path(str(job.get("log_path", JOB_LOG_DIR / f"{job_id}.log")))
+        log_path = _safe_log_path(job_id)
         source = "memory"
     else:
-        log_path = JOB_LOG_DIR / f"{job_id}.log"
+        log_path = _safe_log_path(job_id)
         if not log_path.exists():
             raise HTTPException(status_code=404, detail="job not found")
         meta = _read_job_meta(job_id)
@@ -987,13 +1010,12 @@ def _spawn_job(job_prefix: str, command: list[str], metadata: Optional[Dict[str,
 
 
 def _get_job(job_id: str) -> Dict[str, Any]:
-    if not re.match(r"^[a-zA-Z0-9_-]{1,64}$", job_id):
-        raise HTTPException(status_code=422, detail="Invalid job_id")
+    _validate_job_id(job_id)
     with JOB_LOCK:
         job = JOBS.get(job_id)
     summary = _job_summary(job_id, job)
     status = summary["status"]
-    log_path = Path(summary["log_path"])
+    log_path = _safe_log_path(job_id)
     log_content = _read_log_tail(log_path, 200)
     if job and status in {"success", "failed"}:
         _write_job_meta(
@@ -1652,7 +1674,7 @@ async def get_task(job_id: str, current=Depends(_require_auth)):
 @app.get("/api/tasks/{job_id}/stream")
 async def get_task_stream(job_id: str, offset: int = 0, current=Depends(_require_auth)):
     job = _get_job(job_id)
-    log_path = Path(str(job.get("log_path", JOB_LOG_DIR / f"{job_id}.log")))
+    log_path = _safe_log_path(job_id)
     chunk, next_offset = _read_log_chunk(log_path, offset, JOB_STREAM_MAX_BYTES)
     audit_logger.info("task_stream username=%s job=%s offset=%s", current["sub"], job_id, offset)
     return {
