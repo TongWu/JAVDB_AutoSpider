@@ -3,6 +3,7 @@
     <button
       type="button"
       class="lang-switch__btn"
+      :aria-pressed="locale === 'zh-CN'"
       :class="{ 'lang-switch__btn--active': locale === 'zh-CN' }"
       @click="setLocale('zh-CN')"
     >
@@ -12,6 +13,7 @@
     <button
       type="button"
       class="lang-switch__btn"
+      :aria-pressed="locale === 'en'"
       :class="{ 'lang-switch__btn--active': locale === 'en' }"
       @click="setLocale('en')"
     >
@@ -55,7 +57,7 @@ function setLocale(code: AppLocale) {
   background: rgb(0 0 0 / 0.04) !important;
 }
 
-.theme-dark .lang-switch__btn:hover {
+:global(.theme-dark) .lang-switch__btn:hover {
   background: rgb(255 255 255 / 0.06) !important;
 }
 

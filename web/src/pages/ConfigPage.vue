@@ -480,7 +480,12 @@ function buildPayload(): Record<string, unknown> {
       const s = String(raw ?? "").trim();
       const orig = initialJsonSnapshots.value[key] ?? "";
       if (s === orig) continue;
-      payload[key] = JSON.parse(s) as unknown;
+      try {
+        payload[key] = JSON.parse(s) as unknown;
+      } catch (err: unknown) {
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new Error(`Invalid JSON for ${key}: ${reason}. Raw: ${s}`);
+      }
       continue;
     }
     const s = String(raw ?? "").trim();

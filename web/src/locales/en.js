@@ -54,11 +54,22 @@ export default {
         nextSchedule: "Next scheduled task",
         scheduleNotConfigured: "Not configured",
         mode: "Mode",
+        taskId: "Job ID",
+        url: "URL",
         status: "Status",
+        unknown: "unknown",
         createdAt: "Created at",
         completedAt: "Completed at",
         noHistory: "No task history",
         modeAdhoc: "adhoc / pipeline",
+        modeMap: {
+            pipeline: "Pipeline",
+            spider: "Spider",
+        },
+        frequencyMap: {
+            daily: "daily",
+            pipeline: "pipeline",
+        },
     },
     daily: {
         title: "Scheduled tasks",
@@ -309,4 +320,5 @@ export default {
     errors: {
         pollError: "[poll error] {msg}",
     },
+    jobId: "Job ID",
 };

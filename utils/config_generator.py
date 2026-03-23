@@ -346,6 +346,8 @@ def generate_config_content(github_actions_mode: bool = False) -> str:
             value = type_func(env_name, default)
         else:
             value = type_func(None, default) if callable(type_func) else default
+        if config_name == 'CF_BYPASS_PORT_MAP' and not isinstance(value, dict):
+            value = {}
         sections[section].append((config_name, value))
     
     # Build config file content

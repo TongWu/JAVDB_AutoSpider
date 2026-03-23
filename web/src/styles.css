@@ -888,7 +888,7 @@ select:disabled {
   background: var(--mdc-bg-page);
   border: none;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .job-meta {
@@ -1132,7 +1132,7 @@ h3 {
 
 pre:not(.log-live) {
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   background: var(--mdc-bg-subtle);
   border: 1px solid var(--mdc-border);
   border-radius: var(--mdc-radius);
