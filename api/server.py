@@ -1310,14 +1310,43 @@ def _qb_add_magnet(cfg: Dict[str, Any], magnet: str, title: str, category: Optio
 
 
 def _resolved_history_csv_path(cfg: Dict[str, Any]) -> Path:
-    reports_dir = str(cfg.get("REPORTS_DIR", "reports") or "reports")
-    history_raw = str(cfg.get("PARSED_MOVIES_CSV", "parsed_movies_history.csv") or "parsed_movies_history.csv")
-    history_path = Path(history_raw)
-    if history_path.is_absolute():
-        return history_path
+    reports_dir_raw = str(cfg.get("REPORTS_DIR", "reports") or "reports").strip()
+    history_raw = str(cfg.get("PARSED_MOVIES_CSV", "parsed_movies_history.csv") or "parsed_movies_history.csv").strip()
+
+    def _resolve_under_root(raw: str, field: str) -> Path:
+        p = Path(raw)
+        if p.is_absolute():
+            raise HTTPException(status_code=422, detail=f"{field} must be a relative path")
+        candidate = (ROOT_DIR / p).resolve()
+        try:
+            candidate.relative_to(ROOT_DIR.resolve())
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=f"{field} escapes project root") from exc
+        return candidate
+
+    def _safe_single_segment(name: str, field: str) -> str:
+        if not name:
+            raise HTTPException(status_code=422, detail=f"{field} cannot be empty")
+        # Enforce a single file name segment and reject traversal markers.
+        if "/" in name or "\\" in name:
+            raise HTTPException(status_code=422, detail=f"{field} must be a file name")
+        segment = Path(name)
+        if segment.is_absolute() or len(segment.parts) != 1 or name in {".", ".."}:
+            raise HTTPException(status_code=422, detail=f"{field} is invalid")
+        if ".." in name:
+            raise HTTPException(status_code=422, detail=f"{field} cannot contain traversal markers")
+        return name
+
+    reports_dir = _resolve_under_root(reports_dir_raw or "reports", "REPORTS_DIR")
     if "/" in history_raw or "\\" in history_raw:
-        return ROOT_DIR / history_path
-    return ROOT_DIR / reports_dir / history_path
+        return _resolve_under_root(history_raw, "PARSED_MOVIES_CSV")
+    history_name = _safe_single_segment(history_raw or "parsed_movies_history.csv", "PARSED_MOVIES_CSV")
+    candidate = (reports_dir / history_name).resolve()
+    try:
+        candidate.relative_to(ROOT_DIR.resolve())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="PARSED_MOVIES_CSV escapes project root") from exc
+    return candidate
 
 
 def _downloaded_map_by_href(cfg: Dict[str, Any]) -> Dict[str, bool]:
