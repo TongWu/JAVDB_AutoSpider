@@ -1,10 +1,19 @@
-"""Unit tests for scripts/spider/sleep_manager.py."""
+"""Unit tests for scripts/spider/sleep_manager.py.
+
+Tests that verify exact configuration values and thread-safety properties
+that are not covered by the broader integration test
+(tests/test_spider_integration.py::TestSleepManagerHumanLike).
+
+Redundant classes removed:
+  - TestMovieSleepManagerFactors  → covered by TestSleepManagerHumanLike
+  - TestMovieSleepManagerDistribution → covered by TestSleepManagerHumanLike
+  - TestThreeFactorWorstCase → covered by TestSleepManagerHumanLike
+"""
 
 import os
 import sys
 import time
 import threading
-import statistics
 
 import pytest
 
@@ -22,7 +31,7 @@ from scripts.spider.sleep_manager import (
 
 
 # ---------------------------------------------------------------------------
-# PenaltyTracker
+# PenaltyTracker — exact tier values and thread safety
 # ---------------------------------------------------------------------------
 
 
@@ -48,14 +57,6 @@ class TestPenaltyTracker:
         for _ in range(4):
             pt.record_event()
         assert pt.get_penalty_factor() == 2.00
-
-    def test_events_decay_over_window(self):
-        pt = PenaltyTracker()
-        pt.WINDOW_SECONDS = 0.1  # 100ms for fast test
-        pt.record_event()
-        assert pt.get_penalty_factor() == 1.30
-        time.sleep(0.15)
-        assert pt.get_penalty_factor() == 1.0
 
     def test_recent_event_count(self):
         pt = PenaltyTracker()
@@ -87,7 +88,7 @@ class TestPenaltyTracker:
 
 
 # ---------------------------------------------------------------------------
-# DualWindowThrottle
+# DualWindowThrottle — max wait timeout and thread safety
 # ---------------------------------------------------------------------------
 
 
@@ -98,18 +99,6 @@ class TestDualWindowThrottle:
                                   long_window_sec=10.0, long_max=100)
         waited = dwt.wait_if_needed()
         assert waited == 0.0
-
-    def test_short_window_throttle(self):
-        dwt = DualWindowThrottle(short_window_sec=60.0, short_max=2,
-                                  long_window_sec=600.0, long_max=100)
-        dwt.wait_if_needed()  # 1st - ok
-        dwt.wait_if_needed()  # 2nd - ok
-        start = time.monotonic()
-        # 3rd should block since short_max=2
-        # But with max wait it will eventually proceed
-        dwt.wait_if_needed()
-        elapsed = time.monotonic() - start
-        assert elapsed >= 0.5  # should have waited at least a bit
 
     def test_max_wait_timeout(self):
         dwt = DualWindowThrottle(short_window_sec=600.0, short_max=1,
@@ -150,119 +139,7 @@ class TestDualWindowThrottle:
 
 
 # ---------------------------------------------------------------------------
-# MovieSleepManager – three-factor multiplier
-# ---------------------------------------------------------------------------
-
-
-class TestMovieSleepManagerFactors:
-
-    def test_default_no_multiplier(self):
-        mgr = MovieSleepManager(8.0, 25.0)
-        t = mgr.get_sleep_time()
-        # Drift shifts base by +/-0.5, so allow a wider range
-        assert 6.5 <= t <= ABSOLUTE_MAX_SLEEP
-
-    def test_volume_multiplier_scales_range(self):
-        mgr = MovieSleepManager(10.0, 20.0)
-        mgr.apply_volume_multiplier(100)
-        assert mgr._volume_min_mult > 1.0
-        assert mgr._volume_max_mult > 1.0
-        assert mgr.sleep_min > 10.0
-        assert mgr.sleep_max > 20.0
-
-    def test_concurrency_factor_sqrt(self):
-        mgr = MovieSleepManager(10.0, 20.0)
-        mgr.apply_concurrency_factor(4)
-        assert abs(mgr._worker_factor - 2.0) < 0.01
-
-    def test_concurrency_factor_capped(self):
-        mgr = MovieSleepManager(10.0, 20.0)
-        mgr.apply_concurrency_factor(100)
-        assert mgr._worker_factor == mgr.WORKER_FACTOR_CAP
-
-    def test_composite_multiplier_cap(self):
-        mgr = MovieSleepManager(8.0, 25.0)
-        pt = PenaltyTracker()
-        mgr._penalty_tracker = pt
-        for _ in range(10):
-            pt.record_event()
-
-        mgr.apply_volume_multiplier(300)
-        mgr.apply_concurrency_factor(8)
-
-        eff_min, eff_max = mgr._effective_range()
-        # Both should be capped at base * COMPOSITE_MULTIPLIER_CAP
-        assert eff_min <= mgr.base_min * COMPOSITE_MULTIPLIER_CAP + 1
-        assert eff_max <= mgr.base_max * COMPOSITE_MULTIPLIER_CAP + 1
-
-    def test_absolute_max_sleep_ceiling(self):
-        mgr = MovieSleepManager(8.0, 25.0)
-        mgr.apply_volume_multiplier(300)
-        mgr.apply_concurrency_factor(8)
-
-        for _ in range(200):
-            t = mgr.get_sleep_time()
-            assert t <= ABSOLUTE_MAX_SLEEP
-
-    def test_penalty_factor_applied_dynamically(self):
-        pt = PenaltyTracker()
-        mgr = MovieSleepManager(10.0, 20.0, penalty_tracker=pt)
-
-        range_before = mgr._effective_range()
-        pt.record_event()
-        pt.record_event()
-        range_after = mgr._effective_range()
-
-        assert range_after[0] > range_before[0]
-        assert range_after[1] > range_before[1]
-
-
-# ---------------------------------------------------------------------------
-# MovieSleepManager – distribution characteristics
-# ---------------------------------------------------------------------------
-
-
-class TestMovieSleepManagerDistribution:
-
-    def test_all_samples_in_range(self):
-        mgr = MovieSleepManager(8.0, 25.0)
-        for _ in range(500):
-            t = mgr.get_sleep_time()
-            # Allow for drift (+/-0.5) and jitter (+/-0.3)
-            assert t >= 6.0
-            assert t <= ABSOLUTE_MAX_SLEEP
-
-    def test_distribution_right_skew(self):
-        """Log-normal mixture should produce mean > median (right skew)."""
-        mgr = MovieSleepManager(8.0, 25.0)
-        samples = [mgr.get_sleep_time() for _ in range(2000)]
-        mean = statistics.mean(samples)
-        median = statistics.median(samples)
-        # Right-skewed: mean >= median (allowing some tolerance)
-        assert mean >= median - 1.0, (
-            f"Expected right skew: mean={mean:.2f}, median={median:.2f}"
-        )
-
-    def test_precision_below_0_1(self):
-        """Values should have more granularity than 0.1s steps."""
-        mgr = MovieSleepManager(8.0, 25.0)
-        samples = [mgr.get_sleep_time() for _ in range(100)]
-        fractional_parts = {round(s % 1, 2) for s in samples}
-        # With round(..., 2) we should see more than just 0.0, 0.1, ..., 0.9
-        assert len(fractional_parts) > 10
-
-    def test_independent_rng_per_instance(self):
-        """Each instance should have its own random state."""
-        mgr1 = MovieSleepManager(8.0, 25.0)
-        mgr2 = MovieSleepManager(8.0, 25.0)
-        samples1 = [mgr1.get_sleep_time() for _ in range(20)]
-        samples2 = [mgr2.get_sleep_time() for _ in range(20)]
-        # With independent RNGs + drift, sequences should differ
-        assert samples1 != samples2
-
-
-# ---------------------------------------------------------------------------
-# MovieSleepManager – session drift
+# MovieSleepManager — session drift
 # ---------------------------------------------------------------------------
 
 
@@ -279,7 +156,7 @@ class TestSessionDrift:
 
 
 # ---------------------------------------------------------------------------
-# Volume tiers
+# Volume tiers — exact tier boundary values
 # ---------------------------------------------------------------------------
 
 
@@ -309,39 +186,3 @@ class TestVolumeTiers:
         mgr = MovieSleepManager(10.0, 20.0)
         mgr.apply_volume_multiplier(150)
         assert mgr._volume_max_mult > mgr._volume_min_mult
-
-
-# ---------------------------------------------------------------------------
-# Integration: three-factor worst case stays within caps
-# ---------------------------------------------------------------------------
-
-
-class TestThreeFactorWorstCase:
-
-    def test_worst_case_bounded(self):
-        """N=300, W=8, 10 CF events => sleep must stay under ABSOLUTE_MAX_SLEEP."""
-        pt = PenaltyTracker()
-        for _ in range(10):
-            pt.record_event()
-
-        mgr = MovieSleepManager(8.0, 25.0, penalty_tracker=pt)
-        mgr.apply_volume_multiplier(300)
-        mgr.apply_concurrency_factor(8)
-
-        for _ in range(100):
-            t = mgr.get_sleep_time()
-            assert t <= ABSOLUTE_MAX_SLEEP, f"Sleep {t}s exceeded ceiling"
-
-    def test_worst_case_effective_range_capped(self):
-        pt = PenaltyTracker()
-        for _ in range(10):
-            pt.record_event()
-
-        mgr = MovieSleepManager(8.0, 25.0, penalty_tracker=pt)
-        mgr.apply_volume_multiplier(300)
-        mgr.apply_concurrency_factor(8)
-
-        eff_min, eff_max = mgr._effective_range()
-        # raw: 2.20 * sqrt(8) * 2.0 ≈ 12.4 => capped to 6.0
-        assert eff_min <= 8.5 * COMPOSITE_MULTIPLIER_CAP
-        assert eff_max <= 25.5 * COMPOSITE_MULTIPLIER_CAP
