@@ -135,7 +135,15 @@ SENSITIVE_KEYS = {
 }
 
 PASSWORD_CTX = CryptContext(schemes=["bcrypt"], deprecated="auto")
-API_SECRET_KEY = os.getenv("API_SECRET_KEY", "change-me-api-secret-key-32chars-min")
+
+_DEFAULT_SECRET = "change-me-api-secret-key-32chars-min"
+API_SECRET_KEY = os.getenv("API_SECRET_KEY", "").strip()
+if not API_SECRET_KEY or API_SECRET_KEY == _DEFAULT_SECRET:
+    raise RuntimeError(
+        "API_SECRET_KEY is not set or still uses the insecure default. "
+        "Please set a strong, unique secret via the API_SECRET_KEY environment variable."
+    )
+
 ACCESS_TOKEN_EXPIRE_SECONDS = int(os.getenv("ACCESS_TOKEN_EXPIRE_SECONDS", "1800"))
 REFRESH_TOKEN_EXPIRE_SECONDS = int(
     os.getenv("REFRESH_TOKEN_EXPIRE_SECONDS", str(7 * 24 * 3600))
@@ -1407,9 +1415,7 @@ async def auth_csrf_middleware(request: Request, call_next):
         try:
             if not request.url.path.startswith("/api/explore/"):
                 _verify_csrf(request)
-            _require_auth(request)
         except HTTPException as exc:
-            # HTTPException inside middleware can surface as 500; return JSON explicitly
             return JSONResponse(
                 status_code=exc.status_code,
                 content={"detail": exc.detail},
@@ -1681,7 +1687,7 @@ async def explore_proxy_page(url: str, token: str = "", current=Depends(_require
 
 @app.post("/api/explore/resolve")
 async def explore_resolve(payload: ExploreResolvePayload, current=Depends(_require_auth)):
-    html = _fetch_javdb_html(payload.url, use_proxy=False, use_cookie=payload.use_cookie)
+    html = _fetch_javdb_html(payload.url, use_proxy=payload.use_proxy, use_cookie=payload.use_cookie)
     page_type = detect_page_type(html)
     body: Dict[str, Any] = {
         "url": payload.url,
@@ -1705,7 +1711,7 @@ async def explore_download_magnet(payload: ExploreMagnetPayload, current=Depends
 
 @app.post("/api/explore/one-click")
 async def explore_one_click(payload: ExploreOneClickPayload, current=Depends(require_role("admin"))):
-    html = _fetch_javdb_html(payload.detail_url, use_proxy=False, use_cookie=payload.use_cookie)
+    html = _fetch_javdb_html(payload.detail_url, use_proxy=payload.use_proxy, use_cookie=payload.use_cookie)
     detail = _result_to_dict(parse_detail_page(html))
     magnets = detail.get("magnets", [])
     best = _pick_best_magnet(magnets if isinstance(magnets, list) else [])
@@ -1735,7 +1741,7 @@ async def explore_index_status(payload: ExploreIndexStatusPayload, current=Depen
         is_downloaded = bool(downloaded_map.get(href) or downloaded_map.get(absolute_url))
         has_uncensored = False
         try:
-            html = _fetch_javdb_html(absolute_url, use_proxy=False, use_cookie=payload.use_cookie)
+            html = _fetch_javdb_html(absolute_url, use_proxy=payload.use_proxy, use_cookie=payload.use_cookie)
             detail = _result_to_dict(parse_detail_page(html))
             magnets = detail.get("magnets", [])
             if isinstance(magnets, list):
