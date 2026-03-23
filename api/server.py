@@ -785,13 +785,8 @@ def _run_config_generator(config_values: Dict[str, Any]) -> None:
 
 
 def _job_meta_path(job_id: str) -> Path:
-    _validate_job_id(job_id)
-    candidate = (_RESOLVED_JOB_LOG_DIR / f"{job_id}.meta.json").resolve()
-    try:
-        candidate.relative_to(_RESOLVED_JOB_LOG_DIR)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid job_id")
-    return candidate
+    filename = _safe_job_log_filename(job_id, ".meta.json")
+    return _resolved_path_under_job_log_dir(filename)
 
 
 def _read_job_meta(job_id: str) -> Dict[str, Any]:
@@ -892,15 +887,41 @@ def _validate_job_id(job_id: str) -> None:
             raise HTTPException(status_code=422, detail="Invalid job_id")
 
 
-def _safe_log_path(job_id: str) -> Path:
-    """Build and anchor-check a log file path for *job_id* under JOB_LOG_DIR."""
+def _safe_job_log_filename(job_id: str, extension: str) -> str:
+    """Return a single path-segment filename ``{job_id}{extension}`` (no traversal).
+
+    Keeps all user-derived data out of generic Path joins until validated as one segment,
+    which satisfies path-safety analysis and adds defense in depth beyond *_validate_job_id*.
+    """
     _validate_job_id(job_id)
-    candidate = (_RESOLVED_JOB_LOG_DIR / f"{job_id}.log").resolve()
+    if not extension.startswith(".") or len(extension) < 2:
+        raise HTTPException(status_code=500, detail="Invalid log filename extension")
+    name = f"{job_id}{extension}"
+    for sep in (os.sep, os.altsep):
+        if sep and sep in name:
+            raise HTTPException(status_code=400, detail="Invalid job_id")
+    if ".." in name or name in (".", ".."):
+        raise HTTPException(status_code=400, detail="Invalid job_id")
+    # Exactly one path component (rejects e.g. hidden multi-part names on edge platforms).
+    if len(Path(name).parts) != 1:
+        raise HTTPException(status_code=400, detail="Invalid job_id")
+    return name
+
+
+def _resolved_path_under_job_log_dir(filename: str) -> Path:
+    """Resolve *filename* under ``_RESOLVED_JOB_LOG_DIR`` and ensure it stays inside that dir."""
+    candidate = (_RESOLVED_JOB_LOG_DIR / filename).resolve()
     try:
         candidate.relative_to(_RESOLVED_JOB_LOG_DIR)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid job_id")
+        raise HTTPException(status_code=400, detail="Invalid job_id") from None
     return candidate
+
+
+def _safe_log_path(job_id: str) -> Path:
+    """Build and anchor-check a log file path for *job_id* under JOB_LOG_DIR."""
+    filename = _safe_job_log_filename(job_id, ".log")
+    return _resolved_path_under_job_log_dir(filename)
 
 
 def _normalize_job_kind(job_id: str) -> str:
