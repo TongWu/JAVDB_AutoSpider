@@ -19,7 +19,7 @@
         <table class="data-table">
           <thead>
             <tr>
-              <th>任务ID</th>
+              <th>{{ t("jobId") }}</th>
               <th>{{ t("tasksPage.mode") }}</th>
               <th>{{ t("tasksPage.status") }}</th>
               <th>URL</th>

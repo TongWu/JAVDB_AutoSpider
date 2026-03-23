@@ -51,10 +51,10 @@
         <table class="data-table">
           <thead>
             <tr>
-              <th>任务ID</th>
+              <th>{{ t("dashboard.taskId") }}</th>
               <th>{{ t("dashboard.mode") }}</th>
               <th>{{ t("dashboard.status") }}</th>
-              <th>URL</th>
+              <th>{{ t("dashboard.url") }}</th>
               <th>{{ t("dashboard.createdAt") }}</th>
               <th>{{ t("dashboard.completedAt") }}</th>
             </tr>
@@ -63,7 +63,7 @@
             <tr v-for="t in taskHistoryRows" :key="t.job_id">
               <td><code>{{ t.job_id }}</code></td>
               <td>{{ taskModeLabel(t) }}</td>
-              <td>{{ t.status || "unknown" }}</td>
+              <td>{{ t.status || t("dashboard.unknown") }}</td>
               <td class="task-url-cell">{{ t.url || "—" }}</td>
               <td>{{ formatTime(t.created_at) }}</td>
               <td>{{ formatTime(t.completed_at) }}</td>
@@ -84,9 +84,25 @@ import { useI18n } from "vue-i18n";
 import { apiFetch } from "../lib/api";
 
 const { t } = useI18n();
-const healthShort = ref("…");
-const healthDetail = ref(t("dashboard.loading"));
-const rustLabel = ref("—");
+const serverHealthStatus = ref<"loading" | "ok" | "unreachable" | "other">("loading");
+const serverHealthDetail = ref("—");
+const rustStatus = ref<"on" | "off" | "unknown">("unknown");
+const healthShort = computed(() => {
+  if (serverHealthStatus.value === "loading") return "…";
+  if (serverHealthStatus.value === "ok") return t("dashboard.healthOk");
+  if (serverHealthStatus.value === "unreachable") return t("dashboard.unreachable");
+  return serverHealthDetail.value || t("dashboard.healthUnknown");
+});
+const healthDetail = computed(() => {
+  if (serverHealthStatus.value === "loading") return t("dashboard.loading");
+  if (serverHealthStatus.value === "unreachable") return t("dashboard.apiUnreachable");
+  return t("dashboard.statusLine", { status: serverHealthDetail.value || "—" });
+});
+const rustLabel = computed(() => {
+  if (rustStatus.value === "on") return t("dashboard.rustOn");
+  if (rustStatus.value === "off") return t("dashboard.rustOff");
+  return "—";
+});
 
 type TaskItem = {
   job_id: string;
@@ -130,8 +146,8 @@ const taskHistoryRows = computed(() => tasks.value.slice(0, 20));
 const nextScheduleLabel = computed(() => {
   const s = nextSchedule.value;
   if (!s) return "";
-  if (s.cron_pipeline) return `Pipeline: ${s.cron_pipeline}`;
-  if (s.cron_spider) return `Spider: ${s.cron_spider}`;
+  if (s.cron_pipeline) return `${t("dashboard.modeMap.pipeline")}: ${s.cron_pipeline}`;
+  if (s.cron_spider) return `${t("dashboard.modeMap.spider")}: ${s.cron_spider}`;
   return "";
 });
 
@@ -144,7 +160,8 @@ function formatTime(v?: string): string {
 
 function taskModeLabel(item: TaskItem): string {
   if (item.kind === "adhoc") return t("dashboard.modeAdhoc");
-  return `daily / ${item.mode || "pipeline"}`;
+  const mode = item.mode === "spider" ? t("dashboard.modeMap.spider") : t("dashboard.modeMap.pipeline");
+  return `${t("dashboard.frequencyMap.daily")} / ${mode}`;
 }
 
 async function loadTasks() {
@@ -185,13 +202,13 @@ onMounted(async () => {
       rust_core_available?: boolean;
     };
     const ok = health.status === "ok" || health.status === "healthy";
-    healthShort.value = ok ? t("dashboard.healthOk") : String(health.status ?? t("dashboard.healthUnknown"));
-    healthDetail.value = t("dashboard.statusLine", { status: health.status ?? "—" });
-    rustLabel.value = health.rust_core_available ? t("dashboard.rustOn") : t("dashboard.rustOff");
+    serverHealthStatus.value = ok ? "ok" : "other";
+    serverHealthDetail.value = String(health.status ?? "—");
+    rustStatus.value = health.rust_core_available ? "on" : "off";
   } catch {
-    healthShort.value = t("dashboard.unreachable");
-    healthDetail.value = t("dashboard.apiUnreachable");
-    rustLabel.value = "—";
+    serverHealthStatus.value = "unreachable";
+    serverHealthDetail.value = "—";
+    rustStatus.value = "unknown";
   }
   await loadTasks();
 });
