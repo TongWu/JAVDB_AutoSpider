@@ -100,6 +100,8 @@ function spawnBackend() {
     stdio: ["ignore", "pipe", "pipe"],
   };
 
+  const supersededProcesses = new WeakSet();
+
   const spawnWithCandidate = (index) => {
     const pythonBin = PYTHON_CANDIDATES[index];
     if (!pythonBin) {
@@ -109,10 +111,9 @@ function spawnBackend() {
     backendProcess = proc;
     ownsBackendProcess = true;
 
-    let retried = false;
     proc.once("error", (err) => {
       if (err && err.code === "ENOENT" && index + 1 < PYTHON_CANDIDATES.length) {
-        retried = true;
+        supersededProcesses.add(proc);
         spawnWithCandidate(index + 1);
         return;
       }
@@ -128,7 +129,7 @@ function spawnBackend() {
       process.stderr.write(`[api] ${chunk}`);
     });
     proc.on("exit", (code, signal) => {
-      if (!quitting && !retried) {
+      if (!quitting && !supersededProcesses.has(proc)) {
         console.error(`[api] exited unexpectedly, code=${code}, signal=${signal || "none"}`);
       }
     });
