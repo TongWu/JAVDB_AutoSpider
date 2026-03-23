@@ -249,8 +249,14 @@ ADMIN_PASSWORD_HASH = os.getenv("ADMIN_PASSWORD_HASH")
 if not ADMIN_PASSWORD_HASH:
     admin_password = os.getenv("ADMIN_PASSWORD", "").strip()
     if not admin_password:
-        raise RuntimeError(
-            "ADMIN_PASSWORD_HASH or ADMIN_PASSWORD must be provided."
+        if _IS_PRODUCTION_ENV:
+            raise RuntimeError(
+                "ADMIN_PASSWORD_HASH or ADMIN_PASSWORD must be provided."
+            )
+        admin_password = secrets.token_urlsafe(24)
+        logger.warning(
+            "ADMIN_PASSWORD_HASH/ADMIN_PASSWORD missing in non-production; "
+            "generated ephemeral admin password for this process."
         )
     ADMIN_PASSWORD_HASH = _hash_password(admin_password)
 READONLY_USERNAME = os.getenv("READONLY_USERNAME", "readonly")
