@@ -785,7 +785,7 @@ def _run_config_generator(config_values: Dict[str, Any]) -> None:
 
 def _job_meta_path(job_id: str) -> Path:
     _validate_job_id(job_id)
-    candidate = (JOB_LOG_DIR / f"{job_id}.meta.json").resolve()
+    candidate = (_RESOLVED_JOB_LOG_DIR / f"{job_id}.meta.json").resolve()
     try:
         candidate.relative_to(_RESOLVED_JOB_LOG_DIR)
     except ValueError:
@@ -1002,7 +1002,7 @@ def _next_schedule_info() -> Dict[str, str]:
 def _spawn_job(job_prefix: str, command: list[str], metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     now = datetime.now(timezone.utc)
     job_id = f"{job_prefix}-{now.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(2)}"
-    log_path = JOB_LOG_DIR / f"{job_id}.log"
+    log_path = _safe_log_path(job_id)
     with open(log_path, "w", encoding="utf-8") as fp:
         process = subprocess.Popen(
             command,
@@ -1163,6 +1163,17 @@ def _validate_javdb_url_or_422(url: str) -> None:
         ) from exc
 
 
+def _javdb_html_looks_like_error_blob(html: str) -> bool:
+    """Reject short bodies that look like stack traces or generic errors, not real pages."""
+    if len(html) >= 200:
+        return False
+    lower = html.lower()
+    return (
+        "traceback (most recent call last)" in lower
+        or "error:" in lower
+    )
+
+
 def _fetch_javdb_html(url: str, use_proxy: bool = True, use_cookie: bool = True) -> str:
     _validate_javdb_url_or_422(url)
     cfg = _load_runtime_config()
@@ -1179,17 +1190,32 @@ def _fetch_javdb_html(url: str, use_proxy: bool = True, use_cookie: bool = True)
             use_cf_bypass=False,
         )
         if html:
-            return html
-        errors.append("request_handler returned empty")
+            if _javdb_html_looks_like_error_blob(html):
+                logger.warning(
+                    "JavDB fetch returned short error-like HTML; retrying with simple fetch"
+                )
+                errors.append("request_handler: error-like response")
+            else:
+                return html
+        else:
+            errors.append("request_handler returned empty")
     except Exception as exc:
         errors.append(f"request_handler: {type(exc).__name__}")
 
     try:
-        return _simple_fetch_javdb_html(cfg, url, use_cookie=use_cookie)
+        html_simple = _simple_fetch_javdb_html(cfg, url, use_cookie=use_cookie)
+        if _javdb_html_looks_like_error_blob(html_simple):
+            logger.warning(
+                "simple JavDB fetch returned short error-like HTML; treating as failure"
+            )
+            errors.append("simple_fetch: error-like response")
+        else:
+            return html_simple
     except Exception as exc:
         errors.append(f"simple_fetch: {type(exc).__name__}")
 
-    raise HTTPException(status_code=502, detail=f"Failed to fetch target page ({'; '.join(errors)})")
+    logger.warning("Failed to fetch JavDB HTML: %s", "; ".join(errors))
+    raise HTTPException(status_code=502, detail="Failed to fetch target page")
 
 
 def _pick_best_magnet(magnets: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
@@ -1287,7 +1313,18 @@ def _downloaded_map_by_href(cfg: Dict[str, Any]) -> Dict[str, bool]:
 
 
 def _inject_explore_enhancer(html: str, source_url: str, *, nonce: str = "") -> str:
-    escaped_url = json.dumps(source_url)
+    # Strip characters that could break out of <script> or carry control bytes; json.dumps
+    # alone does not prevent `</script>`-style sequences inside a JS string literal in HTML.
+    raw = str(source_url)
+    safe_parts: list[str] = []
+    for ch in raw:
+        if ch in "<>":
+            continue
+        o = ord(ch)
+        if o < 32 or o == 127:
+            continue
+        safe_parts.append(ch)
+    escaped_url = json.dumps("".join(safe_parts))
     nonce_attr = f' nonce="{nonce}"' if nonce else ""
     enhancer = f"""
 <script{nonce_attr}>
