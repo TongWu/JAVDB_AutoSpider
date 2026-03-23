@@ -103,8 +103,7 @@ def create_workers(
 
     all_workers: list[ProxyWorker] = []
     coord = coordinator or LoginCoordinator(all_workers=all_workers)
-    if coordinator is None:
-        coord._all_workers = all_workers
+    coord._all_workers = all_workers
 
     shared_pt = PenaltyTracker()
     shared_dwt = DualWindowThrottle(
