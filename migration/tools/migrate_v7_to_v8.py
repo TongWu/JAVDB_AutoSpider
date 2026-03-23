@@ -236,12 +236,10 @@ def run_schema_migration(
 # Parallel actor backfill — one worker per proxy (mirrors ProxyWorker)
 # ---------------------------------------------------------------------------
 
-
-def _requeue_front(q: queue_module.Queue, item) -> None:
-    """Put *item* at the front of a Queue so it gets picked up next."""
-    with q.mutex:
-        q.queue.appendleft(item)
-        q.not_empty.notify()
+from scripts.spider.parallel_login import (  # noqa: E402
+    LoginCoordinator,
+    requeue_front as _requeue_front,
+)
 
 
 @dataclass
@@ -490,9 +488,6 @@ def _parallel_signal_shutdown(
         task_queue.put(None)
 
 
-_backfill_login_lock = threading.Lock()
-_backfill_logged_in_worker_id: int | None = None
-
 
 class BackfillWorker(threading.Thread):
     """Worker thread bound to a single proxy for actor backfill.
@@ -517,6 +512,7 @@ class BackfillWorker(threading.Thread):
         movie_sleep_max: float,
         ban_log_file: str,
         all_workers: list,
+        coordinator,
         completed_ids: set | None = None,
         completed_lock: threading.Lock | None = None,
         stop_event: threading.Event | None = None,
@@ -533,6 +529,7 @@ class BackfillWorker(threading.Thread):
         self.total_workers = total_workers
         self.use_cookie = use_cookie
         self.all_workers = all_workers
+        self._coordinator = coordinator
         self.completed_ids = completed_ids if completed_ids is not None else set()
         self.completed_lock = completed_lock if completed_lock is not None else threading.Lock()
         self._stop_event = stop_event or threading.Event()
@@ -554,10 +551,8 @@ class BackfillWorker(threading.Thread):
             JAVDB_SESSION_COOKIE,
             PROXY_POOL_COOLDOWN_SECONDS,
             PROXY_POOL_MAX_FAILURES,
-            LOGIN_PROXY_NAME,
         )
         self._sleep_mgr = MovieSleepManager(movie_sleep_min, movie_sleep_max)
-        self.login_proxy_name: str | None = LOGIN_PROXY_NAME
 
         self._proxy_pool = create_proxy_pool_from_config(
             [proxy_config],
@@ -656,106 +651,21 @@ class BackfillWorker(threading.Thread):
             return an, ag, al, sup, True, True, False
         return '', '', '', '', False, False, login
 
-    def _try_login_refresh(self) -> bool:
-        global _backfill_logged_in_worker_id
-        import scripts.spider.state as st
-        from scripts.spider.session import attempt_login_refresh
-
-        with _backfill_login_lock:
-            if self.login_proxy_name and self.proxy_name != self.login_proxy_name:
-                return False
-
-            if st.login_attempted:
-                if st.refreshed_session_cookie is not None:
-                    self._handler.config.javdb_session_cookie = st.refreshed_session_cookie
-                    _backfill_logged_in_worker_id = self.worker_id
-                    return True
-                return False
-
-            if self.login_proxy_name:
-                success, new_cookie, _ = attempt_login_refresh(None, None)
-            else:
-                proxy_for_login = {
-                    k: v for k, v in {
-                        'http': self.proxy_config.get('http'),
-                        'https': self.proxy_config.get('https'),
-                    }.items() if v
-                } or None
-
-                success, new_cookie, _ = attempt_login_refresh(
-                    explicit_proxies=proxy_for_login,
-                    explicit_proxy_name=self.proxy_name,
-                )
-            if success and new_cookie:
-                self._handler.config.javdb_session_cookie = new_cookie
-                _backfill_logged_in_worker_id = self.worker_id
-                return True
-            return False
-
     def _handle_login_required(self, task: BackfillTask):
-        global _backfill_logged_in_worker_id
-        import scripts.spider.state as st
-        from scripts.spider.session import can_attempt_login
-        from scripts.spider.parallel_login import should_delegate_login_task
-
-        if should_delegate_login_task(self.login_proxy_name, self.proxy_name):
-            with _backfill_login_lock:
-                if _backfill_logged_in_worker_id is not None:
-                    li_nm = self.all_workers[_backfill_logged_in_worker_id].proxy_name
-                    task.failed_proxies.discard(li_nm)
-                if self.login_proxy_name:
-                    task.failed_proxies.discard(self.login_proxy_name)
-            self.login_queue.put(task)
-            logger.info(
-                "[%s] [%s] Login required for %s, routing to LOGIN_PROXY_NAME worker [%s]",
-                self.proxy_name, task.entry_index, task.video_code, self.login_proxy_name,
-            )
-            return
-
-        with _backfill_login_lock:
-            if _backfill_logged_in_worker_id is not None:
-                if _backfill_logged_in_worker_id != self.worker_id:
-                    logged_in_proxy = self.all_workers[_backfill_logged_in_worker_id].proxy_name
-                    task.failed_proxies.discard(logged_in_proxy)
-                    self.login_queue.put(task)
-                    logger.info(
-                        "[%s] [%s] Login required for %s, routing to [%s]",
-                        self.proxy_name, task.entry_index, task.video_code, logged_in_proxy,
-                    )
-                    return
-                logger.warning(
-                    "[%s] [%s] Own session stale — requeueing %s",
-                    self.proxy_name, task.entry_index, task.video_code,
-                )
-                _backfill_logged_in_worker_id = None
-                st.refreshed_session_cookie = None
-                st.logged_in_proxy_name = None
-                task.failed_proxies.add(self.proxy_name)
-                _requeue_front(self.task_queue, task)
-                return
-
-        if can_attempt_login(True, is_index_page=False):
-            if self._try_login_refresh():
-                logger.info("[%s] Logged in, becoming login worker", self.proxy_name)
-                self.login_queue.put(task)
-                return
-
-        logger.warning("[%s] [%s] Login unavailable, marking failed", self.proxy_name, task.entry_index)
-        self.result_queue.put(BackfillResult(
-            task=task, actor_name='', actor_gender='', actor_link='',
-            supporting_actors='', parse_success=False,
-        ))
+        """Delegate to the shared LoginCoordinator."""
+        self._coordinator.handle_login_required(
+            worker=self,
+            task=task,
+            video_code=task.video_code,
+            login_queue=self.login_queue,
+            task_queue=self.task_queue,
+        )
 
     def _get_next_task(self) -> BackfillTask | None:
-        from scripts.spider.parallel_login import use_login_queue_priority
-
         while True:
-            with _backfill_login_lock:
-                am_logged_in = use_login_queue_priority(
-                    self.login_proxy_name,
-                    self.proxy_name,
-                    _backfill_logged_in_worker_id,
-                    self.worker_id,
+            with self._coordinator.lock:
+                am_logged_in = self._coordinator.is_login_worker(
+                    self.proxy_name, self.worker_id,
                 )
 
             if am_logged_in:
@@ -851,7 +761,6 @@ def run_actor_backfill(
     no_proxy: bool,
     use_cf_bypass: bool,
 ) -> int:
-    global _backfill_logged_in_worker_id
     from utils.config_helper import use_sqlite
     from utils.db import init_db
 
@@ -906,7 +815,7 @@ def run_actor_backfill(
     # Parallel mode: one BackfillWorker per proxy
     # ------------------------------------------------------------------
     if use_proxy and PROXY_POOL:
-        _backfill_logged_in_worker_id = None
+        from scripts.spider.config_loader import LOGIN_PROXY_NAME
 
         completed_ids: set[int] = set()
         completed_lock = threading.Lock()
@@ -919,6 +828,10 @@ def run_actor_backfill(
         login_queue: queue_module.Queue[BackfillTask] = queue_module.Queue()
 
         all_workers: list[BackfillWorker] = []
+        coordinator = LoginCoordinator(
+            all_workers=all_workers, login_proxy_name=LOGIN_PROXY_NAME,
+        )
+
         for idx, proxy_cfg in enumerate(PROXY_POOL):
             w = BackfillWorker(
                 worker_id=idx,
@@ -933,6 +846,7 @@ def run_actor_backfill(
                 movie_sleep_max=movie_sleep_mgr.sleep_max,
                 ban_log_file=ban_log_file,
                 all_workers=all_workers,
+                coordinator=coordinator,
                 completed_ids=completed_ids,
                 completed_lock=completed_lock,
                 stop_event=stop_event,
