@@ -400,6 +400,8 @@ def mask_sensitive_values(content: str) -> str:
     masked = re.sub(r'(COOKIE\s*=\s*")[^"]*(")', r"\1***MASKED***\2", masked)
     # Mask proxy pool (may contain IPs and passwords)
     masked = re.sub(r"(PROXY_POOL\s*=\s*\[)[^\]]*(\])", r"\1***MASKED***\2", masked)
+    # Mask CF bypass port map (may expose internal topology)
+    masked = re.sub(r"(CF_BYPASS_PORT_MAP\s*=\s*)\{[^}]*\}", r"\1***MASKED***", masked)
     return masked
 
 

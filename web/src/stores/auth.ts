@@ -6,6 +6,7 @@ type LoginResp = {
   csrf_token: string;
   role: "admin" | "readonly";
   expires_in: number;
+  username?: string;
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8100";
@@ -25,16 +26,11 @@ function jwtSub(token: string): string {
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
-    accessToken: localStorage.getItem("access_token") ?? "",
-    refreshToken: localStorage.getItem("refresh_token") ?? "",
-    csrfToken: localStorage.getItem("csrf_token") ?? "",
+    accessToken: "",
+    refreshToken: "",
+    csrfToken: "",
     role: (localStorage.getItem("role") as "admin" | "readonly") ?? "readonly",
-    username: (() => {
-      const u = localStorage.getItem("username");
-      if (u) return u;
-      const t = localStorage.getItem("access_token") ?? "";
-      return t ? jwtSub(t) : "";
-    })(),
+    username: localStorage.getItem("username") ?? "",
     apiBase: DESKTOP_API_BASE || API_BASE,
   }),
   actions: {
@@ -43,10 +39,7 @@ export const useAuthStore = defineStore("auth", {
       this.refreshToken = resp.refresh_token;
       this.csrfToken = resp.csrf_token;
       this.role = resp.role;
-      this.username = jwtSub(resp.access_token);
-      localStorage.setItem("access_token", resp.access_token);
-      localStorage.setItem("refresh_token", resp.refresh_token);
-      localStorage.setItem("csrf_token", resp.csrf_token);
+      this.username = resp.username || jwtSub(resp.access_token);
       localStorage.setItem("role", resp.role);
       localStorage.setItem("username", this.username);
     },
@@ -56,9 +49,6 @@ export const useAuthStore = defineStore("auth", {
       this.csrfToken = "";
       this.role = "readonly";
       this.username = "";
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
-      localStorage.removeItem("csrf_token");
       localStorage.removeItem("role");
       localStorage.removeItem("username");
     },

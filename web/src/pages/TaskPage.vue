@@ -33,7 +33,12 @@
               :key="it.job_id"
               class="task-list-row"
               :class="{ 'task-list-row--active': selectedJobId === it.job_id }"
+              tabindex="0"
+              role="button"
+              :aria-selected="selectedJobId === it.job_id"
               @click="selectTask(it.job_id)"
+              @keydown.enter.prevent="selectTask(it.job_id)"
+              @keydown.space.prevent="selectTask(it.job_id)"
             >
               <td><code>{{ it.job_id }}</code></td>
               <td>{{ taskModeLabel(it) }}</td>
@@ -81,6 +86,7 @@ const statusLine = ref("");
 const taskLog = ref("");
 const error = ref("");
 const fetched = ref(false);
+const activeFetchRequestId = ref(0);
 const { t } = useI18n();
 
 const filteredTasks = computed(() => {
@@ -120,20 +126,25 @@ async function refreshTasks() {
 }
 
 async function fetchTask(jobId: string) {
+  const requestJob = jobId.trim();
+  const requestId = activeFetchRequestId.value + 1;
+  activeFetchRequestId.value = requestId;
   error.value = "";
   fetched.value = false;
   statusLine.value = "";
   taskLog.value = "";
   try {
-    const data = (await apiFetch(`/api/tasks/${jobId.trim()}`)) as {
+    const data = (await apiFetch(`/api/tasks/${requestJob}`)) as {
       status?: string;
       log?: string;
     };
+    if (activeFetchRequestId.value !== requestId) return;
     fetched.value = true;
-    selectedJobId.value = jobId;
+    selectedJobId.value = requestJob;
     statusLine.value = t("tasksPage.statusLine", { status: data.status ?? "—" });
     taskLog.value = data.log ?? "";
   } catch (e: unknown) {
+    if (activeFetchRequestId.value !== requestId) return;
     error.value = e instanceof Error ? e.message : String(e);
   }
 }

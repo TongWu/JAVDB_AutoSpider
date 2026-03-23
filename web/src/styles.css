@@ -316,7 +316,7 @@ button {
 
 button:not(.ghost):not(.btn-text):not(.config-tab):not(.btn-text-link):not(.btn-folder):not(.nav-item--btn):not(.lang-switch__btn):not(.task-float) {
   background: var(--mdc-primary);
-  color: #fff;
+  color: var(--mdc-bg-page);
 }
 
 button:not(.ghost):not(.btn-text):not(.config-tab):not(.btn-text-link):not(.btn-folder):not(.nav-item--btn):not(.lang-switch__btn):not(.task-float):hover {

@@ -89,11 +89,27 @@ function isDetailUrl(url: string): boolean {
 }
 
 function normalizeHref(href: string): string {
-  if (!href) return href;
-  if (/^https?:\/\//i.test(href)) return href;
-  if (/^(www\.)?javdb\.com(\/|$)/i.test(href)) return `https://${href}`;
-  if (href.startsWith("/")) return `https://javdb.com${href}`;
-  return `https://javdb.com/${href}`;
+  const raw = String(href || "").trim();
+  if (!raw) return "https://javdb.com";
+  let candidate = raw;
+  if (!/^https?:\/\//i.test(candidate)) {
+    if (/^(www\.)?javdb\.com(\/|$)/i.test(candidate)) {
+      candidate = `https://${candidate}`;
+    } else if (candidate.startsWith("/")) {
+      candidate = `https://javdb.com${candidate}`;
+    } else {
+      candidate = `https://javdb.com/${candidate}`;
+    }
+  }
+  try {
+    const parsed = new URL(candidate);
+    const isHttp = parsed.protocol === "http:" || parsed.protocol === "https:";
+    const isJavdb = /(^|\.)javdb\.com$/i.test(parsed.hostname);
+    if (!isHttp || !isJavdb) return "https://javdb.com";
+    return parsed.toString();
+  } catch {
+    return "https://javdb.com";
+  }
 }
 
 async function syncCookie() {
@@ -138,6 +154,13 @@ function appendHistory(url: string) {
 
 function openUrl() {
   const safe = normalizeHref(urlInput.value);
+  if (!isJavdbUrl(safe)) {
+    message.value = t("explore.urlInvalid");
+    messageIsError.value = true;
+    return;
+  }
+  message.value = "";
+  messageIsError.value = false;
   urlInput.value = safe;
   if (isElectron) {
     webviewSrc.value = safe;
@@ -181,97 +204,11 @@ function reloadFrame() {
 }
 
 function buildEnhancerScript() {
-  const token = auth.accessToken || "";
-  const apiBase = auth.apiBase || "";
   return `
 (() => {
   if (window.__JAVDB_EXPLORE_ENHANCED__) return;
   window.__JAVDB_EXPLORE_ENHANCED__ = true;
-  const token = ${JSON.stringify(token)};
-  const apiBase = ${JSON.stringify(apiBase)};
-  const headers = token
-    ? { "Authorization": "Bearer " + token, "Content-Type": "application/json" }
-    : { "Content-Type": "application/json" };
-  const apiPost = async (path, payload) => {
-    const res = await fetch(apiBase + path, {
-      method: "POST",
-      headers,
-      credentials: "include",
-      body: JSON.stringify(payload || {})
-    });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    return res.json().catch(() => ({}));
-  };
-  const mkBtn = (text) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = text;
-    b.style.marginLeft = "8px";
-    b.style.padding = "3px 8px";
-    b.style.fontSize = "12px";
-    b.style.border = "1px solid #ccc";
-    b.style.borderRadius = "4px";
-    b.style.cursor = "pointer";
-    b.style.background = "#fff";
-    return b;
-  };
-  const isDetail = /^\\/v\\//.test(location.pathname);
-  if (isDetail) {
-    const rows = document.querySelectorAll("#magnets-content .item.columns.is-desktop");
-    rows.forEach((row) => {
-      const anchor = row.querySelector(".magnet-name a[href^='magnet:']");
-      if (!anchor || row.querySelector(".explore-qb-btn")) return;
-      const btn = mkBtn("使用qBittorrent下载");
-      btn.className = "explore-qb-btn";
-      btn.addEventListener("click", async () => {
-        try {
-          await apiPost("/api/explore/download-magnet", {
-            magnet: anchor.getAttribute("href") || "",
-            title: (anchor.querySelector(".name") && anchor.querySelector(".name").textContent || "").trim()
-          });
-          btn.textContent = "已提交";
-        } catch (e) {
-          btn.textContent = "失败";
-        }
-      });
-      anchor.parentElement && anchor.parentElement.appendChild(btn);
-    });
-    const host = document.querySelector("#magnets-content");
-    if (host && !document.querySelector(".explore-one-click-btn")) {
-      const one = mkBtn("一键下载");
-      one.className = "explore-one-click-btn";
-      one.style.margin = "8px 0";
-      one.addEventListener("click", async () => {
-        try {
-          await apiPost("/api/explore/one-click", { detail_url: location.href, use_proxy: false, use_cookie: true });
-          one.textContent = "已提交";
-        } catch (e) {
-          one.textContent = "失败";
-        }
-      });
-      host.parentElement && host.parentElement.insertBefore(one, host);
-    }
-  } else {
-    const cards = Array.from(document.querySelectorAll(".movie-list .item a.box[href]"));
-    cards.forEach((a) => {
-      if (a.querySelector(".explore-card-oneclick")) return;
-      const btn = mkBtn("一键下载");
-      btn.className = "explore-card-oneclick";
-      btn.addEventListener("click", async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        try {
-          const href = new URL(a.getAttribute("href") || "", location.href).toString();
-          await apiPost("/api/explore/one-click", { detail_url: href, use_proxy: false, use_cookie: true });
-          btn.textContent = "已提交";
-        } catch (err) {
-          btn.textContent = "失败";
-        }
-      });
-      const title = a.querySelector(".video-title");
-      if (title && title.parentElement) title.parentElement.appendChild(btn);
-    });
-  }
+  // Security hardening: do not inject host auth token or privileged APIs into guest pages.
 })();
 `;
 }
@@ -294,13 +231,15 @@ function bindWebviewEvents() {
     appendHistory(url);
   };
   wv.addEventListener("did-navigate", (event: any) => {
-    const url = String(event.url || "");
+    const url = normalizeHref(String(event.url || ""));
+    if (!isJavdbUrl(url)) return;
     currentBrowsingUrl.value = url;
     urlInput.value = url;
     syncHistoryFromNavigation(url);
   });
   wv.addEventListener("did-navigate-in-page", (event: any) => {
-    const url = String(event.url || "");
+    const url = normalizeHref(String(event.url || ""));
+    if (!isJavdbUrl(url)) return;
     currentBrowsingUrl.value = url;
     urlInput.value = url;
     syncHistoryFromNavigation(url);
@@ -325,7 +264,8 @@ function onWindowMessage(event: MessageEvent) {
   const data = event.data as { type?: string; url?: string } | null;
   if (!data || typeof data !== "object") return;
   if (data.type === "explore:url" && data.url) {
-    const url = String(data.url);
+    const url = normalizeHref(String(data.url));
+    if (!isJavdbUrl(url)) return;
     currentBrowsingUrl.value = url;
     urlInput.value = url;
     if (historyStack.value[historyIndex.value] !== url) {
