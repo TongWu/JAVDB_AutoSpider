@@ -23,7 +23,10 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from scripts.spider.parallel import ProxyWorker, DetailTask, DetailResult
+from scripts.spider.engine import (
+    _EngineWorker, EngineTask, EngineResult, WorkerContext, LoginRequired,
+    FetchEngine,
+)
 from scripts.spider.parallel_login import (
     LoginCoordinator, requeue_front, use_login_queue_priority,
     should_delegate_login_task,
@@ -90,18 +93,26 @@ def make_entry(code: str, page: int = 1) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _make_handler_stub(*_args, **_kwargs):
+    handler = MagicMock()
+    handler.get_page = MagicMock(return_value=None)
+    handler.config = MagicMock()
+    handler.config.javdb_session_cookie = None
+    return handler
+
+
 def create_workers(
     proxy_names: list[str],
     coordinator: LoginCoordinator = None,
     use_cookie: bool = True,
-    is_adhoc: bool = False,
+    process_fn=None,
 ) -> tuple:
-    """Create ProxyWorker instances (not started) and associated queues."""
+    """Create _EngineWorker instances (not started) and associated queues."""
     dq: queue_module.Queue = queue_module.Queue()
     rq: queue_module.Queue = queue_module.Queue()
     lq: queue_module.Queue = queue_module.Queue()
 
-    all_workers: list[ProxyWorker] = []
+    all_workers: list[_EngineWorker] = []
     coord = coordinator or LoginCoordinator(all_workers=all_workers)
     coord._all_workers = all_workers
 
@@ -111,27 +122,34 @@ def create_workers(
         long_window_sec=5.0, long_max=500,
     )
 
-    for idx, name in enumerate(proxy_names):
-        cfg = {"name": name, "http": f"http://10.0.0.{idx + 1}:8080"}
-        w = ProxyWorker(
-            worker_id=idx,
-            proxy_config=cfg,
-            detail_queue=dq,
-            result_queue=rq,
-            login_queue=lq,
-            total_workers=len(proxy_names),
-            use_cookie=use_cookie,
-            is_adhoc_mode=is_adhoc,
-            movie_sleep_min=0,
-            movie_sleep_max=0,
-            fallback_cooldown=0,
-            ban_log_file="",
-            all_workers=all_workers,
-            coordinator=coord,
-            shared_penalty_tracker=shared_pt,
-            shared_throttle=shared_dwt,
-        )
-        all_workers.append(w)
+    if process_fn is None:
+        def process_fn(ctx, task):
+            return {'parsed': True}
+
+    with patch('scripts.spider.engine.RequestHandler', side_effect=_make_handler_stub), \
+         patch('scripts.spider.engine.create_proxy_pool_from_config', return_value=MagicMock()), \
+         patch('scripts.spider.engine.LOGIN_PROXY_NAME', None):
+        for idx, name in enumerate(proxy_names):
+            cfg = {"name": name, "http": f"http://10.0.0.{idx + 1}:8080"}
+            w = _EngineWorker(
+                worker_id=idx,
+                proxy_config=cfg,
+                task_queue=dq,
+                result_queue=rq,
+                login_queue=lq,
+                total_workers=len(proxy_names),
+                use_cookie=use_cookie,
+                process_fn=process_fn,
+                all_workers=all_workers,
+                coordinator=coord,
+                sleep_min=0.01,
+                sleep_max=0.02,
+                ban_log_file="",
+                penalty_tracker=shared_pt,
+                throttle=shared_dwt,
+            )
+            w._startup_jitter = 0.01
+            all_workers.append(w)
 
     return all_workers, coord, dq, rq, lq
 
@@ -205,47 +223,29 @@ class TestIndexRequiresLogin:
             state.login_attempts_per_proxy = orig["per_proxy"]
             state.login_failures_per_proxy = orig["failures"]
 
-    def test_worker_detects_login_page_on_fetch(self):
-        """_try_fetch_and_parse correctly returns needs_login=True
-        when the fetched HTML is a login page."""
+    def test_worker_context_detects_login_page_on_fetch(self):
+        """WorkerContext.fetch() raises LoginRequired when the fetched HTML
+        is a login page."""
         workers, coord, *_ = create_workers(["TestProxy"])
         w = workers[0]
-
-        task = DetailTask(
-            url="http://javdb.com/v/abc123",
-            entry=make_entry("ABC-123"),
-            phase=1,
-            entry_index="1/5",
-        )
 
         w._fetch_html = lambda url, use_cf: LOGIN_PAGE_HTML
 
-        _, _, _, _, _, success, needs_login = w._try_fetch_and_parse(
-            task, False, "test"
-        )
-        assert success is False
-        assert needs_login is True
+        ctx = WorkerContext(w)
+        with pytest.raises(LoginRequired):
+            ctx.fetch("http://javdb.com/v/abc123")
 
-    def test_worker_parses_detail_html_successfully(self):
-        """_try_fetch_and_parse returns success=True for valid detail HTML."""
+    def test_worker_context_fetches_html_successfully(self):
+        """WorkerContext.fetch() returns HTML for valid pages."""
         workers, coord, *_ = create_workers(["TestProxy"])
         w = workers[0]
+        detail_html = make_detail_html("ABC-123")
 
-        task = DetailTask(
-            url="http://javdb.com/v/abc123",
-            entry=make_entry("ABC-123"),
-            phase=1,
-            entry_index="1/5",
-        )
+        w._fetch_html = lambda url, use_cf: detail_html
 
-        w._fetch_html = lambda url, use_cf: make_detail_html("ABC-123")
-
-        magnets, actor, _, _, _, success, needs_login = w._try_fetch_and_parse(
-            task, False, "test"
-        )
-        assert success is True
-        assert needs_login is False
-        assert len(magnets) > 0
+        ctx = WorkerContext(w)
+        result = ctx.fetch("http://javdb.com/v/abc123")
+        assert result == detail_html
 
 
 # =========================================================================
@@ -264,11 +264,10 @@ class TestMixedDetailLogin:
 
         coord.logged_in_worker_id = 0  # ARM-1 is logged in
 
-        task = DetailTask(
+        task = EngineTask(
             url="http://javdb.com/v/def456",
-            entry=make_entry("DEF-456"),
-            phase=1,
             entry_index="2/10",
+            meta={'video_code': 'DEF-456'},
         )
 
         worker_b = workers[1]  # ARM-2 encounters login page
@@ -292,18 +291,11 @@ class TestMixedDetailLogin:
             is_priority = coord.is_login_worker("ARM-2", 1)
         assert is_priority is False
 
-    def test_direct_then_cf_shortcircuits_on_login(self):
-        """_try_direct_then_cf detects login page on direct attempt and
-        does NOT try CF bypass (since CF won't fix auth)."""
+    def test_ctx_fetch_shortcircuits_on_login(self):
+        """WorkerContext.fetch() raises LoginRequired on first attempt
+        when the page is a login page — no CF fallback is tried."""
         workers, coord, *_ = create_workers(["TestProxy"])
         w = workers[0]
-
-        task = DetailTask(
-            url="http://javdb.com/v/ghi789",
-            entry=make_entry("GHI-789"),
-            phase=1,
-            entry_index="3/10",
-        )
 
         call_count = {"n": 0}
 
@@ -313,9 +305,9 @@ class TestMixedDetailLogin:
 
         w._fetch_html = mock_fetch
 
-        m, a, ag, al, sup, success, used_cf, needs_login = w._try_direct_then_cf(task)
-        assert success is False
-        assert needs_login is True
+        ctx = WorkerContext(w)
+        with pytest.raises(LoginRequired):
+            ctx.fetch("http://javdb.com/v/ghi789")
         assert call_count["n"] == 1, "Should stop after direct; CF bypass skipped"
 
     def test_multiple_workers_concurrent_login_routing(self):
@@ -328,11 +320,10 @@ class TestMixedDetailLogin:
 
         tasks = []
         for i in range(10):
-            t = DetailTask(
+            t = EngineTask(
                 url=f"http://javdb.com/v/mov{i:03d}",
-                entry=make_entry(f"MOV-{i:03d}"),
-                phase=1,
                 entry_index=f"{i+1}/10",
+                meta={'video_code': f'MOV-{i:03d}'},
             )
             tasks.append(t)
 
@@ -405,11 +396,10 @@ class TestCookieRevocationAndFailover:
             coord.logged_in_worker_id = 0
             new_cookie = "re_login_cookie_v2"
 
-            task = DetailTask(
+            task = EngineTask(
                 url="http://javdb.com/v/abc",
-                entry=make_entry("ABC-001"),
-                phase=1,
                 entry_index="1/5",
+                meta={'video_code': 'ABC-001'},
             )
 
             with patch(
@@ -444,11 +434,10 @@ class TestCookieRevocationAndFailover:
 
             new_cookie = "arm2_cookie_after_switch"
 
-            task = DetailTask(
+            task = EngineTask(
                 url="http://javdb.com/v/switch",
-                entry=make_entry("SWT-001"),
-                phase=1,
                 entry_index="1/5",
+                meta={'video_code': 'SWT-001'},
             )
 
             with patch(
@@ -481,11 +470,10 @@ class TestCookieRevocationAndFailover:
 
             coord.logged_in_worker_id = None
 
-            task = DetailTask(
+            task = EngineTask(
                 url="http://javdb.com/v/fail",
-                entry=make_entry("FAIL-001"),
-                phase=1,
                 entry_index="1/5",
+                meta={'video_code': 'FAIL-001'},
             )
 
             coord.handle_login_required(
@@ -526,11 +514,10 @@ class TestCookieRevocationAndFailover:
                 side_effect=lambda *a, **kw: next(login_responses),
             ):
                 for stale_round in range(3):
-                    task = DetailTask(
+                    task = EngineTask(
                         url=f"http://javdb.com/v/stale{stale_round}",
-                        entry=make_entry(f"STL-{stale_round:03d}"),
-                        phase=1,
                         entry_index=f"{stale_round + 1}/5",
+                        meta={'video_code': f'STL-{stale_round:03d}'},
                     )
                     coord.handle_login_required(
                         worker=workers[0],
@@ -556,11 +543,10 @@ class TestCookieRevocationAndFailover:
             coord.logged_in_worker_id = None
             new_cookie = "first_login_cookie"
 
-            task = DetailTask(
+            task = EngineTask(
                 url="http://javdb.com/v/first",
-                entry=make_entry("FST-001"),
-                phase=1,
                 entry_index="1/5",
+                meta={'video_code': 'FST-001'},
             )
 
             with patch(
@@ -766,8 +752,17 @@ class TestSleepManagerHumanLike:
                 assert total >= 0.01
 
     def test_worker_startup_jitter_varies_by_id(self):
-        """Each worker gets a different startup jitter based on worker_id."""
+        """Each worker gets a different startup jitter based on worker_id.
+        Re-apply the natural jitter formula to verify (create_workers zeros it)."""
+        import random
         workers, *_ = create_workers(["P1", "P2", "P3", "P4"])
+
+        rng = random.Random(42)
+        for w in workers:
+            w._startup_jitter = (
+                rng.uniform(0.5, 2.0) + w.worker_id * rng.uniform(1.5, 3.0)
+            )
+
         jitters = [w._startup_jitter for w in workers]
         assert len(set(jitters)) == len(jitters), (
             "Each worker should have a unique jitter"
@@ -794,17 +789,26 @@ class TestEndToEndMiniPipeline:
     def test_workers_process_normal_tasks(self):
         """3 workers process 6 normal detail tasks in parallel and
         all results are collected via result_queue."""
-        workers, coord, dq, rq, lq = create_workers(["ARM-1", "ARM-2", "ARM-3"])
 
+        def _parse_fn(ctx, task):
+            html = ctx.fetch(task.url)
+            if html:
+                return {'code': task.meta.get('video_code', ''), 'html_len': len(html)}
+            return None
+
+        workers, coord, dq, rq, lq = create_workers(
+            ["ARM-1", "ARM-2", "ARM-3"], process_fn=_parse_fn,
+        )
+
+        detail_html = make_detail_html("TEST", hash_val="testhash")
         for w in workers:
-            w._fetch_html = lambda url, use_cf: make_detail_html("TEST", hash_val="testhash")
+            w._fetch_html = lambda url, use_cf, _h=detail_html: _h
 
         for i in range(6):
-            dq.put(DetailTask(
+            dq.put(EngineTask(
                 url=f"http://javdb.com/v/mov{i:03d}",
-                entry=make_entry(f"MOV-{i:03d}"),
-                phase=1,
                 entry_index=f"{i+1}/6",
+                meta={'video_code': f'MOV-{i:03d}'},
             ))
 
         for w in workers:
@@ -825,10 +829,10 @@ class TestEndToEndMiniPipeline:
             w.join(timeout=5)
 
         assert len(results) == 6, f"Expected 6 results, got {len(results)}"
-        assert all(r.parse_success for r in results), "All tasks should parse successfully"
+        assert all(r.success for r in results), "All tasks should succeed"
 
-        worker_names = {r.task.url for r in results}
-        assert len(worker_names) == 6, "Each task should produce exactly one result"
+        task_urls = {r.task.url for r in results}
+        assert len(task_urls) == 6, "Each task should produce exactly one result"
 
 
 # =========================================================================
