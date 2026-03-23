@@ -42,7 +42,7 @@
           class="explore-browser-iframe"
           allowpopups
         />
-        <iframe v-else :key="frameKey" :src="iframeSrc" class="explore-browser-iframe" />
+        <iframe v-else ref="myIframeRef" :key="frameKey" :src="iframeSrc" class="explore-browser-iframe" />
       </div>
     </div>
   </div>
@@ -68,6 +68,7 @@ const iframeSrc = ref("");
 const frameKey = ref(0);
 const webviewSrc = ref("https://javdb.com");
 const webviewRef = ref<any>(null);
+const myIframeRef = ref<HTMLIFrameElement | null>(null);
 const historyStack = ref<string[]>([]);
 const historyIndex = ref(-1);
 const canJumpAdhoc = computed(() => isJavdbUrl(urlInput.value) && !isDetailUrl(urlInput.value));
@@ -90,6 +91,7 @@ function isDetailUrl(url: string): boolean {
 function normalizeHref(href: string): string {
   if (!href) return href;
   if (/^https?:\/\//i.test(href)) return href;
+  if (/^(www\.)?javdb\.com(\/|$)/i.test(href)) return `https://${href}`;
   if (href.startsWith("/")) return `https://javdb.com${href}`;
   return `https://javdb.com/${href}`;
 }
@@ -122,7 +124,6 @@ function buildIframeSrc(targetUrl: string): string {
   const safe = normalizeHref(targetUrl);
   const q = new URLSearchParams({
     url: safe,
-    token: auth.accessToken,
   });
   return `${auth.apiBase}/api/explore/proxy-page?${q.toString()}`;
 }
@@ -278,17 +279,31 @@ function buildEnhancerScript() {
 function bindWebviewEvents() {
   if (!isElectron || !webviewRef.value) return;
   const wv = webviewRef.value;
+  const syncHistoryFromNavigation = (url: string) => {
+    if (!url) return;
+    const prev = historyStack.value[historyIndex.value - 1];
+    const next = historyStack.value[historyIndex.value + 1];
+    if (prev === url) {
+      historyIndex.value -= 1;
+      return;
+    }
+    if (next === url) {
+      historyIndex.value += 1;
+      return;
+    }
+    appendHistory(url);
+  };
   wv.addEventListener("did-navigate", (event: any) => {
     const url = String(event.url || "");
     currentBrowsingUrl.value = url;
     urlInput.value = url;
-    appendHistory(url);
+    syncHistoryFromNavigation(url);
   });
   wv.addEventListener("did-navigate-in-page", (event: any) => {
     const url = String(event.url || "");
     currentBrowsingUrl.value = url;
     urlInput.value = url;
-    appendHistory(url);
+    syncHistoryFromNavigation(url);
   });
   wv.addEventListener("dom-ready", () => {
     wv.executeJavaScript(buildEnhancerScript()).catch(() => {});
@@ -296,6 +311,17 @@ function bindWebviewEvents() {
 }
 
 function onWindowMessage(event: MessageEvent) {
+  const expectedOrigin = (() => {
+    const source = iframeSrc.value || auth.apiBase || window.location.origin;
+    try {
+      return new URL(source, window.location.origin).origin;
+    } catch {
+      return window.location.origin;
+    }
+  })();
+  if (event.origin !== expectedOrigin) return;
+  if (myIframeRef.value && event.source !== myIframeRef.value.contentWindow) return;
+
   const data = event.data as { type?: string; url?: string } | null;
   if (!data || typeof data !== "object") return;
   if (data.type === "explore:url" && data.url) {

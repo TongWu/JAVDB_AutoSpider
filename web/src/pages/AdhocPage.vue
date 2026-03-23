@@ -69,7 +69,7 @@
           <label><input v-model="form.ignore_release_date" type="checkbox" /> ignore_release_date</label>
         </div>
         <div class="actions">
-          <button type="button" @click="submit">{{ t("adhoc.submit") }}</button>
+          <button type="button" :disabled="submitting" @click="submit">{{ t("adhoc.submit") }}</button>
         </div>
       </div>
 
@@ -96,7 +96,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { apiFetch } from "../lib/api";
 import { useRunningJobStore } from "../stores/runningJob";
@@ -104,10 +104,12 @@ import type { TaskTab } from "../stores/runningJob";
 
 const store = useRunningJobStore();
 const route = useRoute();
+const router = useRouter();
 const { t } = useI18n();
 const taskTab = ref<TaskTab>("params");
 const logEl = ref<HTMLElement | null>(null);
 const submitError = ref("");
+const submitting = ref(false);
 
 const form = reactive({
   url: "",
@@ -147,12 +149,13 @@ watch(
 watch(
   () => route.query.tab,
   (t) => {
-    if (t === "log") {
-      taskTab.value = "log";
-      store.setAdhocTaskTab("log");
-      if (store.kind === "adhoc" && store.jobId && store.pollStopped && !isTerminal.value) {
-        store.resumePolling();
-      }
+    const tab = t === "log" ? "log" : "params";
+    if (taskTab.value !== tab) {
+      taskTab.value = tab;
+    }
+    store.setAdhocTaskTab(tab);
+    if (tab === "log" && store.kind === "adhoc" && store.jobId && store.pollStopped && !isTerminal.value) {
+      store.resumePolling();
     }
   },
   { immediate: true },
@@ -170,6 +173,15 @@ watch(
 
 watch(taskTab, (t) => {
   store.setAdhocTaskTab(t);
+  const currentQueryTab = route.query.tab === "log" ? "log" : "params";
+  if (currentQueryTab !== t) {
+    void router.replace({
+      query: {
+        ...route.query,
+        tab: t,
+      },
+    });
+  }
   if (t === "log" && store.kind === "adhoc" && store.jobId && store.pollStopped && !isTerminal.value) {
     store.resumePolling();
   }
@@ -177,10 +189,6 @@ watch(taskTab, (t) => {
 
 function openLogTab() {
   taskTab.value = "log";
-  store.setAdhocTaskTab("log");
-  if (store.kind === "adhoc" && store.jobId && store.pollStopped && !isTerminal.value) {
-    store.resumePolling();
-  }
 }
 
 onMounted(() => {
@@ -190,6 +198,8 @@ onMounted(() => {
 });
 
 async function submit() {
+  if (submitting.value) return;
+  submitting.value = true;
   submitError.value = "";
   try {
     const data = await apiFetch("/api/tasks/adhoc", {
@@ -201,6 +211,8 @@ async function submit() {
   } catch (e: unknown) {
     submitError.value = t("adhoc.submitFail", { msg: e instanceof Error ? e.message : String(e) });
     taskTab.value = "log";
+  } finally {
+    submitting.value = false;
   }
 }
 </script>

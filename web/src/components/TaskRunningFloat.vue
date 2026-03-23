@@ -72,7 +72,7 @@ function goToLog() {
     transform 0.15s ease;
 }
 
-.theme-dark .task-float {
+:global(.theme-dark) .task-float {
   background: #1f1f1f;
   border-color: #525252;
 }
@@ -93,7 +93,7 @@ function goToLog() {
   animation: task-float-spin 0.85s linear infinite;
 }
 
-.theme-dark .task-float__spin {
+:global(.theme-dark) .task-float__spin {
   border-top-color: var(--mdc-text);
 }
 

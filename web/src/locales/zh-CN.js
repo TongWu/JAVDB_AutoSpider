@@ -3,7 +3,7 @@ export default {
         navAria: "主导航",
         system: "系统",
         safeMode: "安全模式",
-        safeModeTitle: "占位",
+        safeModeTitle: "启用后将降低自动操作频率并减少高风险请求",
         themeToggle: "切换主题",
         themeLight: "浅色主题",
         logout: "退出",
@@ -54,11 +54,22 @@ export default {
         nextSchedule: "下一个计划任务",
         scheduleNotConfigured: "暂未配置",
         mode: "模式",
+        taskId: "任务ID",
+        url: "URL",
         status: "状态",
+        unknown: "unknown",
         createdAt: "创建时间",
         completedAt: "完成时间",
         noHistory: "暂无历史任务",
         modeAdhoc: "adhoc / pipeline",
+        modeMap: {
+            pipeline: "Pipeline",
+            spider: "Spider",
+        },
+        frequencyMap: {
+            daily: "daily",
+            pipeline: "pipeline",
+        },
     },
     daily: {
         title: "定期任务",
@@ -309,4 +320,5 @@ export default {
     errors: {
         pollError: "[poll error] {msg}",
     },
+    jobId: "任务ID",
 };

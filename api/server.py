@@ -140,12 +140,23 @@ SENSITIVE_KEYS = {
 PASSWORD_CTX = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 _DEFAULT_SECRET = "change-me-api-secret-key-32chars-min"
-API_SECRET_KEY = os.getenv("API_SECRET_KEY", "").strip()
-if not API_SECRET_KEY or API_SECRET_KEY == _DEFAULT_SECRET:
-    raise RuntimeError(
-        "API_SECRET_KEY is not set or still uses the insecure default. "
-        "Please set a strong, unique secret via the API_SECRET_KEY environment variable."
+_RUNTIME_ENV = os.getenv("ENVIRONMENT", os.getenv("FLASK_ENV", "")).strip().lower()
+_IS_PRODUCTION_ENV = _RUNTIME_ENV == "production"
+API_SECRET_KEY = os.getenv("API_SECRET_KEY", _DEFAULT_SECRET).strip()
+if not API_SECRET_KEY:
+    raise RuntimeError("API_SECRET_KEY is required.")
+if len(API_SECRET_KEY) < 32:
+    message = "API_SECRET_KEY must be at least 32 characters long."
+    if _IS_PRODUCTION_ENV:
+        raise RuntimeError(message)
+    logger.warning("%s Running in non-production mode.", message)
+if API_SECRET_KEY == _DEFAULT_SECRET:
+    message = (
+        "API_SECRET_KEY still uses the insecure default placeholder."
     )
+    if _IS_PRODUCTION_ENV:
+        raise RuntimeError(message)
+    logger.warning("%s Running in non-production mode.", message)
 
 ACCESS_TOKEN_EXPIRE_SECONDS = int(os.getenv("ACCESS_TOKEN_EXPIRE_SECONDS", "1800"))
 REFRESH_TOKEN_EXPIRE_SECONDS = int(
@@ -236,11 +247,21 @@ def _hash_password(plain: str) -> str:
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD_HASH = os.getenv("ADMIN_PASSWORD_HASH")
 if not ADMIN_PASSWORD_HASH:
-    ADMIN_PASSWORD_HASH = _hash_password(os.getenv("ADMIN_PASSWORD", "admin123456"))
+    admin_password = os.getenv("ADMIN_PASSWORD", "").strip()
+    if not admin_password:
+        raise RuntimeError(
+            "ADMIN_PASSWORD_HASH or ADMIN_PASSWORD must be provided."
+        )
+    ADMIN_PASSWORD_HASH = _hash_password(admin_password)
 READONLY_USERNAME = os.getenv("READONLY_USERNAME", "readonly")
 READONLY_PASSWORD_HASH = os.getenv("READONLY_PASSWORD_HASH")
-if not READONLY_PASSWORD_HASH and os.getenv("READONLY_PASSWORD"):
-    READONLY_PASSWORD_HASH = _hash_password(os.getenv("READONLY_PASSWORD"))
+if not READONLY_PASSWORD_HASH:
+    readonly_password = os.getenv("READONLY_PASSWORD", "").strip()
+    if readonly_password:
+        logger.warning(
+            "READONLY_PASSWORD is provided in plaintext env and will be hashed at startup."
+        )
+        READONLY_PASSWORD_HASH = _hash_password(readonly_password)
 
 USERS = {
     ADMIN_USERNAME: {"role": "admin", "password_hash": ADMIN_PASSWORD_HASH},
@@ -529,7 +550,7 @@ app.add_middleware(
 
 @app.exception_handler(Exception)
 async def global_exception_handler(_: Request, exc: Exception):
-    logger.exception("Unhandled exception: %s", exc)
+    logger.exception("Unhandled exception", exc_info=exc)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
@@ -563,6 +584,16 @@ def _bearer_token(request: Request) -> str:
     return auth_header.replace("Bearer ", "", 1).strip()
 
 
+def _access_token_from_request(request: Request) -> str:
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        return auth_header.replace("Bearer ", "", 1).strip()
+    cookie_token = request.cookies.get("access_token", "").strip()
+    if cookie_token:
+        return cookie_token
+    raise HTTPException(status_code=401, detail="Missing bearer token")
+
+
 def _rate_limit(scope: str, request: Request, user: Optional[Dict[str, Any]] = None) -> None:
     path = request.url.path
     if path in METHOD_LIMITS:
@@ -585,7 +616,7 @@ def _rate_limit(scope: str, request: Request, user: Optional[Dict[str, Any]] = N
 
 
 def _require_auth(request: Request) -> Dict[str, Any]:
-    token = _bearer_token(request)
+    token = _access_token_from_request(request)
     payload = _jwt_decode(token)
     if payload.get("typ") != "access":
         raise HTTPException(status_code=401, detail="Access token required")
@@ -593,18 +624,8 @@ def _require_auth(request: Request) -> Dict[str, Any]:
     return payload
 
 
-def _require_auth_or_token(request: Request, token: str = "") -> Dict[str, Any]:
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        return _require_auth(request)
-    token = (token or "").strip()
-    if not token:
-        raise HTTPException(status_code=401, detail="Missing bearer token")
-    payload = _jwt_decode(token)
-    if payload.get("typ") != "access":
-        raise HTTPException(status_code=401, detail="Access token required")
-    _rate_limit("auth", request, payload)
-    return payload
+def _require_auth_or_token(request: Request) -> Dict[str, Any]:
+    return _require_auth(request)
 
 
 def require_role(role: str):
@@ -1262,9 +1283,7 @@ def _inject_explore_enhancer(html: str, source_url: str, *, nonce: str = "") -> 
 <script{nonce_attr}>
 (function() {{
   const SOURCE_URL = {escaped_url};
-  const frameUrl = new URL(window.location.href);
-  const token = frameUrl.searchParams.get("token") || "";
-  const authHeaders = token ? {{ "Authorization": "Bearer " + token, "Content-Type": "application/json" }} : {{ "Content-Type": "application/json" }};
+  const authHeaders = {{ "Content-Type": "application/json" }};
 
   function abs(href) {{
     try {{ return new URL(href, SOURCE_URL).toString(); }} catch (e) {{ return href; }}
@@ -1284,7 +1303,6 @@ def _inject_explore_enhancer(html: str, source_url: str, *, nonce: str = "") -> 
   function linkToProxy(url) {{
     const u = new URL("/api/explore/proxy-page", window.location.origin);
     u.searchParams.set("url", url);
-    if (token) u.searchParams.set("token", token);
     return u.toString();
   }}
   function patchLinks() {{
@@ -1492,6 +1510,14 @@ async def login(payload: LoginPayload, request: Request, response: Response):
         sessions.append((access_claims["jti"], access_claims["exp"]))
         ACTIVE_TOKENS[payload.username] = sessions
     csrf = secrets.token_urlsafe(24)
+    response.set_cookie(
+        "access_token",
+        access,
+        httponly=True,
+        samesite="lax",
+        secure=COOKIE_SECURE,
+        max_age=ACCESS_TOKEN_EXPIRE_SECONDS,
+    )
     response.set_cookie("csrf_token", csrf, httponly=False, samesite="lax", secure=COOKIE_SECURE)
     audit_logger.info(
         "login_success username=%s ip=%s role=%s",
@@ -1510,7 +1536,7 @@ async def login(payload: LoginPayload, request: Request, response: Response):
 
 
 @app.post("/api/auth/refresh")
-async def refresh_token(request: Request):
+async def refresh_token(request: Request, response: Response):
     """Exchange a valid refresh token for a new access token."""
     token = _bearer_token(request)
     payload = _jwt_decode(token)
@@ -1533,6 +1559,14 @@ async def refresh_token(request: Request):
         sessions.append((access_claims["jti"], access_claims["exp"]))
         ACTIVE_TOKENS[username] = sessions
     audit_logger.info("token_refresh username=%s", username)
+    response.set_cookie(
+        "access_token",
+        access,
+        httponly=True,
+        samesite="lax",
+        secure=COOKIE_SECURE,
+        max_age=ACCESS_TOKEN_EXPIRE_SECONDS,
+    )
     return {
         "access_token": access,
         "token_type": "bearer",
@@ -1541,7 +1575,7 @@ async def refresh_token(request: Request):
 
 
 @app.post("/api/auth/logout")
-async def logout(current=Depends(_require_auth)):
+async def logout(response: Response, current=Depends(_require_auth)):
     jti = current.get("jti")
     if jti:
         with _AUTH_LOCK:
@@ -1549,6 +1583,7 @@ async def logout(current=Depends(_require_auth)):
             sessions = ACTIVE_TOKENS.get(current["sub"], [])
             ACTIVE_TOKENS[current["sub"]] = [(s, exp) for s, exp in sessions if s != jti]
     audit_logger.info("logout username=%s", current["sub"])
+    response.delete_cookie("access_token")
     return {"status": "ok"}
 
 
@@ -1719,7 +1754,7 @@ async def explore_sync_cookie(payload: ExploreCookiePayload, current=Depends(req
 
 
 @app.get("/api/explore/proxy-page", response_class=HTMLResponse)
-async def explore_proxy_page(url: str, token: str = "", current=Depends(_require_auth_or_token)):
+async def explore_proxy_page(url: str, current=Depends(_require_auth_or_token)):
     _validate_javdb_url_or_422(url)
     try:
         html = _fetch_javdb_html(url, use_proxy=False, use_cookie=True)

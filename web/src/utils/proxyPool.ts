@@ -47,7 +47,7 @@ export function parseProxyUrl(urlStr: string): Partial<Pick<ProxyEditorRow, "sch
     const scheme = u.protocol.replace(/:$/, "") as ProxyEditorRow["scheme"];
     const allowed: string[] = ["http", "https", "socks5", "socks5h"];
     const sc = allowed.includes(scheme) ? scheme : "http";
-    const port = u.port || (sc === "https" ? "443" : "80");
+    const port = u.port || (sc === "socks5" || sc === "socks5h" ? "1080" : sc === "https" ? "443" : "80");
     return {
       scheme: sc,
       host: u.hostname,
@@ -104,7 +104,8 @@ function buildUrl(
   password: string,
 ): string {
   const h = host.trim();
-  const p = (port.trim() || (scheme === "https" ? "443" : "80")).replace(/^:/, "");
+  const fallback = scheme === "socks5" || scheme === "socks5h" ? "1080" : scheme === "https" ? "443" : "80";
+  const p = (port.trim() || fallback).replace(/^:/, "");
   if (!h) return "";
   let auth = "";
   if (username || password) {
@@ -116,7 +117,8 @@ function buildUrl(
 export function rowToWire(r: ProxyEditorRow): ProxyWire {
   const http = buildUrl(r.scheme, r.host, r.port, r.username, r.password);
   const hHost = (r.httpsHost || r.host).trim();
-  const hPort = (r.httpsPort || r.port).trim() || "443";
+  const fallbackHttpsPort = r.scheme.startsWith("socks") ? "1080" : "443";
+  const hPort = (r.httpsPort || r.port).trim() || fallbackHttpsPort;
   const https = r.sameForHttps ? http : buildUrl(r.scheme, hHost, hPort, r.username, r.password);
   return {
     name: r.name.trim() || undefined,

@@ -34,7 +34,9 @@ export function syncLocaleDocumentAndStorage(): void {
     () => i18n.global.locale.value,
     (loc) => {
       const code = String(loc);
-      localStorage.setItem(LOCALE_STORAGE_KEY, code);
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(LOCALE_STORAGE_KEY, code);
+      }
       if (typeof document !== "undefined") {
         document.documentElement.lang = code === "zh-CN" ? "zh-CN" : "en";
       }

@@ -9,6 +9,13 @@ const API_PORT = Number(process.env.ELECTRON_API_PORT || 8100);
 const API_HEALTH_URL = `http://${API_HOST}:${API_PORT}/api/health`;
 const RENDERER_URL = process.env.ELECTRON_RENDERER_URL || "http://127.0.0.1:5173";
 const API_BASE = process.env.ELECTRON_API_BASE || `http://${API_HOST}:${API_PORT}`;
+const PYTHON_CANDIDATES = Array.from(
+  new Set([
+    process.env.PYTHON || "",
+    process.platform === "win32" ? "python" : "python3",
+    process.platform === "win32" ? "python3" : "python",
+  ].filter(Boolean)),
+);
 
 let mainWindow = null;
 let backendProcess = null;
@@ -83,33 +90,51 @@ async function detectExistingBackend(maxWaitMs = 2500) {
 function spawnBackend() {
   const cwd = path.resolve(__dirname, "..");
   backendStderrBuf = "";
-  backendProcess = spawn(
-    "python3",
-    ["-m", "uvicorn", "api.server:app", "--host", API_HOST, "--port", String(API_PORT)],
-    {
-      cwd,
-      env: {
-        ...process.env,
-        PYTHONUNBUFFERED: "1",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
+  const args = ["-m", "uvicorn", "api.server:app", "--host", API_HOST, "--port", String(API_PORT)];
+  const spawnOpts = {
+    cwd,
+    env: {
+      ...process.env,
+      PYTHONUNBUFFERED: "1",
     },
-  );
-  ownsBackendProcess = true;
+    stdio: ["ignore", "pipe", "pipe"],
+  };
 
-  backendProcess.stdout.on("data", (chunk) => {
-    process.stdout.write(`[api] ${chunk}`);
-  });
-  backendProcess.stderr.on("data", (chunk) => {
-    const s = chunk.toString();
-    backendStderrBuf = (backendStderrBuf + s).slice(-8000);
-    process.stderr.write(`[api] ${chunk}`);
-  });
-  backendProcess.on("exit", (code, signal) => {
-    if (!quitting) {
-      console.error(`[api] exited unexpectedly, code=${code}, signal=${signal || "none"}`);
+  const spawnWithCandidate = (index) => {
+    const pythonBin = PYTHON_CANDIDATES[index];
+    if (!pythonBin) {
+      throw new Error("Unable to locate Python interpreter. Set PYTHON environment variable.");
     }
-  });
+    const proc = spawn(pythonBin, args, spawnOpts);
+    backendProcess = proc;
+    ownsBackendProcess = true;
+
+    let retried = false;
+    proc.once("error", (err) => {
+      if (err && err.code === "ENOENT" && index + 1 < PYTHON_CANDIDATES.length) {
+        retried = true;
+        spawnWithCandidate(index + 1);
+        return;
+      }
+      console.error(`[api] failed to start backend with ${pythonBin}:`, err);
+    });
+
+    proc.stdout.on("data", (chunk) => {
+      process.stdout.write(`[api] ${chunk}`);
+    });
+    proc.stderr.on("data", (chunk) => {
+      const s = chunk.toString();
+      backendStderrBuf = (backendStderrBuf + s).slice(-8000);
+      process.stderr.write(`[api] ${chunk}`);
+    });
+    proc.on("exit", (code, signal) => {
+      if (!quitting && !retried) {
+        console.error(`[api] exited unexpectedly, code=${code}, signal=${signal || "none"}`);
+      }
+    });
+  };
+
+  spawnWithCandidate(0);
 }
 
 function stderrLooksLikeAddrInUse(buf) {
