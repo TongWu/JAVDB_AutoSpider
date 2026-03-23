@@ -5,12 +5,14 @@ FastAPI REST layer with auth, config management and task execution.
 from __future__ import annotations
 
 import importlib
+import ipaddress
 import json
 import logging
 import os
 import re
 import secrets
 import shlex
+import socket
 import subprocess
 import sys
 import threading
@@ -55,6 +57,7 @@ STORE_PATH = ROOT_DIR / "reports" / "api_config_store.json"
 STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
 JOB_LOG_DIR = LOG_DIR / "jobs"
 JOB_LOG_DIR.mkdir(parents=True, exist_ok=True)
+_RESOLVED_JOB_LOG_DIR = JOB_LOG_DIR.resolve()
 
 from api.parsers import (
     parse_index_page,
@@ -756,7 +759,9 @@ def _run_config_generator(config_values: Dict[str, Any]) -> None:
 def _job_meta_path(job_id: str) -> Path:
     _validate_job_id(job_id)
     candidate = (JOB_LOG_DIR / f"{job_id}.meta.json").resolve()
-    if not candidate.parent == JOB_LOG_DIR.resolve():
+    try:
+        candidate.relative_to(_RESOLVED_JOB_LOG_DIR)
+    except ValueError:
         raise HTTPException(status_code=400, detail="Invalid job_id")
     return candidate
 
@@ -859,7 +864,9 @@ def _safe_log_path(job_id: str) -> Path:
     """Build and anchor-check a log file path for *job_id* under JOB_LOG_DIR."""
     _validate_job_id(job_id)
     candidate = (JOB_LOG_DIR / f"{job_id}.log").resolve()
-    if not candidate.parent == JOB_LOG_DIR.resolve():
+    try:
+        candidate.relative_to(_RESOLVED_JOB_LOG_DIR)
+    except ValueError:
         raise HTTPException(status_code=400, detail="Invalid job_id")
     return candidate
 
@@ -1099,17 +1106,30 @@ def _simple_fetch_javdb_html(cfg: Dict[str, Any], url: str, use_cookie: bool = T
 
 def _validate_javdb_url_or_422(url: str) -> None:
     """
-    Ensure the given URL targets an allowed javdb host and scheme.
+    Ensure the given URL targets an allowed javdb host and scheme,
+    and that the host does not resolve to a private/loopback IP (SSRF guard).
     Raises HTTPException(422) if invalid.
     """
     parsed = urlparse(url)
-    # Require an explicit HTTP/HTTPS scheme to avoid unexpected behavior.
     if parsed.scheme not in ("http", "https"):
         raise HTTPException(status_code=422, detail="url must use http or https scheme")
     if not parsed.netloc:
         raise HTTPException(status_code=422, detail="url must include a host")
     if not _is_valid_javdb_host(url):
         raise HTTPException(status_code=422, detail="url must target a valid javdb.com host")
+    hostname = parsed.hostname or ""
+    try:
+        for family, _type, _proto, _canon, sockaddr in socket.getaddrinfo(
+            hostname, None, proto=socket.IPPROTO_TCP
+        ):
+            ip = ipaddress.ip_address(sockaddr[0])
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+                raise HTTPException(
+                    status_code=422,
+                    detail="url must not resolve to a private or reserved IP address",
+                )
+    except socket.gaierror:
+        pass
 
 
 def _fetch_javdb_html(url: str, use_proxy: bool = True, use_cookie: bool = True) -> str:
@@ -1699,8 +1719,7 @@ async def explore_sync_cookie(payload: ExploreCookiePayload, current=Depends(req
 
 @app.get("/api/explore/proxy-page", response_class=HTMLResponse)
 async def explore_proxy_page(url: str, token: str = "", current=Depends(_require_auth_or_token)):
-    if not _is_valid_javdb_host(url):
-        raise HTTPException(status_code=422, detail="url must target a valid javdb.com host")
+    _validate_javdb_url_or_422(url)
     html = _fetch_javdb_html(url, use_proxy=False, use_cookie=True)
     injected = _inject_explore_enhancer(html, url)
     audit_logger.info("explore_proxy_page username=%s", current["sub"])
@@ -1709,6 +1728,7 @@ async def explore_proxy_page(url: str, token: str = "", current=Depends(_require
 
 @app.post("/api/explore/resolve")
 async def explore_resolve(payload: ExploreResolvePayload, current=Depends(_require_auth)):
+    _validate_javdb_url_or_422(payload.url)
     html = _fetch_javdb_html(payload.url, use_proxy=payload.use_proxy, use_cookie=payload.use_cookie)
     page_type = detect_page_type(html)
     body: Dict[str, Any] = {
@@ -1733,6 +1753,7 @@ async def explore_download_magnet(payload: ExploreMagnetPayload, current=Depends
 
 @app.post("/api/explore/one-click")
 async def explore_one_click(payload: ExploreOneClickPayload, current=Depends(require_role("admin"))):
+    _validate_javdb_url_or_422(payload.detail_url)
     html = _fetch_javdb_html(payload.detail_url, use_proxy=payload.use_proxy, use_cookie=payload.use_cookie)
     detail = _result_to_dict(parse_detail_page(html))
     magnets = detail.get("magnets", [])
@@ -1760,6 +1781,10 @@ async def explore_index_status(payload: ExploreIndexStatusPayload, current=Depen
         if not href:
             continue
         absolute_url = href if href.startswith("http") else f"https://javdb.com{href}"
+        try:
+            _validate_javdb_url_or_422(absolute_url)
+        except HTTPException:
+            continue
         is_downloaded = bool(downloaded_map.get(href) or downloaded_map.get(absolute_url))
         has_uncensored = False
         try:
