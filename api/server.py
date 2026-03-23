@@ -4,6 +4,7 @@ FastAPI REST layer with auth, config management and task execution.
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 import ipaddress
 import json
@@ -117,6 +118,24 @@ def _is_valid_javdb_host(url: str) -> bool:
     return hostname in _ALLOWED_HOSTS
 
 
+_SAFE_OUTPUT_FILE_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _sanitize_output_filename(value: str) -> str:
+    name = str(value).strip()
+    if not name:
+        raise ValueError("output_file cannot be empty")
+    if "/" in name or "\\" in name:
+        raise ValueError("output_file cannot contain path separators")
+    if ".." in name:
+        raise ValueError("output_file cannot contain parent traversal")
+    if Path(name).is_absolute() or re.match(r"^[A-Za-z]:", name):
+        raise ValueError("output_file must be a relative filename")
+    if not _SAFE_OUTPUT_FILE_RE.fullmatch(name):
+        raise ValueError("output_file contains invalid characters")
+    return name
+
+
 audit_logger = logging.getLogger("audit")
 if not audit_logger.handlers:
     audit_handler = logging.FileHandler(LOG_DIR / "audit.log")
@@ -165,13 +184,28 @@ REFRESH_TOKEN_EXPIRE_SECONDS = int(
 MAX_SESSIONS_PER_USER = int(os.getenv("MAX_SESSIONS_PER_USER", "3"))
 
 ACTIVE_TOKENS: Dict[str, list[tuple[str, int]]] = {}
-REVOKED_JTI: set[str] = set()
+REVOKED_JTI: Dict[str, int] = {}
 _AUTH_LOCK = threading.Lock()
 RATE_BUCKETS: Dict[str, list[float]] = {}
 JOBS: Dict[str, Dict[str, Any]] = {}
 JOB_LOCK = threading.Lock()
 DEFAULT_TASK_LIST_LIMIT = 200
 JOB_STREAM_MAX_BYTES = 64 * 1024
+EXPLORE_INDEX_STATUS_MAX_ITEMS = int(os.getenv("EXPLORE_INDEX_STATUS_MAX_ITEMS", "30"))
+EXPLORE_INDEX_STATUS_CONCURRENCY = max(1, int(os.getenv("EXPLORE_INDEX_STATUS_CONCURRENCY", "8")))
+EXPLORE_INDEX_STATUS_ITEM_TIMEOUT_SECONDS = float(os.getenv("EXPLORE_INDEX_STATUS_ITEM_TIMEOUT_SECONDS", "12"))
+EXPLORE_INDEX_STATUS_TOTAL_TIMEOUT_SECONDS = float(os.getenv("EXPLORE_INDEX_STATUS_TOTAL_TIMEOUT_SECONDS", "25"))
+EXPLORE_INDEX_STATUS_CACHE_TTL_SECONDS = int(os.getenv("EXPLORE_INDEX_STATUS_CACHE_TTL_SECONDS", "300"))
+EXPLORE_INDEX_STATUS_CACHE_MAX_ITEMS = int(os.getenv("EXPLORE_INDEX_STATUS_CACHE_MAX_ITEMS", "2000"))
+EXPLORE_DETAIL_CACHE: Dict[str, tuple[int, bool]] = {}
+
+
+def _prune_revoked_jti(now: Optional[int] = None) -> None:
+    """Remove expired token revocation records."""
+    ts = now if now is not None else int(datetime.now(timezone.utc).timestamp())
+    expired = [jti for jti, exp in REVOKED_JTI.items() if exp <= ts]
+    for jti in expired:
+        REVOKED_JTI.pop(jti, None)
 
 
 def _prune_sessions(username: str) -> list[tuple[str, int]]:
@@ -180,8 +214,9 @@ def _prune_sessions(username: str) -> list[tuple[str, int]]:
     Caller MUST hold ``_AUTH_LOCK``.
     """
     now = int(datetime.now(timezone.utc).timestamp())
+    _prune_revoked_jti(now)
     sessions = ACTIVE_TOKENS.get(username, [])
-    active = [(jti, exp) for jti, exp in sessions if exp > now and jti not in REVOKED_JTI]
+    active = [(jti, exp) for jti, exp in sessions if exp > now and REVOKED_JTI.get(jti, 0) <= now]
     ACTIVE_TOKENS[username] = active
     return active
 
@@ -382,6 +417,13 @@ class DailyTaskPayload(BaseModel):
             raise ValueError("end_page must be >= start_page")
         return value
 
+    @field_validator("output_file")
+    @classmethod
+    def valid_output_file(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return _sanitize_output_filename(value)
+
 
 class AdhocTaskPayload(BaseModel):
     url: str = Field(..., min_length=1, max_length=2048)
@@ -478,49 +520,6 @@ class ExploreIndexStatusPayload(BaseModel):
     use_cookie: bool = True
 
 
-class UrlPayload(BaseModel):
-    """POST body for the fetch-and-parse endpoint."""
-    url: str
-    page_num: int = 1
-    use_proxy: bool = True
-    use_cf_bypass: bool = True
-    use_cookie: bool = False
-
-
-class CrawlIndexPayload(BaseModel):
-    """POST body for multi-page index crawl."""
-    url: str
-    start_page: int = 1
-    end_page: Optional[int] = None
-    crawl_all: bool = False
-    use_proxy: bool = True
-    use_cf_bypass: bool = True
-    use_cookie: bool = False
-    max_consecutive_empty: int = 2
-    page_delay: float = 1.0
-
-
-class SpiderJobPayload(BaseModel):
-    """POST body to submit a full spider run."""
-    url: Optional[str] = None
-    start_page: int = 1
-    end_page: Optional[int] = None
-    crawl_all: bool = False
-    phase: Literal['1', '2', 'all'] = 'all'
-    ignore_history: bool = False
-    use_history: bool = False
-    ignore_release_date: bool = False
-    use_proxy: bool = True
-    no_rclone_filter: bool = False
-    disable_all_filters: bool = False
-    enable_dedup: bool = False
-    enable_redownload: bool = False
-    redownload_threshold: Optional[float] = None
-    dry_run: bool = False
-    max_movies_phase1: Optional[int] = None
-    max_movies_phase2: Optional[int] = None
-
-
 app = FastAPI(
     title="JAVDB AutoSpider API",
     version="0.2.0",
@@ -577,7 +576,9 @@ def _jwt_decode(token: str) -> Dict[str, Any]:
     except jwt.InvalidTokenError as exc:
         raise HTTPException(status_code=401, detail="Invalid token") from exc
     with _AUTH_LOCK:
-        revoked = payload.get("jti") in REVOKED_JTI
+        now = int(datetime.now(timezone.utc).timestamp())
+        _prune_revoked_jti(now)
+        revoked = REVOKED_JTI.get(str(payload.get("jti", "")), 0) > now
     if revoked:
         raise HTTPException(status_code=401, detail="Token revoked")
     return payload
@@ -1585,6 +1586,7 @@ async def login(payload: LoginPayload, request: Request, response: Response):
         "expires_in": ACCESS_TOKEN_EXPIRE_SECONDS,
         "csrf_token": csrf,
         "role": user["role"],
+        "username": payload.username,
     }
 
 
@@ -1632,7 +1634,9 @@ async def logout(response: Response, current=Depends(_require_auth)):
     jti = current.get("jti")
     if jti:
         with _AUTH_LOCK:
-            REVOKED_JTI.add(jti)
+            exp = int(current.get("exp", int(datetime.now(timezone.utc).timestamp())))
+            REVOKED_JTI[str(jti)] = exp
+            _prune_revoked_jti()
             sessions = ACTIVE_TOKENS.get(current["sub"], [])
             ACTIVE_TOKENS[current["sub"]] = [(s, exp) for s, exp in sessions if s != jti]
     audit_logger.info("logout username=%s", current["sub"])
@@ -1688,7 +1692,11 @@ async def trigger_daily(payload: DailyTaskPayload, current=Depends(require_role(
     if payload.phase:
         command.extend(["--phase", payload.phase])
     if payload.output_file:
-        command.extend(["--output-file", payload.output_file])
+        try:
+            output_file = _sanitize_output_filename(payload.output_file)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        command.extend(["--output-file", output_file])
     if payload.dry_run:
         command.append("--dry-run")
     if payload.ignore_release_date:
@@ -1880,12 +1888,46 @@ async def explore_one_click(payload: ExploreOneClickPayload, current=Depends(req
     }
 
 
+def _has_uncensored_magnet(absolute_url: str, use_proxy: bool, use_cookie: bool) -> bool:
+    now = int(time.time())
+    cached = EXPLORE_DETAIL_CACHE.get(absolute_url)
+    if cached and (now - cached[0]) < EXPLORE_INDEX_STATUS_CACHE_TTL_SECONDS:
+        return cached[1]
+    has_uncensored = False
+    try:
+        html = _fetch_javdb_html(absolute_url, use_proxy=use_proxy, use_cookie=use_cookie)
+        detail = _result_to_dict(parse_detail_page(html))
+        magnets = detail.get("magnets", [])
+        if isinstance(magnets, list):
+            for magnet in magnets:
+                tags = [str(x) for x in magnet.get("tags", [])] if isinstance(magnet, dict) else []
+                name = str(magnet.get("name", "")) if isinstance(magnet, dict) else ""
+                if any(token in name for token in ("無碼", "无码", "uncensored")) or any(
+                    any(token in tag for token in ("無碼", "无码", "uncensored")) for tag in tags
+                ):
+                    has_uncensored = True
+                    break
+    except Exception:
+        has_uncensored = False
+    EXPLORE_DETAIL_CACHE[absolute_url] = (now, has_uncensored)
+    if len(EXPLORE_DETAIL_CACHE) > EXPLORE_INDEX_STATUS_CACHE_MAX_ITEMS:
+        stale = [
+            url
+            for url, (ts, _) in EXPLORE_DETAIL_CACHE.items()
+            if (now - ts) >= EXPLORE_INDEX_STATUS_CACHE_TTL_SECONDS
+        ]
+        for url in stale:
+            EXPLORE_DETAIL_CACHE.pop(url, None)
+    return has_uncensored
+
+
 @app.post("/api/explore/index-status")
 async def explore_index_status(payload: ExploreIndexStatusPayload, current=Depends(_require_auth)):
     cfg = _load_runtime_config()
     downloaded_map = _downloaded_map_by_href(cfg)
     statuses: Dict[str, Dict[str, Any]] = {}
-    for item in payload.movies[:50]:
+    candidates: list[tuple[str, str]] = []
+    for item in payload.movies[:EXPLORE_INDEX_STATUS_MAX_ITEMS]:
         href = str(item.get("href", "")).strip()
         if not href:
             continue
@@ -1895,27 +1937,55 @@ async def explore_index_status(payload: ExploreIndexStatusPayload, current=Depen
         except HTTPException:
             continue
         is_downloaded = bool(downloaded_map.get(href) or downloaded_map.get(absolute_url))
-        has_uncensored = False
-        try:
-            html = _fetch_javdb_html(absolute_url, use_proxy=payload.use_proxy, use_cookie=payload.use_cookie)
-            detail = _result_to_dict(parse_detail_page(html))
-            magnets = detail.get("magnets", [])
-            if isinstance(magnets, list):
-                for magnet in magnets:
-                    tags = [str(x) for x in magnet.get("tags", [])] if isinstance(magnet, dict) else []
-                    name = str(magnet.get("name", "")) if isinstance(magnet, dict) else ""
-                    if any(token in name for token in ("無碼", "无码", "uncensored")) or any(
-                        any(token in tag for token in ("無碼", "无码", "uncensored")) for tag in tags
-                    ):
-                        has_uncensored = True
-                        break
-        except Exception:
-            has_uncensored = False
         statuses[href] = {
             "downloaded": is_downloaded,
-            "has_uncensored": has_uncensored,
+            "has_uncensored": False,
         }
-    audit_logger.info("explore_index_status username=%s count=%s", current["sub"], len(statuses))
+        candidates.append((href, absolute_url))
+
+    semaphore = asyncio.Semaphore(EXPLORE_INDEX_STATUS_CONCURRENCY)
+
+    async def _fetch_status(target_href: str, target_url: str) -> tuple[str, bool]:
+        async with semaphore:
+            try:
+                has_uncensored = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        _has_uncensored_magnet,
+                        target_url,
+                        payload.use_proxy,
+                        payload.use_cookie,
+                    ),
+                    timeout=EXPLORE_INDEX_STATUS_ITEM_TIMEOUT_SECONDS,
+                )
+            except Exception:
+                has_uncensored = False
+            return target_href, has_uncensored
+
+    tasks = [asyncio.create_task(_fetch_status(href, url)) for href, url in candidates]
+    done_count = 0
+    timeout_count = 0
+    if tasks:
+        done, pending = await asyncio.wait(tasks, timeout=EXPLORE_INDEX_STATUS_TOTAL_TIMEOUT_SECONDS)
+        for task in done:
+            try:
+                href, has_uncensored = task.result()
+            except Exception:
+                continue
+            if href in statuses:
+                statuses[href]["has_uncensored"] = has_uncensored
+                done_count += 1
+        timeout_count = len(pending)
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+    audit_logger.info(
+        "explore_index_status username=%s count=%s done=%s timeout=%s",
+        current["sub"],
+        len(statuses),
+        done_count,
+        timeout_count,
+    )
     return {"items": statuses}
 
 

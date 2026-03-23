@@ -91,22 +91,40 @@
                   <div class="grid">
                     <label>
                       local
-                      <input v-model="cfBypassLocalPort" class="field-input" type="number" min="1" max="65535" />
+                      <input
+                        v-model="cfBypassLocalPort"
+                        class="field-input"
+                        type="number"
+                        min="1"
+                        max="65535"
+                        :readonly="f.readonly || !canSave"
+                        :disabled="f.readonly || !canSave"
+                      />
                     </label>
                     <label>
                       default
-                      <input v-model="cfBypassDefaultPort" class="field-input" type="number" min="1" max="65535" />
+                      <input
+                        v-model="cfBypassDefaultPort"
+                        class="field-input"
+                        type="number"
+                        min="1"
+                        max="65535"
+                        :readonly="f.readonly || !canSave"
+                        :disabled="f.readonly || !canSave"
+                      />
                     </label>
                   </div>
                   <div class="grid" style="margin-top: 10px">
                     <label v-for="row in proxyPoolRows" :key="`cf-port-${row._id}`">
                       {{ row.name || row.host || row._id }}
                       <input
-                        v-model="cfBypassProxyPorts[row.name || row.host || row._id]"
+                        v-model="cfBypassProxyPorts[getProxyPortKey(row)]"
                         class="field-input"
                         type="number"
                         min="1"
                         max="65535"
+                        :readonly="f.readonly || !canSave"
+                        :disabled="f.readonly || !canSave"
                       />
                     </label>
                   </div>
@@ -255,6 +273,10 @@ const cfBypassLocalPort = ref("");
 const cfBypassDefaultPort = ref("");
 const cfBypassProxyPorts = reactive<Record<string, string>>({});
 
+function getProxyPortKey(row: ProxyEditorRow): string {
+  return String(row.host || row._id || "").trim();
+}
+
 const sections = computed(() => {
   const map = new Map<string, FieldMeta[]>();
   for (const f of metaFields.value) {
@@ -289,6 +311,10 @@ watch(
   () => {
     if (syncingProxyFromApi.value) return;
     proxyPoolTouched.value = true;
+    const validKeys = new Set(proxyPoolRows.value.map((row) => getProxyPortKey(row)).filter(Boolean));
+    for (const key of Object.keys(cfBypassProxyPorts)) {
+      if (!validKeys.has(key)) delete cfBypassProxyPorts[key];
+    }
   },
   { deep: true },
 );
@@ -464,7 +490,9 @@ function buildPayload(): Record<string, unknown> {
         const defaultPort = parseInt(String(cfBypassDefaultPort.value || "").trim(), 10);
         if (!Number.isNaN(defaultPort)) nextMap.default = defaultPort;
         const proxyMap: Record<string, number> = {};
+        const validKeys = new Set(proxyPoolRows.value.map((row) => getProxyPortKey(row)).filter(Boolean));
         for (const [name, value] of Object.entries(cfBypassProxyPorts)) {
+          if (!validKeys.has(name)) continue;
           const n = parseInt(String(value || "").trim(), 10);
           if (!name || Number.isNaN(n)) continue;
           proxyMap[name] = n;
