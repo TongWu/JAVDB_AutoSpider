@@ -314,7 +314,7 @@ class RequestHandler:
             
             return response.text, None
         except requests.RequestException as e:
-            logger.error(f"[{context_msg}] Error: {e}")
+            logger.error(f"[{context_msg}] Error: {mask_full(str(e))}")
             return None, e
     
     def _do_request_curl_cffi(self, target_url: str, req_headers: Dict, req_proxies: Optional[Dict], 
@@ -420,7 +420,7 @@ class RequestHandler:
             
             return response.text, None
         except Exception as e:
-            logger.error(f"[{context_msg}] [curl_cffi] Error: {e}")
+            logger.error(f"[{context_msg}] [curl_cffi] Error: {mask_full(str(e))}")
             return None, e
     
     def _get_bypass_ip(self, req_proxies: Optional[Dict], force_local: bool = False) -> Optional[str]:
