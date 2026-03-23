@@ -6,7 +6,11 @@ function jwtSub(token) {
         const part = token.split(".")[1];
         if (!part)
             return "user";
-        const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
+        let b64 = part.replace(/-/g, "+").replace(/_/g, "/");
+        const remainder = b64.length % 4;
+        if (remainder) {
+            b64 += "=".repeat(4 - remainder);
+        }
         const json = JSON.parse(atob(b64));
         return json.sub ?? "user";
     }
@@ -25,13 +29,34 @@ export const useAuthStore = defineStore("auth", {
     }),
     actions: {
         setSession(resp) {
-            this.accessToken = resp.access_token;
-            this.refreshToken = resp.refresh_token;
-            this.csrfToken = resp.csrf_token;
-            this.role = resp.role;
-            this.username = resp.username || jwtSub(resp.access_token);
-            localStorage.setItem("role", resp.role);
-            localStorage.setItem("username", this.username);
+            if (resp.access_token != null) {
+                this.accessToken = resp.access_token;
+            }
+            if (resp.refresh_token != null) {
+                this.refreshToken = resp.refresh_token;
+            }
+            if (resp.csrf_token != null) {
+                this.csrfToken = resp.csrf_token;
+            }
+            if (resp.role != null) {
+                this.role = resp.role;
+                localStorage.setItem("role", resp.role);
+            }
+            else {
+                localStorage.removeItem("role");
+            }
+            if (resp.username != null) {
+                this.username = resp.username;
+            }
+            else if (resp.access_token != null) {
+                this.username = jwtSub(resp.access_token);
+            }
+            if (this.username) {
+                localStorage.setItem("username", this.username);
+            }
+            else {
+                localStorage.removeItem("username");
+            }
         },
         clearSession() {
             this.accessToken = "";

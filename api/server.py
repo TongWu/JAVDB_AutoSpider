@@ -23,11 +23,12 @@ import csv
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Literal, Optional
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from dotenv import load_dotenv
 import jwt
 import requests
+import urllib3
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -216,7 +217,7 @@ def _prune_sessions(username: str) -> list[tuple[str, int]]:
     now = int(datetime.now(timezone.utc).timestamp())
     _prune_revoked_jti(now)
     sessions = ACTIVE_TOKENS.get(username, [])
-    active = [(jti, exp) for jti, exp in sessions if exp > now and REVOKED_JTI.get(jti, 0) <= now]
+    active = [(jti, exp) for jti, exp in sessions if exp > now and jti not in REVOKED_JTI]
     ACTIVE_TOKENS[username] = active
     return active
 
@@ -1139,6 +1140,43 @@ def _new_request_handler(config_data: Dict[str, Any]):
     )
 
 
+def _resolve_public_javdb_endpoint_or_422(url: str) -> tuple[Any, str, str]:
+    """Validate a JavDB URL and return (parsed_url, hostname, resolved_public_ip)."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=422, detail="url must use http or https scheme")
+    if not parsed.netloc:
+        raise HTTPException(status_code=422, detail="url must include a host")
+    if not _is_valid_javdb_host(url):
+        raise HTTPException(status_code=422, detail="url must target a valid javdb.com host")
+    hostname = parsed.hostname or ""
+    try:
+        resolved_public_ips: set[str] = set()
+        for _family, _type, _proto, _canon, sockaddr in socket.getaddrinfo(
+            hostname, parsed.port, proto=socket.IPPROTO_TCP
+        ):
+            ip = ipaddress.ip_address(sockaddr[0])
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+                raise HTTPException(
+                    status_code=422,
+                    detail="url must not resolve to a private or reserved IP address",
+                )
+            resolved_public_ips.add(str(ip))
+    except socket.gaierror as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="url host DNS resolution failed",
+        ) from exc
+    if not resolved_public_ips:
+        raise HTTPException(status_code=422, detail="url host DNS resolution failed")
+    if len(resolved_public_ips) > 1:
+        raise HTTPException(
+            status_code=422,
+            detail="url host resolves to multiple public IPs; rejected to prevent DNS rebinding",
+        )
+    return parsed, hostname, next(iter(resolved_public_ips))
+
+
 def _simple_fetch_javdb_html(cfg: Dict[str, Any], url: str, use_cookie: bool = True) -> str:
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -1149,9 +1187,49 @@ def _simple_fetch_javdb_html(cfg: Dict[str, Any], url: str, use_cookie: bool = T
     cookie = str(cfg.get("JAVDB_SESSION_COOKIE", "") or "").strip()
     if use_cookie and cookie:
         headers["Cookie"] = f"_jdb_session={cookie}"
-    resp = requests.get(url, headers=headers, timeout=30)
-    resp.raise_for_status()
-    html = resp.text or ""
+    current_url = url
+    max_redirects = 3
+    timeout = urllib3.Timeout(connect=10, read=20)
+    for _ in range(max_redirects + 1):
+        parsed, hostname, resolved_ip = _resolve_public_javdb_endpoint_or_422(current_url)
+        scheme = parsed.scheme.lower()
+        port = parsed.port or (443 if scheme == "https" else 80)
+        path_query = parsed.path or "/"
+        if parsed.query:
+            path_query += f"?{parsed.query}"
+        default_port = 443 if scheme == "https" else 80
+        headers["Host"] = hostname if port == default_port else f"{hostname}:{port}"
+        if scheme == "https":
+            pool: Any = urllib3.HTTPSConnectionPool(
+                host=resolved_ip,
+                port=port,
+                assert_hostname=hostname,
+                server_hostname=hostname,
+                cert_reqs="CERT_REQUIRED",
+            )
+        else:
+            pool = urllib3.HTTPConnectionPool(host=resolved_ip, port=port)
+        resp = pool.request(
+            "GET",
+            path_query,
+            headers=headers,
+            timeout=timeout,
+            redirect=False,
+            retries=False,
+            preload_content=True,
+        )
+        if 300 <= resp.status < 400:
+            location = resp.headers.get("Location", "")
+            if not location:
+                raise ValueError(f"redirect without location ({resp.status})")
+            current_url = urljoin(current_url, location)
+            continue
+        if resp.status >= 400:
+            raise ValueError(f"http error {resp.status}")
+        html = (resp.data or b"").decode("utf-8", errors="ignore")
+        break
+    else:
+        raise ValueError("too many redirects")
     if not html.strip():
         raise ValueError("empty html")
     return html
@@ -1163,30 +1241,7 @@ def _validate_javdb_url_or_422(url: str) -> None:
     and that the host does not resolve to a private/loopback IP (SSRF guard).
     Raises HTTPException(422) if invalid.
     """
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise HTTPException(status_code=422, detail="url must use http or https scheme")
-    if not parsed.netloc:
-        raise HTTPException(status_code=422, detail="url must include a host")
-    if not _is_valid_javdb_host(url):
-        raise HTTPException(status_code=422, detail="url must target a valid javdb.com host")
-    hostname = parsed.hostname or ""
-    try:
-        for family, _type, _proto, _canon, sockaddr in socket.getaddrinfo(
-            hostname, None, proto=socket.IPPROTO_TCP
-        ):
-            ip = ipaddress.ip_address(sockaddr[0])
-            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
-                raise HTTPException(
-                    status_code=422,
-                    detail="url must not resolve to a private or reserved IP address",
-                )
-    except socket.gaierror as exc:
-        # Fail closed: if DNS cannot be resolved, do not bypass SSRF IP checks.
-        raise HTTPException(
-            status_code=422,
-            detail="url host DNS resolution failed",
-        ) from exc
+    _resolve_public_javdb_endpoint_or_422(url)
 
 
 def _javdb_html_looks_like_error_blob(html: str) -> bool:
