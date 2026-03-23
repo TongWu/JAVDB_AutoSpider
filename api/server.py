@@ -530,7 +530,7 @@ app.add_middleware(
 @app.exception_handler(Exception)
 async def global_exception_handler(_: Request, exc: Exception):
     logger.exception("Unhandled exception: %s", exc)
-    return JSONResponse(status_code=500, content={"detail": str(exc)})
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 def _jwt_encode(payload: Dict[str, Any], expires_in: int) -> str:
@@ -1255,10 +1255,11 @@ def _downloaded_map_by_href(cfg: Dict[str, Any]) -> Dict[str, bool]:
     return downloaded
 
 
-def _inject_explore_enhancer(html: str, source_url: str) -> str:
+def _inject_explore_enhancer(html: str, source_url: str, *, nonce: str = "") -> str:
     escaped_url = json.dumps(source_url)
+    nonce_attr = f' nonce="{nonce}"' if nonce else ""
     enhancer = f"""
-<script>
+<script{nonce_attr}>
 (function() {{
   const SOURCE_URL = {escaped_url};
   const frameUrl = new URL(window.location.href);
@@ -1720,10 +1721,30 @@ async def explore_sync_cookie(payload: ExploreCookiePayload, current=Depends(req
 @app.get("/api/explore/proxy-page", response_class=HTMLResponse)
 async def explore_proxy_page(url: str, token: str = "", current=Depends(_require_auth_or_token)):
     _validate_javdb_url_or_422(url)
-    html = _fetch_javdb_html(url, use_proxy=False, use_cookie=True)
-    injected = _inject_explore_enhancer(html, url)
+    try:
+        html = _fetch_javdb_html(url, use_proxy=False, use_cookie=True)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502, detail="Failed to fetch target page")
+    nonce = secrets.token_urlsafe(16)
+    injected = _inject_explore_enhancer(html, url, nonce=nonce)
     audit_logger.info("explore_proxy_page username=%s", current["sub"])
-    return HTMLResponse(content=injected)
+    csp = (
+        f"script-src 'nonce-{nonce}'; "
+        "style-src * 'unsafe-inline'; "
+        "img-src * data:; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    )
+    return HTMLResponse(
+        content=injected,
+        headers={
+            "Content-Security-Policy": csp,
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @app.post("/api/explore/resolve")
