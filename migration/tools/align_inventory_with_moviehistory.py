@@ -299,6 +299,8 @@ def _make_align_process_fn(inventory_map):
             return {
                 'status': 'search_miss',
                 'video_code': video_code,
+                'proxy_name': ctx.proxy_name,
+                'worker_id': ctx.worker_id,
                 'message': 'exact_video_code_not_found',
             }
 
@@ -317,6 +319,8 @@ def _make_align_process_fn(inventory_map):
                 'video_code': video_code,
                 'href': detail_href,
                 'detail_href': detail_href,
+                'proxy_name': ctx.proxy_name,
+                'worker_id': ctx.worker_id,
                 'message': 'parse_detail_page returned parse_success=False',
             }
 
@@ -345,6 +349,8 @@ def _make_align_process_fn(inventory_map):
             'video_code': video_code,
             'href': detail_href,
             'detail_href': detail_href,
+            'proxy_name': ctx.proxy_name,
+            'worker_id': ctx.worker_id,
             'actor_name': actor_name,
             'chosen_upgrade_category': upgrade_plan.chosen_upgrade_category,
             'db_upsert_kwargs': db_kwargs,
@@ -451,13 +457,16 @@ def run_alignment(args: argparse.Namespace) -> int:
 
             data = result.data
             status = data['status']
+            proxy_name = str(data.get('proxy_name') or 'unknown-proxy')
+            worker_id = data.get('worker_id')
+            worker_label = f"{proxy_name}#w{worker_id}" if worker_id is not None else proxy_name
 
             if status == 'search_miss':
                 process_results.append(MissingProcessResult(
                     video_code=video_code, status='search_miss',
                     message=data.get('message', ''),
                 ))
-                logger.info("[%s] No exact match for %s", idx_str, video_code)
+                logger.info("[%s][%s] No exact match for %s", idx_str, worker_label, video_code)
                 skipped += 1
                 return
 
@@ -468,6 +477,12 @@ def run_alignment(args: argparse.Namespace) -> int:
                     detail_href=data.get('detail_href', ''),
                     message=data.get('message', ''),
                 ))
+                logger.warning(
+                    "[%s][%s] Detail parse failed for %s",
+                    idx_str,
+                    worker_label,
+                    video_code,
+                )
                 failed += 1
                 return
 
@@ -483,7 +498,7 @@ def run_alignment(args: argparse.Namespace) -> int:
                 actor_name=data.get('actor_name', ''),
                 chosen_upgrade_category=data.get('chosen_upgrade_category', ''),
             ))
-            logger.info("[%s] Parsed %s", idx_str, video_code)
+            logger.info("[%s][%s] Parsed %s", idx_str, worker_label, video_code)
             processed += 1
 
         try:
