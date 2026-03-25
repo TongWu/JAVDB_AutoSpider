@@ -3,6 +3,7 @@
 import argparse
 from datetime import datetime
 
+from packages.python.javdb_platform.proxy_policy import add_proxy_arguments
 from packages.python.javdb_spider.runtime.config import PAGE_START, PAGE_END
 
 OUTPUT_CSV = f'Javdb_TodayTitle_{datetime.now().strftime("%Y%m%d")}.csv'
@@ -34,8 +35,11 @@ def parse_arguments():
                         help='Which phase to run: 1 (subtitle+today), 2 (today only), all (default)')
     parser.add_argument('--ignore-release-date', action='store_true',
                         help='Ignore today/yesterday tags and download all entries matching phase criteria')
-    parser.add_argument('--use-proxy', action='store_true',
-                        help='Enable proxy for all HTTP requests (proxy settings from config.py)')
+    add_proxy_arguments(
+        parser,
+        use_help='Force-enable proxy for spider requests',
+        no_help='Force-disable proxy for spider requests',
+    )
     parser.add_argument('--always-bypass-time', type=int, nargs='?', const=0, default=None,
                         help='Minutes to keep using CF bypass after fallback success (0 or no value = whole session)')
     parser.add_argument('--from-pipeline', action='store_true',

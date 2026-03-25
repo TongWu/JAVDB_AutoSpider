@@ -32,6 +32,11 @@ on:
         options:
           - 'ubuntu-latest'
           - 'self-hosted'
+      proxy_spider:
+        description: 'Enable proxy for Spider requests'
+        required: false
+        default: true
+        type: boolean
 
 jobs:
   # =============================================================================
@@ -85,6 +90,9 @@ jobs:
           VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
           VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
           VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_PROXY_SPIDER_ENABLED: ${{ inputs.proxy_spider && 'true' || 'false' }}
+          VAR_PROXY_QBITTORRENT_ENABLED: 'false'
+          VAR_PROXY_PIKPAK_ENABLED: 'false'
           VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
           # ============ GPT API FOR LOGIN (required for auto-login) ============
           VAR_GPT_API_URL: ${{ secrets.GPT_API_URL }}
@@ -152,7 +160,6 @@ jobs:
           # - Process only first 1 movie for phase 1 (--max-movies-phase1 1)
           # - Process only first 1 movie for phase 2 (--max-movies-phase2 1)
           SPIDER_OUTPUT=$(python3 -m apps.cli.spider \
-            --use-proxy \
             --start-page 1 \
             --end-page 10 \
             --max-movies-phase1 1 \
@@ -187,7 +194,6 @@ jobs:
           # - Process only first 1 movie for phase 2 (--max-movies-phase2 1)
           # - Ignore release date filter for adhoc mode
           SPIDER_OUTPUT=$(python3 -m apps.cli.spider \
-            --use-proxy \
             --url 'https://javdb.com/actors/wm9B?t=d&sort_type=0' \
             --start-page 1 \
             --end-page 1 \

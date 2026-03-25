@@ -23,7 +23,7 @@ import os
 import re
 import json
 import argparse
-from typing import Any, Callable, List, Tuple, Dict
+from typing import Any, Callable, List, Tuple, Dict, Optional
 
 
 # =============================================================================
@@ -173,6 +173,55 @@ def get_env_json(name: str, default: Any) -> Any:
     return default
 
 
+def get_env_bool_optional(name: str) -> Optional[bool]:
+    """Get environment variable as an optional boolean.
+
+    Returns ``None`` when the variable is unset or empty, which lets callers
+    distinguish "not provided" from an explicit true/false override.
+    """
+    val = os.environ.get(f'VAR_{name}', None)
+    if val is None:
+        val = os.environ.get(name, None)
+    if val is None:
+        return None
+
+    lowered = str(val).strip().lower()
+    if not lowered or lowered in ('__empty__', '__null__'):
+        return None
+    if lowered in ('true', '1', 'yes'):
+        return True
+    if lowered in ('false', '0', 'no'):
+        return False
+    return None
+
+
+def resolve_proxy_modules(default: Optional[List[str]] = None) -> List[str]:
+    """Resolve proxy-enabled modules from JSON config and per-module overrides."""
+    default_modules = default or ['spider']
+    configured_modules = get_env_json('PROXY_MODULES_JSON', default_modules)
+    if not isinstance(configured_modules, list):
+        configured_modules = default_modules
+
+    module_env_map = (
+        ('spider', 'PROXY_SPIDER_ENABLED'),
+        ('qbittorrent', 'PROXY_QBITTORRENT_ENABLED'),
+        ('pikpak', 'PROXY_PIKPAK_ENABLED'),
+    )
+
+    has_override = False
+    resolved_modules: List[str] = []
+    for module_name, env_name in module_env_map:
+        enabled = get_env_bool_optional(env_name)
+        if enabled is not None:
+            has_override = True
+        else:
+            enabled = 'all' in configured_modules or module_name in configured_modules
+        if enabled:
+            resolved_modules.append(module_name)
+
+    return resolved_modules if has_override else configured_modules
+
+
 def format_python_value(value: Any) -> str:
     """Format Python value for config.py output.
     
@@ -260,7 +309,13 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('PROXY_POOL_MAX_FAILURES', 'PROXY_POOL_MAX_FAILURES', get_env_int, 3, 'PROXY CONFIGURATION'),
         ('PROXY_HTTP', None, lambda n, d: None, None, 'PROXY CONFIGURATION'),  # Hardcoded None
         ('PROXY_HTTPS', None, lambda n, d: None, None, 'PROXY CONFIGURATION'),  # Hardcoded None
-        ('PROXY_MODULES', 'PROXY_MODULES_JSON', get_env_json, ['spider'], 'PROXY CONFIGURATION'),
+        (
+            'PROXY_MODULES',
+            None,
+            lambda _n, default: resolve_proxy_modules(default),
+            ['spider'],
+            'PROXY CONFIGURATION',
+        ),
         ('LOGIN_PROXY_NAME', 'LOGIN_PROXY_NAME', get_env, '', 'PROXY CONFIGURATION'),
         # Cloudflare Bypass Configuration
         ('CF_BYPASS_SERVICE_PORT', 'CF_BYPASS_SERVICE_PORT', get_env_int, 8000, 'CLOUDFLARE BYPASS CONFIGURATION'),

@@ -31,6 +31,11 @@ on:
         required: false
         type: boolean
         default: true
+      proxy_qbittorrent:
+        description: 'Enable proxy for qBittorrent requests'
+        required: false
+        type: boolean
+        default: false
   schedule:
     - cron: '0 16 * * *'
 
@@ -122,6 +127,9 @@ jobs:
           VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS || '691200' }}
           VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES || 3}}
           VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_PROXY_SPIDER_ENABLED: 'true'
+          VAR_PROXY_QBITTORRENT_ENABLED: ${{ github.event_name == 'workflow_dispatch' && (inputs.proxy_qbittorrent && 'true' || 'false') || 'false' }}
+          VAR_PROXY_PIKPAK_ENABLED: 'false'
           VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
           VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
           VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED || 'True' }}
@@ -232,7 +240,7 @@ jobs:
           set -o pipefail  # Exit on error in pipeline
           
           # Build argument array safely without eval
-          ARGS=(--min-size "$MIN_SIZE_MB" --days "$DAYS" --use-proxy)
+          ARGS=(--min-size "$MIN_SIZE_MB" --days "$DAYS")
           
           # Add categories filter via env var (script reads QB_FILTER_CATEGORIES)
           if [ -n "$QB_FILTER_CATEGORIES" ]; then

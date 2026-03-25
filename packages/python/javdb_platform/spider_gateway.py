@@ -111,7 +111,7 @@ def _load_config() -> dict:
         'PROXY_MODE': 'single',
         'PROXY_HTTP': None,
         'PROXY_HTTPS': None,
-        'PROXY_MODULES': ['all'],
+        'PROXY_MODULES': ['spider'],
         'PROXY_POOL_COOLDOWN_SECONDS': 300,
         'PROXY_POOL_MAX_FAILURES': 3,
         'BASE_URL': 'https://javdb.com',
@@ -163,7 +163,7 @@ def _build_handler(cfg: dict, proxy_pool) -> RequestHandler:
             javdb_session_cookie=cfg.get('JAVDB_SESSION_COOKIE'),
             proxy_http=cfg.get('PROXY_HTTP'),
             proxy_https=cfg.get('PROXY_HTTPS'),
-            proxy_modules=cfg.get('PROXY_MODULES', ['all']),
+            proxy_modules=cfg.get('PROXY_MODULES', ['spider']),
             proxy_mode=cfg.get('PROXY_MODE', 'single'),
         ),
     )
@@ -199,7 +199,7 @@ class SpiderGateway:
             url=url,
             use_cookie=self._use_cookie,
             use_proxy=self._use_proxy,
-            module_name='gateway',
+            module_name='spider',
             max_retries=2,
             use_cf_bypass=self._use_cf_bypass,
         )

@@ -477,7 +477,7 @@ class TestApiSpiderJob:
         assert p.url is None
         assert p.start_page == 1
         assert p.phase == 'all'
-        assert p.use_proxy is True
+        assert p.use_proxy is False
         assert p.dry_run is False
         assert p.disable_all_filters is False
 
@@ -501,7 +501,7 @@ class TestApiSpiderJob:
         from api.server import SpiderJobPayload, _payload_to_cli_args
         p = SpiderJobPayload()
         args = _payload_to_cli_args(p)
-        assert '--use-proxy' in args
+        assert '--use-proxy' not in args
         assert '--url' not in args
         assert '--dry-run' not in args
 

@@ -39,8 +39,11 @@ class TestParseArguments:
                             help='Which phase to run')
         parser.add_argument('--ignore-release-date', action='store_true',
                             help='Ignore today/yesterday tags')
-        parser.add_argument('--use-proxy', action='store_true',
-                            help='Enable proxy for all HTTP requests')
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument('--use-proxy', action='store_true',
+                           help='Force-enable proxy for spider requests')
+        group.add_argument('--no-proxy', action='store_true',
+                           help='Force-disable proxy for spider requests')
         parser.add_argument('--always-bypass-time', type=int, nargs='?', const=0, default=None,
                             help='Minutes to keep using CF bypass after fallback success')
         parser.add_argument('--from-pipeline', action='store_true',
@@ -56,6 +59,7 @@ class TestParseArguments:
         assert args.dry_run is False
         assert args.ignore_history is False
         assert args.use_proxy is False
+        assert args.no_proxy is False
         assert args.from_pipeline is False
         assert args.phase == 'all'
         assert args.start_page == 1
@@ -120,6 +124,15 @@ class TestParseArguments:
         args = parser.parse_args(['--use-proxy'])
         
         assert args.use_proxy is True
+        assert args.no_proxy is False
+
+    def test_no_proxy_flag(self):
+        """Test --no-proxy flag."""
+        parser = self.create_parser()
+        args = parser.parse_args(['--no-proxy'])
+
+        assert args.no_proxy is True
+        assert args.use_proxy is False
 
     def test_always_bypass_time_flag_without_value(self):
         """Test --always-bypass-time without value."""
@@ -200,8 +213,10 @@ class TestShouldUseProxyForModule:
     
     def should_use_proxy_for_module(self, module_name, use_proxy_flag, proxy_modules):
         """Local implementation of should_use_proxy_for_module."""
-        if not use_proxy_flag:
+        if use_proxy_flag is False:
             return False
+        if use_proxy_flag is True:
+            return True
         if not proxy_modules:
             return False
         if 'all' in proxy_modules:
@@ -215,18 +230,23 @@ class TestShouldUseProxyForModule:
     
     def test_true_when_all_in_proxy_modules(self):
         """Test returns True when 'all' in PROXY_MODULES."""
-        result = self.should_use_proxy_for_module('spider', True, ['all'])
+        result = self.should_use_proxy_for_module('spider', None, ['all'])
         assert result is True
     
     def test_true_when_module_in_proxy_modules(self):
         """Test returns True when module in PROXY_MODULES."""
-        result = self.should_use_proxy_for_module('spider_detail', True, ['spider_detail'])
+        result = self.should_use_proxy_for_module('spider_detail', None, ['spider_detail'])
         assert result is True
     
     def test_false_when_module_not_in_proxy_modules(self):
         """Test returns False when module not in PROXY_MODULES."""
-        result = self.should_use_proxy_for_module('other_module', True, ['spider_index'])
+        result = self.should_use_proxy_for_module('other_module', None, ['spider_index'])
         assert result is False
+
+    def test_true_when_force_enabled(self):
+        """Test returns True when proxy is force-enabled."""
+        result = self.should_use_proxy_for_module('other_module', True, [])
+        assert result is True
 
 
 class TestExtractIpFromProxyUrl:
@@ -1932,4 +1952,3 @@ class TestWriteCsvMerge:
         assert result[0]['subtitle'] == 'magnet:?xt=urn:btih:abc123'
         # The new hacked_subtitle should be written since existing was empty
         assert result[0]['hacked_subtitle'] == 'new_hacked_link'
-

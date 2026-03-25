@@ -236,13 +236,17 @@ class TestParseArgumentsLogic:
         parser = argparse.ArgumentParser(description='Health Check')
         parser.add_argument('--check-smtp', action='store_true',
                             help='Also check SMTP server connectivity')
-        parser.add_argument('--use-proxy', action='store_true',
-                            help='Check proxy pool status')
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument('--use-proxy', action='store_true',
+                           help='Force-enable proxy health checks')
+        group.add_argument('--no-proxy', action='store_true',
+                           help='Force-disable proxy health checks')
         
         # Test with no arguments
         args = parser.parse_args([])
         assert args.check_smtp is False
         assert args.use_proxy is False
+        assert args.no_proxy is False
     
     def test_check_smtp_flag(self):
         """Test --check-smtp flag."""
@@ -250,7 +254,9 @@ class TestParseArgumentsLogic:
         
         parser = argparse.ArgumentParser()
         parser.add_argument('--check-smtp', action='store_true')
-        parser.add_argument('--use-proxy', action='store_true')
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument('--use-proxy', action='store_true')
+        group.add_argument('--no-proxy', action='store_true')
         
         args = parser.parse_args(['--check-smtp'])
         assert args.check_smtp is True
@@ -261,10 +267,27 @@ class TestParseArgumentsLogic:
         
         parser = argparse.ArgumentParser()
         parser.add_argument('--check-smtp', action='store_true')
-        parser.add_argument('--use-proxy', action='store_true')
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument('--use-proxy', action='store_true')
+        group.add_argument('--no-proxy', action='store_true')
         
         args = parser.parse_args(['--use-proxy'])
         assert args.use_proxy is True
+        assert args.no_proxy is False
+
+    def test_no_proxy_flag(self):
+        """Test --no-proxy flag."""
+        import argparse
+        
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--check-smtp', action='store_true')
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument('--use-proxy', action='store_true')
+        group.add_argument('--no-proxy', action='store_true')
+        
+        args = parser.parse_args(['--no-proxy'])
+        assert args.no_proxy is True
+        assert args.use_proxy is False
     
     def test_all_flags(self):
         """Test all flags combined."""
@@ -272,9 +295,10 @@ class TestParseArgumentsLogic:
         
         parser = argparse.ArgumentParser()
         parser.add_argument('--check-smtp', action='store_true')
-        parser.add_argument('--use-proxy', action='store_true')
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument('--use-proxy', action='store_true')
+        group.add_argument('--no-proxy', action='store_true')
         
         args = parser.parse_args(['--check-smtp', '--use-proxy'])
         assert args.check_smtp is True
         assert args.use_proxy is True
-

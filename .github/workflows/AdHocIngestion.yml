@@ -49,12 +49,17 @@ on:
         required: false
         default: true
         type: boolean
+      proxy_qbittorrent:
+        description: 'Enable proxy for qBittorrent requests'
+        required: false
+        default: false
+        type: boolean
       always_bypass_time:
         description: 'Spider CF bypass sticky window in minutes (empty=disabled, 0=entire session)'
         required: false
         type: number
       proxy_uploader:
-        description: 'Deprecated: qBittorrent Uploader no longer uses proxy'
+        description: 'Deprecated alias for proxy_qbittorrent'
         required: false
         default: false
         type: boolean
@@ -200,6 +205,9 @@ jobs:
           VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS || '691200' }}
           VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES || 3 }}
           VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_PROXY_SPIDER_ENABLED: ${{ inputs.proxy_spider && 'true' || 'false' }}
+          VAR_PROXY_QBITTORRENT_ENABLED: ${{ (inputs.proxy_qbittorrent || inputs.proxy_uploader) && 'true' || 'false' }}
+          VAR_PROXY_PIKPAK_ENABLED: ${{ inputs.proxy_pikpak && 'true' || 'false' }}
           VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
           VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
           VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED || 'True' }}
@@ -340,19 +348,10 @@ jobs:
           echo "✓ Config decrypted successfully"
 
       - name: Run health checks
-        env:
-          INPUT_PROXY_SPIDER: ${{ inputs.proxy_spider }}
-          INPUT_PROXY_PIKPAK: ${{ inputs.proxy_pikpak }}
         run: |
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
-          
-          # Use proxy for health check if any proxy option is enabled
-          if [ "$INPUT_PROXY_SPIDER" = "true" ] || [ "$INPUT_PROXY_PIKPAK" = "true" ]; then
-            python3 -m apps.cli.health_check --use-proxy
-          else
-            python3 -m apps.cli.health_check
-          fi
+          python3 -m apps.cli.health_check
 
   # =============================================================================
   # Job 3: Run Pipeline - Execute spider, uploader, and pikpak bridge
@@ -445,6 +444,7 @@ jobs:
           INPUT_DATE_FILTER: ${{ inputs.date_filter }}
           INPUT_ENABLE_RCLONE_FILTER: ${{ inputs.enable_rclone_filter }}
           INPUT_PROXY_SPIDER: ${{ inputs.proxy_spider }}
+          INPUT_PROXY_QBITTORRENT: ${{ inputs.proxy_qbittorrent || inputs.proxy_uploader }}
           INPUT_PROXY_PIKPAK: ${{ inputs.proxy_pikpak }}
           INPUT_QB_CATEGORY: ${{ inputs.qb_category }}
         run: |
@@ -464,7 +464,7 @@ jobs:
           printf 'Date Filter: %s\n' "$INPUT_DATE_FILTER"
           printf 'Rclone Filter: %s\n' "$INPUT_ENABLE_RCLONE_FILTER"
           printf 'Proxy Spider: %s\n' "$INPUT_PROXY_SPIDER"
-          printf 'Proxy Uploader: %s\n' "$INPUT_PROXY_UPLOADER"
+          printf 'Proxy qBittorrent: %s\n' "$INPUT_PROXY_QBITTORRENT"
           printf 'Proxy PikPak: %s\n' "$INPUT_PROXY_PIKPAK"
           if [ -n "$INPUT_QB_CATEGORY" ]; then
             printf 'QB Category: %s\n' "$INPUT_QB_CATEGORY"
@@ -529,11 +529,6 @@ jobs:
             fi
           fi
           
-          # Add proxy flag if enabled
-          if [ "$INPUT_PROXY_SPIDER" = "true" ]; then
-            SPIDER_CMD+=(--use-proxy)
-          fi
-
           ALWAYS_BYPASS_TIME="$INPUT_ALWAYS_BYPASS_TIME"
           if [ -n "$ALWAYS_BYPASS_TIME" ]; then
             if [ "$ALWAYS_BYPASS_TIME" = "0" ]; then
@@ -629,16 +624,12 @@ jobs:
         id: pikpak
         if: ${{ success() && steps.uploader.outcome == 'success' }}
         env:
-          INPUT_PROXY_PIKPAK: ${{ inputs.proxy_pikpak }}
           SPIDER_SESSION_ID: ${{ steps.spider.outputs.session_id }}
         run: |
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
           
           CMD_ARGS=(python3 -m apps.cli.pikpak_bridge --days 3)
-          if [ "$INPUT_PROXY_PIKPAK" = "true" ]; then
-            CMD_ARGS+=(--use-proxy)
-          fi
           SESSION_ID="$SPIDER_SESSION_ID"
           if [ -n "$SESSION_ID" ]; then
             if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9_-]+$'; then
