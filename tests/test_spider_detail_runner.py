@@ -14,7 +14,9 @@ sys.path.insert(0, project_root)
 import scripts.spider.runtime.state as state
 from scripts.ingestion.models import SpiderIngestionPlan
 from scripts.spider.detail.runner import (
+    DetailPersistOutcome,
     persist_parsed_detail_result,
+    process_detail_entries,
     prepare_detail_entries,
 )
 
@@ -250,3 +252,194 @@ def test_persist_parsed_detail_result_keeps_visited_metadata_on_skip(monkeypatch
         '',
         '',
     )
+
+
+def test_process_detail_entries_handles_backend_results(monkeypatch):
+    from scripts.spider.fetch.backend import FetchRuntimeState
+    from scripts.spider.fetch.fetch_engine import EngineResult
+
+    class FakeBackend:
+        def __init__(self):
+            self.tasks = []
+            self.started = False
+            self.done = False
+            self.shutdown_called = False
+
+        @property
+        def worker_count(self):
+            return 2
+
+        def start(self):
+            self.started = True
+
+        def submit_task(self, task):
+            self.tasks.append(task)
+
+        def mark_done(self):
+            self.done = True
+
+        def runtime_state(self):
+            return FetchRuntimeState(use_proxy=True, use_cf_bypass=False)
+
+        def results(self):
+            yield EngineResult(
+                task=self.tasks[0],
+                success=True,
+                data={
+                    'magnets': ['magnet-1'],
+                    'actor_info': 'Actor',
+                    'actor_gender': '',
+                    'actor_link': '',
+                    'supporting': '',
+                },
+            )
+            yield EngineResult(
+                task=self.tasks[1],
+                success=False,
+                error='fetch_failed',
+            )
+
+        def shutdown(self, *, timeout=10):
+            self.shutdown_called = True
+            return []
+
+    backend = FakeBackend()
+    entries = [
+        make_entry('ABC-123', href='/v/abc123'),
+        make_entry('DEF-456', href='/v/def456'),
+    ]
+
+    monkeypatch.setattr(
+        'scripts.spider.detail.runner.extract_magnets',
+        lambda magnets, _idx: {'subtitle': magnets[0]},
+    )
+    monkeypatch.setattr(
+        'scripts.spider.detail.runner.persist_parsed_detail_result',
+        lambda **kwargs: DetailPersistOutcome(
+            status='reported',
+            row={'href': kwargs['entry']['href'], 'video_code': kwargs['entry']['video_code']},
+            visited_href=kwargs['entry']['href'],
+        ),
+    )
+
+    result = process_detail_entries(
+        backend=backend,
+        entries=entries,
+        phase=1,
+        history_data={},
+        history_file='history.csv',
+        csv_path='report.csv',
+        fieldnames=['href', 'video_code'],
+        dry_run=True,
+        use_history_for_saving=False,
+        is_adhoc_mode=False,
+    )
+
+    assert backend.started is True
+    assert backend.done is True
+    assert backend.shutdown_called is True
+    assert result['rows'] == [{'href': '/v/abc123', 'video_code': 'ABC-123'}]
+    assert result['failed'] == 1
+    assert result['failed_movies'] == [
+        {'video_code': 'DEF-456', 'url': 'https://javdb.com/v/def456', 'phase': 1}
+    ]
+    assert result['use_proxy'] is True
+    assert result['use_cf_bypass'] is False
+
+
+def test_process_detail_entries_acknowledges_runtime_state_changes(monkeypatch):
+    from scripts.spider.fetch.backend import FetchRuntimeState
+    from scripts.spider.fetch.fetch_engine import EngineResult
+
+    class FakeBackend:
+        def __init__(self):
+            self.tasks = []
+            self._states = [
+                FetchRuntimeState(use_proxy=False, use_cf_bypass=False),
+                FetchRuntimeState(use_proxy=True, use_cf_bypass=True),
+                FetchRuntimeState(use_proxy=True, use_cf_bypass=True),
+            ]
+            self._state_index = 0
+            self.ack_calls = []
+
+        @property
+        def worker_count(self):
+            return 1
+
+        def start(self):
+            return None
+
+        def submit_task(self, task):
+            self.tasks.append(task)
+
+        def mark_done(self):
+            return None
+
+        def runtime_state(self):
+            return self._states[self._state_index]
+
+        def results(self):
+            self._state_index = 1
+            yield EngineResult(
+                task=self.tasks[0],
+                success=True,
+                data={
+                    'magnets': ['magnet-1'],
+                    'actor_info': 'Actor',
+                    'actor_gender': '',
+                    'actor_link': '',
+                    'supporting': '',
+                },
+                _ack_callback=lambda status, changed: self.ack_calls.append((status, changed)),
+            )
+            self._state_index = 2
+            yield EngineResult(
+                task=self.tasks[1],
+                success=True,
+                data={
+                    'magnets': ['magnet-2'],
+                    'actor_info': 'Actor',
+                    'actor_gender': '',
+                    'actor_link': '',
+                    'supporting': '',
+                },
+                _ack_callback=lambda status, changed: self.ack_calls.append((status, changed)),
+            )
+
+        def shutdown(self, *, timeout=10):
+            return []
+
+    outcomes = iter(
+        [
+            DetailPersistOutcome(status='reported'),
+            DetailPersistOutcome(status='skipped', skipped_history=1),
+        ]
+    )
+
+    monkeypatch.setattr(
+        'scripts.spider.detail.runner.extract_magnets',
+        lambda magnets, _idx: {'subtitle': magnets[0]},
+    )
+    monkeypatch.setattr(
+        'scripts.spider.detail.runner.persist_parsed_detail_result',
+        lambda **_kwargs: next(outcomes),
+    )
+
+    backend = FakeBackend()
+    process_detail_entries(
+        backend=backend,
+        entries=[
+            make_entry('ABC-123', href='/v/abc123'),
+            make_entry('DEF-456', href='/v/def456'),
+        ],
+        phase=1,
+        history_data={},
+        history_file='history.csv',
+        csv_path='report.csv',
+        fieldnames=['href', 'video_code'],
+        dry_run=True,
+        use_history_for_saving=False,
+        is_adhoc_mode=False,
+    )
+
+    assert backend.ack_calls == [('reported', True), ('skipped', False)]
