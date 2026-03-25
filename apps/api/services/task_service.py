@@ -15,18 +15,35 @@ from urllib.parse import urlparse
 
 from fastapi import HTTPException
 
-from apps.api.infra.security import _sanitize_output_filename
+from apps.api.infra.security import _sanitize_output_filename, _validate_target_url
 from apps.api.services import config_service, context
 
 JOBS: Dict[str, Dict[str, Any]] = {}
 JOB_LOCK = threading.Lock()
 
 _JOB_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+_TASK_ALLOWED_FLAGS: dict[str, str] = {
+    "--all": "flag",
+    "--dry-run": "flag",
+    "--end-page": "int",
+    "--from-pipeline": "flag",
+    "--ignore-history": "flag",
+    "--ignore-release-date": "flag",
+    "--max-movies-phase1": "int",
+    "--max-movies-phase2": "int",
+    "--output-file": "output_file",
+    "--phase": "phase",
+    "--pikpak-individual": "flag",
+    "--start-page": "int",
+    "--url": "url",
+    "--use-history": "flag",
+    "--use-proxy": "flag",
+}
+_TASK_ALLOWED_MODULES = {"apps.cli.pipeline", "apps.cli.spider"}
 
 
 def _job_meta_path(job_id: str) -> Path:
-    filename = _safe_job_log_filename(job_id, ".meta.json")
-    return _resolved_path_under_job_log_dir(filename)
+    return _resolved_path_under_job_log_dir(job_id, ".meta.json")
 
 
 def _read_job_meta(job_id: str) -> Dict[str, Any]:
@@ -145,7 +162,8 @@ def _safe_job_log_filename(job_id: str, extension: str) -> str:
     return name
 
 
-def _resolved_path_under_job_log_dir(filename: str) -> Path:
+def _resolved_path_under_job_log_dir(job_id: str, extension: str) -> Path:
+    filename = _safe_job_log_filename(job_id, extension)
     candidate = (context.RESOLVED_JOB_LOG_DIR / filename).resolve()
     try:
         candidate.relative_to(context.RESOLVED_JOB_LOG_DIR)
@@ -155,8 +173,56 @@ def _resolved_path_under_job_log_dir(filename: str) -> Path:
 
 
 def _safe_log_path(job_id: str) -> Path:
-    filename = _safe_job_log_filename(job_id, ".log")
-    return _resolved_path_under_job_log_dir(filename)
+    return _resolved_path_under_job_log_dir(job_id, ".log")
+
+
+def _validate_task_command(command: list[str]) -> list[str]:
+    if not isinstance(command, list) or len(command) < 4:
+        raise HTTPException(status_code=400, detail="Invalid task command")
+    if any(not isinstance(token, str) or not token for token in command):
+        raise HTTPException(status_code=400, detail="Invalid task command")
+    if command[:3] != ["python3", "-u", "-m"]:
+        raise HTTPException(status_code=400, detail="Invalid task command")
+    if command[3] not in _TASK_ALLOWED_MODULES:
+        raise HTTPException(status_code=400, detail="Invalid task command")
+
+    idx = 4
+    while idx < len(command):
+        flag = command[idx]
+        value_type = _TASK_ALLOWED_FLAGS.get(flag)
+        if value_type is None:
+            raise HTTPException(status_code=400, detail="Invalid task command")
+        if value_type == "flag":
+            idx += 1
+            continue
+        if idx + 1 >= len(command):
+            raise HTTPException(status_code=400, detail="Invalid task command")
+        value = command[idx + 1]
+        if value_type == "int":
+            try:
+                parsed = int(value)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid task command",
+                ) from exc
+            if parsed < 0 or parsed > 10000:
+                raise HTTPException(status_code=400, detail="Invalid task command")
+        elif value_type == "phase":
+            if value not in {"1", "2", "all"}:
+                raise HTTPException(status_code=400, detail="Invalid task command")
+        elif value_type == "output_file":
+            try:
+                _sanitize_output_filename(value)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid task command",
+                ) from exc
+        elif value_type == "url":
+            _validate_target_url(value)
+        idx += 2
+    return command
 
 
 def _normalize_job_kind(job_id: str) -> str:
@@ -266,6 +332,7 @@ def _spawn_job(
     command: list[str],
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    command = _validate_task_command(command)
     now = datetime.now(timezone.utc)
     job_id = f"{job_prefix}-{now.strftime('%Y%m%d-%H%M%S')}-{os.urandom(2).hex()}"
     log_path = _safe_log_path(job_id)
@@ -395,6 +462,7 @@ def trigger_adhoc_task(payload: Any, username: str) -> Dict[str, Any]:
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise HTTPException(status_code=422, detail="Invalid URL for adhoc task")
     safe_url = parsed.geturl()
+    _validate_target_url(safe_url)
 
     command = [
         "python3",
