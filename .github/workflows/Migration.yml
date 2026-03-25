@@ -196,7 +196,7 @@ jobs:
           VAR_RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
           VAR_RCLONE_FOLDER_PATH: ${{ vars.RCLONE_FOLDER_PATH }}
           VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
-        run: python3 utils/config_generator.py --github-actions
+        run: python3 -m apps.cli.config_generator --github-actions
 
       - name: Pull latest changes
         run: |
@@ -262,7 +262,7 @@ jobs:
           set -e
           set -o pipefail
 
-          CMD=(python3 migration/migrate_to_current.py)
+          CMD=(python3 -m apps.cli.migration)
 
           if [ "${{ inputs.dry_run }}" == "true" ]; then
             CMD+=(--dry-run)

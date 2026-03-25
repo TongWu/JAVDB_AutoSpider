@@ -14,7 +14,7 @@ runs:
       uses: actions/cache@v5
       with:
         path: /tmp/rust-wheel
-        key: rust-wheel-${{ runner.os }}-${{ hashFiles('rust_core/src/**', 'rust_core/Cargo.toml', 'rust_core/Cargo.lock') }}
+        key: rust-wheel-${{ runner.os }}-${{ hashFiles('packages/rust/javdb_rust_core/src/**', 'packages/rust/javdb_rust_core/Cargo.toml', 'packages/rust/javdb_rust_core/Cargo.lock') }}
 
     - name: Install from cached wheel
       if: steps.wheel-cache.outputs.cache-hit == 'true'
@@ -34,8 +34,8 @@ runs:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
-          rust_core/target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('rust_core/Cargo.lock') }}
+          packages/rust/javdb_rust_core/target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('packages/rust/javdb_rust_core/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-cargo-
 
@@ -45,7 +45,7 @@ runs:
       run: |
         pip install maturin[patchelf]
         mkdir -p /tmp/rust-wheel
-        cd rust_core
+        cd packages/rust/javdb_rust_core
         maturin build --release --out /tmp/rust-wheel
         echo "✓ Built Rust extension wheel:"
         ls -lh /tmp/rust-wheel/*.whl
