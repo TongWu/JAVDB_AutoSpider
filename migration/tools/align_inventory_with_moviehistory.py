@@ -8,8 +8,9 @@ Scope:
 3) Compare parsed torrent category vs current inventory category. If parsed is
    better, generate qBittorrent upgrade tasks and an rclone purge plan (direct delete).
 
-Parallel mode (one worker per proxy) is used when ``--use-proxy`` is set and the
-proxy pool is configured.  Falls back to single-threaded sequential mode otherwise.
+Proxy-backed fetching is enabled by default. Parallel mode (one worker per
+proxy) is used when proxy is enabled and the proxy pool is configured. Use
+``--no-proxy`` to force direct/sequential fetching for debugging.
 
 HTTP fetching matches the main spider: initial requests do not force CF bypass;
 ``RequestHandler`` / global handler may enable bypass on fallback after failures.
@@ -424,7 +425,7 @@ def run_alignment(args: argparse.Namespace) -> int:
     reports_dir = cfg('REPORTS_DIR', 'reports')
     os.makedirs(reports_dir, exist_ok=True)
     ban_log = os.path.join(reports_dir, 'proxy_bans.csv')
-    use_proxy = args.use_proxy
+    use_proxy = getattr(args, 'use_proxy', not getattr(args, 'no_proxy', False))
     spider_state.setup_proxy_pool(ban_log_file=ban_log, use_proxy=use_proxy)
     spider_state.initialize_request_handler()
     base_url = cfg('BASE_URL', 'https://javdb.com').rstrip('/')
@@ -727,7 +728,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--dry-run', action='store_true', help='Parse and plan only; do not write DB.')
     parser.add_argument('--limit', type=int, default=0, help='Max number of missing codes to process (0=all).')
     parser.add_argument('--codes', type=str, default='', help='Comma-separated codes to process.')
-    parser.add_argument('--use-proxy', action='store_true', help='Use spider proxy configuration.')
+    parser.add_argument(
+        '--no-proxy',
+        action='store_true',
+        help='Direct HTTP without spider proxy configuration (debug; proxy enabled by default).',
+    )
+    parser.add_argument('--use-proxy', dest='legacy_use_proxy', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--output-dir', type=str, default=cfg('MIGRATION_REPORT_DIR', 'reports/Migration'))
     parser.add_argument('--enqueue-qb', action='store_true', help='Enqueue upgrade magnets to qBittorrent.')
     parser.add_argument('--qb-category', type=str, default=cfg('TORRENT_CATEGORY_ADHOC', 'Ad Hoc'))
@@ -736,7 +742,16 @@ def parse_args() -> argparse.Namespace:
         action='store_true',
         help='After planning, run rclone purge on each source_path in the purge-plan CSV (destructive).',
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.no_proxy and args.legacy_use_proxy:
+        parser.error('--no-proxy and deprecated --use-proxy cannot be used together')
+    if args.legacy_use_proxy:
+        logger.warning(
+            '--use-proxy is deprecated; alignment now uses proxy by default. '
+            'Use --no-proxy to disable proxy.',
+        )
+    setattr(args, 'use_proxy', not args.no_proxy)
+    return args
 
 
 def main() -> int:
