@@ -232,7 +232,7 @@ jobs:
           VAR_RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
           VAR_RCLONE_FOLDER_PATH: ${{ vars.RCLONE_FOLDER_PATH }}
           VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
-        run: python3 utils/config_generator.py --github-actions
+        run: python3 -m apps.cli.config_generator --github-actions
 
       - name: Pull latest changes from remote
         run: |
@@ -346,9 +346,9 @@ jobs:
           
           # Use proxy for health check if any proxy option is enabled
           if [ "${{ inputs.proxy_spider }}" == "true" ] || [ "${{ inputs.proxy_uploader }}" == "true" ] || [ "${{ inputs.proxy_pikpak }}" == "true" ]; then
-            python3 scripts/health_check.py --use-proxy
+            python3 -m apps.cli.health_check --use-proxy
           else
-            python3 scripts/health_check.py
+            python3 -m apps.cli.health_check
           fi
 
   # =============================================================================
@@ -457,7 +457,7 @@ jobs:
           set -o pipefail  # Exit on error in pipeline (important for tee)
           
           # Build spider command with conditional flags
-          SPIDER_CMD="python3 scripts/spider"
+          SPIDER_CMD="python3 -m apps.cli.spider"
           
           # Add URL
           SPIDER_CMD="$SPIDER_CMD --url '${{ inputs.url }}'"
@@ -553,7 +553,7 @@ jobs:
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
           
-          CMD="python3 scripts/qb_uploader.py --mode adhoc"
+          CMD="python3 -m apps.cli.qb_uploader --mode adhoc"
           
           # Pass the CSV full path captured from spider
           CSV_PATH="${{ steps.spider.outputs.csv_filename }}"
@@ -591,7 +591,7 @@ jobs:
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
           
-          CMD="python3 scripts/pikpak_bridge.py --days 3"
+          CMD="python3 -m apps.cli.pikpak_bridge --days 3"
           if [ "${{ inputs.proxy_pikpak }}" == "true" ]; then
             CMD="$CMD --use-proxy"
           fi
@@ -609,7 +609,7 @@ jobs:
           set -e
           set -o pipefail
           curl -s https://rclone.org/install.sh | sudo bash
-          python3 scripts/rclone_manager.py --execute
+          python3 -m apps.cli.rclone_manager --execute
         continue-on-error: true
 
       - name: Encrypt and upload logs artifact
@@ -883,7 +883,7 @@ jobs:
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
           
-          CMD="python3 scripts/email_notification.py --mode adhoc"
+          CMD="python3 -m apps.cli.email_notification --mode adhoc"
           
           # Pass the CSV path if available
           CSV_PATH="${{ steps.status.outputs.csv_path }}"
@@ -1110,4 +1110,3 @@ jobs:
           echo ""
           echo "::warning::Failed to push after $MAX_RETRIES attempts."
           exit 1
-

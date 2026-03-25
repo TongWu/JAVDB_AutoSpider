@@ -144,7 +144,7 @@ jobs:
           set -e
           set -o pipefail
 
-          CMD=(python3 scripts/rclone_manager.py --scan --report --execute)
+          CMD=(python3 -m apps.cli.rclone_manager --scan --report --execute)
 
           if [ -n "$INPUT_ROOT_PATH" ]; then
             CMD+=(--root-path "$INPUT_ROOT_PATH")

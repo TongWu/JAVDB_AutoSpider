@@ -7,7 +7,7 @@ services:
       dockerfile: docker/Dockerfile
     container_name: javdb-api
     working_dir: /app
-    command: ["python3", "-m", "uvicorn", "api.server:app", "--host", "0.0.0.0", "--port", "8100"]
+    command: ["python3", "-m", "uvicorn", "apps.api.server:app", "--host", "0.0.0.0", "--port", "8100"]
     ports:
       - "8100:8100"
     environment:
@@ -23,7 +23,7 @@ services:
 
   web:
     build:
-      context: ../web
+      context: ../apps/web
       dockerfile: Dockerfile
     container_name: javdb-web
     ports:

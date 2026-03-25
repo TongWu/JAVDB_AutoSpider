@@ -10,7 +10,7 @@ on:
       - dev
       - feature/**
     paths:
-      - 'rust_core/**'
+      - 'packages/rust/javdb_rust_core/**'
       - '.github/workflows/build-rust-extension.yml'
       - '.github/actions/install-rust-wheel/**'
   workflow_call:

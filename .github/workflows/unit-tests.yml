@@ -14,8 +14,8 @@ on:
     paths:
       - '**.py'
       - '**.rs'
-      - 'rust_core/Cargo.toml'
-      - 'rust_core/Cargo.lock'
+      - 'packages/rust/javdb_rust_core/Cargo.toml'
+      - 'packages/rust/javdb_rust_core/Cargo.lock'
       - 'pytest.ini'
       - 'docker/**'
   pull_request:
@@ -24,8 +24,8 @@ on:
     paths:
       - '**.py'
       - '**.rs'
-      - 'rust_core/Cargo.toml'
-      - 'rust_core/Cargo.lock'
+      - 'packages/rust/javdb_rust_core/Cargo.toml'
+      - 'packages/rust/javdb_rust_core/Cargo.lock'
       - 'pytest.ini'
       - 'docker/**'
 
@@ -46,17 +46,17 @@ jobs:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
-          rust_core/target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('rust_core/Cargo.lock') }}
+          packages/rust/javdb_rust_core/target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('packages/rust/javdb_rust_core/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-cargo-
 
     - name: Run cargo check
-      working-directory: rust_core
+      working-directory: packages/rust/javdb_rust_core
       run: cargo check
 
     - name: Run cargo test
-      working-directory: rust_core
+      working-directory: packages/rust/javdb_rust_core
       run: cargo test
 
   build-wheel:
@@ -124,7 +124,7 @@ jobs:
       run: |
         pip uninstall -y javdb-rust-core || true
         pip uninstall -y javdb_rust_core || true
-        pytest tests/test_rust_adapters_fallback.py tests/test_dedup_checker_rust_adapter.py -v --tb=short
+        pytest tests/unit/test_rust_adapters_fallback.py tests/unit/test_dedup_checker_rust_adapter.py -v --tb=short
 
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v5
