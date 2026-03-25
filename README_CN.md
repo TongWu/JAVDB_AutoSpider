@@ -488,6 +488,7 @@ python pipeline_run_and_notify.py --ignore-release-date --phase 1
 python pipeline_run_and_notify.py --url "https://javdb.com/actors/EvkJ"
 
 # 启用代理的流水线
+# 仅传给 spider 和 PikPak Bridge；qBittorrent uploader 保持直连
 python pipeline_run_and_notify.py --use-proxy
 
 # 使用 PikPak 单个模式的流水线(逐个处理种子)
@@ -504,7 +505,7 @@ python pipeline_run_and_notify.py --pikpak-individual
 7. **分析日志中的严重错误**
 8. 发送带有适当状态的电子邮件通知
 
-**注意**: 流水线接受与 `python3 -m apps.cli.spider` 相同的参数并自动传递。额外的流水线特定参数包括 `--pikpak-individual` 用于 PikPak Bridge 模式控制。
+**注意**: 流水线接受与 `python3 -m apps.cli.spider` 相同的参数并自动传递。`--use-proxy` 会传给 spider 和 PikPak Bridge，但不会传给 `python3 -m apps.cli.qb_uploader`。额外的流水线特定参数包括 `--pikpak-individual` 用于 PikPak Bridge 模式控制。
 
 #### 智能错误检测
 

@@ -461,7 +461,7 @@ jobs:
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
           
-          CMD_ARGS=(python3 -m apps.cli.qb_uploader --mode daily --use-proxy)
+          CMD_ARGS=(python3 -m apps.cli.qb_uploader --mode daily)
           
           # Pass the CSV full path captured from spider
           if [ -n "$CSV_PATH" ]; then
