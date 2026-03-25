@@ -589,6 +589,9 @@ GIT_BRANCH = 'main'
 # =============================================================================
 QB_HOST = 'your_qbittorrent_ip'
 QB_PORT = 'your_qbittorrent_port'
+QB_SCHEME = 'https'  # Prefer HTTPS for qBittorrent Web UI
+QB_VERIFY_TLS = True  # Verify qBittorrent TLS certificates
+QB_ALLOW_INSECURE_HTTP = False  # Set True only for trusted local-only HTTP Web UI
 QB_USERNAME = 'your_qbittorrent_username'
 QB_PASSWORD = 'your_qbittorrent_password'
 TORRENT_CATEGORY = 'JavDB'  # Category for daily mode torrents
@@ -731,6 +734,7 @@ QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
 1. Enable Web UI in qBittorrent settings
 2. Note the IP address, port, username, and password
 3. Update the qBittorrent configuration section in `config.py`
+4. Prefer `QB_SCHEME = 'https'`; if your Web UI is trusted local-only HTTP, set `QB_SCHEME = 'http'` and `QB_ALLOW_INSECURE_HTTP = True` explicitly
 
 **Email Setup (Optional):**
 1. For Gmail, use an App Password instead of your regular password

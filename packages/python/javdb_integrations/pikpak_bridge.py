@@ -59,6 +59,7 @@ from packages.python.javdb_platform.proxy_pool import ProxyPool, create_proxy_po
 
 # Import proxy helper from request handler
 from packages.python.javdb_platform.request_handler import ProxyHelper, create_proxy_helper_from_config
+from packages.python.javdb_platform.qb_config import build_qb_base_url, qb_verify_tls
 
 # Global proxy pool instance
 global_proxy_pool = None
@@ -154,6 +155,7 @@ class QBittorrentClient:
     def __init__(self, base_url, username, password, use_proxy=False):
         self.base_url = base_url.rstrip('/')
         self.session = requests.Session()
+        self.session.verify = qb_verify_tls()
         self.use_proxy = use_proxy
         self.proxies = get_proxies_dict('pikpak', use_proxy)
         self.login(username, password)
@@ -326,7 +328,12 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline
         else:
             logger.warning("PROXY ENABLED: But no proxy configured")
 
-    qb = QBittorrentClient(f"http://{QB_HOST}:{QB_PORT}", QB_USERNAME, QB_PASSWORD, use_proxy)
+    qb = QBittorrentClient(
+        build_qb_base_url(QB_HOST, QB_PORT),
+        QB_USERNAME,
+        QB_PASSWORD,
+        use_proxy,
+    )
     torrents = qb.get_torrents_multiple_categories(CATEGORIES)
     logger.info(f"Found {len(torrents)} torrents across categories {CATEGORIES}")
 

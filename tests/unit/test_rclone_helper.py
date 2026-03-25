@@ -5,6 +5,7 @@ Tests for utils/rclone_helper.py — shared rclone data structures and functions
 import os
 import sys
 import base64
+import json
 import pytest
 from unittest.mock import patch, MagicMock
 from typing import List
@@ -386,6 +387,20 @@ class TestFolderCache:
             folders = [create_folder_info("ABC-123", "有码", "中字")]
             cache.add_folders("2024", "Actor", folders)
             assert cache.folder_count == 1
+
+    def test_cache_persists_json_payload(self):
+        cache = FolderCache()
+        try:
+            folders = [create_folder_info("ABC-123", "有码", "中字")]
+            cache.add_folders("2024", "Actor A", folders)
+            cache_file = next(iter(cache._year_actor_index.values()))
+            assert cache_file.endswith(".json")
+            with open(cache_file, "r", encoding="utf-8") as fh:
+                payload = json.load(fh)
+            assert payload[0]["movie_code"] == "ABC-123"
+            assert payload[0]["sensor_category"] == "有码"
+        finally:
+            cache.clear()
 
 
 # ============================================================================

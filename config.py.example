@@ -27,6 +27,9 @@ GIT_BRANCH = 'main'
 # qBittorrent Web UI settings
 QB_HOST = 'your_qbittorrent_ip'
 QB_PORT = 'your_qbittorrent_port'
+QB_SCHEME = 'https'  # Prefer HTTPS for qBittorrent Web UI
+QB_VERIFY_TLS = True  # Verify qBittorrent TLS certificates
+QB_ALLOW_INSECURE_HTTP = False  # Set True only for trusted local-only HTTP Web UI
 QB_USERNAME = 'your_qbittorrent_username'
 QB_PASSWORD = 'your_qbittorrent_password'
 

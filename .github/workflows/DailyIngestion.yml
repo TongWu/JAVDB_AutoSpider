@@ -377,31 +377,39 @@ jobs:
 
       - name: Step 1 - Run Spider
         id: spider
+        env:
+          INPUT_DISABLE_ALL_FILTERS: ${{ inputs.disable_all_filters }}
+          INPUT_ENABLE_RCLONE_FILTER: ${{ inputs.enable_rclone_filter }}
+          INPUT_ENABLE_DEDUP: ${{ inputs.enable_dedup }}
+          INPUT_ENABLE_REDOWNLOAD: ${{ inputs.enable_redownload }}
+          INPUT_REDOWNLOAD_THRESHOLD: ${{ inputs.redownload_threshold }}
+          INPUT_ALWAYS_BYPASS_TIME: ${{ inputs.always_bypass_time }}
+          SCHEDULE_ENABLE_DEDUP: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
         run: |
           set -o pipefail
           SPIDER_CMD=(python3 -m apps.cli.spider --use-proxy)
-          if [ "${{ inputs.disable_all_filters }}" == "true" ]; then
+          if [ "$INPUT_DISABLE_ALL_FILTERS" = "true" ]; then
             SPIDER_CMD+=(--disable-all-filters)
             echo "⚠️ ALL FILTERS DISABLED: history, rclone inventory, release date filters are all bypassed"
           else
-            if [ "${{ inputs.enable_rclone_filter }}" == "false" ]; then
+            if [ "$INPUT_ENABLE_RCLONE_FILTER" = "false" ]; then
               SPIDER_CMD+=(--no-rclone-filter)
               echo "📋 Rclone inventory filter disabled"
             fi
           fi
-          if [ "${{ inputs.enable_dedup == true || github.event_name == 'schedule' }}" == "true" ]; then
+          if [ "$INPUT_ENABLE_DEDUP" = "true" ] || [ "$SCHEDULE_ENABLE_DEDUP" = "true" ]; then
             SPIDER_CMD+=(--enable-dedup)
             echo "🔍 Dedup detection enabled"
           fi
-          if [ "${{ inputs.enable_redownload }}" == "true" ]; then
+          if [ "$INPUT_ENABLE_REDOWNLOAD" = "true" ]; then
             SPIDER_CMD+=(--enable-redownload)
-            THRESHOLD="${{ inputs.redownload_threshold }}"
+            THRESHOLD="$INPUT_REDOWNLOAD_THRESHOLD"
             if [ -n "$THRESHOLD" ] && [ "$THRESHOLD" != "0.30" ]; then
               SPIDER_CMD+=(--redownload-threshold "$THRESHOLD")
             fi
             echo "🔄 Re-download (洗版) enabled (threshold: ${THRESHOLD:-0.30})"
           fi
-          ALWAYS_BYPASS_TIME="${{ inputs.always_bypass_time }}"
+          ALWAYS_BYPASS_TIME="$INPUT_ALWAYS_BYPASS_TIME"
           if [ -n "$ALWAYS_BYPASS_TIME" ]; then
             if [ "$ALWAYS_BYPASS_TIME" = "0" ]; then
               SPIDER_CMD+=(--always-bypass-time)
@@ -446,6 +454,9 @@ jobs:
 
       - name: Step 2 - Run qBittorrent Uploader
         id: uploader
+        env:
+          CSV_PATH: ${{ steps.spider.outputs.csv_filename }}
+          SPIDER_SESSION_ID: ${{ steps.spider.outputs.session_id }}
         run: |
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
@@ -453,14 +464,13 @@ jobs:
           CMD_ARGS=(python3 -m apps.cli.qb_uploader --mode daily --use-proxy)
           
           # Pass the CSV full path captured from spider
-          CSV_PATH="${{ steps.spider.outputs.csv_filename }}"
           if [ -n "$CSV_PATH" ]; then
             CMD_ARGS+=(--input-file "$CSV_PATH")
             echo "Using CSV file from spider: $CSV_PATH"
           fi
           
           # Pass session_id for SQLite stats
-          SESSION_ID="${{ steps.spider.outputs.session_id }}"
+          SESSION_ID="$SPIDER_SESSION_ID"
           if [ -n "$SESSION_ID" ]; then
             if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9_-]+$'; then
               echo "::error::Invalid SESSION_ID format: $SESSION_ID"
@@ -475,11 +485,13 @@ jobs:
       - name: Step 3 - Run PikPak Bridge
         id: pikpak
         if: ${{ success() && steps.uploader.outcome == 'success' }}
+        env:
+          SPIDER_SESSION_ID: ${{ steps.spider.outputs.session_id }}
         run: |
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
           CMD_ARGS=(python3 -m apps.cli.pikpak_bridge --days 3)
-          SESSION_ID="${{ steps.spider.outputs.session_id }}"
+          SESSION_ID="$SPIDER_SESSION_ID"
           if [ -n "$SESSION_ID" ]; then
             if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9_-]+$'; then
               echo "::error::Invalid SESSION_ID format: $SESSION_ID"
@@ -493,11 +505,12 @@ jobs:
       - name: Step 4 - Run Rclone Dedup Executor
         id: dedup
         if: ${{ inputs.enable_dedup == true || github.event_name == 'schedule' }}
+        env:
+          DEDUP_CSV: ${{ steps.spider.outputs.dedup_csv_path }}
         run: |
           set -e
           set -o pipefail
           curl -s https://rclone.org/install.sh | sudo bash
-          DEDUP_CSV="${{ steps.spider.outputs.dedup_csv_path }}"
           if [ -n "$DEDUP_CSV" ] && [ -f "$DEDUP_CSV" ]; then
             python3 -m apps.cli.rclone_manager --execute --dedup-csv "$DEDUP_CSV"
           else

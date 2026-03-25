@@ -66,13 +66,18 @@ logger = get_logger(__name__)
 from packages.python.javdb_platform.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 
 # Import masking utilities
-from packages.python.javdb_core.masking import mask_ip_address, mask_username, mask_full
+from packages.python.javdb_core.masking import mask_username
 
 # Import proxy pool
 from packages.python.javdb_platform.proxy_pool import ProxyPool, create_proxy_pool_from_config
 
 # Import proxy helper from request handler
 from packages.python.javdb_platform.request_handler import ProxyHelper, create_proxy_helper_from_config
+from packages.python.javdb_platform.qb_config import (
+    build_qb_base_url,
+    masked_qb_base_url,
+    qb_verify_tls,
+)
 
 # Global proxy pool instance
 global_proxy_pool = None
@@ -81,7 +86,9 @@ global_proxy_pool = None
 global_proxy_helper = None
 
 # qBittorrent configuration
-QB_BASE_URL = f'http://{QB_HOST}:{QB_PORT}'
+QB_BASE_URL = build_qb_base_url(QB_HOST, QB_PORT)
+QB_MASKED_URL = masked_qb_base_url(QB_HOST, QB_PORT)
+QB_VERIFY_TLS = qb_verify_tls()
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='qBittorrent Uploader')
@@ -208,9 +215,13 @@ def test_qbittorrent_connection(use_proxy=False):
     """Test if qBittorrent is accessible"""
     try:
         proxies = get_proxies_dict('qbittorrent', use_proxy)
-        masked_url = f"http://{mask_ip_address(QB_HOST)}:{QB_PORT}"
-        logger.info(f"Testing connection to qBittorrent at {masked_url}")
-        response = requests.get(f'{QB_BASE_URL}/api/v2/app/version', timeout=10, proxies=proxies)
+        logger.info(f"Testing connection to qBittorrent at {QB_MASKED_URL}")
+        response = requests.get(
+            f'{QB_BASE_URL}/api/v2/app/version',
+            timeout=10,
+            proxies=proxies,
+            verify=QB_VERIFY_TLS,
+        )
         if response.status_code == 200 or response.status_code == 403:
             logger.info("qBittorrent is accessible")
             return True
@@ -230,11 +241,16 @@ def login_to_qbittorrent(session, use_proxy=False):
     }
     
     proxies = get_proxies_dict('qbittorrent', use_proxy)
-    masked_url = f"http://{mask_ip_address(QB_HOST)}:{QB_PORT}"
     
     try:
-        logger.info(f"Attempting to login to qBittorrent at {masked_url} as {mask_username(QB_USERNAME)}")
-        response = session.post(login_url, data=login_data, timeout=REQUEST_TIMEOUT, proxies=proxies)
+        logger.info(f"Attempting to login to qBittorrent at {QB_MASKED_URL} as {mask_username(QB_USERNAME)}")
+        response = session.post(
+            login_url,
+            data=login_data,
+            timeout=REQUEST_TIMEOUT,
+            proxies=proxies,
+            verify=QB_VERIFY_TLS,
+        )
         
         if response.status_code == 200:
             logger.info("Successfully logged in to qBittorrent")
@@ -291,7 +307,12 @@ def get_existing_torrents(session, use_proxy=False):
     proxies = get_proxies_dict('qbittorrent', use_proxy)
     
     try:
-        response = session.get(info_url, timeout=REQUEST_TIMEOUT, proxies=proxies)
+        response = session.get(
+            info_url,
+            timeout=REQUEST_TIMEOUT,
+            proxies=proxies,
+            verify=QB_VERIFY_TLS,
+        )
         
         if response.status_code == 200:
             torrents = response.json()
@@ -362,7 +383,13 @@ def add_torrent_to_qbittorrent(session, magnet_link, title, mode='daily', use_pr
     
     try:
         logger.debug(f"Adding torrent: {title} with category: {category}")
-        response = session.post(add_url, data=torrent_data, timeout=REQUEST_TIMEOUT, proxies=proxies)
+        response = session.post(
+            add_url,
+            data=torrent_data,
+            timeout=REQUEST_TIMEOUT,
+            proxies=proxies,
+            verify=QB_VERIFY_TLS,
+        )
         
         if response.status_code == 200:
             logger.debug(f"Successfully added torrent: {title} to category: {category}")

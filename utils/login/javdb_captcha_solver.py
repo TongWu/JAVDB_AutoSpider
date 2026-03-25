@@ -15,6 +15,7 @@ Usage:
 import os
 import sys
 import io
+import subprocess
 from PIL import Image, ImageEnhance, ImageFilter
 
 # Try to import optional dependencies
@@ -193,11 +194,21 @@ def solve_with_manual_input(image_data, save_path='javdb_captcha.png'):
             import platform
             system = platform.system()
             if system == 'Darwin':  # macOS
-                os.system(f'open {save_path}')
+                subprocess.run(
+                    ['open', save_path],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
             elif system == 'Linux':
-                os.system(f'xdg-open {save_path} 2>/dev/null || cat {save_path}')
+                subprocess.run(
+                    ['xdg-open', save_path],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
             elif system == 'Windows':
-                os.system(f'start {save_path}')
+                os.startfile(save_path)
         except:
             pass
         
@@ -335,5 +346,4 @@ def test_solver():
 
 if __name__ == '__main__':
     test_solver()
-
 

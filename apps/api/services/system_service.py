@@ -24,6 +24,11 @@ from packages.python.javdb_platform.bridges.rust_adapters.parser_adapter import 
 )
 
 
+def _raise_internal_error(detail: str, exc: Exception) -> None:
+    context.logger.warning("%s: %s", detail, exc)
+    raise HTTPException(status_code=500, detail=detail) from exc
+
+
 def health_payload() -> Any:
     from apps.api.schemas.payloads import HealthResponse
 
@@ -74,42 +79,42 @@ async def parse_index_payload(payload: Any) -> Dict[str, Any]:
     try:
         return result_to_dict(parse_index_page(payload.html, payload.page_num))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        _raise_internal_error("Failed to parse index page", exc)
 
 
 async def parse_detail_payload(payload: Any) -> Dict[str, Any]:
     try:
         return result_to_dict(parse_detail_page(payload.html))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        _raise_internal_error("Failed to parse detail page", exc)
 
 
 async def parse_category_payload(payload: Any) -> Dict[str, Any]:
     try:
         return result_to_dict(parse_category_page(payload.html, payload.page_num))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        _raise_internal_error("Failed to parse category page", exc)
 
 
 async def parse_top_payload(payload: Any) -> Dict[str, Any]:
     try:
         return result_to_dict(parse_top_page(payload.html, payload.page_num))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        _raise_internal_error("Failed to parse top page", exc)
 
 
 async def parse_tags_payload(payload: Any) -> Dict[str, Any]:
     try:
         return result_to_dict(parse_tag_page(payload.html, payload.page_num))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        _raise_internal_error("Failed to parse tag page", exc)
 
 
 async def detect_page_type_payload(payload: Any) -> Dict[str, str]:
     try:
         return {"page_type": detect_page_type(payload.html)}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        _raise_internal_error("Failed to detect page type", exc)
 
 
 async def parse_url_payload(payload: Any) -> Dict[str, Any]:
@@ -124,7 +129,7 @@ async def parse_url_payload(payload: Any) -> Dict[str, Any]:
         result = gateway.fetch_and_parse(payload.url, page_num=payload.page_num)
         return result.to_dict()
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        _raise_internal_error("Failed to fetch and parse URL", exc)
 
 
 async def crawl_index_payload(payload: Any) -> Dict[str, Any]:
@@ -146,7 +151,7 @@ async def crawl_index_payload(payload: Any) -> Dict[str, Any]:
         )
         return result.to_dict()
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        _raise_internal_error("Failed to crawl index pages", exc)
 
 
 __all__ = [
