@@ -9,11 +9,16 @@ from utils.config_helper import use_sqlite
 from utils.parser import parse_detail
 from utils.magnet_extractor import extract_magnets
 from utils.db import db_batch_update_movie_actors
+from scripts.ingestion.models import ParsedMovie
+from scripts.ingestion.planner import build_spider_ingestion_plan
+from scripts.ingestion.policies import (
+    has_complete_subtitles,
+    should_skip_recent_yesterday_release,
+    should_skip_recent_today_release,
+)
 from utils.history_manager import (
-    has_complete_subtitles, should_skip_recent_yesterday_release,
-    should_skip_recent_today_release, should_process_movie,
-    save_parsed_movie_to_history, batch_update_last_visited,
-    check_redownload_upgrade,
+    save_parsed_movie_to_history,
+    batch_update_last_visited,
 )
 from utils.csv_writer import write_csv
 
@@ -23,14 +28,9 @@ from scripts.spider.sleep_manager import (
     penalty_tracker as _shared_penalty_tracker,
     dual_window_throttle as _shared_throttle,
 )
-from scripts.spider.csv_builder import (
-    create_csv_row_with_history_filter, check_torrent_status, collect_new_magnet_links,
-    create_redownload_row,
-)
 from scripts.spider.config_loader import BASE_URL
 from scripts.spider.dedup_checker import (
     should_skip_from_rclone,
-    check_dedup_upgrade,
     append_dedup_record,
 )
 
@@ -233,68 +233,60 @@ def process_detail_entries_parallel(
             data['actor_link'], data['supporting'],
         ))
         magnet_links = extract_magnets(data['magnets'], idx_str)
+        parsed_movie = ParsedMovie(
+            href=href,
+            video_code=entry['video_code'],
+            page_num=page_num,
+            actor_name=data['actor_info'],
+            actor_gender=data['actor_gender'],
+            actor_link=data['actor_link'],
+            supporting_actors=data['supporting'],
+            magnet_links=magnet_links,
+            entry=entry,
+        )
+        rclone_entries = []
+        if rclone_inventory and entry.get('video_code'):
+            rclone_entries = rclone_inventory.get(entry['video_code'].upper(), [])
 
-        should_process, history_torrent_types = should_process_movie(
-            href, history_data, phase, magnet_links,
+        plan = build_spider_ingestion_plan(
+            parsed_movie,
+            history_data=history_data,
+            phase=phase,
+            rclone_entries=rclone_entries,
+            enable_dedup=enable_dedup,
+            enable_redownload=enable_redownload and not is_adhoc_mode,
+            redownload_threshold=redownload_threshold,
         )
 
-        redownload_cats = []
-        if not should_process:
-            if enable_redownload and not is_adhoc_mode:
-                is_today = entry.get('is_today_release', False)
-                is_yesterday = entry.get('is_yesterday_release', False)
-                if not (should_skip_recent_today_release(href, history_data, is_today)
-                        or should_skip_recent_yesterday_release(href, history_data, is_yesterday)):
-                    redownload_cats = check_redownload_upgrade(
-                        href, history_data, magnet_links, redownload_threshold,
-                    )
-            if not redownload_cats:
-                skipped_history += 1
-                continue
+        if plan.should_skip:
+            skipped_history += 1
+            continue
 
-        if enable_dedup and rclone_inventory and entry.get('video_code'):
-            vc = entry['video_code'].upper()
-            rclone_entries = rclone_inventory.get(vc, [])
-            if rclone_entries:
-                torrent_types = {
-                    'subtitle': bool(magnet_links.get('subtitle')),
-                    'hacked_subtitle': bool(magnet_links.get('hacked_subtitle')),
-                    'hacked_no_subtitle': bool(magnet_links.get('hacked_no_subtitle')),
-                    'no_subtitle': bool(magnet_links.get('no_subtitle')),
-                }
-                dedup_records = check_dedup_upgrade(vc, torrent_types, rclone_entries)
-                for rec in dedup_records:
-                    if not dry_run and dedup_csv_path:
-                        append_dedup_record(dedup_csv_path, rec)
-                    logger.info(f"[{idx_str}] DEDUP: {rec.video_code} – {rec.deletion_reason}")
+        for rec in plan.dedup_records:
+            if not dry_run and dedup_csv_path:
+                append_dedup_record(dedup_csv_path, rec)
+            logger.info(f"[{idx_str}] DEDUP: {rec.video_code} – {rec.deletion_reason}")
 
-        if redownload_cats:
-            row = create_redownload_row(
-                href, entry, page_num, data['actor_info'], magnet_links, redownload_cats)
-        else:
-            row = create_csv_row_with_history_filter(
-                href, entry, page_num, data['actor_info'], magnet_links, history_data)
-        row['video_code'] = entry['video_code']
+        row = plan.report_row
+        if row is None:
+            no_new_torrents += 1
+            continue
 
-        _has_any, has_new_torrents, should_include_in_report = check_torrent_status(row)
-
-        if should_include_in_report:
+        if plan.should_include_in_report:
             write_csv([row], csv_path, fieldnames, dry_run, append_mode=True)
             rows.append(row)
             phase_rows.append(row)
 
-            if use_history_for_saving and not dry_run and has_new_torrents:
-                new_magnet_links, new_sizes, new_fc, new_res = collect_new_magnet_links(row, magnet_links)
-                if new_magnet_links:
-                    save_parsed_movie_to_history(
-                        history_file, href, phase, entry['video_code'],
-                        new_magnet_links, size_links=new_sizes,
-                        file_count_links=new_fc, resolution_links=new_res,
-                        actor_name=data['actor_info'],
-                        actor_gender=data['actor_gender'],
-                        actor_link=data['actor_link'],
-                        supporting_actors=data['supporting'],
-                    )
+            if use_history_for_saving and not dry_run and plan.has_new_torrents and plan.new_magnet_links:
+                save_parsed_movie_to_history(
+                    history_file, href, phase, entry['video_code'],
+                    plan.new_magnet_links, size_links=plan.new_sizes,
+                    file_count_links=plan.new_file_counts, resolution_links=plan.new_resolutions,
+                    actor_name=data['actor_info'],
+                    actor_gender=data['actor_gender'],
+                    actor_link=data['actor_link'],
+                    supporting_actors=data['supporting'],
+                )
         else:
             no_new_torrents += 1
 
