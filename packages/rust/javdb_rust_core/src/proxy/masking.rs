@@ -192,7 +192,7 @@ pub fn mask_error(error_msg: Option<&str>) -> String {
     let mut result = msg.to_string();
 
     // 1. Mask proxy URLs (http[s]://user:pass@host:port...)
-    let proxy_re = Regex::new(r"https?://[^:]+:[^@]+@[\d.]+:\d+").unwrap();
+    let proxy_re = Regex::new(r"https?://[^:]+:[^@]+@[^\s/:]+:\d+").unwrap();
     result = proxy_re
         .replace_all(&result, |caps: &regex::Captures| {
             mask_proxy_url(Some(caps.get(0).unwrap().as_str()))
@@ -286,6 +286,16 @@ mod tests {
         assert!(!result.contains("tedwu"));
         assert!(!result.contains("secret"));
         assert!(result.contains("xxx.xxx"));
+    }
+
+    #[test]
+    fn test_mask_error_scrubs_domain_proxy_url() {
+        let msg = "ProxyError: Cannot connect to proxy http://tedwu:secret@proxy.example.com:8080";
+        let result = mask_error(Some(msg));
+        assert!(result.contains("ProxyError"));
+        assert!(!result.contains("tedwu"));
+        assert!(!result.contains("secret"));
+        assert!(!result.contains("@"));
     }
 
     #[test]
