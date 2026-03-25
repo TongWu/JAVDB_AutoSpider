@@ -43,6 +43,7 @@ PROXY_MODE = cfg('PROXY_MODE', 'single')
 PROXY_POOL = cfg('PROXY_POOL', [])
 PROXY_POOL_COOLDOWN_SECONDS = cfg('PROXY_POOL_COOLDOWN_SECONDS', 691200)  # 8 days
 PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
+QB_ALLOW_INSECURE_HTTP = cfg('QB_ALLOW_INSECURE_HTTP', False)
 
 from packages.python.javdb_platform.logging_config import setup_logging, get_logger
 from packages.python.javdb_platform.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
@@ -65,7 +66,13 @@ from packages.python.javdb_platform.proxy_pool import ProxyPool, create_proxy_po
 
 # Import proxy helper from request handler
 from packages.python.javdb_platform.request_handler import ProxyHelper, create_proxy_helper_from_config
-from packages.python.javdb_platform.qb_config import qb_base_url_candidates, qb_verify_tls
+from packages.python.javdb_platform.qb_config import (
+    qb_allow_insecure_http,
+    qb_base_url_candidates,
+    qb_verify_tls,
+)
+
+QB_ALLOW_INSECURE_HTTP = qb_allow_insecure_http(QB_ALLOW_INSECURE_HTTP)
 
 # Global proxy pool instance
 global_proxy_pool = None
