@@ -344,6 +344,37 @@ class TestEngineMarkDoneGuard:
             engine.submit('https://javdb.com/v/1')
 
 
+class TestEngineProxyBanned:
+
+    @_engine_patches
+    def test_proxy_banned_error_requeues_task(self, *_mocks):
+        """ProxyBannedError should requeue task and mark proxy as failed."""
+        from scripts.spider.fetch.fetch_engine import FetchEngine, EngineTask
+        from packages.python.javdb_platform.request_handler import ProxyBannedError
+
+        engine = FetchEngine.simple(
+            parse_fn=lambda html, task: {'ok': True},
+            use_cookie=False, ban_log_file='',
+            sleep_min=0.01, sleep_max=0.02,
+        )
+        engine.start()
+
+        def _raise_ban(url, _cf):
+            raise ProxyBannedError('test-proxy', 'ban page detected')
+
+        _patch_workers(engine, _raise_ban)
+
+        engine.submit('https://javdb.com/v/ban', entry_index='1/1')
+        engine.mark_done()
+
+        results = list(engine.results())
+        engine.shutdown()
+
+        assert len(results) == 1
+        assert results[0].success is False
+        assert results[0].error == 'all_proxies_failed'
+
+
 class TestParallelBackendCompatibility:
 
     @_engine_patches
