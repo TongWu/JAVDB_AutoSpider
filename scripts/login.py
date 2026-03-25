@@ -34,7 +34,7 @@ sys.path.insert(0, project_root)
 
 # Setup logging - use existing logger if available, otherwise create a basic one
 try:
-    from utils.logging_config import get_logger
+    from utils.infra.logging_config import get_logger
     logger = get_logger(__name__)
 except ImportError:
     # Fallback: create a basic logger for standalone use
@@ -45,7 +45,7 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 # Import configuration
-from utils.config_helper import cfg
+from utils.infra.config_helper import cfg
 
 JAVDB_USERNAME = cfg('JAVDB_USERNAME', None)
 JAVDB_PASSWORD = cfg('JAVDB_PASSWORD', None)
@@ -75,7 +75,7 @@ CF_TURNSTILE_COOLDOWN = cfg('CF_TURNSTILE_COOLDOWN', 10)
 FALLBACK_COOLDOWN = cfg('FALLBACK_COOLDOWN', 30)
 
 # Import RequestHandler for Cloudflare bypass via curl_cffi TLS fingerprint
-from utils.request_handler import RequestHandler, RequestConfig
+from utils.infra.request_handler import RequestHandler, RequestConfig
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +159,7 @@ def _attempt_cf_warmup(handler, url, proxies=None):
 def _build_proxies_from_config():
     """Build a proxies dict from config settings for standalone usage."""
     try:
-        from scripts.spider.session import resolve_login_proxy_endpoints
+        from scripts.spider.fetch.session import resolve_login_proxy_endpoints
 
         named_proxies, named_nm = resolve_login_proxy_endpoints()
         if named_proxies:

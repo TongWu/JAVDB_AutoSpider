@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Upgrade all SQLite DBs to the current schema (split layout + MovieHistory v9).
 
-Delegates schema bumps to ``utils.db.init_db`` via ``run_schema_migration`` from
+Delegates schema bumps to ``utils.infra.db.init_db`` via ``run_schema_migration`` from
 ``migrate_v7_to_v8`` (which also handles version alignment across history /
 reports / operations).
 
@@ -29,7 +29,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
-from utils.logging_config import setup_logging, get_logger  # noqa: E402
+from utils.infra.logging_config import setup_logging, get_logger  # noqa: E402
 
 setup_logging()
 logger = get_logger(__name__)
@@ -135,8 +135,8 @@ def main() -> int:
             "Use --align-no-proxy to disable proxy.",
         )
 
-    import utils.db as db_mod
-    from utils.config_helper import use_sqlite, cfg
+    import utils.infra.db as db_mod
+    from utils.infra.config_helper import use_sqlite, cfg
 
     from migration.tools.migrate_v6_to_v7_split import _normalize_three_dbs
     from migration.tools.align_inventory_with_moviehistory import run_alignment

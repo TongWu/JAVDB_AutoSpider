@@ -35,8 +35,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from passlib.context import CryptContext
 from pydantic import BaseModel, Field, field_validator
-from utils.request_handler import create_request_handler_from_config
-from utils.proxy_pool import create_proxy_pool_from_config
+from utils.infra.request_handler import create_request_handler_from_config
+from utils.infra.proxy_pool import create_proxy_pool_from_config
 
 from utils.config_generator import (
     get_config_map,
@@ -47,7 +47,7 @@ from utils.config_generator import (
     get_env_range_max,
     get_env_range_min,
 )
-from utils.masking import mask_full, mask_proxy_url
+from utils.domain.masking import mask_full, mask_proxy_url
 
 logger = logging.getLogger(__name__)
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -70,7 +70,7 @@ from api.parsers import (
     detect_page_type,
     RUST_PARSERS_AVAILABLE,
 )
-from utils.rust_adapters.parser_adapter import result_to_dict
+from utils.bridges.rust_adapters.parser_adapter import result_to_dict
 from utils.spider_gateway import create_gateway
 
 RUST_CORE_AVAILABLE = RUST_PARSERS_AVAILABLE

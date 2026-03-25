@@ -21,7 +21,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
-from utils.logging_config import setup_logging, get_logger
+from utils.infra.logging_config import setup_logging, get_logger
 
 setup_logging()
 logger = get_logger(__name__)

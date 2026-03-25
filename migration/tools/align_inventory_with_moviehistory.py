@@ -42,8 +42,8 @@ sys.path.insert(0, project_root)
 from api.parsers.common import normalize_javdb_href_path
 from api.parsers.detail_parser import parse_detail_page
 from api.parsers.index_parser import parse_index_page, find_exact_video_code_match
-from scripts.spider.fallback import get_page_url
-import scripts.spider.state as spider_state
+from scripts.spider.fetch.fallback import get_page_url
+import scripts.spider.runtime.state as spider_state
 from scripts.ingestion.adapters import (
     build_alignment_purge_plan_rows as _ie_build_alignment_purge_plan_rows,
     build_alignment_qb_row as _ie_build_alignment_qb_row,
@@ -55,12 +55,12 @@ from scripts.ingestion.policies import (
     alignment_inventory_entry_rank as _ie_inventory_entry_rank,
     alignment_parsed_category_rank as _ie_parsed_category_rank,
 )
-from utils.config_helper import cfg
-from utils.db import db_load_history, db_load_rclone_inventory, db_upsert_history, init_db
-from utils.logging_config import get_logger, setup_logging
-from utils.magnet_extractor import extract_magnets
-from utils.path_helper import ensure_dated_dir
-from utils.url_helper import build_search_url
+from utils.infra.config_helper import cfg
+from utils.infra.db import db_load_history, db_load_rclone_inventory, db_upsert_history, init_db
+from utils.infra.logging_config import get_logger, setup_logging
+from utils.domain.magnet_extractor import extract_magnets
+from utils.infra.path_helper import ensure_dated_dir
+from utils.domain.url_helper import build_search_url
 
 setup_logging()
 logger = get_logger(__name__)
@@ -272,10 +272,10 @@ def _make_align_process_fn(inventory_map):
     Returns a non-None dict on success or definitive miss; ``None`` signals a
     proxy-level fetch failure so the engine re-queues to another proxy.
     """
-    from scripts.spider.engine import LoginRequired, WorkerContext, EngineTask
+    from scripts.spider.fetch.fetch_engine import LoginRequired, WorkerContext, EngineTask
 
     def _align_process(ctx: WorkerContext, task: EngineTask):
-        from utils.url_helper import get_page_url as _get_page_url
+        from utils.domain.url_helper import get_page_url as _get_page_url
 
         meta = task.meta
         video_code = meta['video_code']
@@ -391,14 +391,14 @@ def run_alignment(args: argparse.Namespace) -> int:
     purge_plan_rows: List[dict] = []
     rc = 0
 
-    from scripts.spider.config_loader import PROXY_POOL
-    from scripts.spider.sleep_manager import movie_sleep_mgr
+    from scripts.spider.runtime.config import PROXY_POOL
+    from scripts.spider.runtime.sleep import movie_sleep_mgr
 
     # ------------------------------------------------------------------
     # Parallel mode: FetchEngine (advanced) with one worker per proxy
     # ------------------------------------------------------------------
     if use_proxy and PROXY_POOL:
-        from scripts.spider.engine import FetchEngine
+        from scripts.spider.fetch.fetch_engine import FetchEngine
 
         movie_sleep_mgr.apply_volume_multiplier(total)
         stop_event = threading.Event()

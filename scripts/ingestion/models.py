@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from scripts.spider.dedup_checker import DedupRecord
+from scripts.spider.services.dedup import DedupRecord
 
 
 @dataclass

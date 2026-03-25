@@ -22,8 +22,8 @@ from api.parsers.common import (  # noqa: E402
     javdb_absolute_url,
     absolutize_supporting_actors_json,
 )
-from utils.config_helper import cfg  # noqa: E402
-from utils.db import HISTORY_DB_PATH, REPORTS_DB_PATH  # noqa: E402
+from utils.infra.config_helper import cfg  # noqa: E402
+from utils.infra.db import HISTORY_DB_PATH, REPORTS_DB_PATH  # noqa: E402
 
 
 @dataclass

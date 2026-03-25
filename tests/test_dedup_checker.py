@@ -9,7 +9,7 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from scripts.spider.dedup_checker import (
+from scripts.spider.services.dedup import (
     RcloneEntry,
     DedupRecord,
     DEDUP_FIELDNAMES,
@@ -24,7 +24,7 @@ from scripts.spider.dedup_checker import (
     cleanup_deleted_records,
     _raw_csv_read,
 )
-import utils.db as db_mod
+import utils.infra.db as db_mod
 
 
 # ============================================================================
@@ -377,7 +377,7 @@ class TestExportDedupDbToCsv:
     """Tests for the export_dedup_db_to_csv function."""
 
     def test_export_creates_csv(self, tmp_path):
-        from scripts.spider.dedup_checker import export_dedup_db_to_csv
+        from scripts.spider.services.dedup import export_dedup_db_to_csv
         r = DedupRecord('EXP-001', 's', 'sub', 'gdrive:/export', 100, 'cat', 'r', 't', 'False', '')
         append_dedup_record('', r)
         output = str(tmp_path / 'dedup_history.csv')
@@ -389,7 +389,7 @@ class TestExportDedupDbToCsv:
         assert rows[0]['video_code'] == 'EXP-001'
 
     def test_export_empty_db(self, tmp_path):
-        from scripts.spider.dedup_checker import export_dedup_db_to_csv
+        from scripts.spider.services.dedup import export_dedup_db_to_csv
         output = str(tmp_path / 'dedup_history.csv')
         count = export_dedup_db_to_csv(output)
         assert count == 0

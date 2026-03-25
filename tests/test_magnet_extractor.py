@@ -1,5 +1,5 @@
 """
-Unit tests for utils/magnet_extractor.py functions.
+Unit tests for utils/domain/magnet_extractor.py functions.
 """
 import os
 import sys
@@ -9,7 +9,7 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from utils.magnet_extractor import extract_magnets
+from utils.domain.magnet_extractor import extract_magnets
 
 
 class TestExtractMagnets:
@@ -392,4 +392,3 @@ class TestExtractMagnetsAdvanced:
         
         # Should work with index=0
         assert result['subtitle'] != ''
-

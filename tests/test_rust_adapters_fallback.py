@@ -4,7 +4,7 @@ import sys
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from utils.rust_adapters import parser_adapter
+from utils.bridges.rust_adapters import parser_adapter
 
 
 def test_parser_adapter_is_login_page_python_fallback(monkeypatch):

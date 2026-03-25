@@ -34,9 +34,9 @@ from api.parsers import (
     parse_tag_page,
     detect_page_type,
 )
-from utils.proxy_pool import create_proxy_pool_from_config
-from utils.request_handler import RequestConfig, RequestHandler
-from utils.rust_adapters.parser_adapter import result_to_dict
+from utils.infra.proxy_pool import create_proxy_pool_from_config
+from utils.infra.request_handler import RequestConfig, RequestHandler
+from utils.bridges.rust_adapters.parser_adapter import result_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -340,7 +340,7 @@ def create_handler_for_proxy(
     but want to avoid duplicating the config-assembly boilerplate.
     """
     cfg = _load_config()
-    from utils.proxy_pool import create_proxy_pool_from_config
+    from utils.infra.proxy_pool import create_proxy_pool_from_config
 
     pool = create_proxy_pool_from_config(
         [proxy_config],

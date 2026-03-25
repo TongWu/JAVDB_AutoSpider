@@ -1,4 +1,4 @@
-"""Tests for scripts.spider.engine — FetchEngine, EngineWorker, WorkerContext."""
+"""Tests for scripts.spider.fetch.fetch_engine — FetchEngine, EngineWorker, WorkerContext."""
 
 from __future__ import annotations
 
@@ -25,10 +25,10 @@ _PROXY_POOL = [
 
 # Common decorator stack used by most tests that start the engine.
 _engine_patches = lambda fn: (
-    patch('scripts.spider.engine.RequestHandler', side_effect=_make_handler_stub)(
-    patch('scripts.spider.engine.create_proxy_pool_from_config', return_value=MagicMock())(
-    patch('scripts.spider.engine.PROXY_POOL', _PROXY_POOL)(
-    patch('scripts.spider.engine.LOGIN_PROXY_NAME', None)(
+    patch('scripts.spider.fetch.fetch_engine.RequestHandler', side_effect=_make_handler_stub)(
+    patch('scripts.spider.fetch.fetch_engine.create_proxy_pool_from_config', return_value=MagicMock())(
+    patch('scripts.spider.fetch.fetch_engine.PROXY_POOL', _PROXY_POOL)(
+    patch('scripts.spider.fetch.fetch_engine.LOGIN_PROXY_NAME', None)(
     fn))))
 )
 
@@ -36,7 +36,7 @@ _engine_patches = lambda fn: (
 @pytest.fixture(autouse=True)
 def _reset_state():
     """Reset mutable state between tests."""
-    import scripts.spider.state as st
+    import scripts.spider.runtime.state as st
     st.login_attempted = False
     st.refreshed_session_cookie = None
     st.logged_in_proxy_name = None
@@ -72,7 +72,7 @@ class TestEngineSimpleMode:
 
     @_engine_patches
     def test_submit_and_get_results(self, *_mocks):
-        from scripts.spider.engine import FetchEngine, EngineTask
+        from scripts.spider.fetch.fetch_engine import FetchEngine, EngineTask
 
         html_pages = {'https://javdb.com/v/a': '<html>A</html>'}
 
@@ -99,7 +99,7 @@ class TestEngineSimpleMode:
 
     @_engine_patches
     def test_parse_failure_retries_on_other_proxy(self, *_mocks):
-        from scripts.spider.engine import FetchEngine, EngineTask
+        from scripts.spider.fetch.fetch_engine import FetchEngine, EngineTask
 
         engine = FetchEngine.simple(
             parse_fn=lambda html, task: None,
@@ -121,7 +121,7 @@ class TestEngineSimpleMode:
 
     @_engine_patches
     def test_multiple_tasks(self, *_mocks):
-        from scripts.spider.engine import FetchEngine, EngineTask
+        from scripts.spider.fetch.fetch_engine import FetchEngine, EngineTask
 
         engine = FetchEngine.simple(
             parse_fn=lambda html, task: {'code': task.meta.get('code')},
@@ -147,7 +147,7 @@ class TestEngineAdvancedMode:
 
     @_engine_patches
     def test_ctx_fetch_returns_html(self, *_mocks):
-        from scripts.spider.engine import FetchEngine, WorkerContext, EngineTask
+        from scripts.spider.fetch.fetch_engine import FetchEngine, WorkerContext, EngineTask
 
         def process(ctx, task):
             html = ctx.fetch(task.url)
@@ -172,7 +172,7 @@ class TestEngineAdvancedMode:
 
 def _mock_attempt_login(explicit_proxies=None, explicit_proxy_name=None):
     """Mock login that always fails but correctly increments state counters."""
-    import scripts.spider.state as st
+    import scripts.spider.runtime.state as st
     st.login_total_attempts += 1
     if explicit_proxy_name:
         st.login_attempts_per_proxy[explicit_proxy_name] = (
@@ -183,12 +183,12 @@ def _mock_attempt_login(explicit_proxies=None, explicit_proxy_name=None):
 
 class TestEngineLoginDetection:
 
-    @patch('scripts.spider.parallel_login.attempt_login_refresh', side_effect=_mock_attempt_login)
-    @patch('scripts.spider.engine.is_login_page', return_value=True)
+    @patch('scripts.spider.fetch.login_coordinator.attempt_login_refresh', side_effect=_mock_attempt_login)
+    @patch('scripts.spider.fetch.fetch_engine.is_login_page', return_value=True)
     @_engine_patches
     def test_login_page_triggers_coordinator(self, *_mocks):
-        import scripts.spider.state as st
-        from scripts.spider.engine import FetchEngine
+        import scripts.spider.runtime.state as st
+        from scripts.spider.fetch.fetch_engine import FetchEngine
 
         st.login_total_budget = 2
 
@@ -212,10 +212,10 @@ class TestEngineLoginDetection:
 
 class TestEngineCFBypassFallback:
 
-    @patch('scripts.spider.engine.is_login_page', return_value=False)
+    @patch('scripts.spider.fetch.fetch_engine.is_login_page', return_value=False)
     @_engine_patches
     def test_cf_fallback_on_direct_failure(self, *_mocks):
-        from scripts.spider.engine import FetchEngine
+        from scripts.spider.fetch.fetch_engine import FetchEngine
 
         call_log = []
 
@@ -248,7 +248,7 @@ class TestEngineShutdown:
 
     @_engine_patches
     def test_shutdown_returns_orphans(self, *_mocks):
-        from scripts.spider.engine import FetchEngine
+        from scripts.spider.fetch.fetch_engine import FetchEngine
 
         engine = FetchEngine(
             process_fn=lambda ctx, task: time.sleep(10) or {'ok': True},
@@ -266,7 +266,7 @@ class TestEngineShutdown:
 
     @_engine_patches
     def test_pending_counter(self, *_mocks):
-        from scripts.spider.engine import FetchEngine
+        from scripts.spider.fetch.fetch_engine import FetchEngine
 
         engine = FetchEngine(
             process_fn=lambda ctx, task: {'ok': True},
@@ -291,7 +291,7 @@ class TestEngineSubmitTask:
 
     @_engine_patches
     def test_submit_task(self, *_mocks):
-        from scripts.spider.engine import FetchEngine, EngineTask
+        from scripts.spider.fetch.fetch_engine import FetchEngine, EngineTask
 
         engine = FetchEngine(
             process_fn=lambda ctx, task: task.meta,
@@ -314,9 +314,9 @@ class TestEngineSubmitTask:
 
 class TestEngineNoProxyPool:
 
-    @patch('scripts.spider.engine.PROXY_POOL', [])
+    @patch('scripts.spider.fetch.fetch_engine.PROXY_POOL', [])
     def test_start_raises_without_proxies(self):
-        from scripts.spider.engine import FetchEngine
+        from scripts.spider.fetch.fetch_engine import FetchEngine
         engine = FetchEngine(process_fn=lambda ctx, t: None, use_cookie=False)
         with pytest.raises(RuntimeError, match="PROXY_POOL"):
             engine.start()
@@ -324,9 +324,9 @@ class TestEngineNoProxyPool:
 
 class TestEngineMarkDoneGuard:
 
-    @patch('scripts.spider.engine.PROXY_POOL', _PROXY_POOL)
+    @patch('scripts.spider.fetch.fetch_engine.PROXY_POOL', _PROXY_POOL)
     def test_submit_after_done_raises(self):
-        from scripts.spider.engine import FetchEngine
+        from scripts.spider.fetch.fetch_engine import FetchEngine
         engine = FetchEngine(process_fn=lambda ctx, t: None, use_cookie=False)
         engine.mark_done()
         with pytest.raises(RuntimeError, match="mark_done"):

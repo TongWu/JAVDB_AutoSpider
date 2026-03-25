@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Dict, List
 
-from utils.contracts import category_to_indicators, is_uncensored_category
-from utils.logging_config import get_logger
-from utils.magnet_extractor import _parse_size
+from utils.domain.contracts import category_to_indicators, is_uncensored_category
+from utils.infra.logging_config import get_logger
+from utils.domain.magnet_extractor import _parse_size
 
 logger = get_logger(__name__)
 

@@ -19,7 +19,7 @@ from scripts.rclone_manager import (
     INVENTORY_FIELDNAMES,
 )
 from utils.rclone_helper import FolderInfo, rclone_purge
-from scripts.spider.dedup_checker import (
+from scripts.spider.services.dedup import (
     DedupRecord,
     append_dedup_record,
     load_dedup_csv,
@@ -214,7 +214,7 @@ class TestLoadInventoryAsFolderStructure:
         assert 'DEF-456' in codes
 
     def test_loads_from_db(self, storage_mode_db):
-        from utils.db import db_replace_rclone_inventory
+        from utils.infra.db import db_replace_rclone_inventory
         db_replace_rclone_inventory([
             {
                 'video_code': 'DB-001',
@@ -237,7 +237,7 @@ class TestLoadInventoryAsFolderStructure:
 
     def test_db_priority_over_csv(self, tmp_path, storage_mode_db):
         """When DB has data, CSV should not be loaded even if it exists."""
-        from utils.db import db_replace_rclone_inventory
+        from utils.infra.db import db_replace_rclone_inventory
         db_replace_rclone_inventory([
             {
                 'video_code': 'DB-ONLY',

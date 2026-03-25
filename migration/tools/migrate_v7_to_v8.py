@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Standalone migration: align split SQLite DBs with current schema (v9).
 
-The same schema steps run automatically on every ``utils.db.init_db()`` when
-any database file's ``SchemaVersion`` is below ``utils.db.SCHEMA_VERSION``.
+The same schema steps run automatically on every ``utils.infra.db.init_db()`` when
+any database file's ``SchemaVersion`` is below ``utils.infra.db.SCHEMA_VERSION``.
 
 **MovieHistory actor columns (history.db):**
 
@@ -45,13 +45,13 @@ sys.path.insert(0, project_root)
 import requests  # noqa: E402
 
 from api.parsers.common import javdb_absolute_url, absolutize_supporting_actors_json  # noqa: E402
-from utils.config_helper import cfg  # noqa: E402
-from utils.logging_config import setup_logging, get_logger  # noqa: E402
+from utils.infra.config_helper import cfg  # noqa: E402
+from utils.infra.logging_config import setup_logging, get_logger  # noqa: E402
 
 setup_logging()
 logger = get_logger(__name__)
 
-from utils.db import moviehistory_actor_layout_ok  # noqa: E402
+from utils.infra.db import moviehistory_actor_layout_ok  # noqa: E402
 
 EXPECTED_VERSION = 9
 
@@ -161,8 +161,8 @@ def run_schema_migration(
     dry_run: bool,
     verify: bool,
 ) -> int:
-    import utils.db as db_mod
-    from utils.config_helper import use_sqlite
+    import utils.infra.db as db_mod
+    from utils.infra.config_helper import use_sqlite
 
     if not use_sqlite():
         logger.error("SQLite storage mode required (config STORAGE_MODE / use_sqlite).")
@@ -382,8 +382,8 @@ def run_actor_backfill(
     no_proxy: bool,
     use_cf_bypass: bool,
 ) -> int:
-    from utils.config_helper import use_sqlite
-    from utils.db import init_db
+    from utils.infra.config_helper import use_sqlite
+    from utils.infra.db import init_db
 
     if not use_sqlite():
         logger.error("SQLite storage mode required.")
@@ -395,12 +395,12 @@ def run_actor_backfill(
         logger.error("History database not found: %s", history_db)
         return 1
 
-    import scripts.spider.state as state
-    from scripts.spider.config_loader import (
+    import scripts.spider.runtime.state as state
+    from scripts.spider.runtime.config import (
         BASE_URL, REPORTS_DIR, PROXY_POOL,
         MOVIE_SLEEP_MIN, MOVIE_SLEEP_MAX,
     )
-    from scripts.spider.sleep_manager import movie_sleep_mgr
+    from scripts.spider.runtime.sleep import movie_sleep_mgr
 
     ban_log_file = os.path.join(REPORTS_DIR, 'proxy_bans.csv')
     os.makedirs(REPORTS_DIR, exist_ok=True)
@@ -436,7 +436,7 @@ def run_actor_backfill(
     # Parallel mode: FetchEngine with one worker per proxy
     # ------------------------------------------------------------------
     if use_proxy and PROXY_POOL:
-        from scripts.spider.engine import FetchEngine, EngineTask
+        from scripts.spider.fetch.fetch_engine import FetchEngine, EngineTask
         from utils.parser import parse_detail
 
         completed_ids: set[int] = set()
@@ -544,7 +544,7 @@ def run_actor_backfill(
     # ------------------------------------------------------------------
     # Sequential fallback (--no-proxy or no PROXY_POOL configured)
     # ------------------------------------------------------------------
-    from scripts.spider.fallback import fetch_detail_page_with_fallback
+    from scripts.spider.fetch.fallback import fetch_detail_page_with_fallback
 
     session = requests.Session()
     processed = 0
@@ -659,7 +659,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    import utils.db as db_mod
+    import utils.infra.db as db_mod
 
     history_db = args.history_db or db_mod.HISTORY_DB_PATH
 
