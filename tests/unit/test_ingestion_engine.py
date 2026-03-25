@@ -110,7 +110,7 @@ def test_check_redownload_upgrade_logs_video_code(caplog):
     assert '/v/z4bgy5' not in caplog.text
 
 
-def test_build_spider_ingestion_plan_redownload_does_not_emit_dedup_for_size_only_upgrade():
+def test_build_spider_ingestion_plan_redownload_emits_dedup_for_matching_old_folder():
     parsed_movie = ParsedMovie(
         href='/v/z4bgy5',
         video_code='IPZZ-414',
@@ -159,10 +159,74 @@ def test_build_spider_ingestion_plan_redownload_does_not_emit_dedup_for_size_onl
 
     assert plan.should_skip is False
     assert plan.redownload_categories == ['no_subtitle']
-    assert plan.dedup_records == []
+    assert len(plan.dedup_records) == 1
+    assert plan.dedup_records[0].existing_gdrive_path == 'drive:/IPZZ-414 [有码-无字]'
+    assert plan.dedup_records[0].new_torrent_category == 'no_subtitle'
+    assert 'Re-download upgrade' in plan.dedup_records[0].deletion_reason
     assert plan.report_row is not None
     assert plan.report_row['video_code'] == 'IPZZ-414'
     assert plan.report_row['no_subtitle'] == 'magnet:?xt=urn:btih:new'
+
+
+def test_build_spider_ingestion_plan_redownload_skips_bigger_or_mismatched_rclone_entries():
+    parsed_movie = ParsedMovie(
+        href='/v/z4bgy5',
+        video_code='IPZZ-414',
+        page_num=1,
+        actor_name='Actor',
+        magnet_links={
+            'no_subtitle': 'magnet:?xt=urn:btih:new',
+        },
+        size_links={
+            'no_subtitle': '3.52GB',
+        },
+        entry={
+            'video_code': 'IPZZ-414',
+            'rate': '4.8',
+            'comment_number': '120',
+        },
+    )
+    history_data = {
+        '/v/z4bgy5': {
+            'video_code': 'IPZZ-414',
+            'torrent_types': ['no_subtitle'],
+            'size_no_subtitle': '1.41GB',
+        }
+    }
+    rclone_entries = [
+        RcloneEntry(
+            video_code='IPZZ-414',
+            sensor_category='有码',
+            subtitle_category='中字',
+            folder_path='drive:/IPZZ-414 [有码-中字]',
+            folder_size=1513970770,
+            file_count=1,
+            scan_datetime='2026-03-25 21:54:53',
+        ),
+        RcloneEntry(
+            video_code='IPZZ-414',
+            sensor_category='有码',
+            subtitle_category='无字',
+            folder_path='drive:/IPZZ-414 [有码-无字-hires]',
+            folder_size=4000000000,
+            file_count=1,
+            scan_datetime='2026-03-25 21:54:53',
+        ),
+    ]
+
+    plan = build_spider_ingestion_plan(
+        parsed_movie,
+        history_data=history_data,
+        phase=1,
+        rclone_entries=rclone_entries,
+        enable_dedup=True,
+        enable_redownload=True,
+        redownload_threshold=0.30,
+    )
+
+    assert plan.should_skip is False
+    assert plan.redownload_categories == ['no_subtitle']
+    assert plan.dedup_records == []
 
 
 def test_build_alignment_upgrade_plan_emits_upgrade_rows_for_better_category():

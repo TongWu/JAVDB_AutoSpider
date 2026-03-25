@@ -23,7 +23,11 @@ from packages.python.javdb_ingestion.policies import (
     check_redownload_upgrade,
     should_process_movie,
 )
-from packages.python.javdb_spider.services.dedup import DedupRecord, check_dedup_upgrade
+from packages.python.javdb_spider.services.dedup import (
+    DedupRecord,
+    check_dedup_upgrade,
+    check_redownload_dedup_upgrade,
+)
 
 
 def _combined_magnet_payload(parsed_movie: ParsedMovie) -> Dict[str, Any]:
@@ -105,6 +109,15 @@ def build_spider_ingestion_plan(
             torrent_types,
             rclone_entries,
         )
+        if redownload_categories:
+            dedup_records.extend(
+                check_redownload_dedup_upgrade(
+                    parsed_movie.video_code.upper(),
+                    redownload_categories,
+                    magnet_payload,
+                    rclone_entries,
+                )
+            )
 
     if redownload_categories:
         report_row = create_redownload_row(
