@@ -31,6 +31,7 @@ English | [简体中文](README_CN.md)
 - Automatic detection: system uses Rust when available, falls back to pure Python
 
 ### Parallel Processing
+- Unified detail runner that switches between parallel and sequential fetch backends
 - Multi-threaded detail page processing with one worker thread per proxy
 - Activated automatically when using proxy pool mode with 2+ proxies
 - Task queue / result queue architecture for safe concurrent scraping
@@ -1542,8 +1543,8 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
   - `__main__.py`: Package entry point (`python3 scripts/spider`)
   - `app/`: CLI and top-level runtime orchestration (`cli.py`, `main.py`)
   - `runtime/`: Config, mutable state, adaptive sleep, and reporting
-  - `fetch/`: Index fetch, fallback flow, session/login coordination, parallel fetch engine
-  - `detail/`: Shared detail-stage runner plus parallel/sequential detail modes
+  - `fetch/`: Index fetch, fallback flow, session/login coordination, and detail fetch backends
+  - `detail/`: Unified detail-stage runner with thin parallel/sequential compatibility wrappers
   - `services/`: Spider-specific domain services such as dedup and rclone filtering
   - `compat/`: Compatibility exports such as CSV builder facade
 - **rust_core/**: Rust acceleration extension (PyO3 + maturin)

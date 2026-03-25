@@ -35,12 +35,42 @@ from scripts.spider.services.dedup import (
 from scripts.spider.app.cli import parse_arguments, OUTPUT_CSV
 from scripts.spider.runtime.sleep import movie_sleep_mgr
 from scripts.spider.fetch.index import fetch_all_index_pages
-from scripts.spider.detail.parallel_mode import process_detail_entries_parallel
-from scripts.spider.detail.sequential_mode import process_phase_entries_sequential
+from scripts.spider.detail.parallel_mode import build_parallel_detail_backend
+from scripts.spider.detail.runner import process_detail_entries
+from scripts.spider.detail.sequential_mode import build_sequential_detail_backend
 from scripts.spider.runtime.report import generate_summary_report
 from scripts.spider.fetch.fallback import AdhocLoginFailedError
 
 logger = get_logger(__name__)
+
+
+def create_detail_backend(
+    *,
+    use_parallel: bool,
+    use_cookie: bool,
+    is_adhoc_mode: bool,
+    ban_log_file: str,
+    session,
+    use_proxy: bool,
+    use_cf_bypass: bool,
+):
+    """Create the detail backend chosen by the current runtime mode."""
+
+    if use_parallel:
+        return build_parallel_detail_backend(
+            use_cookie=use_cookie,
+            ban_log_file=ban_log_file,
+            use_proxy=use_proxy,
+            use_cf_bypass=use_cf_bypass,
+        )
+
+    return build_sequential_detail_backend(
+        session,
+        use_cookie=use_cookie,
+        is_adhoc_mode=is_adhoc_mode,
+        use_proxy=use_proxy,
+        use_cf_bypass=use_cf_bypass,
+    )
 
 
 def main():
@@ -320,43 +350,37 @@ def main():
 
         total_entries_phase1 = len(all_index_results_phase1)
 
-        if use_parallel:
-            p1_result = process_detail_entries_parallel(
-                entries=all_index_results_phase1, phase=1,
-                history_data=parsed_movies_history_phase1,
-                history_file=history_file, csv_path=csv_path,
-                fieldnames=fieldnames, dry_run=dry_run,
-                use_history_for_saving=use_history_for_saving,
-                use_cookie=custom_url is not None,
-                is_adhoc_mode=custom_url is not None,
-                ban_log_file=ban_log_file,
-                rclone_inventory=rclone_inventory,
-                rclone_filter=rclone_filter,
-                enable_dedup=enable_dedup,
-                dedup_csv_path=dedup_csv_path,
-                enable_redownload=enable_redownload,
-                redownload_threshold=redownload_threshold,
-            )
-        else:
-            p1_result = process_phase_entries_sequential(
-                entries=all_index_results_phase1, phase=1,
-                history_data=parsed_movies_history_phase1,
-                history_file=history_file, csv_path=csv_path,
-                fieldnames=fieldnames, dry_run=dry_run,
-                use_history_for_saving=use_history_for_saving,
-                use_cookie=custom_url is not None,
-                is_adhoc_mode=custom_url is not None,
-                session=session, use_proxy=use_proxy,
-                use_cf_bypass=use_cf_bypass,
-                rclone_inventory=rclone_inventory,
-                rclone_filter=rclone_filter,
-                enable_dedup=enable_dedup,
-                dedup_csv_path=dedup_csv_path,
-                enable_redownload=enable_redownload,
-                redownload_threshold=redownload_threshold,
-            )
-            use_proxy = p1_result['use_proxy']
-            use_cf_bypass = p1_result['use_cf_bypass']
+        p1_backend = create_detail_backend(
+            use_parallel=use_parallel,
+            use_cookie=custom_url is not None,
+            is_adhoc_mode=custom_url is not None,
+            ban_log_file=ban_log_file,
+            session=session,
+            use_proxy=use_proxy,
+            use_cf_bypass=use_cf_bypass,
+        )
+        p1_result = process_detail_entries(
+            backend=p1_backend,
+            entries=all_index_results_phase1,
+            phase=1,
+            history_data=parsed_movies_history_phase1,
+            history_file=history_file,
+            csv_path=csv_path,
+            fieldnames=fieldnames,
+            dry_run=dry_run,
+            use_history_for_saving=use_history_for_saving,
+            is_adhoc_mode=custom_url is not None,
+            rclone_inventory=rclone_inventory,
+            rclone_filter=rclone_filter,
+            enable_dedup=enable_dedup,
+            dedup_csv_path=dedup_csv_path,
+            enable_redownload=enable_redownload,
+            redownload_threshold=redownload_threshold,
+            include_recent_release_filters=use_parallel,
+            log_duplicate_skips=not use_parallel,
+        )
+        use_proxy = p1_result['use_proxy']
+        use_cf_bypass = p1_result['use_cf_bypass']
 
         phase1_rows = p1_result['rows']
         rows.extend(phase1_rows)
@@ -389,43 +413,37 @@ def main():
             logger.info(f"PHASE 2: Processing {len(all_index_results_phase2)} entries (rate > {PHASE2_MIN_RATE}, comments > {PHASE2_MIN_COMMENTS})")
         logger.info("=" * 75)
 
-        if use_parallel:
-            p2_result = process_detail_entries_parallel(
-                entries=all_index_results_phase2, phase=2,
-                history_data=parsed_movies_history_phase2,
-                history_file=history_file, csv_path=csv_path,
-                fieldnames=fieldnames, dry_run=dry_run,
-                use_history_for_saving=use_history_for_saving,
-                use_cookie=custom_url is not None,
-                is_adhoc_mode=custom_url is not None,
-                ban_log_file=ban_log_file,
-                rclone_inventory=rclone_inventory,
-                rclone_filter=rclone_filter,
-                enable_dedup=enable_dedup,
-                dedup_csv_path=dedup_csv_path,
-                enable_redownload=enable_redownload,
-                redownload_threshold=redownload_threshold,
-            )
-        else:
-            p2_result = process_phase_entries_sequential(
-                entries=all_index_results_phase2, phase=2,
-                history_data=parsed_movies_history_phase2,
-                history_file=history_file, csv_path=csv_path,
-                fieldnames=fieldnames, dry_run=dry_run,
-                use_history_for_saving=use_history_for_saving,
-                use_cookie=custom_url is not None,
-                is_adhoc_mode=custom_url is not None,
-                session=session, use_proxy=use_proxy,
-                use_cf_bypass=use_cf_bypass,
-                rclone_inventory=rclone_inventory,
-                rclone_filter=rclone_filter,
-                enable_dedup=enable_dedup,
-                dedup_csv_path=dedup_csv_path,
-                enable_redownload=enable_redownload,
-                redownload_threshold=redownload_threshold,
-            )
-            use_proxy = p2_result['use_proxy']
-            use_cf_bypass = p2_result['use_cf_bypass']
+        p2_backend = create_detail_backend(
+            use_parallel=use_parallel,
+            use_cookie=custom_url is not None,
+            is_adhoc_mode=custom_url is not None,
+            ban_log_file=ban_log_file,
+            session=session,
+            use_proxy=use_proxy,
+            use_cf_bypass=use_cf_bypass,
+        )
+        p2_result = process_detail_entries(
+            backend=p2_backend,
+            entries=all_index_results_phase2,
+            phase=2,
+            history_data=parsed_movies_history_phase2,
+            history_file=history_file,
+            csv_path=csv_path,
+            fieldnames=fieldnames,
+            dry_run=dry_run,
+            use_history_for_saving=use_history_for_saving,
+            is_adhoc_mode=custom_url is not None,
+            rclone_inventory=rclone_inventory,
+            rclone_filter=rclone_filter,
+            enable_dedup=enable_dedup,
+            dedup_csv_path=dedup_csv_path,
+            enable_redownload=enable_redownload,
+            redownload_threshold=redownload_threshold,
+            include_recent_release_filters=use_parallel,
+            log_duplicate_skips=not use_parallel,
+        )
+        use_proxy = p2_result['use_proxy']
+        use_cf_bypass = p2_result['use_cf_bypass']
 
         phase2_rows = p2_result['rows']
         rows.extend(phase2_rows)

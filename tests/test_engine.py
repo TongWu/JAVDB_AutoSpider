@@ -321,6 +321,17 @@ class TestEngineNoProxyPool:
         with pytest.raises(RuntimeError, match="PROXY_POOL"):
             engine.start()
 
+    @patch('scripts.spider.fetch.fetch_engine.PROXY_POOL', [])
+    def test_parallel_backend_start_raises_without_proxies(self):
+        from scripts.spider.fetch.fetch_engine import ParallelFetchBackend
+
+        backend = ParallelFetchBackend(
+            process_fn=lambda ctx, t: None,
+            use_cookie=False,
+        )
+        with pytest.raises(RuntimeError, match="PROXY_POOL"):
+            backend.start()
+
 
 class TestEngineMarkDoneGuard:
 
@@ -331,3 +342,61 @@ class TestEngineMarkDoneGuard:
         engine.mark_done()
         with pytest.raises(RuntimeError, match="mark_done"):
             engine.submit('https://javdb.com/v/1')
+
+
+class TestParallelBackendCompatibility:
+
+    @_engine_patches
+    def test_parallel_backend_matches_fetch_engine_results(self, *_mocks):
+        from scripts.spider.fetch.fetch_engine import (
+            EngineTask,
+            FetchEngine,
+            ParallelFetchBackend,
+        )
+
+        def fake_parse(html, task):
+            return {'code': task.meta['code'], 'html': html}
+
+        backend = ParallelFetchBackend.simple(
+            parse_fn=fake_parse,
+            use_cookie=False,
+            ban_log_file='',
+            sleep_min=0.01,
+            sleep_max=0.02,
+        )
+        backend.start()
+        _patch_workers(backend, lambda url, _cf: f'<html>{url}</html>')
+        backend.submit_task(
+            EngineTask(
+                url='https://javdb.com/v/backend',
+                entry_index='1/1',
+                meta={'code': 'BACKEND'},
+            )
+        )
+        backend.mark_done()
+        backend_results = list(backend.results())
+        backend.shutdown()
+
+        engine = FetchEngine.simple(
+            parse_fn=fake_parse,
+            use_cookie=False,
+            ban_log_file='',
+            sleep_min=0.01,
+            sleep_max=0.02,
+        )
+        engine.start()
+        _patch_workers(engine, lambda url, _cf: f'<html>{url}</html>')
+        engine.submit_task(
+            EngineTask(
+                url='https://javdb.com/v/backend',
+                entry_index='1/1',
+                meta={'code': 'BACKEND'},
+            )
+        )
+        engine.mark_done()
+        engine_results = list(engine.results())
+        engine.shutdown()
+
+        assert [(r.success, r.data, r.task.meta) for r in backend_results] == [
+            (r.success, r.data, r.task.meta) for r in engine_results
+        ]
