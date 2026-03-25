@@ -152,6 +152,7 @@ def check_redownload_upgrade(href: str, history_data: dict, magnet_links: dict, 
         return []
 
     entry = history_data[href]
+    display_id = entry.get('video_code') or href
     torrents = entry.get('torrents', {})
     upgrade_categories = []
 
@@ -176,7 +177,7 @@ def check_redownload_upgrade(href: str, history_data: dict, magnet_links: dict, 
             continue
         if new_bytes > old_bytes * (1 + threshold):
             logger.info(
-                f"Re-download upgrade for {href} [{cat}]: "
+                f"Re-download upgrade for {display_id} [{cat}]: "
                 f"{old_size_str} -> {new_size_str} "
                 f"(+{((new_bytes / old_bytes) - 1) * 100:.0f}%, threshold {threshold * 100:.0f}%)"
             )
@@ -273,4 +274,3 @@ def alignment_best_parsed_category_for_family(magnet_links: Dict[str, str], fami
             best = category
             best_rank = rank
     return best
-
