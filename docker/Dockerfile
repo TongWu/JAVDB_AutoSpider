@@ -52,6 +52,7 @@ RUN pip install /tmp/*.whl && rm -f /tmp/*.whl
 COPY apps/ ./apps/
 COPY packages/ ./packages/
 COPY api/ ./api/
+COPY legacy/ ./legacy/
 COPY migration/ ./migration/
 COPY utils/ ./utils/
 COPY scripts/ ./scripts/

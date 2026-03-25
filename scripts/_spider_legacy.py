@@ -11,4 +11,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from compat import alias_module
 
-alias_module(__name__, "legacy._spider_legacy")
+_module = alias_module(__name__, "legacy._spider_legacy")
+
+if __name__ == "__main__":
+    raise SystemExit(_module.main())
