@@ -4,6 +4,7 @@ from packages.python.javdb_platform.logging_config import get_logger
 from packages.python.javdb_core.parser import parse_detail
 from packages.python.javdb_platform.bridges.rust_adapters.parser_adapter import validate_index_html as _validate_index_html_fast
 from packages.python.javdb_core.url_helper import get_page_url as _url_helper_get_page_url
+from packages.python.javdb_platform.request_handler import ProxyBannedError
 
 import packages.python.javdb_spider.runtime.state as state
 from packages.python.javdb_spider.fetch.session import is_login_page, can_attempt_login, attempt_login_refresh
@@ -126,31 +127,38 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
                     last_failed_html = html
                     return None, False, False
                 return _validate_index_html(html, context_msg)
-        except AdhocLoginFailedError:
+        except (AdhocLoginFailedError, ProxyBannedError):
             raise
         except Exception as e:
             logger.debug(f"[Page {page_num}] Failed {context_msg}: {e}")
         return None, False, False
 
     def try_proxy_direct_then_cf(proxy_name):
-        needs_cf = state.proxy_needs_cf_bypass(proxy_name)
-        if needs_cf:
+        """Returns (html, success, is_valid_empty, used_cf, proxy_banned)."""
+        try:
+            needs_cf = state.proxy_needs_cf_bypass(proxy_name)
+            if needs_cf:
+                html, success, is_valid_empty = try_fetch(
+                    True, True, f"Index: Proxy={proxy_name} + CF Bypass (marked)")
+                if success or is_valid_empty:
+                    return html, success, is_valid_empty, True, False
+                return None, False, False, True, False
             html, success, is_valid_empty = try_fetch(
-                True, True, f"Index: Proxy={proxy_name} + CF Bypass (marked)")
+                True, False, f"Index: Proxy={proxy_name} Direct")
             if success or is_valid_empty:
-                return html, success, is_valid_empty, True
-            return None, False, False, True
-        html, success, is_valid_empty = try_fetch(
-            True, False, f"Index: Proxy={proxy_name} Direct")
-        if success or is_valid_empty:
-            return html, success, is_valid_empty, False
-        html, success, is_valid_empty = try_fetch(
-            True, True, f"Index: Proxy={proxy_name} + CF Bypass")
-        if success or is_valid_empty:
-            if success:
-                state.mark_proxy_cf_bypass(proxy_name)
-            return html, success, is_valid_empty, True
-        return None, False, False, False
+                return html, success, is_valid_empty, False, False
+            html, success, is_valid_empty = try_fetch(
+                True, True, f"Index: Proxy={proxy_name} + CF Bypass")
+            if success or is_valid_empty:
+                if success:
+                    state.mark_proxy_cf_bypass(proxy_name)
+                return html, success, is_valid_empty, True, False
+            return None, False, False, False, False
+        except ProxyBannedError as e:
+            logger.warning(f"[Page {page_num}] Proxy '{proxy_name}' banned during index fetch: {e.reason}")
+            if e.html:
+                state.save_proxy_ban_html(e.html, proxy_name, page_num)
+            return None, False, False, False, True
 
     # --- Phase 0: Initial Attempt with current proxy ---
     if use_proxy and state.global_proxy_pool:
@@ -191,12 +199,14 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
         login_success, _new_cookie, _proxy = attempt_login_refresh()
         if login_success and use_proxy and state.global_proxy_pool:
             current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
-            html, success, is_valid_empty, used_cf = try_proxy_direct_then_cf(current_proxy_name)
+            html, success, is_valid_empty, used_cf, _banned = try_proxy_direct_then_cf(current_proxy_name)
             if success:
                 logger.info(f"[Page {page_num}] Login refresh + retry succeeded (Proxy={current_proxy_name}, CF={used_cf})")
                 return html, True, False, True, used_cf, False
             if is_valid_empty:
                 return html, False, False, True, used_cf, True
+            if _banned:
+                proxy_was_banned = True
             logger.warning(f"[Page {page_num}] Login refresh completed but index page still failed")
         elif login_success and not use_proxy:
             html, success, is_valid_empty = try_fetch(
@@ -232,12 +242,15 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
 
     for _ in range(max_switches):
         current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
-        html, success, is_valid_empty, used_cf = try_proxy_direct_then_cf(current_proxy_name)
+        html, success, is_valid_empty, used_cf, banned = try_proxy_direct_then_cf(current_proxy_name)
         if success:
             logger.info(f"[Page {page_num}] Index Proxy fallback succeeded (Proxy={current_proxy_name}, CF={used_cf})")
             return html, True, proxy_was_banned, True, used_cf, False
         if is_valid_empty:
             return html, False, proxy_was_banned, True, used_cf, True
+        if banned:
+            proxy_was_banned = True
+            continue
         if is_adhoc_mode:
             state.global_proxy_pool.mark_failure_and_switch()
         else:
@@ -300,34 +313,41 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
                 logger.debug(f"[{entry_index}] Parse validation failed (missing magnets): {context_msg}")
             else:
                 logger.debug(f"[{entry_index}] Failed to fetch HTML: {context_msg}")
+        except ProxyBannedError:
+            raise
         except Exception as e:
             logger.debug(f"[{entry_index}] Failed {context_msg}: {e}")
         return [], '', '', '', '', False
 
     def try_proxy_direct_then_cf(proxy_name, skip_sleep=True):
-        needs_cf = state.proxy_needs_cf_bypass(proxy_name)
-        if needs_cf:
+        """Returns (magnets, actor_info, ag, al, sup, success, used_cf, proxy_banned)."""
+        try:
+            needs_cf = state.proxy_needs_cf_bypass(proxy_name)
+            if needs_cf:
+                magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
+                    True, True,
+                    f"Detail: Proxy={proxy_name} + CF Bypass (marked)",
+                    skip_sleep=skip_sleep)
+                if success:
+                    return magnets, actor_info, ag, al, sup, True, True, False
+                return [], '', '', '', '', False, True, False
             magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
-                True, True,
-                f"Detail: Proxy={proxy_name} + CF Bypass (marked)",
+                True, False,
+                f"Detail: Proxy={proxy_name} Direct",
                 skip_sleep=skip_sleep)
             if success:
-                return magnets, actor_info, ag, al, sup, True, True
-            return [], '', '', '', '', False, True
-        magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
-            True, False,
-            f"Detail: Proxy={proxy_name} Direct",
-            skip_sleep=skip_sleep)
-        if success:
-            return magnets, actor_info, ag, al, sup, True, False
-        magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
-            True, True,
-            f"Detail: Proxy={proxy_name} + CF Bypass",
-            skip_sleep=skip_sleep)
-        if success:
-            state.mark_proxy_cf_bypass(proxy_name)
-            return magnets, actor_info, ag, al, sup, True, True
-        return [], '', '', '', '', False, False
+                return magnets, actor_info, ag, al, sup, True, False, False
+            magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
+                True, True,
+                f"Detail: Proxy={proxy_name} + CF Bypass",
+                skip_sleep=skip_sleep)
+            if success:
+                state.mark_proxy_cf_bypass(proxy_name)
+                return magnets, actor_info, ag, al, sup, True, True, False
+            return [], '', '', '', '', False, False, False
+        except ProxyBannedError as e:
+            logger.warning(f"[{entry_index}] Proxy '{proxy_name}' banned during detail fetch: {e.reason}")
+            return [], '', '', '', '', False, False, True
 
     # --- Phase 0: Initial Attempt ---
     if use_proxy and state.global_proxy_pool:
@@ -366,7 +386,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
         login_success, _new_cookie, _proxy = attempt_login_refresh()
         if login_success and use_proxy and state.global_proxy_pool:
             current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
-            magnets, actor_info, ag, al, sup, success, used_cf = try_proxy_direct_then_cf(
+            magnets, actor_info, ag, al, sup, success, used_cf, _banned = try_proxy_direct_then_cf(
                 current_proxy_name, skip_sleep=True)
             if success:
                 logger.info(f"[{entry_index}] Login refresh + retry succeeded (Proxy={current_proxy_name}, CF={used_cf})")
@@ -399,11 +419,13 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
             logger.warning(f"[{entry_index}] No more proxies available in pool")
             break
         current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
-        magnets, actor_info, ag, al, sup, success, used_cf = try_proxy_direct_then_cf(
+        magnets, actor_info, ag, al, sup, success, used_cf, banned = try_proxy_direct_then_cf(
             current_proxy_name, skip_sleep=True)
         if success:
             logger.info(f"[{entry_index}] Detail Proxy fallback succeeded (Proxy={current_proxy_name}, CF={used_cf})")
             return magnets, actor_info, ag, al, sup, True, True, used_cf
+        if banned:
+            continue
 
     logger.warning(f"[{entry_index}] Detail page fallback exhausted. Returning best available result.")
     return (
