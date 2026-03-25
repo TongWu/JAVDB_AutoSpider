@@ -75,19 +75,24 @@ jobs:
     environment: Production
     env:
       TZ: Asia/Singapore
+      INPUT_SCAN: ${{ inputs.scan }}
+      INPUT_REPORT: ${{ inputs.report }}
+      INPUT_EXECUTE: ${{ inputs.execute }}
+      INPUT_ROOT_PATH: ${{ inputs.root_path }}
+      INPUT_YEARS: ${{ inputs.years }}
+      INPUT_WORKERS: ${{ inputs.workers }}
+      INPUT_LOG_LEVEL: ${{ inputs.log_level }}
+      INPUT_DRY_RUN: ${{ inputs.dry_run }}
+      INPUT_INCREMENTAL: ${{ inputs.incremental }}
 
     steps:
       - name: Validate inputs
         run: |
-          SCAN="${{ inputs.scan }}"
-          REPORT="${{ inputs.report }}"
-          EXECUTE="${{ inputs.execute }}"
-
-          if [ "$SCAN" != "true" ] && [ "$REPORT" != "true" ] && [ "$EXECUTE" != "true" ]; then
+          if [ "$INPUT_SCAN" != "true" ] && [ "$INPUT_REPORT" != "true" ] && [ "$INPUT_EXECUTE" != "true" ]; then
             echo "❌ At least one of scan, report, execute must be enabled"
             exit 1
           fi
-          if [ "$SCAN" = "true" ] && [ "$EXECUTE" = "true" ] && [ "$REPORT" != "true" ]; then
+          if [ "$INPUT_SCAN" = "true" ] && [ "$INPUT_EXECUTE" = "true" ] && [ "$INPUT_REPORT" != "true" ]; then
             echo "❌ scan + execute requires report (enable all three)"
             exit 1
           fi
@@ -166,7 +171,7 @@ jobs:
           set -e
           set -o pipefail
 
-          CMD=(python3 scripts/rclone_manager.py)
+          CMD=(python3 -m apps.cli.rclone_manager)
 
           if [ "$INPUT_SCAN" = "true" ]; then
             CMD+=(--scan)
@@ -226,9 +231,9 @@ jobs:
           fi
 
           LABEL=""
-          [ "${{ inputs.scan }}" = "true" ] && LABEL="${LABEL}scan+"
-          [ "${{ inputs.report }}" = "true" ] && LABEL="${LABEL}report+"
-          [ "${{ inputs.execute }}" = "true" ] && LABEL="${LABEL}execute+"
+          [ "$INPUT_SCAN" = "true" ] && LABEL="${LABEL}scan+"
+          [ "$INPUT_REPORT" = "true" ] && LABEL="${LABEL}report+"
+          [ "$INPUT_EXECUTE" = "true" ] && LABEL="${LABEL}execute+"
           LABEL="${LABEL%+}"
 
           git commit -m "Auto-commit: rclone ${LABEL} $(date +'%Y-%m-%d %H:%M:%S SGT')"
@@ -264,28 +269,35 @@ jobs:
       - name: Summary
         if: always()
         run: |
+          summary_bool() {
+            if [ "$1" = "true" ]; then
+              printf 'Yes'
+            else
+              printf 'No'
+            fi
+          }
           echo "## RClone Manager Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           PHASES=""
-          [ "${{ inputs.scan }}" = "true" ] && PHASES="${PHASES}scan "
-          [ "${{ inputs.report }}" = "true" ] && PHASES="${PHASES}report "
-          [ "${{ inputs.execute }}" = "true" ] && PHASES="${PHASES}execute "
+          [ "$INPUT_SCAN" = "true" ] && PHASES="${PHASES}scan "
+          [ "$INPUT_REPORT" = "true" ] && PHASES="${PHASES}report "
+          [ "$INPUT_EXECUTE" = "true" ] && PHASES="${PHASES}execute "
           echo "- **Phases**: ${PHASES}" >> $GITHUB_STEP_SUMMARY
 
-          if [ "${{ inputs.execute }}" = "true" ]; then
-            echo "- **Dry Run**: ${{ inputs.dry_run == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          if [ "$INPUT_EXECUTE" = "true" ]; then
+            printf -- '- **Dry Run**: %s\n' "$(summary_bool "$INPUT_DRY_RUN")" >> $GITHUB_STEP_SUMMARY
           fi
-          if [ "${{ inputs.report }}" = "true" ]; then
-            echo "- **Incremental**: ${{ inputs.incremental == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          if [ "$INPUT_REPORT" = "true" ]; then
+            printf -- '- **Incremental**: %s\n' "$(summary_bool "$INPUT_INCREMENTAL")" >> $GITHUB_STEP_SUMMARY
           fi
 
-          echo "- **Root Path**: ${{ inputs.root_path }}" >> $GITHUB_STEP_SUMMARY
-          if [ -n "${{ inputs.years }}" ]; then
-            echo "- **Year Filter**: ${{ inputs.years }}" >> $GITHUB_STEP_SUMMARY
+          printf -- '- **Root Path**: %s\n' "$INPUT_ROOT_PATH" >> $GITHUB_STEP_SUMMARY
+          if [ -n "$INPUT_YEARS" ]; then
+            printf -- '- **Year Filter**: %s\n' "$INPUT_YEARS" >> $GITHUB_STEP_SUMMARY
           fi
-          echo "- **Workers**: ${{ inputs.workers }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Log Level**: ${{ inputs.log_level }}" >> $GITHUB_STEP_SUMMARY
+          printf -- '- **Workers**: %s\n' "$INPUT_WORKERS" >> $GITHUB_STEP_SUMMARY
+          printf -- '- **Log Level**: %s\n' "$INPUT_LOG_LEVEL" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ -f "reports/rclone_inventory.csv" ]; then

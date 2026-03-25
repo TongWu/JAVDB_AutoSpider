@@ -1,19 +1,13 @@
-"""Entry point for running spider as a package: python3 scripts/spider"""
-import atexit
-import os
+"""Compatibility spider entrypoint: ``python3 scripts/spider``."""
+
+from pathlib import Path
 import sys
 
-_project_root = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
-os.chdir(_project_root)
-if _project_root not in sys.path:
-    sys.path.insert(0, _project_root)
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-from utils.db import close_db  # noqa: E402
+from apps.cli.spider import main
 
-atexit.register(close_db)
-
-from scripts.spider.main import main  # noqa: E402
 
 main()

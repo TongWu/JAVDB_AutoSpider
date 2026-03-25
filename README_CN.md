@@ -8,10 +8,12 @@
 
 [English](README.md) | 简体中文
 
+当前 canonical 入口位于 `apps/cli/`、`apps/api/`、`apps/web/` 和 `apps/desktop/`。仓库根目录下的 `scripts/`、`pipeline.py`、`migration/`、`api/` 保留为兼容包装层。
+
 ## 功能特性
 
 ### 核心爬虫功能
-- 模块化爬虫包 (`scripts/spider/`),包含 14 个专用模块
+- 模块化爬虫包 (`packages/python/javdb_spider/`),包含 14 个专用模块
 - 从 `javdb.com/?vft=2` 到 `javdb.com/?page=5&vft=2` 实时获取数据
 - 过滤同时包含"含中字磁鏈"和"今日新種"标签的条目(支持多种语言变体)
 - 根据特定分类和优先级顺序提取磁力链接
@@ -29,6 +31,7 @@
 - 自动检测：系统在 Rust 可用时使用 Rust,否则回退到纯 Python
 
 ### 并行处理
+- 统一的详情阶段 runner，可在并行与串行抓取 backend 之间切换
 - 多线程详情页处理,每个代理一个 worker 线程
 - 在代理池模式下使用 2+ 代理时自动激活
 - 任务队列 / 结果队列架构,实现安全的并发爬取
@@ -59,7 +62,7 @@
 - **现在默认检查历史记录**以跳过已下载的条目
 - 使用 `--ignore-history` 重新下载所有内容
 - 在 qBittorrent 中使用"Ad Hoc"分类
-- 示例: `python3 scripts/spider --url "https://javdb.com/actors/EvkJ"`
+- 示例: `python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ"`
 
 ### qBittorrent 集成
 - 自动读取当天的 CSV 文件
@@ -122,7 +125,7 @@ pip install requests[socks]
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # 构建并安装扩展
-cd rust_core
+cd packages/rust/javdb_rust_core
 pip install maturin
 maturin develop --release
 cd ..
@@ -212,10 +215,10 @@ docker logs -f javdb-spider
 docker exec javdb-spider tail -f /var/log/cron.log
 
 # 手动运行爬虫
-docker exec javdb-spider python3 scripts/spider --use-proxy
+docker exec javdb-spider python3 -m apps.cli.spider --use-proxy
 
 # 手动运行流水线
-docker exec javdb-spider python pipeline.py
+docker exec javdb-spider python3 -m apps.cli.pipeline
 
 # 在容器内执行命令
 docker exec -it javdb-spider bash
@@ -257,11 +260,11 @@ docker-compose -f docker/docker-compose.yml up -d
 ```bash
 # 爬虫每天凌晨 3:00 运行
 CRON_SPIDER=0 3 * * *
-SPIDER_COMMAND=cd /app && /usr/local/bin/python scripts/spider --use-proxy >> /var/log/cron.log 2>&1
+SPIDER_COMMAND=cd /app && /usr/local/bin/python -m apps.cli.spider --use-proxy >> /var/log/cron.log 2>&1
 
 # 流水线每天凌晨 4:00 运行
 CRON_PIPELINE=0 4 * * *
-PIPELINE_COMMAND=cd /app && /usr/local/bin/python pipeline.py >> /var/log/cron.log 2>&1
+PIPELINE_COMMAND=cd /app && /usr/local/bin/python -m apps.cli.pipeline >> /var/log/cron.log 2>&1
 ```
 
 修改 `.env` 后,重启容器:
@@ -273,7 +276,7 @@ docker-compose -f docker/docker-compose.yml restart
 
 **运行爬虫提取数据:**
 ```bash
-python3 scripts/spider
+python3 -m apps.cli.spider
 
 # 或者等效地:
 python -m scripts.spider
@@ -282,53 +285,53 @@ python -m scripts.spider
 **运行 qBittorrent 上传器:**
 ```bash
 # 每日模式(默认)
-python qbtorrent_uploader.py
+python3 -m apps.cli.qb_uploader
 
 # Ad hoc 模式(用于自定义 URL 爬取结果)
-python qbtorrent_uploader.py --mode adhoc
+python3 -m apps.cli.qb_uploader --mode adhoc
 
 # 为 qBittorrent API 请求使用代理
-python qbtorrent_uploader.py --use-proxy
+python3 -m apps.cli.qb_uploader --use-proxy
 ```
 
 **运行 qBittorrent 文件过滤器(过滤小文件):**
 ```bash
 # 默认：使用 config 中 QB_FILE_FILTER_MIN_SIZE_MB（未配置时为 100MB）
-python scripts/qb_file_filter.py
+python3 -m apps.cli.qb_file_filter
 
 # 覆盖阈值（如 50MB）与天数
-python scripts/qb_file_filter.py --min-size 50
-python scripts/qb_file_filter.py --min-size 100 --days 3
+python3 -m apps.cli.qb_file_filter --min-size 50
+python3 -m apps.cli.qb_file_filter --min-size 100 --days 3
 
 # 演练模式(预览而不实际更改)
-python scripts/qb_file_filter.py --dry-run
+python3 -m apps.cli.qb_file_filter --dry-run
 
 # 仅过滤特定分类
-python scripts/qb_file_filter.py --category JavDB
+python3 -m apps.cli.qb_file_filter --category JavDB
 
 # 使用代理
-python scripts/qb_file_filter.py --use-proxy
+python3 -m apps.cli.qb_file_filter --use-proxy
 ```
 
 **运行 PikPak 桥接器(将旧种子从 qBittorrent 转移到 PikPak):**
 ```bash
 # 默认: 批量模式处理 3 天以上的种子
-python pikpak_bridge.py
+python3 -m apps.cli.pikpak_bridge
 
 # 自定义天数阈值
-python pikpak_bridge.py --days 7
+python3 -m apps.cli.pikpak_bridge --days 7
 
 # 演练模式(测试而不实际转移)
-python pikpak_bridge.py --dry-run
+python3 -m apps.cli.pikpak_bridge --dry-run
 
 # 单个模式(逐个处理种子而非批量)
-python pikpak_bridge.py --individual
+python3 -m apps.cli.pikpak_bridge --individual
 
 # 为 qBittorrent API 请求使用代理
-python pikpak_bridge.py --use-proxy
+python3 -m apps.cli.pikpak_bridge --use-proxy
 
 # 组合选项
-python pikpak_bridge.py --days 5 --dry-run --use-proxy
+python3 -m apps.cli.pikpak_bridge --days 5 --dry-run --use-proxy
 ```
 
 ### 命令行参数
@@ -338,79 +341,79 @@ JavDB Spider 支持各种命令行参数进行自定义:
 #### 基础选项
 ```bash
 # 演练模式(不写入 CSV 文件)
-python3 scripts/spider --dry-run
+python3 -m apps.cli.spider --dry-run
 
 # 指定自定义输出文件名
-python3 scripts/spider --output-file my_results.csv
+python3 -m apps.cli.spider --output-file my_results.csv
 
 # 自定义页面范围
-python3 scripts/spider --start-page 3 --end-page 10
+python3 -m apps.cli.spider --start-page 3 --end-page 10
 
 # 解析所有页面直到找到空页面
-python3 scripts/spider --all
+python3 -m apps.cli.spider --all
 ```
 
 #### 阶段控制
 ```bash
 # 仅运行阶段 1(字幕 + 今日/昨日标签)
-python3 scripts/spider --phase 1
+python3 -m apps.cli.spider --phase 1
 
 # 仅运行阶段 2(今日/昨日标签 + 质量过滤)
-python3 scripts/spider --phase 2
+python3 -m apps.cli.spider --phase 2
 
 # 运行两个阶段(默认)
-python3 scripts/spider --phase all
+python3 -m apps.cli.spider --phase all
 ```
 
 #### 历史控制
 ```bash
 # 忽略历史文件并爬取所有页面(用于每日和 ad hoc 模式)
-python3 scripts/spider --ignore-history
+python3 -m apps.cli.spider --ignore-history
 
 # 自定义 URL 爬取(保存到 reports/AdHoc/,默认检查历史)
-python3 scripts/spider --url "https://javdb.com/?vft=2"
+python3 -m apps.cli.spider --url "https://javdb.com/?vft=2"
 
 # 自定义 URL 爬取,忽略历史重新下载所有内容
-python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --ignore-history
+python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --ignore-history
 
 # 忽略今日/昨日发布日期标签,处理所有匹配条目
-python3 scripts/spider --ignore-release-date
+python3 -m apps.cli.spider --ignore-release-date
 
 # 为所有 HTTP 请求使用代理
-python3 scripts/spider --use-proxy
+python3 -m apps.cli.spider --use-proxy
 ```
 
 #### 完整示例
 ```bash
 # 限制页面的快速测试运行
-python3 scripts/spider --start-page 1 --end-page 3 --dry-run
+python3 -m apps.cli.spider --start-page 1 --end-page 3 --dry-run
 
 # 忽略历史的完整爬取
-python3 scripts/spider --all --ignore-history
+python3 -m apps.cli.spider --all --ignore-history
 
 # 带特定输出文件的自定义 URL
-python3 scripts/spider --url "https://javdb.com/?vft=2" --output-file custom_results.csv
+python3 -m apps.cli.spider --url "https://javdb.com/?vft=2" --output-file custom_results.csv
 
 # 仅阶段 1 + 自定义页面范围
-python3 scripts/spider --phase 1 --start-page 5 --end-page 15
+python3 -m apps.cli.spider --phase 1 --start-page 5 --end-page 15
 
 # 下载所有字幕条目,无论发布日期
-python3 scripts/spider --ignore-release-date --phase 1
+python3 -m apps.cli.spider --ignore-release-date --phase 1
 
 # 下载所有高质量条目,无论发布日期
-python3 scripts/spider --ignore-release-date --phase 2 --start-page 1 --end-page 10
+python3 -m apps.cli.spider --ignore-release-date --phase 2 --start-page 1 --end-page 10
 
 # Ad hoc 模式: 下载特定演员的电影(跳过已下载)
-python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --ignore-release-date
+python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --ignore-release-date
 
 # Ad hoc 模式: 重新下载演员的所有内容(忽略历史)
-python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --ignore-history --ignore-release-date
+python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --ignore-history --ignore-release-date
 
 # 使用代理访问 JavDB(适用于地理限制地区)
-python3 scripts/spider --use-proxy --start-page 1 --end-page 5
+python3 -m apps.cli.spider --use-proxy --start-page 1 --end-page 5
 
 # 组合多个选项: 代理 + 自定义 URL + 忽略发布日期
-python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --use-proxy --ignore-release-date
+python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --use-proxy --ignore-release-date
 ```
 
 #### 参数参考表
@@ -460,12 +463,12 @@ cat "reports/proxy_bans.csv"
 **运行迁移脚本**（在仓库根目录执行）:
 ```bash
 # SQLite 结构 / 演员回填（主入口）
-python3 migration/migrate_to_current.py --help
+python3 -m apps.cli.migration --help
 
-# 一次性或历史辅助脚本在 migration/tools/
-python3 migration/tools/cleanup_history_priorities.py
-python3 migration/tools/update_history_format.py
-python3 migration/tools/reclassify_c_hacked_torrents.py
+# 一次性或历史辅助脚本在 packages/python/javdb_migrations/tools/
+python3 packages/python/javdb_migrations/tools/cleanup_history_priorities.py
+python3 packages/python/javdb_migrations/tools/update_history_format.py
+python3 packages/python/javdb_migrations/tools/reclassify_c_hacked_torrents.py
 ```
 
 ### 自动化流水线
@@ -501,7 +504,7 @@ python pipeline_run_and_notify.py --pikpak-individual
 7. **分析日志中的严重错误**
 8. 发送带有适当状态的电子邮件通知
 
-**注意**: 流水线接受与 `scripts/spider` 相同的参数并自动传递。额外的流水线特定参数包括 `--pikpak-individual` 用于 PikPak Bridge 模式控制。
+**注意**: 流水线接受与 `python3 -m apps.cli.spider` 相同的参数并自动传递。额外的流水线特定参数包括 `--pikpak-individual` 用于 PikPak Bridge 模式控制。
 
 #### 智能错误检测
 
@@ -542,6 +545,9 @@ GIT_BRANCH = 'main'
 # =============================================================================
 QB_HOST = 'your_qbittorrent_ip'
 QB_PORT = 'your_qbittorrent_port'
+QB_SCHEME = 'https'  # 优先使用 HTTPS 访问 qBittorrent Web UI
+QB_VERIFY_TLS = True  # 校验 qBittorrent TLS 证书
+QB_ALLOW_INSECURE_HTTP = False  # 仅在可信的本地 HTTP Web UI 场景下显式设为 True
 QB_USERNAME = 'your_qbittorrent_username'
 QB_PASSWORD = 'your_qbittorrent_password'
 TORRENT_CATEGORY = 'JavDB'  # 每日模式种子的分类
@@ -684,6 +690,7 @@ QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
 1. 在 qBittorrent 设置中启用 Web UI
 2. 记下 IP 地址、端口、用户名和密码
 3. 更新 `config.py` 中的 qBittorrent 配置部分
+4. 优先使用 `QB_SCHEME = 'https'`; 如果你的 Web UI 仅在可信本地网络中通过 HTTP 暴露,请显式设置 `QB_SCHEME = 'http'` 和 `QB_ALLOW_INSECURE_HTTP = True`
 
 **电子邮件设置(可选):**
 1. 对于 Gmail,使用应用专用密码而不是常规密码
@@ -763,7 +770,7 @@ reports/
 #### 命令行参数(推荐)
 ```bash
 # 单次运行忽略发布日期标签
-python3 scripts/spider --ignore-release-date
+python3 -m apps.cli.spider --ignore-release-date
 
 # 或通过流水线
 python pipeline_run_and_notify.py --ignore-release-date
@@ -833,7 +840,7 @@ cat "reports/proxy_bans.csv"
 
 然后使用 `--use-proxy` 标志运行:
 ```bash
-python3 scripts/spider --use-proxy
+python3 -m apps.cli.spider --use-proxy
 ```
 
 #### 单一代理模式(传统)
@@ -869,16 +876,16 @@ PROXY_MODULES = ['all']  # 为所有模块启用
 **2. 使用命令行标志启用代理:**
 ```bash
 # 为爬虫启用代理
-python3 scripts/spider --use-proxy
+python3 -m apps.cli.spider --use-proxy
 
 # 为 qBittorrent 上传器启用代理
-python qbtorrent_uploader.py --use-proxy
+python3 -m apps.cli.qb_uploader --use-proxy
 
 # 为 PikPak 桥接器启用代理
-python pikpak_bridge.py --use-proxy
+python3 -m apps.cli.pikpak_bridge --use-proxy
 
 # 与其他选项组合
-python3 scripts/spider --use-proxy --url "https://javdb.com/actors/EvkJ"
+python3 -m apps.cli.spider --use-proxy --url "https://javdb.com/actors/EvkJ"
 
 # 通过流水线(为所有组件启用代理)
 python pipeline_run_and_notify.py --use-proxy
@@ -1143,7 +1150,7 @@ python3 javdb_login.py
 
 ```bash
 # 带自定义 URL 的爬虫
-python3 scripts/spider --url "https://javdb.com/actors/RdEb4"
+python3 -m apps.cli.spider --url "https://javdb.com/actors/RdEb4"
 
 # 带自定义 URL 的流水线
 python3 pipeline_run_and_notify.py --url "https://javdb.com/actors/RdEb4"
@@ -1340,8 +1347,8 @@ href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle
 
 ## 迁移脚本
 
-- **`migration/migrate_to_current.py`** — SQLite 结构升级、可选时间列规范化与演员回填的主入口（见 `--help`）。
-- **`migration/tools/`** — 一次性或旧版辅助脚本（CSV 清理、旧格式转换、`csv_to_sqlite`、跨大版本迁移等）。
+- **`packages/python/javdb_migrations/migrate_to_current.py`** — SQLite 结构升级、可选时间列规范化与演员回填的主入口（见 `--help`）。
+- **`packages/python/javdb_migrations/tools/`** — 一次性或旧版辅助脚本（CSV 清理、旧格式转换、`csv_to_sqlite`、跨大版本迁移等）。
 
 ### 可用脚本（tools/）
 
@@ -1381,11 +1388,11 @@ href,phase,video_code,create_date,update_date,hacked_subtitle,hacked_no_subtitle
 在仓库根目录执行:
 
 ```bash
-python3 migration/tools/cleanup_history_priorities.py
-python3 migration/tools/update_history_format.py
-python3 migration/tools/rename_columns_add_last_visited.py
-python3 migration/tools/reclassify_c_hacked_torrents.py
-python3 migration/tools/migrate_reports_to_dated_dirs.py --dry-run
+python3 packages/python/javdb_migrations/tools/cleanup_history_priorities.py
+python3 packages/python/javdb_migrations/tools/update_history_format.py
+python3 packages/python/javdb_migrations/tools/rename_columns_add_last_visited.py
+python3 packages/python/javdb_migrations/tools/reclassify_c_hacked_torrents.py
+python3 packages/python/javdb_migrations/tools/migrate_reports_to_dated_dirs.py --dry-run
 ```
 
 **注意:** 运行迁移脚本前务必备份您的 `reports/parsed_movies_history.csv`。
@@ -1493,26 +1500,29 @@ LOG_LEVEL = 'DEBUG'  # 显示详细的调试信息
 - 日志自动屏蔽敏感信息(密码、令牌等)
 
 ### 文件结构
-- **scripts/spider/**: 爬虫包（模块化架构）
-  - `__main__.py`: 包入口点 (`python3 scripts/spider`)
-  - `main.py`: 主编排流程
-  - `cli.py`: 命令行参数解析
-  - `parallel.py`: 多线程详情页处理 (ProxyWorker)
-  - `sequential.py`: 串行详情页处理
-  - `index_fetcher.py`: 索引页抓取
-  - `fallback.py`: 多级 fallback（代理/CF/登录）
-  - `session.py`: 登录与会话管理
-  - `sleep_manager.py`: 按量休眠管理
-  - `state.py`: 全局状态管理
-  - `csv_builder.py`: CSV 行构建
-  - `report.py`: 汇总报告生成
-- **rust_core/**: Rust 加速扩展（PyO3 + maturin）
+- **apps/cli/**: spider、pipeline、migration、qBittorrent、PikPak、email、login、health check 与辅助工具的 canonical CLI 入口
+- **apps/api/**: FastAPI REST API 层
+  - `server.py`: 薄 ASGI 启动壳，alias 到 canonical runtime 模块
+  - `routers/`: 真实 `APIRouter` 分组，覆盖 auth、config、tasks、explore、system
+  - `schemas/`: canonical Pydantic 请求/响应模型
+  - `infra/`: 共享 auth、token、rate-limit、CSRF 与 URL/文件安全辅助
+  - `services/`: 拆分后的业务服务；`services/runtime.py` 现在只承担 bootstrap + compatibility facade
+- **apps/web/** / **apps/desktop/**: canonical Web UI 与 Electron 壳应用
+- **packages/python/javdb_spider/**: 爬虫包（模块化架构）
+  - `__main__.py`: 包入口点 (`python3 -m apps.cli.spider`)
+  - `app/`: CLI 与顶层运行编排（`cli.py`、`main.py`）
+  - `runtime/`: 配置、可变状态、按量休眠、运行报告
+  - `fetch/`: 索引抓取、fallback 流程、会话/登录协调，以及详情抓取 backend
+  - `detail/`: 统一详情阶段 runner，以及保留兼容层的 parallel/sequential 包装
+  - `services/`: dedup、rclone 过滤等 spider 领域服务
+  - `compat/`: `csv_builder.py` 这类兼容导出
+- **packages/rust/javdb_rust_core/**: Rust 加速扩展（PyO3 + maturin）
   - `src/scraper/`: HTML 解析（索引页、详情页、分类页）
   - `src/proxy/`: 代理池、禁用管理、脱敏
   - `src/requester/`: HTTP 请求处理器
   - `src/history/`: 历史 CSV 管理
   - `src/csv_writer.rs`, `src/magnet_extractor.rs`, `src/url_helper.rs`
-- **api/**: FastAPI REST API 层
+- **scripts/** / **pipeline.py** / **migration/** / **api/**: 兼容包装层，转发到新的 `apps/` 与 `packages/` 结构
 - **reports/**: 包含所有报告文件和历史
   - `DailyReport/YYYY/MM/`: 每日爬取结果
   - `AdHoc/YYYY/MM/`: 自定义 URL 爬取结果
@@ -1525,8 +1535,14 @@ LOG_LEVEL = 'DEBUG'  # 显示详细的调试信息
   - `pipeline.log`: 流水线执行日志
   - `pikpak_bridge.log`: PikPak 桥接执行日志
   - `qb_file_filter.log`: 文件过滤器执行日志
-- **migration/**: `migrate_to_current.py`（主数据库迁移）；**migration/tools/** 存放一次性/历史脚本
-- **utils/**: 实用工具模块(历史、解析器、代理池等)
+- **migration/**: `migrate_to_current.py`（主数据库迁移）；**packages/python/javdb_migrations/tools/** 存放一次性/历史脚本
+- **utils/**: 旧导入路径的兼容 re-export 层
+  - `infra/`、`domain/`、`bridges/`: 分别转发到 `packages/python/javdb_platform/`、`javdb_core/` 等 canonical 包
+  - 顶层兼容模块保留用于稳定旧导入：`history_manager.py`、`parser.py`、`proxy_ban_manager.py`、`rclone_helper.py`、`spider_gateway.py`、`sqlite_datetime.py`
+- **tests/**: 分层测试套件
+  - `tests/unit/`: 模块级单元测试
+  - `tests/integration/`: 多模块与 API/runtime 集成测试
+  - `tests/smoke/`: CLI / 入口 / backend 冒烟覆盖
 - **utils/login/**: JavDB 登录相关文件和文档
 - **docker/**: Docker 配置文件
 
@@ -1536,31 +1552,31 @@ LOG_LEVEL = 'DEBUG'  # 显示详细的调试信息
 
 ```bash
 # 基础每日爬取
-python3 scripts/spider
+python3 -m apps.cli.spider
 python3 qbtorrent_uploader.py
 
 # 完整自动化流水线
 python3 pipeline_run_and_notify.py
 
 # 使用代理爬取
-python3 scripts/spider --use-proxy
+python3 -m apps.cli.spider --use-proxy
 python3 pipeline_run_and_notify.py --use-proxy
 
 # 使用代理爬取（CF 绕过会作为 fallback 自动启用）
-python3 scripts/spider --use-proxy
+python3 -m apps.cli.spider --use-proxy
 python3 pipeline_run_and_notify.py --use-proxy
 
 # 自定义 URL 爬取(需要登录)
 python3 javdb_login.py  # 首次设置
-python3 scripts/spider --url "https://javdb.com/actors/RdEb4"
+python3 -m apps.cli.spider --url "https://javdb.com/actors/RdEb4"
 python3 pipeline_run_and_notify.py --url "https://javdb.com/actors/RdEb4"
 
 # 忽略发布日期爬取
-python3 scripts/spider --ignore-release-date --phase 1
+python3 -m apps.cli.spider --ignore-release-date --phase 1
 python3 pipeline_run_and_notify.py --ignore-release-date
 
 # Ad hoc 模式
-python3 scripts/spider --url "https://javdb.com/tags/xyz"
+python3 -m apps.cli.spider --url "https://javdb.com/tags/xyz"
 python3 qbtorrent_uploader.py --mode adhoc
 
 # PikPak 桥接器
@@ -1568,9 +1584,9 @@ python3 pikpak_bridge.py  # 默认: 3 天,批量模式
 python3 pikpak_bridge.py --days 7 --individual  # 自定义天数,单个模式
 
 # qBittorrent 文件过滤器
-python3 scripts/qb_file_filter.py  # 默认阈值来自 config（未配置时为 100MB）
-python3 scripts/qb_file_filter.py --min-size 50  # 更严：< 50MB
-python3 scripts/qb_file_filter.py --min-size 100 --days 3 --dry-run  # 预览模式
+python3 -m apps.cli.qb_file_filter  # 默认阈值来自 config（未配置时为 100MB）
+python3 -m apps.cli.qb_file_filter --min-size 50  # 更严：< 50MB
+python3 -m apps.cli.qb_file_filter --min-size 100 --days 3 --dry-run  # 预览模式
 ```
 
 ### 配置文件
@@ -1595,4 +1611,3 @@ python3 scripts/qb_file_filter.py --min-size 100 --days 3 --dry-run  # 预览模
 ## 许可证
 
 本项目仅用于教育和个人用途。请尊重您爬取的网站的服务条款。
-
