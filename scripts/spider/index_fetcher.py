@@ -8,7 +8,11 @@ from utils.logging_config import get_logger
 from utils.parser import parse_index
 from utils.url_helper import detect_url_type
 from utils.filename_helper import generate_output_csv_name_from_html
-from utils.history_manager import has_complete_subtitles, should_skip_recent_yesterday_release, should_skip_recent_today_release
+from scripts.ingestion.policies import (
+    has_complete_subtitles,
+    should_skip_recent_yesterday_release,
+    should_skip_recent_today_release,
+)
 
 import scripts.spider.state as state
 from scripts.spider.fallback import get_page_url, fetch_index_page_with_fallback
