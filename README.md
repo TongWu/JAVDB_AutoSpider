@@ -10,10 +10,12 @@ It can be played as an ingestion pipeline before the automated scrapping platfor
 
 English | [简体中文](README_CN.md)
 
+Canonical app entrypoints now live under `apps/cli/`, `apps/api/`, `apps/web/`, and `apps/desktop/`. Legacy root paths such as `scripts/`, `pipeline.py`, `migration/`, and `api/` are kept as compatibility wrappers.
+
 ## Features
 
 ### Core Spider Functionality
-- Modular spider package (`scripts/spider/`) with 14 specialized modules
+- Modular spider package (`packages/python/javdb_spider/`) with 14 specialized modules
 - Fetches data in real-time from `javdb.com/?vft=2` to `javdb.com/?page=5&vft=2`
 - Filters entries with both "含中字磁鏈" and "今日新種" tags (supports multiple language variations)
 - Extracts magnet links based on specific categories with priority ordering
@@ -62,7 +64,7 @@ The spider operates in two modes:
 - **Now checks history by default** to skip already downloaded entries
 - Use `--ignore-history` to re-download everything
 - Uses "Ad Hoc" category in qBittorrent
-- Example: `python3 scripts/spider --url "https://javdb.com/actors/EvkJ"`
+- Example: `python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ"`
 
 ### qBittorrent Integration
 - Automatically reads current date's CSV file
@@ -125,7 +127,7 @@ pip install requests[socks]
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # Build and install the extension
-cd rust_core
+cd packages/rust/javdb_rust_core
 pip install maturin
 maturin develop --release
 cd ..
@@ -257,10 +259,10 @@ docker logs -f javdb-spider
 docker exec javdb-spider tail -f /var/log/cron.log
 
 # Run spider manually
-docker exec javdb-spider python3 scripts/spider --use-proxy
+docker exec javdb-spider python3 -m apps.cli.spider --use-proxy
 
 # Run pipeline manually
-docker exec javdb-spider python pipeline.py
+docker exec javdb-spider python3 -m apps.cli.pipeline
 
 # Execute commands inside container
 docker exec -it javdb-spider bash
@@ -302,11 +304,11 @@ Edit the `.env` file to configure scheduled tasks:
 ```bash
 # Spider runs daily at 3:00 AM
 CRON_SPIDER=0 3 * * *
-SPIDER_COMMAND=cd /app && /usr/local/bin/python scripts/spider --use-proxy >> /var/log/cron.log 2>&1
+SPIDER_COMMAND=cd /app && /usr/local/bin/python -m apps.cli.spider --use-proxy >> /var/log/cron.log 2>&1
 
 # Pipeline runs daily at 4:00 AM
 CRON_PIPELINE=0 4 * * *
-PIPELINE_COMMAND=cd /app && /usr/local/bin/python pipeline.py >> /var/log/cron.log 2>&1
+PIPELINE_COMMAND=cd /app && /usr/local/bin/python -m apps.cli.pipeline >> /var/log/cron.log 2>&1
 ```
 
 After modifying `.env`, restart the container:
@@ -318,7 +320,7 @@ docker-compose -f docker/docker-compose.yml restart
 
 **Run the spider to extract data:**
 ```bash
-python3 scripts/spider
+python3 -m apps.cli.spider
 
 # Or equivalently:
 python -m scripts.spider
@@ -327,53 +329,53 @@ python -m scripts.spider
 **Run the qBittorrent uploader:**
 ```bash
 # Daily mode (default)
-python qbtorrent_uploader.py
+python3 -m apps.cli.qb_uploader
 
 # Ad hoc mode (for custom URL scraping results)
-python qbtorrent_uploader.py --mode adhoc
+python3 -m apps.cli.qb_uploader --mode adhoc
 
 # Use proxy for qBittorrent API requests
-python qbtorrent_uploader.py --use-proxy
+python3 -m apps.cli.qb_uploader --use-proxy
 ```
 
 **Run the qBittorrent File Filter (filter out small files):**
 ```bash
 # Default: uses QB_FILE_FILTER_MIN_SIZE_MB from config (100 if unset)
-python scripts/qb_file_filter.py
+python3 -m apps.cli.qb_file_filter
 
 # Override threshold (e.g. 50MB) and days
-python scripts/qb_file_filter.py --min-size 50
-python scripts/qb_file_filter.py --min-size 100 --days 3
+python3 -m apps.cli.qb_file_filter --min-size 50
+python3 -m apps.cli.qb_file_filter --min-size 100 --days 3
 
 # Dry run (preview without changes)
-python scripts/qb_file_filter.py --dry-run
+python3 -m apps.cli.qb_file_filter --dry-run
 
 # Filter specific category only
-python scripts/qb_file_filter.py --category JavDB
+python3 -m apps.cli.qb_file_filter --category JavDB
 
 # With proxy
-python scripts/qb_file_filter.py --use-proxy
+python3 -m apps.cli.qb_file_filter --use-proxy
 ```
 
 **Run the PikPak bridge (transfer old torrents from qBittorrent to PikPak):**
 ```bash
 # Default: process torrents older than 3 days in batch mode
-python pikpak_bridge.py
+python3 -m apps.cli.pikpak_bridge
 
 # Custom days threshold
-python pikpak_bridge.py --days 7
+python3 -m apps.cli.pikpak_bridge --days 7
 
 # Dry run mode (test without actual transfers)
-python pikpak_bridge.py --dry-run
+python3 -m apps.cli.pikpak_bridge --dry-run
 
 # Individual mode (process torrents one by one instead of batch)
-python pikpak_bridge.py --individual
+python3 -m apps.cli.pikpak_bridge --individual
 
 # Use proxy for qBittorrent API requests
-python pikpak_bridge.py --use-proxy
+python3 -m apps.cli.pikpak_bridge --use-proxy
 
 # Combine options
-python pikpak_bridge.py --days 5 --dry-run --use-proxy
+python3 -m apps.cli.pikpak_bridge --days 5 --dry-run --use-proxy
 ```
 
 ### Command-Line Arguments
@@ -383,79 +385,79 @@ The JavDB Spider supports various command-line arguments for customization:
 #### Basic Options
 ```bash
 # Dry run mode (no CSV file written)
-python3 scripts/spider --dry-run
+python3 -m apps.cli.spider --dry-run
 
 # Specify custom output filename
-python3 scripts/spider --output-file my_results.csv
+python3 -m apps.cli.spider --output-file my_results.csv
 
 # Custom page range
-python3 scripts/spider --start-page 3 --end-page 10
+python3 -m apps.cli.spider --start-page 3 --end-page 10
 
 # Parse all pages until empty page is found
-python3 scripts/spider --all
+python3 -m apps.cli.spider --all
 ```
 
 #### Phase Control
 ```bash
 # Run only Phase 1 (subtitle + today/yesterday tags)
-python3 scripts/spider --phase 1
+python3 -m apps.cli.spider --phase 1
 
 # Run only Phase 2 (today/yesterday tags with quality filter)
-python3 scripts/spider --phase 2
+python3 -m apps.cli.spider --phase 2
 
 # Run both phases (default)
-python3 scripts/spider --phase all
+python3 -m apps.cli.spider --phase all
 ```
 
 #### History Control
 ```bash
 # Ignore history file and scrape all pages (for both daily and ad hoc modes)
-python3 scripts/spider --ignore-history
+python3 -m apps.cli.spider --ignore-history
 
 # Custom URL scraping (saves to reports/AdHoc/, checks history by default)
-python3 scripts/spider --url "https://javdb.com/?vft=2"
+python3 -m apps.cli.spider --url "https://javdb.com/?vft=2"
 
 # Custom URL scraping, ignoring history to re-download everything
-python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --ignore-history
+python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --ignore-history
 
 # Ignore today/yesterday release date tags and process all matching entries
-python3 scripts/spider --ignore-release-date
+python3 -m apps.cli.spider --ignore-release-date
 
 # Use proxy for all HTTP requests
-python3 scripts/spider --use-proxy
+python3 -m apps.cli.spider --use-proxy
 ```
 
 #### Complete Examples
 ```bash
 # Quick test run with limited pages
-python3 scripts/spider --start-page 1 --end-page 3 --dry-run
+python3 -m apps.cli.spider --start-page 1 --end-page 3 --dry-run
 
 # Full scrape ignoring history
-python3 scripts/spider --all --ignore-history
+python3 -m apps.cli.spider --all --ignore-history
 
 # Custom URL with specific output file
-python3 scripts/spider --url "https://javdb.com/?vft=2" --output-file custom_results.csv
+python3 -m apps.cli.spider --url "https://javdb.com/?vft=2" --output-file custom_results.csv
 
 # Phase 1 only with custom page range
-python3 scripts/spider --phase 1 --start-page 5 --end-page 15
+python3 -m apps.cli.spider --phase 1 --start-page 5 --end-page 15
 
 # Download all subtitle entries regardless of release date
-python3 scripts/spider --ignore-release-date --phase 1
+python3 -m apps.cli.spider --ignore-release-date --phase 1
 
 # Download all high-quality entries regardless of release date
-python3 scripts/spider --ignore-release-date --phase 2 --start-page 1 --end-page 10
+python3 -m apps.cli.spider --ignore-release-date --phase 2 --start-page 1 --end-page 10
 
 # Ad hoc mode: Download specific actor's movies (skips already downloaded)
-python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --ignore-release-date
+python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --ignore-release-date
 
 # Ad hoc mode: Re-download everything from an actor (ignores history)
-python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --ignore-history --ignore-release-date
+python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --ignore-history --ignore-release-date
 
 # Use proxy to access JavDB (useful for geo-restricted regions)
-python3 scripts/spider --use-proxy --start-page 1 --end-page 5
+python3 -m apps.cli.spider --use-proxy --start-page 1 --end-page 5
 
 # Combine multiple options: proxy + custom URL + ignore release date
-python3 scripts/spider --url "https://javdb.com/actors/EvkJ" --use-proxy --ignore-release-date
+python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --use-proxy --ignore-release-date
 ```
 
 #### Argument Reference
@@ -505,12 +507,12 @@ cat "reports/proxy_bans.csv"
 **Run Migration Scripts** (from repository root):
 ```bash
 # SQLite schema / actor backfill (primary entry)
-python3 migration/migrate_to_current.py --help
+python3 -m apps.cli.migration --help
 
-# Ad hoc CSV / legacy helpers live under migration/tools/
-python3 migration/tools/cleanup_history_priorities.py
-python3 migration/tools/update_history_format.py
-python3 migration/tools/reclassify_c_hacked_torrents.py
+# Ad hoc CSV / legacy helpers live under packages/python/javdb_migrations/tools/
+python3 packages/python/javdb_migrations/tools/cleanup_history_priorities.py
+python3 packages/python/javdb_migrations/tools/update_history_format.py
+python3 packages/python/javdb_migrations/tools/reclassify_c_hacked_torrents.py
 ```
 
 ### Automated Pipeline
@@ -546,7 +548,7 @@ The pipeline will:
 7. **Analyze logs for critical errors**
 8. Send email notifications with appropriate status
 
-**Note**: The pipeline accepts the same arguments as `scripts/spider` and passes them through automatically. Additional pipeline-specific arguments include `--pikpak-individual` for PikPak Bridge mode control.
+**Note**: The pipeline accepts the same arguments as `python3 -m apps.cli.spider` and passes them through automatically. Additional pipeline-specific arguments include `--pikpak-individual` for PikPak Bridge mode control.
 
 #### Intelligent Error Detection
 
@@ -809,7 +811,7 @@ By default, the spider filters entries based on release date tags ("今日新種
 #### Command-Line Argument (Recommended)
 ```bash
 # Ignore release date tags for a single run
-python3 scripts/spider --ignore-release-date
+python3 -m apps.cli.spider --ignore-release-date
 
 # Or via pipeline
 python pipeline_run_and_notify.py --ignore-release-date
@@ -879,7 +881,7 @@ cat "reports/proxy_bans.csv"
 
 Then run with `--use-proxy` flag:
 ```bash
-python3 scripts/spider --use-proxy
+python3 -m apps.cli.spider --use-proxy
 ```
 
 #### Single Proxy Mode (Legacy)
@@ -915,16 +917,16 @@ PROXY_MODULES = ['all']  # Enable for all modules
 **2. Enable proxy with command-line flag:**
 ```bash
 # Enable proxy for spider
-python3 scripts/spider --use-proxy
+python3 -m apps.cli.spider --use-proxy
 
 # Enable proxy for qBittorrent uploader
-python qbtorrent_uploader.py --use-proxy
+python3 -m apps.cli.qb_uploader --use-proxy
 
 # Enable proxy for PikPak bridge
-python pikpak_bridge.py --use-proxy
+python3 -m apps.cli.pikpak_bridge --use-proxy
 
 # Combine with other options
-python3 scripts/spider --use-proxy --url "https://javdb.com/actors/EvkJ"
+python3 -m apps.cli.spider --use-proxy --url "https://javdb.com/actors/EvkJ"
 
 # Via pipeline (enables proxy for all components)
 python pipeline_run_and_notify.py --use-proxy
@@ -1189,7 +1191,7 @@ The script will:
 
 ```bash
 # Spider with custom URL
-python3 scripts/spider --url "https://javdb.com/actors/RdEb4"
+python3 -m apps.cli.spider --url "https://javdb.com/actors/RdEb4"
 
 # Pipeline with custom URL
 python3 pipeline_run_and_notify.py --url "https://javdb.com/actors/RdEb4"
@@ -1386,8 +1388,8 @@ This feature ensures system stability and efficiency, avoiding duplicate downloa
 
 ## Migration Scripts
 
-- **`migration/migrate_to_current.py`** — primary entry for SQLite schema upgrades, optional datetime normalization, and actor backfill (see `--help`).
-- **`migration/tools/`** — one-off and legacy helpers (CSV cleanup, old format conversion, `csv_to_sqlite`, older version jumps, etc.).
+- **`packages/python/javdb_migrations/migrate_to_current.py`** — primary entry for SQLite schema upgrades, optional datetime normalization, and actor backfill (see `--help`).
+- **`packages/python/javdb_migrations/tools/`** — one-off and legacy helpers (CSV cleanup, old format conversion, `csv_to_sqlite`, older version jumps, etc.).
 
 ### Available Scripts (tools/)
 
@@ -1427,11 +1429,11 @@ Run migration scripts when:
 From the repository root:
 
 ```bash
-python3 migration/tools/cleanup_history_priorities.py
-python3 migration/tools/update_history_format.py
-python3 migration/tools/rename_columns_add_last_visited.py
-python3 migration/tools/reclassify_c_hacked_torrents.py
-python3 migration/tools/migrate_reports_to_dated_dirs.py --dry-run
+python3 packages/python/javdb_migrations/tools/cleanup_history_priorities.py
+python3 packages/python/javdb_migrations/tools/update_history_format.py
+python3 packages/python/javdb_migrations/tools/rename_columns_add_last_visited.py
+python3 packages/python/javdb_migrations/tools/reclassify_c_hacked_torrents.py
+python3 packages/python/javdb_migrations/tools/migrate_reports_to_dated_dirs.py --dry-run
 ```
 
 **Note:** Always backup your `reports/parsed_movies_history.csv` before running migration scripts.
@@ -1539,21 +1541,29 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
 - Logs automatically mask sensitive information (passwords, tokens, etc.)
 
 ### File Structure
-- **scripts/spider/**: Spider package (modular architecture)
-  - `__main__.py`: Package entry point (`python3 scripts/spider`)
+- **apps/cli/**: Canonical CLI entrypoints for spider, pipeline, migration, qBittorrent, PikPak, email, login, health check, and helper utilities
+- **apps/api/**: FastAPI REST API layer
+  - `server.py`: thin ASGI bootstrap alias for the canonical runtime module
+  - `routers/`: real `APIRouter` groups for auth, config, tasks, explore, and system endpoints
+  - `schemas/`: canonical Pydantic request/response models
+  - `infra/`: shared auth, token, rate-limit, CSRF, and URL/file guard helpers
+  - `services/`: split business services; `services/runtime.py` is now bootstrap + compatibility facade only
+- **apps/web/** / **apps/desktop/**: Canonical web UI and Electron shell applications
+- **packages/python/javdb_spider/**: Spider package (modular architecture)
+  - `__main__.py`: Package entry point (`python3 -m apps.cli.spider`)
   - `app/`: CLI and top-level runtime orchestration (`cli.py`, `main.py`)
   - `runtime/`: Config, mutable state, adaptive sleep, and reporting
   - `fetch/`: Index fetch, fallback flow, session/login coordination, and detail fetch backends
   - `detail/`: Unified detail-stage runner with thin parallel/sequential compatibility wrappers
   - `services/`: Spider-specific domain services such as dedup and rclone filtering
   - `compat/`: Compatibility exports such as CSV builder facade
-- **rust_core/**: Rust acceleration extension (PyO3 + maturin)
+- **packages/rust/javdb_rust_core/**: Rust acceleration extension (PyO3 + maturin)
   - `src/scraper/`: HTML parsing (index, detail, category pages)
   - `src/proxy/`: Proxy pool, ban manager, masking
   - `src/requester/`: HTTP request handler
   - `src/history/`: History CSV management
   - `src/csv_writer.rs`, `src/magnet_extractor.rs`, `src/url_helper.rs`
-- **api/**: FastAPI REST API layer
+- **scripts/** / **pipeline.py** / **migration/** / **api/**: Compatibility wrappers that forward to the canonical `apps/` and `packages/` layout
 - **reports/**: Contains all report files and history
   - `DailyReport/YYYY/MM/`: Daily scraping results
   - `AdHoc/YYYY/MM/`: Custom URL scraping results
@@ -1566,12 +1576,14 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
   - `pipeline.log`: Pipeline execution logs
   - `pikpak_bridge.log`: PikPak bridge execution logs
   - `qb_file_filter.log`: File filter execution logs
-- **migration/**: `migrate_to_current.py` (main DB migration); **migration/tools/** for ad hoc / legacy scripts
-- **utils/**: Shared support modules
-  - `infra/`: DB, request/proxy runtime, logging, git/path/config, CSV helpers
-  - `domain/`: Contracts, URL helpers, magnet extraction, filename/masking helpers
-  - `bridges/`: Rust adapter bridges
-  - Top-level stable modules kept intentionally: `history_manager.py`, `parser.py`, `proxy_ban_manager.py`, `rclone_helper.py`, `spider_gateway.py`, `sqlite_datetime.py`
+- **migration/**: `migrate_to_current.py` (main DB migration); **packages/python/javdb_migrations/tools/** for ad hoc / legacy scripts
+- **utils/**: Compatibility re-export layer for legacy imports
+  - `infra/`, `domain/`, `bridges/`: forward to `packages/python/javdb_platform/`, `javdb_core/`, and related canonical packages
+  - Top-level compatibility modules retained for stable legacy imports: `history_manager.py`, `parser.py`, `proxy_ban_manager.py`, `rclone_helper.py`, `spider_gateway.py`, `sqlite_datetime.py`
+- **tests/**: Structured test suite
+  - `tests/unit/`: module-level unit tests
+  - `tests/integration/`: multi-module and API/runtime integration coverage
+  - `tests/smoke/`: CLI/entrypoint/backends smoke coverage
 - **utils/login/**: JavDB login related files and documentation
 - **docker/**: Docker configuration files
 
@@ -1581,31 +1593,31 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
 
 ```bash
 # Basic daily scraping
-python3 scripts/spider
+python3 -m apps.cli.spider
 python3 qbtorrent_uploader.py
 
 # Full automated pipeline
 python3 pipeline_run_and_notify.py
 
 # Scrape with proxy
-python3 scripts/spider --use-proxy
+python3 -m apps.cli.spider --use-proxy
 python3 pipeline_run_and_notify.py --use-proxy
 
 # Scrape with proxy (CF bypass activates automatically as fallback)
-python3 scripts/spider --use-proxy
+python3 -m apps.cli.spider --use-proxy
 python3 pipeline_run_and_notify.py --use-proxy
 
 # Custom URL scraping (requires login)
 python3 javdb_login.py  # First time setup
-python3 scripts/spider --url "https://javdb.com/actors/RdEb4"
+python3 -m apps.cli.spider --url "https://javdb.com/actors/RdEb4"
 python3 pipeline_run_and_notify.py --url "https://javdb.com/actors/RdEb4"
 
 # Scrape ignoring release date
-python3 scripts/spider --ignore-release-date --phase 1
+python3 -m apps.cli.spider --ignore-release-date --phase 1
 python3 pipeline_run_and_notify.py --ignore-release-date
 
 # Ad hoc mode
-python3 scripts/spider --url "https://javdb.com/tags/xyz"
+python3 -m apps.cli.spider --url "https://javdb.com/tags/xyz"
 python3 qbtorrent_uploader.py --mode adhoc
 
 # PikPak bridge
@@ -1613,9 +1625,9 @@ python3 pikpak_bridge.py  # Default: 3 days, batch mode
 python3 pikpak_bridge.py --days 7 --individual  # Custom days, individual mode
 
 # qBittorrent File Filter
-python3 scripts/qb_file_filter.py  # Default threshold from config (100MB if unset)
-python3 scripts/qb_file_filter.py --min-size 50  # Stricter: < 50MB
-python3 scripts/qb_file_filter.py --min-size 100 --days 3 --dry-run  # Preview mode
+python3 -m apps.cli.qb_file_filter  # Default threshold from config (100MB if unset)
+python3 -m apps.cli.qb_file_filter --min-size 50  # Stricter: < 50MB
+python3 -m apps.cli.qb_file_filter --min-size 100 --days 3 --dry-run  # Preview mode
 ```
 
 ### Configuration Files
