@@ -36,10 +36,10 @@ sys.path.insert(0, project_root)
 
 
 # Import masking utilities
-from utils.masking import mask_ip_address, mask_username, mask_server, mask_full
+from utils.domain.masking import mask_ip_address, mask_username, mask_server, mask_full
 
 # Import configuration
-from utils.config_helper import cfg
+from utils.infra.config_helper import cfg
 
 QB_HOST = cfg('QB_HOST', None)
 QB_PORT = cfg('QB_PORT', None)

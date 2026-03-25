@@ -4,7 +4,7 @@ import sys
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from scripts.spider.dedup_checker import RcloneEntry, should_skip_from_rclone, check_dedup_upgrade
+from scripts.spider.services.dedup import RcloneEntry, should_skip_from_rclone, check_dedup_upgrade
 
 
 def test_should_skip_from_rclone_behavior():

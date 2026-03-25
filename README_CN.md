@@ -1495,17 +1495,12 @@ LOG_LEVEL = 'DEBUG'  # 显示详细的调试信息
 ### 文件结构
 - **scripts/spider/**: 爬虫包（模块化架构）
   - `__main__.py`: 包入口点 (`python3 scripts/spider`)
-  - `main.py`: 主编排流程
-  - `cli.py`: 命令行参数解析
-  - `parallel.py`: 多线程详情页处理 (ProxyWorker)
-  - `sequential.py`: 串行详情页处理
-  - `index_fetcher.py`: 索引页抓取
-  - `fallback.py`: 多级 fallback（代理/CF/登录）
-  - `session.py`: 登录与会话管理
-  - `sleep_manager.py`: 按量休眠管理
-  - `state.py`: 全局状态管理
-  - `csv_builder.py`: CSV 行构建
-  - `report.py`: 汇总报告生成
+  - `app/`: CLI 与顶层运行编排（`cli.py`、`main.py`）
+  - `runtime/`: 配置、可变状态、按量休眠、运行报告
+  - `fetch/`: 索引抓取、fallback 流程、会话/登录协调、并行抓取引擎
+  - `detail/`: 共享详情阶段 runner，以及 parallel/sequential 两种详情模式
+  - `services/`: dedup、rclone 过滤等 spider 领域服务
+  - `compat/`: `csv_builder.py` 这类兼容导出
 - **rust_core/**: Rust 加速扩展（PyO3 + maturin）
   - `src/scraper/`: HTML 解析（索引页、详情页、分类页）
   - `src/proxy/`: 代理池、禁用管理、脱敏
@@ -1526,7 +1521,11 @@ LOG_LEVEL = 'DEBUG'  # 显示详细的调试信息
   - `pikpak_bridge.log`: PikPak 桥接执行日志
   - `qb_file_filter.log`: 文件过滤器执行日志
 - **migration/**: `migrate_to_current.py`（主数据库迁移）；**migration/tools/** 存放一次性/历史脚本
-- **utils/**: 实用工具模块(历史、解析器、代理池等)
+- **utils/**: 共享支撑模块
+  - `infra/`: DB、请求/代理运行时、日志、git/path/config、CSV 辅助
+  - `domain/`: contracts、URL helper、磁链提取、文件名/脱敏 helper
+  - `bridges/`: Rust 适配桥接层
+  - 有意保留在顶层的稳定模块：`history_manager.py`、`parser.py`、`proxy_ban_manager.py`、`rclone_helper.py`、`spider_gateway.py`、`sqlite_datetime.py`
 - **utils/login/**: JavDB 登录相关文件和文档
 - **docker/**: Docker 配置文件
 
@@ -1595,4 +1594,3 @@ python3 scripts/qb_file_filter.py --min-size 100 --days 3 --dry-run  # 预览模
 ## 许可证
 
 本项目仅用于教育和个人用途。请尊重您爬取的网站的服务条款。
-

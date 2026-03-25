@@ -1,5 +1,5 @@
 """
-Unit tests for utils/path_helper.py functions.
+Unit tests for utils/infra/path_helper.py functions.
 """
 import os
 import sys
@@ -13,7 +13,7 @@ from unittest.mock import patch
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from utils.path_helper import (
+from utils.infra.path_helper import (
     get_dated_subdir,
     get_dated_report_path,
     ensure_dated_dir,
@@ -273,4 +273,3 @@ class TestPathHelperIntegration:
         # Find the file
         found = find_latest_report_in_dated_dirs(base_dir, 'Javdb_TodayTitle_*.csv')
         assert found == full_path
-

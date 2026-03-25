@@ -20,9 +20,9 @@ sys.modules['pikpakapi'] = mock_pikpakapi
 import pytest
 import tempfile
 import shutil
-import utils.db as _db_mod
-import utils.config_helper as _cfg_mod
-import scripts.spider.dedup_checker as _dedup_mod
+import utils.infra.db as _db_mod
+import utils.infra.config_helper as _cfg_mod
+import scripts.spider.services.dedup as _dedup_mod
 
 
 @pytest.fixture(autouse=True)

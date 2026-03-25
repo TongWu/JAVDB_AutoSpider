@@ -13,7 +13,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
-from utils.config_helper import cfg
+from utils.infra.config_helper import cfg
 
 QB_HOST = cfg('QB_HOST', 'your_qbittorrent_ip')
 QB_PORT = cfg('QB_PORT', 'your_qbittorrent_port')
@@ -43,9 +43,9 @@ PROXY_POOL = cfg('PROXY_POOL', [])
 PROXY_POOL_COOLDOWN_SECONDS = cfg('PROXY_POOL_COOLDOWN_SECONDS', 691200)  # 8 days
 PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
 
-from utils.logging_config import setup_logging, get_logger
-from utils.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
-from utils.masking import mask_ip_address, mask_username, mask_email, mask_full
+from utils.infra.logging_config import setup_logging, get_logger
+from utils.infra.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
+from utils.domain.masking import mask_ip_address, mask_username, mask_email, mask_full
 
 # --------------------------
 # Setup Logging
@@ -54,10 +54,10 @@ setup_logging(log_file=PIKPAK_LOG_FILE)
 logger = get_logger(__name__)
 
 # Import proxy pool
-from utils.proxy_pool import ProxyPool, create_proxy_pool_from_config
+from utils.infra.proxy_pool import ProxyPool, create_proxy_pool_from_config
 
 # Import proxy helper from request handler
-from utils.request_handler import ProxyHelper, create_proxy_helper_from_config
+from utils.infra.request_handler import ProxyHelper, create_proxy_helper_from_config
 
 # Global proxy pool instance
 global_proxy_pool = None
@@ -261,7 +261,7 @@ async def process_pikpak_single(magnet, email, password):
 # --------------------------
 def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
     """Save torrent transfer information to PikPak history."""
-    from utils.config_helper import use_sqlite, use_csv
+    from utils.infra.config_helper import use_sqlite, use_csv
 
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -279,7 +279,7 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
 
     if use_sqlite():
         try:
-            from utils.db import init_db, db_append_pikpak_history
+            from utils.infra.db import init_db, db_append_pikpak_history
             init_db()
             db_append_pikpak_history(record)
         except Exception as e:
@@ -510,9 +510,9 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline
 
     if session_id and not dry_run:
         try:
-            from utils.config_helper import use_sqlite as _use_sqlite
+            from utils.infra.config_helper import use_sqlite as _use_sqlite
             if _use_sqlite():
-                from utils.db import init_db, db_save_pikpak_stats
+                from utils.infra.db import init_db, db_save_pikpak_stats
                 init_db()
                 db_save_pikpak_stats(session_id, {
                     'threshold_days': days,
@@ -554,7 +554,7 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline
 
 if __name__ == "__main__":
     import atexit
-    from utils.db import close_db
+    from utils.infra.db import close_db
     atexit.register(close_db)
 
     parser = argparse.ArgumentParser(description="PikPak Bridge - Transfer torrents from qBittorrent to PikPak")

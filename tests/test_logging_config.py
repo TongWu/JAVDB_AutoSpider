@@ -1,5 +1,5 @@
 """
-Unit tests for utils/logging_config.py functions.
+Unit tests for utils/infra/logging_config.py functions.
 """
 import os
 import sys
@@ -13,7 +13,7 @@ from unittest.mock import patch, MagicMock
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from utils.logging_config import setup_logging, get_logger
+from utils.infra.logging_config import setup_logging, get_logger
 
 
 class TestSetupLogging:
@@ -261,5 +261,4 @@ class TestLoggingFormat:
             assert 'test.format.name' in content
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
-
 

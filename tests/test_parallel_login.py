@@ -6,7 +6,7 @@ are covered by tests/test_spider_integration.py::TestLoginQueueHelpers.
 
 from unittest.mock import patch
 
-import scripts.spider.session as session_mod
+import scripts.spider.fetch.session as session_mod
 
 
 class TestResolveLoginProxyEndpoints:

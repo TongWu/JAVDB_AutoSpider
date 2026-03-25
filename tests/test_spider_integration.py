@@ -23,19 +23,19 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from scripts.spider.engine import (
+from scripts.spider.fetch.fetch_engine import (
     _EngineWorker, EngineTask, EngineResult, WorkerContext, LoginRequired,
     FetchEngine,
 )
-from scripts.spider.parallel_login import (
+from scripts.spider.fetch.login_coordinator import (
     LoginCoordinator, requeue_front, use_login_queue_priority,
     should_delegate_login_task,
 )
-from scripts.spider.sleep_manager import (
+from scripts.spider.runtime.sleep import (
     MovieSleepManager, PenaltyTracker, DualWindowThrottle,
     COMPOSITE_MULTIPLIER_CAP, ABSOLUTE_MAX_SLEEP,
 )
-import scripts.spider.state as state
+import scripts.spider.runtime.state as state
 
 
 # ---------------------------------------------------------------------------
@@ -126,9 +126,9 @@ def create_workers(
         def process_fn(ctx, task):
             return {'parsed': True}
 
-    with patch('scripts.spider.engine.RequestHandler', side_effect=_make_handler_stub), \
-         patch('scripts.spider.engine.create_proxy_pool_from_config', return_value=MagicMock()), \
-         patch('scripts.spider.engine.LOGIN_PROXY_NAME', None):
+    with patch('scripts.spider.fetch.fetch_engine.RequestHandler', side_effect=_make_handler_stub), \
+         patch('scripts.spider.fetch.fetch_engine.create_proxy_pool_from_config', return_value=MagicMock()), \
+         patch('scripts.spider.fetch.fetch_engine.LOGIN_PROXY_NAME', None):
         for idx, name in enumerate(proxy_names):
             cfg = {"name": name, "http": f"http://10.0.0.{idx + 1}:8080"}
             w = _EngineWorker(
@@ -166,7 +166,7 @@ class TestIndexRequiresLogin:
     def test_index_login_detection_triggers_attempt(self):
         """When the index page is a login page, is_login_page returns True
         and the spider can trigger attempt_login_refresh."""
-        from scripts.spider.session import is_login_page
+        from scripts.spider.fetch.session import is_login_page
 
         assert is_login_page(LOGIN_PAGE_HTML) is True
 
@@ -198,7 +198,7 @@ class TestIndexRequiresLogin:
             new_cookie = "freshly_baked_session_cookie"
 
             with patch(
-                "scripts.spider.parallel_login.attempt_login_refresh",
+                "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
                 return_value=(True, new_cookie, "ARM-1"),
             ):
                 success, cookie, _ = coord._do_login_for_proxy(
@@ -403,7 +403,7 @@ class TestCookieRevocationAndFailover:
             )
 
             with patch(
-                "scripts.spider.parallel_login.attempt_login_refresh",
+                "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
                 return_value=(True, new_cookie, "ARM-1"),
             ) as mock_login:
                 coord.handle_login_required(
@@ -441,7 +441,7 @@ class TestCookieRevocationAndFailover:
             )
 
             with patch(
-                "scripts.spider.parallel_login.attempt_login_refresh",
+                "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
                 return_value=(True, new_cookie, "ARM-2"),
             ):
                 coord.handle_login_required(
@@ -510,7 +510,7 @@ class TestCookieRevocationAndFailover:
             ])
 
             with patch(
-                "scripts.spider.parallel_login.attempt_login_refresh",
+                "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
                 side_effect=lambda *a, **kw: next(login_responses),
             ):
                 for stale_round in range(3):
@@ -550,7 +550,7 @@ class TestCookieRevocationAndFailover:
             )
 
             with patch(
-                "scripts.spider.parallel_login.attempt_login_refresh",
+                "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
                 return_value=(True, new_cookie, "ARM-1"),
             ):
                 coord.handle_login_required(

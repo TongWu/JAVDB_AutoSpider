@@ -10,10 +10,10 @@ os.chdir(_project_root)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from utils.db import close_db  # noqa: E402
+from utils.infra.db import close_db  # noqa: E402
 
 atexit.register(close_db)
 
-from scripts.spider.main import main  # noqa: E402
+from scripts.spider.app.main import main  # noqa: E402
 
 main()

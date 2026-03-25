@@ -1,4 +1,4 @@
-"""Tests for utils/db.py — SQLite database layer."""
+"""Tests for utils/infra/db.py — SQLite database layer."""
 
 import os
 import sys
@@ -8,7 +8,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
 import pytest
-import utils.db as db_mod
+import utils.infra.db as db_mod
 
 
 # ── init / schema ─────────────────────────────────────────────────────────
@@ -90,7 +90,7 @@ class TestInitDb:
 
     def test_split_db_init(self, tmp_path):
         """init_db() without db_path should create three separate DB files."""
-        import utils.config_helper as _cfg_mod
+        import utils.infra.config_helper as _cfg_mod
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 
@@ -143,7 +143,7 @@ class TestInitDb:
 
     def test_split_migration_from_single_db(self, tmp_path):
         """Placing a v6 single DB at DB_PATH triggers automatic split."""
-        import utils.config_helper as _cfg_mod
+        import utils.infra.config_helper as _cfg_mod
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 

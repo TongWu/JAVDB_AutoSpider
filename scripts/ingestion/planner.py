@@ -23,7 +23,7 @@ from scripts.ingestion.policies import (
     check_redownload_upgrade,
     should_process_movie,
 )
-from scripts.spider.dedup_checker import DedupRecord, check_dedup_upgrade
+from scripts.spider.services.dedup import DedupRecord, check_dedup_upgrade
 
 
 def _combined_magnet_payload(parsed_movie: ParsedMovie) -> Dict[str, Any]:

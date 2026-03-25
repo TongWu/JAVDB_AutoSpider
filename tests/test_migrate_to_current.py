@@ -13,12 +13,12 @@ import migration.migrate_to_current as migrate_to_current
 def _install_main_stubs(monkeypatch):
     calls = {}
 
-    db_mod = types.ModuleType('utils.db')
+    db_mod = types.ModuleType('utils.infra.db')
     db_mod.HISTORY_DB_PATH = 'reports/history.db'
     db_mod.REPORTS_DB_PATH = 'reports/reports.db'
     db_mod.OPERATIONS_DB_PATH = 'reports/operations.db'
 
-    config_helper = types.ModuleType('utils.config_helper')
+    config_helper = types.ModuleType('utils.infra.config_helper')
     config_helper.use_sqlite = lambda: True
     config_helper.cfg = lambda _key, default=None: default
 
@@ -39,8 +39,8 @@ def _install_main_stubs(monkeypatch):
     v7_mod.run_schema_migration = lambda **_kwargs: 0
     v7_mod.verify_v8_layout = lambda *_args, **_kwargs: True
 
-    monkeypatch.setitem(sys.modules, 'utils.db', db_mod)
-    monkeypatch.setitem(sys.modules, 'utils.config_helper', config_helper)
+    monkeypatch.setitem(sys.modules, 'utils.infra.db', db_mod)
+    monkeypatch.setitem(sys.modules, 'utils.infra.config_helper', config_helper)
     monkeypatch.setitem(sys.modules, 'migration.tools.migrate_v6_to_v7_split', split_mod)
     monkeypatch.setitem(sys.modules, 'migration.tools.align_inventory_with_moviehistory', align_mod)
     monkeypatch.setitem(sys.modules, 'migration.tools.migrate_v7_to_v8', v7_mod)

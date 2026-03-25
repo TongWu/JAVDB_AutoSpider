@@ -27,7 +27,7 @@ os.chdir(project_root)
 sys.path.insert(0, project_root)
 
 # Import unified configuration
-from utils.config_helper import cfg
+from utils.infra.config_helper import cfg
 
 QB_HOST = cfg('QB_HOST', 'your_qbittorrent_ip')
 QB_PORT = cfg('QB_PORT', 'your_qbittorrent_port')
@@ -50,18 +50,18 @@ QB_FILE_FILTER_MIN_SIZE_MB = cfg('QB_FILE_FILTER_MIN_SIZE_MB', 100)
 QB_FILE_FILTER_LOG_FILE = cfg('QB_FILE_FILTER_LOG_FILE', 'logs/qb_file_filter.log')
 
 # Configure logging
-from utils.logging_config import setup_logging, get_logger
+from utils.infra.logging_config import setup_logging, get_logger
 setup_logging(QB_FILE_FILTER_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
 # Import masking utilities
-from utils.masking import mask_ip_address, mask_username, mask_full
+from utils.domain.masking import mask_ip_address, mask_username, mask_full
 
 # Import proxy pool
-from utils.proxy_pool import create_proxy_pool_from_config
+from utils.infra.proxy_pool import create_proxy_pool_from_config
 
 # Import proxy helper from request handler
-from utils.request_handler import create_proxy_helper_from_config
+from utils.infra.request_handler import create_proxy_helper_from_config
 
 # Global proxy helper instance
 global_proxy_helper = None
