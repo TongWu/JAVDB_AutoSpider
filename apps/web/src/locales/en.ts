@@ -220,11 +220,8 @@ export default {
       GIT_PASSWORD: "Git password / token",
       GIT_REPO_URL: "Repository URL",
       GIT_BRANCH: "Branch",
-      QB_HOST: "qBittorrent host",
-      QB_PORT: "qBittorrent port",
-      QB_SCHEME: "qBittorrent scheme",
+      QB_URL: "qBittorrent URL",
       QB_VERIFY_TLS: "Verify qBittorrent TLS",
-      QB_ALLOW_INSECURE_HTTP: "Allow insecure qBittorrent HTTP",
       QB_USERNAME: "qBittorrent username",
       QB_PASSWORD: "qBittorrent password",
       TORRENT_CATEGORY: "Torrent category (scheduled)",
@@ -295,6 +292,7 @@ export default {
       DEDUP_LOG_FILE: "Dedup log path",
     },
     desc: {
+      QB_URL: "Full qBittorrent Web UI URL. Include http:// or https://; if omitted, the backend tries https first and then http.",
       PROXY_POOL:
         "Multiple proxies ordered by priority; PROXY_POOL is only sent when you change the visual editor. Re-enter credentials if URLs were masked.",
       GIT_REPO_URL: "Remote Git URL for Actions / local sync.",

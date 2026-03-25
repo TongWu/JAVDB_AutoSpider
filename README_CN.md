@@ -554,11 +554,8 @@ GIT_BRANCH = 'main'
 # =============================================================================
 # QBITTORRENT 配置
 # =============================================================================
-QB_HOST = 'your_qbittorrent_ip'
-QB_PORT = 'your_qbittorrent_port'
-QB_SCHEME = 'https'  # 优先使用 HTTPS 访问 qBittorrent Web UI
+QB_URL = 'https://your_qbittorrent_ip:your_qbittorrent_port'  # 请直接写完整 http:// 或 https:// 地址
 QB_VERIFY_TLS = True  # 校验 qBittorrent TLS 证书
-QB_ALLOW_INSECURE_HTTP = False  # 仅在可信的本地 HTTP Web UI 场景下显式设为 True
 QB_USERNAME = 'your_qbittorrent_username'
 QB_PASSWORD = 'your_qbittorrent_password'
 TORRENT_CATEGORY = 'JavDB'  # 每日模式种子的分类
@@ -699,9 +696,9 @@ QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
 
 **qBittorrent 设置:**
 1. 在 qBittorrent 设置中启用 Web UI
-2. 记下 IP 地址、端口、用户名和密码
+2. 记下完整 Web UI 地址、用户名和密码
 3. 更新 `config.py` 中的 qBittorrent 配置部分
-4. 优先使用 `QB_SCHEME = 'https'`; 如果你的 Web UI 仅在可信本地网络中通过 HTTP 暴露,请显式设置 `QB_SCHEME = 'http'` 和 `QB_ALLOW_INSECURE_HTTP = True`
+4. 将 `QB_URL` 配成完整 Web UI 地址,例如 `https://192.168.1.100:8080`; 如果你没写协议,程序会先尝试 HTTPS,失败后再自动回退到 HTTP
 
 **电子邮件设置(可选):**
 1. 对于 Gmail,使用应用专用密码而不是常规密码

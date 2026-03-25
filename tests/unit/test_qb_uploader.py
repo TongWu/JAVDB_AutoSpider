@@ -13,6 +13,7 @@ sys.path.insert(0, project_root)
 
 # Create a proper mock config module with actual values
 mock_config = ModuleType('config')
+mock_config.QB_URL = 'https://localhost:8080'
 mock_config.QB_HOST = 'localhost'
 mock_config.QB_PORT = '8080'
 mock_config.QB_USERNAME = 'admin'
@@ -46,8 +47,10 @@ sys.modules['config'] = mock_config
 from scripts.qb_uploader import (
     extract_hash_from_magnet,
     is_torrent_exists,
-    get_existing_torrents
+    get_existing_torrents,
+    test_qbittorrent_connection as uploader_test_qbittorrent_connection,
 )
+import scripts.qb_uploader as qb_uploader_module
 
 
 class TestExtractHashFromMagnet:
@@ -292,6 +295,28 @@ class TestGetExistingTorrents:
         result = get_existing_torrents(mock_session, use_proxy=False)
         
         assert len(result) == len(valid_states)
+
+
+class TestQbEndpointFallback:
+    """Test connection fallback from HTTPS to HTTP."""
+
+    @patch('scripts.qb_uploader.get_proxies_dict')
+    @patch('scripts.qb_uploader.requests.get')
+    def test_test_qbittorrent_connection_retries_http(self, mock_get, mock_proxies):
+        import requests
+
+        mock_proxies.return_value = None
+        mock_get.side_effect = [
+            requests.exceptions.SSLError("ssl error"),
+            MagicMock(status_code=200),
+        ]
+
+        with patch.object(qb_uploader_module, 'QB_BASE_URL_CANDIDATES', [
+            'https://qb.internal:8080',
+            'http://qb.internal:8080',
+        ]), patch.object(qb_uploader_module, 'QB_BASE_URL', 'https://qb.internal:8080'), patch.object(qb_uploader_module, 'QB_MASKED_URL', 'https://qb.internal:8080'):
+            assert uploader_test_qbittorrent_connection(use_proxy=False) is True
+            assert qb_uploader_module.QB_BASE_URL == 'http://qb.internal:8080'
 
 
 class TestDuplicateDetectionIntegration:

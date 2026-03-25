@@ -19,6 +19,7 @@ from packages.python.javdb_platform.config_generator import (
     get_env_int,
     get_env_json,
 )
+from packages.python.javdb_platform.qb_config import build_qb_base_url
 
 
 def _build_fernet() -> Fernet | None:
@@ -76,13 +77,45 @@ def load_runtime_config() -> Dict[str, Any]:
         config_module = importlib.import_module("config")
     except Exception:
         config_module = None
+    store_values = load_store()
+    explicit_qb_url = False
     for key, meta in context.CONFIG_SCHEMA.items():
         default = meta["default"]
         if config_module and hasattr(config_module, key):
             cfg[key] = getattr(config_module, key)
+            if key == "QB_URL" and str(cfg[key] or "").strip():
+                explicit_qb_url = True
         else:
             cfg[key] = default
-    cfg.update(load_store())
+    for key, value in store_values.items():
+        if key in context.CONFIG_SCHEMA:
+            cfg[key] = value
+            if key == "QB_URL" and str(value or "").strip():
+                explicit_qb_url = True
+    if not explicit_qb_url:
+        legacy_host = store_values.get(
+            "QB_HOST",
+            getattr(config_module, "QB_HOST", ""),
+        ) if config_module else store_values.get("QB_HOST", "")
+        legacy_port = store_values.get(
+            "QB_PORT",
+            getattr(config_module, "QB_PORT", ""),
+        ) if config_module else store_values.get("QB_PORT", "")
+        legacy_scheme = store_values.get(
+            "QB_SCHEME",
+            getattr(config_module, "QB_SCHEME", "https"),
+        ) if config_module else store_values.get("QB_SCHEME", "https")
+        legacy_allow_insecure_http = store_values.get(
+            "QB_ALLOW_INSECURE_HTTP",
+            getattr(config_module, "QB_ALLOW_INSECURE_HTTP", False),
+        ) if config_module else store_values.get("QB_ALLOW_INSECURE_HTTP", False)
+        if str(legacy_host or "").strip() and str(legacy_port or "").strip():
+            cfg["QB_URL"] = build_qb_base_url(
+                legacy_host,
+                legacy_port,
+                scheme=legacy_scheme,
+                allow_insecure_http=legacy_allow_insecure_http,
+            )
     return cfg
 
 

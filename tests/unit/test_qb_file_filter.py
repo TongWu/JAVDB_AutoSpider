@@ -13,6 +13,7 @@ sys.path.insert(0, project_root)
 
 # Create a proper mock config module with actual values
 mock_config = ModuleType('config')
+mock_config.QB_URL = 'https://localhost:8080'
 mock_config.QB_HOST = 'localhost'
 mock_config.QB_PORT = '8080'
 mock_config.QB_USERNAME = 'admin'
@@ -955,4 +956,3 @@ class TestFilterIntegration:
         # Only files with progress > 0 should be deleted: sample.mp4 and small2.txt
         assert stats['local_files_deleted'] == 2
         assert mock_delete.call_count == 2
-

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 from packages.python.javdb_core.masking import mask_ip_address
 from packages.python.javdb_platform.config_helper import cfg
@@ -45,41 +46,111 @@ def qb_scheme(value: Any = _UNSET, *, allow_insecure_http: Any = _UNSET) -> str:
     normalized = str(value or "https").strip().lower() or "https"
     if normalized not in {"https", "http"}:
         raise ValueError("QB_SCHEME must be either 'https' or 'http'.")
-    if normalized == "http" and not qb_allow_insecure_http(allow_insecure_http):
-        raise ValueError("QB_SCHEME=http requires QB_ALLOW_INSECURE_HTTP=true.")
     return normalized
 
 
+def _normalize_qb_url(url: Any, *, allow_insecure_http: Any = _UNSET) -> str:
+    raw = str(url or "").strip()
+    if not raw:
+        raise ValueError("QB_URL must not be empty.")
+    if "://" not in raw:
+        raw = f"https://{raw}"
+    parsed = urlsplit(raw)
+    if parsed.scheme not in {"https", "http"}:
+        raise ValueError("QB_URL must start with http:// or https://.")
+    if not parsed.netloc:
+        raise ValueError("QB_URL must include a host.")
+    normalized_path = parsed.path.rstrip("/")
+    normalized = SplitResult(
+        scheme=parsed.scheme,
+        netloc=parsed.netloc,
+        path=normalized_path,
+        query="",
+        fragment="",
+    )
+    return urlunsplit(normalized)
+
+
 def build_qb_base_url(
-    host: Any,
-    port: Any,
+    host: Any = _UNSET,
+    port: Any = _UNSET,
     *,
     scheme: Any = _UNSET,
     allow_insecure_http: Any = _UNSET,
 ) -> str:
-    resolved_scheme = qb_scheme(
-        scheme,
+    if host is _UNSET:
+        qb_url = cfg("QB_URL", None)
+        if qb_url:
+            return _normalize_qb_url(
+                qb_url,
+                allow_insecure_http=allow_insecure_http,
+            )
+        host = cfg("QB_HOST", "your_qbittorrent_ip")
+        port = cfg("QB_PORT", "your_qbittorrent_port")
+        if scheme is _UNSET:
+            scheme = cfg("QB_SCHEME", "https")
+    if port is not _UNSET:
+        resolved_scheme = qb_scheme(
+            scheme,
+            allow_insecure_http=allow_insecure_http,
+        )
+        return f"{resolved_scheme}://{str(host).strip()}:{str(port).strip()}"
+    return _normalize_qb_url(
+        host,
         allow_insecure_http=allow_insecure_http,
     )
-    return f"{resolved_scheme}://{str(host).strip()}:{str(port).strip()}"
+
+
+def qb_base_url_candidates(
+    host: Any = _UNSET,
+    port: Any = _UNSET,
+    *,
+    scheme: Any = _UNSET,
+    allow_insecure_http: Any = _UNSET,
+) -> list[str]:
+    primary = build_qb_base_url(
+        host,
+        port,
+        scheme=scheme,
+        allow_insecure_http=allow_insecure_http,
+    )
+    candidates = [primary]
+    parsed = urlsplit(primary)
+    if parsed.scheme == "https":
+        fallback = urlunsplit(
+            SplitResult(
+                scheme="http",
+                netloc=parsed.netloc,
+                path=parsed.path,
+                query="",
+                fragment="",
+            )
+        )
+        if fallback not in candidates:
+            candidates.append(fallback)
+    return candidates
 
 
 def masked_qb_base_url(
-    host: Any,
-    port: Any,
+    host: Any = _UNSET,
+    port: Any = _UNSET,
     *,
     scheme: Any = _UNSET,
     allow_insecure_http: Any = _UNSET,
 ) -> str:
-    resolved_scheme = qb_scheme(
-        scheme,
-        allow_insecure_http=allow_insecure_http,
+    return mask_ip_address(
+        build_qb_base_url(
+            host,
+            port,
+            scheme=scheme,
+            allow_insecure_http=allow_insecure_http,
+        )
     )
-    return f"{resolved_scheme}://{mask_ip_address(str(host).strip())}:{str(port).strip()}"
 
 
 __all__ = [
     "build_qb_base_url",
+    "qb_base_url_candidates",
     "masked_qb_base_url",
     "qb_allow_insecure_http",
     "qb_scheme",

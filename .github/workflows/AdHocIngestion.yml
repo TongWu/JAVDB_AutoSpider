@@ -177,7 +177,7 @@ jobs:
       - name: Generate config.py from GitHub Variables and Secrets
         env:
           # ============ SECRETS (sensitive: passwords, tokens, IPs) ============
-          VAR_QB_HOST: ${{ secrets.QB_HOST }}
+          VAR_QB_URL: ${{ secrets.QB_URL }}
           VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
           VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
@@ -187,7 +187,6 @@ jobs:
           # ============ VARIABLES (non-sensitive) ============
           VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
           VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
-          VAR_QB_PORT: ${{ vars.QB_PORT }}
           VAR_QB_USERNAME: ${{ secrets.QB_USERNAME }}
           VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
           VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}

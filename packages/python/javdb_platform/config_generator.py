@@ -281,11 +281,8 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
 
     return git_config + [
         # qBittorrent Configuration
-        ('QB_HOST', 'QB_HOST', get_env, 'localhost', 'QBITTORRENT CONFIGURATION'),
-        ('QB_PORT', 'QB_PORT', get_env, '8080', 'QBITTORRENT CONFIGURATION'),
-        ('QB_SCHEME', 'QB_SCHEME', get_env, 'https', 'QBITTORRENT CONFIGURATION'),
+        ('QB_URL', 'QB_URL', get_env, 'https://localhost:8080', 'QBITTORRENT CONFIGURATION'),
         ('QB_VERIFY_TLS', 'QB_VERIFY_TLS', get_env_bool, True, 'QBITTORRENT CONFIGURATION'),
-        ('QB_ALLOW_INSECURE_HTTP', 'QB_ALLOW_INSECURE_HTTP', get_env_bool, False, 'QBITTORRENT CONFIGURATION'),
         ('QB_USERNAME', 'QB_USERNAME', get_env, 'admin', 'QBITTORRENT CONFIGURATION'),
         ('QB_PASSWORD', 'QB_PASSWORD', get_env, '', 'QBITTORRENT CONFIGURATION'),
         ('TORRENT_CATEGORY', 'TORRENT_CATEGORY', get_env, 'Daily Ingestion', 'QBITTORRENT CONFIGURATION'),
