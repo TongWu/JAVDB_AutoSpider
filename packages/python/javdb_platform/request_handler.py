@@ -31,7 +31,7 @@ from dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 # Import masking utilities
-from packages.python.javdb_core.masking import mask_ip_address, mask_proxy_url, mask_full
+from packages.python.javdb_core.masking import mask_ip_address, mask_proxy_url, mask_error
 from packages.python.javdb_platform.proxy_policy import should_proxy_module
 
 # Try Rust implementations
@@ -316,7 +316,7 @@ class RequestHandler:
             
             return response.text, None
         except requests.RequestException as e:
-            logger.error(f"[{context_msg}] Error: {mask_full(str(e))}")
+            logger.error(f"[{context_msg}] {type(e).__name__}: {mask_error(str(e))}")
             return None, e
     
     def _do_request_curl_cffi(self, target_url: str, req_headers: Dict, req_proxies: Optional[Dict], 
@@ -422,7 +422,7 @@ class RequestHandler:
             
             return response.text, None
         except Exception as e:
-            logger.error(f"[{context_msg}] [curl_cffi] Error: {mask_full(str(e))}")
+            logger.error(f"[{context_msg}] [curl_cffi] {type(e).__name__}: {mask_error(str(e))}")
             return None, e
     
     def _get_bypass_ip(self, req_proxies: Optional[Dict], force_local: bool = False) -> Optional[str]:
