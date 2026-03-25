@@ -70,7 +70,7 @@ from packages.python.javdb_platform.proxy_policy import (
 )
 from packages.python.javdb_platform.request_handler import create_proxy_helper_from_config
 from packages.python.javdb_platform.qb_config import (
-    build_qb_base_url,
+    qb_base_url_candidates,
     masked_qb_base_url,
     qb_verify_tls,
 )
@@ -79,9 +79,28 @@ from packages.python.javdb_platform.qb_config import (
 global_proxy_helper = None
 
 # qBittorrent configuration
-QB_BASE_URL = build_qb_base_url(QB_HOST, QB_PORT)
-QB_MASKED_URL = masked_qb_base_url(QB_HOST, QB_PORT)
+QB_BASE_URL_CANDIDATES = qb_base_url_candidates()
+QB_BASE_URL = QB_BASE_URL_CANDIDATES[0]
+QB_MASKED_URL = masked_qb_base_url(QB_BASE_URL)
 QB_VERIFY_TLS = qb_verify_tls()
+
+
+def _set_active_qb_base_url(base_url):
+    """Persist the qBittorrent endpoint that proved reachable."""
+    global QB_BASE_URL, QB_MASKED_URL
+    QB_BASE_URL = base_url.rstrip('/')
+    QB_MASKED_URL = masked_qb_base_url(QB_BASE_URL)
+
+
+def _ordered_qb_base_urls():
+    """Try the last known-good URL first, then the remaining candidates."""
+    ordered = []
+    if QB_BASE_URL:
+        ordered.append(QB_BASE_URL)
+    for candidate in QB_BASE_URL_CANDIDATES:
+        if candidate not in ordered:
+            ordered.append(candidate)
+    return ordered
 
 
 def parse_arguments():
@@ -205,29 +224,39 @@ def initialize_proxy_helper(proxy_override):
 
 def test_qbittorrent_connection(use_proxy=False):
     """Test if qBittorrent is accessible"""
-    try:
-        proxies = get_proxies_dict('qbittorrent', use_proxy)
-        logger.info(f"Testing connection to qBittorrent at {QB_MASKED_URL}")
-        response = requests.get(
-            f'{QB_BASE_URL}/api/v2/app/version',
-            timeout=10,
-            proxies=proxies,
-            verify=QB_VERIFY_TLS,
-        )
-        if response.status_code == 200 or response.status_code == 403:
-            logger.info("qBittorrent is accessible")
-            return True
-        else:
-            logger.warning(f"qBittorrent responded with status code: {response.status_code}")
-            return False
-    except requests.RequestException as e:
-        logger.error(f"Cannot connect to qBittorrent: {e}")
-        return False
+    proxies = get_proxies_dict('qbittorrent', use_proxy)
+    primary_url = QB_BASE_URL_CANDIDATES[0]
+    last_error = None
+
+    for base_url in _ordered_qb_base_urls():
+        masked_url = masked_qb_base_url(base_url)
+        try:
+            logger.info(f"Testing connection to qBittorrent at {masked_url}")
+            response = requests.get(
+                f'{base_url}/api/v2/app/version',
+                timeout=10,
+                proxies=proxies,
+                verify=QB_VERIFY_TLS,
+            )
+            if response.status_code == 200 or response.status_code == 403:
+                _set_active_qb_base_url(base_url)
+                if base_url != primary_url:
+                    logger.info(f"qBittorrent is accessible after retrying over HTTP at {masked_url}")
+                else:
+                    logger.info("qBittorrent is accessible")
+                return True
+            logger.warning(f"qBittorrent responded with status code {response.status_code} at {masked_url}")
+        except requests.RequestException as e:
+            last_error = e
+            logger.warning(f"Connection attempt failed for {masked_url}: {e}")
+
+    if last_error is not None:
+        logger.error(f"Cannot connect to qBittorrent: {last_error}")
+    return False
 
 
 def login_to_qbittorrent(session, use_proxy=False):
     """Login to qBittorrent web UI"""
-    login_url = f'{QB_BASE_URL}/api/v2/auth/login'
     login_data = {
         'username': QB_USERNAME,
         'password': QB_PASSWORD
@@ -235,26 +264,36 @@ def login_to_qbittorrent(session, use_proxy=False):
     
     proxies = get_proxies_dict('qbittorrent', use_proxy)
     
-    try:
-        logger.info(f"Attempting to login to qBittorrent at {QB_MASKED_URL} as {mask_username(QB_USERNAME)}")
-        response = session.post(
-            login_url,
-            data=login_data,
-            timeout=REQUEST_TIMEOUT,
-            proxies=proxies,
-            verify=QB_VERIFY_TLS,
-        )
-        
-        if response.status_code == 200:
-            logger.info("Successfully logged in to qBittorrent")
-            return True
-        else:
-            logger.error(f"Login failed with status code: {response.status_code}")
-            return False
-            
-    except requests.RequestException as e:
-        logger.error(f"Login error: {e}")
-        return False
+    last_error = None
+
+    for base_url in _ordered_qb_base_urls():
+        login_url = f'{base_url}/api/v2/auth/login'
+        masked_url = masked_qb_base_url(base_url)
+        try:
+            logger.info(f"Attempting to login to qBittorrent at {masked_url} as {mask_username(QB_USERNAME)}")
+            response = session.post(
+                login_url,
+                data=login_data,
+                timeout=REQUEST_TIMEOUT,
+                proxies=proxies,
+                verify=QB_VERIFY_TLS,
+            )
+
+            if response.status_code == 200 and response.text == 'Ok.':
+                _set_active_qb_base_url(base_url)
+                logger.info("Successfully logged in to qBittorrent")
+                return True
+
+            logger.error(f"Login failed with status code {response.status_code} at {masked_url}")
+            if response.status_code in {401, 403} or response.text.strip() == 'Fails.':
+                return False
+        except requests.RequestException as e:
+            last_error = e
+            logger.warning(f"Login error at {masked_url}: {e}")
+
+    if last_error is not None:
+        logger.error(f"Login error: {last_error}")
+    return False
 
 
 def get_recent_torrents(session, days=2, category=None, categories=None, use_proxy=False):

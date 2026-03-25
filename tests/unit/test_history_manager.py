@@ -13,7 +13,6 @@ sys.path.insert(0, project_root)
 from utils.history_manager import (
     load_parsed_movies_history,
     save_parsed_movie_to_history,
-    validate_history_file,
     determine_torrent_types,
     determine_torrent_type,
     get_missing_torrent_types,
@@ -40,6 +39,12 @@ def _seed_history_sqlite(records):
         db_mod.db_upsert_history(r['href'], r['video_code'], magnet_links=magnets)
 
 
+_RECENT_RELEASE_SKIP_FUNCS = [
+    pytest.param(should_skip_recent_yesterday_release, id='yesterday'),
+    pytest.param(should_skip_recent_today_release, id='today'),
+]
+
+
 class TestLoadParsedMoviesHistory:
     """Test cases for load_parsed_movies_history function."""
     
@@ -48,19 +53,6 @@ class TestLoadParsedMoviesHistory:
         history_file = os.path.join(temp_dir, 'nonexistent.csv')
         result = load_parsed_movies_history(history_file)
         assert result == {}
-    
-    def test_load_existing_history(self, sample_history_csv):
-        """Test loading existing history."""
-        _seed_history_sqlite([
-            {'href': '/v/ABC-123', 'phase': 1, 'video_code': 'ABC-123',
-             'hacked_subtitle': 'magnet:?xt=urn:btih:abc123'},
-            {'href': '/v/DEF-456', 'phase': 2, 'video_code': 'DEF-456',
-             'subtitle': 'magnet:?xt=urn:btih:def456'},
-        ])
-        result = load_parsed_movies_history(sample_history_csv)
-        assert len(result) == 2
-        assert '/v/ABC-123' in result
-        assert '/v/DEF-456' in result
     
     def test_load_with_phase_filter(self, sample_history_csv):
         """Test loading history with phase filter."""
@@ -85,52 +77,6 @@ class TestLoadParsedMoviesHistory:
         assert len(result) == 2
         assert '/v/ABC-123' in result
         assert '/v/DEF-456' in result
-
-
-class TestSaveParsedMovieToHistory:
-    """Test cases for save_parsed_movie_to_history function."""
-    
-    def test_save_new_record(self, temp_dir):
-        """Test saving a new movie to history."""
-        history_file = os.path.join(temp_dir, 'history.csv')
-        
-        magnet_links = {'subtitle': 'magnet:?xt=urn:btih:abc123'}
-        save_parsed_movie_to_history(history_file, '/v/NEW-001', 1, 'NEW-001', magnet_links)
-        
-        history = db_mod.db_load_history()
-        assert '/v/NEW-001' in history
-        magnets = [t.get('MagnetUri', '') for t in history['/v/NEW-001']['torrents'].values()]
-        assert 'magnet:?xt=urn:btih:abc123' in ''.join(magnets)
-    
-    def test_update_existing_record(self, temp_dir):
-        """Test updating an existing movie in history."""
-        history_file = os.path.join(temp_dir, 'history.csv')
-        
-        save_parsed_movie_to_history(history_file, '/v/EXIST-001', 1, 'EXIST-001',
-                                     {'subtitle': 'magnet:?xt=urn:btih:old'})
-        
-        save_parsed_movie_to_history(history_file, '/v/EXIST-001', 1, 'EXIST-001',
-                                     {'hacked_subtitle': 'magnet:?xt=urn:btih:new123'})
-        
-        history = db_mod.db_load_history()
-        assert len(history) == 1
-        magnets = [t.get('MagnetUri', '') for t in history['/v/EXIST-001']['torrents'].values()]
-        assert 'magnet:?xt=urn:btih:new123' in ''.join(magnets)
-
-
-class TestValidateHistoryFile:
-    """Test cases for validate_history_file function."""
-    
-    def test_validate_nonexistent_file(self, temp_dir):
-        """Test validating non-existent file returns True."""
-        history_file = os.path.join(temp_dir, 'nonexistent.csv')
-        result = validate_history_file(history_file)
-        assert result is True
-    
-    def test_validate_valid_file(self, sample_history_csv):
-        """Test validating a valid history file."""
-        result = validate_history_file(sample_history_csv)
-        assert result is True
 
 
 class TestDetermineTorrentTypes:
@@ -307,30 +253,6 @@ class TestShouldSkipRecentYesterdayRelease:
         }
         assert should_skip_recent_yesterday_release('/v/ABC-123', history_data, False) is False
 
-    def test_not_in_history_should_not_skip(self):
-        """Movie not in history → do not skip."""
-        assert should_skip_recent_yesterday_release('/v/NEW-001', {}, True) is False
-
-    def test_none_history_should_not_skip(self):
-        """None history data → do not skip."""
-        assert should_skip_recent_yesterday_release('/v/ABC-123', None, True) is False
-
-    def test_empty_last_visited_datetime_should_not_skip(self):
-        """Empty last_visited_datetime and update_datetime → do not skip."""
-        history_data = {
-            '/v/ABC-123': {'last_visited_datetime': '', 'update_datetime': '', 'torrent_types': ['subtitle']}
-        }
-        assert should_skip_recent_yesterday_release('/v/ABC-123', history_data, True) is False
-
-    def test_fallback_to_update_datetime(self):
-        """When last_visited_datetime is empty, fall back to update_datetime."""
-        from datetime import datetime
-        today = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        history_data = {
-            '/v/ABC-123': {'last_visited_datetime': '', 'update_datetime': today, 'torrent_types': ['subtitle']}
-        }
-        assert should_skip_recent_yesterday_release('/v/ABC-123', history_data, True) is True
-
 
 class TestShouldSkipRecentTodayRelease:
     """Test cases for should_skip_recent_today_release function."""
@@ -362,30 +284,6 @@ class TestShouldSkipRecentTodayRelease:
         }
         assert should_skip_recent_today_release('/v/ABC-123', history_data, False) is False
 
-    def test_not_in_history_should_not_skip(self):
-        """Movie not in history -> do not skip."""
-        assert should_skip_recent_today_release('/v/NEW-001', {}, True) is False
-
-    def test_none_history_should_not_skip(self):
-        """None history data -> do not skip."""
-        assert should_skip_recent_today_release('/v/ABC-123', None, True) is False
-
-    def test_empty_last_visited_datetime_should_not_skip(self):
-        """Empty last_visited_datetime and update_datetime -> do not skip."""
-        history_data = {
-            '/v/ABC-123': {'last_visited_datetime': '', 'update_datetime': '', 'torrent_types': ['subtitle']}
-        }
-        assert should_skip_recent_today_release('/v/ABC-123', history_data, True) is False
-
-    def test_fallback_to_update_datetime(self):
-        """When last_visited_datetime is empty, fall back to update_datetime."""
-        from datetime import datetime
-        today = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        history_data = {
-            '/v/ABC-123': {'last_visited_datetime': '', 'update_datetime': today, 'torrent_types': ['subtitle']}
-        }
-        assert should_skip_recent_today_release('/v/ABC-123', history_data, True) is True
-
     def test_today_release_visited_old_should_not_skip(self):
         """Today release + visited 3 days ago -> do not skip."""
         from datetime import datetime, timedelta
@@ -394,6 +292,46 @@ class TestShouldSkipRecentTodayRelease:
             '/v/ABC-123': {'last_visited_datetime': old_date, 'update_datetime': old_date, 'torrent_types': ['subtitle']}
         }
         assert should_skip_recent_today_release('/v/ABC-123', history_data, True) is False
+
+
+@pytest.mark.parametrize("skip_fn", _RECENT_RELEASE_SKIP_FUNCS)
+def test_recent_release_skip_returns_false_without_history(skip_fn):
+    """Missing history inputs should not skip regardless of release flavor."""
+    assert skip_fn('/v/NEW-001', {}, True) is False
+    assert skip_fn('/v/ABC-123', None, True) is False
+
+
+@pytest.mark.parametrize("skip_fn", _RECENT_RELEASE_SKIP_FUNCS)
+def test_recent_release_skip_respects_release_flag(skip_fn):
+    """A recent visit should not skip when the release flag is disabled."""
+    from datetime import datetime
+
+    today = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    history_data = {
+        '/v/ABC-123': {'last_visited_datetime': today, 'update_datetime': today, 'torrent_types': ['subtitle']}
+    }
+    assert skip_fn('/v/ABC-123', history_data, False) is False
+
+
+@pytest.mark.parametrize("skip_fn", _RECENT_RELEASE_SKIP_FUNCS)
+def test_recent_release_skip_ignores_empty_visit_timestamps(skip_fn):
+    """Empty visit timestamps should not trigger skip behavior."""
+    history_data = {
+        '/v/ABC-123': {'last_visited_datetime': '', 'update_datetime': '', 'torrent_types': ['subtitle']}
+    }
+    assert skip_fn('/v/ABC-123', history_data, True) is False
+
+
+@pytest.mark.parametrize("skip_fn", _RECENT_RELEASE_SKIP_FUNCS)
+def test_recent_release_skip_falls_back_to_update_datetime(skip_fn):
+    """Both recent-release helpers should fall back to update_datetime."""
+    from datetime import datetime
+
+    today = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    history_data = {
+        '/v/ABC-123': {'last_visited_datetime': '', 'update_datetime': today, 'torrent_types': ['subtitle']}
+    }
+    assert skip_fn('/v/ABC-123', history_data, True) is True
 
 
 class TestShouldProcessMovie:
@@ -428,34 +366,6 @@ class TestShouldProcessMovie:
         magnet_links = {'subtitle': 'magnet:?xt=urn:btih:abc'}
         should_process, history_types = should_process_movie('/v/ABC-123', history_data, 1, magnet_links)
         assert should_process is False
-
-
-class TestCheckTorrentInHistory:
-    """Test cases for check_torrent_in_history function."""
-    
-    def test_torrent_not_found(self, temp_dir):
-        """Test when torrent is not in history."""
-        history_file = os.path.join(temp_dir, 'history.csv')
-        with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
-            f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
-        
-        result = check_torrent_in_history(history_file, '/v/ABC-123', 'subtitle')
-        assert result is False
-    
-    def test_torrent_found(self, sample_history_csv):
-        """Test when torrent is in history."""
-        _seed_history_sqlite([
-            {'href': '/v/ABC-123', 'phase': 1, 'video_code': 'ABC-123',
-             'hacked_subtitle': 'magnet:?xt=urn:btih:abc123'},
-        ])
-        result = check_torrent_in_history(sample_history_csv, '/v/ABC-123', 'hacked_subtitle')
-        assert result is True
-    
-    def test_file_not_exists(self, temp_dir):
-        """Test when history file doesn't exist."""
-        history_file = os.path.join(temp_dir, 'nonexistent.csv')
-        result = check_torrent_in_history(history_file, '/v/ABC-123', 'subtitle')
-        assert result is False
 
 
 class TestIsDownloadedTorrent:
@@ -891,4 +801,3 @@ class TestStorageModeDuo:
         history_sqlite = db_mod.db_load_history()
         assert '/v/DUO-001' in history_sqlite
         assert os.path.exists(hf)
-

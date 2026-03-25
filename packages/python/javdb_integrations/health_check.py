@@ -43,11 +43,12 @@ from packages.python.javdb_core.masking import mask_ip_address
 from packages.python.javdb_platform.config_helper import cfg
 from packages.python.javdb_platform.proxy_policy import add_proxy_arguments, resolve_proxy_override
 from packages.python.javdb_platform.qb_config import (
-    build_qb_base_url,
+    qb_base_url_candidates,
     masked_qb_base_url,
     qb_verify_tls,
 )
 
+QB_URL = cfg('QB_URL', None)
 QB_HOST = cfg('QB_HOST', None)
 QB_PORT = cfg('QB_PORT', None)
 QB_USERNAME = cfg('QB_USERNAME', None)
@@ -74,56 +75,68 @@ def check_qbittorrent_connection() -> Tuple[bool, str]:
     Returns:
         Tuple of (success, message)
     """
-    if not QB_HOST or not QB_PORT:
-        return False, "QB_HOST/QB_PORT not configured - qBittorrent checks skipped"
-
-    masked_host = mask_ip_address(QB_HOST)
+    if not QB_URL and (not QB_HOST or not QB_PORT):
+        return False, "QB_URL not configured - qBittorrent checks skipped"
     
     try:
         import requests
-        
-        base_url = build_qb_base_url(QB_HOST, QB_PORT)
-        verify_tls = qb_verify_tls()
-        login_url = f"{base_url}/api/v2/auth/login"
-        
-        # Test connection with timeout
-        logger.info(
-            f"Testing qBittorrent connection to {masked_qb_base_url(QB_HOST, QB_PORT)}..."
-        )
-        
-        session = requests.Session()
-        # Disable environment proxy to avoid interference
-        session.trust_env = False
-        session.verify = verify_tls
-        response = session.post(
-            login_url,
-            data={'username': QB_USERNAME, 'password': QB_PASSWORD},
-            timeout=10,
-            verify=verify_tls,
-        )
-        
-        if response.status_code == 200 and response.text == 'Ok.':
-            # Try to get version to confirm full access
-            version_response = session.get(
-                f"{base_url}/api/v2/app/version",
-                timeout=5,
-                verify=verify_tls,
-            )
-            if version_response.status_code == 200:
-                version = version_response.text
-                return True, f"Connected successfully (version: {version})"
-            return True, "Connected and authenticated"
-        elif response.status_code == 403:
-            return False, "Authentication failed - check QB_USERNAME and QB_PASSWORD"
+
+        if QB_URL:
+            base_urls = qb_base_url_candidates(QB_URL)
         else:
-            return False, f"Unexpected response: {response.status_code} - {response.text}"
+            base_urls = qb_base_url_candidates(QB_HOST, QB_PORT)
+
+        verify_tls = qb_verify_tls()
+        last_message = "Cannot connect to qBittorrent"
+
+        for base_url in base_urls:
+            login_url = f"{base_url}/api/v2/auth/login"
+            masked_url = masked_qb_base_url(base_url)
+
+            logger.info(f"Testing qBittorrent connection to {masked_url}...")
+
+            session = requests.Session()
+            # Disable environment proxy to avoid interference
+            session.trust_env = False
+            session.verify = verify_tls
+
+            try:
+                response = session.post(
+                    login_url,
+                    data={'username': QB_USERNAME, 'password': QB_PASSWORD},
+                    timeout=10,
+                    verify=verify_tls,
+                )
+            except requests.exceptions.ConnectionError:
+                last_message = f"Cannot connect to {masked_url} - connection refused"
+                continue
+            except requests.exceptions.Timeout:
+                last_message = f"Connection timeout to {masked_url}"
+                continue
+
+            if response.status_code == 200 and response.text == 'Ok.':
+                version_response = session.get(
+                    f"{base_url}/api/v2/app/version",
+                    timeout=5,
+                    verify=verify_tls,
+                )
+                if version_response.status_code == 200:
+                    version = version_response.text
+                    if base_url != base_urls[0]:
+                        return True, f"Connected successfully via HTTP fallback at {masked_url} (version: {version})"
+                    return True, f"Connected successfully (version: {version})"
+                if base_url != base_urls[0]:
+                    return True, f"Connected and authenticated via HTTP fallback at {masked_url}"
+                return True, "Connected and authenticated"
+            if response.status_code == 403:
+                last_message = "Authentication failed - check QB_USERNAME and QB_PASSWORD"
+                continue
+
+            last_message = f"Unexpected response from {masked_url}: {response.status_code} - {response.text}"
+        return False, last_message
             
     except ValueError as exc:
         return False, str(exc)
-    except requests.exceptions.ConnectionError:
-        return False, f"Cannot connect to {masked_host}:{QB_PORT} - connection refused"
-    except requests.exceptions.Timeout:
-        return False, f"Connection timeout to {masked_host}:{QB_PORT}"
     except Exception as e:
         return False, f"Error: {str(e)}"
 
