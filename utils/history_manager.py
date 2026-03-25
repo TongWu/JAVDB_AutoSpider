@@ -16,6 +16,16 @@ from datetime import datetime, timedelta
 
 from utils.config_helper import use_sqlite, use_csv
 from utils.logging_config import get_logger
+from scripts.ingestion.policies import (
+    check_redownload_upgrade as _ingestion_check_redownload_upgrade,
+    determine_torrent_type as _ingestion_determine_torrent_type,
+    determine_torrent_types as _ingestion_determine_torrent_types,
+    get_missing_torrent_types as _ingestion_get_missing_torrent_types,
+    has_complete_subtitles as _ingestion_has_complete_subtitles,
+    should_process_movie as _ingestion_should_process_movie,
+    should_skip_recent_today_release as _ingestion_should_skip_recent_today_release,
+    should_skip_recent_yesterday_release as _ingestion_should_skip_recent_yesterday_release,
+)
 
 logger = get_logger(__name__)
 
@@ -250,60 +260,22 @@ def add_downloaded_indicator_to_csv(csv_file, history_file):
 
 def determine_torrent_types(magnet_links):
     """Determine torrent types from magnet links dictionary."""
-    torrent_types = []
-    if magnet_links.get('hacked_subtitle', '').strip():
-        torrent_types.append('hacked_subtitle')
-    if magnet_links.get('hacked_no_subtitle', '').strip():
-        torrent_types.append('hacked_no_subtitle')
-    if magnet_links.get('subtitle', '').strip():
-        torrent_types.append('subtitle')
-    if magnet_links.get('no_subtitle', '').strip():
-        torrent_types.append('no_subtitle')
-    return torrent_types
+    return _ingestion_determine_torrent_types(magnet_links)
 
 
 def determine_torrent_type(magnet_links):
     """Legacy function - use determine_torrent_types instead."""
-    types = determine_torrent_types(magnet_links)
-    return types[0] if types else 'no_subtitle'
+    return _ingestion_determine_torrent_type(magnet_links)
 
 
 def get_missing_torrent_types(history_torrent_types, current_torrent_types):
     """Get missing torrent types that should be searched for."""
-    missing_types = []
-
-    has_hacked_subtitle_in_history = 'hacked_subtitle' in history_torrent_types
-    has_hacked_no_subtitle_in_history = 'hacked_no_subtitle' in history_torrent_types
-    has_subtitle_in_history = 'subtitle' in history_torrent_types
-    has_no_subtitle_in_history = 'no_subtitle' in history_torrent_types
-
-    has_hacked_subtitle_current = 'hacked_subtitle' in current_torrent_types
-    has_hacked_no_subtitle_current = 'hacked_no_subtitle' in current_torrent_types
-    has_subtitle_current = 'subtitle' in current_torrent_types
-    has_no_subtitle_current = 'no_subtitle' in current_torrent_types
-
-    if has_hacked_subtitle_current and not has_hacked_subtitle_in_history:
-        missing_types.append('hacked_subtitle')
-    elif has_hacked_no_subtitle_current and not has_hacked_no_subtitle_in_history and not has_hacked_subtitle_in_history:
-        missing_types.append('hacked_no_subtitle')
-
-    if has_subtitle_current and not has_subtitle_in_history:
-        missing_types.append('subtitle')
-    elif has_no_subtitle_current and not has_no_subtitle_in_history and not has_subtitle_in_history:
-        missing_types.append('no_subtitle')
-
-    return missing_types
+    return _ingestion_get_missing_torrent_types(history_torrent_types, current_torrent_types)
 
 
 def has_complete_subtitles(href, history_data):
     """Check if a movie already has both subtitle and hacked_subtitle in history."""
-    if not history_data or href not in history_data:
-        return False
-    entry = history_data[href]
-    if entry.get('PerfectMatchIndicator'):
-        return True
-    torrent_types = entry.get('torrent_types', [])
-    return 'subtitle' in torrent_types and 'hacked_subtitle' in torrent_types
+    return _ingestion_has_complete_subtitles(href, history_data)
 
 
 def _get_visited_datetime(entry):
@@ -316,63 +288,17 @@ def _get_visited_datetime(entry):
 
 def should_skip_recent_yesterday_release(href, history_data, is_yesterday_release):
     """Skip a movie if it was visited recently and is tagged as yesterday's release."""
-    if not is_yesterday_release:
-        return False
-    if not history_data or href not in history_data:
-        return False
-    visited_str = _get_visited_datetime(history_data[href])
-    if not visited_str:
-        return False
-    cutoff = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-    return visited_str[:10] >= cutoff
+    return _ingestion_should_skip_recent_yesterday_release(href, history_data, is_yesterday_release)
 
 
 def should_skip_recent_today_release(href, history_data, is_today_release):
     """Skip a movie if it was already visited today and is tagged as today's release."""
-    if not is_today_release:
-        return False
-    if not history_data or href not in history_data:
-        return False
-    visited_str = _get_visited_datetime(history_data[href])
-    if not visited_str:
-        return False
-    cutoff = datetime.now().strftime('%Y-%m-%d')
-    return visited_str[:10] >= cutoff
+    return _ingestion_should_skip_recent_today_release(href, history_data, is_today_release)
 
 
 def should_process_movie(href, history_data, phase, magnet_links):
     """Determine if a movie should be processed based on history and phase rules."""
-    if href not in history_data:
-        logger.debug(f"New movie {href}: should process")
-        return True, None
-
-    current_torrent_types = determine_torrent_types(magnet_links)
-    history_torrent_types = history_data[href].get('torrent_types', ['no_subtitle'])
-
-    logger.debug(f"Movie {href}: current={current_torrent_types}, history={history_torrent_types}, phase={phase}")
-
-    missing_types = get_missing_torrent_types(history_torrent_types, current_torrent_types)
-
-    if phase == 1:
-        if missing_types:
-            logger.debug(f"Phase 1: missing types {missing_types} -> should process")
-            return True, history_torrent_types
-        else:
-            logger.debug(f"Phase 1: no missing types -> should not process")
-            return False, history_torrent_types
-
-    elif phase == 2:
-        if 'no_subtitle' in history_torrent_types and 'hacked_no_subtitle' in current_torrent_types:
-            logger.debug(f"Phase 2: upgrading no_subtitle to hacked_no_subtitle -> should process")
-            return True, history_torrent_types
-        elif missing_types:
-            logger.debug(f"Phase 2: missing types {missing_types} -> should process")
-            return True, history_torrent_types
-        else:
-            logger.debug(f"Phase 2: no upgrade possible -> should not process")
-            return False, history_torrent_types
-
-    return False, history_torrent_types
+    return _ingestion_should_process_movie(href, history_data, phase, magnet_links)
 
 
 def check_redownload_upgrade(href, history_data, magnet_links, threshold=0.30):
@@ -386,45 +312,7 @@ def check_redownload_upgrade(href, history_data, magnet_links, threshold=0.30):
     Returns:
         list of category names that qualify for re-download.
     """
-    if not history_data or href not in history_data:
-        return []
-
-    from utils.magnet_extractor import _parse_size
-    from utils.db import category_to_indicators
-
-    entry = history_data[href]
-    torrents = entry.get('torrents', {})
-    upgrade_categories = []
-
-    for cat in ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle'):
-        new_magnet = magnet_links.get(cat, '')
-        if not new_magnet:
-            continue
-
-        new_size_str = magnet_links.get(f'size_{cat}', '')
-        if not new_size_str:
-            continue
-
-        # Look up old size from the torrents dict (SQLite) or flat keys (CSV)
-        key = category_to_indicators(cat)
-        old_torrent = torrents.get(key, {})
-        old_size_str = old_torrent.get('Size', '') or entry.get(f'size_{cat}', '')
-        if not old_size_str:
-            continue
-
-        old_bytes = _parse_size(old_size_str)
-        new_bytes = _parse_size(new_size_str)
-        if old_bytes <= 0:
-            continue
-        if new_bytes > old_bytes * (1 + threshold):
-            logger.info(
-                f"Re-download upgrade for {href} [{cat}]: "
-                f"{old_size_str} -> {new_size_str} "
-                f"(+{((new_bytes / old_bytes) - 1) * 100:.0f}%, threshold {threshold * 100:.0f}%)"
-            )
-            upgrade_categories.append(cat)
-
-    return upgrade_categories
+    return _ingestion_check_redownload_upgrade(href, history_data, magnet_links, threshold)
 
 
 def is_downloaded_torrent(torrent_content):
