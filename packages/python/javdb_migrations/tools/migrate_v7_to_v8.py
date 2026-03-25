@@ -247,6 +247,20 @@ def _is_meaningful_actor_data(an: str, al: str, sup: str) -> bool:
     return bool(s and s != '[]')
 
 
+def _actor_log_fields(an: str, al: str, sup: str) -> tuple[bool, bool, int]:
+    supporting_count = 0
+    raw = (sup or "").strip()
+    if raw and raw != "[]":
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            supporting_count = 0
+        else:
+            if isinstance(parsed, list):
+                supporting_count = len(parsed)
+    return bool((an or "").strip()), bool((al or "").strip()), supporting_count
+
+
 def _promote_single_female_actor(
     actor_name: str,
     actor_gender: str,
@@ -335,7 +349,7 @@ def _apply_backfill_result(
     idx_str = result.task.entry_index
 
     if not result.success:
-        logger.warning("[%s] Failed to get actor for %s (%s)", idx_str, video_code, href)
+        logger.warning("[%s] Failed to get actor for %s", idx_str, video_code)
         return 0, 1, 0
 
     data = result.data
@@ -359,7 +373,15 @@ def _apply_backfill_result(
             conn.commit()
         return 0, 0, 1
 
-    logger.debug("[%s] %s -> %r %r", idx_str, video_code, an, al)
+    has_actor_name, has_actor_link, supporting_count = _actor_log_fields(an, al, sup)
+    logger.debug(
+        "[%s] %s actor_found=%s actor_link=%s supporting_count=%d",
+        idx_str,
+        video_code,
+        has_actor_name,
+        has_actor_link,
+        supporting_count,
+    )
     completed_ids.add(movie_id)
     if not dry_run:
         conn.execute(
@@ -580,8 +602,11 @@ def run_actor_backfill(
 
             if not _is_meaningful_actor_data(an, al, sup):
                 logger.warning(
-                    "[%s] No actor for %s (%s, parse_ok=%s, magnets=%d)",
-                    entry_index, video_code, href, parse_ok, len(magnets or []),
+                    "[%s] No actor for %s (parse_ok=%s, magnets=%d)",
+                    entry_index,
+                    video_code,
+                    parse_ok,
+                    len(magnets or []),
                 )
                 if parse_ok and not dry_run:
                     conn.execute(
@@ -594,7 +619,15 @@ def run_actor_backfill(
                 movie_sleep_mgr.sleep()
                 continue
 
-            logger.info("[%s] %s -> %r %r", entry_index, video_code, an, al)
+            has_actor_name, has_actor_link, supporting_count = _actor_log_fields(an, al, sup)
+            logger.info(
+                "[%s] %s actor_found=%s actor_link=%s supporting_count=%d",
+                entry_index,
+                video_code,
+                has_actor_name,
+                has_actor_link,
+                supporting_count,
+            )
             if not dry_run:
                 conn.execute(
                     """UPDATE MovieHistory SET ActorName=?, ActorGender=?, ActorLink=?,
