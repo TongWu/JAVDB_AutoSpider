@@ -86,6 +86,18 @@ _PURGE_PLAN_FIELDNAMES = [
     'reason',
 ]
 
+_RESULT_FIELDNAMES = [
+    'video_code',
+    'status',
+    'href',
+    'detail_href',
+    'actor_name',
+    'chosen_upgrade_category',
+    'message',
+]
+
+_RESULT_CSV_BASENAME = 'InventoryHistoryAlign_Result.csv'
+
 
 @dataclass
 class MissingProcessResult:
@@ -219,13 +231,100 @@ def _fetch_html(
     )
 
 
-def _write_csv(path: str, fieldnames: List[str], rows: List[dict]) -> None:
+def _write_csv(path: str, fieldnames: List[str], rows: List[dict]) -> str:
+    if not rows:
+        if os.path.exists(path):
+            os.remove(path)
+        logger.info("Skipping empty CSV output (header-only suppressed): %s", path)
+        return ''
     os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
     with open(path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
+    return path
+
+
+def _normalize_result_row(row: dict) -> dict:
+    normalized = {
+        field: '' if row.get(field) is None else str(row.get(field, ''))
+        for field in _RESULT_FIELDNAMES
+    }
+    normalized['video_code'] = _normalize_code(normalized.get('video_code', ''))
+    return normalized
+
+
+def _read_csv_rows(path: str) -> List[dict]:
+    try:
+        with open(path, 'r', newline='', encoding='utf-8-sig') as f:
+            return list(csv.DictReader(f))
+    except FileNotFoundError:
+        return []
+    except Exception as exc:
+        logger.warning("Failed to read CSV %s: %s", path, exc)
+        return []
+
+
+def _find_legacy_result_csvs(output_dir: str) -> List[str]:
+    root = Path(output_dir)
+    if not root.exists():
+        return []
+    return sorted(
+        str(path)
+        for path in root.rglob('InventoryHistoryAlign_Result_*.csv')
+        if path.is_file()
+    )
+
+
+def _merge_result_rows(rows: Iterable[dict], merged_by_code: Dict[str, dict], *, overwrite: bool) -> None:
+    for row in rows:
+        normalized = _normalize_result_row(row)
+        video_code = normalized.get('video_code', '')
+        if not video_code:
+            logger.warning("Skipping align result row without video_code: %s", row)
+            continue
+        if overwrite or video_code not in merged_by_code:
+            merged_by_code[video_code] = normalized
+
+
+def _write_consolidated_result_csv(output_dir: str, rows: List[dict]) -> str:
+    os.makedirs(output_dir, exist_ok=True)
+    consolidated_path = os.path.join(output_dir, _RESULT_CSV_BASENAME)
+    legacy_paths = _find_legacy_result_csvs(output_dir)
+    merged_by_code: Dict[str, dict] = {}
+
+    if os.path.exists(consolidated_path):
+        _merge_result_rows(_read_csv_rows(consolidated_path), merged_by_code, overwrite=True)
+        for legacy_path in legacy_paths:
+            _merge_result_rows(_read_csv_rows(legacy_path), merged_by_code, overwrite=False)
+    else:
+        for legacy_path in legacy_paths:
+            _merge_result_rows(_read_csv_rows(legacy_path), merged_by_code, overwrite=True)
+
+    _merge_result_rows(rows, merged_by_code, overwrite=True)
+
+    merged_rows = sorted(merged_by_code.values(), key=lambda row: row['video_code'])
+    written_path = _write_csv(consolidated_path, _RESULT_FIELDNAMES, merged_rows)
+
+    removed_legacy = 0
+    for legacy_path in legacy_paths:
+        try:
+            os.remove(legacy_path)
+            removed_legacy += 1
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            logger.warning("Failed to remove legacy align result CSV %s: %s", legacy_path, exc)
+
+    if legacy_paths:
+        logger.info(
+            "Consolidated %d legacy align result CSV(s) into %s",
+            removed_legacy,
+            written_path or consolidated_path,
+        )
+
+    return written_path
 
 
 def _enqueue_qb_from_csv(csv_path: str, use_proxy: bool, category_override: str = '') -> bool:
@@ -628,19 +727,18 @@ def run_alignment(args: argparse.Namespace) -> int:
     # Write outputs (common for both paths)
     # ------------------------------------------------------------------
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    os.makedirs(args.output_dir, exist_ok=True)
     out_dir = ensure_dated_dir(args.output_dir)
-    process_csv = os.path.join(out_dir, f'InventoryHistoryAlign_Result_{timestamp}.csv')
     qb_csv = os.path.join(out_dir, f'InventoryHistoryAlign_QBUpgrade_{timestamp}.csv')
     purge_plan_csv = os.path.join(out_dir, f'InventoryHistoryAlign_PurgePlan_{timestamp}.csv')
     summary_json = os.path.join(out_dir, f'InventoryHistoryAlign_Summary_{timestamp}.json')
 
-    _write_csv(
-        process_csv,
-        ['video_code', 'status', 'href', 'detail_href', 'actor_name', 'chosen_upgrade_category', 'message'],
+    process_csv = _write_consolidated_result_csv(
+        args.output_dir,
         [r.__dict__ for r in process_results],
     )
-    _write_csv(qb_csv, _QB_FIELDNAMES, qb_rows)
-    _write_csv(purge_plan_csv, _PURGE_PLAN_FIELDNAMES, purge_plan_rows)
+    qb_csv = _write_csv(qb_csv, _QB_FIELDNAMES, qb_rows)
+    purge_plan_csv = _write_csv(purge_plan_csv, _PURGE_PLAN_FIELDNAMES, purge_plan_rows)
 
     summary = {
         'missing_codes_total': len(missing_codes),
@@ -661,9 +759,9 @@ def run_alignment(args: argparse.Namespace) -> int:
         json.dump(summary, f, ensure_ascii=False, indent=2)
 
     logger.info("Alignment summary saved: %s", summary_json)
-    logger.info("Result CSV: %s", process_csv)
-    logger.info("qB Upgrade CSV: %s", qb_csv)
-    logger.info("Purge-plan CSV: %s", purge_plan_csv)
+    logger.info("Result CSV: %s", process_csv or '(not written; no rows)')
+    logger.info("qB Upgrade CSV: %s", qb_csv or '(not written; no rows)')
+    logger.info("Purge-plan CSV: %s", purge_plan_csv or '(not written; no rows)')
 
     if rc != 0:
         return rc
