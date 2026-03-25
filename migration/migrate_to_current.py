@@ -15,7 +15,7 @@ Usage::
     python3 migration/migrate_to_current.py [--backup] [--verify] [--dry-run]
     python3 migration/migrate_to_current.py --normalize-datetimes
     python3 migration/migrate_to_current.py --backfill-actors [--limit N] [--no-proxy]
-    python3 migration/migrate_to_current.py --align-inventory-history [--align-limit N] [--align-use-proxy] [--align-execute-delete]
+    python3 migration/migrate_to_current.py --align-inventory-history [--align-limit N] [--align-no-proxy] [--align-execute-delete]
 """
 
 from __future__ import annotations
@@ -95,9 +95,14 @@ def main() -> int:
         help="Alignment: comma-separated video codes override",
     )
     parser.add_argument(
+        "--align-no-proxy",
+        action="store_true",
+        help="Alignment: direct HTTP without proxy (debug; proxy enabled by default)",
+    )
+    parser.add_argument(
         "--align-use-proxy",
         action="store_true",
-        help="Alignment: use spider proxy pool",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--align-enqueue-qb",
@@ -122,6 +127,13 @@ def main() -> int:
         help="Alignment: qBittorrent category override for upgrade enqueue",
     )
     args = parser.parse_args()
+    if args.align_no_proxy and args.align_use_proxy:
+        parser.error("--align-no-proxy and deprecated --align-use-proxy cannot be used together")
+    if args.align_use_proxy:
+        logger.warning(
+            "--align-use-proxy is deprecated; alignment now uses proxy by default. "
+            "Use --align-no-proxy to disable proxy.",
+        )
 
     import utils.db as db_mod
     from utils.config_helper import use_sqlite, cfg
@@ -191,7 +203,7 @@ def main() -> int:
             dry_run=args.dry_run,
             limit=args.align_limit,
             codes=args.align_codes,
-            use_proxy=args.align_use_proxy,
+            use_proxy=not args.align_no_proxy,
             output_dir=align_output_dir,
             enqueue_qb=args.align_enqueue_qb,
             qb_category=args.align_qb_category,
