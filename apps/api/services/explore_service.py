@@ -13,6 +13,7 @@ from urllib.parse import urljoin
 
 import requests
 import urllib3
+from bs4 import BeautifulSoup
 from fastapi import HTTPException
 from fastapi.responses import HTMLResponse
 
@@ -83,6 +84,7 @@ def _simple_fetch_javdb_html(
     url: str,
     use_cookie: bool = True,
 ) -> str:
+    _validate_javdb_url_or_422(url)
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -103,22 +105,21 @@ def _simple_fetch_javdb_html(
     for _ in range(max_redirects + 1):
         parsed, hostname, resolved_ip = _resolve_public_target_or_422(current_url)
         scheme = parsed.scheme.lower()
+        if scheme != "https":
+            raise HTTPException(status_code=422, detail="url must use https")
         port = parsed.port or (443 if scheme == "https" else 80)
         path_query = parsed.path or "/"
         if parsed.query:
             path_query += f"?{parsed.query}"
         default_port = 443 if scheme == "https" else 80
         headers["Host"] = hostname if port == default_port else f"{hostname}:{port}"
-        if scheme == "https":
-            pool: Any = urllib3.HTTPSConnectionPool(
-                host=resolved_ip,
-                port=port,
-                assert_hostname=hostname,
-                server_hostname=hostname,
-                cert_reqs="CERT_REQUIRED",
-            )
-        else:
-            pool = urllib3.HTTPConnectionPool(host=resolved_ip, port=port)
+        pool: Any = urllib3.HTTPSConnectionPool(
+            host=resolved_ip,
+            port=port,
+            assert_hostname=hostname,
+            server_hostname=hostname,
+            cert_reqs="CERT_REQUIRED",
+        )
 
         resp = pool.request(
             "GET",
@@ -133,7 +134,9 @@ def _simple_fetch_javdb_html(
             location = resp.headers.get("Location", "")
             if not location:
                 raise ValueError(f"redirect without location ({resp.status})")
-            current_url = urljoin(current_url, location)
+            next_url = urljoin(current_url, location)
+            _validate_javdb_url_or_422(next_url)
+            current_url = next_url
             continue
         if resp.status >= 400:
             raise ValueError(f"http error {resp.status}")
@@ -148,7 +151,9 @@ def _simple_fetch_javdb_html(
 
 
 def _validate_javdb_url_or_422(url: str) -> None:
-    _resolve_public_target_or_422(url)
+    parsed, _hostname, _resolved_ip = _resolve_public_target_or_422(url)
+    if parsed.scheme.lower() != "https":
+        raise HTTPException(status_code=422, detail="url must use https")
 
 
 def _javdb_html_looks_like_error_blob(html: str) -> bool:
@@ -156,6 +161,34 @@ def _javdb_html_looks_like_error_blob(html: str) -> bool:
         return False
     lower = html.lower()
     return "traceback (most recent call last)" in lower or "error:" in lower
+
+
+def _sanitize_proxied_html(html: str) -> str:
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in list(soup.find_all(True)):
+        tag_name = str(tag.name or "").lower()
+        if tag_name in {"base", "embed", "frame", "iframe", "noscript", "object", "script"}:
+            tag.decompose()
+            continue
+        if tag_name == "meta" and str(tag.get("http-equiv", "")).strip():
+            tag.decompose()
+            continue
+        for attr_name in list(tag.attrs.keys()):
+            lowered = attr_name.lower()
+            if lowered.startswith("on") or lowered == "srcdoc":
+                del tag.attrs[attr_name]
+                continue
+            if lowered in {"action", "formaction", "href", "src"}:
+                raw_value = tag.attrs.get(attr_name)
+                values = raw_value if isinstance(raw_value, list) else [raw_value]
+                if any(
+                    str(value).strip().lower().startswith(
+                        ("data:text/html", "javascript:", "vbscript:")
+                    )
+                    for value in values
+                ):
+                    del tag.attrs[attr_name]
+    return str(soup)
 
 
 def _fetch_javdb_html(
@@ -641,15 +674,21 @@ async def proxy_page_payload(url: str, username: str) -> HTMLResponse:
         ) from exc
 
     nonce = secrets.token_urlsafe(16)
-    injected = _inject_explore_enhancer(html, url, nonce=nonce)
+    sanitized_html = _sanitize_proxied_html(html)
+    injected = _inject_explore_enhancer(sanitized_html, url, nonce=nonce)
     context.audit_logger.info("explore_proxy_page username=%s", username)
     csp = (
+        "default-src 'none'; "
         f"script-src 'nonce-{nonce}'; "
-        "style-src * 'unsafe-inline'; "
-        "img-src * data:; "
+        "style-src 'unsafe-inline' https:; "
+        "img-src https: data:; "
+        "font-src https: data:; "
+        "connect-src 'self'; "
+        "media-src https: data:; "
+        "frame-ancestors 'self'; "
         "object-src 'none'; "
-        "base-uri 'self'; "
-        "form-action 'self'"
+        "base-uri 'none'; "
+        "form-action 'none'"
     )
     return HTMLResponse(
         content=injected,

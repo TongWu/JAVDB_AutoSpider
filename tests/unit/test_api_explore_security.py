@@ -25,3 +25,13 @@ def test_qb_login_session_hides_transport_validation_details():
 
     assert exc_info.value.status_code == 422
     assert exc_info.value.detail == "Invalid qBittorrent transport settings"
+
+
+def test_validate_javdb_url_requires_https(monkeypatch):
+    def fake_resolve(url: str):
+        return type("Parsed", (), {"scheme": "http"})(), "javdb.com", "1.2.3.4"
+
+    monkeypatch.setattr(explore_service, "_resolve_public_target_or_422", fake_resolve)
+
+    with pytest.raises(HTTPException, match="url must use https"):
+        explore_service._validate_javdb_url_or_422("http://javdb.com/v/abc123")
