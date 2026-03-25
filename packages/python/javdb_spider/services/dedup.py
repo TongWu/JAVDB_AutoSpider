@@ -17,6 +17,7 @@ from packages.python.javdb_core.contracts import (
     is_uncensored_category,
     get_uncensored_priority,
 )
+from packages.python.javdb_core.magnet_extractor import _parse_size
 from packages.python.javdb_platform.logging_config import get_logger
 from packages.python.javdb_platform.bridges.rust_adapters.dedup_adapter import (
     rust_should_skip_from_rclone,
@@ -299,6 +300,83 @@ def check_dedup_upgrade(
                 is_deleted='False',
                 delete_datetime='',
             ))
+
+    return records
+
+
+def _redownload_category_matches_entry(category: str, entry: RcloneEntry) -> bool:
+    """Return True when an rclone entry matches the broad torrent category."""
+    if category not in {'hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle'}:
+        return False
+
+    wants_subtitle = category in {'hacked_subtitle', 'subtitle'}
+    wants_uncensored = category in {'hacked_subtitle', 'hacked_no_subtitle'}
+
+    if wants_uncensored:
+        if not _is_wuma_category(entry.sensor_category):
+            return False
+    elif entry.sensor_category != '有码':
+        return False
+
+    return entry.subtitle_category == ('中字' if wants_subtitle else '无字')
+
+
+def check_redownload_dedup_upgrade(
+    video_code: str,
+    redownload_categories: List[str],
+    new_size_links: Dict[str, str],
+    rclone_entries: List[RcloneEntry],
+) -> List[DedupRecord]:
+    """Queue matching old folders for dedup when a size-based re-download wins.
+
+    The history layer only tracks the legacy broad categories, so we match
+    inventory entries by family (有码 vs 无码*) plus subtitle state.  We keep
+    a safety guard: if the existing folder is already at least as large as the
+    newly found torrent, we do not queue it for deletion.
+    """
+    if not redownload_categories or not rclone_entries:
+        return []
+
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    seen_paths: Set[str] = set()
+    records: List[DedupRecord] = []
+
+    for category in redownload_categories:
+        new_size_str = new_size_links.get(f'size_{category}', '')
+        new_size_bytes = _parse_size(new_size_str) if new_size_str else 0
+        if new_size_bytes <= 0:
+            continue
+
+        for entry in rclone_entries:
+            if not _redownload_category_matches_entry(category, entry):
+                continue
+            if entry.folder_path in seen_paths:
+                continue
+            if entry.folder_size > 0 and entry.folder_size >= new_size_bytes:
+                logger.debug(
+                    "Skipping size-based dedup for %s [%s]: existing folder %s is not smaller than %s",
+                    video_code.upper(),
+                    category,
+                    entry.folder_size,
+                    new_size_str,
+                )
+                continue
+
+            records.append(DedupRecord(
+                video_code=video_code.upper(),
+                existing_sensor=entry.sensor_category,
+                existing_subtitle=entry.subtitle_category,
+                existing_gdrive_path=entry.folder_path,
+                existing_folder_size=entry.folder_size,
+                new_torrent_category=category,
+                deletion_reason=(
+                    f"Re-download upgrade ({category}: larger same-category torrent {new_size_str} found)"
+                ),
+                detect_datetime=now_str,
+                is_deleted='False',
+                delete_datetime='',
+            ))
+            seen_paths.add(entry.folder_path)
 
     return records
 

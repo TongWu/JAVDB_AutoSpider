@@ -17,6 +17,7 @@ from scripts.spider.services.dedup import (
     is_in_rclone_inventory,
     should_skip_from_rclone,
     check_dedup_upgrade,
+    check_redownload_dedup_upgrade,
     append_dedup_record,
     load_dedup_csv,
     save_dedup_csv,
@@ -160,6 +161,36 @@ class TestCheckDedupUpgrade:
         records = check_dedup_upgrade('ABC-123', types, entries)
         assert len(records) == 1
         assert records[0].existing_gdrive_path == 'p1'
+
+
+class TestCheckRedownloadDedupUpgrade:
+    def test_matches_same_family_and_subtitle_state(self):
+        entries = [
+            RcloneEntry('ABC-123', '有码', '无字', 'p1', 1000, 1, 't'),
+            RcloneEntry('ABC-123', '有码', '中字', 'p2', 1000, 1, 't'),
+        ]
+        records = check_redownload_dedup_upgrade(
+            'ABC-123',
+            ['no_subtitle'],
+            {'size_no_subtitle': '2.0GB'},
+            entries,
+        )
+        assert len(records) == 1
+        assert records[0].existing_gdrive_path == 'p1'
+        assert records[0].new_torrent_category == 'no_subtitle'
+        assert 'Re-download upgrade' in records[0].deletion_reason
+
+    def test_skips_existing_folder_when_not_smaller_than_new_torrent(self):
+        entries = [
+            RcloneEntry('ABC-123', '有码', '无字', 'p1', 3_000_000_000, 1, 't'),
+        ]
+        records = check_redownload_dedup_upgrade(
+            'ABC-123',
+            ['no_subtitle'],
+            {'size_no_subtitle': '2.0GB'},
+            entries,
+        )
+        assert records == []
 
 
 # ============================================================================

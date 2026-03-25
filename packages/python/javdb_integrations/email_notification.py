@@ -898,7 +898,13 @@ def _is_dedup_enabled(log_path):
         return last_enabled if last_enabled is not None else False
     except Exception as e:
         logger.debug(f"Could not read spider log for dedup status: {e}")
-        return False
+    return False
+
+
+def _is_redownload_dedup_reason(reason):
+    """Return True when a dedup reason represents a redownload upgrade."""
+    normalized = (reason or '').strip().lower()
+    return normalized.startswith('re-download upgrade') or normalized.startswith('redownload upgrade')
 
 
 def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
@@ -915,7 +921,8 @@ def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
             treated as in-session (no date filtering).
 
     Returns a dict with keys:
-        detected, deleted, failed, deleted_items (list of summary strings)
+        detected, deleted, failed, redownload_detected, redownload_deleted,
+        deleted_items (list of summary strings)
     Returns None when no data exists.
     """
     rows = None
@@ -967,14 +974,24 @@ def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
         1 for r in rows
         if cutoff is None or r.get('detect_datetime', '') >= cutoff
     )
+    redownload_detected_session = sum(
+        1 for r in rows
+        if (cutoff is None or r.get('detect_datetime', '') >= cutoff)
+        and _is_redownload_dedup_reason(r.get('deletion_reason', ''))
+    )
     deleted_session_items = []
+    redownload_deleted_session = 0
     for r in rows:
         in_session = cutoff is None or r.get('detect_datetime', '') >= cutoff
+        is_redownload = _is_redownload_dedup_reason(r.get('deletion_reason', ''))
         if (in_session
                 and r.get('is_deleted', 'False') == 'True'
                 and (cutoff is None or r.get('delete_datetime', '') >= cutoff)):
+            if is_redownload:
+                redownload_deleted_session += 1
+            label = '[Redownload upgrade] ' if is_redownload else ''
             deleted_session_items.append(
-                f"  • {r.get('video_code', '?')} [{r.get('existing_sensor', '?')}-{r.get('existing_subtitle', '?')}] "
+                f"  • {label}{r.get('video_code', '?')} [{r.get('existing_sensor', '?')}-{r.get('existing_subtitle', '?')}] "
                 f"-> {r.get('deletion_reason', '?')}"
             )
 
@@ -982,6 +999,8 @@ def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
         'detected': detected_session,
         'deleted': len(deleted_session_items),
         'failed': detected_session - len(deleted_session_items) if detected_session > len(deleted_session_items) else 0,
+        'redownload_detected': redownload_detected_session,
+        'redownload_deleted': redownload_deleted_session,
         'deleted_items': deleted_session_items,
     }
 
@@ -1118,6 +1137,17 @@ Cleanup (>{pikpak_stats['threshold_days']} days)
         deleted_list = "\n".join(dedup_stats['deleted_items'][:10]) if dedup_stats['deleted_items'] else "  (none this run)"
         if len(dedup_stats['deleted_items']) > 10:
             deleted_list += f"\n  ... and {len(dedup_stats['deleted_items']) - 10} more"
+        redownload_detected = dedup_stats.get('redownload_detected', 0)
+        redownload_deleted = dedup_stats.get('redownload_deleted', 0)
+        regular_detected = max(dedup_stats['detected'] - redownload_detected, 0)
+        regular_deleted = max(dedup_stats['deleted'] - redownload_deleted, 0)
+        breakdown_block = ""
+        if redownload_detected or redownload_deleted:
+            breakdown_block = f"""
+
+Breakdown
+  Regular Upgrades:   {regular_detected} detected, {regular_deleted} deleted
+  Redownload Upgrade: {redownload_detected} detected, {redownload_deleted} deleted"""
         sections.append(f"""
 ───────────────────────────────
 🗑️ RCLONE DEDUP SUMMARY
@@ -1125,7 +1155,7 @@ Cleanup (>{pikpak_stats['threshold_days']} days)
 
 Detected for Dedup: {dedup_stats['detected']}
 Successfully Deleted: {dedup_stats['deleted']}
-Failed: {dedup_stats['failed']}
+Failed: {dedup_stats['failed']}{breakdown_block}
 
 Deleted This Run:
 {deleted_list}""")
