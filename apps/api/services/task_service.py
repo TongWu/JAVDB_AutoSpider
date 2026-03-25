@@ -370,7 +370,7 @@ def trigger_daily_task(payload: Any, username: str) -> Dict[str, Any]:
         try:
             output_file = _sanitize_output_filename(payload.output_file)
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            raise HTTPException(status_code=422, detail="Invalid output_file") from exc
         command.extend(["--output-file", output_file])
     if payload.dry_run:
         command.append("--dry-run")

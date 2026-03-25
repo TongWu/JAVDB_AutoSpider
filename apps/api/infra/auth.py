@@ -17,20 +17,19 @@ from apps.api.services import context
 
 PASSWORD_CTX = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-_DEFAULT_SECRET = "change-me-api-secret-key-32chars-min"
 _RUNTIME_ENV = os.getenv("ENVIRONMENT", os.getenv("FLASK_ENV", "")).strip().lower()
 _IS_PRODUCTION_ENV = _RUNTIME_ENV == "production"
 
-API_SECRET_KEY = os.getenv("API_SECRET_KEY", _DEFAULT_SECRET).strip()
+API_SECRET_KEY = os.getenv("API_SECRET_KEY", "").strip()
 if not API_SECRET_KEY:
-    raise RuntimeError("API_SECRET_KEY is required.")
+    if _IS_PRODUCTION_ENV:
+        raise RuntimeError("API_SECRET_KEY is required.")
+    API_SECRET_KEY = secrets.token_urlsafe(48)
+    context.logger.warning(
+        "API_SECRET_KEY missing in non-production; generated ephemeral secret for this process."
+    )
 if len(API_SECRET_KEY) < 32:
     message = "API_SECRET_KEY must be at least 32 characters long."
-    if _IS_PRODUCTION_ENV:
-        raise RuntimeError(message)
-    context.logger.warning("%s Running in non-production mode.", message)
-if API_SECRET_KEY == _DEFAULT_SECRET:
-    message = "API_SECRET_KEY still uses the insecure default placeholder."
     if _IS_PRODUCTION_ENV:
         raise RuntimeError(message)
     context.logger.warning("%s Running in non-production mode.", message)

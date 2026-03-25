@@ -12,12 +12,12 @@ import csv
 import json
 import gc
 import base64
+import hashlib
 import subprocess
 import tempfile
-import pickle
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional, Generator
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 
@@ -134,13 +134,49 @@ class FolderCache:
         self._year_actor_index: Dict[str, str] = {}
         logger.debug(f"Cache initialized at: {self._cache_dir}")
 
+    @staticmethod
+    def _cache_path_for_key(cache_dir: str, key: str) -> str:
+        digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
+        return os.path.join(cache_dir, f"{digest}.json")
+
+    @staticmethod
+    def _serialize_folders(folders: List[FolderInfo]) -> list[dict]:
+        payload: list[dict] = []
+        for folder in folders:
+            item = asdict(folder)
+            if folder.video_mod_time is not None:
+                item["video_mod_time"] = folder.video_mod_time.isoformat()
+            payload.append(item)
+        return payload
+
+    @staticmethod
+    def _deserialize_folders(items: list[dict]) -> List[FolderInfo]:
+        folders: List[FolderInfo] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            raw = dict(item)
+            raw_video_mod_time = raw.get("video_mod_time")
+            if raw_video_mod_time:
+                try:
+                    raw["video_mod_time"] = datetime.fromisoformat(raw_video_mod_time)
+                except ValueError:
+                    raw["video_mod_time"] = None
+            else:
+                raw["video_mod_time"] = None
+            try:
+                folders.append(FolderInfo(**raw))
+            except TypeError:
+                logger.warning("Skipping invalid cached folder payload for key=%s", raw.get("movie_code", "unknown"))
+        return folders
+
     def add_folders(self, year: str, actor: str, folders: List[FolderInfo]) -> None:
         if not folders:
             return
         key = f"{year}/{actor}"
-        cache_file = os.path.join(self._cache_dir, f"{hash(key)}.pkl")
-        with open(cache_file, 'wb') as f:
-            pickle.dump(folders, f, protocol=pickle.HIGHEST_PROTOCOL)
+        cache_file = self._cache_path_for_key(self._cache_dir, key)
+        with open(cache_file, 'w', encoding='utf-8') as f:
+            json.dump(self._serialize_folders(folders), f, ensure_ascii=False)
         self._year_actor_index[key] = cache_file
         self._folder_count += len(folders)
 
@@ -149,19 +185,21 @@ class FolderCache:
         cache_file = self._year_actor_index.get(key)
         if not cache_file or not os.path.exists(cache_file):
             return []
-        with open(cache_file, 'rb') as f:
-            return pickle.load(f)
+        with open(cache_file, 'r', encoding='utf-8') as f:
+            payload = json.load(f)
+        return self._deserialize_folders(payload if isinstance(payload, list) else [])
 
     def iter_all_folders(self, batch_size: int = BATCH_SIZE) -> Generator[List[FolderInfo], None, None]:
         batch: List[FolderInfo] = []
         for key, cache_file in self._year_actor_index.items():
             if os.path.exists(cache_file):
-                with open(cache_file, 'rb') as f:
-                    folders = pickle.load(f)
-                    batch.extend(folders)
-                    while len(batch) >= batch_size:
-                        yield batch[:batch_size]
-                        batch = batch[batch_size:]
+                with open(cache_file, 'r', encoding='utf-8') as f:
+                    payload = json.load(f)
+                folders = self._deserialize_folders(payload if isinstance(payload, list) else [])
+                batch.extend(folders)
+                while len(batch) >= batch_size:
+                    yield batch[:batch_size]
+                    batch = batch[batch_size:]
         if batch:
             yield batch
 
@@ -170,8 +208,9 @@ class FolderCache:
         for key, cache_file in self._year_actor_index.items():
             year, actor = key.split('/', 1)
             if os.path.exists(cache_file):
-                with open(cache_file, 'rb') as f:
-                    result[year][actor] = pickle.load(f)
+                with open(cache_file, 'r', encoding='utf-8') as f:
+                    payload = json.load(f)
+                result[year][actor] = self._deserialize_folders(payload if isinstance(payload, list) else [])
         return dict(result)
 
     @property

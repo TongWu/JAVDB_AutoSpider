@@ -23,6 +23,7 @@ from packages.python.javdb_platform.bridges.rust_adapters.parser_adapter import 
     result_to_dict,
 )
 from packages.python.javdb_platform.proxy_pool import create_proxy_pool_from_config
+from packages.python.javdb_platform.qb_config import build_qb_base_url, qb_verify_tls
 from packages.python.javdb_platform.request_handler import (
     create_request_handler_from_config,
 )
@@ -233,12 +234,26 @@ def _qb_login_session(cfg: Dict[str, Any]) -> requests.Session:
     password = str(cfg.get("QB_PASSWORD", "")).strip()
     if not host or not port or not username or not password:
         raise HTTPException(status_code=422, detail="qBittorrent config is incomplete")
-    base_url = f"http://{host}:{port}"
+    try:
+        base_url = build_qb_base_url(
+            host,
+            port,
+            scheme=cfg.get("QB_SCHEME", "https"),
+            allow_insecure_http=cfg.get("QB_ALLOW_INSECURE_HTTP", False),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid qBittorrent transport settings",
+        ) from exc
+    verify_tls = qb_verify_tls(cfg.get("QB_VERIFY_TLS", True))
     session = requests.Session()
+    session.verify = verify_tls
     resp = session.post(
         f"{base_url}/api/v2/auth/login",
         data={"username": username, "password": password},
         timeout=int(cfg.get("REQUEST_TIMEOUT", 30) or 30),
+        verify=verify_tls,
     )
     if resp.status_code != 200:
         raise HTTPException(status_code=502, detail="Failed to login qBittorrent")
@@ -253,7 +268,19 @@ def _qb_add_magnet(
 ) -> None:
     host = str(cfg.get("QB_HOST", "")).strip()
     port = str(cfg.get("QB_PORT", "")).strip()
-    base_url = f"http://{host}:{port}"
+    try:
+        base_url = build_qb_base_url(
+            host,
+            port,
+            scheme=cfg.get("QB_SCHEME", "https"),
+            allow_insecure_http=cfg.get("QB_ALLOW_INSECURE_HTTP", False),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid qBittorrent transport settings",
+        ) from exc
+    verify_tls = qb_verify_tls(cfg.get("QB_VERIFY_TLS", True))
     session = _qb_login_session(cfg)
     effective_category = category or str(
         cfg.get("TORRENT_CATEGORY_ADHOC", "") or cfg.get("TORRENT_CATEGORY", "")
@@ -271,6 +298,7 @@ def _qb_add_magnet(
         f"{base_url}/api/v2/torrents/add",
         data=payload,
         timeout=int(cfg.get("REQUEST_TIMEOUT", 30) or 30),
+        verify=verify_tls,
     )
     if resp.status_code != 200:
         raise HTTPException(status_code=502, detail="Failed to add magnet to qBittorrent")

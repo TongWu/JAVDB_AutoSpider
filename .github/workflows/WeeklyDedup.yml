@@ -64,6 +64,13 @@ jobs:
     environment: Production
     env:
       TZ: Asia/Singapore
+      INPUT_RUNNER: ${{ inputs.runner || 'ubuntu-latest' }}
+      INPUT_ROOT_PATH: ${{ inputs.root_path || 'gdrive:/剧集/不可以色色/JAV-Sync' }}
+      INPUT_YEARS: ${{ inputs.years || '' }}
+      INPUT_WORKERS: ${{ inputs.workers || '4' }}
+      INPUT_LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
+      INPUT_DRY_RUN: ${{ inputs.dry_run || 'false' }}
+      INPUT_INCREMENTAL: ${{ inputs.incremental || 'false' }}
 
     steps:
       - name: Checkout repository
@@ -192,7 +199,7 @@ jobs:
             exit 0
           fi
 
-          DRY_RUN="${{ inputs.dry_run }}"
+          DRY_RUN="$INPUT_DRY_RUN"
           LABEL="scan+report+execute"
           if [ "$DRY_RUN" = "true" ]; then
             LABEL="scan+report+execute(dry-run)"
@@ -231,21 +238,28 @@ jobs:
       - name: Summary
         if: always()
         run: |
+          summary_bool() {
+            if [ "$1" = "true" ]; then
+              printf 'Yes'
+            else
+              printf 'No'
+            fi
+          }
           echo "## Weekly Dedup Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Phases**: scan → report → execute" >> $GITHUB_STEP_SUMMARY
-          echo "- **Dry Run**: ${{ inputs.dry_run == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Incremental**: ${{ inputs.incremental == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Root Path**: ${{ inputs.root_path || 'gdrive:/剧集/不可以色色/JAV-Sync' }}" >> $GITHUB_STEP_SUMMARY
+          printf -- '- **Dry Run**: %s\n' "$(summary_bool "$INPUT_DRY_RUN")" >> $GITHUB_STEP_SUMMARY
+          printf -- '- **Incremental**: %s\n' "$(summary_bool "$INPUT_INCREMENTAL")" >> $GITHUB_STEP_SUMMARY
+          printf -- '- **Root Path**: %s\n' "$INPUT_ROOT_PATH" >> $GITHUB_STEP_SUMMARY
 
-          YEARS="${{ inputs.years }}"
+          YEARS="$INPUT_YEARS"
           if [ -n "$YEARS" ]; then
             echo "- **Year Filter**: $YEARS" >> $GITHUB_STEP_SUMMARY
           fi
 
-          echo "- **Workers**: ${{ inputs.workers || '4' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Log Level**: ${{ inputs.log_level || 'INFO' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Runner**: ${{ inputs.runner || 'ubuntu-latest' }}" >> $GITHUB_STEP_SUMMARY
+          printf -- '- **Workers**: %s\n' "$INPUT_WORKERS" >> $GITHUB_STEP_SUMMARY
+          printf -- '- **Log Level**: %s\n' "$INPUT_LOG_LEVEL" >> $GITHUB_STEP_SUMMARY
+          printf -- '- **Runner**: %s\n' "$INPUT_RUNNER" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ -f "$REPORTS_DIR/rclone_inventory.csv" ]; then

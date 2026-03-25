@@ -108,6 +108,23 @@ jobs:
     environment: Production
     env:
       TZ: Asia/Singapore
+      INPUT_DRY_RUN: ${{ inputs.dry_run }}
+      INPUT_BACKUP: ${{ inputs.backup }}
+      INPUT_VERIFY: ${{ inputs.verify }}
+      INPUT_SKIP_SCHEMA: ${{ inputs.skip_schema }}
+      INPUT_NORMALIZE_DATETIMES: ${{ inputs.normalize_datetimes }}
+      INPUT_BACKFILL_ACTORS: ${{ inputs.backfill_actors }}
+      INPUT_BACKFILL_LIMIT: ${{ inputs.backfill_limit || '0' }}
+      INPUT_NO_PROXY: ${{ inputs.no_proxy }}
+      INPUT_USE_CF_BYPASS: ${{ inputs.use_cf_bypass }}
+      INPUT_ALIGN_INVENTORY_HISTORY: ${{ inputs.align_inventory_history }}
+      INPUT_ALIGN_LIMIT: ${{ inputs.align_limit || '0' }}
+      INPUT_ALIGN_CODES: ${{ inputs.align_codes }}
+      INPUT_ALIGN_NO_PROXY: ${{ inputs.align_no_proxy }}
+      INPUT_ALIGN_ENQUEUE_QB: ${{ inputs.align_enqueue_qb }}
+      INPUT_ALIGN_EXECUTE_DELETE: ${{ inputs.align_execute_delete }}
+      INPUT_ALIGN_QB_CATEGORY: ${{ inputs.align_qb_category }}
+      INPUT_RUNNER: ${{ inputs.runner || 'ubuntu-latest' }}
 
     steps:
       - name: Checkout repository
@@ -238,23 +255,31 @@ jobs:
           echo "============================================"
           echo "Migration Parameters:"
           echo "============================================"
-          echo "Dry Run:                ${{ inputs.dry_run }}"
-          echo "Backup:                 ${{ inputs.backup }}"
-          echo "Verify:                 ${{ inputs.verify }}"
-          echo "Skip Schema:            ${{ inputs.skip_schema }}"
-          echo "Normalize Datetimes:    ${{ inputs.normalize_datetimes }}"
-          echo "Backfill Actors:        ${{ inputs.backfill_actors }}"
-          echo "  Limit:                ${{ inputs.backfill_limit || '0 (all)' }}"
-          echo "  No Proxy:             ${{ inputs.no_proxy }}"
-          echo "  CF Bypass:            ${{ inputs.use_cf_bypass }}"
-          echo "Align Inventory:        ${{ inputs.align_inventory_history }}"
-          echo "  Limit:                ${{ inputs.align_limit || '0 (all)' }}"
-          echo "  Codes:                ${{ inputs.align_codes || '(none)' }}"
-          echo "  No Proxy:             ${{ inputs.align_no_proxy }}"
-          echo "  Enqueue QB:           ${{ inputs.align_enqueue_qb }}"
-          echo "  Execute Delete:       ${{ inputs.align_execute_delete }}"
-          echo "  QB Category:          ${{ inputs.align_qb_category || '(default)' }}"
-          echo "Runner:                 ${{ inputs.runner || 'ubuntu-latest' }}"
+          printf 'Dry Run:                %s\n' "$INPUT_DRY_RUN"
+          printf 'Backup:                 %s\n' "$INPUT_BACKUP"
+          printf 'Verify:                 %s\n' "$INPUT_VERIFY"
+          printf 'Skip Schema:            %s\n' "$INPUT_SKIP_SCHEMA"
+          printf 'Normalize Datetimes:    %s\n' "$INPUT_NORMALIZE_DATETIMES"
+          printf 'Backfill Actors:        %s\n' "$INPUT_BACKFILL_ACTORS"
+          printf '  Limit:                %s\n' "${INPUT_BACKFILL_LIMIT:-0 (all)}"
+          printf '  No Proxy:             %s\n' "$INPUT_NO_PROXY"
+          printf '  CF Bypass:            %s\n' "$INPUT_USE_CF_BYPASS"
+          printf 'Align Inventory:        %s\n' "$INPUT_ALIGN_INVENTORY_HISTORY"
+          printf '  Limit:                %s\n' "${INPUT_ALIGN_LIMIT:-0 (all)}"
+          if [ -n "$INPUT_ALIGN_CODES" ]; then
+            printf '  Codes:                %s\n' "$INPUT_ALIGN_CODES"
+          else
+            echo "  Codes:                (none)"
+          fi
+          printf '  No Proxy:             %s\n' "$INPUT_ALIGN_NO_PROXY"
+          printf '  Enqueue QB:           %s\n' "$INPUT_ALIGN_ENQUEUE_QB"
+          printf '  Execute Delete:       %s\n' "$INPUT_ALIGN_EXECUTE_DELETE"
+          if [ -n "$INPUT_ALIGN_QB_CATEGORY" ]; then
+            printf '  QB Category:          %s\n' "$INPUT_ALIGN_QB_CATEGORY"
+          else
+            echo "  QB Category:          (default)"
+          fi
+          printf 'Runner:                 %s\n' "$INPUT_RUNNER"
           echo "============================================"
 
       - name: Run migration
@@ -264,69 +289,69 @@ jobs:
 
           CMD=(python3 -m apps.cli.migration)
 
-          if [ "${{ inputs.dry_run }}" == "true" ]; then
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
             CMD+=(--dry-run)
           fi
 
-          if [ "${{ inputs.backup }}" == "true" ]; then
+          if [ "$INPUT_BACKUP" = "true" ]; then
             CMD+=(--backup)
           fi
 
-          if [ "${{ inputs.verify }}" == "true" ]; then
+          if [ "$INPUT_VERIFY" = "true" ]; then
             CMD+=(--verify)
           fi
 
-          if [ "${{ inputs.skip_schema }}" == "true" ]; then
+          if [ "$INPUT_SKIP_SCHEMA" = "true" ]; then
             CMD+=(--skip-schema)
           fi
 
-          if [ "${{ inputs.normalize_datetimes }}" == "true" ]; then
+          if [ "$INPUT_NORMALIZE_DATETIMES" = "true" ]; then
             CMD+=(--normalize-datetimes)
           fi
 
-          if [ "${{ inputs.backfill_actors }}" == "true" ]; then
+          if [ "$INPUT_BACKFILL_ACTORS" = "true" ]; then
             CMD+=(--backfill-actors)
 
-            LIMIT="${{ inputs.backfill_limit }}"
+            LIMIT="$INPUT_BACKFILL_LIMIT"
             if [ -n "$LIMIT" ] && [ "$LIMIT" != "0" ]; then
               CMD+=(--limit "$LIMIT")
             fi
 
-            if [ "${{ inputs.no_proxy }}" == "true" ]; then
+            if [ "$INPUT_NO_PROXY" = "true" ]; then
               CMD+=(--no-proxy)
             fi
 
-            if [ "${{ inputs.use_cf_bypass }}" == "true" ]; then
+            if [ "$INPUT_USE_CF_BYPASS" = "true" ]; then
               CMD+=(--use-cf-bypass)
             fi
           fi
 
-          if [ "${{ inputs.align_inventory_history }}" == "true" ]; then
+          if [ "$INPUT_ALIGN_INVENTORY_HISTORY" = "true" ]; then
             CMD+=(--align-inventory-history)
 
-            ALIGN_LIMIT="${{ inputs.align_limit }}"
+            ALIGN_LIMIT="$INPUT_ALIGN_LIMIT"
             if [ -n "$ALIGN_LIMIT" ] && [ "$ALIGN_LIMIT" != "0" ]; then
               CMD+=(--align-limit "$ALIGN_LIMIT")
             fi
 
-            ALIGN_CODES="${{ inputs.align_codes }}"
+            ALIGN_CODES="$INPUT_ALIGN_CODES"
             if [ -n "$ALIGN_CODES" ]; then
               CMD+=(--align-codes "$ALIGN_CODES")
             fi
 
-            if [ "${{ inputs.align_no_proxy }}" == "true" ]; then
+            if [ "$INPUT_ALIGN_NO_PROXY" = "true" ]; then
               CMD+=(--align-no-proxy)
             fi
 
-            if [ "${{ inputs.align_enqueue_qb }}" == "true" ]; then
+            if [ "$INPUT_ALIGN_ENQUEUE_QB" = "true" ]; then
               CMD+=(--align-enqueue-qb)
             fi
 
-            if [ "${{ inputs.align_execute_delete }}" == "true" ]; then
+            if [ "$INPUT_ALIGN_EXECUTE_DELETE" = "true" ]; then
               CMD+=(--align-execute-delete)
             fi
 
-            QB_CATEGORY="${{ inputs.align_qb_category }}"
+            QB_CATEGORY="$INPUT_ALIGN_QB_CATEGORY"
             if [ -n "$QB_CATEGORY" ]; then
               CMD+=(--align-qb-category "$QB_CATEGORY")
             fi
@@ -366,13 +391,13 @@ jobs:
           git diff --cached --name-only
 
           LABEL="schema migration"
-          if [ "${{ inputs.backfill_actors }}" == "true" ]; then
+          if [ "$INPUT_BACKFILL_ACTORS" = "true" ]; then
             LABEL="$LABEL + backfill-actors"
           fi
-          if [ "${{ inputs.normalize_datetimes }}" == "true" ]; then
+          if [ "$INPUT_NORMALIZE_DATETIMES" = "true" ]; then
             LABEL="$LABEL + normalize-datetimes"
           fi
-          if [ "${{ inputs.align_inventory_history }}" == "true" ]; then
+          if [ "$INPUT_ALIGN_INVENTORY_HISTORY" = "true" ]; then
             LABEL="$LABEL + align-inventory"
           fi
 
@@ -396,29 +421,44 @@ jobs:
       - name: Summary
         if: always()
         run: |
+          summary_bool() {
+            if [ "$1" = "true" ]; then
+              printf 'Yes'
+            else
+              printf 'No'
+            fi
+          }
           echo "## Database Migration Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Dry Run**: ${{ inputs.dry_run == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Backup**: ${{ inputs.backup == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Verify**: ${{ inputs.verify == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Skip Schema**: ${{ inputs.skip_schema == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          printf -- '- **Dry Run**: %s\n' "$(summary_bool "$INPUT_DRY_RUN")" >> $GITHUB_STEP_SUMMARY
+          printf -- '- **Backup**: %s\n' "$(summary_bool "$INPUT_BACKUP")" >> $GITHUB_STEP_SUMMARY
+          printf -- '- **Verify**: %s\n' "$(summary_bool "$INPUT_VERIFY")" >> $GITHUB_STEP_SUMMARY
+          printf -- '- **Skip Schema**: %s\n' "$(summary_bool "$INPUT_SKIP_SCHEMA")" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Operations" >> $GITHUB_STEP_SUMMARY
-          echo "- **Normalize Datetimes**: ${{ inputs.normalize_datetimes == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Backfill Actors**: ${{ inputs.backfill_actors == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ inputs.backfill_actors }}" == "true" ]; then
-            echo "  - Limit: ${{ inputs.backfill_limit || '0 (all)' }}" >> $GITHUB_STEP_SUMMARY
-            echo "  - No Proxy: ${{ inputs.no_proxy == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-            echo "  - CF Bypass: ${{ inputs.use_cf_bypass == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          printf -- '- **Normalize Datetimes**: %s\n' "$(summary_bool "$INPUT_NORMALIZE_DATETIMES")" >> $GITHUB_STEP_SUMMARY
+          printf -- '- **Backfill Actors**: %s\n' "$(summary_bool "$INPUT_BACKFILL_ACTORS")" >> $GITHUB_STEP_SUMMARY
+          if [ "$INPUT_BACKFILL_ACTORS" = "true" ]; then
+            printf '  - Limit: %s\n' "${INPUT_BACKFILL_LIMIT:-0 (all)}" >> $GITHUB_STEP_SUMMARY
+            printf '  - No Proxy: %s\n' "$(summary_bool "$INPUT_NO_PROXY")" >> $GITHUB_STEP_SUMMARY
+            printf '  - CF Bypass: %s\n' "$(summary_bool "$INPUT_USE_CF_BYPASS")" >> $GITHUB_STEP_SUMMARY
           fi
-          echo "- **Align Inventory**: ${{ inputs.align_inventory_history == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ inputs.align_inventory_history }}" == "true" ]; then
-            echo "  - Limit: ${{ inputs.align_limit || '0 (all)' }}" >> $GITHUB_STEP_SUMMARY
-            echo "  - Codes: ${{ inputs.align_codes || '(none)' }}" >> $GITHUB_STEP_SUMMARY
-            echo "  - No Proxy: ${{ inputs.align_no_proxy == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-            echo "  - Enqueue QB: ${{ inputs.align_enqueue_qb == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-            echo "  - Execute Delete: ${{ inputs.align_execute_delete == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-            echo "  - QB Category: ${{ inputs.align_qb_category || '(default)' }}" >> $GITHUB_STEP_SUMMARY
+          printf -- '- **Align Inventory**: %s\n' "$(summary_bool "$INPUT_ALIGN_INVENTORY_HISTORY")" >> $GITHUB_STEP_SUMMARY
+          if [ "$INPUT_ALIGN_INVENTORY_HISTORY" = "true" ]; then
+            printf '  - Limit: %s\n' "${INPUT_ALIGN_LIMIT:-0 (all)}" >> $GITHUB_STEP_SUMMARY
+            if [ -n "$INPUT_ALIGN_CODES" ]; then
+              printf '  - Codes: %s\n' "$INPUT_ALIGN_CODES" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "  - Codes: (none)" >> $GITHUB_STEP_SUMMARY
+            fi
+            printf '  - No Proxy: %s\n' "$(summary_bool "$INPUT_ALIGN_NO_PROXY")" >> $GITHUB_STEP_SUMMARY
+            printf '  - Enqueue QB: %s\n' "$(summary_bool "$INPUT_ALIGN_ENQUEUE_QB")" >> $GITHUB_STEP_SUMMARY
+            printf '  - Execute Delete: %s\n' "$(summary_bool "$INPUT_ALIGN_EXECUTE_DELETE")" >> $GITHUB_STEP_SUMMARY
+            if [ -n "$INPUT_ALIGN_QB_CATEGORY" ]; then
+              printf '  - QB Category: %s\n' "$INPUT_ALIGN_QB_CATEGORY" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "  - QB Category: (default)" >> $GITHUB_STEP_SUMMARY
+            fi
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Runner**: ${{ inputs.runner || 'ubuntu-latest' }}" >> $GITHUB_STEP_SUMMARY
+          printf -- '- **Runner**: %s\n' "$INPUT_RUNNER" >> $GITHUB_STEP_SUMMARY

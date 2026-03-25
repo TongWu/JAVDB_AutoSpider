@@ -33,6 +33,7 @@ export function isPathLikeField(key, type, sensitive) {
 }
 /** Select field option values (labels come from i18n `config.select.<KEY>.<value>`). */
 export const SELECT_OPTION_KEYS = {
+    QB_SCHEME: ["https", "http"],
     PROXY_MODE: ["pool", "single"],
     STORAGE_MODE: ["duo", "db", "csv"],
     LOG_LEVEL: ["DEBUG", "INFO", "WARNING", "ERROR"],

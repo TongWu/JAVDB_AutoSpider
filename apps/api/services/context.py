@@ -124,8 +124,12 @@ def infer_cookie_secure(origins: list[str] | None = None) -> bool:
         return True
     if explicit in {"0", "false", "no"}:
         return False
-    effective_origins = origins if origins is not None else CORS_ORIGINS
-    return any(origin.startswith("https://") for origin in effective_origins)
+    insecure_override = os.getenv("COOKIE_ALLOW_INSECURE", "").strip().lower()
+    if insecure_override in {"1", "true", "yes"}:
+        return False
+    if insecure_override in {"0", "false", "no"}:
+        return True
+    return True
 
 
 COOKIE_SECURE = infer_cookie_secure()

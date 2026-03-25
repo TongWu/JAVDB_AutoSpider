@@ -37,10 +37,15 @@ if str(REPO_ROOT) not in sys.path:
 
 
 # Import masking utilities
-from packages.python.javdb_core.masking import mask_ip_address, mask_username, mask_server, mask_full
+from packages.python.javdb_core.masking import mask_ip_address
 
 # Import configuration
 from packages.python.javdb_platform.config_helper import cfg
+from packages.python.javdb_platform.qb_config import (
+    build_qb_base_url,
+    masked_qb_base_url,
+    qb_verify_tls,
+)
 
 QB_HOST = cfg('QB_HOST', None)
 QB_PORT = cfg('QB_PORT', None)
@@ -75,26 +80,32 @@ def check_qbittorrent_connection() -> Tuple[bool, str]:
     try:
         import requests
         
-        base_url = f"http://{QB_HOST}:{QB_PORT}"
+        base_url = build_qb_base_url(QB_HOST, QB_PORT)
+        verify_tls = qb_verify_tls()
         login_url = f"{base_url}/api/v2/auth/login"
         
         # Test connection with timeout
-        logger.info(f"Testing qBittorrent connection to {masked_host}:{QB_PORT}...")
+        logger.info(
+            f"Testing qBittorrent connection to {masked_qb_base_url(QB_HOST, QB_PORT)}..."
+        )
         
         session = requests.Session()
         # Disable environment proxy to avoid interference
         session.trust_env = False
+        session.verify = verify_tls
         response = session.post(
             login_url,
             data={'username': QB_USERNAME, 'password': QB_PASSWORD},
-            timeout=10
+            timeout=10,
+            verify=verify_tls,
         )
         
         if response.status_code == 200 and response.text == 'Ok.':
             # Try to get version to confirm full access
             version_response = session.get(
                 f"{base_url}/api/v2/app/version",
-                timeout=5
+                timeout=5,
+                verify=verify_tls,
             )
             if version_response.status_code == 200:
                 version = version_response.text
@@ -105,6 +116,8 @@ def check_qbittorrent_connection() -> Tuple[bool, str]:
         else:
             return False, f"Unexpected response: {response.status_code} - {response.text}"
             
+    except ValueError as exc:
+        return False, str(exc)
     except requests.exceptions.ConnectionError:
         return False, f"Cannot connect to {masked_host}:{QB_PORT} - connection refused"
     except requests.exceptions.Timeout:
