@@ -648,16 +648,35 @@ def login_with_retry(username, password, max_retries=5, proxies=None):
         if success:
             break
         else:
-            is_captcha_error = any(keyword in message.lower() for keyword in [
+            msg_lower = (message or '').lower()
+            is_captcha_error = any(keyword in msg_lower for keyword in [
                 'captcha', '验证码', '驗證碼', 'verification'
             ])
-            is_cf_error = any(keyword in message.lower() for keyword in [
+            is_cf_error = any(keyword in msg_lower for keyword in [
                 'cloudflare', 'cf bypass', 'turnstile'
             ])
+            # Fast-fail for proxy-level Cloudflare blocks on login submit:
+            # retrying the same proxy immediately is usually futile.
+            is_cf_hard_block = (
+                is_cf_error
+                and 'http 403' in msg_lower
+                and (
+                    'during login post' in msg_lower
+                    or 'during login' in msg_lower
+                    or 'access denied by javdb during login' in msg_lower
+                )
+            )
 
             if attempt < max_retries:
                 if is_captcha_error:
                     logger.warning("Captcha error detected, retrying with new captcha...")
+                elif is_cf_hard_block:
+                    logger.warning(
+                        "Cloudflare hard-block detected on this proxy, "
+                        "skipping remaining retries for current login attempt."
+                    )
+                    logger.warning(f"Error message: {message}")
+                    break
                 elif is_cf_error:
                     logger.warning("Cloudflare error detected, retrying after cooldown...")
                     logger.warning(f"Error message: {message}")
