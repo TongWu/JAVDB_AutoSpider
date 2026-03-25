@@ -1,9 +1,12 @@
-__pycache__/
+**/__pycache__/
 test_history_integrity.py
 config.py
 .idea/
 logs/
 html/
+
+# Local captcha image
+javdb_captcha.png
 
 # Docker files
 .env
@@ -73,6 +76,7 @@ coverage.xml
 # Rust
 # Compiled files
 rust_core/target/
+packages/rust/**/target/
 **/*.rs.bk
 **/*.rs.bak
 
