@@ -52,6 +52,7 @@ from utils.infra.request_handler import RequestHandler, RequestConfig
 import scripts.spider.runtime.state as state
 from scripts.spider.fetch.session import is_login_page
 from scripts.spider.fetch.login_coordinator import LoginCoordinator, requeue_front
+from scripts.spider.fetch.backend import FetchBackend, FetchRuntimeState
 from scripts.spider.runtime.sleep import (
     MovieSleepManager,
     movie_sleep_mgr as _global_sleep_mgr,
@@ -75,8 +76,9 @@ from scripts.spider.runtime.config import (
 logger = get_logger(__name__)
 
 __all__ = [
+    'FetchBackend', 'FetchRuntimeState',
     'EngineTask', 'EngineResult', 'LoginRequired',
-    'WorkerContext', 'FetchEngine',
+    'WorkerContext', 'ParallelFetchBackend', 'FetchEngine',
 ]
 
 
@@ -114,6 +116,22 @@ class EngineResult:
     data: Any = None
     used_cf: bool = False
     error: Optional[str] = None
+    _ack_callback: Optional[Callable[[str, bool], None]] = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
+
+    def acknowledge(
+        self,
+        outcome_status: str,
+        *,
+        runtime_state_changed: bool = False,
+    ) -> None:
+        """Notify the producing backend that this result was fully handled."""
+
+        if self._ack_callback is not None:
+            self._ack_callback(outcome_status, runtime_state_changed)
 
 
 class LoginRequired(Exception):
@@ -470,11 +488,11 @@ class _EngineWorker(threading.Thread):
 
 
 # ---------------------------------------------------------------------------
-# FetchEngine — public orchestrator
+# ParallelFetchBackend — public parallel orchestrator
 # ---------------------------------------------------------------------------
 
 
-class FetchEngine:
+class ParallelFetchBackend(FetchBackend):
     """Parallel fetch engine backed by one worker per proxy.
 
     Manages worker lifecycle, task/result queues, and
@@ -499,6 +517,7 @@ class FetchEngine:
         throttle: Optional[DualWindowThrottle] = None,
         sleep_min: Optional[float] = None,
         sleep_max: Optional[float] = None,
+        runtime_state: Optional[FetchRuntimeState] = None,
     ):
         self._process_fn = process_fn
         self._use_cookie = use_cookie
@@ -526,6 +545,10 @@ class FetchEngine:
         self._workers: List[_EngineWorker] = []
         self._coordinator: Optional[LoginCoordinator] = None
         self._started = False
+        self._runtime_state = runtime_state or FetchRuntimeState(
+            use_proxy=bool(PROXY_POOL),
+            use_cf_bypass=False,
+        )
 
         self._submitted = 0
         self._received = 0
@@ -648,6 +671,10 @@ class FetchEngine:
         """
         self._done = True
 
+    @property
+    def worker_count(self) -> int:
+        return len(self._workers)
+
     # -- result consumption --------------------------------------------------
 
     @property
@@ -702,6 +729,12 @@ class FetchEngine:
 
         return orphaned
 
+    def runtime_state(self) -> FetchRuntimeState:
+        return FetchRuntimeState(
+            use_proxy=self._runtime_state.use_proxy,
+            use_cf_bypass=self._runtime_state.use_cf_bypass,
+        )
+
     # -- convenience constructors --------------------------------------------
 
     @classmethod
@@ -709,7 +742,7 @@ class FetchEngine:
         cls,
         parse_fn: Callable[[str, EngineTask], Any],
         **kwargs: Any,
-    ) -> 'FetchEngine':
+    ) -> 'ParallelFetchBackend':
         """Create an engine that fetches one URL per task then calls *parse_fn*.
 
         The wrapper replicates the ``ProxyWorker`` direct→CF cascade: if the
@@ -771,3 +804,69 @@ class FetchEngine:
             return None
 
         return cls(process_fn=_simple_process, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# FetchEngine — compatibility facade over ParallelFetchBackend
+# ---------------------------------------------------------------------------
+
+
+class FetchEngine:
+    """Compatibility facade that preserves the legacy FetchEngine API."""
+
+    def __init__(self, process_fn: ProcessFn, **kwargs: Any):
+        self._backend = ParallelFetchBackend(process_fn=process_fn, **kwargs)
+
+    @classmethod
+    def _from_backend(cls, backend: ParallelFetchBackend) -> 'FetchEngine':
+        inst = cls.__new__(cls)
+        inst._backend = backend
+        return inst
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._backend, name)
+
+    @property
+    def worker_count(self) -> int:
+        return self._backend.worker_count
+
+    @property
+    def pending(self) -> int:
+        return self._backend.pending
+
+    def start(self) -> None:
+        self._backend.start()
+
+    def submit(
+        self,
+        url: str,
+        *,
+        meta: Optional[dict] = None,
+        entry_index: str = '',
+    ) -> None:
+        self._backend.submit(url, meta=meta, entry_index=entry_index)
+
+    def submit_task(self, task: EngineTask) -> None:
+        self._backend.submit_task(task)
+
+    def mark_done(self) -> None:
+        self._backend.mark_done()
+
+    def results(self) -> Iterator[EngineResult]:
+        return self._backend.results()
+
+    def shutdown(self, *, timeout: float = 10) -> List[EngineTask]:
+        return self._backend.shutdown(timeout=timeout)
+
+    def runtime_state(self) -> FetchRuntimeState:
+        return self._backend.runtime_state()
+
+    @classmethod
+    def simple(
+        cls,
+        parse_fn: Callable[[str, EngineTask], Any],
+        **kwargs: Any,
+    ) -> 'FetchEngine':
+        return cls._from_backend(
+            ParallelFetchBackend.simple(parse_fn=parse_fn, **kwargs)
+        )

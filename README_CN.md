@@ -29,6 +29,7 @@
 - 自动检测：系统在 Rust 可用时使用 Rust,否则回退到纯 Python
 
 ### 并行处理
+- 统一的详情阶段 runner，可在并行与串行抓取 backend 之间切换
 - 多线程详情页处理,每个代理一个 worker 线程
 - 在代理池模式下使用 2+ 代理时自动激活
 - 任务队列 / 结果队列架构,实现安全的并发爬取
@@ -1497,8 +1498,8 @@ LOG_LEVEL = 'DEBUG'  # 显示详细的调试信息
   - `__main__.py`: 包入口点 (`python3 scripts/spider`)
   - `app/`: CLI 与顶层运行编排（`cli.py`、`main.py`）
   - `runtime/`: 配置、可变状态、按量休眠、运行报告
-  - `fetch/`: 索引抓取、fallback 流程、会话/登录协调、并行抓取引擎
-  - `detail/`: 共享详情阶段 runner，以及 parallel/sequential 两种详情模式
+  - `fetch/`: 索引抓取、fallback 流程、会话/登录协调，以及详情抓取 backend
+  - `detail/`: 统一详情阶段 runner，以及保留兼容层的 parallel/sequential 包装
   - `services/`: dedup、rclone 过滤等 spider 领域服务
   - `compat/`: `csv_builder.py` 这类兼容导出
 - **rust_core/**: Rust 加速扩展（PyO3 + maturin）
