@@ -110,7 +110,11 @@ def parse_arguments():
     parser.add_argument('--output-file', type=str, help='Specify output CSV file name')
     parser.add_argument('--dry-run', action='store_true', help='Print items that would be written without changing CSV file')
     parser.add_argument('--ignore-release-date', action='store_true', help='Ignore today/yesterday tags')
-    parser.add_argument('--use-proxy', action='store_true', help='Enable proxy for all HTTP requests')
+    parser.add_argument(
+        '--use-proxy',
+        action='store_true',
+        help='Enable proxy for spider and PikPak Bridge requests',
+    )
     parser.add_argument(
         '--always-bypass-time',
         type=int,
@@ -289,9 +293,6 @@ def main():
         uploader_args.extend(['--mode', 'adhoc'])
     else:
         uploader_args.extend(['--mode', 'daily'])
-    if args.use_proxy:
-        uploader_args.append('--use-proxy')
-
     # Build arguments for pikpak bridge
     pikpak_args = ['--from-pipeline']  # Always pass --from-pipeline
     pikpak_args.extend(['--days', '3'])
