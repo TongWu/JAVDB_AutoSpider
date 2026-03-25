@@ -53,15 +53,31 @@ def _extract_page_url(html_content: str) -> str:
     Checks ``<!-- saved from url=(...) -->`` comments and
     ``<link rel="canonical">`` tags.
     """
-    # "saved from" comment – format: url=(NNNN)https://...
-    m = re.search(r'saved from url=\(\d+\)(https?://[^\s]+)', html_content[:3000])
-    if m:
-        return m.group(1).rstrip()
+    saved_from = html_content[:3000]
+    marker = "saved from url=("
+    marker_idx = saved_from.find(marker)
+    if marker_idx >= 0:
+        url_start = saved_from.find(")", marker_idx)
+        if url_start >= 0:
+            remainder = saved_from[url_start + 1 :].lstrip()
+            for terminator in (" ", "\n", "\r", "\t", '"', "'", "<", ">"):
+                term_idx = remainder.find(terminator)
+                if term_idx >= 0:
+                    remainder = remainder[:term_idx]
+                    break
+            if remainder.startswith(("http://", "https://")):
+                return remainder.rstrip()
 
     # Canonical link
-    m = re.search(r'<link[^>]+rel=["\']canonical["\'][^>]+href=["\']([^"\']+)', html_content[:5000])
-    if m:
-        return m.group(1)
+    snippet = BeautifulSoup(html_content[:5000], "html.parser")
+    for link in snippet.find_all("link", href=True):
+        rel_values = link.get("rel", [])
+        if isinstance(rel_values, str):
+            rel_tokens = [rel_values.lower()]
+        else:
+            rel_tokens = [str(value).lower() for value in rel_values]
+        if "canonical" in rel_tokens:
+            return str(link.get("href", ""))
 
     return ''
 
