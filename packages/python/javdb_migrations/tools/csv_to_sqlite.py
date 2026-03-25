@@ -773,9 +773,9 @@ def main():
         logger.info("[VERIFY MODE]")
     logger.info("=" * 60)
 
-    import packages.python.javdb_platform.db
-    utils.infra.db.DB_PATH = db_path
-    utils.infra.db.init_db(db_path, force=True)
+    import packages.python.javdb_platform.db as db_mod
+    db_mod.DB_PATH = db_path
+    db_mod.init_db(db_path, force=True)
 
     # ── Phase 1: data tables ─────────────────────────────────────────
     logger.info("-" * 60)
