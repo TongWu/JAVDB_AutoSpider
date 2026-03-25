@@ -409,10 +409,16 @@ python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --ignore-releas
 # Ad hoc 模式: 重新下载演员的所有内容(忽略历史)
 python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --ignore-history --ignore-release-date
 
-# 使用代理访问 JavDB(适用于地理限制地区)
+# 默认自动模式：按 config.py 中的代理模块配置运行
+python3 -m apps.cli.spider --start-page 1 --end-page 5
+
+# 强制为本次运行启用代理
 python3 -m apps.cli.spider --use-proxy --start-page 1 --end-page 5
 
-# 组合多个选项: 代理 + 自定义 URL + 忽略发布日期
+# 强制为本次运行禁用代理
+python3 -m apps.cli.spider --no-proxy --start-page 1 --end-page 5
+
+# 组合多个选项: 强制代理 + 自定义 URL + 忽略发布日期
 python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --use-proxy --ignore-release-date
 ```
 
@@ -429,7 +435,8 @@ python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --use-proxy --i
 | `--url` | 要爬取的自定义 URL(启用 ad hoc 模式) | None | `--url "https://javdb.com/?vft=2"` |
 | `--phase` | 运行的阶段(1/2/all) | all | `--phase 1` |
 | `--ignore-release-date` | 忽略今日/昨日标签 | False | `--ignore-release-date` |
-| `--use-proxy` | 从 config.py 启用代理 | False | `--use-proxy` |
+| `--use-proxy` | 强制为本次运行启用代理 | 自动（`PROXY_MODULES`） | `--use-proxy` |
+| `--no-proxy` | 强制为本次运行禁用代理 | 自动（`PROXY_MODULES`） | `--no-proxy` |
 | `--always-bypass-time [分钟]` | fallback 成功后持续使用 CF bypass（不带值或 0 表示本次 session 一直使用；不传该参数则始终 direct-first） | None | `--always-bypass-time 30` |
 | `--sequential` | 强制串行处理(禁用并行) | False | `--sequential` |
 | `--max-movies-phase1` | 限制阶段 1 电影数量(测试用) | None | `--max-movies-phase1 10` |
@@ -475,7 +482,7 @@ python3 packages/python/javdb_migrations/tools/reclassify_c_hacked_torrents.py
 
 **运行完整工作流:**
 ```bash
-# 基础流水线运行
+# 基础流水线运行（默认按 config.py 中的代理配置自动处理）
 python pipeline_run_and_notify.py
 
 # 带自定义参数的流水线(传递给 Javdb_Spider)
@@ -487,9 +494,11 @@ python pipeline_run_and_notify.py --ignore-release-date --phase 1
 # 带自定义 URL 的流水线
 python pipeline_run_and_notify.py --url "https://javdb.com/actors/EvkJ"
 
-# 启用代理的流水线
-# 仅传给 spider 和 PikPak Bridge；qBittorrent uploader 保持直连
+# 强制为本次流水线所有步骤启用代理
 python pipeline_run_and_notify.py --use-proxy
+
+# 强制为本次流水线所有步骤禁用代理
+python pipeline_run_and_notify.py --no-proxy
 
 # 使用 PikPak 单个模式的流水线(逐个处理种子)
 python pipeline_run_and_notify.py --pikpak-individual
@@ -505,7 +514,8 @@ python pipeline_run_and_notify.py --pikpak-individual
 7. **分析日志中的严重错误**
 8. 发送带有适当状态的电子邮件通知
 
-**注意**: 流水线接受与 `python3 -m apps.cli.spider` 相同的参数并自动传递。`--use-proxy` 会传给 spider 和 PikPak Bridge，但不会传给 `python3 -m apps.cli.qb_uploader`。额外的流水线特定参数包括 `--pikpak-individual` 用于 PikPak Bridge 模式控制。
+**注意**: 流水线接受与 `python3 -m apps.cli.spider` 相同的参数并自动传递。默认情况下它**不会**主动给子脚本加 `--use-proxy` 或 `--no-proxy`，各步骤都按 `config.py` 中的 `PROXY_MODULES` 运行。只有您手动给流水线传入 `--use-proxy` 或 `--no-proxy` 时，这个覆盖才会转发给 spider、qBittorrent uploader 和 PikPak Bridge。额外的流水线特定参数包括 `--pikpak-individual` 用于 PikPak Bridge 模式控制。
+当 dedup 运行时，邮件报告会把 `Redownload Upgrade` 记录从普通 dedup 升级中单独汇总显示。
 
 #### 智能错误检测
 
@@ -590,8 +600,8 @@ PROXY_POOL_MAX_FAILURES = 3  # 冷却前的最大失败次数
 PROXY_HTTP = None
 PROXY_HTTPS = None
 
-# 模块化代理控制 - 哪些模块使用代理
-PROXY_MODULES = ['all']  # 'all' 或列表: 'spider', 'qbittorrent', 'pikpak'
+# 模块化代理控制 - 默认哪些模块使用代理
+PROXY_MODULES = ['spider']  # 默认值；也可用 'all' 或列表: 'spider', 'qbittorrent', 'pikpak'
 
 # =============================================================================
 # 爬虫配置
@@ -839,10 +849,13 @@ cat "reports/proxy_bans.csv"
 # - 当前状态(BANNED/AVAILABLE)
 ```
 
-然后使用 `--use-proxy` 标志运行:
+命令默认会按 `PROXY_MODULES` 自动判断是否使用代理。需要临时覆盖时，可使用 `--use-proxy` 强制开启，或使用 `--no-proxy` 强制关闭:
 ```bash
+python3 -m apps.cli.spider
 python3 -m apps.cli.spider --use-proxy
+python3 -m apps.cli.spider --no-proxy
 ```
+Web UI 与任务 API 也已经统一到相同的三态语义：两个字段都不传表示自动模式，`use_proxy=true` 表示强制开启，`no_proxy=true` 表示强制关闭。
 
 #### 单一代理模式(传统)
 
@@ -868,34 +881,41 @@ PROXY_HTTP = 'http://username:password@proxy.example.com:8080'
 PROXY_HTTPS = 'http://username:password@proxy.example.com:8080'
 
 # 控制哪些模块使用代理(模块化控制)
-PROXY_MODULES = ['all']  # 为所有模块启用
-# PROXY_MODULES = ['spider']  # 仅爬虫模块（包含登录）
+PROXY_MODULES = ['spider']  # 默认：仅爬虫模块（包含登录）
+# PROXY_MODULES = ['all']  # 为所有模块启用
 # PROXY_MODULES = ['spider', 'qbittorrent']  # 爬虫和 qBittorrent
 # PROXY_MODULES = []  # 为所有模块禁用
 ```
 
-**2. 使用命令行标志启用代理:**
+**2. 可选的命令行覆盖:**
 ```bash
-# 为爬虫启用代理
+# 自动模式：按 config.py 中的 PROXY_MODULES 运行
+python3 -m apps.cli.spider
+
+# 强制为爬虫启用代理
 python3 -m apps.cli.spider --use-proxy
 
-# 为 qBittorrent 上传器启用代理
+# 强制为 qBittorrent 上传器启用代理
 python3 -m apps.cli.qb_uploader --use-proxy
 
-# 为 PikPak 桥接器启用代理
+# 强制为 PikPak 桥接器启用代理
 python3 -m apps.cli.pikpak_bridge --use-proxy
+
+# 无论配置如何都禁用代理
+python3 -m apps.cli.spider --no-proxy
 
 # 与其他选项组合
 python3 -m apps.cli.spider --use-proxy --url "https://javdb.com/actors/EvkJ"
 
-# 通过流水线(为所有组件启用代理)
+# 通过流水线（强制本次所有组件启用代理）
 python pipeline_run_and_notify.py --use-proxy
 ```
 
 **注意:** 
-- 代理**默认禁用**。您必须使用 `--use-proxy` 来启用它。
-- 如果设置了 `--use-proxy` 但 `config.py` 中未配置代理,将记录警告。
-- 您可以通过 `PROXY_MODULES` 配置控制爬虫的哪些部分使用代理。
+- 默认行为是**自动模式**：命令会按 `config.py` 中的 `PROXY_MODULES` 运行。
+- `--use-proxy` 会强制当前命令的所有模块走代理。
+- `--no-proxy` 会强制当前命令的所有模块直连。
+- 如果强制启用代理但 `config.py` 中未配置代理，将记录警告。
 
 #### 模块化代理控制
 
@@ -906,15 +926,15 @@ python pipeline_run_and_notify.py --use-proxy
 | `spider` | JavDB 爬虫 | 使用代理访问所有 JavDB 页面（索引、详情、登录/刷新会话） |
 | `qbittorrent` | qBittorrent Web UI API | 使用代理进行 qBittorrent API 请求 |
 | `pikpak` | PikPak 桥接器 qBittorrent API | 使用代理进行 PikPak 桥接操作 |
-| `all` | 所有模块 | 为所有内容使用代理(默认) |
+| `all` | 所有模块 | 为所有内容使用代理 |
 
 **示例:**
 ```python
+# 默认：仅为爬虫使用代理（包含登录）
+PROXY_MODULES = ['spider']
+
 # 为所有内容使用代理
 PROXY_MODULES = ['all']
-
-# 仅为爬虫使用代理（包含登录）,不为其他模块
-PROXY_MODULES = ['spider']
 
 # 为爬虫和 qBittorrent 使用代理
 PROXY_MODULES = ['spider', 'qbittorrent']
@@ -925,7 +945,7 @@ PROXY_MODULES = ['qbittorrent', 'pikpak']
 # 仅为爬虫使用代理,不为 qBittorrent/PikPak
 PROXY_MODULES = ['spider']
 
-# 为所有模块禁用代理(即使设置了 --use-proxy)
+# 默认禁用所有模块代理
 PROXY_MODULES = []
 ```
 

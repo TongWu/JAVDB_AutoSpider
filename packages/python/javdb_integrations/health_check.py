@@ -41,6 +41,7 @@ from packages.python.javdb_core.masking import mask_ip_address
 
 # Import configuration
 from packages.python.javdb_platform.config_helper import cfg
+from packages.python.javdb_platform.proxy_policy import add_proxy_arguments, resolve_proxy_override
 from packages.python.javdb_platform.qb_config import (
     build_qb_base_url,
     masked_qb_base_url,
@@ -55,6 +56,7 @@ SMTP_SERVER = cfg('SMTP_SERVER', None)
 SMTP_PORT = cfg('SMTP_PORT', None)
 PROXY_POOL = cfg('PROXY_POOL', [])
 PROXY_MODE = cfg('PROXY_MODE', 'single')
+PROXY_MODULES = cfg('PROXY_MODULES', ['spider'])
 LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
 
 # Setup basic logging
@@ -198,13 +200,18 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='Health Check for JavDB Pipeline')
     parser.add_argument('--check-smtp', action='store_true',
                         help='Also check SMTP server connectivity')
-    parser.add_argument('--use-proxy', action='store_true',
-                        help='Check proxy pool status')
+    add_proxy_arguments(
+        parser,
+        use_help='Force-enable proxy health checks',
+        no_help='Force-disable proxy health checks',
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_arguments()
+    proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
+    should_check_proxy = proxy_override is not False and (proxy_override is True or bool(PROXY_MODULES))
     
     logger.info("=" * 60)
     logger.info("HEALTH CHECK - Pre-flight Verification")
@@ -228,17 +235,21 @@ def main():
     # Check 2: Proxy Pool (if configured or --use-proxy)
     logger.info("")
     logger.info("[2/3] Checking proxy pool status...")
-    proxy_success, proxy_message = check_proxy_pool_status()
-    results.append(("Proxy Pool", proxy_success, proxy_message))
-    if proxy_success:
-        logger.info(f"  ✓ {proxy_message}")
-    else:
-        logger.error(f"  ✗ {proxy_message}")
-        # Proxy failure is critical if PROXY_MODE is 'pool'
-        if PROXY_MODE == 'pool':
-            all_passed = False
+    if should_check_proxy:
+        proxy_success, proxy_message = check_proxy_pool_status()
+        results.append(("Proxy Pool", proxy_success, proxy_message))
+        if proxy_success:
+            logger.info(f"  ✓ {proxy_message}")
         else:
-            logger.warning("  (Non-critical in single/no proxy mode)")
+            logger.error(f"  ✗ {proxy_message}")
+            # Proxy failure is critical if PROXY_MODE is 'pool'
+            if PROXY_MODE == 'pool':
+                all_passed = False
+            else:
+                logger.warning("  (Non-critical in single/no proxy mode)")
+    else:
+        logger.info("  ✓ Skipped (proxy forced off or no proxy-enabled modules configured)")
+        results.append(("Proxy Pool", True, "Skipped"))
     
     # Check 3: SMTP (optional)
     logger.info("")

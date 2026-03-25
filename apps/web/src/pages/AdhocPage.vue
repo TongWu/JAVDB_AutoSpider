@@ -58,13 +58,18 @@
             qb_category
             <input v-model="form.qb_category" :placeholder="t('adhoc.qbCategoryPh')" />
           </label>
+          <label>
+            {{ t("adhoc.proxyMode") }}
+            <select v-model="form.proxy_mode">
+              <option value="auto">{{ t("adhoc.proxyAuto") }}</option>
+              <option value="use_proxy">{{ t("adhoc.proxyForceOn") }}</option>
+              <option value="no_proxy">{{ t("adhoc.proxyForceOff") }}</option>
+            </select>
+          </label>
         </div>
         <div class="checkbox-row">
           <label><input v-model="form.history_filter" type="checkbox" /> history_filter</label>
           <label><input v-model="form.date_filter" type="checkbox" /> date_filter</label>
-          <label><input v-model="form.use_proxy" type="checkbox" /> use_proxy</label>
-          <label><input v-model="form.proxy_uploader" type="checkbox" /> proxy_uploader</label>
-          <label><input v-model="form.proxy_pikpak" type="checkbox" /> proxy_pikpak</label>
           <label><input v-model="form.dry_run" type="checkbox" /> dry_run</label>
           <label><input v-model="form.ignore_release_date" type="checkbox" /> ignore_release_date</label>
         </div>
@@ -118,9 +123,7 @@ const form = reactive({
   history_filter: false,
   date_filter: false,
   phase: "all",
-  use_proxy: true,
-  proxy_uploader: false,
-  proxy_pikpak: false,
+  proxy_mode: "auto",
   qb_category: "",
   dry_run: false,
   ignore_release_date: true,
@@ -202,9 +205,14 @@ async function submit() {
   submitting.value = true;
   submitError.value = "";
   try {
+    const { proxy_mode, ...rest } = form;
     const data = await apiFetch("/api/tasks/adhoc", {
       method: "POST",
-      body: JSON.stringify(form),
+      body: JSON.stringify({
+        ...rest,
+        use_proxy: proxy_mode === "use_proxy",
+        no_proxy: proxy_mode === "no_proxy",
+      }),
     });
     store.startPolling(data.job_id as string, "adhoc", true);
     taskTab.value = "log";

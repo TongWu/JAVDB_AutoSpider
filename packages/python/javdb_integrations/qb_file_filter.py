@@ -38,7 +38,7 @@ REQUEST_TIMEOUT = cfg('REQUEST_TIMEOUT', 30)
 LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
 PROXY_HTTP = cfg('PROXY_HTTP', None)
 PROXY_HTTPS = cfg('PROXY_HTTPS', None)
-PROXY_MODULES = cfg('PROXY_MODULES', ['all'])
+PROXY_MODULES = cfg('PROXY_MODULES', ['spider'])
 
 # Proxy pool
 PROXY_MODE = cfg('PROXY_MODE', 'single')
@@ -62,6 +62,12 @@ from packages.python.javdb_core.masking import mask_username
 from packages.python.javdb_platform.proxy_pool import create_proxy_pool_from_config
 
 # Import proxy helper from request handler
+from packages.python.javdb_platform.proxy_policy import (
+    add_proxy_arguments,
+    describe_proxy_override,
+    resolve_proxy_override,
+    should_proxy_module,
+)
 from packages.python.javdb_platform.request_handler import create_proxy_helper_from_config
 from packages.python.javdb_platform.qb_config import (
     build_qb_base_url,
@@ -95,10 +101,10 @@ def parse_arguments():
         default=2,
         help='Number of days to look back for recently added torrents (default: 2 for today and yesterday)'
     )
-    parser.add_argument(
-        '--use-proxy',
-        action='store_true',
-        help='Enable proxy for qBittorrent API requests'
+    add_proxy_arguments(
+        parser,
+        use_help='Force-enable proxy for qBittorrent API requests',
+        no_help='Force-disable proxy for qBittorrent API requests',
     )
     parser.add_argument(
         '--dry-run',
@@ -143,11 +149,11 @@ def get_proxies_dict(module_name, use_proxy_flag):
     return global_proxy_helper.get_proxies_dict(module_name, use_proxy_flag)
 
 
-def initialize_proxy_helper(use_proxy):
+def initialize_proxy_helper(proxy_override):
     """Initialize global proxy pool and proxy helper."""
     global global_proxy_helper
     
-    if not use_proxy:
+    if proxy_override is False:
         global_proxy_helper = create_proxy_helper_from_config(
             proxy_pool=None,
             proxy_modules=PROXY_MODULES,
@@ -660,6 +666,8 @@ def print_summary(stats, min_size_mb, days, dry_run=False, delete_local_files_fl
 
 def main():
     args = parse_arguments()
+    proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
+    proxy_active = should_proxy_module('qbittorrent', proxy_override, PROXY_MODULES)
     
     logger.info("Starting qBittorrent File Filter...")
     
@@ -683,19 +691,22 @@ def main():
         logger.info(f"Configuration: min_size={args.min_size}MB, days={args.days}, category={args.category}, dry_run={args.dry_run}, delete_local_files={args.delete_local_files}")
     
     # Initialize proxy helper
-    initialize_proxy_helper(args.use_proxy)
+    initialize_proxy_helper(proxy_override)
     
-    if args.use_proxy:
+    logger.info(f"Proxy policy for qBittorrent: {describe_proxy_override(proxy_override)}")
+    if proxy_active:
         logger.info("Proxy enabled for qBittorrent API requests")
+    else:
+        logger.info("Proxy disabled for qBittorrent API requests")
     
     # Test qBittorrent connection
-    if not test_qbittorrent_connection(args.use_proxy):
+    if not test_qbittorrent_connection(proxy_override):
         logger.error("Cannot connect to qBittorrent. Please check your configuration.")
         sys.exit(1)
     
     # Create session and login
     session = requests.Session()
-    if not login_to_qbittorrent(session, args.use_proxy):
+    if not login_to_qbittorrent(session, proxy_override):
         logger.error("Failed to login to qBittorrent.")
         sys.exit(1)
     
@@ -705,7 +716,7 @@ def main():
         days=args.days,
         category=args.category,
         categories=categories_list,
-        use_proxy=args.use_proxy
+        use_proxy=proxy_override
     )
     
     if not torrents:
@@ -730,7 +741,7 @@ def main():
         torrents,
         min_size_mb=args.min_size,
         dry_run=args.dry_run,
-        use_proxy=args.use_proxy,
+        use_proxy=proxy_override,
         delete_local_files_flag=args.delete_local_files
     )
     

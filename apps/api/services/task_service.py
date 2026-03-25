@@ -17,6 +17,7 @@ from fastapi import HTTPException
 
 from apps.api.infra.security import _sanitize_output_filename, _validate_target_url
 from apps.api.services import config_service, context
+from packages.python.javdb_platform.proxy_policy import resolve_proxy_override
 
 JOBS: Dict[str, Dict[str, Any]] = {}
 JOB_LOCK = threading.Lock()
@@ -38,6 +39,7 @@ _TASK_ALLOWED_FLAGS: dict[str, str] = {
     "--url": "url",
     "--use-history": "flag",
     "--use-proxy": "flag",
+    "--no-proxy": "flag",
 }
 _TASK_ALLOWED_MODULES = {"apps.cli.pipeline", "apps.cli.spider"}
 
@@ -223,6 +225,21 @@ def _validate_task_command(command: list[str]) -> list[str]:
             _validate_target_url(value)
         idx += 2
     return command
+
+
+def _payload_proxy_override(payload: Any) -> Optional[bool]:
+    return resolve_proxy_override(
+        bool(getattr(payload, "use_proxy", False)),
+        bool(getattr(payload, "no_proxy", False)),
+    )
+
+
+def _append_proxy_override_flags(command: list[str], payload: Any) -> None:
+    proxy_override = _payload_proxy_override(payload)
+    if proxy_override is True:
+        command.append("--use-proxy")
+    elif proxy_override is False:
+        command.append("--no-proxy")
 
 
 def _normalize_job_kind(job_id: str) -> str:
@@ -443,8 +460,7 @@ def trigger_daily_task(payload: Any, username: str) -> Dict[str, Any]:
         command.append("--dry-run")
     if payload.ignore_release_date:
         command.append("--ignore-release-date")
-    if payload.use_proxy:
-        command.append("--use-proxy")
+    _append_proxy_override_flags(command, payload)
     if payload.max_movies_phase1:
         command.extend(["--max-movies-phase1", str(payload.max_movies_phase1)])
     if payload.max_movies_phase2:
@@ -482,8 +498,7 @@ def trigger_adhoc_task(payload: Any, username: str) -> Dict[str, Any]:
         command.append("--use-history")
     if not payload.date_filter:
         command.append("--ignore-release-date")
-    if payload.use_proxy or payload.proxy_uploader or payload.proxy_pikpak:
-        command.append("--use-proxy")
+    _append_proxy_override_flags(command, payload)
     if payload.dry_run:
         command.append("--dry-run")
     if payload.max_movies_phase1:

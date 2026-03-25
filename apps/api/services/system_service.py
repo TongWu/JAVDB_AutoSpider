@@ -19,6 +19,7 @@ from apps.api.parsers import (
     parse_top_page,
 )
 from apps.api.services import context
+from packages.python.javdb_platform.proxy_policy import resolve_proxy_override
 from packages.python.javdb_platform.bridges.rust_adapters.parser_adapter import (
     result_to_dict,
 )
@@ -43,8 +44,14 @@ async def run_health_check_payload(payload: Any, username: str) -> Dict[str, Any
     command = ["python3", "-m", "apps.cli.health_check"]
     if payload.check_smtp:
         command.append("--check-smtp")
-    if payload.use_proxy:
+    proxy_override = resolve_proxy_override(
+        bool(getattr(payload, "use_proxy", False)),
+        bool(getattr(payload, "no_proxy", False)),
+    )
+    if proxy_override is True:
         command.append("--use-proxy")
+    elif proxy_override is False:
+        command.append("--no-proxy")
     proc = subprocess.run(
         command,
         cwd=context.REPO_ROOT,

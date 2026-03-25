@@ -33,7 +33,7 @@ AD_HOC_DIR = cfg('AD_HOC_DIR', 'reports/AdHoc')
 LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
 PROXY_HTTP = cfg('PROXY_HTTP', None)
 PROXY_HTTPS = cfg('PROXY_HTTPS', None)
-PROXY_MODULES = cfg('PROXY_MODULES', ['all'])
+PROXY_MODULES = cfg('PROXY_MODULES', ['spider'])
 GIT_USERNAME = cfg('GIT_USERNAME', 'github-actions')
 GIT_PASSWORD = cfg('GIT_PASSWORD', '')
 GIT_REPO_URL = cfg('GIT_REPO_URL', '')
@@ -56,6 +56,12 @@ except ImportError:
 
 # Import path helper for dated subdirectories
 from packages.python.javdb_platform.path_helper import get_dated_report_path, get_dated_subdir, find_latest_report_in_dated_dirs
+from packages.python.javdb_platform.proxy_policy import (
+    add_proxy_arguments,
+    describe_proxy_override,
+    resolve_proxy_override,
+    should_proxy_module,
+)
 
 # Configure logging
 from packages.python.javdb_platform.logging_config import setup_logging, get_logger
@@ -94,7 +100,11 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='qBittorrent Uploader')
     parser.add_argument('--mode', choices=['adhoc', 'daily'], default='daily', help='Upload mode: adhoc (Ad Hoc folder) or daily (Daily Report folder)')
     parser.add_argument('--input-file', type=str, help='Specify input CSV file name (overrides default date-based name)')
-    parser.add_argument('--use-proxy', action='store_true', help='Enable proxy for qBittorrent API requests (proxy settings from config.py)')
+    add_proxy_arguments(
+        parser,
+        use_help='Force-enable proxy for qBittorrent API requests',
+        no_help='Force-disable proxy for qBittorrent API requests',
+    )
     parser.add_argument('--from-pipeline', action='store_true', help='Running from pipeline.py - use GIT_USERNAME for commits')
     parser.add_argument('--category', type=str, help='Override qBittorrent category (defaults to TORRENT_CATEGORY_ADHOC for adhoc mode, TORRENT_CATEGORY for daily mode)')
     parser.add_argument('--session-id', type=int, default=None, help='Report session ID for saving uploader stats to SQLite')
@@ -492,11 +502,11 @@ def read_csv_file(filename):
         logger.error(f"Error reading CSV file: {e}")
         return torrents, True  # File exists but had read error
 
-def initialize_proxy_helper(use_proxy):
+def initialize_proxy_helper(proxy_override):
     """Initialize global proxy pool and proxy helper."""
     global global_proxy_pool, global_proxy_helper
     
-    if not use_proxy:
+    if proxy_override is False:
         global_proxy_pool = None
         # When use_proxy=False, don't pass proxy configs to ensure no proxy is used
         global_proxy_helper = create_proxy_helper_from_config(
@@ -560,16 +570,20 @@ def main():
 
     args = parse_arguments()
     mode = args.mode
-    use_proxy = args.use_proxy
+    proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
+    use_proxy = proxy_override
+    proxy_active = should_proxy_module('qbittorrent', proxy_override, PROXY_MODULES)
     category_override = args.category
     logger.info("Starting qBittorrent uploader...")
     if category_override:
         logger.info(f"Using custom category: {category_override}")
     
     # Initialize proxy helper
-    initialize_proxy_helper(use_proxy)
+    initialize_proxy_helper(proxy_override)
     
-    if use_proxy:
+    logger.info(f"Proxy policy for qBittorrent: {describe_proxy_override(proxy_override)}")
+
+    if proxy_active:
         if global_proxy_helper is not None:
             stats = global_proxy_helper.get_statistics()
             
@@ -582,6 +596,8 @@ def main():
                     logger.info(f"Main proxy: {main_proxy_name}")
         else:
             logger.warning("PROXY ENABLED: But no proxy configured")
+    else:
+        logger.info("Proxy disabled for qBittorrent requests")
     
     # Test qBittorrent connection first
     if not test_qbittorrent_connection(use_proxy):

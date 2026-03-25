@@ -57,9 +57,16 @@
               <option value="spider">spider</option>
             </select>
           </label>
+          <label>
+            {{ t("daily.proxyMode") }}
+            <select v-model="form.proxy_mode">
+              <option value="auto">{{ t("daily.proxyAuto") }}</option>
+              <option value="use_proxy">{{ t("daily.proxyForceOn") }}</option>
+              <option value="no_proxy">{{ t("daily.proxyForceOff") }}</option>
+            </select>
+          </label>
         </div>
         <div class="checkbox-row">
-          <label><input v-model="form.use_proxy" type="checkbox" /> use_proxy</label>
           <label><input v-model="form.dry_run" type="checkbox" /> dry_run</label>
           <label><input v-model="form.ignore_release_date" type="checkbox" /> ignore_release_date</label>
         </div>
@@ -108,7 +115,7 @@ const form = reactive({
   end_page: 10,
   phase: "all",
   mode: "pipeline",
-  use_proxy: false,
+  proxy_mode: "auto",
   dry_run: false,
   ignore_release_date: false,
 });
@@ -172,9 +179,14 @@ onMounted(() => {
 async function submit() {
   submitError.value = "";
   try {
+    const { proxy_mode, ...rest } = form;
     const data = await apiFetch("/api/tasks/daily", {
       method: "POST",
-      body: JSON.stringify(form),
+      body: JSON.stringify({
+        ...rest,
+        use_proxy: proxy_mode === "use_proxy",
+        no_proxy: proxy_mode === "no_proxy",
+      }),
     });
     store.startPolling(data.job_id as string, "daily", true);
     taskTab.value = "log";

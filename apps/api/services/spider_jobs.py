@@ -13,6 +13,7 @@ from fastapi import HTTPException
 
 from apps.api.infra.security import _validate_target_url
 from apps.api.services import context
+from packages.python.javdb_platform.proxy_policy import resolve_proxy_override
 
 MAX_CONCURRENT_SPIDER_JOBS = 2
 MAX_OUTPUT_LINES = 5000
@@ -49,8 +50,14 @@ def _payload_to_cli_args(payload: Any) -> list[str]:
         args.append("--all")
     if payload.phase != "all":
         args.extend(["--phase", payload.phase])
-    if payload.use_proxy:
+    proxy_override = resolve_proxy_override(
+        bool(getattr(payload, "use_proxy", False)),
+        bool(getattr(payload, "no_proxy", False)),
+    )
+    if proxy_override is True:
         args.append("--use-proxy")
+    elif proxy_override is False:
+        args.append("--no-proxy")
     if payload.ignore_history:
         args.append("--ignore-history")
     if payload.use_history:

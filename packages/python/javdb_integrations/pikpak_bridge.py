@@ -36,7 +36,7 @@ PIKPAK_REQUEST_DELAY = cfg('PIKPAK_REQUEST_DELAY', 3)
 
 PROXY_HTTP = cfg('PROXY_HTTP', None)
 PROXY_HTTPS = cfg('PROXY_HTTPS', None)
-PROXY_MODULES = cfg('PROXY_MODULES', ['all'])
+PROXY_MODULES = cfg('PROXY_MODULES', ['spider'])
 
 # Proxy pool
 PROXY_MODE = cfg('PROXY_MODE', 'single')
@@ -46,6 +46,12 @@ PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
 
 from packages.python.javdb_platform.logging_config import setup_logging, get_logger
 from packages.python.javdb_platform.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
+from packages.python.javdb_platform.proxy_policy import (
+    add_proxy_arguments,
+    describe_proxy_override,
+    resolve_proxy_override,
+    should_proxy_module,
+)
 from packages.python.javdb_core.masking import mask_ip_address, mask_username, mask_email, mask_full
 
 # --------------------------
@@ -87,11 +93,11 @@ def get_proxies_dict(module_name, use_proxy_flag):
     return global_proxy_helper.get_proxies_dict(module_name, use_proxy_flag)
 
 
-def initialize_proxy_helper(use_proxy):
+def initialize_proxy_helper(proxy_override):
     """Initialize global proxy pool and proxy helper."""
     global global_proxy_pool, global_proxy_helper
     
-    if not use_proxy:
+    if proxy_override is False:
         global_proxy_pool = None
         # When use_proxy=False, don't pass proxy configs to ensure no proxy is used
         global_proxy_helper = create_proxy_helper_from_config(
@@ -307,14 +313,17 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
 # --------------------------
 # Main Logic
 # --------------------------
-def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline=False, session_id=None):
+def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=False, session_id=None):
     cutoff_date = (datetime.now() - timedelta(days=days)).date()
     logger.info(f"Processing torrents older than {days} days (before {cutoff_date})")
     
     # Initialize proxy helper
     initialize_proxy_helper(use_proxy)
     
-    if use_proxy:
+    proxy_active = should_proxy_module('pikpak', use_proxy, PROXY_MODULES)
+    logger.info(f"Proxy policy for PikPak: {describe_proxy_override(use_proxy)}")
+
+    if proxy_active:
         if global_proxy_helper is not None:
             stats = global_proxy_helper.get_statistics()
             
@@ -327,6 +336,8 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline
                     logger.info(f"Main proxy: {main_proxy_name}")
         else:
             logger.warning("PROXY ENABLED: But no proxy configured")
+    else:
+        logger.info("Proxy disabled for PikPak requests")
 
     qb = QBittorrentClient(
         build_qb_base_url(QB_HOST, QB_PORT),
@@ -570,15 +581,20 @@ def main():
     parser.add_argument("--days", type=int, default=3, help="Filter torrents older than N days")
     parser.add_argument("--dry-run", action="store_true", help="Test mode: no delete or PikPak add")
     parser.add_argument("--individual", action="store_true", help="Process torrents individually instead of batch mode (default: batch mode)")
-    parser.add_argument("--use-proxy", action="store_true", help="Enable proxy for qBittorrent API requests (proxy settings from config.py)")
+    add_proxy_arguments(
+        parser,
+        use_help='Force-enable proxy for PikPak and qBittorrent requests in this command',
+        no_help='Force-disable proxy for PikPak and qBittorrent requests in this command',
+    )
     parser.add_argument("--from-pipeline", action="store_true", help="Running from pipeline.py - use GIT_USERNAME for commits")
     parser.add_argument("--session-id", type=int, default=None, help="Report session ID for saving pikpak stats to SQLite")
     args = parser.parse_args()
 
     # Default to batch mode unless --individual is specified
     batch_mode = not args.individual
+    proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
     
-    pikpak_bridge(args.days, args.dry_run, batch_mode, args.use_proxy, args.from_pipeline,
+    pikpak_bridge(args.days, args.dry_run, batch_mode, proxy_override, args.from_pipeline,
                   session_id=args.session_id)
 
 

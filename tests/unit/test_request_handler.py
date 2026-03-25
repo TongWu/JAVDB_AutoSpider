@@ -36,7 +36,7 @@ class TestRequestConfig:
         assert config.javdb_session_cookie is None
         assert config.proxy_http is None
         assert config.proxy_https is None
-        assert config.proxy_modules == ['all']
+        assert config.proxy_modules == ['spider']
         assert config.proxy_mode == 'single'
     
     def test_custom_values(self):
@@ -61,7 +61,7 @@ class TestRequestConfig:
         """Test that post_init sets default proxy_modules if None."""
         config = RequestConfig(proxy_modules=None)
         
-        assert config.proxy_modules == ['all']
+        assert config.proxy_modules == ['spider']
 
 
 class TestRequestHandler:
@@ -100,30 +100,37 @@ class TestRequestHandler:
         assert result is False
     
     def test_should_use_proxy_for_module_all(self):
-        """Test should_use_proxy_for_module with 'all' in modules."""
+        """Test should_use_proxy_for_module with auto mode and 'all' modules."""
         config = RequestConfig(proxy_modules=['all'])
         handler = RequestHandler(config=config)
         
-        result = handler.should_use_proxy_for_module('spider', use_proxy_flag=True)
+        result = handler.should_use_proxy_for_module('spider', use_proxy_flag=None)
         
         assert result is True
     
     def test_should_use_proxy_for_module_specific(self):
-        """Test should_use_proxy_for_module with specific module."""
+        """Test should_use_proxy_for_module with auto mode and specific module."""
         config = RequestConfig(proxy_modules=['spider', 'qbittorrent'])
         handler = RequestHandler(config=config)
         
-        assert handler.should_use_proxy_for_module('spider', use_proxy_flag=True) is True
-        assert handler.should_use_proxy_for_module('pikpak', use_proxy_flag=True) is False
+        assert handler.should_use_proxy_for_module('spider', use_proxy_flag=None) is True
+        assert handler.should_use_proxy_for_module('pikpak', use_proxy_flag=None) is False
     
     def test_should_use_proxy_for_module_empty_list(self):
-        """Test should_use_proxy_for_module with empty module list."""
+        """Test should_use_proxy_for_module with auto mode and empty module list."""
         config = RequestConfig(proxy_modules=[])
         handler = RequestHandler(config=config)
         
-        result = handler.should_use_proxy_for_module('spider', use_proxy_flag=True)
+        result = handler.should_use_proxy_for_module('spider', use_proxy_flag=None)
         
         assert result is False
+
+    def test_should_use_proxy_for_module_true_force_on(self):
+        """Test should_use_proxy_for_module forces proxy on."""
+        config = RequestConfig(proxy_modules=[])
+        handler = RequestHandler(config=config)
+
+        assert handler.should_use_proxy_for_module('pikpak', use_proxy_flag=True) is True
     
     def test_extract_ip_from_proxy_url(self):
         """Test extract_ip_from_proxy_url."""
@@ -397,7 +404,7 @@ class TestProxyHelper:
         helper = ProxyHelper()
         
         assert helper.proxy_pool is None
-        assert helper.proxy_modules == ['all']
+        assert helper.proxy_modules == ['spider']
         assert helper.proxy_mode == 'single'
         assert helper.proxy_http is None
         assert helper.proxy_https is None
@@ -426,25 +433,25 @@ class TestProxyHelper:
         assert result is False
     
     def test_should_use_proxy_for_module_all(self):
-        """Test should_use_proxy_for_module with 'all' in modules."""
+        """Test should_use_proxy_for_module with auto mode and 'all' modules."""
         helper = ProxyHelper(proxy_modules=['all'])
         
-        result = helper.should_use_proxy_for_module('qbittorrent', use_proxy_flag=True)
+        result = helper.should_use_proxy_for_module('qbittorrent', use_proxy_flag=None)
         
         assert result is True
     
     def test_should_use_proxy_for_module_specific(self):
-        """Test should_use_proxy_for_module with specific module."""
+        """Test should_use_proxy_for_module with auto mode and specific module."""
         helper = ProxyHelper(proxy_modules=['qbittorrent', 'pikpak'])
         
-        assert helper.should_use_proxy_for_module('qbittorrent', use_proxy_flag=True) is True
-        assert helper.should_use_proxy_for_module('other', use_proxy_flag=True) is False
+        assert helper.should_use_proxy_for_module('qbittorrent', use_proxy_flag=None) is True
+        assert helper.should_use_proxy_for_module('other', use_proxy_flag=None) is False
     
     def test_should_use_proxy_for_module_empty_list(self):
-        """Test should_use_proxy_for_module with empty module list."""
+        """Test should_use_proxy_for_module with auto mode and empty module list."""
         helper = ProxyHelper(proxy_modules=[])
         
-        result = helper.should_use_proxy_for_module('qbittorrent', use_proxy_flag=True)
+        result = helper.should_use_proxy_for_module('qbittorrent', use_proxy_flag=None)
         
         assert result is False
     
@@ -452,7 +459,7 @@ class TestProxyHelper:
         """Test get_proxies_dict when module shouldn't use proxy."""
         helper = ProxyHelper(proxy_modules=['other'])
         
-        result = helper.get_proxies_dict('qbittorrent', use_proxy_flag=True)
+        result = helper.get_proxies_dict('qbittorrent', use_proxy_flag=None)
         
         assert result is None
     
@@ -731,9 +738,9 @@ class TestProxyHelperAdvanced:
         """Test should_use_proxy_for_module with None modules list."""
         helper = ProxyHelper(proxy_modules=None)
         
-        # Should use default ['all']
-        result = helper.should_use_proxy_for_module('test', use_proxy_flag=True)
-        assert result is True
+        # Should use default ['spider']
+        assert helper.should_use_proxy_for_module('spider', use_proxy_flag=None) is True
+        assert helper.should_use_proxy_for_module('test', use_proxy_flag=None) is False
     
     def test_get_proxies_dict_single_mode(self):
         """Test get_proxies_dict in single proxy mode."""
