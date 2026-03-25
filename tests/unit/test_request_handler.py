@@ -20,6 +20,18 @@ from utils.infra.request_handler import (
 )
 
 
+_PROXY_RULE_SUBJECTS = [
+    pytest.param('request_handler', id='request_handler'),
+    pytest.param('proxy_helper', id='proxy_helper'),
+]
+
+
+def _make_proxy_rule_subject(subject_name, proxy_modules):
+    if subject_name == 'request_handler':
+        return RequestHandler(config=RequestConfig(proxy_modules=proxy_modules))
+    return ProxyHelper(proxy_modules=proxy_modules)
+
+
 class TestRequestConfig:
     """Test cases for RequestConfig class."""
     
@@ -64,6 +76,36 @@ class TestRequestConfig:
         assert config.proxy_modules == ['spider']
 
 
+class TestProxySelectionRules:
+    """Shared proxy-module selection rules for both request abstractions."""
+
+    @pytest.mark.parametrize("subject_name", _PROXY_RULE_SUBJECTS)
+    def test_force_disable_proxy(self, subject_name):
+        subject = _make_proxy_rule_subject(subject_name, None)
+        assert subject.should_use_proxy_for_module('spider', use_proxy_flag=False) is False
+
+    @pytest.mark.parametrize("subject_name", _PROXY_RULE_SUBJECTS)
+    def test_all_modules_auto_mode(self, subject_name):
+        subject = _make_proxy_rule_subject(subject_name, ['all'])
+        assert subject.should_use_proxy_for_module('spider', use_proxy_flag=None) is True
+
+    @pytest.mark.parametrize("subject_name", _PROXY_RULE_SUBJECTS)
+    def test_specific_modules_auto_mode(self, subject_name):
+        subject = _make_proxy_rule_subject(subject_name, ['spider', 'qbittorrent'])
+        assert subject.should_use_proxy_for_module('spider', use_proxy_flag=None) is True
+        assert subject.should_use_proxy_for_module('pikpak', use_proxy_flag=None) is False
+
+    @pytest.mark.parametrize("subject_name", _PROXY_RULE_SUBJECTS)
+    def test_empty_module_list_auto_mode(self, subject_name):
+        subject = _make_proxy_rule_subject(subject_name, [])
+        assert subject.should_use_proxy_for_module('spider', use_proxy_flag=None) is False
+
+    @pytest.mark.parametrize("subject_name", _PROXY_RULE_SUBJECTS)
+    def test_force_enable_proxy(self, subject_name):
+        subject = _make_proxy_rule_subject(subject_name, [])
+        assert subject.should_use_proxy_for_module('pikpak', use_proxy_flag=True) is True
+
+
 class TestRequestHandler:
     """Test cases for RequestHandler class."""
     
@@ -90,47 +132,6 @@ class TestRequestHandler:
         handler = RequestHandler(proxy_pool=mock_pool)
         
         assert handler.proxy_pool is mock_pool
-    
-    def test_should_use_proxy_for_module_false_no_flag(self):
-        """Test should_use_proxy_for_module returns False when flag is False."""
-        handler = RequestHandler()
-        
-        result = handler.should_use_proxy_for_module('spider', use_proxy_flag=False)
-        
-        assert result is False
-    
-    def test_should_use_proxy_for_module_all(self):
-        """Test should_use_proxy_for_module with auto mode and 'all' modules."""
-        config = RequestConfig(proxy_modules=['all'])
-        handler = RequestHandler(config=config)
-        
-        result = handler.should_use_proxy_for_module('spider', use_proxy_flag=None)
-        
-        assert result is True
-    
-    def test_should_use_proxy_for_module_specific(self):
-        """Test should_use_proxy_for_module with auto mode and specific module."""
-        config = RequestConfig(proxy_modules=['spider', 'qbittorrent'])
-        handler = RequestHandler(config=config)
-        
-        assert handler.should_use_proxy_for_module('spider', use_proxy_flag=None) is True
-        assert handler.should_use_proxy_for_module('pikpak', use_proxy_flag=None) is False
-    
-    def test_should_use_proxy_for_module_empty_list(self):
-        """Test should_use_proxy_for_module with auto mode and empty module list."""
-        config = RequestConfig(proxy_modules=[])
-        handler = RequestHandler(config=config)
-        
-        result = handler.should_use_proxy_for_module('spider', use_proxy_flag=None)
-        
-        assert result is False
-
-    def test_should_use_proxy_for_module_true_force_on(self):
-        """Test should_use_proxy_for_module forces proxy on."""
-        config = RequestConfig(proxy_modules=[])
-        handler = RequestHandler(config=config)
-
-        assert handler.should_use_proxy_for_module('pikpak', use_proxy_flag=True) is True
     
     def test_extract_ip_from_proxy_url(self):
         """Test extract_ip_from_proxy_url."""
@@ -423,37 +424,6 @@ class TestProxyHelper:
         assert helper.proxy_modules == ['qbittorrent']
         assert helper.proxy_mode == 'pool'
         assert helper.proxy_http == 'http://proxy:8080'
-    
-    def test_should_use_proxy_for_module_false_no_flag(self):
-        """Test should_use_proxy_for_module returns False when flag is False."""
-        helper = ProxyHelper()
-        
-        result = helper.should_use_proxy_for_module('qbittorrent', use_proxy_flag=False)
-        
-        assert result is False
-    
-    def test_should_use_proxy_for_module_all(self):
-        """Test should_use_proxy_for_module with auto mode and 'all' modules."""
-        helper = ProxyHelper(proxy_modules=['all'])
-        
-        result = helper.should_use_proxy_for_module('qbittorrent', use_proxy_flag=None)
-        
-        assert result is True
-    
-    def test_should_use_proxy_for_module_specific(self):
-        """Test should_use_proxy_for_module with auto mode and specific module."""
-        helper = ProxyHelper(proxy_modules=['qbittorrent', 'pikpak'])
-        
-        assert helper.should_use_proxy_for_module('qbittorrent', use_proxy_flag=None) is True
-        assert helper.should_use_proxy_for_module('other', use_proxy_flag=None) is False
-    
-    def test_should_use_proxy_for_module_empty_list(self):
-        """Test should_use_proxy_for_module with auto mode and empty module list."""
-        helper = ProxyHelper(proxy_modules=[])
-        
-        result = helper.should_use_proxy_for_module('qbittorrent', use_proxy_flag=None)
-        
-        assert result is False
     
     def test_get_proxies_dict_no_proxy(self):
         """Test get_proxies_dict when module shouldn't use proxy."""

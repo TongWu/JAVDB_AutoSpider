@@ -65,7 +65,7 @@ from packages.python.javdb_platform.proxy_pool import ProxyPool, create_proxy_po
 
 # Import proxy helper from request handler
 from packages.python.javdb_platform.request_handler import ProxyHelper, create_proxy_helper_from_config
-from packages.python.javdb_platform.qb_config import build_qb_base_url, qb_verify_tls
+from packages.python.javdb_platform.qb_config import qb_base_url_candidates, qb_verify_tls
 
 # Global proxy pool instance
 global_proxy_pool = None
@@ -158,8 +158,12 @@ def initialize_proxy_helper(proxy_override):
 # qBittorrent Client
 # --------------------------
 class QBittorrentClient:
-    def __init__(self, base_url, username, password, use_proxy=False):
-        self.base_url = base_url.rstrip('/')
+    def __init__(self, base_urls, username, password, use_proxy=False):
+        if isinstance(base_urls, str):
+            self.base_urls = [base_urls.rstrip('/')]
+        else:
+            self.base_urls = [str(url).rstrip('/') for url in base_urls if str(url).strip()]
+        self.base_url = self.base_urls[0]
         self.session = requests.Session()
         self.session.verify = qb_verify_tls()
         self.use_proxy = use_proxy
@@ -167,16 +171,38 @@ class QBittorrentClient:
         self.login(username, password)
 
     def login(self, username, password):
-        resp = self.session.post(f"{self.base_url}/api/v2/auth/login", data={
-            'username': username,
-            'password': password
-        }, proxies=self.proxies)
-        if resp.status_code != 200 or resp.text != 'Ok.':
-            logger.error(f"qBittorrent login failed: {resp.text}")
-            raise Exception(f"Failed to login qBittorrent: {resp.text}")
-        # Use mask_ip_address to extract and mask the host from base_url
-        masked_url = mask_ip_address(self.base_url)
-        logger.info(f"Logged into qBittorrent at {masked_url} as {mask_username(username)} successfully.")
+        last_error = None
+        primary_url = self.base_urls[0]
+
+        for candidate in self.base_urls:
+            try:
+                resp = self.session.post(
+                    f"{candidate}/api/v2/auth/login",
+                    data={
+                        'username': username,
+                        'password': password
+                    },
+                    proxies=self.proxies,
+                )
+            except requests.RequestException as exc:
+                last_error = exc
+                logger.warning(f"qBittorrent login attempt failed at {mask_ip_address(candidate)}: {exc}")
+                continue
+
+            if resp.status_code == 200 and resp.text == 'Ok.':
+                self.base_url = candidate
+                masked_url = mask_ip_address(self.base_url)
+                if candidate != primary_url:
+                    logger.info(f"qBittorrent HTTPS login failed; retried successfully over HTTP at {masked_url}.")
+                logger.info(f"Logged into qBittorrent at {masked_url} as {mask_username(username)} successfully.")
+                return
+
+            last_error = Exception(resp.text)
+            logger.warning(f"qBittorrent login failed at {mask_ip_address(candidate)}: {resp.text}")
+
+        if last_error is None:
+            raise Exception("Failed to login qBittorrent")
+        raise Exception(f"Failed to login qBittorrent: {last_error}")
 
     def get_torrents(self, category):
         resp = self.session.get(f"{self.base_url}/api/v2/torrents/info",
@@ -340,7 +366,7 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
         logger.info("Proxy disabled for PikPak requests")
 
     qb = QBittorrentClient(
-        build_qb_base_url(QB_HOST, QB_PORT),
+        qb_base_url_candidates(),
         QB_USERNAME,
         QB_PASSWORD,
         use_proxy,

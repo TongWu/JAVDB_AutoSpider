@@ -560,14 +560,12 @@ class TestGenerateConfigContentExtended:
     def test_values_from_environment(self):
         """Should use values from environment variables."""
         env = {
-            'VAR_QB_HOST': 'my.qbittorrent.server',
-            'VAR_QB_PORT': '9090',
+            'VAR_QB_URL': 'https://my.qbittorrent.server:9090',
         }
         with patch.dict(os.environ, env, clear=True):
             content = generate_config_content()
             
-            assert "QB_HOST = 'my.qbittorrent.server'" in content
-            assert "QB_PORT = '9090'" in content
+            assert "QB_URL = 'https://my.qbittorrent.server:9090'" in content
 
 
 class TestMaskSensitiveValuesExtended:
