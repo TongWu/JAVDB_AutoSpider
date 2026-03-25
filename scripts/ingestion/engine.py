@@ -1,72 +1,14 @@
-"""Compatibility exports for the shared ingestion package.
+"""Compatibility wrapper for the canonical packages.python.javdb_ingestion.engine module."""
 
-The package now separates models, policies, adapters, and planners. This
-module stays as a stable import target for older call sites and tests.
-"""
+from __future__ import annotations
 
-from scripts.ingestion.adapters import (
-    build_alignment_purge_plan_rows,
-    build_alignment_qb_row,
-    check_torrent_status,
-    collect_new_magnet_links,
-    create_csv_row_with_history_filter,
-    create_redownload_row,
-    should_include_torrent_in_csv,
-)
-from scripts.ingestion.models import AlignmentUpgradePlan, ParsedMovie, SpiderIngestionPlan
-from scripts.ingestion.planner import build_alignment_upgrade_plan, build_spider_ingestion_plan
-from scripts.ingestion.policies import (
-    ALIGNMENT_CENSORED_FAMILY,
-    ALIGNMENT_PARSED_FAMILY_CANDIDATES,
-    ALIGNMENT_UNCENSORED_FAMILY,
-    alignment_best_inventory_rank,
-    alignment_best_inventory_rank_for_family,
-    alignment_best_parsed_category,
-    alignment_best_parsed_category_for_family,
-    alignment_category_family,
-    alignment_inventory_entry_family,
-    alignment_inventory_entry_rank,
-    alignment_parsed_category_rank,
-    check_redownload_upgrade,
-    determine_torrent_type,
-    determine_torrent_types,
-    get_missing_torrent_types,
-    has_complete_subtitles,
-    should_process_movie,
-    should_skip_recent_today_release,
-    should_skip_recent_yesterday_release,
-)
+from pathlib import Path
+import sys
 
-__all__ = [
-    'ALIGNMENT_CENSORED_FAMILY',
-    'ALIGNMENT_PARSED_FAMILY_CANDIDATES',
-    'ALIGNMENT_UNCENSORED_FAMILY',
-    'AlignmentUpgradePlan',
-    'ParsedMovie',
-    'SpiderIngestionPlan',
-    'alignment_best_inventory_rank',
-    'alignment_best_inventory_rank_for_family',
-    'alignment_best_parsed_category',
-    'alignment_best_parsed_category_for_family',
-    'alignment_category_family',
-    'alignment_inventory_entry_family',
-    'alignment_inventory_entry_rank',
-    'alignment_parsed_category_rank',
-    'build_alignment_purge_plan_rows',
-    'build_alignment_qb_row',
-    'build_alignment_upgrade_plan',
-    'build_spider_ingestion_plan',
-    'check_redownload_upgrade',
-    'check_torrent_status',
-    'collect_new_magnet_links',
-    'create_csv_row_with_history_filter',
-    'create_redownload_row',
-    'determine_torrent_type',
-    'determine_torrent_types',
-    'get_missing_torrent_types',
-    'has_complete_subtitles',
-    'should_include_torrent_in_csv',
-    'should_process_movie',
-    'should_skip_recent_today_release',
-    'should_skip_recent_yesterday_release',
-]
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from compat import alias_module
+
+alias_module(__name__, "packages.python.javdb_ingestion.engine")

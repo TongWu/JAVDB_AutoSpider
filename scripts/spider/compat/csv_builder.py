@@ -1,22 +1,14 @@
-"""Compatibility wrappers for CSV row construction.
+"""Compatibility wrapper for the canonical packages.python.javdb_spider.compat.csv_builder module."""
 
-The canonical implementations now live in ``scripts.ingestion.adapters``.
-"""
+from __future__ import annotations
 
-from scripts.ingestion.adapters import (
-    check_torrent_status,
-    collect_new_magnet_links,
-    create_csv_row_with_history_filter,
-    create_redownload_row,
-    should_include_torrent_in_csv,
-)
-from utils.bridges.rust_adapters.csv_adapter import RUST_CSV_AVAILABLE
+from pathlib import Path
+import sys
 
-__all__ = [
-    'RUST_CSV_AVAILABLE',
-    'check_torrent_status',
-    'collect_new_magnet_links',
-    'create_csv_row_with_history_filter',
-    'create_redownload_row',
-    'should_include_torrent_in_csv',
-]
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from compat import alias_module
+
+alias_module(__name__, "packages.python.javdb_spider.compat.csv_builder")
