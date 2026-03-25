@@ -225,7 +225,7 @@ def mask_error(error_msg: Optional[str]) -> str:
 
     # 1. Mask proxy URLs  (http[s]://user:pass@host:port...)
     proxy_pattern = re.compile(
-        r'https?://[^:]+:[^@]+@[\d.]+:\d+'
+        r'https?://[^:]+:[^@]+@[^\s/:]+:\d+'
     )
     result = proxy_pattern.sub(
         lambda m: mask_proxy_url(m.group(0)),
