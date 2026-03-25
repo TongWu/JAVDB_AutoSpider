@@ -62,6 +62,16 @@ except ImportError:
     logger.debug("curl_cffi not available - using standard requests library")
 
 
+class ProxyBannedError(Exception):
+    """Raised when the target site has banned the proxy's IP (HTTP 403 or ban page HTML)."""
+
+    def __init__(self, proxy_name: str, reason: str = '', html: str = ''):
+        self.proxy_name = proxy_name
+        self.reason = reason
+        self.html = html
+        super().__init__(f"Proxy '{proxy_name}' banned: {reason}")
+
+
 @dataclass
 class RequestConfig:
     """Configuration for request handler"""
@@ -202,6 +212,18 @@ class RequestHandler:
             logger.warning(f"Failed to extract IP from proxy URL: {type(e).__name__}")
             return None
     
+    @staticmethod
+    def is_ban_page(html: Optional[str]) -> bool:
+        """Detect whether the HTML is a JavDB IP-ban page.
+
+        Matches the characteristic text from html/ban.html:
+        - English: "banned your access"
+        - Chinese: "管理員禁止了你的訪問"
+        """
+        if not html:
+            return False
+        return 'banned your access' in html or '管理員禁止了你的訪問' in html
+
     def get_cf_bypass_service_url(self, proxy_ip: Optional[str] = None) -> str:
         """
         Get the CF bypass service URL based on proxy configuration.
@@ -303,6 +325,17 @@ class RequestHandler:
                 logger.debug(f"[{context_msg}] Using proxies: {req_proxies}")
             
             response = use_session.get(target_url, headers=req_headers, proxies=req_proxies, timeout=timeout)
+
+            # On 403 Forbidden, preserve the response body so callers can
+            # inspect it for ban-page patterns before deciding how to handle.
+            if response.status_code == 403:
+                body = response.text
+                logger.warning(f"[{context_msg}] HTTP 403 Forbidden (body {len(body)} bytes)")
+                return body, requests.HTTPError(
+                    f"403 Client Error: Forbidden for url: {target_url}",
+                    response=response,
+                )
+
             response.raise_for_status()
             
             # Log response details
@@ -409,6 +442,14 @@ class RequestHandler:
                 proxies=req_proxies,
                 timeout=timeout
             )
+
+            if response.status_code == 403:
+                body = response.text
+                logger.warning(f"[{context_msg}] [curl_cffi] HTTP 403 Forbidden (body {len(body)} bytes)")
+                return body, Exception(
+                    f"403 Client Error: Forbidden for url: {target_url}"
+                )
+
             response.raise_for_status()
             
             # Log response details
@@ -490,7 +531,8 @@ class RequestHandler:
     
     def _fetch_with_cf_bypass(self, url: str, req_proxies: Optional[Dict], context_msg: str,
                                force_local: bool = False, use_proxy_bypass: bool = False,
-                               session: Optional[requests.Session] = None) -> Tuple[Optional[str], bool, bool]:
+                               session: Optional[requests.Session] = None,
+                               proxy_name: Optional[str] = None) -> Tuple[Optional[str], bool, bool]:
         """
         Fetch using CF bypass service.
         
@@ -501,9 +543,13 @@ class RequestHandler:
             force_local: If True, always use local bypass (127.0.0.1) regardless of proxy settings
             use_proxy_bypass: If True, requires proxy for bypass mode
             session: Optional custom session to use
+            proxy_name: Proxy name for ban error attribution
         
         Returns:
             tuple: (html_content, success, is_turnstile)
+        
+        Raises:
+            ProxyBannedError: if the returned HTML matches a ban page pattern
         """
         proxy_ip = self._get_bypass_ip(req_proxies, force_local)
         
@@ -532,6 +578,14 @@ class RequestHandler:
                                                 session=session)
         
         if html_content:
+            # Check for IP ban page before any other inspection
+            if self.is_ban_page(html_content):
+                raise ProxyBannedError(
+                    proxy_name=proxy_name or 'unknown',
+                    reason='ban page detected via CF bypass',
+                    html=html_content,
+                )
+
             content_size = len(html_content)
             has_turnstile_keyword = 'turnstile' in html_content.lower()
             has_security_verification = 'Security Verification' in html_content
@@ -638,7 +692,8 @@ class RequestHandler:
             return None, False, False
     
     def _fetch_direct(self, url: str, req_proxies: Optional[Dict], context_msg: str,
-                      use_cookie: bool = False, session: Optional[requests.Session] = None) -> Tuple[Optional[str], bool, bool]:
+                      use_cookie: bool = False, session: Optional[requests.Session] = None,
+                      proxy_name: Optional[str] = None) -> Tuple[Optional[str], bool, bool]:
         """
         Fetch directly without CF bypass. Uses browser-like headers.
         
@@ -647,6 +702,9 @@ class RequestHandler:
         
         Returns:
             tuple: (html_content, success, is_turnstile)
+        
+        Raises:
+            ProxyBannedError: if the returned HTML matches a ban page pattern
         """
         headers = self.BROWSER_HEADERS.copy()
         if use_cookie and self.config.javdb_session_cookie:
@@ -675,6 +733,14 @@ class RequestHandler:
             )
         
         if html_content:
+            # Check for IP ban page before any other inspection
+            if self.is_ban_page(html_content):
+                raise ProxyBannedError(
+                    proxy_name=proxy_name or 'unknown',
+                    reason='ban page detected',
+                    html=html_content,
+                )
+
             is_turnstile = 'Security Verification' in html_content and 'turnstile' in html_content.lower()
             if is_turnstile:
                 logger.warning(f"[Direct] {context_msg} returned Turnstile page (size={len(html_content)} bytes)")
@@ -792,33 +858,40 @@ class RequestHandler:
         else:
             logger.debug(f"[{module_name}] Mode: Direct request (no proxy, no bypass)")
         
-        # If CF bypass is enabled, use the new retry sequence
-        if effective_use_cf_bypass:
-            return self._get_page_with_cf_bypass(
+        try:
+            # If CF bypass is enabled, use the new retry sequence
+            if effective_use_cf_bypass:
+                return self._get_page_with_cf_bypass(
+                    url=url,
+                    session=use_session,
+                    use_cookie=use_cookie,
+                    use_proxy=use_proxy,
+                    module_name=module_name,
+                    max_retries=max_retries,
+                    proxies=proxies,
+                    use_proxy_pool_mode=use_proxy_pool_mode,
+                    proxy_name=proxy_name,
+                    use_local_bypass=use_local_bypass,
+                    use_proxy_bypass=use_proxy_bypass
+                )
+            
+            # Non-CF bypass mode: standard retry logic
+            return self._get_page_direct(
                 url=url,
                 session=use_session,
                 use_cookie=use_cookie,
-                use_proxy=use_proxy,
                 module_name=module_name,
                 max_retries=max_retries,
                 proxies=proxies,
                 use_proxy_pool_mode=use_proxy_pool_mode,
-                proxy_name=proxy_name,
-                use_local_bypass=use_local_bypass,
-                use_proxy_bypass=use_proxy_bypass
+                proxy_name=proxy_name
             )
-        
-        # Non-CF bypass mode: standard retry logic
-        return self._get_page_direct(
-            url=url,
-            session=use_session,
-            use_cookie=use_cookie,
-            module_name=module_name,
-            max_retries=max_retries,
-            proxies=proxies,
-            use_proxy_pool_mode=use_proxy_pool_mode,
-            proxy_name=proxy_name
-        )
+        except ProxyBannedError as e:
+            log_ctx = self._log_ctx(module_name, e.proxy_name)
+            logger.warning(f"{log_ctx} Proxy banned: {e.reason}")
+            if self.proxy_pool:
+                self.proxy_pool.ban_proxy(e.proxy_name)
+            raise
     
     def _get_page_with_cf_bypass(self, url: str, session: requests.Session, use_cookie: bool,
                                   use_proxy: bool, module_name: str, max_retries: int,
@@ -836,7 +909,8 @@ class RequestHandler:
         # Step: Initial CF bypass attempt
         html_content, success, is_turnstile = self._fetch_with_cf_bypass(
             url, proxies, f"Proxy={proxy_name}", 
-            force_local=use_local_bypass, use_proxy_bypass=use_proxy_bypass, session=session
+            force_local=use_local_bypass, use_proxy_bypass=use_proxy_bypass, session=session,
+            proxy_name=proxy_name
         )
         if success:
             result = self._process_html(url, html_content, proxies, use_cookie, session, from_cf_bypass=True)
@@ -866,7 +940,8 @@ class RequestHandler:
         logger.debug(f"[{module_name}] Fallback step (a): Retry CF bypass")
         html_content, success, is_turnstile = self._fetch_with_cf_bypass(
             url, proxies, f"Retry Proxy={proxy_name}",
-            force_local=use_local_bypass, use_proxy_bypass=use_proxy_bypass, session=session
+            force_local=use_local_bypass, use_proxy_bypass=use_proxy_bypass, session=session,
+            proxy_name=proxy_name
         )
         if success:
             result = self._process_html(url, html_content, proxies, use_cookie, session, from_cf_bypass=True)
@@ -898,7 +973,7 @@ class RequestHandler:
                 time.sleep(self.config.fallback_cooldown)
             
             logger.debug(f"[{module_name}] Fallback step (b): Direct request with current proxy (no bypass)")
-            html_content, success, is_turnstile = self._fetch_direct(url, proxies, f"Proxy={proxy_name}", use_cookie, session)
+            html_content, success, is_turnstile = self._fetch_direct(url, proxies, f"Proxy={proxy_name}", use_cookie, session, proxy_name=proxy_name)
             if success:
                 result = self._process_html(url, html_content, proxies, use_cookie, session)
                 if result and len(result) >= 10000:
@@ -931,7 +1006,7 @@ class RequestHandler:
                 
                 # Step (c): Try direct with new proxy
                 logger.debug(f"[{module_name}] Fallback step (c): Direct request with new proxy={proxy_name} (no bypass)")
-                html_content, success, is_turnstile = self._fetch_direct(url, proxies, f"Proxy={proxy_name}", use_cookie, session)
+                html_content, success, is_turnstile = self._fetch_direct(url, proxies, f"Proxy={proxy_name}", use_cookie, session, proxy_name=proxy_name)
                 if success:
                     result = self._process_html(url, html_content, proxies, use_cookie, session)
                     if result and len(result) >= 10000:
@@ -949,7 +1024,8 @@ class RequestHandler:
                 logger.debug(f"[{module_name}] Fallback step (d): CF bypass with new proxy={proxy_name}")
                 html_content, success, is_turnstile = self._fetch_with_cf_bypass(
                     url, proxies, f"Proxy={proxy_name}", force_local=False, 
-                    use_proxy_bypass=True, session=session
+                    use_proxy_bypass=True, session=session,
+                    proxy_name=proxy_name
                 )
                 if success:
                     result = self._process_html(url, html_content, proxies, use_cookie, session, from_cf_bypass=True)
@@ -998,7 +1074,7 @@ class RequestHandler:
             
             html_content, success, is_turnstile = self._fetch_direct(
                 url, proxies, f"Proxy={proxy_name}" if proxies else "No proxy", 
-                use_cookie, session
+                use_cookie, session, proxy_name=proxy_name
             )
             
             if success:
