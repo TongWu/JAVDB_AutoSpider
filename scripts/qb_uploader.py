@@ -13,7 +13,7 @@ os.chdir(project_root)
 sys.path.insert(0, project_root)
 
 # Import unified configuration
-from utils.config_helper import cfg
+from utils.infra.config_helper import cfg
 
 QB_HOST = cfg('QB_HOST', 'your_qbittorrent_ip')
 QB_PORT = cfg('QB_PORT', 'your_qbittorrent_port')
@@ -54,24 +54,24 @@ except ImportError:
         return torrent_content.strip().startswith("[DOWNLOADED]")
 
 # Import path helper for dated subdirectories
-from utils.path_helper import get_dated_report_path, get_dated_subdir, find_latest_report_in_dated_dirs
+from utils.infra.path_helper import get_dated_report_path, get_dated_subdir, find_latest_report_in_dated_dirs
 
 # Configure logging
-from utils.logging_config import setup_logging, get_logger
+from utils.infra.logging_config import setup_logging, get_logger
 setup_logging(UPLOADER_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
 # Import git helper
-from utils.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
+from utils.infra.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 
 # Import masking utilities
-from utils.masking import mask_ip_address, mask_username, mask_full
+from utils.domain.masking import mask_ip_address, mask_username, mask_full
 
 # Import proxy pool
-from utils.proxy_pool import ProxyPool, create_proxy_pool_from_config
+from utils.infra.proxy_pool import ProxyPool, create_proxy_pool_from_config
 
 # Import proxy helper from request handler
-from utils.request_handler import ProxyHelper, create_proxy_helper_from_config
+from utils.infra.request_handler import ProxyHelper, create_proxy_helper_from_config
 
 # Global proxy pool instance
 global_proxy_pool = None
@@ -527,7 +527,7 @@ def initialize_proxy_helper(use_proxy):
 
 def main():
     import atexit
-    from utils.db import close_db
+    from utils.infra.db import close_db
     atexit.register(close_db)
 
     args = parse_arguments()
@@ -673,9 +673,9 @@ def main():
     _session_id = getattr(args, 'session_id', None)
     if _session_id:
         try:
-            from utils.config_helper import use_sqlite as _use_sqlite
+            from utils.infra.config_helper import use_sqlite as _use_sqlite
             if _use_sqlite():
-                from utils.db import init_db, db_save_uploader_stats
+                from utils.infra.db import init_db, db_save_uploader_stats
                 init_db()
                 _rate = (successfully_added / attempted * 100) if attempted > 0 else 0.0
                 db_save_uploader_stats(_session_id, {

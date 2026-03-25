@@ -1,5 +1,5 @@
 """
-Unit tests for utils/request_handler.py
+Unit tests for utils/infra/request_handler.py
 """
 import os
 import sys
@@ -11,7 +11,7 @@ import requests
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from utils.request_handler import (
+from utils.infra.request_handler import (
     RequestConfig,
     RequestHandler,
     ProxyHelper,
@@ -969,4 +969,3 @@ class TestCurlCffiCookieHandling:
             cookie_header = passed_headers.get('Cookie', '')
             
             assert cookie_header == '_jdb_session=my_session'
-

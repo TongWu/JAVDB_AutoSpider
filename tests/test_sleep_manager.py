@@ -1,4 +1,4 @@
-"""Unit tests for scripts/spider/sleep_manager.py.
+"""Unit tests for scripts/spider/runtime/sleep.py.
 
 Tests that verify exact configuration values and thread-safety properties
 that are not covered by the broader integration test
@@ -20,7 +20,7 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from scripts.spider.sleep_manager import (
+from scripts.spider.runtime.sleep import (
     MovieSleepManager,
     PenaltyTracker,
     DualWindowThrottle,
@@ -104,7 +104,7 @@ class TestDualWindowThrottle:
         dwt = DualWindowThrottle(short_window_sec=600.0, short_max=1,
                                   long_window_sec=600.0, long_max=1)
         dwt.wait_if_needed()  # fills both windows
-        import scripts.spider.sleep_manager as sm
+        import scripts.spider.runtime.sleep as sm
         original = sm.THROTTLE_MAX_WAIT
         sm.THROTTLE_MAX_WAIT = 2.0  # override to 2s for fast test
         try:

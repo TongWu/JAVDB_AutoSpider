@@ -29,8 +29,8 @@ from api.parsers.common import (  # noqa: E402
     movie_href_lookup_values,
     absolutize_supporting_actors_json,
 )
-from utils.config_helper import cfg  # noqa: E402
-from utils.db import HISTORY_DB_PATH  # noqa: E402
+from utils.infra.config_helper import cfg  # noqa: E402
+from utils.infra.db import HISTORY_DB_PATH  # noqa: E402
 
 _IDX_HREF = 2
 _IDX_SUPPORTING = 6

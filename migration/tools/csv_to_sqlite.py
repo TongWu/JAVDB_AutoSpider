@@ -28,10 +28,10 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
-from utils.logging_config import setup_logging, get_logger
+from utils.infra.logging_config import setup_logging, get_logger
 from utils.sqlite_datetime import normalize_storage_datetime
 from api.parsers.common import javdb_absolute_url
-from utils.config_helper import cfg
+from utils.infra.config_helper import cfg
 
 setup_logging()
 logger = get_logger(__name__)
@@ -70,7 +70,7 @@ def migrate_history(csv_path: str, db_path: str, dry_run: bool = False) -> int:
         logger.info(f"Skipping history: {csv_path} not found")
         return 0
 
-    from utils.db import get_db
+    from utils.infra.db import get_db
     with open(csv_path, 'r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -180,7 +180,7 @@ def migrate_inventory(csv_path: str, db_path: str, dry_run: bool = False) -> int
         logger.info(f"Skipping inventory: {csv_path} not found")
         return 0
 
-    from utils.db import get_db
+    from utils.infra.db import get_db
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -220,7 +220,7 @@ def migrate_dedup(csv_path: str, db_path: str, dry_run: bool = False) -> int:
         logger.info(f"Skipping dedup: {csv_path} not found")
         return 0
 
-    from utils.db import get_db
+    from utils.infra.db import get_db
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -334,7 +334,7 @@ def migrate_dedup_all(reports_dir: str, db_path: str, dry_run: bool = False) -> 
 
     After import the merged data is exported to ``reports/dedup_history.csv``.
     """
-    from utils.db import get_db
+    from utils.infra.db import get_db
     import glob as _glob
 
     all_rows: list = []
@@ -467,7 +467,7 @@ def migrate_pikpak(csv_path: str, db_path: str, dry_run: bool = False) -> int:
         logger.info(f"Skipping pikpak: {csv_path} not found")
         return 0
 
-    from utils.db import get_db
+    from utils.infra.db import get_db
     with open(csv_path, 'r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -510,7 +510,7 @@ def migrate_proxy_bans(csv_path: str, db_path: str, dry_run: bool = False) -> in
         logger.info(f"Skipping proxy_bans: {csv_path} not found")
         return 0
 
-    from utils.db import get_db
+    from utils.infra.db import get_db
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -650,7 +650,7 @@ def migrate_single_csv(csv_path: str, filename: str, is_adhoc: bool,
     Returns dict with keys: session_id, row_count, skipped.
     """
     from datetime import datetime
-    from utils.db import get_db
+    from utils.infra.db import get_db
 
     meta = parse_csv_filename(filename, is_adhoc)
 
@@ -725,7 +725,7 @@ def migrate_single_csv(csv_path: str, filename: str, is_adhoc: bool,
 
 def verify_session(session_id: int, csv_path: str, db_path: str) -> bool:
     """Verify a migrated session: movie count matches CSV row count."""
-    from utils.db import get_db
+    from utils.infra.db import get_db
 
     try:
         with open(csv_path, 'r', encoding='utf-8-sig') as f:
@@ -771,9 +771,9 @@ def main():
         logger.info("[VERIFY MODE]")
     logger.info("=" * 60)
 
-    import utils.db
-    utils.db.DB_PATH = db_path
-    utils.db.init_db(db_path, force=True)
+    import utils.infra.db
+    utils.infra.db.DB_PATH = db_path
+    utils.infra.db.init_db(db_path, force=True)
 
     # ── Phase 1: data tables ─────────────────────────────────────────
     logger.info("-" * 60)

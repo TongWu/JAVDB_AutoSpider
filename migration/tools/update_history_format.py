@@ -29,12 +29,12 @@ from utils.history_manager import (
     validate_history_file
 )
 from utils.parser import parse_detail
-from utils.magnet_extractor import extract_magnets
-from utils.logging_config import setup_logging, get_logger
+from utils.domain.magnet_extractor import extract_magnets
+from utils.infra.logging_config import setup_logging, get_logger
 from utils.spider_gateway import create_gateway
 
 # Import configuration
-from utils.config_helper import cfg
+from utils.infra.config_helper import cfg
 
 BASE_URL = cfg('BASE_URL', 'https://javdb.com')
 PARSED_MOVIES_CSV = cfg('PARSED_MOVIES_CSV', 'parsed_movies_history.csv')

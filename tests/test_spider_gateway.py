@@ -17,7 +17,7 @@ from utils.spider_gateway import (
     _PARSER_MAP,
     _build_page_url,
 )
-from utils.rust_adapters.parser_adapter import result_to_dict
+from utils.bridges.rust_adapters.parser_adapter import result_to_dict
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +245,7 @@ class TestParserMap:
 
 class TestRustFallback:
     def test_parse_html_python_fallback(self, index_html, monkeypatch):
-        from utils.rust_adapters import parser_adapter
+        from utils.bridges.rust_adapters import parser_adapter
         monkeypatch.setattr(parser_adapter, 'RUST_PARSER_EXTRAS_AVAILABLE', False)
         gw = _make_gateway()
         r = gw.parse_html(index_html)

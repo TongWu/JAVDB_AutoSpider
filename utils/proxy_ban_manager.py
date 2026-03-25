@@ -89,12 +89,12 @@ class ProxyBanManager:
     
     def _load_ban_records(self):
         """Load ban records from the active storage backend."""
-        from utils.config_helper import use_sqlite, use_csv
+        from utils.infra.config_helper import use_sqlite, use_csv
         loaded = False
 
         if use_sqlite():
             try:
-                from utils.db import init_db, db_load_proxy_bans
+                from utils.infra.db import init_db, db_load_proxy_bans
                 init_db()
                 rows = db_load_proxy_bans()
                 for row in rows:
@@ -129,12 +129,12 @@ class ProxyBanManager:
 
     def _save_ban_records(self):
         """Save ban records to the active storage backend(s)."""
-        from utils.config_helper import use_sqlite, use_csv
+        from utils.infra.config_helper import use_sqlite, use_csv
         records = [r.to_dict() for r in self.banned_proxies.values()]
 
         if use_sqlite():
             try:
-                from utils.db import init_db, db_save_proxy_bans
+                from utils.infra.db import init_db, db_save_proxy_bans
                 init_db()
                 db_save_proxy_bans(records)
                 logger.debug(f"Saved {len(records)} ban records to SQLite")

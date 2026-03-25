@@ -2,7 +2,7 @@
 """Standalone migration: upgrade SQLite database from schema v5 (or earlier) to v6.
 
 This script wraps the ``_migrate_v5_to_v6`` logic already embedded in
-``utils.db.init_db`` but adds:
+``utils.infra.db.init_db`` but adds:
   - Optional ``--backup`` to snapshot the DB file before mutating it.
   - Optional ``--verify`` to run basic integrity checks after migration.
   - Dry-run mode.
@@ -39,7 +39,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
-from utils.logging_config import setup_logging, get_logger
+from utils.infra.logging_config import setup_logging, get_logger
 
 setup_logging()
 logger = get_logger(__name__)
@@ -194,9 +194,9 @@ def main():
         backup_db(db_path)
 
     logger.info("Running migration via init_db() ...")
-    import utils.db
-    utils.db.DB_PATH = db_path
-    utils.db.init_db(db_path, force=True)
+    import utils.infra.db
+    utils.infra.db.DB_PATH = db_path
+    utils.infra.db.init_db(db_path, force=True)
 
     new_version = _detect_version(db_path)
     logger.info(f"Migration complete. Schema version: {new_version}")

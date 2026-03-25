@@ -17,14 +17,14 @@ from bs4 import BeautifulSoup
 from bs4.element import Tag
 
 # Import configuration
-from utils.config_helper import cfg
+from utils.infra.config_helper import cfg
 
 PHASE2_MIN_RATE = cfg('PHASE2_MIN_RATE', 4.0)
 PHASE2_MIN_COMMENTS = cfg('PHASE2_MIN_COMMENTS', 100)
 LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
 IGNORE_RELEASE_DATE_FILTER = cfg('IGNORE_RELEASE_DATE_FILTER', False)
 
-from utils.logging_config import get_logger
+from utils.infra.logging_config import get_logger
 
 # New API layer imports
 from api.parsers.index_parser import parse_index_page as _api_parse_index

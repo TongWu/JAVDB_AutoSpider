@@ -28,7 +28,7 @@ os.chdir(project_root)
 sys.path.insert(0, project_root)
 
 # Import unified configuration
-from utils.config_helper import cfg
+from utils.infra.config_helper import cfg
 
 GIT_USERNAME = cfg('GIT_USERNAME', 'your_github_username')
 GIT_PASSWORD = cfg('GIT_PASSWORD', 'your_github_password_or_token')
@@ -58,18 +58,18 @@ DEDUP_LOG_FILE = cfg('DEDUP_LOG_FILE', 'logs/rclone_dedup.log')
 EMAIL_NOTIFICATION_LOG_FILE = cfg('EMAIL_NOTIFICATION_LOG_FILE', 'logs/email_notification.log')
 
 # --- LOGGING SETUP ---
-from utils.logging_config import setup_logging, get_logger
+from utils.infra.logging_config import setup_logging, get_logger
 setup_logging(EMAIL_NOTIFICATION_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
 # Import masking utilities
-from utils.masking import mask_email, mask_server, mask_full
+from utils.domain.masking import mask_email, mask_server, mask_full
 
 # Import git helper
-from utils.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
+from utils.infra.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 
 # Import path helper for dated subdirectories
-from utils.path_helper import get_dated_report_path, find_latest_report_in_dated_dirs
+from utils.infra.path_helper import get_dated_report_path, find_latest_report_in_dated_dirs
 
 
 def _parse_github_workflow_run_started_at():
@@ -921,9 +921,9 @@ def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
 
     # Try DB first
     try:
-        from utils.config_helper import use_sqlite
+        from utils.infra.config_helper import use_sqlite
         if use_sqlite():
-            from utils.db import init_db, db_load_dedup_records
+            from utils.infra.db import init_db, db_load_dedup_records
             init_db()
             db_rows = db_load_dedup_records()
             if db_rows:
@@ -1344,9 +1344,9 @@ def main():
     _db_uploader_stats = None
     _db_pikpak_stats = None
     try:
-        from utils.config_helper import use_sqlite as _use_sqlite
+        from utils.infra.config_helper import use_sqlite as _use_sqlite
         if _use_sqlite():
-            from utils.db import init_db, db_get_latest_session, db_get_spider_stats, db_get_uploader_stats, db_get_pikpak_stats
+            from utils.infra.db import init_db, db_get_latest_session, db_get_spider_stats, db_get_uploader_stats, db_get_pikpak_stats
             init_db()
             _sid = args.session_id
             if _sid is None:
@@ -1435,7 +1435,7 @@ def main():
         session_start_time = None
         if _sid is not None:
             try:
-                from utils.db import get_db, REPORTS_DB_PATH
+                from utils.infra.db import get_db, REPORTS_DB_PATH
                 with get_db(REPORTS_DB_PATH) as _conn:
                     _row = _conn.execute(
                         "SELECT DateTimeCreated FROM ReportSessions WHERE Id = ?", (_sid,)

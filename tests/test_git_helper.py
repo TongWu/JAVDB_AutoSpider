@@ -11,7 +11,7 @@ from unittest.mock import patch, MagicMock
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from utils.git_helper import (
+from utils.infra.git_helper import (
     is_github_actions,
     has_git_credentials,
     get_current_branch,
@@ -240,7 +240,7 @@ class TestGitCommitAndPush:
     
     def test_skips_commit_when_no_changes(self):
         """Should skip commit when there are no changes."""
-        from utils.git_helper import git_commit_and_push
+        from utils.infra.git_helper import git_commit_and_push
         
         # Mock subprocess.run to simulate no changes
         mock_result = MagicMock()
@@ -260,7 +260,7 @@ class TestGitCommitAndPush:
     
     def test_skips_push_in_github_actions_when_not_from_pipeline(self):
         """Should skip push in GitHub Actions when not from pipeline."""
-        from utils.git_helper import git_commit_and_push
+        from utils.infra.git_helper import git_commit_and_push
         
         mock_results = [
             MagicMock(stdout='main\n', returncode=0),  # get_current_branch
@@ -286,7 +286,7 @@ class TestGitCommitAndPush:
     
     def test_returns_false_when_pipeline_mode_without_credentials(self):
         """Should return False when in pipeline mode without credentials."""
-        from utils.git_helper import git_commit_and_push
+        from utils.infra.git_helper import git_commit_and_push
         
         # Clear GitHub Actions env
         env = os.environ.copy()
@@ -305,7 +305,7 @@ class TestGitCommitAndPush:
     
     def test_successful_commit_and_push_local_mode(self):
         """Should successfully commit and push in local mode."""
-        from utils.git_helper import git_commit_and_push
+        from utils.infra.git_helper import git_commit_and_push
         
         mock_results = [
             MagicMock(stdout='main\n', returncode=0),  # get_current_branch
@@ -335,7 +335,7 @@ class TestGitCommitAndPush:
     
     def test_returns_false_on_subprocess_error(self):
         """Should return False when subprocess fails."""
-        from utils.git_helper import git_commit_and_push
+        from utils.infra.git_helper import git_commit_and_push
         import subprocess
         
         env = os.environ.copy()
@@ -355,7 +355,7 @@ class TestGitCommitAndPush:
     
     def test_standalone_github_actions_mode(self):
         """Should configure git user as github-actions[bot] in standalone GitHub Actions mode."""
-        from utils.git_helper import git_commit_and_push
+        from utils.infra.git_helper import git_commit_and_push
         
         mock_results = [
             MagicMock(stdout='main\n', returncode=0),  # get_current_branch
@@ -379,7 +379,7 @@ class TestGitCommitAndPush:
     
     def test_local_mode_without_username(self):
         """Should return False in local mode without username."""
-        from utils.git_helper import git_commit_and_push
+        from utils.infra.git_helper import git_commit_and_push
         
         mock_result = MagicMock()
         mock_result.stdout = 'main\n'
@@ -402,7 +402,7 @@ class TestGitCommitAndPush:
     
     def test_skip_push_with_flag(self):
         """Should skip push when skip_push=True."""
-        from utils.git_helper import git_commit_and_push
+        from utils.infra.git_helper import git_commit_and_push
         
         mock_results = [
             MagicMock(stdout='main\n', returncode=0),  # get_current_branch
@@ -435,7 +435,7 @@ class TestSafeLogFunctions:
     
     def test_safe_log_info(self):
         """Should log info message with sensitive info masked."""
-        from utils.git_helper import safe_log_info
+        from utils.infra.git_helper import safe_log_info
         
         # Should not raise any exception
         safe_log_info("Normal log message")
@@ -443,14 +443,14 @@ class TestSafeLogFunctions:
     
     def test_safe_log_warning(self):
         """Should log warning message with sensitive info masked."""
-        from utils.git_helper import safe_log_warning
+        from utils.infra.git_helper import safe_log_warning
         
         safe_log_warning("Warning message")
         safe_log_warning("Warning with password: mysecretpassword")
     
     def test_safe_log_error(self):
         """Should log error message with sensitive info masked."""
-        from utils.git_helper import safe_log_error
+        from utils.infra.git_helper import safe_log_error
         
         safe_log_error("Error message")
         safe_log_error("Error with SMTP_PASSWORD: mysmtppassword")
@@ -461,7 +461,7 @@ class TestGitCommitAndPushAdvanced:
     
     def test_github_actions_fallback_to_username(self):
         """Should fallback to git_username when github-actions[bot] fails."""
-        from utils.git_helper import git_commit_and_push
+        from utils.infra.git_helper import git_commit_and_push
         import subprocess
         
         call_count = [0]
@@ -513,7 +513,7 @@ class TestGitCommitAndPushAdvanced:
     
     def test_github_actions_push_without_pipeline(self):
         """Should push in GitHub Actions when from_pipeline=False but not skipped."""
-        from utils.git_helper import git_commit_and_push
+        from utils.infra.git_helper import git_commit_and_push
         
         mock_results = [
             MagicMock(stdout='main\n', returncode=0),  # get_current_branch
@@ -540,7 +540,7 @@ class TestGitCommitAndPushAdvanced:
     
     def test_local_push_with_credentials(self):
         """Should push with credentials in local mode."""
-        from utils.git_helper import git_commit_and_push
+        from utils.infra.git_helper import git_commit_and_push
         
         mock_results = [
             MagicMock(stdout='main\n', returncode=0),  # get_current_branch
@@ -569,7 +569,7 @@ class TestGitCommitAndPushAdvanced:
     
     def test_local_push_without_credentials(self):
         """Should try normal push when no credentials in local mode."""
-        from utils.git_helper import git_commit_and_push
+        from utils.infra.git_helper import git_commit_and_push
         
         mock_results = [
             MagicMock(stdout='main\n', returncode=0),  # get_current_branch
@@ -598,7 +598,7 @@ class TestGitCommitAndPushAdvanced:
     
     def test_unexpected_exception(self):
         """Should return False on unexpected exception."""
-        from utils.git_helper import git_commit_and_push
+        from utils.infra.git_helper import git_commit_and_push
         
         with patch('subprocess.run', side_effect=Exception("Unexpected error")):
             result = git_commit_and_push(
@@ -613,7 +613,7 @@ class TestGitCommitAndPushAdvanced:
     
     def test_git_add_failure_continues(self):
         """Should continue even when git add fails for some files."""
-        from utils.git_helper import git_commit_and_push
+        from utils.infra.git_helper import git_commit_and_push
         import subprocess
         
         call_count = [0]

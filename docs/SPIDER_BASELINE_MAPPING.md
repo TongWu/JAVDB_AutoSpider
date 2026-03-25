@@ -1,33 +1,54 @@
-# Spider Baseline And Legacy Mapping
+# Spider Current Layout And Legacy Mapping
 
-## Baseline Snapshot
+## Current Snapshot
 
-- Primary entry: `scripts/spider/main.py`
-- Index acquisition: `scripts/spider/index_fetcher.py`
-- Detail processing:
-  - Sequential: `scripts/spider/sequential.py`
-  - Parallel proxy workers: `scripts/spider/parallel.py`
-- Retry/fallback and auth handling: `scripts/spider/fallback.py`, `scripts/spider/session.py`
-- CSV row build and filtering: `scripts/spider/csv_builder.py`
-- Dedup and rclone inventory checks: `scripts/spider/dedup_checker.py`
-- Shared state/config: `scripts/spider/state.py`, `scripts/spider/config_loader.py`
+- Public package entry remains `python3 scripts/spider` via `scripts/spider/__main__.py`
+- App entrypoints live under `scripts/spider/app/`
+  - `main.py`: top-level spider orchestration
+  - `cli.py`: argument parsing
+- Runtime state lives under `scripts/spider/runtime/`
+  - `config.py`: config/constants bootstrap
+  - `state.py`: mutable runtime state
+  - `sleep.py`: adaptive sleep and throttling
+  - `report.py`: summary reporting
+- Fetch execution lives under `scripts/spider/fetch/`
+  - `index.py`: index-page fetching
+  - `fallback.py`: direct/proxy/CF/login fallback flow
+  - `session.py`: login/session helpers
+  - `login_coordinator.py`: parallel login routing
+  - `fetch_engine.py`: proxy-worker execution engine
+- Detail orchestration lives under `scripts/spider/detail/`
+  - `runner.py`: shared detail-stage filtering and persistence
+  - `parallel_mode.py`: multi-proxy detail mode
+  - `sequential_mode.py`: sequential detail mode
+- Spider domain services live under `scripts/spider/services/`
+  - `dedup.py`: rclone inventory and dedup decisions
+- Compatibility exports live under `scripts/spider/compat/`
+  - `csv_builder.py`: CSV builder facade
 
-## Legacy To New Mapping
+## Legacy Flat Path To Current Layered Path
 
-| Legacy capability (`scripts/_spider_legacy.py`) | New location |
+| Legacy path | Current path |
 | --- | --- |
-| CLI and runtime bootstrap | `scripts/spider/cli.py`, `scripts/spider/main.py` |
-| Proxy pool setup and request handler init | `scripts/spider/state.py` |
-| Index page fetch and validation | `scripts/spider/index_fetcher.py`, `scripts/spider/fallback.py` |
-| Detail page parse loop (sequential) | `scripts/spider/sequential.py` |
-| Multi-proxy parallel queue workers | `scripts/spider/parallel.py` |
-| Login refresh and login-page detection | `scripts/spider/session.py` |
-| CSV row creation and history-aware filtering | `scripts/spider/csv_builder.py` |
-| Rclone skip + dedup decision | `scripts/spider/dedup_checker.py` |
-| End-of-run summary report | `scripts/spider/report.py` |
+| `scripts/spider/main.py` | `scripts/spider/app/main.py` |
+| `scripts/spider/cli.py` | `scripts/spider/app/cli.py` |
+| `scripts/spider/config_loader.py` | `scripts/spider/runtime/config.py` |
+| `scripts/spider/state.py` | `scripts/spider/runtime/state.py` |
+| `scripts/spider/sleep_manager.py` | `scripts/spider/runtime/sleep.py` |
+| `scripts/spider/report.py` | `scripts/spider/runtime/report.py` |
+| `scripts/spider/index_fetcher.py` | `scripts/spider/fetch/index.py` |
+| `scripts/spider/fallback.py` | `scripts/spider/fetch/fallback.py` |
+| `scripts/spider/session.py` | `scripts/spider/fetch/session.py` |
+| `scripts/spider/parallel_login.py` | `scripts/spider/fetch/login_coordinator.py` |
+| `scripts/spider/engine.py` | `scripts/spider/fetch/fetch_engine.py` |
+| `scripts/spider/detail_runner.py` | `scripts/spider/detail/runner.py` |
+| `scripts/spider/parallel.py` | `scripts/spider/detail/parallel_mode.py` |
+| `scripts/spider/sequential.py` | `scripts/spider/detail/sequential_mode.py` |
+| `scripts/spider/dedup_checker.py` | `scripts/spider/services/dedup.py` |
+| `scripts/spider/csv_builder.py` | `scripts/spider/compat/csv_builder.py` |
 
-## Migration Rule
+## Usage Rule
 
-- New feature work must target `scripts/spider/` only.
-- `scripts/_spider_legacy.py` stays for compatibility and rollback reference.
-- If behavior diverges, fix in `scripts/spider/` first, then backport only when strictly required.
+- New spider implementation work should target the layered paths above.
+- Public invocation stays `python3 scripts/spider`.
+- `scripts/_spider_legacy.py` remains a historical compatibility reference, not the primary implementation surface.

@@ -21,9 +21,9 @@ from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 
-from utils.contracts import UNCENSORED_SENSOR_PRIORITY
-from utils.logging_config import get_logger
-from utils.path_helper import ensure_dated_dir
+from utils.domain.contracts import UNCENSORED_SENSOR_PRIORITY
+from utils.infra.logging_config import get_logger
+from utils.infra.path_helper import ensure_dated_dir
 
 logger = get_logger(__name__)
 

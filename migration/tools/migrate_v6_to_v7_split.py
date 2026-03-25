@@ -26,7 +26,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
-from utils.logging_config import setup_logging, get_logger
+from utils.infra.logging_config import setup_logging, get_logger
 
 setup_logging()
 logger = get_logger(__name__)
@@ -88,7 +88,7 @@ def _normalize_three_dbs(history_path: str, reports_path: str, operations_path: 
 
 
 def verify_split(reports_dir: str) -> bool:
-    import utils.db as db_mod
+    import utils.infra.db as db_mod
 
     ok = True
     for db_name, expected_tables in [
@@ -168,7 +168,7 @@ def main():
         logger.info("Database is below v6. Run migration/tools/migrate_v5_to_v6.py first.")
         sys.exit(1)
 
-    import utils.db as db_mod
+    import utils.infra.db as db_mod
 
     reports_dir = os.path.dirname(db_path)
     db_mod.DB_PATH = db_path

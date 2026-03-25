@@ -1540,17 +1540,12 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
 ### File Structure
 - **scripts/spider/**: Spider package (modular architecture)
   - `__main__.py`: Package entry point (`python3 scripts/spider`)
-  - `main.py`: Main orchestration flow
-  - `cli.py`: Command-line argument parsing
-  - `parallel.py`: Multi-threaded detail processing (ProxyWorker)
-  - `sequential.py`: Sequential detail processing
-  - `index_fetcher.py`: Index page fetching
-  - `fallback.py`: Multi-level fallback (proxy/CF/login)
-  - `session.py`: Login and session management
-  - `sleep_manager.py`: Volume-based sleep management
-  - `state.py`: Global state management
-  - `csv_builder.py`: CSV row construction
-  - `report.py`: Summary report generation
+  - `app/`: CLI and top-level runtime orchestration (`cli.py`, `main.py`)
+  - `runtime/`: Config, mutable state, adaptive sleep, and reporting
+  - `fetch/`: Index fetch, fallback flow, session/login coordination, parallel fetch engine
+  - `detail/`: Shared detail-stage runner plus parallel/sequential detail modes
+  - `services/`: Spider-specific domain services such as dedup and rclone filtering
+  - `compat/`: Compatibility exports such as CSV builder facade
 - **rust_core/**: Rust acceleration extension (PyO3 + maturin)
   - `src/scraper/`: HTML parsing (index, detail, category pages)
   - `src/proxy/`: Proxy pool, ban manager, masking
@@ -1571,7 +1566,11 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
   - `pikpak_bridge.log`: PikPak bridge execution logs
   - `qb_file_filter.log`: File filter execution logs
 - **migration/**: `migrate_to_current.py` (main DB migration); **migration/tools/** for ad hoc / legacy scripts
-- **utils/**: Utility modules (history, parser, proxy pool, etc.)
+- **utils/**: Shared support modules
+  - `infra/`: DB, request/proxy runtime, logging, git/path/config, CSV helpers
+  - `domain/`: Contracts, URL helpers, magnet extraction, filename/masking helpers
+  - `bridges/`: Rust adapter bridges
+  - Top-level stable modules kept intentionally: `history_manager.py`, `parser.py`, `proxy_ban_manager.py`, `rclone_helper.py`, `spider_gateway.py`, `sqlite_datetime.py`
 - **utils/login/**: JavDB login related files and documentation
 - **docker/**: Docker configuration files
 

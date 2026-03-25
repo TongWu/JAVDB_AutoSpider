@@ -22,7 +22,7 @@ from datetime import datetime
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
 # Import unified configuration
-from utils.config_helper import cfg
+from utils.infra.config_helper import cfg
 
 PIPELINE_LOG_FILE = cfg('PIPELINE_LOG_FILE', 'logs/pipeline.log')
 LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
@@ -32,10 +32,10 @@ _REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
 DEDUP_CSV = cfg('DEDUP_CSV', 'dedup.csv')
 
 # Import path helper for dated subdirectories
-from utils.path_helper import get_dated_report_path
+from utils.infra.path_helper import get_dated_report_path
 
 # --- LOGGING SETUP ---
-from utils.logging_config import setup_logging, get_logger
+from utils.infra.logging_config import setup_logging, get_logger
 setup_logging(PIPELINE_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
@@ -53,14 +53,14 @@ def check_rust_core_status():
     
     # Check proxy pool
     try:
-        from utils.proxy_pool import RUST_PROXY_AVAILABLE
+        from utils.infra.proxy_pool import RUST_PROXY_AVAILABLE
         status['proxy_pool'] = RUST_PROXY_AVAILABLE
     except Exception:
         status['proxy_pool'] = False
     
     # Check request handler
     try:
-        from utils.request_handler import RUST_REQUEST_HANDLER_AVAILABLE
+        from utils.infra.request_handler import RUST_REQUEST_HANDLER_AVAILABLE
         status['request_handler'] = RUST_REQUEST_HANDLER_AVAILABLE
     except Exception:
         status['request_handler'] = False

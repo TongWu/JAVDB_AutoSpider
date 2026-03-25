@@ -11,10 +11,10 @@ from scripts.ingestion.policies import (
     determine_torrent_types,
     get_missing_torrent_types,
 )
-from scripts.spider.config_loader import INCLUDE_DOWNLOADED_IN_REPORT
-from utils.contracts import DOWNLOADED_PLACEHOLDER, TORRENT_CATEGORIES
-from utils.logging_config import get_logger
-from utils.rust_adapters.csv_adapter import (
+from scripts.spider.runtime.config import INCLUDE_DOWNLOADED_IN_REPORT
+from utils.domain.contracts import DOWNLOADED_PLACEHOLDER, TORRENT_CATEGORIES
+from utils.infra.logging_config import get_logger
+from utils.bridges.rust_adapters.csv_adapter import (
     RUST_CSV_AVAILABLE,
     rust_check_torrent_status,
     rust_collect_new_magnet_links,

@@ -51,9 +51,9 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
-from utils.config_helper import cfg
-from utils.logging_config import setup_logging, get_logger
-from utils.path_helper import find_latest_report_in_dated_dirs, ensure_dated_dir
+from utils.infra.config_helper import cfg
+from utils.infra.logging_config import setup_logging, get_logger
+from utils.infra.path_helper import find_latest_report_in_dated_dirs, ensure_dated_dir
 
 from utils.rclone_helper import (
     FolderInfo,
@@ -246,7 +246,7 @@ def scan_inventory(
 
 def export_db_to_csv(output_path: str) -> int:
     """Export the rclone_inventory table from SQLite to a CSV file."""
-    from utils.db import get_db, OPERATIONS_DB_PATH
+    from utils.infra.db import get_db, OPERATIONS_DB_PATH
 
     with get_db(OPERATIONS_DB_PATH) as conn:
         rows = conn.execute(
@@ -283,13 +283,13 @@ def load_inventory_as_folder_structure(
     ``{year: {actor: [FolderInfo, ...]}}`` structure usable by the
     dedup analysis pipeline.
     """
-    from utils.config_helper import use_sqlite
+    from utils.infra.config_helper import use_sqlite
 
     rows: List[dict] = []
 
     if use_sqlite():
         try:
-            from utils.db import db_load_rclone_inventory
+            from utils.infra.db import db_load_rclone_inventory
             raw = db_load_rclone_inventory()
             for code, entries in raw.items():
                 for e in entries:
@@ -406,7 +406,7 @@ def _persist_dedup_records(dedup_results: List[DedupResult]) -> None:
     to produce a consolidated ``dedup_history.csv`` from the DB.
     """
     try:
-        from scripts.spider.dedup_checker import DedupRecord, append_dedup_record
+        from scripts.spider.services.dedup import DedupRecord, append_dedup_record
 
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         appended = 0
@@ -440,7 +440,7 @@ def export_dedup_history() -> int:
 
     Mirrors the pattern used by :func:`export_db_to_csv` for inventory.
     """
-    from scripts.spider.dedup_checker import export_dedup_db_to_csv
+    from scripts.spider.services.dedup import export_dedup_db_to_csv
 
     output_path = os.path.join(REPORTS_DIR, 'dedup_history.csv')
     return export_dedup_db_to_csv(output_path)
@@ -486,7 +486,7 @@ def run_execute_from_csv(
     Returns 0 when at least one purge succeeded (or nothing to do);
     returns 1 only when all attempted purges failed.
     """
-    from scripts.spider.dedup_checker import (
+    from scripts.spider.services.dedup import (
         load_dedup_csv, mark_records_deleted, cleanup_deleted_records,
     )
 
@@ -836,13 +836,13 @@ def main() -> int:
 
     # ── Scan phase ───────────────────────────────────────────────────
     if args.scan:
-        from utils.config_helper import use_sqlite as _use_sqlite, use_csv as _use_csv
+        from utils.infra.config_helper import use_sqlite as _use_sqlite, use_csv as _use_csv
 
         total_written = 0
         _sqlite_ok = False
         if _use_sqlite():
             try:
-                from utils.db import init_db, db_clear_rclone_inventory, db_append_rclone_inventory
+                from utils.infra.db import init_db, db_clear_rclone_inventory, db_append_rclone_inventory
                 init_db()
                 db_clear_rclone_inventory()
                 _sqlite_ok = True
