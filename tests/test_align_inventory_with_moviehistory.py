@@ -67,6 +67,31 @@ def test_purge_plan_rows_only_lower_rank_entries():
     assert 'destination_path' not in rows[0]
 
 
+def test_purge_plan_rows_only_touch_same_family_entries():
+    entries = [
+        {
+            'FolderPath': 'drive:/root/2026/A/JAC-228 [有码-中字]',
+            'SensorCategory': '有码',
+            'SubtitleCategory': '中字',
+        },
+        {
+            'FolderPath': 'drive:/root/2026/A/JAC-228 [无码破解-无字]',
+            'SensorCategory': '无码破解',
+            'SubtitleCategory': '无字',
+        },
+    ]
+
+    rows = _to_purge_plan_rows(
+        video_code='JAC-228',
+        inventory_entries=entries,
+        parsed_best_rank=40,
+        new_torrent_category='hacked_subtitle',
+    )
+
+    assert len(rows) == 1
+    assert rows[0]['source_path'].endswith('[无码破解-无字]')
+
+
 def test_parse_args_alignment_defaults_to_proxy(monkeypatch):
     monkeypatch.setattr(sys, 'argv', ['align_inventory_with_moviehistory.py'])
     args = parse_args()
