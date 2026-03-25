@@ -43,6 +43,7 @@ from packages.python.javdb_core.masking import mask_ip_address
 from packages.python.javdb_platform.config_helper import cfg
 from packages.python.javdb_platform.proxy_policy import add_proxy_arguments, resolve_proxy_override
 from packages.python.javdb_platform.qb_config import (
+    qb_allow_insecure_http,
     qb_base_url_candidates,
     masked_qb_base_url,
     qb_verify_tls,
@@ -53,6 +54,7 @@ QB_HOST = cfg('QB_HOST', None)
 QB_PORT = cfg('QB_PORT', None)
 QB_USERNAME = cfg('QB_USERNAME', None)
 QB_PASSWORD = cfg('QB_PASSWORD', None)
+QB_ALLOW_INSECURE_HTTP = qb_allow_insecure_http()
 SMTP_SERVER = cfg('SMTP_SERVER', None)
 SMTP_PORT = cfg('SMTP_PORT', None)
 PROXY_POOL = cfg('PROXY_POOL', [])
@@ -82,16 +84,26 @@ def check_qbittorrent_connection() -> Tuple[bool, str]:
         import requests
 
         if QB_URL:
-            base_urls = qb_base_url_candidates(QB_URL)
+            base_urls = qb_base_url_candidates(
+                QB_URL,
+                allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
+            )
         else:
-            base_urls = qb_base_url_candidates(QB_HOST, QB_PORT)
+            base_urls = qb_base_url_candidates(
+                QB_HOST,
+                QB_PORT,
+                allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
+            )
 
         verify_tls = qb_verify_tls()
         last_message = "Cannot connect to qBittorrent"
 
         for base_url in base_urls:
             login_url = f"{base_url}/api/v2/auth/login"
-            masked_url = masked_qb_base_url(base_url)
+            masked_url = masked_qb_base_url(
+                base_url,
+                allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
+            )
 
             logger.info(f"Testing qBittorrent connection to {masked_url}...")
 
