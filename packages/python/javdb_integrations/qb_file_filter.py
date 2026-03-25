@@ -70,6 +70,7 @@ from packages.python.javdb_platform.proxy_policy import (
 )
 from packages.python.javdb_platform.request_handler import create_proxy_helper_from_config
 from packages.python.javdb_platform.qb_config import (
+    qb_allow_insecure_http,
     qb_base_url_candidates,
     masked_qb_base_url,
     qb_verify_tls,
@@ -79,9 +80,15 @@ from packages.python.javdb_platform.qb_config import (
 global_proxy_helper = None
 
 # qBittorrent configuration
-QB_BASE_URL_CANDIDATES = qb_base_url_candidates()
+QB_ALLOW_INSECURE_HTTP = qb_allow_insecure_http()
+QB_BASE_URL_CANDIDATES = qb_base_url_candidates(
+    allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
+)
 QB_BASE_URL = QB_BASE_URL_CANDIDATES[0]
-QB_MASKED_URL = masked_qb_base_url(QB_BASE_URL)
+QB_MASKED_URL = masked_qb_base_url(
+    QB_BASE_URL,
+    allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
+)
 QB_VERIFY_TLS = qb_verify_tls()
 
 
@@ -89,7 +96,10 @@ def _set_active_qb_base_url(base_url):
     """Persist the qBittorrent endpoint that proved reachable."""
     global QB_BASE_URL, QB_MASKED_URL
     QB_BASE_URL = base_url.rstrip('/')
-    QB_MASKED_URL = masked_qb_base_url(QB_BASE_URL)
+    QB_MASKED_URL = masked_qb_base_url(
+        QB_BASE_URL,
+        allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
+    )
 
 
 def _ordered_qb_base_urls():
@@ -229,7 +239,10 @@ def test_qbittorrent_connection(use_proxy=False):
     last_error = None
 
     for base_url in _ordered_qb_base_urls():
-        masked_url = masked_qb_base_url(base_url)
+        masked_url = masked_qb_base_url(
+            base_url,
+            allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
+        )
         try:
             logger.info(f"Testing connection to qBittorrent at {masked_url}")
             response = requests.get(
@@ -268,7 +281,10 @@ def login_to_qbittorrent(session, use_proxy=False):
 
     for base_url in _ordered_qb_base_urls():
         login_url = f'{base_url}/api/v2/auth/login'
-        masked_url = masked_qb_base_url(base_url)
+        masked_url = masked_qb_base_url(
+            base_url,
+            allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
+        )
         try:
             logger.info(f"Attempting to login to qBittorrent at {masked_url} as {mask_username(QB_USERNAME)}")
             response = session.post(
