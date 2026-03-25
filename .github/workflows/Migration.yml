@@ -70,8 +70,8 @@ on:
         required: false
         default: ''
         type: string
-      align_use_proxy:
-        description: 'Alignment: use spider proxy pool'
+      align_no_proxy:
+        description: 'Alignment: direct HTTP without proxy (debug; proxy enabled by default)'
         required: false
         default: false
         type: boolean
@@ -250,7 +250,7 @@ jobs:
           echo "Align Inventory:        ${{ inputs.align_inventory_history }}"
           echo "  Limit:                ${{ inputs.align_limit || '0 (all)' }}"
           echo "  Codes:                ${{ inputs.align_codes || '(none)' }}"
-          echo "  Use Proxy:            ${{ inputs.align_use_proxy }}"
+          echo "  No Proxy:             ${{ inputs.align_no_proxy }}"
           echo "  Enqueue QB:           ${{ inputs.align_enqueue_qb }}"
           echo "  Execute Delete:       ${{ inputs.align_execute_delete }}"
           echo "  QB Category:          ${{ inputs.align_qb_category || '(default)' }}"
@@ -314,8 +314,8 @@ jobs:
               CMD+=(--align-codes "$ALIGN_CODES")
             fi
 
-            if [ "${{ inputs.align_use_proxy }}" == "true" ]; then
-              CMD+=(--align-use-proxy)
+            if [ "${{ inputs.align_no_proxy }}" == "true" ]; then
+              CMD+=(--align-no-proxy)
             fi
 
             if [ "${{ inputs.align_enqueue_qb }}" == "true" ]; then
@@ -415,7 +415,7 @@ jobs:
           if [ "${{ inputs.align_inventory_history }}" == "true" ]; then
             echo "  - Limit: ${{ inputs.align_limit || '0 (all)' }}" >> $GITHUB_STEP_SUMMARY
             echo "  - Codes: ${{ inputs.align_codes || '(none)' }}" >> $GITHUB_STEP_SUMMARY
-            echo "  - Use Proxy: ${{ inputs.align_use_proxy == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+            echo "  - No Proxy: ${{ inputs.align_no_proxy == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
             echo "  - Enqueue QB: ${{ inputs.align_enqueue_qb == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
             echo "  - Execute Delete: ${{ inputs.align_execute_delete == true && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
             echo "  - QB Category: ${{ inputs.align_qb_category || '(default)' }}" >> $GITHUB_STEP_SUMMARY

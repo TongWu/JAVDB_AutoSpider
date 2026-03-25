@@ -1,6 +1,8 @@
 import os
 import sys
 
+import pytest
+
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
@@ -8,6 +10,7 @@ from migration.tools.align_inventory_with_moviehistory import (
     compute_missing_codes,
     _best_parsed_category,
     _to_purge_plan_rows,
+    parse_args,
 )
 
 
@@ -62,3 +65,27 @@ def test_purge_plan_rows_only_lower_rank_entries():
     assert len(rows) == 1
     assert rows[0]['source_path'].endswith('[有码-无字]')
     assert 'destination_path' not in rows[0]
+
+
+def test_parse_args_alignment_defaults_to_proxy(monkeypatch):
+    monkeypatch.setattr(sys, 'argv', ['align_inventory_with_moviehistory.py'])
+    args = parse_args()
+    assert args.no_proxy is False
+    assert args.use_proxy is True
+
+
+def test_parse_args_alignment_no_proxy(monkeypatch):
+    monkeypatch.setattr(sys, 'argv', ['align_inventory_with_moviehistory.py', '--no-proxy'])
+    args = parse_args()
+    assert args.no_proxy is True
+    assert args.use_proxy is False
+
+
+def test_parse_args_alignment_rejects_conflicting_proxy_flags(monkeypatch):
+    monkeypatch.setattr(sys, 'argv', [
+        'align_inventory_with_moviehistory.py',
+        '--no-proxy',
+        '--use-proxy',
+    ])
+    with pytest.raises(SystemExit):
+        parse_args()
