@@ -5,8 +5,10 @@ Scope:
 1) Only process movie codes present in RcloneInventory but missing in MovieHistory.
 2) For each missing code, search JavDB by code, strictly match exact video code,
    parse detail page, and upsert MovieHistory/TorrentHistory.
-3) Compare parsed torrent category vs current inventory category. If parsed is
-   better, generate qBittorrent upgrade tasks and an rclone purge plan (direct delete).
+3) Compare parsed torrents against inventory per family. The planner keeps the
+   best censored variant and the best uncensored variant independently, then
+   generates qBittorrent upgrade tasks and an rclone purge plan for only the
+   lower-quality entries inside the upgraded family.
 
 Proxy-backed fetching is enabled by default. Parallel mode (one worker per
 proxy) is used when proxy is enabled and the proxy pool is configured. Use
@@ -42,6 +44,17 @@ from api.parsers.detail_parser import parse_detail_page
 from api.parsers.index_parser import parse_index_page, find_exact_video_code_match
 from scripts.spider.fallback import get_page_url
 import scripts.spider.state as spider_state
+from scripts.ingestion.adapters import (
+    build_alignment_purge_plan_rows as _ie_build_alignment_purge_plan_rows,
+    build_alignment_qb_row as _ie_build_alignment_qb_row,
+)
+from scripts.ingestion.planner import build_alignment_upgrade_plan
+from scripts.ingestion.policies import (
+    alignment_best_inventory_rank as _ie_best_inventory_rank,
+    alignment_best_parsed_category as _ie_best_parsed_category,
+    alignment_inventory_entry_rank as _ie_inventory_entry_rank,
+    alignment_parsed_category_rank as _ie_parsed_category_rank,
+)
 from utils.config_helper import cfg
 from utils.db import db_load_history, db_load_rclone_inventory, db_upsert_history, init_db
 from utils.logging_config import get_logger, setup_logging
@@ -106,62 +119,23 @@ def compute_missing_codes(
 
 
 def _parsed_category_rank(category: str) -> int:
-    rank_map = {
-        'hacked_subtitle': 40,      # 无码破解 + 中字
-        'hacked_no_subtitle': 30,   # 无码破解 + 无字
-        'subtitle': 20,             # 有码 + 中字
-        'no_subtitle': 10,          # 有码 + 无字
-    }
-    return rank_map.get(category, 0)
+    return _ie_parsed_category_rank(category)
 
 
 def _inventory_entry_rank(entry: dict) -> int:
-    sensor = (entry.get('SensorCategory') or entry.get('sensor_category') or '').strip()
-    subtitle = (entry.get('SubtitleCategory') or entry.get('subtitle_category') or '').strip()
-    if sensor == '有码':
-        return 20 if subtitle == '中字' else 10
-    if sensor == '无码破解':
-        return 40 if subtitle == '中字' else 30
-    if sensor == '无码':
-        return 55 if subtitle == '中字' else 50
-    if sensor == '无码流出':
-        return 65 if subtitle == '中字' else 60
-    return 0
+    return _ie_inventory_entry_rank(entry)
 
 
 def _best_inventory_rank(entries: List[dict]) -> int:
-    if not entries:
-        return 0
-    return max(_inventory_entry_rank(e) for e in entries)
+    return _ie_best_inventory_rank(entries)
 
 
 def _best_parsed_category(magnet_links: Dict[str, str]) -> str:
-    candidates = ['hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle']
-    best = ''
-    best_rank = 0
-    for cat in candidates:
-        if not magnet_links.get(cat):
-            continue
-        rank = _parsed_category_rank(cat)
-        if rank > best_rank:
-            best = cat
-            best_rank = rank
-    return best
+    return _ie_best_parsed_category(magnet_links)
 
 
 def _to_qb_row(href: str, video_code: str, chosen_category: str, magnet_links: Dict[str, str]) -> dict:
-    row = {
-        'href': href,
-        'video_code': video_code,
-        'page': 1,
-        'hacked_subtitle': '',
-        'hacked_no_subtitle': '',
-        'subtitle': '',
-        'no_subtitle': '',
-    }
-    if chosen_category:
-        row[chosen_category] = magnet_links.get(chosen_category, '')
-    return row
+    return _ie_build_alignment_qb_row(href, video_code, chosen_category, magnet_links)
 
 
 def _to_purge_plan_rows(
@@ -170,23 +144,12 @@ def _to_purge_plan_rows(
     parsed_best_rank: int,
     new_torrent_category: str,
 ) -> List[dict]:
-    """Rows for ``rclone purge`` (lower-quality inventory folders only)."""
-    rows: List[dict] = []
-    for entry in inventory_entries:
-        src = (entry.get('FolderPath') or entry.get('folder_path') or '').strip()
-        if not src:
-            continue
-        if _inventory_entry_rank(entry) >= parsed_best_rank:
-            continue
-        rows.append({
-            'video_code': video_code,
-            'source_path': src,
-            'existing_sensor': entry.get('SensorCategory') or entry.get('sensor_category') or '',
-            'existing_subtitle': entry.get('SubtitleCategory') or entry.get('subtitle_category') or '',
-            'new_torrent_category': new_torrent_category,
-            'reason': 'parsed_better_version',
-        })
-    return rows
+    return _ie_build_alignment_purge_plan_rows(
+        video_code,
+        inventory_entries,
+        parsed_best_rank,
+        new_torrent_category,
+    )
 
 
 def _build_db_upsert_kwargs(detail_href: str, video_code: str, magnet_links: dict,
@@ -370,19 +333,12 @@ def _make_align_process_fn(inventory_map):
         )
 
         # 4) Compare ranks and build upgrade plan
-        qb_rows: list[dict] = []
-        purge_plan_rows: list[dict] = []
-        parsed_best_cat = _best_parsed_category(magnet_links)
-        parsed_best_rank = _parsed_category_rank(parsed_best_cat)
-        inventory_best_rank = _best_inventory_rank(inventory_entries)
-
-        chosen_upgrade = ''
-        if parsed_best_cat and parsed_best_rank > inventory_best_rank:
-            chosen_upgrade = parsed_best_cat
-            qb_rows.append(_to_qb_row(detail_href, video_code, parsed_best_cat, magnet_links))
-            purge_plan_rows.extend(_to_purge_plan_rows(
-                video_code, inventory_entries, parsed_best_rank, parsed_best_cat,
-            ))
+        upgrade_plan = build_alignment_upgrade_plan(
+            detail_href=detail_href,
+            video_code=video_code,
+            magnet_links=magnet_links,
+            inventory_entries=inventory_entries,
+        )
 
         return {
             'status': 'ok',
@@ -390,10 +346,10 @@ def _make_align_process_fn(inventory_map):
             'href': detail_href,
             'detail_href': detail_href,
             'actor_name': actor_name,
-            'chosen_upgrade_category': chosen_upgrade,
+            'chosen_upgrade_category': upgrade_plan.chosen_upgrade_category,
             'db_upsert_kwargs': db_kwargs,
-            'qb_rows': qb_rows,
-            'purge_plan_rows': purge_plan_rows,
+            'qb_rows': upgrade_plan.qb_rows,
+            'purge_plan_rows': upgrade_plan.purge_plan_rows,
         }
 
     return _align_process
@@ -630,21 +586,15 @@ def run_alignment(args: argparse.Namespace) -> int:
                     actor_name, actor_gender, actor_link, supporting_actors,
                 ))
 
-            parsed_best_cat = _best_parsed_category(magnet_links)
-            parsed_best_rank = _parsed_category_rank(parsed_best_cat)
             inventory_entries = inventory.get(code, [])
-            inventory_best_rank = _best_inventory_rank(inventory_entries)
-
-            if parsed_best_cat and parsed_best_rank > inventory_best_rank:
-                qb_rows.append(_to_qb_row(detail_href, code, parsed_best_cat, magnet_links))
-                purge_plan_rows.extend(
-                    _to_purge_plan_rows(
-                        code,
-                        inventory_entries,
-                        parsed_best_rank,
-                        parsed_best_cat,
-                    )
-                )
+            upgrade_plan = build_alignment_upgrade_plan(
+                detail_href=detail_href,
+                video_code=code,
+                magnet_links=magnet_links,
+                inventory_entries=inventory_entries,
+            )
+            qb_rows.extend(upgrade_plan.qb_rows)
+            purge_plan_rows.extend(upgrade_plan.purge_plan_rows)
 
             process_results.append(
                 MissingProcessResult(
@@ -653,7 +603,7 @@ def run_alignment(args: argparse.Namespace) -> int:
                     href=detail_href,
                     detail_href=detail_href,
                     actor_name=actor_name,
-                    chosen_upgrade_category=parsed_best_cat,
+                    chosen_upgrade_category=upgrade_plan.chosen_upgrade_category,
                 )
             )
 
