@@ -453,10 +453,16 @@ python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --ignore-releas
 # Ad hoc mode: Re-download everything from an actor (ignores history)
 python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --ignore-history --ignore-release-date
 
-# Use proxy to access JavDB (useful for geo-restricted regions)
+# Follow proxy modules from config.py (default auto mode)
+python3 -m apps.cli.spider --start-page 1 --end-page 5
+
+# Force-enable proxy for this run
 python3 -m apps.cli.spider --use-proxy --start-page 1 --end-page 5
 
-# Combine multiple options: proxy + custom URL + ignore release date
+# Force-disable proxy for this run
+python3 -m apps.cli.spider --no-proxy --start-page 1 --end-page 5
+
+# Combine multiple options: force proxy + custom URL + ignore release date
 python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --use-proxy --ignore-release-date
 ```
 
@@ -473,7 +479,8 @@ python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --use-proxy --i
 | `--url` | Custom URL to scrape (enables ad hoc mode) | None | `--url "https://javdb.com/?vft=2"` |
 | `--phase` | Phase to run (1/2/all) | all | `--phase 1` |
 | `--ignore-release-date` | Ignore today/yesterday tags | False | `--ignore-release-date` |
-| `--use-proxy` | Enable proxy from config.py | False | `--use-proxy` |
+| `--use-proxy` | Force-enable proxy for this run | Auto (`PROXY_MODULES`) | `--use-proxy` |
+| `--no-proxy` | Force-disable proxy for this run | Auto (`PROXY_MODULES`) | `--no-proxy` |
 | `--always-bypass-time [MINUTES]` | Keep using CF bypass after fallback success (omit value or 0 = whole session; omit flag = always direct-first) | None | `--always-bypass-time 30` |
 | `--sequential` | Force sequential processing (disable parallel) | False | `--sequential` |
 | `--max-movies-phase1` | Limit phase 1 movies (for testing) | None | `--max-movies-phase1 10` |
@@ -519,7 +526,7 @@ python3 packages/python/javdb_migrations/tools/reclassify_c_hacked_torrents.py
 
 **Run the complete workflow:**
 ```bash
-# Basic pipeline run
+# Basic pipeline run (auto proxy mode from config.py)
 python pipeline_run_and_notify.py
 
 # Pipeline with custom arguments (passed to Javdb_Spider)
@@ -531,9 +538,11 @@ python pipeline_run_and_notify.py --ignore-release-date --phase 1
 # Pipeline with custom URL
 python pipeline_run_and_notify.py --url "https://javdb.com/actors/EvkJ"
 
-# Pipeline with proxy enabled
-# Applies to spider and PikPak Bridge; qBittorrent uploader stays direct
+# Force-enable proxy for all pipeline steps
 python pipeline_run_and_notify.py --use-proxy
+
+# Force-disable proxy for all pipeline steps
+python pipeline_run_and_notify.py --no-proxy
 
 # Pipeline with PikPak individual mode (process torrents one by one)
 python pipeline_run_and_notify.py --pikpak-individual
@@ -549,7 +558,8 @@ The pipeline will:
 7. **Analyze logs for critical errors**
 8. Send email notifications with appropriate status
 
-**Note**: The pipeline accepts the same arguments as `python3 -m apps.cli.spider` and passes them through automatically. `--use-proxy` is forwarded to spider and PikPak Bridge, but not to `python3 -m apps.cli.qb_uploader`. Additional pipeline-specific arguments include `--pikpak-individual` for PikPak Bridge mode control.
+**Note**: The pipeline accepts the same arguments as `python3 -m apps.cli.spider` and passes them through automatically. By default it does **not** inject `--use-proxy` or `--no-proxy`; each step follows `config.py` via `PROXY_MODULES`. If you manually pass `--use-proxy` or `--no-proxy` to the pipeline, that override is forwarded to spider, qBittorrent uploader, and PikPak Bridge. Additional pipeline-specific arguments include `--pikpak-individual` for PikPak Bridge mode control.
+When dedup runs, the email report now breaks out `Redownload Upgrade` entries separately from regular dedup upgrades.
 
 #### Intelligent Error Detection
 
@@ -634,8 +644,8 @@ PROXY_POOL_MAX_FAILURES = 3  # Max failures before cooldown
 PROXY_HTTP = None
 PROXY_HTTPS = None
 
-# Modular proxy control - which modules use proxy
-PROXY_MODULES = ['all']  # 'all' or list: 'spider', 'qbittorrent', 'pikpak'
+# Modular proxy control - which modules use proxy by default
+PROXY_MODULES = ['spider']  # default; or use 'all' / list: 'spider', 'qbittorrent', 'pikpak'
 
 # =============================================================================
 # SPIDER CONFIGURATION
@@ -884,10 +894,13 @@ cat "reports/proxy_bans.csv"
 # - Current status (BANNED/AVAILABLE)
 ```
 
-Then run with `--use-proxy` flag:
+Commands use `PROXY_MODULES` automatically by default. Use `--use-proxy` to force proxy on for one run, or `--no-proxy` to force it off:
 ```bash
+python3 -m apps.cli.spider
 python3 -m apps.cli.spider --use-proxy
+python3 -m apps.cli.spider --no-proxy
 ```
+The Web UI and task API now mirror the same tri-state behavior: omit both flags for auto mode, set `use_proxy=true` to force proxy on, or `no_proxy=true` to force it off.
 
 #### Single Proxy Mode (Legacy)
 
@@ -913,34 +926,41 @@ PROXY_HTTP = 'http://username:password@proxy.example.com:8080'
 PROXY_HTTPS = 'http://username:password@proxy.example.com:8080'
 
 # Control which modules use proxy (modular control)
-PROXY_MODULES = ['all']  # Enable for all modules
-# PROXY_MODULES = ['spider']  # Only spider module (includes login)
+PROXY_MODULES = ['spider']  # Default: only spider module (includes login)
+# PROXY_MODULES = ['all']  # Enable for all modules
 # PROXY_MODULES = ['spider', 'qbittorrent']  # Spider and qBittorrent
 # PROXY_MODULES = []  # Disable for all modules
 ```
 
-**2. Enable proxy with command-line flag:**
+**2. Optional command-line overrides:**
 ```bash
-# Enable proxy for spider
+# Auto mode: follow PROXY_MODULES from config.py
+python3 -m apps.cli.spider
+
+# Force-enable proxy for spider
 python3 -m apps.cli.spider --use-proxy
 
-# Enable proxy for qBittorrent uploader
+# Force-enable proxy for qBittorrent uploader
 python3 -m apps.cli.qb_uploader --use-proxy
 
-# Enable proxy for PikPak bridge
+# Force-enable proxy for PikPak bridge
 python3 -m apps.cli.pikpak_bridge --use-proxy
+
+# Force-disable proxy regardless of PROXY_MODULES
+python3 -m apps.cli.spider --no-proxy
 
 # Combine with other options
 python3 -m apps.cli.spider --use-proxy --url "https://javdb.com/actors/EvkJ"
 
-# Via pipeline (enables proxy for all components)
+# Via pipeline (forces proxy for all components in that run)
 python pipeline_run_and_notify.py --use-proxy
 ```
 
 **Note:** 
-- Proxy is **disabled by default**. You must use `--use-proxy` to enable it.
-- If `--use-proxy` is set but no proxy is configured in `config.py`, a warning will be logged.
-- You can control which parts of the spider use proxy via `PROXY_MODULES` configuration.
+- The default behavior is **auto mode**: commands follow `PROXY_MODULES` from `config.py`.
+- `--use-proxy` forces proxy on for every module in that command.
+- `--no-proxy` forces proxy off for every module in that command.
+- If proxy is forced on but no proxy is configured in `config.py`, a warning will be logged.
 
 #### Modular Proxy Control
 
@@ -951,15 +971,15 @@ The `PROXY_MODULES` setting allows fine-grained control over which parts use pro
 | `spider` | JavDB Spider | Use proxy to access all JavDB pages (index, detail, login/session refresh) |
 | `qbittorrent` | qBittorrent Web UI API | Use proxy for qBittorrent API requests |
 | `pikpak` | PikPak bridge qBittorrent API | Use proxy for PikPak bridge operations |
-| `all` | All modules | Use proxy for everything (default) |
+| `all` | All modules | Use proxy for everything |
 
 **Examples:**
 ```python
+# Default: only use proxy for spider module (includes login)
+PROXY_MODULES = ['spider']
+
 # Use proxy for everything
 PROXY_MODULES = ['all']
-
-# Only use proxy for spider module (includes login)
-PROXY_MODULES = ['spider']
 
 # Use proxy for spider and qBittorrent
 PROXY_MODULES = ['spider', 'qbittorrent']
@@ -970,7 +990,7 @@ PROXY_MODULES = ['qbittorrent', 'pikpak']
 # Use proxy for spider only, not qBittorrent/PikPak
 PROXY_MODULES = ['spider']
 
-# Disable proxy for all modules (even if --use-proxy is set)
+# Disable proxy for all modules by default
 PROXY_MODULES = []
 ```
 

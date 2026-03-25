@@ -350,6 +350,7 @@ class TestErrorHandlingExitCodes:
         mock_args.return_value = MagicMock(
             mode='daily',
             use_proxy=False,
+            no_proxy=False,
             input_file=None,
             from_pipeline=False
         )
@@ -372,6 +373,7 @@ class TestErrorHandlingExitCodes:
         mock_args.return_value = MagicMock(
             mode='daily',
             use_proxy=False,
+            no_proxy=False,
             input_file=None,
             from_pipeline=False
         )
@@ -395,6 +397,7 @@ class TestErrorHandlingExitCodes:
         mock_args.return_value = MagicMock(
             mode='adhoc',
             use_proxy=False,
+            no_proxy=False,
             input_file=None,
             from_pipeline=False
         )
@@ -418,6 +421,7 @@ class TestErrorHandlingExitCodes:
         mock_args.return_value = MagicMock(
             mode='daily',
             use_proxy=False,
+            no_proxy=False,
             input_file=None,
             from_pipeline=False
         )
@@ -828,7 +832,6 @@ class TestInitializeProxyHelper:
         """Test initialization without proxy."""
         from scripts.qb_uploader import initialize_proxy_helper
         
-        result = initialize_proxy_helper(use_proxy=False)
+        result = initialize_proxy_helper(False)
         
         assert result is None
-

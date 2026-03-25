@@ -23,6 +23,21 @@ on:
         options:
           - 'ubuntu-latest'
           - 'self-hosted'
+      proxy_spider:
+        description: 'Enable proxy for Spider requests'
+        required: false
+        default: true
+        type: boolean
+      proxy_qbittorrent:
+        description: 'Enable proxy for qBittorrent requests'
+        required: false
+        default: false
+        type: boolean
+      proxy_pikpak:
+        description: 'Enable proxy for PikPak requests'
+        required: false
+        default: false
+        type: boolean
       enable_rclone_filter:
         description: 'Enable rclone inventory filter (skip entries already in rclone inventory with 中字)'
         required: false
@@ -150,6 +165,9 @@ jobs:
           VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS || '691200' }}
           VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES || 3 }}
           VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_PROXY_SPIDER_ENABLED: ${{ github.event_name == 'workflow_dispatch' && (inputs.proxy_spider && 'true' || 'false') || 'true' }}
+          VAR_PROXY_QBITTORRENT_ENABLED: ${{ github.event_name == 'workflow_dispatch' && (inputs.proxy_qbittorrent && 'true' || 'false') || 'false' }}
+          VAR_PROXY_PIKPAK_ENABLED: ${{ github.event_name == 'workflow_dispatch' && (inputs.proxy_pikpak && 'true' || 'false') || 'false' }}
           VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
           VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
           VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED || 'True' }}
@@ -293,7 +311,7 @@ jobs:
         run: |
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
-          python3 -m apps.cli.health_check --use-proxy
+          python3 -m apps.cli.health_check
 
   # =============================================================================
   # Job 3: Run Pipeline - Execute spider, uploader, and pikpak bridge
@@ -387,7 +405,7 @@ jobs:
           SCHEDULE_ENABLE_DEDUP: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
         run: |
           set -o pipefail
-          SPIDER_CMD=(python3 -m apps.cli.spider --use-proxy)
+          SPIDER_CMD=(python3 -m apps.cli.spider)
           if [ "$INPUT_DISABLE_ALL_FILTERS" = "true" ]; then
             SPIDER_CMD+=(--disable-all-filters)
             echo "⚠️ ALL FILTERS DISABLED: history, rclone inventory, release date filters are all bypassed"

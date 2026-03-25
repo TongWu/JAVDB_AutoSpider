@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 # Import masking utilities
 from packages.python.javdb_core.masking import mask_ip_address, mask_proxy_url, mask_full
+from packages.python.javdb_platform.proxy_policy import should_proxy_module
 
 # Try Rust implementations
 try:
@@ -82,7 +83,7 @@ class RequestConfig:
     
     def __post_init__(self):
         if self.proxy_modules is None:
-            self.proxy_modules = ['all']
+            self.proxy_modules = ['spider']
         if self.cf_bypass_port_map is None or not isinstance(self.cf_bypass_port_map, dict):
             self.cf_bypass_port_map = {}
 
@@ -157,30 +158,18 @@ class RequestHandler:
         elif not CURL_CFFI_AVAILABLE and self.config.use_curl_cffi:
             logger.info("curl_cffi not installed - using standard requests (install with: pip install curl_cffi)")
         
-    def should_use_proxy_for_module(self, module_name: str, use_proxy_flag: bool) -> bool:
+    def should_use_proxy_for_module(self, module_name: str, use_proxy_flag: Optional[bool]) -> bool:
         """
         Check if a specific module should use proxy based on configuration.
         
         Args:
             module_name: Name of the module ('spider', 'qbittorrent', 'pikpak', etc.)
-            use_proxy_flag: Whether --use-proxy flag is enabled
+            use_proxy_flag: Proxy override: True=force on, False=force off, None=auto
         
         Returns:
             bool: True if the module should use proxy, False otherwise
         """
-        if not use_proxy_flag:
-            return False
-        
-        if not self.config.proxy_modules:
-            # Empty list means no modules use proxy
-            return False
-        
-        if 'all' in self.config.proxy_modules:
-            # 'all' means all modules use proxy
-            return True
-        
-        # Check if specific module is in the list
-        return module_name in self.config.proxy_modules
+        return should_proxy_module(module_name, use_proxy_flag, self.config.proxy_modules)
 
     @staticmethod
     def _log_ctx(module_name: str, proxy_name: Optional[str] = None) -> str:
@@ -1100,40 +1089,31 @@ class ProxyHelper:
             proxy_https: Legacy HTTPS proxy URL
         """
         self.proxy_pool = proxy_pool
-        self.proxy_modules = proxy_modules if proxy_modules is not None else ['all']
+        self.proxy_modules = proxy_modules if proxy_modules is not None else ['spider']
         self.proxy_mode = proxy_mode
         self.proxy_http = proxy_http
         self.proxy_https = proxy_https
     
-    def should_use_proxy_for_module(self, module_name: str, use_proxy_flag: bool) -> bool:
+    def should_use_proxy_for_module(self, module_name: str, use_proxy_flag: Optional[bool]) -> bool:
         """
         Check if a specific module should use proxy based on configuration.
         
         Args:
             module_name: Name of the module (e.g., 'qbittorrent', 'pikpak')
-            use_proxy_flag: Whether --use-proxy flag is enabled
+            use_proxy_flag: Proxy override: True=force on, False=force off, None=auto
         
         Returns:
             bool: True if the module should use proxy, False otherwise
         """
-        if not use_proxy_flag:
-            return False
-        
-        if not self.proxy_modules:
-            return False
-        
-        if 'all' in self.proxy_modules:
-            return True
-        
-        return module_name in self.proxy_modules
+        return should_proxy_module(module_name, use_proxy_flag, self.proxy_modules)
     
-    def get_proxies_dict(self, module_name: str, use_proxy_flag: bool) -> Optional[Dict[str, str]]:
+    def get_proxies_dict(self, module_name: str, use_proxy_flag: Optional[bool]) -> Optional[Dict[str, str]]:
         """
         Get proxies dictionary for requests if module should use proxy.
         
         Args:
             module_name: Name of the module
-            use_proxy_flag: Whether --use-proxy flag is enabled
+            use_proxy_flag: Proxy override: True=force on, False=force off, None=auto
         
         Returns:
             dict or None: Proxies dictionary for requests, or None
@@ -1216,4 +1196,3 @@ def create_proxy_helper_from_config(proxy_pool=None, proxy_modules=None, proxy_m
         proxy_http=proxy_http,
         proxy_https=proxy_https
     )
-

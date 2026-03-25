@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from apps.api.infra.security import (
     _is_valid_javdb_host,
@@ -37,7 +37,18 @@ class CrawlIndexPayload(BaseModel):
     page_delay: float = 1.0
 
 
-class SpiderJobPayload(BaseModel):
+class CliProxyOverridePayload(BaseModel):
+    use_proxy: bool = False
+    no_proxy: bool = False
+
+    @model_validator(mode="after")
+    def validate_proxy_override(self):
+        if self.use_proxy and self.no_proxy:
+            raise ValueError("use_proxy and no_proxy cannot both be true")
+        return self
+
+
+class SpiderJobPayload(CliProxyOverridePayload):
     url: Optional[str] = None
     start_page: int = 1
     end_page: Optional[int] = None
@@ -46,7 +57,6 @@ class SpiderJobPayload(BaseModel):
     ignore_history: bool = False
     use_history: bool = False
     ignore_release_date: bool = False
-    use_proxy: bool = True
     no_rclone_filter: bool = False
     disable_all_filters: bool = False
     enable_dedup: bool = False
@@ -67,7 +77,7 @@ class LoginPayload(BaseModel):
     password: str = Field(..., min_length=1, max_length=256)
 
 
-class DailyTaskPayload(BaseModel):
+class DailyTaskPayload(CliProxyOverridePayload):
     start_page: int = Field(1, ge=1, le=200)
     end_page: int = Field(10, ge=1, le=200)
     all: bool = False
@@ -76,7 +86,6 @@ class DailyTaskPayload(BaseModel):
     output_file: Optional[str] = None
     dry_run: bool = False
     ignore_release_date: bool = False
-    use_proxy: bool = False
     max_movies_phase1: Optional[int] = Field(None, ge=1, le=10000)
     max_movies_phase2: Optional[int] = Field(None, ge=1, le=10000)
     pikpak_individual: bool = False
@@ -112,16 +121,13 @@ class DailyTaskPayload(BaseModel):
         return _sanitize_output_filename(value)
 
 
-class AdhocTaskPayload(BaseModel):
+class AdhocTaskPayload(CliProxyOverridePayload):
     url: str = Field(..., min_length=1, max_length=2048)
     start_page: int = Field(1, ge=1, le=200)
     end_page: int = Field(1, ge=1, le=200)
     history_filter: bool = False
     date_filter: bool = False
     phase: str = Field("all")
-    use_proxy: bool = True
-    proxy_uploader: bool = False
-    proxy_pikpak: bool = False
     qb_category: Optional[str] = Field(None, max_length=255)
     dry_run: bool = False
     ignore_release_date: bool = True
@@ -151,9 +157,8 @@ class AdhocTaskPayload(BaseModel):
         return value
 
 
-class HealthCheckPayload(BaseModel):
+class HealthCheckPayload(CliProxyOverridePayload):
     check_smtp: bool = True
-    use_proxy: bool = False
 
 
 class ExploreResolvePayload(BaseModel):

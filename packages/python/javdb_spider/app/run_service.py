@@ -13,6 +13,11 @@ from packages.python.javdb_platform.git_helper import git_commit_and_push, flush
 from packages.python.javdb_core.filename_helper import generate_output_csv_name
 from packages.python.javdb_platform.path_helper import ensure_dated_dir
 from packages.python.javdb_platform.csv_writer import set_active_session
+from packages.python.javdb_platform.proxy_policy import (
+    describe_proxy_override,
+    resolve_proxy_override,
+    should_proxy_module,
+)
 
 import packages.python.javdb_spider.runtime.state as state
 from packages.python.javdb_spider.runtime.config import (
@@ -85,7 +90,8 @@ def main():
     use_history = args.use_history
     parse_all = args.all
     ignore_release_date = args.ignore_release_date
-    use_proxy = args.use_proxy
+    proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
+    use_proxy = should_proxy_module('spider', proxy_override, PROXY_MODULES)
     use_cf_bypass = False
     always_bypass_time = args.always_bypass_time
     max_movies_phase1 = args.max_movies_phase1
@@ -148,6 +154,7 @@ def main():
     if ignore_release_date:
         logger.info("IGNORE RELEASE DATE: Will process all entries regardless of today/yesterday tags")
 
+    logger.info(f"Proxy policy for spider: {describe_proxy_override(proxy_override)}")
     if use_proxy:
         logger.info("MODE: Proxy (CF bypass available as automatic fallback)")
     else:
