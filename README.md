@@ -851,7 +851,7 @@ Configure multiple proxies for automatic failover:
 - **Automatic Switching**: When one proxy fails, automatically switches to another
 - **Passive Health Checking**: Only marks proxies as failed on actual failures (no active probing)
 - **Cooldown Mechanism**: Failed proxies are temporarily disabled to allow recovery (8 days default)
-- **Ban Detection**: Automatically detects when proxies are banned by JavDB
+- **Ban Detection**: Automatically detects proxy bans via HTTP 403 responses and ban-page HTML patterns, immediately bans the proxy and re-queues the page to another worker
 - **Persistent Ban Records**: Ban history stored in `reports/proxy_bans.csv` and persists across runs
 - **Statistics Tracking**: Detailed success rates and usage statistics for each proxy
 - **Perfect for JavDB**: Respects strict rate limiting while providing redundancy
