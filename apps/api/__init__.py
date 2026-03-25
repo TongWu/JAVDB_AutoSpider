@@ -1,0 +1,1 @@
+"""Canonical FastAPI application package."""

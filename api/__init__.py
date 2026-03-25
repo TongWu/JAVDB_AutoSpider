@@ -14,6 +14,10 @@ Quick start (REST)::
     uvicorn api.server:app --reload
 """
 
+from compat import extend_package_path
+
+extend_package_path(__path__, "apps", "api")
+
 from api.models import (
     ActorCredit,
     MovieLink,

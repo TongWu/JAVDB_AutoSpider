@@ -1,58 +1,14 @@
-"""Shared ingestion data models."""
+"""Compatibility wrapper for the canonical packages.python.javdb_ingestion.models module."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+import sys
 
-from scripts.spider.services.dedup import DedupRecord
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
+from compat import alias_module
 
-@dataclass
-class ParsedMovie:
-    """Normalized parsed-movie payload shared across ingestion call sites."""
-
-    href: str
-    video_code: str
-    page_num: int
-    actor_name: str = ''
-    actor_gender: str = ''
-    actor_link: str = ''
-    supporting_actors: str = ''
-    magnet_links: Dict[str, str] = field(default_factory=dict)
-    size_links: Dict[str, str] = field(default_factory=dict)
-    file_count_links: Dict[str, int] = field(default_factory=dict)
-    resolution_links: Dict[str, Optional[int]] = field(default_factory=dict)
-    entry: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class SpiderIngestionPlan:
-    """Decision payload for spider ingestion/reporting/history writes."""
-
-    should_skip: bool
-    skip_reason: str = ''
-    history_torrent_types: List[str] = field(default_factory=list)
-    redownload_categories: List[str] = field(default_factory=list)
-    dedup_records: List[DedupRecord] = field(default_factory=list)
-    report_row: Optional[dict] = None
-    has_any_torrents: bool = False
-    has_new_torrents: bool = False
-    should_include_in_report: bool = False
-    new_magnet_links: Dict[str, str] = field(default_factory=dict)
-    new_sizes: Dict[str, str] = field(default_factory=dict)
-    new_file_counts: Dict[str, int] = field(default_factory=dict)
-    new_resolutions: Dict[str, Optional[int]] = field(default_factory=dict)
-
-
-@dataclass
-class AlignmentUpgradePlan:
-    """Upgrade-plan payload for inventory alignment."""
-
-    chosen_upgrade_category: str = ''
-    chosen_upgrade_categories: List[str] = field(default_factory=list)
-    parsed_best_rank: int = 0
-    inventory_best_rank: int = 0
-    qb_rows: List[dict] = field(default_factory=list)
-    purge_plan_rows: List[dict] = field(default_factory=list)
-
+alias_module(__name__, "packages.python.javdb_ingestion.models")
