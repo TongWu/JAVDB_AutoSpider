@@ -54,7 +54,7 @@ on:
         required: false
         type: number
       proxy_uploader:
-        description: 'Enable proxy for qBittorrent Uploader requests'
+        description: 'Deprecated: qBittorrent Uploader no longer uses proxy'
         required: false
         default: false
         type: boolean
@@ -342,14 +342,13 @@ jobs:
       - name: Run health checks
         env:
           INPUT_PROXY_SPIDER: ${{ inputs.proxy_spider }}
-          INPUT_PROXY_UPLOADER: ${{ inputs.proxy_uploader }}
           INPUT_PROXY_PIKPAK: ${{ inputs.proxy_pikpak }}
         run: |
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
           
           # Use proxy for health check if any proxy option is enabled
-          if [ "$INPUT_PROXY_SPIDER" = "true" ] || [ "$INPUT_PROXY_UPLOADER" = "true" ] || [ "$INPUT_PROXY_PIKPAK" = "true" ]; then
+          if [ "$INPUT_PROXY_SPIDER" = "true" ] || [ "$INPUT_PROXY_PIKPAK" = "true" ]; then
             python3 -m apps.cli.health_check --use-proxy
           else
             python3 -m apps.cli.health_check
@@ -446,7 +445,6 @@ jobs:
           INPUT_DATE_FILTER: ${{ inputs.date_filter }}
           INPUT_ENABLE_RCLONE_FILTER: ${{ inputs.enable_rclone_filter }}
           INPUT_PROXY_SPIDER: ${{ inputs.proxy_spider }}
-          INPUT_PROXY_UPLOADER: ${{ inputs.proxy_uploader }}
           INPUT_PROXY_PIKPAK: ${{ inputs.proxy_pikpak }}
           INPUT_QB_CATEGORY: ${{ inputs.qb_category }}
         run: |
@@ -591,7 +589,6 @@ jobs:
         id: uploader
         env:
           CSV_PATH: ${{ steps.spider.outputs.csv_filename }}
-          INPUT_PROXY_UPLOADER: ${{ inputs.proxy_uploader }}
           INPUT_QB_CATEGORY: ${{ inputs.qb_category }}
           SPIDER_SESSION_ID: ${{ steps.spider.outputs.session_id }}
         run: |
@@ -606,10 +603,6 @@ jobs:
             echo "Using CSV file from spider: $CSV_PATH"
           else
             echo "Warning: No CSV path provided, qb_uploader will use auto-discovery"
-          fi
-          
-          if [ "$INPUT_PROXY_UPLOADER" = "true" ]; then
-            CMD_ARGS+=(--use-proxy)
           fi
           
           # Add custom category if provided

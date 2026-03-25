@@ -532,6 +532,7 @@ python pipeline_run_and_notify.py --ignore-release-date --phase 1
 python pipeline_run_and_notify.py --url "https://javdb.com/actors/EvkJ"
 
 # Pipeline with proxy enabled
+# Applies to spider and PikPak Bridge; qBittorrent uploader stays direct
 python pipeline_run_and_notify.py --use-proxy
 
 # Pipeline with PikPak individual mode (process torrents one by one)
@@ -548,7 +549,7 @@ The pipeline will:
 7. **Analyze logs for critical errors**
 8. Send email notifications with appropriate status
 
-**Note**: The pipeline accepts the same arguments as `python3 -m apps.cli.spider` and passes them through automatically. Additional pipeline-specific arguments include `--pikpak-individual` for PikPak Bridge mode control.
+**Note**: The pipeline accepts the same arguments as `python3 -m apps.cli.spider` and passes them through automatically. `--use-proxy` is forwarded to spider and PikPak Bridge, but not to `python3 -m apps.cli.qb_uploader`. Additional pipeline-specific arguments include `--pikpak-individual` for PikPak Bridge mode control.
 
 #### Intelligent Error Detection
 
