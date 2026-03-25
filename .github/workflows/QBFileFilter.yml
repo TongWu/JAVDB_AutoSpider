@@ -31,8 +31,8 @@ on:
         required: false
         type: boolean
         default: true
-  schedule:
-    - cron: '0 16 * * *'
+  # schedule: # DISABLED FOR PUBLIC REPO
+    # - cron: '0 16 * * *'
 
 jobs:
   # =============================================================================
