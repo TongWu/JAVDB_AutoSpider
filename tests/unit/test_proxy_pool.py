@@ -539,3 +539,69 @@ class TestProxyPoolWithBannedProxy:
         
         # Banned proxy should not be added
         assert len(pool2.proxies) == 0
+
+
+class TestProxyPoolBanProxy:
+    """Test cases for ProxyPool.ban_proxy() method.
+
+    Uses unique proxy names (``ban-*``) to avoid collisions with the global
+    singleton ``ProxyBanManager`` that may have been populated by earlier tests.
+    """
+
+    def test_ban_proxy_immediately_bans_and_switches(self, temp_dir):
+        """ban_proxy should put target into cooldown and switch to next."""
+        ban_log_file = os.path.join(temp_dir, 'proxy_bans_ban.csv')
+        pool = ProxyPool(ban_log_file=ban_log_file, max_failures_before_cooldown=5)
+        pool.add_proxy(http_url="http://ban-imm1:8080", name="ban-imm-1")
+        pool.add_proxy(http_url="http://ban-imm2:8080", name="ban-imm-2")
+
+        result = pool.ban_proxy("ban-imm-1")
+
+        assert result is True
+        assert pool.proxies[0].is_in_cooldown()
+        assert pool.current_index == 1
+
+    def test_ban_proxy_records_in_ban_manager(self, temp_dir):
+        """ban_proxy should call ban_manager.add_ban."""
+        ban_log_file = os.path.join(temp_dir, 'proxy_bans_record.csv')
+        pool = ProxyPool(ban_log_file=ban_log_file)
+        pool.add_proxy(http_url="http://ban-rec1:8080", name="ban-rec-1")
+        pool.add_proxy(http_url="http://ban-rec2:8080", name="ban-rec-2")
+
+        with patch.object(pool.ban_manager, 'add_ban') as mock_add:
+            pool.ban_proxy("ban-rec-1")
+            mock_add.assert_called_once_with("ban-rec-1", "http://ban-rec1:8080")
+
+    def test_ban_proxy_nonexistent_name(self, temp_dir):
+        """ban_proxy with unknown name should return False."""
+        ban_log_file = os.path.join(temp_dir, 'proxy_bans_noname.csv')
+        pool = ProxyPool(ban_log_file=ban_log_file)
+        pool.add_proxy(http_url="http://ban-exist1:8080", name="ban-exist-1")
+
+        result = pool.ban_proxy("nonexistent-ban")
+
+        assert result is False
+
+    def test_ban_proxy_no_other_available(self, temp_dir):
+        """ban_proxy on the only proxy should return False."""
+        ban_log_file = os.path.join(temp_dir, 'proxy_bans_solo.csv')
+        pool = ProxyPool(ban_log_file=ban_log_file)
+        pool.add_proxy(http_url="http://ban-solo:8080", name="ban-solo-proxy")
+
+        result = pool.ban_proxy("ban-solo-proxy")
+
+        assert result is False
+        assert pool.proxies[0].is_in_cooldown()
+
+    def test_ban_proxy_by_current_proxy(self, temp_dir):
+        """ban_proxy with None should ban the current proxy."""
+        ban_log_file = os.path.join(temp_dir, 'proxy_bans_current.csv')
+        pool = ProxyPool(ban_log_file=ban_log_file)
+        pool.add_proxy(http_url="http://ban-cur1:8080", name="ban-cur-1")
+        pool.add_proxy(http_url="http://ban-cur2:8080", name="ban-cur-2")
+
+        result = pool.ban_proxy(None)
+
+        assert result is True
+        assert pool.proxies[0].is_in_cooldown()
+        assert pool.current_index == 1

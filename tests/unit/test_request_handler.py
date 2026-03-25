@@ -15,6 +15,7 @@ from utils.infra.request_handler import (
     RequestConfig,
     RequestHandler,
     ProxyHelper,
+    ProxyBannedError,
     create_request_handler_from_config,
     create_proxy_helper_from_config
 )
@@ -294,7 +295,7 @@ class TestRequestHandler:
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
         
-        handler = RequestHandler()
+        handler = RequestHandler(config=RequestConfig(use_curl_cffi=False))
         html, success, is_turnstile = handler._fetch_direct(
             'http://test.com', None, 'Test'
         )
@@ -313,7 +314,7 @@ class TestRequestHandler:
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
         
-        handler = RequestHandler()
+        handler = RequestHandler(config=RequestConfig(use_curl_cffi=False))
         html, success, is_turnstile = handler._fetch_direct(
             'http://test.com', None, 'Test'
         )
@@ -331,7 +332,7 @@ class TestRequestHandler:
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
         
-        config = RequestConfig(javdb_session_cookie='my_session_cookie')
+        config = RequestConfig(javdb_session_cookie='my_session_cookie', use_curl_cffi=False)
         handler = RequestHandler(config=config)
         
         handler._fetch_direct('http://test.com', None, 'Test', use_cookie=True)
@@ -611,7 +612,7 @@ class TestRequestHandlerAdvanced:
         """Test _fetch_direct error handling."""
         mock_get.side_effect = requests.RequestException("Connection failed")
         
-        handler = RequestHandler()
+        handler = RequestHandler(config=RequestConfig(use_curl_cffi=False))
         html, success, is_turnstile = handler._fetch_direct(
             'http://test.com', None, 'Test'
         )
@@ -630,7 +631,7 @@ class TestRequestHandlerAdvanced:
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
         
-        handler = RequestHandler()
+        handler = RequestHandler(config=RequestConfig(use_curl_cffi=False))
         html, success, is_turnstile = handler._fetch_direct(
             'http://test.com', None, 'Test', use_cookie=False
         )
@@ -946,3 +947,109 @@ class TestCurlCffiCookieHandling:
             cookie_header = passed_headers.get('Cookie', '')
             
             assert cookie_header == '_jdb_session=my_session'
+
+
+BAN_PAGE_HTML = (
+    "\nThe owner of this website has banned your access based on your browser's behaving\n\n"
+    "IP: xxx.xxx.xxx.xxx\n\n"
+    "基於你的異常行為，管理員禁止了你的訪問，將在3-7日後解除。\n"
+    "群組和反饋不受理此問題，請耐心等待解除或更換網絡節點進行訪問。\n"
+)
+
+
+class TestIsBanPage:
+    """Test cases for RequestHandler.is_ban_page static method."""
+
+    def test_is_ban_page_with_ban_html(self):
+        """Ban page HTML should be detected."""
+        assert RequestHandler.is_ban_page(BAN_PAGE_HTML) is True
+
+    def test_is_ban_page_with_chinese_only(self):
+        """Chinese-only ban indicator should be detected."""
+        assert RequestHandler.is_ban_page("管理員禁止了你的訪問") is True
+
+    def test_is_ban_page_with_english_only(self):
+        """English-only ban indicator should be detected."""
+        assert RequestHandler.is_ban_page("banned your access") is True
+
+    def test_is_ban_page_with_normal_html(self):
+        """Normal HTML should not be flagged."""
+        normal_html = '<html><div class="movie-list">Content</div></html>'
+        assert RequestHandler.is_ban_page(normal_html) is False
+
+    def test_is_ban_page_with_empty(self):
+        """Empty/None inputs should return False."""
+        assert RequestHandler.is_ban_page('') is False
+        assert RequestHandler.is_ban_page(None) is False
+
+
+class TestDoRequest403:
+    """Test _do_request returns body on HTTP 403."""
+
+    @patch.object(requests.Session, 'get')
+    def test_do_request_403_returns_body(self, mock_get):
+        """HTTP 403 should return (body, error) so callers can inspect ban HTML."""
+        mock_response = MagicMock()
+        mock_response.status_code = 403
+        mock_response.text = BAN_PAGE_HTML
+        mock_get.return_value = mock_response
+
+        handler = RequestHandler()
+        html, error = handler._do_request(
+            'http://test.com', {}, None, timeout=30, context_msg='Test'
+        )
+
+        assert html == BAN_PAGE_HTML
+        assert error is not None
+        assert isinstance(error, requests.HTTPError)
+
+
+class TestProxyBanDetection:
+    """Test ProxyBannedError raise/catch flow."""
+
+    @patch.object(RequestHandler, '_do_request_curl_cffi')
+    @patch.object(RequestHandler, '_do_request')
+    def test_fetch_direct_raises_proxy_banned_error(self, mock_do, mock_curl):
+        """_fetch_direct should raise ProxyBannedError when ban page is detected."""
+        mock_curl.return_value = (None, Exception("skip"))
+        mock_do.return_value = (BAN_PAGE_HTML, requests.HTTPError("403"))
+
+        handler = RequestHandler(config=RequestConfig(use_curl_cffi=False))
+        with pytest.raises(ProxyBannedError) as exc_info:
+            handler._fetch_direct('http://test.com', None, 'Test', proxy_name='proxy-1')
+
+        assert exc_info.value.proxy_name == 'proxy-1'
+        assert 'ban page' in exc_info.value.reason
+
+    @patch.object(RequestHandler, '_do_request_curl_cffi')
+    @patch.object(RequestHandler, '_do_request')
+    def test_fetch_direct_normal_403_no_ban(self, mock_do, mock_curl):
+        """403 with non-ban HTML should NOT raise ProxyBannedError."""
+        non_ban_html = '<html>Access Denied</html>'
+        mock_curl.return_value = (None, Exception("skip"))
+        mock_do.return_value = (non_ban_html, requests.HTTPError("403"))
+
+        handler = RequestHandler(config=RequestConfig(use_curl_cffi=False))
+        html, success, is_turnstile = handler._fetch_direct(
+            'http://test.com', None, 'Test', proxy_name='proxy-1'
+        )
+        assert html == non_ban_html
+        assert success is False
+
+    @patch.object(RequestHandler, '_get_page_direct')
+    def test_get_page_catches_proxy_banned_and_bans(self, mock_direct):
+        """get_page should catch ProxyBannedError, call ban_proxy, and re-raise."""
+        mock_direct.side_effect = ProxyBannedError('proxy-1', 'ban page detected')
+
+        mock_pool = MagicMock()
+        mock_pool.get_current_proxy_name.return_value = 'proxy-1'
+
+        config = RequestConfig(cf_bypass_enabled=False)
+        handler = RequestHandler(proxy_pool=mock_pool, config=config)
+
+        with pytest.raises(ProxyBannedError):
+            handler.get_page(
+                'http://test.com', use_proxy=True, module_name='spider'
+            )
+
+        mock_pool.ban_proxy.assert_called_once_with('proxy-1')
