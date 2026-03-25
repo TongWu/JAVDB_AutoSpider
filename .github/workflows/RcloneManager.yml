@@ -166,7 +166,7 @@ jobs:
           set -e
           set -o pipefail
 
-          CMD=(python3 scripts/rclone_manager.py)
+          CMD=(python3 -m apps.cli.rclone_manager)
 
           if [ "$INPUT_SCAN" = "true" ]; then
             CMD+=(--scan)

@@ -151,7 +151,7 @@ jobs:
           VAR_QB_FILE_FILTER_MIN_SIZE_MB: ${{ vars.QB_FILE_FILTER_MIN_SIZE_MB }}
           VAR_QB_FILE_FILTER_LOG_FILE: ${{ vars.QB_FILE_FILTER_LOG_FILE || 'logs/qb_file_filter.log' }}
           VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
-        run: python3 utils/config_generator.py --github-actions
+        run: python3 -m apps.cli.config_generator --github-actions
 
       - name: Encrypt config for artifact
         env:
@@ -247,5 +247,5 @@ jobs:
             ARGS+=(--delete-local-files)
           fi
           
-          echo "Running: python3 scripts/qb_file_filter.py ${ARGS[*]}"
-          python3 scripts/qb_file_filter.py "${ARGS[@]}"
+          echo "Running: python3 -m apps.cli.qb_file_filter ${ARGS[*]}"
+          python3 -m apps.cli.qb_file_filter "${ARGS[@]}"

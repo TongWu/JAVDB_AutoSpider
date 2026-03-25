@@ -15,8 +15,8 @@ on:
     paths:
       - '**.py'
       - '**.rs'
-      - 'rust_core/Cargo.toml'
-      - 'rust_core/Cargo.lock'
+      - 'packages/rust/javdb_rust_core/Cargo.toml'
+      - 'packages/rust/javdb_rust_core/Cargo.lock'
       - 'pytest.ini'
       - 'docker/**'
   pull_request:
@@ -26,8 +26,8 @@ on:
     paths:
       - '**.py'
       - '**.rs'
-      - 'rust_core/Cargo.toml'
-      - 'rust_core/Cargo.lock'
+      - 'packages/rust/javdb_rust_core/Cargo.toml'
+      - 'packages/rust/javdb_rust_core/Cargo.lock'
       - 'pytest.ini'
       - 'docker/**'
   workflow_dispatch:
@@ -75,14 +75,22 @@ jobs:
       - name: Test required files exist
         run: |
           docker run --rm javdb-autospider:test sh -c "
-            test -f /app/pipeline.py && echo '✓ pipeline.py exists' &&
+            test -f /app/pipeline.py && echo '✓ pipeline.py compatibility wrapper exists' &&
             test -f /app/config.py.example && echo '✓ config.py.example exists' &&
+            test -f /app/compat.py && echo '✓ compat.py exists' &&
+            test -d /app/apps && echo '✓ apps directory exists' &&
+            test -d /app/packages && echo '✓ packages directory exists' &&
+            test -d /app/apps/cli && echo '✓ apps/cli exists' &&
+            test -d /app/apps/api && echo '✓ apps/api exists' &&
+            test -f /app/apps/cli/pipeline.py && echo '✓ apps/cli/pipeline.py canonical entry exists' &&
+            test -f /app/apps/cli/config_generator.py && echo '✓ apps/cli/config_generator.py canonical entry exists' &&
+            test -d /app/packages/python/javdb_spider && echo '✓ canonical spider package exists' &&
+            test -d /app/packages/rust/javdb_rust_core && echo '✓ canonical rust package exists' &&
             test -d /app/utils && echo '✓ utils directory exists' &&
-            test -d /app/scripts && echo '✓ scripts directory exists' &&
-            test -d /app/scripts/spider && echo '✓ scripts/spider package exists' &&
-            test -f /app/scripts/login.py && echo '✓ scripts/login.py exists' &&
-            test -f /app/scripts/pikpak_bridge.py && echo '✓ scripts/pikpak_bridge.py exists' &&
-            test -f /app/scripts/qb_uploader.py && echo '✓ scripts/qb_uploader.py exists'
+            test -d /app/scripts && echo '✓ scripts compatibility directory exists' &&
+            test -f /app/scripts/login.py && echo '✓ scripts/login.py compatibility wrapper exists' &&
+            test -f /app/scripts/pikpak_bridge.py && echo '✓ scripts/pikpak_bridge.py compatibility wrapper exists' &&
+            test -f /app/scripts/qb_uploader.py && echo '✓ scripts/qb_uploader.py compatibility wrapper exists'
           "
       
       - name: Test Rust extension
@@ -92,10 +100,12 @@ jobs:
       - name: Test Python syntax
         run: |
           docker run --rm javdb-autospider:test python -m py_compile /app/pipeline.py
-          docker run --rm javdb-autospider:test python -m py_compile /app/scripts/spider/__main__.py
-          docker run --rm javdb-autospider:test python -m py_compile /app/scripts/login.py
-          docker run --rm javdb-autospider:test python -m py_compile /app/scripts/pikpak_bridge.py
-          docker run --rm javdb-autospider:test python -m py_compile /app/scripts/qb_uploader.py
+          docker run --rm javdb-autospider:test python -m py_compile /app/apps/cli/pipeline.py
+          docker run --rm javdb-autospider:test python -m py_compile /app/apps/cli/config_generator.py
+          docker run --rm javdb-autospider:test python -m py_compile /app/apps/cli/spider.py
+          docker run --rm javdb-autospider:test python -m py_compile /app/apps/cli/login.py
+          docker run --rm javdb-autospider:test python -m py_compile /app/apps/cli/pikpak_bridge.py
+          docker run --rm javdb-autospider:test python -m py_compile /app/apps/cli/qb_uploader.py
       
       - name: Test cron setup
         run: |
@@ -108,4 +118,3 @@ jobs:
       - name: Show image size
         run: |
           docker images javdb-autospider:test
-
