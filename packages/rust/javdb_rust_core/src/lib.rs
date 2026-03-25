@@ -17,7 +17,7 @@ use models::{
 };
 use proxy::ban_manager::{get_global_ban_manager, ProxyBanManager};
 use proxy::masking::{
-    mask_email, mask_full, mask_ip_address, mask_partial, mask_proxy_url, mask_server,
+    mask_email, mask_error, mask_full, mask_ip_address, mask_partial, mask_proxy_url, mask_server,
     mask_username,
 };
 use proxy::pool::{create_proxy_pool_from_config, ProxyInfo, ProxyPool};
@@ -112,6 +112,7 @@ fn javdb_rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(mask_proxy_url, m)?)?;
     m.add_function(wrap_pyfunction!(mask_username, m)?)?;
     m.add_function(wrap_pyfunction!(mask_server, m)?)?;
+    m.add_function(wrap_pyfunction!(mask_error, m)?)?;
 
     // --- Request Handler ---
     m.add_class::<RequestConfig>()?;
