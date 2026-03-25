@@ -333,6 +333,64 @@ class ProxyPool:
             logger.error("Failed to switch proxy: all proxies are unavailable")
             return False
             
+    def ban_proxy(self, proxy_name: Optional[str] = None) -> bool:
+        """Immediately ban a proxy and switch to the next available one.
+
+        Unlike ``mark_failure_and_switch`` which increments failure count
+        toward a threshold, this method immediately puts the proxy into
+        cooldown and records the ban via the ban manager.
+
+        Args:
+            proxy_name: Name of the proxy to ban.  If *None*, the current
+                proxy is banned.
+
+        Returns:
+            True if another proxy is available after the ban, False otherwise.
+        """
+        if self.no_proxy_mode or not self.proxies:
+            return False
+
+        with self.lock:
+            # Resolve target proxy
+            target = None
+            target_index = None
+            if proxy_name is None:
+                target = self.proxies[self.current_index]
+                target_index = self.current_index
+            else:
+                for i, p in enumerate(self.proxies):
+                    if p.name == proxy_name:
+                        target = p
+                        target_index = i
+                        break
+
+            if target is None:
+                logger.warning(f"ban_proxy: proxy '{proxy_name}' not found in pool")
+                return False
+
+            proxy_url = target.http_url or target.https_url
+            self.ban_manager.add_ban(target.name, proxy_url)
+            target.mark_failure(self.cooldown_seconds)
+            logger.warning(
+                f"Proxy '{target.name}' immediately banned and put in "
+                f"cooldown for {self.cooldown_seconds}s"
+            )
+
+            # Try to switch to next available proxy
+            attempts = 0
+            candidate = target_index
+            while attempts < len(self.proxies):
+                candidate = (candidate + 1) % len(self.proxies)
+                next_proxy = self.proxies[candidate]
+                if next_proxy.is_available and not next_proxy.is_in_cooldown():
+                    self.current_index = candidate
+                    logger.info(f"Switched from '{target.name}' to '{next_proxy.name}'")
+                    return True
+                attempts += 1
+
+            logger.error("ban_proxy: all proxies are unavailable after ban")
+            return False
+
     def get_proxy_count(self) -> int:
         """Return the number of proxies in the pool"""
         return len(self.proxies)
