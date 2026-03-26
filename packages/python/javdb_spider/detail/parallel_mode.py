@@ -16,7 +16,6 @@ from packages.python.javdb_spider.fetch.fetch_engine import (
 )
 from packages.python.javdb_spider.runtime.sleep import (
     penalty_tracker as _shared_penalty_tracker,
-    dual_window_throttle as _shared_throttle,
 )
 
 logger = get_logger(__name__)
@@ -75,7 +74,6 @@ def build_parallel_detail_backend(
         parse_fn=_spider_parse_fn,
         use_cookie=use_cookie,
         penalty_tracker=_shared_penalty_tracker,
-        throttle=_shared_throttle,
         runtime_state=FetchRuntimeState(
             use_proxy=use_proxy,
             use_cf_bypass=use_cf_bypass,
