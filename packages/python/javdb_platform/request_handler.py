@@ -301,7 +301,7 @@ class RequestHandler:
             if proxies:
                 return proxies, True
             else:
-                logger.warning(f"[{module_name}] Proxy mode '{self.config.proxy_mode}' enabled but no proxy available")
+                logger.debug(f"[{module_name}] Proxy mode '{self.config.proxy_mode}' enabled but no proxy available")
                 return None, False
         elif self.config.proxy_http or self.config.proxy_https:
             proxies = {}
@@ -900,7 +900,7 @@ class RequestHandler:
             )
         except ProxyBannedError as e:
             log_ctx = self._log_ctx(module_name, e.proxy_name)
-            logger.warning(f"{log_ctx} Proxy banned: {e.reason}")
+            logger.info(f"{log_ctx} Proxy banned: {e.reason}")
             if self.proxy_pool:
                 self.proxy_pool.ban_proxy(e.proxy_name)
             raise
