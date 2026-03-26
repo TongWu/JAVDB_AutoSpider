@@ -587,8 +587,7 @@ PROXY_POOL = [
 ]
 
 # 代理池行为(仅用于池模式)
-PROXY_POOL_COOLDOWN_SECONDS = 691200  # 被禁代理的 8 天冷却期
-PROXY_POOL_MAX_FAILURES = 3  # 冷却前的最大失败次数
+PROXY_POOL_MAX_FAILURES = 3  # 最大失败次数，之后该代理在本次运行中永久禁用
 
 # 传统代理配置(已弃用 - 请改用 PROXY_POOL)
 PROXY_HTTP = None
@@ -611,10 +610,8 @@ PHASE2_MIN_COMMENTS = 80  # 阶段 2 条目的最少评论数
 # 发布日期过滤器
 IGNORE_RELEASE_DATE_FILTER = False  # 设为 True 以忽略今日/昨日标签
 
-# 休眠时间配置(秒)
-PAGE_SLEEP = 2  # 索引页之间休眠
-MOVIE_SLEEP_MIN = 5   # 电影之间最小随机休眠
-MOVIE_SLEEP_MAX = 15  # 电影之间最大随机休眠
+# 休眠时间配置（自适应，由 MovieSleepManager 管理）
+# MOVIE_SLEEP_MIN/MAX 自动调优；可通过环境变量 VAR_MOVIE_SLEEP 覆盖（如 "5,15"）
 
 # =============================================================================
 # JAVDB 登录配置(用于自动会话 cookie 刷新)
@@ -816,8 +813,7 @@ PROXY_POOL = [
     {'name': 'Proxy-1', 'http': 'http://127.0.0.1:7890', 'https': 'http://127.0.0.1:7890'},
     {'name': 'Proxy-2', 'http': 'http://127.0.0.1:7891', 'https': 'http://127.0.0.1:7891'},
 ]
-PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 天冷却期(JavDB 禁止 7 天)
-PROXY_POOL_MAX_FAILURES = 3  # 冷却前的最大失败次数
+PROXY_POOL_MAX_FAILURES = 3  # 最大失败次数，之后该代理在本次运行中永久禁用
 ```
 
 **代理禁用管理:**
@@ -1455,7 +1451,7 @@ python3 packages/python/javdb_migrations/tools/migrate_reports_to_dated_dirs.py 
 **代理禁用问题:**
 - **当次运行中所有代理被禁**: 查看爬虫日志；禁用仅本会话有效，新一次运行会从干净状态重试所有代理—必要时增加代理或处理 JavDB 侧封锁
 - **爬虫以代码 2 退出**: 表示本次会话检测到代理禁用；冷却仅在当次运行内存中生效，或添加新代理
-- **冷却不工作**: 默认为 8 天,如需要调整 PROXY_POOL_COOLDOWN_SECONDS
+- **冷却不工作**: 代理禁用仅本次运行有效（内存中），重启运行即可重试所有代理
 - **禁用误报**: 检查 JavDB 是否实际上可从代理 IP 访问
 
 ### 调试模式
@@ -1489,9 +1485,10 @@ LOG_LEVEL = 'DEBUG'  # 显示详细的调试信息
 
 ### 速率限制和延迟
 - 系统包含请求之间的延迟以尊重服务器:
-  - **索引页**: 2 秒(通过 `PAGE_SLEEP` 配置)
-  - **电影**: 5-15 秒随机(通过 `MOVIE_SLEEP_MIN` / `MOVIE_SLEEP_MAX` 配置)
+  - **索引页**: 自适应休眠，由 `MovieSleepManager` 管理（并行模式使用每 worker 独立节奏）
+  - **电影**: 自适应休眠，通过 `MovieSleepManager`（对数正态分布，自动调优）
   - **按量调整**: `MovieSleepManager` 在处理大批量时自动增加休眠间隔
+  - **所有冷却**: 由 `MovieSleepManager.get_cooldown()` 自适应计算
   - **qBittorrent 添加**: 1 秒(通过 `DELAY_BETWEEN_ADDITIONS` 配置)
   - **PikPak 请求**: 默认 2 秒(通过 `PIKPAK_REQUEST_DELAY` 配置)
 

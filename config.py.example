@@ -136,10 +136,8 @@ PROXY_POOL = [
 ]
 
 # Proxy pool behavior settings (only applies when PROXY_MODE = 'pool')
-# IMPORTANT: JavDB bans IPs for 7 days, so cooldown is set to 8 days (691200 seconds)
 # Ban records are session-scoped (in-memory only) and reset on each new run
-PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 days (691200 seconds)
-PROXY_POOL_MAX_FAILURES = 3  # Max consecutive failures before putting proxy in cooldown
+PROXY_POOL_MAX_FAILURES = 3  # Max consecutive failures before banning proxy for this session
 
 # =============================================================================
 # LEGACY PROXY CONFIGURATION (DEPRECATED - for backward compatibility only)
@@ -221,13 +219,9 @@ GPT_API_KEY = ''  # Your API key (e.g., sk-xxx)
 JAVDB_SESSION_COOKIE = ''
 
 # Sleep time configuration (in seconds)
-PAGE_SLEEP = 5  # Sleep time between index pages
-# MOVIE_SLEEP_MIN/MAX are auto-tuned by the adaptive sleep system.
+# MOVIE_SLEEP_MIN/MAX are auto-tuned by the adaptive sleep system (MovieSleepManager).
 # Override only for CI/testing via env var VAR_MOVIE_SLEEP (e.g. "0,0").
-
-# Cloudflare protection handling
-CF_TURNSTILE_COOLDOWN = 5  # Sleep time when Cloudflare Turnstile verification page is detected
-FALLBACK_COOLDOWN = 15  # Cooldown between CF bypass fallback steps (see request_handler)
+# All cooldowns (CF, fallback, login retry) are derived adaptively from MovieSleepManager.
 
 # =============================================================================
 # LOGGING CONFIGURATION
