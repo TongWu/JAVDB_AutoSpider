@@ -49,7 +49,6 @@ def _runtime_proxy_pool(config_data: Dict[str, Any]):
             max_failures=int(
                 config_data.get("PROXY_POOL_MAX_FAILURES", 3) or 3
             ),
-            ban_log_file=str(context.REPO_ROOT / "reports" / "proxy_bans.csv"),
         )
     except Exception:
         return None
