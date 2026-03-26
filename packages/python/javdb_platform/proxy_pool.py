@@ -234,7 +234,7 @@ class ProxyPool:
                 self.current_index = (self.current_index + 1) % len(self.proxies)
                 attempts += 1
             
-            logger.warning("All proxies are unavailable or in cooldown")
+            logger.debug("All proxies are unavailable or in cooldown")
             return None
     
     def get_next_proxy(self) -> Optional[Dict[str, str]]:
@@ -251,7 +251,7 @@ class ProxyPool:
             
             available_count = sum(1 for p in self.proxies if p.is_available and not p.is_in_cooldown())
             if available_count == 0:
-                logger.warning("All proxies are unavailable or in cooldown")
+                logger.debug("All proxies are unavailable or in cooldown")
                 return None
             
             attempts = 0
@@ -375,7 +375,7 @@ class ProxyPool:
             self.ban_manager.add_ban(target.name, proxy_url)
             target.banned = True
             target.is_available = False
-            logger.warning(
+            logger.info(
                 f"Proxy '{target.name}' banned [session-permanent]"
             )
 
@@ -391,7 +391,7 @@ class ProxyPool:
                     return True
                 attempts += 1
 
-            logger.error("ban_proxy: all proxies are unavailable after ban")
+            logger.info("ban_proxy: all proxies are unavailable after ban")
             return False
 
     def get_proxy_count(self) -> int:
