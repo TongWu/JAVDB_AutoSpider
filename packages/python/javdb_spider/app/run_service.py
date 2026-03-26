@@ -54,7 +54,6 @@ def create_detail_backend(
     use_parallel: bool,
     use_cookie: bool,
     is_adhoc_mode: bool,
-    ban_log_file: str,
     session,
     use_proxy: bool,
     use_cf_bypass: bool,
@@ -64,7 +63,6 @@ def create_detail_backend(
     if use_parallel:
         return build_parallel_detail_backend(
             use_cookie=use_cookie,
-            ban_log_file=ban_log_file,
             use_proxy=use_proxy,
             use_cf_bypass=use_cf_bypass,
         )
@@ -114,8 +112,7 @@ def main():
         ignore_release_date = True
         rclone_filter = False
 
-    ban_log_file = os.path.join(REPORTS_DIR, 'proxy_bans.csv')
-    state.setup_proxy_pool(ban_log_file, use_proxy)
+    state.setup_proxy_pool(use_proxy)
     state.initialize_request_handler()
 
     # Determine output directory and filename
@@ -361,7 +358,6 @@ def main():
             use_parallel=use_parallel,
             use_cookie=custom_url is not None,
             is_adhoc_mode=custom_url is not None,
-            ban_log_file=ban_log_file,
             session=session,
             use_proxy=use_proxy,
             use_cf_bypass=use_cf_bypass,
@@ -424,7 +420,6 @@ def main():
             use_parallel=use_parallel,
             use_cookie=custom_url is not None,
             is_adhoc_mode=custom_url is not None,
-            ban_log_file=ban_log_file,
             session=session,
             use_proxy=use_proxy,
             use_cf_bypass=use_cf_bypass,

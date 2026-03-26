@@ -426,10 +426,9 @@ def run_actor_backfill(
     )
     from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr
 
-    ban_log_file = os.path.join(REPORTS_DIR, 'proxy_bans.csv')
     os.makedirs(REPORTS_DIR, exist_ok=True)
     use_proxy = not no_proxy
-    state.setup_proxy_pool(ban_log_file, use_proxy)
+    state.setup_proxy_pool(use_proxy)
     state.initialize_request_handler()
 
     conn = sqlite3.connect(history_db)
@@ -482,7 +481,6 @@ def run_actor_backfill(
         engine = FetchEngine.simple(
             parse_fn=_backfill_parse,
             use_cookie=True,
-            ban_log_file=ban_log_file,
             stop_event=stop_event,
             sleep_min=movie_sleep_mgr.sleep_min,
             sleep_max=movie_sleep_mgr.sleep_max,

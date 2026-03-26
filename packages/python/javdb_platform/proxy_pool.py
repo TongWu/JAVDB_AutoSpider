@@ -147,7 +147,7 @@ class ProxyPool:
     """
     
     def __init__(self, cooldown_seconds: int = 300, max_failures_before_cooldown: int = 3,
-                 ban_log_file: str = 'reports/proxy_bans.csv'):
+                 **_kwargs):
         self.proxies: List[ProxyInfo] = []
         self.current_index: int = 0
         self.cooldown_seconds = cooldown_seconds
@@ -155,7 +155,7 @@ class ProxyPool:
         self.lock = Lock()
         self.no_proxy_mode = False
         
-        self.ban_manager = get_ban_manager(ban_log_file)
+        self.ban_manager = get_ban_manager()
         
     def add_proxy(self, http_url: Optional[str] = None, https_url: Optional[str] = None, 
                   name: Optional[str] = None) -> None:
@@ -480,7 +480,7 @@ class ProxyPool:
 def create_proxy_pool_from_config(proxy_list_config: List[Dict], 
                                    cooldown_seconds: int = 300,
                                    max_failures: int = 3,
-                                   ban_log_file: str = 'reports/proxy_bans.csv'):
+                                   **_kwargs):
     """
     Create and configure a proxy pool from configuration.
     Prefers Rust implementation when available, falls back to Python otherwise.
@@ -489,7 +489,6 @@ def create_proxy_pool_from_config(proxy_list_config: List[Dict],
         proxy_list_config: List of proxy configurations from config.py
         cooldown_seconds: Cooldown duration in seconds
         max_failures: Max failures before cooldown
-        ban_log_file: Path to ban log file (default: reports/proxy_bans.csv)
         
     Returns:
         Configured ProxyPool instance (RustProxyPool if available, otherwise Python ProxyPool)
@@ -511,7 +510,6 @@ def create_proxy_pool_from_config(proxy_list_config: List[Dict],
                 rust_proxy_list,
                 cooldown_seconds=cooldown_seconds,
                 max_failures=max_failures,
-                ban_log_file=ban_log_file
             )
             logger.debug("Created Rust proxy pool")
             return pool
@@ -521,7 +519,6 @@ def create_proxy_pool_from_config(proxy_list_config: List[Dict],
     pool = ProxyPool(
         cooldown_seconds=cooldown_seconds,
         max_failures_before_cooldown=max_failures,
-        ban_log_file=ban_log_file
     )
     
     pool.add_proxies_from_list(proxy_list_config)

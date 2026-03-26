@@ -6,7 +6,6 @@ Phase 1 — Data tables:
   - rclone_inventory.csv        →  RcloneInventory
   - dedup.csv                  →  DedupRecords
   - pikpak_bridge_history.csv   →  PikpakHistory
-  - proxy_bans.csv             →  ProxyBans
 
 Phase 2 — Report CSVs:
   - reports/DailyReport/*.csv  →  ReportSessions + ReportMovies + ReportTorrents
@@ -507,37 +506,13 @@ def migrate_pikpak(csv_path: str, db_path: str, dry_run: bool = False) -> int:
 
 
 def migrate_proxy_bans(csv_path: str, db_path: str, dry_run: bool = False) -> int:
-    """Migrate proxy_bans.csv → ProxyBans table."""
-    if not os.path.exists(csv_path):
-        logger.info(f"Skipping proxy_bans: {csv_path} not found")
-        return 0
+    """No-op: proxy bans are now session-scoped (in-memory only).
 
-    from packages.python.javdb_platform.db import get_db
-    with open(csv_path, 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        rows = list(reader)
-
-    logger.info(f"Proxy bans: {len(rows)} rows")
-
-    if dry_run:
-        logger.info(f"[DRY RUN] Would insert {len(rows)} ProxyBans records")
-        return len(rows)
-
-    count = 0
-    with get_db(db_path) as conn:
-        conn.execute("DELETE FROM ProxyBans")
-        for row in rows:
-            conn.execute(
-                """INSERT INTO ProxyBans (ProxyName, DateTimeBanned, DateTimeUnbanned)
-                   VALUES (?, ?, ?)""",
-                (row.get('proxy_name', ''),
-                 row.get('ban_time', ''),
-                 row.get('unban_time', '')),
-            )
-            count += 1
-
-    logger.info(f"Migrated {count} ProxyBans records")
-    return count
+    Kept for backward compatibility with callers that still reference
+    this function.  Always returns 0.
+    """
+    logger.info("Skipping proxy_bans migration (proxy bans are now session-scoped, not persisted)")
+    return 0
 
 
 # =====================================================================

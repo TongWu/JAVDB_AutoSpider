@@ -161,7 +161,7 @@ def initialize_request_handler():
     logger.info("Request handler initialized successfully")
 
 
-def setup_proxy_pool(ban_log_file: str, use_proxy) -> None:
+def setup_proxy_pool(use_proxy) -> None:
     """Initialize the global proxy pool from configuration."""
     global global_proxy_pool
     if PROXY_POOL and len(PROXY_POOL) > 0:
@@ -171,7 +171,6 @@ def setup_proxy_pool(ban_log_file: str, use_proxy) -> None:
                 PROXY_POOL,
                 cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
                 max_failures=PROXY_POOL_MAX_FAILURES,
-                ban_log_file=ban_log_file,
             )
             logger.info("Proxy pool initialized successfully")
             logger.info(f"Cooldown: {PROXY_POOL_COOLDOWN_SECONDS}s, Max failures before cooldown: {PROXY_POOL_MAX_FAILURES}")
@@ -181,7 +180,6 @@ def setup_proxy_pool(ban_log_file: str, use_proxy) -> None:
                 [PROXY_POOL[0]],
                 cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
                 max_failures=PROXY_POOL_MAX_FAILURES,
-                ban_log_file=ban_log_file,
             )
             logger.info(f"Single proxy initialized: {PROXY_POOL[0].get('name', 'Main-Proxy')}")
     elif PROXY_HTTP or PROXY_HTTPS:
@@ -191,7 +189,6 @@ def setup_proxy_pool(ban_log_file: str, use_proxy) -> None:
             [legacy_proxy],
             cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
             max_failures=PROXY_POOL_MAX_FAILURES,
-            ban_log_file=ban_log_file,
         )
     else:
         if should_proxy_module('spider', use_proxy, PROXY_MODULES):
