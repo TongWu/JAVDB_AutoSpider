@@ -524,7 +524,7 @@ jobs:
         run: |
           set -e
           set -o pipefail
-          curl -s https://rclone.org/install.sh | sudo bash
+          bash .github/scripts/install_rclone.sh
           python3 -m apps.cli.rclone_manager --execute
         continue-on-error: true
 

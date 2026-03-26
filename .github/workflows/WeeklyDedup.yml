@@ -95,7 +95,7 @@ jobs:
       - name: Install rclone
         if: inputs.runner != 'self-hosted'
         run: |
-          curl https://rclone.org/install.sh | sudo bash
+          bash .github/scripts/install_rclone.sh
           rclone version
 
       - name: Configure rclone
