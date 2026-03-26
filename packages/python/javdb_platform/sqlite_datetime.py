@@ -76,8 +76,6 @@ SQLITE_REPORT_DATETIME_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
         ("PikpakHistory", "DateTimeAddedToQb"),
         ("PikpakHistory", "DateTimeDeletedFromQb"),
         ("PikpakHistory", "DateTimeUploadedToPikpak"),
-        ("ProxyBans", "DateTimeBanned"),
-        ("ProxyBans", "DateTimeUnbanned"),
     ),
 }
 

@@ -257,7 +257,6 @@ class _EngineWorker(threading.Thread):
         coordinator: LoginCoordinator,
         sleep_min: float,
         sleep_max: float,
-        ban_log_file: str,
         penalty_tracker: Optional[PenaltyTracker] = None,
         throttle: Optional[DualWindowThrottle] = None,
         stop_event: Optional[threading.Event] = None,
@@ -295,7 +294,6 @@ class _EngineWorker(threading.Thread):
             [proxy_config],
             cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
             max_failures=PROXY_POOL_MAX_FAILURES,
-            ban_log_file=ban_log_file,
         )
         self._handler = RequestHandler(
             proxy_pool=self._proxy_pool,
@@ -517,7 +515,6 @@ class ParallelFetchBackend(FetchBackend):
         process_fn: ProcessFn,
         *,
         use_cookie: bool = False,
-        ban_log_file: str = '',
         stop_event: Optional[threading.Event] = None,
         penalty_tracker: Optional[PenaltyTracker] = None,
         throttle: Optional[DualWindowThrottle] = None,
@@ -527,7 +524,6 @@ class ParallelFetchBackend(FetchBackend):
     ):
         self._process_fn = process_fn
         self._use_cookie = use_cookie
-        self._ban_log_file = ban_log_file
         self._stop_event = stop_event or threading.Event()
         self._penalty_tracker = penalty_tracker
         self._throttle = throttle
@@ -594,7 +590,6 @@ class ParallelFetchBackend(FetchBackend):
                 coordinator=self._coordinator,
                 sleep_min=self._sleep_min,
                 sleep_max=self._sleep_max,
-                ban_log_file=self._ban_log_file,
                 penalty_tracker=self._penalty_tracker,
                 throttle=self._throttle,
                 stop_event=self._stop_event,

@@ -6,8 +6,7 @@ holding a logically separate group of tables:
 - **history.db** — MovieHistory, TorrentHistory
 - **reports.db** — ReportSessions, ReportMovies, ReportTorrents,
   SpiderStats, UploaderStats, PikpakStats
-- **operations.db** — RcloneInventory, DedupRecords, PikpakHistory,
-  ProxyBans
+- **operations.db** — RcloneInventory, DedupRecords, PikpakHistory
 
 WAL mode is enabled on every connection for concurrent-read safety.
 """
@@ -34,7 +33,6 @@ from packages.python.javdb_platform.db_layer.history_repo import (
 )
 from packages.python.javdb_platform.db_layer.operations_repo import (
     replace_rclone_inventory as _replace_rclone_inventory,
-    save_proxy_bans as _save_proxy_bans,
 )
 
 logger = get_logger(__name__)
@@ -305,13 +303,6 @@ CREATE TABLE IF NOT EXISTS PikpakHistory (
     TransferStatus TEXT,
     ErrorMessage TEXT
 );
-
-CREATE TABLE IF NOT EXISTS ProxyBans (
-    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ProxyName TEXT,
-    DateTimeBanned TEXT,
-    DateTimeUnbanned TEXT
-);
 """
 
 # Combined DDL for single-DB mode (backward compat, csv_to_sqlite, testing)
@@ -447,15 +438,10 @@ def _migrate_v5_to_v6(conn):
         conn.execute("DROP TABLE pikpak_history")
         logger.info("Migrated pikpak_history → PikpakHistory")
 
-    # ── Step 5: proxy_bans → ProxyBans ──
+    # ── Step 5: proxy_bans → dropped (no longer persisted) ──
     if _has_table(conn, 'proxy_bans'):
-        conn.execute("""
-            INSERT INTO ProxyBans (ProxyName, DateTimeBanned, DateTimeUnbanned)
-            SELECT proxy_name, ban_time, unban_time
-            FROM proxy_bans
-        """)
         conn.execute("DROP TABLE proxy_bans")
-        logger.info("Migrated proxy_bans → ProxyBans")
+        logger.info("Dropped legacy proxy_bans table (proxy bans are now session-scoped)")
 
     session_map: dict[int, int] = {}
 
@@ -939,7 +925,7 @@ def _migrate_single_to_split():
             'SpiderStats', 'UploaderStats', 'PikpakStats',
         ]),
         (OPERATIONS_DB_PATH, _OPERATIONS_DDL, [
-            'RcloneInventory', 'DedupRecords', 'PikpakHistory', 'ProxyBans',
+            'RcloneInventory', 'DedupRecords', 'PikpakHistory',
         ]),
     ]
 
@@ -1523,21 +1509,6 @@ def db_append_pikpak_history(record: dict, db_path: Optional[str] = None) -> int
              record.get('ErrorMessage', record.get('error_message'))),
         )
         return cur.lastrowid
-
-
-# ── ProxyBans helpers ────────────────────────────────────────────────────
-
-def db_load_proxy_bans(db_path: Optional[str] = None) -> List[dict]:
-    """Load all proxy ban records."""
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        rows = conn.execute("SELECT * FROM ProxyBans ORDER BY Id").fetchall()
-        return [dict(r) for r in rows]
-
-
-def db_save_proxy_bans(records: List[dict], db_path: Optional[str] = None) -> None:
-    """Replace all proxy ban records."""
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        _save_proxy_bans(conn, records)
 
 
 # ── ReportSessions + ReportMovies + ReportTorrents helpers ───────────────
