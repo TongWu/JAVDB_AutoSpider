@@ -94,6 +94,7 @@ The spider operates in two modes:
 - Incremental commits throughout pipeline execution
 - Email notifications with results and logs
 - Complete workflow automation
+- GitHub Actions ingestion workflows ([`.github/workflows/DailyIngestion.yml`](.github/workflows/DailyIngestion.yml), [`.github/workflows/AdHocIngestion.yml`](.github/workflows/AdHocIngestion.yml)) use shared composite actions ([`.github/actions/setup-python-env`](.github/actions/setup-python-env), [`.github/actions/restore-encrypted-config`](.github/actions/restore-encrypted-config)) for Python + pip cache + Rust wheel; health checks run as the first step of `run-pipeline` (no separate job)
 
 ### JavDB Auto Login
 - Automatic session cookie refresh

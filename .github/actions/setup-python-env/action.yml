@@ -1,0 +1,54 @@
+name: 'Setup Python environment'
+description: 'Set up Python, cache pip, create venv, install requirements, install Rust wheel'
+
+inputs:
+  python-version:
+    description: 'Python version for setup-python'
+    required: false
+    default: '3.11'
+  requirements-file:
+    description: 'Path to requirements file (repo root relative)'
+    required: false
+    default: 'requirements.txt'
+  upgrade-pip:
+    description: 'Run python -m pip install --upgrade pip before requirements'
+    required: false
+    default: 'false'
+  install-rust:
+    description: 'Run install-rust-wheel after pip install'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Cache pip
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-py${{ inputs.python-version }}-${{ hashFiles(inputs.requirements-file) }}
+        restore-keys: |
+          ${{ runner.os }}-pip-py${{ inputs.python-version }}-
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies (venv + pip)
+      shell: bash
+      run: |
+        set -euo pipefail
+        python -m venv .venv
+        source .venv/bin/activate
+        if [ "${{ inputs.upgrade-pip }}" = "true" ]; then
+          python -m pip install --upgrade pip
+        fi
+        pip install -r "${{ inputs.requirements-file }}"
+        echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+        echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+
+    - name: Install Rust extension
+      if: inputs.install-rust == 'true'
+      uses: ./.github/actions/install-rust-wheel

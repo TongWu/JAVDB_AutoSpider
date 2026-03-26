@@ -92,6 +92,7 @@
 - 流水线执行过程中的增量提交
 - 带结果和日志的电子邮件通知
 - 完整的工作流自动化
+- GitHub Actions 摄取工作流（[`DailyIngestion.yml`](.github/workflows/DailyIngestion.yml)、[`AdHocIngestion.yml`](.github/workflows/AdHocIngestion.yml)）复用 composite action（[`setup-python-env`](.github/actions/setup-python-env)、[`restore-encrypted-config`](.github/actions/restore-encrypted-config)）以统一 Python、pip 缓存与 Rust 扩展安装；健康检查在 `run-pipeline` 的首个 step 执行，不再单独占一个 job
 
 ### JavDB 自动登录
 - 自动刷新会话 cookie
