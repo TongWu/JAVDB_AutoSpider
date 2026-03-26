@@ -627,6 +627,75 @@ impl ProxyPool {
         self.ban_manager.get_ban_summary(include_ip)
     }
 
+    #[pyo3(signature = (proxy_name=None))]
+    pub fn ban_proxy(&self, proxy_name: Option<String>) -> bool {
+        let mut pool = self.inner.lock();
+        if pool.no_proxy_mode || pool.proxies.is_empty() {
+            return false;
+        }
+
+        let (target_index, target_name, proxy_url) = match proxy_name {
+            None => {
+                let idx = pool.current_index;
+                let proxy = pool.proxies[idx].lock();
+                let name = proxy.name.clone();
+                let url = proxy.http_url.clone().or_else(|| proxy.https_url.clone());
+                (idx, name, url)
+            }
+            Some(ref name) => {
+                let found = pool.proxies.iter().enumerate().find(|(_, arc)| {
+                    arc.lock().name == *name
+                });
+                match found {
+                    Some((idx, arc)) => {
+                        let proxy = arc.lock();
+                        let url = proxy.http_url.clone().or_else(|| proxy.https_url.clone());
+                        (idx, name.clone(), url)
+                    }
+                    None => {
+                        warn!("ban_proxy: proxy '{}' not found in pool", name);
+                        return false;
+                    }
+                }
+            }
+        };
+
+        self.ban_manager.add_ban(&target_name, proxy_url);
+        {
+            let mut proxy = pool.proxies[target_index].lock();
+            proxy.cooldown_until = Some(Local::now() + Duration::seconds(self.cooldown_seconds));
+            proxy.is_available = false;
+            proxy.failures += 1;
+            proxy.total_requests += 1;
+            proxy.last_failure = Some(Local::now());
+        }
+        warn!(
+            "Proxy '{}' immediately banned and put in cooldown for {}s",
+            target_name, self.cooldown_seconds
+        );
+
+        let len = pool.proxies.len();
+        let mut candidate = target_index;
+        for _ in 0..len {
+            candidate = (candidate + 1) % len;
+            let (available, next_name) = {
+                let proxy = pool.proxies[candidate].lock();
+                (proxy.is_available && !proxy.is_in_cooldown(), proxy.name.clone())
+            };
+            if available {
+                pool.current_index = candidate;
+                info!(
+                    "Switched from '{}' to '{}'",
+                    target_name, next_name
+                );
+                return true;
+            }
+        }
+
+        error!("ban_proxy: all proxies are unavailable after ban");
+        false
+    }
+
     pub fn get_proxy_count(&self) -> usize {
         self.inner.lock().proxies.len()
     }

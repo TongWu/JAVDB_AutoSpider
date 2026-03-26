@@ -9,18 +9,30 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    - name: Detect pip command
+      id: pip
+      shell: bash
+      run: |
+        if command -v pip &>/dev/null; then
+          echo "cmd=pip" >> $GITHUB_OUTPUT
+        elif command -v pip3 &>/dev/null; then
+          echo "cmd=pip3" >> $GITHUB_OUTPUT
+        else
+          echo "cmd=python3 -m pip" >> $GITHUB_OUTPUT
+        fi
+
     - name: Restore Rust wheel from cache
       id: wheel-cache
       uses: actions/cache@v5
       with:
         path: /tmp/rust-wheel
-        key: rust-wheel-${{ runner.os }}-${{ hashFiles('packages/rust/javdb_rust_core/src/**', 'packages/rust/javdb_rust_core/Cargo.toml', 'packages/rust/javdb_rust_core/Cargo.lock') }}
+        key: rust-wheel-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/rust/javdb_rust_core/src/**', 'packages/rust/javdb_rust_core/Cargo.toml', 'packages/rust/javdb_rust_core/Cargo.lock') }}
 
     - name: Install from cached wheel
       if: steps.wheel-cache.outputs.cache-hit == 'true'
       shell: bash
       run: |
-        pip install /tmp/rust-wheel/*.whl
+        ${{ steps.pip.outputs.cmd }} install /tmp/rust-wheel/*.whl
         echo "✓ Installed Rust extension from cache"
 
     - name: Install Rust toolchain
@@ -35,15 +47,15 @@ runs:
           ~/.cargo/registry
           ~/.cargo/git
           packages/rust/javdb_rust_core/target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('packages/rust/javdb_rust_core/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('packages/rust/javdb_rust_core/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-cargo-
+          ${{ runner.os }}-${{ runner.arch }}-cargo-
 
     - name: Build Rust extension wheel
       if: steps.wheel-cache.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        pip install maturin[patchelf]
+        ${{ steps.pip.outputs.cmd }} install maturin[patchelf]
         mkdir -p /tmp/rust-wheel
         cd packages/rust/javdb_rust_core
         maturin build --release --out /tmp/rust-wheel
@@ -54,5 +66,5 @@ runs:
       if: steps.wheel-cache.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        pip install /tmp/rust-wheel/*.whl
+        ${{ steps.pip.outputs.cmd }} install /tmp/rust-wheel/*.whl
         echo "✓ Installed Rust extension from freshly built wheel"
