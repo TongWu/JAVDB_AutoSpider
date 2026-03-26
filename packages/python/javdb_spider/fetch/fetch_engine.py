@@ -264,7 +264,6 @@ class _EngineWorker(threading.Thread):
         drain_lock: threading.Lock,
         drain_done: List[bool],
         penalty_tracker: Optional[PenaltyTracker] = None,
-        throttle: Optional[DualWindowThrottle] = None,
         stop_event: Optional[threading.Event] = None,
     ):
         super().__init__(
@@ -296,7 +295,7 @@ class _EngineWorker(threading.Thread):
         self._sleep_mgr = MovieSleepManager(
             sleep_min, sleep_max,
             penalty_tracker=penalty_tracker,
-            throttle=throttle,
+            throttle=DualWindowThrottle(),
         )
 
         self._proxy_pool = create_proxy_pool_from_config(
@@ -574,7 +573,6 @@ class ParallelFetchBackend(FetchBackend):
         use_cookie: bool = False,
         stop_event: Optional[threading.Event] = None,
         penalty_tracker: Optional[PenaltyTracker] = None,
-        throttle: Optional[DualWindowThrottle] = None,
         sleep_min: Optional[float] = None,
         sleep_max: Optional[float] = None,
         runtime_state: Optional[FetchRuntimeState] = None,
@@ -583,7 +581,6 @@ class ParallelFetchBackend(FetchBackend):
         self._use_cookie = use_cookie
         self._stop_event = stop_event or threading.Event()
         self._penalty_tracker = penalty_tracker
-        self._throttle = throttle
         self._sleep_min = (
             sleep_min if sleep_min is not None else _global_sleep_mgr.sleep_min
         )
@@ -676,7 +673,6 @@ class ParallelFetchBackend(FetchBackend):
                 drain_lock=drain_lock,
                 drain_done=drain_done,
                 penalty_tracker=self._penalty_tracker,
-                throttle=self._throttle,
                 stop_event=self._stop_event,
             )
             self._workers.append(w)
