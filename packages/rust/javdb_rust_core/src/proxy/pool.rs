@@ -21,6 +21,7 @@ pub struct ProxyInfoInner {
     pub successful_requests: u64,
     pub is_available: bool,
     pub cooldown_until: Option<DateTime<Local>>,
+    pub banned: bool,
 }
 
 impl ProxyInfoInner {
@@ -111,6 +112,7 @@ impl ProxyInfo {
             successful_requests: 0,
             is_available: true,
             cooldown_until: None,
+            banned: false,
         })
     }
 
@@ -319,6 +321,7 @@ impl ProxyPool {
             successful_requests: 0,
             is_available: true,
             cooldown_until: None,
+            banned: false,
         };
 
         self.inner.lock().proxies.push(Arc::new(Mutex::new(proxy)));
@@ -360,7 +363,7 @@ impl ProxyPool {
             return None;
         }
 
-        check_cooldowns(&pool.proxies, &self.ban_manager);
+        check_cooldowns(&pool.proxies);
 
         let len = pool.proxies.len();
         for _ in 0..len {
@@ -386,7 +389,7 @@ impl ProxyPool {
             return None;
         }
 
-        check_cooldowns(&pool.proxies, &self.ban_manager);
+        check_cooldowns(&pool.proxies);
 
         let available = pool
             .proxies
@@ -500,7 +503,7 @@ impl ProxyPool {
     pub fn get_statistics(&self) -> HashMap<String, PyObject> {
         Python::with_gil(|py| {
             let pool = self.inner.lock();
-            check_cooldowns(&pool.proxies, &self.ban_manager);
+            check_cooldowns(&pool.proxies);
 
             let mut stats = HashMap::new();
             stats.insert("total_proxies".to_string(), pool.proxies.len().to_object(py));
@@ -564,7 +567,7 @@ impl ProxyPool {
     #[allow(unused_variables)]
     pub fn log_statistics(&self, level: Option<i32>) {
         let pool = self.inner.lock();
-        check_cooldowns(&pool.proxies, &self.ban_manager);
+        check_cooldowns(&pool.proxies);
 
         let total = pool.proxies.len();
         let available = pool
@@ -662,15 +665,12 @@ impl ProxyPool {
         self.ban_manager.add_ban(&target_name, proxy_url);
         {
             let mut proxy = pool.proxies[target_index].lock();
-            proxy.cooldown_until = Some(Local::now() + Duration::seconds(self.cooldown_seconds));
+            proxy.banned = true;
             proxy.is_available = false;
-            proxy.failures += 1;
-            proxy.total_requests += 1;
-            proxy.last_failure = Some(Local::now());
         }
         warn!(
-            "Proxy '{}' immediately banned and put in cooldown for {}s",
-            target_name, self.cooldown_seconds
+            "Proxy '{}' banned [session-permanent]",
+            target_name
         );
 
         let len = pool.proxies.len();
@@ -679,7 +679,7 @@ impl ProxyPool {
             candidate = (candidate + 1) % len;
             let (available, next_name) = {
                 let proxy = pool.proxies[candidate].lock();
-                (proxy.is_available && !proxy.is_in_cooldown(), proxy.name.clone())
+                (proxy.is_available && !proxy.banned && !proxy.is_in_cooldown(), proxy.name.clone())
             };
             if available {
                 pool.current_index = candidate;
@@ -700,16 +700,16 @@ impl ProxyPool {
     }
 }
 
-fn check_cooldowns(proxies: &[Arc<Mutex<ProxyInfoInner>>], ban_manager: &ProxyBanManager) {
+fn check_cooldowns(proxies: &[Arc<Mutex<ProxyInfoInner>>]) {
     for arc in proxies {
         let mut proxy = arc.lock();
+        if proxy.banned {
+            continue;
+        }
         if proxy.is_in_cooldown() {
             continue;
         }
         if !proxy.is_available {
-            if ban_manager.is_proxy_banned(&proxy.name) {
-                continue;
-            }
             proxy.is_available = true;
             proxy.failures = 0;
             info!(
