@@ -235,9 +235,8 @@ def save_proxy_ban_html(html_content, proxy_name, page_num):
             f.write(f"# HTML Length: {len(html_content)} bytes\n")
             f.write("=" * 60 + "\n\n")
             f.write(html_content)
-        logger.info(f"Saved proxy ban HTML to: {filepath}")
+        logger.debug(f"Saved proxy ban HTML to: {filepath}")
         proxy_ban_html_files.append(filepath)
-        print(f"PROXY_BAN_HTML={filepath}")
         return filepath
     except Exception:
         logger.exception("Failed to save proxy ban HTML")
