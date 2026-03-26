@@ -672,6 +672,7 @@ def login_with_retry(username, password, max_retries=5, proxies=None):
                 from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _mgr
                 if is_captcha_error:
                     logger.warning("Captcha error detected, retrying with new captcha...")
+                    time.sleep(_mgr.get_cooldown())
                 elif is_cf_hard_block:
                     logger.warning(
                         "Cloudflare hard-block detected on this proxy, "
@@ -685,7 +686,7 @@ def login_with_retry(username, password, max_retries=5, proxies=None):
                     time.sleep(_mgr.get_cooldown())
                     continue
                 else:
-                    # Generic login failure only — captcha retries immediately above.
+                    # Generic login failure (not captcha / CF paths above).
                     logger.warning(f"Login failed: {message}")
                     logger.info("Retrying...")
                     time.sleep(_mgr.get_cooldown())
