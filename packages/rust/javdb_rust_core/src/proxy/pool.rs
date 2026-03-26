@@ -237,11 +237,10 @@ pub struct ProxyPool {
 #[pymethods]
 impl ProxyPool {
     #[new]
-    #[pyo3(signature = (cooldown_seconds=300, max_failures_before_cooldown=3, **_kwargs))]
+    #[pyo3(signature = (cooldown_seconds=300, max_failures_before_cooldown=3))]
     pub fn new(
         cooldown_seconds: i64,
         max_failures_before_cooldown: u32,
-        _kwargs: Option<&pyo3::types::PyDict>,
     ) -> Self {
         Self {
             inner: Mutex::new(PoolInner {
@@ -722,14 +721,13 @@ fn check_cooldowns(proxies: &[Arc<Mutex<ProxyInfoInner>>], ban_manager: &ProxyBa
 }
 
 #[pyfunction]
-#[pyo3(signature = (proxy_list_config, cooldown_seconds=300, max_failures=3, **_kwargs))]
+#[pyo3(signature = (proxy_list_config, cooldown_seconds=300, max_failures=3))]
 pub fn create_proxy_pool_from_config(
     proxy_list_config: Vec<HashMap<String, String>>,
     cooldown_seconds: i64,
     max_failures: u32,
-    _kwargs: Option<&pyo3::types::PyDict>,
 ) -> ProxyPool {
-    let pool = ProxyPool::new(cooldown_seconds, max_failures, None);
+    let pool = ProxyPool::new(cooldown_seconds, max_failures);
     pool.add_proxies_from_list(proxy_list_config);
     pool
 }

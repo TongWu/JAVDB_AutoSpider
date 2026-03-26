@@ -48,8 +48,7 @@ pub struct ProxyBanManager {
 #[pymethods]
 impl ProxyBanManager {
     #[new]
-    #[pyo3(signature = (**_kwargs))]
-    pub fn new(_kwargs: Option<&pyo3::types::PyDict>) -> Self {
+    pub fn new() -> Self {
         info!("RustProxyBanManager initialised (session-scoped, in-memory only)");
         Self {
             inner: Arc::new(BanManagerInner {
@@ -212,12 +211,11 @@ static GLOBAL_BAN_MANAGER: OnceCell<ProxyBanManager> = OnceCell::new();
 
 pub fn get_ban_manager(_ban_log_file: &str) -> ProxyBanManager {
     GLOBAL_BAN_MANAGER
-        .get_or_init(|| ProxyBanManager::new(None))
+        .get_or_init(ProxyBanManager::new)
         .clone()
 }
 
 #[pyfunction]
-#[pyo3(signature = (**_kwargs))]
-pub fn get_global_ban_manager(_kwargs: Option<&pyo3::types::PyDict>) -> ProxyBanManager {
-    ProxyBanManager::new(None)
+pub fn get_global_ban_manager() -> ProxyBanManager {
+    ProxyBanManager::new()
 }
