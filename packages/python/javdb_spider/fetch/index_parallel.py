@@ -123,11 +123,11 @@ def fetch_all_index_pages_parallel(
     if parse_all:
         window_size = max(len(PROXY_POOL) * 2, 4) if PROXY_POOL else 4
         next_page = start_page
-        submitted_up_to = start_page - 1
+        in_flight = 0
         for _ in range(window_size):
             _submit_page(backend, next_page, custom_url)
-            submitted_up_to = next_page
             next_page += 1
+            in_flight += 1
     else:
         for p in range(start_page, end_page + 1):
             _submit_page(backend, p, custom_url)
@@ -176,11 +176,11 @@ def fetch_all_index_pages_parallel(
                 stop_collecting = True
                 backend.mark_done()
             else:
-                while next_page <= submitted_up_to + 1:
-                    pass
-                _submit_page(backend, next_page, custom_url)
-                submitted_up_to = next_page
-                next_page += 1
+                in_flight -= 1
+                while in_flight < window_size:
+                    _submit_page(backend, next_page, custom_url)
+                    next_page += 1
+                    in_flight += 1
 
     # -- shutdown engine and export login state -----------------------------
 
