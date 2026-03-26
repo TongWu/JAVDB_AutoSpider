@@ -533,14 +533,14 @@ class TestProxyPoolBanProxy:
         assert pool.current_index == 1
 
     def test_ban_proxy_records_in_ban_manager(self):
-        """ban_proxy should call ban_manager.add_ban."""
+        """ban_proxy should register the ban in the ban manager."""
         pool = ProxyPool()
         pool.add_proxy(http_url="http://ban-rec1:8080", name="ban-rec-1")
         pool.add_proxy(http_url="http://ban-rec2:8080", name="ban-rec-2")
 
-        with patch.object(pool.ban_manager, 'add_ban') as mock_add:
-            pool.ban_proxy("ban-rec-1")
-            mock_add.assert_called_once_with("ban-rec-1", "http://ban-rec1:8080")
+        assert not pool.ban_manager.is_proxy_banned("ban-rec-1")
+        pool.ban_proxy("ban-rec-1")
+        assert pool.ban_manager.is_proxy_banned("ban-rec-1")
 
     def test_ban_proxy_nonexistent_name(self):
         """ban_proxy with unknown name should return False."""
