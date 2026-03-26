@@ -61,8 +61,8 @@ impl ProxyBanManager {
         };
         banned.insert(proxy_name.to_string(), record);
 
-        info!(
-            "Proxy '{}' banned [session-permanent, until process restart]",
+        debug!(
+            "Proxy '{}' banned [session-permanent]",
             proxy_name
         );
     }
@@ -146,5 +146,7 @@ pub fn get_ban_manager(_ban_log_file: &str) -> ProxyBanManager {
 
 #[pyfunction]
 pub fn get_global_ban_manager() -> ProxyBanManager {
-    ProxyBanManager::new()
+    GLOBAL_BAN_MANAGER
+        .get_or_init(ProxyBanManager::new)
+        .clone()
 }
