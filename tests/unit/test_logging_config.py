@@ -14,6 +14,10 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 from utils.infra.logging_config import setup_logging, get_logger
+from packages.python.javdb_platform.logging_config import (
+    get_logger_name_mapping,
+    _shorten_logger_name,
+)
 
 
 class TestSetupLogging:
@@ -261,4 +265,47 @@ class TestLoggingFormat:
             assert 'test.format.name' in content
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_log_format_uses_short_name_for_mapped_module(self):
+        """Test that mapped module names appear shortened in logs."""
+        temp_dir = tempfile.mkdtemp()
+        log_file = os.path.join(temp_dir, 'test.log')
+
+        try:
+            setup_logging(log_file=log_file)
+            logger = get_logger('packages.python.javdb_platform.request_handler')
+            logger.info("Short name test")
+
+            with open(log_file, 'r') as f:
+                content = f.read()
+
+            assert 'RequestHandler' in content
+            assert 'packages.python.javdb_platform.request_handler' not in content
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+class TestLoggerNameMapping:
+    """Test cases for logger short-name mapping."""
+
+    def test_shorten_mapped_module(self):
+        assert _shorten_logger_name('packages.python.javdb_spider.fetch.fetch_engine') == 'FetchEngine'
+
+    def test_shorten_unmapped_module_strips_prefix(self):
+        result = _shorten_logger_name('packages.python.javdb_new.new_module')
+        assert result == 'javdb_new.new_module'
+
+    def test_shorten_unknown_module_returned_as_is(self):
+        assert _shorten_logger_name('some.other.lib') == 'some.other.lib'
+
+    def test_get_logger_name_mapping_returns_dict(self):
+        mapping = get_logger_name_mapping()
+        assert isinstance(mapping, dict)
+        assert 'RequestHandler' in mapping
+        assert mapping['RequestHandler'] == 'packages.python.javdb_platform.request_handler'
+
+    def test_get_logger_name_mapping_is_copy(self):
+        m1 = get_logger_name_mapping()
+        m2 = get_logger_name_mapping()
+        assert m1 is not m2
 
