@@ -17,7 +17,7 @@ from packages.python.javdb_ingestion.policies import (
 import packages.python.javdb_spider.runtime.state as state
 from packages.python.javdb_spider.fetch.fallback import get_page_url, fetch_index_page_with_fallback
 from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr
-from packages.python.javdb_spider.runtime.config import PAGE_SLEEP, PROXY_POOL, PROXY_MODE
+from packages.python.javdb_spider.runtime.config import PAGE_SLEEP, PROXY_POOL
 
 logger = get_logger(__name__)
 
@@ -160,9 +160,6 @@ def fetch_all_index_pages(
     _est_n = len(all_index_results_phase1) + len(all_index_results_phase2) - _est_skip
     logger.info(f"Estimated processing volume: N={_est_n} (total={len(all_index_results_phase1)+len(all_index_results_phase2)}, pre-skip={_est_skip})")
     movie_sleep_mgr.apply_volume_multiplier(_est_n)
-
-    _w = len(PROXY_POOL) if PROXY_MODE == 'pool' and PROXY_POOL else 1
-    movie_sleep_mgr.apply_concurrency_factor(_w)
 
     return {
         'all_index_results_phase1': all_index_results_phase1,
