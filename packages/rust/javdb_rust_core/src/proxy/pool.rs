@@ -678,12 +678,15 @@ impl ProxyPool {
         let mut candidate = target_index;
         for _ in 0..len {
             candidate = (candidate + 1) % len;
-            let proxy = pool.proxies[candidate].lock();
-            if proxy.is_available && !proxy.is_in_cooldown() {
+            let (available, next_name) = {
+                let proxy = pool.proxies[candidate].lock();
+                (proxy.is_available && !proxy.is_in_cooldown(), proxy.name.clone())
+            };
+            if available {
                 pool.current_index = candidate;
                 info!(
                     "Switched from '{}' to '{}'",
-                    target_name, proxy.name
+                    target_name, next_name
                 );
                 return true;
             }
