@@ -61,6 +61,7 @@ from packages.python.javdb_spider.runtime.sleep import (
     movie_sleep_mgr as _global_sleep_mgr,
     PenaltyTracker,
     DualWindowThrottle,
+    penalty_tracker as _shared_penalty_tracker,
 )
 from packages.python.javdb_spider.runtime.config import (
     BASE_URL,
@@ -260,6 +261,7 @@ class _EngineWorker(threading.Thread):
         coordinator: LoginCoordinator,
         sleep_min: float,
         sleep_max: float,
+        penalty_tracker: PenaltyTracker,
         banned_proxies: set,
         drain_lock: threading.Lock,
         drain_done: List[bool],
@@ -291,11 +293,12 @@ class _EngineWorker(threading.Thread):
             random.uniform(0.5, 2.0) + worker_id * random.uniform(1.5, 3.0)
         )
 
-        own_penalty_tracker = PenaltyTracker()
-
+        # One PenaltyTracker per engine (passed in): CF/failure events from any
+        # worker must raise the penalty factor for all workers' adaptive sleep.
+        # Per-worker DualWindowThrottle stays isolated (independent proxy IPs).
         self._sleep_mgr = MovieSleepManager(
             sleep_min, sleep_max,
-            penalty_tracker=own_penalty_tracker,
+            penalty_tracker=penalty_tracker,
             throttle=DualWindowThrottle(),
         )
 
@@ -320,7 +323,7 @@ class _EngineWorker(threading.Thread):
                 proxy_modules=['all'],
                 proxy_mode='single',
             ),
-            penalty_tracker=own_penalty_tracker,
+            penalty_tracker=penalty_tracker,
         )
 
     # -- fetch helpers -------------------------------------------------------
@@ -654,6 +657,9 @@ class ParallelFetchBackend(FetchBackend):
         drain_lock = threading.Lock()
         drain_done: List[bool] = [False]
 
+        # Same instance as movie_sleep_mgr.penalty_tracker: all engine workers
+        # share CF/failure history for coordinated backoff; aligns with other
+        # spider stages using the module sleep manager (thread-safe).
         for idx, proxy_cfg in enumerate(active_configs):
             w = _EngineWorker(
                 worker_id=idx,
@@ -668,6 +674,7 @@ class ParallelFetchBackend(FetchBackend):
                 coordinator=self._coordinator,
                 sleep_min=self._sleep_min,
                 sleep_max=self._sleep_max,
+                penalty_tracker=_shared_penalty_tracker,
                 banned_proxies=banned_proxies,
                 drain_lock=drain_lock,
                 drain_done=drain_done,
