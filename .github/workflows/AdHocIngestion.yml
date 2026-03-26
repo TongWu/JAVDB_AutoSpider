@@ -166,7 +166,6 @@ jobs:
           VAR_EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           VAR_EMAIL_TO: ${{ secrets.EMAIL_TO }}
           VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
-          VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS || '691200' }}
           VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES || 3 }}
           VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
           VAR_PROXY_SPIDER_ENABLED: ${{ inputs.proxy_spider && 'true' || 'false' }}
@@ -183,10 +182,7 @@ jobs:
           VAR_JAVDB_USERNAME: ${{ secrets.JAVDB_USERNAME }}
           VAR_GPT_API_URL: ${{ secrets.GPT_API_URL }}
           VAR_GPT_API_KEY: ${{ secrets.GPT_API_KEY }}
-          VAR_PAGE_SLEEP: ${{ vars.PAGE_SLEEP }}
           VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
-          VAR_CF_TURNSTILE_COOLDOWN: ${{ vars.CF_TURNSTILE_COOLDOWN }}
-          VAR_FALLBACK_COOLDOWN: ${{ vars.FALLBACK_COOLDOWN }}
           VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
           VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE || 'logs/spider.log' }}
           VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE || 'logs/qb_uploader.log' }}
