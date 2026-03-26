@@ -18,6 +18,8 @@ on:
       - 'packages/rust/javdb_rust_core/**'
       - '.github/workflows/build-rust-extension.yml'
       - '.github/actions/install-rust-wheel/**'
+      - '.github/actions/setup-python-env/**'
+      - '.github/actions/restore-encrypted-config/**'
   workflow_call:
   workflow_dispatch:
 

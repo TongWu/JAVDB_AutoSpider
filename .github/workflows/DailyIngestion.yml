@@ -16,7 +16,7 @@ on:
         required: false
         type: number
       runner:
-        description: 'Runner type for pipeline jobs (health-check and run-pipeline)'
+        description: 'Runner type for run-pipeline (includes health checks)'
         required: false
         default: 'ubuntu-latest'
         type: choice
@@ -64,13 +64,15 @@ on:
 
 jobs:
   # =============================================================================
-  # Job 0: Build Rust Extension - Build and cache wheel (subsequent jobs get cache hits)
+  # Job 1: Setup - Checkout, install dependencies, generate config (includes Rust wheel build/cache)
   # =============================================================================
-  build-rust:
+  setup:
     runs-on: ubuntu-latest
+    environment: Production
     permissions:
       contents: read
     outputs:
+      branch: ${{ steps.branch_check.outputs.branch }}
       pipeline_workflow_run_started_at: ${{ steps.capture_run_started_at.outputs.started_at }}
     env:
       TZ: Asia/Singapore
@@ -80,32 +82,6 @@ jobs:
         id: capture_run_started_at
         run: echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
 
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-
-      - name: Build and cache Rust wheel
-        uses: ./.github/actions/install-rust-wheel
-
-  # =============================================================================
-  # Job 1: Setup - Checkout, install dependencies, generate config
-  # =============================================================================
-  setup:
-    needs: build-rust
-    runs-on: ubuntu-latest
-    environment: Production
-    permissions:
-      contents: read
-    outputs:
-      branch: ${{ steps.branch_check.outputs.branch }}
-    env:
-      TZ: Asia/Singapore
-    
-    steps:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
@@ -118,21 +94,10 @@ jobs:
           echo "Current branch: $CURRENT_BRANCH"
           echo "branch=$CURRENT_BRANCH" >> $GITHUB_OUTPUT
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
         with:
           python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -r requirements.txt
-          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
-          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
-
-      - name: Install Rust extension
-        uses: ./.github/actions/install-rust-wheel
 
       - name: Generate config.py from GitHub Variables and Secrets
         env:
@@ -252,81 +217,21 @@ jobs:
           retention-days: 1
 
   # =============================================================================
-  # Job 2: Health Check - Verify essential services before running pipeline
-  # =============================================================================
-  health-check:
-    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
-    environment: Production
-    permissions:
-      contents: read
-    needs: [build-rust, setup]
-    env:
-      TZ: Asia/Singapore
-    
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -r requirements.txt
-          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
-          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
-
-      - name: Install Rust extension
-        uses: ./.github/actions/install-rust-wheel
-
-      - name: Download encrypted config
-        uses: actions/download-artifact@v7
-        with:
-          name: config-encrypted
-          path: .
-
-      - name: Decrypt config
-        env:
-          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
-        run: |
-          if [ -z "$ARTIFACT_KEY" ]; then
-            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
-            echo "This secret is required to decrypt config.py."
-            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
-            exit 1
-          fi
-          
-          openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
-            -in config.py.enc -out config.py \
-            -pass pass:"$ARTIFACT_KEY"
-          rm config.py.enc
-          echo "✓ Config decrypted successfully"
-
-      - name: Run health checks
-        run: |
-          set -e  # Exit on error
-          set -o pipefail  # Exit on error in pipeline
-          python3 -m apps.cli.health_check
-
-  # =============================================================================
-  # Job 3: Run Pipeline - Execute spider, uploader, and pikpak bridge
+  # Job 2: Run Pipeline - Health checks, then spider, uploader, and pikpak bridge
   # =============================================================================
   run-pipeline:
     runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     environment: Production
     permissions:
       contents: read
-    needs: [build-rust, setup, health-check]
+    needs: [setup]
     outputs:
       spider_success: ${{ steps.spider.outcome == 'success' }}
       uploader_success: ${{ steps.uploader.outcome == 'success' }}
       pikpak_success: ${{ steps.pikpak.outcome == 'success' }}
       csv_filename: ${{ steps.spider.outputs.csv_filename }}
       session_id: ${{ steps.spider.outputs.session_id }}
+      health_check_outcome: ${{ steps.health_check.outcome }}
     env:
       TZ: Asia/Singapore
     
@@ -337,45 +242,23 @@ jobs:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
           lfs: true
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -r requirements.txt
-          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
-          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
-
-      - name: Install Rust extension
-        uses: ./.github/actions/install-rust-wheel
-
-      - name: Download encrypted config
-        uses: actions/download-artifact@v7
+      - name: Restore encrypted config
+        uses: ./.github/actions/restore-encrypted-config
         with:
-          name: config-encrypted
-          path: .
+          artifact-name: config-encrypted
+          artifact-key: ${{ secrets.ARTIFACT_KEY }}
 
-      - name: Decrypt config
-        env:
-          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+      - name: Run health checks
+        id: health_check
         run: |
-          # Guard: fail workflow if ARTIFACT_KEY is not configured
-          if [ -z "$ARTIFACT_KEY" ]; then
-            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
-            echo "This secret is required to decrypt config.py."
-            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
-            exit 1
-          fi
-          
-          openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
-            -in config.py.enc -out config.py \
-            -pass pass:"$ARTIFACT_KEY"
-          rm config.py.enc
-          echo "✓ Config decrypted successfully"
+          set -e
+          set -o pipefail
+          python3 -m apps.cli.health_check
 
       - name: Pull latest changes
         run: |
@@ -642,7 +525,7 @@ jobs:
           if-no-files-found: ignore
 
   # =============================================================================
-  # Job 4: Email Notification - Always runs (success, failure, or cancel)
+  # Job 3: Email Notification - Always runs (success, failure, or cancel)
   # (Runs in parallel with commit-results on GitHub-hosted runner)
   # =============================================================================
   email-notification:
@@ -650,56 +533,27 @@ jobs:
     environment: Production
     permissions:
       contents: read
-    needs: [build-rust, setup, health-check, run-pipeline]
+    needs: [setup, run-pipeline]
     if: always()
     env:
       TZ: Asia/Singapore
       # Email subject/body date ≈ workflow start (first job UTC timestamp), not send time
-      PIPELINE_WORKFLOW_RUN_STARTED_AT: ${{ needs.build-rust.outputs.pipeline_workflow_run_started_at }}
+      PIPELINE_WORKFLOW_RUN_STARTED_AT: ${{ needs.setup.outputs.pipeline_workflow_run_started_at }}
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -r requirements.txt
-          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
-          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
-
-      - name: Install Rust extension
-        uses: ./.github/actions/install-rust-wheel
-
-      - name: Download encrypted config
-        uses: actions/download-artifact@v7
+      - name: Restore encrypted config
+        uses: ./.github/actions/restore-encrypted-config
         with:
-          name: config-encrypted
-          path: .
-
-      - name: Decrypt config
-        env:
-          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
-        run: |
-          # Guard: fail workflow if ARTIFACT_KEY is not configured
-          if [ -z "$ARTIFACT_KEY" ]; then
-            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
-            echo "This secret is required to decrypt config.py."
-            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
-            exit 1
-          fi
-          
-          openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
-            -in config.py.enc -out config.py \
-            -pass pass:"$ARTIFACT_KEY"
-          rm config.py.enc
-          echo "✓ Config decrypted successfully"
+          artifact-name: config-encrypted
+          artifact-key: ${{ secrets.ARTIFACT_KEY }}
 
       - name: Download encrypted logs (if available)
         uses: actions/download-artifact@v7
@@ -769,7 +623,7 @@ jobs:
         run: |
           # Check the status of all previous jobs
           SETUP_STATUS="${{ needs.setup.result }}"
-          HEALTH_STATUS="${{ needs.health-check.result }}"
+          HEALTH_STATUS="${{ needs.run-pipeline.outputs.health_check_outcome }}"
           PIPELINE_STATUS="${{ needs.run-pipeline.result }}"
           
           echo "Setup: $SETUP_STATUS"
@@ -826,7 +680,7 @@ jobs:
           "${CMD_ARGS[@]}"
 
   # =============================================================================
-  # Job 5: Commit Results - Commit CSV files only (no logs)
+  # Job 4: Commit Results - Commit CSV files only (no logs)
   # (Runs in parallel with email-notification on GitHub-hosted runner)
   # =============================================================================
   commit-results:
