@@ -92,10 +92,7 @@ jobs:
           VAR_PAGE_END: '20'
           VAR_PHASE2_MIN_RATE: '4.0'
           VAR_PHASE2_MIN_COMMENTS: '85'
-          VAR_PAGE_SLEEP: '2'
           VAR_MOVIE_SLEEP: '5,15'
-          VAR_CF_TURNSTILE_COOLDOWN: '30'
-          VAR_FALLBACK_COOLDOWN: '30'
           VAR_LOG_LEVEL: 'INFO'
           VAR_SPIDER_LOG_FILE: 'logs/spider.log'
           VAR_REPORTS_DIR: 'reports'
@@ -105,7 +102,6 @@ jobs:
           VAR_IGNORE_RELEASE_DATE_FILTER: 'False'
           VAR_CF_BYPASS_ENABLED: 'True'
           VAR_CF_BYPASS_SERVICE_PORT: '8000'
-          VAR_PROXY_POOL_COOLDOWN_SECONDS: '691200'
           VAR_PROXY_POOL_MAX_FAILURES: '3'
           VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
         run: python3 -m apps.cli.config_generator --github-actions
