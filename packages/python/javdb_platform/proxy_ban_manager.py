@@ -81,13 +81,13 @@ class ProxyBanManager:
         """
         with self.lock:
             if proxy_name in self.banned_proxies:
-                logger.warning(f"Proxy '{proxy_name}' is already banned this session, not updating")
+                logger.debug(f"Proxy '{proxy_name}' is already banned this session, not updating")
                 return
             
             record = ProxyBanRecord(proxy_name, datetime.now(), proxy_url)
             self.banned_proxies[proxy_name] = record
             
-            logger.warning(
+            logger.info(
                 f"Proxy '{proxy_name}' banned [session-permanent, until process restart]"
             )
     
