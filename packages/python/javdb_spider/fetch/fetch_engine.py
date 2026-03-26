@@ -620,11 +620,12 @@ class ParallelFetchBackend(FetchBackend):
 
         ban_mgr = get_ban_manager()
         banned_proxies: set = set()
+        pre_banned_count = 0
         active_configs = []
         for cfg in proxy_configs:
             name = cfg.get('name', '')
             if ban_mgr.is_proxy_banned(name):
-                banned_proxies.add(name)
+                pre_banned_count += 1
                 logger.info(
                     "[startup] Proxy '%s' already banned — skipping worker",
                     name,
@@ -667,10 +668,10 @@ class ParallelFetchBackend(FetchBackend):
 
         self._inherit_login_state()
 
-        if banned_proxies:
+        if pre_banned_count:
             logger.info(
-                "FetchEngine: starting %d worker(s) (%d proxies banned)",
-                len(self._workers), len(banned_proxies),
+                "FetchEngine: starting %d worker(s) (%d proxies pre-banned)",
+                len(self._workers), pre_banned_count,
             )
         else:
             logger.info(
