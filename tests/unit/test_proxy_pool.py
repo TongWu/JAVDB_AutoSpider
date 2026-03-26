@@ -490,10 +490,9 @@ class TestCreateProxyPoolFromConfig:
             mock_ban_manager.return_value = MagicMock()
             mock_ban_manager.return_value.is_proxy_banned.return_value = False
             
-            pool = create_proxy_pool_from_config(proxy_list, cooldown_seconds=600, max_failures=5)
+            pool = create_proxy_pool_from_config(proxy_list, max_failures=5)
         
         assert len(pool.proxies) == 2
-        assert pool.cooldown_seconds == 600
         assert pool.max_failures_before_cooldown == 5
 
 
