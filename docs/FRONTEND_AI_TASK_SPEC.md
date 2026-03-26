@@ -194,7 +194,7 @@ Authorization: Bearer <token>
 | CF Bypass 回退最大代理切换 | 5 次 | `get_page_with_cf_bypass` |
 | 代理冷却时间 | 默认 300 s，生产配置 691200 s（8 天） | `PROXY_POOL_COOLDOWN_SECONDS` |
 | 代理最大连续失败 | 3 次触发冷却 | `PROXY_POOL_MAX_FAILURES` |
-| 代理封禁时长 | 7 天 | `ProxyBanManager::BAN_DURATION_DAYS` |
+| 代理封禁时长 | 7 天（仅当前 session，不持久化） | `ProxyBanManager::BAN_DURATION_DAYS` |
 | 翻页间隔 | `PAGE_SLEEP`（默认 5 s） | `config.py` |
 | 影片间隔 | `MOVIE_SLEEP`（默认 5 s） | `config.py` |
 | Turnstile 冷却 | `CF_TURNSTILE_COOLDOWN`（默认 5 s） | `config.py` |
