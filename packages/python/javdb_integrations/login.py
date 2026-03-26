@@ -669,6 +669,7 @@ def login_with_retry(username, password, max_retries=5, proxies=None):
             )
 
             if attempt < max_retries:
+                from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _mgr
                 if is_captcha_error:
                     logger.warning("Captcha error detected, retrying with new captcha...")
                 elif is_cf_hard_block:
@@ -681,14 +682,13 @@ def login_with_retry(username, password, max_retries=5, proxies=None):
                 elif is_cf_error:
                     logger.warning("Cloudflare error detected, retrying after cooldown...")
                     logger.warning(f"Error message: {message}")
-                    from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _mgr
                     time.sleep(_mgr.get_cooldown())
                     continue
                 else:
+                    # Generic login failure only — captcha retries immediately above.
                     logger.warning(f"Login failed: {message}")
                     logger.info("Retrying...")
-                from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _mgr
-                time.sleep(_mgr.get_cooldown())
+                    time.sleep(_mgr.get_cooldown())
             else:
                 logger.error(f"All {max_retries} attempts failed")
 
