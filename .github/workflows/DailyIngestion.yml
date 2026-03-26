@@ -406,7 +406,7 @@ jobs:
         run: |
           set -e
           set -o pipefail
-          curl -s https://rclone.org/install.sh | sudo bash
+          bash .github/scripts/install_rclone.sh
           if [ -n "$DEDUP_CSV" ] && [ -f "$DEDUP_CSV" ]; then
             python3 -m apps.cli.rclone_manager --execute --dedup-csv "$DEDUP_CSV"
           else
