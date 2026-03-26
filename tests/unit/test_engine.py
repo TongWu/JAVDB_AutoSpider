@@ -23,13 +23,20 @@ _PROXY_POOL = [
     {'name': 'proxy-b', 'http': 'http://b:1', 'https': 'http://b:1'},
 ]
 
+def _make_ban_manager_stub():
+    mgr = MagicMock()
+    mgr.is_proxy_banned = MagicMock(return_value=False)
+    return mgr
+
+
 # Common decorator stack used by most tests that start the engine.
 _engine_patches = lambda fn: (
     patch('scripts.spider.fetch.fetch_engine.RequestHandler', side_effect=_make_handler_stub)(
     patch('scripts.spider.fetch.fetch_engine.create_proxy_pool_from_config', return_value=MagicMock())(
+    patch('scripts.spider.fetch.fetch_engine.get_ban_manager', return_value=_make_ban_manager_stub())(
     patch('scripts.spider.fetch.fetch_engine.PROXY_POOL', _PROXY_POOL)(
     patch('scripts.spider.fetch.fetch_engine.LOGIN_PROXY_NAME', None)(
-    fn))))
+    fn)))))
 )
 
 
@@ -347,8 +354,8 @@ class TestEngineMarkDoneGuard:
 class TestEngineProxyBanned:
 
     @_engine_patches
-    def test_proxy_banned_error_requeues_task(self, *_mocks):
-        """ProxyBannedError should requeue task and mark proxy as failed."""
+    def test_proxy_banned_stops_worker(self, *_mocks):
+        """ProxyBannedError should stop the worker and produce a failure result."""
         from scripts.spider.fetch.fetch_engine import FetchEngine, EngineTask
         from packages.python.javdb_platform.request_handler import ProxyBannedError
 
@@ -372,7 +379,7 @@ class TestEngineProxyBanned:
 
         assert len(results) == 1
         assert results[0].success is False
-        assert results[0].error == 'all_proxies_failed'
+        assert results[0].error == 'all_proxies_banned'
 
 
 class TestParallelBackendCompatibility:
