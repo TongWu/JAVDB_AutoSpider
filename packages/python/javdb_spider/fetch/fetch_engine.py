@@ -261,6 +261,8 @@ class _EngineWorker(threading.Thread):
         sleep_min: float,
         sleep_max: float,
         banned_proxies: set,
+        drain_lock: threading.Lock,
+        drain_done: List[bool],
         penalty_tracker: Optional[PenaltyTracker] = None,
         throttle: Optional[DualWindowThrottle] = None,
         stop_event: Optional[threading.Event] = None,
@@ -282,6 +284,8 @@ class _EngineWorker(threading.Thread):
         self._coordinator = coordinator
         self._stop_event = stop_event or threading.Event()
         self._banned_proxies = banned_proxies
+        self._drain_lock = drain_lock
+        self._drain_done = drain_done
 
         self._cf_bypass_since: Optional[float] = None
         self._first_request = True
@@ -520,15 +524,21 @@ class _EngineWorker(threading.Thread):
                 task=task, success=False,
                 error='all_proxies_banned',
             ))
-            self._drain_remaining_tasks()
+            with self._drain_lock:
+                if not self._drain_done[0]:
+                    self._drain_done[0] = True
+                    self._drain_remaining_tasks()
 
     def _drain_remaining_tasks(self) -> None:
-        """When all workers are banned, drain the task queue as failures."""
+        """When all workers are banned, drain the task queue as failures.
+
+        Must only be called once across all workers (guarded by
+        ``_drain_lock`` / ``_drain_done`` in ``_handle_proxy_banned``).
+        """
         while True:
             try:
                 item = self.task_queue.get_nowait()
                 if item is None:
-                    self.task_queue.put(None)
                     break
                 self.result_queue.put(EngineResult(
                     task=item, success=False,
@@ -645,6 +655,9 @@ class ParallelFetchBackend(FetchBackend):
             login_proxy_name=LOGIN_PROXY_NAME,
         )
 
+        drain_lock = threading.Lock()
+        drain_done: List[bool] = [False]
+
         for idx, proxy_cfg in enumerate(active_configs):
             w = _EngineWorker(
                 worker_id=idx,
@@ -660,6 +673,8 @@ class ParallelFetchBackend(FetchBackend):
                 sleep_min=self._sleep_min,
                 sleep_max=self._sleep_max,
                 banned_proxies=banned_proxies,
+                drain_lock=drain_lock,
+                drain_done=drain_done,
                 penalty_tracker=self._penalty_tracker,
                 throttle=self._throttle,
                 stop_event=self._stop_event,
