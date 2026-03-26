@@ -2,7 +2,7 @@
 Unit tests for utils/proxy_ban_manager.py
 
 Proxy bans are now session-scoped (in-memory only).
-No CSV or SQLite persistence is tested.
+A ban is permanent for the lifetime of the process.
 """
 import os
 import sys
@@ -28,88 +28,36 @@ class TestProxyBanRecord:
     def test_init_basic(self):
         """Test basic initialization."""
         ban_time = datetime(2024, 1, 1, 10, 0, 0)
-        unban_time = datetime(2024, 1, 8, 10, 0, 0)
-        record = ProxyBanRecord("test-proxy", ban_time, unban_time)
+        record = ProxyBanRecord("test-proxy", ban_time)
         
         assert record.proxy_name == "test-proxy"
         assert record.ban_time == ban_time
-        assert record.unban_time == unban_time
         assert record.proxy_url is None
     
     def test_init_with_proxy_url(self):
         """Test initialization with proxy URL."""
         ban_time = datetime(2024, 1, 1, 10, 0, 0)
-        unban_time = datetime(2024, 1, 8, 10, 0, 0)
-        record = ProxyBanRecord("test-proxy", ban_time, unban_time, 
+        record = ProxyBanRecord("test-proxy", ban_time,
                                 proxy_url="http://user:pass@192.168.1.1:8080")
         
         assert record.proxy_url == "http://user:pass@192.168.1.1:8080"
     
-    def test_is_still_banned_true(self):
-        """Test is_still_banned returns True when still banned."""
-        ban_time = datetime.now() - timedelta(days=1)
-        unban_time = datetime.now() + timedelta(days=6)
-        record = ProxyBanRecord("test-proxy", ban_time, unban_time)
-        
-        assert record.is_still_banned() is True
-    
-    def test_is_still_banned_false(self):
-        """Test is_still_banned returns False when ban expired."""
-        ban_time = datetime.now() - timedelta(days=10)
-        unban_time = datetime.now() - timedelta(days=3)
-        record = ProxyBanRecord("test-proxy", ban_time, unban_time)
-        
-        assert record.is_still_banned() is False
-    
-    def test_time_until_unban(self):
-        """Test time_until_unban calculation."""
-        ban_time = datetime.now()
-        unban_time = datetime.now() + timedelta(days=7)
-        record = ProxyBanRecord("test-proxy", ban_time, unban_time)
-        
-        time_left = record.time_until_unban()
-        # Should be approximately 7 days
-        assert time_left.days >= 6
-        assert time_left.days <= 7
-    
-    def test_days_until_unban_positive(self):
-        """Test days_until_unban with positive days remaining."""
-        ban_time = datetime.now()
-        unban_time = datetime.now() + timedelta(days=5, hours=12)
-        record = ProxyBanRecord("test-proxy", ban_time, unban_time)
-        
-        days = record.days_until_unban()
-        assert days == 5
-    
-    def test_days_until_unban_expired(self):
-        """Test days_until_unban returns 0 when expired."""
-        ban_time = datetime.now() - timedelta(days=10)
-        unban_time = datetime.now() - timedelta(days=3)
-        record = ProxyBanRecord("test-proxy", ban_time, unban_time)
-        
-        days = record.days_until_unban()
-        assert days == 0
-    
     def test_to_dict(self):
         """Test to_dict conversion."""
         ban_time = datetime(2024, 1, 1, 10, 30, 45)
-        unban_time = datetime(2024, 1, 8, 10, 30, 45)
-        record = ProxyBanRecord("test-proxy", ban_time, unban_time,
+        record = ProxyBanRecord("test-proxy", ban_time,
                                 proxy_url="http://proxy:8080")
         
         result = record.to_dict()
         
         assert result['proxy_name'] == "test-proxy"
         assert result['ban_time'] == "2024-01-01 10:30:45"
-        assert result['unban_time'] == "2024-01-08 10:30:45"
-        # proxy_url should NOT be in to_dict (no IP for security)
         assert 'proxy_url' not in result
     
     def test_to_dict_with_ip(self):
         """Test to_dict_with_ip conversion."""
         ban_time = datetime(2024, 1, 1, 10, 30, 45)
-        unban_time = datetime(2024, 1, 8, 10, 30, 45)
-        record = ProxyBanRecord("test-proxy", ban_time, unban_time,
+        record = ProxyBanRecord("test-proxy", ban_time,
                                 proxy_url="http://proxy:8080")
         
         result = record.to_dict_with_ip()
@@ -120,8 +68,7 @@ class TestProxyBanRecord:
     def test_to_dict_with_ip_no_url(self):
         """Test to_dict_with_ip when no URL is set."""
         ban_time = datetime(2024, 1, 1, 10, 30, 45)
-        unban_time = datetime(2024, 1, 8, 10, 30, 45)
-        record = ProxyBanRecord("test-proxy", ban_time, unban_time)
+        record = ProxyBanRecord("test-proxy", ban_time)
         
         result = record.to_dict_with_ip()
         
@@ -153,10 +100,8 @@ class TestProxyBanManager:
         manager.add_ban("proxy-1")
         original_ban_time = manager.banned_proxies["proxy-1"].ban_time
         
-        # Try to add same proxy again
         manager.add_ban("proxy-1")
         
-        # Ban time should not change
         assert manager.banned_proxies["proxy-1"].ban_time == original_ban_time
     
     def test_is_proxy_banned_true(self):
@@ -173,22 +118,12 @@ class TestProxyBanManager:
         
         assert manager.is_proxy_banned("unknown-proxy") is False
     
-    def test_is_proxy_banned_expired(self):
-        """Test is_proxy_banned cleans up expired ban and returns False."""
+    def test_is_proxy_banned_session_permanent(self):
+        """Ban is permanent for the session — no expiry."""
         manager = ProxyBanManager()
-        
-        # Manually add an expired ban
-        expired_record = ProxyBanRecord(
-            "expired-proxy",
-            datetime.now() - timedelta(days=10),
-            datetime.now() - timedelta(days=3)
-        )
-        manager.banned_proxies["expired-proxy"] = expired_record
-        
-        result = manager.is_proxy_banned("expired-proxy")
-        
-        assert result is False
-        assert "expired-proxy" not in manager.banned_proxies
+        manager.add_ban("proxy-1")
+
+        assert manager.is_proxy_banned("proxy-1") is True
     
     def test_get_banned_proxies(self):
         """Test get_banned_proxies returns list of banned proxies."""
@@ -223,7 +158,6 @@ class TestProxyBanManager:
         assert "Currently banned proxies: 1" in summary
         assert "proxy-1" in summary
         assert "Banned at:" in summary
-        assert "Will unban:" in summary
     
     def test_get_ban_summary_with_ip(self):
         """Test get_ban_summary with IP included."""
@@ -243,24 +177,7 @@ class TestProxyBanManager:
         
         summary = manager.get_ban_summary(include_ip=False)
         
-        # IP should not appear when include_ip=False
         assert "192.168.1.1" not in summary
-    
-    def test_get_cooldown_seconds(self):
-        """Test get_cooldown_seconds returns correct value."""
-        manager = ProxyBanManager()
-        
-        cooldown = manager.get_cooldown_seconds()
-        
-        # 8 days in seconds
-        expected = 8 * 24 * 3600
-        assert cooldown == expected
-    
-    def test_ban_duration_days(self):
-        """Test BAN_DURATION_DAYS constant."""
-        manager = ProxyBanManager()
-        
-        assert manager.BAN_DURATION_DAYS == 7
 
     def test_session_scoped_no_persistence(self):
         """Test that bans do not persist: a new manager starts clean."""
@@ -277,15 +194,12 @@ class TestGetBanManager:
     
     def test_get_ban_manager_creates_singleton(self):
         """Test that get_ban_manager creates a singleton instance."""
-        # Reset global
         import utils.proxy_ban_manager as pbm
         pbm._global_ban_manager = None
         
         manager1 = get_ban_manager()
         manager2 = get_ban_manager()
         
-        # Should be the same instance
         assert manager1 is manager2
         
-        # Reset for other tests
         pbm._global_ban_manager = None
