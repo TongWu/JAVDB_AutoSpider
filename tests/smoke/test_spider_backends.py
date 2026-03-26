@@ -159,5 +159,6 @@ def test_sequential_backend_skip_and_cf_fallback_keep_original_pacing(monkeypatc
     third = next(results)
     third.acknowledge('no_row')
 
-    assert cooldown_calls == [sb.FALLBACK_COOLDOWN]
+    assert len(cooldown_calls) == 1
+    assert cooldown_calls[0] == sb.movie_sleep_mgr.get_cooldown()
     assert movie_sleep_calls == ['movie']

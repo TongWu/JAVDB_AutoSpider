@@ -35,7 +35,6 @@ mock_config.PROXY_HTTPS = None
 mock_config.PROXY_MODULES = ['all']
 mock_config.PROXY_MODE = 'single'
 mock_config.PROXY_POOL = []
-mock_config.PROXY_POOL_COOLDOWN_SECONDS = 691200
 mock_config.PROXY_POOL_MAX_FAILURES = 3
 mock_config.GIT_USERNAME = 'test'
 mock_config.GIT_PASSWORD = ''
