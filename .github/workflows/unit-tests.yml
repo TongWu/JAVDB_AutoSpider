@@ -47,9 +47,9 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           packages/rust/javdb_rust_core/target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('packages/rust/javdb_rust_core/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('packages/rust/javdb_rust_core/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-cargo-
+          ${{ runner.os }}-${{ runner.arch }}-cargo-
 
     - name: Run cargo check
       working-directory: packages/rust/javdb_rust_core

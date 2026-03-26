@@ -2063,13 +2063,24 @@ def generate_summary_report(
         proxies_were_banned = proxies_were_banned or any_proxy_banned_phase2
 
     if proxies_were_banned:
-        logger.error("=" * 75)
-        logger.error("CRITICAL: PROXY BAN DETECTED DURING THIS RUN")
-        logger.error("=" * 75)
-        logger.error("One or more proxies were marked as BANNED due to failure to retrieve movie list.")
-        logger.error("This indicates the proxy IP may be blocked by JavDB.")
-        logger.error("Please check proxy ban status and consider using different proxies.")
-        sys.exit(2)
+        logger.warning("=" * 75)
+        logger.warning("PROXY BAN DETECTED DURING THIS RUN")
+        logger.warning("=" * 75)
+        logger.warning("One or more proxies were marked as BANNED due to failure to retrieve movie list.")
+        logger.warning("This indicates the proxy IP may be blocked by JavDB.")
+        logger.warning("Please check proxy ban status and consider using different proxies.")
+        if len(rows) > 0:
+            logger.info(
+                "Spider completed successfully with %d results despite proxy ban(s) — "
+                "remaining workers finished the job.",
+                len(rows),
+            )
+        else:
+            logger.error(
+                "Spider produced NO results and proxy ban(s) were detected — "
+                "all proxies may be blocked."
+            )
+            sys.exit(2)
 
     if len(rows) == 0 and use_proxy:
         logger.warning("=" * 75)
