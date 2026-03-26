@@ -1,0 +1,38 @@
+name: 'Restore encrypted config'
+description: 'Download encrypted config artifact and decrypt to config.py'
+
+inputs:
+  artifact-name:
+    description: 'Artifact name from upload-artifact'
+    required: false
+    default: 'config-encrypted'
+  artifact-key:
+    description: 'Decryption passphrase (pass secrets.ARTIFACT_KEY)'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Download encrypted config
+      uses: actions/download-artifact@v7
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: .
+
+    - name: Decrypt config
+      shell: bash
+      env:
+        ARTIFACT_KEY: ${{ inputs.artifact-key }}
+      run: |
+        set -euo pipefail
+        if [ -z "$ARTIFACT_KEY" ]; then
+          echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
+          echo "This secret is required to decrypt config.py."
+          echo "Please configure the ARTIFACT_KEY secret in your repository settings."
+          exit 1
+        fi
+        openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+          -in config.py.enc -out config.py \
+          -pass pass:"$ARTIFACT_KEY"
+        rm -f config.py.enc
+        echo "✓ Config decrypted successfully"

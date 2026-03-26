@@ -104,21 +104,10 @@ jobs:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
           lfs: true
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
         with:
           python-version: '3.11'
-
-      - name: Install Python dependencies
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -r requirements.txt
-          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
-          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
-
-      - name: Install Rust extension
-        uses: ./.github/actions/install-rust-wheel
 
       - name: Install rclone
         if: inputs.runner != 'self-hosted'
