@@ -133,6 +133,20 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
             logger.debug(f"[Page {page_num}] Failed {context_msg}: {e}")
         return None, False, False
 
+    def phase0_try(u_proxy, u_cf, context_msg):
+        """Like try_fetch, but handle ban: get_page() bans + switches pool then re-raises."""
+        nonlocal proxy_was_banned
+        try:
+            return try_fetch(u_proxy, u_cf, context_msg)
+        except ProxyBannedError as e:
+            logger.warning(
+                f"[Page {page_num}] Proxy '{e.proxy_name}' banned during initial attempt: {e.reason}"
+            )
+            if e.html:
+                state.save_proxy_ban_html(e.html, e.proxy_name, page_num)
+            proxy_was_banned = True
+            return None, False, False
+
     def try_proxy_direct_then_cf(proxy_name):
         """Returns (html, success, is_valid_empty, used_cf, proxy_banned)."""
         try:
@@ -164,7 +178,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
     if use_proxy and state.global_proxy_pool:
         current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
         initial_cf = use_cf_bypass or state.proxy_needs_cf_bypass(current_proxy_name)
-        html, success, is_valid_empty = try_fetch(
+        html, success, is_valid_empty = phase0_try(
             True, initial_cf,
             f"Initial attempt (Proxy={current_proxy_name}, CF={initial_cf})")
         if success:
@@ -172,7 +186,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
         if is_valid_empty:
             return html, False, False, True, initial_cf, True
         if not initial_cf:
-            html, success, is_valid_empty = try_fetch(
+            html, success, is_valid_empty = phase0_try(
                 True, True,
                 f"Index: Proxy={current_proxy_name} + CF Bypass")
             if success:
@@ -236,9 +250,10 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
             if last_failed_html:
                 current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
                 state.save_proxy_ban_html(last_failed_html, current_proxy_name, page_num)
-            for _ in range(PROXY_POOL_MAX_FAILURES):
-                state.global_proxy_pool.mark_failure_and_switch()
-            proxy_was_banned = True
+            if not proxy_was_banned:
+                for _ in range(PROXY_POOL_MAX_FAILURES):
+                    state.global_proxy_pool.mark_failure_and_switch()
+                proxy_was_banned = True
 
     for _ in range(max_switches):
         current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
