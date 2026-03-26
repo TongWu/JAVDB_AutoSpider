@@ -20,7 +20,6 @@ Usage::
 from __future__ import annotations
 
 import logging
-import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -127,7 +126,7 @@ def _load_config() -> dict:
     return {k: getattr(cfg, k, v) for k, v in keys.items()}
 
 
-def _build_proxy_pool(cfg: dict, ban_log_file: str):
+def _build_proxy_pool(cfg: dict):
     pool_list = cfg.get('PROXY_POOL')
     if pool_list and len(pool_list) > 0:
         entries = pool_list if cfg.get('PROXY_MODE') == 'pool' else [pool_list[0]]
@@ -135,7 +134,6 @@ def _build_proxy_pool(cfg: dict, ban_log_file: str):
             entries,
             cooldown_seconds=cfg.get('PROXY_POOL_COOLDOWN_SECONDS', 300),
             max_failures=cfg.get('PROXY_POOL_MAX_FAILURES', 3),
-            ban_log_file=ban_log_file,
         )
     http_p = cfg.get('PROXY_HTTP')
     https_p = cfg.get('PROXY_HTTPS')
@@ -144,7 +142,6 @@ def _build_proxy_pool(cfg: dict, ban_log_file: str):
             [{'name': 'Legacy-Proxy', 'http': http_p, 'https': https_p}],
             cooldown_seconds=cfg.get('PROXY_POOL_COOLDOWN_SECONDS', 300),
             max_failures=cfg.get('PROXY_POOL_MAX_FAILURES', 3),
-            ban_log_file=ban_log_file,
         )
     return None
 
@@ -318,10 +315,7 @@ def create_gateway(
     """Create a :class:`SpiderGateway` from ``config.py`` (or a custom handler)."""
     if handler is None:
         cfg = _load_config()
-        reports_dir = cfg.get('REPORTS_DIR', 'reports')
-        ban_log = os.path.join(reports_dir, 'proxy_bans.csv')
-        os.makedirs(reports_dir, exist_ok=True)
-        proxy_pool = _build_proxy_pool(cfg, ban_log) if use_proxy else None
+        proxy_pool = _build_proxy_pool(cfg) if use_proxy else None
         handler = _build_handler(cfg, proxy_pool)
     return SpiderGateway(
         handler, use_proxy=use_proxy,
@@ -331,8 +325,6 @@ def create_gateway(
 
 def create_handler_for_proxy(
     proxy_config: dict,
-    *,
-    ban_log_file: str = '',
 ) -> RequestHandler:
     """Build a ``RequestHandler`` bound to a single proxy.
 
@@ -346,7 +338,6 @@ def create_handler_for_proxy(
         [proxy_config],
         cooldown_seconds=cfg.get('PROXY_POOL_COOLDOWN_SECONDS', 300),
         max_failures=cfg.get('PROXY_POOL_MAX_FAILURES', 3),
-        ban_log_file=ban_log_file,
     )
     return RequestHandler(
         proxy_pool=pool,

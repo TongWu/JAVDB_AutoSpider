@@ -207,8 +207,7 @@ def _build_db_upsert_kwargs(detail_href: str, video_code: str, magnet_links: dic
 def _init_spider_requester(use_proxy: bool) -> requests.Session:
     reports_dir = cfg('REPORTS_DIR', 'reports')
     os.makedirs(reports_dir, exist_ok=True)
-    ban_log = os.path.join(reports_dir, 'proxy_bans.csv')
-    spider_state.setup_proxy_pool(ban_log_file=ban_log, use_proxy=use_proxy)
+    spider_state.setup_proxy_pool(use_proxy=use_proxy)
     spider_state.initialize_request_handler()
     return requests.Session()
 
@@ -487,9 +486,8 @@ def run_alignment(args: argparse.Namespace) -> int:
     # Common network setup
     reports_dir = cfg('REPORTS_DIR', 'reports')
     os.makedirs(reports_dir, exist_ok=True)
-    ban_log = os.path.join(reports_dir, 'proxy_bans.csv')
     use_proxy = getattr(args, 'use_proxy', not getattr(args, 'no_proxy', False))
-    spider_state.setup_proxy_pool(ban_log_file=ban_log, use_proxy=use_proxy)
+    spider_state.setup_proxy_pool(use_proxy=use_proxy)
     spider_state.initialize_request_handler()
     base_url = cfg('BASE_URL', 'https://javdb.com').rstrip('/')
 
@@ -513,7 +511,6 @@ def run_alignment(args: argparse.Namespace) -> int:
         engine = FetchEngine(
             process_fn=_make_align_process_fn(inventory),
             use_cookie=True,
-            ban_log_file=ban_log,
             stop_event=stop_event,
             sleep_min=movie_sleep_mgr.sleep_min,
             sleep_max=movie_sleep_mgr.sleep_max,
