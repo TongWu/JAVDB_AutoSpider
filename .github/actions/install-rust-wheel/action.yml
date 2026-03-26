@@ -13,12 +13,25 @@ runs:
       id: pip
       shell: bash
       run: |
+        python_from_pip() {
+          local pip_bin="$1"
+          local ver
+          ver=$("$pip_bin" -V 2>&1 | sed -n 's/.*([Pp]ython \([0-9.]*\)).*/\1/p')
+          if [[ -n "$ver" ]] && command -v "python${ver}" &>/dev/null; then
+            echo "python${ver}"
+          else
+            echo "python3"
+          fi
+        }
         if command -v pip &>/dev/null; then
           echo "cmd=pip" >> $GITHUB_OUTPUT
+          echo "python_cmd=$(python_from_pip pip)" >> $GITHUB_OUTPUT
         elif command -v pip3 &>/dev/null; then
           echo "cmd=pip3" >> $GITHUB_OUTPUT
+          echo "python_cmd=$(python_from_pip pip3)" >> $GITHUB_OUTPUT
         else
           echo "cmd=python3 -m pip" >> $GITHUB_OUTPUT
+          echo "python_cmd=python3" >> $GITHUB_OUTPUT
         fi
 
     - name: Restore Rust wheel from cache
@@ -58,7 +71,9 @@ runs:
         ${{ steps.pip.outputs.cmd }} install maturin[patchelf]
         mkdir -p /tmp/rust-wheel
         cd packages/rust/javdb_rust_core
-        maturin build --release --out /tmp/rust-wheel
+        # User installs (common on self-hosted) put scripts in ~/.local/bin, which is often not on PATH.
+        export PATH="${HOME}/.local/bin:${PATH}"
+        ${{ steps.pip.outputs.python_cmd }} -m maturin build --release --out /tmp/rust-wheel
         echo "✓ Built Rust extension wheel:"
         ls -lh /tmp/rust-wheel/*.whl
 
