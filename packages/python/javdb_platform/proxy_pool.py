@@ -114,8 +114,9 @@ class ProxyInfo:
         self.successful_requests += 1
         self.total_requests += 1
         self.failures = 0
-        self.is_available = True
-        self.cooldown_until = None
+        if not self.banned:
+            self.is_available = True
+            self.cooldown_until = None
         
     def mark_failure(self, cooldown_seconds: int = 300):
         """Mark this proxy as failed and put it in cooldown"""
@@ -228,7 +229,7 @@ class ProxyPool:
             while attempts < len(self.proxies):
                 proxy = self.proxies[self.current_index]
                 
-                if proxy.is_available and not proxy.is_in_cooldown():
+                if proxy.is_available and not proxy.banned and not proxy.is_in_cooldown():
                     return proxy.get_proxies_dict()
                     
                 self.current_index = (self.current_index + 1) % len(self.proxies)
@@ -249,7 +250,10 @@ class ProxyPool:
         with self.lock:
             self._check_cooldowns()
             
-            available_count = sum(1 for p in self.proxies if p.is_available and not p.is_in_cooldown())
+            available_count = sum(
+                1 for p in self.proxies
+                if p.is_available and not p.banned and not p.is_in_cooldown()
+            )
             if available_count == 0:
                 logger.debug("All proxies are unavailable or in cooldown")
                 return None
@@ -259,7 +263,7 @@ class ProxyPool:
                 self.current_index = (self.current_index + 1) % len(self.proxies)
                 proxy = self.proxies[self.current_index]
                 
-                if proxy.is_available and not proxy.is_in_cooldown():
+                if proxy.is_available and not proxy.banned and not proxy.is_in_cooldown():
                     logger.debug(f"Round-robin selected proxy: {proxy.name}")
                     return proxy.get_proxies_dict()
                     
