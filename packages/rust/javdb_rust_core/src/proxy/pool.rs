@@ -303,7 +303,7 @@ impl ProxyPool {
         });
 
         if self.ban_manager.is_proxy_banned(&proxy_name) {
-            info!("Proxy '{}' is currently banned, skipping", proxy_name);
+            debug!("Proxy '{}' is currently banned, skipping", proxy_name);
             return;
         }
 
@@ -487,7 +487,7 @@ impl ProxyPool {
             pool.current_index = (pool.current_index + 1) % len;
             let proxy = pool.proxies[pool.current_index].lock();
             if proxy.is_available && !proxy.is_in_cooldown() {
-                info!(
+                debug!(
                     "Switched from '{}' to '{}'",
                     current_name, proxy.name
                 );
@@ -668,7 +668,7 @@ impl ProxyPool {
             proxy.banned = true;
             proxy.is_available = false;
         }
-        info!(
+        debug!(
             "Proxy '{}' banned [session-permanent]",
             target_name
         );
@@ -683,7 +683,7 @@ impl ProxyPool {
             };
             if available {
                 pool.current_index = candidate;
-                info!(
+                debug!(
                     "Switched from '{}' to '{}'",
                     target_name, next_name
                 );
@@ -691,7 +691,7 @@ impl ProxyPool {
             }
         }
 
-        info!("ban_proxy: all proxies are unavailable after ban");
+        debug!("ban_proxy: all proxies are unavailable after ban");
         false
     }
 
