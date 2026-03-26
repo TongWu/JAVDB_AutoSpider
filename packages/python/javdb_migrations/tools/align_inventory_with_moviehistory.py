@@ -58,7 +58,15 @@ from packages.python.javdb_ingestion.policies import (
     alignment_parsed_category_rank as _ie_parsed_category_rank,
 )
 from packages.python.javdb_platform.config_helper import cfg
-from packages.python.javdb_platform.db import db_load_history, db_load_rclone_inventory, db_upsert_history, init_db
+from packages.python.javdb_platform.db import (
+    db_delete_align_no_exact_match,
+    db_load_align_no_exact_match_codes,
+    db_load_history,
+    db_load_rclone_inventory,
+    db_upsert_align_no_exact_match,
+    db_upsert_history,
+    init_db,
+)
 from packages.python.javdb_platform.logging_config import get_logger, setup_logging
 from packages.python.javdb_core.magnet_extractor import extract_magnets
 from packages.python.javdb_platform.path_helper import ensure_dated_dir
@@ -118,6 +126,7 @@ def compute_missing_codes(
     inventory: Dict[str, List[dict]],
     history_by_href: Dict[str, dict],
     only_codes: Optional[Iterable[str]] = None,
+    skip_codes: Optional[Iterable[str]] = None,
 ) -> List[str]:
     history_codes = {
         _normalize_code(v.get('VideoCode', ''))
@@ -129,6 +138,9 @@ def compute_missing_codes(
     if only_codes:
         wanted = {_normalize_code(c) for c in only_codes if _normalize_code(c)}
         missing = [c for c in missing if c in wanted]
+    if skip_codes:
+        skip = {_normalize_code(c) for c in skip_codes if _normalize_code(c)}
+        missing = [c for c in missing if c not in skip]
     return missing
 
 
@@ -474,7 +486,12 @@ def run_alignment(args: argparse.Namespace) -> int:
     if args.codes:
         only_codes = [c.strip() for c in args.codes.split(',') if c.strip()]
 
-    missing_codes = compute_missing_codes(inventory, history, only_codes=only_codes)
+    no_match_codes = db_load_align_no_exact_match_codes()
+    if no_match_codes:
+        logger.info("Skipping %d previously unmatched codes", len(no_match_codes))
+    missing_codes = compute_missing_codes(
+        inventory, history, only_codes=only_codes, skip_codes=no_match_codes,
+    )
     if args.limit and args.limit > 0:
         missing_codes = missing_codes[: args.limit]
 
@@ -564,6 +581,8 @@ def run_alignment(args: argparse.Namespace) -> int:
                     video_code=video_code, status='search_miss',
                     message=data.get('message', ''),
                 ))
+                if not args.dry_run:
+                    db_upsert_align_no_exact_match(video_code, reason=data.get('message', ''))
                 logger.info("[%s][%s] No exact match for %s", idx_str, worker_label, video_code)
                 skipped += 1
                 return
@@ -586,6 +605,7 @@ def run_alignment(args: argparse.Namespace) -> int:
 
             if data.get('db_upsert_kwargs') and not args.dry_run:
                 db_upsert_history(**data['db_upsert_kwargs'])
+                db_delete_align_no_exact_match(video_code)
             qb_rows.extend(data.get('qb_rows', []))
             purge_plan_rows.extend(data.get('purge_plan_rows', []))
 
@@ -657,6 +677,8 @@ def run_alignment(args: argparse.Namespace) -> int:
                         message='exact_video_code_not_found',
                     )
                 )
+                if not args.dry_run:
+                    db_upsert_align_no_exact_match(code)
                 continue
 
             detail_href = normalize_javdb_href_path(exact_entry.href)
@@ -698,6 +720,7 @@ def run_alignment(args: argparse.Namespace) -> int:
                     detail_href, code, magnet_links,
                     actor_name, actor_gender, actor_link, supporting_actors,
                 ))
+                db_delete_align_no_exact_match(code)
 
             inventory_entries = inventory.get(code, [])
             upgrade_plan = build_alignment_upgrade_plan(
