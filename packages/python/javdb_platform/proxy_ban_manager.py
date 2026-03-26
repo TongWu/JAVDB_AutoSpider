@@ -1,15 +1,14 @@
 """
 Proxy Ban Manager
 
-Manages proxy ban records with persistent storage.
-Records when proxies are banned and tracks their expected unban time (7 days).
+Manages proxy ban records in-memory for the current session only.
+When a proxy is banned, it is marked as banned for the current session.
+On a new session (process restart), all proxies start fresh with no bans.
 
 Prefers the Rust implementation (``javdb_rust_core``) when available,
 falling back to the pure-Python implementation otherwise.
 """
 
-import os
-import csv
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
@@ -29,14 +28,14 @@ logger = logging.getLogger(__name__)
 
 
 class ProxyBanRecord:
-    """Record of a proxy ban"""
+    """Record of a proxy ban (session-scoped, in-memory only)"""
     
     def __init__(self, proxy_name: str, ban_time: datetime, unban_time: datetime, 
                  proxy_url: Optional[str] = None):
         self.proxy_name = proxy_name
         self.ban_time = ban_time
         self.unban_time = unban_time
-        self.proxy_url = proxy_url  # Full URL with IP (for email, not logged to file)
+        self.proxy_url = proxy_url
         
     def is_still_banned(self) -> bool:
         """Check if proxy is still in ban period"""
@@ -52,7 +51,7 @@ class ProxyBanRecord:
         return max(0, delta.days)
     
     def to_dict(self) -> Dict:
-        """Convert to dictionary (for CSV/logging - without IP)"""
+        """Convert to dictionary (without IP)"""
         return {
             'proxy_name': self.proxy_name,
             'ban_time': self.ban_time.strftime('%Y-%m-%d %H:%M:%S'),
@@ -67,104 +66,19 @@ class ProxyBanRecord:
 
 
 class ProxyBanManager:
-    """Manages proxy ban records with persistent storage"""
+    """Manages proxy ban records in-memory for the current session.
+
+    Bans are NOT persisted to disk.  Every new process / session starts
+    with a clean slate — all proxies are considered unbanned.
+    """
     
     BAN_DURATION_DAYS = 7  # JavDB bans IPs for 7 days
     COOLDOWN_DURATION_DAYS = 8  # 8 days cooldown (7 days ban + 1 day buffer)
     
-    def __init__(self, ban_log_file: str = 'reports/proxy_bans.csv'):
-        self.ban_log_file = ban_log_file
+    def __init__(self, **_kwargs):
         self.banned_proxies: Dict[str, ProxyBanRecord] = {}
         self.lock = Lock()
-        
-        # Ensure log directory exists
-        os.makedirs(os.path.dirname(ban_log_file), exist_ok=True)
-        
-        # Load existing ban records
-        self._load_ban_records()
-        
-        # Clean up expired bans
-        with self.lock:
-            self._cleanup_expired_bans()
-    
-    def _load_ban_records(self):
-        """Load ban records from the active storage backend."""
-        from packages.python.javdb_platform.config_helper import use_sqlite, use_csv
-        loaded = False
-
-        if use_sqlite():
-            try:
-                from packages.python.javdb_platform.db import init_db, db_load_proxy_bans
-                init_db()
-                rows = db_load_proxy_bans()
-                for row in rows:
-                    proxy_name = row.get('ProxyName', row.get('proxy_name', ''))
-                    ban_time = datetime.strptime(
-                        row.get('DateTimeBanned', row.get('ban_time', '')), '%Y-%m-%d %H:%M:%S')
-                    unban_time = datetime.strptime(
-                        row.get('DateTimeUnbanned', row.get('unban_time', '')), '%Y-%m-%d %H:%M:%S')
-                    record = ProxyBanRecord(proxy_name, ban_time, unban_time)
-                    self.banned_proxies[proxy_name] = record
-                loaded = bool(self.banned_proxies)
-                logger.info(f"Loaded {len(self.banned_proxies)} ban records from SQLite")
-            except Exception as e:
-                logger.debug(f"SQLite proxy bans load failed: {e}")
-
-        if not loaded and use_csv() and os.path.exists(self.ban_log_file):
-            try:
-                with open(self.ban_log_file, 'r', encoding='utf-8') as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        proxy_name = row['proxy_name']
-                        ban_time = datetime.strptime(row['ban_time'], '%Y-%m-%d %H:%M:%S')
-                        unban_time = datetime.strptime(row['unban_time'], '%Y-%m-%d %H:%M:%S')
-                        record = ProxyBanRecord(proxy_name, ban_time, unban_time)
-                        self.banned_proxies[proxy_name] = record
-                logger.info(f"Loaded {len(self.banned_proxies)} ban records from {self.ban_log_file}")
-            except Exception as e:
-                logger.error(f"Error loading ban records: {e}")
-
-        if not loaded and not self.banned_proxies:
-            logger.info(f"No existing ban records found")
-
-    def _save_ban_records(self):
-        """Save ban records to the active storage backend(s)."""
-        from packages.python.javdb_platform.config_helper import use_sqlite, use_csv
-        records = [r.to_dict() for r in self.banned_proxies.values()]
-
-        if use_sqlite():
-            try:
-                from packages.python.javdb_platform.db import init_db, db_save_proxy_bans
-                init_db()
-                db_save_proxy_bans(records)
-                logger.debug(f"Saved {len(records)} ban records to SQLite")
-            except Exception as e:
-                logger.warning(f"Failed to save ban records to SQLite: {e}")
-
-        if use_csv():
-            try:
-                with open(self.ban_log_file, 'w', newline='', encoding='utf-8') as f:
-                    fieldnames = ['proxy_name', 'ban_time', 'unban_time']
-                    writer = csv.DictWriter(f, fieldnames=fieldnames)
-                    writer.writeheader()
-                    for record_dict in records:
-                        writer.writerow(record_dict)
-                logger.debug(f"Saved {len(records)} ban records to {self.ban_log_file}")
-            except Exception as e:
-                logger.error(f"Error saving ban records to CSV: {e}")
-    
-    def _cleanup_expired_bans(self):
-        """Remove expired ban records (must be called with lock held)"""
-        # Note: This method assumes the caller already holds self.lock
-        expired = [name for name, record in self.banned_proxies.items() 
-                  if not record.is_still_banned()]
-        
-        for proxy_name in expired:
-            del self.banned_proxies[proxy_name]
-            logger.info(f"Removed expired ban record for proxy '{proxy_name}'")
-        
-        if expired:
-            self._save_ban_records()
+        logger.info("ProxyBanManager initialised (session-scoped, in-memory only)")
     
     def is_proxy_banned(self, proxy_name: str) -> bool:
         """Check if a proxy is currently banned"""
@@ -174,30 +88,25 @@ class ProxyBanManager:
             
             record = self.banned_proxies[proxy_name]
             if not record.is_still_banned():
-                # Ban expired, remove it
                 del self.banned_proxies[proxy_name]
-                self._save_ban_records()
                 return False
             
             return True
     
     def add_ban(self, proxy_name: str, proxy_url: Optional[str] = None):
-        """
-        Add a new ban record for a proxy
-        
+        """Add a new ban record for a proxy (in-memory only).
+
         Args:
             proxy_name: Name of the proxy
             proxy_url: Full proxy URL with IP (for email reporting)
         """
         with self.lock:
-            # Check if already banned
             if proxy_name in self.banned_proxies:
                 existing = self.banned_proxies[proxy_name]
                 if existing.is_still_banned():
                     logger.warning(f"Proxy '{proxy_name}' is already in ban period, not updating")
                     return
             
-            # Create new ban record
             ban_time = datetime.now()
             unban_time = ban_time + timedelta(days=self.BAN_DURATION_DAYS)
             
@@ -206,11 +115,8 @@ class ProxyBanManager:
             
             logger.warning(
                 f"Proxy '{proxy_name}' banned until {unban_time.strftime('%Y-%m-%d %H:%M:%S')} "
-                f"({self.BAN_DURATION_DAYS} days)"
+                f"({self.BAN_DURATION_DAYS} days) [session-scoped]"
             )
-            
-            # Save to file
-            self._save_ban_records()
     
     def get_banned_proxies(self) -> List[ProxyBanRecord]:
         """Get list of currently banned proxies"""
@@ -219,12 +125,11 @@ class ProxyBanManager:
             return list(self.banned_proxies.values())
     
     def get_ban_summary(self, include_ip: bool = False) -> str:
-        """
-        Get a formatted summary of banned proxies
-        
+        """Get a formatted summary of banned proxies.
+
         Args:
             include_ip: Whether to include IP information (for email)
-        
+
         Returns:
             Formatted string summary
         """
@@ -255,17 +160,25 @@ class ProxyBanManager:
         """Get cooldown duration in seconds (8 days)"""
         return self.COOLDOWN_DURATION_DAYS * 24 * 3600
 
+    def _cleanup_expired_bans(self):
+        """Remove expired ban records (must be called with lock held)"""
+        expired = [name for name, record in self.banned_proxies.items() 
+                  if not record.is_still_banned()]
+        
+        for proxy_name in expired:
+            del self.banned_proxies[proxy_name]
+            logger.info(f"Removed expired ban record for proxy '{proxy_name}'")
+
 
 # Global ban manager instance
 _global_ban_manager: Optional[ProxyBanManager] = None
 
 
-def get_ban_manager(ban_log_file: str = 'reports/proxy_bans.csv') -> ProxyBanManager:
-    """Get or create the global ban manager instance"""
+def get_ban_manager(**_kwargs) -> ProxyBanManager:
+    """Get or create the global ban manager instance (session-scoped)."""
     global _global_ban_manager
     
     if _global_ban_manager is None:
-        _global_ban_manager = ProxyBanManager(ban_log_file)
+        _global_ban_manager = ProxyBanManager()
     
     return _global_ban_manager
-

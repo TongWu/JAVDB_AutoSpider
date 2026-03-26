@@ -10,8 +10,7 @@ Old Structure:
     ├── *.csv (report files)
     ├── YYYY/MM/*.csv (already migrated reports)
     ├── parsed_movies_history.csv
-    ├── pikpak_bridge_history.csv
-    └── proxy_bans.csv
+    └── pikpak_bridge_history.csv
     
     Ad Hoc/
     ├── *.csv (report files)
@@ -22,8 +21,7 @@ New Structure:
     ├── DailyReport/YYYY/MM/*.csv  (daily report files)
     ├── AdHoc/YYYY/MM/*.csv        (ad hoc report files)
     ├── parsed_movies_history.csv  (history file at root)
-    ├── pikpak_bridge_history.csv  (history file at root)
-    └── proxy_bans.csv             (history file at root)
+    └── pikpak_bridge_history.csv  (history file at root)
 
 Usage:
     # Dry run (preview changes without moving files)
@@ -57,7 +55,6 @@ NEW_AD_HOC_DIR = 'reports/AdHoc'
 HISTORY_FILES = {
     'parsed_movies_history.csv',
     'pikpak_bridge_history.csv',
-    'proxy_bans.csv',
 }
 
 
@@ -373,7 +370,6 @@ Migration Details:
     4. Ad Hoc/YYYY/MM/*.csv → reports/AdHoc/YYYY/MM/*.csv
     5. Daily Report/parsed_movies_history.csv → reports/parsed_movies_history.csv
     6. Daily Report/pikpak_bridge_history.csv → reports/pikpak_bridge_history.csv
-    7. Daily Report/proxy_bans.csv → reports/proxy_bans.csv
         """
     )
     
