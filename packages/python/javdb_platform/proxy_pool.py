@@ -97,6 +97,7 @@ class ProxyInfo:
     successful_requests: int = 0
     is_available: bool = True
     cooldown_until: Optional[datetime] = None
+    banned: bool = False
     
     def get_proxies_dict(self) -> Dict[str, str]:
         """Get proxies dictionary for requests library"""
@@ -201,11 +202,13 @@ class ProxyPool:
         logger.info("No-proxy mode disabled")
         
     def _check_cooldowns(self) -> None:
-        """Check and update cooldown status for all proxies"""
+        """Check and update cooldown status for all proxies."""
         for proxy in self.proxies:
+            if proxy.banned:
+                continue
             if proxy.is_in_cooldown():
                 continue
-            elif not proxy.is_available and not proxy.is_in_cooldown():
+            if not proxy.is_available:
                 proxy.is_available = True
                 logger.info(f"Proxy '{proxy.name}' cooldown period ended, marked as available")
                 
@@ -337,8 +340,9 @@ class ProxyPool:
         """Immediately ban a proxy and switch to the next available one.
 
         Unlike ``mark_failure_and_switch`` which increments failure count
-        toward a threshold, this method immediately puts the proxy into
-        cooldown and records the ban via the ban manager.
+        toward a threshold, this method permanently removes the proxy from
+        rotation for the current session and records the ban via the ban
+        manager.
 
         Args:
             proxy_name: Name of the proxy to ban.  If *None*, the current
@@ -351,7 +355,6 @@ class ProxyPool:
             return False
 
         with self.lock:
-            # Resolve target proxy
             target = None
             target_index = None
             if proxy_name is None:
@@ -370,10 +373,10 @@ class ProxyPool:
 
             proxy_url = target.http_url or target.https_url
             self.ban_manager.add_ban(target.name, proxy_url)
-            target.mark_failure(self.cooldown_seconds)
+            target.banned = True
+            target.is_available = False
             logger.warning(
-                f"Proxy '{target.name}' immediately banned and put in "
-                f"cooldown for {self.cooldown_seconds}s"
+                f"Proxy '{target.name}' banned [session-permanent]"
             )
 
             # Try to switch to next available proxy
@@ -382,7 +385,7 @@ class ProxyPool:
             while attempts < len(self.proxies):
                 candidate = (candidate + 1) % len(self.proxies)
                 next_proxy = self.proxies[candidate]
-                if next_proxy.is_available and not next_proxy.is_in_cooldown():
+                if next_proxy.is_available and not next_proxy.banned and not next_proxy.is_in_cooldown():
                     self.current_index = candidate
                     logger.info(f"Switched from '{target.name}' to '{next_proxy.name}'")
                     return True
