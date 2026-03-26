@@ -38,6 +38,8 @@ _BASE_MAX = 25
 # ---------------------------------------------------------------------------
 COMPOSITE_MULTIPLIER_CAP = 6.0
 ABSOLUTE_MAX_SLEEP = 120.0  # seconds
+COOLDOWN_FRACTION = 0.5     # cooldown = eff_min * this fraction
+COOLDOWN_MAX = 30.0         # hard ceiling for cooldown durations
 
 # ---------------------------------------------------------------------------
 # PenaltyTracker
@@ -288,6 +290,17 @@ class MovieSleepManager:
         sleep_time = max(eff_min, min(eff_max, sleep_time + jitter))
 
         return min(round(sleep_time, 2), ABSOLUTE_MAX_SLEEP)
+
+    def get_cooldown(self) -> float:
+        """Return an adaptive cooldown duration (seconds).
+
+        Derived from the lower bound of the effective sleep range so that
+        cooldowns scale with penalty factor (CF events) and volume.
+        Used for CF/fallback/login retry delays instead of fixed config
+        values.
+        """
+        eff_min, _ = self._effective_range()
+        return min(round(eff_min * COOLDOWN_FRACTION, 2), COOLDOWN_MAX)
 
     def sleep(self) -> float:
         """Sleep for a human-like duration, then pass through the throttle.

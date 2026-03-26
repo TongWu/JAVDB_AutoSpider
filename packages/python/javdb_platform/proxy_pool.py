@@ -40,6 +40,9 @@ from packages.python.javdb_platform.proxy_ban_manager import get_ban_manager, Pr
 
 logger = logging.getLogger(__name__)
 
+# Session-scoped ban: banned proxies never recover within a single run.
+_SESSION_BAN_COOLDOWN = 86400 * 365
+
 if RUST_PROXY_AVAILABLE:
     logger.debug("✅ Rust proxy pool available - using high-performance Rust implementation")
 else:
@@ -148,7 +151,8 @@ class ProxyPool:
     rate limits or bans from the target website.
     """
     
-    def __init__(self, cooldown_seconds: int = 300, max_failures_before_cooldown: int = 3,
+    def __init__(self, cooldown_seconds: int = _SESSION_BAN_COOLDOWN,
+                 max_failures_before_cooldown: int = 3,
                  **_kwargs):
         self.proxies: List[ProxyInfo] = []
         self.current_index: int = 0
@@ -312,8 +316,8 @@ class ProxyPool:
                 
                 current_proxy.mark_failure(self.cooldown_seconds)
                 logger.warning(
-                    f"Proxy '{current_proxy.name}' reached {current_proxy.failures} failures, "
-                    f"putting in cooldown for {self.cooldown_seconds}s (8 days)"
+                    "Proxy '%s' reached %d failures, banned for this session",
+                    current_proxy.name, current_proxy.failures,
                 )
             else:
                 current_proxy.failures += 1
@@ -484,22 +488,22 @@ class ProxyPool:
         return self.ban_manager.get_ban_summary(include_ip=include_ip)
 
 
-def create_proxy_pool_from_config(proxy_list_config: List[Dict], 
-                                   cooldown_seconds: int = 300,
+def create_proxy_pool_from_config(proxy_list_config: List[Dict],
                                    max_failures: int = 3,
                                    **_kwargs):
-    """
-    Create and configure a proxy pool from configuration.
+    """Create and configure a proxy pool from configuration.
+
     Prefers Rust implementation when available, falls back to Python otherwise.
-    
+    Banned proxies never recover within a single session.
+
     Args:
         proxy_list_config: List of proxy configurations from config.py
-        cooldown_seconds: Cooldown duration in seconds
-        max_failures: Max failures before cooldown
-        
+        max_failures: Max failures before banning proxy for the session
+
     Returns:
         Configured ProxyPool instance (RustProxyPool if available, otherwise Python ProxyPool)
     """
+    cooldown_seconds = _SESSION_BAN_COOLDOWN
     if RUST_PROXY_AVAILABLE:
         try:
             rust_proxy_list = []
@@ -512,7 +516,7 @@ def create_proxy_pool_from_config(proxy_list_config: List[Dict],
                 if 'https' in proxy_config and proxy_config['https']:
                     rust_proxy_dict['https'] = proxy_config['https']
                 rust_proxy_list.append(rust_proxy_dict)
-            
+
             pool = _rust_create_proxy_pool(
                 rust_proxy_list,
                 cooldown_seconds=cooldown_seconds,
@@ -522,7 +526,7 @@ def create_proxy_pool_from_config(proxy_list_config: List[Dict],
             return pool
         except Exception as e:
             logger.warning(f"Failed to create Rust proxy pool, falling back to Python: {e}")
-    
+
     pool = ProxyPool(
         cooldown_seconds=cooldown_seconds,
         max_failures_before_cooldown=max_failures,

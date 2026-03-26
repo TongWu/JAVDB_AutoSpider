@@ -192,13 +192,10 @@ Authorization: Bearer <token>
 | CF Cache 刷新超时 | 120 s | `refresh_bypass_cache` |
 | 直连最大重试 | 3 次（可配 `max_retries`） | `get_page_direct` |
 | CF Bypass 回退最大代理切换 | 5 次 | `get_page_with_cf_bypass` |
-| 代理冷却时间 | 默认 300 s，生产配置 691200 s（8 天） | `PROXY_POOL_COOLDOWN_SECONDS` |
-| 代理最大连续失败 | 3 次触发冷却 | `PROXY_POOL_MAX_FAILURES` |
-| 代理封禁时长 | 7 天（仅当前 session，不持久化） | `ProxyBanManager::BAN_DURATION_DAYS` |
-| 翻页间隔 | `PAGE_SLEEP`（默认 5 s） | `config.py` |
-| 影片间隔 | `MOVIE_SLEEP`（默认 5 s） | `config.py` |
-| Turnstile 冷却 | `CF_TURNSTILE_COOLDOWN`（默认 5 s） | `config.py` |
-| 回退冷却 | `FALLBACK_COOLDOWN`（默认 15 s） | `config.py` |
+| 代理最大连续失败 | 3 次触发 session 内永久封禁 | `PROXY_POOL_MAX_FAILURES` |
+| 代理封禁时长 | 仅当前 session，不持久化 | `ProxyBanManager` |
+| 影片间隔 | `MOVIE_SLEEP`（自适应，`MovieSleepManager`） | `config.py` |
+| 所有冷却 | 由 `MovieSleepManager.get_cooldown()` 自适应计算 | `sleep.py` |
 | 历史记录上限 | 默认 1000 条（`maintain_history_limit`） | `history/manager.rs` |
 | 线程安全 | `parking_lot::Mutex` + `Arc`，Rust 端 GIL 释放（`py.allow_threads`） | 全部 Rust 模块 |
 
@@ -284,7 +281,6 @@ Authorization: Bearer <token>
 |--------|------|------|-----------|
 | PROXY_MODE | string | `single` 或 `pool` | `pool` |
 | PROXY_POOL | JSON array | 代理列表（敏感，可脱敏） | `[]` |
-| PROXY_POOL_COOLDOWN_SECONDS | int | 代理冷却时间（秒） | `691200` |
 | PROXY_POOL_MAX_FAILURES | int | 最大连续失败次数 | `3` |
 | PROXY_MODULES | JSON array | 使用代理的模块：如 `['spider']`、`['spider','qbittorrent']`、`['all']` | `['spider']` |
 
@@ -314,11 +310,7 @@ Authorization: Bearer <token>
 | JAVDB_SESSION_COOKIE | string | 会话 Cookie（敏感） | 空 |
 | GPT_API_URL | string | GPT 兼容 API URL（验证码） | 空 |
 | GPT_API_KEY | string | API Key（敏感） | 空 |
-| PAGE_SLEEP | int | 翻页间隔（秒） | 默认 `5`（建议 `2`–`15`） |
-| MOVIE_SLEEP | int | 影片间间隔（秒，含详情页限速） | `5`–`30` |
-| CF_TURNSTILE_COOLDOWN | int | Turnstile 冷却（秒） | 默认 `5`（建议 `5`–`60`；过短可能增加触发风控概率） |
-| PHASE_TRANSITION_COOLDOWN | int | 阶段切换冷却（秒） | `30`–`60` |
-| FALLBACK_COOLDOWN | int | 回退冷却（秒） | 默认 `15`（建议 `15`–`60`） |
+| MOVIE_SLEEP | string | 影片间隔范围 (如 `"8,25"`)，由 `MovieSleepManager` 自适应管理 | 内部自动调优 |
 
 ### 2.8 LOGGING CONFIGURATION
 
