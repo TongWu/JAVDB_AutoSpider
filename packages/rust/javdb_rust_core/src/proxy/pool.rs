@@ -303,7 +303,7 @@ impl ProxyPool {
         });
 
         if self.ban_manager.is_proxy_banned(&proxy_name) {
-            warn!("Proxy '{}' is currently banned, skipping", proxy_name);
+            info!("Proxy '{}' is currently banned, skipping", proxy_name);
             return;
         }
 
@@ -375,7 +375,7 @@ impl ProxyPool {
             pool.current_index = (pool.current_index + 1) % len;
         }
 
-        warn!("All proxies are unavailable or in cooldown");
+        debug!("All proxies are unavailable or in cooldown");
         None
     }
 
@@ -385,7 +385,7 @@ impl ProxyPool {
             return None;
         }
         if pool.proxies.is_empty() {
-            warn!("No proxies configured in pool");
+            debug!("No proxies configured in pool");
             return None;
         }
 
@@ -400,7 +400,7 @@ impl ProxyPool {
             })
             .count();
         if available == 0 {
-            warn!("All proxies are unavailable or in cooldown");
+            debug!("All proxies are unavailable or in cooldown");
             return None;
         }
 
@@ -668,7 +668,7 @@ impl ProxyPool {
             proxy.banned = true;
             proxy.is_available = false;
         }
-        warn!(
+        info!(
             "Proxy '{}' banned [session-permanent]",
             target_name
         );
@@ -691,7 +691,7 @@ impl ProxyPool {
             }
         }
 
-        error!("ban_proxy: all proxies are unavailable after ban");
+        info!("ban_proxy: all proxies are unavailable after ban");
         false
     }
 
