@@ -117,10 +117,6 @@ def create_workers(
     coord._all_workers = all_workers
 
     shared_pt = PenaltyTracker()
-    shared_dwt = DualWindowThrottle(
-        short_window_sec=0.5, short_max=100,
-        long_window_sec=5.0, long_max=500,
-    )
     banned_proxies: set = set()
     drain_lock = threading.Lock()
     drain_done: list[bool] = [False]
@@ -151,7 +147,6 @@ def create_workers(
                 drain_lock=drain_lock,
                 drain_done=drain_done,
                 penalty_tracker=shared_pt,
-                throttle=shared_dwt,
             )
             w._startup_jitter = 0.01
             all_workers.append(w)
@@ -663,17 +658,6 @@ class TestSleepManagerHumanLike:
         assert mgr.sleep_min > before_min
         assert mgr.sleep_max > before_max
 
-    def test_concurrency_factor_scales_with_sqrt(self):
-        """Worker factor = min(sqrt(W), CAP)."""
-        mgr = MovieSleepManager(10.0, 20.0)
-        mgr.apply_concurrency_factor(4)
-        assert abs(mgr._worker_factor - 2.0) < 0.01
-
-        mgr2 = MovieSleepManager(10.0, 20.0)
-        mgr2.apply_concurrency_factor(9)
-        # sqrt(9)=3.0 exceeds WORKER_FACTOR_CAP=2.45, so it's capped
-        assert mgr2._worker_factor == mgr2.WORKER_FACTOR_CAP
-
     def test_penalty_tracker_raises_sleep_dynamically(self):
         """Recording CF/failure events dynamically raises effective sleep range."""
         pt = PenaltyTracker()
@@ -700,7 +684,7 @@ class TestSleepManagerHumanLike:
         assert pt.get_penalty_factor() == 1.0
 
     def test_composite_cap_prevents_runaway(self):
-        """Even with max volume + concurrency + penalty, effective multiplier
+        """Even with max volume + penalty, effective multiplier
         is capped at COMPOSITE_MULTIPLIER_CAP."""
         pt = PenaltyTracker()
         for _ in range(10):
@@ -708,7 +692,6 @@ class TestSleepManagerHumanLike:
 
         mgr = MovieSleepManager(8.0, 25.0, penalty_tracker=pt)
         mgr.apply_volume_multiplier(300)
-        mgr.apply_concurrency_factor(10)
 
         eff_min, eff_max = mgr._effective_range()
         assert eff_min <= mgr.base_min * COMPOSITE_MULTIPLIER_CAP + 1
@@ -722,7 +705,6 @@ class TestSleepManagerHumanLike:
 
         mgr = MovieSleepManager(8.0, 25.0, penalty_tracker=pt)
         mgr.apply_volume_multiplier(300)
-        mgr.apply_concurrency_factor(10)
 
         for _ in range(300):
             assert mgr.get_sleep_time() <= ABSOLUTE_MAX_SLEEP
