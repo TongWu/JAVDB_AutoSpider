@@ -9,6 +9,18 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    - name: Detect pip command
+      id: pip
+      shell: bash
+      run: |
+        if command -v pip &>/dev/null; then
+          echo "cmd=pip" >> $GITHUB_OUTPUT
+        elif command -v pip3 &>/dev/null; then
+          echo "cmd=pip3" >> $GITHUB_OUTPUT
+        else
+          echo "cmd=python3 -m pip" >> $GITHUB_OUTPUT
+        fi
+
     - name: Restore Rust wheel from cache
       id: wheel-cache
       uses: actions/cache@v5
@@ -20,7 +32,7 @@ runs:
       if: steps.wheel-cache.outputs.cache-hit == 'true'
       shell: bash
       run: |
-        pip install /tmp/rust-wheel/*.whl
+        ${{ steps.pip.outputs.cmd }} install /tmp/rust-wheel/*.whl
         echo "✓ Installed Rust extension from cache"
 
     - name: Install Rust toolchain
@@ -43,7 +55,7 @@ runs:
       if: steps.wheel-cache.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        pip install maturin[patchelf]
+        ${{ steps.pip.outputs.cmd }} install maturin[patchelf]
         mkdir -p /tmp/rust-wheel
         cd packages/rust/javdb_rust_core
         maturin build --release --out /tmp/rust-wheel
@@ -54,5 +66,5 @@ runs:
       if: steps.wheel-cache.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        pip install /tmp/rust-wheel/*.whl
+        ${{ steps.pip.outputs.cmd }} install /tmp/rust-wheel/*.whl
         echo "✓ Installed Rust extension from freshly built wheel"
