@@ -31,7 +31,8 @@ runs:
       uses: actions/cache@v5
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-py${{ inputs.python-version }}-${{ hashFiles(inputs.requirements-file) }}
+        # hashFiles() requires a literal glob or format(); input refs alone are invalid.
+        key: ${{ runner.os }}-pip-py${{ inputs.python-version }}-${{ hashFiles(format('{0}', inputs['requirements-file'])) }}
         restore-keys: |
           ${{ runner.os }}-pip-py${{ inputs.python-version }}-
           ${{ runner.os }}-pip-
