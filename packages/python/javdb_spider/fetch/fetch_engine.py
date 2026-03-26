@@ -263,7 +263,6 @@ class _EngineWorker(threading.Thread):
         banned_proxies: set,
         drain_lock: threading.Lock,
         drain_done: List[bool],
-        penalty_tracker: Optional[PenaltyTracker] = None,
         stop_event: Optional[threading.Event] = None,
     ):
         super().__init__(
@@ -292,9 +291,11 @@ class _EngineWorker(threading.Thread):
             random.uniform(0.5, 2.0) + worker_id * random.uniform(1.5, 3.0)
         )
 
+        own_penalty_tracker = PenaltyTracker()
+
         self._sleep_mgr = MovieSleepManager(
             sleep_min, sleep_max,
-            penalty_tracker=penalty_tracker,
+            penalty_tracker=own_penalty_tracker,
             throttle=DualWindowThrottle(),
         )
 
@@ -319,7 +320,7 @@ class _EngineWorker(threading.Thread):
                 proxy_modules=['all'],
                 proxy_mode='single',
             ),
-            penalty_tracker=penalty_tracker,
+            penalty_tracker=own_penalty_tracker,
         )
 
     # -- fetch helpers -------------------------------------------------------
@@ -572,7 +573,6 @@ class ParallelFetchBackend(FetchBackend):
         *,
         use_cookie: bool = False,
         stop_event: Optional[threading.Event] = None,
-        penalty_tracker: Optional[PenaltyTracker] = None,
         sleep_min: Optional[float] = None,
         sleep_max: Optional[float] = None,
         runtime_state: Optional[FetchRuntimeState] = None,
@@ -580,7 +580,6 @@ class ParallelFetchBackend(FetchBackend):
         self._process_fn = process_fn
         self._use_cookie = use_cookie
         self._stop_event = stop_event or threading.Event()
-        self._penalty_tracker = penalty_tracker
         self._sleep_min = (
             sleep_min if sleep_min is not None else _global_sleep_mgr.sleep_min
         )
@@ -672,7 +671,6 @@ class ParallelFetchBackend(FetchBackend):
                 banned_proxies=banned_proxies,
                 drain_lock=drain_lock,
                 drain_done=drain_done,
-                penalty_tracker=self._penalty_tracker,
                 stop_event=self._stop_event,
             )
             self._workers.append(w)
