@@ -87,8 +87,8 @@ class ProxyBanManager:
             record = ProxyBanRecord(proxy_name, datetime.now(), proxy_url)
             self.banned_proxies[proxy_name] = record
             
-            logger.info(
-                f"Proxy '{proxy_name}' banned [session-permanent, until process restart]"
+            logger.debug(
+                f"Proxy '{proxy_name}' banned [session-permanent]"
             )
     
     def get_banned_proxies(self) -> List[ProxyBanRecord]:
@@ -125,15 +125,23 @@ class ProxyBanManager:
         return "\n".join(lines)
 
 
-# Global ban manager instance
-_global_ban_manager: Optional[ProxyBanManager] = None
+# Global ban manager instance (may be the Rust or Python implementation)
+_global_ban_manager = None
 
 
-def get_ban_manager(**_kwargs) -> ProxyBanManager:
-    """Get or create the global ban manager instance (session-scoped)."""
+def get_ban_manager(**_kwargs):
+    """Get or create the global ban manager singleton (session-scoped).
+
+    Returns the Rust ``RustProxyBanManager`` when available — this is the
+    same singleton that every ``RustProxyPool`` uses internally, so ban
+    state stays in sync across all components.
+    """
     global _global_ban_manager
-    
+
     if _global_ban_manager is None:
-        _global_ban_manager = ProxyBanManager()
-    
+        if RUST_BAN_MANAGER_AVAILABLE:
+            _global_ban_manager = _rust_get_ban_manager()
+        else:
+            _global_ban_manager = ProxyBanManager()
+
     return _global_ban_manager
