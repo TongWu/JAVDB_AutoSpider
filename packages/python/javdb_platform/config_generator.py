@@ -302,7 +302,6 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # Proxy Configuration
         ('PROXY_MODE', 'PROXY_MODE', get_env, 'pool', 'PROXY CONFIGURATION'),
         ('PROXY_POOL', 'PROXY_POOL_JSON', get_env_json, [], 'PROXY CONFIGURATION'),
-        ('PROXY_POOL_COOLDOWN_SECONDS', 'PROXY_POOL_COOLDOWN_SECONDS', get_env_int, 691200, 'PROXY CONFIGURATION'),
         ('PROXY_POOL_MAX_FAILURES', 'PROXY_POOL_MAX_FAILURES', get_env_int, 3, 'PROXY CONFIGURATION'),
         ('PROXY_HTTP', None, lambda n, d: None, None, 'PROXY CONFIGURATION'),  # Hardcoded None
         ('PROXY_HTTPS', None, lambda n, d: None, None, 'PROXY CONFIGURATION'),  # Hardcoded None
@@ -333,11 +332,8 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('GPT_API_URL', 'GPT_API_URL', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
         ('GPT_API_KEY', 'GPT_API_KEY', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
         # Request Timing Configuration
-        ('PAGE_SLEEP', 'PAGE_SLEEP', get_env_int, 5, 'REQUEST TIMING CONFIGURATION'),
         ('MOVIE_SLEEP_MIN', 'MOVIE_SLEEP', get_env_range_min, None, 'REQUEST TIMING CONFIGURATION'),
         ('MOVIE_SLEEP_MAX', 'MOVIE_SLEEP', get_env_range_max, None, 'REQUEST TIMING CONFIGURATION'),
-        ('CF_TURNSTILE_COOLDOWN', 'CF_TURNSTILE_COOLDOWN', get_env_int, 5, 'REQUEST TIMING CONFIGURATION'),
-        ('FALLBACK_COOLDOWN', 'FALLBACK_COOLDOWN', get_env_int, 15, 'REQUEST TIMING CONFIGURATION'),
         # Logging Configuration
         ('LOG_LEVEL', 'LOG_LEVEL', get_env, 'INFO', 'LOGGING CONFIGURATION'),
         ('SPIDER_LOG_FILE', 'SPIDER_LOG_FILE', get_env, 'logs/spider.log', 'LOGGING CONFIGURATION'),

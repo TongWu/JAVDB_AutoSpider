@@ -43,9 +43,6 @@ def _runtime_proxy_pool(config_data: Dict[str, Any]):
     try:
         return create_proxy_pool_from_config(
             proxy_pool_raw,
-            cooldown_seconds=int(
-                config_data.get("PROXY_POOL_COOLDOWN_SECONDS", 691200) or 691200
-            ),
             max_failures=int(
                 config_data.get("PROXY_POOL_MAX_FAILURES", 3) or 3
             ),
@@ -64,10 +61,6 @@ def _new_request_handler(config_data: Dict[str, Any]):
         ),
         cf_bypass_port_map=config_data.get("CF_BYPASS_PORT_MAP", {}) or {},
         cf_bypass_enabled=bool(config_data.get("CF_BYPASS_ENABLED", True)),
-        cf_turnstile_cooldown=int(
-            config_data.get("CF_TURNSTILE_COOLDOWN", 30) or 30
-        ),
-        fallback_cooldown=int(config_data.get("FALLBACK_COOLDOWN", 30) or 30),
         javdb_session_cookie=str(
             config_data.get("JAVDB_SESSION_COOKIE", "") or ""
         ),

@@ -42,7 +42,6 @@ GIT_BRANCH = cfg('GIT_BRANCH', 'main')
 # Proxy pool
 PROXY_MODE = cfg('PROXY_MODE', 'single')
 PROXY_POOL = cfg('PROXY_POOL', [])
-PROXY_POOL_COOLDOWN_SECONDS = cfg('PROXY_POOL_COOLDOWN_SECONDS', 691200)  # 8 days
 PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
 
 # Import history manager functions
@@ -579,7 +578,6 @@ def initialize_proxy_helper(proxy_override):
             logger.info(f"Initializing proxy pool with {len(PROXY_POOL)} proxies...")
             global_proxy_pool = create_proxy_pool_from_config(
                 PROXY_POOL,
-                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
                 max_failures=PROXY_POOL_MAX_FAILURES
             )
             logger.info(f"Proxy pool initialized successfully")
@@ -587,7 +585,6 @@ def initialize_proxy_helper(proxy_override):
             logger.info(f"Initializing single proxy mode (using first proxy from pool)...")
             global_proxy_pool = create_proxy_pool_from_config(
                 [PROXY_POOL[0]],
-                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
                 max_failures=PROXY_POOL_MAX_FAILURES
             )
             logger.info(f"Single proxy initialized: {PROXY_POOL[0].get('name', 'Main-Proxy')}")
@@ -600,7 +597,6 @@ def initialize_proxy_helper(proxy_override):
         }
         global_proxy_pool = create_proxy_pool_from_config(
             [legacy_proxy],
-            cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
             max_failures=PROXY_POOL_MAX_FAILURES
         )
     else:

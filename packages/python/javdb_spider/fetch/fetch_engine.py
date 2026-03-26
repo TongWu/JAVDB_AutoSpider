@@ -68,11 +68,8 @@ from packages.python.javdb_spider.runtime.config import (
     CF_BYPASS_SERVICE_PORT,
     CF_BYPASS_ENABLED,
     CF_BYPASS_PORT_MAP,
-    CF_TURNSTILE_COOLDOWN,
-    FALLBACK_COOLDOWN,
     JAVDB_SESSION_COOKIE,
     PROXY_POOL,
-    PROXY_POOL_COOLDOWN_SECONDS,
     PROXY_POOL_MAX_FAILURES,
     LOGIN_PROXY_NAME,
 )
@@ -84,6 +81,14 @@ __all__ = [
     'EngineTask', 'EngineResult', 'LoginRequired',
     'WorkerContext', 'ParallelFetchBackend', 'FetchEngine',
 ]
+
+# ---------------------------------------------------------------------------
+# Engine-internal timing constants
+# ---------------------------------------------------------------------------
+_STARTUP_JITTER_BASE = (0.5, 2.0)
+_STARTUP_JITTER_PER_WORKER = (1.5, 3.0)
+_REQUEUE_BACKOFF_FACTOR = 0.3
+_REQUEUE_BACKOFF_CAP = 2.0
 
 
 # ---------------------------------------------------------------------------
@@ -290,7 +295,8 @@ class _EngineWorker(threading.Thread):
         self._cf_bypass_since: Optional[float] = None
         self._first_request = True
         self._startup_jitter = (
-            random.uniform(0.5, 2.0) + worker_id * random.uniform(1.5, 3.0)
+            random.uniform(*_STARTUP_JITTER_BASE)
+            + worker_id * random.uniform(*_STARTUP_JITTER_PER_WORKER)
         )
 
         # One PenaltyTracker per engine (passed in): CF/failure events from any
@@ -304,9 +310,9 @@ class _EngineWorker(threading.Thread):
 
         self._proxy_pool = create_proxy_pool_from_config(
             [proxy_config],
-            cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
             max_failures=PROXY_POOL_MAX_FAILURES,
         )
+        _cd = self._sleep_mgr.get_cooldown()
         self._handler = RequestHandler(
             proxy_pool=self._proxy_pool,
             config=RequestConfig(
@@ -315,8 +321,8 @@ class _EngineWorker(threading.Thread):
                 cf_bypass_port_map=CF_BYPASS_PORT_MAP,
                 cf_bypass_enabled=CF_BYPASS_ENABLED,
                 cf_bypass_max_failures=3,
-                cf_turnstile_cooldown=CF_TURNSTILE_COOLDOWN,
-                fallback_cooldown=FALLBACK_COOLDOWN,
+                cf_turnstile_cooldown=_cd,
+                fallback_cooldown=_cd,
                 javdb_session_cookie=JAVDB_SESSION_COOKIE,
                 proxy_http=proxy_config.get('http'),
                 proxy_https=proxy_config.get('https'),
@@ -440,7 +446,7 @@ class _EngineWorker(threading.Thread):
                     ))
                     continue
                 requeue_front(self.task_queue, task)
-                backoff = min(2.0, 0.3 * len(task.failed_proxies))
+                backoff = min(_REQUEUE_BACKOFF_CAP, _REQUEUE_BACKOFF_FACTOR * len(task.failed_proxies))
                 if self._interruptible_sleep(backoff):
                     continue
                 continue

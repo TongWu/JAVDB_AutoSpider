@@ -111,14 +111,11 @@ def _load_config() -> dict:
         'PROXY_HTTP': None,
         'PROXY_HTTPS': None,
         'PROXY_MODULES': ['spider'],
-        'PROXY_POOL_COOLDOWN_SECONDS': 300,
         'PROXY_POOL_MAX_FAILURES': 3,
         'BASE_URL': 'https://javdb.com',
         'CF_BYPASS_SERVICE_PORT': 8000,
         'CF_BYPASS_PORT_MAP': {},
         'CF_BYPASS_ENABLED': True,
-        'CF_TURNSTILE_COOLDOWN': 30,
-        'FALLBACK_COOLDOWN': 15,
         'JAVDB_SESSION_COOKIE': None,
         'LOGIN_PROXY_NAME': None,
         'REPORTS_DIR': 'reports',
@@ -132,7 +129,6 @@ def _build_proxy_pool(cfg: dict):
         entries = pool_list if cfg.get('PROXY_MODE') == 'pool' else [pool_list[0]]
         return create_proxy_pool_from_config(
             entries,
-            cooldown_seconds=cfg.get('PROXY_POOL_COOLDOWN_SECONDS', 300),
             max_failures=cfg.get('PROXY_POOL_MAX_FAILURES', 3),
         )
     http_p = cfg.get('PROXY_HTTP')
@@ -140,7 +136,6 @@ def _build_proxy_pool(cfg: dict):
     if http_p or https_p:
         return create_proxy_pool_from_config(
             [{'name': 'Legacy-Proxy', 'http': http_p, 'https': https_p}],
-            cooldown_seconds=cfg.get('PROXY_POOL_COOLDOWN_SECONDS', 300),
             max_failures=cfg.get('PROXY_POOL_MAX_FAILURES', 3),
         )
     return None
@@ -155,8 +150,6 @@ def _build_handler(cfg: dict, proxy_pool) -> RequestHandler:
             cf_bypass_port_map=cfg.get('CF_BYPASS_PORT_MAP', {}),
             cf_bypass_enabled=cfg.get('CF_BYPASS_ENABLED', True),
             cf_bypass_max_failures=3,
-            cf_turnstile_cooldown=cfg.get('CF_TURNSTILE_COOLDOWN', 30),
-            fallback_cooldown=cfg.get('FALLBACK_COOLDOWN', 15),
             javdb_session_cookie=cfg.get('JAVDB_SESSION_COOKIE'),
             proxy_http=cfg.get('PROXY_HTTP'),
             proxy_https=cfg.get('PROXY_HTTPS'),
@@ -336,7 +329,6 @@ def create_handler_for_proxy(
 
     pool = create_proxy_pool_from_config(
         [proxy_config],
-        cooldown_seconds=cfg.get('PROXY_POOL_COOLDOWN_SECONDS', 300),
         max_failures=cfg.get('PROXY_POOL_MAX_FAILURES', 3),
     )
     return RequestHandler(
@@ -347,8 +339,6 @@ def create_handler_for_proxy(
             cf_bypass_port_map=cfg.get('CF_BYPASS_PORT_MAP', {}),
             cf_bypass_enabled=cfg.get('CF_BYPASS_ENABLED', True),
             cf_bypass_max_failures=3,
-            cf_turnstile_cooldown=cfg.get('CF_TURNSTILE_COOLDOWN', 30),
-            fallback_cooldown=cfg.get('FALLBACK_COOLDOWN', 15),
             javdb_session_cookie=cfg.get('JAVDB_SESSION_COOKIE'),
             proxy_http=proxy_config.get('http'),
             proxy_https=proxy_config.get('https'),
