@@ -275,7 +275,7 @@ REPORTS_DIR = 'reports'
 # Database file paths (three separate databases for concurrency and isolation)
 # history.db — MovieHistory, TorrentHistory (spider core data)
 # reports.db — ReportSessions, ReportMovies, ReportTorrents, SpiderStats, UploaderStats, PikpakStats
-# operations.db — RcloneInventory, DedupRecords, PikpakHistory, ProxyBans
+# operations.db — RcloneInventory, DedupRecords, PikpakHistory
 HISTORY_DB_PATH = 'reports/history.db'
 REPORTS_DB_PATH = 'reports/reports.db'
 OPERATIONS_DB_PATH = 'reports/operations.db'
