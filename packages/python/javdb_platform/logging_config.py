@@ -5,6 +5,102 @@ import sys
 from packages.python.javdb_platform.config_helper import cfg
 
 
+# ---------------------------------------------------------------------------
+# Short logger name mapping
+# ---------------------------------------------------------------------------
+# Maps fully-qualified module paths to concise display names shown in logs.
+# Call ``get_logger_name_mapping()`` to retrieve this for debugging.
+
+_MODULE_SHORT_NAMES = {
+    # javdb_platform
+    'packages.python.javdb_platform.request_handler': 'RequestHandler',
+    'packages.python.javdb_platform.proxy_pool': 'ProxyPool',
+    'packages.python.javdb_platform.proxy_ban_manager': 'BanManager',
+    'packages.python.javdb_platform.proxy_policy': 'ProxyPolicy',
+    'packages.python.javdb_platform.logging_config': 'LogConfig',
+    'packages.python.javdb_platform.config_helper': 'Config',
+    'packages.python.javdb_platform.history_manager': 'History',
+    'packages.python.javdb_platform.pipeline_service': 'Pipeline',
+    'packages.python.javdb_platform.db': 'DB',
+    'packages.python.javdb_platform.csv_writer': 'CSVWriter',
+    'packages.python.javdb_platform.git_helper': 'Git',
+    'packages.python.javdb_platform.spider_gateway': 'Gateway',
+    'packages.python.javdb_platform.path_helper': 'PathHelper',
+    'packages.python.javdb_platform.qb_config': 'QBConfig',
+    # javdb_spider
+    'packages.python.javdb_spider.fetch.fetch_engine': 'FetchEngine',
+    'packages.python.javdb_spider.fetch.index': 'IndexFetch',
+    'packages.python.javdb_spider.fetch.fallback': 'Fallback',
+    'packages.python.javdb_spider.fetch.session': 'Session',
+    'packages.python.javdb_spider.fetch.login_coordinator': 'Login',
+    'packages.python.javdb_spider.fetch.sequential_backend': 'SeqBackend',
+    'packages.python.javdb_spider.detail.runner': 'DetailRunner',
+    'packages.python.javdb_spider.detail.parallel_mode': 'ParallelMode',
+    'packages.python.javdb_spider.runtime.sleep': 'SleepMgr',
+    'packages.python.javdb_spider.runtime.state': 'SpiderState',
+    'packages.python.javdb_spider.runtime.config': 'SpiderConfig',
+    'packages.python.javdb_spider.runtime.report': 'Report',
+    'packages.python.javdb_spider.app.run_service': 'Spider',
+    'packages.python.javdb_spider.services.dedup': 'Dedup',
+    # javdb_core
+    'packages.python.javdb_core.parser': 'Parser',
+    'packages.python.javdb_core.masking': 'Masking',
+    'packages.python.javdb_core.url_helper': 'URLHelper',
+    'packages.python.javdb_core.filename_helper': 'FileHelper',
+    'packages.python.javdb_core.magnet_extractor': 'MagnetExtractor',
+    # javdb_integrations
+    'packages.python.javdb_integrations.email_notification': 'Email',
+    'packages.python.javdb_integrations.qb_uploader': 'QBUploader',
+    'packages.python.javdb_integrations.pikpak_bridge': 'PikPak',
+    'packages.python.javdb_integrations.qb_file_filter': 'QBFilter',
+    'packages.python.javdb_integrations.rclone_manager': 'Rclone',
+    'packages.python.javdb_integrations.rclone_helper': 'RcloneHelper',
+    'packages.python.javdb_integrations.health_check': 'HealthCheck',
+    'packages.python.javdb_integrations.login': 'JavDBLogin',
+    'packages.python.javdb_integrations.fetch_page': 'FetchPage',
+    # javdb_ingestion
+    'packages.python.javdb_ingestion.adapters': 'Adapters',
+    'packages.python.javdb_ingestion.policies': 'Policies',
+    # javdb_migrations
+    'packages.python.javdb_migrations.migrate_to_current': 'Migration',
+    'packages.python.javdb_migrations.tools.csv_to_sqlite': 'MigCSVtoSQLite',
+}
+
+# Build reverse mapping for debug lookup
+_SHORT_TO_FULL = {v: k for k, v in _MODULE_SHORT_NAMES.items()}
+
+
+def get_logger_name_mapping():
+    """Return a copy of the short-name → full-module-path mapping.
+
+    Useful for debugging to find which source file corresponds to a
+    short logger name seen in logs.
+    """
+    return dict(_SHORT_TO_FULL)
+
+
+def _shorten_logger_name(name):
+    """Return the short display name for a module, or a truncated fallback."""
+    if name in _MODULE_SHORT_NAMES:
+        return _MODULE_SHORT_NAMES[name]
+    # For unmapped modules, strip common prefixes for readability
+    for prefix in ('packages.python.', 'apps.cli.', 'scripts.'):
+        if name.startswith(prefix):
+            return name[len(prefix):]
+    return name
+
+
+class _ShortNameFormatter(logging.Formatter):
+    """Formatter that replaces long module names with concise aliases."""
+
+    def format(self, record):
+        saved = record.name
+        record.name = _shorten_logger_name(record.name)
+        result = super().format(record)
+        record.name = saved
+        return result
+
+
 def setup_logging(log_file=None, log_level=None):
     """Setup logging configuration for all modules.
 
@@ -35,7 +131,7 @@ def setup_logging(log_file=None, log_level=None):
             h.setLevel(numeric_level)
         return root_logger
 
-    formatter = logging.Formatter(
+    formatter = _ShortNameFormatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
@@ -63,14 +159,16 @@ def setup_logging(log_file=None, log_level=None):
 
     return root_logger
 
+
 def get_logger(name):
-    """
-    Get a logger with the specified name
-    
+    """Get a logger with the specified name.
+
     Args:
-        name: Logger name (usually __name__)
-    
+        name: Logger name (usually ``__name__``).
+
     Returns:
-        Logger instance
+        Logger instance.  The underlying Python logger retains the full
+        module name so ``logging.getLogger()`` lookups still work.  The
+        short display name is applied only at formatting time.
     """
-    return logging.getLogger(name) 
+    return logging.getLogger(name)
