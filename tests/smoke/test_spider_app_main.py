@@ -32,7 +32,6 @@ def test_create_detail_backend_selects_parallel(monkeypatch):
         use_parallel=True,
         use_cookie=True,
         is_adhoc_mode=False,
-        ban_log_file='proxy_bans.csv',
         session=object(),
         use_proxy=True,
         use_cf_bypass=False,
@@ -42,7 +41,6 @@ def test_create_detail_backend_selects_parallel(monkeypatch):
     assert calls == [
         {
             'use_cookie': True,
-            'ban_log_file': 'proxy_bans.csv',
             'use_proxy': True,
             'use_cf_bypass': False,
         }
@@ -73,7 +71,6 @@ def test_create_detail_backend_selects_sequential(monkeypatch):
         use_parallel=False,
         use_cookie=False,
         is_adhoc_mode=True,
-        ban_log_file='proxy_bans.csv',
         session=session,
         use_proxy=False,
         use_cf_bypass=True,

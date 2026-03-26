@@ -66,7 +66,6 @@ def _spider_parse_fn(html: str, task: EngineTask):
 def build_parallel_detail_backend(
     *,
     use_cookie: bool,
-    ban_log_file: str,
     use_proxy: bool = True,
     use_cf_bypass: bool = False,
 ) -> ParallelFetchBackend:
@@ -75,7 +74,6 @@ def build_parallel_detail_backend(
     return ParallelFetchBackend.simple(
         parse_fn=_spider_parse_fn,
         use_cookie=use_cookie,
-        ban_log_file=ban_log_file,
         penalty_tracker=_shared_penalty_tracker,
         throttle=_shared_throttle,
         runtime_state=FetchRuntimeState(
@@ -101,7 +99,6 @@ def process_detail_entries_parallel(
     use_history_for_saving: bool,
     use_cookie: bool,
     is_adhoc_mode: bool,
-    ban_log_file: str,
     rclone_inventory: dict = None,
     rclone_filter: bool = True,
     enable_dedup: bool = False,
@@ -116,7 +113,6 @@ def process_detail_entries_parallel(
     """
     backend = build_parallel_detail_backend(
         use_cookie=use_cookie,
-        ban_log_file=ban_log_file,
     )
     return process_detail_entries(
         backend=backend,

@@ -10,7 +10,6 @@ def create_detail_backend(
     use_parallel: bool,
     use_cookie: bool,
     is_adhoc_mode: bool,
-    ban_log_file: str,
     session,
     use_proxy: bool,
     use_cf_bypass: bool,
@@ -20,7 +19,6 @@ def create_detail_backend(
     if use_parallel:
         return build_parallel_detail_backend(
             use_cookie=use_cookie,
-            ban_log_file=ban_log_file,
             use_proxy=use_proxy,
             use_cf_bypass=use_cf_bypass,
         )

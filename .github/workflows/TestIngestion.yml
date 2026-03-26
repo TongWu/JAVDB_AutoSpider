@@ -303,7 +303,7 @@ jobs:
           fi
           
           # Add history files if they exist
-          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/proxy_bans.csv"; do
+          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv"; do
             if [ -f "$HIST_FILE" ]; then
               FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $HIST_FILE"
               echo "Including history: $HIST_FILE"
@@ -403,7 +403,6 @@ jobs:
           
           # Stage history files
           git add "$REPORTS_DIR/parsed_movies_history.csv" 2>/dev/null || true
-          git add "$REPORTS_DIR/proxy_bans.csv" 2>/dev/null || true
           
           # Stage Daily report CSVs
           find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true

@@ -137,7 +137,7 @@ PROXY_POOL = [
 
 # Proxy pool behavior settings (only applies when PROXY_MODE = 'pool')
 # IMPORTANT: JavDB bans IPs for 7 days, so cooldown is set to 8 days (691200 seconds)
-# Ban records are persistent across runs and stored in Daily Report/proxy_bans.csv
+# Ban records are session-scoped (in-memory only) and reset on each new run
 PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 days (691200 seconds)
 PROXY_POOL_MAX_FAILURES = 3  # Max consecutive failures before putting proxy in cooldown
 
@@ -275,7 +275,7 @@ REPORTS_DIR = 'reports'
 # Database file paths (three separate databases for concurrency and isolation)
 # history.db — MovieHistory, TorrentHistory (spider core data)
 # reports.db — ReportSessions, ReportMovies, ReportTorrents, SpiderStats, UploaderStats, PikpakStats
-# operations.db — RcloneInventory, DedupRecords, PikpakHistory, ProxyBans
+# operations.db — RcloneInventory, DedupRecords, PikpakHistory
 HISTORY_DB_PATH = 'reports/history.db'
 REPORTS_DB_PATH = 'reports/reports.db'
 OPERATIONS_DB_PATH = 'reports/operations.db'

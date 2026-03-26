@@ -37,22 +37,3 @@ def replace_rclone_inventory(conn, entries: List[dict]) -> int:
         [_normalize_inventory_entry(entry) for entry in entries],
     )
     return len(entries)
-
-
-def save_proxy_bans(conn, records: List[dict]) -> None:
-    """Replace all proxy bans using batched inserts."""
-    conn.execute("DELETE FROM ProxyBans")
-    if not records:
-        return
-    conn.executemany(
-        "INSERT INTO ProxyBans (ProxyName, DateTimeBanned, DateTimeUnbanned) VALUES (?, ?, ?)",
-        [
-            (
-                rec.get("ProxyName", rec.get("proxy_name")),
-                rec.get("DateTimeBanned", rec.get("ban_time")),
-                rec.get("DateTimeUnbanned", rec.get("unban_time")),
-            )
-            for rec in records
-        ],
-    )
-

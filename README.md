@@ -504,12 +504,8 @@ python3 javdb_login.py
 ```
 
 **Check Proxy Ban Status:**
-```bash
-# View ban records
-cat "reports/proxy_bans.csv"
 
-# Ban information is also included in pipeline email reports
-```
+Proxy bans are **session-scoped** (in-memory only): when a proxy is banned during a run, it applies only to that process. The next run starts with no bans—all proxies are automatically retried. Ban activity appears in spider log output; pipeline email reports may still summarize proxy issues for that run. There is no `reports/proxy_bans.csv`, and bans are not stored in the database (the `ProxyBans` table no longer exists).
 
 **Run Migration Scripts** (from repository root):
 ```bash
@@ -777,15 +773,13 @@ reports/
 │   └── Javdb_AdHoc_*.csv
 ├── Dedup/                       # Rclone dedup reports
 ├── parsed_movies_history.csv    # History tracking
-├── pikpak_bridge_history.csv    # PikPak transfer history
-└── proxy_bans.csv               # Proxy ban records
+└── pikpak_bridge_history.csv    # PikPak transfer history
 ```
 
 - **Daily Report CSV files**: `reports/DailyReport/YYYY/MM/Javdb_TodayTitle_YYYYMMDD.csv`
 - **Ad Hoc CSV files**: `reports/AdHoc/YYYY/MM/Javdb_AdHoc_*.csv`
 - **History file**: `reports/parsed_movies_history.csv`
 - **PikPak history**: `reports/pikpak_bridge_history.csv`
-- **Proxy ban records**: `reports/proxy_bans.csv`
 - **Log files**: `logs/` directory
   - `spider.log`
   - `qb_uploader.log`
@@ -852,7 +846,7 @@ Configure multiple proxies for automatic failover:
 - **Passive Health Checking**: Only marks proxies as failed on actual failures (no active probing)
 - **Cooldown Mechanism**: Failed proxies are temporarily disabled to allow recovery (8 days default)
 - **Ban Detection**: Automatically detects proxy bans via HTTP 403 responses and ban-page HTML patterns, immediately bans the proxy and re-queues the page to another worker
-- **Persistent Ban Records**: Ban history stored in `reports/proxy_bans.csv` and persists across runs
+- **Session-Scoped Bans**: Proxies banned during a run are skipped only for that session (in-memory). The next run starts with a clean slate—no CSV file, no `ProxyBans` database table, and all proxies are retried automatically
 - **Statistics Tracking**: Detailed success rates and usage statistics for each proxy
 - **Perfect for JavDB**: Respects strict rate limiting while providing redundancy
 
@@ -874,22 +868,14 @@ PROXY_POOL_MAX_FAILURES = 3  # Max failures before cooldown
 
 The system includes intelligent ban detection and management:
 - **Automatic Detection**: Detects when JavDB blocks a proxy IP
-- **Persistent Records**: Ban history stored in `reports/proxy_bans.csv`
-- **8-Day Cooldown**: Default cooldown matches JavDB's 7-day ban period
+- **Session-Scoped State**: Ban state exists only in memory for the current process; it does not persist to `reports/proxy_bans.csv`, SQLite, or the next run
+- **8-Day Cooldown**: Default cooldown matches JavDB's 7-day ban period (applies within the session for temporarily disabled proxies)
 - **Exit Code 2**: Spider exits with code 2 when proxies are banned (helps with automation)
-- **Ban Summary**: Detailed ban status included in pipeline email reports
+- **Ban Summary**: Pipeline email reports may include proxy/ban context for that run
 
-**Checking Ban Status:**
-```bash
-# Ban records are logged in:
-cat "reports/proxy_bans.csv"
+**Observing ban activity during a run:**
 
-# Pipeline emails include ban summary with:
-# - Proxy name and IP
-# - Ban timestamp
-# - Cooldown expiry time
-# - Current status (BANNED/AVAILABLE)
-```
+Review spider log output (e.g. `logs/spider.log`) for ban-related messages. There is no ban CSV file or `ProxyBans` table; the next session always begins with no stored bans.
 
 Commands use `PROXY_MODULES` automatically by default. Use `--use-proxy` to force proxy on for one run, or `--no-proxy` to force it off:
 ```bash
@@ -1511,8 +1497,8 @@ Progress tracking includes:
 - **Proxy + CF not working**: Ensure CF bypass service runs on proxy server
 
 **Proxy Ban Issues:**
-- **All proxies banned**: Check `reports/proxy_bans.csv` for ban status
-- **Spider exits with code 2**: Indicates proxy ban detected, wait for cooldown or add new proxies
+- **All proxies banned during a run**: Check spider logs; bans are session-only, so a new run retries all proxies from a clean slate—add more proxies or address JavDB-side blocks if needed
+- **Spider exits with code 2**: Proxy ban detected during this session; cooldowns apply in-memory for that run, or add new proxies
 - **Cooldown not working**: Default is 8 days, adjust PROXY_POOL_COOLDOWN_SECONDS if needed
 - **Ban false positives**: Check if JavDB is actually accessible from proxy IP
 
@@ -1559,7 +1545,7 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
 - The pipeline provides incremental commits for monitoring progress in real-time
 - History file tracks all downloaded movies with timestamps
 - Rust acceleration is automatically detected and used when available
-- Exit code 2 indicates proxy ban detection (useful for automation)
+- Exit code 2 indicates proxy ban detection during the current run; bans are session-scoped and do not persist to the next run (useful for automation)
 - Logs automatically mask sensitive information (passwords, tokens, etc.)
 
 ### File Structure
@@ -1591,7 +1577,6 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
   - `AdHoc/YYYY/MM/`: Custom URL scraping results
   - `parsed_movies_history.csv`: History tracking
   - `pikpak_bridge_history.csv`: PikPak transfer history
-  - `proxy_bans.csv`: Proxy ban records
 - **logs/**: Contains all log files
   - `spider.log`: Spider execution logs
   - `qb_uploader.log`: Upload execution logs
@@ -1656,7 +1641,6 @@ python3 -m apps.cli.qb_file_filter --min-size 100 --days 3 --dry-run  # Preview 
 
 - **Main config**: `config.py` (copy from `config.py.example`)
 - **History file**: `reports/parsed_movies_history.csv`
-- **Ban records**: `reports/proxy_bans.csv`
 - **Login docs**: `utils/login/JAVDB_LOGIN_README.md`
 
 ### Important Links
