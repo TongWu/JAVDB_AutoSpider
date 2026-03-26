@@ -631,8 +631,7 @@ PROXY_POOL = [
 ]
 
 # Proxy pool behavior (only for pool mode)
-PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 days cooldown for banned proxies
-PROXY_POOL_MAX_FAILURES = 3  # Max failures before cooldown
+PROXY_POOL_MAX_FAILURES = 3  # Max failures before banning proxy for this session
 
 # Legacy proxy config (deprecated - use PROXY_POOL instead)
 PROXY_HTTP = None
@@ -655,10 +654,8 @@ PHASE2_MIN_COMMENTS = 80  # Minimum comment count for phase 2 entries
 # Release date filter
 IGNORE_RELEASE_DATE_FILTER = False  # Set True to ignore today/yesterday tags
 
-# Sleep time configuration (in seconds)
-PAGE_SLEEP = 2  # Sleep between index pages
-MOVIE_SLEEP_MIN = 5   # Minimum random sleep between movies
-MOVIE_SLEEP_MAX = 15  # Maximum random sleep between movies
+# Sleep time configuration (adaptive, managed by MovieSleepManager)
+# MOVIE_SLEEP_MIN/MAX are auto-tuned; override via env var VAR_MOVIE_SLEEP (e.g. "5,15")
 
 # =============================================================================
 # JAVDB LOGIN CONFIGURATION (for automatic session cookie refresh)
@@ -861,8 +858,7 @@ PROXY_POOL = [
     {'name': 'Proxy-1', 'http': 'http://127.0.0.1:7890', 'https': 'http://127.0.0.1:7890'},
     {'name': 'Proxy-2', 'http': 'http://127.0.0.1:7891', 'https': 'http://127.0.0.1:7891'},
 ]
-PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 days cooldown (JavDB bans for 7 days)
-PROXY_POOL_MAX_FAILURES = 3  # Max failures before cooldown
+PROXY_POOL_MAX_FAILURES = 3  # Max failures before banning proxy for this session
 ```
 
 **Proxy Ban Management:**
@@ -1500,7 +1496,7 @@ Progress tracking includes:
 **Proxy Ban Issues:**
 - **All proxies banned during a run**: Check spider logs; bans are session-only, so a new run retries all proxies from a clean slate—add more proxies or address JavDB-side blocks if needed
 - **Spider exits with code 2**: Proxy ban detected during this session; cooldowns apply in-memory for that run, or add new proxies
-- **Cooldown not working**: Default is 8 days, adjust PROXY_POOL_COOLDOWN_SECONDS if needed
+- **Cooldown not working**: Proxy bans are session-scoped (in-memory only); restart the run to retry all proxies
 - **Ban false positives**: Check if JavDB is actually accessible from proxy IP
 
 ### Debug Mode
@@ -1534,9 +1530,10 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
 
 ### Rate Limiting and Delays
 - The system includes delays between requests to be respectful to servers:
-  - **Index pages**: 2 seconds (configurable via `PAGE_SLEEP`)
-  - **Movies**: 5-15 seconds random (configurable via `MOVIE_SLEEP_MIN` / `MOVIE_SLEEP_MAX`)
+  - **Index pages**: Adaptive sleep managed by `MovieSleepManager` (parallel mode uses per-worker pacing)
+  - **Movies**: Adaptive sleep via `MovieSleepManager` (log-normal distribution, auto-tuned)
   - **Volume-based adjustment**: `MovieSleepManager` automatically increases sleep intervals when processing large batches
+  - **All cooldowns**: Derived adaptively from `MovieSleepManager.get_cooldown()`
   - **qBittorrent additions**: 1 second (configurable via `DELAY_BETWEEN_ADDITIONS`)
   - **PikPak requests**: 2 seconds default (configurable via `PIKPAK_REQUEST_DELAY`)
 
