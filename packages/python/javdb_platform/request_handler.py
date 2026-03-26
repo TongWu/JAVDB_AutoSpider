@@ -330,7 +330,7 @@ class RequestHandler:
             # inspect it for ban-page patterns before deciding how to handle.
             if response.status_code == 403:
                 body = response.text
-                logger.warning(f"[{context_msg}] HTTP 403 Forbidden (body {len(body)} bytes)")
+                logger.debug(f"[{context_msg}] HTTP 403 Forbidden (body {len(body)} bytes)")
                 return body, requests.HTTPError(
                     f"403 Client Error: Forbidden for url: {target_url}",
                     response=response,
@@ -349,7 +349,7 @@ class RequestHandler:
             
             return response.text, None
         except requests.RequestException as e:
-            logger.error(f"[{context_msg}] {type(e).__name__}: {mask_error(str(e))}")
+            logger.debug(f"[{context_msg}] {type(e).__name__}: {mask_error(str(e))}")
             return None, e
     
     def _do_request_curl_cffi(self, target_url: str, req_headers: Dict, req_proxies: Optional[Dict], 
@@ -445,7 +445,7 @@ class RequestHandler:
 
             if response.status_code == 403:
                 body = response.text
-                logger.warning(f"[{context_msg}] [curl_cffi] HTTP 403 Forbidden (body {len(body)} bytes)")
+                logger.debug(f"[{context_msg}] [curl_cffi] HTTP 403 Forbidden (body {len(body)} bytes)")
                 return body, Exception(
                     f"403 Client Error: Forbidden for url: {target_url}"
                 )
@@ -463,7 +463,7 @@ class RequestHandler:
             
             return response.text, None
         except Exception as e:
-            logger.error(f"[{context_msg}] [curl_cffi] {type(e).__name__}: {mask_error(str(e))}")
+            logger.debug(f"[{context_msg}] [curl_cffi] {type(e).__name__}: {mask_error(str(e))}")
             return None, e
     
     def _get_bypass_ip(self, req_proxies: Optional[Dict], force_local: bool = False) -> Optional[str]:
@@ -688,7 +688,7 @@ class RequestHandler:
                 logger.warning(f"[CF Bypass] {context_msg} returned failure response (size={content_size} bytes)")
                 return html_content, False, False
         else:
-            logger.error(f"[CF Bypass] {context_msg} returned no content")
+            logger.debug(f"[CF Bypass] {context_msg} returned no content")
             return None, False, False
     
     def _fetch_direct(self, url: str, req_proxies: Optional[Dict], context_msg: str,
@@ -899,8 +899,7 @@ class RequestHandler:
                 proxy_name=proxy_name
             )
         except ProxyBannedError as e:
-            log_ctx = self._log_ctx(module_name, e.proxy_name)
-            logger.info(f"{log_ctx} Proxy banned: {e.reason}")
+            logger.debug(f"[{module_name}] Proxy '{e.proxy_name}' banned: {e.reason}")
             if self.proxy_pool:
                 self.proxy_pool.ban_proxy(e.proxy_name)
             raise
