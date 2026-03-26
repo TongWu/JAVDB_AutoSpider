@@ -845,6 +845,18 @@ class RequestHandler:
         proxies, use_proxy_pool_mode = self._get_proxies_config(module_name, use_proxy)
         proxy_name = self.proxy_pool.get_current_proxy_name() if (use_proxy_pool_mode and self.proxy_pool) else "None"
         
+        # Fail fast when proxy mode demands a proxy but all are in
+        # cooldown/banned.  Without this guard the request falls through to a
+        # direct (no-proxy) connection, exposing the real IP.
+        if (use_proxy
+                and self.config.proxy_mode in ('pool', 'single')
+                and self.proxy_pool is not None
+                and not use_proxy_pool_mode):
+            raise ProxyBannedError(
+                proxy_name=self.proxy_pool.get_current_proxy_name() or 'unknown',
+                reason='all proxies in cooldown, refusing direct fallback',
+            )
+        
         # Determine the mode based on flags
         use_local_bypass = effective_use_cf_bypass and not use_proxy
         use_proxy_bypass = effective_use_cf_bypass and use_proxy
