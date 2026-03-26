@@ -303,6 +303,12 @@ CREATE TABLE IF NOT EXISTS PikpakHistory (
     TransferStatus TEXT,
     ErrorMessage TEXT
 );
+
+CREATE TABLE IF NOT EXISTS InventoryAlignNoExactMatch (
+    VideoCode TEXT PRIMARY KEY,
+    Reason TEXT,
+    DateTimeRecorded TEXT
+);
 """
 
 # Combined DDL for single-DB mode (backward compat, csv_to_sqlite, testing)
@@ -926,6 +932,7 @@ def _migrate_single_to_split():
         ]),
         (OPERATIONS_DB_PATH, _OPERATIONS_DDL, [
             'RcloneInventory', 'DedupRecords', 'PikpakHistory',
+            'InventoryAlignNoExactMatch',
         ]),
     ]
 
@@ -1509,6 +1516,45 @@ def db_append_pikpak_history(record: dict, db_path: Optional[str] = None) -> int
              record.get('ErrorMessage', record.get('error_message'))),
         )
         return cur.lastrowid
+
+
+# ── InventoryAlignNoExactMatch helpers ───────────────────────────────────
+
+def db_upsert_align_no_exact_match(
+    video_code: str,
+    reason: str = 'exact_video_code_not_found',
+    db_path: Optional[str] = None,
+) -> None:
+    """Record a video code that had no exact match on JavDB search."""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
+        conn.execute(
+            """INSERT OR REPLACE INTO InventoryAlignNoExactMatch
+               (VideoCode, Reason, DateTimeRecorded)
+               VALUES (?, ?, ?)""",
+            (video_code.strip().upper(), reason, now),
+        )
+
+
+def db_load_align_no_exact_match_codes(db_path: Optional[str] = None) -> set:
+    """Return the set of normalised video codes previously marked as no-exact-match."""
+    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT VideoCode FROM InventoryAlignNoExactMatch"
+        ).fetchall()
+    return {r['VideoCode'] for r in rows}
+
+
+def db_delete_align_no_exact_match(
+    video_code: str,
+    db_path: Optional[str] = None,
+) -> None:
+    """Remove a video code from the no-exact-match table (e.g. after a successful match)."""
+    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
+        conn.execute(
+            "DELETE FROM InventoryAlignNoExactMatch WHERE VideoCode = ?",
+            (video_code.strip().upper(),),
+        )
 
 
 # ── ReportSessions + ReportMovies + ReportTorrents helpers ───────────────
