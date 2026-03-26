@@ -169,7 +169,7 @@ class ProxyPool:
             name = f"Proxy-{len(self.proxies) + 1}"
         
         if self.ban_manager.is_proxy_banned(name):
-            logger.warning(f"Proxy '{name}' is currently banned, skipping")
+            logger.debug(f"Proxy '{name}' is currently banned, skipping")
             return
             
         proxy_info = ProxyInfo(
@@ -327,7 +327,7 @@ class ProxyPool:
                 next_proxy = self.proxies[self.current_index]
                 
                 if next_proxy.is_available and not next_proxy.is_in_cooldown():
-                    logger.info(f"Switched from '{current_proxy.name}' to '{next_proxy.name}'")
+                    logger.debug(f"Switched from '{current_proxy.name}' to '{next_proxy.name}'")
                     return True
                     
                 attempts += 1
@@ -375,7 +375,7 @@ class ProxyPool:
             self.ban_manager.add_ban(target.name, proxy_url)
             target.banned = True
             target.is_available = False
-            logger.info(
+            logger.debug(
                 f"Proxy '{target.name}' banned [session-permanent]"
             )
 
@@ -387,11 +387,11 @@ class ProxyPool:
                 next_proxy = self.proxies[candidate]
                 if next_proxy.is_available and not next_proxy.banned and not next_proxy.is_in_cooldown():
                     self.current_index = candidate
-                    logger.info(f"Switched from '{target.name}' to '{next_proxy.name}'")
+                    logger.debug(f"Switched from '{target.name}' to '{next_proxy.name}'")
                     return True
                 attempts += 1
 
-            logger.info("ban_proxy: all proxies are unavailable after ban")
+            logger.debug("ban_proxy: all proxies are unavailable after ban")
             return False
 
     def get_proxy_count(self) -> int:
