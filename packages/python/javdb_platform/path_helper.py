@@ -9,8 +9,7 @@ Directory Structure:
     ├── DailyReport/YYYY/MM/    # Daily report CSV files
     ├── AdHoc/YYYY/MM/          # Ad hoc report CSV files
     ├── parsed_movies_history.csv
-    ├── pikpak_bridge_history.csv
-    └── proxy_bans.csv
+    └── pikpak_bridge_history.csv
 
 Usage:
     from packages.python.javdb_platform.path_helper import get_dated_report_path, get_history_file_path
