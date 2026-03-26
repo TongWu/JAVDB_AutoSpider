@@ -1,5 +1,5 @@
 use chrono::{DateTime, Local};
-use log::{info, warn};
+use log::{debug, info};
 use parking_lot::Mutex;
 use pyo3::prelude::*;
 use std::collections::HashMap;
@@ -50,7 +50,7 @@ impl ProxyBanManager {
     pub fn add_ban(&self, proxy_name: &str, proxy_url: Option<String>) {
         let mut banned = self.inner.banned_proxies.lock();
         if banned.contains_key(proxy_name) {
-            warn!("Proxy '{}' is already banned this session, not updating", proxy_name);
+            debug!("Proxy '{}' is already banned this session, not updating", proxy_name);
             return;
         }
 
@@ -61,7 +61,7 @@ impl ProxyBanManager {
         };
         banned.insert(proxy_name.to_string(), record);
 
-        warn!(
+        info!(
             "Proxy '{}' banned [session-permanent, until process restart]",
             proxy_name
         );
