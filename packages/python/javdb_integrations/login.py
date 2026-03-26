@@ -72,8 +72,6 @@ PROXY_MODE = cfg('PROXY_MODE', 'single')
 PROXY_POOL = cfg('PROXY_POOL', [])
 PROXY_MODULES = cfg('PROXY_MODULES', ['spider'])
 
-CF_TURNSTILE_COOLDOWN = cfg('CF_TURNSTILE_COOLDOWN', 10)
-FALLBACK_COOLDOWN = cfg('FALLBACK_COOLDOWN', 30)
 
 # Import RequestHandler for Cloudflare bypass via curl_cffi TLS fingerprint
 from packages.python.javdb_platform.request_handler import RequestHandler, RequestConfig
@@ -107,13 +105,15 @@ def _is_cloudflare_challenge(response):
 
 def _create_handler():
     """Create a RequestHandler instance configured for login."""
+    from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _mgr
+    _cd = _mgr.get_cooldown()
     config = RequestConfig(
         base_url=BASE_URL,
         cf_bypass_service_port=CF_BYPASS_SERVICE_PORT,
         cf_bypass_port_map=CF_BYPASS_PORT_MAP,
         cf_bypass_enabled=CF_BYPASS_ENABLED,
-        cf_turnstile_cooldown=CF_TURNSTILE_COOLDOWN,
-        fallback_cooldown=FALLBACK_COOLDOWN,
+        cf_turnstile_cooldown=_cd,
+        fallback_cooldown=_cd,
         proxy_http=PROXY_HTTP,
         proxy_https=PROXY_HTTPS,
         proxy_mode=PROXY_MODE,
@@ -427,19 +427,19 @@ def login_javdb(username, password, proxies=None):
 
             # Attempt 1: CF bypass service warmup
             if _attempt_cf_warmup(handler, login_page_url, proxies):
+                from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _mgr
                 logger.info("CF warmup succeeded, retrying login page fetch after cooldown...")
-                time.sleep(FALLBACK_COOLDOWN)
+                time.sleep(_mgr.get_cooldown())
                 response = session.get(login_page_url, headers=headers, timeout=30, proxies=proxies)
 
                 if _is_cloudflare_challenge(response):
-                    # Attempt 2: refresh bypass cache and retry once more
                     logger.warning("Still blocked after warmup, refreshing bypass cache...")
                     handler.refresh_bypass_cache(
                         login_page_url,
                         proxies,
                         force_local=(proxies is None),
                     )
-                    time.sleep(FALLBACK_COOLDOWN)
+                    time.sleep(_mgr.get_cooldown())
                     response = session.get(login_page_url, headers=headers, timeout=30, proxies=proxies)
 
                     if _is_cloudflare_challenge(response):
@@ -681,11 +681,14 @@ def login_with_retry(username, password, max_retries=5, proxies=None):
                 elif is_cf_error:
                     logger.warning("Cloudflare error detected, retrying after cooldown...")
                     logger.warning(f"Error message: {message}")
-                    time.sleep(CF_TURNSTILE_COOLDOWN)
+                    from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _mgr
+                    time.sleep(_mgr.get_cooldown())
+                    continue
                 else:
                     logger.warning(f"Login failed: {message}")
                     logger.info("Retrying...")
-                time.sleep(2)
+                from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _mgr
+                time.sleep(_mgr.get_cooldown())
             else:
                 logger.error(f"All {max_retries} attempts failed")
 

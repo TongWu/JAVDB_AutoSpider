@@ -43,7 +43,6 @@ PROXY_MODULES = cfg('PROXY_MODULES', ['spider'])
 # Proxy pool
 PROXY_MODE = cfg('PROXY_MODE', 'single')
 PROXY_POOL = cfg('PROXY_POOL', [])
-PROXY_POOL_COOLDOWN_SECONDS = cfg('PROXY_POOL_COOLDOWN_SECONDS', 691200)
 PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
 
 # File filter
@@ -199,14 +198,12 @@ def initialize_proxy_helper(proxy_override):
             logger.info(f"Initializing proxy pool with {len(PROXY_POOL)} proxies...")
             proxy_pool = create_proxy_pool_from_config(
                 PROXY_POOL,
-                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
                 max_failures=PROXY_POOL_MAX_FAILURES
             )
         elif PROXY_MODE == 'single':
             logger.info(f"Initializing single proxy mode...")
             proxy_pool = create_proxy_pool_from_config(
                 [PROXY_POOL[0]],
-                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
                 max_failures=PROXY_POOL_MAX_FAILURES
             )
     elif PROXY_HTTP or PROXY_HTTPS:
@@ -218,7 +215,6 @@ def initialize_proxy_helper(proxy_override):
         }
         proxy_pool = create_proxy_pool_from_config(
             [legacy_proxy],
-            cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
             max_failures=PROXY_POOL_MAX_FAILURES
         )
     

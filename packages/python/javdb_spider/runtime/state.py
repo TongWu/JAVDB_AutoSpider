@@ -21,10 +21,9 @@ from packages.python.javdb_spider.runtime.config import (
     BASE_URL,
     CF_BYPASS_SERVICE_PORT, CF_BYPASS_ENABLED,
     CF_BYPASS_PORT_MAP,
-    CF_TURNSTILE_COOLDOWN, FALLBACK_COOLDOWN,
     JAVDB_SESSION_COOKIE,
     PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES, PROXY_MODE,
-    PROXY_POOL, PROXY_POOL_COOLDOWN_SECONDS, PROXY_POOL_MAX_FAILURES,
+    PROXY_POOL, PROXY_POOL_MAX_FAILURES,
     REPORTS_DIR,
     LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
 )
@@ -140,15 +139,19 @@ def is_cf_bypass_failure(html_content: str) -> bool:
 def initialize_request_handler():
     """Create the global RequestHandler from configuration."""
     global global_request_handler
-    from packages.python.javdb_spider.runtime.sleep import penalty_tracker as _pt
+    from packages.python.javdb_spider.runtime.sleep import (
+        penalty_tracker as _pt,
+        movie_sleep_mgr as _mgr,
+    )
+    _cd = _mgr.get_cooldown()
     config = RequestConfig(
         base_url=BASE_URL,
         cf_bypass_service_port=CF_BYPASS_SERVICE_PORT,
         cf_bypass_port_map=CF_BYPASS_PORT_MAP,
         cf_bypass_enabled=CF_BYPASS_ENABLED,
         cf_bypass_max_failures=3,
-        cf_turnstile_cooldown=CF_TURNSTILE_COOLDOWN,
-        fallback_cooldown=FALLBACK_COOLDOWN,
+        cf_turnstile_cooldown=_cd,
+        fallback_cooldown=_cd,
         javdb_session_cookie=JAVDB_SESSION_COOKIE,
         proxy_http=PROXY_HTTP,
         proxy_https=PROXY_HTTPS,
@@ -169,16 +172,14 @@ def setup_proxy_pool(use_proxy) -> None:
             logger.info(f"Initializing proxy pool with {len(PROXY_POOL)} proxies...")
             global_proxy_pool = create_proxy_pool_from_config(
                 PROXY_POOL,
-                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
                 max_failures=PROXY_POOL_MAX_FAILURES,
             )
             logger.info("Proxy pool initialized successfully")
-            logger.info(f"Cooldown: {PROXY_POOL_COOLDOWN_SECONDS}s, Max failures before cooldown: {PROXY_POOL_MAX_FAILURES}")
+            logger.info("Max failures before ban: %d (session-scoped)", PROXY_POOL_MAX_FAILURES)
         elif PROXY_MODE == 'single':
             logger.info("Initializing single proxy mode (using first proxy from pool)...")
             global_proxy_pool = create_proxy_pool_from_config(
                 [PROXY_POOL[0]],
-                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
                 max_failures=PROXY_POOL_MAX_FAILURES,
             )
             logger.info(f"Single proxy initialized: {PROXY_POOL[0].get('name', 'Main-Proxy')}")
@@ -187,7 +188,6 @@ def setup_proxy_pool(use_proxy) -> None:
         legacy_proxy = {'name': 'Legacy-Proxy', 'http': PROXY_HTTP, 'https': PROXY_HTTPS}
         global_proxy_pool = create_proxy_pool_from_config(
             [legacy_proxy],
-            cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
             max_failures=PROXY_POOL_MAX_FAILURES,
         )
     else:
