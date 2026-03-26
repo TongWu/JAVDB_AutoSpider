@@ -116,7 +116,6 @@ def create_workers(
     coord = coordinator or LoginCoordinator(all_workers=all_workers)
     coord._all_workers = all_workers
 
-    shared_pt = PenaltyTracker()
     banned_proxies: set = set()
     drain_lock = threading.Lock()
     drain_done: list[bool] = [False]
@@ -146,7 +145,6 @@ def create_workers(
                 banned_proxies=banned_proxies,
                 drain_lock=drain_lock,
                 drain_done=drain_done,
-                penalty_tracker=shared_pt,
             )
             w._startup_jitter = 0.01
             all_workers.append(w)
