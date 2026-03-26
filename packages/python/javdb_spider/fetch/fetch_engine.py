@@ -828,6 +828,31 @@ class ParallelFetchBackend(FetchBackend):
             use_cf_bypass=self._runtime_state.use_cf_bypass,
         )
 
+    def export_login_state(self) -> None:
+        """Write the engine's login state back to the global ``state`` module.
+
+        After index-phase parallel fetch, the login worker may have refreshed
+        the session cookie.  This method propagates that information so the
+        subsequent detail-phase engine can inherit it via
+        ``_inherit_login_state``.
+        """
+        if not self._coordinator:
+            return
+        lid = self._coordinator.logged_in_worker_id
+        if lid is None:
+            return
+        for w in self._workers:
+            if w.worker_id == lid:
+                cookie = w._handler.config.javdb_session_cookie
+                if cookie:
+                    state.logged_in_proxy_name = w.proxy_name
+                    state.refreshed_session_cookie = cookie
+                    logger.info(
+                        "Exported engine login state: proxy=%s",
+                        w.proxy_name,
+                    )
+                return
+
     # -- convenience constructors --------------------------------------------
 
     @classmethod
