@@ -1,7 +1,6 @@
 """Index-page fetching and parsing across all pages."""
 
 import os
-import time
 from typing import Optional
 
 from packages.python.javdb_platform.logging_config import get_logger
@@ -17,7 +16,6 @@ from packages.python.javdb_ingestion.policies import (
 import packages.python.javdb_spider.runtime.state as state
 from packages.python.javdb_spider.fetch.fallback import get_page_url, fetch_index_page_with_fallback
 from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr
-from packages.python.javdb_spider.runtime.config import PAGE_SLEEP, PROXY_POOL
 
 logger = get_logger(__name__)
 
@@ -29,21 +27,68 @@ def fetch_all_index_pages(
     output_csv: str, output_dated_dir: str, csv_path: str,
     user_specified_output: bool,
     parsed_movies_history_phase1: dict, parsed_movies_history_phase2: dict,
+    use_parallel: bool = False,
 ) -> dict:
     """Fetch and parse all index pages, collecting entries for both phases.
+
+    When *use_parallel* is ``True`` the request work is delegated to a
+    :class:`ParallelFetchBackend` with one worker per proxy, mirroring
+    the detail-page parallel model.
 
     Returns a dict with keys:
         all_index_results_phase1, all_index_results_phase2,
         any_proxy_banned, use_proxy, use_cf_bypass, csv_path
     """
+
+    logger.info("=" * 75)
+    logger.info("Fetching and parsing index pages%s", " (parallel)" if use_parallel else "")
+    logger.info("=" * 75)
+
+    if use_parallel:
+        from packages.python.javdb_spider.fetch.index_parallel import (
+            fetch_all_index_pages_parallel,
+        )
+        idx_result = fetch_all_index_pages_parallel(
+            start_page=start_page, end_page=end_page,
+            parse_all=parse_all, phase_mode=phase_mode,
+            custom_url=custom_url, ignore_release_date=ignore_release_date,
+            use_proxy=use_proxy, use_cf_bypass=use_cf_bypass,
+            max_consecutive_empty=max_consecutive_empty,
+            output_csv=output_csv, output_dated_dir=output_dated_dir,
+            csv_path=csv_path, user_specified_output=user_specified_output,
+        )
+        return _post_process_index_results(
+            idx_result, custom_url,
+            parsed_movies_history_phase1, parsed_movies_history_phase2,
+        )
+
+    return _fetch_all_index_pages_sequential(
+        session=session, start_page=start_page, end_page=end_page,
+        parse_all=parse_all, phase_mode=phase_mode, custom_url=custom_url,
+        ignore_release_date=ignore_release_date, use_proxy=use_proxy,
+        use_cf_bypass=use_cf_bypass,
+        max_consecutive_empty=max_consecutive_empty,
+        output_csv=output_csv, output_dated_dir=output_dated_dir,
+        csv_path=csv_path, user_specified_output=user_specified_output,
+        parsed_movies_history_phase1=parsed_movies_history_phase1,
+        parsed_movies_history_phase2=parsed_movies_history_phase2,
+    )
+
+
+def _fetch_all_index_pages_sequential(
+    session, start_page: int, end_page: int, parse_all: bool,
+    phase_mode: str, custom_url: Optional[str], ignore_release_date: bool,
+    use_proxy: bool, use_cf_bypass: bool, max_consecutive_empty: int,
+    output_csv: str, output_dated_dir: str, csv_path: str,
+    user_specified_output: bool,
+    parsed_movies_history_phase1: dict, parsed_movies_history_phase2: dict,
+) -> dict:
+    """Original sequential index fetch logic."""
+
     all_index_results_phase1: list = []
     all_index_results_phase2: list = []
     any_proxy_banned = False
     last_valid_page = 0
-
-    logger.info("=" * 75)
-    logger.info("Fetching and parsing index pages")
-    logger.info("=" * 75)
 
     page_num = start_page
     consecutive_empty_pages = 0
@@ -135,9 +180,35 @@ def fetch_all_index_pages(
             break
 
         page_num += 1
-        time.sleep(PAGE_SLEEP)
+        movie_sleep_mgr.sleep()
 
     logger.info(f"Fetched and parsed {last_valid_page - start_page + 1 if last_valid_page >= start_page else 0} pages")
+
+    return _post_process_index_results(
+        {
+            'all_index_results_phase1': all_index_results_phase1,
+            'all_index_results_phase2': all_index_results_phase2,
+            'any_proxy_banned': any_proxy_banned,
+            'use_proxy': use_proxy,
+            'use_cf_bypass': use_cf_bypass,
+            'csv_path': csv_path,
+            'last_valid_page': last_valid_page,
+        },
+        custom_url,
+        parsed_movies_history_phase1,
+        parsed_movies_history_phase2,
+    )
+
+
+def _post_process_index_results(
+    idx_result: dict,
+    custom_url: Optional[str],
+    parsed_movies_history_phase1: dict,
+    parsed_movies_history_phase2: dict,
+) -> dict:
+    """Estimate processing volume and apply the sleep volume multiplier."""
+    all_p1 = idx_result['all_index_results_phase1']
+    all_p2 = idx_result['all_index_results_phase2']
 
     def _should_pre_skip(e, history):
         if has_complete_subtitles(e['href'], history):
@@ -153,20 +224,15 @@ def fetch_all_index_pages(
         return False
 
     _est_skip = sum(
-        1 for e in all_index_results_phase1 if _should_pre_skip(e, parsed_movies_history_phase1)
+        1 for e in all_p1 if _should_pre_skip(e, parsed_movies_history_phase1)
     ) + sum(
-        1 for e in all_index_results_phase2 if _should_pre_skip(e, parsed_movies_history_phase2)
+        1 for e in all_p2 if _should_pre_skip(e, parsed_movies_history_phase2)
     )
-    _est_n = len(all_index_results_phase1) + len(all_index_results_phase2) - _est_skip
-    logger.info(f"Estimated processing volume: N={_est_n} (total={len(all_index_results_phase1)+len(all_index_results_phase2)}, pre-skip={_est_skip})")
+    _est_n = len(all_p1) + len(all_p2) - _est_skip
+    logger.info(
+        "Estimated processing volume: N=%d (total=%d, pre-skip=%d)",
+        _est_n, len(all_p1) + len(all_p2), _est_skip,
+    )
     movie_sleep_mgr.apply_volume_multiplier(_est_n)
 
-    return {
-        'all_index_results_phase1': all_index_results_phase1,
-        'all_index_results_phase2': all_index_results_phase2,
-        'any_proxy_banned': any_proxy_banned,
-        'use_proxy': use_proxy,
-        'use_cf_bypass': use_cf_bypass,
-        'csv_path': csv_path,
-        'last_valid_page': last_valid_page,
-    }
+    return idx_result
