@@ -41,8 +41,10 @@ impl ProxyInfoInner {
         self.successful_requests += 1;
         self.total_requests += 1;
         self.failures = 0;
-        self.is_available = true;
-        self.cooldown_until = None;
+        if !self.banned {
+            self.is_available = true;
+            self.cooldown_until = None;
+        }
     }
 
     pub fn mark_failure(&mut self, cooldown_seconds: i64) {
@@ -368,7 +370,7 @@ impl ProxyPool {
         let len = pool.proxies.len();
         for _ in 0..len {
             let proxy = pool.proxies[pool.current_index].lock();
-            if proxy.is_available && !proxy.is_in_cooldown() {
+            if proxy.is_available && !proxy.banned && !proxy.is_in_cooldown() {
                 return Some(proxy.get_proxies_dict());
             }
             drop(proxy);
@@ -396,7 +398,7 @@ impl ProxyPool {
             .iter()
             .filter(|p| {
                 let proxy = p.lock();
-                proxy.is_available && !proxy.is_in_cooldown()
+                proxy.is_available && !proxy.banned && !proxy.is_in_cooldown()
             })
             .count();
         if available == 0 {
@@ -408,7 +410,7 @@ impl ProxyPool {
         for _ in 0..len {
             pool.current_index = (pool.current_index + 1) % len;
             let proxy = pool.proxies[pool.current_index].lock();
-            if proxy.is_available && !proxy.is_in_cooldown() {
+            if proxy.is_available && !proxy.banned && !proxy.is_in_cooldown() {
                 debug!("Round-robin selected proxy: {}", proxy.name);
                 return Some(proxy.get_proxies_dict());
             }
