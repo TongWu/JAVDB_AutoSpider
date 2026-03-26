@@ -14,7 +14,7 @@ runs:
       uses: actions/cache@v5
       with:
         path: /tmp/rust-wheel
-        key: rust-wheel-${{ runner.os }}-${{ hashFiles('packages/rust/javdb_rust_core/src/**', 'packages/rust/javdb_rust_core/Cargo.toml', 'packages/rust/javdb_rust_core/Cargo.lock') }}
+        key: rust-wheel-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/rust/javdb_rust_core/src/**', 'packages/rust/javdb_rust_core/Cargo.toml', 'packages/rust/javdb_rust_core/Cargo.lock') }}
 
     - name: Install from cached wheel
       if: steps.wheel-cache.outputs.cache-hit == 'true'
@@ -35,9 +35,9 @@ runs:
           ~/.cargo/registry
           ~/.cargo/git
           packages/rust/javdb_rust_core/target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('packages/rust/javdb_rust_core/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('packages/rust/javdb_rust_core/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-cargo-
+          ${{ runner.os }}-${{ runner.arch }}-cargo-
 
     - name: Build Rust extension wheel
       if: steps.wheel-cache.outputs.cache-hit != 'true'
