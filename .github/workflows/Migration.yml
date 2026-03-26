@@ -94,7 +94,7 @@ on:
       runner:
         description: 'Runner type'
         required: false
-        default: 'ubuntu-latest'
+        default: 'self-hosted'
         type: choice
         options:
           - 'ubuntu-latest'
