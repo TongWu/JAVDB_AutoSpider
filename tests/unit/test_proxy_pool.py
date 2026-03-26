@@ -588,3 +588,42 @@ class TestProxyPoolBanProxy:
 
         assert pool.proxies[0].banned is True
         assert pool.proxies[0].is_available is False
+
+    def test_mark_success_does_not_revive_banned_proxy(self):
+        """mark_success on a banned proxy must not reset is_available."""
+        pool = ProxyPool()
+        pool.add_proxy(http_url="http://revive1:8080", name="revive-1")
+        pool.add_proxy(http_url="http://revive2:8080", name="revive-2")
+
+        pool.ban_proxy("revive-1")
+        pool.proxies[0].mark_success()
+
+        assert pool.proxies[0].banned is True
+        assert pool.proxies[0].is_available is False
+
+    def test_get_current_proxy_skips_banned(self):
+        """get_current_proxy must never return a banned proxy."""
+        pool = ProxyPool()
+        pool.add_proxy(http_url="http://skip-ban1:8080", name="skip-ban-1")
+        pool.add_proxy(http_url="http://skip-ban2:8080", name="skip-ban-2")
+
+        pool.ban_proxy("skip-ban-1")
+        # Force is_available back to True to simulate the former bug path
+        pool.proxies[0].is_available = True
+
+        result = pool.get_current_proxy()
+        assert result == {"http": "http://skip-ban2:8080"}
+
+    def test_get_next_proxy_skips_banned(self):
+        """get_next_proxy must never return a banned proxy."""
+        pool = ProxyPool()
+        pool.add_proxy(http_url="http://skip-next1:8080", name="skip-next-1")
+        pool.add_proxy(http_url="http://skip-next2:8080", name="skip-next-2")
+        pool.add_proxy(http_url="http://skip-next3:8080", name="skip-next-3")
+
+        pool.ban_proxy("skip-next-2")
+        pool.proxies[1].is_available = True
+
+        results = [pool.get_next_proxy() for _ in range(4)]
+        banned_dict = {"http": "http://skip-next2:8080"}
+        assert banned_dict not in results
