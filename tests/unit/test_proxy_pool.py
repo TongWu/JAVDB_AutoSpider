@@ -520,7 +520,7 @@ class TestProxyPoolBanProxy:
     """Test cases for ProxyPool.ban_proxy() method."""
 
     def test_ban_proxy_immediately_bans_and_switches(self):
-        """ban_proxy should put target into cooldown and switch to next."""
+        """ban_proxy should permanently ban target and switch to next."""
         pool = ProxyPool(max_failures_before_cooldown=5)
         pool.add_proxy(http_url="http://ban-imm1:8080", name="ban-imm-1")
         pool.add_proxy(http_url="http://ban-imm2:8080", name="ban-imm-2")
@@ -528,7 +528,8 @@ class TestProxyPoolBanProxy:
         result = pool.ban_proxy("ban-imm-1")
 
         assert result is True
-        assert pool.proxies[0].is_in_cooldown()
+        assert pool.proxies[0].banned is True
+        assert pool.proxies[0].is_available is False
         assert pool.current_index == 1
 
     def test_ban_proxy_records_in_ban_manager(self):
@@ -558,7 +559,8 @@ class TestProxyPoolBanProxy:
         result = pool.ban_proxy("ban-solo-proxy")
 
         assert result is False
-        assert pool.proxies[0].is_in_cooldown()
+        assert pool.proxies[0].banned is True
+        assert pool.proxies[0].is_available is False
 
     def test_ban_proxy_by_current_proxy(self):
         """ban_proxy with None should ban the current proxy."""
@@ -569,5 +571,20 @@ class TestProxyPoolBanProxy:
         result = pool.ban_proxy(None)
 
         assert result is True
-        assert pool.proxies[0].is_in_cooldown()
+        assert pool.proxies[0].banned is True
+        assert pool.proxies[0].is_available is False
         assert pool.current_index == 1
+
+    def test_banned_proxy_never_recovers(self):
+        """Banned proxies must not recover from cooldown checks."""
+        pool = ProxyPool()
+        pool.add_proxy(http_url="http://perm-ban:8080", name="perm-ban-proxy")
+        pool.add_proxy(http_url="http://avail:8080", name="avail-proxy")
+
+        pool.ban_proxy("perm-ban-proxy")
+
+        result = pool.get_current_proxy()
+        assert result is not None
+
+        assert pool.proxies[0].banned is True
+        assert pool.proxies[0].is_available is False
