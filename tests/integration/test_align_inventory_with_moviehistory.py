@@ -236,6 +236,7 @@ def test_run_alignment_skips_empty_auxiliary_reports(monkeypatch, temp_dir):
         'ABC-123': [{'VideoCode': 'ABC-123'}],
     })
     monkeypatch.setattr(mod, 'init_db', lambda *args, **kwargs: None)
+    monkeypatch.setattr(mod, 'db_load_align_no_exact_match_codes', lambda: set())
     monkeypatch.setattr(mod.spider_state, 'setup_proxy_pool', lambda **kwargs: None)
     monkeypatch.setattr(mod.spider_state, 'initialize_request_handler', lambda: None)
     monkeypatch.setattr(mod, 'cfg', lambda key, default=None: temp_dir if key == 'REPORTS_DIR' else default)
@@ -291,3 +292,74 @@ def test_run_alignment_skips_empty_auxiliary_reports(monkeypatch, temp_dir):
     assert summary['files']['purge_plan_csv'] == ''
     assert not list(Path(temp_dir).rglob('InventoryHistoryAlign_QBUpgrade_*.csv'))
     assert not list(Path(temp_dir).rglob('InventoryHistoryAlign_PurgePlan_*.csv'))
+
+
+# ── compute_missing_codes: skip_codes ────────────────────────────────────
+
+def test_compute_missing_codes_skips_no_exact_match_codes():
+    inventory = {
+        'ABC-123': [{'VideoCode': 'ABC-123'}],
+        'DEF-456': [{'VideoCode': 'DEF-456'}],
+        'GHI-789': [{'VideoCode': 'GHI-789'}],
+    }
+    history = {}
+    missing = compute_missing_codes(
+        inventory, history, skip_codes={'DEF-456'},
+    )
+    assert missing == ['ABC-123', 'GHI-789']
+
+
+def test_compute_missing_codes_skip_codes_normalises_case():
+    inventory = {'ABC-123': [{}], 'DEF-456': [{}]}
+    missing = compute_missing_codes(
+        inventory, {}, skip_codes={'abc-123'},
+    )
+    assert missing == ['DEF-456']
+
+
+def test_compute_missing_codes_skip_and_only_codes_combined():
+    inventory = {
+        'A-001': [{}], 'B-002': [{}], 'C-003': [{}],
+    }
+    missing = compute_missing_codes(
+        inventory, {},
+        only_codes=['A-001', 'B-002'],
+        skip_codes={'B-002'},
+    )
+    assert missing == ['A-001']
+
+
+# ── DB helpers: InventoryAlignNoExactMatch ───────────────────────────────
+
+def test_db_align_no_exact_match_roundtrip(temp_dir):
+    import sqlite3
+    from packages.python.javdb_platform.db import (
+        db_upsert_align_no_exact_match,
+        db_load_align_no_exact_match_codes,
+        db_delete_align_no_exact_match,
+        _OPERATIONS_DDL,
+    )
+
+    db_path = os.path.join(temp_dir, 'ops_test.db')
+    conn = sqlite3.connect(db_path)
+    conn.executescript(_OPERATIONS_DDL)
+    conn.commit()
+    conn.close()
+
+    assert db_load_align_no_exact_match_codes(db_path=db_path) == set()
+
+    db_upsert_align_no_exact_match('abc-123', db_path=db_path)
+    db_upsert_align_no_exact_match('DEF-456', reason='custom', db_path=db_path)
+
+    codes = db_load_align_no_exact_match_codes(db_path=db_path)
+    assert codes == {'ABC-123', 'DEF-456'}
+
+    db_upsert_align_no_exact_match('abc-123', reason='updated', db_path=db_path)
+    codes = db_load_align_no_exact_match_codes(db_path=db_path)
+    assert codes == {'ABC-123', 'DEF-456'}
+
+    db_delete_align_no_exact_match('ABC-123', db_path=db_path)
+    assert db_load_align_no_exact_match_codes(db_path=db_path) == {'DEF-456'}
+
+    db_delete_align_no_exact_match('nonexistent', db_path=db_path)
+    assert db_load_align_no_exact_match_codes(db_path=db_path) == {'DEF-456'}
