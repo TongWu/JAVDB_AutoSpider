@@ -16,6 +16,87 @@ from packages.python.javdb_spider.runtime.config import (
 logger = get_logger(__name__)
 
 
+def validate_index_html(html: str, page_num: int = 0, context_msg: str = ''):
+    """Validate index page HTML and classify the result.
+
+    Tries the fast Rust validator first, then falls back to a full
+    BeautifulSoup parse when the Rust layer returns negative.
+
+    Returns:
+        (html_or_none, has_movie_list, is_valid_empty)
+        - ``html_or_none``: the original *html* on success / valid-empty,
+          ``None`` when validation fails completely.
+        - ``has_movie_list``: ``True`` if a non-empty movie list was found.
+        - ``is_valid_empty``: ``True`` if the page is structurally valid
+          but contains no entries (end-of-pagination, empty category, etc.).
+    """
+    has_movie_list, is_valid_empty = _validate_index_html_fast(html)
+    if has_movie_list:
+        logger.debug("[Page %d] Success: %s", page_num, context_msg)
+        return html, True, False
+    if is_valid_empty:
+        logger.info("[Page %d] Valid empty page detected: %s", page_num, context_msg)
+        return html, False, True
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html, 'html.parser')
+    movie_list = soup.find('div', class_=lambda x: x and 'movie-list' in x)
+    if movie_list:
+        movie_items = movie_list.find_all('div', class_='item')
+        if len(movie_items) > 0:
+            logger.debug(
+                "[Page %d] Success: %s - Found %d movie items",
+                page_num, context_msg, len(movie_items),
+            )
+            return html, True, False
+        else:
+            logger.info(
+                "[Page %d] movie-list exists but is empty (0 items) "
+                "- treating as valid empty page", page_num,
+            )
+            return html, False, True
+
+    page_text = soup.get_text()
+    title = soup.find('title')
+    title_text = title.text.strip() if title else ""
+    age_modal = soup.find('div', class_='modal is-active over18-modal')
+    empty_message_div = soup.find('div', class_='empty-message')
+    has_no_content_msg = (
+        'No content yet' in page_text or
+        'No result' in page_text or
+        '暫無內容' in page_text or
+        '暂无内容' in page_text or
+        empty_message_div is not None
+    )
+
+    if empty_message_div is not None:
+        empty_msg_text = empty_message_div.get_text().strip()
+        logger.info(
+            "[Page %d] Page exists but has no content (empty-message: '%s')",
+            page_num, empty_msg_text,
+        )
+        return html, False, True
+    if not age_modal and has_no_content_msg:
+        logger.info(
+            "[Page %d] Page exists but has no content (text pattern detected)",
+            page_num,
+        )
+        return html, False, True
+    if not age_modal and len(html) > 20000:
+        logger.debug(
+            "[Page %d] Large HTML without movie list, treating as empty page",
+            page_num,
+        )
+        return html, False, True
+
+    logger.debug(
+        "[Page %d] Validation failed (no movie list, title='%s', "
+        "age_modal=%s): %s",
+        page_num, title_text, age_modal is not None, context_msg,
+    )
+    return None, False, False
+
+
 class AdhocLoginFailedError(Exception):
     """Raised when login fails on an index page in adhoc mode, causing the spider to abort."""
     pass
@@ -47,54 +128,12 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
     def _validate_index_html(html, context_msg):
         """Validate index page HTML. Returns (html, has_movie_list, is_valid_empty)."""
         nonlocal last_failed_html
-
-        has_movie_list, is_valid_empty = _validate_index_html_fast(html)
-        if has_movie_list:
-            logger.debug(f"[Page {page_num}] Success: {context_msg}")
-            return html, True, False
-        if is_valid_empty:
-            logger.info(f"[Page {page_num}] Valid empty page detected: {context_msg}")
-            return html, False, True
-
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(html, 'html.parser')
-        movie_list = soup.find('div', class_=lambda x: x and 'movie-list' in x)
-        if movie_list:
-            movie_items = movie_list.find_all('div', class_='item')
-            if len(movie_items) > 0:
-                logger.debug(f"[Page {page_num}] Success: {context_msg} - Found {len(movie_items)} movie items")
-                return html, True, False
-            else:
-                logger.info(f"[Page {page_num}] movie-list exists but is empty (0 items) - treating as valid empty page")
-                return html, False, True
-        else:
-            page_text = soup.get_text()
-            title = soup.find('title')
-            title_text = title.text.strip() if title else ""
-            age_modal = soup.find('div', class_='modal is-active over18-modal')
-            empty_message_div = soup.find('div', class_='empty-message')
-            has_no_content_msg = (
-                'No content yet' in page_text or
-                'No result' in page_text or
-                '暫無內容' in page_text or
-                '暂无内容' in page_text or
-                empty_message_div is not None
-            )
-
-            if empty_message_div is not None:
-                empty_msg_text = empty_message_div.get_text().strip()
-                logger.info(f"[Page {page_num}] Page exists but has no content (empty-message: '{empty_msg_text}')")
-                return html, False, True
-            elif not age_modal and has_no_content_msg:
-                logger.info(f"[Page {page_num}] Page exists but has no content (text pattern detected)")
-                return html, False, True
-            elif not age_modal and len(html) > 20000:
-                logger.debug(f"[Page {page_num}] Large HTML without movie list, treating as empty page")
-                return html, False, True
-            else:
-                last_failed_html = html
-                logger.debug(f"[Page {page_num}] Validation failed (no movie list, title='{title_text}', age_modal={age_modal is not None}): {context_msg}")
-        return None, False, False
+        result_html, has_movie_list, is_valid_empty = validate_index_html(
+            html, page_num=page_num, context_msg=context_msg,
+        )
+        if result_html is None:
+            last_failed_html = html
+        return result_html, has_movie_list, is_valid_empty
 
     def try_fetch(u_proxy, u_cf, context_msg):
         nonlocal last_failed_html

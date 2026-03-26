@@ -292,6 +292,7 @@ def main():
             csv_path=csv_path, user_specified_output=bool(args.output_file),
             parsed_movies_history_phase1=parsed_movies_history_phase1,
             parsed_movies_history_phase2=parsed_movies_history_phase2,
+            use_parallel=use_parallel,
         )
     except AdhocLoginFailedError as e:
         logger.error(f"ADHOC SPIDER FAILED: Login failed during index page fetch — {e}")
@@ -398,9 +399,8 @@ def main():
     if phase_mode in ['2', 'all']:
         if phase_mode == 'all':
             if total_entries_phase1 > 0:
-                t = movie_sleep_mgr.get_sleep_time()
-                logger.info(f"Phase transition cooldown: {t}s before Phase 2")
-                time.sleep(t)
+                t = movie_sleep_mgr.sleep()
+                logger.info("Phase transition cooldown: %.1fs before Phase 2", t)
             else:
                 logger.info("Phase 1 had no entries to process, skipping phase transition cooldown")
 
