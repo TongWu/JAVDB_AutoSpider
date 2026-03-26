@@ -144,7 +144,6 @@ def create_workers(
                 coordinator=coord,
                 sleep_min=0.01,
                 sleep_max=0.02,
-                ban_log_file="",
                 penalty_tracker=shared_pt,
                 throttle=shared_dwt,
             )

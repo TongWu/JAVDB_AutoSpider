@@ -81,7 +81,7 @@ class TestEngineSimpleMode:
 
         engine = FetchEngine.simple(
             parse_fn=fake_parse, use_cookie=False,
-            ban_log_file='', sleep_min=0.01, sleep_max=0.02,
+            sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
         _patch_workers(engine, lambda url, _cf, _h=html_pages: _h.get(url))
@@ -103,7 +103,7 @@ class TestEngineSimpleMode:
 
         engine = FetchEngine.simple(
             parse_fn=lambda html, task: None,
-            use_cookie=False, ban_log_file='',
+            use_cookie=False,
             sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
@@ -125,7 +125,7 @@ class TestEngineSimpleMode:
 
         engine = FetchEngine.simple(
             parse_fn=lambda html, task: {'code': task.meta.get('code')},
-            use_cookie=False, ban_log_file='',
+            use_cookie=False,
             sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
@@ -155,7 +155,7 @@ class TestEngineAdvancedMode:
 
         engine = FetchEngine(
             process_fn=process, use_cookie=False,
-            ban_log_file='', sleep_min=0.01, sleep_max=0.02,
+            sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
         _patch_workers(engine, lambda url, _cf: '<html>ok</html>')
@@ -194,7 +194,7 @@ class TestEngineLoginDetection:
 
         engine = FetchEngine.simple(
             parse_fn=lambda html, task: {'ok': True},
-            use_cookie=True, ban_log_file='',
+            use_cookie=True,
             sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
@@ -225,7 +225,7 @@ class TestEngineCFBypassFallback:
 
         engine = FetchEngine.simple(
             parse_fn=fake_parse, use_cookie=False,
-            ban_log_file='', sleep_min=0.01, sleep_max=0.02,
+            sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
 
@@ -252,7 +252,7 @@ class TestEngineShutdown:
 
         engine = FetchEngine(
             process_fn=lambda ctx, task: time.sleep(10) or {'ok': True},
-            use_cookie=False, ban_log_file='',
+            use_cookie=False,
             sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
@@ -270,7 +270,7 @@ class TestEngineShutdown:
 
         engine = FetchEngine(
             process_fn=lambda ctx, task: {'ok': True},
-            use_cookie=False, ban_log_file='',
+            use_cookie=False,
             sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
@@ -295,7 +295,7 @@ class TestEngineSubmitTask:
 
         engine = FetchEngine(
             process_fn=lambda ctx, task: task.meta,
-            use_cookie=False, ban_log_file='',
+            use_cookie=False,
             sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
@@ -354,7 +354,7 @@ class TestEngineProxyBanned:
 
         engine = FetchEngine.simple(
             parse_fn=lambda html, task: {'ok': True},
-            use_cookie=False, ban_log_file='',
+            use_cookie=False,
             sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
@@ -391,7 +391,6 @@ class TestParallelBackendCompatibility:
         backend = ParallelFetchBackend.simple(
             parse_fn=fake_parse,
             use_cookie=False,
-            ban_log_file='',
             sleep_min=0.01,
             sleep_max=0.02,
         )
@@ -411,7 +410,6 @@ class TestParallelBackendCompatibility:
         engine = FetchEngine.simple(
             parse_fn=fake_parse,
             use_cookie=False,
-            ban_log_file='',
             sleep_min=0.01,
             sleep_max=0.02,
         )
