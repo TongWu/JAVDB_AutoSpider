@@ -273,6 +273,8 @@ def test_run_alignment_skips_empty_auxiliary_reports(monkeypatch, temp_dir):
         execute_delete=False,
         no_proxy=True,
         use_proxy=False,
+        no_login=False,
+        shuffle=False,
     )
 
     rc = run_alignment(args)
@@ -363,3 +365,44 @@ def test_db_align_no_exact_match_roundtrip(temp_dir):
 
     db_delete_align_no_exact_match('nonexistent', db_path=db_path)
     assert db_load_align_no_exact_match_codes(db_path=db_path) == {'DEF-456'}
+
+
+# ── parse_args: --no-login / --shuffle ───────────────────────────────────
+
+def test_parse_args_no_login_defaults_false(monkeypatch):
+    monkeypatch.setattr(sys, 'argv', ['align_inventory_with_moviehistory.py'])
+    args = parse_args()
+    assert args.no_login is False
+
+
+def test_parse_args_no_login_flag(monkeypatch):
+    monkeypatch.setattr(sys, 'argv', ['align_inventory_with_moviehistory.py', '--no-login'])
+    args = parse_args()
+    assert args.no_login is True
+
+
+def test_parse_args_shuffle_defaults_false(monkeypatch):
+    monkeypatch.setattr(sys, 'argv', ['align_inventory_with_moviehistory.py'])
+    args = parse_args()
+    assert args.shuffle is False
+
+
+def test_parse_args_shuffle_flag(monkeypatch):
+    monkeypatch.setattr(sys, 'argv', ['align_inventory_with_moviehistory.py', '--shuffle'])
+    args = parse_args()
+    assert args.shuffle is True
+
+
+# ── shuffle: randomises missing codes order ──────────────────────────────
+
+def test_shuffle_changes_order_before_limit():
+    import random
+
+    inventory = {f'CODE-{i:03d}': [{}] for i in range(20)}
+    sorted_codes = compute_missing_codes(inventory, {})
+    assert sorted_codes == sorted(sorted_codes)
+
+    shuffled = list(sorted_codes)
+    rng = random.Random(42)
+    rng.shuffle(shuffled)
+    assert shuffled != sorted_codes

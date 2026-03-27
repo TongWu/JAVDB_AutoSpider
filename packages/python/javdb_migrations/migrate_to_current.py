@@ -107,6 +107,16 @@ def main() -> int:
         help=argparse.SUPPRESS,
     )
     parser.add_argument(
+        "--align-no-login",
+        action="store_true",
+        help="Alignment: skip movies requiring JavDB login instead of attempting authentication",
+    )
+    parser.add_argument(
+        "--align-shuffle",
+        action="store_true",
+        help="Alignment: randomise processing queue to avoid consecutive failures on similar prefixes",
+    )
+    parser.add_argument(
         "--align-enqueue-qb",
         action="store_true",
         help="Alignment: enqueue upgrade magnets to qBittorrent",
@@ -206,6 +216,8 @@ def main() -> int:
             limit=args.align_limit,
             codes=args.align_codes,
             use_proxy=not args.align_no_proxy,
+            no_login=args.align_no_login,
+            shuffle=args.align_shuffle,
             output_dir=align_output_dir,
             enqueue_qb=args.align_enqueue_qb,
             qb_category=args.align_qb_category,
