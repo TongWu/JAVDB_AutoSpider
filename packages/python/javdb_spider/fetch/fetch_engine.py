@@ -224,6 +224,7 @@ class WorkerContext:
             self._last_used_cf = False
             return html
 
+        worker._sleep_mgr.sleep()
         html = worker._fetch_html(url, True)
         if html:
             if is_login_page(html):
@@ -328,6 +329,7 @@ class _EngineWorker(threading.Thread):
                 proxy_https=proxy_config.get('https'),
                 proxy_modules=['all'],
                 proxy_mode='single',
+                between_attempt_sleep=self._sleep_mgr.sleep,
             ),
             penalty_tracker=penalty_tracker,
         )

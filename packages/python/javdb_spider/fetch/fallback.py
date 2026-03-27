@@ -12,8 +12,14 @@ from packages.python.javdb_spider.runtime.config import (
     BASE_URL,
     PROXY_MODE, PROXY_POOL_MAX_FAILURES,
 )
+from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _sleep_mgr
 
 logger = get_logger(__name__)
+
+
+def _sleep_between_fetches() -> None:
+    """Full adaptive sleep between consecutive top-level fetch attempts."""
+    _sleep_mgr.sleep()
 
 
 def validate_index_html(html: str, page_num: int = 0, context_msg: str = ''):
@@ -149,6 +155,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
                         logger.info(f"[Page {page_num}] Attempting login refresh due to login page...")
                         login_ok, _, _proxy = attempt_login_refresh()
                         if login_ok:
+                            _sleep_between_fetches()
                             html = state.get_page(page_url, session, use_cookie=use_cookie,
                                                   use_proxy=u_proxy, module_name='spider',
                                                   max_retries=1, use_cf_bypass=u_cf)
@@ -200,6 +207,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
                 True, False, f"Index: Proxy={proxy_name} Direct")
             if success or is_valid_empty:
                 return html, success, is_valid_empty, False, False
+            _sleep_between_fetches()
             html, success, is_valid_empty = try_fetch(
                 True, True, f"Index: Proxy={proxy_name} + CF Bypass")
             if success or is_valid_empty:
@@ -225,6 +233,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
         if is_valid_empty:
             return html, False, False, True, initial_cf, True
         if not initial_cf:
+            _sleep_between_fetches()
             html, success, is_valid_empty = phase0_try(
                 True, True,
                 f"Index: Proxy={current_proxy_name} + CF Bypass")
@@ -252,6 +261,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
         login_success, _new_cookie, _proxy = attempt_login_refresh()
         if login_success and use_proxy and state.global_proxy_pool:
             current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
+            _sleep_between_fetches()
             html, success, is_valid_empty, used_cf, _banned = try_proxy_direct_then_cf(current_proxy_name)
             if success:
                 logger.info(f"[Page {page_num}] Login refresh + retry succeeded (Proxy={current_proxy_name}, CF={used_cf})")
@@ -262,6 +272,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
                 proxy_was_banned = True
             logger.warning(f"[Page {page_num}] Login refresh completed but index page still failed")
         elif login_success and not use_proxy:
+            _sleep_between_fetches()
             html, success, is_valid_empty = try_fetch(
                 False, use_cf_bypass,
                 "Fallback: Retry with refreshed cookie (No Proxy)")
@@ -295,6 +306,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
                 proxy_was_banned = True
 
     for _ in range(max_switches):
+        _sleep_between_fetches()
         current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
         html, success, is_valid_empty, used_cf, banned = try_proxy_direct_then_cf(current_proxy_name)
         if success:
@@ -342,6 +354,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
                         logger.info(f"[{entry_index}] Attempting login refresh due to login page...")
                         login_ok, _, _proxy = attempt_login_refresh()
                         if login_ok:
+                            _sleep_between_fetches()
                             html = state.get_page(detail_url, session, use_cookie=use_cookie,
                                                   use_proxy=u_proxy, module_name='spider',
                                                   max_retries=1, use_cf_bypass=u_cf)
@@ -391,6 +404,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
                 skip_sleep=skip_sleep)
             if success:
                 return magnets, actor_info, ag, al, sup, True, False, False
+            _sleep_between_fetches()
             magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
                 True, True,
                 f"Detail: Proxy={proxy_name} + CF Bypass",
@@ -414,6 +428,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
         if success:
             return magnets, actor_info, ag, al, sup, True, True, initial_cf
         if not initial_cf:
+            _sleep_between_fetches()
             magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
                 True, True,
                 f"Detail: Proxy={current_proxy_name} + CF Bypass",
@@ -440,6 +455,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
         login_success, _new_cookie, _proxy = attempt_login_refresh()
         if login_success and use_proxy and state.global_proxy_pool:
             current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
+            _sleep_between_fetches()
             magnets, actor_info, ag, al, sup, success, used_cf, _banned = try_proxy_direct_then_cf(
                 current_proxy_name, skip_sleep=True)
             if success:
@@ -447,6 +463,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
                 return magnets, actor_info, ag, al, sup, True, True, used_cf
             logger.warning(f"[{entry_index}] Login refresh completed but detail page still failed")
         elif login_success and not use_proxy:
+            _sleep_between_fetches()
             magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
                 False, use_cf_bypass,
                 "Detail: Retry with refreshed cookie (No Proxy)",
@@ -473,6 +490,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
             logger.warning(f"[{entry_index}] No more proxies available in pool")
             break
         current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
+        _sleep_between_fetches()
         magnets, actor_info, ag, al, sup, success, used_cf, banned = try_proxy_direct_then_cf(
             current_proxy_name, skip_sleep=True)
         if success:
