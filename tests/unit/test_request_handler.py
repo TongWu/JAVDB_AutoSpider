@@ -51,6 +51,7 @@ class TestRequestConfig:
         assert config.proxy_https is None
         assert config.proxy_modules == ['spider']
         assert config.proxy_mode == 'single'
+        assert config.between_attempt_sleep is None
     
     def test_custom_values(self):
         """Test custom configuration values."""
@@ -1053,3 +1054,94 @@ class TestProxyBanDetection:
             )
 
         mock_pool.ban_proxy.assert_called_once_with('proxy-1')
+
+
+class TestPauseBetweenAttempts:
+    """Test _pause_between_attempts with and without injected callable."""
+
+    def test_uses_injected_callable(self):
+        call_count = 0
+
+        def fake_sleep():
+            nonlocal call_count
+            call_count += 1
+            return 0.0
+
+        handler = RequestHandler(
+            config=RequestConfig(between_attempt_sleep=fake_sleep)
+        )
+        handler._pause_between_attempts(legacy_seconds=30)
+        assert call_count == 1
+
+    @patch('packages.python.javdb_platform.request_handler.time.sleep')
+    def test_legacy_fallback(self, mock_sleep):
+        handler = RequestHandler(config=RequestConfig(between_attempt_sleep=None))
+        handler._pause_between_attempts(legacy_seconds=5)
+        mock_sleep.assert_called_once_with(5)
+
+    @patch('packages.python.javdb_platform.request_handler.time.sleep')
+    def test_legacy_zero_skips_sleep(self, mock_sleep):
+        handler = RequestHandler(config=RequestConfig(between_attempt_sleep=None))
+        handler._pause_between_attempts(legacy_seconds=0)
+        mock_sleep.assert_not_called()
+
+    @patch.object(RequestHandler, '_fetch_direct')
+    def test_cf_fallback_calls_injected_sleep(self, mock_fetch):
+        """CF bypass fallback steps should invoke injected sleep, not time.sleep."""
+        call_count = 0
+
+        def counting_sleep():
+            nonlocal call_count
+            call_count += 1
+            return 0.0
+
+        mock_fetch.return_value = (None, False, False)
+        config = RequestConfig(
+            cf_bypass_enabled=True,
+            fallback_cooldown=30,
+            between_attempt_sleep=counting_sleep,
+        )
+        handler = RequestHandler(config=config)
+
+        with patch.object(handler, '_fetch_with_cf_bypass',
+                          return_value=('<html>small</html>', False, False)):
+            handler.get_page(
+                'http://test.com',
+                use_proxy=False,
+                use_cf_bypass=True,
+                module_name='test',
+                max_retries=1,
+            )
+
+        assert call_count >= 1, "injected sleep should be called during CF fallback"
+
+    @patch.object(RequestHandler, '_fetch_direct')
+    def test_turnstile_retry_calls_injected_sleep(self, mock_fetch):
+        """Turnstile retry in _get_page_direct should use injected sleep."""
+        call_count = 0
+
+        def counting_sleep():
+            nonlocal call_count
+            call_count += 1
+            return 0.0
+
+        mock_fetch.side_effect = [
+            ('<html>Security Verification turnstile</html>', False, True),
+            ('<html>' + 'x' * 15000 + '</html>', True, False),
+        ]
+        config = RequestConfig(
+            cf_turnstile_cooldown=10,
+            between_attempt_sleep=counting_sleep,
+        )
+        handler = RequestHandler(config=config)
+
+        result = handler.get_page(
+            'http://test.com',
+            use_proxy=False,
+            use_cf_bypass=False,
+            module_name='test',
+            max_retries=3,
+        )
+
+        assert result is not None
+        assert call_count >= 1, "injected sleep should be called on Turnstile retry"
