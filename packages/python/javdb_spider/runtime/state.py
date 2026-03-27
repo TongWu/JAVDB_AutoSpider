@@ -157,6 +157,7 @@ def initialize_request_handler():
         proxy_https=PROXY_HTTPS,
         proxy_modules=PROXY_MODULES,
         proxy_mode=PROXY_MODE,
+        between_attempt_sleep=_mgr.sleep,
     )
     global_request_handler = RequestHandler(
         proxy_pool=global_proxy_pool, config=config, penalty_tracker=_pt,
