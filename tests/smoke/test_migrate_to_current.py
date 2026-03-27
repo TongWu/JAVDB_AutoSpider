@@ -88,3 +88,51 @@ def test_main_align_inventory_rejects_conflicting_proxy_flags(monkeypatch):
 
     with pytest.raises(SystemExit):
         migrate_to_current.main()
+
+
+def test_main_align_no_login_passed_through(monkeypatch):
+    calls = _install_main_stubs(monkeypatch)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        ['migrate_to_current.py', '--skip-schema', '--align-inventory-history', '--align-no-login'],
+    )
+
+    assert migrate_to_current.main() == 0
+    assert calls['align_args'].no_login is True
+
+
+def test_main_align_no_login_defaults_false(monkeypatch):
+    calls = _install_main_stubs(monkeypatch)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        ['migrate_to_current.py', '--skip-schema', '--align-inventory-history'],
+    )
+
+    assert migrate_to_current.main() == 0
+    assert calls['align_args'].no_login is False
+
+
+def test_main_align_shuffle_passed_through(monkeypatch):
+    calls = _install_main_stubs(monkeypatch)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        ['migrate_to_current.py', '--skip-schema', '--align-inventory-history', '--align-shuffle'],
+    )
+
+    assert migrate_to_current.main() == 0
+    assert calls['align_args'].shuffle is True
+
+
+def test_main_align_shuffle_defaults_false(monkeypatch):
+    calls = _install_main_stubs(monkeypatch)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        ['migrate_to_current.py', '--skip-schema', '--align-inventory-history'],
+    )
+
+    assert migrate_to_current.main() == 0
+    assert calls['align_args'].shuffle is False
