@@ -1488,7 +1488,8 @@ LOG_LEVEL = 'DEBUG'  # 显示详细的调试信息
   - **索引页**: 自适应休眠，由 `MovieSleepManager` 管理（并行模式使用每 worker 独立节奏）
   - **电影**: 自适应休眠，通过 `MovieSleepManager`（对数正态分布，自动调优）
   - **按量调整**: `MovieSleepManager` 在处理大批量时自动增加休眠间隔
-  - **所有冷却**: 由 `MovieSleepManager.get_cooldown()` 自适应计算
+  - **Fallback 重试**: 每次连续 HTTP 尝试之间使用完整自适应休眠（与电影间隔一致的分布），包括 CF bypass fallback 步骤、transport 切换和代理轮换
+  - **所有冷却**: 由 `MovieSleepManager` 自适应计算
   - **qBittorrent 添加**: 1 秒(通过 `DELAY_BETWEEN_ADDITIONS` 配置)
   - **PikPak 请求**: 默认 2 秒(通过 `PIKPAK_REQUEST_DELAY` 配置)
 
