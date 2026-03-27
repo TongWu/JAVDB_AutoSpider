@@ -75,6 +75,16 @@ on:
         required: false
         default: false
         type: boolean
+      align_no_login:
+        description: 'Alignment: skip movies requiring JavDB login instead of attempting authentication'
+        required: false
+        default: false
+        type: boolean
+      align_shuffle:
+        description: 'Alignment: randomise processing queue to avoid consecutive failures on similar prefixes'
+        required: false
+        default: true
+        type: boolean
       align_enqueue_qb:
         description: 'Alignment: enqueue upgrade magnets to qBittorrent'
         required: false
@@ -121,6 +131,8 @@ jobs:
       INPUT_ALIGN_LIMIT: ${{ inputs.align_limit || '0' }}
       INPUT_ALIGN_CODES: ${{ inputs.align_codes }}
       INPUT_ALIGN_NO_PROXY: ${{ inputs.align_no_proxy }}
+      INPUT_ALIGN_NO_LOGIN: ${{ inputs.align_no_login }}
+      INPUT_ALIGN_SHUFFLE: ${{ inputs.align_shuffle }}
       INPUT_ALIGN_ENQUEUE_QB: ${{ inputs.align_enqueue_qb }}
       INPUT_ALIGN_EXECUTE_DELETE: ${{ inputs.align_execute_delete }}
       INPUT_ALIGN_QB_CATEGORY: ${{ inputs.align_qb_category }}
@@ -256,6 +268,8 @@ jobs:
             echo "  Codes:                (none)"
           fi
           printf '  No Proxy:             %s\n' "$INPUT_ALIGN_NO_PROXY"
+          printf '  No Login:             %s\n' "$INPUT_ALIGN_NO_LOGIN"
+          printf '  Shuffle:              %s\n' "$INPUT_ALIGN_SHUFFLE"
           printf '  Enqueue QB:           %s\n' "$INPUT_ALIGN_ENQUEUE_QB"
           printf '  Execute Delete:       %s\n' "$INPUT_ALIGN_EXECUTE_DELETE"
           if [ -n "$INPUT_ALIGN_QB_CATEGORY" ]; then
@@ -325,6 +339,14 @@ jobs:
 
             if [ "$INPUT_ALIGN_NO_PROXY" = "true" ]; then
               CMD+=(--align-no-proxy)
+            fi
+
+            if [ "$INPUT_ALIGN_NO_LOGIN" = "true" ]; then
+              CMD+=(--align-no-login)
+            fi
+
+            if [ "$INPUT_ALIGN_SHUFFLE" = "true" ]; then
+              CMD+=(--align-shuffle)
             fi
 
             if [ "$INPUT_ALIGN_ENQUEUE_QB" = "true" ]; then
@@ -436,6 +458,8 @@ jobs:
               echo "  - Codes: (none)" >> $GITHUB_STEP_SUMMARY
             fi
             printf '  - No Proxy: %s\n' "$(summary_bool "$INPUT_ALIGN_NO_PROXY")" >> $GITHUB_STEP_SUMMARY
+            printf '  - No Login: %s\n' "$(summary_bool "$INPUT_ALIGN_NO_LOGIN")" >> $GITHUB_STEP_SUMMARY
+            printf '  - Shuffle: %s\n' "$(summary_bool "$INPUT_ALIGN_SHUFFLE")" >> $GITHUB_STEP_SUMMARY
             printf '  - Enqueue QB: %s\n' "$(summary_bool "$INPUT_ALIGN_ENQUEUE_QB")" >> $GITHUB_STEP_SUMMARY
             printf '  - Execute Delete: %s\n' "$(summary_bool "$INPUT_ALIGN_EXECUTE_DELETE")" >> $GITHUB_STEP_SUMMARY
             if [ -n "$INPUT_ALIGN_QB_CATEGORY" ]; then
