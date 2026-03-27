@@ -23,10 +23,10 @@ import requests
 import time
 import logging
 import threading
-from typing import Optional, Dict, Any, Tuple
+from typing import Callable, Optional, Dict, Any, Tuple
 from urllib.parse import urljoin, urlparse, quote
 from bs4 import BeautifulSoup
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +90,10 @@ class RequestConfig:
     # curl_cffi settings for better TLS fingerprint
     use_curl_cffi: bool = True  # Use curl_cffi if available (recommended)
     curl_cffi_impersonate: str = 'chrome131'  # Browser to impersonate
+    # Injected sleep callable for between-attempt pauses (e.g. MovieSleepManager.sleep).
+    # When set, replaces all fixed fallback_cooldown / cf_turnstile_cooldown sleeps
+    # inside RequestHandler with a full adaptive sleep (penalty already baked in).
+    between_attempt_sleep: Optional[Callable[[], float]] = field(default=None, repr=False)
     
     def __post_init__(self):
         if self.proxy_modules is None:
@@ -167,7 +171,23 @@ class RequestHandler:
                 self.use_curl_cffi = False
         elif not CURL_CFFI_AVAILABLE and self.config.use_curl_cffi:
             logger.info("curl_cffi not installed - using standard requests (install with: pip install curl_cffi)")
-        
+
+    def _pause_between_attempts(self, *, legacy_seconds: float) -> None:
+        """Sleep between consecutive fetch attempts.
+
+        If ``config.between_attempt_sleep`` is set (injected callable such as
+        ``MovieSleepManager.sleep``), it is called directly — penalty factor
+        is already baked into the callable's sampling range.
+
+        Otherwise falls back to a fixed ``time.sleep(legacy_seconds)`` to
+        preserve backwards compatibility for callers that don't inject a
+        sleep callable (tests, standalone tools).
+        """
+        if self.config.between_attempt_sleep is not None:
+            self.config.between_attempt_sleep()
+        elif legacy_seconds > 0:
+            time.sleep(legacy_seconds)
+
     def should_use_proxy_for_module(self, module_name: str, use_proxy_flag: Optional[bool]) -> bool:
         """
         Check if a specific module should use proxy based on configuration.
@@ -633,6 +653,7 @@ class RequestHandler:
                                 bypass_over18_url = f"{bypass_base_url}/html?url={encoded_over18_url}"
                                 
                                 logger.debug(f"[CF Bypass] {context_msg}: Visiting over18 URL via bypass: {over18_url}")
+                                self._pause_between_attempts(legacy_seconds=0)
                                 
                                 over18_content, over18_error = self._do_request(
                                     bypass_over18_url, self.BYPASS_HEADERS, None,
@@ -642,6 +663,7 @@ class RequestHandler:
                                 
                                 if over18_content:
                                     logger.debug(f"[CF Bypass] {context_msg}: Over18 bypass returned {len(over18_content)} bytes, re-fetching original URL...")
+                                    self._pause_between_attempts(legacy_seconds=0)
                                     
                                     # Re-fetch the original URL after over18 cookie is set
                                     html_content2, error2 = self._do_request(
@@ -723,6 +745,7 @@ class RequestHandler:
                 logger.debug(f"[Direct] {context_msg} succeeded with curl_cffi")
             elif error:
                 logger.debug(f"[Direct] {context_msg} curl_cffi failed, falling back to standard requests: {error}")
+                self._pause_between_attempts(legacy_seconds=0)
         
         # Fall back to standard requests if curl_cffi failed or not available
         if not html_content:
@@ -945,7 +968,7 @@ class RequestHandler:
         # Cooldown before entering fallback
         if self.config.fallback_cooldown > 0:
             logger.debug(f"[{module_name}] Fallback cooldown: {self.config.fallback_cooldown}s before step (a)")
-            time.sleep(self.config.fallback_cooldown)
+            self._pause_between_attempts(legacy_seconds=self.config.fallback_cooldown)
         
         # Step (a): Retry CF bypass (one more attempt)
         logger.debug(f"[{module_name}] Fallback step (a): Retry CF bypass")
@@ -972,7 +995,7 @@ class RequestHandler:
         if turnstile_detected:
             logger.info(f"[{module_name}] Turnstile detected, refreshing bypass cache...")
             if self.config.fallback_cooldown > 0:
-                time.sleep(self.config.fallback_cooldown)
+                self._pause_between_attempts(legacy_seconds=self.config.fallback_cooldown)
             self.refresh_bypass_cache(url, proxies, force_local=use_local_bypass, session=session)
             turnstile_detected = False
         
@@ -981,7 +1004,7 @@ class RequestHandler:
         if max_retries > 1 and use_proxy and proxies:
             if self.config.fallback_cooldown > 0:
                 logger.debug(f"[{module_name}] Fallback cooldown: {self.config.fallback_cooldown}s before step (b)")
-                time.sleep(self.config.fallback_cooldown)
+                self._pause_between_attempts(legacy_seconds=self.config.fallback_cooldown)
             
             logger.debug(f"[{module_name}] Fallback step (b): Direct request with current proxy (no bypass)")
             html_content, success, is_turnstile = self._fetch_direct(url, proxies, f"Proxy={proxy_name}", use_cookie, session, proxy_name=proxy_name)
@@ -1003,7 +1026,7 @@ class RequestHandler:
             for switch_count in range(max_proxy_switches):
                 if self.config.fallback_cooldown > 0:
                     logger.debug(f"[{module_name}] Fallback cooldown: {self.config.fallback_cooldown}s before switching proxy")
-                    time.sleep(self.config.fallback_cooldown)
+                    self._pause_between_attempts(legacy_seconds=self.config.fallback_cooldown)
                 
                 # Switch to next proxy
                 switched = self.proxy_pool.mark_failure_and_switch()
@@ -1029,7 +1052,7 @@ class RequestHandler:
                 
                 if self.config.fallback_cooldown > 0:
                     logger.debug(f"[{module_name}] Fallback cooldown: {self.config.fallback_cooldown}s before step (d)")
-                    time.sleep(self.config.fallback_cooldown)
+                    self._pause_between_attempts(legacy_seconds=self.config.fallback_cooldown)
                 
                 # Step (d): Try CF bypass with new proxy
                 logger.debug(f"[{module_name}] Fallback step (d): CF bypass with new proxy={proxy_name}")
@@ -1055,7 +1078,7 @@ class RequestHandler:
                 if turnstile_detected:
                     logger.info(f"[{module_name}] Turnstile detected after step (d), refreshing bypass cache for proxy={proxy_name}...")
                     if self.config.fallback_cooldown > 0:
-                        time.sleep(self.config.fallback_cooldown)
+                        self._pause_between_attempts(legacy_seconds=self.config.fallback_cooldown)
                     self.refresh_bypass_cache(url, proxies, force_local=False, session=session)
                     turnstile_detected = False
         
@@ -1106,7 +1129,7 @@ class RequestHandler:
                     self.penalty_tracker.record_event()
                 if retry_count < max_retries - 1:
                     logger.warning(f"[{module_name}] Turnstile detected, waiting {self.config.cf_turnstile_cooldown}s before retry...")
-                    time.sleep(self.config.cf_turnstile_cooldown)
+                    self._pause_between_attempts(legacy_seconds=self.config.cf_turnstile_cooldown)
                 else:
                     logger.warning(f"[{module_name}] Turnstile detected, no retries remaining")
             

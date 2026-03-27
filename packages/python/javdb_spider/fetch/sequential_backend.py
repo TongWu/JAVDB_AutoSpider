@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import queue as queue_module
-import time
 from typing import Optional
 
 from packages.python.javdb_platform.logging_config import get_logger
@@ -149,9 +148,7 @@ class SequentialFetchBackend(FetchBackend):
             return
 
         if runtime_state_changed:
-            _cd = movie_sleep_mgr.get_cooldown()
-            logger.debug("Applying fallback cooldown: %.1fs", _cd)
-            time.sleep(_cd)
+            movie_sleep_mgr.sleep()
             self._pending_movie_sleep = False
             return
 
