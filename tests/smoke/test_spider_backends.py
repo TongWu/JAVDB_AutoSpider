@@ -122,7 +122,6 @@ def test_sequential_backend_skip_and_cf_fallback_keep_original_pacing(monkeypatc
             (['magnet-3'], 'Actor', '', '', '', True, True, True),
         ]
     )
-    cooldown_calls: list[float] = []
     movie_sleep_calls: list[str] = []
 
     monkeypatch.setattr(
@@ -130,7 +129,6 @@ def test_sequential_backend_skip_and_cf_fallback_keep_original_pacing(monkeypatc
         'fetch_detail_page_with_fallback',
         lambda *_args, **_kwargs: next(responses),
     )
-    monkeypatch.setattr(sb.time, 'sleep', lambda seconds: cooldown_calls.append(seconds))
     monkeypatch.setattr(
         sb.movie_sleep_mgr,
         'sleep',
@@ -159,6 +157,6 @@ def test_sequential_backend_skip_and_cf_fallback_keep_original_pacing(monkeypatc
     third = next(results)
     third.acknowledge('no_row')
 
-    assert len(cooldown_calls) == 1
-    assert cooldown_calls[0] == sb.movie_sleep_mgr.get_cooldown()
-    assert movie_sleep_calls == ['movie']
+    # runtime_state_changed now uses movie_sleep_mgr.sleep() (same as inter-movie pacing),
+    # then skipped also triggers movie sleep before next task.
+    assert movie_sleep_calls == ['movie', 'movie']
