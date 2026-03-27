@@ -1533,7 +1533,8 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
   - **Index pages**: Adaptive sleep managed by `MovieSleepManager` (parallel mode uses per-worker pacing)
   - **Movies**: Adaptive sleep via `MovieSleepManager` (log-normal distribution, auto-tuned)
   - **Volume-based adjustment**: `MovieSleepManager` automatically increases sleep intervals when processing large batches
-  - **All cooldowns**: Derived adaptively from `MovieSleepManager.get_cooldown()`
+  - **Fallback retries**: Full adaptive sleep (same distribution as inter-movie pacing) between every consecutive HTTP attempt, including CF bypass fallback steps, transport switches, and proxy rotation
+  - **All cooldowns**: Derived adaptively from `MovieSleepManager`
   - **qBittorrent additions**: 1 second (configurable via `DELAY_BETWEEN_ADDITIONS`)
   - **PikPak requests**: 2 seconds default (configurable via `PIKPAK_REQUEST_DELAY`)
 
