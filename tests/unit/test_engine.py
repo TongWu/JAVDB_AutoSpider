@@ -177,7 +177,8 @@ class TestEngineAdvancedMode:
         assert results[0].data == {'len': len('<html>ok</html>')}
 
 
-def _mock_attempt_login(explicit_proxies=None, explicit_proxy_name=None):
+def _mock_attempt_login(explicit_proxies=None, explicit_proxy_name=None,
+                        *, spider_uses_proxy=True):
     """Mock login that always fails but correctly increments state counters."""
     import scripts.spider.runtime.state as st
     st.login_total_attempts += 1
