@@ -1486,7 +1486,10 @@ LOG_LEVEL = 'DEBUG'  # 显示详细的调试信息
 - 系统包含请求之间的延迟以尊重服务器:
   - **索引页**: 自适应休眠，由 `MovieSleepManager` 管理（并行模式使用每 worker 独立节奏）
   - **电影**: 自适应休眠，通过 `MovieSleepManager`（对数正态分布，自动调优）
-  - **按量调整**: `MovieSleepManager` 在处理大批量时自动增加休眠间隔
+  - **按量调整**: `MovieSleepManager` 使用分段线性插值，跨 14 个锚点（per-worker 量级）平滑缩放休眠倍率（1.0× 至 8.0×）；代理被 ban 后自动为存活 worker 动态重算
+  - **Penalty 溢出**: 当复合倍率（volume × penalty）超过上限时，超出部分转换为固定秒数加成，确保 CF 反馈在高量级下仍然有效
+  - **微休息**: 4% 概率触发长暂停，其范围相对于当前有效最大休眠时间，在所有量级下模拟人类行为
+  - **三窗口限流**: 每 worker 速率限制器，三个滚动窗口（30s/3、300s/30、1800s/200）；per-worker 量级 ≥ 50 时短窗口收紧为 30s/2
   - **Fallback 重试**: 每次连续 HTTP 尝试之间使用完整自适应休眠（与电影间隔一致的分布），包括 CF bypass fallback 步骤、transport 切换和代理轮换
   - **所有冷却**: 由 `MovieSleepManager` 自适应计算
   - **qBittorrent 添加**: 1 秒(通过 `DELAY_BETWEEN_ADDITIONS` 配置)

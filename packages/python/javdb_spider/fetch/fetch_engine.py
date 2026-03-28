@@ -528,7 +528,12 @@ class _EngineWorker(threading.Thread):
                 )
 
     def _handle_proxy_banned(self, task: EngineTask) -> None:
-        """Handle proxy ban: stop this worker and re-route tasks."""
+        """Handle proxy ban: stop this worker and re-route tasks.
+
+        When active workers remain, dynamically re-calculate and apply
+        volume multipliers for all surviving workers so that the
+        increased per-worker load triggers appropriately higher sleep.
+        """
         task.failed_proxies.add(self.proxy_name)
 
         with self._drain_lock:
@@ -542,6 +547,12 @@ class _EngineWorker(threading.Thread):
             )
 
             if active > 0:
+                remaining = self.task_queue.qsize() + active
+                for w in self.all_workers:
+                    if w.proxy_name not in self._banned_proxies:
+                        w._sleep_mgr.apply_volume_multiplier(
+                            remaining, num_workers=active,
+                        )
                 requeue_front(self.task_queue, task)
             else:
                 self.result_queue.put(EngineResult(

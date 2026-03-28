@@ -2,8 +2,9 @@
 
 Provides human-like request pacing via three cooperating components:
 
-- ``MovieSleepManager`` — per-worker sleep with log-normal distribution and
-  a two-factor multiplier (volume * penalty).
+- ``MovieSleepManager`` — per-worker sleep with piecewise-linear volume
+  multiplier, log-normal distribution, penalty overflow, and micro-break
+  sampling for human-like pacing.
 - ``PenaltyTracker`` — shared across workers; tracks recent CF/failure events
   and computes a dynamic penalty factor that decays over time.
 - ``TripleWindowThrottle`` — per-worker rate limiter; enforces short-window
@@ -16,11 +17,14 @@ Thread-safe via ``threading.Lock``.  **Not** compatible with
 must be adapted to use ``multiprocessing.Manager`` or similar.
 """
 
+from __future__ import annotations
+
 import math
 import random
 import threading
 import time
 from collections import deque
+from typing import Tuple
 
 from packages.python.javdb_platform.logging_config import get_logger
 
@@ -37,10 +41,57 @@ _BASE_MAX = 25
 # ---------------------------------------------------------------------------
 # Safety caps
 # ---------------------------------------------------------------------------
-COMPOSITE_MULTIPLIER_CAP = 6.0
-ABSOLUTE_MAX_SLEEP = 120.0  # seconds
+COMPOSITE_MULTIPLIER_CAP = 10.0
+ABSOLUTE_MAX_SLEEP = 200.0  # seconds
 COOLDOWN_FRACTION = 0.5     # cooldown = eff_min * this fraction
-COOLDOWN_MAX = 30.0         # hard ceiling for cooldown durations
+COOLDOWN_MAX = 45.0         # hard ceiling for cooldown durations
+PENALTY_OVERFLOW_WEIGHT = 2.0  # extra seconds per 1.0 overflow above cap
+
+# ---------------------------------------------------------------------------
+# Micro-break (human-like long pause) — relative to current eff_max
+# ---------------------------------------------------------------------------
+MICRO_BREAK_PROB = 0.04
+MICRO_BREAK_EXTRA_MIN = 30.0
+MICRO_BREAK_EXTRA_MAX = 120.0
+MICRO_BREAK_FLOOR = 60.0
+
+# ---------------------------------------------------------------------------
+# Volume anchors — piecewise-linear interpolation (per-worker count)
+# ---------------------------------------------------------------------------
+VOLUME_ANCHORS: list = [
+    (0,    1.00,  1.00),
+    (4,    1.00,  1.15),
+    (10,   1.15,  1.30),
+    (20,   1.35,  1.65),
+    (30,   1.60,  2.00),
+    (40,   1.80,  2.30),
+    (50,   2.00,  2.60),
+    (60,   2.20,  2.90),
+    (70,   2.40,  3.20),
+    (80,   2.70,  3.60),
+    (90,   3.00,  4.00),
+    (100,  5.50,  7.00),
+    (150,  6.25,  7.50),
+    (200,  7.00,  8.00),
+]
+
+
+def _interpolate_multiplier(n: int) -> Tuple[float, float]:
+    """Return (min_mult, max_mult) via piecewise-linear interpolation."""
+    if n <= VOLUME_ANCHORS[0][0]:
+        return VOLUME_ANCHORS[0][1], VOLUME_ANCHORS[0][2]
+    if n >= VOLUME_ANCHORS[-1][0]:
+        return VOLUME_ANCHORS[-1][1], VOLUME_ANCHORS[-1][2]
+    for i in range(len(VOLUME_ANCHORS) - 1):
+        lo_n, lo_min, lo_max = VOLUME_ANCHORS[i]
+        hi_n, hi_min, hi_max = VOLUME_ANCHORS[i + 1]
+        if lo_n <= n < hi_n:
+            t = (n - lo_n) / (hi_n - lo_n)
+            return (
+                round(lo_min + t * (hi_min - lo_min), 2),
+                round(lo_max + t * (hi_max - lo_max), 2),
+            )
+    return VOLUME_ANCHORS[-1][1], VOLUME_ANCHORS[-1][2]
 
 # ---------------------------------------------------------------------------
 # PenaltyTracker
@@ -163,6 +214,11 @@ class TripleWindowThrottle:
             self._timestamps.append(now)
         return waited
 
+    def tighten_short_window(self, per_worker_n: int) -> None:
+        """Reduce short-window burst limit for high-volume sessions."""
+        if per_worker_n >= 50:
+            self.short_max = 2
+
 
 # Backward compatibility: existing imports and tests use this name.
 DualWindowThrottle = TripleWindowThrottle
@@ -185,25 +241,22 @@ class MovieSleepManager:
     """Human-like movie sleep with two-factor adaptive throttling.
 
     ``effective_multiplier = volume_factor * penalty_factor``
-    capped at ``COMPOSITE_MULTIPLIER_CAP`` (currently 6.0).
+    capped at ``COMPOSITE_MULTIPLIER_CAP``.  When the raw product exceeds
+    the cap, the overflow is converted to a flat additive bonus
+    (``PENALTY_OVERFLOW_WEIGHT`` seconds per 1.0 overflow) so that CF
+    penalty feedback remains effective even at high volume tiers.
 
-    The sleep value itself is capped at ``ABSOLUTE_MAX_SLEEP`` (120 s).
+    A 4 % micro-break probability injects occasional long pauses whose
+    range is *relative* to the current ``eff_max``, staying above normal
+    sleep regardless of volume tier.
     """
-
-    # Tiers for N < 250 only (see ``apply_volume_multiplier`` for N ≥ 250).
-    VOLUME_TIERS = [
-        (20,  1.00, 1.00),
-        (50,  1.15, 1.30),
-        (100, 1.35, 1.65),
-        (150, 1.60, 2.00),
-    ]
 
     def __init__(
         self,
         sleep_min: float,
         sleep_max: float,
-        penalty_tracker: PenaltyTracker = None,
-        throttle: TripleWindowThrottle = None,
+        penalty_tracker: PenaltyTracker | None = None,
+        throttle: TripleWindowThrottle | None = None,
     ):
         drift = random.uniform(-0.5, 0.5)
         self.base_min = max(1.0, float(sleep_min) + drift)
@@ -222,29 +275,23 @@ class MovieSleepManager:
 
     # -- factor setters ----------------------------------------------------
 
-    def apply_volume_multiplier(self, n: int) -> None:
-        """Set volume factor based on estimated processing volume *n*."""
-        if n >= 500:
-            min_mult, max_mult = 4.0, 5.5
-        elif n >= 350:
-            min_mult, max_mult = 3.0, 4.0
-        elif n >= 250:
-            min_mult, max_mult = 2.2, 2.9
-        else:
-            min_mult, max_mult = 1.0, 1.0
-            for threshold, m_lo, m_hi in self.VOLUME_TIERS:
-                if n < threshold:
-                    break
-                min_mult, max_mult = m_lo, m_hi
+    def apply_volume_multiplier(self, total: int, num_workers: int = 1) -> None:
+        """Set volume factor based on per-worker processing volume."""
+        n = max(1, total // max(1, num_workers))
+        min_mult, max_mult = _interpolate_multiplier(n)
 
         self._volume_min_mult = min_mult
         self._volume_max_mult = max_mult
         self._recalc_range()
 
+        if self._throttle and hasattr(self._throttle, 'tighten_short_window'):
+            self._throttle.tighten_short_window(n)
+
         if min_mult > 1.0 or max_mult > 1.0:
             logger.info(
-                "Volume-based sleep adjustment: N=%d → volume_factor %.2fx/%.2fx",
-                n, min_mult, max_mult,
+                "Volume-based sleep adjustment: total=%d, workers=%d, "
+                "per_worker=%d → volume_factor %.2fx/%.2fx",
+                total, num_workers, n, min_mult, max_mult,
             )
 
     def _recalc_range(self) -> None:
@@ -260,22 +307,27 @@ class MovieSleepManager:
 
     # -- sampling ----------------------------------------------------------
 
-    def _effective_range(self):
-        """Return (eff_min, eff_max) after applying the dynamic penalty."""
+    def _effective_range(self) -> Tuple[float, float]:
+        """Return (eff_min, eff_max) after applying the dynamic penalty.
+
+        When ``volume * penalty`` exceeds ``COMPOSITE_MULTIPLIER_CAP``,
+        the overflow is converted to an additive bonus so that CF penalty
+        feedback is never fully absorbed by the cap.
+        """
         pf = self._penalty_tracker.get_penalty_factor() if self._penalty_tracker else 1.0
 
-        eff_min_mult = min(
-            self._volume_min_mult * pf,
-            COMPOSITE_MULTIPLIER_CAP,
-        )
-        eff_max_mult = min(
-            self._volume_max_mult * pf,
-            COMPOSITE_MULTIPLIER_CAP,
-        )
-        return (
-            round(self.base_min * eff_min_mult, 2),
-            round(self.base_max * eff_max_mult, 2),
-        )
+        raw_min_mult = self._volume_min_mult * pf
+        raw_max_mult = self._volume_max_mult * pf
+
+        eff_min_mult = min(raw_min_mult, COMPOSITE_MULTIPLIER_CAP)
+        eff_max_mult = min(raw_max_mult, COMPOSITE_MULTIPLIER_CAP)
+
+        overflow_min = max(0.0, raw_min_mult - COMPOSITE_MULTIPLIER_CAP)
+        overflow_max = max(0.0, raw_max_mult - COMPOSITE_MULTIPLIER_CAP)
+
+        eff_min = round(self.base_min * eff_min_mult + overflow_min * PENALTY_OVERFLOW_WEIGHT, 2)
+        eff_max = round(self.base_max * eff_max_mult + overflow_max * PENALTY_OVERFLOW_WEIGHT, 2)
+        return eff_min, eff_max
 
     def _human_like_delay(self, lo: float, hi: float) -> float:
         """Sample from a truncated log-normal distribution in [lo, hi]."""
@@ -299,12 +351,17 @@ class MovieSleepManager:
 
         roll = self._rng.random()
 
+        if roll < MICRO_BREAK_PROB:
+            break_lo = max(MICRO_BREAK_FLOOR, eff_max + MICRO_BREAK_EXTRA_MIN)
+            break_hi = eff_max + MICRO_BREAK_EXTRA_MAX
+            return round(self._rng.uniform(break_lo, break_hi), 2)
+
         if self._force_high:
             sleep_time = self._rng.uniform(eff_min + span * 0.7, eff_max)
             self._force_high = False
-        elif roll < 0.08:
+        elif roll < 0.08 + MICRO_BREAK_PROB:
             sleep_time = self._rng.uniform(eff_min + span * 0.7, eff_max)
-        elif roll < 0.15:
+        elif roll < 0.15 + MICRO_BREAK_PROB:
             sleep_time = self._rng.uniform(eff_min, eff_min + span * 0.15)
             self._force_high = True
         else:

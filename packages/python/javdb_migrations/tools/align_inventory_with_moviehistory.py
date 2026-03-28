@@ -546,7 +546,9 @@ def run_alignment(args: argparse.Namespace) -> int:
     if use_proxy and PROXY_POOL:
         from packages.python.javdb_spider.fetch.fetch_engine import FetchEngine
 
-        movie_sleep_mgr.apply_volume_multiplier(total)
+        movie_sleep_mgr.apply_volume_multiplier(
+            total, num_workers=len(PROXY_POOL),
+        )
         stop_event = threading.Event()
 
         engine = FetchEngine(

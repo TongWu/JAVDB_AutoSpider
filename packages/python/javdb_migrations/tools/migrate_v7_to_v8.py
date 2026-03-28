@@ -452,7 +452,10 @@ def run_actor_backfill(
         conn.close()
         return 0
 
-    movie_sleep_mgr.apply_volume_multiplier(total)
+    movie_sleep_mgr.apply_volume_multiplier(
+        total,
+        num_workers=len(PROXY_POOL) if (use_proxy and PROXY_POOL) else 1,
+    )
     now_fmt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # ------------------------------------------------------------------
