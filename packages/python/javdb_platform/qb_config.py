@@ -144,6 +144,13 @@ def masked_qb_base_url(
     scheme: Any = _UNSET,
     allow_insecure_http: Any = _UNSET,
 ) -> str:
+    # Resolved candidate URL (e.g. http://… from HTTPS fallback): mask only, do not pass
+    # through build_qb_base_url / _normalize_qb_url — http would wrongly require
+    # QB_ALLOW_INSECURE_HTTP when the user only configured https:// as primary.
+    if host is not _UNSET and port is _UNSET:
+        h = str(host).strip()
+        if "://" in h:
+            return mask_ip_address(h)
     return mask_ip_address(
         build_qb_base_url(
             host,
