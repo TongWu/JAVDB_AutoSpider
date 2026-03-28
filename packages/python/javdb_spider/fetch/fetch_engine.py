@@ -797,10 +797,11 @@ class ParallelFetchBackend(FetchBackend):
             return
         per_worker_n = gm._last_per_worker_n
         for w in self._workers:
-            w._sleep_mgr._volume_min_mult = vol_min
-            w._sleep_mgr._volume_max_mult = vol_max
-            w._sleep_mgr._last_per_worker_n = per_worker_n
-            w._sleep_mgr._recalc_range()
+            with w._sleep_mgr._lock:
+                w._sleep_mgr._volume_min_mult = vol_min
+                w._sleep_mgr._volume_max_mult = vol_max
+                w._sleep_mgr._last_per_worker_n = per_worker_n
+                w._sleep_mgr._recalc_range()
             if per_worker_n and w._sleep_mgr._throttle:
                 w._sleep_mgr._throttle.tighten_short_window(per_worker_n)
         logger.info(
