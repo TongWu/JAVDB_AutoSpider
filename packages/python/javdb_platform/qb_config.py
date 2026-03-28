@@ -121,7 +121,8 @@ def qb_base_url_candidates(
     )
     candidates = [primary]
     parsed = urlsplit(primary)
-    if parsed.scheme == "https" and qb_allow_insecure_http(allow_insecure_http):
+    # Always try http:// same host after https:// so TLS failures can fall back without extra config.
+    if parsed.scheme == "https":
         fallback = urlunsplit(
             SplitResult(
                 scheme="http",
