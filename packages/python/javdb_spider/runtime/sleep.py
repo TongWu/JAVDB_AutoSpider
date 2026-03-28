@@ -272,6 +272,7 @@ class MovieSleepManager:
 
         self._rng = random.Random()
         self._force_high = False
+        self._last_per_worker_n = 0
 
     # -- factor setters ----------------------------------------------------
 
@@ -282,11 +283,12 @@ class MovieSleepManager:
         Callers that update many workers in a loop should pass
         ``quiet=True`` and emit a single summary log themselves.
         """
-        n = max(1, total // max(1, num_workers))
+        n = max(1, -(-total // max(1, num_workers)))
         min_mult, max_mult = _interpolate_multiplier(n)
 
         self._volume_min_mult = min_mult
         self._volume_max_mult = max_mult
+        self._last_per_worker_n = n
         self._recalc_range()
 
         if self._throttle and hasattr(self._throttle, 'tighten_short_window'):
