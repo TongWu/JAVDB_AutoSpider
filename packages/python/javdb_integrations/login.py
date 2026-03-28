@@ -727,7 +727,7 @@ def update_config_file(session_cookie):
         with open(config_path, 'w', encoding='utf-8') as f:
             f.write(new_content)
 
-        logger.info(f"Updated {config_path} with new session cookie")
+        # logger.info(f"Updated {config_path} with new session cookie")
         return True
 
     except Exception as e:
