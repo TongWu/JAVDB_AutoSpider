@@ -207,8 +207,8 @@ def mask_error(error_msg: Optional[str]) -> str:
     the error type and diagnostic text.
 
     Scrubs proxy URLs (with embedded credentials), standalone IP addresses,
-    and ``_jdb_session`` cookie values so that logs remain useful for
-    debugging without leaking secrets.
+    ``port=`` ports in urllib3-style errors, and ``_jdb_session`` cookie values
+    so that logs remain useful for debugging without leaking secrets.
 
     Args:
         error_msg: The stringified exception (``str(e)``)
@@ -216,10 +216,12 @@ def mask_error(error_msg: Optional[str]) -> str:
     Returns:
         Error message with sensitive fragments replaced
     """
-    if RUST_MASKING_AVAILABLE:
-        return _rust_mask_error(error_msg)
     if not error_msg:
         return 'None'
+
+    if RUST_MASKING_AVAILABLE:
+        result = _rust_mask_error(error_msg)
+        return re.sub(r'\bport=(\d+)\b', 'port=****', str(result))
 
     result = str(error_msg)
 
@@ -250,6 +252,8 @@ def mask_error(error_msg: Optional[str]) -> str:
         _mask_bare_ip,
         result,
     )
+
+    result = re.sub(r'\bport=(\d+)\b', 'port=****', result)
 
     return result
 

@@ -24,9 +24,10 @@ def test_build_qb_base_url_defaults_to_https_when_scheme_is_missing():
     assert build_qb_base_url("qb.internal:8080") == "https://qb.internal:8080"
 
 
-def test_qb_base_url_candidates_no_http_fallback_by_default():
+def test_qb_base_url_candidates_includes_http_fallback_by_default():
     assert qb_base_url_candidates("qb.internal:8080") == [
         "https://qb.internal:8080",
+        "http://qb.internal:8080",
     ]
 
 
