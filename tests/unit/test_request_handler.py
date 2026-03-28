@@ -50,7 +50,7 @@ class TestRequestConfig:
         assert config.proxy_http is None
         assert config.proxy_https is None
         assert config.proxy_modules == ['spider']
-        assert config.proxy_mode == 'single'
+        assert config.proxy_mode == 'pool'
         assert config.between_attempt_sleep is None
     
     def test_custom_values(self):
@@ -408,7 +408,7 @@ class TestProxyHelper:
         
         assert helper.proxy_pool is None
         assert helper.proxy_modules == ['spider']
-        assert helper.proxy_mode == 'single'
+        assert helper.proxy_mode == 'pool'
         assert helper.proxy_http is None
         assert helper.proxy_https is None
     
