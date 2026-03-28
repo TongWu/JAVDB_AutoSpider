@@ -166,12 +166,7 @@ def initialize_request_handler():
 
 
 def setup_proxy_pool(use_proxy) -> None:
-    """Initialize the global proxy pool from configuration.
-
-    *use_proxy* is the resolved spider flag (e.g. from ``should_proxy_module('spider', ...)``).
-    When ``False`` (``--no-proxy`` or policy), the spider does not use proxies; we skip
-    creating the pool so resources and logs match user expectation.
-    """
+    """Initialize the global proxy pool from configuration."""
     from packages.python.javdb_platform.proxy_policy import is_proxy_mode_disabled
     global global_proxy_pool
 
@@ -181,10 +176,7 @@ def setup_proxy_pool(use_proxy) -> None:
         return
 
     if not use_proxy:
-        logger.info(
-            "Spider proxy disabled for this run — skipping proxy pool initialization "
-            "(--no-proxy or PROXY_MODULES policy)"
-        )
+        logger.info("Proxy disabled for this run (--no-proxy) - skipping pool init")
         global_proxy_pool = None
         return
 
