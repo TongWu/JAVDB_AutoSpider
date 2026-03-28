@@ -8,6 +8,7 @@ sys.path.insert(0, project_root)
 
 from packages.python.javdb_platform.qb_config import (  # noqa: E402
     build_qb_base_url,
+    masked_qb_base_url,
     qb_base_url_candidates,
     qb_verify_tls,
 )
@@ -58,3 +59,13 @@ def test_build_qb_base_url_rejects_invalid_scheme():
 
 def test_qb_verify_tls_parses_false_string():
     assert qb_verify_tls("false") is False
+
+
+def test_masked_qb_base_url_masks_http_fallback_without_insecure_flag():
+    """Logging must not re-validate http:// candidates against QB_ALLOW_INSECURE_HTTP."""
+    masked = masked_qb_base_url(
+        "http://192.168.1.100:8080",
+        allow_insecure_http=False,
+    )
+    assert "192.168" not in masked
+    assert "xxx" in masked
