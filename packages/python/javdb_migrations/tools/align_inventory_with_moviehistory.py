@@ -426,7 +426,10 @@ def _make_align_process_fn(inventory_map, *, no_login: bool = False):
                 }
 
             # Only after an exact search hit: pause before detail fetch; miss path skips this (see above).
-            movie_sleep_mgr.sleep()
+            # Use the worker-local sleep manager so each proxy's throttle
+            # budget is independent (the global singleton would serialise
+            # all workers through a single TripleWindowThrottle).
+            ctx.sleep()
 
             # 2) Fetch detail page
             detail_href = normalize_javdb_href_path(exact_entry.href)
