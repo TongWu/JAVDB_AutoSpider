@@ -96,9 +96,10 @@ class _ShortNameFormatter(logging.Formatter):
     def format(self, record):
         saved = record.name
         record.name = _shorten_logger_name(record.name)
-        result = super().format(record)
-        record.name = saved
-        return result
+        try:
+            return super().format(record)
+        finally:
+            record.name = saved
 
 
 def setup_logging(log_file=None, log_level=None):

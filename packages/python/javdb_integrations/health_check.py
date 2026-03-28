@@ -41,7 +41,7 @@ from packages.python.javdb_core.masking import mask_ip_address
 
 # Import configuration
 from packages.python.javdb_platform.config_helper import cfg
-from packages.python.javdb_platform.proxy_policy import add_proxy_arguments, resolve_proxy_override
+from packages.python.javdb_platform.proxy_policy import add_proxy_arguments, resolve_proxy_override, should_proxy_module
 from packages.python.javdb_platform.qb_config import (
     qb_allow_insecure_http,
     qb_base_url_candidates,
@@ -236,7 +236,7 @@ def parse_arguments():
 def main():
     args = parse_arguments()
     proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
-    should_check_proxy = proxy_override is not False and (proxy_override is True or bool(PROXY_MODULES))
+    should_check_proxy = should_proxy_module('spider', proxy_override, PROXY_MODULES)
     
     logger.info("=" * 60)
     logger.info("HEALTH CHECK - Pre-flight Verification")
@@ -266,12 +266,7 @@ def main():
         if proxy_success:
             logger.info(f"  ✓ {proxy_message}")
         else:
-            logger.error(f"  ✗ {proxy_message}")
-            # Proxy failure is critical if PROXY_MODE is 'pool'
-            if PROXY_MODE == 'pool':
-                all_passed = False
-            else:
-                logger.warning("  (Non-critical in single/no proxy mode)")
+            logger.warning(f"  ⚠ {proxy_message} (informational — ban manager is session-scoped)")
     else:
         logger.info("  ✓ Skipped (proxy forced off or no proxy-enabled modules configured)")
         results.append(("Proxy Pool", True, "Skipped"))

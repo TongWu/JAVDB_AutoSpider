@@ -1056,6 +1056,74 @@ class TestProxyBanDetection:
         mock_pool.ban_proxy.assert_called_once_with('proxy-1')
 
 
+class TestCfBypassBanThreshold:
+    """Test CF bypass consecutive failure auto-ban via ProxyBannedError."""
+
+    def _make_handler(self, ban_threshold=4, max_failures=2):
+        mock_pool = MagicMock()
+        mock_pool.get_current_proxy_name.return_value = 'test-proxy'
+        config = RequestConfig(
+            cf_bypass_enabled=True,
+            cf_bypass_max_failures=max_failures,
+            cf_bypass_ban_threshold=ban_threshold,
+            fallback_cooldown=0,
+            between_attempt_sleep=lambda: 0.0,
+        )
+        handler = RequestHandler(proxy_pool=mock_pool, config=config)
+        return handler, mock_pool
+
+    @patch.object(RequestHandler, '_fetch_direct')
+    @patch.object(RequestHandler, '_fetch_with_cf_bypass')
+    def test_below_threshold_returns_none(self, mock_bypass, mock_direct):
+        """Failures below ban_threshold should return None, not raise."""
+        mock_bypass.return_value = (None, False, False)
+        mock_direct.return_value = (None, False, False)
+        handler, _ = self._make_handler(ban_threshold=6)
+
+        result = handler.get_page(
+            'http://test.com', use_proxy=False,
+            use_cf_bypass=True, module_name='test', max_retries=1,
+        )
+        assert result is None
+        assert handler.cf_bypass_failure_count < 6
+
+    @patch.object(RequestHandler, '_fetch_direct')
+    @patch.object(RequestHandler, '_fetch_with_cf_bypass')
+    def test_reaching_threshold_raises_proxy_banned(self, mock_bypass, mock_direct):
+        """Once cf_bypass_failure_count >= ban_threshold, ProxyBannedError is raised."""
+        mock_bypass.return_value = (None, False, False)
+        mock_direct.return_value = (None, False, False)
+        handler, mock_pool = self._make_handler(ban_threshold=4)
+        handler.cf_bypass_failure_count = 3
+
+        with pytest.raises(ProxyBannedError) as exc_info:
+            handler.get_page(
+                'http://test.com', use_proxy=False,
+                use_cf_bypass=True, module_name='test', max_retries=1,
+            )
+        assert 'consecutive' in exc_info.value.reason
+        mock_pool.ban_proxy.assert_called()
+
+    @patch.object(RequestHandler, '_fetch_with_cf_bypass')
+    def test_success_resets_counter(self, mock_bypass):
+        """A successful CF bypass should reset cf_bypass_failure_count to 0."""
+        mock_bypass.return_value = ('<html>' + 'x' * 15000 + '</html>', True, False)
+        handler, _ = self._make_handler(ban_threshold=4)
+        handler.cf_bypass_failure_count = 3
+
+        result = handler.get_page(
+            'http://test.com', use_proxy=False,
+            use_cf_bypass=True, module_name='test', max_retries=1,
+        )
+        assert result is not None
+        assert handler.cf_bypass_failure_count == 0
+
+    def test_default_ban_threshold(self):
+        """Default cf_bypass_ban_threshold should be 6."""
+        config = RequestConfig()
+        assert config.cf_bypass_ban_threshold == 6
+
+
 class TestPauseBetweenAttempts:
     """Test _pause_between_attempts with and without injected callable."""
 

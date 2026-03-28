@@ -276,7 +276,7 @@ def _read_csv_rows(path: str) -> List[dict]:
         return []
     except Exception as exc:
         logger.warning("Failed to read CSV %s: %s", path, exc)
-        return []
+        raise
 
 
 def _find_legacy_result_csvs(output_dir: str) -> List[str]:
