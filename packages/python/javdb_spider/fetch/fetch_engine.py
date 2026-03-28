@@ -563,7 +563,7 @@ class _EngineWorker(threading.Thread):
                         w._sleep_mgr.apply_volume_multiplier(
                             remaining, num_workers=active, quiet=True,
                         )
-                per_worker = max(1, remaining // max(1, active))
+                per_worker = max(1, -(-remaining // max(1, active)))
                 min_m, max_m = _interpolate_multiplier(per_worker)
                 if min_m > 1.0 or max_m > 1.0:
                     logger.info(
@@ -635,10 +635,10 @@ class ParallelFetchBackend(FetchBackend):
         self._use_cookie = use_cookie
         self._stop_event = stop_event or threading.Event()
         self._sleep_min = (
-            sleep_min if sleep_min is not None else _global_sleep_mgr.sleep_min
+            sleep_min if sleep_min is not None else _global_sleep_mgr.base_min
         )
         self._sleep_max = (
-            sleep_max if sleep_max is not None else _global_sleep_mgr.sleep_max
+            sleep_max if sleep_max is not None else _global_sleep_mgr.base_max
         )
 
         self._task_queue: queue_module.Queue[Optional[EngineTask]] = (
@@ -734,6 +734,7 @@ class ParallelFetchBackend(FetchBackend):
             self._workers.append(w)
 
         self._inherit_login_state()
+        self._inherit_global_volume(len(active_configs))
 
         if pre_banned_count:
             logger.info(
@@ -778,6 +779,34 @@ class ParallelFetchBackend(FetchBackend):
         logger.warning(
             "Index login via [%s] but no matching engine worker found",
             state.logged_in_proxy_name,
+        )
+
+    def _inherit_global_volume(self, num_workers: int) -> None:
+        """Propagate the global sleep manager's volume state to all workers.
+
+        Workers are initialised with the raw (un-scaled) base range so that
+        ``apply_volume_multiplier`` in ``_handle_proxy_banned`` replaces
+        rather than compounds.  This method seeds each worker with the
+        volume multiplier that was already applied to the global singleton
+        (e.g. by ``_post_process_index_results`` or alignment setup).
+        """
+        gm = _global_sleep_mgr
+        vol_min = gm._volume_min_mult
+        vol_max = gm._volume_max_mult
+        if vol_min <= 1.0 and vol_max <= 1.0:
+            return
+        per_worker_n = gm._last_per_worker_n
+        for w in self._workers:
+            w._sleep_mgr._volume_min_mult = vol_min
+            w._sleep_mgr._volume_max_mult = vol_max
+            w._sleep_mgr._last_per_worker_n = per_worker_n
+            w._sleep_mgr._recalc_range()
+            if per_worker_n and w._sleep_mgr._throttle:
+                w._sleep_mgr._throttle.tighten_short_window(per_worker_n)
+        logger.info(
+            "Inherited global volume state to %d workers: "
+            "volume_factor %.2fx/%.2fx",
+            len(self._workers), vol_min, vol_max,
         )
 
     # -- task submission -----------------------------------------------------

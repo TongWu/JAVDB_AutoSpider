@@ -558,8 +558,8 @@ def run_alignment(args: argparse.Namespace) -> int:
             process_fn=_make_align_process_fn(inventory, no_login=no_login),
             use_cookie=True,
             stop_event=stop_event,
-            sleep_min=movie_sleep_mgr.sleep_min,
-            sleep_max=movie_sleep_mgr.sleep_max,
+            sleep_min=movie_sleep_mgr.base_min,
+            sleep_max=movie_sleep_mgr.base_max,
         )
         engine.start()
 
