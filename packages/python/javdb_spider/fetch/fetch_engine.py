@@ -126,6 +126,7 @@ class EngineResult:
     data: Any = None
     used_cf: bool = False
     error: Optional[str] = None
+    worker_name: str = ''
     _ack_callback: Optional[Callable[[str, bool], None]] = field(
         default=None,
         repr=False,
@@ -456,6 +457,7 @@ class _EngineWorker(threading.Thread):
                     self.result_queue.put(EngineResult(
                         task=task, success=False,
                         error='all_proxies_failed',
+                        worker_name=self.proxy_name,
                     ))
                     continue
                 requeue_front(self.task_queue, task)
@@ -499,6 +501,7 @@ class _EngineWorker(threading.Thread):
                     self.result_queue.put(EngineResult(
                         task=task, success=True,
                         data=data, used_cf=ctx._last_used_cf,
+                        worker_name=self.proxy_name,
                     ))
                 else:
                     task.failed_proxies.add(self.proxy_name)
@@ -577,6 +580,7 @@ class _EngineWorker(threading.Thread):
                 self.result_queue.put(EngineResult(
                     task=task, success=False,
                     error='all_proxies_banned',
+                    worker_name=self.proxy_name,
                 ))
                 if not self._drain_done[0]:
                     self._drain_done[0] = True
@@ -597,6 +601,7 @@ class _EngineWorker(threading.Thread):
                     self.result_queue.put(EngineResult(
                         task=item, success=False,
                         error='all_proxies_banned',
+                        worker_name=self.proxy_name,
                     ))
                 except queue_module.Empty:
                     break
@@ -791,11 +796,12 @@ class ParallelFetchBackend(FetchBackend):
         (e.g. by ``_post_process_index_results`` or alignment setup).
         """
         gm = _global_sleep_mgr
-        vol_min = gm._volume_min_mult
-        vol_max = gm._volume_max_mult
+        with gm._lock:
+            vol_min = gm._volume_min_mult
+            vol_max = gm._volume_max_mult
+            per_worker_n = gm._last_per_worker_n
         if vol_min <= 1.0 and vol_max <= 1.0:
             return
-        per_worker_n = gm._last_per_worker_n
         for w in self._workers:
             with w._sleep_mgr._lock:
                 w._sleep_mgr._volume_min_mult = vol_min

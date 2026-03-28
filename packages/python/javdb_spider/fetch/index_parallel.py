@@ -136,6 +136,7 @@ def fetch_all_index_pages_parallel(
 
         # -- collect results (may arrive out of order) ----------------------
 
+        total_expected = end_page - start_page + 1 if not parse_all else 0
         results_by_page: Dict[int, EngineResult] = {}
         any_proxy_banned = False
         csv_name_resolved = False
@@ -147,6 +148,24 @@ def fetch_all_index_pages_parallel(
         for result in backend.results():
             page_num = result.task.meta.get('page_num', 0)
             results_by_page[page_num] = result
+
+            collected = len(results_by_page)
+            worker_tag = f"[worker={result.worker_name}]" if result.worker_name else ""
+            progress = f"{collected}/{total_expected}" if total_expected else str(collected)
+            if result.success:
+                has_movies = bool(result.data and result.data.get('has_movie_list'))
+                logger.info(
+                    "[Page %2d]%s Received (%s) — %s pages collected",
+                    page_num, worker_tag,
+                    "has content" if has_movies else "empty",
+                    progress,
+                )
+            else:
+                logger.warning(
+                    "[Page %2d]%s Failed (%s) — %s pages collected",
+                    page_num, worker_tag,
+                    result.error or "unknown", progress,
+                )
 
             if result.success and result.data:
                 data = result.data
