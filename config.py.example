@@ -62,11 +62,11 @@ EMAIL_TO = 'your_email@gmail.com'
 # =============================================================================
 
 # PROXY MODE SELECTION
-# Choose between single proxy or proxy pool
 # Options:
+#   'pool'   - Use proxy pool with automatic failover (recommended, default)
 #   'single' - Use only the first proxy (main proxy) from PROXY_POOL
-#   'pool'   - Use proxy pool with automatic failover (recommended for better reliability)
-PROXY_MODE = 'single'
+#   'None'   - Disable proxy entirely (direct connection only)
+PROXY_MODE = 'pool'
 
 # =============================================================================
 # UNIFIED PROXY CONFIGURATION

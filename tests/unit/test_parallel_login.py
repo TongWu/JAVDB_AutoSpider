@@ -9,6 +9,11 @@ from unittest.mock import patch, MagicMock, ANY
 import scripts.spider.fetch.session as session_mod
 import scripts.spider.fetch.fallback as fallback_mod
 import scripts.spider.runtime.state as state_mod
+from packages.python.javdb_platform.proxy_policy import (
+    is_proxy_mode_disabled,
+    normalize_proxy_mode,
+    should_proxy_module,
+)
 
 
 class TestResolveLoginProxyEndpoints:
@@ -224,3 +229,50 @@ class TestNoProxyFallbackShortCircuit:
 
         pool.mark_failure_and_switch.assert_not_called()
         assert result[5] is False  # parse_success
+
+
+class TestProxyModeDisabled:
+    """Tests for PROXY_MODE='None' / 'none' disabling proxy globally."""
+
+    def test_is_proxy_mode_disabled_none_string(self):
+        assert is_proxy_mode_disabled('None') is True
+        assert is_proxy_mode_disabled('none') is True
+        assert is_proxy_mode_disabled('NONE') is True
+        assert is_proxy_mode_disabled(' None ') is True
+
+    def test_is_proxy_mode_disabled_active_modes(self):
+        assert is_proxy_mode_disabled('pool') is False
+        assert is_proxy_mode_disabled('single') is False
+
+    def test_normalize_proxy_mode(self):
+        assert normalize_proxy_mode(None) == 'none'
+        assert normalize_proxy_mode('') == 'none'
+        assert normalize_proxy_mode('None') == 'none'
+        assert normalize_proxy_mode('POOL') == 'pool'
+        assert normalize_proxy_mode('single') == 'single'
+        assert normalize_proxy_mode(' Pool ') == 'pool'
+
+    def test_should_proxy_module_disabled_mode(self):
+        """proxy_mode='none' makes should_proxy_module return False
+        regardless of override or module list."""
+        assert should_proxy_module('spider', True, ['all'], proxy_mode='none') is False
+        assert should_proxy_module('spider', None, ['spider'], proxy_mode='none') is False
+
+    def test_should_proxy_module_active_mode(self):
+        """Normal proxy_mode values pass through to existing logic."""
+        assert should_proxy_module('spider', None, ['spider'], proxy_mode='pool') is True
+        assert should_proxy_module('spider', False, ['spider'], proxy_mode='pool') is False
+
+    def test_setup_proxy_pool_skips_on_disabled(self):
+        """setup_proxy_pool sets global_proxy_pool to None when mode is disabled."""
+        orig_pool = state_mod.global_proxy_pool
+        orig_mode = getattr(session_mod, 'PROXY_MODE', None)
+        try:
+            import scripts.spider.runtime.config as cfg_mod
+            with patch.object(cfg_mod, 'PROXY_MODE', 'none'), \
+                 patch('scripts.spider.runtime.state.PROXY_MODE', 'none'), \
+                 patch('scripts.spider.runtime.state.PROXY_POOL', [{'name': 'X', 'http': 'http://x:1'}]):
+                state_mod.setup_proxy_pool(True)
+                assert state_mod.global_proxy_pool is None
+        finally:
+            state_mod.global_proxy_pool = orig_pool
