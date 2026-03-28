@@ -991,6 +991,10 @@ class ParallelFetchBackend(FetchBackend):
                     _task_worker_ctx(task.entry_index, ctx.proxy_name),
                 )
 
+            # Adaptive sleep before CF bypass (mirrors WorkerContext.fetch
+            # and the sequential fallback's _sleep_between_fetches pattern).
+            ctx.sleep()
+
             # CF bypass attempt
             html = ctx.fetch_html(task.url, use_cf=True)
             if html:
