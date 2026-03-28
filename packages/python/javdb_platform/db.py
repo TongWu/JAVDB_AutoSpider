@@ -1526,13 +1526,16 @@ def db_upsert_align_no_exact_match(
     db_path: Optional[str] = None,
 ) -> None:
     """Record a video code that had no exact match on JavDB search."""
+    normalized = video_code.strip().upper()
+    if not normalized:
+        return
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         conn.execute(
             """INSERT OR REPLACE INTO InventoryAlignNoExactMatch
                (VideoCode, Reason, DateTimeRecorded)
                VALUES (?, ?, ?)""",
-            (video_code.strip().upper(), reason, now),
+            (normalized, reason, now),
         )
 
 

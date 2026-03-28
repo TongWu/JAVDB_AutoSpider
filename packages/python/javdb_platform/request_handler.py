@@ -72,6 +72,15 @@ class ProxyBannedError(Exception):
         super().__init__(f"Proxy '{proxy_name}' banned: {reason}")
 
 
+class ProxyExhaustedError(Exception):
+    """Raised when all proxies are in cooldown/unavailable but none are genuinely banned."""
+
+    def __init__(self, proxy_name: str, reason: str = ''):
+        self.proxy_name = proxy_name
+        self.reason = reason
+        super().__init__(f"Proxy pool exhausted ('{proxy_name}'): {reason}")
+
+
 @dataclass
 class RequestConfig:
     """Configuration for request handler"""
@@ -80,6 +89,7 @@ class RequestConfig:
     cf_bypass_port_map: Dict[str, Any] = None
     cf_bypass_enabled: bool = True
     cf_bypass_max_failures: int = 3
+    cf_bypass_ban_threshold: int = 6
     cf_turnstile_cooldown: int = 10
     fallback_cooldown: int = 30
     javdb_session_cookie: Optional[str] = None
@@ -875,7 +885,7 @@ class RequestHandler:
                 and self.config.proxy_mode in ('pool', 'single')
                 and self.proxy_pool is not None
                 and not use_proxy_pool_mode):
-            raise ProxyBannedError(
+            raise ProxyExhaustedError(
                 proxy_name=self.proxy_pool.get_current_proxy_name() or 'unknown',
                 reason='all proxies in cooldown, refusing direct fallback',
             )
@@ -1087,6 +1097,15 @@ class RequestHandler:
         self.cf_bypass_failure_count += 1
         if self.penalty_tracker:
             self.penalty_tracker.record_event()
+        if self.cf_bypass_failure_count >= self.config.cf_bypass_ban_threshold:
+            logger.error(
+                f"{log_ctx} CF Bypass has failed {self.cf_bypass_failure_count} "
+                "consecutive times — treating proxy as banned."
+            )
+            raise ProxyBannedError(
+                proxy_name=proxy_name,
+                reason=f"CF bypass failed {self.cf_bypass_failure_count} consecutive times",
+            )
         if self.cf_bypass_failure_count >= self.config.cf_bypass_max_failures:
             logger.error(
                 f"{log_ctx} CF Bypass has failed {self.cf_bypass_failure_count} times. "

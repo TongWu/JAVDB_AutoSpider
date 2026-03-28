@@ -118,74 +118,73 @@ def fetch_all_index_pages_parallel(
     )
     backend.start()
 
-    # -- submit tasks -------------------------------------------------------
+    try:
+        # -- submit tasks ---------------------------------------------------
 
-    if parse_all:
-        window_size = max(len(PROXY_POOL) * 2, 4) if PROXY_POOL else 4
-        next_page = start_page
-        in_flight = 0
-        for _ in range(window_size):
-            _submit_page(backend, next_page, custom_url)
-            next_page += 1
-            in_flight += 1
-    else:
-        for p in range(start_page, end_page + 1):
-            _submit_page(backend, p, custom_url)
-        backend.mark_done()
+        if parse_all:
+            window_size = max(len(PROXY_POOL) * 2, 4) if PROXY_POOL else 4
+            next_page = start_page
+            in_flight = 0
+            for _ in range(window_size):
+                _submit_page(backend, next_page, custom_url)
+                next_page += 1
+                in_flight += 1
+        else:
+            for p in range(start_page, end_page + 1):
+                _submit_page(backend, p, custom_url)
+            backend.mark_done()
 
-    # -- collect results (may arrive out of order) --------------------------
+        # -- collect results (may arrive out of order) ----------------------
 
-    results_by_page: Dict[int, EngineResult] = {}
-    any_proxy_banned = False
-    csv_name_resolved = False
-    all_index_results_phase1: List[dict] = []
-    all_index_results_phase2: List[dict] = []
-    last_valid_page = 0
-    stop_collecting = False
+        results_by_page: Dict[int, EngineResult] = {}
+        any_proxy_banned = False
+        csv_name_resolved = False
+        all_index_results_phase1: List[dict] = []
+        all_index_results_phase2: List[dict] = []
+        last_valid_page = 0
+        stop_collecting = False
 
-    for result in backend.results():
-        page_num = result.task.meta.get('page_num', 0)
-        results_by_page[page_num] = result
+        for result in backend.results():
+            page_num = result.task.meta.get('page_num', 0)
+            results_by_page[page_num] = result
 
-        if result.success and result.data:
-            data = result.data
-            if data.get('has_movie_list'):
-                html = data['html']
+            if result.success and result.data:
+                data = result.data
+                if data.get('has_movie_list'):
+                    html = data['html']
 
-                if custom_url is not None and not csv_name_resolved and not user_specified_output:
-                    url_type = detect_url_type(custom_url)
-                    if url_type in ('actors', 'makers', 'publishers', 'series', 'directors', 'video_codes'):
-                        resolved_csv_name = generate_output_csv_name_from_html(custom_url, html)
-                        if resolved_csv_name != output_csv:
-                            output_csv = resolved_csv_name
-                            csv_path = os.path.join(output_dated_dir, output_csv)
-                            logger.info("[AdHoc] Updated CSV path: %s", csv_path)
-                    csv_name_resolved = True
+                    if custom_url is not None and not csv_name_resolved and not user_specified_output:
+                        url_type = detect_url_type(custom_url)
+                        if url_type in ('actors', 'makers', 'publishers', 'series', 'directors', 'video_codes'):
+                            resolved_csv_name = generate_output_csv_name_from_html(custom_url, html)
+                            if resolved_csv_name != output_csv:
+                                output_csv = resolved_csv_name
+                                csv_path = os.path.join(output_dated_dir, output_csv)
+                                logger.info("[AdHoc] Updated CSV path: %s", csv_path)
+                        csv_name_resolved = True
 
-        if not result.success:
-            if result.error == 'all_proxies_banned':
-                any_proxy_banned = True
+            if not result.success:
+                if result.error == 'all_proxies_banned':
+                    any_proxy_banned = True
 
-        # -- sliding window: advance or stop --------------------------------
+            # -- sliding window: advance or stop ----------------------------
 
-        if parse_all and not stop_collecting:
-            should_stop = _check_stop_condition(
-                results_by_page, start_page, max_consecutive_empty,
-            )
-            if should_stop:
-                stop_collecting = True
-                backend.mark_done()
-            else:
-                in_flight -= 1
-                while in_flight < window_size:
-                    _submit_page(backend, next_page, custom_url)
-                    next_page += 1
-                    in_flight += 1
-
-    # -- shutdown engine and export login state -----------------------------
-
-    backend.shutdown()
-    backend.export_login_state()
+            if parse_all and not stop_collecting:
+                should_stop = _check_stop_condition(
+                    results_by_page, start_page, max_consecutive_empty,
+                )
+                if should_stop:
+                    stop_collecting = True
+                    backend.mark_done()
+                else:
+                    in_flight -= 1
+                    while in_flight < window_size:
+                        _submit_page(backend, next_page, custom_url)
+                        next_page += 1
+                        in_flight += 1
+    finally:
+        backend.shutdown()
+        backend.export_login_state()
 
     # -- process results in page order --------------------------------------
 
@@ -195,8 +194,12 @@ def fetch_all_index_pages_parallel(
     for page_num in sorted_pages:
         result = results_by_page[page_num]
 
-        if not result.success or not result.data:
-            logger.info("[Page %d] Failed or empty (parallel)", page_num)
+        if not result.success:
+            logger.warning("[Page %d] Fetch failed (parallel), skipping", page_num)
+            continue
+
+        if not result.data:
+            logger.info("[Page %d] No data returned (parallel)", page_num)
             consecutive_empty += 1
             if consecutive_empty >= max_consecutive_empty:
                 break

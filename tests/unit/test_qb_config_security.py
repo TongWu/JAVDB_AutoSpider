@@ -24,15 +24,30 @@ def test_build_qb_base_url_defaults_to_https_when_scheme_is_missing():
     assert build_qb_base_url("qb.internal:8080") == "https://qb.internal:8080"
 
 
-def test_qb_base_url_candidates_retry_http_after_https():
+def test_qb_base_url_candidates_no_http_fallback_by_default():
     assert qb_base_url_candidates("qb.internal:8080") == [
+        "https://qb.internal:8080",
+    ]
+
+
+def test_qb_base_url_candidates_http_fallback_when_insecure_allowed():
+    assert qb_base_url_candidates(
+        "qb.internal:8080", allow_insecure_http=True,
+    ) == [
         "https://qb.internal:8080",
         "http://qb.internal:8080",
     ]
 
 
-def test_build_qb_base_url_accepts_explicit_http_url():
-    assert build_qb_base_url("http://qb.internal:8080") == "http://qb.internal:8080"
+def test_build_qb_base_url_rejects_http_without_flag():
+    with pytest.raises(ValueError, match="insecure"):
+        build_qb_base_url("http://qb.internal:8080")
+
+
+def test_build_qb_base_url_accepts_explicit_http_url_with_flag():
+    assert build_qb_base_url(
+        "http://qb.internal:8080", allow_insecure_http=True,
+    ) == "http://qb.internal:8080"
 
 
 def test_build_qb_base_url_rejects_invalid_scheme():

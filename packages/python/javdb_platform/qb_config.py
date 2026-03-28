@@ -58,6 +58,11 @@ def _normalize_qb_url(url: Any, *, allow_insecure_http: Any = _UNSET) -> str:
     parsed = urlsplit(raw)
     if parsed.scheme not in {"https", "http"}:
         raise ValueError("QB_URL must start with http:// or https://.")
+    if parsed.scheme == "http" and not qb_allow_insecure_http(allow_insecure_http):
+        raise ValueError(
+            "QB_URL uses plain http:// which is insecure. "
+            "Set QB_ALLOW_INSECURE_HTTP=true to allow, or use https://."
+        )
     if not parsed.netloc:
         raise ValueError("QB_URL must include a host.")
     normalized_path = parsed.path.rstrip("/")
@@ -116,7 +121,7 @@ def qb_base_url_candidates(
     )
     candidates = [primary]
     parsed = urlsplit(primary)
-    if parsed.scheme == "https":
+    if parsed.scheme == "https" and qb_allow_insecure_http(allow_insecure_http):
         fallback = urlunsplit(
             SplitResult(
                 scheme="http",

@@ -172,8 +172,7 @@ GET /api/config
 Authorization: Bearer <token>
 
 → 200 {
-  "QB_HOST": "localhost",
-  "QB_PORT": "8080",
+  "QB_URL": "https://localhost:8080",
   "QB_PASSWORD": "********",
   "PROXY_POOL": [{"name":"Proxy-1","http":"http://***:***@xxx.xxx.xxx.xxx:12300"}],
   "JAVDB_SESSION_COOKIE": "********",
@@ -252,10 +251,12 @@ Authorization: Bearer <token>
 
 | 配置名 | 类型 | 说明 | 默认/示例 |
 |--------|------|------|-----------|
-| QB_HOST | string | qBittorrent Web UI 主机 | `localhost` |
-| QB_PORT | string/int | 端口 | `8080` |
+| QB_URL | string | qBittorrent Web UI 完整地址（含 scheme 和可选端口，如 `https://localhost:8080`）| `https://localhost:8080` |
 | QB_USERNAME | string | 用户名 | `admin` |
 | QB_PASSWORD | string | 密码（敏感） | 空 |
+| QB_ALLOW_INSECURE_HTTP | bool | 允许使用 `http://`（默认仅允许 `https://`）| `False` |
+
+> **迁移说明**: UI/后端现已统一使用 `QB_URL`，旧的 `QB_HOST`/`QB_PORT` 已弃用。若现有配置仍使用 `QB_HOST`+`QB_PORT`，系统会自动合成 URL，但建议尽快迁移到 `QB_URL`。
 | TORRENT_CATEGORY | string | Daily 模式分类名 | `Daily Ingestion` |
 | TORRENT_CATEGORY_ADHOC | string | Adhoc 模式分类名 | `Ad Hoc` |
 | TORRENT_SAVE_PATH | string | 保存路径，空为默认 | 空 |
