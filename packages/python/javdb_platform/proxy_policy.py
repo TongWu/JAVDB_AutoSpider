@@ -108,5 +108,8 @@ def is_cf_bypass_reachable(host: str = '127.0.0.1', port: int = 8000,
             _cf_bypass_checked = True
             return True
     except OSError:
-        _cf_bypass_checked = False
+        if _cf_bypass_checked is True:
+            _cf_bypass_checked = None
+        else:
+            _cf_bypass_checked = False
         return False

@@ -728,7 +728,8 @@ def run_alignment(args: argparse.Namespace) -> int:
                 )
                 if not args.dry_run:
                     db_upsert_align_no_exact_match(code)
-                # No 3s sleep on miss — next iteration (parallel workers get FetchEngine movie_sleep on next task).
+                if not (use_proxy and PROXY_POOL):
+                    movie_sleep_mgr.sleep()
                 continue
 
             # Only after an exact search hit: pause before detail fetch.

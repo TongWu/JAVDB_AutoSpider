@@ -321,3 +321,4 @@ class TestProxyModeDisabled:
                 assert state_mod.global_proxy_pool is None
         finally:
             state_mod.global_proxy_pool = orig_pool
+            session_mod.PROXY_MODE = orig_mode
