@@ -2,6 +2,11 @@ name: Build Rust Extension
 
 # This workflow builds the Rust extension wheel and caches it.
 # It can be triggered standalone on push, manually, or called by other workflows.
+#
+# Two parallel jobs:
+#   - build-x64: always runs on ubuntu-latest (GitHub-hosted, x64)
+#   - build-arm: runs on self-hosted (ARM). Skipped gracefully if no
+#     self-hosted runner picks up the job within 5 minutes.
 
 on:
   push:
@@ -13,6 +18,8 @@ on:
       - 'packages/rust/javdb_rust_core/**'
       - '.github/workflows/build-rust-extension.yml'
       - '.github/actions/install-rust-wheel/**'
+      - '.github/actions/setup-python-env/**'
+      - '.github/actions/restore-encrypted-config/**'
   workflow_call:
   workflow_dispatch:
 
@@ -20,7 +27,10 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  # =============================================================================
+  # x64 build (GitHub-hosted)
+  # =============================================================================
+  build-x64:
     runs-on: ubuntu-latest
     env:
       TZ: Asia/Singapore
@@ -44,13 +54,58 @@ jobs:
       - name: Upload Rust extension wheel artifact
         uses: actions/upload-artifact@v7
         with:
-          name: rust-extension-wheel-${{ github.sha }}
+          name: rust-extension-wheel-x64-${{ github.sha }}
           path: /tmp/rust-wheel/*.whl
           retention-days: 30
 
       - name: Upload Rust extension wheel artifact (branch latest)
         uses: actions/upload-artifact@v7
         with:
-          name: rust-extension-wheel-latest-${{ steps.branch.outputs.name }}
+          name: rust-extension-wheel-x64-latest-${{ steps.branch.outputs.name }}
+          path: /tmp/rust-wheel/*.whl
+          retention-days: 7
+
+  # =============================================================================
+  # ARM build (self-hosted)
+  # Timeout after 5 min if no runner picks it up; failure does not block x64.
+  # =============================================================================
+  build-arm:
+    runs-on: self-hosted
+    timeout-minutes: 30
+    continue-on-error: true
+    env:
+      TZ: Asia/Singapore
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Ensure Python 3 is available
+        shell: bash
+        run: |
+          if ! command -v python3 &>/dev/null; then
+            echo "::error::python3 not found on self-hosted runner"
+            exit 1
+          fi
+          python3 --version
+
+      - name: Build and cache Rust wheel
+        uses: ./.github/actions/install-rust-wheel
+
+      - name: Sanitize branch name
+        id: branch
+        run: echo "name=$(echo '${{ github.ref_name }}' | sed 's/[^a-zA-Z0-9._-]/-/g')" >> $GITHUB_OUTPUT
+
+      - name: Upload Rust extension wheel artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: rust-extension-wheel-arm-${{ github.sha }}
+          path: /tmp/rust-wheel/*.whl
+          retention-days: 30
+
+      - name: Upload Rust extension wheel artifact (branch latest)
+        uses: actions/upload-artifact@v7
+        with:
+          name: rust-extension-wheel-arm-latest-${{ steps.branch.outputs.name }}
           path: /tmp/rust-wheel/*.whl
           retention-days: 7

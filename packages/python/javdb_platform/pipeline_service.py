@@ -24,6 +24,7 @@ activate_repo_root()
 
 # Import unified configuration
 from packages.python.javdb_platform.config_helper import cfg
+from packages.python.javdb_platform.proxy_policy import add_proxy_arguments, resolve_proxy_override
 
 PIPELINE_LOG_FILE = cfg('PIPELINE_LOG_FILE', 'logs/pipeline.log')
 LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
@@ -110,7 +111,11 @@ def parse_arguments():
     parser.add_argument('--output-file', type=str, help='Specify output CSV file name')
     parser.add_argument('--dry-run', action='store_true', help='Print items that would be written without changing CSV file')
     parser.add_argument('--ignore-release-date', action='store_true', help='Ignore today/yesterday tags')
-    parser.add_argument('--use-proxy', action='store_true', help='Enable proxy for all HTTP requests')
+    add_proxy_arguments(
+        parser,
+        use_help='Force-enable proxy for all pipeline steps',
+        no_help='Force-disable proxy for all pipeline steps',
+    )
     parser.add_argument(
         '--always-bypass-time',
         type=int,
@@ -223,6 +228,7 @@ def main():
     email_cmd = ['python3', '-u', '-m', 'apps.cli.email_notification']
 
     args = parse_arguments()
+    proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
     if args.always_bypass_time is not None and args.always_bypass_time < 0:
         logger.error("--always-bypass-time must be >= 0")
         sys.exit(2)
@@ -274,8 +280,10 @@ def main():
         spider_args.append('--dry-run')
     if args.ignore_release_date:
         spider_args.append('--ignore-release-date')
-    if args.use_proxy:
+    if proxy_override is True:
         spider_args.append('--use-proxy')
+    elif proxy_override is False:
+        spider_args.append('--no-proxy')
     if args.always_bypass_time is not None:
         spider_args.append('--always-bypass-time')
         if args.always_bypass_time > 0:
@@ -289,8 +297,10 @@ def main():
         uploader_args.extend(['--mode', 'adhoc'])
     else:
         uploader_args.extend(['--mode', 'daily'])
-    if args.use_proxy:
+    if proxy_override is True:
         uploader_args.append('--use-proxy')
+    elif proxy_override is False:
+        uploader_args.append('--no-proxy')
 
     # Build arguments for pikpak bridge
     pikpak_args = ['--from-pipeline']  # Always pass --from-pipeline
@@ -299,8 +309,10 @@ def main():
         pikpak_args.append('--dry-run')
     if args.pikpak_individual:
         pikpak_args.append('--individual')
-    if args.use_proxy:
+    if proxy_override is True:
         pikpak_args.append('--use-proxy')
+    elif proxy_override is False:
+        pikpak_args.append('--no-proxy')
 
     pipeline_success = False
     

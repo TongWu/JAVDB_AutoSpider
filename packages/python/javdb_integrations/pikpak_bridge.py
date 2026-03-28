@@ -36,16 +36,22 @@ PIKPAK_REQUEST_DELAY = cfg('PIKPAK_REQUEST_DELAY', 3)
 
 PROXY_HTTP = cfg('PROXY_HTTP', None)
 PROXY_HTTPS = cfg('PROXY_HTTPS', None)
-PROXY_MODULES = cfg('PROXY_MODULES', ['all'])
+PROXY_MODULES = cfg('PROXY_MODULES', ['spider'])
 
 # Proxy pool
 PROXY_MODE = cfg('PROXY_MODE', 'single')
 PROXY_POOL = cfg('PROXY_POOL', [])
-PROXY_POOL_COOLDOWN_SECONDS = cfg('PROXY_POOL_COOLDOWN_SECONDS', 691200)  # 8 days
 PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
+QB_ALLOW_INSECURE_HTTP = cfg('QB_ALLOW_INSECURE_HTTP', False)
 
 from packages.python.javdb_platform.logging_config import setup_logging, get_logger
 from packages.python.javdb_platform.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
+from packages.python.javdb_platform.proxy_policy import (
+    add_proxy_arguments,
+    describe_proxy_override,
+    resolve_proxy_override,
+    should_proxy_module,
+)
 from packages.python.javdb_core.masking import mask_ip_address, mask_username, mask_email, mask_full
 
 # --------------------------
@@ -59,7 +65,13 @@ from packages.python.javdb_platform.proxy_pool import ProxyPool, create_proxy_po
 
 # Import proxy helper from request handler
 from packages.python.javdb_platform.request_handler import ProxyHelper, create_proxy_helper_from_config
-from packages.python.javdb_platform.qb_config import build_qb_base_url, qb_verify_tls
+from packages.python.javdb_platform.qb_config import (
+    qb_allow_insecure_http,
+    qb_base_url_candidates,
+    qb_verify_tls,
+)
+
+QB_ALLOW_INSECURE_HTTP = qb_allow_insecure_http(QB_ALLOW_INSECURE_HTTP)
 
 # Global proxy pool instance
 global_proxy_pool = None
@@ -87,11 +99,11 @@ def get_proxies_dict(module_name, use_proxy_flag):
     return global_proxy_helper.get_proxies_dict(module_name, use_proxy_flag)
 
 
-def initialize_proxy_helper(use_proxy):
+def initialize_proxy_helper(proxy_override):
     """Initialize global proxy pool and proxy helper."""
     global global_proxy_pool, global_proxy_helper
     
-    if not use_proxy:
+    if proxy_override is False:
         global_proxy_pool = None
         # When use_proxy=False, don't pass proxy configs to ensure no proxy is used
         global_proxy_helper = create_proxy_helper_from_config(
@@ -109,7 +121,6 @@ def initialize_proxy_helper(use_proxy):
             logger.info(f"Initializing proxy pool with {len(PROXY_POOL)} proxies...")
             global_proxy_pool = create_proxy_pool_from_config(
                 PROXY_POOL,
-                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
                 max_failures=PROXY_POOL_MAX_FAILURES
             )
             logger.info(f"Proxy pool initialized successfully")
@@ -117,7 +128,6 @@ def initialize_proxy_helper(use_proxy):
             logger.info(f"Initializing single proxy mode (using first proxy from pool)...")
             global_proxy_pool = create_proxy_pool_from_config(
                 [PROXY_POOL[0]],
-                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
                 max_failures=PROXY_POOL_MAX_FAILURES
             )
             logger.info(f"Single proxy initialized: {PROXY_POOL[0].get('name', 'Main-Proxy')}")
@@ -130,7 +140,6 @@ def initialize_proxy_helper(use_proxy):
         }
         global_proxy_pool = create_proxy_pool_from_config(
             [legacy_proxy],
-            cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
             max_failures=PROXY_POOL_MAX_FAILURES
         )
     else:
@@ -152,8 +161,12 @@ def initialize_proxy_helper(use_proxy):
 # qBittorrent Client
 # --------------------------
 class QBittorrentClient:
-    def __init__(self, base_url, username, password, use_proxy=False):
-        self.base_url = base_url.rstrip('/')
+    def __init__(self, base_urls, username, password, use_proxy=False):
+        if isinstance(base_urls, str):
+            self.base_urls = [base_urls.rstrip('/')]
+        else:
+            self.base_urls = [str(url).rstrip('/') for url in base_urls if str(url).strip()]
+        self.base_url = self.base_urls[0]
         self.session = requests.Session()
         self.session.verify = qb_verify_tls()
         self.use_proxy = use_proxy
@@ -161,16 +174,38 @@ class QBittorrentClient:
         self.login(username, password)
 
     def login(self, username, password):
-        resp = self.session.post(f"{self.base_url}/api/v2/auth/login", data={
-            'username': username,
-            'password': password
-        }, proxies=self.proxies)
-        if resp.status_code != 200 or resp.text != 'Ok.':
-            logger.error(f"qBittorrent login failed: {resp.text}")
-            raise Exception(f"Failed to login qBittorrent: {resp.text}")
-        # Use mask_ip_address to extract and mask the host from base_url
-        masked_url = mask_ip_address(self.base_url)
-        logger.info(f"Logged into qBittorrent at {masked_url} as {mask_username(username)} successfully.")
+        last_error = None
+        primary_url = self.base_urls[0]
+
+        for candidate in self.base_urls:
+            try:
+                resp = self.session.post(
+                    f"{candidate}/api/v2/auth/login",
+                    data={
+                        'username': username,
+                        'password': password
+                    },
+                    proxies=self.proxies,
+                )
+            except requests.RequestException as exc:
+                last_error = exc
+                logger.warning(f"qBittorrent login attempt failed at {mask_ip_address(candidate)}: {exc}")
+                continue
+
+            if resp.status_code == 200 and resp.text == 'Ok.':
+                self.base_url = candidate
+                masked_url = mask_ip_address(self.base_url)
+                if candidate != primary_url:
+                    logger.info(f"qBittorrent HTTPS login failed; retried successfully over HTTP at {masked_url}.")
+                logger.info(f"Logged into qBittorrent at {masked_url} as {mask_username(username)} successfully.")
+                return
+
+            last_error = Exception(resp.text)
+            logger.warning(f"qBittorrent login failed at {mask_ip_address(candidate)}: {resp.text}")
+
+        if last_error is None:
+            raise Exception("Failed to login qBittorrent")
+        raise Exception(f"Failed to login qBittorrent: {last_error}")
 
     def get_torrents(self, category):
         resp = self.session.get(f"{self.base_url}/api/v2/torrents/info",
@@ -307,14 +342,17 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
 # --------------------------
 # Main Logic
 # --------------------------
-def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline=False, session_id=None):
+def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=False, session_id=None):
     cutoff_date = (datetime.now() - timedelta(days=days)).date()
     logger.info(f"Processing torrents older than {days} days (before {cutoff_date})")
     
     # Initialize proxy helper
     initialize_proxy_helper(use_proxy)
     
-    if use_proxy:
+    proxy_active = should_proxy_module('pikpak', use_proxy, PROXY_MODULES)
+    logger.info(f"Proxy policy for PikPak: {describe_proxy_override(use_proxy)}")
+
+    if proxy_active:
         if global_proxy_helper is not None:
             stats = global_proxy_helper.get_statistics()
             
@@ -327,9 +365,11 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=False, from_pipeline
                     logger.info(f"Main proxy: {main_proxy_name}")
         else:
             logger.warning("PROXY ENABLED: But no proxy configured")
+    else:
+        logger.info("Proxy disabled for PikPak requests")
 
     qb = QBittorrentClient(
-        build_qb_base_url(QB_HOST, QB_PORT),
+        qb_base_url_candidates(),
         QB_USERNAME,
         QB_PASSWORD,
         use_proxy,
@@ -570,15 +610,20 @@ def main():
     parser.add_argument("--days", type=int, default=3, help="Filter torrents older than N days")
     parser.add_argument("--dry-run", action="store_true", help="Test mode: no delete or PikPak add")
     parser.add_argument("--individual", action="store_true", help="Process torrents individually instead of batch mode (default: batch mode)")
-    parser.add_argument("--use-proxy", action="store_true", help="Enable proxy for qBittorrent API requests (proxy settings from config.py)")
+    add_proxy_arguments(
+        parser,
+        use_help='Force-enable proxy for PikPak and qBittorrent requests in this command',
+        no_help='Force-disable proxy for PikPak and qBittorrent requests in this command',
+    )
     parser.add_argument("--from-pipeline", action="store_true", help="Running from pipeline.py - use GIT_USERNAME for commits")
     parser.add_argument("--session-id", type=int, default=None, help="Report session ID for saving pikpak stats to SQLite")
     args = parser.parse_args()
 
     # Default to batch mode unless --individual is specified
     batch_mode = not args.individual
+    proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
     
-    pikpak_bridge(args.days, args.dry_run, batch_mode, args.use_proxy, args.from_pipeline,
+    pikpak_bridge(args.days, args.dry_run, batch_mode, proxy_override, args.from_pipeline,
                   session_id=args.session_id)
 
 

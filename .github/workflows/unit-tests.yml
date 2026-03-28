@@ -47,9 +47,9 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           packages/rust/javdb_rust_core/target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('packages/rust/javdb_rust_core/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('packages/rust/javdb_rust_core/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-cargo-
+          ${{ runner.os }}-${{ runner.arch }}-cargo-
 
     - name: Run cargo check
       working-directory: packages/rust/javdb_rust_core
@@ -87,30 +87,11 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v6
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v6
+    - name: Set up Python, venv, dependencies, Rust extension
+      uses: ./.github/actions/setup-python-env
       with:
         python-version: ${{ matrix.python-version }}
-
-    - name: Cache pip dependencies
-      uses: actions/cache@v5
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-
-    - name: Install dependencies
-      run: |
-        python -m venv .venv
-        source .venv/bin/activate
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
-        echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
-
-    - name: Install Rust extension
-      uses: ./.github/actions/install-rust-wheel
+        upgrade-pip: 'true'
 
     - name: Create config.py from example
       run: |

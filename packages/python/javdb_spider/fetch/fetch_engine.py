@@ -46,8 +46,11 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator, List, Optional
 
 from packages.python.javdb_platform.logging_config import get_logger
+from packages.python.javdb_platform.proxy_ban_manager import get_ban_manager
 from packages.python.javdb_platform.proxy_pool import create_proxy_pool_from_config
-from packages.python.javdb_platform.request_handler import RequestHandler, RequestConfig
+from packages.python.javdb_platform.request_handler import (
+    RequestHandler, RequestConfig, ProxyBannedError, ProxyExhaustedError,
+)
 
 import packages.python.javdb_spider.runtime.state as state
 from packages.python.javdb_spider.fetch.session import is_login_page
@@ -58,17 +61,15 @@ from packages.python.javdb_spider.runtime.sleep import (
     movie_sleep_mgr as _global_sleep_mgr,
     PenaltyTracker,
     DualWindowThrottle,
+    penalty_tracker as _shared_penalty_tracker,
 )
 from packages.python.javdb_spider.runtime.config import (
     BASE_URL,
     CF_BYPASS_SERVICE_PORT,
     CF_BYPASS_ENABLED,
     CF_BYPASS_PORT_MAP,
-    CF_TURNSTILE_COOLDOWN,
-    FALLBACK_COOLDOWN,
     JAVDB_SESSION_COOKIE,
     PROXY_POOL,
-    PROXY_POOL_COOLDOWN_SECONDS,
     PROXY_POOL_MAX_FAILURES,
     LOGIN_PROXY_NAME,
 )
@@ -80,6 +81,14 @@ __all__ = [
     'EngineTask', 'EngineResult', 'LoginRequired',
     'WorkerContext', 'ParallelFetchBackend', 'FetchEngine',
 ]
+
+# ---------------------------------------------------------------------------
+# Engine-internal timing constants
+# ---------------------------------------------------------------------------
+_STARTUP_JITTER_BASE = (0.5, 2.0)
+_STARTUP_JITTER_PER_WORKER = (1.5, 3.0)
+_REQUEUE_BACKOFF_FACTOR = 0.3
+_REQUEUE_BACKOFF_CAP = 2.0
 
 
 # ---------------------------------------------------------------------------
@@ -215,6 +224,7 @@ class WorkerContext:
             self._last_used_cf = False
             return html
 
+        worker._sleep_mgr.sleep()
         html = worker._fetch_html(url, True)
         if html:
             if is_login_page(html):
@@ -257,9 +267,10 @@ class _EngineWorker(threading.Thread):
         coordinator: LoginCoordinator,
         sleep_min: float,
         sleep_max: float,
-        ban_log_file: str,
-        penalty_tracker: Optional[PenaltyTracker] = None,
-        throttle: Optional[DualWindowThrottle] = None,
+        penalty_tracker: PenaltyTracker,
+        banned_proxies: set,
+        drain_lock: threading.Lock,
+        drain_done: List[bool],
         stop_event: Optional[threading.Event] = None,
     ):
         super().__init__(
@@ -278,25 +289,31 @@ class _EngineWorker(threading.Thread):
         self.all_workers = all_workers
         self._coordinator = coordinator
         self._stop_event = stop_event or threading.Event()
+        self._banned_proxies = banned_proxies
+        self._drain_lock = drain_lock
+        self._drain_done = drain_done
 
         self._cf_bypass_since: Optional[float] = None
         self._first_request = True
         self._startup_jitter = (
-            random.uniform(0.5, 2.0) + worker_id * random.uniform(1.5, 3.0)
+            random.uniform(*_STARTUP_JITTER_BASE)
+            + worker_id * random.uniform(*_STARTUP_JITTER_PER_WORKER)
         )
 
+        # One PenaltyTracker per engine (passed in): CF/failure events from any
+        # worker must raise the penalty factor for all workers' adaptive sleep.
+        # Per-worker DualWindowThrottle stays isolated (independent proxy IPs).
         self._sleep_mgr = MovieSleepManager(
             sleep_min, sleep_max,
             penalty_tracker=penalty_tracker,
-            throttle=throttle,
+            throttle=DualWindowThrottle(),
         )
 
         self._proxy_pool = create_proxy_pool_from_config(
             [proxy_config],
-            cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
             max_failures=PROXY_POOL_MAX_FAILURES,
-            ban_log_file=ban_log_file,
         )
+        _cd = self._sleep_mgr.get_cooldown()
         self._handler = RequestHandler(
             proxy_pool=self._proxy_pool,
             config=RequestConfig(
@@ -305,13 +322,14 @@ class _EngineWorker(threading.Thread):
                 cf_bypass_port_map=CF_BYPASS_PORT_MAP,
                 cf_bypass_enabled=CF_BYPASS_ENABLED,
                 cf_bypass_max_failures=3,
-                cf_turnstile_cooldown=CF_TURNSTILE_COOLDOWN,
-                fallback_cooldown=FALLBACK_COOLDOWN,
+                cf_turnstile_cooldown=_cd,
+                fallback_cooldown=_cd,
                 javdb_session_cookie=JAVDB_SESSION_COOKIE,
                 proxy_http=proxy_config.get('http'),
                 proxy_https=proxy_config.get('https'),
                 proxy_modules=['all'],
                 proxy_mode='single',
+                between_attempt_sleep=self._sleep_mgr.sleep,
             ),
             penalty_tracker=penalty_tracker,
         )
@@ -407,27 +425,31 @@ class _EngineWorker(threading.Thread):
 
     # -- main loop -----------------------------------------------------------
 
+    @property
+    def _active_workers(self) -> int:
+        return self.total_workers - len(self._banned_proxies)
+
     def run(self) -> None:
         while True:
             task = self._get_next_task()
             if task is None:
                 break
 
-            # During shutdown, return tasks to the queue for the engine to
-            # collect as orphans.
             if self._stop_event.is_set():
                 self.task_queue.put(task)
                 continue
 
             if self.proxy_name in task.failed_proxies:
-                if len(task.failed_proxies) >= self.total_workers:
+                active = self._active_workers
+                failed_non_banned = task.failed_proxies - self._banned_proxies
+                if active <= 0 or len(failed_non_banned) >= active:
                     self.result_queue.put(EngineResult(
                         task=task, success=False,
                         error='all_proxies_failed',
                     ))
                     continue
                 requeue_front(self.task_queue, task)
-                backoff = min(2.0, 0.3 * len(task.failed_proxies))
+                backoff = min(_REQUEUE_BACKOFF_CAP, _REQUEUE_BACKOFF_FACTOR * len(task.failed_proxies))
                 if self._interruptible_sleep(backoff):
                     continue
                 continue
@@ -476,10 +498,23 @@ class _EngineWorker(threading.Thread):
                         "%s Process returned None, re-queued "
                         "(%d/%d proxies)",
                         _task_worker_ctx(task.entry_index, self.proxy_name),
-                        len(task.failed_proxies), self.total_workers,
+                        len(task.failed_proxies), self._active_workers,
                     )
             except LoginRequired:
                 self._handle_login_required(task)
+            except ProxyBannedError:
+                self._handle_proxy_banned(task)
+                break
+            except ProxyExhaustedError:
+                task.failed_proxies.add(self.proxy_name)
+                task.retry_count += 1
+                requeue_front(self.task_queue, task)
+                logger.warning(
+                    "%s Proxy pool exhausted, re-queued "
+                    "(%d/%d proxies)",
+                    _task_worker_ctx(task.entry_index, self.proxy_name),
+                    len(task.failed_proxies), self._active_workers,
+                )
             except Exception as exc:
                 task.failed_proxies.add(self.proxy_name)
                 task.retry_count += 1
@@ -489,8 +524,52 @@ class _EngineWorker(threading.Thread):
                     "(%d/%d proxies)",
                     _task_worker_ctx(task.entry_index, self.proxy_name),
                     exc,
-                    len(task.failed_proxies), self.total_workers,
+                    len(task.failed_proxies), self._active_workers,
                 )
+
+    def _handle_proxy_banned(self, task: EngineTask) -> None:
+        """Handle proxy ban: stop this worker and re-route tasks."""
+        task.failed_proxies.add(self.proxy_name)
+
+        with self._drain_lock:
+            self._banned_proxies.add(self.proxy_name)
+            active = self._active_workers
+
+            logger.warning(
+                "[worker=%s] Proxy banned (HTTP 403) — worker stopped "
+                "(%d active workers remain)",
+                self.proxy_name, active,
+            )
+
+            if active > 0:
+                requeue_front(self.task_queue, task)
+            else:
+                self.result_queue.put(EngineResult(
+                    task=task, success=False,
+                    error='all_proxies_banned',
+                ))
+                if not self._drain_done[0]:
+                    self._drain_done[0] = True
+                    self._drain_remaining_tasks()
+
+    def _drain_remaining_tasks(self) -> None:
+        """When all workers are banned, drain task and login queues as failures.
+
+        Must only be called once across all workers (guarded by
+        ``_drain_lock`` / ``_drain_done`` in ``_handle_proxy_banned``).
+        """
+        for q in (self.task_queue, self.login_queue):
+            while True:
+                try:
+                    item = q.get_nowait()
+                    if item is None:
+                        break
+                    self.result_queue.put(EngineResult(
+                        task=item, success=False,
+                        error='all_proxies_banned',
+                    ))
+                except queue_module.Empty:
+                    break
 
 
 # ---------------------------------------------------------------------------
@@ -517,20 +596,14 @@ class ParallelFetchBackend(FetchBackend):
         process_fn: ProcessFn,
         *,
         use_cookie: bool = False,
-        ban_log_file: str = '',
         stop_event: Optional[threading.Event] = None,
-        penalty_tracker: Optional[PenaltyTracker] = None,
-        throttle: Optional[DualWindowThrottle] = None,
         sleep_min: Optional[float] = None,
         sleep_max: Optional[float] = None,
         runtime_state: Optional[FetchRuntimeState] = None,
     ):
         self._process_fn = process_fn
         self._use_cookie = use_cookie
-        self._ban_log_file = ban_log_file
         self._stop_event = stop_event or threading.Event()
-        self._penalty_tracker = penalty_tracker
-        self._throttle = throttle
         self._sleep_min = (
             sleep_min if sleep_min is not None else _global_sleep_mgr.sleep_min
         )
@@ -575,37 +648,72 @@ class ParallelFetchBackend(FetchBackend):
                 "FetchEngine requires at least one proxy in PROXY_POOL"
             )
 
+        ban_mgr = get_ban_manager()
+        banned_proxies: set = set()
+        pre_banned_count = 0
+        active_configs = []
+        for cfg in proxy_configs:
+            name = cfg.get('name', '')
+            if ban_mgr.is_proxy_banned(name):
+                pre_banned_count += 1
+                logger.info(
+                    "[startup] Proxy '%s' already banned — skipping worker",
+                    name,
+                )
+            else:
+                active_configs.append(cfg)
+
+        if not active_configs:
+            raise RuntimeError(
+                "FetchEngine: all proxies are banned, cannot start"
+            )
+
+        total_workers = len(active_configs)
+
         self._coordinator = LoginCoordinator(
             all_workers=self._workers,
             login_proxy_name=LOGIN_PROXY_NAME,
         )
 
-        for idx, proxy_cfg in enumerate(proxy_configs):
+        drain_lock = threading.Lock()
+        drain_done: List[bool] = [False]
+
+        # Same instance as movie_sleep_mgr.penalty_tracker: all engine workers
+        # share CF/failure history for coordinated backoff; aligns with other
+        # spider stages using the module sleep manager (thread-safe).
+        for idx, proxy_cfg in enumerate(active_configs):
             w = _EngineWorker(
                 worker_id=idx,
                 proxy_config=proxy_cfg,
                 task_queue=self._task_queue,
                 result_queue=self._result_queue,
                 login_queue=self._login_queue,
-                total_workers=len(proxy_configs),
+                total_workers=total_workers,
                 use_cookie=self._use_cookie,
                 process_fn=self._process_fn,
                 all_workers=self._workers,
                 coordinator=self._coordinator,
                 sleep_min=self._sleep_min,
                 sleep_max=self._sleep_max,
-                ban_log_file=self._ban_log_file,
-                penalty_tracker=self._penalty_tracker,
-                throttle=self._throttle,
+                penalty_tracker=_shared_penalty_tracker,
+                banned_proxies=banned_proxies,
+                drain_lock=drain_lock,
+                drain_done=drain_done,
                 stop_event=self._stop_event,
             )
             self._workers.append(w)
 
         self._inherit_login_state()
 
-        logger.info(
-            "FetchEngine: starting %d worker(s)", len(self._workers),
-        )
+        if pre_banned_count:
+            logger.info(
+                "FetchEngine: starting %d worker(s) (%d proxies pre-banned)",
+                len(self._workers), pre_banned_count,
+            )
+        else:
+            logger.info(
+                "FetchEngine: starting %d worker(s)", len(self._workers),
+            )
         for w in self._workers:
             w.start()
 
@@ -740,6 +848,31 @@ class ParallelFetchBackend(FetchBackend):
             use_proxy=self._runtime_state.use_proxy,
             use_cf_bypass=self._runtime_state.use_cf_bypass,
         )
+
+    def export_login_state(self) -> None:
+        """Write the engine's login state back to the global ``state`` module.
+
+        After index-phase parallel fetch, the login worker may have refreshed
+        the session cookie.  This method propagates that information so the
+        subsequent detail-phase engine can inherit it via
+        ``_inherit_login_state``.
+        """
+        if not self._coordinator:
+            return
+        lid = self._coordinator.logged_in_worker_id
+        if lid is None:
+            return
+        for w in self._workers:
+            if w.worker_id == lid:
+                cookie = w._handler.config.javdb_session_cookie
+                if cookie:
+                    state.logged_in_proxy_name = w.proxy_name
+                    state.refreshed_session_cookie = cookie
+                    logger.info(
+                        "Exported engine login state: proxy=%s",
+                        w.proxy_name,
+                    )
+                return
 
     # -- convenience constructors --------------------------------------------
 

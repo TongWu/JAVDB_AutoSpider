@@ -75,6 +75,16 @@ on:
         required: false
         default: false
         type: boolean
+      align_no_login:
+        description: 'Alignment: skip movies requiring JavDB login instead of attempting authentication'
+        required: false
+        default: false
+        type: boolean
+      align_shuffle:
+        description: 'Alignment: randomise processing queue to avoid consecutive failures on similar prefixes'
+        required: false
+        default: true
+        type: boolean
       align_enqueue_qb:
         description: 'Alignment: enqueue upgrade magnets to qBittorrent'
         required: false
@@ -94,7 +104,7 @@ on:
       runner:
         description: 'Runner type'
         required: false
-        default: 'ubuntu-latest'
+        default: 'self-hosted'
         type: choice
         options:
           - 'ubuntu-latest'
@@ -121,6 +131,8 @@ jobs:
       INPUT_ALIGN_LIMIT: ${{ inputs.align_limit || '0' }}
       INPUT_ALIGN_CODES: ${{ inputs.align_codes }}
       INPUT_ALIGN_NO_PROXY: ${{ inputs.align_no_proxy }}
+      INPUT_ALIGN_NO_LOGIN: ${{ inputs.align_no_login }}
+      INPUT_ALIGN_SHUFFLE: ${{ inputs.align_shuffle }}
       INPUT_ALIGN_ENQUEUE_QB: ${{ inputs.align_enqueue_qb }}
       INPUT_ALIGN_EXECUTE_DELETE: ${{ inputs.align_execute_delete }}
       INPUT_ALIGN_QB_CATEGORY: ${{ inputs.align_qb_category }}
@@ -133,26 +145,15 @@ jobs:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
           lfs: true
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
         with:
           python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -r requirements.txt
-          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
-          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
-
-      - name: Install Rust extension
-        uses: ./.github/actions/install-rust-wheel
 
       - name: Generate config.py from GitHub Variables and Secrets
         env:
           # ============ SECRETS (sensitive: passwords, tokens, IPs) ============
-          VAR_QB_HOST: ${{ secrets.QB_HOST }}
+          VAR_QB_URL: ${{ secrets.QB_URL }}
           VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
           VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
@@ -162,7 +163,6 @@ jobs:
           # ============ VARIABLES (non-sensitive) ============
           VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
           VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
-          VAR_QB_PORT: ${{ vars.QB_PORT }}
           VAR_QB_USERNAME: ${{ secrets.QB_USERNAME }}
           VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
           VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
@@ -177,7 +177,6 @@ jobs:
           VAR_EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           VAR_EMAIL_TO: ${{ secrets.EMAIL_TO }}
           VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
-          VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS || '691200' }}
           VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES || 3 }}
           VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
           VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
@@ -191,10 +190,7 @@ jobs:
           VAR_JAVDB_USERNAME: ${{ secrets.JAVDB_USERNAME }}
           VAR_GPT_API_URL: ${{ secrets.GPT_API_URL }}
           VAR_GPT_API_KEY: ${{ secrets.GPT_API_KEY }}
-          VAR_PAGE_SLEEP: ${{ vars.PAGE_SLEEP }}
           VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
-          VAR_CF_TURNSTILE_COOLDOWN: ${{ vars.CF_TURNSTILE_COOLDOWN }}
-          VAR_FALLBACK_COOLDOWN: ${{ vars.FALLBACK_COOLDOWN }}
           VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
           VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE || 'logs/spider.log' }}
           VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE || 'logs/qb_uploader.log' }}
@@ -233,7 +229,7 @@ jobs:
       - name: Install rclone
         if: ${{ inputs.align_execute_delete == true }}
         run: |
-          curl -s https://rclone.org/install.sh | sudo bash
+          bash .github/scripts/install_rclone.sh
           rclone version
 
       - name: Configure rclone
@@ -272,6 +268,8 @@ jobs:
             echo "  Codes:                (none)"
           fi
           printf '  No Proxy:             %s\n' "$INPUT_ALIGN_NO_PROXY"
+          printf '  No Login:             %s\n' "$INPUT_ALIGN_NO_LOGIN"
+          printf '  Shuffle:              %s\n' "$INPUT_ALIGN_SHUFFLE"
           printf '  Enqueue QB:           %s\n' "$INPUT_ALIGN_ENQUEUE_QB"
           printf '  Execute Delete:       %s\n' "$INPUT_ALIGN_EXECUTE_DELETE"
           if [ -n "$INPUT_ALIGN_QB_CATEGORY" ]; then
@@ -341,6 +339,14 @@ jobs:
 
             if [ "$INPUT_ALIGN_NO_PROXY" = "true" ]; then
               CMD+=(--align-no-proxy)
+            fi
+
+            if [ "$INPUT_ALIGN_NO_LOGIN" = "true" ]; then
+              CMD+=(--align-no-login)
+            fi
+
+            if [ "$INPUT_ALIGN_SHUFFLE" = "true" ]; then
+              CMD+=(--align-shuffle)
             fi
 
             if [ "$INPUT_ALIGN_ENQUEUE_QB" = "true" ]; then
@@ -452,6 +458,8 @@ jobs:
               echo "  - Codes: (none)" >> $GITHUB_STEP_SUMMARY
             fi
             printf '  - No Proxy: %s\n' "$(summary_bool "$INPUT_ALIGN_NO_PROXY")" >> $GITHUB_STEP_SUMMARY
+            printf '  - No Login: %s\n' "$(summary_bool "$INPUT_ALIGN_NO_LOGIN")" >> $GITHUB_STEP_SUMMARY
+            printf '  - Shuffle: %s\n' "$(summary_bool "$INPUT_ALIGN_SHUFFLE")" >> $GITHUB_STEP_SUMMARY
             printf '  - Enqueue QB: %s\n' "$(summary_bool "$INPUT_ALIGN_ENQUEUE_QB")" >> $GITHUB_STEP_SUMMARY
             printf '  - Execute Delete: %s\n' "$(summary_bool "$INPUT_ALIGN_EXECUTE_DELETE")" >> $GITHUB_STEP_SUMMARY
             if [ -n "$INPUT_ALIGN_QB_CATEGORY" ]; then

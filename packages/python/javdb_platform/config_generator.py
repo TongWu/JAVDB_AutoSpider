@@ -23,7 +23,7 @@ import os
 import re
 import json
 import argparse
-from typing import Any, Callable, List, Tuple, Dict
+from typing import Any, Callable, List, Tuple, Dict, Optional
 
 
 # =============================================================================
@@ -173,6 +173,55 @@ def get_env_json(name: str, default: Any) -> Any:
     return default
 
 
+def get_env_bool_optional(name: str) -> Optional[bool]:
+    """Get environment variable as an optional boolean.
+
+    Returns ``None`` when the variable is unset or empty, which lets callers
+    distinguish "not provided" from an explicit true/false override.
+    """
+    val = os.environ.get(f'VAR_{name}', None)
+    if val is None:
+        val = os.environ.get(name, None)
+    if val is None:
+        return None
+
+    lowered = str(val).strip().lower()
+    if not lowered or lowered in ('__empty__', '__null__'):
+        return None
+    if lowered in ('true', '1', 'yes'):
+        return True
+    if lowered in ('false', '0', 'no'):
+        return False
+    return None
+
+
+def resolve_proxy_modules(default: Optional[List[str]] = None) -> List[str]:
+    """Resolve proxy-enabled modules from JSON config and per-module overrides."""
+    default_modules = default or ['spider']
+    configured_modules = get_env_json('PROXY_MODULES_JSON', default_modules)
+    if not isinstance(configured_modules, list):
+        configured_modules = default_modules
+
+    module_env_map = (
+        ('spider', 'PROXY_SPIDER_ENABLED'),
+        ('qbittorrent', 'PROXY_QBITTORRENT_ENABLED'),
+        ('pikpak', 'PROXY_PIKPAK_ENABLED'),
+    )
+
+    has_override = False
+    resolved_modules: List[str] = []
+    for module_name, env_name in module_env_map:
+        enabled = get_env_bool_optional(env_name)
+        if enabled is not None:
+            has_override = True
+        else:
+            enabled = 'all' in configured_modules or module_name in configured_modules
+        if enabled:
+            resolved_modules.append(module_name)
+
+    return resolved_modules if has_override else configured_modules
+
+
 def format_python_value(value: Any) -> str:
     """Format Python value for config.py output.
     
@@ -232,11 +281,8 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
 
     return git_config + [
         # qBittorrent Configuration
-        ('QB_HOST', 'QB_HOST', get_env, 'localhost', 'QBITTORRENT CONFIGURATION'),
-        ('QB_PORT', 'QB_PORT', get_env, '8080', 'QBITTORRENT CONFIGURATION'),
-        ('QB_SCHEME', 'QB_SCHEME', get_env, 'https', 'QBITTORRENT CONFIGURATION'),
+        ('QB_URL', 'QB_URL', get_env, 'https://localhost:8080', 'QBITTORRENT CONFIGURATION'),
         ('QB_VERIFY_TLS', 'QB_VERIFY_TLS', get_env_bool, True, 'QBITTORRENT CONFIGURATION'),
-        ('QB_ALLOW_INSECURE_HTTP', 'QB_ALLOW_INSECURE_HTTP', get_env_bool, False, 'QBITTORRENT CONFIGURATION'),
         ('QB_USERNAME', 'QB_USERNAME', get_env, 'admin', 'QBITTORRENT CONFIGURATION'),
         ('QB_PASSWORD', 'QB_PASSWORD', get_env, '', 'QBITTORRENT CONFIGURATION'),
         ('TORRENT_CATEGORY', 'TORRENT_CATEGORY', get_env, 'Daily Ingestion', 'QBITTORRENT CONFIGURATION'),
@@ -256,11 +302,16 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # Proxy Configuration
         ('PROXY_MODE', 'PROXY_MODE', get_env, 'pool', 'PROXY CONFIGURATION'),
         ('PROXY_POOL', 'PROXY_POOL_JSON', get_env_json, [], 'PROXY CONFIGURATION'),
-        ('PROXY_POOL_COOLDOWN_SECONDS', 'PROXY_POOL_COOLDOWN_SECONDS', get_env_int, 691200, 'PROXY CONFIGURATION'),
         ('PROXY_POOL_MAX_FAILURES', 'PROXY_POOL_MAX_FAILURES', get_env_int, 3, 'PROXY CONFIGURATION'),
         ('PROXY_HTTP', None, lambda n, d: None, None, 'PROXY CONFIGURATION'),  # Hardcoded None
         ('PROXY_HTTPS', None, lambda n, d: None, None, 'PROXY CONFIGURATION'),  # Hardcoded None
-        ('PROXY_MODULES', 'PROXY_MODULES_JSON', get_env_json, ['spider'], 'PROXY CONFIGURATION'),
+        (
+            'PROXY_MODULES',
+            None,
+            lambda _n, default: resolve_proxy_modules(default),
+            ['spider'],
+            'PROXY CONFIGURATION',
+        ),
         ('LOGIN_PROXY_NAME', 'LOGIN_PROXY_NAME', get_env, '', 'PROXY CONFIGURATION'),
         # Cloudflare Bypass Configuration
         ('CF_BYPASS_SERVICE_PORT', 'CF_BYPASS_SERVICE_PORT', get_env_int, 8000, 'CLOUDFLARE BYPASS CONFIGURATION'),
@@ -281,11 +332,8 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('GPT_API_URL', 'GPT_API_URL', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
         ('GPT_API_KEY', 'GPT_API_KEY', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
         # Request Timing Configuration
-        ('PAGE_SLEEP', 'PAGE_SLEEP', get_env_int, 5, 'REQUEST TIMING CONFIGURATION'),
         ('MOVIE_SLEEP_MIN', 'MOVIE_SLEEP', get_env_range_min, None, 'REQUEST TIMING CONFIGURATION'),
         ('MOVIE_SLEEP_MAX', 'MOVIE_SLEEP', get_env_range_max, None, 'REQUEST TIMING CONFIGURATION'),
-        ('CF_TURNSTILE_COOLDOWN', 'CF_TURNSTILE_COOLDOWN', get_env_int, 5, 'REQUEST TIMING CONFIGURATION'),
-        ('FALLBACK_COOLDOWN', 'FALLBACK_COOLDOWN', get_env_int, 15, 'REQUEST TIMING CONFIGURATION'),
         # Logging Configuration
         ('LOG_LEVEL', 'LOG_LEVEL', get_env, 'INFO', 'LOGGING CONFIGURATION'),
         ('SPIDER_LOG_FILE', 'SPIDER_LOG_FILE', get_env, 'logs/spider.log', 'LOGGING CONFIGURATION'),

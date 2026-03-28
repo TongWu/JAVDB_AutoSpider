@@ -21,7 +21,7 @@ class TestInitDb:
             ).fetchall()]
         expected = {
             'DedupRecords', 'MovieHistory', 'TorrentHistory', 'PikpakHistory',
-            'PikpakStats', 'ProxyBans', 'RcloneInventory',
+            'PikpakStats', 'RcloneInventory',
             'ReportMovies', 'ReportTorrents', 'ReportSessions', 'SchemaVersion',
             'SpiderStats', 'UploaderStats',
         }
@@ -441,30 +441,6 @@ class TestPikpakHistory:
 
 
 # ── proxy_bans ────────────────────────────────────────────────────────────
-
-class TestProxyBans:
-    def test_save_and_load(self, _isolate_sqlite):
-        bans = [
-            {'proxy_name': 'proxy1', 'ban_time': '2024-01-01', 'unban_time': '2024-01-02'},
-            {'proxy_name': 'proxy2', 'ban_time': '2024-01-03', 'unban_time': '2024-01-04'},
-        ]
-        db_mod.db_save_proxy_bans(bans)
-        loaded = db_mod.db_load_proxy_bans()
-        assert len(loaded) == 2
-        names = {r['ProxyName'] for r in loaded}
-        assert names == {'proxy1', 'proxy2'}
-
-    def test_save_replaces(self, _isolate_sqlite):
-        db_mod.db_save_proxy_bans([
-            {'proxy_name': 'old', 'ban_time': 't1', 'unban_time': 't2'}
-        ])
-        db_mod.db_save_proxy_bans([
-            {'proxy_name': 'new', 'ban_time': 't3', 'unban_time': 't4'}
-        ])
-        loaded = db_mod.db_load_proxy_bans()
-        assert len(loaded) == 1
-        assert loaded[0]['ProxyName'] == 'new'
-
 
 # ── report_sessions + report_rows ─────────────────────────────────────────
 

@@ -20,6 +20,7 @@ try:
         mask_email as _rust_mask_email,
         mask_ip_address as _rust_mask_ip_address,
         mask_proxy_url as _rust_mask_proxy_url,
+        mask_error as _rust_mask_error,
     )
     RUST_MASKING_AVAILABLE = True
 except ImportError:
@@ -198,6 +199,59 @@ def mask_server(server: Optional[str]) -> str:
     
     # It's a hostname, partially mask it
     return mask_partial(server, show_start=2, show_end=4)
+
+
+def mask_error(error_msg: Optional[str]) -> str:
+    """
+    Mask sensitive data inside an error/exception message while preserving
+    the error type and diagnostic text.
+
+    Scrubs proxy URLs (with embedded credentials), standalone IP addresses,
+    and ``_jdb_session`` cookie values so that logs remain useful for
+    debugging without leaking secrets.
+
+    Args:
+        error_msg: The stringified exception (``str(e)``)
+
+    Returns:
+        Error message with sensitive fragments replaced
+    """
+    if RUST_MASKING_AVAILABLE:
+        return _rust_mask_error(error_msg)
+    if not error_msg:
+        return 'None'
+
+    result = str(error_msg)
+
+    # 1. Mask proxy URLs  (http[s]://user:pass@host:port...)
+    proxy_pattern = re.compile(
+        r'https?://[^:]+:[^@]+@[^\s/:]+:\d+'
+    )
+    result = proxy_pattern.sub(
+        lambda m: mask_proxy_url(m.group(0)),
+        result,
+    )
+
+    # 2. Mask session cookie values  (_jdb_session=<value>)
+    result = re.sub(
+        r'(_jdb_session=)\S+',
+        r'\1********',
+        result,
+    )
+
+    # 3. Mask remaining bare IP addresses (skip already-masked xxx.xxx)
+    def _mask_bare_ip(m: re.Match) -> str:
+        if 'xxx' in m.group(0):
+            return m.group(0)
+        return mask_ip_address(m.group(0))
+
+    result = re.sub(
+        r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b',
+        _mask_bare_ip,
+        result,
+    )
+
+    return result
 
 
 def mask_proxy_url(proxy_url: Optional[str]) -> str:

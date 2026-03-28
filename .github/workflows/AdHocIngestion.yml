@@ -49,12 +49,17 @@ on:
         required: false
         default: true
         type: boolean
+      proxy_qbittorrent:
+        description: 'Enable proxy for qBittorrent requests'
+        required: false
+        default: false
+        type: boolean
       always_bypass_time:
         description: 'Spider CF bypass sticky window in minutes (empty=disabled, 0=entire session)'
         required: false
         type: number
       proxy_uploader:
-        description: 'Enable proxy for qBittorrent Uploader requests'
+        description: 'Deprecated alias for proxy_qbittorrent'
         required: false
         default: false
         type: boolean
@@ -69,7 +74,7 @@ on:
         default: ''
         type: string
       runner:
-        description: 'Runner type for pipeline jobs (health-check and run-pipeline)'
+        description: 'Runner type for run-pipeline (includes health checks)'
         required: false
         default: 'ubuntu-latest'
         type: choice
@@ -99,13 +104,15 @@ on:
 
 jobs:
   # =============================================================================
-  # Job 0: Build Rust Extension - Build and cache wheel (subsequent jobs get cache hits)
+  # Job 1: Setup - Checkout, install dependencies, generate config (includes Rust wheel build/cache)
   # =============================================================================
-  build-rust:
+  setup:
     runs-on: ubuntu-latest
+    environment: Production
     permissions:
       contents: read
     outputs:
+      branch: ${{ steps.branch_check.outputs.branch }}
       pipeline_workflow_run_started_at: ${{ steps.capture_run_started_at.outputs.started_at }}
     env:
       TZ: Asia/Singapore
@@ -115,32 +122,6 @@ jobs:
         id: capture_run_started_at
         run: echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
 
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-
-      - name: Build and cache Rust wheel
-        uses: ./.github/actions/install-rust-wheel
-
-  # =============================================================================
-  # Job 1: Setup - Checkout, install dependencies, generate config
-  # =============================================================================
-  setup:
-    needs: build-rust
-    runs-on: ubuntu-latest
-    environment: Production
-    permissions:
-      contents: read
-    outputs:
-      branch: ${{ steps.branch_check.outputs.branch }}
-    env:
-      TZ: Asia/Singapore
-    
-    steps:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
@@ -153,26 +134,15 @@ jobs:
           echo "Current branch: $CURRENT_BRANCH"
           echo "branch=$CURRENT_BRANCH" >> $GITHUB_OUTPUT
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
         with:
           python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -r requirements.txt
-          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
-          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
-
-      - name: Install Rust extension
-        uses: ./.github/actions/install-rust-wheel
 
       - name: Generate config.py from GitHub Variables and Secrets
         env:
           # ============ SECRETS (sensitive: passwords, tokens, IPs) ============
-          VAR_QB_HOST: ${{ secrets.QB_HOST }}
+          VAR_QB_URL: ${{ secrets.QB_URL }}
           VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
           VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
@@ -182,7 +152,6 @@ jobs:
           # ============ VARIABLES (non-sensitive) ============
           VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
           VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
-          VAR_QB_PORT: ${{ vars.QB_PORT }}
           VAR_QB_USERNAME: ${{ secrets.QB_USERNAME }}
           VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
           VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
@@ -197,9 +166,11 @@ jobs:
           VAR_EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           VAR_EMAIL_TO: ${{ secrets.EMAIL_TO }}
           VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
-          VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS || '691200' }}
           VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES || 3 }}
           VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_PROXY_SPIDER_ENABLED: ${{ inputs.proxy_spider && 'true' || 'false' }}
+          VAR_PROXY_QBITTORRENT_ENABLED: ${{ (inputs.proxy_qbittorrent || inputs.proxy_uploader) && 'true' || 'false' }}
+          VAR_PROXY_PIKPAK_ENABLED: ${{ inputs.proxy_pikpak && 'true' || 'false' }}
           VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
           VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
           VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED || 'True' }}
@@ -211,10 +182,7 @@ jobs:
           VAR_JAVDB_USERNAME: ${{ secrets.JAVDB_USERNAME }}
           VAR_GPT_API_URL: ${{ secrets.GPT_API_URL }}
           VAR_GPT_API_KEY: ${{ secrets.GPT_API_KEY }}
-          VAR_PAGE_SLEEP: ${{ vars.PAGE_SLEEP }}
           VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
-          VAR_CF_TURNSTILE_COOLDOWN: ${{ vars.CF_TURNSTILE_COOLDOWN }}
-          VAR_FALLBACK_COOLDOWN: ${{ vars.FALLBACK_COOLDOWN }}
           VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
           VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE || 'logs/spider.log' }}
           VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE || 'logs/qb_uploader.log' }}
@@ -284,92 +252,21 @@ jobs:
           retention-days: 1
 
   # =============================================================================
-  # Job 2: Health Check - Verify essential services before running pipeline
-  # =============================================================================
-  health-check:
-    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
-    environment: Production
-    permissions:
-      contents: read
-    needs: [setup, build-rust]
-    env:
-      TZ: Asia/Singapore
-    
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -r requirements.txt
-          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
-          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
-
-      - name: Install Rust extension
-        uses: ./.github/actions/install-rust-wheel
-
-      - name: Download encrypted config
-        uses: actions/download-artifact@v7
-        with:
-          name: config-encrypted
-          path: .
-
-      - name: Decrypt config
-        env:
-          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
-        run: |
-          # Guard: fail workflow if ARTIFACT_KEY is not configured
-          if [ -z "$ARTIFACT_KEY" ]; then
-            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
-            echo "This secret is required to decrypt config.py."
-            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
-            exit 1
-          fi
-          
-          openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
-            -in config.py.enc -out config.py \
-            -pass pass:"$ARTIFACT_KEY"
-          rm config.py.enc
-          echo "✓ Config decrypted successfully"
-
-      - name: Run health checks
-        env:
-          INPUT_PROXY_SPIDER: ${{ inputs.proxy_spider }}
-          INPUT_PROXY_UPLOADER: ${{ inputs.proxy_uploader }}
-          INPUT_PROXY_PIKPAK: ${{ inputs.proxy_pikpak }}
-        run: |
-          set -e  # Exit on error
-          set -o pipefail  # Exit on error in pipeline
-          
-          # Use proxy for health check if any proxy option is enabled
-          if [ "$INPUT_PROXY_SPIDER" = "true" ] || [ "$INPUT_PROXY_UPLOADER" = "true" ] || [ "$INPUT_PROXY_PIKPAK" = "true" ]; then
-            python3 -m apps.cli.health_check --use-proxy
-          else
-            python3 -m apps.cli.health_check
-          fi
-
-  # =============================================================================
-  # Job 3: Run Pipeline - Execute spider, uploader, and pikpak bridge
+  # Job 2: Run Pipeline - Health checks, then spider, uploader, and pikpak bridge
   # =============================================================================
   run-pipeline:
     runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     environment: Production
     permissions:
       contents: read
-    needs: [setup, health-check, build-rust]
+    needs: [setup]
     outputs:
       spider_success: ${{ steps.spider.outcome == 'success' }}
       uploader_success: ${{ steps.uploader.outcome == 'success' }}
       pikpak_success: ${{ steps.pikpak.outcome == 'success' }}
       csv_filename: ${{ steps.spider.outputs.csv_filename }}
       session_id: ${{ steps.spider.outputs.session_id }}
+      health_check_outcome: ${{ steps.health_check.outcome }}
     env:
       TZ: Asia/Singapore
     
@@ -380,45 +277,23 @@ jobs:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
           lfs: true
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -r requirements.txt
-          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
-          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
-
-      - name: Install Rust extension
-        uses: ./.github/actions/install-rust-wheel
-
-      - name: Download encrypted config
-        uses: actions/download-artifact@v7
+      - name: Restore encrypted config
+        uses: ./.github/actions/restore-encrypted-config
         with:
-          name: config-encrypted
-          path: .
+          artifact-name: config-encrypted
+          artifact-key: ${{ secrets.ARTIFACT_KEY }}
 
-      - name: Decrypt config
-        env:
-          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+      - name: Run health checks
+        id: health_check
         run: |
-          # Guard: fail workflow if ARTIFACT_KEY is not configured
-          if [ -z "$ARTIFACT_KEY" ]; then
-            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
-            echo "This secret is required to decrypt config.py."
-            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
-            exit 1
-          fi
-          
-          openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
-            -in config.py.enc -out config.py \
-            -pass pass:"$ARTIFACT_KEY"
-          rm config.py.enc
-          echo "✓ Config decrypted successfully"
+          set -e
+          set -o pipefail
+          python3 -m apps.cli.health_check
 
       - name: Pull latest changes
         run: |
@@ -446,7 +321,7 @@ jobs:
           INPUT_DATE_FILTER: ${{ inputs.date_filter }}
           INPUT_ENABLE_RCLONE_FILTER: ${{ inputs.enable_rclone_filter }}
           INPUT_PROXY_SPIDER: ${{ inputs.proxy_spider }}
-          INPUT_PROXY_UPLOADER: ${{ inputs.proxy_uploader }}
+          INPUT_PROXY_QBITTORRENT: ${{ inputs.proxy_qbittorrent || inputs.proxy_uploader }}
           INPUT_PROXY_PIKPAK: ${{ inputs.proxy_pikpak }}
           INPUT_QB_CATEGORY: ${{ inputs.qb_category }}
         run: |
@@ -466,7 +341,7 @@ jobs:
           printf 'Date Filter: %s\n' "$INPUT_DATE_FILTER"
           printf 'Rclone Filter: %s\n' "$INPUT_ENABLE_RCLONE_FILTER"
           printf 'Proxy Spider: %s\n' "$INPUT_PROXY_SPIDER"
-          printf 'Proxy Uploader: %s\n' "$INPUT_PROXY_UPLOADER"
+          printf 'Proxy qBittorrent: %s\n' "$INPUT_PROXY_QBITTORRENT"
           printf 'Proxy PikPak: %s\n' "$INPUT_PROXY_PIKPAK"
           if [ -n "$INPUT_QB_CATEGORY" ]; then
             printf 'QB Category: %s\n' "$INPUT_QB_CATEGORY"
@@ -531,11 +406,6 @@ jobs:
             fi
           fi
           
-          # Add proxy flag if enabled
-          if [ "$INPUT_PROXY_SPIDER" = "true" ]; then
-            SPIDER_CMD+=(--use-proxy)
-          fi
-
           ALWAYS_BYPASS_TIME="$INPUT_ALWAYS_BYPASS_TIME"
           if [ -n "$ALWAYS_BYPASS_TIME" ]; then
             if [ "$ALWAYS_BYPASS_TIME" = "0" ]; then
@@ -591,7 +461,6 @@ jobs:
         id: uploader
         env:
           CSV_PATH: ${{ steps.spider.outputs.csv_filename }}
-          INPUT_PROXY_UPLOADER: ${{ inputs.proxy_uploader }}
           INPUT_QB_CATEGORY: ${{ inputs.qb_category }}
           SPIDER_SESSION_ID: ${{ steps.spider.outputs.session_id }}
         run: |
@@ -606,10 +475,6 @@ jobs:
             echo "Using CSV file from spider: $CSV_PATH"
           else
             echo "Warning: No CSV path provided, qb_uploader will use auto-discovery"
-          fi
-          
-          if [ "$INPUT_PROXY_UPLOADER" = "true" ]; then
-            CMD_ARGS+=(--use-proxy)
           fi
           
           # Add custom category if provided
@@ -636,16 +501,12 @@ jobs:
         id: pikpak
         if: ${{ success() && steps.uploader.outcome == 'success' }}
         env:
-          INPUT_PROXY_PIKPAK: ${{ inputs.proxy_pikpak }}
           SPIDER_SESSION_ID: ${{ steps.spider.outputs.session_id }}
         run: |
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
           
           CMD_ARGS=(python3 -m apps.cli.pikpak_bridge --days 3)
-          if [ "$INPUT_PROXY_PIKPAK" = "true" ]; then
-            CMD_ARGS+=(--use-proxy)
-          fi
           SESSION_ID="$SPIDER_SESSION_ID"
           if [ -n "$SESSION_ID" ]; then
             if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9_-]+$'; then
@@ -663,7 +524,7 @@ jobs:
         run: |
           set -e
           set -o pipefail
-          curl -s https://rclone.org/install.sh | sudo bash
+          bash .github/scripts/install_rclone.sh
           python3 -m apps.cli.rclone_manager --execute
         continue-on-error: true
 
@@ -726,7 +587,7 @@ jobs:
           fi
           
           # Create encrypted archive of all reports (preserving folder structure)
-          # This includes: CSV report, history files, proxy_bans.csv
+          # This includes: CSV report, history files
           mkdir -p encrypted_artifacts
           
           # Build list of files to archive
@@ -740,7 +601,7 @@ jobs:
           fi
           
           # Add history files and database if they exist
-          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/pikpak_bridge_history.csv" "$REPORTS_DIR/proxy_bans.csv" "$REPORTS_DIR/rclone_inventory.csv" "$REPORTS_DIR/history.db" "$REPORTS_DIR/reports.db" "$REPORTS_DIR/operations.db"; do
+          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/pikpak_bridge_history.csv" "$REPORTS_DIR/rclone_inventory.csv" "$REPORTS_DIR/history.db" "$REPORTS_DIR/reports.db" "$REPORTS_DIR/operations.db"; do
             if [ -f "$HIST_FILE" ]; then
               FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $HIST_FILE"
               echo "Including: $HIST_FILE"
@@ -774,7 +635,7 @@ jobs:
           if-no-files-found: ignore
 
   # =============================================================================
-  # Job 4: Email Notification - Always runs (success, failure, or cancel)
+  # Job 3: Email Notification - Always runs (success, failure, or cancel)
   # (Runs in parallel with commit-results on GitHub-hosted runner)
   # =============================================================================
   email-notification:
@@ -782,55 +643,26 @@ jobs:
     environment: Production
     permissions:
       contents: read
-    needs: [setup, health-check, run-pipeline, build-rust]
+    needs: [setup, run-pipeline]
     if: always()
     env:
       TZ: Asia/Singapore
-      PIPELINE_WORKFLOW_RUN_STARTED_AT: ${{ needs.build-rust.outputs.pipeline_workflow_run_started_at }}
-    
+      PIPELINE_WORKFLOW_RUN_STARTED_AT: ${{ needs.setup.outputs.pipeline_workflow_run_started_at }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -r requirements.txt
-          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
-          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
-
-      - name: Install Rust extension
-        uses: ./.github/actions/install-rust-wheel
-
-      - name: Download encrypted config
-        uses: actions/download-artifact@v7
+      - name: Restore encrypted config
+        uses: ./.github/actions/restore-encrypted-config
         with:
-          name: config-encrypted
-          path: .
-
-      - name: Decrypt config
-        env:
-          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
-        run: |
-          # Guard: fail workflow if ARTIFACT_KEY is not configured
-          if [ -z "$ARTIFACT_KEY" ]; then
-            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
-            echo "This secret is required to decrypt config.py."
-            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
-            exit 1
-          fi
-          
-          openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
-            -in config.py.enc -out config.py \
-            -pass pass:"$ARTIFACT_KEY"
-          rm config.py.enc
-          echo "✓ Config decrypted successfully"
+          artifact-name: config-encrypted
+          artifact-key: ${{ secrets.ARTIFACT_KEY }}
 
       - name: Download encrypted logs (if available)
         uses: actions/download-artifact@v7
@@ -899,7 +731,7 @@ jobs:
         id: status
         env:
           SETUP_STATUS: ${{ needs.setup.result }}
-          HEALTH_STATUS: ${{ needs.health-check.result }}
+          HEALTH_STATUS: ${{ needs.run-pipeline.outputs.health_check_outcome }}
           PIPELINE_STATUS: ${{ needs.run-pipeline.result }}
           INPUT_URL: ${{ inputs.url }}
           INPUT_START_PAGE: ${{ inputs.start_page }}
@@ -966,7 +798,7 @@ jobs:
           "${CMD_ARGS[@]}"
 
   # =============================================================================
-  # Job 5: Commit Results - Commit CSV files only (no logs)
+  # Job 4: Commit Results - Commit CSV files only (no logs)
   # (Runs in parallel with email-notification on GitHub-hosted runner)
   # =============================================================================
   commit-results:
@@ -1050,7 +882,6 @@ jobs:
             echo "Spider and Uploader both succeeded - staging all data files"
             git add "$REPORTS_DIR/parsed_movies_history.csv" 2>/dev/null || true
             git add "$REPORTS_DIR/pikpak_bridge_history.csv" 2>/dev/null || true
-            git add "$REPORTS_DIR/proxy_bans.csv" 2>/dev/null || true
             git add "$REPORTS_DIR/history.db" 2>/dev/null || true
             git add "$REPORTS_DIR/reports.db" 2>/dev/null || true
             git add "$REPORTS_DIR/operations.db" 2>/dev/null || true

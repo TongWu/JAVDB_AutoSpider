@@ -94,6 +94,7 @@ The spider operates in two modes:
 - Incremental commits throughout pipeline execution
 - Email notifications with results and logs
 - Complete workflow automation
+- GitHub Actions ingestion workflows ([`.github/workflows/DailyIngestion.yml`](.github/workflows/DailyIngestion.yml), [`.github/workflows/AdHocIngestion.yml`](.github/workflows/AdHocIngestion.yml)) use shared composite actions ([`.github/actions/setup-python-env`](.github/actions/setup-python-env), [`.github/actions/restore-encrypted-config`](.github/actions/restore-encrypted-config)) for Python + pip cache + Rust wheel; health checks run as the first step of `run-pipeline` (no separate job)
 
 ### JavDB Auto Login
 - Automatic session cookie refresh
@@ -453,10 +454,16 @@ python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --ignore-releas
 # Ad hoc mode: Re-download everything from an actor (ignores history)
 python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --ignore-history --ignore-release-date
 
-# Use proxy to access JavDB (useful for geo-restricted regions)
+# Follow proxy modules from config.py (default auto mode)
+python3 -m apps.cli.spider --start-page 1 --end-page 5
+
+# Force-enable proxy for this run
 python3 -m apps.cli.spider --use-proxy --start-page 1 --end-page 5
 
-# Combine multiple options: proxy + custom URL + ignore release date
+# Force-disable proxy for this run
+python3 -m apps.cli.spider --no-proxy --start-page 1 --end-page 5
+
+# Combine multiple options: force proxy + custom URL + ignore release date
 python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --use-proxy --ignore-release-date
 ```
 
@@ -473,7 +480,8 @@ python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ" --use-proxy --i
 | `--url` | Custom URL to scrape (enables ad hoc mode) | None | `--url "https://javdb.com/?vft=2"` |
 | `--phase` | Phase to run (1/2/all) | all | `--phase 1` |
 | `--ignore-release-date` | Ignore today/yesterday tags | False | `--ignore-release-date` |
-| `--use-proxy` | Enable proxy from config.py | False | `--use-proxy` |
+| `--use-proxy` | Force-enable proxy for this run | Auto (`PROXY_MODULES`) | `--use-proxy` |
+| `--no-proxy` | Force-disable proxy for this run | Auto (`PROXY_MODULES`) | `--no-proxy` |
 | `--always-bypass-time [MINUTES]` | Keep using CF bypass after fallback success (omit value or 0 = whole session; omit flag = always direct-first) | None | `--always-bypass-time 30` |
 | `--sequential` | Force sequential processing (disable parallel) | False | `--sequential` |
 | `--max-movies-phase1` | Limit phase 1 movies (for testing) | None | `--max-movies-phase1 10` |
@@ -497,12 +505,8 @@ python3 javdb_login.py
 ```
 
 **Check Proxy Ban Status:**
-```bash
-# View ban records
-cat "reports/proxy_bans.csv"
 
-# Ban information is also included in pipeline email reports
-```
+Proxy bans are **session-scoped** (in-memory only): when a proxy is banned during a run, it applies only to that process. The next run starts with no bans—all proxies are automatically retried. Ban activity appears in spider log output; pipeline email reports may still summarize proxy issues for that run. There is no `reports/proxy_bans.csv`, and bans are not stored in the database (the `ProxyBans` table no longer exists).
 
 **Run Migration Scripts** (from repository root):
 ```bash
@@ -519,7 +523,7 @@ python3 packages/python/javdb_migrations/tools/reclassify_c_hacked_torrents.py
 
 **Run the complete workflow:**
 ```bash
-# Basic pipeline run
+# Basic pipeline run (auto proxy mode from config.py)
 python pipeline_run_and_notify.py
 
 # Pipeline with custom arguments (passed to Javdb_Spider)
@@ -531,8 +535,11 @@ python pipeline_run_and_notify.py --ignore-release-date --phase 1
 # Pipeline with custom URL
 python pipeline_run_and_notify.py --url "https://javdb.com/actors/EvkJ"
 
-# Pipeline with proxy enabled
+# Force-enable proxy for all pipeline steps
 python pipeline_run_and_notify.py --use-proxy
+
+# Force-disable proxy for all pipeline steps
+python pipeline_run_and_notify.py --no-proxy
 
 # Pipeline with PikPak individual mode (process torrents one by one)
 python pipeline_run_and_notify.py --pikpak-individual
@@ -548,7 +555,8 @@ The pipeline will:
 7. **Analyze logs for critical errors**
 8. Send email notifications with appropriate status
 
-**Note**: The pipeline accepts the same arguments as `python3 -m apps.cli.spider` and passes them through automatically. Additional pipeline-specific arguments include `--pikpak-individual` for PikPak Bridge mode control.
+**Note**: The pipeline accepts the same arguments as `python3 -m apps.cli.spider` and passes them through automatically. By default it does **not** inject `--use-proxy` or `--no-proxy`; each step follows `config.py` via `PROXY_MODULES`. If you manually pass `--use-proxy` or `--no-proxy` to the pipeline, that override is forwarded to spider, qBittorrent uploader, and PikPak Bridge. Additional pipeline-specific arguments include `--pikpak-individual` for PikPak Bridge mode control.
+When dedup runs, the email report now breaks out `Redownload Upgrade` entries separately from regular dedup upgrades.
 
 #### Intelligent Error Detection
 
@@ -587,11 +595,8 @@ GIT_BRANCH = 'main'
 # =============================================================================
 # QBITTORRENT CONFIGURATION
 # =============================================================================
-QB_HOST = 'your_qbittorrent_ip'
-QB_PORT = 'your_qbittorrent_port'
-QB_SCHEME = 'https'  # Prefer HTTPS for qBittorrent Web UI
+QB_URL = 'https://your_qbittorrent_ip:your_qbittorrent_port'  # Include http:// or https://
 QB_VERIFY_TLS = True  # Verify qBittorrent TLS certificates
-QB_ALLOW_INSECURE_HTTP = False  # Set True only for trusted local-only HTTP Web UI
 QB_USERNAME = 'your_qbittorrent_username'
 QB_PASSWORD = 'your_qbittorrent_password'
 TORRENT_CATEGORY = 'JavDB'  # Category for daily mode torrents
@@ -626,15 +631,14 @@ PROXY_POOL = [
 ]
 
 # Proxy pool behavior (only for pool mode)
-PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 days cooldown for banned proxies
-PROXY_POOL_MAX_FAILURES = 3  # Max failures before cooldown
+PROXY_POOL_MAX_FAILURES = 3  # Max failures before banning proxy for this session
 
 # Legacy proxy config (deprecated - use PROXY_POOL instead)
 PROXY_HTTP = None
 PROXY_HTTPS = None
 
-# Modular proxy control - which modules use proxy
-PROXY_MODULES = ['all']  # 'all' or list: 'spider', 'qbittorrent', 'pikpak'
+# Modular proxy control - which modules use proxy by default
+PROXY_MODULES = ['spider']  # default; or use 'all' / list: 'spider', 'qbittorrent', 'pikpak'
 
 # =============================================================================
 # SPIDER CONFIGURATION
@@ -650,10 +654,8 @@ PHASE2_MIN_COMMENTS = 80  # Minimum comment count for phase 2 entries
 # Release date filter
 IGNORE_RELEASE_DATE_FILTER = False  # Set True to ignore today/yesterday tags
 
-# Sleep time configuration (in seconds)
-PAGE_SLEEP = 2  # Sleep between index pages
-MOVIE_SLEEP_MIN = 5   # Minimum random sleep between movies
-MOVIE_SLEEP_MAX = 15  # Maximum random sleep between movies
+# Sleep time configuration (adaptive, managed by MovieSleepManager)
+# MOVIE_SLEEP_MIN/MAX are auto-tuned; override via env var VAR_MOVIE_SLEEP (e.g. "5,15")
 
 # =============================================================================
 # JAVDB LOGIN CONFIGURATION (for automatic session cookie refresh)
@@ -732,9 +734,9 @@ QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
 
 **qBittorrent Setup:**
 1. Enable Web UI in qBittorrent settings
-2. Note the IP address, port, username, and password
+2. Note the full Web UI URL, username, and password
 3. Update the qBittorrent configuration section in `config.py`
-4. Prefer `QB_SCHEME = 'https'`; if your Web UI is trusted local-only HTTP, set `QB_SCHEME = 'http'` and `QB_ALLOW_INSECURE_HTTP = True` explicitly
+4. Set `QB_URL` to the full Web UI address, such as `https://192.168.1.100:8080`; if you omit the scheme, the app tries HTTPS first and then retries HTTP automatically
 
 **Email Setup (Optional):**
 1. For Gmail, use an App Password instead of your regular password
@@ -769,15 +771,13 @@ reports/
 │   └── Javdb_AdHoc_*.csv
 ├── Dedup/                       # Rclone dedup reports
 ├── parsed_movies_history.csv    # History tracking
-├── pikpak_bridge_history.csv    # PikPak transfer history
-└── proxy_bans.csv               # Proxy ban records
+└── pikpak_bridge_history.csv    # PikPak transfer history
 ```
 
 - **Daily Report CSV files**: `reports/DailyReport/YYYY/MM/Javdb_TodayTitle_YYYYMMDD.csv`
 - **Ad Hoc CSV files**: `reports/AdHoc/YYYY/MM/Javdb_AdHoc_*.csv`
 - **History file**: `reports/parsed_movies_history.csv`
 - **PikPak history**: `reports/pikpak_bridge_history.csv`
-- **Proxy ban records**: `reports/proxy_bans.csv`
 - **Log files**: `logs/` directory
   - `spider.log`
   - `qb_uploader.log`
@@ -843,8 +843,8 @@ Configure multiple proxies for automatic failover:
 - **Automatic Switching**: When one proxy fails, automatically switches to another
 - **Passive Health Checking**: Only marks proxies as failed on actual failures (no active probing)
 - **Cooldown Mechanism**: Failed proxies are temporarily disabled to allow recovery (8 days default)
-- **Ban Detection**: Automatically detects when proxies are banned by JavDB
-- **Persistent Ban Records**: Ban history stored in `reports/proxy_bans.csv` and persists across runs
+- **Ban Detection**: Automatically detects proxy bans via HTTP 403 responses and ban-page HTML patterns, immediately bans the proxy and re-queues the page to another worker
+- **Session-Scoped Bans**: Proxies banned during a run are skipped only for that session (in-memory). The next run starts with a clean slate—no CSV file, no `ProxyBans` database table, and all proxies are retried automatically
 - **Statistics Tracking**: Detailed success rates and usage statistics for each proxy
 - **Perfect for JavDB**: Respects strict rate limiting while providing redundancy
 
@@ -858,35 +858,29 @@ PROXY_POOL = [
     {'name': 'Proxy-1', 'http': 'http://127.0.0.1:7890', 'https': 'http://127.0.0.1:7890'},
     {'name': 'Proxy-2', 'http': 'http://127.0.0.1:7891', 'https': 'http://127.0.0.1:7891'},
 ]
-PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 days cooldown (JavDB bans for 7 days)
-PROXY_POOL_MAX_FAILURES = 3  # Max failures before cooldown
+PROXY_POOL_MAX_FAILURES = 3  # Max failures before banning proxy for this session
 ```
 
 **Proxy Ban Management:**
 
 The system includes intelligent ban detection and management:
 - **Automatic Detection**: Detects when JavDB blocks a proxy IP
-- **Persistent Records**: Ban history stored in `reports/proxy_bans.csv`
-- **8-Day Cooldown**: Default cooldown matches JavDB's 7-day ban period
+- **Session-Scoped State**: Ban state exists only in memory for the current process; it does not persist to `reports/proxy_bans.csv`, SQLite, or the next run
+- **8-Day Cooldown**: Default cooldown matches JavDB's 7-day ban period (applies within the session for temporarily disabled proxies)
 - **Exit Code 2**: Spider exits with code 2 when proxies are banned (helps with automation)
-- **Ban Summary**: Detailed ban status included in pipeline email reports
+- **Ban Summary**: Pipeline email reports may include proxy/ban context for that run
 
-**Checking Ban Status:**
+**Observing ban activity during a run:**
+
+Review spider log output (e.g. `logs/spider.log`) for ban-related messages. There is no ban CSV file or `ProxyBans` table; the next session always begins with no stored bans.
+
+Commands use `PROXY_MODULES` automatically by default. Use `--use-proxy` to force proxy on for one run, or `--no-proxy` to force it off:
 ```bash
-# Ban records are logged in:
-cat "reports/proxy_bans.csv"
-
-# Pipeline emails include ban summary with:
-# - Proxy name and IP
-# - Ban timestamp
-# - Cooldown expiry time
-# - Current status (BANNED/AVAILABLE)
-```
-
-Then run with `--use-proxy` flag:
-```bash
+python3 -m apps.cli.spider
 python3 -m apps.cli.spider --use-proxy
+python3 -m apps.cli.spider --no-proxy
 ```
+The Web UI and task API now mirror the same tri-state behavior: omit both flags for auto mode, set `use_proxy=true` to force proxy on, or `no_proxy=true` to force it off.
 
 #### Single Proxy Mode (Legacy)
 
@@ -912,34 +906,41 @@ PROXY_HTTP = 'http://username:password@proxy.example.com:8080'
 PROXY_HTTPS = 'http://username:password@proxy.example.com:8080'
 
 # Control which modules use proxy (modular control)
-PROXY_MODULES = ['all']  # Enable for all modules
-# PROXY_MODULES = ['spider']  # Only spider module (includes login)
+PROXY_MODULES = ['spider']  # Default: only spider module (includes login)
+# PROXY_MODULES = ['all']  # Enable for all modules
 # PROXY_MODULES = ['spider', 'qbittorrent']  # Spider and qBittorrent
 # PROXY_MODULES = []  # Disable for all modules
 ```
 
-**2. Enable proxy with command-line flag:**
+**2. Optional command-line overrides:**
 ```bash
-# Enable proxy for spider
+# Auto mode: follow PROXY_MODULES from config.py
+python3 -m apps.cli.spider
+
+# Force-enable proxy for spider
 python3 -m apps.cli.spider --use-proxy
 
-# Enable proxy for qBittorrent uploader
+# Force-enable proxy for qBittorrent uploader
 python3 -m apps.cli.qb_uploader --use-proxy
 
-# Enable proxy for PikPak bridge
+# Force-enable proxy for PikPak bridge
 python3 -m apps.cli.pikpak_bridge --use-proxy
+
+# Force-disable proxy regardless of PROXY_MODULES
+python3 -m apps.cli.spider --no-proxy
 
 # Combine with other options
 python3 -m apps.cli.spider --use-proxy --url "https://javdb.com/actors/EvkJ"
 
-# Via pipeline (enables proxy for all components)
+# Via pipeline (forces proxy for all components in that run)
 python pipeline_run_and_notify.py --use-proxy
 ```
 
 **Note:** 
-- Proxy is **disabled by default**. You must use `--use-proxy` to enable it.
-- If `--use-proxy` is set but no proxy is configured in `config.py`, a warning will be logged.
-- You can control which parts of the spider use proxy via `PROXY_MODULES` configuration.
+- The default behavior is **auto mode**: commands follow `PROXY_MODULES` from `config.py`.
+- `--use-proxy` forces proxy on for every module in that command.
+- `--no-proxy` forces proxy off for every module in that command.
+- If proxy is forced on but no proxy is configured in `config.py`, a warning will be logged.
 
 #### Modular Proxy Control
 
@@ -950,15 +951,15 @@ The `PROXY_MODULES` setting allows fine-grained control over which parts use pro
 | `spider` | JavDB Spider | Use proxy to access all JavDB pages (index, detail, login/session refresh) |
 | `qbittorrent` | qBittorrent Web UI API | Use proxy for qBittorrent API requests |
 | `pikpak` | PikPak bridge qBittorrent API | Use proxy for PikPak bridge operations |
-| `all` | All modules | Use proxy for everything (default) |
+| `all` | All modules | Use proxy for everything |
 
 **Examples:**
 ```python
+# Default: only use proxy for spider module (includes login)
+PROXY_MODULES = ['spider']
+
 # Use proxy for everything
 PROXY_MODULES = ['all']
-
-# Only use proxy for spider module (includes login)
-PROXY_MODULES = ['spider']
 
 # Use proxy for spider and qBittorrent
 PROXY_MODULES = ['spider', 'qbittorrent']
@@ -969,7 +970,7 @@ PROXY_MODULES = ['qbittorrent', 'pikpak']
 # Use proxy for spider only, not qBittorrent/PikPak
 PROXY_MODULES = ['spider']
 
-# Disable proxy for all modules (even if --use-proxy is set)
+# Disable proxy for all modules by default
 PROXY_MODULES = []
 ```
 
@@ -1493,9 +1494,9 @@ Progress tracking includes:
 - **Proxy + CF not working**: Ensure CF bypass service runs on proxy server
 
 **Proxy Ban Issues:**
-- **All proxies banned**: Check `reports/proxy_bans.csv` for ban status
-- **Spider exits with code 2**: Indicates proxy ban detected, wait for cooldown or add new proxies
-- **Cooldown not working**: Default is 8 days, adjust PROXY_POOL_COOLDOWN_SECONDS if needed
+- **All proxies banned during a run**: Check spider logs; bans are session-only, so a new run retries all proxies from a clean slate—add more proxies or address JavDB-side blocks if needed
+- **Spider exits with code 2**: Proxy ban detected during this session; cooldowns apply in-memory for that run, or add new proxies
+- **Cooldown not working**: Proxy bans are session-scoped (in-memory only); restart the run to retry all proxies
 - **Ban false positives**: Check if JavDB is actually accessible from proxy IP
 
 ### Debug Mode
@@ -1529,9 +1530,11 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
 
 ### Rate Limiting and Delays
 - The system includes delays between requests to be respectful to servers:
-  - **Index pages**: 2 seconds (configurable via `PAGE_SLEEP`)
-  - **Movies**: 5-15 seconds random (configurable via `MOVIE_SLEEP_MIN` / `MOVIE_SLEEP_MAX`)
+  - **Index pages**: Adaptive sleep managed by `MovieSleepManager` (parallel mode uses per-worker pacing)
+  - **Movies**: Adaptive sleep via `MovieSleepManager` (log-normal distribution, auto-tuned)
   - **Volume-based adjustment**: `MovieSleepManager` automatically increases sleep intervals when processing large batches
+  - **Fallback retries**: Full adaptive sleep (same distribution as inter-movie pacing) between every consecutive HTTP attempt, including CF bypass fallback steps, transport switches, and proxy rotation
+  - **All cooldowns**: Derived adaptively from `MovieSleepManager`
   - **qBittorrent additions**: 1 second (configurable via `DELAY_BETWEEN_ADDITIONS`)
   - **PikPak requests**: 2 seconds default (configurable via `PIKPAK_REQUEST_DELAY`)
 
@@ -1541,7 +1544,7 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
 - The pipeline provides incremental commits for monitoring progress in real-time
 - History file tracks all downloaded movies with timestamps
 - Rust acceleration is automatically detected and used when available
-- Exit code 2 indicates proxy ban detection (useful for automation)
+- Exit code 2 indicates proxy ban detection during the current run; bans are session-scoped and do not persist to the next run (useful for automation)
 - Logs automatically mask sensitive information (passwords, tokens, etc.)
 
 ### File Structure
@@ -1573,7 +1576,6 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
   - `AdHoc/YYYY/MM/`: Custom URL scraping results
   - `parsed_movies_history.csv`: History tracking
   - `pikpak_bridge_history.csv`: PikPak transfer history
-  - `proxy_bans.csv`: Proxy ban records
 - **logs/**: Contains all log files
   - `spider.log`: Spider execution logs
   - `qb_uploader.log`: Upload execution logs
@@ -1638,7 +1640,6 @@ python3 -m apps.cli.qb_file_filter --min-size 100 --days 3 --dry-run  # Preview 
 
 - **Main config**: `config.py` (copy from `config.py.example`)
 - **History file**: `reports/parsed_movies_history.csv`
-- **Ban records**: `reports/proxy_bans.csv`
 - **Login docs**: `utils/login/JAVDB_LOGIN_README.md`
 
 ### Important Links

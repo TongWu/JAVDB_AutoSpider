@@ -1178,7 +1178,6 @@ class ProxyWorker(threading.Thread):
         movie_sleep_min: Optional[float],
         movie_sleep_max: Optional[float],
         fallback_cooldown: float,
-        ban_log_file: str,
         all_workers: list,
     ):
         super().__init__(daemon=True, name=f"ProxyWorker-{proxy_config.get('name', worker_id)}")
@@ -1201,7 +1200,6 @@ class ProxyWorker(threading.Thread):
             [proxy_config],
             cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
             max_failures=PROXY_POOL_MAX_FAILURES,
-            ban_log_file=ban_log_file,
         )
         self._handler = RequestHandler(
             proxy_pool=self._proxy_pool,
@@ -1362,7 +1360,6 @@ def process_detail_entries_parallel(
     use_history_for_saving: bool,
     use_cookie: bool,
     is_adhoc_mode: bool,
-    ban_log_file: str,
 ) -> dict:
     """Process detail entries in parallel using one worker per proxy.
 
@@ -1388,7 +1385,6 @@ def process_detail_entries_parallel(
             movie_sleep_min=MOVIE_SLEEP_MIN,
             movie_sleep_max=MOVIE_SLEEP_MAX,
             fallback_cooldown=FALLBACK_COOLDOWN,
-            ban_log_file=ban_log_file,
             all_workers=all_workers,
         )
         all_workers.append(w)
@@ -2063,13 +2059,24 @@ def generate_summary_report(
         proxies_were_banned = proxies_were_banned or any_proxy_banned_phase2
 
     if proxies_were_banned:
-        logger.error("=" * 75)
-        logger.error("CRITICAL: PROXY BAN DETECTED DURING THIS RUN")
-        logger.error("=" * 75)
-        logger.error("One or more proxies were marked as BANNED due to failure to retrieve movie list.")
-        logger.error("This indicates the proxy IP may be blocked by JavDB.")
-        logger.error("Please check proxy ban status and consider using different proxies.")
-        sys.exit(2)
+        logger.warning("=" * 75)
+        logger.warning("PROXY BAN DETECTED DURING THIS RUN")
+        logger.warning("=" * 75)
+        logger.warning("One or more proxies were marked as BANNED due to failure to retrieve movie list.")
+        logger.warning("This indicates the proxy IP may be blocked by JavDB.")
+        logger.warning("Please check proxy ban status and consider using different proxies.")
+        if len(rows) > 0:
+            logger.info(
+                "Spider completed successfully with %d results despite proxy ban(s) — "
+                "remaining workers finished the job.",
+                len(rows),
+            )
+        else:
+            logger.error(
+                "Spider produced NO results and proxy ban(s) were detected — "
+                "all proxies may be blocked."
+            )
+            sys.exit(2)
 
     if len(rows) == 0 and use_proxy:
         logger.warning("=" * 75)
@@ -2078,7 +2085,7 @@ def generate_summary_report(
         logger.warning("This might indicate proxy issues or CF bypass service problems.")
 
 
-def setup_proxy_pool(ban_log_file: str, use_proxy: bool) -> None:
+def setup_proxy_pool(use_proxy: bool) -> None:
     """Initialize the global proxy pool from configuration."""
     global global_proxy_pool
 
@@ -2089,7 +2096,6 @@ def setup_proxy_pool(ban_log_file: str, use_proxy: bool) -> None:
                 PROXY_POOL,
                 cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
                 max_failures=PROXY_POOL_MAX_FAILURES,
-                ban_log_file=ban_log_file
             )
             logger.info("Proxy pool initialized successfully")
             logger.info(f"Cooldown: {PROXY_POOL_COOLDOWN_SECONDS}s, Max failures before cooldown: {PROXY_POOL_MAX_FAILURES}")
@@ -2099,7 +2105,6 @@ def setup_proxy_pool(ban_log_file: str, use_proxy: bool) -> None:
                 [PROXY_POOL[0]],
                 cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
                 max_failures=PROXY_POOL_MAX_FAILURES,
-                ban_log_file=ban_log_file
             )
             logger.info(f"Single proxy initialized: {PROXY_POOL[0].get('name', 'Main-Proxy')}")
     elif PROXY_HTTP or PROXY_HTTPS:
@@ -2113,7 +2118,6 @@ def setup_proxy_pool(ban_log_file: str, use_proxy: bool) -> None:
             [legacy_proxy],
             cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
             max_failures=PROXY_POOL_MAX_FAILURES,
-            ban_log_file=ban_log_file
         )
     else:
         if use_proxy:
@@ -2141,8 +2145,7 @@ def main():
     max_movies_phase2 = args.max_movies_phase2
     sequential = args.sequential
 
-    ban_log_file = os.path.join(REPORTS_DIR, 'proxy_bans.csv')
-    setup_proxy_pool(ban_log_file, use_proxy)
+    setup_proxy_pool(use_proxy)
     initialize_request_handler()
 
     # Determine output directory and filename
@@ -2350,7 +2353,6 @@ def main():
                 use_history_for_saving=use_history_for_saving,
                 use_cookie=custom_url is not None,
                 is_adhoc_mode=custom_url is not None,
-                ban_log_file=ban_log_file,
             )
             phase1_rows = p1_result['rows']
             rows.extend(phase1_rows)
@@ -2430,7 +2432,6 @@ def main():
                 use_history_for_saving=use_history_for_saving,
                 use_cookie=custom_url is not None,
                 is_adhoc_mode=custom_url is not None,
-                ban_log_file=ban_log_file,
             )
             phase2_rows = p2_result['rows']
             rows.extend(phase2_rows)

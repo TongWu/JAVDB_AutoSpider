@@ -13,6 +13,7 @@ sys.path.insert(0, project_root)
 
 # Create a proper mock config module with actual values
 mock_config = ModuleType('config')
+mock_config.QB_URL = 'https://localhost:8080'
 mock_config.QB_HOST = 'localhost'
 mock_config.QB_PORT = '8080'
 mock_config.QB_USERNAME = 'admin'
@@ -24,7 +25,6 @@ mock_config.PROXY_HTTPS = None
 mock_config.PROXY_MODULES = ['all']
 mock_config.PROXY_MODE = 'single'
 mock_config.PROXY_POOL = []
-mock_config.PROXY_POOL_COOLDOWN_SECONDS = 691200
 mock_config.PROXY_POOL_MAX_FAILURES = 3
 mock_config.QB_FILE_FILTER_MIN_SIZE_MB = 100
 mock_config.QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
@@ -955,4 +955,3 @@ class TestFilterIntegration:
         # Only files with progress > 0 should be deleted: sample.mp4 and small2.txt
         assert stats['local_files_deleted'] == 2
         assert mock_delete.call_count == 2
-

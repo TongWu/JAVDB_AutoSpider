@@ -3,11 +3,12 @@
 Provides human-like request pacing via three cooperating components:
 
 - ``MovieSleepManager`` — per-worker sleep with log-normal distribution and
-  a three-factor multiplier (volume * concurrency * penalty).
+  a two-factor multiplier (volume * penalty).
 - ``PenaltyTracker`` — shared across workers; tracks recent CF/failure events
   and computes a dynamic penalty factor that decays over time.
-- ``DualWindowThrottle`` — shared across workers; enforces both a short-window
-  burst limit and a long-window budget to match Cloudflare's dual detection.
+- ``DualWindowThrottle`` — per-worker rate limiter; enforces both a
+  short-window burst limit and a long-window budget.  Each proxy worker
+  owns an independent instance because proxy IPs are independent.
 
 Thread-safe via ``threading.Lock``.  **Not** compatible with
 ``multiprocessing`` — if the concurrency model ever changes, these classes
@@ -26,7 +27,7 @@ logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Tuned base sleep range (seconds).  These values are calibrated for the
-# adaptive three-factor system and should NOT be tweaked by users.
+# adaptive two-factor system and should NOT be tweaked by users.
 # Override ONLY via env var ``VAR_MOVIE_SLEEP`` for CI/testing/emergency.
 # ---------------------------------------------------------------------------
 _BASE_MIN = 8
@@ -37,6 +38,8 @@ _BASE_MAX = 25
 # ---------------------------------------------------------------------------
 COMPOSITE_MULTIPLIER_CAP = 6.0
 ABSOLUTE_MAX_SLEEP = 120.0  # seconds
+COOLDOWN_FRACTION = 0.5     # cooldown = eff_min * this fraction
+COOLDOWN_MAX = 30.0         # hard ceiling for cooldown durations
 
 # ---------------------------------------------------------------------------
 # PenaltyTracker
@@ -99,8 +102,8 @@ class DualWindowThrottle:
     def __init__(
         self,
         short_window_sec: float = 30.0,
-        short_max: int = 3,
-        long_window_sec: float = 600.0,
+        short_max: int = 4,
+        long_window_sec: float = 300.0,
         long_max: int = 40,
     ):
         self._timestamps: deque = deque()
@@ -158,9 +161,9 @@ dual_window_throttle = DualWindowThrottle()
 
 
 class MovieSleepManager:
-    """Human-like movie sleep with three-factor adaptive throttling.
+    """Human-like movie sleep with two-factor adaptive throttling.
 
-    ``effective_multiplier = volume_factor * worker_factor * penalty_factor``
+    ``effective_multiplier = volume_factor * penalty_factor``
     capped at ``COMPOSITE_MULTIPLIER_CAP`` (currently 6.0).
 
     The sleep value itself is capped at ``ABSOLUTE_MAX_SLEEP`` (120 s).
@@ -174,8 +177,6 @@ class MovieSleepManager:
         (250, 1.90, 2.45),
     ]
     VOLUME_MAX_MULTIPLIER = (2.20, 2.90)
-
-    WORKER_FACTOR_CAP = 2.45
 
     def __init__(
         self,
@@ -192,7 +193,6 @@ class MovieSleepManager:
 
         self._volume_min_mult = 1.0
         self._volume_max_mult = 1.0
-        self._worker_factor = 1.0
 
         self._penalty_tracker = penalty_tracker
         self._throttle = throttle
@@ -223,32 +223,14 @@ class MovieSleepManager:
                 n, min_mult, max_mult,
             )
 
-    def apply_concurrency_factor(self, w: int) -> None:
-        """Set worker factor based on parallel worker count *w*."""
-        w = max(1, w)
-        self._worker_factor = min(math.sqrt(w), self.WORKER_FACTOR_CAP)
-        self._recalc_range()
-
-        if self._worker_factor > 1.0:
-            logger.info(
-                "Concurrency-based sleep adjustment: W=%d → worker_factor %.2fx",
-                w, self._worker_factor,
-            )
-
     def _recalc_range(self) -> None:
         """Recompute effective sleep_min/max from base + static factors.
 
         The dynamic ``penalty_factor`` is applied at sampling time so that
         it tracks real-time CF events.
         """
-        eff_min_mult = min(
-            self._volume_min_mult * self._worker_factor,
-            COMPOSITE_MULTIPLIER_CAP,
-        )
-        eff_max_mult = min(
-            self._volume_max_mult * self._worker_factor,
-            COMPOSITE_MULTIPLIER_CAP,
-        )
+        eff_min_mult = min(self._volume_min_mult, COMPOSITE_MULTIPLIER_CAP)
+        eff_max_mult = min(self._volume_max_mult, COMPOSITE_MULTIPLIER_CAP)
         self.sleep_min = round(self.base_min * eff_min_mult, 2)
         self.sleep_max = round(self.base_max * eff_max_mult, 2)
 
@@ -259,11 +241,11 @@ class MovieSleepManager:
         pf = self._penalty_tracker.get_penalty_factor() if self._penalty_tracker else 1.0
 
         eff_min_mult = min(
-            self._volume_min_mult * self._worker_factor * pf,
+            self._volume_min_mult * pf,
             COMPOSITE_MULTIPLIER_CAP,
         )
         eff_max_mult = min(
-            self._volume_max_mult * self._worker_factor * pf,
+            self._volume_max_mult * pf,
             COMPOSITE_MULTIPLIER_CAP,
         )
         return (
@@ -308,6 +290,17 @@ class MovieSleepManager:
         sleep_time = max(eff_min, min(eff_max, sleep_time + jitter))
 
         return min(round(sleep_time, 2), ABSOLUTE_MAX_SLEEP)
+
+    def get_cooldown(self) -> float:
+        """Return an adaptive cooldown duration (seconds).
+
+        Derived from the lower bound of the effective sleep range so that
+        cooldowns scale with penalty factor (CF events) and volume.
+        Used for CF/fallback/login retry delays instead of fixed config
+        values.
+        """
+        eff_min, _ = self._effective_range()
+        return min(round(eff_min * COOLDOWN_FRACTION, 2), COOLDOWN_MAX)
 
     def sleep(self) -> float:
         """Sleep for a human-like duration, then pass through the throttle.

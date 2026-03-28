@@ -23,13 +23,20 @@ _PROXY_POOL = [
     {'name': 'proxy-b', 'http': 'http://b:1', 'https': 'http://b:1'},
 ]
 
+def _make_ban_manager_stub():
+    mgr = MagicMock()
+    mgr.is_proxy_banned = MagicMock(return_value=False)
+    return mgr
+
+
 # Common decorator stack used by most tests that start the engine.
 _engine_patches = lambda fn: (
     patch('scripts.spider.fetch.fetch_engine.RequestHandler', side_effect=_make_handler_stub)(
     patch('scripts.spider.fetch.fetch_engine.create_proxy_pool_from_config', return_value=MagicMock())(
+    patch('scripts.spider.fetch.fetch_engine.get_ban_manager', return_value=_make_ban_manager_stub())(
     patch('scripts.spider.fetch.fetch_engine.PROXY_POOL', _PROXY_POOL)(
     patch('scripts.spider.fetch.fetch_engine.LOGIN_PROXY_NAME', None)(
-    fn))))
+    fn)))))
 )
 
 
@@ -81,7 +88,7 @@ class TestEngineSimpleMode:
 
         engine = FetchEngine.simple(
             parse_fn=fake_parse, use_cookie=False,
-            ban_log_file='', sleep_min=0.01, sleep_max=0.02,
+            sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
         _patch_workers(engine, lambda url, _cf, _h=html_pages: _h.get(url))
@@ -103,7 +110,7 @@ class TestEngineSimpleMode:
 
         engine = FetchEngine.simple(
             parse_fn=lambda html, task: None,
-            use_cookie=False, ban_log_file='',
+            use_cookie=False,
             sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
@@ -125,7 +132,7 @@ class TestEngineSimpleMode:
 
         engine = FetchEngine.simple(
             parse_fn=lambda html, task: {'code': task.meta.get('code')},
-            use_cookie=False, ban_log_file='',
+            use_cookie=False,
             sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
@@ -155,7 +162,7 @@ class TestEngineAdvancedMode:
 
         engine = FetchEngine(
             process_fn=process, use_cookie=False,
-            ban_log_file='', sleep_min=0.01, sleep_max=0.02,
+            sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
         _patch_workers(engine, lambda url, _cf: '<html>ok</html>')
@@ -194,7 +201,7 @@ class TestEngineLoginDetection:
 
         engine = FetchEngine.simple(
             parse_fn=lambda html, task: {'ok': True},
-            use_cookie=True, ban_log_file='',
+            use_cookie=True,
             sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
@@ -225,7 +232,7 @@ class TestEngineCFBypassFallback:
 
         engine = FetchEngine.simple(
             parse_fn=fake_parse, use_cookie=False,
-            ban_log_file='', sleep_min=0.01, sleep_max=0.02,
+            sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
 
@@ -252,7 +259,7 @@ class TestEngineShutdown:
 
         engine = FetchEngine(
             process_fn=lambda ctx, task: time.sleep(10) or {'ok': True},
-            use_cookie=False, ban_log_file='',
+            use_cookie=False,
             sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
@@ -270,7 +277,7 @@ class TestEngineShutdown:
 
         engine = FetchEngine(
             process_fn=lambda ctx, task: {'ok': True},
-            use_cookie=False, ban_log_file='',
+            use_cookie=False,
             sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
@@ -295,7 +302,7 @@ class TestEngineSubmitTask:
 
         engine = FetchEngine(
             process_fn=lambda ctx, task: task.meta,
-            use_cookie=False, ban_log_file='',
+            use_cookie=False,
             sleep_min=0.01, sleep_max=0.02,
         )
         engine.start()
@@ -344,6 +351,37 @@ class TestEngineMarkDoneGuard:
             engine.submit('https://javdb.com/v/1')
 
 
+class TestEngineProxyBanned:
+
+    @_engine_patches
+    def test_proxy_banned_stops_worker(self, *_mocks):
+        """ProxyBannedError should stop the worker and produce a failure result."""
+        from scripts.spider.fetch.fetch_engine import FetchEngine, EngineTask
+        from packages.python.javdb_platform.request_handler import ProxyBannedError
+
+        engine = FetchEngine.simple(
+            parse_fn=lambda html, task: {'ok': True},
+            use_cookie=False,
+            sleep_min=0.01, sleep_max=0.02,
+        )
+        engine.start()
+
+        def _raise_ban(url, _cf):
+            raise ProxyBannedError('test-proxy', 'ban page detected')
+
+        _patch_workers(engine, _raise_ban)
+
+        engine.submit('https://javdb.com/v/ban', entry_index='1/1')
+        engine.mark_done()
+
+        results = list(engine.results())
+        engine.shutdown()
+
+        assert len(results) == 1
+        assert results[0].success is False
+        assert results[0].error == 'all_proxies_banned'
+
+
 class TestParallelBackendCompatibility:
 
     @_engine_patches
@@ -360,7 +398,6 @@ class TestParallelBackendCompatibility:
         backend = ParallelFetchBackend.simple(
             parse_fn=fake_parse,
             use_cookie=False,
-            ban_log_file='',
             sleep_min=0.01,
             sleep_max=0.02,
         )
@@ -380,7 +417,6 @@ class TestParallelBackendCompatibility:
         engine = FetchEngine.simple(
             parse_fn=fake_parse,
             use_cookie=False,
-            ban_log_file='',
             sleep_min=0.01,
             sleep_max=0.02,
         )

@@ -181,6 +181,44 @@ pub fn mask_server(server: Option<&str>) -> String {
     mask_partial(Some(s), 3, 3, 2)
 }
 
+#[pyfunction]
+#[pyo3(signature = (error_msg=None))]
+pub fn mask_error(error_msg: Option<&str>) -> String {
+    let msg = match error_msg {
+        Some(s) if !s.is_empty() => s,
+        _ => return "None".to_string(),
+    };
+
+    let mut result = msg.to_string();
+
+    // 1. Mask proxy URLs (http[s]://user:pass@host:port...)
+    let proxy_re = Regex::new(r"https?://[^:]+:[^@]+@[^\s/:]+:\d+").unwrap();
+    result = proxy_re
+        .replace_all(&result, |caps: &regex::Captures| {
+            mask_proxy_url(Some(caps.get(0).unwrap().as_str()))
+        })
+        .to_string();
+
+    // 2. Mask session cookie values (_jdb_session=<value>)
+    let cookie_re = Regex::new(r"(_jdb_session=)\S+").unwrap();
+    result = cookie_re.replace_all(&result, "${1}********").to_string();
+
+    // 3. Mask remaining bare IP addresses (skip already-masked xxx.xxx)
+    let ip_re = Regex::new(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b").unwrap();
+    result = ip_re
+        .replace_all(&result, |caps: &regex::Captures| {
+            let ip = caps.get(0).unwrap().as_str();
+            if ip.contains("xxx") {
+                ip.to_string()
+            } else {
+                mask_ip_address(Some(ip))
+            }
+        })
+        .to_string();
+
+    result
+}
+
 /// Mask proxy URL for logging (used by proxy_pool)
 pub fn mask_proxy_url_internal(url: Option<&str>) -> String {
     match url {
@@ -230,5 +268,57 @@ mod tests {
         assert!(!result.contains("@"));
         assert!(result.contains("xxx.xxx"));
         assert!(result.starts_with("http://"));
+    }
+
+    #[test]
+    fn test_mask_error_preserves_structure() {
+        let msg = "HTTPSConnectionPool(host='javdb.com'): Max retries exceeded";
+        let result = mask_error(Some(msg));
+        assert!(result.contains("HTTPSConnectionPool"));
+        assert!(result.contains("Max retries exceeded"));
+    }
+
+    #[test]
+    fn test_mask_error_scrubs_proxy_url() {
+        let msg = "ProxyError: Cannot connect to proxy http://tedwu:secret@192.168.1.1:8080";
+        let result = mask_error(Some(msg));
+        assert!(result.contains("ProxyError"));
+        assert!(!result.contains("tedwu"));
+        assert!(!result.contains("secret"));
+        assert!(result.contains("xxx.xxx"));
+    }
+
+    #[test]
+    fn test_mask_error_scrubs_domain_proxy_url() {
+        let msg = "ProxyError: Cannot connect to proxy http://tedwu:secret@proxy.example.com:8080";
+        let result = mask_error(Some(msg));
+        assert!(result.contains("ProxyError"));
+        assert!(!result.contains("tedwu"));
+        assert!(!result.contains("secret"));
+        assert!(!result.contains("@"));
+    }
+
+    #[test]
+    fn test_mask_error_scrubs_bare_ip() {
+        let msg = "ConnectionError: connect to 10.0.0.5 timed out";
+        let result = mask_error(Some(msg));
+        assert!(result.contains("ConnectionError"));
+        assert!(result.contains("xxx.xxx"));
+        assert!(!result.contains("0.0.5"));
+    }
+
+    #[test]
+    fn test_mask_error_scrubs_cookie() {
+        let msg = "Cookie rejected: _jdb_session=abc123secret";
+        let result = mask_error(Some(msg));
+        assert!(result.contains("Cookie rejected"));
+        assert!(!result.contains("abc123secret"));
+        assert!(result.contains("_jdb_session=********"));
+    }
+
+    #[test]
+    fn test_mask_error_none() {
+        assert_eq!(mask_error(None), "None");
+        assert_eq!(mask_error(Some("")), "None");
     }
 }

@@ -17,11 +17,13 @@ from utils.config_generator import (
     get_env_int,
     get_env_float,
     get_env_bool,
+    get_env_bool_optional,
     get_env_json,
     format_python_value,
     get_config_map,
     generate_config_content,
     mask_sensitive_values,
+    resolve_proxy_modules,
     write_config,
     EMPTY_PLACEHOLDERS
 )
@@ -144,6 +146,22 @@ class TestGetEnvBool:
         """Should be case insensitive."""
         with patch.dict(os.environ, {'VAR_BOOL_VAR': 'TRUE'}):
             assert get_env_bool('BOOL_VAR', False) is True
+
+
+class TestGetEnvBoolOptional:
+    """Tests for get_env_bool_optional function."""
+
+    def test_returns_none_when_unset(self):
+        with patch.dict(os.environ, {}, clear=True):
+            assert get_env_bool_optional('BOOL_VAR') is None
+
+    def test_returns_true_when_set(self):
+        with patch.dict(os.environ, {'VAR_BOOL_VAR': 'true'}, clear=True):
+            assert get_env_bool_optional('BOOL_VAR') is True
+
+    def test_returns_false_when_set(self):
+        with patch.dict(os.environ, {'VAR_BOOL_VAR': 'false'}, clear=True):
+            assert get_env_bool_optional('BOOL_VAR') is False
 
 
 class TestGetEnvJson:
@@ -316,6 +334,39 @@ class TestGenerateConfigContent:
         with patch.dict(os.environ, env, clear=True):
             content = generate_config_content(github_actions_mode=True)
             assert 'GIT_PASSWORD is empty' in content
+
+    def test_defaults_proxy_modules_to_spider(self):
+        """Should default PROXY_MODULES to ['spider']."""
+        with patch.dict(os.environ, {}, clear=True):
+            content = generate_config_content()
+            assert 'PROXY_MODULES = ["spider"]' in content
+
+
+class TestResolveProxyModules:
+    """Tests for per-module proxy override resolution."""
+
+    def test_uses_json_modules_when_no_switches_provided(self):
+        env = {'VAR_PROXY_MODULES_JSON': '["qbittorrent"]'}
+        with patch.dict(os.environ, env, clear=True):
+            assert resolve_proxy_modules(['spider']) == ['qbittorrent']
+
+    def test_switches_override_json_modules(self):
+        env = {
+            'VAR_PROXY_MODULES_JSON': '["all"]',
+            'VAR_PROXY_SPIDER_ENABLED': 'true',
+            'VAR_PROXY_QBITTORRENT_ENABLED': 'false',
+            'VAR_PROXY_PIKPAK_ENABLED': 'true',
+        }
+        with patch.dict(os.environ, env, clear=True):
+            assert resolve_proxy_modules(['spider']) == ['spider', 'pikpak']
+
+    def test_partial_switches_fall_back_to_json_modules(self):
+        env = {
+            'VAR_PROXY_MODULES_JSON': '["qbittorrent"]',
+            'VAR_PROXY_PIKPAK_ENABLED': 'true',
+        }
+        with patch.dict(os.environ, env, clear=True):
+            assert resolve_proxy_modules(['spider']) == ['qbittorrent', 'pikpak']
 
 
 class TestMaskSensitiveValues:
@@ -509,14 +560,12 @@ class TestGenerateConfigContentExtended:
     def test_values_from_environment(self):
         """Should use values from environment variables."""
         env = {
-            'VAR_QB_HOST': 'my.qbittorrent.server',
-            'VAR_QB_PORT': '9090',
+            'VAR_QB_URL': 'https://my.qbittorrent.server:9090',
         }
         with patch.dict(os.environ, env, clear=True):
             content = generate_config_content()
             
-            assert "QB_HOST = 'my.qbittorrent.server'" in content
-            assert "QB_PORT = '9090'" in content
+            assert "QB_URL = 'https://my.qbittorrent.server:9090'" in content
 
 
 class TestMaskSensitiveValuesExtended:
@@ -561,4 +610,3 @@ class TestFormatPythonValueExtended:
         """Should format negative integer."""
         result = format_python_value(-42)
         assert result == '-42'
-

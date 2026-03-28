@@ -13,6 +13,7 @@ sys.path.insert(0, project_root)
 
 # Create a proper mock config module with actual values
 mock_config = ModuleType('config')
+mock_config.QB_URL = 'https://localhost:8080'
 mock_config.QB_HOST = 'localhost'
 mock_config.QB_PORT = '8080'
 mock_config.QB_USERNAME = 'admin'
@@ -34,7 +35,6 @@ mock_config.PROXY_HTTPS = None
 mock_config.PROXY_MODULES = ['all']
 mock_config.PROXY_MODE = 'single'
 mock_config.PROXY_POOL = []
-mock_config.PROXY_POOL_COOLDOWN_SECONDS = 691200
 mock_config.PROXY_POOL_MAX_FAILURES = 3
 mock_config.GIT_USERNAME = 'test'
 mock_config.GIT_PASSWORD = ''
@@ -46,8 +46,10 @@ sys.modules['config'] = mock_config
 from scripts.qb_uploader import (
     extract_hash_from_magnet,
     is_torrent_exists,
-    get_existing_torrents
+    get_existing_torrents,
+    test_qbittorrent_connection as uploader_test_qbittorrent_connection,
 )
+import scripts.qb_uploader as qb_uploader_module
 
 
 class TestExtractHashFromMagnet:
@@ -294,6 +296,30 @@ class TestGetExistingTorrents:
         assert len(result) == len(valid_states)
 
 
+class TestQbEndpointFallback:
+    """Test connection fallback from HTTPS to HTTP."""
+
+    @patch('scripts.qb_uploader.get_proxies_dict')
+    @patch('scripts.qb_uploader.requests.get')
+    def test_test_qbittorrent_connection_retries_http(self, mock_get, mock_proxies):
+        import requests
+
+        mock_proxies.return_value = None
+        mock_get.side_effect = [
+            requests.exceptions.SSLError("ssl error"),
+            MagicMock(status_code=200),
+        ]
+
+        with patch.object(qb_uploader_module, 'QB_BASE_URL_CANDIDATES', [
+            'https://qb.internal:8080',
+            'http://qb.internal:8080',
+        ]), patch.object(qb_uploader_module, 'QB_BASE_URL', 'https://qb.internal:8080'), \
+                patch.object(qb_uploader_module, 'QB_MASKED_URL', 'https://qb.internal:8080'), \
+                patch.object(qb_uploader_module, 'QB_ALLOW_INSECURE_HTTP', True):
+            assert uploader_test_qbittorrent_connection(use_proxy=False) is True
+            assert qb_uploader_module.QB_BASE_URL == 'http://qb.internal:8080'
+
+
 class TestDuplicateDetectionIntegration:
     """Integration tests for duplicate detection workflow."""
     
@@ -350,6 +376,7 @@ class TestErrorHandlingExitCodes:
         mock_args.return_value = MagicMock(
             mode='daily',
             use_proxy=False,
+            no_proxy=False,
             input_file=None,
             from_pipeline=False
         )
@@ -372,6 +399,7 @@ class TestErrorHandlingExitCodes:
         mock_args.return_value = MagicMock(
             mode='daily',
             use_proxy=False,
+            no_proxy=False,
             input_file=None,
             from_pipeline=False
         )
@@ -395,6 +423,7 @@ class TestErrorHandlingExitCodes:
         mock_args.return_value = MagicMock(
             mode='adhoc',
             use_proxy=False,
+            no_proxy=False,
             input_file=None,
             from_pipeline=False
         )
@@ -418,6 +447,7 @@ class TestErrorHandlingExitCodes:
         mock_args.return_value = MagicMock(
             mode='daily',
             use_proxy=False,
+            no_proxy=False,
             input_file=None,
             from_pipeline=False
         )
@@ -828,7 +858,6 @@ class TestInitializeProxyHelper:
         """Test initialization without proxy."""
         from scripts.qb_uploader import initialize_proxy_helper
         
-        result = initialize_proxy_helper(use_proxy=False)
+        result = initialize_proxy_helper(False)
         
         assert result is None
-

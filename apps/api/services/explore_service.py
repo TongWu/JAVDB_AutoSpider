@@ -24,7 +24,7 @@ from packages.python.javdb_platform.bridges.rust_adapters.parser_adapter import 
     result_to_dict,
 )
 from packages.python.javdb_platform.proxy_pool import create_proxy_pool_from_config
-from packages.python.javdb_platform.qb_config import build_qb_base_url, qb_verify_tls
+from packages.python.javdb_platform.qb_config import qb_base_url_candidates, qb_verify_tls
 from packages.python.javdb_platform.request_handler import (
     create_request_handler_from_config,
 )
@@ -43,13 +43,9 @@ def _runtime_proxy_pool(config_data: Dict[str, Any]):
     try:
         return create_proxy_pool_from_config(
             proxy_pool_raw,
-            cooldown_seconds=int(
-                config_data.get("PROXY_POOL_COOLDOWN_SECONDS", 691200) or 691200
-            ),
             max_failures=int(
                 config_data.get("PROXY_POOL_MAX_FAILURES", 3) or 3
             ),
-            ban_log_file=str(context.REPO_ROOT / "reports" / "proxy_bans.csv"),
         )
     except Exception:
         return None
@@ -65,10 +61,6 @@ def _new_request_handler(config_data: Dict[str, Any]):
         ),
         cf_bypass_port_map=config_data.get("CF_BYPASS_PORT_MAP", {}) or {},
         cf_bypass_enabled=bool(config_data.get("CF_BYPASS_ENABLED", True)),
-        cf_turnstile_cooldown=int(
-            config_data.get("CF_TURNSTILE_COOLDOWN", 30) or 30
-        ),
-        fallback_cooldown=int(config_data.get("FALLBACK_COOLDOWN", 30) or 30),
         javdb_session_cookie=str(
             config_data.get("JAVDB_SESSION_COOKIE", "") or ""
         ),
@@ -260,37 +252,64 @@ def _pick_best_magnet(magnets: list[dict[str, Any]]) -> Optional[dict[str, Any]]
     return sorted(magnets, key=_score, reverse=True)[0]
 
 
-def _qb_login_session(cfg: Dict[str, Any]) -> requests.Session:
+def _qb_configured_base_urls(cfg: Dict[str, Any]) -> list[str]:
+    qb_url = str(cfg.get("QB_URL", "")).strip()
+    qb_url_default = str(
+        context.CONFIG_SCHEMA.get("QB_URL", {}).get("default", "") or ""
+    ).strip()
     host = str(cfg.get("QB_HOST", "")).strip()
     port = str(cfg.get("QB_PORT", "")).strip()
-    username = str(cfg.get("QB_USERNAME", "")).strip()
-    password = str(cfg.get("QB_PASSWORD", "")).strip()
-    if not host or not port or not username or not password:
+    allow_insecure_http = cfg.get("QB_ALLOW_INSECURE_HTTP", False)
+    if qb_url and not (host and port and qb_url == qb_url_default):
+        try:
+            return qb_base_url_candidates(
+                qb_url,
+                allow_insecure_http=allow_insecure_http,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="Invalid qBittorrent transport settings",
+            ) from exc
+    if not host or not port:
         raise HTTPException(status_code=422, detail="qBittorrent config is incomplete")
     try:
-        base_url = build_qb_base_url(
+        return qb_base_url_candidates(
             host,
             port,
             scheme=cfg.get("QB_SCHEME", "https"),
-            allow_insecure_http=cfg.get("QB_ALLOW_INSECURE_HTTP", False),
+            allow_insecure_http=allow_insecure_http,
         )
     except ValueError as exc:
         raise HTTPException(
             status_code=422,
             detail="Invalid qBittorrent transport settings",
         ) from exc
+
+
+def _qb_login_session(cfg: Dict[str, Any]) -> tuple[requests.Session, str]:
+    username = str(cfg.get("QB_USERNAME", "")).strip()
+    password = str(cfg.get("QB_PASSWORD", "")).strip()
+    if not username or not password:
+        raise HTTPException(status_code=422, detail="qBittorrent config is incomplete")
+    base_urls = _qb_configured_base_urls(cfg)
     verify_tls = qb_verify_tls(cfg.get("QB_VERIFY_TLS", True))
     session = requests.Session()
     session.verify = verify_tls
-    resp = session.post(
-        f"{base_url}/api/v2/auth/login",
-        data={"username": username, "password": password},
-        timeout=int(cfg.get("REQUEST_TIMEOUT", 30) or 30),
-        verify=verify_tls,
-    )
-    if resp.status_code != 200:
-        raise HTTPException(status_code=502, detail="Failed to login qBittorrent")
-    return session
+    timeout = int(cfg.get("REQUEST_TIMEOUT", 30) or 30)
+    for base_url in base_urls:
+        try:
+            resp = session.post(
+                f"{base_url}/api/v2/auth/login",
+                data={"username": username, "password": password},
+                timeout=timeout,
+                verify=verify_tls,
+            )
+        except requests.RequestException:
+            continue
+        if resp.status_code == 200 and resp.text == "Ok.":
+            return session, base_url
+    raise HTTPException(status_code=502, detail="Failed to login qBittorrent")
 
 
 def _qb_add_magnet(
@@ -299,22 +318,8 @@ def _qb_add_magnet(
     title: str,
     category: Optional[str] = None,
 ) -> None:
-    host = str(cfg.get("QB_HOST", "")).strip()
-    port = str(cfg.get("QB_PORT", "")).strip()
-    try:
-        base_url = build_qb_base_url(
-            host,
-            port,
-            scheme=cfg.get("QB_SCHEME", "https"),
-            allow_insecure_http=cfg.get("QB_ALLOW_INSECURE_HTTP", False),
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=422,
-            detail="Invalid qBittorrent transport settings",
-        ) from exc
     verify_tls = qb_verify_tls(cfg.get("QB_VERIFY_TLS", True))
-    session = _qb_login_session(cfg)
+    session, base_url = _qb_login_session(cfg)
     effective_category = category or str(
         cfg.get("TORRENT_CATEGORY_ADHOC", "") or cfg.get("TORRENT_CATEGORY", "")
     )

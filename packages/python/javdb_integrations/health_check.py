@@ -41,20 +41,25 @@ from packages.python.javdb_core.masking import mask_ip_address
 
 # Import configuration
 from packages.python.javdb_platform.config_helper import cfg
+from packages.python.javdb_platform.proxy_policy import add_proxy_arguments, resolve_proxy_override, should_proxy_module
 from packages.python.javdb_platform.qb_config import (
-    build_qb_base_url,
+    qb_allow_insecure_http,
+    qb_base_url_candidates,
     masked_qb_base_url,
     qb_verify_tls,
 )
 
+QB_URL = cfg('QB_URL', None)
 QB_HOST = cfg('QB_HOST', None)
 QB_PORT = cfg('QB_PORT', None)
 QB_USERNAME = cfg('QB_USERNAME', None)
 QB_PASSWORD = cfg('QB_PASSWORD', None)
+QB_ALLOW_INSECURE_HTTP = qb_allow_insecure_http()
 SMTP_SERVER = cfg('SMTP_SERVER', None)
 SMTP_PORT = cfg('SMTP_PORT', None)
 PROXY_POOL = cfg('PROXY_POOL', [])
 PROXY_MODE = cfg('PROXY_MODE', 'single')
+PROXY_MODULES = cfg('PROXY_MODULES', ['spider'])
 LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
 
 # Setup basic logging
@@ -72,56 +77,78 @@ def check_qbittorrent_connection() -> Tuple[bool, str]:
     Returns:
         Tuple of (success, message)
     """
-    if not QB_HOST or not QB_PORT:
-        return False, "QB_HOST/QB_PORT not configured - qBittorrent checks skipped"
-
-    masked_host = mask_ip_address(QB_HOST)
+    if not QB_URL and (not QB_HOST or not QB_PORT):
+        return False, "QB_URL not configured - qBittorrent checks skipped"
     
     try:
         import requests
-        
-        base_url = build_qb_base_url(QB_HOST, QB_PORT)
-        verify_tls = qb_verify_tls()
-        login_url = f"{base_url}/api/v2/auth/login"
-        
-        # Test connection with timeout
-        logger.info(
-            f"Testing qBittorrent connection to {masked_qb_base_url(QB_HOST, QB_PORT)}..."
-        )
-        
-        session = requests.Session()
-        # Disable environment proxy to avoid interference
-        session.trust_env = False
-        session.verify = verify_tls
-        response = session.post(
-            login_url,
-            data={'username': QB_USERNAME, 'password': QB_PASSWORD},
-            timeout=10,
-            verify=verify_tls,
-        )
-        
-        if response.status_code == 200 and response.text == 'Ok.':
-            # Try to get version to confirm full access
-            version_response = session.get(
-                f"{base_url}/api/v2/app/version",
-                timeout=5,
-                verify=verify_tls,
+
+        if QB_URL:
+            base_urls = qb_base_url_candidates(
+                QB_URL,
+                allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
             )
-            if version_response.status_code == 200:
-                version = version_response.text
-                return True, f"Connected successfully (version: {version})"
-            return True, "Connected and authenticated"
-        elif response.status_code == 403:
-            return False, "Authentication failed - check QB_USERNAME and QB_PASSWORD"
         else:
-            return False, f"Unexpected response: {response.status_code} - {response.text}"
+            base_urls = qb_base_url_candidates(
+                QB_HOST,
+                QB_PORT,
+                allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
+            )
+
+        verify_tls = qb_verify_tls()
+        last_message = "Cannot connect to qBittorrent"
+
+        for base_url in base_urls:
+            login_url = f"{base_url}/api/v2/auth/login"
+            masked_url = masked_qb_base_url(
+                base_url,
+                allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
+            )
+
+            logger.info(f"Testing qBittorrent connection to {masked_url}...")
+
+            session = requests.Session()
+            # Disable environment proxy to avoid interference
+            session.trust_env = False
+            session.verify = verify_tls
+
+            try:
+                response = session.post(
+                    login_url,
+                    data={'username': QB_USERNAME, 'password': QB_PASSWORD},
+                    timeout=10,
+                    verify=verify_tls,
+                )
+            except requests.exceptions.ConnectionError:
+                last_message = f"Cannot connect to {masked_url} - connection refused"
+                continue
+            except requests.exceptions.Timeout:
+                last_message = f"Connection timeout to {masked_url}"
+                continue
+
+            if response.status_code == 200 and response.text == 'Ok.':
+                version_response = session.get(
+                    f"{base_url}/api/v2/app/version",
+                    timeout=5,
+                    verify=verify_tls,
+                )
+                if version_response.status_code == 200:
+                    version = version_response.text
+                    if base_url != base_urls[0]:
+                        return True, f"Connected successfully via HTTP fallback at {masked_url} (version: {version})"
+                    return True, f"Connected successfully (version: {version})"
+                if base_url != base_urls[0]:
+                    return True, f"Connected and authenticated via HTTP fallback at {masked_url}"
+                return True, "Connected and authenticated"
+            if response.status_code == 403:
+                last_message = "Authentication failed - check QB_USERNAME and QB_PASSWORD"
+                continue
+
+            last_message = f"Unexpected response from {masked_url}: {response.status_code} - {response.text}"
+        return False, last_message
             
     except ValueError as exc:
         return False, str(exc)
-    except requests.exceptions.ConnectionError:
-        return False, f"Cannot connect to {masked_host}:{QB_PORT} - connection refused"
-    except requests.exceptions.Timeout:
-        return False, f"Connection timeout to {masked_host}:{QB_PORT}"
     except Exception as e:
         return False, f"Error: {str(e)}"
 
@@ -198,13 +225,18 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='Health Check for JavDB Pipeline')
     parser.add_argument('--check-smtp', action='store_true',
                         help='Also check SMTP server connectivity')
-    parser.add_argument('--use-proxy', action='store_true',
-                        help='Check proxy pool status')
+    add_proxy_arguments(
+        parser,
+        use_help='Force-enable proxy health checks',
+        no_help='Force-disable proxy health checks',
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_arguments()
+    proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
+    should_check_proxy = should_proxy_module('spider', proxy_override, PROXY_MODULES)
     
     logger.info("=" * 60)
     logger.info("HEALTH CHECK - Pre-flight Verification")
@@ -228,17 +260,16 @@ def main():
     # Check 2: Proxy Pool (if configured or --use-proxy)
     logger.info("")
     logger.info("[2/3] Checking proxy pool status...")
-    proxy_success, proxy_message = check_proxy_pool_status()
-    results.append(("Proxy Pool", proxy_success, proxy_message))
-    if proxy_success:
-        logger.info(f"  ✓ {proxy_message}")
-    else:
-        logger.error(f"  ✗ {proxy_message}")
-        # Proxy failure is critical if PROXY_MODE is 'pool'
-        if PROXY_MODE == 'pool':
-            all_passed = False
+    if should_check_proxy:
+        proxy_success, proxy_message = check_proxy_pool_status()
+        results.append(("Proxy Pool", proxy_success, proxy_message))
+        if proxy_success:
+            logger.info(f"  ✓ {proxy_message}")
         else:
-            logger.warning("  (Non-critical in single/no proxy mode)")
+            logger.warning(f"  ⚠ {proxy_message} (informational — ban manager is session-scoped)")
+    else:
+        logger.info("  ✓ Skipped (proxy forced off or no proxy-enabled modules configured)")
+        results.append(("Proxy Pool", True, "Skipped"))
     
     # Check 3: SMTP (optional)
     logger.info("")

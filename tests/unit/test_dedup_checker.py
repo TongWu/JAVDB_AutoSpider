@@ -17,6 +17,7 @@ from scripts.spider.services.dedup import (
     is_in_rclone_inventory,
     should_skip_from_rclone,
     check_dedup_upgrade,
+    check_redownload_dedup_upgrade,
     append_dedup_record,
     load_dedup_csv,
     save_dedup_csv,
@@ -160,6 +161,36 @@ class TestCheckDedupUpgrade:
         records = check_dedup_upgrade('ABC-123', types, entries)
         assert len(records) == 1
         assert records[0].existing_gdrive_path == 'p1'
+
+
+class TestCheckRedownloadDedupUpgrade:
+    def test_matches_same_family_and_subtitle_state(self):
+        entries = [
+            RcloneEntry('ABC-123', '有码', '无字', 'p1', 1000, 1, 't'),
+            RcloneEntry('ABC-123', '有码', '中字', 'p2', 1000, 1, 't'),
+        ]
+        records = check_redownload_dedup_upgrade(
+            'ABC-123',
+            ['no_subtitle'],
+            {'size_no_subtitle': '2.0GB'},
+            entries,
+        )
+        assert len(records) == 1
+        assert records[0].existing_gdrive_path == 'p1'
+        assert records[0].new_torrent_category == 'no_subtitle'
+        assert 'Re-download upgrade' in records[0].deletion_reason
+
+    def test_skips_existing_folder_when_not_smaller_than_new_torrent(self):
+        entries = [
+            RcloneEntry('ABC-123', '有码', '无字', 'p1', 3_000_000_000, 1, 't'),
+        ]
+        records = check_redownload_dedup_upgrade(
+            'ABC-123',
+            ['no_subtitle'],
+            {'size_no_subtitle': '2.0GB'},
+            entries,
+        )
+        assert records == []
 
 
 # ============================================================================
@@ -337,16 +368,6 @@ class TestStorageModeDb:
 class TestStorageModeCsv:
     """csv mode: dedup always writes to DB (force=True), no CSV mirror."""
 
-    def test_append_db_only(self, tmp_path, storage_mode_csv):
-        csv_path = str(tmp_path / 'dedup.csv')
-        r = DedupRecord('CSV-001', 's', 'sub', 'p', 100, 'cat', 'reason', 't', 'False', '')
-        append_dedup_record(csv_path, r)
-        # DB should still be written (dedup forces DB init)
-        rows = db_mod.db_load_dedup_records()
-        assert any(row.get('VideoCode', row.get('video_code')) == 'CSV-001' for row in rows)
-        # CSV is no longer written as a mirror
-        assert not os.path.exists(csv_path)
-
     def test_inventory_reads_csv(self, tmp_path, storage_mode_csv):
         csv_path = str(tmp_path / 'inv.csv')
         import csv as csv_mod
@@ -364,12 +385,28 @@ class TestStorageModeCsv:
 class TestStorageModeDuo:
     """duo mode: dedup writes to DB only (no CSV mirror)."""
 
-    def test_append_db_only(self, tmp_path, storage_mode_duo):
+
+class TestStorageModeNonDbMirrors:
+    """csv and duo modes share the same dedup write behavior."""
+
+    @pytest.mark.parametrize(
+        ("storage_fixture", "video_code"),
+        [
+            ('storage_mode_csv', 'CSV-001'),
+            ('storage_mode_duo', 'DUO-001'),
+        ],
+        ids=['csv', 'duo'],
+    )
+    def test_append_db_only(self, tmp_path, request, storage_fixture, video_code):
+        request.getfixturevalue(storage_fixture)
+
         csv_path = str(tmp_path / 'dedup.csv')
-        r = DedupRecord('DUO-001', 's', 'sub', 'p', 100, 'cat', 'reason', 't', 'False', '')
-        append_dedup_record(csv_path, r)
-        rows_sqlite = db_mod.db_load_dedup_records()
-        assert any(row.get('VideoCode', row.get('video_code')) == 'DUO-001' for row in rows_sqlite)
+        record = DedupRecord(video_code, 's', 'sub', 'p', 100, 'cat', 'reason', 't', 'False', '')
+
+        append_dedup_record(csv_path, record)
+
+        rows = db_mod.db_load_dedup_records()
+        assert any(row.get('VideoCode', row.get('video_code')) == video_code for row in rows)
         assert not os.path.exists(csv_path)
 
 

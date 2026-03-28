@@ -15,9 +15,22 @@ from utils.infra.request_handler import (
     RequestConfig,
     RequestHandler,
     ProxyHelper,
+    ProxyBannedError,
     create_request_handler_from_config,
     create_proxy_helper_from_config
 )
+
+
+_PROXY_RULE_SUBJECTS = [
+    pytest.param('request_handler', id='request_handler'),
+    pytest.param('proxy_helper', id='proxy_helper'),
+]
+
+
+def _make_proxy_rule_subject(subject_name, proxy_modules):
+    if subject_name == 'request_handler':
+        return RequestHandler(config=RequestConfig(proxy_modules=proxy_modules))
+    return ProxyHelper(proxy_modules=proxy_modules)
 
 
 class TestRequestConfig:
@@ -36,8 +49,9 @@ class TestRequestConfig:
         assert config.javdb_session_cookie is None
         assert config.proxy_http is None
         assert config.proxy_https is None
-        assert config.proxy_modules == ['all']
+        assert config.proxy_modules == ['spider']
         assert config.proxy_mode == 'single'
+        assert config.between_attempt_sleep is None
     
     def test_custom_values(self):
         """Test custom configuration values."""
@@ -61,7 +75,37 @@ class TestRequestConfig:
         """Test that post_init sets default proxy_modules if None."""
         config = RequestConfig(proxy_modules=None)
         
-        assert config.proxy_modules == ['all']
+        assert config.proxy_modules == ['spider']
+
+
+class TestProxySelectionRules:
+    """Shared proxy-module selection rules for both request abstractions."""
+
+    @pytest.mark.parametrize("subject_name", _PROXY_RULE_SUBJECTS)
+    def test_force_disable_proxy(self, subject_name):
+        subject = _make_proxy_rule_subject(subject_name, None)
+        assert subject.should_use_proxy_for_module('spider', use_proxy_flag=False) is False
+
+    @pytest.mark.parametrize("subject_name", _PROXY_RULE_SUBJECTS)
+    def test_all_modules_auto_mode(self, subject_name):
+        subject = _make_proxy_rule_subject(subject_name, ['all'])
+        assert subject.should_use_proxy_for_module('spider', use_proxy_flag=None) is True
+
+    @pytest.mark.parametrize("subject_name", _PROXY_RULE_SUBJECTS)
+    def test_specific_modules_auto_mode(self, subject_name):
+        subject = _make_proxy_rule_subject(subject_name, ['spider', 'qbittorrent'])
+        assert subject.should_use_proxy_for_module('spider', use_proxy_flag=None) is True
+        assert subject.should_use_proxy_for_module('pikpak', use_proxy_flag=None) is False
+
+    @pytest.mark.parametrize("subject_name", _PROXY_RULE_SUBJECTS)
+    def test_empty_module_list_auto_mode(self, subject_name):
+        subject = _make_proxy_rule_subject(subject_name, [])
+        assert subject.should_use_proxy_for_module('spider', use_proxy_flag=None) is False
+
+    @pytest.mark.parametrize("subject_name", _PROXY_RULE_SUBJECTS)
+    def test_force_enable_proxy(self, subject_name):
+        subject = _make_proxy_rule_subject(subject_name, [])
+        assert subject.should_use_proxy_for_module('pikpak', use_proxy_flag=True) is True
 
 
 class TestRequestHandler:
@@ -90,40 +134,6 @@ class TestRequestHandler:
         handler = RequestHandler(proxy_pool=mock_pool)
         
         assert handler.proxy_pool is mock_pool
-    
-    def test_should_use_proxy_for_module_false_no_flag(self):
-        """Test should_use_proxy_for_module returns False when flag is False."""
-        handler = RequestHandler()
-        
-        result = handler.should_use_proxy_for_module('spider', use_proxy_flag=False)
-        
-        assert result is False
-    
-    def test_should_use_proxy_for_module_all(self):
-        """Test should_use_proxy_for_module with 'all' in modules."""
-        config = RequestConfig(proxy_modules=['all'])
-        handler = RequestHandler(config=config)
-        
-        result = handler.should_use_proxy_for_module('spider', use_proxy_flag=True)
-        
-        assert result is True
-    
-    def test_should_use_proxy_for_module_specific(self):
-        """Test should_use_proxy_for_module with specific module."""
-        config = RequestConfig(proxy_modules=['spider', 'qbittorrent'])
-        handler = RequestHandler(config=config)
-        
-        assert handler.should_use_proxy_for_module('spider', use_proxy_flag=True) is True
-        assert handler.should_use_proxy_for_module('pikpak', use_proxy_flag=True) is False
-    
-    def test_should_use_proxy_for_module_empty_list(self):
-        """Test should_use_proxy_for_module with empty module list."""
-        config = RequestConfig(proxy_modules=[])
-        handler = RequestHandler(config=config)
-        
-        result = handler.should_use_proxy_for_module('spider', use_proxy_flag=True)
-        
-        assert result is False
     
     def test_extract_ip_from_proxy_url(self):
         """Test extract_ip_from_proxy_url."""
@@ -286,7 +296,7 @@ class TestRequestHandler:
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
         
-        handler = RequestHandler()
+        handler = RequestHandler(config=RequestConfig(use_curl_cffi=False))
         html, success, is_turnstile = handler._fetch_direct(
             'http://test.com', None, 'Test'
         )
@@ -305,7 +315,7 @@ class TestRequestHandler:
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
         
-        handler = RequestHandler()
+        handler = RequestHandler(config=RequestConfig(use_curl_cffi=False))
         html, success, is_turnstile = handler._fetch_direct(
             'http://test.com', None, 'Test'
         )
@@ -323,7 +333,7 @@ class TestRequestHandler:
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
         
-        config = RequestConfig(javdb_session_cookie='my_session_cookie')
+        config = RequestConfig(javdb_session_cookie='my_session_cookie', use_curl_cffi=False)
         handler = RequestHandler(config=config)
         
         handler._fetch_direct('http://test.com', None, 'Test', use_cookie=True)
@@ -397,7 +407,7 @@ class TestProxyHelper:
         helper = ProxyHelper()
         
         assert helper.proxy_pool is None
-        assert helper.proxy_modules == ['all']
+        assert helper.proxy_modules == ['spider']
         assert helper.proxy_mode == 'single'
         assert helper.proxy_http is None
         assert helper.proxy_https is None
@@ -417,42 +427,11 @@ class TestProxyHelper:
         assert helper.proxy_mode == 'pool'
         assert helper.proxy_http == 'http://proxy:8080'
     
-    def test_should_use_proxy_for_module_false_no_flag(self):
-        """Test should_use_proxy_for_module returns False when flag is False."""
-        helper = ProxyHelper()
-        
-        result = helper.should_use_proxy_for_module('qbittorrent', use_proxy_flag=False)
-        
-        assert result is False
-    
-    def test_should_use_proxy_for_module_all(self):
-        """Test should_use_proxy_for_module with 'all' in modules."""
-        helper = ProxyHelper(proxy_modules=['all'])
-        
-        result = helper.should_use_proxy_for_module('qbittorrent', use_proxy_flag=True)
-        
-        assert result is True
-    
-    def test_should_use_proxy_for_module_specific(self):
-        """Test should_use_proxy_for_module with specific module."""
-        helper = ProxyHelper(proxy_modules=['qbittorrent', 'pikpak'])
-        
-        assert helper.should_use_proxy_for_module('qbittorrent', use_proxy_flag=True) is True
-        assert helper.should_use_proxy_for_module('other', use_proxy_flag=True) is False
-    
-    def test_should_use_proxy_for_module_empty_list(self):
-        """Test should_use_proxy_for_module with empty module list."""
-        helper = ProxyHelper(proxy_modules=[])
-        
-        result = helper.should_use_proxy_for_module('qbittorrent', use_proxy_flag=True)
-        
-        assert result is False
-    
     def test_get_proxies_dict_no_proxy(self):
         """Test get_proxies_dict when module shouldn't use proxy."""
         helper = ProxyHelper(proxy_modules=['other'])
         
-        result = helper.get_proxies_dict('qbittorrent', use_proxy_flag=True)
+        result = helper.get_proxies_dict('qbittorrent', use_proxy_flag=None)
         
         assert result is None
     
@@ -634,7 +613,7 @@ class TestRequestHandlerAdvanced:
         """Test _fetch_direct error handling."""
         mock_get.side_effect = requests.RequestException("Connection failed")
         
-        handler = RequestHandler()
+        handler = RequestHandler(config=RequestConfig(use_curl_cffi=False))
         html, success, is_turnstile = handler._fetch_direct(
             'http://test.com', None, 'Test'
         )
@@ -653,7 +632,7 @@ class TestRequestHandlerAdvanced:
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
         
-        handler = RequestHandler()
+        handler = RequestHandler(config=RequestConfig(use_curl_cffi=False))
         html, success, is_turnstile = handler._fetch_direct(
             'http://test.com', None, 'Test', use_cookie=False
         )
@@ -731,9 +710,9 @@ class TestProxyHelperAdvanced:
         """Test should_use_proxy_for_module with None modules list."""
         helper = ProxyHelper(proxy_modules=None)
         
-        # Should use default ['all']
-        result = helper.should_use_proxy_for_module('test', use_proxy_flag=True)
-        assert result is True
+        # Should use default ['spider']
+        assert helper.should_use_proxy_for_module('spider', use_proxy_flag=None) is True
+        assert helper.should_use_proxy_for_module('test', use_proxy_flag=None) is False
     
     def test_get_proxies_dict_single_mode(self):
         """Test get_proxies_dict in single proxy mode."""
@@ -969,3 +948,268 @@ class TestCurlCffiCookieHandling:
             cookie_header = passed_headers.get('Cookie', '')
             
             assert cookie_header == '_jdb_session=my_session'
+
+
+BAN_PAGE_HTML = (
+    "\nThe owner of this website has banned your access based on your browser's behaving\n\n"
+    "IP: xxx.xxx.xxx.xxx\n\n"
+    "基於你的異常行為，管理員禁止了你的訪問，將在3-7日後解除。\n"
+    "群組和反饋不受理此問題，請耐心等待解除或更換網絡節點進行訪問。\n"
+)
+
+
+class TestIsBanPage:
+    """Test cases for RequestHandler.is_ban_page static method."""
+
+    def test_is_ban_page_with_ban_html(self):
+        """Ban page HTML should be detected."""
+        assert RequestHandler.is_ban_page(BAN_PAGE_HTML) is True
+
+    def test_is_ban_page_with_chinese_only(self):
+        """Chinese-only ban indicator should be detected."""
+        assert RequestHandler.is_ban_page("管理員禁止了你的訪問") is True
+
+    def test_is_ban_page_with_english_only(self):
+        """English-only ban indicator should be detected."""
+        assert RequestHandler.is_ban_page("banned your access") is True
+
+    def test_is_ban_page_with_normal_html(self):
+        """Normal HTML should not be flagged."""
+        normal_html = '<html><div class="movie-list">Content</div></html>'
+        assert RequestHandler.is_ban_page(normal_html) is False
+
+    def test_is_ban_page_with_empty(self):
+        """Empty/None inputs should return False."""
+        assert RequestHandler.is_ban_page('') is False
+        assert RequestHandler.is_ban_page(None) is False
+
+
+class TestDoRequest403:
+    """Test _do_request returns body on HTTP 403."""
+
+    @patch.object(requests.Session, 'get')
+    def test_do_request_403_returns_body(self, mock_get):
+        """HTTP 403 should return (body, error) so callers can inspect ban HTML."""
+        mock_response = MagicMock()
+        mock_response.status_code = 403
+        mock_response.text = BAN_PAGE_HTML
+        mock_get.return_value = mock_response
+
+        handler = RequestHandler()
+        html, error = handler._do_request(
+            'http://test.com', {}, None, timeout=30, context_msg='Test'
+        )
+
+        assert html == BAN_PAGE_HTML
+        assert error is not None
+        assert isinstance(error, requests.HTTPError)
+
+
+class TestProxyBanDetection:
+    """Test ProxyBannedError raise/catch flow."""
+
+    @patch.object(RequestHandler, '_do_request_curl_cffi')
+    @patch.object(RequestHandler, '_do_request')
+    def test_fetch_direct_raises_proxy_banned_error(self, mock_do, mock_curl):
+        """_fetch_direct should raise ProxyBannedError when ban page is detected."""
+        mock_curl.return_value = (None, Exception("skip"))
+        mock_do.return_value = (BAN_PAGE_HTML, requests.HTTPError("403"))
+
+        handler = RequestHandler(config=RequestConfig(use_curl_cffi=False))
+        with pytest.raises(ProxyBannedError) as exc_info:
+            handler._fetch_direct('http://test.com', None, 'Test', proxy_name='proxy-1')
+
+        assert exc_info.value.proxy_name == 'proxy-1'
+        assert 'ban page' in exc_info.value.reason
+
+    @patch.object(RequestHandler, '_do_request_curl_cffi')
+    @patch.object(RequestHandler, '_do_request')
+    def test_fetch_direct_normal_403_no_ban(self, mock_do, mock_curl):
+        """403 with non-ban HTML should NOT raise ProxyBannedError."""
+        non_ban_html = '<html>Access Denied</html>'
+        mock_curl.return_value = (None, Exception("skip"))
+        mock_do.return_value = (non_ban_html, requests.HTTPError("403"))
+
+        handler = RequestHandler(config=RequestConfig(use_curl_cffi=False))
+        html, success, is_turnstile = handler._fetch_direct(
+            'http://test.com', None, 'Test', proxy_name='proxy-1'
+        )
+        assert html == non_ban_html
+        assert success is False
+
+    @patch.object(RequestHandler, '_get_page_direct')
+    def test_get_page_catches_proxy_banned_and_bans(self, mock_direct):
+        """get_page should catch ProxyBannedError, call ban_proxy, and re-raise."""
+        mock_direct.side_effect = ProxyBannedError('proxy-1', 'ban page detected')
+
+        mock_pool = MagicMock()
+        mock_pool.get_current_proxy_name.return_value = 'proxy-1'
+
+        config = RequestConfig(cf_bypass_enabled=False)
+        handler = RequestHandler(proxy_pool=mock_pool, config=config)
+
+        with pytest.raises(ProxyBannedError):
+            handler.get_page(
+                'http://test.com', use_proxy=True, module_name='spider'
+            )
+
+        mock_pool.ban_proxy.assert_called_once_with('proxy-1')
+
+
+class TestCfBypassBanThreshold:
+    """Test CF bypass consecutive failure auto-ban via ProxyBannedError."""
+
+    def _make_handler(self, ban_threshold=4, max_failures=2):
+        mock_pool = MagicMock()
+        mock_pool.get_current_proxy_name.return_value = 'test-proxy'
+        config = RequestConfig(
+            cf_bypass_enabled=True,
+            cf_bypass_max_failures=max_failures,
+            cf_bypass_ban_threshold=ban_threshold,
+            fallback_cooldown=0,
+            between_attempt_sleep=lambda: 0.0,
+        )
+        handler = RequestHandler(proxy_pool=mock_pool, config=config)
+        return handler, mock_pool
+
+    @patch.object(RequestHandler, '_fetch_direct')
+    @patch.object(RequestHandler, '_fetch_with_cf_bypass')
+    def test_below_threshold_returns_none(self, mock_bypass, mock_direct):
+        """Failures below ban_threshold should return None, not raise."""
+        mock_bypass.return_value = (None, False, False)
+        mock_direct.return_value = (None, False, False)
+        handler, _ = self._make_handler(ban_threshold=6)
+
+        result = handler.get_page(
+            'http://test.com', use_proxy=False,
+            use_cf_bypass=True, module_name='test', max_retries=1,
+        )
+        assert result is None
+        assert handler.cf_bypass_failure_count < 6
+
+    @patch.object(RequestHandler, '_fetch_direct')
+    @patch.object(RequestHandler, '_fetch_with_cf_bypass')
+    def test_reaching_threshold_raises_proxy_banned(self, mock_bypass, mock_direct):
+        """Once cf_bypass_failure_count >= ban_threshold, ProxyBannedError is raised."""
+        mock_bypass.return_value = (None, False, False)
+        mock_direct.return_value = (None, False, False)
+        handler, mock_pool = self._make_handler(ban_threshold=4)
+        handler.cf_bypass_failure_count = 3
+
+        with pytest.raises(ProxyBannedError) as exc_info:
+            handler.get_page(
+                'http://test.com', use_proxy=False,
+                use_cf_bypass=True, module_name='test', max_retries=1,
+            )
+        assert 'consecutive' in exc_info.value.reason
+        mock_pool.ban_proxy.assert_called()
+
+    @patch.object(RequestHandler, '_fetch_with_cf_bypass')
+    def test_success_resets_counter(self, mock_bypass):
+        """A successful CF bypass should reset cf_bypass_failure_count to 0."""
+        mock_bypass.return_value = ('<html>' + 'x' * 15000 + '</html>', True, False)
+        handler, _ = self._make_handler(ban_threshold=4)
+        handler.cf_bypass_failure_count = 3
+
+        result = handler.get_page(
+            'http://test.com', use_proxy=False,
+            use_cf_bypass=True, module_name='test', max_retries=1,
+        )
+        assert result is not None
+        assert handler.cf_bypass_failure_count == 0
+
+    def test_default_ban_threshold(self):
+        """Default cf_bypass_ban_threshold should be 6."""
+        config = RequestConfig()
+        assert config.cf_bypass_ban_threshold == 6
+
+
+class TestPauseBetweenAttempts:
+    """Test _pause_between_attempts with and without injected callable."""
+
+    def test_uses_injected_callable(self):
+        call_count = 0
+
+        def fake_sleep():
+            nonlocal call_count
+            call_count += 1
+            return 0.0
+
+        handler = RequestHandler(
+            config=RequestConfig(between_attempt_sleep=fake_sleep)
+        )
+        handler._pause_between_attempts(legacy_seconds=30)
+        assert call_count == 1
+
+    @patch('packages.python.javdb_platform.request_handler.time.sleep')
+    def test_legacy_fallback(self, mock_sleep):
+        handler = RequestHandler(config=RequestConfig(between_attempt_sleep=None))
+        handler._pause_between_attempts(legacy_seconds=5)
+        mock_sleep.assert_called_once_with(5)
+
+    @patch('packages.python.javdb_platform.request_handler.time.sleep')
+    def test_legacy_zero_skips_sleep(self, mock_sleep):
+        handler = RequestHandler(config=RequestConfig(between_attempt_sleep=None))
+        handler._pause_between_attempts(legacy_seconds=0)
+        mock_sleep.assert_not_called()
+
+    @patch.object(RequestHandler, '_fetch_direct')
+    def test_cf_fallback_calls_injected_sleep(self, mock_fetch):
+        """CF bypass fallback steps should invoke injected sleep, not time.sleep."""
+        call_count = 0
+
+        def counting_sleep():
+            nonlocal call_count
+            call_count += 1
+            return 0.0
+
+        mock_fetch.return_value = (None, False, False)
+        config = RequestConfig(
+            cf_bypass_enabled=True,
+            fallback_cooldown=30,
+            between_attempt_sleep=counting_sleep,
+        )
+        handler = RequestHandler(config=config)
+
+        with patch.object(handler, '_fetch_with_cf_bypass',
+                          return_value=('<html>small</html>', False, False)):
+            handler.get_page(
+                'http://test.com',
+                use_proxy=False,
+                use_cf_bypass=True,
+                module_name='test',
+                max_retries=1,
+            )
+
+        assert call_count >= 1, "injected sleep should be called during CF fallback"
+
+    @patch.object(RequestHandler, '_fetch_direct')
+    def test_turnstile_retry_calls_injected_sleep(self, mock_fetch):
+        """Turnstile retry in _get_page_direct should use injected sleep."""
+        call_count = 0
+
+        def counting_sleep():
+            nonlocal call_count
+            call_count += 1
+            return 0.0
+
+        mock_fetch.side_effect = [
+            ('<html>Security Verification turnstile</html>', False, True),
+            ('<html>' + 'x' * 15000 + '</html>', True, False),
+        ]
+        config = RequestConfig(
+            cf_turnstile_cooldown=10,
+            between_attempt_sleep=counting_sleep,
+        )
+        handler = RequestHandler(config=config)
+
+        result = handler.get_page(
+            'http://test.com',
+            use_proxy=False,
+            use_cf_bypass=False,
+            module_name='test',
+            max_retries=3,
+        )
+
+        assert result is not None
+        assert call_count >= 1, "injected sleep should be called on Turnstile retry"

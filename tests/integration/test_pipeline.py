@@ -18,6 +18,7 @@ from scripts.email_notification import (
     analyze_uploader_log,
     analyze_pikpak_log,
     analyze_pipeline_log,
+    extract_dedup_statistics,
     extract_spider_statistics,
     extract_uploader_statistics,
     extract_pikpak_statistics,
@@ -480,3 +481,84 @@ class TestFormatEmailReport:
         )
         assert 'Started:  2025-03-20 23:30:00' in out
         assert 'Finished: 2025-03-21 01:15:00' in out
+
+    def test_format_email_report_shows_redownload_breakdown(self):
+        spider_stats = {
+            'phase1': {'discovered': 0, 'processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0},
+            'phase2': {'discovered': 0, 'processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0},
+            'overall': {'total_discovered': 0, 'successfully_processed': 0, 'skipped_history': 0, 'no_new_torrents': 0, 'failed': 0}
+        }
+        uploader_stats = {
+            'total': 0, 'success': 0, 'failed': 0, 'hacked_sub': 0, 'hacked_nosub': 0,
+            'subtitle': 0, 'no_subtitle': 0, 'success_rate': 0.0
+        }
+        pikpak_stats = {
+            'total_torrents': 0, 'filtered_old': 0, 'added_to_pikpak': 0,
+            'removed_from_qb': 0, 'failed': 0, 'threshold_days': 3
+        }
+        dedup_stats = {
+            'detected': 3,
+            'deleted': 2,
+            'failed': 1,
+            'redownload_detected': 2,
+            'redownload_deleted': 1,
+            'deleted_items': [
+                '  • [Redownload upgrade] IPZZ-414 [有码-无字] -> Re-download upgrade (no_subtitle: larger same-category torrent 3.52GB found)',
+                '  • ABC-123 [有码-无字] -> Subtitle upgrade: replaced with subtitle torrent',
+            ],
+        }
+
+        out = format_email_report(
+            spider_stats, uploader_stats, pikpak_stats, 'none',
+            show_spider=False, show_uploader=False, show_pikpak=False,
+            dedup_stats=dedup_stats,
+        )
+
+        assert 'RCLONE DEDUP SUMMARY' in out
+        assert 'Regular Upgrades:   1 detected, 1 deleted' in out
+        assert 'Redownload Upgrade: 2 detected, 1 deleted' in out
+        assert '[Redownload upgrade] IPZZ-414' in out
+
+
+class TestExtractDedupStatistics:
+    def test_extract_dedup_statistics_tracks_redownload_upgrades(self, temp_dir, monkeypatch):
+        import packages.python.javdb_platform.config_helper as config_helper
+
+        monkeypatch.setattr(config_helper, 'use_sqlite', lambda: False)
+
+        csv_path = os.path.join(temp_dir, 'dedup_history.csv')
+        with open(csv_path, 'w', encoding='utf-8') as f:
+            f.write(
+                'video_code,existing_sensor,existing_subtitle,existing_gdrive_path,'
+                'existing_folder_size,new_torrent_category,deletion_reason,'
+                'detect_datetime,is_deleted,delete_datetime\n'
+            )
+            f.write(
+                'IPZZ-414,有码,无字,/old/ipzz414,1513977000,no_subtitle,'
+                '"Re-download upgrade (no_subtitle: larger same-category torrent 3.52GB found)",'
+                '2026-03-25 21:55:00,True,2026-03-25 22:10:00\n'
+            )
+            f.write(
+                'IPZZ-414,有码,无字,/older/ipzz414,1413977000,no_subtitle,'
+                '"Re-download upgrade (no_subtitle: larger same-category torrent 3.52GB found)",'
+                '2026-03-25 21:56:00,False,\n'
+            )
+            f.write(
+                'ABC-123,有码,无字,/old/abc123,1111111111,subtitle,'
+                '"Subtitle upgrade: replaced with subtitle torrent",'
+                '2026-03-25 21:57:00,True,2026-03-25 22:12:00\n'
+            )
+            f.write(
+                'OLD-999,有码,无字,/old/old999,999999999,no_subtitle,'
+                '"Re-download upgrade (no_subtitle: larger same-category torrent 3.52GB found)",'
+                '2026-03-24 21:00:00,True,2026-03-24 21:10:00\n'
+            )
+
+        stats = extract_dedup_statistics(csv_path, session_start_time='2026-03-25 21:54:00')
+
+        assert stats['detected'] == 3
+        assert stats['deleted'] == 2
+        assert stats['failed'] == 1
+        assert stats['redownload_detected'] == 2
+        assert stats['redownload_deleted'] == 1
+        assert stats['deleted_items'][0].startswith('  • [Redownload upgrade] IPZZ-414')

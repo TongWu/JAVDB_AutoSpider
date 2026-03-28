@@ -13,6 +13,7 @@ from datetime import datetime
 
 from packages.python.javdb_platform.logging_config import get_logger
 from packages.python.javdb_platform.proxy_pool import ProxyPool, create_proxy_pool_from_config
+from packages.python.javdb_platform.proxy_policy import should_proxy_module
 from packages.python.javdb_platform.request_handler import RequestHandler, RequestConfig
 from packages.python.javdb_platform.path_helper import ensure_dated_dir
 
@@ -20,10 +21,9 @@ from packages.python.javdb_spider.runtime.config import (
     BASE_URL,
     CF_BYPASS_SERVICE_PORT, CF_BYPASS_ENABLED,
     CF_BYPASS_PORT_MAP,
-    CF_TURNSTILE_COOLDOWN, FALLBACK_COOLDOWN,
     JAVDB_SESSION_COOKIE,
     PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES, PROXY_MODE,
-    PROXY_POOL, PROXY_POOL_COOLDOWN_SECONDS, PROXY_POOL_MAX_FAILURES,
+    PROXY_POOL, PROXY_POOL_MAX_FAILURES,
     REPORTS_DIR,
     LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
 )
@@ -110,12 +110,10 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False,
     )
 
 
-def should_use_proxy_for_module(module_name: str, use_proxy_flag: bool) -> bool:
+def should_use_proxy_for_module(module_name: str, use_proxy_flag) -> bool:
     if global_request_handler:
         return global_request_handler.should_use_proxy_for_module(module_name, use_proxy_flag)
-    if not use_proxy_flag or not PROXY_MODULES:
-        return False
-    return 'all' in PROXY_MODULES or module_name in PROXY_MODULES
+    return should_proxy_module(module_name, use_proxy_flag, PROXY_MODULES)
 
 
 def extract_ip_from_proxy_url(proxy_url: str) -> Optional[str]:
@@ -141,20 +139,25 @@ def is_cf_bypass_failure(html_content: str) -> bool:
 def initialize_request_handler():
     """Create the global RequestHandler from configuration."""
     global global_request_handler
-    from packages.python.javdb_spider.runtime.sleep import penalty_tracker as _pt
+    from packages.python.javdb_spider.runtime.sleep import (
+        penalty_tracker as _pt,
+        movie_sleep_mgr as _mgr,
+    )
+    _cd = _mgr.get_cooldown()
     config = RequestConfig(
         base_url=BASE_URL,
         cf_bypass_service_port=CF_BYPASS_SERVICE_PORT,
         cf_bypass_port_map=CF_BYPASS_PORT_MAP,
         cf_bypass_enabled=CF_BYPASS_ENABLED,
         cf_bypass_max_failures=3,
-        cf_turnstile_cooldown=CF_TURNSTILE_COOLDOWN,
-        fallback_cooldown=FALLBACK_COOLDOWN,
+        cf_turnstile_cooldown=_cd,
+        fallback_cooldown=_cd,
         javdb_session_cookie=JAVDB_SESSION_COOKIE,
         proxy_http=PROXY_HTTP,
         proxy_https=PROXY_HTTPS,
         proxy_modules=PROXY_MODULES,
         proxy_mode=PROXY_MODE,
+        between_attempt_sleep=_mgr.sleep,
     )
     global_request_handler = RequestHandler(
         proxy_pool=global_proxy_pool, config=config, penalty_tracker=_pt,
@@ -162,7 +165,7 @@ def initialize_request_handler():
     logger.info("Request handler initialized successfully")
 
 
-def setup_proxy_pool(ban_log_file: str, use_proxy: bool) -> None:
+def setup_proxy_pool(use_proxy) -> None:
     """Initialize the global proxy pool from configuration."""
     global global_proxy_pool
     if PROXY_POOL and len(PROXY_POOL) > 0:
@@ -170,19 +173,15 @@ def setup_proxy_pool(ban_log_file: str, use_proxy: bool) -> None:
             logger.info(f"Initializing proxy pool with {len(PROXY_POOL)} proxies...")
             global_proxy_pool = create_proxy_pool_from_config(
                 PROXY_POOL,
-                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
                 max_failures=PROXY_POOL_MAX_FAILURES,
-                ban_log_file=ban_log_file,
             )
             logger.info("Proxy pool initialized successfully")
-            logger.info(f"Cooldown: {PROXY_POOL_COOLDOWN_SECONDS}s, Max failures before cooldown: {PROXY_POOL_MAX_FAILURES}")
+            logger.info("Max failures before ban: %d (session-scoped)", PROXY_POOL_MAX_FAILURES)
         elif PROXY_MODE == 'single':
             logger.info("Initializing single proxy mode (using first proxy from pool)...")
             global_proxy_pool = create_proxy_pool_from_config(
                 [PROXY_POOL[0]],
-                cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
                 max_failures=PROXY_POOL_MAX_FAILURES,
-                ban_log_file=ban_log_file,
             )
             logger.info(f"Single proxy initialized: {PROXY_POOL[0].get('name', 'Main-Proxy')}")
     elif PROXY_HTTP or PROXY_HTTPS:
@@ -190,12 +189,10 @@ def setup_proxy_pool(ban_log_file: str, use_proxy: bool) -> None:
         legacy_proxy = {'name': 'Legacy-Proxy', 'http': PROXY_HTTP, 'https': PROXY_HTTPS}
         global_proxy_pool = create_proxy_pool_from_config(
             [legacy_proxy],
-            cooldown_seconds=PROXY_POOL_COOLDOWN_SECONDS,
             max_failures=PROXY_POOL_MAX_FAILURES,
-            ban_log_file=ban_log_file,
         )
     else:
-        if use_proxy:
+        if should_proxy_module('spider', use_proxy, PROXY_MODULES):
             logger.warning("Proxy enabled but no proxy configuration found (neither PROXY_POOL nor PROXY_HTTP/PROXY_HTTPS)")
         global_proxy_pool = None
 
@@ -239,9 +236,8 @@ def save_proxy_ban_html(html_content, proxy_name, page_num):
             f.write(f"# HTML Length: {len(html_content)} bytes\n")
             f.write("=" * 60 + "\n\n")
             f.write(html_content)
-        logger.info(f"Saved proxy ban HTML to: {filepath}")
+        logger.debug(f"Saved proxy ban HTML to: {filepath}")
         proxy_ban_html_files.append(filepath)
-        print(f"PROXY_BAN_HTML={filepath}")
         return filepath
     except Exception:
         logger.exception("Failed to save proxy ban HTML")

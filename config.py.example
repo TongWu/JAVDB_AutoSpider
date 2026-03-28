@@ -25,11 +25,8 @@ GIT_BRANCH = 'main'
 # =============================================================================
 
 # qBittorrent Web UI settings
-QB_HOST = 'your_qbittorrent_ip'
-QB_PORT = 'your_qbittorrent_port'
-QB_SCHEME = 'https'  # Prefer HTTPS for qBittorrent Web UI
+QB_URL = 'https://your_qbittorrent_ip:your_qbittorrent_port'  # Include http:// or https://
 QB_VERIFY_TLS = True  # Verify qBittorrent TLS certificates
-QB_ALLOW_INSECURE_HTTP = False  # Set True only for trusted local-only HTTP Web UI
 QB_USERNAME = 'your_qbittorrent_username'
 QB_PASSWORD = 'your_qbittorrent_password'
 
@@ -139,10 +136,8 @@ PROXY_POOL = [
 ]
 
 # Proxy pool behavior settings (only applies when PROXY_MODE = 'pool')
-# IMPORTANT: JavDB bans IPs for 7 days, so cooldown is set to 8 days (691200 seconds)
-# Ban records are persistent across runs and stored in Daily Report/proxy_bans.csv
-PROXY_POOL_COOLDOWN_SECONDS = 691200  # 8 days (691200 seconds)
-PROXY_POOL_MAX_FAILURES = 3  # Max consecutive failures before putting proxy in cooldown
+# Ban records are session-scoped (in-memory only) and reset on each new run
+PROXY_POOL_MAX_FAILURES = 3  # Max consecutive failures before banning proxy for this session
 
 # =============================================================================
 # LEGACY PROXY CONFIGURATION (DEPRECATED - for backward compatibility only)
@@ -152,7 +147,10 @@ PROXY_POOL_MAX_FAILURES = 3  # Max consecutive failures before putting proxy in 
 PROXY_HTTP = None  # Deprecated: Use PROXY_POOL instead
 PROXY_HTTPS = None  # Deprecated: Use PROXY_POOL instead
 
-# Proxy modules control (which parts of the script use proxy when --use-proxy is enabled)
+# Proxy modules control which modules use proxy in the default auto mode.
+# Manual CLI overrides:
+#   --use-proxy  Force-enable proxy for every module in that command
+#   --no-proxy   Force-disable proxy for every module in that command
 # Available modules:
 #   'spider'      - All JavDB requests (index pages, detail pages, login/session refresh)
 #   'qbittorrent' - qBittorrent Web UI API requests
@@ -160,14 +158,14 @@ PROXY_HTTPS = None  # Deprecated: Use PROXY_POOL instead
 # Add module names to the list to enable proxy for those modules
 # Leave empty list [] to disable proxy for all modules
 # Use ['all'] to enable proxy for all modules
-PROXY_MODULES = ['all']
+PROXY_MODULES = ['spider']
 
 # Example configurations:
-# PROXY_MODULES = ['all']  # Enable proxy for all modules (default)
-# PROXY_MODULES = ['spider']  # Only spider (including login), not qBittorrent/PikPak
+# PROXY_MODULES = ['spider']  # Default: only spider (including login), not qBittorrent/PikPak
+# PROXY_MODULES = ['all']  # Enable proxy for all modules
 # PROXY_MODULES = ['spider', 'qbittorrent']  # Spider and qBittorrent
 # PROXY_MODULES = ['qbittorrent', 'pikpak']  # Only qBittorrent and PikPak, not spider
-# PROXY_MODULES = []  # Disable proxy for all modules (even if --use-proxy is set)
+# PROXY_MODULES = []  # Disable proxy for all modules by default
 
 # =============================================================================
 # CLOUDFLARE BYPASS CONFIGURATION
@@ -221,13 +219,9 @@ GPT_API_KEY = ''  # Your API key (e.g., sk-xxx)
 JAVDB_SESSION_COOKIE = ''
 
 # Sleep time configuration (in seconds)
-PAGE_SLEEP = 5  # Sleep time between index pages
-# MOVIE_SLEEP_MIN/MAX are auto-tuned by the adaptive sleep system.
+# MOVIE_SLEEP_MIN/MAX are auto-tuned by the adaptive sleep system (MovieSleepManager).
 # Override only for CI/testing via env var VAR_MOVIE_SLEEP (e.g. "0,0").
-
-# Cloudflare protection handling
-CF_TURNSTILE_COOLDOWN = 5  # Sleep time when Cloudflare Turnstile verification page is detected
-FALLBACK_COOLDOWN = 15  # Cooldown between CF bypass fallback steps (see request_handler)
+# All cooldowns (CF, fallback, login retry) are derived adaptively from MovieSleepManager.
 
 # =============================================================================
 # LOGGING CONFIGURATION
@@ -275,7 +269,7 @@ REPORTS_DIR = 'reports'
 # Database file paths (three separate databases for concurrency and isolation)
 # history.db — MovieHistory, TorrentHistory (spider core data)
 # reports.db — ReportSessions, ReportMovies, ReportTorrents, SpiderStats, UploaderStats, PikpakStats
-# operations.db — RcloneInventory, DedupRecords, PikpakHistory, ProxyBans
+# operations.db — RcloneInventory, DedupRecords, PikpakHistory
 HISTORY_DB_PATH = 'reports/history.db'
 REPORTS_DB_PATH = 'reports/reports.db'
 OPERATIONS_DB_PATH = 'reports/operations.db'

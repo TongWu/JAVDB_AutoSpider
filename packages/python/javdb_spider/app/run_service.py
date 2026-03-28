@@ -2,7 +2,7 @@
 
 import os
 import sys
-import time
+
 import logging
 import requests
 from datetime import datetime
@@ -13,6 +13,11 @@ from packages.python.javdb_platform.git_helper import git_commit_and_push, flush
 from packages.python.javdb_core.filename_helper import generate_output_csv_name
 from packages.python.javdb_platform.path_helper import ensure_dated_dir
 from packages.python.javdb_platform.csv_writer import set_active_session
+from packages.python.javdb_platform.proxy_policy import (
+    describe_proxy_override,
+    resolve_proxy_override,
+    should_proxy_module,
+)
 
 import packages.python.javdb_spider.runtime.state as state
 from packages.python.javdb_spider.runtime.config import (
@@ -49,7 +54,6 @@ def create_detail_backend(
     use_parallel: bool,
     use_cookie: bool,
     is_adhoc_mode: bool,
-    ban_log_file: str,
     session,
     use_proxy: bool,
     use_cf_bypass: bool,
@@ -59,7 +63,6 @@ def create_detail_backend(
     if use_parallel:
         return build_parallel_detail_backend(
             use_cookie=use_cookie,
-            ban_log_file=ban_log_file,
             use_proxy=use_proxy,
             use_cf_bypass=use_cf_bypass,
         )
@@ -85,7 +88,8 @@ def main():
     use_history = args.use_history
     parse_all = args.all
     ignore_release_date = args.ignore_release_date
-    use_proxy = args.use_proxy
+    proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
+    use_proxy = should_proxy_module('spider', proxy_override, PROXY_MODULES)
     use_cf_bypass = False
     always_bypass_time = args.always_bypass_time
     max_movies_phase1 = args.max_movies_phase1
@@ -108,8 +112,7 @@ def main():
         ignore_release_date = True
         rclone_filter = False
 
-    ban_log_file = os.path.join(REPORTS_DIR, 'proxy_bans.csv')
-    state.setup_proxy_pool(ban_log_file, use_proxy)
+    state.setup_proxy_pool(use_proxy)
     state.initialize_request_handler()
 
     # Determine output directory and filename
@@ -148,6 +151,7 @@ def main():
     if ignore_release_date:
         logger.info("IGNORE RELEASE DATE: Will process all entries regardless of today/yesterday tags")
 
+    logger.info(f"Proxy policy for spider: {describe_proxy_override(proxy_override)}")
     if use_proxy:
         logger.info("MODE: Proxy (CF bypass available as automatic fallback)")
     else:
@@ -288,6 +292,7 @@ def main():
             csv_path=csv_path, user_specified_output=bool(args.output_file),
             parsed_movies_history_phase1=parsed_movies_history_phase1,
             parsed_movies_history_phase2=parsed_movies_history_phase2,
+            use_parallel=use_parallel,
         )
     except AdhocLoginFailedError as e:
         logger.error(f"ADHOC SPIDER FAILED: Login failed during index page fetch — {e}")
@@ -354,7 +359,6 @@ def main():
             use_parallel=use_parallel,
             use_cookie=custom_url is not None,
             is_adhoc_mode=custom_url is not None,
-            ban_log_file=ban_log_file,
             session=session,
             use_proxy=use_proxy,
             use_cf_bypass=use_cf_bypass,
@@ -395,9 +399,8 @@ def main():
     if phase_mode in ['2', 'all']:
         if phase_mode == 'all':
             if total_entries_phase1 > 0:
-                t = movie_sleep_mgr.get_sleep_time()
-                logger.info(f"Phase transition cooldown: {t}s before Phase 2")
-                time.sleep(t)
+                t = movie_sleep_mgr.sleep()
+                logger.info("Phase transition cooldown: %.1fs before Phase 2", t)
             else:
                 logger.info("Phase 1 had no entries to process, skipping phase transition cooldown")
 
@@ -417,7 +420,6 @@ def main():
             use_parallel=use_parallel,
             use_cookie=custom_url is not None,
             is_adhoc_mode=custom_url is not None,
-            ban_log_file=ban_log_file,
             session=session,
             use_proxy=use_proxy,
             use_cf_bypass=use_cf_bypass,

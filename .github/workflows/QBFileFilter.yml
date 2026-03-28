@@ -31,37 +31,19 @@ on:
         required: false
         type: boolean
         default: true
+      proxy_qbittorrent:
+        description: 'Enable proxy for qBittorrent requests'
+        required: false
+        type: boolean
+        default: false
   # schedule: # DISABLED FOR PUBLIC REPO
     # - cron: '0 16 * * *'
 
 jobs:
   # =============================================================================
-  # Job 0: Build Rust Extension - Build and cache wheel (subsequent jobs get cache hits)
-  # =============================================================================
-  build-rust:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    env:
-      TZ: Asia/Singapore
-    
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-
-      - name: Build and cache Rust wheel
-        uses: ./.github/actions/install-rust-wheel
-
-  # =============================================================================
-  # Job 1: Setup - Checkout, install dependencies, generate config
+  # Job 1: Setup - Checkout, install dependencies, generate config (includes Rust wheel build/cache)
   # =============================================================================
   setup:
-    needs: build-rust
     runs-on: ubuntu-latest
     environment: Production
     permissions:
@@ -75,26 +57,15 @@ jobs:
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
         with:
           python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -r requirements.txt
-          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
-          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
-
-      - name: Install Rust extension
-        uses: ./.github/actions/install-rust-wheel
 
       - name: Generate config.py from GitHub Variables and Secrets
         env:
           # ============ SECRETS (sensitive: passwords, tokens, IPs) ============
-          VAR_QB_HOST: ${{ secrets.QB_HOST }}
+          VAR_QB_URL: ${{ secrets.QB_URL }}
           VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
           VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
@@ -104,7 +75,6 @@ jobs:
           # ============ VARIABLES (non-sensitive) ============
           VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
           VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
-          VAR_QB_PORT: ${{ vars.QB_PORT }}
           VAR_QB_USERNAME: ${{ secrets.QB_USERNAME }}
           VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
           VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
@@ -119,9 +89,11 @@ jobs:
           VAR_EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           VAR_EMAIL_TO: ${{ secrets.EMAIL_TO }}
           VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
-          VAR_PROXY_POOL_COOLDOWN_SECONDS: ${{ vars.PROXY_POOL_COOLDOWN_SECONDS || '691200' }}
           VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES || 3}}
           VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_PROXY_SPIDER_ENABLED: 'true'
+          VAR_PROXY_QBITTORRENT_ENABLED: ${{ github.event_name == 'workflow_dispatch' && (inputs.proxy_qbittorrent && 'true' || 'false') || 'false' }}
+          VAR_PROXY_PIKPAK_ENABLED: 'false'
           VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
           VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
           VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED || 'True' }}
@@ -131,10 +103,7 @@ jobs:
           VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
           VAR_BASE_URL: ${{ vars.BASE_URL || 'https://javdb.com' }}
           VAR_JAVDB_USERNAME: ${{ secrets.JAVDB_USERNAME }}
-          VAR_PAGE_SLEEP: ${{ vars.PAGE_SLEEP }}
           VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
-          VAR_CF_TURNSTILE_COOLDOWN: ${{ vars.CF_TURNSTILE_COOLDOWN }}
-          VAR_FALLBACK_COOLDOWN: ${{ vars.FALLBACK_COOLDOWN }}
           VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
           VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE || 'logs/spider.log' }}
           VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE || 'logs/qb_uploader.log' }}
@@ -177,7 +146,7 @@ jobs:
     environment: Production
     permissions:
       contents: read
-    needs: [setup, build-rust]
+    needs: [setup]
     env:
       TZ: Asia/Singapore
     
@@ -185,37 +154,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -r requirements.txt
-          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
-          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
-
-      - name: Install Rust extension
-        uses: ./.github/actions/install-rust-wheel
-
-      - name: Download encrypted config
-        uses: actions/download-artifact@v7
+      - name: Restore encrypted config
+        uses: ./.github/actions/restore-encrypted-config
         with:
-          name: config-encrypted-filefilter
-          path: .
-
-      - name: Decrypt config
-        env:
-          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
-        run: |
-          openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
-            -in config.py.enc -out config.py \
-            -pass pass:"$ARTIFACT_KEY"
-          rm config.py.enc
-          echo "✓ Config decrypted successfully"
+          artifact-name: config-encrypted-filefilter
+          artifact-key: ${{ secrets.ARTIFACT_KEY }}
 
       - name: Run qBittorrent File Filter
         env:
@@ -232,7 +180,7 @@ jobs:
           set -o pipefail  # Exit on error in pipeline
           
           # Build argument array safely without eval
-          ARGS=(--min-size "$MIN_SIZE_MB" --days "$DAYS" --use-proxy)
+          ARGS=(--min-size "$MIN_SIZE_MB" --days "$DAYS")
           
           # Add categories filter via env var (script reads QB_FILTER_CATEGORIES)
           if [ -n "$QB_FILTER_CATEGORIES" ]; then
