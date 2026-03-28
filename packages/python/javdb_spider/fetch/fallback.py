@@ -17,6 +17,36 @@ from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _sleep
 logger = get_logger(__name__)
 
 
+def _login_refresh_for_spider(use_proxy):
+    """Call ``attempt_login_refresh`` with proxy context matching the spider's mode.
+
+    When *use_proxy* is ``False`` (``--no-proxy``), login runs via direct
+    connection.  When ``True``, the current proxy-pool snapshot is passed as
+    explicit arguments so the login endpoint matches the worker/proxy that
+    triggered the fallback.
+    """
+    if not use_proxy:
+        return attempt_login_refresh(spider_uses_proxy=False)
+    if state.global_proxy_pool is not None:
+        current = state.global_proxy_pool.get_current_proxy()
+        if current:
+            proxies = {
+                k: v
+                for k, v in (
+                    ('http', current.get('http')),
+                    ('https', current.get('https')),
+                )
+                if v
+            }
+            if proxies:
+                return attempt_login_refresh(
+                    explicit_proxies=proxies,
+                    explicit_proxy_name=state.global_proxy_pool.get_current_proxy_name(),
+                    spider_uses_proxy=True,
+                )
+    return attempt_login_refresh(spider_uses_proxy=True)
+
+
 def _sleep_between_fetches() -> None:
     """Full adaptive sleep between consecutive top-level fetch attempts."""
     _sleep_mgr.sleep()
@@ -153,7 +183,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
                     logger.warning(f"[Page {page_num}] Login page detected: {context_msg}")
                     if can_attempt_login(is_adhoc_mode, is_index_page=True):
                         logger.info(f"[Page {page_num}] Attempting login refresh due to login page...")
-                        login_ok, _, _proxy = attempt_login_refresh()
+                        login_ok, _, _proxy = _login_refresh_for_spider(u_proxy)
                         if login_ok:
                             _sleep_between_fetches()
                             html = state.get_page(page_url, session, use_cookie=use_cookie,
@@ -258,7 +288,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
     # --- Phase 1: Login Refresh ---
     if is_adhoc_mode and can_attempt_login(is_adhoc_mode, is_index_page=True):
         logger.info(f"[Page {page_num}] Attempting login refresh...")
-        login_success, _new_cookie, _proxy = attempt_login_refresh()
+        login_success, _new_cookie, _proxy = _login_refresh_for_spider(use_proxy)
         if login_success and use_proxy and state.global_proxy_pool:
             current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
             _sleep_between_fetches()
@@ -284,6 +314,11 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
             if is_adhoc_mode:
                 raise AdhocLoginFailedError("Login refresh failed on index page")
             logger.warning(f"[Page {page_num}] Login refresh failed, continuing with proxy pool fallback...")
+
+    # No-proxy mode: only login recovery allowed, skip proxy pool iteration
+    if not use_proxy:
+        logger.warning(f"[Page {page_num}] No-proxy mode: fallback exhausted (login-only recovery)")
+        return last_failed_html, False, False, use_proxy, use_cf_bypass, False
 
     # --- Phase 2: Iterate through remaining proxies ---
     if state.global_proxy_pool is None:
@@ -352,7 +387,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
                     logger.warning(f"[{entry_index}] Login page detected: {context_msg}")
                     if can_attempt_login(is_adhoc_mode, is_index_page=False):
                         logger.info(f"[{entry_index}] Attempting login refresh due to login page...")
-                        login_ok, _, _proxy = attempt_login_refresh()
+                        login_ok, _, _proxy = _login_refresh_for_spider(u_proxy)
                         if login_ok:
                             _sleep_between_fetches()
                             html = state.get_page(detail_url, session, use_cookie=use_cookie,
@@ -459,7 +494,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
     # --- Phase 1: Login Refresh ---
     if can_attempt_login(is_adhoc_mode, is_index_page=False):
         logger.info(f"[{entry_index}] Attempting login refresh...")
-        login_success, _new_cookie, _proxy = attempt_login_refresh()
+        login_success, _new_cookie, _proxy = _login_refresh_for_spider(use_proxy)
         if login_success and use_proxy and state.global_proxy_pool:
             current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
             _sleep_between_fetches()
@@ -479,6 +514,14 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
                 return magnets, actor_info, ag, al, sup, True, False, use_cf_bypass
         elif not login_success:
             logger.warning(f"[{entry_index}] Login refresh failed, continuing with proxy pool fallback...")
+
+    # No-proxy mode: only login recovery allowed, skip proxy pool iteration
+    if not use_proxy:
+        logger.warning(f"[{entry_index}] No-proxy mode: fallback exhausted (login-only recovery)")
+        return (
+            last_result[0], last_result[1], last_result[2], last_result[3], last_result[4],
+            last_result[5], use_proxy, use_cf_bypass,
+        )
 
     # --- Phase 2: Iterate through remaining proxies ---
     if state.global_proxy_pool is None:
