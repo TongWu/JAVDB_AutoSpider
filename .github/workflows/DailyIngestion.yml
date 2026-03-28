@@ -46,7 +46,7 @@ on:
       enable_dedup:
         description: 'Enable rclone dedup (detect + execute)'
         required: false
-        default: false
+        default: true
         type: boolean
       enable_redownload:
         description: 'Enable torrent re-download (洗版) when a same-category torrent is significantly larger'
@@ -281,6 +281,7 @@ jobs:
           INPUT_REDOWNLOAD_THRESHOLD: ${{ inputs.redownload_threshold }}
           INPUT_ALWAYS_BYPASS_TIME: ${{ inputs.always_bypass_time }}
           SCHEDULE_ENABLE_DEDUP: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
+          SCHEDULE_ENABLE_REDOWNLOAD: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
         run: |
           set -o pipefail
           SPIDER_CMD=(python3 -m apps.cli.spider)
@@ -297,7 +298,7 @@ jobs:
             SPIDER_CMD+=(--enable-dedup)
             echo "🔍 Dedup detection enabled"
           fi
-          if [ "$INPUT_ENABLE_REDOWNLOAD" = "true" ]; then
+          if [ "$INPUT_ENABLE_REDOWNLOAD" = "true" ] || [ "$SCHEDULE_ENABLE_REDOWNLOAD" = "true" ]; then
             SPIDER_CMD+=(--enable-redownload)
             THRESHOLD="$INPUT_REDOWNLOAD_THRESHOLD"
             if [ -n "$THRESHOLD" ] && [ "$THRESHOLD" != "0.30" ]; then
