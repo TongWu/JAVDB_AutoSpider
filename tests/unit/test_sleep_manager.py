@@ -175,11 +175,23 @@ class TestVolumeTiers:
         assert mgr._volume_min_mult == 1.15
         assert mgr._volume_max_mult == 1.30
 
-    def test_n_over_250_max(self):
+    def test_n_250_to_349_tier(self):
         mgr = MovieSleepManager(10.0, 20.0)
         mgr.apply_volume_multiplier(300)
-        assert mgr._volume_min_mult == 2.20
-        assert mgr._volume_max_mult == 2.90
+        assert mgr._volume_min_mult == 2.2
+        assert mgr._volume_max_mult == 2.9
+
+    def test_n_350_to_499_tier(self):
+        mgr = MovieSleepManager(10.0, 20.0)
+        mgr.apply_volume_multiplier(400)
+        assert mgr._volume_min_mult == 3.0
+        assert mgr._volume_max_mult == 4.0
+
+    def test_n_500_plus_tier(self):
+        mgr = MovieSleepManager(10.0, 20.0)
+        mgr.apply_volume_multiplier(600)
+        assert mgr._volume_min_mult == 4.0
+        assert mgr._volume_max_mult == 5.5
 
     def test_asymmetric_multipliers(self):
         """max_mult should grow faster than min_mult."""
