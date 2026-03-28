@@ -6,9 +6,10 @@ Provides human-like request pacing via three cooperating components:
   a two-factor multiplier (volume * penalty).
 - ``PenaltyTracker`` — shared across workers; tracks recent CF/failure events
   and computes a dynamic penalty factor that decays over time.
-- ``DualWindowThrottle`` — per-worker rate limiter; enforces both a
-  short-window burst limit and a long-window budget.  Each proxy worker
-  owns an independent instance because proxy IPs are independent.
+- ``TripleWindowThrottle`` — per-worker rate limiter; enforces short-window
+  burst, medium-window budget, and a long (30 min) rolling cap.  Each proxy
+  worker owns an independent instance because proxy IPs are independent.
+  ``DualWindowThrottle`` is an alias for backward compatibility.
 
 Thread-safe via ``threading.Lock``.  **Not** compatible with
 ``multiprocessing`` — if the concurrency model ever changes, these classes
@@ -86,25 +87,28 @@ class PenaltyTracker:
 
 
 # ---------------------------------------------------------------------------
-# DualWindowThrottle
+# TripleWindowThrottle (DualWindowThrottle is an alias)
 # ---------------------------------------------------------------------------
 
 THROTTLE_MAX_WAIT = 60.0  # seconds – hard ceiling on additional blocking
 
 
-class DualWindowThrottle:
-    """Enforce short-window burst limit **and** long-window request budget.
+class TripleWindowThrottle:
+    """Enforce three rolling-window request limits (burst, medium, long).
 
-    Parameters are intentionally conservative defaults; tune after
-    observing real CF trigger patterns.
+    Defaults: 30s/3, 300s/30, 1800s/200.  Tests may pass custom windows;
+    *extra* window should be >= *long* window >= *short* window for sane
+    purge behaviour.
     """
 
     def __init__(
         self,
         short_window_sec: float = 30.0,
-        short_max: int = 4,
+        short_max: int = 3,
         long_window_sec: float = 300.0,
-        long_max: int = 40,
+        long_max: int = 30,
+        extra_window_sec: float = 1800.0,
+        extra_max: int = 200,
     ):
         self._timestamps: deque = deque()
         self._lock = threading.Lock()
@@ -112,13 +116,16 @@ class DualWindowThrottle:
         self.short_max = short_max
         self.long_window = long_window_sec
         self.long_max = long_max
+        self.extra_window = extra_window_sec
+        self.extra_max = extra_max
 
     def _purge(self, now: float) -> None:
-        while self._timestamps and self._timestamps[0] < now - self.long_window:
+        oldest_keep = now - self.extra_window
+        while self._timestamps and self._timestamps[0] < oldest_keep:
             self._timestamps.popleft()
 
     def wait_if_needed(self) -> float:
-        """Block until both windows have capacity.
+        """Block until all three windows have capacity.
 
         Returns total seconds spent waiting.  Never waits longer than
         ``THROTTLE_MAX_WAIT``.
@@ -131,8 +138,15 @@ class DualWindowThrottle:
                 short_count = sum(
                     1 for t in self._timestamps if t >= now - self.short_window
                 )
-                long_count = len(self._timestamps)
-                if short_count < self.short_max and long_count < self.long_max:
+                long_count = sum(
+                    1 for t in self._timestamps if t >= now - self.long_window
+                )
+                extra_count = len(self._timestamps)
+                if (
+                    short_count < self.short_max
+                    and long_count < self.long_max
+                    and extra_count < self.extra_max
+                ):
                     self._timestamps.append(now)
                     return waited
             pause = random.uniform(1.0, 3.0)
@@ -140,19 +154,26 @@ class DualWindowThrottle:
             waited += pause
 
         logger.warning(
-            "DualWindowThrottle: max wait (%.0fs) exceeded, proceeding",
+            "TripleWindowThrottle: max wait (%.0fs) exceeded, proceeding",
             THROTTLE_MAX_WAIT,
         )
         with self._lock:
-            self._timestamps.append(time.monotonic())
+            now = time.monotonic()
+            self._purge(now)
+            self._timestamps.append(now)
         return waited
+
+
+# Backward compatibility: existing imports and tests use this name.
+DualWindowThrottle = TripleWindowThrottle
 
 
 # ---------------------------------------------------------------------------
 # Module-level shared instances
 # ---------------------------------------------------------------------------
 penalty_tracker = PenaltyTracker()
-dual_window_throttle = DualWindowThrottle()
+triple_window_throttle = TripleWindowThrottle()
+dual_window_throttle = triple_window_throttle
 
 
 # ---------------------------------------------------------------------------
@@ -169,21 +190,20 @@ class MovieSleepManager:
     The sleep value itself is capped at ``ABSOLUTE_MAX_SLEEP`` (120 s).
     """
 
+    # Tiers for N < 250 only (see ``apply_volume_multiplier`` for N ≥ 250).
     VOLUME_TIERS = [
         (20,  1.00, 1.00),
         (50,  1.15, 1.30),
         (100, 1.35, 1.65),
         (150, 1.60, 2.00),
-        (250, 1.90, 2.45),
     ]
-    VOLUME_MAX_MULTIPLIER = (2.20, 2.90)
 
     def __init__(
         self,
         sleep_min: float,
         sleep_max: float,
         penalty_tracker: PenaltyTracker = None,
-        throttle: DualWindowThrottle = None,
+        throttle: TripleWindowThrottle = None,
     ):
         drift = random.uniform(-0.5, 0.5)
         self.base_min = max(1.0, float(sleep_min) + drift)
@@ -204,14 +224,18 @@ class MovieSleepManager:
 
     def apply_volume_multiplier(self, n: int) -> None:
         """Set volume factor based on estimated processing volume *n*."""
-        min_mult, max_mult = 1.0, 1.0
-        for threshold, m_lo, m_hi in self.VOLUME_TIERS:
-            if n < threshold:
-                break
-            min_mult, max_mult = m_lo, m_hi
+        if n >= 500:
+            min_mult, max_mult = 4.0, 5.5
+        elif n >= 350:
+            min_mult, max_mult = 3.0, 4.0
+        elif n >= 250:
+            min_mult, max_mult = 2.2, 2.9
         else:
-            if n >= self.VOLUME_TIERS[-1][0]:
-                min_mult, max_mult = self.VOLUME_MAX_MULTIPLIER
+            min_mult, max_mult = 1.0, 1.0
+            for threshold, m_lo, m_hi in self.VOLUME_TIERS:
+                if n < threshold:
+                    break
+                min_mult, max_mult = m_lo, m_hi
 
         self._volume_min_mult = min_mult
         self._volume_max_mult = max_mult
@@ -343,5 +367,5 @@ movie_sleep_mgr = MovieSleepManager(
     _resolved_min,
     _resolved_max,
     penalty_tracker=penalty_tracker,
-    throttle=dual_window_throttle,
+    throttle=triple_window_throttle,
 )
