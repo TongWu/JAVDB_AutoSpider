@@ -197,6 +197,15 @@ class WorkerContext:
         """Return ``True`` if *html* is a login/auth wall page."""
         return is_login_page(html)
 
+    def sleep(self) -> float:
+        """Delegate to the worker-local sleep manager.
+
+        Use this for intra-task pauses (e.g. between search and detail
+        fetches) so that each worker's independent throttle budget is
+        respected instead of the global module-level singleton.
+        """
+        return self._worker._sleep_mgr.sleep()
+
     # -- high-level ----------------------------------------------------------
 
     def fetch(self, url: str) -> Optional[str]:
