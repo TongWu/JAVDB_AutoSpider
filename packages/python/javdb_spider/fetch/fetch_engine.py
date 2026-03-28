@@ -60,7 +60,7 @@ from packages.python.javdb_spider.runtime.sleep import (
     MovieSleepManager,
     movie_sleep_mgr as _global_sleep_mgr,
     PenaltyTracker,
-    DualWindowThrottle,
+    TripleWindowThrottle,
     penalty_tracker as _shared_penalty_tracker,
 )
 from packages.python.javdb_spider.runtime.config import (
@@ -302,11 +302,11 @@ class _EngineWorker(threading.Thread):
 
         # One PenaltyTracker per engine (passed in): CF/failure events from any
         # worker must raise the penalty factor for all workers' adaptive sleep.
-        # Per-worker DualWindowThrottle stays isolated (independent proxy IPs).
+        # Per-worker TripleWindowThrottle stays isolated (independent proxy IPs).
         self._sleep_mgr = MovieSleepManager(
             sleep_min, sleep_max,
             penalty_tracker=penalty_tracker,
-            throttle=DualWindowThrottle(),
+            throttle=TripleWindowThrottle(),
         )
 
         self._proxy_pool = create_proxy_pool_from_config(
