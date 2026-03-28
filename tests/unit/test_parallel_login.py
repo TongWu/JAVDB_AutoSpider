@@ -74,7 +74,9 @@ class TestSpiderUsesProxyFlag:
         for p in patches:
             p.start()
         try:
-            with patch(
+            # login.py calls sys.exit(1) at import time when config.py is missing (typical CI);
+            # mock.patch loads that module to patch login_with_retry, so sys.exit must be stubbed first.
+            with patch('sys.exit'), patch(
                 'packages.python.javdb_integrations.login.login_with_retry',
                 mock_login,
             ), patch(
@@ -114,7 +116,7 @@ class TestSpiderUsesProxyFlag:
         for p in patches:
             p.start()
         try:
-            with patch(
+            with patch('sys.exit'), patch(
                 'packages.python.javdb_integrations.login.login_with_retry',
                 mock_login,
             ), patch(
@@ -229,6 +231,49 @@ class TestNoProxyFallbackShortCircuit:
 
         pool.mark_failure_and_switch.assert_not_called()
         assert result[5] is False  # parse_success
+
+
+class TestDetailLoginRetrySendsCookie:
+    """run_service sets use_cookie=False for daily runs; post-login retry must still attach cookie."""
+
+    def test_after_login_refresh_no_proxy_forces_cookie_on_retry(self):
+        cookies_used = []
+
+        def get_page_tracked(url, session=None, use_cookie=False, **kwargs):
+            cookies_used.append(use_cookie)
+            return '<html><body>stub</body></html>'
+
+        parse_seq = iter(
+            [
+                ([], '', '', '', '', False),
+                (['mag'], 'a', '', '', '', True),
+            ]
+        )
+
+        def parse_side_effect(html, entry_index, **kwargs):
+            return next(parse_seq)
+
+        with patch.object(state_mod, 'global_proxy_pool', None), \
+             patch.object(session_mod, 'LOGIN_FEATURE_AVAILABLE', True), \
+             patch.object(state_mod, 'login_attempted', False), \
+             patch.object(fallback_mod, '_login_refresh_for_spider', return_value=(True, 'ck', None)), \
+             patch.object(fallback_mod, '_sleep_between_fetches'), \
+             patch.object(fallback_mod, 'is_login_page', return_value=False), \
+             patch.object(state_mod, 'get_page', side_effect=get_page_tracked), \
+             patch.object(fallback_mod, 'parse_detail', side_effect=parse_side_effect):
+            result = fallback_mod.fetch_detail_page_with_fallback(
+                detail_url='http://javdb.com/v/abc',
+                session=MagicMock(),
+                use_cookie=False,
+                use_proxy=False,
+                use_cf_bypass=False,
+                entry_index='1/10',
+            )
+
+        assert result[5] is True  # parse_success
+        assert cookies_used == [False, True], (
+            'initial fetch may omit cookie in daily mode; retry after login must send it'
+        )
 
 
 class TestProxyModeDisabled:
