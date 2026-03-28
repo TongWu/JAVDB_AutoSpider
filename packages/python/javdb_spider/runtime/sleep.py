@@ -275,8 +275,13 @@ class MovieSleepManager:
 
     # -- factor setters ----------------------------------------------------
 
-    def apply_volume_multiplier(self, total: int, num_workers: int = 1) -> None:
-        """Set volume factor based on per-worker processing volume."""
+    def apply_volume_multiplier(self, total: int, num_workers: int = 1, *, quiet: bool = False) -> None:
+        """Set volume factor based on per-worker processing volume.
+
+        When *quiet* is ``True`` the per-instance INFO log is suppressed.
+        Callers that update many workers in a loop should pass
+        ``quiet=True`` and emit a single summary log themselves.
+        """
         n = max(1, total // max(1, num_workers))
         min_mult, max_mult = _interpolate_multiplier(n)
 
@@ -287,7 +292,7 @@ class MovieSleepManager:
         if self._throttle and hasattr(self._throttle, 'tighten_short_window'):
             self._throttle.tighten_short_window(n)
 
-        if min_mult > 1.0 or max_mult > 1.0:
+        if not quiet and (min_mult > 1.0 or max_mult > 1.0):
             logger.info(
                 "Volume-based sleep adjustment: total=%d, workers=%d, "
                 "per_worker=%d → volume_factor %.2fx/%.2fx",
