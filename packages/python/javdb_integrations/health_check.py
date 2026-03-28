@@ -58,7 +58,7 @@ QB_ALLOW_INSECURE_HTTP = qb_allow_insecure_http()
 SMTP_SERVER = cfg('SMTP_SERVER', None)
 SMTP_PORT = cfg('SMTP_PORT', None)
 PROXY_POOL = cfg('PROXY_POOL', [])
-PROXY_MODE = cfg('PROXY_MODE', 'single')
+PROXY_MODE = cfg('PROXY_MODE', 'pool')
 PROXY_MODULES = cfg('PROXY_MODULES', ['spider'])
 LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
 
@@ -236,7 +236,7 @@ def parse_arguments():
 def main():
     args = parse_arguments()
     proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
-    should_check_proxy = should_proxy_module('spider', proxy_override, PROXY_MODULES)
+    should_check_proxy = should_proxy_module('spider', proxy_override, PROXY_MODULES, proxy_mode=PROXY_MODE)
     
     logger.info("=" * 60)
     logger.info("HEALTH CHECK - Pre-flight Verification")

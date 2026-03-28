@@ -50,7 +50,8 @@ CF_BYPASS_ENABLED = cfg('CF_BYPASS_ENABLED', True)
 CF_BYPASS_PORT_MAP = cfg('CF_BYPASS_PORT_MAP', {})
 
 # Proxy pool
-PROXY_MODE = cfg('PROXY_MODE', 'single')
+from packages.python.javdb_platform.proxy_policy import normalize_proxy_mode
+PROXY_MODE = normalize_proxy_mode(cfg('PROXY_MODE', 'pool'))
 PROXY_POOL = cfg('PROXY_POOL', [])
 PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
 _raw_login_proxy_name = cfg('LOGIN_PROXY_NAME', None)
