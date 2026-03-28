@@ -313,7 +313,9 @@ class TestQbEndpointFallback:
         with patch.object(qb_uploader_module, 'QB_BASE_URL_CANDIDATES', [
             'https://qb.internal:8080',
             'http://qb.internal:8080',
-        ]), patch.object(qb_uploader_module, 'QB_BASE_URL', 'https://qb.internal:8080'), patch.object(qb_uploader_module, 'QB_MASKED_URL', 'https://qb.internal:8080'):
+        ]), patch.object(qb_uploader_module, 'QB_BASE_URL', 'https://qb.internal:8080'), \
+                patch.object(qb_uploader_module, 'QB_MASKED_URL', 'https://qb.internal:8080'), \
+                patch.object(qb_uploader_module, 'QB_ALLOW_INSECURE_HTTP', True):
             assert uploader_test_qbittorrent_connection(use_proxy=False) is True
             assert qb_uploader_module.QB_BASE_URL == 'http://qb.internal:8080'
 

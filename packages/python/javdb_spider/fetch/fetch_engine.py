@@ -49,7 +49,7 @@ from packages.python.javdb_platform.logging_config import get_logger
 from packages.python.javdb_platform.proxy_ban_manager import get_ban_manager
 from packages.python.javdb_platform.proxy_pool import create_proxy_pool_from_config
 from packages.python.javdb_platform.request_handler import (
-    RequestHandler, RequestConfig, ProxyBannedError,
+    RequestHandler, RequestConfig, ProxyBannedError, ProxyExhaustedError,
 )
 
 import packages.python.javdb_spider.runtime.state as state
@@ -441,7 +441,8 @@ class _EngineWorker(threading.Thread):
 
             if self.proxy_name in task.failed_proxies:
                 active = self._active_workers
-                if active <= 0 or len(task.failed_proxies) >= active:
+                failed_non_banned = task.failed_proxies - self._banned_proxies
+                if active <= 0 or len(failed_non_banned) >= active:
                     self.result_queue.put(EngineResult(
                         task=task, success=False,
                         error='all_proxies_failed',
@@ -504,6 +505,16 @@ class _EngineWorker(threading.Thread):
             except ProxyBannedError:
                 self._handle_proxy_banned(task)
                 break
+            except ProxyExhaustedError:
+                task.failed_proxies.add(self.proxy_name)
+                task.retry_count += 1
+                requeue_front(self.task_queue, task)
+                logger.warning(
+                    "%s Proxy pool exhausted, re-queued "
+                    "(%d/%d proxies)",
+                    _task_worker_ctx(task.entry_index, self.proxy_name),
+                    len(task.failed_proxies), self._active_workers,
+                )
             except Exception as exc:
                 task.failed_proxies.add(self.proxy_name)
                 task.retry_count += 1
@@ -518,45 +529,47 @@ class _EngineWorker(threading.Thread):
 
     def _handle_proxy_banned(self, task: EngineTask) -> None:
         """Handle proxy ban: stop this worker and re-route tasks."""
-        self._banned_proxies.add(self.proxy_name)
-        active = self._active_workers
-
-        logger.warning(
-            "[worker=%s] Proxy banned (HTTP 403) — worker stopped "
-            "(%d active workers remain)",
-            self.proxy_name, active,
-        )
-
         task.failed_proxies.add(self.proxy_name)
-        if active > 0:
-            requeue_front(self.task_queue, task)
-        else:
-            self.result_queue.put(EngineResult(
-                task=task, success=False,
-                error='all_proxies_banned',
-            ))
-            with self._drain_lock:
+
+        with self._drain_lock:
+            self._banned_proxies.add(self.proxy_name)
+            active = self._active_workers
+
+            logger.warning(
+                "[worker=%s] Proxy banned (HTTP 403) — worker stopped "
+                "(%d active workers remain)",
+                self.proxy_name, active,
+            )
+
+            if active > 0:
+                requeue_front(self.task_queue, task)
+            else:
+                self.result_queue.put(EngineResult(
+                    task=task, success=False,
+                    error='all_proxies_banned',
+                ))
                 if not self._drain_done[0]:
                     self._drain_done[0] = True
                     self._drain_remaining_tasks()
 
     def _drain_remaining_tasks(self) -> None:
-        """When all workers are banned, drain the task queue as failures.
+        """When all workers are banned, drain task and login queues as failures.
 
         Must only be called once across all workers (guarded by
         ``_drain_lock`` / ``_drain_done`` in ``_handle_proxy_banned``).
         """
-        while True:
-            try:
-                item = self.task_queue.get_nowait()
-                if item is None:
+        for q in (self.task_queue, self.login_queue):
+            while True:
+                try:
+                    item = q.get_nowait()
+                    if item is None:
+                        break
+                    self.result_queue.put(EngineResult(
+                        task=item, success=False,
+                        error='all_proxies_banned',
+                    ))
+                except queue_module.Empty:
                     break
-                self.result_queue.put(EngineResult(
-                    task=item, success=False,
-                    error='all_proxies_banned',
-                ))
-            except queue_module.Empty:
-                break
 
 
 # ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@ from packages.python.javdb_platform.logging_config import get_logger
 from packages.python.javdb_core.parser import parse_detail
 from packages.python.javdb_platform.bridges.rust_adapters.parser_adapter import validate_index_html as _validate_index_html_fast
 from packages.python.javdb_core.url_helper import get_page_url as _url_helper_get_page_url
-from packages.python.javdb_platform.request_handler import ProxyBannedError
+from packages.python.javdb_platform.request_handler import ProxyBannedError, ProxyExhaustedError
 
 import packages.python.javdb_spider.runtime.state as state
 from packages.python.javdb_spider.fetch.session import is_login_page, can_attempt_login, attempt_login_refresh
@@ -173,7 +173,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
                     last_failed_html = html
                     return None, False, False
                 return _validate_index_html(html, context_msg)
-        except (AdhocLoginFailedError, ProxyBannedError):
+        except (AdhocLoginFailedError, ProxyBannedError, ProxyExhaustedError):
             raise
         except Exception as e:
             logger.debug(f"[Page {page_num}] Failed {context_msg}: {e}")
@@ -380,7 +380,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
                 logger.debug(f"[{entry_index}] Parse validation failed (missing magnets): {context_msg}")
             else:
                 logger.debug(f"[{entry_index}] Failed to fetch HTML: {context_msg}")
-        except ProxyBannedError:
+        except (ProxyBannedError, ProxyExhaustedError):
             raise
         except Exception as e:
             logger.debug(f"[{entry_index}] Failed {context_msg}: {e}")
@@ -418,25 +418,32 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
             return [], '', '', '', '', False, False, True
 
     # --- Phase 0: Initial Attempt ---
+    detail_proxy_was_banned = False
     if use_proxy and state.global_proxy_pool:
         current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
         initial_cf = use_cf_bypass or state.proxy_needs_cf_bypass(current_proxy_name)
-        magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
-            True, initial_cf,
-            f"Detail Initial (Proxy={current_proxy_name}, CF={initial_cf})",
-            skip_sleep=False)
-        if success:
-            return magnets, actor_info, ag, al, sup, True, True, initial_cf
-        if not initial_cf:
-            _sleep_between_fetches()
+        try:
             magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
-                True, True,
-                f"Detail: Proxy={current_proxy_name} + CF Bypass",
-                skip_sleep=True)
+                True, initial_cf,
+                f"Detail Initial (Proxy={current_proxy_name}, CF={initial_cf})",
+                skip_sleep=False)
             if success:
-                state.mark_proxy_cf_bypass(current_proxy_name)
-                logger.info(f"[{entry_index}] Detail CF Bypass succeeded with initial proxy={current_proxy_name}")
-                return magnets, actor_info, ag, al, sup, True, True, True
+                return magnets, actor_info, ag, al, sup, True, True, initial_cf
+            if not initial_cf:
+                _sleep_between_fetches()
+                magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
+                    True, True,
+                    f"Detail: Proxy={current_proxy_name} + CF Bypass",
+                    skip_sleep=True)
+                if success:
+                    state.mark_proxy_cf_bypass(current_proxy_name)
+                    logger.info(f"[{entry_index}] Detail CF Bypass succeeded with initial proxy={current_proxy_name}")
+                    return magnets, actor_info, ag, al, sup, True, True, True
+        except ProxyBannedError as e:
+            logger.warning(
+                f"[{entry_index}] Proxy '{e.proxy_name}' banned during detail initial attempt: {e.reason}"
+            )
+            detail_proxy_was_banned = True
         logger.warning(f"[{entry_index}] Detail page initial attempt failed. Starting fallback...")
     elif not use_proxy:
         magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
@@ -484,11 +491,15 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
     max_switches = state.global_proxy_pool.get_proxy_count() if PROXY_MODE == 'pool' else 1
     max_switches = min(max_switches, 10)
 
+    skip_switch = detail_proxy_was_banned
     for _ in range(max_switches):
-        switched = state.global_proxy_pool.mark_failure_and_switch()
-        if not switched:
-            logger.warning(f"[{entry_index}] No more proxies available in pool")
-            break
+        if skip_switch:
+            skip_switch = False
+        else:
+            switched = state.global_proxy_pool.mark_failure_and_switch()
+            if not switched:
+                logger.warning(f"[{entry_index}] No more proxies available in pool")
+                break
         current_proxy_name = state.global_proxy_pool.get_current_proxy_name()
         _sleep_between_fetches()
         magnets, actor_info, ag, al, sup, success, used_cf, banned = try_proxy_direct_then_cf(
@@ -497,6 +508,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
             logger.info(f"[{entry_index}] Detail Proxy fallback succeeded (Proxy={current_proxy_name}, CF={used_cf})")
             return magnets, actor_info, ag, al, sup, True, True, used_cf
         if banned:
+            skip_switch = True
             continue
 
     logger.warning(f"[{entry_index}] Detail page fallback exhausted. Returning best available result.")
