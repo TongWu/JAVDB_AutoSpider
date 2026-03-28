@@ -395,11 +395,13 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
     use_cf_bypass = _effective_cf_bypass(use_cf_bypass)
     last_result = ([], '', '', '', '', False)
 
-    def try_fetch_and_parse(u_proxy, u_cf, context_msg, skip_sleep=False):
+    def try_fetch_and_parse(u_proxy, u_cf, context_msg, skip_sleep=False, *, send_cookie=None):
+        """send_cookie: when True/False, overrides outer use_cookie (e.g. after login refresh)."""
         nonlocal last_result
+        cookie_flag = use_cookie if send_cookie is None else send_cookie
         logger.debug(f"[{entry_index}] {context_msg}...")
         try:
-            html = state.get_page(detail_url, session, use_cookie=use_cookie,
+            html = state.get_page(detail_url, session, use_cookie=cookie_flag,
                                   use_proxy=u_proxy, module_name='spider',
                                   max_retries=1, use_cf_bypass=u_cf)
             if html:
@@ -410,7 +412,8 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
                         login_ok, _, _proxy = _login_refresh_for_spider(u_proxy)
                         if login_ok:
                             _sleep_between_fetches()
-                            html = state.get_page(detail_url, session, use_cookie=use_cookie,
+                            # After refresh, always send session cookie (run_service often sets use_cookie=False outside adhoc).
+                            html = state.get_page(detail_url, session, use_cookie=True,
                                                   use_proxy=u_proxy, module_name='spider',
                                                   max_retries=1, use_cf_bypass=u_cf)
                             if html and not is_login_page(html):
@@ -529,7 +532,9 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
             magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
                 False, use_cf_bypass,
                 "Detail: Retry with refreshed cookie (No Proxy)",
-                skip_sleep=True)
+                skip_sleep=True,
+                send_cookie=True,
+            )
             if success:
                 return magnets, actor_info, ag, al, sup, True, False, use_cf_bypass
         elif not login_success:
