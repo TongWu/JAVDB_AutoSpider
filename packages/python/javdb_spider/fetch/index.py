@@ -233,6 +233,9 @@ def _post_process_index_results(
         "Estimated processing volume: N=%d (total=%d, pre-skip=%d)",
         _est_n, len(all_p1) + len(all_p2), _est_skip,
     )
-    movie_sleep_mgr.apply_volume_multiplier(_est_n)
+    from packages.python.javdb_spider.runtime.config import PROXY_POOL
+    movie_sleep_mgr.apply_volume_multiplier(
+        _est_n, num_workers=len(PROXY_POOL) if PROXY_POOL else 1,
+    )
 
     return idx_result

@@ -1532,7 +1532,10 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
 - The system includes delays between requests to be respectful to servers:
   - **Index pages**: Adaptive sleep managed by `MovieSleepManager` (parallel mode uses per-worker pacing)
   - **Movies**: Adaptive sleep via `MovieSleepManager` (log-normal distribution, auto-tuned)
-  - **Volume-based adjustment**: `MovieSleepManager` automatically increases sleep intervals when processing large batches
+  - **Volume-based adjustment**: `MovieSleepManager` uses piecewise-linear interpolation across 14 anchor points (per-worker volume) to smoothly scale sleep multipliers from 1.0× to 8.0×; proxy bans trigger dynamic recalculation for surviving workers
+  - **Penalty overflow**: When the composite multiplier (volume × penalty) exceeds the cap, the excess is converted to flat additive seconds so CF feedback remains effective at high volume tiers
+  - **Micro-breaks**: 4% chance of a long pause whose range is relative to the current effective max sleep, simulating human-like behaviour at all volume tiers
+  - **Triple-window throttle**: Per-worker rate limiter with three rolling windows (30s/3, 300s/30, 1800s/200); short window tightens to 30s/2 when per-worker volume ≥ 50
   - **Fallback retries**: Full adaptive sleep (same distribution as inter-movie pacing) between every consecutive HTTP attempt, including CF bypass fallback steps, transport switches, and proxy rotation
   - **All cooldowns**: Derived adaptively from `MovieSleepManager`
   - **qBittorrent additions**: 1 second (configurable via `DELAY_BETWEEN_ADDITIONS`)
