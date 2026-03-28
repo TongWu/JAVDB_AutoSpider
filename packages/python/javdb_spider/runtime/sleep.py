@@ -365,7 +365,6 @@ class MovieSleepManager:
         roll = self._rng.random()
 
         if roll < MICRO_BREAK_PROB:
-            self._force_high = False
             break_lo = max(MICRO_BREAK_FLOOR, eff_max + MICRO_BREAK_EXTRA_MIN)
             break_hi = eff_max + MICRO_BREAK_EXTRA_MAX
             return min(round(self._rng.uniform(break_lo, break_hi), 2), ABSOLUTE_MAX_SLEEP)
