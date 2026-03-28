@@ -21,6 +21,7 @@ import sys
 import os
 from pathlib import Path
 from datetime import datetime, timedelta
+from urllib.parse import urlsplit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 os.chdir(REPO_ROOT)
@@ -93,8 +94,10 @@ QB_VERIFY_TLS = qb_verify_tls()
 
 def _set_active_qb_base_url(base_url):
     """Persist the qBittorrent endpoint that proved reachable."""
-    global QB_BASE_URL, QB_MASKED_URL
+    global QB_BASE_URL, QB_MASKED_URL, QB_ALLOW_INSECURE_HTTP
     QB_BASE_URL = base_url.rstrip('/')
+    if urlsplit(QB_BASE_URL).scheme == 'http':
+        QB_ALLOW_INSECURE_HTTP = True
     QB_MASKED_URL = masked_qb_base_url(
         QB_BASE_URL,
         allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
