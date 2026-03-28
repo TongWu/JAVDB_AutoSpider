@@ -105,10 +105,11 @@ class LoginCoordinator:
     # -- login execution helpers (must hold lock) --------------------------
 
     def _do_login_for_proxy(self, proxy_config: dict, proxy_name: str):
-        """Call ``attempt_login_refresh`` for a specific proxy."""
-        if self._login_proxy_name and proxy_name == self._login_proxy_name:
-            return attempt_login_refresh(None, None)
+        """Call ``attempt_login_refresh`` for a specific proxy.
 
+        Always uses the worker's own ``proxy_config`` so the login endpoint
+        matches the proxy that will later carry the authenticated requests.
+        """
         proxy_for_login = {
             'http': proxy_config.get('http'),
             'https': proxy_config.get('https'),
@@ -120,6 +121,7 @@ class LoginCoordinator:
         return attempt_login_refresh(
             explicit_proxies=proxy_for_login,
             explicit_proxy_name=proxy_name,
+            spider_uses_proxy=True,
         )
 
     def _find_and_login_next_worker(self, exclude: set | None = None) -> int | None:
