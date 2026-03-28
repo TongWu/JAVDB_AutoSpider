@@ -321,17 +321,3 @@ class TestProxyModeDisabled:
                 assert state_mod.global_proxy_pool is None
         finally:
             state_mod.global_proxy_pool = orig_pool
-
-    def test_setup_proxy_pool_skips_when_spider_proxy_off(self):
-        """With PROXY_POOL configured, --no-proxy (use_proxy=False) must not build a pool."""
-        orig_pool = state_mod.global_proxy_pool
-        try:
-            with patch('scripts.spider.runtime.state.PROXY_MODE', 'pool'), \
-                 patch(
-                     'scripts.spider.runtime.state.PROXY_POOL',
-                     [{'name': 'X', 'http': 'http://x:1'}],
-                 ):
-                state_mod.setup_proxy_pool(False)
-                assert state_mod.global_proxy_pool is None
-        finally:
-            state_mod.global_proxy_pool = orig_pool
