@@ -29,6 +29,7 @@ import queue as queue_module
 import random
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -76,6 +77,9 @@ from packages.python.javdb_core.url_helper import build_search_url
 
 setup_logging()
 logger = get_logger(__name__)
+
+# Hardcoded delay (seconds) between search index and detail fetch per code.
+_ALIGN_SEARCH_TO_DETAIL_SLEEP_SEC = 3
 
 _QB_FIELDNAMES = [
     'href',
@@ -423,6 +427,9 @@ def _make_align_process_fn(inventory_map, *, no_login: bool = False):
                     'message': 'exact_video_code_not_found',
                 }
 
+            # Only after an exact search hit: pause before detail fetch; miss path skips this (see above).
+            time.sleep(_ALIGN_SEARCH_TO_DETAIL_SLEEP_SEC)
+
             # 2) Fetch detail page
             detail_href = normalize_javdb_href_path(exact_entry.href)
             detail_url = urljoin(base_url + '/', detail_href.lstrip('/'))
@@ -721,7 +728,12 @@ def run_alignment(args: argparse.Namespace) -> int:
                 )
                 if not args.dry_run:
                     db_upsert_align_no_exact_match(code)
+                if not (use_proxy and PROXY_POOL):
+                    movie_sleep_mgr.sleep()
                 continue
+
+            # Only after an exact search hit: pause before detail fetch.
+            time.sleep(_ALIGN_SEARCH_TO_DETAIL_SLEEP_SEC)
 
             detail_href = normalize_javdb_href_path(exact_entry.href)
             detail_url = urljoin(base_url + '/', detail_href.lstrip('/'))

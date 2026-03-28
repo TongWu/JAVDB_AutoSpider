@@ -41,7 +41,7 @@ PROXY_HTTPS = cfg('PROXY_HTTPS', None)
 PROXY_MODULES = cfg('PROXY_MODULES', ['spider'])
 
 # Proxy pool
-PROXY_MODE = cfg('PROXY_MODE', 'single')
+PROXY_MODE = cfg('PROXY_MODE', 'pool')
 PROXY_POOL = cfg('PROXY_POOL', [])
 PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
 
@@ -55,7 +55,7 @@ setup_logging(QB_FILE_FILTER_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
 # Import masking utilities
-from packages.python.javdb_core.masking import mask_username
+from packages.python.javdb_core.masking import mask_error, mask_username
 
 # Import proxy pool
 from packages.python.javdb_platform.proxy_pool import create_proxy_pool_from_config
@@ -257,10 +257,12 @@ def test_qbittorrent_connection(use_proxy=False):
             logger.warning(f"qBittorrent responded with status code {response.status_code} at {masked_url}")
         except requests.RequestException as e:
             last_error = e
-            logger.warning(f"Connection attempt failed for {masked_url}: {e}")
+            logger.warning(
+                f"Connection attempt failed for {masked_url}: {mask_error(str(e))}"
+            )
 
     if last_error is not None:
-        logger.error(f"Cannot connect to qBittorrent: {last_error}")
+        logger.error(f"Cannot connect to qBittorrent: {mask_error(str(last_error))}")
     return False
 
 
@@ -301,10 +303,10 @@ def login_to_qbittorrent(session, use_proxy=False):
                 return False
         except requests.RequestException as e:
             last_error = e
-            logger.warning(f"Login error at {masked_url}: {e}")
+            logger.warning(f"Login error at {masked_url}: {mask_error(str(e))}")
 
     if last_error is not None:
-        logger.error(f"Login error: {last_error}")
+        logger.error(f"Login error: {mask_error(str(last_error))}")
     return False
 
 
@@ -718,7 +720,7 @@ def print_summary(stats, min_size_mb, days, dry_run=False, delete_local_files_fl
 def main():
     args = parse_arguments()
     proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
-    proxy_active = should_proxy_module('qbittorrent', proxy_override, PROXY_MODULES)
+    proxy_active = should_proxy_module('qbittorrent', proxy_override, PROXY_MODULES, proxy_mode=PROXY_MODE)
     
     logger.info("Starting qBittorrent File Filter...")
     

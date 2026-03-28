@@ -68,7 +68,7 @@ CF_BYPASS_SERVICE_PORT = cfg('CF_BYPASS_SERVICE_PORT', 8000)
 CF_BYPASS_ENABLED = cfg('CF_BYPASS_ENABLED', True)
 CF_BYPASS_PORT_MAP = cfg('CF_BYPASS_PORT_MAP', {})
 
-PROXY_MODE = cfg('PROXY_MODE', 'single')
+PROXY_MODE = cfg('PROXY_MODE', 'pool')
 PROXY_POOL = cfg('PROXY_POOL', [])
 PROXY_MODULES = cfg('PROXY_MODULES', ['spider'])
 
@@ -727,7 +727,7 @@ def update_config_file(session_cookie):
         with open(config_path, 'w', encoding='utf-8') as f:
             f.write(new_content)
 
-        logger.info(f"Updated {config_path} with new session cookie")
+        # logger.info(f"Updated {config_path} with new session cookie")
         return True
 
     except Exception as e:

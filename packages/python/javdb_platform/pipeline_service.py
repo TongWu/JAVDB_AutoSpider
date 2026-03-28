@@ -128,6 +128,18 @@ def parse_arguments():
     parser.add_argument('--pikpak-individual', action='store_true', help='Use individual mode for PikPak Bridge')
     # Dedup
     parser.add_argument('--enable-dedup', action='store_true', help='Enable rclone dedup detection and execution')
+    # Re-download (洗版): enabled by default when running through pipeline; opt out with --no-redownload
+    parser.add_argument(
+        '--no-redownload',
+        action='store_true',
+        help='Disable torrent re-download (洗版); pipeline enables it by default',
+    )
+    parser.add_argument(
+        '--redownload-threshold',
+        type=float,
+        default=None,
+        help='Size increase threshold for re-download (spider default if omitted)',
+    )
     return parser.parse_args()
 
 
@@ -291,6 +303,10 @@ def main():
     enable_dedup = args.enable_dedup
     if enable_dedup:
         spider_args.append('--enable-dedup')
+    if not getattr(args, 'no_redownload', False):
+        spider_args.append('--enable-redownload')
+        if args.redownload_threshold is not None:
+            spider_args.extend(['--redownload-threshold', str(args.redownload_threshold)])
     # Build base arguments for uploader (csv filename will be added after spider runs)
     uploader_args = ['--from-pipeline']  # Always pass --from-pipeline
     if is_adhoc_mode:

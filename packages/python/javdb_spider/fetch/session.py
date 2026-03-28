@@ -47,7 +47,8 @@ def resolve_login_proxy_endpoints():
     return None, None
 
 
-def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None):
+def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
+                          *, spider_uses_proxy=True):
     """Attempt to refresh session cookie by logging in via login.py.
 
     Can be called multiple times within a session, subject to per-proxy
@@ -59,11 +60,18 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None):
     ``state.logged_in_proxy_name`` is set so that parallel workers know which
     server holds the valid session.
 
+    When ``spider_uses_proxy`` is ``False`` (i.e. spider is running with
+    ``--no-proxy``), implicit proxy resolution (``LOGIN_PROXY_NAME`` and
+    ``global_proxy_pool``) is skipped and login runs via direct connection,
+    matching the spider's own network path.
+
     Args:
         explicit_proxies: If provided, use these proxies for login instead of
             the global proxy pool.  Used by parallel workers to login through
             their own proxy.
         explicit_proxy_name: Human-readable name of the proxy being used.
+        spider_uses_proxy: Whether the calling spider is using proxies.
+            When ``False``, login is performed via direct connection.
 
     Returns:
         tuple: (success: bool, new_cookie: str or None, proxy_name: str or None)
@@ -86,13 +94,13 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None):
     login_proxies = explicit_proxies
     used_proxy_name = explicit_proxy_name
 
-    if login_proxies is None:
+    if login_proxies is None and spider_uses_proxy:
         named_proxies, named_nm = resolve_login_proxy_endpoints()
         if named_proxies:
             login_proxies = named_proxies
             used_proxy_name = named_nm
 
-    if login_proxies is None and state.global_proxy_pool is not None:
+    if login_proxies is None and spider_uses_proxy and state.global_proxy_pool is not None:
         current_proxy = state.global_proxy_pool.get_current_proxy()
         if current_proxy:
             login_proxies = {
@@ -130,7 +138,9 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None):
     )
     logger.info("=" * 60)
 
-    if login_proxies and used_proxy_name:
+    if not spider_uses_proxy:
+        logger.info("Login will use direct connection (no proxy)")
+    elif login_proxies and used_proxy_name:
         logger.info(f"Login will use proxy: {used_proxy_name}")
 
     state.login_attempted = True

@@ -18,6 +18,8 @@ on:
     branches:
       - main
     paths:
+      - 'packages/python/**/*.py'
+      - 'apps/**/*.py'
       - 'scripts/**/*.py'
       - 'utils/**/*.py'
       - 'pipeline.py'
