@@ -62,6 +62,7 @@ from packages.python.javdb_spider.runtime.sleep import (
     PenaltyTracker,
     TripleWindowThrottle,
     penalty_tracker as _shared_penalty_tracker,
+    _interpolate_multiplier,
 )
 from packages.python.javdb_spider.runtime.config import (
     BASE_URL,
@@ -560,8 +561,17 @@ class _EngineWorker(threading.Thread):
                 for w in self.all_workers:
                     if w.proxy_name not in self._banned_proxies:
                         w._sleep_mgr.apply_volume_multiplier(
-                            remaining, num_workers=active,
+                            remaining, num_workers=active, quiet=True,
                         )
+                per_worker = max(1, remaining // max(1, active))
+                min_m, max_m = _interpolate_multiplier(per_worker)
+                if min_m > 1.0 or max_m > 1.0:
+                    logger.info(
+                        "Volume-based sleep adjustment (ban rebalance): "
+                        "total=%d, workers=%d, per_worker=%d → "
+                        "volume_factor %.2fx/%.2fx",
+                        remaining, active, per_worker, min_m, max_m,
+                    )
                 requeue_front(self.task_queue, task)
             else:
                 self.result_queue.put(EngineResult(
