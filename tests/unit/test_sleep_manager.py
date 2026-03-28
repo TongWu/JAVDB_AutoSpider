@@ -281,7 +281,7 @@ class TestCapAndCeiling:
         )
 
     def test_get_sleep_time_respects_absolute_max(self):
-        """Non-micro-break samples must not exceed ABSOLUTE_MAX_SLEEP."""
+        """All samples (including micro-breaks) must not exceed ABSOLUTE_MAX_SLEEP."""
         pt = PenaltyTracker()
         for _ in range(10):
             pt.record_event()
@@ -291,12 +291,12 @@ class TestCapAndCeiling:
         normal_count = 0
         for _ in range(2000):
             t = mgr.get_sleep_time()
+            assert t <= ABSOLUTE_MAX_SLEEP, (
+                f"Sleep {t} exceeds ABSOLUTE_MAX_SLEEP ({ABSOLUTE_MAX_SLEEP})"
+            )
             eff_min, eff_max = mgr._effective_range()
             if t <= eff_max + 1:
                 normal_count += 1
-                assert t <= ABSOLUTE_MAX_SLEEP, (
-                    f"Normal sleep {t} exceeds ABSOLUTE_MAX_SLEEP"
-                )
         assert normal_count > 1800
 
 
@@ -392,15 +392,19 @@ class TestMicroBreak:
                 )
 
     def test_micro_break_above_eff_max_high_volume(self):
-        """At high volume, micro-breaks must be above eff_max."""
+        """At high volume, micro-breaks must be above eff_max (capped at ABSOLUTE_MAX_SLEEP)."""
         mgr = MovieSleepManager(8.0, 25.0)
         mgr.apply_volume_multiplier(100)
         eff_min, eff_max = mgr._effective_range()
 
         for _ in range(500):
             t = mgr.get_sleep_time()
+            assert t <= ABSOLUTE_MAX_SLEEP, (
+                f"Sleep {t} exceeds ABSOLUTE_MAX_SLEEP ({ABSOLUTE_MAX_SLEEP})"
+            )
             if t > eff_max + 5:
-                assert t >= eff_max + MICRO_BREAK_EXTRA_MIN - 1
+                expected_floor = min(eff_max + MICRO_BREAK_EXTRA_MIN - 1, ABSOLUTE_MAX_SLEEP)
+                assert t >= expected_floor
 
 
 # ---------------------------------------------------------------------------

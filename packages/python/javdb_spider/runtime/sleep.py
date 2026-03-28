@@ -270,6 +270,7 @@ class MovieSleepManager:
         self._penalty_tracker = penalty_tracker
         self._throttle = throttle
 
+        self._lock = threading.Lock()
         self._rng = random.Random()
         self._force_high = False
         self._last_per_worker_n = 0
@@ -286,10 +287,11 @@ class MovieSleepManager:
         n = max(1, -(-total // max(1, num_workers)))
         min_mult, max_mult = _interpolate_multiplier(n)
 
-        self._volume_min_mult = min_mult
-        self._volume_max_mult = max_mult
-        self._last_per_worker_n = n
-        self._recalc_range()
+        with self._lock:
+            self._volume_min_mult = min_mult
+            self._volume_max_mult = max_mult
+            self._last_per_worker_n = n
+            self._recalc_range()
 
         if self._throttle and hasattr(self._throttle, 'tighten_short_window'):
             self._throttle.tighten_short_window(n)
@@ -323,8 +325,12 @@ class MovieSleepManager:
         """
         pf = self._penalty_tracker.get_penalty_factor() if self._penalty_tracker else 1.0
 
-        raw_min_mult = self._volume_min_mult * pf
-        raw_max_mult = self._volume_max_mult * pf
+        with self._lock:
+            vol_min = self._volume_min_mult
+            vol_max = self._volume_max_mult
+
+        raw_min_mult = vol_min * pf
+        raw_max_mult = vol_max * pf
 
         eff_min_mult = min(raw_min_mult, COMPOSITE_MULTIPLIER_CAP)
         eff_max_mult = min(raw_max_mult, COMPOSITE_MULTIPLIER_CAP)
@@ -362,7 +368,7 @@ class MovieSleepManager:
             self._force_high = False
             break_lo = max(MICRO_BREAK_FLOOR, eff_max + MICRO_BREAK_EXTRA_MIN)
             break_hi = eff_max + MICRO_BREAK_EXTRA_MAX
-            return round(self._rng.uniform(break_lo, break_hi), 2)
+            return min(round(self._rng.uniform(break_lo, break_hi), 2), ABSOLUTE_MAX_SLEEP)
 
         if self._force_high:
             sleep_time = self._rng.uniform(eff_min + span * 0.7, eff_max)
