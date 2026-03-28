@@ -567,6 +567,23 @@ class TestGenerateConfigContentExtended:
             
             assert "QB_URL = 'https://my.qbittorrent.server:9090'" in content
 
+    def test_qb_allow_insecure_http_inferred_from_http_url(self):
+        """http:// QB_URL should emit QB_ALLOW_INSECURE_HTTP True unless overridden."""
+        env = {'VAR_QB_URL': 'http://192.168.1.10:8080'}
+        with patch.dict(os.environ, env, clear=True):
+            content = generate_config_content()
+        assert 'QB_ALLOW_INSECURE_HTTP = True' in content
+
+    def test_qb_allow_insecure_http_explicit_override(self):
+        """VAR_QB_ALLOW_INSECURE_HTTP=false should disable inference for http URL."""
+        env = {
+            'VAR_QB_URL': 'http://192.168.1.10:8080',
+            'VAR_QB_ALLOW_INSECURE_HTTP': 'false',
+        }
+        with patch.dict(os.environ, env, clear=True):
+            content = generate_config_content()
+        assert 'QB_ALLOW_INSECURE_HTTP = False' in content
+
 
 class TestMaskSensitiveValuesExtended:
     """Extended tests for mask_sensitive_values function."""

@@ -195,6 +195,22 @@ def get_env_bool_optional(name: str) -> Optional[bool]:
     return None
 
 
+def resolve_qb_allow_insecure_http(_n: Optional[str], default: bool) -> bool:
+    """Resolve QB_ALLOW_INSECURE_HTTP for generated config.
+
+    Explicit ``VAR_QB_ALLOW_INSECURE_HTTP`` / ``QB_ALLOW_INSECURE_HTTP`` wins.
+    Otherwise, if ``QB_URL`` is plain ``http://``, default to True so CI and
+    LAN Web UI URLs do not fail import-time validation in ``qb_config``.
+    """
+    explicit = get_env_bool_optional('QB_ALLOW_INSECURE_HTTP')
+    if explicit is not None:
+        return explicit
+    qb_url = get_env('QB_URL', '').strip()
+    if qb_url.lower().startswith('http://'):
+        return True
+    return default
+
+
 def resolve_proxy_modules(default: Optional[List[str]] = None) -> List[str]:
     """Resolve proxy-enabled modules from JSON config and per-module overrides."""
     default_modules = default or ['spider']
@@ -282,6 +298,7 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
     return git_config + [
         # qBittorrent Configuration
         ('QB_URL', 'QB_URL', get_env, 'https://localhost:8080', 'QBITTORRENT CONFIGURATION'),
+        ('QB_ALLOW_INSECURE_HTTP', None, resolve_qb_allow_insecure_http, False, 'QBITTORRENT CONFIGURATION'),
         ('QB_VERIFY_TLS', 'QB_VERIFY_TLS', get_env_bool, True, 'QBITTORRENT CONFIGURATION'),
         ('QB_USERNAME', 'QB_USERNAME', get_env, 'admin', 'QBITTORRENT CONFIGURATION'),
         ('QB_PASSWORD', 'QB_PASSWORD', get_env, '', 'QBITTORRENT CONFIGURATION'),

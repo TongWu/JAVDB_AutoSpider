@@ -315,9 +315,16 @@ class TestQbEndpointFallback:
             'http://qb.internal:8080',
         ]), patch.object(qb_uploader_module, 'QB_BASE_URL', 'https://qb.internal:8080'), \
                 patch.object(qb_uploader_module, 'QB_MASKED_URL', 'https://qb.internal:8080'), \
-                patch.object(qb_uploader_module, 'QB_ALLOW_INSECURE_HTTP', True):
+                patch.object(qb_uploader_module, 'QB_ALLOW_INSECURE_HTTP', False):
             assert uploader_test_qbittorrent_connection(use_proxy=False) is True
             assert qb_uploader_module.QB_BASE_URL == 'http://qb.internal:8080'
+            assert qb_uploader_module.QB_ALLOW_INSECURE_HTTP is True
+
+    def test_set_active_qb_base_url_https_does_not_force_allow_insecure(self):
+        mod = qb_uploader_module
+        with patch.object(mod, 'QB_ALLOW_INSECURE_HTTP', False):
+            mod._set_active_qb_base_url('https://qb.internal:8080')
+            assert mod.QB_ALLOW_INSECURE_HTTP is False
 
 
 class TestDuplicateDetectionIntegration:
