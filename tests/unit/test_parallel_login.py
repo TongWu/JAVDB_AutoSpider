@@ -83,7 +83,7 @@ class TestSpiderUsesProxyFlag:
                 'packages.python.javdb_integrations.login.update_config_file',
                 return_value=False,
             ):
-                success, cookie, proxy_name = session_mod.attempt_login_refresh(
+                success, _cookie, _proxy_name = session_mod.attempt_login_refresh(
                     spider_uses_proxy=False,
                 )
             assert success is True
@@ -123,7 +123,7 @@ class TestSpiderUsesProxyFlag:
                 'packages.python.javdb_integrations.login.update_config_file',
                 return_value=False,
             ):
-                success, cookie, proxy_name = session_mod.attempt_login_refresh(
+                success, _cookie, _proxy_name = session_mod.attempt_login_refresh(
                     spider_uses_proxy=True,
                 )
             assert success is True
