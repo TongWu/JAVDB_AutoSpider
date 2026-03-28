@@ -41,7 +41,7 @@ PROXY_HTTPS = cfg('PROXY_HTTPS', None)
 PROXY_MODULES = cfg('PROXY_MODULES', ['spider'])
 
 # Proxy pool
-PROXY_MODE = cfg('PROXY_MODE', 'single')
+PROXY_MODE = cfg('PROXY_MODE', 'pool')
 PROXY_POOL = cfg('PROXY_POOL', [])
 PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
 
@@ -718,7 +718,7 @@ def print_summary(stats, min_size_mb, days, dry_run=False, delete_local_files_fl
 def main():
     args = parse_arguments()
     proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
-    proxy_active = should_proxy_module('qbittorrent', proxy_override, PROXY_MODULES)
+    proxy_active = should_proxy_module('qbittorrent', proxy_override, PROXY_MODULES, proxy_mode=PROXY_MODE)
     
     logger.info("Starting qBittorrent File Filter...")
     

@@ -39,7 +39,7 @@ PROXY_HTTPS = cfg('PROXY_HTTPS', None)
 PROXY_MODULES = cfg('PROXY_MODULES', ['spider'])
 
 # Proxy pool
-PROXY_MODE = cfg('PROXY_MODE', 'single')
+PROXY_MODE = cfg('PROXY_MODE', 'pool')
 PROXY_POOL = cfg('PROXY_POOL', [])
 PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
 QB_ALLOW_INSECURE_HTTP = cfg('QB_ALLOW_INSECURE_HTTP', False)
@@ -349,7 +349,7 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
     # Initialize proxy helper
     initialize_proxy_helper(use_proxy)
     
-    proxy_active = should_proxy_module('pikpak', use_proxy, PROXY_MODULES)
+    proxy_active = should_proxy_module('pikpak', use_proxy, PROXY_MODULES, proxy_mode=PROXY_MODE)
     logger.info(f"Proxy policy for PikPak: {describe_proxy_override(use_proxy)}")
 
     if proxy_active:

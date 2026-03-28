@@ -89,7 +89,7 @@ def main():
     parse_all = args.all
     ignore_release_date = args.ignore_release_date
     proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
-    use_proxy = should_proxy_module('spider', proxy_override, PROXY_MODULES)
+    use_proxy = should_proxy_module('spider', proxy_override, PROXY_MODULES, proxy_mode=PROXY_MODE)
     use_cf_bypass = False
     always_bypass_time = args.always_bypass_time
     max_movies_phase1 = args.max_movies_phase1
