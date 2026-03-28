@@ -10,8 +10,10 @@ import packages.python.javdb_spider.runtime.state as state
 from packages.python.javdb_spider.fetch.session import is_login_page, can_attempt_login, attempt_login_refresh
 from packages.python.javdb_spider.runtime.config import (
     BASE_URL,
+    CF_BYPASS_ENABLED, CF_BYPASS_SERVICE_PORT,
     PROXY_MODE, PROXY_POOL_MAX_FAILURES,
 )
+from packages.python.javdb_platform.proxy_policy import is_cf_bypass_reachable
 from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _sleep_mgr
 
 logger = get_logger(__name__)
@@ -45,6 +47,22 @@ def _login_refresh_for_spider(use_proxy):
                     spider_uses_proxy=True,
                 )
     return attempt_login_refresh(spider_uses_proxy=True)
+
+
+def _effective_cf_bypass(requested: bool) -> bool:
+    """Return whether CF bypass should actually be attempted.
+
+    Returns *False* (skip bypass) when the feature is globally disabled
+    or the local bypass service is not reachable.
+    """
+    if not requested:
+        return False
+    if not CF_BYPASS_ENABLED:
+        return False
+    if not is_cf_bypass_reachable(port=CF_BYPASS_SERVICE_PORT):
+        logger.debug("CF bypass service not reachable on port %d, skipping", CF_BYPASS_SERVICE_PORT)
+        return False
+    return True
 
 
 def _sleep_between_fetches() -> None:
@@ -158,6 +176,7 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
         tuple: (html_content, has_movie_list, proxy_was_banned,
                 effective_use_proxy, effective_use_cf_bypass, is_valid_empty_page)
     """
+    use_cf_bypass = _effective_cf_bypass(use_cf_bypass)
     proxy_was_banned = False
     last_failed_html = None
 
@@ -373,6 +392,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
         tuple: (magnets, actor_info, actor_gender, actor_link, supporting_actors, parse_success,
                 effective_use_proxy, effective_use_cf_bypass)
     """
+    use_cf_bypass = _effective_cf_bypass(use_cf_bypass)
     last_result = ([], '', '', '', '', False)
 
     def try_fetch_and_parse(u_proxy, u_cf, context_msg, skip_sleep=False):

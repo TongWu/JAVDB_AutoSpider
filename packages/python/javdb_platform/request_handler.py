@@ -96,7 +96,7 @@ class RequestConfig:
     proxy_http: Optional[str] = None
     proxy_https: Optional[str] = None
     proxy_modules: list = None
-    proxy_mode: str = 'single'
+    proxy_mode: str = 'pool'
     # curl_cffi settings for better TLS fingerprint
     use_curl_cffi: bool = True  # Use curl_cffi if available (recommended)
     curl_cffi_impersonate: str = 'chrome131'  # Browser to impersonate
@@ -209,7 +209,10 @@ class RequestHandler:
         Returns:
             bool: True if the module should use proxy, False otherwise
         """
-        return should_proxy_module(module_name, use_proxy_flag, self.config.proxy_modules)
+        return should_proxy_module(
+            module_name, use_proxy_flag, self.config.proxy_modules,
+            proxy_mode=self.config.proxy_mode,
+        )
 
     @staticmethod
     def _log_ctx(module_name: str, proxy_name: Optional[str] = None) -> str:
@@ -1205,7 +1208,7 @@ class ProxyHelper:
     """
     
     def __init__(self, proxy_pool=None, proxy_modules: Optional[list] = None,
-                 proxy_mode: str = 'single', proxy_http: Optional[str] = None,
+                 proxy_mode: str = 'pool', proxy_http: Optional[str] = None,
                  proxy_https: Optional[str] = None):
         """
         Initialize ProxyHelper.
@@ -1234,7 +1237,10 @@ class ProxyHelper:
         Returns:
             bool: True if the module should use proxy, False otherwise
         """
-        return should_proxy_module(module_name, use_proxy_flag, self.proxy_modules)
+        return should_proxy_module(
+            module_name, use_proxy_flag, self.proxy_modules,
+            proxy_mode=self.proxy_mode,
+        )
     
     def get_proxies_dict(self, module_name: str, use_proxy_flag: Optional[bool]) -> Optional[Dict[str, str]]:
         """
@@ -1303,7 +1309,7 @@ class ProxyHelper:
         }
 
 
-def create_proxy_helper_from_config(proxy_pool=None, proxy_modules=None, proxy_mode='single',
+def create_proxy_helper_from_config(proxy_pool=None, proxy_modules=None, proxy_mode='pool',
                                      proxy_http=None, proxy_https=None) -> ProxyHelper:
     """
     Create a ProxyHelper instance from configuration.

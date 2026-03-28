@@ -40,7 +40,7 @@ GIT_REPO_URL = cfg('GIT_REPO_URL', '')
 GIT_BRANCH = cfg('GIT_BRANCH', 'main')
 
 # Proxy pool
-PROXY_MODE = cfg('PROXY_MODE', 'single')
+PROXY_MODE = cfg('PROXY_MODE', 'pool')
 PROXY_POOL = cfg('PROXY_POOL', [])
 PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
 
@@ -623,7 +623,7 @@ def main():
     mode = args.mode
     proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
     use_proxy = proxy_override
-    proxy_active = should_proxy_module('qbittorrent', proxy_override, PROXY_MODULES)
+    proxy_active = should_proxy_module('qbittorrent', proxy_override, PROXY_MODULES, proxy_mode=PROXY_MODE)
     category_override = args.category
     logger.info("Starting qBittorrent uploader...")
     if category_override:

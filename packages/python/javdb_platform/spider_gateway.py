@@ -107,7 +107,7 @@ def _load_config() -> dict:
         return {}
     keys = {
         'PROXY_POOL': None,
-        'PROXY_MODE': 'single',
+        'PROXY_MODE': 'pool',
         'PROXY_HTTP': None,
         'PROXY_HTTPS': None,
         'PROXY_MODULES': ['spider'],
@@ -154,7 +154,7 @@ def _build_handler(cfg: dict, proxy_pool) -> RequestHandler:
             proxy_http=cfg.get('PROXY_HTTP'),
             proxy_https=cfg.get('PROXY_HTTPS'),
             proxy_modules=cfg.get('PROXY_MODULES', ['spider']),
-            proxy_mode=cfg.get('PROXY_MODE', 'single'),
+            proxy_mode=cfg.get('PROXY_MODE', 'pool'),
         ),
     )
 

@@ -113,7 +113,7 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False,
 def should_use_proxy_for_module(module_name: str, use_proxy_flag) -> bool:
     if global_request_handler:
         return global_request_handler.should_use_proxy_for_module(module_name, use_proxy_flag)
-    return should_proxy_module(module_name, use_proxy_flag, PROXY_MODULES)
+    return should_proxy_module(module_name, use_proxy_flag, PROXY_MODULES, proxy_mode=PROXY_MODE)
 
 
 def extract_ip_from_proxy_url(proxy_url: str) -> Optional[str]:
@@ -167,7 +167,14 @@ def initialize_request_handler():
 
 def setup_proxy_pool(use_proxy) -> None:
     """Initialize the global proxy pool from configuration."""
+    from packages.python.javdb_platform.proxy_policy import is_proxy_mode_disabled
     global global_proxy_pool
+
+    if is_proxy_mode_disabled(PROXY_MODE):
+        logger.info("Proxy globally disabled (PROXY_MODE='%s') - skipping pool init", PROXY_MODE)
+        global_proxy_pool = None
+        return
+
     if PROXY_POOL and len(PROXY_POOL) > 0:
         if PROXY_MODE == 'pool':
             logger.info(f"Initializing proxy pool with {len(PROXY_POOL)} proxies...")
@@ -192,7 +199,7 @@ def setup_proxy_pool(use_proxy) -> None:
             max_failures=PROXY_POOL_MAX_FAILURES,
         )
     else:
-        if should_proxy_module('spider', use_proxy, PROXY_MODULES):
+        if should_proxy_module('spider', use_proxy, PROXY_MODULES, proxy_mode=PROXY_MODE):
             logger.warning("Proxy enabled but no proxy configuration found (neither PROXY_POOL nor PROXY_HTTP/PROXY_HTTPS)")
         global_proxy_pool = None
 
