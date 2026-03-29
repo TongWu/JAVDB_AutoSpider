@@ -40,10 +40,11 @@ from __future__ import annotations
 
 import queue as queue_module
 import random
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterator, List, Optional
+from typing import Any, Callable, Iterator, List, Optional, Union
 
 from packages.python.javdb_platform.logging_config import get_logger
 from packages.python.javdb_platform.proxy_ban_manager import get_ban_manager
@@ -105,6 +106,10 @@ class EngineTask:
     that is round-tripped back in the corresponding :class:`EngineResult`.
     ``entry_index`` and ``failed_proxies`` satisfy the duck-typing contract
     required by :class:`~scripts.spider.fetch.login_coordinator.LoginCoordinator`.
+
+    ``priority`` controls dequeue order when the engine uses a priority queue
+    (lower values are dequeued first).  Default ``0`` preserves FIFO behaviour
+    when all tasks share the same priority.
     """
 
     url: str
@@ -112,6 +117,7 @@ class EngineTask:
     retry_count: int = 0
     failed_proxies: set = field(default_factory=set)
     meta: dict = field(default_factory=dict)
+    priority: int = 0
 
 
 @dataclass
@@ -153,6 +159,58 @@ class LoginRequired(Exception):
     Callers should **not** catch this inside their *process_fn*.
     """
 
+
+# ---------------------------------------------------------------------------
+# Priority task queue (opt-in, used by index-page parallel fetch)
+# ---------------------------------------------------------------------------
+
+class _PriorityTaskQueue:
+    """Drop-in ``Queue`` replacement that dequeues by ``EngineTask.priority``.
+
+    Lower priority values are dequeued first.  A monotonic sequence number
+    breaks ties so that tasks with equal priority preserve insertion order.
+    ``None`` sentinels (used by shutdown) are given ``sys.maxsize`` priority
+    so they are consumed only after all real tasks.
+    """
+
+    _is_priority_queue = True
+
+    def __init__(self) -> None:
+        self._pq: queue_module.PriorityQueue = queue_module.PriorityQueue()
+        self._counter = 0
+        self._counter_lock = threading.Lock()
+
+    def _next_seq(self) -> int:
+        with self._counter_lock:
+            seq = self._counter
+            self._counter += 1
+            return seq
+
+    def put(self, item: Any, block: bool = True, timeout: Any = None) -> None:
+        priority = sys.maxsize if item is None else getattr(item, 'priority', 0)
+        self._pq.put((priority, self._next_seq(), item), block, timeout)
+
+    def put_nowait(self, item: Any) -> None:
+        priority = sys.maxsize if item is None else getattr(item, 'priority', 0)
+        self._pq.put_nowait((priority, self._next_seq(), item))
+
+    def get(self, block: bool = True, timeout: Any = None) -> Any:
+        _, _, item = self._pq.get(block, timeout)
+        return item
+
+    def get_nowait(self) -> Any:
+        _, _, item = self._pq.get_nowait()
+        return item
+
+    def qsize(self) -> int:
+        return self._pq.qsize()
+
+    def empty(self) -> bool:
+        return self._pq.empty()
+
+
+# Type alias for the task queue (regular or priority).
+_TaskQueue = Union[queue_module.Queue, _PriorityTaskQueue]
 
 # Type alias for user-supplied processing functions.
 ProcessFn = Callable[['WorkerContext', EngineTask], Any]
@@ -635,6 +693,7 @@ class ParallelFetchBackend(FetchBackend):
         sleep_min: Optional[float] = None,
         sleep_max: Optional[float] = None,
         runtime_state: Optional[FetchRuntimeState] = None,
+        use_priority_queue: bool = False,
     ):
         self._process_fn = process_fn
         self._use_cookie = use_cookie
@@ -646,8 +705,9 @@ class ParallelFetchBackend(FetchBackend):
             sleep_max if sleep_max is not None else _global_sleep_mgr.base_max
         )
 
-        self._task_queue: queue_module.Queue[Optional[EngineTask]] = (
-            queue_module.Queue()
+        self._task_queue: _TaskQueue = (
+            _PriorityTaskQueue() if use_priority_queue
+            else queue_module.Queue()
         )
         self._result_queue: queue_module.Queue[EngineResult] = (
             queue_module.Queue()
@@ -824,12 +884,14 @@ class ParallelFetchBackend(FetchBackend):
         *,
         meta: Optional[dict] = None,
         entry_index: str = '',
+        priority: int = 0,
     ) -> None:
         """Submit a URL for processing.  Thread-safe."""
         if self._done:
             raise RuntimeError("Cannot submit after mark_done()")
         task = EngineTask(
             url=url, entry_index=entry_index, meta=meta or {},
+            priority=priority,
         )
         with self._count_lock:
             self._submitted += 1
@@ -1052,8 +1114,9 @@ class FetchEngine:
         *,
         meta: Optional[dict] = None,
         entry_index: str = '',
+        priority: int = 0,
     ) -> None:
-        self._backend.submit(url, meta=meta, entry_index=entry_index)
+        self._backend.submit(url, meta=meta, entry_index=entry_index, priority=priority)
 
     def submit_task(self, task: EngineTask) -> None:
         self._backend.submit_task(task)
