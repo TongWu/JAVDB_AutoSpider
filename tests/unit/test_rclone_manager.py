@@ -16,9 +16,16 @@ from scripts.rclone_manager import (
     load_inventory_as_folder_structure,
     run_report_from_inventory,
     run_execute_from_csv,
+    migrate_strip_drive_names,
     INVENTORY_FIELDNAMES,
 )
-from utils.rclone_helper import FolderInfo, rclone_purge
+from utils.rclone_helper import (
+    FolderInfo,
+    rclone_purge,
+    strip_drive_name,
+    get_configured_drive_name,
+    prepend_drive_name,
+)
 from scripts.spider.services.dedup import (
     DedupRecord,
     append_dedup_record,
@@ -176,7 +183,8 @@ class TestResolveRcloneRoot:
 # ============================================================================
 
 class TestLoadInventoryAsFolderStructure:
-    def test_loads_from_csv(self, tmp_path, storage_mode_csv):
+    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='gdrive')
+    def test_loads_from_csv(self, _mock_dn, tmp_path, storage_mode_csv):
         csv_path = str(tmp_path / 'inventory.csv')
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=INVENTORY_FIELDNAMES)
@@ -185,7 +193,7 @@ class TestLoadInventoryAsFolderStructure:
                 'video_code': 'ABC-123',
                 'sensor_category': '有码',
                 'subtitle_category': '中字',
-                'folder_path': 'gdrive:root/2025/Actor/ABC-123 [有码-中字]',
+                'folder_path': 'root/2025/Actor/ABC-123 [有码-中字]',
                 'folder_size': '1000',
                 'file_count': '3',
                 'scan_datetime': '2026-01-01 00:00:00',
@@ -194,7 +202,7 @@ class TestLoadInventoryAsFolderStructure:
                 'video_code': 'DEF-456',
                 'sensor_category': '无码',
                 'subtitle_category': '无字',
-                'folder_path': 'gdrive:root/2025/ActorB/DEF-456 [无码-无字]',
+                'folder_path': 'root/2025/ActorB/DEF-456 [无码-无字]',
                 'folder_size': '2000',
                 'file_count': '5',
                 'scan_datetime': '2026-01-01 00:00:00',
@@ -212,15 +220,17 @@ class TestLoadInventoryAsFolderStructure:
         codes = {f.movie_code for f in all_folders}
         assert 'ABC-123' in codes
         assert 'DEF-456' in codes
+        assert all_folders[0].full_path.startswith('gdrive:')
 
-    def test_loads_from_db(self, storage_mode_db):
+    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='gdrive')
+    def test_loads_from_db(self, _mock_dn, storage_mode_db):
         from utils.infra.db import db_replace_rclone_inventory
         db_replace_rclone_inventory([
             {
                 'video_code': 'DB-001',
                 'sensor_category': '有码',
                 'subtitle_category': '中字',
-                'folder_path': 'gdrive:root/2025/Actor/DB-001 [有码-中字]',
+                'folder_path': 'root/2025/Actor/DB-001 [有码-中字]',
                 'folder_size': 500,
                 'file_count': 2,
                 'scan_datetime': '2026-01-01 00:00:00',
@@ -234,8 +244,10 @@ class TestLoadInventoryAsFolderStructure:
                 all_folders.extend(folders)
         assert len(all_folders) == 1
         assert all_folders[0].movie_code == 'DB-001'
+        assert all_folders[0].full_path == 'gdrive:root/2025/Actor/DB-001 [有码-中字]'
 
-    def test_db_priority_over_csv(self, tmp_path, storage_mode_db):
+    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='gdrive')
+    def test_db_priority_over_csv(self, _mock_dn, tmp_path, storage_mode_db):
         """When DB has data, CSV should not be loaded even if it exists."""
         from utils.infra.db import db_replace_rclone_inventory
         db_replace_rclone_inventory([
@@ -243,7 +255,7 @@ class TestLoadInventoryAsFolderStructure:
                 'video_code': 'DB-ONLY',
                 'sensor_category': '有码',
                 'subtitle_category': '中字',
-                'folder_path': 'gdrive:root/2025/A/DB-ONLY [有码-中字]',
+                'folder_path': 'root/2025/A/DB-ONLY [有码-中字]',
                 'folder_size': 100,
                 'file_count': 1,
                 'scan_datetime': '2026-01-01 00:00:00',
@@ -258,7 +270,7 @@ class TestLoadInventoryAsFolderStructure:
                 'video_code': 'CSV-ONLY',
                 'sensor_category': '無碼',
                 'subtitle_category': '中字',
-                'folder_path': 'gdrive:root/2025/B/CSV-ONLY [無碼-中字]',
+                'folder_path': 'root/2025/B/CSV-ONLY [無碼-中字]',
                 'folder_size': '200',
                 'file_count': '2',
                 'scan_datetime': '2026-01-01 00:00:00',
@@ -278,7 +290,8 @@ class TestLoadInventoryAsFolderStructure:
         structure = load_inventory_as_folder_structure(csv_path)
         assert structure == {}
 
-    def test_folder_info_fields(self, tmp_path, storage_mode_csv):
+    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='gdrive')
+    def test_folder_info_fields(self, _mock_dn, tmp_path, storage_mode_csv):
         csv_path = str(tmp_path / 'inventory.csv')
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=INVENTORY_FIELDNAMES)
@@ -287,7 +300,7 @@ class TestLoadInventoryAsFolderStructure:
                 'video_code': 'XYZ-789',
                 'sensor_category': '无码流出',
                 'subtitle_category': '无字',
-                'folder_path': 'gdrive:root/2024/SomeActor/XYZ-789 [无码流出-无字]',
+                'folder_path': 'root/2024/SomeActor/XYZ-789 [无码流出-无字]',
                 'folder_size': '5000',
                 'file_count': '10',
                 'scan_datetime': '2026-03-01 12:00:00',
@@ -305,6 +318,7 @@ class TestLoadInventoryAsFolderStructure:
         assert fi.subtitle_category == '无字'
         assert fi.size == 5000
         assert fi.file_count == 10
+        assert fi.full_path == 'gdrive:root/2024/SomeActor/XYZ-789 [无码流出-无字]'
 
 
 # ============================================================================
@@ -362,11 +376,12 @@ class TestIsDeletedUpdate:
 # ============================================================================
 
 class TestExecuteMode:
+    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='gdrive')
     @patch('utils.rclone_helper.subprocess.run')
-    def test_dry_run_does_not_update_csv(self, mock_run, tmp_path):
+    def test_dry_run_does_not_update_csv(self, mock_run, _mock_dn, tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
         path = str(tmp_path / 'dedup.csv')
-        r = DedupRecord('A-001', 's', 'sub', 'gdrive:/p', 100, 'cat', 'r', 't', 'False', '')
+        r = DedupRecord('A-001', 's', 'sub', '/p', 100, 'cat', 'r', 't', 'False', '')
         append_dedup_record(path, r)
 
         result = run_execute_from_csv(path, dry_run=True)
@@ -380,12 +395,13 @@ class TestExecuteMode:
         result = run_execute_from_csv(path)
         assert result == 0
 
+    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='gdrive')
     @patch('scripts.rclone_manager.export_dedup_history')
     @patch('utils.rclone_helper.subprocess.run')
-    def test_run_execute_live(self, mock_run, mock_export, tmp_path):
+    def test_run_execute_live(self, mock_run, mock_export, _mock_dn, tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
         path = str(tmp_path / 'dedup.csv')
-        r = DedupRecord('A-001', 's', 'sub', 'gdrive:/test/path', 100, 'cat', 'r', 't', 'False', '')
+        r = DedupRecord('A-001', 's', 'sub', '/test/path', 100, 'cat', 'r', 't', 'False', '')
         append_dedup_record(path, r)
 
         result = run_execute_from_csv(path, dry_run=False)
@@ -402,3 +418,141 @@ class TestExecuteMode:
 
         result = run_execute_from_csv(path)
         assert result == 0
+
+
+# ============================================================================
+# Test drive-name utility functions
+# ============================================================================
+
+class TestStripDriveName:
+    def test_strips_gdrive(self):
+        assert strip_drive_name('gdrive:path/to/folder') == 'path/to/folder'
+
+    def test_strips_paula(self):
+        assert strip_drive_name('paula:剧集/JAV') == '剧集/JAV'
+
+    def test_no_colon_unchanged(self):
+        assert strip_drive_name('path/to/folder') == 'path/to/folder'
+
+    def test_empty_string(self):
+        assert strip_drive_name('') == ''
+
+    def test_colon_only(self):
+        assert strip_drive_name('gdrive:') == ''
+
+    def test_multiple_colons(self):
+        assert strip_drive_name('a:b:c') == 'b:c'
+
+    def test_colon_after_slash_unchanged(self):
+        assert strip_drive_name('root/2025/folder:with:colons') == 'root/2025/folder:with:colons'
+
+
+class TestPrependDriveName:
+    def test_prepends_given_drive(self):
+        assert prepend_drive_name('path/to/folder', 'gdrive') == 'gdrive:path/to/folder'
+
+    def test_already_has_drive(self):
+        assert prepend_drive_name('gdrive:path/to/folder', 'other') == 'gdrive:path/to/folder'
+
+    def test_colon_in_segment_gets_prepended(self):
+        assert prepend_drive_name('root/folder:name', 'gdrive') == 'gdrive:root/folder:name'
+
+    def test_no_drive_name_given(self):
+        with patch('utils.rclone_helper.get_configured_drive_name', return_value='auto'):
+            assert prepend_drive_name('path') == 'auto:path'
+
+    def test_no_drive_configured(self):
+        with patch('utils.rclone_helper.get_configured_drive_name', return_value=''):
+            assert prepend_drive_name('path') == 'path'
+
+    def test_empty_path(self):
+        assert prepend_drive_name('', 'gdrive') == 'gdrive:'
+
+
+class TestGetConfiguredDriveName:
+    def test_from_rclone_folder_path(self):
+        with patch('packages.python.javdb_platform.config_helper.cfg') as mock_cfg:
+            mock_cfg.side_effect = lambda name, default: 'gdrive:/path' if name == 'RCLONE_FOLDER_PATH' else default
+            assert get_configured_drive_name() == 'gdrive'
+
+    def test_from_rclone_drive_name(self):
+        with patch('packages.python.javdb_platform.config_helper.cfg') as mock_cfg:
+            def fake_cfg(name, default):
+                if name == 'RCLONE_FOLDER_PATH':
+                    return None
+                if name == 'RCLONE_DRIVE_NAME':
+                    return 'paula'
+                return default
+            mock_cfg.side_effect = fake_cfg
+            assert get_configured_drive_name() == 'paula'
+
+    def test_returns_empty_when_not_configured(self):
+        with patch('packages.python.javdb_platform.config_helper.cfg') as mock_cfg:
+            mock_cfg.return_value = None
+            assert get_configured_drive_name() == ''
+
+
+# ============================================================================
+# Test DB migration
+# ============================================================================
+
+class TestMigrateStripDriveNames:
+    def test_strips_drive_names_in_db(self):
+        from utils.infra.db import db_replace_rclone_inventory, get_db, OPERATIONS_DB_PATH
+        db_replace_rclone_inventory([
+            {
+                'video_code': 'MIG-001',
+                'sensor_category': '有码',
+                'subtitle_category': '中字',
+                'folder_path': 'gdrive:root/2025/Actor/MIG-001 [有码-中字]',
+                'folder_size': 500,
+                'file_count': 2,
+                'scan_datetime': '2026-01-01 00:00:00',
+            },
+        ])
+
+        updated = migrate_strip_drive_names()
+        assert updated >= 1
+
+        with get_db(OPERATIONS_DB_PATH) as conn:
+            row = conn.execute("SELECT FolderPath FROM RcloneInventory WHERE VideoCode='MIG-001'").fetchone()
+        assert row is not None
+        assert ':' not in row[0]
+        assert row[0] == 'root/2025/Actor/MIG-001 [有码-中字]'
+
+    def test_idempotent(self):
+        from utils.infra.db import db_replace_rclone_inventory, get_db, OPERATIONS_DB_PATH
+        db_replace_rclone_inventory([
+            {
+                'video_code': 'MIG-002',
+                'sensor_category': '无码',
+                'subtitle_category': '无字',
+                'folder_path': 'root/2025/Actor/MIG-002 [无码-无字]',
+                'folder_size': 300,
+                'file_count': 1,
+                'scan_datetime': '2026-01-01 00:00:00',
+            },
+            {
+                'video_code': 'MIG-003',
+                'sensor_category': '有码',
+                'subtitle_category': '中字',
+                'folder_path': 'gdrive:root/2025/Actor/MIG-003 [有码-中字]',
+                'folder_size': 400,
+                'file_count': 2,
+                'scan_datetime': '2026-01-01 00:00:00',
+            },
+        ])
+
+        first = migrate_strip_drive_names()
+        assert first >= 1
+
+        second = migrate_strip_drive_names()
+        assert second == 0
+
+        with get_db(OPERATIONS_DB_PATH) as conn:
+            row = conn.execute(
+                "SELECT FolderPath FROM RcloneInventory WHERE VideoCode='MIG-003'",
+            ).fetchone()
+        assert row is not None
+        assert row[0] == 'root/2025/Actor/MIG-003 [有码-中字]'
+        assert ':' not in row[0]

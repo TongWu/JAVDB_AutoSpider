@@ -71,10 +71,17 @@ def build_parallel_index_backend(
     use_proxy: bool = True,
     use_cf_bypass: bool = False,
 ) -> ParallelFetchBackend:
-    """Build an index-page parallel backend."""
+    """Build an index-page parallel backend.
+
+    Uses a priority queue so pages are processed in ascending page-number
+    order.  This allows the sliding-window stop condition to trigger as
+    early as possible (the contiguous sequence from ``start_page`` builds
+    up faster when lower pages are dequeued first).
+    """
     return ParallelFetchBackend.simple(
         parse_fn=_index_parse_fn,
         use_cookie=use_cookie,
+        use_priority_queue=True,
         runtime_state=FetchRuntimeState(
             use_proxy=use_proxy,
             use_cf_bypass=use_cf_bypass,
@@ -136,6 +143,7 @@ def fetch_all_index_pages_parallel(
 
         # -- collect results (may arrive out of order) ----------------------
 
+        total_expected = end_page - start_page + 1 if not parse_all else 0
         results_by_page: Dict[int, EngineResult] = {}
         any_proxy_banned = False
         csv_name_resolved = False
@@ -147,6 +155,24 @@ def fetch_all_index_pages_parallel(
         for result in backend.results():
             page_num = result.task.meta.get('page_num', 0)
             results_by_page[page_num] = result
+
+            collected = len(results_by_page)
+            worker_tag = f"[worker={result.worker_name}]" if result.worker_name else ""
+            progress = f"{collected}/{total_expected}" if total_expected else str(collected)
+            if result.success:
+                has_movies = bool(result.data and result.data.get('has_movie_list'))
+                logger.info(
+                    "[Page %2d]%s Received (%s) — %s pages collected",
+                    page_num, worker_tag,
+                    "has content" if has_movies else "empty",
+                    progress,
+                )
+            else:
+                logger.warning(
+                    "[Page %2d]%s Failed (%s) — %s pages collected",
+                    page_num, worker_tag,
+                    result.error or "unknown", progress,
+                )
 
             if result.success and result.data:
                 data = result.data
@@ -176,6 +202,13 @@ def fetch_all_index_pages_parallel(
                 if should_stop:
                     stop_collecting = True
                     backend.mark_done()
+                    logger.info(
+                        "Stop condition met after %d results — "
+                        "exiting collection loop (remaining in-flight "
+                        "tasks will be cancelled)",
+                        len(results_by_page),
+                    )
+                    break
                 else:
                     in_flight -= 1
                     while in_flight < window_size:
@@ -280,6 +313,7 @@ def _submit_page(
         url,
         meta={'page_num': page_num},
         entry_index=f'page-{page_num}',
+        priority=page_num,
     )
 
 

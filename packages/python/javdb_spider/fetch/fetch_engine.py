@@ -40,10 +40,11 @@ from __future__ import annotations
 
 import queue as queue_module
 import random
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterator, List, Optional
+from typing import Any, Callable, Iterator, List, Optional, Union
 
 from packages.python.javdb_platform.logging_config import get_logger
 from packages.python.javdb_platform.proxy_ban_manager import get_ban_manager
@@ -60,8 +61,9 @@ from packages.python.javdb_spider.runtime.sleep import (
     MovieSleepManager,
     movie_sleep_mgr as _global_sleep_mgr,
     PenaltyTracker,
-    DualWindowThrottle,
+    TripleWindowThrottle,
     penalty_tracker as _shared_penalty_tracker,
+    _interpolate_multiplier,
 )
 from packages.python.javdb_spider.runtime.config import (
     BASE_URL,
@@ -104,6 +106,10 @@ class EngineTask:
     that is round-tripped back in the corresponding :class:`EngineResult`.
     ``entry_index`` and ``failed_proxies`` satisfy the duck-typing contract
     required by :class:`~scripts.spider.fetch.login_coordinator.LoginCoordinator`.
+
+    ``priority`` controls dequeue order when the engine uses a priority queue
+    (lower values are dequeued first).  Default ``0`` preserves FIFO behaviour
+    when all tasks share the same priority.
     """
 
     url: str
@@ -111,6 +117,7 @@ class EngineTask:
     retry_count: int = 0
     failed_proxies: set = field(default_factory=set)
     meta: dict = field(default_factory=dict)
+    priority: int = 0
 
 
 @dataclass
@@ -125,6 +132,7 @@ class EngineResult:
     data: Any = None
     used_cf: bool = False
     error: Optional[str] = None
+    worker_name: str = ''
     _ack_callback: Optional[Callable[[str, bool], None]] = field(
         default=None,
         repr=False,
@@ -151,6 +159,58 @@ class LoginRequired(Exception):
     Callers should **not** catch this inside their *process_fn*.
     """
 
+
+# ---------------------------------------------------------------------------
+# Priority task queue (opt-in, used by index-page parallel fetch)
+# ---------------------------------------------------------------------------
+
+class _PriorityTaskQueue:
+    """Drop-in ``Queue`` replacement that dequeues by ``EngineTask.priority``.
+
+    Lower priority values are dequeued first.  A monotonic sequence number
+    breaks ties so that tasks with equal priority preserve insertion order.
+    ``None`` sentinels (used by shutdown) are given ``sys.maxsize`` priority
+    so they are consumed only after all real tasks.
+    """
+
+    _is_priority_queue = True
+
+    def __init__(self) -> None:
+        self._pq: queue_module.PriorityQueue = queue_module.PriorityQueue()
+        self._counter = 0
+        self._counter_lock = threading.Lock()
+
+    def _next_seq(self) -> int:
+        with self._counter_lock:
+            seq = self._counter
+            self._counter += 1
+            return seq
+
+    def put(self, item: Any, block: bool = True, timeout: Any = None) -> None:
+        priority = sys.maxsize if item is None else getattr(item, 'priority', 0)
+        self._pq.put((priority, self._next_seq(), item), block, timeout)
+
+    def put_nowait(self, item: Any) -> None:
+        priority = sys.maxsize if item is None else getattr(item, 'priority', 0)
+        self._pq.put_nowait((priority, self._next_seq(), item))
+
+    def get(self, block: bool = True, timeout: Any = None) -> Any:
+        _, _, item = self._pq.get(block, timeout)
+        return item
+
+    def get_nowait(self) -> Any:
+        _, _, item = self._pq.get_nowait()
+        return item
+
+    def qsize(self) -> int:
+        return self._pq.qsize()
+
+    def empty(self) -> bool:
+        return self._pq.empty()
+
+
+# Type alias for the task queue (regular or priority).
+_TaskQueue = Union[queue_module.Queue, _PriorityTaskQueue]
 
 # Type alias for user-supplied processing functions.
 ProcessFn = Callable[['WorkerContext', EngineTask], Any]
@@ -196,6 +256,15 @@ class WorkerContext:
     def check_login_page(html: str) -> bool:
         """Return ``True`` if *html* is a login/auth wall page."""
         return is_login_page(html)
+
+    def sleep(self) -> float:
+        """Delegate to the worker-local sleep manager.
+
+        Use this for intra-task pauses (e.g. between search and detail
+        fetches) so that each worker's independent throttle budget is
+        respected instead of the global module-level singleton.
+        """
+        return self._worker._sleep_mgr.sleep()
 
     # -- high-level ----------------------------------------------------------
 
@@ -302,11 +371,11 @@ class _EngineWorker(threading.Thread):
 
         # One PenaltyTracker per engine (passed in): CF/failure events from any
         # worker must raise the penalty factor for all workers' adaptive sleep.
-        # Per-worker DualWindowThrottle stays isolated (independent proxy IPs).
+        # Per-worker TripleWindowThrottle stays isolated (independent proxy IPs).
         self._sleep_mgr = MovieSleepManager(
             sleep_min, sleep_max,
             penalty_tracker=penalty_tracker,
-            throttle=DualWindowThrottle(),
+            throttle=TripleWindowThrottle(),
         )
 
         self._proxy_pool = create_proxy_pool_from_config(
@@ -446,6 +515,7 @@ class _EngineWorker(threading.Thread):
                     self.result_queue.put(EngineResult(
                         task=task, success=False,
                         error='all_proxies_failed',
+                        worker_name=self.proxy_name,
                     ))
                     continue
                 requeue_front(self.task_queue, task)
@@ -489,6 +559,7 @@ class _EngineWorker(threading.Thread):
                     self.result_queue.put(EngineResult(
                         task=task, success=True,
                         data=data, used_cf=ctx._last_used_cf,
+                        worker_name=self.proxy_name,
                     ))
                 else:
                     task.failed_proxies.add(self.proxy_name)
@@ -528,7 +599,12 @@ class _EngineWorker(threading.Thread):
                 )
 
     def _handle_proxy_banned(self, task: EngineTask) -> None:
-        """Handle proxy ban: stop this worker and re-route tasks."""
+        """Handle proxy ban: stop this worker and re-route tasks.
+
+        When active workers remain, dynamically re-calculate and apply
+        volume multipliers for all surviving workers so that the
+        increased per-worker load triggers appropriately higher sleep.
+        """
         task.failed_proxies.add(self.proxy_name)
 
         with self._drain_lock:
@@ -542,11 +618,27 @@ class _EngineWorker(threading.Thread):
             )
 
             if active > 0:
+                remaining = self.task_queue.qsize() + active
+                for w in self.all_workers:
+                    if w.proxy_name not in self._banned_proxies:
+                        w._sleep_mgr.apply_volume_multiplier(
+                            remaining, num_workers=active, quiet=True,
+                        )
+                per_worker = max(1, -(-remaining // max(1, active)))
+                min_m, max_m = _interpolate_multiplier(per_worker)
+                if min_m > 1.0 or max_m > 1.0:
+                    logger.info(
+                        "Volume-based sleep adjustment (ban rebalance): "
+                        "total=%d, workers=%d, per_worker=%d → "
+                        "volume_factor %.2fx/%.2fx",
+                        remaining, active, per_worker, min_m, max_m,
+                    )
                 requeue_front(self.task_queue, task)
             else:
                 self.result_queue.put(EngineResult(
                     task=task, success=False,
                     error='all_proxies_banned',
+                    worker_name=self.proxy_name,
                 ))
                 if not self._drain_done[0]:
                     self._drain_done[0] = True
@@ -567,6 +659,7 @@ class _EngineWorker(threading.Thread):
                     self.result_queue.put(EngineResult(
                         task=item, success=False,
                         error='all_proxies_banned',
+                        worker_name=self.proxy_name,
                     ))
                 except queue_module.Empty:
                     break
@@ -600,19 +693,21 @@ class ParallelFetchBackend(FetchBackend):
         sleep_min: Optional[float] = None,
         sleep_max: Optional[float] = None,
         runtime_state: Optional[FetchRuntimeState] = None,
+        use_priority_queue: bool = False,
     ):
         self._process_fn = process_fn
         self._use_cookie = use_cookie
         self._stop_event = stop_event or threading.Event()
         self._sleep_min = (
-            sleep_min if sleep_min is not None else _global_sleep_mgr.sleep_min
+            sleep_min if sleep_min is not None else _global_sleep_mgr.base_min
         )
         self._sleep_max = (
-            sleep_max if sleep_max is not None else _global_sleep_mgr.sleep_max
+            sleep_max if sleep_max is not None else _global_sleep_mgr.base_max
         )
 
-        self._task_queue: queue_module.Queue[Optional[EngineTask]] = (
-            queue_module.Queue()
+        self._task_queue: _TaskQueue = (
+            _PriorityTaskQueue() if use_priority_queue
+            else queue_module.Queue()
         )
         self._result_queue: queue_module.Queue[EngineResult] = (
             queue_module.Queue()
@@ -704,6 +799,7 @@ class ParallelFetchBackend(FetchBackend):
             self._workers.append(w)
 
         self._inherit_login_state()
+        self._inherit_global_volume(len(active_configs))
 
         if pre_banned_count:
             logger.info(
@@ -750,6 +846,41 @@ class ParallelFetchBackend(FetchBackend):
             state.logged_in_proxy_name,
         )
 
+    def _inherit_global_volume(self, num_workers: int) -> None:
+        """Propagate the global sleep manager's volume state to all workers.
+
+        Workers start from the raw base range; this reapplies volume scaling
+        using the same total the global singleton last saw and the engine's
+        worker count, so per-worker multipliers match the real parallelism
+        (copying ``_last_per_worker_n`` from a different worker count would
+        under-throttle).
+        """
+        gm = _global_sleep_mgr
+        with gm._lock:
+            vol_min = gm._volume_min_mult
+            vol_max = gm._volume_max_mult
+            last_total = gm._last_volume_total
+        if vol_min <= 1.0 and vol_max <= 1.0:
+            return
+        if last_total <= 0:
+            return
+        nw = max(1, num_workers)
+        for w in self._workers:
+            w._sleep_mgr.apply_volume_multiplier(
+                last_total, num_workers=nw, quiet=True,
+            )
+        eff_min, eff_max = vol_min, vol_max
+        if self._workers:
+            w0 = self._workers[0]
+            with w0._sleep_mgr._lock:
+                eff_min = w0._sleep_mgr._volume_min_mult
+                eff_max = w0._sleep_mgr._volume_max_mult
+        logger.info(
+            "Inherited global volume to %d workers (total=%d): "
+            "volume_factor %.2fx/%.2fx",
+            len(self._workers), last_total, eff_min, eff_max,
+        )
+
     # -- task submission -----------------------------------------------------
 
     def submit(
@@ -758,12 +889,14 @@ class ParallelFetchBackend(FetchBackend):
         *,
         meta: Optional[dict] = None,
         entry_index: str = '',
+        priority: int = 0,
     ) -> None:
         """Submit a URL for processing.  Thread-safe."""
         if self._done:
             raise RuntimeError("Cannot submit after mark_done()")
         task = EngineTask(
             url=url, entry_index=entry_index, meta=meta or {},
+            priority=priority,
         )
         with self._count_lock:
             self._submitted += 1
@@ -925,6 +1058,10 @@ class ParallelFetchBackend(FetchBackend):
                     _task_worker_ctx(task.entry_index, ctx.proxy_name),
                 )
 
+            # Adaptive sleep before CF bypass (mirrors WorkerContext.fetch
+            # and the sequential fallback's _sleep_between_fetches pattern).
+            ctx.sleep()
+
             # CF bypass attempt
             html = ctx.fetch_html(task.url, use_cf=True)
             if html:
@@ -982,8 +1119,9 @@ class FetchEngine:
         *,
         meta: Optional[dict] = None,
         entry_index: str = '',
+        priority: int = 0,
     ) -> None:
-        self._backend.submit(url, meta=meta, entry_index=entry_index)
+        self._backend.submit(url, meta=meta, entry_index=entry_index, priority=priority)
 
     def submit_task(self, task: EngineTask) -> None:
         self._backend.submit_task(task)

@@ -238,6 +238,53 @@ class FolderCache:
 # rclone config helper
 # ============================================================================
 
+def has_remote_prefix(path: str) -> bool:
+    """True when *path* has a leading rclone remote (first ``:`` before first ``/``).
+
+    Examples: ``remote:rest``, ``a:b`` (no slash) → True; ``dir/file:name`` → False.
+    """
+    if not path or ':' not in path:
+        return False
+    ci = path.index(':')
+    si = path.find('/')
+    if si == -1:
+        return True
+    return ci < si
+
+
+def strip_drive_name(path: str) -> str:
+    """Remove rclone drive name prefix (e.g. ``'gdrive:path'`` → ``'path'``)."""
+    if has_remote_prefix(path):
+        return path.split(':', 1)[1]
+    return path
+
+
+def get_configured_drive_name() -> str:
+    """Read the rclone drive name from ``RCLONE_FOLDER_PATH`` config."""
+    from packages.python.javdb_platform.config_helper import cfg as _cfg
+    path = _cfg('RCLONE_FOLDER_PATH', None)
+    if path and has_remote_prefix(str(path)):
+        return str(path).split(':', 1)[0].strip()
+    drive = _cfg('RCLONE_DRIVE_NAME', None)
+    if drive:
+        return str(drive).strip()
+    return ''
+
+
+def prepend_drive_name(folder_path: str, drive_name: str = '') -> str:
+    """Prepend rclone drive name to a relative folder path.
+
+    If *folder_path* already has a leading remote prefix it is returned as-is.
+    When *drive_name* is not given, :func:`get_configured_drive_name` is used.
+    """
+    if has_remote_prefix(folder_path):
+        return folder_path
+    dn = drive_name or get_configured_drive_name()
+    if not dn:
+        return folder_path
+    return f"{dn}:{folder_path}"
+
+
 def setup_rclone_config_from_base64(config_base64: str) -> bool:
     """Decode a Base64 rclone config and write it to the standard location."""
     if not config_base64:

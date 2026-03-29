@@ -77,6 +77,9 @@ from packages.python.javdb_integrations.rclone_helper import (
     format_size,
     generate_csv_report,
     print_summary,
+    strip_drive_name,
+    get_configured_drive_name,
+    prepend_drive_name,
     INCREMENTAL_DAYS,
 )
 
@@ -134,9 +137,9 @@ def resolve_rclone_root(cli_root_path: Optional[str]) -> Optional[Tuple[str, str
 
 
 def _folder_to_row(folder: FolderInfo, remote_name: str, root_folder: str, scan_time: str) -> dict:
-    folder_path = folder.full_path
-    if not folder_path.startswith(f"{remote_name}:"):
-        folder_path = f"{remote_name}:{root_folder}/{folder.year}/{folder.actor}/{folder.folder_name}"
+    folder_path = strip_drive_name(folder.full_path)
+    if not folder_path:
+        folder_path = f"{root_folder}/{folder.year}/{folder.actor}/{folder.folder_name}"
     return {
         'video_code': folder.movie_code,
         'sensor_category': folder.sensor_category,
@@ -314,12 +317,13 @@ def load_inventory_as_folder_structure(
         logger.warning("No inventory data available for dedup")
         return {}
 
+    drive_name = get_configured_drive_name()
+
     structure: Dict[str, Dict[str, List[FolderInfo]]] = {}
     for row in rows:
         folder_path = row.get('FolderPath', row.get('folder_path', ''))
-        parts = folder_path.split('/')
-        # typical: remote:root/YYYY/Actor/FolderName
-        # We need year and actor from the path.
+        raw_path = strip_drive_name(folder_path)
+        parts = raw_path.split('/')
         year = ''
         actor = ''
         folder_name = ''
@@ -333,7 +337,7 @@ def load_inventory_as_folder_structure(
             continue
 
         fi = FolderInfo(
-            full_path=folder_path,
+            full_path=prepend_drive_name(raw_path, drive_name),
             year=year,
             actor=actor,
             movie_code=code,
@@ -419,7 +423,7 @@ def _persist_dedup_records(dedup_results: List[DedupResult]) -> None:
                     video_code=folder.movie_code,
                     existing_sensor=folder.sensor_category,
                     existing_subtitle=folder.subtitle_category,
-                    existing_gdrive_path=folder.full_path,
+                    existing_gdrive_path=strip_drive_name(folder.full_path),
                     existing_folder_size=folder.size,
                     new_torrent_category='',
                     deletion_reason=reason,
@@ -446,6 +450,37 @@ def export_dedup_history() -> int:
 
     output_path = os.path.join(REPORTS_DIR, 'dedup_history.csv')
     return export_dedup_db_to_csv(output_path)
+
+
+def migrate_strip_drive_names() -> int:
+    """One-time migration: strip drive-name prefix from all paths in operations.db.
+
+    Idempotent — only rows with a *leading* rclone remote (``:`` before first ``/``)
+    are updated; paths like ``dir/file:name`` are left unchanged.
+    Returns the total number of rows updated across both tables.
+    """
+    from packages.python.javdb_platform.db import get_db, OPERATIONS_DB_PATH
+
+    updated = 0
+    with get_db(OPERATIONS_DB_PATH) as conn:
+        cur = conn.execute(
+            "UPDATE RcloneInventory SET FolderPath = "
+            "SUBSTR(FolderPath, INSTR(FolderPath, ':') + 1) "
+            "WHERE INSTR(FolderPath, ':') > 0 "
+            "AND (INSTR(FolderPath, '/') = 0 OR INSTR(FolderPath, ':') < INSTR(FolderPath, '/'))"
+        )
+        updated += cur.rowcount
+        cur = conn.execute(
+            "UPDATE DedupRecords SET ExistingGdrivePath = "
+            "SUBSTR(ExistingGdrivePath, INSTR(ExistingGdrivePath, ':') + 1) "
+            "WHERE INSTR(ExistingGdrivePath, ':') > 0 "
+            "AND (INSTR(ExistingGdrivePath, '/') = 0 OR "
+            "INSTR(ExistingGdrivePath, ':') < INSTR(ExistingGdrivePath, '/'))"
+        )
+        updated += cur.rowcount
+        conn.commit()
+    logger.info(f"migrate_strip_drive_names: updated {updated} rows in operations.db")
+    return updated
 
 
 # ============================================================================
@@ -517,6 +552,8 @@ def run_execute_from_csv(
     fail_count = 0
     skip_count = 0
 
+    drive_name = get_configured_drive_name()
+
     unique_paths: Dict[str, bool] = {}
     for row in pending:
         folder_path = row.get('ExistingGdrivePath', row.get('existing_gdrive_path', ''))
@@ -528,7 +565,8 @@ def run_execute_from_csv(
 
     purged_pairs: list = []
     for folder_path in unique_paths:
-        ok = rclone_purge(folder_path, dry_run=dry_run)
+        full_path = prepend_drive_name(folder_path, drive_name)
+        ok = rclone_purge(full_path, dry_run=dry_run)
         if ok:
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             purged_pairs.append((folder_path, now_str))
@@ -579,6 +617,7 @@ def run_execute_soft_delete_from_csv(
         logger.info("No soft-delete rows found — nothing to do")
         return 0
 
+    drive_name = get_configured_drive_name()
     success = 0
     failed = 0
     skipped = 0
@@ -595,19 +634,18 @@ def run_execute_soft_delete_from_csv(
         seen_sources.add(source_path)
 
         destination_path = (row.get('destination_path') or row.get('DestinationPath') or '').strip()
+        full_source = prepend_drive_name(source_path, drive_name)
         if not destination_path:
             if not backup_prefix:
                 logger.warning("Missing destination_path and no backup_prefix set for source: %s", source_path)
                 failed += 1
                 continue
-            if ':' in source_path:
-                _, src_rel = source_path.split(':', 1)
-            else:
-                src_rel = source_path
-            src_rel = src_rel.lstrip('/')
+            src_rel = strip_drive_name(source_path).lstrip('/')
             destination_path = f"{backup_prefix.rstrip('/')}/{src_rel}"
+        else:
+            destination_path = prepend_drive_name(destination_path, drive_name)
 
-        if rclone_move(source_path, destination_path, dry_run=dry_run):
+        if rclone_move(full_source, destination_path, dry_run=dry_run):
             success += 1
         else:
             failed += 1
@@ -646,6 +684,7 @@ def run_execute_inventory_purge_from_csv(
         logger.info("No purge-plan rows found — nothing to do")
         return 0
 
+    drive_name = get_configured_drive_name()
     success = 0
     failed = 0
     skipped = 0
@@ -661,7 +700,8 @@ def run_execute_inventory_purge_from_csv(
             continue
         seen_sources.add(source_path)
 
-        if rclone_purge(source_path, dry_run=dry_run):
+        full_path = prepend_drive_name(source_path, drive_name)
+        if rclone_purge(full_path, dry_run=dry_run):
             success += 1
         else:
             failed += 1

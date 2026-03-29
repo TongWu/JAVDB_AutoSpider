@@ -74,12 +74,10 @@ from packages.python.javdb_platform.logging_config import get_logger, setup_logg
 from packages.python.javdb_core.magnet_extractor import extract_magnets
 from packages.python.javdb_platform.path_helper import ensure_dated_dir
 from packages.python.javdb_core.url_helper import build_search_url
+from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr
 
 setup_logging()
 logger = get_logger(__name__)
-
-# Hardcoded delay (seconds) between search index and detail fetch per code.
-_ALIGN_SEARCH_TO_DETAIL_SLEEP_SEC = 3
 
 _QB_FIELDNAMES = [
     'href',
@@ -428,7 +426,10 @@ def _make_align_process_fn(inventory_map, *, no_login: bool = False):
                 }
 
             # Only after an exact search hit: pause before detail fetch; miss path skips this (see above).
-            time.sleep(_ALIGN_SEARCH_TO_DETAIL_SLEEP_SEC)
+            # Use the worker-local sleep manager so each proxy's throttle
+            # budget is independent (the global singleton would serialise
+            # all workers through a single TripleWindowThrottle).
+            ctx.sleep()
 
             # 2) Fetch detail page
             detail_href = normalize_javdb_href_path(exact_entry.href)
@@ -541,7 +542,6 @@ def run_alignment(args: argparse.Namespace) -> int:
     rc = 0
 
     from packages.python.javdb_spider.runtime.config import PROXY_POOL
-    from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr
 
     # ------------------------------------------------------------------
     # Parallel mode: FetchEngine (advanced) with one worker per proxy
@@ -549,15 +549,17 @@ def run_alignment(args: argparse.Namespace) -> int:
     if use_proxy and PROXY_POOL:
         from packages.python.javdb_spider.fetch.fetch_engine import FetchEngine
 
-        movie_sleep_mgr.apply_volume_multiplier(total)
+        movie_sleep_mgr.apply_volume_multiplier(
+            total, num_workers=len(PROXY_POOL),
+        )
         stop_event = threading.Event()
 
         engine = FetchEngine(
             process_fn=_make_align_process_fn(inventory, no_login=no_login),
             use_cookie=True,
             stop_event=stop_event,
-            sleep_min=movie_sleep_mgr.sleep_min,
-            sleep_max=movie_sleep_mgr.sleep_max,
+            sleep_min=movie_sleep_mgr.base_min,
+            sleep_max=movie_sleep_mgr.base_max,
         )
         engine.start()
 
@@ -733,7 +735,7 @@ def run_alignment(args: argparse.Namespace) -> int:
                 continue
 
             # Only after an exact search hit: pause before detail fetch.
-            time.sleep(_ALIGN_SEARCH_TO_DETAIL_SLEEP_SEC)
+            movie_sleep_mgr.sleep()
 
             detail_href = normalize_javdb_href_path(exact_entry.href)
             detail_url = urljoin(base_url + '/', detail_href.lstrip('/'))

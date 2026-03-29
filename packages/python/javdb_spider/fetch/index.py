@@ -44,6 +44,9 @@ def fetch_all_index_pages(
     logger.info("Fetching and parsing index pages%s", " (parallel)" if use_parallel else "")
     logger.info("=" * 75)
 
+    from packages.python.javdb_spider.runtime.config import PROXY_POOL
+    active_workers = len(PROXY_POOL) if (use_parallel and PROXY_POOL) else 1
+
     if use_parallel:
         from packages.python.javdb_spider.fetch.index_parallel import (
             fetch_all_index_pages_parallel,
@@ -60,6 +63,7 @@ def fetch_all_index_pages(
         return _post_process_index_results(
             idx_result, custom_url,
             parsed_movies_history_phase1, parsed_movies_history_phase2,
+            num_workers=active_workers,
         )
 
     return _fetch_all_index_pages_sequential(
@@ -72,6 +76,7 @@ def fetch_all_index_pages(
         csv_path=csv_path, user_specified_output=user_specified_output,
         parsed_movies_history_phase1=parsed_movies_history_phase1,
         parsed_movies_history_phase2=parsed_movies_history_phase2,
+        num_workers=active_workers,
     )
 
 
@@ -82,6 +87,7 @@ def _fetch_all_index_pages_sequential(
     output_csv: str, output_dated_dir: str, csv_path: str,
     user_specified_output: bool,
     parsed_movies_history_phase1: dict, parsed_movies_history_phase2: dict,
+    num_workers: int = 1,
 ) -> dict:
     """Original sequential index fetch logic."""
 
@@ -197,6 +203,7 @@ def _fetch_all_index_pages_sequential(
         custom_url,
         parsed_movies_history_phase1,
         parsed_movies_history_phase2,
+        num_workers=num_workers,
     )
 
 
@@ -205,6 +212,8 @@ def _post_process_index_results(
     custom_url: Optional[str],
     parsed_movies_history_phase1: dict,
     parsed_movies_history_phase2: dict,
+    *,
+    num_workers: int = 1,
 ) -> dict:
     """Estimate processing volume and apply the sleep volume multiplier."""
     all_p1 = idx_result['all_index_results_phase1']
@@ -233,6 +242,8 @@ def _post_process_index_results(
         "Estimated processing volume: N=%d (total=%d, pre-skip=%d)",
         _est_n, len(all_p1) + len(all_p2), _est_skip,
     )
-    movie_sleep_mgr.apply_volume_multiplier(_est_n)
+    movie_sleep_mgr.apply_volume_multiplier(
+        _est_n, num_workers=max(1, num_workers),
+    )
 
     return idx_result
