@@ -195,6 +195,13 @@ def fetch_all_index_pages_parallel(
                 if should_stop:
                     stop_collecting = True
                     backend.mark_done()
+                    logger.info(
+                        "Stop condition met after %d results — "
+                        "exiting collection loop (remaining in-flight "
+                        "tasks will be cancelled)",
+                        len(results_by_page),
+                    )
+                    break
                 else:
                     in_flight -= 1
                     while in_flight < window_size:
