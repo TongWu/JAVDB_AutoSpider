@@ -849,31 +849,36 @@ class ParallelFetchBackend(FetchBackend):
     def _inherit_global_volume(self, num_workers: int) -> None:
         """Propagate the global sleep manager's volume state to all workers.
 
-        Workers are initialised with the raw (un-scaled) base range so that
-        ``apply_volume_multiplier`` in ``_handle_proxy_banned`` replaces
-        rather than compounds.  This method seeds each worker with the
-        volume multiplier that was already applied to the global singleton
-        (e.g. by ``_post_process_index_results`` or alignment setup).
+        Workers start from the raw base range; this reapplies volume scaling
+        using the same total the global singleton last saw and the engine's
+        worker count, so per-worker multipliers match the real parallelism
+        (copying ``_last_per_worker_n`` from a different worker count would
+        under-throttle).
         """
         gm = _global_sleep_mgr
         with gm._lock:
             vol_min = gm._volume_min_mult
             vol_max = gm._volume_max_mult
-            per_worker_n = gm._last_per_worker_n
+            last_total = gm._last_volume_total
         if vol_min <= 1.0 and vol_max <= 1.0:
             return
+        if last_total <= 0:
+            return
+        nw = max(1, num_workers)
         for w in self._workers:
-            with w._sleep_mgr._lock:
-                w._sleep_mgr._volume_min_mult = vol_min
-                w._sleep_mgr._volume_max_mult = vol_max
-                w._sleep_mgr._last_per_worker_n = per_worker_n
-                w._sleep_mgr._recalc_range()
-            if per_worker_n and w._sleep_mgr._throttle:
-                w._sleep_mgr._throttle.tighten_short_window(per_worker_n)
+            w._sleep_mgr.apply_volume_multiplier(
+                last_total, num_workers=nw, quiet=True,
+            )
+        eff_min, eff_max = vol_min, vol_max
+        if self._workers:
+            w0 = self._workers[0]
+            with w0._sleep_mgr._lock:
+                eff_min = w0._sleep_mgr._volume_min_mult
+                eff_max = w0._sleep_mgr._volume_max_mult
         logger.info(
-            "Inherited global volume state to %d workers: "
+            "Inherited global volume to %d workers (total=%d): "
             "volume_factor %.2fx/%.2fx",
-            len(self._workers), vol_min, vol_max,
+            len(self._workers), last_total, eff_min, eff_max,
         )
 
     # -- task submission -----------------------------------------------------

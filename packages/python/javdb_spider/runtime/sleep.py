@@ -164,7 +164,8 @@ class TripleWindowThrottle:
         self._timestamps: deque = deque()
         self._lock = threading.Lock()
         self.short_window = short_window_sec
-        self.short_max = short_max
+        self._base_short_max = int(short_max)
+        self.short_max = self._base_short_max
         self.long_window = long_window_sec
         self.long_max = long_max
         self.extra_window = extra_window_sec
@@ -215,9 +216,12 @@ class TripleWindowThrottle:
         return waited
 
     def tighten_short_window(self, per_worker_n: int) -> None:
-        """Reduce short-window burst limit for high-volume sessions."""
+        """Adjust short-window burst limit from volume; restores toward constructor baseline."""
         if per_worker_n >= 50:
-            self.short_max = 2
+            # High-volume cap (legacy 2) but never raise above or below baseline inappropriately
+            self.short_max = min(self._base_short_max, 2)
+        else:
+            self.short_max = self._base_short_max
 
 
 # Backward compatibility: existing imports and tests use this name.
@@ -274,8 +278,15 @@ class MovieSleepManager:
         self._rng = random.Random()
         self._force_high = False
         self._last_per_worker_n = 0
+        self._last_volume_total = 0
 
     # -- factor setters ----------------------------------------------------
+
+    @property
+    def last_volume_total(self) -> int:
+        """Total count last passed to :meth:`apply_volume_multiplier` (for rescaling workers)."""
+        with self._lock:
+            return self._last_volume_total
 
     def apply_volume_multiplier(self, total: int, num_workers: int = 1, *, quiet: bool = False) -> None:
         """Set volume factor based on per-worker processing volume.
@@ -291,6 +302,7 @@ class MovieSleepManager:
             self._volume_min_mult = min_mult
             self._volume_max_mult = max_mult
             self._last_per_worker_n = n
+            self._last_volume_total = int(total)
             self._recalc_range()
 
         if self._throttle and hasattr(self._throttle, 'tighten_short_window'):
