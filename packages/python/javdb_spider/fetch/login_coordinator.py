@@ -33,7 +33,14 @@ def _task_worker_ctx(entry_index: str, worker_name: str) -> str:
 
 
 def requeue_front(q: queue_module.Queue, item) -> None:
-    """Put *item* at the front of a Queue so it gets picked up next."""
+    """Put *item* at the front of a Queue so it gets picked up next.
+
+    For priority queues (``_is_priority_queue``), a regular ``put()`` is used
+    instead — the item's ``priority`` field already determines dequeue order.
+    """
+    if getattr(q, '_is_priority_queue', False):
+        q.put(item)
+        return
     with q.mutex:
         q.queue.appendleft(item)
         q.not_empty.notify()

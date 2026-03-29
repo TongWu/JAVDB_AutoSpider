@@ -1,8 +1,9 @@
-"""Tests for packages.python.javdb_spider.fetch.index_parallel — _check_stop_condition."""
+"""Tests for index-parallel logic: _check_stop_condition, _PriorityTaskQueue, requeue_front."""
 
 from __future__ import annotations
 
 import os
+import queue as queue_module
 import sys
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
@@ -13,6 +14,11 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 from packages.python.javdb_spider.fetch.index_parallel import _check_stop_condition
+from packages.python.javdb_spider.fetch.fetch_engine import (
+    EngineTask,
+    _PriorityTaskQueue,
+)
+from packages.python.javdb_spider.fetch.login_coordinator import requeue_front
 
 
 # ---------------------------------------------------------------------------
@@ -168,3 +174,115 @@ class TestCheckStopCondition:
             3: _content_result(),
         }
         assert _check_stop_condition(results, start_page=1, max_consecutive_empty=3) is False
+
+
+# ---------------------------------------------------------------------------
+# Tests for _PriorityTaskQueue
+# ---------------------------------------------------------------------------
+
+
+class TestPriorityTaskQueue:
+
+    def test_dequeue_order_by_priority(self):
+        """Tasks are dequeued in ascending priority order."""
+        pq = _PriorityTaskQueue()
+        pq.put(EngineTask(url='p10', priority=10))
+        pq.put(EngineTask(url='p1', priority=1))
+        pq.put(EngineTask(url='p5', priority=5))
+
+        assert pq.get_nowait().url == 'p1'
+        assert pq.get_nowait().url == 'p5'
+        assert pq.get_nowait().url == 'p10'
+
+    def test_fifo_within_same_priority(self):
+        """Tasks with equal priority preserve insertion order."""
+        pq = _PriorityTaskQueue()
+        pq.put(EngineTask(url='a', priority=0))
+        pq.put(EngineTask(url='b', priority=0))
+        pq.put(EngineTask(url='c', priority=0))
+
+        assert pq.get_nowait().url == 'a'
+        assert pq.get_nowait().url == 'b'
+        assert pq.get_nowait().url == 'c'
+
+    def test_none_sentinel_dequeued_last(self):
+        """None sentinels (shutdown signals) always come after real tasks."""
+        pq = _PriorityTaskQueue()
+        pq.put(None)
+        pq.put(EngineTask(url='task', priority=999))
+
+        assert pq.get_nowait().url == 'task'
+        assert pq.get_nowait() is None
+
+    def test_qsize(self):
+        pq = _PriorityTaskQueue()
+        assert pq.qsize() == 0
+        pq.put(EngineTask(url='x', priority=1))
+        assert pq.qsize() == 1
+        pq.get_nowait()
+        assert pq.qsize() == 0
+
+    def test_empty_get_raises(self):
+        pq = _PriorityTaskQueue()
+        with pytest.raises(queue_module.Empty):
+            pq.get_nowait()
+
+    def test_is_priority_queue_marker(self):
+        pq = _PriorityTaskQueue()
+        assert pq._is_priority_queue is True
+
+    def test_simulates_index_page_ordering(self):
+        """Simulate: pages 1-10 submitted, then some re-queued after ban.
+
+        Even with interleaved re-queues, pages should come out in ascending
+        page order.
+        """
+        pq = _PriorityTaskQueue()
+        for p in range(1, 11):
+            pq.put(EngineTask(url=f'page-{p}', priority=p))
+
+        t1 = pq.get_nowait()
+        assert t1.url == 'page-1'
+        t2 = pq.get_nowait()
+        assert t2.url == 'page-2'
+
+        # Pages 1 and 2 get re-queued (proxy ban)
+        pq.put(t1)
+        pq.put(t2)
+
+        out = []
+        while pq.qsize() > 0:
+            out.append(pq.get_nowait())
+
+        urls = [t.url for t in out]
+        assert urls == [f'page-{p}' for p in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]
+
+
+# ---------------------------------------------------------------------------
+# Tests for requeue_front with priority queue
+# ---------------------------------------------------------------------------
+
+
+class TestRequeueFrontPriorityQueue:
+
+    def test_requeue_preserves_priority_order(self):
+        """requeue_front on a priority queue respects the task's priority."""
+        pq = _PriorityTaskQueue()
+        pq.put(EngineTask(url='page-5', priority=5))
+
+        task = EngineTask(url='page-2', priority=2)
+        requeue_front(pq, task)
+
+        assert pq.get_nowait().url == 'page-2'
+        assert pq.get_nowait().url == 'page-5'
+
+    def test_requeue_on_regular_queue_still_works(self):
+        """requeue_front on a regular Queue still uses appendleft."""
+        q: queue_module.Queue = queue_module.Queue()
+        q.put(EngineTask(url='first'))
+
+        task = EngineTask(url='requeued')
+        requeue_front(q, task)
+
+        assert q.get_nowait().url == 'requeued'
+        assert q.get_nowait().url == 'first'

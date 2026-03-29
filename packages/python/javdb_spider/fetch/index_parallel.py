@@ -71,10 +71,17 @@ def build_parallel_index_backend(
     use_proxy: bool = True,
     use_cf_bypass: bool = False,
 ) -> ParallelFetchBackend:
-    """Build an index-page parallel backend."""
+    """Build an index-page parallel backend.
+
+    Uses a priority queue so pages are processed in ascending page-number
+    order.  This allows the sliding-window stop condition to trigger as
+    early as possible (the contiguous sequence from ``start_page`` builds
+    up faster when lower pages are dequeued first).
+    """
     return ParallelFetchBackend.simple(
         parse_fn=_index_parse_fn,
         use_cookie=use_cookie,
+        use_priority_queue=True,
         runtime_state=FetchRuntimeState(
             use_proxy=use_proxy,
             use_cf_bypass=use_cf_bypass,
@@ -306,6 +313,7 @@ def _submit_page(
         url,
         meta={'page_num': page_num},
         entry_index=f'page-{page_num}',
+        priority=page_num,
     )
 
 
