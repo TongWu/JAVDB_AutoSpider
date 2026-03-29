@@ -463,14 +463,21 @@ def migrate_strip_drive_names() -> int:
 
     updated = 0
     with get_db(OPERATIONS_DB_PATH) as conn:
-        for table, col in [('RcloneInventory', 'FolderPath'),
-                           ('DedupRecords', 'ExistingGdrivePath')]:
-            cur = conn.execute(
-                f"UPDATE {table} SET {col} = SUBSTR({col}, INSTR({col}, ':') + 1) "
-                f"WHERE INSTR({col}, ':') > 0 "
-                f"AND (INSTR({col}, '/') = 0 OR INSTR({col}, ':') < INSTR({col}, '/'))"
-            )
-            updated += cur.rowcount
+        cur = conn.execute(
+            "UPDATE RcloneInventory SET FolderPath = "
+            "SUBSTR(FolderPath, INSTR(FolderPath, ':') + 1) "
+            "WHERE INSTR(FolderPath, ':') > 0 "
+            "AND (INSTR(FolderPath, '/') = 0 OR INSTR(FolderPath, ':') < INSTR(FolderPath, '/'))"
+        )
+        updated += cur.rowcount
+        cur = conn.execute(
+            "UPDATE DedupRecords SET ExistingGdrivePath = "
+            "SUBSTR(ExistingGdrivePath, INSTR(ExistingGdrivePath, ':') + 1) "
+            "WHERE INSTR(ExistingGdrivePath, ':') > 0 "
+            "AND (INSTR(ExistingGdrivePath, '/') = 0 OR "
+            "INSTR(ExistingGdrivePath, ':') < INSTR(ExistingGdrivePath, '/'))"
+        )
+        updated += cur.rowcount
         conn.commit()
     logger.info(f"migrate_strip_drive_names: updated {updated} rows in operations.db")
     return updated
