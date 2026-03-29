@@ -443,6 +443,9 @@ class TestStripDriveName:
     def test_multiple_colons(self):
         assert strip_drive_name('a:b:c') == 'b:c'
 
+    def test_colon_after_slash_unchanged(self):
+        assert strip_drive_name('root/2025/folder:with:colons') == 'root/2025/folder:with:colons'
+
 
 class TestPrependDriveName:
     def test_prepends_given_drive(self):
@@ -450,6 +453,9 @@ class TestPrependDriveName:
 
     def test_already_has_drive(self):
         assert prepend_drive_name('gdrive:path/to/folder', 'other') == 'gdrive:path/to/folder'
+
+    def test_colon_in_segment_gets_prepended(self):
+        assert prepend_drive_name('root/folder:name', 'gdrive') == 'gdrive:root/folder:name'
 
     def test_no_drive_name_given(self):
         with patch('utils.rclone_helper.get_configured_drive_name', return_value='auto'):
@@ -515,7 +521,7 @@ class TestMigrateStripDriveNames:
         assert row[0] == 'root/2025/Actor/MIG-001 [有码-中字]'
 
     def test_idempotent(self):
-        from utils.infra.db import db_replace_rclone_inventory
+        from utils.infra.db import db_replace_rclone_inventory, get_db, OPERATIONS_DB_PATH
         db_replace_rclone_inventory([
             {
                 'video_code': 'MIG-002',
@@ -526,7 +532,27 @@ class TestMigrateStripDriveNames:
                 'file_count': 1,
                 'scan_datetime': '2026-01-01 00:00:00',
             },
+            {
+                'video_code': 'MIG-003',
+                'sensor_category': '有码',
+                'subtitle_category': '中字',
+                'folder_path': 'gdrive:root/2025/Actor/MIG-003 [有码-中字]',
+                'folder_size': 400,
+                'file_count': 2,
+                'scan_datetime': '2026-01-01 00:00:00',
+            },
         ])
 
-        updated = migrate_strip_drive_names()
-        assert updated == 0
+        first = migrate_strip_drive_names()
+        assert first >= 1
+
+        second = migrate_strip_drive_names()
+        assert second == 0
+
+        with get_db(OPERATIONS_DB_PATH) as conn:
+            row = conn.execute(
+                "SELECT FolderPath FROM RcloneInventory WHERE VideoCode='MIG-003'",
+            ).fetchone()
+        assert row is not None
+        assert row[0] == 'root/2025/Actor/MIG-003 [有码-中字]'
+        assert ':' not in row[0]

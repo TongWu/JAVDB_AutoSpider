@@ -455,7 +455,8 @@ def export_dedup_history() -> int:
 def migrate_strip_drive_names() -> int:
     """One-time migration: strip drive-name prefix from all paths in operations.db.
 
-    Idempotent — rows already without a colon are left unchanged.
+    Idempotent — only rows with a *leading* rclone remote (``:`` before first ``/``)
+    are updated; paths like ``dir/file:name`` are left unchanged.
     Returns the total number of rows updated across both tables.
     """
     from packages.python.javdb_platform.db import get_db, OPERATIONS_DB_PATH
@@ -466,7 +467,8 @@ def migrate_strip_drive_names() -> int:
                            ('DedupRecords', 'ExistingGdrivePath')]:
             cur = conn.execute(
                 f"UPDATE {table} SET {col} = SUBSTR({col}, INSTR({col}, ':') + 1) "
-                f"WHERE {col} LIKE '%:%'"
+                f"WHERE INSTR({col}, ':') > 0 "
+                f"AND (INSTR({col}, '/') = 0 OR INSTR({col}, ':') < INSTR({col}, '/'))"
             )
             updated += cur.rowcount
         conn.commit()
