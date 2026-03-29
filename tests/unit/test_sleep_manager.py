@@ -420,6 +420,18 @@ class TestThrottleTighten:
         twt.tighten_short_window(50)
         assert twt.short_max == 2
 
+    def test_tighten_respects_low_baseline(self):
+        twt = TripleWindowThrottle(short_max=1)
+        twt.tighten_short_window(50)
+        assert twt.short_max == 1
+
+    def test_tighten_reversible(self):
+        twt = TripleWindowThrottle()
+        twt.tighten_short_window(50)
+        assert twt.short_max == 2
+        twt.tighten_short_window(49)
+        assert twt.short_max == 3
+
     def test_no_tighten_below_50(self):
         twt = TripleWindowThrottle()
         twt.tighten_short_window(49)
