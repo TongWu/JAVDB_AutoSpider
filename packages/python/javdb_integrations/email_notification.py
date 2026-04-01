@@ -1540,11 +1540,22 @@ def main():
         existing_ban_files = [f for f in proxy_ban_html_files if os.path.exists(f)]
         if len(existing_ban_files) > 3:
             proxy_ban_zip_path = os.path.join('logs', 'proxy_ban_html_files.zip')
-            with zipfile.ZipFile(proxy_ban_zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            try:
+                with zipfile.ZipFile(proxy_ban_zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    for html_file in existing_ban_files:
+                        zf.write(html_file, os.path.basename(html_file))
+                logger.info(f"Compressed {len(existing_ban_files)} proxy ban files into {proxy_ban_zip_path}")
+                attachments.append(proxy_ban_zip_path)
+            except Exception as e:
+                logger.warning(f"Failed to create proxy ban zip file: {e} — falling back to individual attachments")
+                if os.path.exists(proxy_ban_zip_path):
+                    try:
+                        os.remove(proxy_ban_zip_path)
+                    except OSError:
+                        pass
+                proxy_ban_zip_path = None
                 for html_file in existing_ban_files:
-                    zf.write(html_file, os.path.basename(html_file))
-            logger.info(f"Compressed {len(existing_ban_files)} proxy ban files into {proxy_ban_zip_path}")
-            attachments.append(proxy_ban_zip_path)
+                    attachments.append(html_file)
         else:
             for html_file in existing_ban_files:
                 attachments.append(html_file)
