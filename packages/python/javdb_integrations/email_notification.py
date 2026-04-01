@@ -19,6 +19,7 @@ import re
 import shutil
 import html as html_module
 import argparse
+import zipfile
 from pathlib import Path
 from datetime import datetime, timezone
 from email.message import EmailMessage
@@ -1169,7 +1170,7 @@ Deleted This Run:
 
 {proxy_ban_html_summary}
 
-(See attached .txt files for full HTML content)""")
+(See attached files for full HTML content — zipped if more than 3)""")
     
     # Proxy status (always show)
     sections.append(f"""
@@ -1533,10 +1534,20 @@ def main():
     if dedup_enabled and os.path.exists(dedup_csv_path):
         attachments.append(dedup_csv_path)
 
-    # Add proxy ban HTML files to attachments
-    for html_file in proxy_ban_html_files:
-        if os.path.exists(html_file):
-            attachments.append(html_file)
+    # Add proxy ban HTML files to attachments (zip if > 3 files)
+    proxy_ban_zip_path = None
+    if proxy_ban_html_files:
+        existing_ban_files = [f for f in proxy_ban_html_files if os.path.exists(f)]
+        if len(existing_ban_files) > 3:
+            proxy_ban_zip_path = os.path.join('logs', 'proxy_ban_html_files.zip')
+            with zipfile.ZipFile(proxy_ban_zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for html_file in existing_ban_files:
+                    zf.write(html_file, os.path.basename(html_file))
+            logger.info(f"Compressed {len(existing_ban_files)} proxy ban files into {proxy_ban_zip_path}")
+            attachments.append(proxy_ban_zip_path)
+        else:
+            for html_file in existing_ban_files:
+                attachments.append(html_file)
     
     # Prepare default stats for missing components
     default_spider_stats = {
@@ -1639,6 +1650,14 @@ Check attached logs for details.
                 logger.debug(f"Cleaned up temporary file: {txt_path}")
             except Exception as e:
                 logger.warning(f"Failed to clean up {txt_path}: {e}")
+    
+    # Clean up temporary proxy ban zip file
+    if proxy_ban_zip_path and os.path.exists(proxy_ban_zip_path):
+        try:
+            os.remove(proxy_ban_zip_path)
+            logger.debug(f"Cleaned up temporary file: {proxy_ban_zip_path}")
+        except Exception as e:
+            logger.warning(f"Failed to clean up {proxy_ban_zip_path}: {e}")
     
     # Commit pipeline log (only if credentials are available)
     if not args.dry_run and has_git_credentials(GIT_USERNAME, GIT_PASSWORD):
