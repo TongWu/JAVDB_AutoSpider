@@ -627,12 +627,28 @@ class _EngineWorker(threading.Thread):
                 per_worker = max(1, -(-remaining // max(1, active)))
                 min_m, max_m = _interpolate_multiplier(per_worker)
                 if min_m > 1.0 or max_m > 1.0:
-                    logger.info(
-                        "Volume-based sleep adjustment (ban rebalance): "
-                        "total=%d, workers=%d, per_worker=%d → "
-                        "volume_factor %.2fx/%.2fx",
-                        remaining, active, per_worker, min_m, max_m,
+                    sample_w = next(
+                        (w for w in self.all_workers
+                         if w.proxy_name not in self._banned_proxies), None,
                     )
+                    if sample_w is not None:
+                        sm = sample_w._sleep_mgr
+                        logger.info(
+                            "Volume-based sleep adjustment (ban rebalance): "
+                            "total=%d, workers=%d, per_worker=%d → "
+                            "volume_factor %.2fx/%.2fx, "
+                            "sleep range ~[%.2f, %.2f] (base ~[%.2f, %.2f])",
+                            remaining, active, per_worker, min_m, max_m,
+                            sm.sleep_min, sm.sleep_max,
+                            sm.base_min, sm.base_max,
+                        )
+                    else:
+                        logger.info(
+                            "Volume-based sleep adjustment (ban rebalance): "
+                            "total=%d, workers=%d, per_worker=%d → "
+                            "volume_factor %.2fx/%.2fx",
+                            remaining, active, per_worker, min_m, max_m,
+                        )
                 requeue_front(self.task_queue, task)
             else:
                 self.result_queue.put(EngineResult(
