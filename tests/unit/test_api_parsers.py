@@ -14,6 +14,7 @@ from api.parsers.index_parser import (
     parse_category_page,
     parse_top_page,
     find_exact_video_code_match,
+    derive_letter_suffix_fallback_video_code,
 )
 from api.parsers.detail_parser import parse_detail_page
 from api.parsers.common import (
@@ -218,6 +219,20 @@ class TestParseSearchPageRealHTML:
         result = parse_index_page(html, page_num=1)
         matched = find_exact_video_code_match(result.movies, 'JAC-999')
         assert matched is None
+
+
+class TestDeriveLetterSuffixFallbackVideoCode:
+    def test_gana_style_with_numeric_prefix(self):
+        assert derive_letter_suffix_fallback_video_code('200GANA-3327') == 'GANA-3327'
+
+    def test_returns_none_for_plain_studio_code(self):
+        assert derive_letter_suffix_fallback_video_code('JAC-228') is None
+
+    def test_returns_none_when_first_segment_is_digits_only(self):
+        assert derive_letter_suffix_fallback_video_code('200-3327') is None
+
+    def test_returns_none_when_letters_not_only_trailing_in_first_segment(self):
+        assert derive_letter_suffix_fallback_video_code('AB200GANA-3327') is None
 
 
 class TestParseCategoryPageRealHTML:

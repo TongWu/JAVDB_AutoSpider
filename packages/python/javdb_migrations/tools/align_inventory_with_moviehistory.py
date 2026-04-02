@@ -3,8 +3,12 @@
 
 Scope:
 1) Only process movie codes present in RcloneInventory but missing in MovieHistory.
-2) For each missing code, search JavDB by code, strictly match exact video code,
-   parse detail page, and upsert MovieHistory/TorrentHistory.
+2) For each missing code, search JavDB by code, match exact video code (with a
+   letter-suffix fallback for codes like ``200GANA-3327`` → ``GANA-3327`` on the
+   same page, then a slept re-search if needed), parse detail page, and upsert
+   MovieHistory/TorrentHistory. History rows use the **listing** code from JavDB
+   (e.g. ``GANA-3327``); magnets and upgrade planning still key on the inventory
+   code (e.g. ``200GANA-3327``).
 3) Compare parsed torrents against inventory per family. The planner keeps the
    best censored variant and the best uncensored variant independently, then
    generates qBittorrent upgrade tasks and an rclone purge plan for only the
@@ -45,7 +49,11 @@ if str(REPO_ROOT) not in sys.path:
 
 from apps.api.parsers.common import normalize_javdb_href_path
 from apps.api.parsers.detail_parser import parse_detail_page
-from apps.api.parsers.index_parser import parse_index_page, find_exact_video_code_match
+from apps.api.parsers.index_parser import (
+    derive_letter_suffix_fallback_video_code,
+    find_exact_video_code_match,
+    parse_index_page,
+)
 from packages.python.javdb_spider.fetch.fallback import get_page_url
 from packages.python.javdb_spider.fetch.fetch_engine import PER_WORKER_TASK_CAP_ERROR
 from packages.python.javdb_spider.fetch.session import is_login_page
@@ -183,6 +191,12 @@ def _to_purge_plan_rows(
         parsed_best_rank,
         new_torrent_category,
     )
+
+
+def _history_video_code_for_moviehistory(exact_entry, inventory_video_code: str) -> str:
+    """Video code stored in MovieHistory: JavDB list/detail code, not the inventory alias."""
+    listed = (getattr(exact_entry, 'video_code', None) or '').strip().upper()
+    return listed or (inventory_video_code or '').strip().upper()
 
 
 def _build_db_upsert_kwargs(detail_href: str, video_code: str, magnet_links: dict,
@@ -384,6 +398,19 @@ def _enqueue_qb_from_csv(csv_path: str, use_proxy: bool, category_override: str 
     return True
 
 
+def _find_exact_entry_first_search_page(movies: list, video_code: str):
+    """Match *video_code* on the first results page; if miss, same-page match for letter-suffix code."""
+    if not movies:
+        return None
+    hit = find_exact_video_code_match(movies, video_code)
+    if hit is not None:
+        return hit
+    alt = derive_letter_suffix_fallback_video_code(video_code)
+    if alt is None:
+        return None
+    return find_exact_video_code_match(movies, alt)
+
+
 def _make_align_process_fn(inventory_map, *, no_login: bool = False):
     """Build the ``process_fn`` for FetchEngine (advanced mode).
 
@@ -415,9 +442,20 @@ def _make_align_process_fn(inventory_map, *, no_login: bool = False):
                 return None
 
             parsed = parse_index_page(search_html, page_num=page_num)
-            exact_entry = None
-            if parsed.has_movie_list and parsed.movies:
-                exact_entry = find_exact_video_code_match(parsed.movies, video_code)
+            movies = parsed.movies if parsed.has_movie_list else []
+            exact_entry = _find_exact_entry_first_search_page(movies, video_code)
+
+            if exact_entry is None:
+                alt_code = derive_letter_suffix_fallback_video_code(video_code)
+                if alt_code is not None:
+                    ctx.sleep()
+                    alt_search_url = build_search_url(alt_code, f='all', base_url=base_url)
+                    paged_alt = _get_page_url(page_num, base_url, custom_url=alt_search_url)
+                    search_html_alt = ctx.fetch(paged_alt)
+                    if search_html_alt:
+                        parsed_alt = parse_index_page(search_html_alt, page_num=page_num)
+                        m_alt = parsed_alt.movies if parsed_alt.has_movie_list else []
+                        exact_entry = find_exact_video_code_match(m_alt, alt_code)
 
             if exact_entry is None:
                 return {
@@ -461,8 +499,9 @@ def _make_align_process_fn(inventory_map, *, no_login: bool = False):
             actor_link = detail.get_first_actor_href()
             supporting_actors = detail.get_supporting_actors_json()
 
+            history_code = _history_video_code_for_moviehistory(exact_entry, video_code)
             db_kwargs = _build_db_upsert_kwargs(
-                detail_href, video_code, magnet_links,
+                detail_href, history_code, magnet_links,
                 actor_name, actor_gender, actor_link, supporting_actors,
             )
 
@@ -794,8 +833,33 @@ def run_alignment(args: argparse.Namespace) -> int:
             exact_entry = None
             if search_html:
                 parsed = parse_index_page(search_html, page_num=page_num)
-                if parsed.has_movie_list and parsed.movies:
-                    exact_entry = find_exact_video_code_match(parsed.movies, code)
+                movies = parsed.movies if parsed.has_movie_list else []
+                exact_entry = _find_exact_entry_first_search_page(movies, code)
+
+            if exact_entry is None:
+                alt_code = derive_letter_suffix_fallback_video_code(code)
+                if alt_code is not None:
+                    movie_sleep_mgr.sleep()
+                    alt_url = build_search_url(alt_code, f='all', base_url=base_url)
+                    paged_alt = get_page_url(page_num, custom_url=alt_url)
+                    search_html_alt = _fetch_html(session, paged_alt, use_proxy=use_proxy)
+                    if search_html_alt and is_login_page(search_html_alt) and no_login:
+                        process_results.append(
+                            MissingProcessResult(
+                                video_code=code,
+                                status='login_required',
+                                message='login_required (--no-login)',
+                            )
+                        )
+                        logger.info(
+                            "[%d/%d] %s fallback search requires login, skipping (--no-login)",
+                            idx, total, code,
+                        )
+                        continue
+                    if search_html_alt:
+                        parsed_alt = parse_index_page(search_html_alt, page_num=page_num)
+                        m_alt = parsed_alt.movies if parsed_alt.has_movie_list else []
+                        exact_entry = find_exact_video_code_match(m_alt, alt_code)
 
             if exact_entry is None:
                 process_results.append(
@@ -862,9 +926,10 @@ def run_alignment(args: argparse.Namespace) -> int:
             actor_link = detail.get_first_actor_href()
             supporting_actors = detail.get_supporting_actors_json()
 
+            history_code = _history_video_code_for_moviehistory(exact_entry, code)
             if not args.dry_run:
                 db_upsert_history(**_build_db_upsert_kwargs(
-                    detail_href, code, magnet_links,
+                    detail_href, history_code, magnet_links,
                     actor_name, actor_gender, actor_link, supporting_actors,
                 ))
                 db_delete_align_no_exact_match(code)
