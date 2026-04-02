@@ -19,8 +19,48 @@ HTML_DIR = os.path.join(project_root, 'html')
 
 def _load_html(filename):
     path = os.path.join(HTML_DIR, filename)
+    if not os.path.exists(path):
+        pytest.skip(f'HTML test file not found: {filename}')
     with open(path, encoding='utf-8') as f:
         return f.read()
+
+
+def _make_entry(video_code, href='/v/test'):
+    return SimpleNamespace(
+        href=href, video_code=video_code, title='',
+        rate='', comment_count='', release_date='', tags=[],
+        cover_url='', page=1, ranking=None,
+        to_dict=lambda self=None, vc=video_code, h=href: {
+            'href': h, 'video_code': vc, 'title': '',
+            'rate': '', 'comment_count': '', 'release_date': '',
+            'tags': [], 'cover_url': '', 'page': 1, 'ranking': None,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Minimal search-page HTML for inline tests (no external file dependency)
+# ---------------------------------------------------------------------------
+_MINIMAL_SEARCH_HTML = """
+<html><body>
+<div class="movie-list">
+  <div class="item">
+    <a href="/v/abc123">
+      <div class="video-title"><strong>JAC-228</strong></div>
+      <div class="score"><span class="value">3.8</span></div>
+    </a>
+  </div>
+  <div class="item">
+    <a href="/v/xyz456">
+      <div class="video-title"><strong>JAC-229</strong></div>
+      <div class="score"><span class="value">4.0</span></div>
+    </a>
+  </div>
+</div>
+</body></html>
+"""
+
+_EMPTY_SEARCH_HTML = '<html><body><div class="movie-list"></div></body></html>'
 
 
 # ---------------------------------------------------------------------------
@@ -28,7 +68,13 @@ def _load_html(filename):
 # ---------------------------------------------------------------------------
 
 class TestFindExactEntryFirstSearchPage:
-    def test_direct_match(self):
+    def test_direct_match_inline(self):
+        movies = parse_index_page(_MINIMAL_SEARCH_HTML, page_num=1).movies
+        hit = find_exact_entry_first_search_page(movies, 'JAC-228')
+        assert hit is not None
+        assert hit.video_code == 'JAC-228'
+
+    def test_direct_match_real_html(self):
         html = _load_html('search_JAC-228.html')
         movies = parse_index_page(html, page_num=1).movies
         hit = find_exact_entry_first_search_page(movies, 'JAC-228')
@@ -36,8 +82,7 @@ class TestFindExactEntryFirstSearchPage:
         assert hit.video_code == 'JAC-228'
 
     def test_no_match_returns_none(self):
-        html = _load_html('search_JAC-228.html')
-        movies = parse_index_page(html, page_num=1).movies
+        movies = parse_index_page(_MINIMAL_SEARCH_HTML, page_num=1).movies
         assert find_exact_entry_first_search_page(movies, 'NONEXIST-999') is None
 
     def test_empty_list(self):
@@ -45,21 +90,13 @@ class TestFindExactEntryFirstSearchPage:
 
     def test_letter_suffix_fallback_same_page(self):
         """Searching for 200GANA-3327 should match an entry with code GANA-3327."""
-        fake_entry = SimpleNamespace(
-            href='/v/abc', video_code='GANA-3327', title='',
-            rate='', comment_count='', release_date='', tags=[],
-            cover_url='', page=1, ranking=None,
-        )
-        result = find_exact_entry_first_search_page([fake_entry], '200GANA-3327')
-        assert result is fake_entry
+        entry = _make_entry('GANA-3327')
+        result = find_exact_entry_first_search_page([entry], '200GANA-3327')
+        assert result is entry
 
     def test_no_fallback_for_plain_code(self):
-        fake_entry = SimpleNamespace(
-            href='/v/x', video_code='OTHER-001', title='',
-            rate='', comment_count='', release_date='', tags=[],
-            cover_url='', page=1, ranking=None,
-        )
-        assert find_exact_entry_first_search_page([fake_entry], 'JAC-228') is None
+        entry = _make_entry('OTHER-001')
+        assert find_exact_entry_first_search_page([entry], 'JAC-228') is None
 
 
 # ---------------------------------------------------------------------------
@@ -83,10 +120,9 @@ def _run(coro):
 
 class TestSearchByVideoCodeService:
     def test_exact_match_annotated(self, _mock_config):
-        html = _load_html('search_JAC-228.html')
         with patch(
             'apps.api.services.video_code_search_service._fetch_javdb_html',
-            return_value=html,
+            return_value=_MINIMAL_SEARCH_HTML,
         ):
             from apps.api.services.video_code_search_service import search_by_video_code
             result = _run(search_by_video_code('JAC-228'))
@@ -100,10 +136,9 @@ class TestSearchByVideoCodeService:
         assert sum(exact_flags) == 1
 
     def test_no_match_no_fallback(self, _mock_config):
-        html = _load_html('search_JAC-228.html')
         with patch(
             'apps.api.services.video_code_search_service._fetch_javdb_html',
-            return_value=html,
+            return_value=_MINIMAL_SEARCH_HTML,
         ):
             from apps.api.services.video_code_search_service import search_by_video_code
             result = _run(search_by_video_code('NONEXIST-999'))
@@ -113,16 +148,14 @@ class TestSearchByVideoCodeService:
         assert all(not m['exact_match'] for m in result['movies'])
 
     def test_letter_suffix_fallback_triggers_second_search(self, _mock_config):
-        primary_html = '<html><body><div class="movie-list"></div></body></html>'
-        alt_html = _load_html('search_JAC-228.html')
         call_count = 0
 
         def _mock_fetch(url, *, use_proxy=True, use_cookie=True):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                return primary_html
-            return alt_html
+                return _EMPTY_SEARCH_HTML
+            return _MINIMAL_SEARCH_HTML
 
         with patch(
             'apps.api.services.video_code_search_service._fetch_javdb_html',
