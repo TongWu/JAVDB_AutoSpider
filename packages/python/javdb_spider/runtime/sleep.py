@@ -35,8 +35,8 @@ logger = get_logger(__name__)
 # adaptive two-factor system and should NOT be tweaked by users.
 # Override ONLY via env var ``VAR_MOVIE_SLEEP`` for CI/testing/emergency.
 # ---------------------------------------------------------------------------
-_BASE_MIN = 8
-_BASE_MAX = 25
+_BASE_MIN = 6
+_BASE_MAX = 20
 
 # ---------------------------------------------------------------------------
 # Safety caps
@@ -70,8 +70,8 @@ VOLUME_ANCHORS: list = [
     (70,   2.40,  3.20),
     (80,   2.70,  3.60),
     (90,   3.00,  4.00),
-    (100,  5.50,  7.00),
-    (150,  6.25,  7.50),
+    (100,  3.50,  4.50),
+    (150,  5.00,  6.00),
     (200,  7.00,  8.00),
 ]
 
