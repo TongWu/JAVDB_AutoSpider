@@ -540,8 +540,10 @@ def _align_eff_denominator(
 ) -> int:
     """Denominator for ``align-<seq>/<eff>`` — must match ``_align_progress_label`` and ``task.entry_index``.
 
-    When *limit_per_worker* is set, *eff* is ``min(queued_total, limit × active_proxies)`` so that
-    Login / FetchEngine logs (which use ``entry_index``) align with Parsed lines.
+    *active_proxy_count* is the **configured** pool size (``len(PROXY_POOL)``), not the live
+    post-ban count, so labels stay identical across Login, FetchEngine, and Parsed logs.
+
+    When *limit_per_worker* is set, *eff* is ``min(queued_total, limit × active_proxy_count)``.
     """
     if limit_per_worker <= 0:
         return queued_total
@@ -577,8 +579,8 @@ def run_alignment(args: argparse.Namespace) -> int:
         logger.info(
             "Alignment cap: %d code(s) per worker × %d worker(s) = %d max queued "
             "(each worker stops after %d completed tasks; surplus flushed if workers ban/cap). "
-            "Progress logs use align-<n>/<eff> with eff=min(queued, %d×active_proxies) so the "
-            "denominator shrinks when proxies are banned.",
+            "Progress align-<n>/<eff> uses eff=min(queued, %d×pool_size) with pool_size=len(PROXY_POOL) "
+            "so Login / Parsed lines match; live bans reduce throughput but do not change eff.",
             limit_per_worker,
             num_workers,
             effective_limit,
@@ -662,22 +664,15 @@ def run_alignment(args: argparse.Namespace) -> int:
         parallel_interrupted = False
 
         def _align_progress_label(task) -> str:
-            """Build align-<seq>/<eff>; eff matches sleep rebalance (cap × active proxies)."""
+            """Build align-<seq>/<eff> — same formula as ``entry_index`` (configured pool size, not live bans)."""
             meta = task.meta
             seq = meta.get('align_seq')
             if seq is None:
                 return task.entry_index
             if limit_per_worker <= 0:
                 return f"align-{seq}/{total}"
-            try:
-                workers = engine._workers
-                if not workers:
-                    active = max(1, len(PROXY_POOL))
-                else:
-                    active = workers[0]._active_workers
-            except (AttributeError, IndexError):
-                active = max(1, len(PROXY_POOL))
-            eff = _align_eff_denominator(total, limit_per_worker, active)
+            pool_sz = max(1, len(PROXY_POOL))
+            eff = _align_eff_denominator(total, limit_per_worker, pool_sz)
             return f"align-{seq}/{eff}"
 
         def _log_per_worker_cap_after_movie_line(engine_result):
