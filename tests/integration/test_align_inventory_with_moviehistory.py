@@ -261,6 +261,7 @@ def test_run_alignment_skips_empty_auxiliary_reports(monkeypatch, temp_dir):
         ),
     )
     monkeypatch.setattr(mod, 'find_exact_video_code_match', lambda movies, code: movies[0])
+    monkeypatch.setattr(mod, 'find_exact_entry_first_search_page', lambda movies, code: movies[0] if movies else None)
     monkeypatch.setattr(mod, 'parse_detail_page', lambda html: FakeDetail())
     monkeypatch.setattr(mod, 'extract_magnets', lambda payload, index='': {})
     monkeypatch.setattr(

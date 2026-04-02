@@ -212,6 +212,13 @@ class ExploreIndexStatusPayload(BaseModel):
     use_cookie: bool = True
 
 
+class VideoCodeSearchPayload(BaseModel):
+    video_code: str = Field(..., min_length=1, max_length=64)
+    use_proxy: bool = True
+    use_cookie: bool = True
+    f: str = Field("all", max_length=32)
+
+
 __all__ = [
     "AdhocTaskPayload",
     "CrawlIndexPayload",
@@ -227,4 +234,5 @@ __all__ = [
     "LoginPayload",
     "SpiderJobPayload",
     "UrlPayload",
+    "VideoCodeSearchPayload",
 ]

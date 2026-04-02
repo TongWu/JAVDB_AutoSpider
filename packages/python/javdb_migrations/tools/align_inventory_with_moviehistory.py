@@ -54,6 +54,7 @@ from apps.api.parsers.index_parser import (
     find_exact_video_code_match,
     parse_index_page,
 )
+from apps.api.parsers.search_exact import find_exact_entry_first_search_page
 from packages.python.javdb_spider.fetch.fallback import get_page_url
 from packages.python.javdb_spider.fetch.fetch_engine import PER_WORKER_TASK_CAP_ERROR
 from packages.python.javdb_spider.fetch.session import is_login_page
@@ -398,19 +399,6 @@ def _enqueue_qb_from_csv(csv_path: str, use_proxy: bool, category_override: str 
     return True
 
 
-def _find_exact_entry_first_search_page(movies: list, video_code: str):
-    """Match *video_code* on the first results page; if miss, same-page match for letter-suffix code."""
-    if not movies:
-        return None
-    hit = find_exact_video_code_match(movies, video_code)
-    if hit is not None:
-        return hit
-    alt = derive_letter_suffix_fallback_video_code(video_code)
-    if alt is None:
-        return None
-    return find_exact_video_code_match(movies, alt)
-
-
 def _make_align_process_fn(inventory_map, *, no_login: bool = False):
     """Build the ``process_fn`` for FetchEngine (advanced mode).
 
@@ -443,7 +431,7 @@ def _make_align_process_fn(inventory_map, *, no_login: bool = False):
 
             parsed = parse_index_page(search_html, page_num=page_num)
             movies = parsed.movies if parsed.has_movie_list else []
-            exact_entry = _find_exact_entry_first_search_page(movies, video_code)
+            exact_entry = find_exact_entry_first_search_page(movies, video_code)
 
             if exact_entry is None:
                 alt_code = derive_letter_suffix_fallback_video_code(video_code)
@@ -834,7 +822,7 @@ def run_alignment(args: argparse.Namespace) -> int:
             if search_html:
                 parsed = parse_index_page(search_html, page_num=page_num)
                 movies = parsed.movies if parsed.has_movie_list else []
-                exact_entry = _find_exact_entry_first_search_page(movies, code)
+                exact_entry = find_exact_entry_first_search_page(movies, code)
 
             if exact_entry is None:
                 alt_code = derive_letter_suffix_fallback_video_code(code)
