@@ -379,14 +379,15 @@ class MovieSleepManager:
 
         roll = self._rng.random()
 
-        if roll < MICRO_BREAK_PROB:
-            break_lo = max(MICRO_BREAK_FLOOR, eff_max + MICRO_BREAK_EXTRA_MIN)
-            break_hi = eff_max + MICRO_BREAK_EXTRA_MAX
-            return min(round(self._rng.uniform(break_lo, break_hi), 2), ABSOLUTE_MAX_SLEEP)
-
+        # Honor _force_high before micro-break so the flag is always consumed
+        # in one call (micro-break would otherwise return early with it still set).
         if self._force_high:
             sleep_time = self._rng.uniform(eff_min + span * 0.7, eff_max)
             self._force_high = False
+        elif roll < MICRO_BREAK_PROB:
+            break_lo = max(MICRO_BREAK_FLOOR, eff_max + MICRO_BREAK_EXTRA_MIN)
+            break_hi = eff_max + MICRO_BREAK_EXTRA_MAX
+            return min(round(self._rng.uniform(break_lo, break_hi), 2), ABSOLUTE_MAX_SLEEP)
         elif roll < 0.08 + MICRO_BREAK_PROB:
             sleep_time = self._rng.uniform(eff_min + span * 0.7, eff_max)
         elif roll < 0.15 + MICRO_BREAK_PROB:
