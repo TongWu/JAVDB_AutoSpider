@@ -346,6 +346,7 @@ class TestApiRouteRegistry:
             '/api/explore/download-magnet',
             '/api/explore/one-click',
             '/api/explore/index-status',
+            '/api/explore/search-by-video-code',
             '/api/health-check',
             '/api/login/refresh',
             '/api/parse/index',

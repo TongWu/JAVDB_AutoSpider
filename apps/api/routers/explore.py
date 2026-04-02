@@ -12,8 +12,10 @@ from apps.api.schemas.payloads import (
     ExploreMagnetPayload,
     ExploreOneClickPayload,
     ExploreResolvePayload,
+    VideoCodeSearchPayload,
 )
 from apps.api.services import explore_service
+from apps.api.services import video_code_search_service
 
 router = APIRouter(prefix="/api/explore")
 
@@ -63,12 +65,26 @@ async def explore_index_status(
     return await explore_service.index_status_payload(payload, current["sub"])
 
 
+@router.post("/search-by-video-code")
+async def explore_search_by_video_code(
+    payload: VideoCodeSearchPayload,
+    current=Depends(_require_auth),
+):
+    return await video_code_search_service.search_by_video_code(
+        payload.video_code,
+        use_proxy=payload.use_proxy,
+        use_cookie=payload.use_cookie,
+        f=payload.f,
+    )
+
+
 __all__ = [
     "explore_download_magnet",
     "explore_index_status",
     "explore_one_click",
     "explore_proxy_page",
     "explore_resolve",
+    "explore_search_by_video_code",
     "explore_sync_cookie",
     "router",
 ]
