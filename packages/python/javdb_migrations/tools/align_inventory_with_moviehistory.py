@@ -47,6 +47,7 @@ from apps.api.parsers.common import normalize_javdb_href_path
 from apps.api.parsers.detail_parser import parse_detail_page
 from apps.api.parsers.index_parser import parse_index_page, find_exact_video_code_match
 from packages.python.javdb_spider.fetch.fallback import get_page_url
+from packages.python.javdb_spider.fetch.fetch_engine import PER_WORKER_TASK_CAP_ERROR
 from packages.python.javdb_spider.fetch.session import is_login_page
 import packages.python.javdb_spider.runtime.state as spider_state
 from packages.python.javdb_ingestion.adapters import (
@@ -519,8 +520,31 @@ def run_alignment(args: argparse.Namespace) -> int:
     )
     if getattr(args, 'shuffle', False):
         random.shuffle(missing_codes)
-    if args.limit and args.limit > 0:
-        missing_codes = missing_codes[: args.limit]
+
+    use_proxy = getattr(args, 'use_proxy', not getattr(args, 'no_proxy', False))
+    limit_per_worker = int(getattr(args, 'limit_per_worker', 0) or 0)
+    absolute_limit = int(getattr(args, 'limit', 0) or 0)
+
+    if limit_per_worker > 0:
+        from packages.python.javdb_spider.runtime.config import PROXY_POOL
+
+        num_workers = len(PROXY_POOL) if (use_proxy and PROXY_POOL) else 1
+        effective_limit = limit_per_worker * num_workers
+        logger.info(
+            "Alignment cap: %d code(s) per worker × %d worker(s) = %d max queued "
+            "(each worker stops after %d completed tasks; surplus flushed if workers ban/cap)",
+            limit_per_worker,
+            num_workers,
+            effective_limit,
+            limit_per_worker,
+        )
+    elif absolute_limit > 0:
+        effective_limit = absolute_limit
+    else:
+        effective_limit = 0
+
+    if effective_limit > 0:
+        missing_codes = missing_codes[:effective_limit]
 
     total = len(missing_codes)
     logger.info("Missing movie codes to align: %d", total)
@@ -530,7 +554,6 @@ def run_alignment(args: argparse.Namespace) -> int:
     # Common network setup
     reports_dir = cfg('REPORTS_DIR', 'reports')
     os.makedirs(reports_dir, exist_ok=True)
-    use_proxy = getattr(args, 'use_proxy', not getattr(args, 'no_proxy', False))
     spider_state.setup_proxy_pool(use_proxy=use_proxy)
     spider_state.initialize_request_handler()
     base_url = cfg('BASE_URL', 'https://javdb.com').rstrip('/')
@@ -560,6 +583,7 @@ def run_alignment(args: argparse.Namespace) -> int:
             stop_event=stop_event,
             sleep_min=movie_sleep_mgr.base_min,
             sleep_max=movie_sleep_mgr.base_max,
+            per_worker_task_limit=limit_per_worker if limit_per_worker > 0 else 0,
         )
         engine.start()
 
@@ -592,6 +616,19 @@ def run_alignment(args: argparse.Namespace) -> int:
             idx_str = result.task.entry_index
 
             if not result.success:
+                if result.error == PER_WORKER_TASK_CAP_ERROR:
+                    process_results.append(MissingProcessResult(
+                        video_code=video_code,
+                        status='per_worker_cap',
+                        message='not dispatched: per-worker limit reached on all workers',
+                    ))
+                    skipped += 1
+                    logger.info(
+                        "[%s] %s skipped — queue flushed after per-worker task cap",
+                        idx_str,
+                        video_code,
+                    )
+                    return
                 logger.warning("[%s] All proxies failed for %s", idx_str, video_code)
                 process_results.append(MissingProcessResult(
                     video_code=video_code, status='all_proxies_failed',
@@ -882,7 +919,21 @@ def parse_args() -> argparse.Namespace:
         description='Align inventory-only movie codes into MovieHistory with JavDB search/detail enrichment.',
     )
     parser.add_argument('--dry-run', action='store_true', help='Parse and plan only; do not write DB.')
-    parser.add_argument('--limit', type=int, default=0, help='Max number of missing codes to process (0=all).')
+    parser.add_argument(
+        '--limit',
+        type=int,
+        default=0,
+        help='Max missing codes in total (0=all). Ignored when --limit-per-worker > 0.',
+    )
+    parser.add_argument(
+        '--limit-per-worker',
+        type=int,
+        default=0,
+        dest='limit_per_worker',
+        help='Max completed align tasks per proxy worker (0=use --limit or all). '
+        'Queue upper bound is this × pool size; each worker stops after N successes; '
+        'surplus queued codes are flushed if all workers stop (e.g. bans/caps).',
+    )
     parser.add_argument('--codes', type=str, default='', help='Comma-separated codes to process.')
     parser.add_argument(
         '--no-proxy',
