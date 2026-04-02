@@ -79,6 +79,8 @@ from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr
 
 setup_logging()
 logger = get_logger(__name__)
+# Same channel as fetch_engine so "Per-worker cap" lines keep the FetchEngine label.
+_fetch_engine_logger = get_logger('packages.python.javdb_spider.fetch.fetch_engine')
 
 _QB_FIELDNAMES = [
     'href',
@@ -632,6 +634,18 @@ def run_alignment(args: argparse.Namespace) -> int:
             eff = min(total, limit_per_worker * max(1, active))
             return f"align-{seq}/{eff}"
 
+        def _log_per_worker_cap_after_movie_line(engine_result):
+            """Emit cap line after the per-film align log (see EngineResult flags)."""
+            if not getattr(engine_result, 'per_worker_cap_reached', False):
+                return
+            lim = getattr(engine_result, 'per_worker_cap_limit', 0) or 0
+            wn = engine_result.worker_name or 'worker'
+            _fetch_engine_logger.info(
+                "[%s] Per-worker task cap reached (%d) — stopping worker",
+                wn,
+                lim,
+            )
+
         def _apply_align_result(result):
             nonlocal processed, failed, skipped, login_skipped
             video_code = result.task.meta['video_code']
@@ -671,6 +685,7 @@ def run_alignment(args: argparse.Namespace) -> int:
                     message=data.get('message', ''),
                 ))
                 logger.info("[%s][%s] %s requires login, skipped (--no-login)", idx_str, worker_label, video_code)
+                _log_per_worker_cap_after_movie_line(result)
                 login_skipped += 1
                 return
 
@@ -682,6 +697,7 @@ def run_alignment(args: argparse.Namespace) -> int:
                 if not args.dry_run:
                     db_upsert_align_no_exact_match(video_code, reason=data.get('message', ''))
                 logger.info("[%s][%s] No exact match for %s", idx_str, worker_label, video_code)
+                _log_per_worker_cap_after_movie_line(result)
                 skipped += 1
                 return
 
@@ -698,6 +714,7 @@ def run_alignment(args: argparse.Namespace) -> int:
                     worker_label,
                     video_code,
                 )
+                _log_per_worker_cap_after_movie_line(result)
                 failed += 1
                 return
 
@@ -715,6 +732,7 @@ def run_alignment(args: argparse.Namespace) -> int:
                 chosen_upgrade_category=data.get('chosen_upgrade_category', ''),
             ))
             logger.info("[%s][%s] Parsed %s", idx_str, worker_label, video_code)
+            _log_per_worker_cap_after_movie_line(result)
             processed += 1
 
         try:
