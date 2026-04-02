@@ -532,10 +532,13 @@ def run_alignment(args: argparse.Namespace) -> int:
         effective_limit = limit_per_worker * num_workers
         logger.info(
             "Alignment cap: %d code(s) per worker × %d worker(s) = %d max queued "
-            "(each worker stops after %d completed tasks; surplus flushed if workers ban/cap)",
+            "(each worker stops after %d completed tasks; surplus flushed if workers ban/cap). "
+            "Progress logs use align-<n>/<eff> with eff=min(queued, %d×active_proxies) so the "
+            "denominator shrinks when proxies are banned.",
             limit_per_worker,
             num_workers,
             effective_limit,
+            limit_per_worker,
             limit_per_worker,
         )
     elif absolute_limit > 0:
@@ -593,6 +596,7 @@ def run_alignment(args: argparse.Namespace) -> int:
                 entry_index=f"align-{i}/{total}",
                 meta={
                     'video_code': code,
+                    'align_seq': i,
                     'search_url': build_search_url(code, f='all', base_url=base_url),
                     'base_url': base_url,
                 },
@@ -600,7 +604,7 @@ def run_alignment(args: argparse.Namespace) -> int:
         engine.mark_done()
 
         logger.info(
-            "Starting %d workers for %d alignment tasks (search + detail per code)",
+            "Starting %d workers for %d queued alignment tasks (search + detail per code)",
             len(engine._workers), total,
         )
 
@@ -610,10 +614,28 @@ def run_alignment(args: argparse.Namespace) -> int:
         login_skipped = 0
         parallel_interrupted = False
 
+        def _align_progress_label(task) -> str:
+            """Build align-<seq>/<eff>; eff matches sleep rebalance (cap × active proxies)."""
+            meta = task.meta
+            seq = meta.get('align_seq')
+            if seq is None:
+                return task.entry_index
+            if limit_per_worker <= 0:
+                return f"align-{seq}/{total}"
+            try:
+                workers = engine._workers
+                if not workers:
+                    return f"align-{seq}/{total}"
+                active = workers[0]._active_workers
+            except (AttributeError, IndexError):
+                active = max(1, len(PROXY_POOL))
+            eff = min(total, limit_per_worker * max(1, active))
+            return f"align-{seq}/{eff}"
+
         def _apply_align_result(result):
             nonlocal processed, failed, skipped, login_skipped
             video_code = result.task.meta['video_code']
-            idx_str = result.task.entry_index
+            idx_str = _align_progress_label(result.task)
 
             if not result.success:
                 if result.error == PER_WORKER_TASK_CAP_ERROR:
