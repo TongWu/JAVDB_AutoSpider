@@ -639,36 +639,52 @@ class _EngineWorker(threading.Thread):
             )
 
             if active > 0:
-                remaining = self.task_queue.qsize() + active
+                # Queue depth + in-flight tasks in worker threads (approximate).
+                remaining_est = self.task_queue.qsize() + active
+                volume_total = remaining_est
+                if self._per_worker_task_limit > 0:
+                    cap = self._per_worker_task_limit * active
+                    volume_total = min(remaining_est, cap)
                 for w in self.all_workers:
                     if w.proxy_name not in self._banned_proxies:
                         w._sleep_mgr.apply_volume_multiplier(
-                            remaining, num_workers=active, quiet=True,
+                            volume_total, num_workers=active, quiet=True,
                         )
-                per_worker = max(1, -(-remaining // max(1, active)))
+                per_worker = max(1, -(-volume_total // max(1, active)))
                 min_m, max_m = _interpolate_multiplier(per_worker)
                 if min_m > 1.0 or max_m > 1.0:
                     sample_w = next(
                         (w for w in self.all_workers
                          if w.proxy_name not in self._banned_proxies), None,
                     )
+                    cap_note = ""
+                    if (
+                        self._per_worker_task_limit > 0
+                        and volume_total < remaining_est
+                    ):
+                        cap_note = (
+                            f" [sleep volume capped: queue_est={remaining_est}, "
+                            f"per_worker_task_limit={self._per_worker_task_limit}]"
+                        )
                     if sample_w is not None:
                         sm = sample_w._sleep_mgr
                         logger.info(
                             "Volume-based sleep adjustment (ban rebalance): "
                             "total=%d, workers=%d, per_worker=%d → "
                             "volume_factor %.2fx/%.2fx, "
-                            "sleep range ~[%.2f, %.2f] (base ~[%.2f, %.2f])",
-                            remaining, active, per_worker, min_m, max_m,
+                            "sleep range ~[%.2f, %.2f] (base ~[%.2f, %.2f])%s",
+                            volume_total, active, per_worker, min_m, max_m,
                             sm.sleep_min, sm.sleep_max,
                             sm.base_min, sm.base_max,
+                            cap_note,
                         )
                     else:
                         logger.info(
                             "Volume-based sleep adjustment (ban rebalance): "
                             "total=%d, workers=%d, per_worker=%d → "
-                            "volume_factor %.2fx/%.2fx",
-                            remaining, active, per_worker, min_m, max_m,
+                            "volume_factor %.2fx/%.2fx%s",
+                            volume_total, active, per_worker, min_m, max_m,
+                            cap_note,
                         )
                 requeue_front(self.task_queue, task)
             else:
