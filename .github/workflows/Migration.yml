@@ -60,8 +60,8 @@ on:
         default: false
         type: boolean
       # ---- Align Options ----
-      align_limit:
-        description: 'Alignment: max missing codes to process (0 = all)'
+      align_limit_per_worker:
+        description: 'Alignment: max missing codes per proxy worker (0 = all). Total = this × configured proxy count (×1 if alignment uses --align-no-proxy)'
         required: false
         default: '0'
         type: string
@@ -128,7 +128,7 @@ jobs:
       INPUT_NO_PROXY: ${{ inputs.no_proxy }}
       INPUT_USE_CF_BYPASS: ${{ inputs.use_cf_bypass }}
       INPUT_ALIGN_INVENTORY_HISTORY: ${{ inputs.align_inventory_history }}
-      INPUT_ALIGN_LIMIT: ${{ inputs.align_limit || '0' }}
+      INPUT_ALIGN_LIMIT_PER_WORKER: ${{ inputs.align_limit_per_worker || '0' }}
       INPUT_ALIGN_CODES: ${{ inputs.align_codes }}
       INPUT_ALIGN_NO_PROXY: ${{ inputs.align_no_proxy }}
       INPUT_ALIGN_NO_LOGIN: ${{ inputs.align_no_login }}
@@ -261,7 +261,7 @@ jobs:
           printf '  No Proxy:             %s\n' "$INPUT_NO_PROXY"
           printf '  CF Bypass:            %s\n' "$INPUT_USE_CF_BYPASS"
           printf 'Align Inventory:        %s\n' "$INPUT_ALIGN_INVENTORY_HISTORY"
-          printf '  Limit:                %s\n' "${INPUT_ALIGN_LIMIT:-0 (all)}"
+          printf '  Limit per worker:     %s\n' "${INPUT_ALIGN_LIMIT_PER_WORKER:-0 (all)}"
           if [ -n "$INPUT_ALIGN_CODES" ]; then
             printf '  Codes:                %s\n' "$INPUT_ALIGN_CODES"
           else
@@ -327,9 +327,9 @@ jobs:
           if [ "$INPUT_ALIGN_INVENTORY_HISTORY" = "true" ]; then
             CMD+=(--align-inventory-history)
 
-            ALIGN_LIMIT="$INPUT_ALIGN_LIMIT"
-            if [ -n "$ALIGN_LIMIT" ] && [ "$ALIGN_LIMIT" != "0" ]; then
-              CMD+=(--align-limit "$ALIGN_LIMIT")
+            ALIGN_LIMIT_PW="$INPUT_ALIGN_LIMIT_PER_WORKER"
+            if [ -n "$ALIGN_LIMIT_PW" ] && [ "$ALIGN_LIMIT_PW" != "0" ]; then
+              CMD+=(--align-limit-per-worker "$ALIGN_LIMIT_PW")
             fi
 
             ALIGN_CODES="$INPUT_ALIGN_CODES"
@@ -451,7 +451,7 @@ jobs:
           fi
           printf -- '- **Align Inventory**: %s\n' "$(summary_bool "$INPUT_ALIGN_INVENTORY_HISTORY")" >> $GITHUB_STEP_SUMMARY
           if [ "$INPUT_ALIGN_INVENTORY_HISTORY" = "true" ]; then
-            printf '  - Limit: %s\n' "${INPUT_ALIGN_LIMIT:-0 (all)}" >> $GITHUB_STEP_SUMMARY
+            printf '  - Limit per worker: %s\n' "${INPUT_ALIGN_LIMIT_PER_WORKER:-0 (all)}" >> $GITHUB_STEP_SUMMARY
             if [ -n "$INPUT_ALIGN_CODES" ]; then
               printf '  - Codes: %s\n' "$INPUT_ALIGN_CODES" >> $GITHUB_STEP_SUMMARY
             else

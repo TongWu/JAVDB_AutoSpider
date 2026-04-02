@@ -136,3 +136,21 @@ def test_main_align_shuffle_defaults_false(monkeypatch):
 
     assert migrate_to_current.main() == 0
     assert calls['align_args'].shuffle is False
+
+
+def test_main_align_limit_per_worker_passed_through(monkeypatch):
+    calls = _install_main_stubs(monkeypatch)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            'migrate_to_current.py',
+            '--skip-schema',
+            '--align-inventory-history',
+            '--align-limit-per-worker',
+            '12',
+        ],
+    )
+
+    assert migrate_to_current.main() == 0
+    assert calls['align_args'].limit_per_worker == 12

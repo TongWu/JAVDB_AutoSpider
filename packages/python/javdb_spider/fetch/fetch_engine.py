@@ -82,6 +82,7 @@ __all__ = [
     'FetchBackend', 'FetchRuntimeState',
     'EngineTask', 'EngineResult', 'LoginRequired',
     'WorkerContext', 'ParallelFetchBackend', 'FetchEngine',
+    'PER_WORKER_TASK_CAP_ERROR',
 ]
 
 # ---------------------------------------------------------------------------
@@ -91,6 +92,10 @@ _STARTUP_JITTER_BASE = (0.5, 2.0)
 _STARTUP_JITTER_PER_WORKER = (1.5, 3.0)
 _REQUEUE_BACKOFF_FACTOR = 0.3
 _REQUEUE_BACKOFF_CAP = 2.0
+
+# Emitted when :meth:`ParallelFetchBackend.results` drains tasks left in queue
+# after every worker thread has stopped (e.g. per-worker task cap).
+PER_WORKER_TASK_CAP_ERROR = "per_worker_task_cap"
 
 
 # ---------------------------------------------------------------------------
@@ -341,12 +346,15 @@ class _EngineWorker(threading.Thread):
         drain_lock: threading.Lock,
         drain_done: List[bool],
         stop_event: Optional[threading.Event] = None,
+        per_worker_task_limit: int = 0,
     ):
         super().__init__(
             daemon=True,
             name=f"EngineWorker-{proxy_config.get('name', worker_id)}",
         )
         self.worker_id = worker_id
+        self._per_worker_task_limit = max(0, int(per_worker_task_limit))
+        self._per_worker_completed = 0
         self.proxy_config = proxy_config
         self.proxy_name: str = proxy_config.get('name', f'Proxy-{worker_id}')
         self.task_queue = task_queue
@@ -504,6 +512,18 @@ class _EngineWorker(threading.Thread):
             if task is None:
                 break
 
+            if (
+                self._per_worker_task_limit > 0
+                and self._per_worker_completed >= self._per_worker_task_limit
+            ):
+                requeue_front(self.task_queue, task)
+                logger.info(
+                    "[%s] Per-worker task cap reached (%d) — stopping worker",
+                    self.proxy_name,
+                    self._per_worker_task_limit,
+                )
+                break
+
             if self._stop_event.is_set():
                 self.task_queue.put(task)
                 continue
@@ -556,6 +576,7 @@ class _EngineWorker(threading.Thread):
             try:
                 data = self._process_fn(ctx, task)
                 if data is not None:
+                    self._per_worker_completed += 1
                     self.result_queue.put(EngineResult(
                         task=task, success=True,
                         data=data, used_cf=ctx._last_used_cf,
@@ -710,9 +731,11 @@ class ParallelFetchBackend(FetchBackend):
         sleep_max: Optional[float] = None,
         runtime_state: Optional[FetchRuntimeState] = None,
         use_priority_queue: bool = False,
+        per_worker_task_limit: int = 0,
     ):
         self._process_fn = process_fn
         self._use_cookie = use_cookie
+        self._per_worker_task_limit = max(0, int(per_worker_task_limit))
         self._stop_event = stop_event or threading.Event()
         self._sleep_min = (
             sleep_min if sleep_min is not None else _global_sleep_mgr.base_min
@@ -744,6 +767,7 @@ class ParallelFetchBackend(FetchBackend):
         self._received = 0
         self._done = False
         self._count_lock = threading.Lock()
+        self._stale_queue_flushed = False
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -811,6 +835,7 @@ class ParallelFetchBackend(FetchBackend):
                 drain_lock=drain_lock,
                 drain_done=drain_done,
                 stop_event=self._stop_event,
+                per_worker_task_limit=self._per_worker_task_limit,
             )
             self._workers.append(w)
 
@@ -946,6 +971,51 @@ class ParallelFetchBackend(FetchBackend):
         with self._count_lock:
             return self._submitted - self._received
 
+    def _maybe_flush_stalled_tasks(self) -> None:
+        """If every worker has exited but tasks remain, emit failure results.
+
+        Otherwise :meth:`results` would block forever (e.g. per-worker task
+        cap stopped all workers while the shared queue still holds tasks).
+        """
+        if self._stale_queue_flushed or not self._workers:
+            return
+        if any(w.is_alive() for w in self._workers):
+            return
+        with self._count_lock:
+            if not self._done:
+                return
+            pending = self._submitted - self._received
+        if pending <= 0:
+            return
+
+        flushed = 0
+        for q in (self._task_queue, self._login_queue):
+            while True:
+                try:
+                    item = q.get_nowait()
+                except queue_module.Empty:
+                    break
+                if item is None:
+                    continue
+                self._result_queue.put(
+                    EngineResult(
+                        task=item,
+                        success=False,
+                        error=PER_WORKER_TASK_CAP_ERROR,
+                        worker_name="engine",
+                    ),
+                )
+                flushed += 1
+
+        if flushed:
+            self._stale_queue_flushed = True
+            logger.warning(
+                "FetchEngine: all workers stopped with %d task(s) still queued — "
+                "emitted failure results (%s)",
+                flushed,
+                PER_WORKER_TASK_CAP_ERROR,
+            )
+
     def results(self) -> Iterator[EngineResult]:
         """Yield results as workers complete them.
 
@@ -960,6 +1030,7 @@ class ParallelFetchBackend(FetchBackend):
             try:
                 result = self._result_queue.get(timeout=1.0)
             except queue_module.Empty:
+                self._maybe_flush_stalled_tasks()
                 continue
             with self._count_lock:
                 self._received += 1

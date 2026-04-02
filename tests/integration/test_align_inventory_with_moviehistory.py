@@ -114,6 +114,16 @@ def test_parse_args_alignment_no_proxy(monkeypatch):
     assert args.use_proxy is False
 
 
+def test_parse_args_alignment_limit_per_worker(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        ['align_inventory_with_moviehistory.py', '--limit-per-worker', '5'],
+    )
+    args = parse_args()
+    assert args.limit_per_worker == 5
+
+
 def test_parse_args_alignment_rejects_conflicting_proxy_flags(monkeypatch):
     monkeypatch.setattr(sys, 'argv', [
         'align_inventory_with_moviehistory.py',
