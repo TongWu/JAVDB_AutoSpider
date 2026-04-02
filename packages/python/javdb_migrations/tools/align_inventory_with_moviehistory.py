@@ -533,6 +533,21 @@ def _make_align_process_fn(inventory_map, *, no_login: bool = False):
 # ---------------------------------------------------------------------------
 
 
+def _align_eff_denominator(
+    queued_total: int,
+    limit_per_worker: int,
+    active_proxy_count: int,
+) -> int:
+    """Denominator for ``align-<seq>/<eff>`` — must match ``_align_progress_label`` and ``task.entry_index``.
+
+    When *limit_per_worker* is set, *eff* is ``min(queued_total, limit × active_proxies)`` so that
+    Login / FetchEngine logs (which use ``entry_index``) align with Parsed lines.
+    """
+    if limit_per_worker <= 0:
+        return queued_total
+    return min(queued_total, limit_per_worker * max(1, active_proxy_count))
+
+
 def run_alignment(args: argparse.Namespace) -> int:
     init_db(force=True)
     history = db_load_history()
@@ -619,10 +634,13 @@ def run_alignment(args: argparse.Namespace) -> int:
         )
         engine.start()
 
+        pool_n = max(1, len(PROXY_POOL))
+        align_denom = _align_eff_denominator(total, limit_per_worker, pool_n)
+
         for i, code in enumerate(missing_codes, 1):
             engine.submit(
                 build_search_url(code, f='all', base_url=base_url),
-                entry_index=f"align-{i}/{total}",
+                entry_index=f"align-{i}/{align_denom}",
                 meta={
                     'video_code': code,
                     'align_seq': i,
@@ -654,11 +672,12 @@ def run_alignment(args: argparse.Namespace) -> int:
             try:
                 workers = engine._workers
                 if not workers:
-                    return f"align-{seq}/{total}"
-                active = workers[0]._active_workers
+                    active = max(1, len(PROXY_POOL))
+                else:
+                    active = workers[0]._active_workers
             except (AttributeError, IndexError):
                 active = max(1, len(PROXY_POOL))
-            eff = min(total, limit_per_worker * max(1, active))
+            eff = _align_eff_denominator(total, limit_per_worker, active)
             return f"align-{seq}/{eff}"
 
         def _log_per_worker_cap_after_movie_line(engine_result):
