@@ -130,6 +130,11 @@ class EngineResult:
     """Result produced by the engine for each submitted task.
 
     ``data`` holds whatever the caller's *process_fn* returned.
+
+    When ``per_worker_cap_reached`` is True, this result is the worker's last
+    successful task before it stops (per-worker task limit). Callers should log
+    their normal per-task line first, then emit the cap message so logs stay in
+    film order.
     """
 
     task: EngineTask
@@ -138,6 +143,8 @@ class EngineResult:
     used_cf: bool = False
     error: Optional[str] = None
     worker_name: str = ''
+    per_worker_cap_reached: bool = False
+    per_worker_cap_limit: int = 0
     _ack_callback: Optional[Callable[[str, bool], None]] = field(
         default=None,
         repr=False,
@@ -512,18 +519,6 @@ class _EngineWorker(threading.Thread):
             if task is None:
                 break
 
-            if (
-                self._per_worker_task_limit > 0
-                and self._per_worker_completed >= self._per_worker_task_limit
-            ):
-                requeue_front(self.task_queue, task)
-                logger.info(
-                    "[%s] Per-worker task cap reached (%d) — stopping worker",
-                    self.proxy_name,
-                    self._per_worker_task_limit,
-                )
-                break
-
             if self._stop_event.is_set():
                 self.task_queue.put(task)
                 continue
@@ -577,11 +572,22 @@ class _EngineWorker(threading.Thread):
                 data = self._process_fn(ctx, task)
                 if data is not None:
                     self._per_worker_completed += 1
+                    cap_now = (
+                        self._per_worker_task_limit > 0
+                        and self._per_worker_completed
+                        >= self._per_worker_task_limit
+                    )
                     self.result_queue.put(EngineResult(
                         task=task, success=True,
                         data=data, used_cf=ctx._last_used_cf,
                         worker_name=self.proxy_name,
+                        per_worker_cap_reached=cap_now,
+                        per_worker_cap_limit=(
+                            self._per_worker_task_limit if cap_now else 0
+                        ),
                     ))
+                    if cap_now:
+                        break
                 else:
                     task.failed_proxies.add(self.proxy_name)
                     task.retry_count += 1
