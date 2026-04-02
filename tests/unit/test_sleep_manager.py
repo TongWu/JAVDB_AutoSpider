@@ -202,7 +202,7 @@ class TestInterpolation:
 
     def test_above_last_anchor(self):
         """n > 200 returns last anchor values (clamped)."""
-        assert _interpolate_multiplier(500) == (7.00, 8.00)
+        assert _interpolate_multiplier(500) == (6.00, 7.00)
 
     def test_midpoint_interpolation(self):
         """n=5 is midpoint between anchors (0,1.0,1.0) and (4,1.0,1.15).
@@ -316,7 +316,7 @@ class TestPenaltyOverflow:
         assert eff_max == round(mgr.base_max * 1.65, 2)
 
     def test_overflow_adds_flat_seconds(self):
-        """volume=7.0, penalty=2.0 → raw=14.0, overflow=4.0 → +8s."""
+        """volume max_mult=7.0, penalty=2.0 → raw_max_mult=14.0, overflow=4.0 → +8s."""
         pt = PenaltyTracker()
         for _ in range(4):
             pt.record_event()
@@ -324,13 +324,13 @@ class TestPenaltyOverflow:
 
         mgr = MovieSleepManager(8.0, 25.0, penalty_tracker=pt)
         mgr.apply_volume_multiplier(200)
-        assert mgr._volume_min_mult == 7.0
-        assert mgr._volume_max_mult == 8.0
+        assert mgr._volume_min_mult == 6.0
+        assert mgr._volume_max_mult == 7.0
 
         eff_min, eff_max = mgr._effective_range()
 
-        raw_max = 8.0 * 2.0  # 16.0
-        overflow_max = raw_max - COMPOSITE_MULTIPLIER_CAP  # 6.0
+        raw_max = 7.0 * 2.0  # 14.0 (volume max_mult × penalty)
+        overflow_max = raw_max - COMPOSITE_MULTIPLIER_CAP  # 4.0
         expected_max = round(
             mgr.base_max * COMPOSITE_MULTIPLIER_CAP
             + overflow_max * PENALTY_OVERFLOW_WEIGHT,
@@ -464,22 +464,23 @@ class TestVolumeTiers:
         assert mgr._volume_max_mult == _interpolate_multiplier(3)[1]
 
     def test_anchor_60(self):
+        """n=60 lies between anchors (50,…) and (100,…); max_mult interpolates to 2.88."""
         mgr = MovieSleepManager(10.0, 20.0)
         mgr.apply_volume_multiplier(60)
         assert mgr._volume_min_mult == 2.20
-        assert mgr._volume_max_mult == 2.90
+        assert mgr._volume_max_mult == 2.88
 
     def test_anchor_200(self):
         mgr = MovieSleepManager(10.0, 20.0)
         mgr.apply_volume_multiplier(200)
-        assert mgr._volume_min_mult == 7.00
-        assert mgr._volume_max_mult == 8.00
+        assert mgr._volume_min_mult == 6.00
+        assert mgr._volume_max_mult == 7.00
 
     def test_above_max_anchor(self):
         mgr = MovieSleepManager(10.0, 20.0)
         mgr.apply_volume_multiplier(500)
-        assert mgr._volume_min_mult == 7.00
-        assert mgr._volume_max_mult == 8.00
+        assert mgr._volume_min_mult == 6.00
+        assert mgr._volume_max_mult == 7.00
 
     def test_asymmetric_multipliers(self):
         """max_mult should grow faster than min_mult."""
