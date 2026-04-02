@@ -719,8 +719,7 @@ def run_alignment(args: argparse.Namespace) -> int:
             data = result.data
             status = data['status']
             proxy_name = str(data.get('proxy_name') or 'unknown-proxy')
-            worker_id = data.get('worker_id')
-            worker_label = f"{proxy_name}#w{worker_id}" if worker_id is not None else proxy_name
+            worker_label = proxy_name
 
             if status == 'login_required':
                 process_results.append(MissingProcessResult(
