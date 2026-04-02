@@ -501,6 +501,8 @@ def _make_align_process_fn(inventory_map, *, no_login: bool = False):
                 inventory_entries=inventory_entries,
             )
 
+            ctx._worker._sleep_mgr.record_parsed_movie()
+
             return {
                 'status': 'ok',
                 'video_code': video_code,
@@ -956,6 +958,7 @@ def run_alignment(args: argparse.Namespace) -> int:
                     chosen_upgrade_category=upgrade_plan.chosen_upgrade_category,
                 )
             )
+            movie_sleep_mgr.record_parsed_movie()
 
     # ------------------------------------------------------------------
     # Write outputs (common for both paths)

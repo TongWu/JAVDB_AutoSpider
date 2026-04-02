@@ -391,6 +391,7 @@ class _EngineWorker(threading.Thread):
             sleep_min, sleep_max,
             penalty_tracker=penalty_tracker,
             throttle=TripleWindowThrottle(),
+            proxy_label=self.proxy_name,
         )
 
         self._proxy_pool = create_proxy_pool_from_config(
