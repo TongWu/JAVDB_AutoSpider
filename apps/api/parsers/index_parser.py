@@ -188,6 +188,27 @@ def find_exact_video_code_match(entries: list[MovieIndexEntry], target_code: str
     return None
 
 
+def derive_letter_suffix_fallback_video_code(code: str) -> Optional[str]:
+    """If *code* looks like ``200GANA-3327`` (digits then letters in segment 1), return ``GANA-3327``.
+
+    Pattern: hyphen-separated, first segment is ``<digits><letters>`` with letters only as a
+    trailing run (no letters before the digits). Otherwise return ``None``.
+    """
+    s = (code or '').strip()
+    if '-' not in s:
+        return None
+    first, rest = s.split('-', 1)
+    if not first or not rest:
+        return None
+    m = re.fullmatch(r'(\d+)([A-Za-z]+)', first)
+    if not m:
+        return None
+    letters = m.group(2)
+    if not letters:
+        return None
+    return f'{letters}-{rest}'.upper()
+
+
 def parse_category_page(html_content: str, page_num: int = 1) -> CategoryPageResult:
     """Parse a category page (actors, makers, publishers, series, directors,
     video_codes, tags) and return entries plus category metadata."""
