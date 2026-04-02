@@ -78,12 +78,19 @@ class TestExtractVideoCode:
         a = soup.find('a')
         assert extract_video_code(a) == 'ABC-123'
 
-    def test_invalid_no_dash(self):
+    def test_invalid_no_dash_letters_only(self):
         from bs4 import BeautifulSoup
         html = '<a class="box"><div class="video-title"><strong>NODASH</strong></div></a>'
         soup = BeautifulSoup(html, 'html.parser')
         a = soup.find('a')
         assert extract_video_code(a) == ''
+
+    def test_hyphenless_code_with_letters_and_digits(self):
+        from bs4 import BeautifulSoup
+        html = '<a class="box"><div class="video-title"><strong>n0656</strong> title</div></a>'
+        soup = BeautifulSoup(html, 'html.parser')
+        a = soup.find('a')
+        assert extract_video_code(a) == 'n0656'
 
     def test_no_video_title(self):
         from bs4 import BeautifulSoup

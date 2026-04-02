@@ -154,11 +154,27 @@ def extract_all_movie_links(parent_tag: Tag) -> list:
 # Video-code extraction (ported from utils/parser.py)
 # ---------------------------------------------------------------------------
 
+def _is_plausible_video_code(raw: str) -> bool:
+    """Heuristic: accept classic ``ABC-123`` codes and hyphen-less studio codes (e.g. ``n0656``).
+
+    Rejects empty strings and bare letter-only blobs (e.g. a mistaken title fragment).
+    """
+    s = (raw or '').strip()
+    if len(s) < 2:
+        return False
+    if '-' in s:
+        return True
+    # Hyphen-less codes must mix letters and digits so we do not treat e.g. "NODASH" as a code.
+    has_letter = any(c.isalpha() for c in s)
+    has_digit = any(c.isdigit() for c in s)
+    return has_letter and has_digit
+
+
 def extract_video_code(a_tag: Tag) -> str:
     """Extract the video code from a movie-card ``<a class="box">`` tag.
 
-    Video codes that do not contain ``-`` are considered invalid and an
-    empty string is returned.
+    Accepts standard hyphenated codes and hyphen-less codes when they contain
+    both letters and digits (e.g. ``n0656``). Other values return an empty string.
     """
     video_title_div = a_tag.find('div', class_='video-title')
     if video_title_div:
@@ -168,8 +184,8 @@ def extract_video_code(a_tag: Tag) -> str:
         else:
             video_code = video_title_div.get_text(strip=True)
 
-        if '-' not in video_code:
-            logger.debug("Skipping invalid video code (no '-'): %s", video_code)
+        if not _is_plausible_video_code(video_code):
+            logger.debug("Skipping invalid or implausible video code: %s", video_code)
             return ''
         return video_code
 
