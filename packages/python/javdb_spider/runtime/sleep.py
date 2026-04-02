@@ -311,8 +311,11 @@ class MovieSleepManager:
         if not quiet and (min_mult > 1.0 or max_mult > 1.0):
             logger.info(
                 "Volume-based sleep adjustment: total=%d, workers=%d, "
-                "per_worker=%d → volume_factor %.2fx/%.2fx",
+                "per_worker=%d → volume_factor %.2fx/%.2fx, "
+                "sleep range [%.2f, %.2f] (base [%.2f, %.2f])",
                 total, num_workers, n, min_mult, max_mult,
+                self.sleep_min, self.sleep_max,
+                self.base_min, self.base_max,
             )
 
     def _recalc_range(self) -> None:
