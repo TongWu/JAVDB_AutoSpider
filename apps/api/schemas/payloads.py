@@ -218,6 +218,13 @@ class VideoCodeSearchPayload(BaseModel):
     use_cookie: bool = True
     f: str = Field("all", max_length=32)
 
+    @field_validator("video_code", "f", mode="before")
+    @classmethod
+    def strip_whitespace(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
 
 __all__ = [
     "AdhocTaskPayload",
