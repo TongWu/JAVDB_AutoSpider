@@ -508,6 +508,63 @@ class _EngineWorker(threading.Thread):
             task_queue=self.task_queue,
         )
 
+    def _reassign_logged_in_worker_before_cap_exit(self) -> None:
+        """If this worker holds the session for login_queue, hand off before the thread exits.
+
+        Otherwise ``logged_in_worker_id`` would point at a dead worker, login-required
+        tasks would sit in ``login_queue`` with no live worker prioritising it, and
+        :meth:`FetchEngine.results` could stall until every worker had exited.
+        """
+        coord = self._coordinator
+        with coord.lock:
+            if coord.logged_in_worker_id != self.worker_id:
+                return
+            cookie = str(
+                getattr(self._handler.config, 'javdb_session_cookie', None) or '',
+            ).strip()
+            replacement = None
+            for w in self.all_workers:
+                if w.worker_id == self.worker_id:
+                    continue
+                if w.proxy_name in self._banned_proxies:
+                    continue
+                if not w.is_alive():
+                    continue
+                replacement = w
+                break
+            if replacement is not None:
+                if cookie:
+                    replacement._handler.config.javdb_session_cookie = cookie
+                coord.logged_in_worker_id = replacement.worker_id
+                logger.info(
+                    "[%s] Per-worker task cap: transferring logged-in session to [%s]",
+                    self.proxy_name,
+                    replacement.proxy_name,
+                )
+                return
+            coord.logged_in_worker_id = None
+            drained = 0
+            while True:
+                try:
+                    t = self.login_queue.get_nowait()
+                except queue_module.Empty:
+                    break
+                requeue_front(self.task_queue, t)
+                drained += 1
+            if drained:
+                logger.warning(
+                    "[%s] Per-worker task cap: was logged-in worker; no peer to reassign — "
+                    "cleared login designation and re-queued %d login_queue task(s) to task_queue",
+                    self.proxy_name,
+                    drained,
+                )
+            else:
+                logger.warning(
+                    "[%s] Per-worker task cap: was logged-in worker; no peer to reassign — "
+                    "cleared login designation",
+                    self.proxy_name,
+                )
+
     # -- main loop -----------------------------------------------------------
 
     @property
@@ -588,6 +645,7 @@ class _EngineWorker(threading.Thread):
                         ),
                     ))
                     if cap_now:
+                        self._reassign_logged_in_worker_before_cap_exit()
                         break
                 else:
                     task.failed_proxies.add(self.proxy_name)
