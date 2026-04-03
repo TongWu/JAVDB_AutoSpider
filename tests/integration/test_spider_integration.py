@@ -117,6 +117,7 @@ def create_workers(
     coord._all_workers = all_workers
 
     banned_proxies: set = set()
+    capped_proxies: set = set()
     drain_lock = threading.Lock()
     drain_done: list[bool] = [False]
     shared_penalty_tracker = PenaltyTracker()
@@ -145,6 +146,7 @@ def create_workers(
                 sleep_max=0.02,
                 penalty_tracker=shared_penalty_tracker,
                 banned_proxies=banned_proxies,
+                capped_proxies=capped_proxies,
                 drain_lock=drain_lock,
                 drain_done=drain_done,
             )
