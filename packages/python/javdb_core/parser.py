@@ -79,8 +79,8 @@ def extract_video_code(a):
 
     Returns:
         video_code: The extracted video code, or empty string if not found
-                    or invalid.  Video codes without ``-`` are considered
-                    invalid and will return empty string.
+                    or invalid.  Hyphen-less codes are accepted when they mix
+                    letters and digits (e.g. ``n0656``).
     """
     from apps.api.parsers.common import extract_video_code as _api_extract
     return _api_extract(a)

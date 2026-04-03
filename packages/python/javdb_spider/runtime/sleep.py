@@ -24,7 +24,7 @@ import random
 import threading
 import time
 from collections import deque
-from typing import Tuple
+from typing import Optional, Tuple
 
 from packages.python.javdb_platform.logging_config import get_logger
 
@@ -35,8 +35,8 @@ logger = get_logger(__name__)
 # adaptive two-factor system and should NOT be tweaked by users.
 # Override ONLY via env var ``VAR_MOVIE_SLEEP`` for CI/testing/emergency.
 # ---------------------------------------------------------------------------
-_BASE_MIN = 8
-_BASE_MAX = 25
+_BASE_MIN = 6
+_BASE_MAX = 20
 
 # ---------------------------------------------------------------------------
 # Safety caps
@@ -66,13 +66,9 @@ VOLUME_ANCHORS: list = [
     (30,   1.60,  2.00),
     (40,   1.80,  2.30),
     (50,   2.00,  2.60),
-    (60,   2.20,  2.90),
-    (70,   2.40,  3.20),
-    (80,   2.70,  3.60),
-    (90,   3.00,  4.00),
-    (100,  5.50,  7.00),
-    (150,  6.25,  7.50),
-    (200,  7.00,  8.00),
+    (100,  3.00,  4.00),
+    (150,  4.00,  5.00),
+    (200,  6.00,  7.00),
 ]
 
 
@@ -261,6 +257,8 @@ class MovieSleepManager:
         sleep_max: float,
         penalty_tracker: PenaltyTracker | None = None,
         throttle: TripleWindowThrottle | None = None,
+        *,
+        proxy_label: Optional[str] = None,
     ):
         drift = random.uniform(-0.5, 0.5)
         self.base_min = max(1.0, float(sleep_min) + drift)
@@ -273,14 +271,21 @@ class MovieSleepManager:
 
         self._penalty_tracker = penalty_tracker
         self._throttle = throttle
+        self._proxy_label = proxy_label
 
         self._lock = threading.Lock()
         self._rng = random.Random()
         self._force_high = False
         self._last_per_worker_n = 0
         self._last_volume_total = 0
+        self._parsed_since_micro_break = 0
 
     # -- factor setters ----------------------------------------------------
+
+    def record_parsed_movie(self) -> None:
+        """Increment the per-worker count of fully parsed movies (for micro-break INFO logs)."""
+        with self._lock:
+            self._parsed_since_micro_break += 1
 
     @property
     def last_volume_total(self) -> int:
@@ -311,8 +316,11 @@ class MovieSleepManager:
         if not quiet and (min_mult > 1.0 or max_mult > 1.0):
             logger.info(
                 "Volume-based sleep adjustment: total=%d, workers=%d, "
-                "per_worker=%d → volume_factor %.2fx/%.2fx",
+                "per_worker=%d → volume_factor %.2fx/%.2fx, "
+                "sleep range [%.2f, %.2f] (base [%.2f, %.2f])",
                 total, num_workers, n, min_mult, max_mult,
+                self.sleep_min, self.sleep_max,
+                self.base_min, self.base_max,
             )
 
     def _recalc_range(self) -> None:
@@ -376,14 +384,26 @@ class MovieSleepManager:
 
         roll = self._rng.random()
 
-        if roll < MICRO_BREAK_PROB:
-            break_lo = max(MICRO_BREAK_FLOOR, eff_max + MICRO_BREAK_EXTRA_MIN)
-            break_hi = eff_max + MICRO_BREAK_EXTRA_MAX
-            return min(round(self._rng.uniform(break_lo, break_hi), 2), ABSOLUTE_MAX_SLEEP)
-
+        # Honor _force_high before micro-break so the flag is always consumed
+        # in one call (micro-break would otherwise return early with it still set).
         if self._force_high:
             sleep_time = self._rng.uniform(eff_min + span * 0.7, eff_max)
             self._force_high = False
+        elif roll < MICRO_BREAK_PROB:
+            break_lo = max(MICRO_BREAK_FLOOR, eff_max + MICRO_BREAK_EXTRA_MIN)
+            break_hi = eff_max + MICRO_BREAK_EXTRA_MAX
+            t_long = min(round(self._rng.uniform(break_lo, break_hi), 2), ABSOLUTE_MAX_SLEEP)
+            with self._lock:
+                n_movies = self._parsed_since_micro_break
+                self._parsed_since_micro_break = 0
+            proxy = self._proxy_label or "default"
+            logger.info(
+                "Long sleep (micro-break): %.2fs on proxy [%s] — %d movie(s) parsed since last micro-break",
+                t_long,
+                proxy,
+                n_movies,
+            )
+            return t_long
         elif roll < 0.08 + MICRO_BREAK_PROB:
             sleep_time = self._rng.uniform(eff_min + span * 0.7, eff_max)
         elif roll < 0.15 + MICRO_BREAK_PROB:

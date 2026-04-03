@@ -50,6 +50,7 @@ from apps.api.routers.explore import (
     explore_one_click,
     explore_proxy_page,
     explore_resolve,
+    explore_search_by_video_code,
     explore_sync_cookie,
     router as explore_router,
 )
@@ -93,6 +94,7 @@ from apps.api.schemas.payloads import (
     LoginPayload,
     SpiderJobPayload,
     UrlPayload,
+    VideoCodeSearchPayload,
 )
 from apps.api.services import config_service, context, explore_service, spider_jobs, task_service
 from packages.python.javdb_platform.spider_gateway import create_gateway
@@ -182,6 +184,7 @@ __all__ = [
     "SpiderJobPayload",
     "USERS",
     "UrlPayload",
+    "VideoCodeSearchPayload",
     "_AUTH_LOCK",
     "_access_token_from_request",
     "_bearer_token",
@@ -217,6 +220,7 @@ __all__ = [
     "explore_one_click",
     "explore_proxy_page",
     "explore_resolve",
+    "explore_search_by_video_code",
     "explore_service",
     "explore_sync_cookie",
     "get_config",

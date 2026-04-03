@@ -3,8 +3,12 @@
 
 Scope:
 1) Only process movie codes present in RcloneInventory but missing in MovieHistory.
-2) For each missing code, search JavDB by code, strictly match exact video code,
-   parse detail page, and upsert MovieHistory/TorrentHistory.
+2) For each missing code, search JavDB by code, match exact video code (with a
+   letter-suffix fallback for codes like ``200GANA-3327`` → ``GANA-3327`` on the
+   same page, then a slept re-search if needed), parse detail page, and upsert
+   MovieHistory/TorrentHistory. History rows use the **listing** code from JavDB
+   (e.g. ``GANA-3327``); magnets and upgrade planning still key on the inventory
+   code (e.g. ``200GANA-3327``).
 3) Compare parsed torrents against inventory per family. The planner keeps the
    best censored variant and the best uncensored variant independently, then
    generates qBittorrent upgrade tasks and an rclone purge plan for only the
@@ -45,8 +49,14 @@ if str(REPO_ROOT) not in sys.path:
 
 from apps.api.parsers.common import normalize_javdb_href_path
 from apps.api.parsers.detail_parser import parse_detail_page
-from apps.api.parsers.index_parser import parse_index_page, find_exact_video_code_match
+from apps.api.parsers.index_parser import (
+    derive_letter_suffix_fallback_video_code,
+    find_exact_video_code_match,
+    parse_index_page,
+)
+from apps.api.parsers.search_exact import find_exact_entry_first_search_page
 from packages.python.javdb_spider.fetch.fallback import get_page_url
+from packages.python.javdb_spider.fetch.fetch_engine import PER_WORKER_TASK_CAP_ERROR
 from packages.python.javdb_spider.fetch.session import is_login_page
 import packages.python.javdb_spider.runtime.state as spider_state
 from packages.python.javdb_ingestion.adapters import (
@@ -78,6 +88,8 @@ from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr
 
 setup_logging()
 logger = get_logger(__name__)
+# Same channel as fetch_engine so "Per-worker cap" lines keep the FetchEngine label.
+_fetch_engine_logger = get_logger('packages.python.javdb_spider.fetch.fetch_engine')
 
 _QB_FIELDNAMES = [
     'href',
@@ -180,6 +192,12 @@ def _to_purge_plan_rows(
         parsed_best_rank,
         new_torrent_category,
     )
+
+
+def _history_video_code_for_moviehistory(exact_entry, inventory_video_code: str) -> str:
+    """Video code stored in MovieHistory: JavDB list/detail code, not the inventory alias."""
+    listed = (getattr(exact_entry, 'video_code', None) or '').strip().upper()
+    return listed or (inventory_video_code or '').strip().upper()
 
 
 def _build_db_upsert_kwargs(detail_href: str, video_code: str, magnet_links: dict,
@@ -412,9 +430,20 @@ def _make_align_process_fn(inventory_map, *, no_login: bool = False):
                 return None
 
             parsed = parse_index_page(search_html, page_num=page_num)
-            exact_entry = None
-            if parsed.has_movie_list and parsed.movies:
-                exact_entry = find_exact_video_code_match(parsed.movies, video_code)
+            movies = parsed.movies if parsed.has_movie_list else []
+            exact_entry = find_exact_entry_first_search_page(movies, video_code)
+
+            if exact_entry is None:
+                alt_code = derive_letter_suffix_fallback_video_code(video_code)
+                if alt_code is not None:
+                    ctx.sleep()
+                    alt_search_url = build_search_url(alt_code, f='all', base_url=base_url)
+                    paged_alt = _get_page_url(page_num, base_url, custom_url=alt_search_url)
+                    search_html_alt = ctx.fetch(paged_alt)
+                    if search_html_alt:
+                        parsed_alt = parse_index_page(search_html_alt, page_num=page_num)
+                        m_alt = parsed_alt.movies if parsed_alt.has_movie_list else []
+                        exact_entry = find_exact_video_code_match(m_alt, alt_code)
 
             if exact_entry is None:
                 return {
@@ -458,8 +487,9 @@ def _make_align_process_fn(inventory_map, *, no_login: bool = False):
             actor_link = detail.get_first_actor_href()
             supporting_actors = detail.get_supporting_actors_json()
 
+            history_code = _history_video_code_for_moviehistory(exact_entry, video_code)
             db_kwargs = _build_db_upsert_kwargs(
-                detail_href, video_code, magnet_links,
+                detail_href, history_code, magnet_links,
                 actor_name, actor_gender, actor_link, supporting_actors,
             )
 
@@ -470,6 +500,8 @@ def _make_align_process_fn(inventory_map, *, no_login: bool = False):
                 magnet_links=magnet_links,
                 inventory_entries=inventory_entries,
             )
+
+            ctx._worker._sleep_mgr.record_parsed_movie()
 
             return {
                 'status': 'ok',
@@ -503,6 +535,23 @@ def _make_align_process_fn(inventory_map, *, no_login: bool = False):
 # ---------------------------------------------------------------------------
 
 
+def _align_eff_denominator(
+    queued_total: int,
+    limit_per_worker: int,
+    active_proxy_count: int,
+) -> int:
+    """Denominator for ``align-<seq>/<eff>`` — must match ``_align_progress_label`` and ``task.entry_index``.
+
+    *active_proxy_count* is the **configured** pool size (``len(PROXY_POOL)``), not the live
+    post-ban count, so labels stay identical across Login, FetchEngine, and Parsed logs.
+
+    When *limit_per_worker* is set, *eff* is ``min(queued_total, limit × active_proxy_count)``.
+    """
+    if limit_per_worker <= 0:
+        return queued_total
+    return min(queued_total, limit_per_worker * max(1, active_proxy_count))
+
+
 def run_alignment(args: argparse.Namespace) -> int:
     init_db(force=True)
     history = db_load_history()
@@ -519,8 +568,34 @@ def run_alignment(args: argparse.Namespace) -> int:
     )
     if getattr(args, 'shuffle', False):
         random.shuffle(missing_codes)
-    if args.limit and args.limit > 0:
-        missing_codes = missing_codes[: args.limit]
+
+    use_proxy = getattr(args, 'use_proxy', not getattr(args, 'no_proxy', False))
+    limit_per_worker = int(getattr(args, 'limit_per_worker', 0) or 0)
+    absolute_limit = int(getattr(args, 'limit', 0) or 0)
+
+    if limit_per_worker > 0:
+        from packages.python.javdb_spider.runtime.config import PROXY_POOL
+
+        num_workers = len(PROXY_POOL) if (use_proxy and PROXY_POOL) else 1
+        effective_limit = limit_per_worker * num_workers
+        logger.info(
+            "Alignment cap: %d code(s) per worker × %d worker(s) = %d max queued "
+            "(each worker stops after %d completed tasks; surplus flushed if workers ban/cap). "
+            "Progress align-<n>/<eff> uses eff=min(queued, %d×pool_size) with pool_size=len(PROXY_POOL) "
+            "so Login / Parsed lines match; live bans reduce throughput but do not change eff.",
+            limit_per_worker,
+            num_workers,
+            effective_limit,
+            limit_per_worker,
+            limit_per_worker,
+        )
+    elif absolute_limit > 0:
+        effective_limit = absolute_limit
+    else:
+        effective_limit = 0
+
+    if effective_limit > 0:
+        missing_codes = missing_codes[:effective_limit]
 
     total = len(missing_codes)
     logger.info("Missing movie codes to align: %d", total)
@@ -530,7 +605,6 @@ def run_alignment(args: argparse.Namespace) -> int:
     # Common network setup
     reports_dir = cfg('REPORTS_DIR', 'reports')
     os.makedirs(reports_dir, exist_ok=True)
-    use_proxy = getattr(args, 'use_proxy', not getattr(args, 'no_proxy', False))
     spider_state.setup_proxy_pool(use_proxy=use_proxy)
     spider_state.initialize_request_handler()
     base_url = cfg('BASE_URL', 'https://javdb.com').rstrip('/')
@@ -560,15 +634,20 @@ def run_alignment(args: argparse.Namespace) -> int:
             stop_event=stop_event,
             sleep_min=movie_sleep_mgr.base_min,
             sleep_max=movie_sleep_mgr.base_max,
+            per_worker_task_limit=limit_per_worker if limit_per_worker > 0 else 0,
         )
         engine.start()
+
+        pool_n = max(1, len(PROXY_POOL))
+        align_denom = _align_eff_denominator(total, limit_per_worker, pool_n)
 
         for i, code in enumerate(missing_codes, 1):
             engine.submit(
                 build_search_url(code, f='all', base_url=base_url),
-                entry_index=f"align-{i}/{total}",
+                entry_index=f"align-{i}/{align_denom}",
                 meta={
                     'video_code': code,
+                    'align_seq': i,
                     'search_url': build_search_url(code, f='all', base_url=base_url),
                     'base_url': base_url,
                 },
@@ -576,7 +655,7 @@ def run_alignment(args: argparse.Namespace) -> int:
         engine.mark_done()
 
         logger.info(
-            "Starting %d workers for %d alignment tasks (search + detail per code)",
+            "Starting %d workers for %d queued alignment tasks (search + detail per code)",
             len(engine._workers), total,
         )
 
@@ -586,12 +665,49 @@ def run_alignment(args: argparse.Namespace) -> int:
         login_skipped = 0
         parallel_interrupted = False
 
+        def _align_progress_label(task) -> str:
+            """Build align-<seq>/<eff> — same formula as ``entry_index`` (configured pool size, not live bans)."""
+            meta = task.meta
+            seq = meta.get('align_seq')
+            if seq is None:
+                return task.entry_index
+            if limit_per_worker <= 0:
+                return f"align-{seq}/{total}"
+            pool_sz = max(1, len(PROXY_POOL))
+            eff = _align_eff_denominator(total, limit_per_worker, pool_sz)
+            return f"align-{seq}/{eff}"
+
+        def _log_per_worker_cap_after_movie_line(engine_result):
+            """Emit cap line after the per-film align log (see EngineResult flags)."""
+            if not getattr(engine_result, 'per_worker_cap_reached', False):
+                return
+            lim = getattr(engine_result, 'per_worker_cap_limit', 0) or 0
+            wn = engine_result.worker_name or 'worker'
+            _fetch_engine_logger.info(
+                "[%s] Per-worker task cap reached (%d) — stopping worker",
+                wn,
+                lim,
+            )
+
         def _apply_align_result(result):
             nonlocal processed, failed, skipped, login_skipped
             video_code = result.task.meta['video_code']
-            idx_str = result.task.entry_index
+            idx_str = _align_progress_label(result.task)
 
             if not result.success:
+                if result.error == PER_WORKER_TASK_CAP_ERROR:
+                    process_results.append(MissingProcessResult(
+                        video_code=video_code,
+                        status='per_worker_cap',
+                        message='not dispatched: per-worker limit reached on all workers',
+                    ))
+                    skipped += 1
+                    logger.info(
+                        "[%s] %s skipped — queue flushed after per-worker task cap",
+                        idx_str,
+                        video_code,
+                    )
+                    return
                 logger.warning("[%s] All proxies failed for %s", idx_str, video_code)
                 process_results.append(MissingProcessResult(
                     video_code=video_code, status='all_proxies_failed',
@@ -603,8 +719,7 @@ def run_alignment(args: argparse.Namespace) -> int:
             data = result.data
             status = data['status']
             proxy_name = str(data.get('proxy_name') or 'unknown-proxy')
-            worker_id = data.get('worker_id')
-            worker_label = f"{proxy_name}#w{worker_id}" if worker_id is not None else proxy_name
+            worker_label = proxy_name
 
             if status == 'login_required':
                 process_results.append(MissingProcessResult(
@@ -612,6 +727,7 @@ def run_alignment(args: argparse.Namespace) -> int:
                     message=data.get('message', ''),
                 ))
                 logger.info("[%s][%s] %s requires login, skipped (--no-login)", idx_str, worker_label, video_code)
+                _log_per_worker_cap_after_movie_line(result)
                 login_skipped += 1
                 return
 
@@ -623,6 +739,7 @@ def run_alignment(args: argparse.Namespace) -> int:
                 if not args.dry_run:
                     db_upsert_align_no_exact_match(video_code, reason=data.get('message', ''))
                 logger.info("[%s][%s] No exact match for %s", idx_str, worker_label, video_code)
+                _log_per_worker_cap_after_movie_line(result)
                 skipped += 1
                 return
 
@@ -639,6 +756,7 @@ def run_alignment(args: argparse.Namespace) -> int:
                     worker_label,
                     video_code,
                 )
+                _log_per_worker_cap_after_movie_line(result)
                 failed += 1
                 return
 
@@ -656,6 +774,7 @@ def run_alignment(args: argparse.Namespace) -> int:
                 chosen_upgrade_category=data.get('chosen_upgrade_category', ''),
             ))
             logger.info("[%s][%s] Parsed %s", idx_str, worker_label, video_code)
+            _log_per_worker_cap_after_movie_line(result)
             processed += 1
 
         try:
@@ -717,8 +836,33 @@ def run_alignment(args: argparse.Namespace) -> int:
             exact_entry = None
             if search_html:
                 parsed = parse_index_page(search_html, page_num=page_num)
-                if parsed.has_movie_list and parsed.movies:
-                    exact_entry = find_exact_video_code_match(parsed.movies, code)
+                movies = parsed.movies if parsed.has_movie_list else []
+                exact_entry = find_exact_entry_first_search_page(movies, code)
+
+            if exact_entry is None:
+                alt_code = derive_letter_suffix_fallback_video_code(code)
+                if alt_code is not None:
+                    movie_sleep_mgr.sleep()
+                    alt_url = build_search_url(alt_code, f='all', base_url=base_url)
+                    paged_alt = get_page_url(page_num, custom_url=alt_url)
+                    search_html_alt = _fetch_html(session, paged_alt, use_proxy=use_proxy)
+                    if search_html_alt and is_login_page(search_html_alt) and no_login:
+                        process_results.append(
+                            MissingProcessResult(
+                                video_code=code,
+                                status='login_required',
+                                message='login_required (--no-login)',
+                            )
+                        )
+                        logger.info(
+                            "[%d/%d] %s fallback search requires login, skipping (--no-login)",
+                            idx, total, code,
+                        )
+                        continue
+                    if search_html_alt:
+                        parsed_alt = parse_index_page(search_html_alt, page_num=page_num)
+                        m_alt = parsed_alt.movies if parsed_alt.has_movie_list else []
+                        exact_entry = find_exact_video_code_match(m_alt, alt_code)
 
             if exact_entry is None:
                 process_results.append(
@@ -785,9 +929,10 @@ def run_alignment(args: argparse.Namespace) -> int:
             actor_link = detail.get_first_actor_href()
             supporting_actors = detail.get_supporting_actors_json()
 
+            history_code = _history_video_code_for_moviehistory(exact_entry, code)
             if not args.dry_run:
                 db_upsert_history(**_build_db_upsert_kwargs(
-                    detail_href, code, magnet_links,
+                    detail_href, history_code, magnet_links,
                     actor_name, actor_gender, actor_link, supporting_actors,
                 ))
                 db_delete_align_no_exact_match(code)
@@ -812,6 +957,7 @@ def run_alignment(args: argparse.Namespace) -> int:
                     chosen_upgrade_category=upgrade_plan.chosen_upgrade_category,
                 )
             )
+            movie_sleep_mgr.record_parsed_movie()
 
     # ------------------------------------------------------------------
     # Write outputs (common for both paths)
@@ -882,7 +1028,21 @@ def parse_args() -> argparse.Namespace:
         description='Align inventory-only movie codes into MovieHistory with JavDB search/detail enrichment.',
     )
     parser.add_argument('--dry-run', action='store_true', help='Parse and plan only; do not write DB.')
-    parser.add_argument('--limit', type=int, default=0, help='Max number of missing codes to process (0=all).')
+    parser.add_argument(
+        '--limit',
+        type=int,
+        default=0,
+        help='Max missing codes in total (0=all). Ignored when --limit-per-worker > 0.',
+    )
+    parser.add_argument(
+        '--limit-per-worker',
+        type=int,
+        default=0,
+        dest='limit_per_worker',
+        help='Max completed align tasks per proxy worker (0=use --limit or all). '
+        'Queue upper bound is this × pool size; each worker stops after N successes; '
+        'surplus queued codes are flushed if all workers stop (e.g. bans/caps).',
+    )
     parser.add_argument('--codes', type=str, default='', help='Comma-separated codes to process.')
     parser.add_argument(
         '--no-proxy',

@@ -15,7 +15,7 @@ Usage::
     python3 -m apps.cli.migration [--backup] [--verify] [--dry-run]
     python3 -m apps.cli.migration --normalize-datetimes
     python3 -m apps.cli.migration --backfill-actors [--limit N] [--no-proxy]
-    python3 -m apps.cli.migration --align-inventory-history [--align-limit N] [--align-no-proxy] [--align-execute-delete]
+    python3 -m apps.cli.migration --align-inventory-history [--align-limit-per-worker N] [--align-no-proxy] [--align-execute-delete]
 """
 
 from __future__ import annotations
@@ -88,7 +88,16 @@ def main() -> int:
         "--align-limit",
         type=int,
         default=0,
-        help="Alignment: max missing codes to process (0 = all)",
+        help="Alignment: absolute max missing codes (0 = all). Ignored when --align-limit-per-worker > 0.",
+    )
+    parser.add_argument(
+        "--align-limit-per-worker",
+        type=int,
+        default=0,
+        dest="align_limit_per_worker",
+        help="Alignment: max completed tasks per proxy worker (0 = use --align-limit or all). "
+        "Queue size is at most per-worker x len(PROXY_POOL); each worker stops after this many "
+        "successful outcomes -- remaining workers do not absorb a banned peer's share.",
     )
     parser.add_argument(
         "--align-codes",
@@ -214,6 +223,7 @@ def main() -> int:
         align_ns = SimpleNamespace(
             dry_run=args.dry_run,
             limit=args.align_limit,
+            limit_per_worker=args.align_limit_per_worker,
             codes=args.align_codes,
             use_proxy=not args.align_no_proxy,
             no_login=args.align_no_login,

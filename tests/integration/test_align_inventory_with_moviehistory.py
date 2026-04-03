@@ -114,6 +114,16 @@ def test_parse_args_alignment_no_proxy(monkeypatch):
     assert args.use_proxy is False
 
 
+def test_parse_args_alignment_limit_per_worker(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        ['align_inventory_with_moviehistory.py', '--limit-per-worker', '5'],
+    )
+    args = parse_args()
+    assert args.limit_per_worker == 5
+
+
 def test_parse_args_alignment_rejects_conflicting_proxy_flags(monkeypatch):
     monkeypatch.setattr(sys, 'argv', [
         'align_inventory_with_moviehistory.py',
@@ -251,6 +261,7 @@ def test_run_alignment_skips_empty_auxiliary_reports(monkeypatch, temp_dir):
         ),
     )
     monkeypatch.setattr(mod, 'find_exact_video_code_match', lambda movies, code: movies[0])
+    monkeypatch.setattr(mod, 'find_exact_entry_first_search_page', lambda movies, code: movies[0] if movies else None)
     monkeypatch.setattr(mod, 'parse_detail_page', lambda html: FakeDetail())
     monkeypatch.setattr(mod, 'extract_magnets', lambda payload, index='': {})
     monkeypatch.setattr(

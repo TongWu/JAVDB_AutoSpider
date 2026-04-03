@@ -212,6 +212,20 @@ class ExploreIndexStatusPayload(BaseModel):
     use_cookie: bool = True
 
 
+class VideoCodeSearchPayload(BaseModel):
+    video_code: str = Field(..., min_length=1, max_length=64)
+    use_proxy: bool = True
+    use_cookie: bool = True
+    f: str = Field("all", max_length=32)
+
+    @field_validator("video_code", "f", mode="before")
+    @classmethod
+    def strip_whitespace(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+
 __all__ = [
     "AdhocTaskPayload",
     "CrawlIndexPayload",
@@ -227,4 +241,5 @@ __all__ = [
     "LoginPayload",
     "SpiderJobPayload",
     "UrlPayload",
+    "VideoCodeSearchPayload",
 ]

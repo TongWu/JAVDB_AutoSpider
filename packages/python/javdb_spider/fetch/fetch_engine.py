@@ -82,6 +82,7 @@ __all__ = [
     'FetchBackend', 'FetchRuntimeState',
     'EngineTask', 'EngineResult', 'LoginRequired',
     'WorkerContext', 'ParallelFetchBackend', 'FetchEngine',
+    'PER_WORKER_TASK_CAP_ERROR',
 ]
 
 # ---------------------------------------------------------------------------
@@ -91,6 +92,10 @@ _STARTUP_JITTER_BASE = (0.5, 2.0)
 _STARTUP_JITTER_PER_WORKER = (1.5, 3.0)
 _REQUEUE_BACKOFF_FACTOR = 0.3
 _REQUEUE_BACKOFF_CAP = 2.0
+
+# Emitted when :meth:`ParallelFetchBackend.results` drains tasks left in queue
+# after every worker thread has stopped (e.g. per-worker task cap).
+PER_WORKER_TASK_CAP_ERROR = "per_worker_task_cap"
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +130,11 @@ class EngineResult:
     """Result produced by the engine for each submitted task.
 
     ``data`` holds whatever the caller's *process_fn* returned.
+
+    When ``per_worker_cap_reached`` is True, this result is the worker's last
+    successful task before it stops (per-worker task limit). Callers should log
+    their normal per-task line first, then emit the cap message so logs stay in
+    film order.
     """
 
     task: EngineTask
@@ -133,6 +143,8 @@ class EngineResult:
     used_cf: bool = False
     error: Optional[str] = None
     worker_name: str = ''
+    per_worker_cap_reached: bool = False
+    per_worker_cap_limit: int = 0
     _ack_callback: Optional[Callable[[str, bool], None]] = field(
         default=None,
         repr=False,
@@ -338,15 +350,19 @@ class _EngineWorker(threading.Thread):
         sleep_max: float,
         penalty_tracker: PenaltyTracker,
         banned_proxies: set,
+        capped_proxies: set,
         drain_lock: threading.Lock,
         drain_done: List[bool],
         stop_event: Optional[threading.Event] = None,
+        per_worker_task_limit: int = 0,
     ):
         super().__init__(
             daemon=True,
             name=f"EngineWorker-{proxy_config.get('name', worker_id)}",
         )
         self.worker_id = worker_id
+        self._per_worker_task_limit = max(0, int(per_worker_task_limit))
+        self._per_worker_completed = 0
         self.proxy_config = proxy_config
         self.proxy_name: str = proxy_config.get('name', f'Proxy-{worker_id}')
         self.task_queue = task_queue
@@ -359,6 +375,7 @@ class _EngineWorker(threading.Thread):
         self._coordinator = coordinator
         self._stop_event = stop_event or threading.Event()
         self._banned_proxies = banned_proxies
+        self._capped_proxies = capped_proxies
         self._drain_lock = drain_lock
         self._drain_done = drain_done
 
@@ -376,6 +393,7 @@ class _EngineWorker(threading.Thread):
             sleep_min, sleep_max,
             penalty_tracker=penalty_tracker,
             throttle=TripleWindowThrottle(),
+            proxy_label=self.proxy_name,
         )
 
         self._proxy_pool = create_proxy_pool_from_config(
@@ -492,11 +510,68 @@ class _EngineWorker(threading.Thread):
             task_queue=self.task_queue,
         )
 
+    def _reassign_logged_in_worker_before_cap_exit(self) -> None:
+        """If this worker holds the session for login_queue, hand off before the thread exits.
+
+        Otherwise ``logged_in_worker_id`` would point at a dead worker, login-required
+        tasks would sit in ``login_queue`` with no live worker prioritising it, and
+        :meth:`FetchEngine.results` could stall until every worker had exited.
+        """
+        coord = self._coordinator
+        with coord.lock:
+            if coord.logged_in_worker_id != self.worker_id:
+                return
+            cookie = str(
+                getattr(self._handler.config, 'javdb_session_cookie', None) or '',
+            ).strip()
+            replacement = None
+            for w in self.all_workers:
+                if w.worker_id == self.worker_id:
+                    continue
+                if w.proxy_name in self._banned_proxies or w.proxy_name in self._capped_proxies:
+                    continue
+                if not w.is_alive():
+                    continue
+                replacement = w
+                break
+            if replacement is not None:
+                if cookie:
+                    replacement._handler.config.javdb_session_cookie = cookie
+                coord.logged_in_worker_id = replacement.worker_id
+                logger.info(
+                    "[%s] Per-worker task cap: transferring logged-in session to [%s]",
+                    self.proxy_name,
+                    replacement.proxy_name,
+                )
+                return
+            coord.logged_in_worker_id = None
+            drained = 0
+            while True:
+                try:
+                    t = self.login_queue.get_nowait()
+                except queue_module.Empty:
+                    break
+                requeue_front(self.task_queue, t)
+                drained += 1
+            if drained:
+                logger.warning(
+                    "[%s] Per-worker task cap: was logged-in worker; no peer to reassign — "
+                    "cleared login designation and re-queued %d login_queue task(s) to task_queue",
+                    self.proxy_name,
+                    drained,
+                )
+            else:
+                logger.warning(
+                    "[%s] Per-worker task cap: was logged-in worker; no peer to reassign — "
+                    "cleared login designation",
+                    self.proxy_name,
+                )
+
     # -- main loop -----------------------------------------------------------
 
     @property
     def _active_workers(self) -> int:
-        return self.total_workers - len(self._banned_proxies)
+        return self.total_workers - len(self._banned_proxies) - len(self._capped_proxies)
 
     def run(self) -> None:
         while True:
@@ -510,8 +585,8 @@ class _EngineWorker(threading.Thread):
 
             if self.proxy_name in task.failed_proxies:
                 active = self._active_workers
-                failed_non_banned = task.failed_proxies - self._banned_proxies
-                if active <= 0 or len(failed_non_banned) >= active:
+                failed_non_active = task.failed_proxies - self._banned_proxies - self._capped_proxies
+                if active <= 0 or len(failed_non_active) >= active:
                     self.result_queue.put(EngineResult(
                         task=task, success=False,
                         error='all_proxies_failed',
@@ -556,11 +631,26 @@ class _EngineWorker(threading.Thread):
             try:
                 data = self._process_fn(ctx, task)
                 if data is not None:
+                    self._per_worker_completed += 1
+                    cap_now = (
+                        self._per_worker_task_limit > 0
+                        and self._per_worker_completed
+                        >= self._per_worker_task_limit
+                    )
                     self.result_queue.put(EngineResult(
                         task=task, success=True,
                         data=data, used_cf=ctx._last_used_cf,
                         worker_name=self.proxy_name,
+                        per_worker_cap_reached=cap_now,
+                        per_worker_cap_limit=(
+                            self._per_worker_task_limit if cap_now else 0
+                        ),
                     ))
+                    if cap_now:
+                        self._reassign_logged_in_worker_before_cap_exit()
+                        with self._drain_lock:
+                            self._capped_proxies.add(self.proxy_name)
+                        break
                 else:
                     task.failed_proxies.add(self.proxy_name)
                     task.retry_count += 1
@@ -618,21 +708,53 @@ class _EngineWorker(threading.Thread):
             )
 
             if active > 0:
-                remaining = self.task_queue.qsize() + active
+                # Queue depth + in-flight tasks in worker threads (approximate).
+                remaining_est = self.task_queue.qsize() + active
+                volume_total = remaining_est
+                if self._per_worker_task_limit > 0:
+                    cap = self._per_worker_task_limit * active
+                    volume_total = min(remaining_est, cap)
                 for w in self.all_workers:
                     if w.proxy_name not in self._banned_proxies:
                         w._sleep_mgr.apply_volume_multiplier(
-                            remaining, num_workers=active, quiet=True,
+                            volume_total, num_workers=active, quiet=True,
                         )
-                per_worker = max(1, -(-remaining // max(1, active)))
+                per_worker = max(1, -(-volume_total // max(1, active)))
                 min_m, max_m = _interpolate_multiplier(per_worker)
                 if min_m > 1.0 or max_m > 1.0:
-                    logger.info(
-                        "Volume-based sleep adjustment (ban rebalance): "
-                        "total=%d, workers=%d, per_worker=%d → "
-                        "volume_factor %.2fx/%.2fx",
-                        remaining, active, per_worker, min_m, max_m,
+                    sample_w = next(
+                        (w for w in self.all_workers
+                         if w.proxy_name not in self._banned_proxies), None,
                     )
+                    cap_note = ""
+                    if (
+                        self._per_worker_task_limit > 0
+                        and volume_total < remaining_est
+                    ):
+                        cap_note = (
+                            f" [sleep volume capped: queue_est={remaining_est}, "
+                            f"per_worker_task_limit={self._per_worker_task_limit}]"
+                        )
+                    if sample_w is not None:
+                        sm = sample_w._sleep_mgr
+                        logger.info(
+                            "Volume-based sleep adjustment (ban rebalance): "
+                            "total=%d, workers=%d, per_worker=%d → "
+                            "volume_factor %.2fx/%.2fx, "
+                            "sleep range ~[%.2f, %.2f] (base ~[%.2f, %.2f])%s",
+                            volume_total, active, per_worker, min_m, max_m,
+                            sm.sleep_min, sm.sleep_max,
+                            sm.base_min, sm.base_max,
+                            cap_note,
+                        )
+                    else:
+                        logger.info(
+                            "Volume-based sleep adjustment (ban rebalance): "
+                            "total=%d, workers=%d, per_worker=%d → "
+                            "volume_factor %.2fx/%.2fx%s",
+                            volume_total, active, per_worker, min_m, max_m,
+                            cap_note,
+                        )
                 requeue_front(self.task_queue, task)
             else:
                 self.result_queue.put(EngineResult(
@@ -694,9 +816,11 @@ class ParallelFetchBackend(FetchBackend):
         sleep_max: Optional[float] = None,
         runtime_state: Optional[FetchRuntimeState] = None,
         use_priority_queue: bool = False,
+        per_worker_task_limit: int = 0,
     ):
         self._process_fn = process_fn
         self._use_cookie = use_cookie
+        self._per_worker_task_limit = max(0, int(per_worker_task_limit))
         self._stop_event = stop_event or threading.Event()
         self._sleep_min = (
             sleep_min if sleep_min is not None else _global_sleep_mgr.base_min
@@ -728,6 +852,7 @@ class ParallelFetchBackend(FetchBackend):
         self._received = 0
         self._done = False
         self._count_lock = threading.Lock()
+        self._stale_queue_flushed = False
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -770,6 +895,7 @@ class ParallelFetchBackend(FetchBackend):
             login_proxy_name=LOGIN_PROXY_NAME,
         )
 
+        capped_proxies: set = set()
         drain_lock = threading.Lock()
         drain_done: List[bool] = [False]
 
@@ -792,9 +918,11 @@ class ParallelFetchBackend(FetchBackend):
                 sleep_max=self._sleep_max,
                 penalty_tracker=_shared_penalty_tracker,
                 banned_proxies=banned_proxies,
+                capped_proxies=capped_proxies,
                 drain_lock=drain_lock,
                 drain_done=drain_done,
                 stop_event=self._stop_event,
+                per_worker_task_limit=self._per_worker_task_limit,
             )
             self._workers.append(w)
 
@@ -930,6 +1058,51 @@ class ParallelFetchBackend(FetchBackend):
         with self._count_lock:
             return self._submitted - self._received
 
+    def _maybe_flush_stalled_tasks(self) -> None:
+        """If every worker has exited but tasks remain, emit failure results.
+
+        Otherwise :meth:`results` would block forever (e.g. per-worker task
+        cap stopped all workers while the shared queue still holds tasks).
+        """
+        if self._stale_queue_flushed or not self._workers:
+            return
+        if any(w.is_alive() for w in self._workers):
+            return
+        with self._count_lock:
+            if not self._done:
+                return
+            pending = self._submitted - self._received
+        if pending <= 0:
+            return
+
+        flushed = 0
+        for q in (self._task_queue, self._login_queue):
+            while True:
+                try:
+                    item = q.get_nowait()
+                except queue_module.Empty:
+                    break
+                if item is None:
+                    continue
+                self._result_queue.put(
+                    EngineResult(
+                        task=item,
+                        success=False,
+                        error=PER_WORKER_TASK_CAP_ERROR,
+                        worker_name="engine",
+                    ),
+                )
+                flushed += 1
+
+        if flushed:
+            self._stale_queue_flushed = True
+            logger.warning(
+                "FetchEngine: all workers stopped with %d task(s) still queued — "
+                "emitted failure results (%s)",
+                flushed,
+                PER_WORKER_TASK_CAP_ERROR,
+            )
+
     def results(self) -> Iterator[EngineResult]:
         """Yield results as workers complete them.
 
@@ -944,6 +1117,7 @@ class ParallelFetchBackend(FetchBackend):
             try:
                 result = self._result_queue.get(timeout=1.0)
             except queue_module.Empty:
+                self._maybe_flush_stalled_tasks()
                 continue
             with self._count_lock:
                 self._received += 1
