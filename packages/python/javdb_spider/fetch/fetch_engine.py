@@ -350,6 +350,7 @@ class _EngineWorker(threading.Thread):
         sleep_max: float,
         penalty_tracker: PenaltyTracker,
         banned_proxies: set,
+        capped_proxies: set,
         drain_lock: threading.Lock,
         drain_done: List[bool],
         stop_event: Optional[threading.Event] = None,
@@ -374,6 +375,7 @@ class _EngineWorker(threading.Thread):
         self._coordinator = coordinator
         self._stop_event = stop_event or threading.Event()
         self._banned_proxies = banned_proxies
+        self._capped_proxies = capped_proxies
         self._drain_lock = drain_lock
         self._drain_done = drain_done
 
@@ -526,7 +528,7 @@ class _EngineWorker(threading.Thread):
             for w in self.all_workers:
                 if w.worker_id == self.worker_id:
                     continue
-                if w.proxy_name in self._banned_proxies:
+                if w.proxy_name in self._banned_proxies or w.proxy_name in self._capped_proxies:
                     continue
                 if not w.is_alive():
                     continue
@@ -569,7 +571,7 @@ class _EngineWorker(threading.Thread):
 
     @property
     def _active_workers(self) -> int:
-        return self.total_workers - len(self._banned_proxies)
+        return self.total_workers - len(self._banned_proxies) - len(self._capped_proxies)
 
     def run(self) -> None:
         while True:
@@ -583,8 +585,8 @@ class _EngineWorker(threading.Thread):
 
             if self.proxy_name in task.failed_proxies:
                 active = self._active_workers
-                failed_non_banned = task.failed_proxies - self._banned_proxies
-                if active <= 0 or len(failed_non_banned) >= active:
+                failed_non_active = task.failed_proxies - self._banned_proxies - self._capped_proxies
+                if active <= 0 or len(failed_non_active) >= active:
                     self.result_queue.put(EngineResult(
                         task=task, success=False,
                         error='all_proxies_failed',
@@ -646,6 +648,8 @@ class _EngineWorker(threading.Thread):
                     ))
                     if cap_now:
                         self._reassign_logged_in_worker_before_cap_exit()
+                        with self._drain_lock:
+                            self._capped_proxies.add(self.proxy_name)
                         break
                 else:
                     task.failed_proxies.add(self.proxy_name)
@@ -891,6 +895,7 @@ class ParallelFetchBackend(FetchBackend):
             login_proxy_name=LOGIN_PROXY_NAME,
         )
 
+        capped_proxies: set = set()
         drain_lock = threading.Lock()
         drain_done: List[bool] = [False]
 
@@ -913,6 +918,7 @@ class ParallelFetchBackend(FetchBackend):
                 sleep_max=self._sleep_max,
                 penalty_tracker=_shared_penalty_tracker,
                 banned_proxies=banned_proxies,
+                capped_proxies=capped_proxies,
                 drain_lock=drain_lock,
                 drain_done=drain_done,
                 stop_event=self._stop_event,
