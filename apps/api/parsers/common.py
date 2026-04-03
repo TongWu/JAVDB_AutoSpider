@@ -154,19 +154,23 @@ def extract_all_movie_links(parent_tag: Tag) -> list:
 # Video-code extraction (ported from utils/parser.py)
 # ---------------------------------------------------------------------------
 
+_HYPHENATED_CODE_RE = re.compile(r'^[A-Za-z0-9]+-[A-Za-z0-9]+$')
+
+
 def _is_plausible_video_code(raw: str) -> bool:
     """Heuristic: accept classic ``ABC-123`` codes and hyphen-less studio codes (e.g. ``n0656``).
 
-    Rejects empty strings and bare letter-only blobs (e.g. a mistaken title fragment).
+    Rejects empty strings, bare letter-only blobs (e.g. a mistaken title fragment),
+    and hyphenated strings that look like natural-language titles (contain spaces or
+    non-alphanumeric characters beyond ``-``).
     """
     s = (raw or '').strip()
     if len(s) < 2:
         return False
-    if '-' in s:
-        return True
-    # Hyphen-less codes must mix letters and digits so we do not treat e.g. "NODASH" as a code.
     has_letter = any(c.isalpha() for c in s)
     has_digit = any(c.isdigit() for c in s)
+    if '-' in s:
+        return bool(_HYPHENATED_CODE_RE.match(s)) and has_letter and has_digit
     return has_letter and has_digit
 
 
