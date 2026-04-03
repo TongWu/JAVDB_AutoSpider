@@ -96,8 +96,8 @@ def main() -> int:
         default=0,
         dest="align_limit_per_worker",
         help="Alignment: max completed tasks per proxy worker (0 = use --align-limit or all). "
-        "Queue size is at most per-worker × len(PROXY_POOL); each worker stops after this many "
-        "successful outcomes—remaining workers do not absorb a banned peer's share.",
+        "Queue size is at most per-worker x len(PROXY_POOL); each worker stops after this many "
+        "successful outcomes -- remaining workers do not absorb a banned peer's share.",
     )
     parser.add_argument(
         "--align-codes",

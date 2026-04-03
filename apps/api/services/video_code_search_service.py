@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
@@ -36,7 +37,9 @@ async def search_by_video_code(
     base_url = str(cfg.get("BASE_URL", "https://javdb.com")).rstrip("/")
 
     search_url = build_search_url(video_code, f=f, base_url=base_url)
-    html = _fetch_javdb_html(search_url, use_proxy=use_proxy, use_cookie=use_cookie)
+    html = await asyncio.to_thread(
+        _fetch_javdb_html, search_url, use_proxy=use_proxy, use_cookie=use_cookie,
+    )
 
     if is_login_page(html):
         raise HTTPException(status_code=403, detail="JavDB login required")
@@ -52,7 +55,9 @@ async def search_by_video_code(
         if alt_code is not None:
             alt_url = build_search_url(alt_code, f=f, base_url=base_url)
             try:
-                alt_html = _fetch_javdb_html(alt_url, use_proxy=use_proxy, use_cookie=use_cookie)
+                alt_html = await asyncio.to_thread(
+                    _fetch_javdb_html, alt_url, use_proxy=use_proxy, use_cookie=use_cookie,
+                )
             except HTTPException:
                 alt_html = None
 
