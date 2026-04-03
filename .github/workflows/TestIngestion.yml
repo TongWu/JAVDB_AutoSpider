@@ -14,15 +14,15 @@ permissions:
   contents: read  # Least privilege: only commit-results job needs write (overrides at job level)
 
 on:
-  # push:  # DISABLED FOR PRIVATE REPO - enabled in public repo
-  #   branches:
-  #     - main
-  #   paths:
-  #     - 'packages/python/**/*.py'
-  #     - 'apps/**/*.py'
-  #     - 'scripts/**/*.py'
-  #     - 'utils/**/*.py'
-  #     - 'pipeline.py'
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/python/**/*.py'
+      - 'apps/**/*.py'
+      - 'scripts/**/*.py'
+      - 'utils/**/*.py'
+      - 'pipeline.py'
   
   workflow_dispatch:
     inputs:
