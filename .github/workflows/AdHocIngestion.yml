@@ -533,6 +533,8 @@ jobs:
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
+          set -eo pipefail
+          
           # Guard: fail workflow if ARTIFACT_KEY is not configured (prevent unencrypted artifacts)
           if [ -z "$ARTIFACT_KEY" ]; then
             echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
@@ -555,12 +557,16 @@ jobs:
           fi
           
           if [ -n "$LOG_FILES" ]; then
+            # Show file sizes before archiving
+            echo "Log files to archive:"
+            ls -la $LOG_FILES
+            
             tar -czf - $LOG_FILES | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
               -out encrypted_artifacts/logs.tar.gz.enc \
               -pass pass:"$ARTIFACT_KEY"
             echo "✓ Logs encrypted successfully (including proxy ban HTML files if any)"
           else
-            echo "No log files found to encrypt"
+            echo "⚠️ No log files found to encrypt"
           fi
 
       - name: Upload encrypted logs artifact
@@ -675,6 +681,8 @@ jobs:
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
+          set -eo pipefail
+          
           # Guard: fail workflow if ARTIFACT_KEY is not configured
           if [ -z "$ARTIFACT_KEY" ]; then
             echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
@@ -688,8 +696,16 @@ jobs:
               -in encrypted_artifacts/logs.tar.gz.enc \
               -pass pass:"$ARTIFACT_KEY" | tar -xzf -
             echo "✓ Logs decrypted successfully"
+            # Verify key log files were extracted
+            for f in logs/spider.log logs/pipeline.log; do
+              if [ -f "$f" ]; then
+                echo "  $f: $(wc -c < "$f") bytes"
+              else
+                echo "  ⚠️ $f not found after extraction"
+              fi
+            done
           else
-            echo "No encrypted logs found"
+            echo "⚠️ No encrypted logs artifact found — email will have empty log attachments"
             mkdir -p logs
           fi
 
@@ -704,6 +720,8 @@ jobs:
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
+          set -eo pipefail
+          
           # Guard: fail workflow if ARTIFACT_KEY is not configured
           if [ -z "$ARTIFACT_KEY" ]; then
             echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
