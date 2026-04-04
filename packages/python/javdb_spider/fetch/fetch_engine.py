@@ -115,6 +115,13 @@ class EngineTask:
     ``priority`` controls dequeue order when the engine uses a priority queue
     (lower values are dequeued first).  Default ``0`` preserves FIFO behaviour
     when all tasks share the same priority.
+
+    ``_deadline`` is set internally by the worker when a task-level time
+    budget is configured; it is **not** meant to be supplied by callers.
+
+    ``_speculative`` is ``True`` when the task was created by the engine's
+    speculative execution mechanism (idle workers racing on an in-flight
+    task).  Speculative tasks are never re-queued on failure.
     """
 
     url: str
@@ -123,6 +130,8 @@ class EngineTask:
     failed_proxies: set = field(default_factory=set)
     meta: dict = field(default_factory=dict)
     priority: int = 0
+    _deadline: Optional[float] = field(default=None, repr=False, compare=False)
+    _speculative: bool = field(default=False, repr=False, compare=False)
 
 
 @dataclass
@@ -246,8 +255,9 @@ class WorkerContext:
     fallback and login-page detection.
     """
 
-    def __init__(self, worker: '_EngineWorker'):
+    def __init__(self, worker: '_EngineWorker', task: EngineTask):
         self._worker = worker
+        self._current_task = task
         self._last_used_cf: bool = False
 
     @property
@@ -257,6 +267,26 @@ class WorkerContext:
     @property
     def worker_id(self) -> int:
         return self._worker.worker_id
+
+    @property
+    def queue_pressure(self) -> str:
+        """Queue pressure indicator (``'low'`` or ``'normal'``).
+
+        When ``'low'``, the task queue is nearly empty while many workers
+        are idle.  Callers should prefer a fast re-queue over an
+        expensive CF fallback cascade so that another worker with a
+        different proxy can attempt the direct path.
+        """
+        return self._worker._queue_pressure
+
+    @property
+    def is_expired(self) -> bool:
+        """``True`` when the current task has exceeded its time budget.
+
+        Custom ``process_fn`` implementations should check this between
+        expensive steps and return ``None`` early to allow a re-queue.
+        """
+        return self._worker._is_task_expired(self._current_task)
 
     # -- low-level -----------------------------------------------------------
 
@@ -304,6 +334,12 @@ class WorkerContext:
                 raise LoginRequired()
             self._last_used_cf = False
             return html
+
+        if self.queue_pressure == 'low':
+            return None
+
+        if self.is_expired:
+            return None
 
         worker._sleep_mgr.sleep()
         html = worker._fetch_html(url, True)
@@ -355,6 +391,11 @@ class _EngineWorker(threading.Thread):
         drain_done: List[bool],
         stop_event: Optional[threading.Event] = None,
         per_worker_task_limit: int = 0,
+        task_timeout: float = 0,
+        in_flight: Optional[dict] = None,
+        in_flight_lock: Optional[threading.Lock] = None,
+        completed_entries: Optional[set] = None,
+        completed_lock: Optional[threading.Lock] = None,
     ):
         super().__init__(
             daemon=True,
@@ -363,6 +404,7 @@ class _EngineWorker(threading.Thread):
         self.worker_id = worker_id
         self._per_worker_task_limit = max(0, int(per_worker_task_limit))
         self._per_worker_completed = 0
+        self._task_timeout = max(0.0, float(task_timeout))
         self.proxy_config = proxy_config
         self.proxy_name: str = proxy_config.get('name', f'Proxy-{worker_id}')
         self.task_queue = task_queue
@@ -378,6 +420,13 @@ class _EngineWorker(threading.Thread):
         self._capped_proxies = capped_proxies
         self._drain_lock = drain_lock
         self._drain_done = drain_done
+
+        # Speculative execution shared state (all workers share the same
+        # dict/set/lock instances, created by ParallelFetchBackend).
+        self._in_flight: dict = in_flight if in_flight is not None else {}
+        self._in_flight_lock = in_flight_lock or threading.Lock()
+        self._completed_entries: set = completed_entries if completed_entries is not None else set()
+        self._completed_lock = completed_lock or threading.Lock()
 
         self._cf_bypass_since: Optional[float] = None
         self._first_request = True
@@ -420,6 +469,24 @@ class _EngineWorker(threading.Thread):
             ),
             penalty_tracker=penalty_tracker,
         )
+
+    # -- task deadline -------------------------------------------------------
+
+    def _stamp_deadline(self, task: EngineTask) -> None:
+        """Set the task's deadline based on the configured timeout.
+
+        Also propagates the deadline to the ``RequestHandler`` so the
+        CF fallback cascade can bail out early.
+        """
+        if self._task_timeout > 0:
+            task._deadline = time.monotonic() + self._task_timeout
+        else:
+            task._deadline = None
+        self._handler.config.task_deadline = task._deadline
+
+    def _is_task_expired(self, task: EngineTask) -> bool:
+        """Return ``True`` when the task has exceeded its time budget."""
+        return task._deadline is not None and time.monotonic() > task._deadline
 
     # -- fetch helpers -------------------------------------------------------
 
@@ -477,6 +544,66 @@ class _EngineWorker(threading.Thread):
 
     # -- task routing --------------------------------------------------------
 
+    def _try_speculative_task(self) -> Optional[EngineTask]:
+        """Create a speculative copy of an in-flight task if possible.
+
+        Only fires when the task queue is empty and another worker is
+        actively processing a task that this worker's proxy hasn't
+        tried yet.  The copy is marked ``_speculative=True`` so the
+        run-loop knows not to re-queue on failure.
+        """
+        with self._in_flight_lock:
+            for entry_idx, task in self._in_flight.items():
+                with self._completed_lock:
+                    if entry_idx in self._completed_entries:
+                        continue
+                if self.proxy_name in task.failed_proxies:
+                    continue
+                spec = EngineTask(
+                    url=task.url,
+                    entry_index=task.entry_index,
+                    retry_count=task.retry_count,
+                    failed_proxies=set(task.failed_proxies),
+                    meta=dict(task.meta),
+                    priority=task.priority,
+                    _deadline=task._deadline,
+                    _speculative=True,
+                )
+                return spec
+        return None
+
+    def _is_entry_completed(self, entry_index: str) -> bool:
+        if not entry_index:
+            return False
+        with self._completed_lock:
+            return entry_index in self._completed_entries
+
+    def _mark_entry_completed(self, entry_index: str) -> bool:
+        """Atomically mark an entry as completed.
+
+        Returns ``True`` if this call was the one that set it (i.e. first
+        to complete).  Returns ``False`` if it was already completed.
+        """
+        if not entry_index:
+            return True
+        with self._completed_lock:
+            if entry_index in self._completed_entries:
+                return False
+            self._completed_entries.add(entry_index)
+            return True
+
+    def _register_in_flight(self, task: EngineTask) -> None:
+        if task._speculative or not task.entry_index:
+            return
+        with self._in_flight_lock:
+            self._in_flight[task.entry_index] = task
+
+    def _unregister_in_flight(self, task: EngineTask) -> None:
+        if task._speculative or not task.entry_index:
+            return
+        with self._in_flight_lock:
+            self._in_flight.pop(task.entry_index, None)
+
     def _get_next_task(self) -> Optional[EngineTask]:
         while True:
             if self._stop_event.is_set():
@@ -499,6 +626,9 @@ class _EngineWorker(threading.Thread):
             try:
                 return self.task_queue.get(timeout=0.3 if am_logged_in else 2.0)
             except queue_module.Empty:
+                spec = self._try_speculative_task()
+                if spec is not None:
+                    return spec
                 continue
 
     def _handle_login_required(self, task: EngineTask) -> None:
@@ -573,17 +703,40 @@ class _EngineWorker(threading.Thread):
     def _active_workers(self) -> int:
         return self.total_workers - len(self._banned_proxies) - len(self._capped_proxies)
 
-    def run(self) -> None:
+    @property
+    def _queue_pressure(self) -> str:
+        """Estimate queue pressure relative to idle worker capacity.
+
+        Returns ``'low'`` when the task queue is nearly empty and most
+        workers are likely idle — callers can use this to skip expensive
+        fallback paths (e.g. CF bypass cascade) and re-queue immediately
+        so that another worker with a different proxy can try the direct
+        path instead.
+        """
+        qsize = self.task_queue.qsize()
+        active = self._active_workers
+        if qsize <= 1 and active > 2:
+            return 'low'
+        return 'normal'
+
+    def run(self) -> None:  # noqa: C901 – complexity from speculative paths
         while True:
             task = self._get_next_task()
             if task is None:
                 break
 
             if self._stop_event.is_set():
-                self.task_queue.put(task)
+                if not task._speculative:
+                    self.task_queue.put(task)
+                continue
+
+            # Speculative tasks whose entry was already completed are stale.
+            if task._speculative and self._is_entry_completed(task.entry_index):
                 continue
 
             if self.proxy_name in task.failed_proxies:
+                if task._speculative:
+                    continue
                 active = self._active_workers
                 failed_non_active = task.failed_proxies - self._banned_proxies - self._capped_proxies
                 if active <= 0 or len(failed_non_active) >= active:
@@ -605,7 +758,8 @@ class _EngineWorker(threading.Thread):
                     self.proxy_name, self._startup_jitter,
                 )
                 if self._interruptible_sleep(self._startup_jitter):
-                    self.task_queue.put(task)
+                    if not task._speculative:
+                        self.task_queue.put(task)
                     continue
                 self._first_request = False
             else:
@@ -618,19 +772,35 @@ class _EngineWorker(threading.Thread):
                     "Movie sleep: %.2fs (penalty=%.2f)", sleep_time, pf,
                 )
                 if self._interruptible_sleep(sleep_time):
-                    self.task_queue.put(task)
+                    if not task._speculative:
+                        self.task_queue.put(task)
                     continue
                 if self._sleep_mgr._throttle:
                     self._sleep_mgr._throttle.wait_if_needed()
 
             if self._stop_event.is_set():
-                self.task_queue.put(task)
+                if not task._speculative:
+                    self.task_queue.put(task)
                 continue
 
-            ctx = WorkerContext(self)
+            # Check again before the expensive process_fn call.
+            if task._speculative and self._is_entry_completed(task.entry_index):
+                continue
+
+            self._stamp_deadline(task)
+            self._register_in_flight(task)
+            ctx = WorkerContext(self, task)
             try:
                 data = self._process_fn(ctx, task)
                 if data is not None:
+                    if not self._mark_entry_completed(task.entry_index):
+                        # Another worker (speculative or original) already
+                        # produced a result for this entry — discard ours.
+                        logger.debug(
+                            "%s discarding duplicate result (already completed)",
+                            _task_worker_ctx(task.entry_index, self.proxy_name),
+                        )
+                        continue
                     self._per_worker_completed += 1
                     cap_now = (
                         self._per_worker_task_limit > 0
@@ -652,6 +822,11 @@ class _EngineWorker(threading.Thread):
                             self._capped_proxies.add(self.proxy_name)
                         break
                 else:
+                    # Speculative tasks are never re-queued on failure.
+                    if task._speculative:
+                        continue
+                    if self._is_entry_completed(task.entry_index):
+                        continue
                     task.failed_proxies.add(self.proxy_name)
                     task.retry_count += 1
                     requeue_front(self.task_queue, task)
@@ -662,11 +837,15 @@ class _EngineWorker(threading.Thread):
                         len(task.failed_proxies), self._active_workers,
                     )
             except LoginRequired:
-                self._handle_login_required(task)
+                if not task._speculative:
+                    self._handle_login_required(task)
             except ProxyBannedError:
-                self._handle_proxy_banned(task)
+                if not task._speculative:
+                    self._handle_proxy_banned(task)
                 break
             except ProxyExhaustedError:
+                if task._speculative:
+                    continue
                 task.failed_proxies.add(self.proxy_name)
                 task.retry_count += 1
                 requeue_front(self.task_queue, task)
@@ -677,6 +856,8 @@ class _EngineWorker(threading.Thread):
                     len(task.failed_proxies), self._active_workers,
                 )
             except Exception as exc:
+                if task._speculative:
+                    continue
                 task.failed_proxies.add(self.proxy_name)
                 task.retry_count += 1
                 requeue_front(self.task_queue, task)
@@ -687,6 +868,8 @@ class _EngineWorker(threading.Thread):
                     exc,
                     len(task.failed_proxies), self._active_workers,
                 )
+            finally:
+                self._unregister_in_flight(task)
 
     def _handle_proxy_banned(self, task: EngineTask) -> None:
         """Handle proxy ban: stop this worker and re-route tasks.
@@ -817,10 +1000,12 @@ class ParallelFetchBackend(FetchBackend):
         runtime_state: Optional[FetchRuntimeState] = None,
         use_priority_queue: bool = False,
         per_worker_task_limit: int = 0,
+        task_timeout: float = 0,
     ):
         self._process_fn = process_fn
         self._use_cookie = use_cookie
         self._per_worker_task_limit = max(0, int(per_worker_task_limit))
+        self._task_timeout = max(0.0, float(task_timeout))
         self._stop_event = stop_event or threading.Event()
         self._sleep_min = (
             sleep_min if sleep_min is not None else _global_sleep_mgr.base_min
@@ -853,6 +1038,12 @@ class ParallelFetchBackend(FetchBackend):
         self._done = False
         self._count_lock = threading.Lock()
         self._stale_queue_flushed = False
+
+        # Speculative execution: shared across all workers.
+        self._in_flight: dict = {}
+        self._in_flight_lock = threading.Lock()
+        self._completed_entries: set = set()
+        self._completed_lock = threading.Lock()
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -923,6 +1114,11 @@ class ParallelFetchBackend(FetchBackend):
                 drain_done=drain_done,
                 stop_event=self._stop_event,
                 per_worker_task_limit=self._per_worker_task_limit,
+                task_timeout=self._task_timeout,
+                in_flight=self._in_flight,
+                in_flight_lock=self._in_flight_lock,
+                completed_entries=self._completed_entries,
+                completed_lock=self._completed_lock,
             )
             self._workers.append(w)
 
@@ -1231,6 +1427,24 @@ class ParallelFetchBackend(FetchBackend):
                     "%s parse failed: Direct",
                     _task_worker_ctx(task.entry_index, ctx.proxy_name),
                 )
+
+            # When most workers are idle and few tasks remain, skip the
+            # expensive CF bypass cascade and re-queue immediately so
+            # another worker can attempt the direct path with a different
+            # proxy (avoids head-of-line blocking).
+            if ctx.queue_pressure == 'low':
+                logger.debug(
+                    "%s low queue pressure — skipping CF fallback, re-queuing",
+                    _task_worker_ctx(task.entry_index, ctx.proxy_name),
+                )
+                return None
+
+            if ctx.is_expired:
+                logger.debug(
+                    "%s task time budget exceeded before CF fallback",
+                    _task_worker_ctx(task.entry_index, ctx.proxy_name),
+                )
+                return None
 
             # Adaptive sleep before CF bypass (mirrors WorkerContext.fetch
             # and the sequential fallback's _sleep_between_fetches pattern).
