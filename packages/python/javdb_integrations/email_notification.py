@@ -1193,7 +1193,12 @@ def convert_log_to_txt(log_path):
     Returns the path to the txt file.
     """
     if not os.path.exists(log_path):
+        logger.info(f"Log file not found, skipping: {log_path}")
         return None
+    
+    file_size = os.path.getsize(log_path)
+    if file_size == 0:
+        logger.warning(f"Log file is empty (0 bytes): {log_path}")
     
     # Create txt path by replacing extension
     base_name = os.path.basename(log_path)
@@ -1203,7 +1208,7 @@ def convert_log_to_txt(log_path):
     
     # Copy content to txt file
     shutil.copy2(log_path, txt_path)
-    logger.debug(f"Converted {log_path} to {txt_path}")
+    logger.info(f"Converted {log_path} → {txt_path} ({file_size} bytes)")
     
     return txt_path
 
@@ -1249,7 +1254,11 @@ def send_email(subject, body, attachments=None, dry_run=False):
     if attachments:
         for file_path in attachments:
             if not os.path.exists(file_path):
-                logger.warning(f'Attachment not found: {file_path}')
+                logger.warning(f'Attachment not found, skipping: {file_path}')
+                continue
+            file_size = os.path.getsize(file_path)
+            if file_size == 0:
+                logger.warning(f'Attachment is empty (0 bytes), skipping: {file_path}')
                 continue
             with open(file_path, 'rb') as f:
                 file_data = f.read()
@@ -1257,6 +1266,7 @@ def send_email(subject, body, attachments=None, dry_run=False):
                 maintype = 'application'
                 subtype = 'octet-stream'
                 msg.add_attachment(file_data, maintype=maintype, subtype=subtype, filename=file_name)
+                logger.info(f'Attached: {file_name} ({file_size} bytes)')
 
     logger.info(f'Connecting to SMTP server {mask_server(SMTP_SERVER)}:{SMTP_PORT}...')
     try:
@@ -1527,7 +1537,7 @@ def main():
     
     # Add CSV if exists
     attachments = txt_attachments.copy()
-    if os.path.exists(csv_path):
+    if csv_path and os.path.exists(csv_path):
         attachments.insert(0, csv_path)
     
     # Add dedup.csv if dedup was enabled and file exists
