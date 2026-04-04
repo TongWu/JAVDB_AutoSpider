@@ -54,6 +54,8 @@ MICRO_BREAK_PROB = 0.04
 MICRO_BREAK_EXTRA_MIN = 30.0
 MICRO_BREAK_EXTRA_MAX = 120.0
 MICRO_BREAK_FLOOR = 60.0
+MICRO_BREAK_MIN_MOVIES = 5    # min movies before micro-break eligible
+MICRO_BREAK_MAX_MOVIES = 15   # max (gate randomised in this range each cycle)
 
 # ---------------------------------------------------------------------------
 # Volume anchors — piecewise-linear interpolation (per-worker count)
@@ -279,6 +281,7 @@ class MovieSleepManager:
         self._last_per_worker_n = 0
         self._last_volume_total = 0
         self._parsed_since_micro_break = 0
+        self._micro_break_gate = random.randint(MICRO_BREAK_MIN_MOVIES, MICRO_BREAK_MAX_MOVIES)
 
     # -- factor setters ----------------------------------------------------
 
@@ -390,20 +393,26 @@ class MovieSleepManager:
             sleep_time = self._rng.uniform(eff_min + span * 0.7, eff_max)
             self._force_high = False
         elif roll < MICRO_BREAK_PROB:
-            break_lo = max(MICRO_BREAK_FLOOR, eff_max + MICRO_BREAK_EXTRA_MIN)
-            break_hi = eff_max + MICRO_BREAK_EXTRA_MAX
-            t_long = min(round(self._rng.uniform(break_lo, break_hi), 2), ABSOLUTE_MAX_SLEEP)
             with self._lock:
-                n_movies = self._parsed_since_micro_break
-                self._parsed_since_micro_break = 0
-            proxy = self._proxy_label or "default"
-            logger.info(
-                "Long sleep (micro-break): %.2fs on proxy [%s] — %d movie(s) parsed since last micro-break",
-                t_long,
-                proxy,
-                n_movies,
-            )
-            return t_long
+                eligible = self._parsed_since_micro_break >= self._micro_break_gate
+            if not eligible:
+                sleep_time = self._human_like_delay(eff_min, eff_max)
+            else:
+                break_lo = max(MICRO_BREAK_FLOOR, eff_max + MICRO_BREAK_EXTRA_MIN)
+                break_hi = eff_max + MICRO_BREAK_EXTRA_MAX
+                t_long = min(round(self._rng.uniform(break_lo, break_hi), 2), ABSOLUTE_MAX_SLEEP)
+                with self._lock:
+                    n_movies = self._parsed_since_micro_break
+                    self._parsed_since_micro_break = 0
+                    next_gate = self._rng.randint(MICRO_BREAK_MIN_MOVIES, MICRO_BREAK_MAX_MOVIES)
+                    self._micro_break_gate = next_gate
+                proxy = self._proxy_label or "default"
+                logger.info(
+                    "Long sleep (micro-break): %.2fs on proxy [%s] — "
+                    "%d movie(s) parsed since last micro-break (next gate: %d)",
+                    t_long, proxy, n_movies, next_gate,
+                )
+                return t_long
         elif roll < 0.08 + MICRO_BREAK_PROB:
             sleep_time = self._rng.uniform(eff_min + span * 0.7, eff_max)
         elif roll < 0.15 + MICRO_BREAK_PROB:

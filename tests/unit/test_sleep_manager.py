@@ -28,6 +28,7 @@ from scripts.spider.runtime.sleep import (
     MICRO_BREAK_PROB,
     MICRO_BREAK_EXTRA_MIN,
     MICRO_BREAK_FLOOR,
+    MICRO_BREAK_MAX_MOVIES,
     _interpolate_multiplier,
 )
 
@@ -290,6 +291,7 @@ class TestCapAndCeiling:
 
         normal_count = 0
         for _ in range(2000):
+            mgr.record_parsed_movie()
             t = mgr.get_sleep_time()
             assert t <= ABSOLUTE_MAX_SLEEP, (
                 f"Sleep {t} exceeds ABSOLUTE_MAX_SLEEP ({ABSOLUTE_MAX_SLEEP})"
@@ -371,6 +373,7 @@ class TestMicroBreak:
         micro_count = 0
         total = 5000
         for _ in range(total):
+            mgr.record_parsed_movie()
             t = mgr.get_sleep_time()
             if t > eff_max + MICRO_BREAK_EXTRA_MIN - 1:
                 micro_count += 1
@@ -384,6 +387,7 @@ class TestMicroBreak:
         """At low volume, micro-breaks must be >= MICRO_BREAK_FLOOR."""
         mgr = MovieSleepManager(8.0, 25.0)
         for _ in range(500):
+            mgr.record_parsed_movie()
             t = mgr.get_sleep_time()
             eff_min, eff_max = mgr._effective_range()
             if t > eff_max + 5:
@@ -398,6 +402,7 @@ class TestMicroBreak:
         eff_min, eff_max = mgr._effective_range()
 
         for _ in range(500):
+            mgr.record_parsed_movie()
             t = mgr.get_sleep_time()
             assert t <= ABSOLUTE_MAX_SLEEP, (
                 f"Sleep {t} exceeds ABSOLUTE_MAX_SLEEP ({ABSOLUTE_MAX_SLEEP})"
