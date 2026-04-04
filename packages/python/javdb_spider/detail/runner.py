@@ -148,10 +148,12 @@ def process_detail_entries(
             page_num = entry['page']
             idx_str = result.task.entry_index
 
+            worker_tag = f"[{result.worker_name}] " if result.worker_name else ""
+
             if not result.success:
                 detail_url = urljoin(BASE_URL, href)
                 logger.error(
-                    f"[{idx_str}] [Page {page_num}] Failed: "
+                    f"[{idx_str}] {worker_tag}[Page {page_num}] Failed: "
                     f"{entry.get('video_code', '?')} ({detail_url})"
                 )
                 failed += 1
@@ -173,7 +175,7 @@ def process_detail_entries(
                 continue
 
             cf_tag = " +CF" if result.used_cf else ""
-            logger.info(f"[{idx_str}] Parsed {entry.get('video_code', '')}{cf_tag}")
+            logger.info(f"[{idx_str}] {worker_tag}Parsed {entry.get('video_code', '')}{cf_tag}")
 
             data = result.data or {}
             magnet_links = extract_magnets(data['magnets'], idx_str)
@@ -181,6 +183,7 @@ def process_detail_entries(
                 entry=entry,
                 phase=phase,
                 entry_index=idx_str,
+                worker_name=result.worker_name,
                 history_data=history_data,
                 history_file=history_file,
                 csv_path=csv_path,
@@ -375,6 +378,7 @@ def persist_parsed_detail_result(
     entry: dict,
     phase: int,
     entry_index: str = '',
+    worker_name: str = '',
     history_data: dict,
     history_file: str,
     csv_path: str,
@@ -452,12 +456,13 @@ def persist_parsed_detail_result(
         outcome.skipped_history = 1
         return outcome
 
+    worker_tag = f"[{worker_name}] " if worker_name else ""
     for rec in plan.dedup_records:
         if not dry_run and dedup_csv_path:
             append_dedup_record(dedup_csv_path, rec)
         if entry_index:
             logger.info(
-                f"[{entry_index}] DEDUP: {rec.video_code} - "
+                f"[{entry_index}] {worker_tag}DEDUP: {rec.video_code} - "
                 f"{rec.deletion_reason}"
             )
 
