@@ -124,6 +124,7 @@ class SequentialFetchBackend(FetchBackend):
                     "supporting": supporting_actors or "",
                 },
                 used_cf=effective_use_cf_bypass,
+                worker_name="sequential",
                 _ack_callback=self._acknowledge_result,
             )
 
@@ -132,6 +133,7 @@ class SequentialFetchBackend(FetchBackend):
             success=False,
             used_cf=effective_use_cf_bypass,
             error="fetch_failed",
+            worker_name="sequential",
             _ack_callback=self._acknowledge_result,
         )
 
