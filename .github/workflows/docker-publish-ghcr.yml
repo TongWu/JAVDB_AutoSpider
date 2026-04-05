@@ -1,16 +1,16 @@
 name: Publish to GitHub Container Registry
 
 on:
-  # push:  # DISABLED FOR PRIVATE REPO - enabled in public repo
-  #   branches:
-  #     - main
-  #     - master
-  #   tags:
-  #     - 'v*.*.*'
-  #   paths:
-  #     - '**/*.py'
-  #     - 'pytest.ini'
-  #     - 'docker/**'
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*.*.*'
+    paths:
+      - '**/*.py'
+      - 'pytest.ini'
+      - 'docker/**'
   #     - 'requirements.txt'
   #     - 'packages/rust/javdb_rust_core/pyproject.toml'
   workflow_dispatch:  # Allow manual trigger
