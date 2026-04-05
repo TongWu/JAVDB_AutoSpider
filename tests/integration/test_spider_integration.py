@@ -117,6 +117,7 @@ def create_workers(
     coord._all_workers = all_workers
 
     banned_proxies: set = set()
+    capped_proxies: set = set()
     drain_lock = threading.Lock()
     drain_done: list[bool] = [False]
     shared_penalty_tracker = PenaltyTracker()
@@ -145,6 +146,7 @@ def create_workers(
                 sleep_max=0.02,
                 penalty_tracker=shared_penalty_tracker,
                 banned_proxies=banned_proxies,
+                capped_proxies=capped_proxies,
                 drain_lock=drain_lock,
                 drain_done=drain_done,
             )
@@ -231,7 +233,8 @@ class TestIndexRequiresLogin:
 
         w._fetch_html = lambda url, use_cf: LOGIN_PAGE_HTML
 
-        ctx = WorkerContext(w)
+        _dummy = EngineTask(url="http://javdb.com/v/abc123")
+        ctx = WorkerContext(w, _dummy)
         with pytest.raises(LoginRequired):
             ctx.fetch("http://javdb.com/v/abc123")
 
@@ -243,7 +246,8 @@ class TestIndexRequiresLogin:
 
         w._fetch_html = lambda url, use_cf: detail_html
 
-        ctx = WorkerContext(w)
+        _dummy = EngineTask(url="http://javdb.com/v/abc123")
+        ctx = WorkerContext(w, _dummy)
         result = ctx.fetch("http://javdb.com/v/abc123")
         assert result == detail_html
 
@@ -305,7 +309,8 @@ class TestMixedDetailLogin:
 
         w._fetch_html = mock_fetch
 
-        ctx = WorkerContext(w)
+        _dummy = EngineTask(url="http://javdb.com/v/ghi789")
+        ctx = WorkerContext(w, _dummy)
         with pytest.raises(LoginRequired):
             ctx.fetch("http://javdb.com/v/ghi789")
         assert call_count["n"] == 1, "Should stop after direct; CF bypass skipped"

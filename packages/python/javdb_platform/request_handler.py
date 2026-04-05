@@ -104,6 +104,9 @@ class RequestConfig:
     # When set, replaces all fixed fallback_cooldown / cf_turnstile_cooldown sleeps
     # inside RequestHandler with a full adaptive sleep (penalty already baked in).
     between_attempt_sleep: Optional[Callable[[], float]] = field(default=None, repr=False)
+    # Monotonic deadline for the current task.  When set, the CF bypass
+    # fallback cascade bails out early once the deadline is exceeded.
+    task_deadline: Optional[float] = field(default=None, repr=False)
     
     def __post_init__(self):
         if self.proxy_modules is None:
@@ -182,6 +185,11 @@ class RequestHandler:
         elif not CURL_CFFI_AVAILABLE and self.config.use_curl_cffi:
             logger.info("curl_cffi not installed - using standard requests (install with: pip install curl_cffi)")
 
+    def _is_deadline_exceeded(self) -> bool:
+        """Return ``True`` if the task-level time budget has been exhausted."""
+        d = self.config.task_deadline
+        return d is not None and time.monotonic() > d
+
     def _pause_between_attempts(self, *, legacy_seconds: float) -> None:
         """Sleep between consecutive fetch attempts.
 
@@ -192,11 +200,30 @@ class RequestHandler:
         Otherwise falls back to a fixed ``time.sleep(legacy_seconds)`` to
         preserve backwards compatibility for callers that don't inject a
         sleep callable (tests, standalone tools).
+
+        When a ``task_deadline`` is configured, the sleep is truncated so
+        that the fallback cascade can bail out sooner.
         """
+        if self._is_deadline_exceeded():
+            return
         if self.config.between_attempt_sleep is not None:
+            remaining = self._remaining_budget()
+            if remaining is not None and remaining < 0.5:
+                return
             self.config.between_attempt_sleep()
         elif legacy_seconds > 0:
-            time.sleep(legacy_seconds)
+            remaining = self._remaining_budget()
+            if remaining is not None:
+                legacy_seconds = min(legacy_seconds, max(0.0, remaining))
+            if legacy_seconds > 0:
+                time.sleep(legacy_seconds)
+
+    def _remaining_budget(self) -> Optional[float]:
+        """Seconds until the task deadline, or ``None`` if no deadline."""
+        d = self.config.task_deadline
+        if d is None:
+            return None
+        return d - time.monotonic()
 
     def should_use_proxy_for_module(self, module_name: str, use_proxy_flag: Optional[bool]) -> bool:
         """
@@ -978,6 +1005,10 @@ class RequestHandler:
         if is_turnstile and self.penalty_tracker:
             self.penalty_tracker.record_event()
         
+        if self._is_deadline_exceeded():
+            logger.debug(f"[{module_name}] Task deadline exceeded before fallback step (a)")
+            return None
+
         # Cooldown before entering fallback
         if self.config.fallback_cooldown > 0:
             logger.debug(f"[{module_name}] Fallback cooldown: {self.config.fallback_cooldown}s before step (a)")
@@ -1014,6 +1045,9 @@ class RequestHandler:
         
         # Step (b): Try direct (no bypass) with current proxy (only if using proxy)
         # Skip when max_retries <= 1 (caller handles direct fallback externally)
+        if self._is_deadline_exceeded():
+            logger.debug(f"[{module_name}] Task deadline exceeded before fallback step (b)")
+            return None
         if max_retries > 1 and use_proxy and proxies:
             if self.config.fallback_cooldown > 0:
                 logger.debug(f"[{module_name}] Fallback cooldown: {self.config.fallback_cooldown}s before step (b)")
@@ -1037,6 +1071,9 @@ class RequestHandler:
             max_proxy_switches = min(self.proxy_pool.get_proxy_count() - 1, 5)
             
             for switch_count in range(max_proxy_switches):
+                if self._is_deadline_exceeded():
+                    logger.debug(f"[{module_name}] Task deadline exceeded during proxy switch loop")
+                    break
                 if self.config.fallback_cooldown > 0:
                     logger.debug(f"[{module_name}] Fallback cooldown: {self.config.fallback_cooldown}s before switching proxy")
                     self._pause_between_attempts(legacy_seconds=self.config.fallback_cooldown)

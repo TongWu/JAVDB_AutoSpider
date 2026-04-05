@@ -11,6 +11,8 @@ on:
       - '**/*.py'
       - 'pytest.ini'
       - 'docker/**'
+  #     - 'requirements.txt'
+  #     - 'packages/rust/javdb_rust_core/pyproject.toml'
   workflow_dispatch:  # Allow manual trigger
 
 env:

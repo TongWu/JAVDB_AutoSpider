@@ -437,3 +437,280 @@ class TestParallelBackendCompatibility:
         assert [(r.success, r.data, r.task.meta) for r in backend_results] == [
             (r.success, r.data, r.task.meta) for r in engine_results
         ]
+
+
+# ---------------------------------------------------------------------------
+# HOL blocking improvements – queue pressure
+# ---------------------------------------------------------------------------
+
+
+class TestQueuePressure:
+    """Plan B: _simple_process skips CF fallback under low queue pressure."""
+
+    @patch('scripts.spider.fetch.fetch_engine.is_login_page', return_value=False)
+    @patch('scripts.spider.fetch.fetch_engine.RequestHandler', side_effect=_make_handler_stub)
+    @patch('scripts.spider.fetch.fetch_engine.create_proxy_pool_from_config', return_value=MagicMock())
+    @patch('scripts.spider.fetch.fetch_engine.get_ban_manager', return_value=_make_ban_manager_stub())
+    @patch('scripts.spider.fetch.fetch_engine.PROXY_POOL', [
+        {'name': 'proxy-a', 'http': 'http://a:1', 'https': 'http://a:1'},
+        {'name': 'proxy-b', 'http': 'http://b:1', 'https': 'http://b:1'},
+        {'name': 'proxy-c', 'http': 'http://c:1', 'https': 'http://c:1'},
+    ])
+    @patch('scripts.spider.fetch.fetch_engine.LOGIN_PROXY_NAME', None)
+    def test_low_pressure_skips_cf_fallback(self, *_mocks):
+        """With 3 workers (active > 2) and a nearly-empty queue, pressure
+        is 'low'.  The first proxies should skip CF fallback and re-queue;
+        the task should still complete via CF on the tail attempt once
+        enough proxies have failed via direct path."""
+        from scripts.spider.fetch.fetch_engine import FetchEngine
+
+        cf_calls = []
+
+        def fetch_fn(url, use_cf):
+            if use_cf:
+                cf_calls.append(url)
+                return '<html>cf</html>'
+            return None  # direct always fails
+
+        engine = FetchEngine.simple(
+            parse_fn=lambda html, task: {'ok': True},
+            use_cookie=False,
+            sleep_min=0.01, sleep_max=0.02,
+        )
+        engine.start()
+        _patch_workers(engine, fetch_fn)
+
+        engine.submit('https://javdb.com/v/pressure', entry_index='p-1')
+        engine.mark_done()
+        results = list(engine.results())
+        engine.shutdown()
+
+        assert len(results) == 1
+        assert results[0].success is True
+        # CF should eventually be tried (tail-task fallback), but fewer
+        # times than the total number of workers (early workers skipped it).
+        assert len(cf_calls) >= 1
+
+
+class TestQueuePressureProperty:
+    """Unit-level test for _queue_pressure without starting full engine."""
+
+    @staticmethod
+    def _make_worker_stub(qsize, active_workers):
+        """Create a minimal namespace for _queue_pressure testing."""
+        class _Stub:
+            task_queue = MagicMock()
+            _active_workers = active_workers
+        _Stub.task_queue.qsize.return_value = qsize
+        return _Stub()
+
+    def test_low_when_queue_empty_and_many_workers(self):
+        from packages.python.javdb_spider.fetch.fetch_engine import _EngineWorker
+        w = self._make_worker_stub(qsize=0, active_workers=5)
+        assert _EngineWorker._queue_pressure.fget(w) == 'low'
+
+    def test_normal_when_queue_has_items(self):
+        from packages.python.javdb_spider.fetch.fetch_engine import _EngineWorker
+        w = self._make_worker_stub(qsize=5, active_workers=5)
+        assert _EngineWorker._queue_pressure.fget(w) == 'normal'
+
+    def test_normal_when_few_workers(self):
+        from packages.python.javdb_spider.fetch.fetch_engine import _EngineWorker
+        w = self._make_worker_stub(qsize=0, active_workers=2)
+        assert _EngineWorker._queue_pressure.fget(w) == 'normal'
+
+
+# ---------------------------------------------------------------------------
+# HOL blocking improvements – task time budget
+# ---------------------------------------------------------------------------
+
+
+class TestTaskTimeBudget:
+    """Plan A: task-level deadline prevents unbounded processing."""
+
+    @_engine_patches
+    def test_task_timeout_triggers_requeue(self, *_mocks):
+        """A task that exceeds its time budget should be detected as
+        expired and re-queued; a subsequent attempt should succeed."""
+        from scripts.spider.fetch.fetch_engine import FetchEngine
+
+        call_count = {'n': 0}
+        observed_expired = {'v': False}
+
+        def slow_process(ctx, task):
+            call_count['n'] += 1
+            if call_count['n'] == 1:
+                time.sleep(0.3)  # exceed the 0.2s timeout
+                observed_expired['v'] = ctx.is_expired
+                return None  # expired — triggers re-queue
+            return {'ok': True}
+
+        engine = FetchEngine(
+            process_fn=slow_process,
+            use_cookie=False,
+            sleep_min=0.01, sleep_max=0.02,
+            task_timeout=0.2,
+        )
+        engine.start()
+        _patch_workers(engine, lambda url, _cf: '<html></html>')
+
+        engine.submit('https://javdb.com/v/slow', entry_index='slow-1')
+        engine.mark_done()
+        results = list(engine.results())
+        engine.shutdown()
+
+        assert observed_expired['v'], "first call should have observed an expired deadline"
+        assert call_count['n'] >= 2, "task should have been retried after expiry"
+        assert len(results) == 1
+        assert results[0].success is True
+
+    @_engine_patches
+    def test_zero_timeout_means_no_limit(self, *_mocks):
+        """task_timeout=0 should not set any deadline."""
+        from scripts.spider.fetch.fetch_engine import FetchEngine
+
+        engine = FetchEngine(
+            process_fn=lambda ctx, task: {'ok': True},
+            use_cookie=False,
+            sleep_min=0.01, sleep_max=0.02,
+            task_timeout=0,
+        )
+        engine.start()
+        _patch_workers(engine, lambda url, _cf: '<html></html>')
+
+        engine.submit('https://javdb.com/v/x')
+        engine.mark_done()
+        results = list(engine.results())
+        engine.shutdown()
+
+        assert len(results) == 1
+        assert results[0].success is True
+
+    def test_engine_task_deadline_field(self):
+        """EngineTask should have a _deadline field defaulting to None."""
+        from packages.python.javdb_spider.fetch.fetch_engine import EngineTask
+        t = EngineTask(url='https://example.com')
+        assert t._deadline is None
+        assert t._speculative is False
+
+
+# ---------------------------------------------------------------------------
+# HOL blocking improvements – CF fallback deadline in RequestHandler
+# ---------------------------------------------------------------------------
+
+
+class TestRequestHandlerDeadline:
+    """Plan D: deadline-aware pausing in RequestHandler."""
+
+    def test_pause_skipped_when_deadline_exceeded(self):
+        from packages.python.javdb_platform.request_handler import (
+            RequestHandler, RequestConfig,
+        )
+        config = RequestConfig(task_deadline=time.monotonic() - 1.0)
+        handler = RequestHandler(config=config)
+        start = time.monotonic()
+        handler._pause_between_attempts(legacy_seconds=5.0)
+        elapsed = time.monotonic() - start
+        assert elapsed < 1.0
+
+    def test_pause_truncated_to_remaining_budget(self):
+        from packages.python.javdb_platform.request_handler import (
+            RequestHandler, RequestConfig,
+        )
+        config = RequestConfig(task_deadline=time.monotonic() + 0.1)
+        handler = RequestHandler(config=config)
+        start = time.monotonic()
+        handler._pause_between_attempts(legacy_seconds=5.0)
+        elapsed = time.monotonic() - start
+        assert elapsed < 0.5
+
+    def test_is_deadline_exceeded_false_when_no_deadline(self):
+        from packages.python.javdb_platform.request_handler import (
+            RequestHandler, RequestConfig,
+        )
+        handler = RequestHandler(config=RequestConfig())
+        assert handler._is_deadline_exceeded() is False
+
+    def test_is_deadline_exceeded_true_when_past(self):
+        from packages.python.javdb_platform.request_handler import (
+            RequestHandler, RequestConfig,
+        )
+        config = RequestConfig(task_deadline=time.monotonic() - 1.0)
+        handler = RequestHandler(config=config)
+        assert handler._is_deadline_exceeded() is True
+
+
+# ---------------------------------------------------------------------------
+# HOL blocking improvements – speculative execution
+# ---------------------------------------------------------------------------
+
+
+class TestSpeculativeExecution:
+    """Plan C: idle workers speculatively race on in-flight tasks."""
+
+    @_engine_patches
+    def test_speculative_worker_produces_result(self, *_mocks):
+        """When one worker is slow and another is idle, the idle worker
+        should speculatively attempt the same task.
+
+        The slow worker must hold the task longer than the
+        ``task_queue.get(timeout=2.0)`` poll so the idle worker's
+        ``_try_speculative_task()`` fires before the task is completed
+        or re-queued.
+        """
+        from scripts.spider.fetch.fetch_engine import FetchEngine
+
+        attempt_count = {'n': 0}
+
+        def flaky_process(ctx, task):
+            attempt_count['n'] += 1
+            if attempt_count['n'] == 1:
+                time.sleep(2.5)  # longer than queue poll timeout (2.0s)
+                return None
+            return {'ok': True}
+
+        engine = FetchEngine(
+            process_fn=flaky_process,
+            use_cookie=False,
+            sleep_min=0.01, sleep_max=0.02,
+        )
+        engine.start()
+        _patch_workers(engine, lambda url, _cf: '<html></html>')
+
+        engine.submit('https://javdb.com/v/spec', entry_index='spec-1')
+        engine.mark_done()
+        results = list(engine.results())
+        engine.shutdown()
+
+        assert len(results) == 1
+        assert results[0].success is True
+
+    def test_speculative_flag_on_task(self):
+        from packages.python.javdb_spider.fetch.fetch_engine import EngineTask
+        t = EngineTask(url='https://example.com', _speculative=True)
+        assert t._speculative is True
+
+    def test_mark_entry_completed_atomicity(self):
+        """Only the first caller to mark_entry_completed should get True."""
+        from packages.python.javdb_spider.fetch.fetch_engine import _EngineWorker
+
+        worker = MagicMock(spec=_EngineWorker)
+        completed = set()
+        lock = threading.Lock()
+        worker._completed_entries = completed
+        worker._completed_lock = lock
+
+        assert _EngineWorker._mark_entry_completed(worker, 'entry-1') is True
+        assert _EngineWorker._mark_entry_completed(worker, 'entry-1') is False
+        assert 'entry-1' in completed
+
+    def test_mark_entry_completed_empty_index(self):
+        """Empty entry_index should always return True (no dedup)."""
+        from packages.python.javdb_spider.fetch.fetch_engine import _EngineWorker
+
+        worker = MagicMock(spec=_EngineWorker)
+        worker._completed_entries = set()
+        worker._completed_lock = threading.Lock()
+
+        assert _EngineWorker._mark_entry_completed(worker, '') is True
+        assert _EngineWorker._mark_entry_completed(worker, '') is True

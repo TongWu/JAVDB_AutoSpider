@@ -17,7 +17,16 @@ from utils.infra.logging_config import setup_logging, get_logger
 from packages.python.javdb_platform.logging_config import (
     get_logger_name_mapping,
     _shorten_logger_name,
+    _reset_logging_state,
 )
+
+
+@pytest.fixture(autouse=True)
+def reset_logging():
+    """Reset logging state before each test to avoid cross-test interference."""
+    _reset_logging_state()
+    yield
+    _reset_logging_state()
 
 
 class TestSetupLogging:
@@ -308,4 +317,56 @@ class TestLoggerNameMapping:
         m1 = get_logger_name_mapping()
         m2 = get_logger_name_mapping()
         assert m1 is not m2
+
+
+class TestSetupLoggingGuard:
+    """Test that setup_logging guards against truncating a different log file."""
+
+    def test_second_call_with_different_file_does_not_truncate(self):
+        """Once a primary log file is set, a second call with a different file
+        must NOT replace the file handler (and therefore must not truncate
+        the first file)."""
+        temp_dir = tempfile.mkdtemp()
+        file_a = os.path.join(temp_dir, 'a.log')
+        file_b = os.path.join(temp_dir, 'b.log')
+
+        try:
+            setup_logging(log_file=file_a, log_level='INFO')
+            logger = get_logger('guard.test')
+            logger.info("written to A")
+
+            # Second call targets a different file — should be skipped
+            setup_logging(log_file=file_b, log_level='INFO')
+
+            logger.info("still goes to A")
+
+            assert os.path.exists(file_a)
+            with open(file_a, 'r') as f:
+                content = f.read()
+            assert 'written to A' in content
+            assert 'still goes to A' in content
+
+            # file_b should NOT be created
+            assert not os.path.exists(file_b)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_same_file_is_allowed(self):
+        """Calling setup_logging again with the SAME file should work."""
+        temp_dir = tempfile.mkdtemp()
+        log_file = os.path.join(temp_dir, 'same.log')
+
+        try:
+            setup_logging(log_file=log_file, log_level='INFO')
+            logger = get_logger('guard.same')
+            logger.info("first call")
+
+            setup_logging(log_file=log_file, log_level='DEBUG')
+            logger.debug("second call at debug")
+
+            with open(log_file, 'r') as f:
+                content = f.read()
+            assert 'second call at debug' in content
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
 

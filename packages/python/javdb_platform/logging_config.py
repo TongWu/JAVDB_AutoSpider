@@ -102,6 +102,23 @@ class _ShortNameFormatter(logging.Formatter):
             record.name = saved
 
 
+_primary_log_file = None
+
+
+def _reset_logging_state():
+    """Reset internal state. Only intended for unit tests."""
+    global _primary_log_file
+    _primary_log_file = None
+    root = logging.getLogger()
+    for handler in root.handlers[:]:
+        root.removeHandler(handler)
+        try:
+            handler.close()
+        except Exception:
+            pass
+    root.handlers = []
+
+
 def setup_logging(log_file=None, log_level=None):
     """Setup logging configuration for all modules.
 
@@ -114,10 +131,18 @@ def setup_logging(log_file=None, log_level=None):
     transitive imports from accidentally stripping a file handler that
     was set up earlier.
 
+    If a file handler was already established for a *different* log file
+    (e.g. the email-notification process already writes to its own log),
+    a second call with a different *log_file* is silently skipped.  This
+    guards against transitive module-level ``setup_logging`` calls that
+    would otherwise truncate unrelated log files.
+
     Args:
         log_file: Log file path (optional).
         log_level: Log level string, e.g. ``"INFO"`` (optional).
     """
+    global _primary_log_file
+
     if log_level is None:
         log_level = cfg('LOG_LEVEL', 'INFO')
 
@@ -128,6 +153,15 @@ def setup_logging(log_file=None, log_level=None):
 
     # Level-only call and handlers already exist — just update levels.
     if log_file is None and root_logger.handlers:
+        for h in root_logger.handlers:
+            h.setLevel(numeric_level)
+        return root_logger
+
+    # Guard: if a primary log file was already set up for this process
+    # and the new call targets a DIFFERENT file, skip it to prevent
+    # accidental truncation (e.g. importing spider config from the
+    # email-notification process).
+    if log_file and _primary_log_file and os.path.abspath(log_file) != os.path.abspath(_primary_log_file):
         for h in root_logger.handlers:
             h.setLevel(numeric_level)
         return root_logger
@@ -153,6 +187,7 @@ def setup_logging(log_file=None, log_level=None):
         file_handler.setLevel(numeric_level)
         file_handler.setFormatter(formatter)
         root_logger.addHandler(file_handler)
+        _primary_log_file = os.path.abspath(log_file)
 
     # Silence noisy third-party loggers
     logging.getLogger("httpx").setLevel(logging.INFO)
