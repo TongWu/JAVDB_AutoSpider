@@ -207,6 +207,9 @@ class RequestHandler:
         if self._is_deadline_exceeded():
             return
         if self.config.between_attempt_sleep is not None:
+            remaining = self._remaining_budget()
+            if remaining is not None and remaining < 0.5:
+                return
             self.config.between_attempt_sleep()
         elif legacy_seconds > 0:
             remaining = self._remaining_budget()

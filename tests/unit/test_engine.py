@@ -448,10 +448,20 @@ class TestQueuePressure:
     """Plan B: _simple_process skips CF fallback under low queue pressure."""
 
     @patch('scripts.spider.fetch.fetch_engine.is_login_page', return_value=False)
-    @_engine_patches
+    @patch('scripts.spider.fetch.fetch_engine.RequestHandler', side_effect=_make_handler_stub)
+    @patch('scripts.spider.fetch.fetch_engine.create_proxy_pool_from_config', return_value=MagicMock())
+    @patch('scripts.spider.fetch.fetch_engine.get_ban_manager', return_value=_make_ban_manager_stub())
+    @patch('scripts.spider.fetch.fetch_engine.PROXY_POOL', [
+        {'name': 'proxy-a', 'http': 'http://a:1', 'https': 'http://a:1'},
+        {'name': 'proxy-b', 'http': 'http://b:1', 'https': 'http://b:1'},
+        {'name': 'proxy-c', 'http': 'http://c:1', 'https': 'http://c:1'},
+    ])
+    @patch('scripts.spider.fetch.fetch_engine.LOGIN_PROXY_NAME', None)
     def test_low_pressure_skips_cf_fallback(self, *_mocks):
-        """When queue is nearly empty with many workers, direct failure
-        should re-queue instead of attempting CF bypass."""
+        """With 3 workers (active > 2) and a nearly-empty queue, pressure
+        is 'low'.  The first proxies should skip CF fallback and re-queue;
+        the task should still complete via CF on the tail attempt once
+        enough proxies have failed via direct path."""
         from scripts.spider.fetch.fetch_engine import FetchEngine
 
         cf_calls = []
@@ -475,13 +485,11 @@ class TestQueuePressure:
         results = list(engine.results())
         engine.shutdown()
 
-        # Task should eventually complete (via another worker's direct path
-        # or CF fallback once pressure rises), but the first worker should
-        # NOT have tried CF when pressure was low.  Since there are only 2
-        # proxies in the test pool and direct always fails, the task will
-        # end up using CF on the final attempt — but the re-queue should
-        # have happened at least once before that.
         assert len(results) == 1
+        assert results[0].success is True
+        # CF should eventually be tried (tail-task fallback), but fewer
+        # times than the total number of workers (early workers skipped it).
+        assert len(cf_calls) >= 1
 
 
 class TestQueuePressureProperty:

@@ -109,6 +109,14 @@ def _reset_logging_state():
     """Reset internal state. Only intended for unit tests."""
     global _primary_log_file
     _primary_log_file = None
+    root = logging.getLogger()
+    for handler in root.handlers[:]:
+        root.removeHandler(handler)
+        try:
+            handler.close()
+        except Exception:
+            pass
+    root.handlers = []
 
 
 def setup_logging(log_file=None, log_level=None):
