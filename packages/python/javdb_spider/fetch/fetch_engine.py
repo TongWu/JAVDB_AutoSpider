@@ -319,6 +319,9 @@ class WorkerContext:
         """
         worker = self._worker
 
+        if self.is_expired:
+            return None
+
         if worker._should_shortcircuit_cf():
             html = worker._fetch_html(url, True)
             if html:
@@ -347,6 +350,10 @@ class WorkerContext:
             return None
 
         worker._sleep_mgr.sleep()
+
+        if self.is_expired:
+            return None
+
         html = worker._fetch_html(url, True)
         if html:
             if is_login_page(html):
@@ -1426,6 +1433,9 @@ class ParallelFetchBackend(FetchBackend):
         def _simple_process(ctx: WorkerContext, task: EngineTask) -> Any:
             worker = ctx._worker
 
+            if ctx.is_expired:
+                return None
+
             # CF sticky short-circuit
             if worker._should_shortcircuit_cf():
                 html = ctx.fetch_html(task.url, use_cf=True)
@@ -1480,6 +1490,9 @@ class ParallelFetchBackend(FetchBackend):
             # Adaptive sleep before CF bypass (mirrors WorkerContext.fetch
             # and the sequential fallback's _sleep_between_fetches pattern).
             ctx.sleep()
+
+            if ctx.is_expired:
+                return None
 
             # CF bypass attempt
             html = ctx.fetch_html(task.url, use_cf=True)
