@@ -530,17 +530,19 @@ class TestTaskTimeBudget:
 
     @_engine_patches
     def test_task_timeout_triggers_requeue(self, *_mocks):
-        """A task that exceeds its time budget should return None and
-        be re-queued to another worker."""
+        """A task that exceeds its time budget should be detected as
+        expired and re-queued; a subsequent attempt should succeed."""
         from scripts.spider.fetch.fetch_engine import FetchEngine
 
         call_count = {'n': 0}
+        observed_expired = {'v': False}
 
         def slow_process(ctx, task):
             call_count['n'] += 1
             if call_count['n'] == 1:
-                time.sleep(0.3)
-                return None  # simulate slow failure
+                time.sleep(0.3)  # exceed the 0.2s timeout
+                observed_expired['v'] = ctx.is_expired
+                return None  # expired — triggers re-queue
             return {'ok': True}
 
         engine = FetchEngine(
@@ -557,7 +559,10 @@ class TestTaskTimeBudget:
         results = list(engine.results())
         engine.shutdown()
 
+        assert observed_expired['v'], "first call should have observed an expired deadline"
+        assert call_count['n'] >= 2, "task should have been retried after expiry"
         assert len(results) == 1
+        assert results[0].success is True
 
     @_engine_patches
     def test_zero_timeout_means_no_limit(self, *_mocks):
@@ -646,7 +651,13 @@ class TestSpeculativeExecution:
     @_engine_patches
     def test_speculative_worker_produces_result(self, *_mocks):
         """When one worker is slow and another is idle, the idle worker
-        should speculatively attempt the same task."""
+        should speculatively attempt the same task.
+
+        The slow worker must hold the task longer than the
+        ``task_queue.get(timeout=2.0)`` poll so the idle worker's
+        ``_try_speculative_task()`` fires before the task is completed
+        or re-queued.
+        """
         from scripts.spider.fetch.fetch_engine import FetchEngine
 
         attempt_count = {'n': 0}
@@ -654,7 +665,7 @@ class TestSpeculativeExecution:
         def flaky_process(ctx, task):
             attempt_count['n'] += 1
             if attempt_count['n'] == 1:
-                time.sleep(0.5)
+                time.sleep(2.5)  # longer than queue poll timeout (2.0s)
                 return None
             return {'ok': True}
 
