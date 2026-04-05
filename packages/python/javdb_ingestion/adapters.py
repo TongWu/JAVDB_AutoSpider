@@ -11,8 +11,10 @@ from packages.python.javdb_ingestion.policies import (
     determine_torrent_types,
     get_missing_torrent_types,
 )
-from packages.python.javdb_spider.runtime.config import INCLUDE_DOWNLOADED_IN_REPORT
+from packages.python.javdb_platform.config_helper import cfg
 from packages.python.javdb_core.contracts import DOWNLOADED_PLACEHOLDER, TORRENT_CATEGORIES
+
+INCLUDE_DOWNLOADED_IN_REPORT = cfg('INCLUDE_DOWNLOADED_IN_REPORT', False)
 from packages.python.javdb_platform.logging_config import get_logger
 from packages.python.javdb_platform.bridges.rust_adapters.csv_adapter import (
     RUST_CSV_AVAILABLE,
