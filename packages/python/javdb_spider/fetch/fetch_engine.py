@@ -335,8 +335,13 @@ class WorkerContext:
             self._last_used_cf = False
             return html
 
+        # Skip expensive CF bypass when queue pressure is low, UNLESS
+        # this task has already exhausted most proxies via direct path
+        # (tail-task scenario where CF bypass may be the only way).
         if self.queue_pressure == 'low':
-            return None
+            active = worker._active_workers
+            if len(self._current_task.failed_proxies) < max(1, active - 1):
+                return None
 
         if self.is_expired:
             return None
@@ -822,8 +827,13 @@ class _EngineWorker(threading.Thread):
                             self._capped_proxies.add(self.proxy_name)
                         break
                 else:
-                    # Speculative tasks are never re-queued on failure.
                     if task._speculative:
+                        # Propagate the failure to the original in-flight task
+                        # so _try_speculative_task skips this proxy next time.
+                        with self._in_flight_lock:
+                            orig = self._in_flight.get(task.entry_index)
+                            if orig is not None:
+                                orig.failed_proxies.add(self.proxy_name)
                         continue
                     if self._is_entry_completed(task.entry_index):
                         continue
@@ -840,11 +850,19 @@ class _EngineWorker(threading.Thread):
                 if not task._speculative:
                     self._handle_login_required(task)
             except ProxyBannedError:
-                if not task._speculative:
-                    self._handle_proxy_banned(task)
+                if task._speculative:
+                    with self._in_flight_lock:
+                        orig = self._in_flight.get(task.entry_index)
+                        if orig is not None:
+                            orig.failed_proxies.add(self.proxy_name)
+                self._handle_proxy_banned(task, _requeue=not task._speculative)
                 break
             except ProxyExhaustedError:
                 if task._speculative:
+                    with self._in_flight_lock:
+                        orig = self._in_flight.get(task.entry_index)
+                        if orig is not None:
+                            orig.failed_proxies.add(self.proxy_name)
                     continue
                 task.failed_proxies.add(self.proxy_name)
                 task.retry_count += 1
@@ -857,6 +875,10 @@ class _EngineWorker(threading.Thread):
                 )
             except Exception as exc:
                 if task._speculative:
+                    with self._in_flight_lock:
+                        orig = self._in_flight.get(task.entry_index)
+                        if orig is not None:
+                            orig.failed_proxies.add(self.proxy_name)
                     continue
                 task.failed_proxies.add(self.proxy_name)
                 task.retry_count += 1
@@ -871,12 +893,16 @@ class _EngineWorker(threading.Thread):
             finally:
                 self._unregister_in_flight(task)
 
-    def _handle_proxy_banned(self, task: EngineTask) -> None:
+    def _handle_proxy_banned(self, task: EngineTask, *, _requeue: bool = True) -> None:
         """Handle proxy ban: stop this worker and re-route tasks.
 
         When active workers remain, dynamically re-calculate and apply
         volume multipliers for all surviving workers so that the
         increased per-worker load triggers appropriately higher sleep.
+
+        When ``_requeue`` is ``False`` (speculative task), the ban is
+        recorded and volume rebalanced but the task is not re-queued or
+        emitted as a failure result.
         """
         task.failed_proxies.add(self.proxy_name)
 
@@ -938,13 +964,15 @@ class _EngineWorker(threading.Thread):
                             volume_total, active, per_worker, min_m, max_m,
                             cap_note,
                         )
-                requeue_front(self.task_queue, task)
+                if _requeue:
+                    requeue_front(self.task_queue, task)
             else:
-                self.result_queue.put(EngineResult(
-                    task=task, success=False,
-                    error='all_proxies_banned',
-                    worker_name=self.proxy_name,
-                ))
+                if _requeue:
+                    self.result_queue.put(EngineResult(
+                        task=task, success=False,
+                        error='all_proxies_banned',
+                        worker_name=self.proxy_name,
+                    ))
                 if not self._drain_done[0]:
                     self._drain_done[0] = True
                     self._drain_remaining_tasks()
@@ -1431,13 +1459,16 @@ class ParallelFetchBackend(FetchBackend):
             # When most workers are idle and few tasks remain, skip the
             # expensive CF bypass cascade and re-queue immediately so
             # another worker can attempt the direct path with a different
-            # proxy (avoids head-of-line blocking).
+            # proxy — unless this task has already exhausted most proxies
+            # via direct path (tail-task scenario).
             if ctx.queue_pressure == 'low':
-                logger.debug(
-                    "%s low queue pressure — skipping CF fallback, re-queuing",
-                    _task_worker_ctx(task.entry_index, ctx.proxy_name),
-                )
-                return None
+                active = ctx._worker._active_workers
+                if len(task.failed_proxies) < max(1, active - 1):
+                    logger.debug(
+                        "%s low queue pressure — skipping CF fallback, re-queuing",
+                        _task_worker_ctx(task.entry_index, ctx.proxy_name),
+                    )
+                    return None
 
             if ctx.is_expired:
                 logger.debug(
