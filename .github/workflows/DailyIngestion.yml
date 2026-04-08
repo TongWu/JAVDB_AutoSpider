@@ -59,8 +59,8 @@ on:
         default: '0.30'
         type: string
   schedule:
-    # Run daily at 15:15 UTC (23:15 Beijing Time)
-    - cron: '15 15 * * *'
+    # Run daily at 12:00 UTC (20:00 Beijing Time)
+    - cron: '12 00 * * *'
 
 jobs:
   # =============================================================================
