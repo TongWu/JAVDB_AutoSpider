@@ -6,6 +6,7 @@ concurrency:
 
 permissions:
   contents: write
+  pull-requests: write
 
 on:
   schedule:
@@ -64,6 +65,7 @@ jobs:
     environment: Production
     env:
       TZ: Asia/Singapore
+      GH_TOKEN: ${{ github.token }}
       INPUT_RUNNER: ${{ inputs.runner || 'ubuntu-latest' }}
       INPUT_ROOT_PATH: ${{ inputs.root_path || 'gdrive:/剧集/不可以色色/JAV-Sync' }}
       INPUT_YEARS: ${{ inputs.years || '' }}
@@ -195,6 +197,7 @@ jobs:
           fi
 
           git commit -m "Auto-commit: weekly dedup ${LABEL} $(date +'%Y-%m-%d %H:%M:%S SGT')"
+          LOCAL_COMMIT=$(git rev-parse HEAD)
 
           MAX_RETRIES=3
           RETRY_DELAY=3
@@ -208,8 +211,14 @@ jobs:
             sleep $RETRY_DELAY
             RETRY_DELAY=$((RETRY_DELAY * 2))
           done
-          echo "::warning::Failed to push after $MAX_RETRIES attempts."
-          exit 1
+
+          echo ""
+          echo "::warning::Failed to push after $MAX_RETRIES attempts. Initiating fallback branch strategy..."
+
+          git checkout "$CURRENT_BRANCH" 2>/dev/null || true
+          git reset --hard "$LOCAL_COMMIT" 2>/dev/null || true
+
+          bash .github/scripts/fallback_push.sh "weekly-dedup" "$CURRENT_BRANCH"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
