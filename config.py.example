@@ -35,6 +35,13 @@ QB_PASSWORD = 'your_qbittorrent_password'
 # Torrent settings
 TORRENT_CATEGORY = 'JavDB'  # Category for all JavDB torrents
 TORRENT_CATEGORY_ADHOC = 'Ad Hoc'  # Category for adhoc mode torrents
+
+# Optional: Dedicated adhoc qBittorrent instance (leave empty to disable)
+# When set, pikpak_bridge scans both the primary and adhoc QB instances.
+# The adhoc instance is limited to the "Ad Hoc" category only.
+QB_URL_ADHOC = ''
+QB_USERNAME_ADHOC = ''  # Falls back to QB_USERNAME when empty
+QB_PASSWORD_ADHOC = ''  # Falls back to QB_PASSWORD when empty
 TORRENT_SAVE_PATH = ''  # Leave empty for default path
 AUTO_START = True  # Set to False to add torrents in paused state
 SKIP_CHECKING = False  # Set to True to skip hash checking
