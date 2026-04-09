@@ -27,6 +27,11 @@ REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
 TORRENT_CATEGORY = cfg('TORRENT_CATEGORY', 'JavDB')
 TORRENT_CATEGORY_ADHOC = cfg('TORRENT_CATEGORY_ADHOC', 'Ad Hoc')
 
+# Optional adhoc qBittorrent instance
+QB_URL_ADHOC = cfg('QB_URL_ADHOC', '')
+QB_USERNAME_ADHOC = cfg('QB_USERNAME_ADHOC', '') or QB_USERNAME  # fallback to primary
+QB_PASSWORD_ADHOC = cfg('QB_PASSWORD_ADHOC', '') or QB_PASSWORD  # fallback to primary
+
 GIT_USERNAME = cfg('GIT_USERNAME', 'github-actions')
 GIT_PASSWORD = cfg('GIT_PASSWORD', '')
 GIT_REPO_URL = cfg('GIT_REPO_URL', '')
@@ -375,7 +380,39 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
         use_proxy,
     )
     torrents = qb.get_torrents_multiple_categories(CATEGORIES)
-    logger.info(f"Found {len(torrents)} torrents across categories {CATEGORIES}")
+    logger.info(f"Found {len(torrents)} torrents across categories {CATEGORIES} (primary QB)")
+
+    # Tag each torrent with its source QB client for deletion later
+    torrent_qb_map = {}  # torrent_hash -> QBittorrentClient
+    for t in torrents:
+        torrent_qb_map[t['hash']] = qb
+
+    # Scan adhoc QB instance if configured
+    qb_adhoc = None
+    if QB_URL_ADHOC:
+        try:
+            adhoc_candidates = qb_base_url_candidates(QB_URL_ADHOC, allow_insecure_http=True)
+            qb_adhoc = QBittorrentClient(
+                adhoc_candidates,
+                QB_USERNAME_ADHOC,
+                QB_PASSWORD_ADHOC,
+                use_proxy,
+            )
+            adhoc_categories = [TORRENT_CATEGORY_ADHOC]
+            adhoc_torrents = qb_adhoc.get_torrents_multiple_categories(adhoc_categories)
+            logger.info(f"Found {len(adhoc_torrents)} torrents in category {adhoc_categories} (adhoc QB)")
+
+            # Deduplicate by hash — adhoc torrents that already exist in primary are skipped
+            existing_hashes = {t['hash'] for t in torrents}
+            for t in adhoc_torrents:
+                if t['hash'] not in existing_hashes:
+                    torrents.append(t)
+                    torrent_qb_map[t['hash']] = qb_adhoc
+                else:
+                    logger.debug(f"Skipping duplicate torrent from adhoc QB: {t['name']}")
+        except Exception as e:
+            logger.warning(f"Failed to connect to adhoc qBittorrent: {e}")
+            logger.warning("Continuing with primary QB only")
 
     old_torrents = [t for t in torrents if datetime.fromtimestamp(t['added_on']).date() <= cutoff_date]
     logger.info(f"Filtered {len(old_torrents)} torrents older than {days} days")
@@ -436,10 +473,11 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
             for magnet in success_magnets:
                 torrent = torrent_by_magnet[magnet]
                 logger.info(f"Successfully uploaded to PikPak: {torrent['name']}")
-                
-                # Try to delete from qBittorrent
+
+                # Try to delete from the correct qBittorrent instance
+                target_qb = torrent_qb_map.get(torrent['hash'], qb)
                 try:
-                    qb.delete_torrents([torrent['hash']], delete_files=True)
+                    target_qb.delete_torrents([torrent['hash']], delete_files=True)
                     logger.info(f"Successfully deleted from qBittorrent: {torrent['name']}")
                     save_to_pikpak_history(torrent, 'success')
                     successfully_transferred.append(torrent)
@@ -478,10 +516,11 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
                 
                 if success_magnets:  # Upload successful
                     logger.info(f"Successfully uploaded to PikPak: {torrent['name']}")
-                    
-                    # Try to delete from qBittorrent
+
+                    # Try to delete from the correct qBittorrent instance
+                    target_qb = torrent_qb_map.get(torrent['hash'], qb)
                     try:
-                        qb.delete_torrents([torrent['hash']], delete_files=True)
+                        target_qb.delete_torrents([torrent['hash']], delete_files=True)
                         logger.info(f"Successfully deleted from qBittorrent: {torrent['name']}")
                         save_to_pikpak_history(torrent, 'success')
                         successfully_transferred.append(torrent)
