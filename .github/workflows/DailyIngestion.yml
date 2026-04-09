@@ -59,8 +59,8 @@ on:
         default: '0.30'
         type: string
   schedule:
-    # Run daily at 15:15 UTC (23:15 Beijing Time)
-    - cron: '15 15 * * *'
+    # Run daily at 12:00 UTC (20:00 Beijing Time)
+    - cron: '00 12 * * *'
 
 jobs:
   # =============================================================================
@@ -705,8 +705,10 @@ jobs:
     if: ${{ !cancelled() }}
     permissions:
       contents: write
+      pull-requests: write
     env:
       TZ: Asia/Singapore
+      GH_TOKEN: ${{ github.token }}
     
     steps:
       - name: Checkout repository
@@ -901,5 +903,10 @@ jobs:
           done
           
           echo ""
-          echo "::warning::Failed to push after $MAX_RETRIES attempts."
-          exit 1
+          echo "::warning::Failed to push after $MAX_RETRIES attempts. Initiating fallback branch strategy..."
+          
+          # Reset to our original commit before fallback (undo any broken rebase/merge state)
+          git checkout "$CURRENT_BRANCH" 2>/dev/null || true
+          git reset --hard "$LOCAL_COMMIT" 2>/dev/null || true
+          
+          bash .github/scripts/fallback_push.sh "daily-ingestion" "$CURRENT_BRANCH"

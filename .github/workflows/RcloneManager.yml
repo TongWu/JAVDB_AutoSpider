@@ -6,6 +6,7 @@ concurrency:
 
 permissions:
   contents: write
+  pull-requests: write
 
 on:
   workflow_dispatch:
@@ -75,6 +76,7 @@ jobs:
     environment: Production
     env:
       TZ: Asia/Singapore
+      GH_TOKEN: ${{ github.token }}
       INPUT_SCAN: ${{ inputs.scan }}
       INPUT_REPORT: ${{ inputs.report }}
       INPUT_EXECUTE: ${{ inputs.execute }}
@@ -226,6 +228,7 @@ jobs:
           LABEL="${LABEL%+}"
 
           git commit -m "Auto-commit: rclone ${LABEL} $(date +'%Y-%m-%d %H:%M:%S SGT')"
+          LOCAL_COMMIT=$(git rev-parse HEAD)
 
           MAX_RETRIES=3
           RETRY_DELAY=3
@@ -239,8 +242,14 @@ jobs:
             sleep $RETRY_DELAY
             RETRY_DELAY=$((RETRY_DELAY * 2))
           done
-          echo "::warning::Failed to push after $MAX_RETRIES attempts."
-          exit 1
+
+          echo ""
+          echo "::warning::Failed to push after $MAX_RETRIES attempts. Initiating fallback branch strategy..."
+
+          git checkout "$CURRENT_BRANCH" 2>/dev/null || true
+          git reset --hard "$LOCAL_COMMIT" 2>/dev/null || true
+
+          bash .github/scripts/fallback_push.sh "rclone-manager" "$CURRENT_BRANCH"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
