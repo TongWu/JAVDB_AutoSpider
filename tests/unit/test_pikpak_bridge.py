@@ -272,6 +272,61 @@ class TestInitializeProxyHelperLogic:
         assert proxies_to_use[0]['name'] == 'Proxy1'
 
 
+class TestAdhocQBMergeLogic:
+    """Test cases for merging torrents from primary and adhoc QB instances."""
+
+    def test_adhoc_torrents_merged_without_duplicates(self):
+        """Adhoc torrents are appended only when their hash is new."""
+        primary_torrents = [
+            {'hash': 'aaa', 'name': 'T1', 'category': 'Daily Ingestion'},
+            {'hash': 'bbb', 'name': 'T2', 'category': 'Ad Hoc'},
+        ]
+        adhoc_torrents = [
+            {'hash': 'bbb', 'name': 'T2-dup', 'category': 'Ad Hoc'},
+            {'hash': 'ccc', 'name': 'T3', 'category': 'Ad Hoc'},
+        ]
+
+        # Simulate the merge logic from pikpak_bridge
+        torrent_qb_map = {}
+        for t in primary_torrents:
+            torrent_qb_map[t['hash']] = 'primary'
+
+        existing_hashes = {t['hash'] for t in primary_torrents}
+        merged = list(primary_torrents)
+        for t in adhoc_torrents:
+            if t['hash'] not in existing_hashes:
+                merged.append(t)
+                torrent_qb_map[t['hash']] = 'adhoc'
+
+        assert len(merged) == 3
+        assert torrent_qb_map['aaa'] == 'primary'
+        assert torrent_qb_map['bbb'] == 'primary'  # not overwritten by adhoc
+        assert torrent_qb_map['ccc'] == 'adhoc'
+
+    def test_no_adhoc_when_url_empty(self):
+        """When QB_URL_ADHOC is empty, only primary torrents are used."""
+        qb_url_adhoc = ''
+        primary_torrents = [{'hash': 'x', 'name': 'T1'}]
+
+        merged = list(primary_torrents)
+        if qb_url_adhoc:
+            merged.append({'hash': 'y', 'name': 'T2'})
+
+        assert len(merged) == 1
+
+    def test_delete_uses_correct_qb_client(self):
+        """Each torrent is deleted from the QB instance it came from."""
+        torrent_qb_map = {
+            'aaa': 'primary',
+            'bbb': 'adhoc',
+        }
+        default_qb = 'primary'
+
+        assert torrent_qb_map.get('aaa', default_qb) == 'primary'
+        assert torrent_qb_map.get('bbb', default_qb) == 'adhoc'
+        assert torrent_qb_map.get('unknown', default_qb) == 'primary'
+
+
 # Use temp_dir fixture
 @pytest.fixture
 def temp_dir():

@@ -304,6 +304,10 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('QB_PASSWORD', 'QB_PASSWORD', get_env, '', 'QBITTORRENT CONFIGURATION'),
         ('TORRENT_CATEGORY', 'TORRENT_CATEGORY', get_env, 'Daily Ingestion', 'QBITTORRENT CONFIGURATION'),
         ('TORRENT_CATEGORY_ADHOC', 'TORRENT_CATEGORY_ADHOC', get_env, 'Ad Hoc', 'QBITTORRENT CONFIGURATION'),
+        # Adhoc qBittorrent instance (optional — empty means disabled)
+        ('QB_URL_ADHOC', 'QB_URL_ADHOC', get_env, '', 'QBITTORRENT CONFIGURATION'),
+        ('QB_USERNAME_ADHOC', 'QB_USERNAME_ADHOC', get_env, '', 'QBITTORRENT CONFIGURATION'),
+        ('QB_PASSWORD_ADHOC', 'QB_PASSWORD_ADHOC', get_env, '', 'QBITTORRENT CONFIGURATION'),
         ('TORRENT_SAVE_PATH', 'TORRENT_SAVE_PATH', get_env, '', 'QBITTORRENT CONFIGURATION'),
         ('AUTO_START', 'AUTO_START', get_env_bool, True, 'QBITTORRENT CONFIGURATION'),
         ('SKIP_CHECKING', 'SKIP_CHECKING', get_env_bool, False, 'QBITTORRENT CONFIGURATION'),
