@@ -153,7 +153,8 @@ jobs:
       - name: Generate config.py from GitHub Variables and Secrets
         env:
           # ============ SECRETS (sensitive: passwords, tokens, IPs) ============
-          VAR_QB_URL: ${{ secrets.QB_URL }}
+          # Migration workflow: prefer QB_URL_ADHOC; fall back to QB_URL.
+          VAR_QB_URL: ${{ secrets.QB_URL_ADHOC || secrets.QB_URL }}
           VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
           VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
