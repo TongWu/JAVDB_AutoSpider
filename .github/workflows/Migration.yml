@@ -155,7 +155,7 @@ jobs:
           # ============ SECRETS (sensitive: passwords, tokens, IPs) ============
           # Migration workflow: prefer QB_URL_ADHOC; fall back to QB_URL.
           VAR_QB_URL: ${{ secrets.QB_URL_ADHOC || secrets.QB_URL }}
-          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
+          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD_ADHOC || secrets.QB_PASSWORD }}
           VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
           VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
@@ -164,7 +164,7 @@ jobs:
           # ============ VARIABLES (non-sensitive) ============
           VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
           VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
-          VAR_QB_USERNAME: ${{ secrets.QB_USERNAME }}
+          VAR_QB_USERNAME: ${{ secrets.QB_USERNAME_ADHOC || secrets.QB_USERNAME }}
           VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
           VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
           VAR_TORRENT_SAVE_PATH: ${{ vars.TORRENT_SAVE_PATH }}
