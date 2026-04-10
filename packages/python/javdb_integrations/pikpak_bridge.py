@@ -212,20 +212,20 @@ class QBittorrentClient:
             raise Exception("Failed to login qBittorrent")
         raise Exception(f"Failed to login qBittorrent: {last_error}")
 
-    def get_torrents(self, category):
+    def get_torrents(self, category, torrent_filter="downloading"):
         resp = self.session.get(f"{self.base_url}/api/v2/torrents/info",
-                                params={"category": category, "filter": "downloading"},
+                                params={"category": category, "filter": torrent_filter},
                                 proxies=self.proxies)
         resp.raise_for_status()
         return resp.json()
-    
-    def get_torrents_multiple_categories(self, categories):
-        """Get torrents from multiple categories"""
+
+    def get_torrents_multiple_categories(self, categories, torrent_filter="downloading"):
+        """Get torrents from multiple categories."""
         all_torrents = []
         for category in categories:
             try:
-                torrents = self.get_torrents(category)
-                logger.debug(f"Found {len(torrents)} torrents in category '{category}'")
+                torrents = self.get_torrents(category, torrent_filter=torrent_filter)
+                logger.debug(f"Found {len(torrents)} torrents in category '{category}' (filter={torrent_filter})")
                 all_torrents.extend(torrents)
             except Exception as e:
                 logger.warning(f"Failed to get torrents from category '{category}': {e}")
@@ -239,6 +239,30 @@ class QBittorrentClient:
         resp.raise_for_status()
         logger.info(f"Deleted {len(hashes)} torrents from qBittorrent.")
         return True
+
+
+def remove_completed_torrents_keep_files(qb_client, categories, dry_run=False, qb_label="qBittorrent"):
+    """
+    Remove completed (100%) torrents: remove torrent entries only, keep content files on disk.
+    Runs on each configured qBittorrent (primary and optional adhoc) before PikPak upload.
+    """
+    completed = qb_client.get_torrents_multiple_categories(categories, torrent_filter="completed")
+    if not completed:
+        logger.info(f"{qb_label}: no completed torrents to remove before PikPak upload.")
+        return
+    hashes = [t["hash"] for t in completed]
+    if dry_run:
+        sample = ", ".join(t.get("name", "") for t in completed[:5])
+        extra = " …" if len(completed) > 5 else ""
+        logger.info(
+            f"[Dry-Run] Would remove {len(hashes)} completed torrent(s) from {qb_label} "
+            f"(torrent only, files kept). Sample: {sample}{extra}"
+        )
+        return
+    qb_client.delete_torrents(hashes, delete_files=False)
+    logger.info(
+        f"{qb_label}: removed {len(hashes)} completed torrent(s) from client (files kept on disk)."
+    )
 
 
 # --------------------------
@@ -379,6 +403,7 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
         QB_PASSWORD,
         use_proxy,
     )
+    remove_completed_torrents_keep_files(qb, CATEGORIES, dry_run=dry_run, qb_label="Primary QB")
     torrents = qb.get_torrents_multiple_categories(CATEGORIES)
     logger.info(f"Found {len(torrents)} torrents across categories {CATEGORIES} (primary QB)")
 
@@ -399,6 +424,9 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
                 use_proxy,
             )
             adhoc_categories = [TORRENT_CATEGORY_ADHOC]
+            remove_completed_torrents_keep_files(
+                qb_adhoc, adhoc_categories, dry_run=dry_run, qb_label="Adhoc QB"
+            )
             adhoc_torrents = qb_adhoc.get_torrents_multiple_categories(adhoc_categories)
             logger.info(f"Found {len(adhoc_torrents)} torrents in category {adhoc_categories} (adhoc QB)")
 
