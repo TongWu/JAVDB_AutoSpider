@@ -327,6 +327,50 @@ class TestAdhocQBMergeLogic:
         assert torrent_qb_map.get('unknown', default_qb) == 'primary'
 
 
+class TestRemoveCompletedTorrentsKeepFiles:
+    """remove_completed_torrents_keep_files (per-qB cleanup before PikPak)."""
+
+    def test_calls_delete_with_keep_files_when_completed_present(self):
+        from unittest.mock import MagicMock
+        from packages.python.javdb_integrations.pikpak_bridge import (
+            remove_completed_torrents_keep_files,
+        )
+
+        mock_qb = MagicMock()
+        mock_qb.get_torrents_multiple_categories.return_value = [
+            {'hash': 'h1', 'name': 'done1'},
+        ]
+        remove_completed_torrents_keep_files(mock_qb, ['Ad Hoc'], dry_run=False)
+        mock_qb.get_torrents_multiple_categories.assert_called_once_with(
+            ['Ad Hoc'], torrent_filter='completed'
+        )
+        mock_qb.delete_torrents.assert_called_once_with(['h1'], delete_files=False)
+
+    def test_skips_delete_when_empty(self):
+        from unittest.mock import MagicMock
+        from packages.python.javdb_integrations.pikpak_bridge import (
+            remove_completed_torrents_keep_files,
+        )
+
+        mock_qb = MagicMock()
+        mock_qb.get_torrents_multiple_categories.return_value = []
+        remove_completed_torrents_keep_files(mock_qb, ['Ad Hoc'], dry_run=False)
+        mock_qb.delete_torrents.assert_not_called()
+
+    def test_dry_run_does_not_delete(self):
+        from unittest.mock import MagicMock
+        from packages.python.javdb_integrations.pikpak_bridge import (
+            remove_completed_torrents_keep_files,
+        )
+
+        mock_qb = MagicMock()
+        mock_qb.get_torrents_multiple_categories.return_value = [
+            {'hash': 'h1', 'name': 'done1'},
+        ]
+        remove_completed_torrents_keep_files(mock_qb, ['Ad Hoc'], dry_run=True)
+        mock_qb.delete_torrents.assert_not_called()
+
+
 # Use temp_dir fixture
 @pytest.fixture
 def temp_dir():
