@@ -410,7 +410,10 @@ class TestCookieRevocationAndFailover:
             with patch(
                 "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
                 return_value=(True, new_cookie, "ARM-1"),
-            ) as mock_login:
+            ) as mock_login, patch(
+                "scripts.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
+                return_value=True,
+            ):
                 coord.handle_login_required(
                     worker=workers[0],
                     task=task,
@@ -448,6 +451,9 @@ class TestCookieRevocationAndFailover:
             with patch(
                 "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
                 return_value=(True, new_cookie, "ARM-2"),
+            ), patch(
+                "scripts.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
+                return_value=True,
             ):
                 coord.handle_login_required(
                     worker=workers[0],
@@ -517,6 +523,9 @@ class TestCookieRevocationAndFailover:
             with patch(
                 "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
                 side_effect=lambda *a, **kw: next(login_responses),
+            ), patch(
+                "scripts.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
+                return_value=True,
             ):
                 for stale_round in range(3):
                     task = EngineTask(
@@ -557,6 +566,9 @@ class TestCookieRevocationAndFailover:
             with patch(
                 "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
                 return_value=(True, new_cookie, "ARM-1"),
+            ), patch(
+                "scripts.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
+                return_value=True,
             ):
                 coord.handle_login_required(
                     worker=workers[0],

@@ -227,6 +227,35 @@ GPT_API_KEY = ''  # Your API key (e.g., sk-xxx)
 # Automatic method: Set credentials above and run: python3 scripts/login.py
 JAVDB_SESSION_COOKIE = ''
 
+# -----------------------------------------------------------------------------
+# Login retry / verification policy
+# -----------------------------------------------------------------------------
+# Per-proxy and global retry budget for the auto-login feature.
+#   * LOGIN_ATTEMPTS_PER_PROXY_LIMIT caps how many login refreshes any single
+#     proxy may perform per run (default 6).
+#   * LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH caps how many stale-session
+#     failures trigger a proxy switch (default 3).
+#   * The global budget is initially len(PROXY_POOL) * LOGIN_ATTEMPTS_PER_PROXY_LIMIT
+#     and is automatically reduced when a proxy is banned (its remaining
+#     unused attempts are removed from the global cap).
+LOGIN_ATTEMPTS_PER_PROXY_LIMIT = 6
+LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH = 3
+
+# After the auto-login refresh succeeds, the spider validates the freshly
+# obtained cookie by fetching these "login-required" pages through the same
+# worker.  Login is only treated as verified when every URL returns a
+# non-login response.  Once verified, the original task is re-queued and a
+# subsequent login wall on that page is treated as a page-level failure
+# (no further login attempts are spent on it).
+#
+# Items may be absolute URLs or paths relative to BASE_URL.  Provide at
+# least one detail-style and one index-style page that require an active
+# session to display content.  Set to [] to disable verification (legacy
+# behaviour: trust the login response).
+LOGIN_VERIFICATION_URLS = [
+    '/users/want_watch_videos',
+]
+
 # Sleep time configuration (in seconds)
 # MOVIE_SLEEP_MIN/MAX are auto-tuned by the adaptive sleep system (MovieSleepManager).
 # Override only for CI/testing via env var VAR_MOVIE_SLEEP (e.g. "0,0").
