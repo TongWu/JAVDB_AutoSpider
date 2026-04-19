@@ -52,6 +52,8 @@ def _reset_state():
     st.login_total_attempts = 0
     st.always_bypass_time = None
     st.parsed_links.clear()
+    if hasattr(st, '_login_budget_deducted_proxies'):
+        st._login_budget_deducted_proxies.clear()
     yield
 
 
@@ -714,3 +716,237 @@ class TestSpeculativeExecution:
 
         assert _EngineWorker._mark_entry_completed(worker, '') is True
         assert _EngineWorker._mark_entry_completed(worker, '') is True
+
+
+# ---------------------------------------------------------------------------
+# Login verification + login budget reduction
+# ---------------------------------------------------------------------------
+
+
+class TestVerifyLoginViaFixedPages:
+    """``verify_login_via_fixed_pages`` correctly gates a fresh login."""
+
+    def test_returns_true_when_no_urls_configured(self):
+        from packages.python.javdb_spider.fetch.session import (
+            verify_login_via_fixed_pages,
+        )
+        handler = MagicMock()
+        assert verify_login_via_fixed_pages(handler, 'p1', urls=[]) is True
+        handler.get_page.assert_not_called()
+
+    def test_returns_true_when_all_urls_pass(self):
+        from packages.python.javdb_spider.fetch import session as session_mod
+
+        handler = MagicMock()
+        handler.get_page.return_value = '<html>logged in dashboard</html>'
+
+        with patch.object(session_mod, 'is_login_page', return_value=False):
+            ok = session_mod.verify_login_via_fixed_pages(
+                handler, 'p1', urls=['/users/want_watch_videos', '/'],
+            )
+        assert ok is True
+        assert handler.get_page.call_count == 2
+
+    def test_returns_false_when_any_page_is_login_wall(self):
+        from packages.python.javdb_spider.fetch import session as session_mod
+
+        handler = MagicMock()
+        handler.get_page.return_value = '<html>login form</html>'
+
+        with patch.object(session_mod, 'is_login_page', return_value=True):
+            ok = session_mod.verify_login_via_fixed_pages(
+                handler, 'p1', urls=['/users/want_watch_videos'],
+            )
+        assert ok is False
+
+    def test_returns_false_when_fetch_returns_empty(self):
+        from packages.python.javdb_spider.fetch.session import (
+            verify_login_via_fixed_pages,
+        )
+        handler = MagicMock()
+        handler.get_page.return_value = None
+        ok = verify_login_via_fixed_pages(handler, 'p1', urls=['/foo'])
+        assert ok is False
+
+    def test_relative_paths_are_prefixed_with_base_url(self):
+        from packages.python.javdb_spider.fetch import session as session_mod
+
+        handler = MagicMock()
+        handler.get_page.return_value = '<html>ok</html>'
+
+        with patch.object(session_mod, 'BASE_URL', 'https://javdb.com'), \
+                patch.object(session_mod, 'is_login_page', return_value=False):
+            session_mod.verify_login_via_fixed_pages(
+                handler, 'p1', urls=['/users/want_watch_videos'],
+            )
+
+        called_url = handler.get_page.call_args.args[0]
+        assert called_url == 'https://javdb.com/users/want_watch_videos'
+
+
+class TestLoginBudgetReduction:
+    """``state.deduct_proxy_login_budget`` shrinks budget for banned proxies."""
+
+    def _reset(self, *, budget, attempts=0, per_proxy=None):
+        import packages.python.javdb_spider.runtime.state as st
+        st.login_total_budget = budget
+        st.login_total_attempts = attempts
+        st.login_attempts_per_proxy.clear()
+        if per_proxy:
+            st.login_attempts_per_proxy.update(per_proxy)
+        st._login_budget_deducted_proxies.clear()
+
+    def test_deducts_full_per_proxy_limit_when_unused(self):
+        import packages.python.javdb_spider.runtime.state as st
+        from packages.python.javdb_spider.runtime.config import (
+            LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
+        )
+        self._reset(budget=4 * LOGIN_ATTEMPTS_PER_PROXY_LIMIT)
+        original = st.login_total_budget
+
+        deducted = st.deduct_proxy_login_budget('proxy-x')
+        assert deducted == LOGIN_ATTEMPTS_PER_PROXY_LIMIT
+        assert st.login_total_budget == original - LOGIN_ATTEMPTS_PER_PROXY_LIMIT
+
+    def test_deducts_only_remaining_when_some_attempts_used(self):
+        import packages.python.javdb_spider.runtime.state as st
+        from packages.python.javdb_spider.runtime.config import (
+            LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
+        )
+        self._reset(
+            budget=4 * LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
+            attempts=2,
+            per_proxy={'proxy-x': 2},
+        )
+        original = st.login_total_budget
+
+        deducted = st.deduct_proxy_login_budget('proxy-x')
+        assert deducted == LOGIN_ATTEMPTS_PER_PROXY_LIMIT - 2
+        assert st.login_total_budget == original - (LOGIN_ATTEMPTS_PER_PROXY_LIMIT - 2)
+
+    def test_idempotent_for_same_proxy(self):
+        import packages.python.javdb_spider.runtime.state as st
+        from packages.python.javdb_spider.runtime.config import (
+            LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
+        )
+        self._reset(budget=4 * LOGIN_ATTEMPTS_PER_PROXY_LIMIT)
+
+        first = st.deduct_proxy_login_budget('proxy-x')
+        before = st.login_total_budget
+        second = st.deduct_proxy_login_budget('proxy-x')
+        assert first == LOGIN_ATTEMPTS_PER_PROXY_LIMIT
+        assert second == 0
+        assert st.login_total_budget == before
+
+    def test_never_drops_below_attempts_already_spent(self):
+        import packages.python.javdb_spider.runtime.state as st
+        from packages.python.javdb_spider.runtime.config import (
+            LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
+        )
+        # 1 proxy already spent everything, only 1 attempt total left.
+        self._reset(
+            budget=LOGIN_ATTEMPTS_PER_PROXY_LIMIT + 1,
+            attempts=LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
+            per_proxy={'proxy-y': LOGIN_ATTEMPTS_PER_PROXY_LIMIT},
+        )
+        # Banning a fresh proxy with 0 used attempts would normally subtract
+        # the full limit; clamp must keep budget >= login_total_attempts.
+        st.deduct_proxy_login_budget('proxy-x')
+        assert st.login_total_budget >= st.login_total_attempts
+
+    def test_banned_proxy_runtime_path_calls_deduct(self):
+        """``_handle_proxy_banned`` invokes ``deduct_proxy_login_budget``."""
+        import packages.python.javdb_spider.runtime.state as st
+        from packages.python.javdb_platform.request_handler import ProxyBannedError
+        from scripts.spider.fetch.fetch_engine import FetchEngine
+        from packages.python.javdb_spider.runtime.config import (
+            LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
+        )
+
+        # Reset state so we have a known starting budget.
+        self._reset(budget=2 * LOGIN_ATTEMPTS_PER_PROXY_LIMIT)
+        original_budget = st.login_total_budget
+
+        with patch('scripts.spider.fetch.fetch_engine.PROXY_POOL', _PROXY_POOL), \
+                patch('scripts.spider.fetch.fetch_engine.LOGIN_PROXY_NAME', None), \
+                patch('scripts.spider.fetch.fetch_engine.RequestHandler', side_effect=_make_handler_stub), \
+                patch('scripts.spider.fetch.fetch_engine.create_proxy_pool_from_config', return_value=MagicMock()), \
+                patch(
+                    'scripts.spider.fetch.fetch_engine.get_ban_manager',
+                    return_value=_make_ban_manager_stub(),
+                ):
+            engine = FetchEngine.simple(
+                parse_fn=lambda html, task: {'ok': True},
+                use_cookie=False,
+                sleep_min=0.01, sleep_max=0.02,
+            )
+            engine.start()
+
+            def _raise_ban(url, _cf):
+                raise ProxyBannedError('proxy-a', 'banned')
+
+            _patch_workers(engine, _raise_ban)
+            engine.submit('https://javdb.com/v/x', entry_index='1/1')
+            engine.mark_done()
+            list(engine.results())
+            engine.shutdown()
+
+        # At least one proxy got banned, so budget must have been reduced.
+        assert st.login_total_budget < original_budget
+
+
+class TestEngineTaskLoginVerifiedFlag:
+    """``EngineTask.login_verified_after_refresh`` propagates through the engine."""
+
+    def test_default_is_false(self):
+        from packages.python.javdb_spider.fetch.fetch_engine import EngineTask
+        assert EngineTask(url='https://x').login_verified_after_refresh is False
+
+
+class TestLoginCoordinatorVerifiedShortCircuit:
+    """When a verified-login task hits the wall again, no extra login fires."""
+
+    def test_verified_task_routed_back_without_relogin(self):
+        import packages.python.javdb_spider.runtime.state as st
+        from packages.python.javdb_spider.fetch.login_coordinator import (
+            LoginCoordinator,
+        )
+        from packages.python.javdb_spider.fetch.fetch_engine import EngineTask
+        import queue as queue_module
+
+        st.login_total_budget = 10
+        st.login_total_attempts = 1
+        st.login_attempts_per_proxy.clear()
+        st.login_failures_per_proxy.clear()
+        st._login_budget_deducted_proxies.clear()
+
+        worker = MagicMock()
+        worker.worker_id = 0
+        worker.proxy_name = 'proxy-a'
+        worker.proxy_config = {'name': 'proxy-a'}
+        worker._handler = MagicMock()
+        worker._handler.config = MagicMock()
+
+        coord = LoginCoordinator(all_workers=[worker], login_proxy_name=None)
+        coord.logged_in_worker_id = 0  # this worker IS the logged-in worker
+
+        task = EngineTask(
+            url='https://x', entry_index='1/1',
+            login_verified_after_refresh=True,
+        )
+        task_q: queue_module.Queue = queue_module.Queue()
+        login_q: queue_module.Queue = queue_module.Queue()
+
+        with patch(
+            'packages.python.javdb_spider.fetch.login_coordinator.attempt_login_refresh',
+        ) as mock_login:
+            coord.handle_login_required(
+                worker=worker, task=task, video_code='V-1',
+                login_queue=login_q, task_queue=task_q,
+            )
+        # No login attempt should fire.
+        mock_login.assert_not_called()
+        # Task should be re-queued to the regular task queue with proxy marked failed.
+        assert 'proxy-a' in task.failed_proxies
+        assert task_q.qsize() == 1
+        assert login_q.qsize() == 0
