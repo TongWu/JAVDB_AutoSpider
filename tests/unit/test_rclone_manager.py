@@ -419,6 +419,48 @@ class TestExecuteMode:
         result = run_execute_from_csv(path)
         assert result == 0
 
+    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='')
+    @patch('utils.rclone_helper.subprocess.run')
+    def test_run_execute_refuses_when_no_drive_name(self, mock_run, _mock_dn, tmp_path):
+        """Without a remote prefix and without a configured drive name, the
+        executor must refuse rather than letting rclone treat the relative
+        path as a LOCAL filesystem path (which would either error out or,
+        worse, silently delete a real local directory)."""
+        path = str(tmp_path / 'dedup.csv')
+        r = DedupRecord(
+            'A-001', 's', 'sub',
+            '剧集/不可以色色/JAV-Sync/2012/Actor/A-001 [有码-无字]',
+            100, 'cat', 'r', 't', 'False', '',
+        )
+        append_dedup_record(path, r)
+
+        with pytest.raises(RuntimeError, match='drive name is not configured'):
+            run_execute_from_csv(path, dry_run=False)
+
+        mock_run.assert_not_called()
+        reloaded = load_dedup_csv(path)
+        assert reloaded[0]['is_deleted'] == 'False'
+
+    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='')
+    @patch('scripts.rclone_manager.export_dedup_history')
+    @patch('utils.rclone_helper.subprocess.run')
+    def test_run_execute_allows_explicit_remote_prefix_without_drive_name(
+        self, mock_run, _mock_export, _mock_dn, tmp_path,
+    ):
+        """When every pending row already carries an explicit ``remote:`` prefix
+        the guard must NOT trigger, since rclone will route correctly."""
+        mock_run.return_value = MagicMock(returncode=0)
+        path = str(tmp_path / 'dedup.csv')
+        r = DedupRecord(
+            'A-001', 's', 'sub',
+            'gdrive:剧集/不可以色色/JAV-Sync/2012/Actor/A-001 [有码-无字]',
+            100, 'cat', 'r', 't', 'False', '',
+        )
+        append_dedup_record(path, r)
+
+        result = run_execute_from_csv(path, dry_run=False)
+        assert result == 0
+
 
 # ============================================================================
 # Test drive-name utility functions

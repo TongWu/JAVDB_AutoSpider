@@ -80,6 +80,7 @@ from packages.python.javdb_integrations.rclone_helper import (
     strip_drive_name,
     get_configured_drive_name,
     prepend_drive_name,
+    has_remote_prefix,
     INCREMENTAL_DAYS,
 )
 
@@ -487,6 +488,42 @@ def migrate_strip_drive_names() -> int:
 # Execute mode — purge folders from a dedup CSV
 # ============================================================================
 
+def _assert_remote_drive_resolved(
+    drive_name: str,
+    sample_paths,
+    *,
+    context: str,
+) -> None:
+    """Fail fast when about to invoke ``rclone`` with paths that lack a remote
+    prefix and no drive name is configured.
+
+    Without this guard, ``rclone purge`` (or ``move``) would interpret the
+    relative path as a *local* filesystem path and resolve it against the
+    current working directory — which on CI runners is the repo checkout.
+    Best case: ``directory not found`` errors.  Worst case: silent deletion
+    of legitimate local files that happen to share the path prefix.
+
+    Raises:
+        RuntimeError: when the configuration cannot produce a remote-qualified
+            path for the given samples.
+    """
+    if drive_name:
+        return
+
+    offenders = [p for p in sample_paths if p and not has_remote_prefix(p)]
+    if not offenders:
+        return
+
+    sample = offenders[:3]
+    raise RuntimeError(
+        f"{context}: refusing to run rclone — drive name is not configured "
+        f"(set RCLONE_FOLDER_PATH like 'gdrive:/...' or RCLONE_DRIVE_NAME) "
+        f"and {len(offenders)} path(s) lack a remote prefix, e.g. {sample}. "
+        f"Without a remote prefix rclone would treat them as LOCAL paths "
+        f"relative to the current working directory."
+    )
+
+
 def resolve_latest_dedup_file(dedup_dir: str) -> Optional[str]:
     """Resolve the dedup CSV to use for execute: choose the newest by mtime
     between the latest Dedup_Pending_* and latest Dedup_Report_* so we never
@@ -563,6 +600,10 @@ def run_execute_from_csv(
             continue
         unique_paths.setdefault(folder_path, True)
 
+    _assert_remote_drive_resolved(
+        drive_name, unique_paths.keys(), context='dedup execute',
+    )
+
     purged_pairs: list = []
     for folder_path in unique_paths:
         full_path = prepend_drive_name(folder_path, drive_name)
@@ -622,6 +663,14 @@ def run_execute_soft_delete_from_csv(
     failed = 0
     skipped = 0
     seen_sources = set()
+
+    _candidate_paths = [
+        (row.get('source_path') or row.get('SourcePath') or '').strip()
+        for row in rows
+    ]
+    _assert_remote_drive_resolved(
+        drive_name, _candidate_paths, context='soft-delete execute',
+    )
 
     for row in rows:
         source_path = (row.get('source_path') or row.get('SourcePath') or '').strip()
@@ -689,6 +738,14 @@ def run_execute_inventory_purge_from_csv(
     failed = 0
     skipped = 0
     seen_sources: set[str] = set()
+
+    _candidate_paths = [
+        (row.get('source_path') or row.get('SourcePath') or '').strip()
+        for row in rows
+    ]
+    _assert_remote_drive_resolved(
+        drive_name, _candidate_paths, context='inventory-purge execute',
+    )
 
     for row in rows:
         source_path = (row.get('source_path') or row.get('SourcePath') or '').strip()
