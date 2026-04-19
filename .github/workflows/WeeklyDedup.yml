@@ -86,6 +86,21 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          # Rclone / Dedup Configuration
+          VAR_RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
+          VAR_RCLONE_FOLDER_PATH: ${{ vars.RCLONE_FOLDER_PATH }}
+          VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
+          # File paths / logging
+          VAR_REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+          VAR_DEDUP_DIR: ${{ vars.DEDUP_DIR }}
+          VAR_RCLONE_INVENTORY_CSV: ${{ vars.RCLONE_INVENTORY_CSV || 'rclone_inventory.csv' }}
+          VAR_DEDUP_CSV: ${{ vars.DEDUP_CSV || 'dedup.csv' }}
+          VAR_DEDUP_LOG_FILE: ${{ vars.DEDUP_LOG_FILE || 'logs/rclone_dedup.log' }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+        run: python3 -m apps.cli.config_generator --github-actions
+
       - name: Set report paths
         run: |
           REPORTS_DIR="${{ vars.REPORTS_DIR || 'reports' }}"
