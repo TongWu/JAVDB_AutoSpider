@@ -89,7 +89,7 @@ on:
       align_enqueue_qb:
         description: 'Alignment: enqueue upgrade magnets to qBittorrent'
         required: false
-        default: false
+        default: true
         type: boolean
       align_execute_delete:
         description: 'Alignment: run rclone purge on purge-plan CSV (destructive)'
