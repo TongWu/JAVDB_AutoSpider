@@ -53,6 +53,58 @@ login_total_budget: int = len(PROXY_POOL) * LOGIN_ATTEMPTS_PER_PROXY_LIMIT if PR
 always_bypass_time: Optional[int] = None
 proxies_requiring_cf_bypass: Dict[str, float] = {}
 
+# Proxies whose remaining login budget has already been deducted from
+# ``login_total_budget`` (idempotency guard for ``deduct_proxy_login_budget``).
+_login_budget_deducted_proxies: set = set()
+
+
+def deduct_proxy_login_budget(proxy_name: Optional[str]) -> int:
+    """Remove a proxy's unused login attempts from the global budget.
+
+    Called when a proxy is banned (either pre-banned at startup or banned
+    during runtime).  The proxy's *remaining* per-proxy budget
+    (``LOGIN_ATTEMPTS_PER_PROXY_LIMIT - login_attempts_per_proxy[proxy]``,
+    floored at 0) is subtracted from :data:`login_total_budget` so that
+    banned workers no longer reserve login credits they cannot use.
+
+    Idempotent per ``proxy_name`` — repeated calls for the same proxy are
+    no-ops, even if it gets re-banned.
+
+    Args:
+        proxy_name: Name of the proxy whose budget should be reclaimed.
+            ``None``/empty inputs are silently ignored.
+
+    Returns:
+        The number of login attempts deducted (``0`` when nothing changed).
+    """
+    global login_total_budget
+    if not proxy_name:
+        return 0
+    if proxy_name in _login_budget_deducted_proxies:
+        return 0
+    if login_total_budget <= 0:
+        _login_budget_deducted_proxies.add(proxy_name)
+        return 0
+
+    used = login_attempts_per_proxy.get(proxy_name, 0)
+    remaining = LOGIN_ATTEMPTS_PER_PROXY_LIMIT - used
+    if remaining <= 0:
+        _login_budget_deducted_proxies.add(proxy_name)
+        return 0
+
+    # Never let the global budget drop below total attempts already spent
+    # (otherwise downstream budget checks would falsely report "exhausted").
+    new_budget = max(login_total_attempts, login_total_budget - remaining)
+    actually_deducted = login_total_budget - new_budget
+    login_total_budget = new_budget
+    _login_budget_deducted_proxies.add(proxy_name)
+    if actually_deducted > 0:
+        logger.info(
+            "Login budget reduced by %d for banned proxy '%s' (now %d, attempts so far %d)",
+            actually_deducted, proxy_name, new_budget, login_total_attempts,
+        )
+    return actually_deducted
+
 # ---------------------------------------------------------------------------
 # CF bypass helpers
 # ---------------------------------------------------------------------------

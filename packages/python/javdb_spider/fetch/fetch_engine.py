@@ -74,6 +74,7 @@ from packages.python.javdb_spider.runtime.config import (
     PROXY_POOL,
     PROXY_POOL_MAX_FAILURES,
     LOGIN_PROXY_NAME,
+    LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
 )
 
 logger = get_logger(__name__)
@@ -122,6 +123,15 @@ class EngineTask:
     ``_speculative`` is ``True`` when the task was created by the engine's
     speculative execution mechanism (idle workers racing on an in-flight
     task).  Speculative tasks are never re-queued on failure.
+
+    ``login_verified_after_refresh`` is set by
+    :class:`~scripts.spider.fetch.login_coordinator.LoginCoordinator` after a
+    successful auto-login + fixed-page verification cycle.  Once set, any
+    further :class:`LoginRequired` raised while the *logged-in worker* is
+    processing this task is treated as a page/proxy issue (re-routed to a
+    different proxy) instead of triggering yet another login attempt — the
+    cookie is provably valid against fixed login-required pages, so the
+    failure must be specific to this URL or this proxy IP.
     """
 
     url: str
@@ -130,6 +140,7 @@ class EngineTask:
     failed_proxies: set = field(default_factory=set)
     meta: dict = field(default_factory=dict)
     priority: int = 0
+    login_verified_after_refresh: bool = False
     _deadline: Optional[float] = field(default=None, repr=False, compare=False)
     _speculative: bool = field(default=False, repr=False, compare=False)
 
@@ -578,6 +589,7 @@ class _EngineWorker(threading.Thread):
                     failed_proxies=set(task.failed_proxies),
                     meta=dict(task.meta),
                     priority=task.priority,
+                    login_verified_after_refresh=task.login_verified_after_refresh,
                     _deadline=task._deadline,
                     _speculative=True,
                 )
@@ -913,6 +925,10 @@ class _EngineWorker(threading.Thread):
         """
         task.failed_proxies.add(self.proxy_name)
 
+        # Reclaim this proxy's unused login attempts from the global budget
+        # so banned workers no longer reserve credits they cannot spend.
+        state.deduct_proxy_login_budget(self.proxy_name)
+
         with self._drain_lock:
             self._banned_proxies.add(self.proxy_name)
             active = self._active_workers
@@ -1098,10 +1114,12 @@ class ParallelFetchBackend(FetchBackend):
         banned_proxies: set = set()
         pre_banned_count = 0
         active_configs = []
+        pre_banned_names: List[str] = []
         for cfg in proxy_configs:
             name = cfg.get('name', '')
             if ban_mgr.is_proxy_banned(name):
                 pre_banned_count += 1
+                pre_banned_names.append(name)
                 logger.info(
                     "[startup] Proxy '%s' already banned — skipping worker",
                     name,
@@ -1113,6 +1131,26 @@ class ParallelFetchBackend(FetchBackend):
             raise RuntimeError(
                 "FetchEngine: all proxies are banned, cannot start"
             )
+
+        # Recompute the global login budget so it reflects only the proxies
+        # we will actually run (matches the per-proxy x active rule used at
+        # state-init time).  Only safe before any login attempt has fired.
+        if state.login_total_attempts == 0:
+            new_budget = len(active_configs) * LOGIN_ATTEMPTS_PER_PROXY_LIMIT
+            if new_budget != state.login_total_budget:
+                logger.info(
+                    "Login budget adjusted at startup: %d -> %d "
+                    "(%d active proxies, %d pre-banned)",
+                    state.login_total_budget, new_budget,
+                    len(active_configs), pre_banned_count,
+                )
+                state.login_total_budget = new_budget
+            for name in pre_banned_names:
+                # Mark as already accounted for so a later runtime ban is a no-op.
+                state._login_budget_deducted_proxies.add(name)
+        else:
+            for name in pre_banned_names:
+                state.deduct_proxy_login_budget(name)
 
         total_workers = len(active_configs)
 
