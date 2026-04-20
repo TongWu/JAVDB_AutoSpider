@@ -17,12 +17,21 @@ on:
   push:
     branches:
       - main
+    # Auto-trigger only for ingestion-impacting code paths.
+    # In public repos this workflow will be skipped at job level (see job `if` guards below).
     paths:
       - 'packages/python/**/*.py'
       - 'apps/**/*.py'
       - 'scripts/**/*.py'
       - 'utils/**/*.py'
+      - 'packages/rust/**/*.rs'
+      - 'packages/rust/**/Cargo.toml'
+      - 'packages/rust/**/Cargo.lock'
+      - 'packages/rust/**/pyproject.toml'
       - 'pipeline.py'
+      - 'pipeline_run_and_notify.py'
+      - '.github/actions/setup-python-env/**'
+      - '.github/workflows/TestIngestion.yml'
   
   workflow_dispatch:
     inputs:
@@ -45,6 +54,9 @@ jobs:
   # Job 1: Setup and Run Pipeline - Simplified single job
   # =============================================================================
   run-pipeline:
+    # Private repo: allow automatic push trigger + manual trigger.
+    # Public repo: disable automatic runs while keeping manual dispatch available.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.repository.private }}
     runs-on: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
     environment: Production
     outputs:
@@ -320,10 +332,10 @@ jobs:
   # This tests the commit functionality without affecting the remote repository
   # =============================================================================
   commit-results:
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event.repository.private) }}
     runs-on: ubuntu-latest
     environment: Production
     needs: [run-pipeline]
-    if: ${{ !cancelled() }}
     permissions:
       contents: write
     env:
