@@ -263,7 +263,7 @@ def verify_login_via_fixed_pages(
                 max_retries=2,
                 use_cf_bypass=use_cf_bypass,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "[%s] Login verification request raised %s for %s",
                 label, exc, url,
