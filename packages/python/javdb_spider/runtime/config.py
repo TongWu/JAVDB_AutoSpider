@@ -63,6 +63,25 @@ LOGIN_PROXY_NAME = (
 LOGIN_ATTEMPTS_PER_PROXY_LIMIT = cfg('LOGIN_ATTEMPTS_PER_PROXY_LIMIT', 6)
 LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH = cfg('LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH', 3)
 
+# Login verification: after a successful login refresh, fetch each of these
+# URLs (must be login-required pages, e.g. user profile / want-watch list)
+# through the worker that just logged in.  Login is only considered
+# "verified" if every URL returns non-login HTML.  Empty list disables
+# verification (legacy behaviour: trust the login response).  Items can be
+# absolute URLs or paths relative to ``BASE_URL``.
+LOGIN_VERIFICATION_URLS = cfg(
+    'LOGIN_VERIFICATION_URLS',
+    ['/users/want_watch_videos', '/users'],
+)
+# Normalise: cfg() may return None (explicit empty), a scalar string (which
+# would be iterated character-by-character when fed to the verifier), or a
+# list/tuple.  Consumers always expect a list of URL strings.
+if LOGIN_VERIFICATION_URLS is None:
+    LOGIN_VERIFICATION_URLS = []
+elif not isinstance(LOGIN_VERIFICATION_URLS, (list, tuple)):
+    LOGIN_VERIFICATION_URLS = [LOGIN_VERIFICATION_URLS]
+LOGIN_VERIFICATION_URLS = [str(x) for x in LOGIN_VERIFICATION_URLS]
+
 # GPT / Login
 GPT_API_KEY = cfg('GPT_API_KEY', None)
 GPT_API_URL = cfg('GPT_API_URL', None)

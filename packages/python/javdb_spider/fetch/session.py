@@ -1,15 +1,19 @@
 """Login / session-cookie management for the spider."""
 
+from typing import Iterable, Optional
+
 from packages.python.javdb_platform.logging_config import get_logger
 from packages.python.javdb_platform.bridges.rust_adapters.parser_adapter import is_login_page
 import packages.python.javdb_spider.runtime.state as state
 from packages.python.javdb_spider.runtime.config import (
+    BASE_URL,
     LOGIN_FEATURE_AVAILABLE,
     JAVDB_USERNAME,
     JAVDB_PASSWORD,
     LOGIN_PROXY_NAME,
     PROXY_POOL,
     LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
+    LOGIN_VERIFICATION_URLS,
 )
 
 logger = get_logger(__name__)
@@ -196,6 +200,95 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
     except Exception as e:
         logger.error(f"Unexpected error during login: {e}")
         return False, None, None
+
+
+def _absolute_url(url: str) -> str:
+    """Return *url* prefixed with :data:`BASE_URL` when it is a path."""
+    if not url:
+        return url
+    if url.startswith(('http://', 'https://')):
+        return url
+    base = (BASE_URL or '').rstrip('/')
+    if not base:
+        return url
+    if url.startswith('/'):
+        return f"{base}{url}"
+    return f"{base}/{url}"
+
+
+def verify_login_via_fixed_pages(
+    handler,
+    proxy_name: Optional[str] = None,
+    *,
+    urls: Optional[Iterable[str]] = None,
+    use_cf_bypass: bool = False,
+) -> bool:
+    """Verify a freshly-obtained session cookie against fixed login-required pages.
+
+    The freshly logged-in *handler* must already carry the new
+    ``javdb_session_cookie``.  Each URL in ``urls`` (defaulting to
+    :data:`LOGIN_VERIFICATION_URLS`) is fetched through *handler* and the
+    response must be non-empty and **not** look like a login wall for the
+    login to be considered verified.
+
+    Returns ``True`` when every URL passes (or when no verification URLs are
+    configured — caller falls back to the legacy "trust the login response"
+    behaviour).  Returns ``False`` on the first URL that fails to fetch or
+    returns a login page.
+
+    Notes:
+        * The handler's own retry logic (``max_retries=2``) is used so a
+          single transient network blip does not invalidate a fresh cookie.
+        * No further re-login is triggered from inside this helper — the
+          caller decides what to do on failure (clear cookie, switch proxy,
+          etc.).
+    """
+    verification_urls = list(urls) if urls is not None else list(LOGIN_VERIFICATION_URLS or [])
+    if not verification_urls:
+        logger.debug("Login verification skipped: LOGIN_VERIFICATION_URLS is empty")
+        return True
+
+    label = proxy_name or 'default'
+    for raw_url in verification_urls:
+        url = _absolute_url(raw_url)
+        logger.info(
+            "[%s] Verifying login via fixed page: %s", label, url,
+        )
+        try:
+            html = handler.get_page(
+                url,
+                use_cookie=True,
+                use_proxy=True,
+                module_name='spider',
+                max_retries=2,
+                use_cf_bypass=use_cf_bypass,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "[%s] Login verification request raised %s for %s",
+                label, exc, url,
+            )
+            return False
+
+        if not html:
+            logger.warning(
+                "[%s] Login verification fetch returned no content for %s",
+                label, url,
+            )
+            return False
+        if is_login_page(html):
+            logger.warning(
+                "[%s] Login verification page %s still shows login wall — "
+                "session cookie not actually authenticated",
+                label, url,
+            )
+            return False
+
+    logger.info(
+        "[%s] Login verified against %d fixed page(s)",
+        label, len(verification_urls),
+    )
+    return True
 
 
 def can_attempt_login(is_adhoc_mode: bool, is_index_page: bool = False) -> bool:

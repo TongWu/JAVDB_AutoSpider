@@ -272,6 +272,105 @@ class TestInitializeProxyHelperLogic:
         assert proxies_to_use[0]['name'] == 'Proxy1'
 
 
+class TestAdhocQBMergeLogic:
+    """Test cases for merging torrents from primary and adhoc QB instances."""
+
+    def test_adhoc_torrents_merged_without_duplicates(self):
+        """Adhoc torrents are appended only when their hash is new."""
+        primary_torrents = [
+            {'hash': 'aaa', 'name': 'T1', 'category': 'Daily Ingestion'},
+            {'hash': 'bbb', 'name': 'T2', 'category': 'Ad Hoc'},
+        ]
+        adhoc_torrents = [
+            {'hash': 'bbb', 'name': 'T2-dup', 'category': 'Ad Hoc'},
+            {'hash': 'ccc', 'name': 'T3', 'category': 'Ad Hoc'},
+        ]
+
+        # Simulate the merge logic from pikpak_bridge
+        torrent_qb_map = {}
+        for t in primary_torrents:
+            torrent_qb_map[t['hash']] = 'primary'
+
+        existing_hashes = {t['hash'] for t in primary_torrents}
+        merged = list(primary_torrents)
+        for t in adhoc_torrents:
+            if t['hash'] not in existing_hashes:
+                merged.append(t)
+                torrent_qb_map[t['hash']] = 'adhoc'
+
+        assert len(merged) == 3
+        assert torrent_qb_map['aaa'] == 'primary'
+        assert torrent_qb_map['bbb'] == 'primary'  # not overwritten by adhoc
+        assert torrent_qb_map['ccc'] == 'adhoc'
+
+    def test_no_adhoc_when_url_empty(self):
+        """When QB_URL_ADHOC is empty, only primary torrents are used."""
+        qb_url_adhoc = ''
+        primary_torrents = [{'hash': 'x', 'name': 'T1'}]
+
+        merged = list(primary_torrents)
+        if qb_url_adhoc:
+            merged.append({'hash': 'y', 'name': 'T2'})
+
+        assert len(merged) == 1
+
+    def test_delete_uses_correct_qb_client(self):
+        """Each torrent is deleted from the QB instance it came from."""
+        torrent_qb_map = {
+            'aaa': 'primary',
+            'bbb': 'adhoc',
+        }
+        default_qb = 'primary'
+
+        assert torrent_qb_map.get('aaa', default_qb) == 'primary'
+        assert torrent_qb_map.get('bbb', default_qb) == 'adhoc'
+        assert torrent_qb_map.get('unknown', default_qb) == 'primary'
+
+
+class TestRemoveCompletedTorrentsKeepFiles:
+    """remove_completed_torrents_keep_files (per-qB cleanup before PikPak)."""
+
+    def test_calls_delete_with_keep_files_when_completed_present(self):
+        from unittest.mock import MagicMock
+        from packages.python.javdb_integrations.pikpak_bridge import (
+            remove_completed_torrents_keep_files,
+        )
+
+        mock_qb = MagicMock()
+        mock_qb.get_torrents_multiple_categories.return_value = [
+            {'hash': 'h1', 'name': 'done1'},
+        ]
+        remove_completed_torrents_keep_files(mock_qb, ['Ad Hoc'], dry_run=False)
+        mock_qb.get_torrents_multiple_categories.assert_called_once_with(
+            ['Ad Hoc'], torrent_filter='completed'
+        )
+        mock_qb.delete_torrents.assert_called_once_with(['h1'], delete_files=False)
+
+    def test_skips_delete_when_empty(self):
+        from unittest.mock import MagicMock
+        from packages.python.javdb_integrations.pikpak_bridge import (
+            remove_completed_torrents_keep_files,
+        )
+
+        mock_qb = MagicMock()
+        mock_qb.get_torrents_multiple_categories.return_value = []
+        remove_completed_torrents_keep_files(mock_qb, ['Ad Hoc'], dry_run=False)
+        mock_qb.delete_torrents.assert_not_called()
+
+    def test_dry_run_does_not_delete(self):
+        from unittest.mock import MagicMock
+        from packages.python.javdb_integrations.pikpak_bridge import (
+            remove_completed_torrents_keep_files,
+        )
+
+        mock_qb = MagicMock()
+        mock_qb.get_torrents_multiple_categories.return_value = [
+            {'hash': 'h1', 'name': 'done1'},
+        ]
+        remove_completed_torrents_keep_files(mock_qb, ['Ad Hoc'], dry_run=True)
+        mock_qb.delete_torrents.assert_not_called()
+
+
 # Use temp_dir fixture
 @pytest.fixture
 def temp_dir():

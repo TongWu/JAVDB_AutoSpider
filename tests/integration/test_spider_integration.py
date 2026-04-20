@@ -410,7 +410,10 @@ class TestCookieRevocationAndFailover:
             with patch(
                 "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
                 return_value=(True, new_cookie, "ARM-1"),
-            ) as mock_login:
+            ) as mock_login, patch(
+                "scripts.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
+                return_value=True,
+            ) as mock_verify:
                 coord.handle_login_required(
                     worker=workers[0],
                     task=task,
@@ -419,6 +422,7 @@ class TestCookieRevocationAndFailover:
                     task_queue=dq,
                 )
                 mock_login.assert_called_once()
+                mock_verify.assert_called_once()
 
             assert coord.logged_in_worker_id == 0
             assert workers[0]._handler.config.javdb_session_cookie == new_cookie
@@ -448,7 +452,10 @@ class TestCookieRevocationAndFailover:
             with patch(
                 "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
                 return_value=(True, new_cookie, "ARM-2"),
-            ):
+            ), patch(
+                "scripts.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
+                return_value=True,
+            ) as mock_verify:
                 coord.handle_login_required(
                     worker=workers[0],
                     task=task,
@@ -456,6 +463,7 @@ class TestCookieRevocationAndFailover:
                     login_queue=lq,
                     task_queue=dq,
                 )
+                mock_verify.assert_called()
 
             assert coord.logged_in_worker_id == 1, "Should switch to ARM-2 (worker_id=1)"
             assert workers[1]._handler.config.javdb_session_cookie == new_cookie
@@ -517,7 +525,10 @@ class TestCookieRevocationAndFailover:
             with patch(
                 "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
                 side_effect=lambda *a, **kw: next(login_responses),
-            ):
+            ), patch(
+                "scripts.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
+                return_value=True,
+            ) as mock_verify:
                 for stale_round in range(3):
                     task = EngineTask(
                         url=f"http://javdb.com/v/stale{stale_round}",
@@ -531,6 +542,7 @@ class TestCookieRevocationAndFailover:
                         login_queue=lq,
                         task_queue=dq,
                     )
+                mock_verify.assert_called()
 
             assert coord.logged_in_worker_id == 1, "ARM-2 should now be logged in"
             assert workers[1]._handler.config.javdb_session_cookie == "arm2_fresh"
@@ -557,7 +569,10 @@ class TestCookieRevocationAndFailover:
             with patch(
                 "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
                 return_value=(True, new_cookie, "ARM-1"),
-            ):
+            ), patch(
+                "scripts.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
+                return_value=True,
+            ) as mock_verify:
                 coord.handle_login_required(
                     worker=workers[0],
                     task=task,
@@ -565,6 +580,7 @@ class TestCookieRevocationAndFailover:
                     login_queue=lq,
                     task_queue=dq,
                 )
+                mock_verify.assert_called_once()
 
             assert coord.logged_in_worker_id == 0
             assert workers[0]._handler.config.javdb_session_cookie == new_cookie

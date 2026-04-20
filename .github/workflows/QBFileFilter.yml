@@ -48,9 +48,11 @@ jobs:
     environment: Production
     permissions:
       contents: read
+    outputs:
+      has_adhoc_qb: ${{ steps.detect_adhoc.outputs.has_adhoc_qb }}
     env:
       TZ: Asia/Singapore
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -138,8 +140,101 @@ jobs:
           path: config.py.enc
           retention-days: 1
 
+      # --- Adhoc qBittorrent instance (optional) ---
+      - name: Detect adhoc qBittorrent credentials
+        id: detect_adhoc
+        env:
+          QB_URL_ADHOC: ${{ secrets.QB_URL_ADHOC }}
+        run: |
+          if [ -n "$QB_URL_ADHOC" ]; then
+            echo "has_adhoc_qb=true" >> "$GITHUB_OUTPUT"
+            echo "✓ Adhoc qBittorrent credentials detected"
+          else
+            echo "has_adhoc_qb=false" >> "$GITHUB_OUTPUT"
+            echo "ℹ No adhoc qBittorrent credentials – skipping adhoc filter"
+          fi
+
+      - name: Generate adhoc config.py
+        if: steps.detect_adhoc.outputs.has_adhoc_qb == 'true'
+        env:
+          # ============ SECRETS — prefer dedicated adhoc qB credentials ============
+          VAR_QB_URL: ${{ secrets.QB_URL_ADHOC || secrets.QB_URL }}
+          VAR_QB_USERNAME: ${{ secrets.QB_USERNAME_ADHOC || secrets.QB_USERNAME }}
+          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD_ADHOC || secrets.QB_PASSWORD }}
+          VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
+          VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
+          VAR_JAVDB_SESSION_COOKIE: ${{ secrets.JAVDB_SESSION_COOKIE }}
+          VAR_PIKPAK_PASSWORD: ${{ secrets.PIKPAK_PASSWORD }}
+          # ============ VARIABLES (non-sensitive) ============
+          VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
+          VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
+          VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
+          VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
+          VAR_TORRENT_SAVE_PATH: ${{ vars.TORRENT_SAVE_PATH }}
+          VAR_AUTO_START: ${{ vars.AUTO_START }}
+          VAR_SKIP_CHECKING: ${{ vars.SKIP_CHECKING || 'False' }}
+          VAR_REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT || '30' }}
+          VAR_DELAY_BETWEEN_ADDITIONS: ${{ vars.DELAY_BETWEEN_ADDITIONS }}
+          VAR_SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          VAR_SMTP_PORT: ${{ vars.SMTP_PORT }}
+          VAR_SMTP_USER: ${{ secrets.SMTP_USER }}
+          VAR_EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          VAR_EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
+          VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES || 3}}
+          VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_PROXY_SPIDER_ENABLED: 'true'
+          VAR_PROXY_QBITTORRENT_ENABLED: ${{ github.event_name == 'workflow_dispatch' && (inputs.proxy_qbittorrent && 'true' || 'false') || 'false' }}
+          VAR_PROXY_PIKPAK_ENABLED: 'false'
+          VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
+          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
+          VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED || 'True' }}
+          VAR_PAGE_START: ${{ vars.PAGE_START }}
+          VAR_PAGE_END: ${{ vars.PAGE_END }}
+          VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}
+          VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
+          VAR_BASE_URL: ${{ vars.BASE_URL || 'https://javdb.com' }}
+          VAR_JAVDB_USERNAME: ${{ secrets.JAVDB_USERNAME }}
+          VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+          VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE || 'logs/spider.log' }}
+          VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE || 'logs/qb_uploader.log' }}
+          VAR_PIPELINE_LOG_FILE: ${{ vars.PIPELINE_LOG_FILE || 'logs/pipeline.log' }}
+          VAR_EMAIL_NOTIFICATION_LOG_FILE: ${{ vars.EMAIL_NOTIFICATION_LOG_FILE || 'logs/email_notification.log' }}
+          VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER || 'False' }}
+          VAR_REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+          VAR_DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'reports/DailyReport' }}
+          VAR_AD_HOC_DIR: ${{ vars.AD_HOC_DIR || 'reports/AdHoc' }}
+          VAR_PARSED_MOVIES_CSV: ${{ vars.PARSED_MOVIES_CSV }}
+          VAR_PIKPAK_EMAIL: ${{ secrets.PIKPAK_EMAIL }}
+          VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE || 'logs/pikpak_bridge.log' }}
+          VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
+          VAR_QB_FILE_FILTER_MIN_SIZE_MB: ${{ vars.QB_FILE_FILTER_MIN_SIZE_MB }}
+          VAR_QB_FILE_FILTER_LOG_FILE: ${{ vars.QB_FILE_FILTER_LOG_FILE || 'logs/qb_file_filter.log' }}
+          VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
+        run: python3 -m apps.cli.config_generator --github-actions
+
+      - name: Encrypt adhoc config for artifact
+        if: steps.detect_adhoc.outputs.has_adhoc_qb == 'true'
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
+            -in config.py -out config.py.enc \
+            -pass pass:"$ARTIFACT_KEY"
+          echo "✓ Adhoc config encrypted successfully"
+
+      - name: Upload encrypted adhoc config artifact
+        if: steps.detect_adhoc.outputs.has_adhoc_qb == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: config-encrypted-filefilter-adhoc
+          path: config.py.enc
+          retention-days: 1
+
   # =============================================================================
-  # Job 2: Run File Filter
+  # Job 2: Run File Filter (default qBittorrent)
   # =============================================================================
   run-file-filter:
     runs-on: ubuntu-latest
@@ -196,4 +291,77 @@ jobs:
           fi
           
           echo "Running: python3 -m apps.cli.qb_file_filter ${ARGS[*]}"
+          python3 -m apps.cli.qb_file_filter "${ARGS[@]}"
+
+  # =============================================================================
+  # Job 3: Run File Filter on Adhoc qBittorrent (only when QB_URL_ADHOC is set)
+  # =============================================================================
+  run-file-filter-adhoc:
+    runs-on: ubuntu-latest
+    environment: Production
+    permissions:
+      contents: read
+    needs: [setup]
+    if: needs.setup.outputs.has_adhoc_qb == 'true'
+    env:
+      TZ: Asia/Singapore
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.11'
+
+      - name: Restore encrypted adhoc config
+        uses: ./.github/actions/restore-encrypted-config
+        with:
+          artifact-name: config-encrypted-filefilter-adhoc
+          artifact-key: ${{ secrets.ARTIFACT_KEY }}
+
+      - name: Run qBittorrent File Filter (adhoc)
+        env:
+          MIN_SIZE_MB: ${{ github.event.inputs.min_size_mb || '100' }}
+          DAYS: ${{ github.event.inputs.days || '2' }}
+          # Honour the manual-dispatch category input so deployments that
+          # rename the adhoc category via TORRENT_CATEGORY_ADHOC (consumed
+          # by the setup job's config.py) aren't silently skipped.  The
+          # default mirrors the ``categories`` input default and only kicks
+          # in when this job was started outside of workflow_dispatch
+          # (e.g. on schedule).
+          QB_FILTER_CATEGORIES: ${{ github.event.inputs.categories || '["Ad Hoc", "Daily Ingestion"]' }}
+          # Fallback category name used when the dispatch input does not
+          # mention an adhoc-style entry — matches the config default.
+          ADHOC_CATEGORY: ${{ vars.TORRENT_CATEGORY_ADHOC || 'Ad Hoc' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          DELETE_LOCAL_FILES: ${{ github.event.inputs.delete_local_files || 'false' }}
+        run: |
+          set -e
+          set -o pipefail
+
+          # Skip the adhoc step entirely when the requested categories do
+          # not include the adhoc category (workflow_dispatch may have
+          # narrowed the run to daily-only).
+          if ! printf '%s' "$QB_FILTER_CATEGORIES" | grep -qF "$ADHOC_CATEGORY"; then
+            echo "Adhoc category '$ADHOC_CATEGORY' not present in QB_FILTER_CATEGORIES ($QB_FILTER_CATEGORIES) — skipping adhoc run"
+            exit 0
+          fi
+
+          ARGS=(--min-size "$MIN_SIZE_MB" --days "$DAYS")
+
+          if [ -n "$QB_FILTER_CATEGORIES" ]; then
+            ARGS+=(--categories "$QB_FILTER_CATEGORIES")
+          fi
+
+          if [ "$DRY_RUN" = "true" ]; then
+            ARGS+=(--dry-run)
+          fi
+
+          if [ "$DELETE_LOCAL_FILES" = "true" ]; then
+            ARGS+=(--delete-local-files)
+          fi
+
+          echo "Running (adhoc): python3 -m apps.cli.qb_file_filter ${ARGS[*]}"
           python3 -m apps.cli.qb_file_filter "${ARGS[@]}"

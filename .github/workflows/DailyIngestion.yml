@@ -59,8 +59,13 @@ on:
         default: '0.30'
         type: string
   # schedule: # DISABLED FOR PUBLIC REPO
+<<<<<<< dev
+    # Run daily at 14:00 UTC (22:00 Beijing Time)
+    # - cron: '00 14 * * *'
+=======
     # Run daily at 15:15 UTC (23:15 Beijing Time)
     # - cron: '15 15 * * *'
+>>>>>>> main
 
 jobs:
   # =============================================================================
@@ -157,6 +162,10 @@ jobs:
           VAR_PIKPAK_EMAIL: ${{ secrets.PIKPAK_EMAIL }}
           VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE || 'logs/pikpak_bridge.log' }}
           VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
+          # Adhoc qBittorrent instance (optional — pikpak_bridge scans both when set)
+          VAR_QB_URL_ADHOC: ${{ secrets.QB_URL_ADHOC }}
+          VAR_QB_USERNAME_ADHOC: ${{ secrets.QB_USERNAME_ADHOC || secrets.QB_USERNAME }}
+          VAR_QB_PASSWORD_ADHOC: ${{ secrets.QB_PASSWORD_ADHOC || secrets.QB_PASSWORD }}
           # Rclone / Dedup Configuration
           VAR_RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
           VAR_RCLONE_FOLDER_PATH: ${{ vars.RCLONE_FOLDER_PATH }}
@@ -705,8 +714,10 @@ jobs:
     if: ${{ !cancelled() }}
     permissions:
       contents: write
+      pull-requests: write
     env:
       TZ: Asia/Singapore
+      GH_TOKEN: ${{ github.token }}
     
     steps:
       - name: Checkout repository
@@ -901,5 +912,10 @@ jobs:
           done
           
           echo ""
-          echo "::warning::Failed to push after $MAX_RETRIES attempts."
-          exit 1
+          echo "::warning::Failed to push after $MAX_RETRIES attempts. Initiating fallback branch strategy..."
+          
+          # Reset to our original commit before fallback (undo any broken rebase/merge state)
+          git checkout "$CURRENT_BRANCH" 2>/dev/null || true
+          git reset --hard "$LOCAL_COMMIT" 2>/dev/null || true
+          
+          bash .github/scripts/fallback_push.sh "daily-ingestion" "$CURRENT_BRANCH" "$LOCAL_COMMIT"

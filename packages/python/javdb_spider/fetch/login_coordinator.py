@@ -12,10 +12,14 @@ import threading
 from typing import Optional
 
 import packages.python.javdb_spider.runtime.state as state
-from packages.python.javdb_spider.fetch.session import attempt_login_refresh
+from packages.python.javdb_spider.fetch.session import (
+    attempt_login_refresh,
+    verify_login_via_fixed_pages,
+)
 from packages.python.javdb_spider.runtime.config import (
     LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
     LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH,
+    LOGIN_VERIFICATION_URLS,
 )
 from packages.python.javdb_platform.logging_config import get_logger
 
@@ -25,6 +29,29 @@ logger = get_logger(__name__)
 def _task_worker_ctx(entry_index: str, worker_name: str) -> str:
     """Unified task log prefix: entry first, then worker."""
     return f"[{entry_index}][worker={worker_name}]"
+
+
+def _get_login_verified(task) -> bool:
+    """Read ``task.login_verified_after_refresh`` defensively.
+
+    The coordinator is duck-typed — callers may pass :class:`EngineTask` or
+    legacy tasks (e.g. ``DetailTask``) that do not declare the flag.  A
+    direct attribute access would raise :class:`AttributeError` and abort
+    the login state machine halfway through.
+    """
+    return bool(getattr(task, "login_verified_after_refresh", False))
+
+
+def _set_login_verified(task, value: bool) -> None:
+    """Write ``task.login_verified_after_refresh``.
+
+    See :func:`_get_login_verified` for the duck-typing rationale on reads.
+    Writes use a direct attribute assignment — if the task type restricts
+    attributes via ``__slots__`` the resulting :class:`AttributeError`
+    should surface so the misconfiguration is noticed rather than silently
+    dropping the verified flag.
+    """
+    task.login_verified_after_refresh = value
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +158,58 @@ class LoginCoordinator:
             spider_uses_proxy=True,
         )
 
+    def _login_and_verify(self, worker) -> tuple[bool, str | None]:
+        """Run a login refresh on *worker* and verify it via fixed pages.
+
+        Updates the worker's request handler with the new cookie when login
+        succeeds.  Verification is performed through the same handler so the
+        check uses the very session the spider will subsequently use.
+
+        On verification failure the freshly issued cookie is cleared from
+        both the worker's request handler *and* the global login state
+        (:data:`state.refreshed_session_cookie` and
+        :data:`state.logged_in_proxy_name`).  This prevents downstream code
+        (e.g. ``fetch_engine`` cookie seeding) from handing a rejected
+        cookie to other workers.
+
+        Returns ``(verified, new_cookie)`` where ``verified`` is ``True``
+        only when both login and fixed-page verification succeeded.
+        """
+        success, new_cookie, _ = self._do_login_for_proxy(
+            worker.proxy_config, worker.proxy_name,
+        )
+        if not (success and new_cookie):
+            return False, None
+
+        worker._handler.config.javdb_session_cookie = new_cookie
+
+        if not LOGIN_VERIFICATION_URLS:
+            return True, new_cookie
+
+        verified = verify_login_via_fixed_pages(
+            worker._handler, worker.proxy_name,
+            urls=LOGIN_VERIFICATION_URLS,
+        )
+        if verified:
+            return True, new_cookie
+
+        logger.warning(
+            "[%s] Login response succeeded but fixed-page verification failed "
+            "— discarding cookie on this worker",
+            worker.proxy_name,
+        )
+        worker._handler.config.javdb_session_cookie = ''
+        # ``attempt_login_refresh`` publishes the freshly-minted cookie on the
+        # global state (see fetch/session.py).  A verification failure means
+        # that cookie is untrusted, so clear it from the globals too —
+        # otherwise downstream code (e.g. fetch_engine cookie seeding) would
+        # hand the rejected cookie to other workers.  Use ``None`` (not an
+        # empty string) to match the ``Optional[str]`` declaration in
+        # ``state.py`` and the other clears in this module.
+        state.refreshed_session_cookie = None
+        state.logged_in_proxy_name = None
+        return False, None
+
     def _find_and_login_next_worker(self, exclude: set | None = None) -> int | None:
         """Find the next proxy with remaining budget, login through it.
 
@@ -151,9 +230,8 @@ class LoginCoordinator:
                 "Switching login proxy to [%s] (logins: %d/%d)",
                 w.proxy_name, proxy_attempts, LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
             )
-            success, new_cookie, _ = self._do_login_for_proxy(w.proxy_config, w.proxy_name)
-            if success and new_cookie:
-                w._handler.config.javdb_session_cookie = new_cookie
+            verified, _ = self._login_and_verify(w)
+            if verified:
                 self.logged_in_worker_id = w.worker_id
                 logger.info(
                     "[%s] Logged in successfully, "
@@ -232,6 +310,34 @@ class LoginCoordinator:
 
             # -- Self is the logged-in worker but session went stale -------
             if self.logged_in_worker_id == worker.worker_id:
+                # If this task was already requeued after a verified login,
+                # the session has been proven valid against fixed pages —
+                # so a fresh login wall on this URL is *not* a session
+                # problem.  Treat it as a normal page/proxy failure and let
+                # another proxy try, instead of burning more login budget.
+                if _get_login_verified(task):
+                    logger.info(
+                        "%s Login wall on %s after a verified login refresh "
+                        "— treating as page/proxy failure (no extra login attempt)",
+                        _task_worker_ctx(task.entry_index, worker.proxy_name),
+                        video_code,
+                    )
+                    # Release login ownership so that if the cookie is
+                    # actually invalid (e.g. quickly revoked after
+                    # verification), other workers that hit LoginRequired
+                    # will no longer delegate back to this worker via
+                    # ``login_queue`` — otherwise the task could ping-pong
+                    # between workers without ever triggering another login
+                    # attempt.  The next login wall will go through the
+                    # "no logged-in worker yet" branch and can pick a fresh
+                    # proxy for re-login.
+                    self.logged_in_worker_id = None
+                    state.refreshed_session_cookie = None
+                    state.logged_in_proxy_name = None
+                    task.failed_proxies.add(worker.proxy_name)
+                    requeue_front(task_queue, task)
+                    return
+
                 stale_count = (
                     state.login_failures_per_proxy.get(worker.proxy_name, 0) + 1
                 )
@@ -254,16 +360,15 @@ class LoginCoordinator:
                         stale_count, LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH,
                         proxy_attempts, LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
                     )
-                    success, new_cookie, _ = self._do_login_for_proxy(
-                        worker.proxy_config, worker.proxy_name,
-                    )
-                    if success and new_cookie:
-                        worker._handler.config.javdb_session_cookie = new_cookie
+                    verified, _ = self._login_and_verify(worker)
+                    if verified:
                         self.logged_in_worker_id = worker.worker_id
+                        _set_login_verified(task, True)
                         login_queue.put(task)
                         return
                     logger.warning(
-                        "[%s] Re-login failed, switching proxy",
+                        "[%s] Re-login failed (or fixed-page verification failed), "
+                        "switching proxy",
                         worker.proxy_name,
                     )
                 else:
@@ -287,6 +392,7 @@ class LoginCoordinator:
                     task.failed_proxies.discard(
                         self._all_workers[next_wid].proxy_name,
                     )
+                    _set_login_verified(task, True)
                     login_queue.put(task)
                     return
 
@@ -297,12 +403,10 @@ class LoginCoordinator:
                 )
                 if cur_attempts < LOGIN_ATTEMPTS_PER_PROXY_LIMIT:
                     state.login_failures_per_proxy[worker.proxy_name] = 0
-                    success, new_cookie, _ = self._do_login_for_proxy(
-                        worker.proxy_config, worker.proxy_name,
-                    )
-                    if success and new_cookie:
-                        worker._handler.config.javdb_session_cookie = new_cookie
+                    verified, _ = self._login_and_verify(worker)
+                    if verified:
                         self.logged_in_worker_id = worker.worker_id
+                        _set_login_verified(task, True)
                         login_queue.put(task)
                         return
 
@@ -337,17 +441,15 @@ class LoginCoordinator:
                 worker.proxy_name, 0,
             )
             if own_attempts < LOGIN_ATTEMPTS_PER_PROXY_LIMIT:
-                success, new_cookie, _ = self._do_login_for_proxy(
-                    worker.proxy_config, worker.proxy_name,
-                )
-                if success and new_cookie:
-                    worker._handler.config.javdb_session_cookie = new_cookie
+                verified, _ = self._login_and_verify(worker)
+                if verified:
                     self.logged_in_worker_id = worker.worker_id
                     logger.info(
                         "[%s] Logged in successfully, "
                         "becoming the logged-in worker for login-required pages",
                         worker.proxy_name,
                     )
+                    _set_login_verified(task, True)
                     login_queue.put(task)
                     return
 
@@ -359,6 +461,7 @@ class LoginCoordinator:
                 task.failed_proxies.discard(
                     self._all_workers[next_wid].proxy_name,
                 )
+                _set_login_verified(task, True)
                 login_queue.put(task)
                 return
 

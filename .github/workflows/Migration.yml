@@ -2,6 +2,7 @@ name: Database Migration
 
 permissions:
   contents: write
+  pull-requests: write
 
 on:
   workflow_dispatch:
@@ -88,7 +89,7 @@ on:
       align_enqueue_qb:
         description: 'Alignment: enqueue upgrade magnets to qBittorrent'
         required: false
-        default: false
+        default: true
         type: boolean
       align_execute_delete:
         description: 'Alignment: run rclone purge on purge-plan CSV (destructive)'
@@ -118,6 +119,7 @@ jobs:
     environment: Production
     env:
       TZ: Asia/Singapore
+      GH_TOKEN: ${{ github.token }}
       INPUT_DRY_RUN: ${{ inputs.dry_run }}
       INPUT_BACKUP: ${{ inputs.backup }}
       INPUT_VERIFY: ${{ inputs.verify }}
@@ -153,8 +155,10 @@ jobs:
       - name: Generate config.py from GitHub Variables and Secrets
         env:
           # ============ SECRETS (sensitive: passwords, tokens, IPs) ============
-          VAR_QB_URL: ${{ secrets.QB_URL }}
-          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
+          # Prefer dedicated adhoc/migration qB credentials when set; else Daily/default secrets.
+          VAR_QB_URL: ${{ secrets.QB_URL_ADHOC || secrets.QB_URL }}
+          VAR_QB_USERNAME: ${{ secrets.QB_USERNAME_ADHOC || secrets.QB_USERNAME }}
+          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD_ADHOC || secrets.QB_PASSWORD }}
           VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
           VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
@@ -163,7 +167,6 @@ jobs:
           # ============ VARIABLES (non-sensitive) ============
           VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
           VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
-          VAR_QB_USERNAME: ${{ secrets.QB_USERNAME }}
           VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
           VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
           VAR_TORRENT_SAVE_PATH: ${{ vars.TORRENT_SAVE_PATH }}
@@ -408,6 +411,7 @@ jobs:
           fi
 
           git commit -m "Auto-commit: migration (${LABEL}) $(date +'%Y-%m-%d %H:%M:%S SGT')"
+          LOCAL_COMMIT=$(git rev-parse HEAD)
 
           MAX_RETRIES=3
           RETRY_DELAY=3
@@ -421,8 +425,14 @@ jobs:
             sleep $RETRY_DELAY
             RETRY_DELAY=$((RETRY_DELAY * 2))
           done
-          echo "::warning::Failed to push after $MAX_RETRIES attempts."
-          exit 1
+
+          echo ""
+          echo "::warning::Failed to push after $MAX_RETRIES attempts. Initiating fallback branch strategy..."
+
+          git checkout "$CURRENT_BRANCH" 2>/dev/null || true
+          git reset --hard "$LOCAL_COMMIT" 2>/dev/null || true
+
+          bash .github/scripts/fallback_push.sh "db-migration" "$CURRENT_BRANCH" "$LOCAL_COMMIT"
 
       - name: Summary
         if: always()

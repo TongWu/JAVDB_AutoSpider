@@ -304,6 +304,10 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('QB_PASSWORD', 'QB_PASSWORD', get_env, '', 'QBITTORRENT CONFIGURATION'),
         ('TORRENT_CATEGORY', 'TORRENT_CATEGORY', get_env, 'Daily Ingestion', 'QBITTORRENT CONFIGURATION'),
         ('TORRENT_CATEGORY_ADHOC', 'TORRENT_CATEGORY_ADHOC', get_env, 'Ad Hoc', 'QBITTORRENT CONFIGURATION'),
+        # Adhoc qBittorrent instance (optional — empty means disabled)
+        ('QB_URL_ADHOC', 'QB_URL_ADHOC', get_env, '', 'QBITTORRENT CONFIGURATION'),
+        ('QB_USERNAME_ADHOC', 'QB_USERNAME_ADHOC', get_env, '', 'QBITTORRENT CONFIGURATION'),
+        ('QB_PASSWORD_ADHOC', 'QB_PASSWORD_ADHOC', get_env, '', 'QBITTORRENT CONFIGURATION'),
         ('TORRENT_SAVE_PATH', 'TORRENT_SAVE_PATH', get_env, '', 'QBITTORRENT CONFIGURATION'),
         ('AUTO_START', 'AUTO_START', get_env_bool, True, 'QBITTORRENT CONFIGURATION'),
         ('SKIP_CHECKING', 'SKIP_CHECKING', get_env_bool, False, 'QBITTORRENT CONFIGURATION'),
@@ -330,6 +334,16 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
             'PROXY CONFIGURATION',
         ),
         ('LOGIN_PROXY_NAME', 'LOGIN_PROXY_NAME', get_env, '', 'PROXY CONFIGURATION'),
+        # Login retry / verification
+        ('LOGIN_ATTEMPTS_PER_PROXY_LIMIT', 'LOGIN_ATTEMPTS_PER_PROXY_LIMIT', get_env_int, 6, 'JAVDB LOGIN CONFIGURATION'),
+        ('LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH', 'LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH', get_env_int, 3, 'JAVDB LOGIN CONFIGURATION'),
+        (
+            'LOGIN_VERIFICATION_URLS',
+            'LOGIN_VERIFICATION_URLS_JSON',
+            get_env_json,
+            ['/users/want_watch_videos'],
+            'JAVDB LOGIN CONFIGURATION',
+        ),
         # Cloudflare Bypass Configuration
         ('CF_BYPASS_SERVICE_PORT', 'CF_BYPASS_SERVICE_PORT', get_env_int, 8000, 'CLOUDFLARE BYPASS CONFIGURATION'),
         ('CF_BYPASS_ENABLED', 'CF_BYPASS_ENABLED', get_env_bool, True, 'CLOUDFLARE BYPASS CONFIGURATION'),

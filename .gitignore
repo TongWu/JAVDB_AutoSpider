@@ -105,3 +105,4 @@ rust_core/target/sdist/
 *.db-wal
 *.db-shm
 .cursorrules
+pytest-of-tedwu/*
