@@ -913,4 +913,4 @@ jobs:
           git checkout "$CURRENT_BRANCH" 2>/dev/null || true
           git reset --hard "$LOCAL_COMMIT" 2>/dev/null || true
           
-          bash .github/scripts/fallback_push.sh "daily-ingestion" "$CURRENT_BRANCH"
+          bash .github/scripts/fallback_push.sh "daily-ingestion" "$CURRENT_BRANCH" "$LOCAL_COMMIT"

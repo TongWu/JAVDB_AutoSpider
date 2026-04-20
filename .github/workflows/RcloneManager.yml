@@ -126,6 +126,18 @@ jobs:
           VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
         run: python3 -m apps.cli.config_generator --github-actions
 
+      - name: Export report paths from config
+        run: |
+          REPORTS_DIR="${{ vars.REPORTS_DIR || 'reports' }}"
+          DEDUP_DIR="${{ vars.DEDUP_DIR }}"
+          if [ -z "$DEDUP_DIR" ]; then DEDUP_DIR="$REPORTS_DIR/Dedup"; fi
+          RCLONE_INVENTORY_CSV="${{ vars.RCLONE_INVENTORY_CSV || 'rclone_inventory.csv' }}"
+          DEDUP_CSV="${{ vars.DEDUP_CSV || 'dedup.csv' }}"
+          echo "REPORTS_DIR=$REPORTS_DIR" >> "$GITHUB_ENV"
+          echo "DEDUP_DIR=$DEDUP_DIR" >> "$GITHUB_ENV"
+          echo "RCLONE_INVENTORY_CSV=$RCLONE_INVENTORY_CSV" >> "$GITHUB_ENV"
+          echo "DEDUP_CSV=$DEDUP_CSV" >> "$GITHUB_ENV"
+
       - name: Install rclone
         if: inputs.runner != 'self-hosted'
         run: |
@@ -226,10 +238,10 @@ jobs:
             git remote set-url origin "$REPO_SSH"
           fi
 
-          git add reports/rclone_inventory.csv 2>/dev/null || true
-          git add reports/operations.db 2>/dev/null || true
-          git add reports/dedup_history.csv 2>/dev/null || true
-          find reports/Dedup -name "*.csv" -exec git add {} \; 2>/dev/null || true
+          git add "$REPORTS_DIR/$RCLONE_INVENTORY_CSV" 2>/dev/null || true
+          git add "$REPORTS_DIR/operations.db" 2>/dev/null || true
+          git add "$REPORTS_DIR/dedup_history.csv" 2>/dev/null || true
+          find "$DEDUP_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
 
           if git diff --cached --quiet; then
             echo "No changes to commit"
@@ -264,7 +276,7 @@ jobs:
           git checkout "$CURRENT_BRANCH" 2>/dev/null || true
           git reset --hard "$LOCAL_COMMIT" 2>/dev/null || true
 
-          bash .github/scripts/fallback_push.sh "rclone-manager" "$CURRENT_BRANCH"
+          bash .github/scripts/fallback_push.sh "rclone-manager" "$CURRENT_BRANCH" "$LOCAL_COMMIT"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
@@ -272,10 +284,10 @@ jobs:
         with:
           name: rclone-${{ github.run_number }}
           path: |
-            reports/rclone_inventory.csv
-            reports/operations.db
-            reports/dedup_history.csv
-            reports/Dedup/
+            ${{ env.REPORTS_DIR }}/${{ env.RCLONE_INVENTORY_CSV }}
+            ${{ env.REPORTS_DIR }}/operations.db
+            ${{ env.REPORTS_DIR }}/dedup_history.csv
+            ${{ env.DEDUP_DIR }}/
           retention-days: 30
           if-no-files-found: ignore
 
@@ -313,14 +325,14 @@ jobs:
           printf -- '- **Log Level**: %s\n' "$INPUT_LOG_LEVEL" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          if [ -f "reports/rclone_inventory.csv" ]; then
-            LINES=$(wc -l < "reports/rclone_inventory.csv")
+          if [ -f "$REPORTS_DIR/$RCLONE_INVENTORY_CSV" ]; then
+            LINES=$(wc -l < "$REPORTS_DIR/$RCLONE_INVENTORY_CSV")
             echo "### Inventory" >> $GITHUB_STEP_SUMMARY
             echo "Records: $((LINES - 1))" >> $GITHUB_STEP_SUMMARY
           fi
 
-          if [ -d "reports/Dedup" ]; then
-            REPORT_FILE=$(find reports/Dedup -name "*.csv" -type f | sort -r | head -1)
+          if [ -d "$DEDUP_DIR" ]; then
+            REPORT_FILE=$(find "$DEDUP_DIR" -name "*.csv" -type f | sort -r | head -1)
             if [ -n "$REPORT_FILE" ]; then
               echo "" >> $GITHUB_STEP_SUMMARY
               echo "### Dedup Report" >> $GITHUB_STEP_SUMMARY
