@@ -43,14 +43,15 @@ def _get_login_verified(task) -> bool:
 
 
 def _set_login_verified(task, value: bool) -> None:
-    """Write ``task.login_verified_after_refresh`` defensively.
+    """Write ``task.login_verified_after_refresh``.
 
-    See :func:`_get_login_verified` for the duck-typing rationale.
+    See :func:`_get_login_verified` for the duck-typing rationale on reads.
+    Writes use a direct attribute assignment — if the task type restricts
+    attributes via ``__slots__`` the resulting :class:`AttributeError`
+    should surface so the misconfiguration is noticed rather than silently
+    dropping the verified flag.
     """
-    try:
-        setattr(task, "login_verified_after_refresh", value)
-    except AttributeError:
-        pass
+    task.login_verified_after_refresh = value
 
 
 # ---------------------------------------------------------------------------
@@ -165,8 +166,11 @@ class LoginCoordinator:
         check uses the very session the spider will subsequently use.
 
         On verification failure the freshly issued cookie is cleared from
-        the worker (legacy cookie remains in :data:`state.refreshed_session_cookie`
-        unchanged — verification only governs *this worker's* trust).
+        both the worker's request handler *and* the global login state
+        (:data:`state.refreshed_session_cookie` and
+        :data:`state.logged_in_proxy_name`).  This prevents downstream code
+        (e.g. ``fetch_engine`` cookie seeding) from handing a rejected
+        cookie to other workers.
 
         Returns ``(verified, new_cookie)`` where ``verified`` is ``True``
         only when both login and fixed-page verification succeeded.
@@ -199,8 +203,10 @@ class LoginCoordinator:
         # global state (see fetch/session.py).  A verification failure means
         # that cookie is untrusted, so clear it from the globals too —
         # otherwise downstream code (e.g. fetch_engine cookie seeding) would
-        # hand the rejected cookie to other workers.
-        state.refreshed_session_cookie = ''
+        # hand the rejected cookie to other workers.  Use ``None`` (not an
+        # empty string) to match the ``Optional[str]`` declaration in
+        # ``state.py`` and the other clears in this module.
+        state.refreshed_session_cookie = None
         state.logged_in_proxy_name = None
         return False, None
 
