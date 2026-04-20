@@ -432,7 +432,7 @@ jobs:
           git checkout "$CURRENT_BRANCH" 2>/dev/null || true
           git reset --hard "$LOCAL_COMMIT" 2>/dev/null || true
 
-          bash .github/scripts/fallback_push.sh "db-migration" "$CURRENT_BRANCH"
+          bash .github/scripts/fallback_push.sh "db-migration" "$CURRENT_BRANCH" "$LOCAL_COMMIT"
 
       - name: Summary
         if: always()
