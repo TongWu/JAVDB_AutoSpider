@@ -325,13 +325,29 @@ jobs:
         env:
           MIN_SIZE_MB: ${{ github.event.inputs.min_size_mb || '100' }}
           DAYS: ${{ github.event.inputs.days || '2' }}
-          # Adhoc instance only processes the "Ad Hoc" category
-          QB_FILTER_CATEGORIES: '["Ad Hoc"]'
+          # Honour the manual-dispatch category input so deployments that
+          # rename the adhoc category via TORRENT_CATEGORY_ADHOC (consumed
+          # by the setup job's config.py) aren't silently skipped.  The
+          # default mirrors the ``categories`` input default and only kicks
+          # in when this job was started outside of workflow_dispatch
+          # (e.g. on schedule).
+          QB_FILTER_CATEGORIES: ${{ github.event.inputs.categories || '["Ad Hoc", "Daily Ingestion"]' }}
+          # Fallback category name used when the dispatch input does not
+          # mention an adhoc-style entry — matches the config default.
+          ADHOC_CATEGORY: ${{ vars.TORRENT_CATEGORY_ADHOC || 'Ad Hoc' }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
           DELETE_LOCAL_FILES: ${{ github.event.inputs.delete_local_files || 'false' }}
         run: |
           set -e
           set -o pipefail
+
+          # Skip the adhoc step entirely when the requested categories do
+          # not include the adhoc category (workflow_dispatch may have
+          # narrowed the run to daily-only).
+          if ! printf '%s' "$QB_FILTER_CATEGORIES" | grep -qF "$ADHOC_CATEGORY"; then
+            echo "Adhoc category '$ADHOC_CATEGORY' not present in QB_FILTER_CATEGORIES ($QB_FILTER_CATEGORIES) — skipping adhoc run"
+            exit 0
+          fi
 
           ARGS=(--min-size "$MIN_SIZE_MB" --days "$DAYS")
 
