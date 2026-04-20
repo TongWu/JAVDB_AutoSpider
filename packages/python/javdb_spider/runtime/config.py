@@ -71,8 +71,16 @@ LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH = cfg('LOGIN_MAX_FAILURES_BEFORE_PROXY_SW
 # absolute URLs or paths relative to ``BASE_URL``.
 LOGIN_VERIFICATION_URLS = cfg(
     'LOGIN_VERIFICATION_URLS',
-    ['/users/want_watch_videos'],
+    ['/users/want_watch_videos', '/users'],
 )
+# Normalise: cfg() may return None (explicit empty), a scalar string (which
+# would be iterated character-by-character when fed to the verifier), or a
+# list/tuple.  Consumers always expect a list of URL strings.
+if LOGIN_VERIFICATION_URLS is None:
+    LOGIN_VERIFICATION_URLS = []
+elif not isinstance(LOGIN_VERIFICATION_URLS, (list, tuple)):
+    LOGIN_VERIFICATION_URLS = [LOGIN_VERIFICATION_URLS]
+LOGIN_VERIFICATION_URLS = [str(x) for x in LOGIN_VERIFICATION_URLS]
 
 # GPT / Login
 GPT_API_KEY = cfg('GPT_API_KEY', None)

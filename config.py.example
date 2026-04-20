@@ -253,7 +253,8 @@ LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH = 3
 # session to display content.  Set to [] to disable verification (legacy
 # behaviour: trust the login response).
 LOGIN_VERIFICATION_URLS = [
-    '/users/want_watch_videos',
+    '/users/want_watch_videos',  # detail-style (user-specific list page)
+    '/users',                    # index-style (user profile landing)
 ]
 
 # Sleep time configuration (in seconds)

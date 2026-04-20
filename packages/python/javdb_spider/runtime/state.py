@@ -7,6 +7,7 @@ Every module that needs to read or *mutate* shared state should
 import os
 import re
 import logging
+import threading
 import time
 from typing import Optional, Dict
 from datetime import datetime
@@ -56,30 +57,15 @@ proxies_requiring_cf_bypass: Dict[str, float] = {}
 # Proxies whose remaining login budget has already been deducted from
 # ``login_total_budget`` (idempotency guard for ``deduct_proxy_login_budget``).
 _login_budget_deducted_proxies: set = set()
+# Serialises ``deduct_proxy_login_budget`` so the check-and-update against
+# ``_login_budget_deducted_proxies`` / ``login_total_budget`` is atomic
+# across concurrent proxy-ban callers.
+_login_budget_lock = threading.Lock()
 
 
-def deduct_proxy_login_budget(proxy_name: Optional[str]) -> int:
-    """Remove a proxy's unused login attempts from the global budget.
-
-    Called when a proxy is banned (either pre-banned at startup or banned
-    during runtime).  The proxy's *remaining* per-proxy budget
-    (``LOGIN_ATTEMPTS_PER_PROXY_LIMIT - login_attempts_per_proxy[proxy]``,
-    floored at 0) is subtracted from :data:`login_total_budget` so that
-    banned workers no longer reserve login credits they cannot use.
-
-    Idempotent per ``proxy_name`` — repeated calls for the same proxy are
-    no-ops, even if it gets re-banned.
-
-    Args:
-        proxy_name: Name of the proxy whose budget should be reclaimed.
-            ``None``/empty inputs are silently ignored.
-
-    Returns:
-        The number of login attempts deducted (``0`` when nothing changed).
-    """
+def _deduct_proxy_login_budget_locked(proxy_name: str) -> int:
+    """Core deduction logic. Caller must hold :data:`_login_budget_lock`."""
     global login_total_budget
-    if not proxy_name:
-        return 0
     if proxy_name in _login_budget_deducted_proxies:
         return 0
     if login_total_budget <= 0:
@@ -104,6 +90,32 @@ def deduct_proxy_login_budget(proxy_name: Optional[str]) -> int:
             actually_deducted, proxy_name, new_budget, login_total_attempts,
         )
     return actually_deducted
+
+
+def deduct_proxy_login_budget(proxy_name: Optional[str]) -> int:
+    """Remove a proxy's unused login attempts from the global budget.
+
+    Called when a proxy is banned (either pre-banned at startup or banned
+    during runtime).  The proxy's *remaining* per-proxy budget
+    (``LOGIN_ATTEMPTS_PER_PROXY_LIMIT - login_attempts_per_proxy[proxy]``,
+    floored at 0) is subtracted from :data:`login_total_budget` so that
+    banned workers no longer reserve login credits they cannot use.
+
+    Idempotent per ``proxy_name`` — repeated calls for the same proxy are
+    no-ops, even if it gets re-banned.  Thread-safe: concurrent callers
+    for different (or the same) proxy cannot double-deduct.
+
+    Args:
+        proxy_name: Name of the proxy whose budget should be reclaimed.
+            ``None``/empty inputs are silently ignored.
+
+    Returns:
+        The number of login attempts deducted (``0`` when nothing changed).
+    """
+    if not proxy_name:
+        return 0
+    with _login_budget_lock:
+        return _deduct_proxy_login_budget_locked(proxy_name)
 
 # ---------------------------------------------------------------------------
 # CF bypass helpers
