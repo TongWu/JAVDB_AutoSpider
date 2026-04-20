@@ -106,8 +106,12 @@ jobs:
           REPORTS_DIR="${{ vars.REPORTS_DIR || 'reports' }}"
           DEDUP_DIR="${{ vars.DEDUP_DIR }}"
           if [ -z "$DEDUP_DIR" ]; then DEDUP_DIR="$REPORTS_DIR/Dedup"; fi
-          echo "REPORTS_DIR=$REPORTS_DIR" >> $GITHUB_ENV
-          echo "DEDUP_DIR=$DEDUP_DIR" >> $GITHUB_ENV
+          RCLONE_INVENTORY_CSV="${{ vars.RCLONE_INVENTORY_CSV || 'rclone_inventory.csv' }}"
+          DEDUP_CSV="${{ vars.DEDUP_CSV || 'dedup.csv' }}"
+          echo "REPORTS_DIR=$REPORTS_DIR" >> "$GITHUB_ENV"
+          echo "DEDUP_DIR=$DEDUP_DIR" >> "$GITHUB_ENV"
+          echo "RCLONE_INVENTORY_CSV=$RCLONE_INVENTORY_CSV" >> "$GITHUB_ENV"
+          echo "DEDUP_CSV=$DEDUP_CSV" >> "$GITHUB_ENV"
 
       - name: Install rclone
         if: inputs.runner != 'self-hosted'
@@ -195,7 +199,7 @@ jobs:
             git remote set-url origin "$REPO_SSH"
           fi
 
-          git add "$REPORTS_DIR/rclone_inventory.csv" 2>/dev/null || true
+          git add "$REPORTS_DIR/$RCLONE_INVENTORY_CSV" 2>/dev/null || true
           git add "$REPORTS_DIR/operations.db" 2>/dev/null || true
           git add "$REPORTS_DIR/dedup_history.csv" 2>/dev/null || true
           find "$DEDUP_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
@@ -241,7 +245,7 @@ jobs:
         with:
           name: weekly-dedup-${{ github.run_number }}
           path: |
-            ${{ env.REPORTS_DIR }}/rclone_inventory.csv
+            ${{ env.REPORTS_DIR }}/${{ env.RCLONE_INVENTORY_CSV }}
             ${{ env.REPORTS_DIR }}/operations.db
             ${{ env.REPORTS_DIR }}/dedup_history.csv
             ${{ env.DEDUP_DIR }}/
@@ -275,8 +279,8 @@ jobs:
           printf -- '- **Runner**: %s\n' "$INPUT_RUNNER" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          if [ -f "$REPORTS_DIR/rclone_inventory.csv" ]; then
-            LINES=$(wc -l < "$REPORTS_DIR/rclone_inventory.csv")
+          if [ -f "$REPORTS_DIR/$RCLONE_INVENTORY_CSV" ]; then
+            LINES=$(wc -l < "$REPORTS_DIR/$RCLONE_INVENTORY_CSV")
             echo "### Inventory" >> $GITHUB_STEP_SUMMARY
             echo "Records: $((LINES - 1))" >> $GITHUB_STEP_SUMMARY
           fi

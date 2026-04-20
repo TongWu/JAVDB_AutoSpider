@@ -445,6 +445,11 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
                 torrent_qb_map.setdefault(t['hash'], set()).add(qb_adhoc)
                 if t['hash'] not in existing_hashes:
                     torrents.append(t)
+                    # Track the hash so any repeat within ``adhoc_torrents``
+                    # itself (defensive — the adhoc QB API shouldn't return
+                    # duplicates, but nothing guarantees it) is collapsed
+                    # instead of appended a second time.
+                    existing_hashes.add(t['hash'])
                 else:
                     logger.debug(f"Skipping duplicate torrent from adhoc QB: {t['name']}")
         except Exception as e:
