@@ -14,16 +14,36 @@ permissions:
   contents: read  # Least privilege: only commit-results job needs write (overrides at job level)
 
 on:
-  # push:  # DISABLED FOR PRIVATE REPO - enabled in public repo
-  #   branches:
-  #     - main
-  #   paths:
-  #     - 'packages/python/**/*.py'
-  #     - 'apps/**/*.py'
-  #     - 'scripts/**/*.py'
-  #     - 'utils/**/*.py'
-  #     - 'pipeline.py'
-  
+  # >>>> PRIVATE_ONLY_PUSH_BEGIN
+  # Auto push trigger enabled in PRIVATE repo only.
+  # The publish-to-public workflow strips this block out for the public repo,
+  # so only workflow_dispatch remains there.
+  push:
+    branches:
+      - main
+    paths:
+      # Python entry points & CLI modules
+      - 'apps/**/*.py'
+      - 'pipeline.py'
+      - 'compat.py'
+      # Python libraries used by daily & adhoc ingestion
+      - 'packages/python/**/*.py'
+      - 'utils/**/*.py'
+      - 'scripts/**/*.py'
+      # Python dependency manifest
+      - 'requirements.txt'
+      # Rust extension (affects spider / dedup / rclone / history ops)
+      - 'packages/rust/javdb_rust_core/**/*.rs'
+      - 'packages/rust/javdb_rust_core/Cargo.toml'
+      - 'packages/rust/javdb_rust_core/Cargo.lock'
+      - 'packages/rust/javdb_rust_core/pyproject.toml'
+      # The workflow itself
+      - '.github/workflows/TestIngestion.yml'
+      - '.github/actions/setup-python-env/**'
+      - '.github/actions/restore-encrypted-config/**'
+      - '.github/actions/install-rust-wheel/**'
+  # <<<< PRIVATE_ONLY_PUSH_END
+
   workflow_dispatch:
     inputs:
       runner:
