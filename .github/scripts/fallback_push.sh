@@ -3,7 +3,16 @@
 # from the current HEAD and open a PR for manual conflict resolution.
 #
 # Usage:
-#   fallback_push.sh <task-name> <target-branch>
+#   fallback_push.sh <task-name> <target-branch> [preserved-commit]
+#
+# Arguments:
+#   task-name        — Short identifier used in the fallback branch name / PR title.
+#   target-branch    — Branch the eventual PR should merge into.
+#   preserved-commit — (Optional) The commit SHA the caller wants the fallback
+#                      branch to be based on.  When supplied, the script resets
+#                      HEAD to this SHA *after* aborting any in-progress rebase
+#                      or merge, guaranteeing the fallback branch is created
+#                      from the intended commit even if the abort rewound HEAD.
 #
 # Environment variables (set by caller):
 #   GH_TOKEN      — GitHub token with pull-requests:write scope (required for PR creation)
@@ -12,8 +21,9 @@
 
 set -euo pipefail
 
-TASK_NAME="${1:?Usage: fallback_push.sh <task-name> <target-branch>}"
-TARGET_BRANCH="${2:?Usage: fallback_push.sh <task-name> <target-branch>}"
+TASK_NAME="${1:?Usage: fallback_push.sh <task-name> <target-branch> [preserved-commit]}"
+TARGET_BRANCH="${2:?Usage: fallback_push.sh <task-name> <target-branch> [preserved-commit]}"
+LOCAL_COMMIT="${3:-}"
 
 DATETIME=$(TZ="${TZ:-UTC}" date +'%Y%m%d-%H%M%S')
 SAFE_TASK_NAME=$(echo "$TASK_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
@@ -23,12 +33,29 @@ echo ""
 echo "============================================"
 echo "FALLBACK: Creating branch for manual merge"
 echo "============================================"
-echo "Task:            $TASK_NAME"
-echo "Target branch:   $TARGET_BRANCH"
-echo "Fallback branch: $FALLBACK_BRANCH"
+echo "Task:             $TASK_NAME"
+echo "Target branch:    $TARGET_BRANCH"
+echo "Fallback branch:  $FALLBACK_BRANCH"
+if [ -n "$LOCAL_COMMIT" ]; then
+  echo "Preserved commit: $LOCAL_COMMIT"
+fi
 
 git rebase --abort 2>/dev/null || true
 git merge --abort 2>/dev/null || true
+
+# After aborting a rebase/merge HEAD may have been moved back to the
+# pre-operation state, losing the auto-generated commit the caller wanted
+# to preserve.  If the caller supplied that commit's SHA, force HEAD back
+# to it before branching off so the fallback branch contains the intended
+# payload.
+if [ -n "$LOCAL_COMMIT" ]; then
+  if git cat-file -e "${LOCAL_COMMIT}^{commit}" 2>/dev/null; then
+    git reset --hard "$LOCAL_COMMIT"
+  else
+    echo "::error::Preserved commit '$LOCAL_COMMIT' not found in local repo — cannot safely create fallback branch."
+    exit 1
+  fi
+fi
 
 echo "Current HEAD: $(git rev-parse HEAD)"
 echo "Files in HEAD commit:"
