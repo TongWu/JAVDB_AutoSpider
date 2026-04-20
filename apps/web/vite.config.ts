@@ -9,7 +9,14 @@ export default defineConfig({
       configureServer(server) {
         server.middlewares.use((req, _res, next) => {
           const url = req.url || "";
-          const isPageRequest = req.method === "GET" && !url.startsWith("/api") && !url.includes(".");
+          const path = url.split("?")[0];
+          const isViteInternalRequest =
+            path.startsWith("/@") || path.startsWith("/src/") || path.startsWith("/node_modules/");
+          const isPageRequest =
+            req.method === "GET" &&
+            !path.startsWith("/api") &&
+            !isViteInternalRequest &&
+            !path.includes(".");
           if (isPageRequest) req.url = "/index.html";
           next();
         });
