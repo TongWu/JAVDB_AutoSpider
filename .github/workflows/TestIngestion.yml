@@ -20,8 +20,10 @@ permissions:
 on:
   # >>>> PRIVATE_ONLY_PUSH_BEGIN
   # Auto push trigger enabled in PRIVATE repo only.
-  # The publish-to-public workflow strips this block out for the public repo,
-  # so only workflow_dispatch remains there.
+  # The publish-to-public workflow comments out every active line inside this
+  # block for the public repo (the BEGIN / END markers are preserved), so in
+  # the public repo only workflow_dispatch remains active while this config
+  # stays visible for reference.
   push:
     branches:
       - main
