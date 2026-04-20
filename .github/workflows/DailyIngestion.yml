@@ -59,8 +59,13 @@ on:
         default: '0.30'
         type: string
   # schedule: # DISABLED FOR PUBLIC REPO
+<<<<<<< dev
     # Run daily at 14:00 UTC (22:00 Beijing Time)
     # - cron: '00 14 * * *'
+=======
+    # Run daily at 15:15 UTC (23:15 Beijing Time)
+    # - cron: '15 15 * * *'
+>>>>>>> main
 
 jobs:
   # =============================================================================
