@@ -407,16 +407,22 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
     torrents = qb.get_torrents_multiple_categories(CATEGORIES)
     logger.info(f"Found {len(torrents)} torrents across categories {CATEGORIES} (primary QB)")
 
-    # Tag each torrent with its source QB client for deletion later
-    torrent_qb_map = {}  # torrent_hash -> QBittorrentClient
+    # Tag each torrent with the set of QB clients that hold a copy — when
+    # both the primary and adhoc QB have the same hash we need to delete
+    # from *every* client after a successful PikPak upload, otherwise the
+    # leftover copy keeps seeding stale files.
+    torrent_qb_map: dict = {}  # torrent_hash -> set[QBittorrentClient]
     for t in torrents:
-        torrent_qb_map[t['hash']] = qb
+        torrent_qb_map.setdefault(t['hash'], set()).add(qb)
 
     # Scan adhoc QB instance if configured
     qb_adhoc = None
     if QB_URL_ADHOC:
         try:
-            adhoc_candidates = qb_base_url_candidates(QB_URL_ADHOC, allow_insecure_http=True)
+            adhoc_candidates = qb_base_url_candidates(
+                QB_URL_ADHOC,
+                allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
+            )
             qb_adhoc = QBittorrentClient(
                 adhoc_candidates,
                 QB_USERNAME_ADHOC,
@@ -430,12 +436,15 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
             adhoc_torrents = qb_adhoc.get_torrents_multiple_categories(adhoc_categories)
             logger.info(f"Found {len(adhoc_torrents)} torrents in category {adhoc_categories} (adhoc QB)")
 
-            # Deduplicate by hash — adhoc torrents that already exist in primary are skipped
+            # Deduplicate by hash — adhoc torrents that already exist in
+            # primary are *not* re-added to ``torrents`` (to avoid double
+            # processing), but their adhoc QB is still tracked so deletion
+            # after upload cleans up both copies.
             existing_hashes = {t['hash'] for t in torrents}
             for t in adhoc_torrents:
+                torrent_qb_map.setdefault(t['hash'], set()).add(qb_adhoc)
                 if t['hash'] not in existing_hashes:
                     torrents.append(t)
-                    torrent_qb_map[t['hash']] = qb_adhoc
                 else:
                     logger.debug(f"Skipping duplicate torrent from adhoc QB: {t['name']}")
         except Exception as e:
@@ -502,18 +511,29 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
                 torrent = torrent_by_magnet[magnet]
                 logger.info(f"Successfully uploaded to PikPak: {torrent['name']}")
 
-                # Try to delete from the correct qBittorrent instance
-                target_qb = torrent_qb_map.get(torrent['hash'], qb)
-                try:
-                    target_qb.delete_torrents([torrent['hash']], delete_files=True)
+                # Delete from every QB instance that still holds this hash
+                # (primary + adhoc can both have the same hash).
+                target_clients = torrent_qb_map.get(torrent['hash']) or {qb}
+                delete_errors = []
+                for client in target_clients:
+                    try:
+                        client.delete_torrents([torrent['hash']], delete_files=True)
+                    except Exception as delete_error:
+                        delete_errors.append(delete_error)
+                        logger.error(
+                            f"Failed to delete from one qBittorrent instance "
+                            f"after successful PikPak upload: {torrent['name']}, "
+                            f"Error: {delete_error}"
+                        )
+                if not delete_errors:
                     logger.info(f"Successfully deleted from qBittorrent: {torrent['name']}")
                     save_to_pikpak_history(torrent, 'success')
                     successfully_transferred.append(torrent)
-                except Exception as delete_error:
-                    logger.error(f"Failed to delete from qBittorrent after successful PikPak upload: {torrent['name']}, Error: {delete_error}")
-                    save_to_pikpak_history(torrent, 'failed_but_deleted', str(delete_error))
+                else:
+                    combined = "; ".join(str(e) for e in delete_errors)
+                    save_to_pikpak_history(torrent, 'failed_but_deleted', combined)
                     delete_failed_count += 1
-                    failed_transfers.append((torrent, f"qB delete failed: {delete_error}"))
+                    failed_transfers.append((torrent, f"qB delete failed: {combined}"))
             
             # Process failed uploads
             for magnet, error_msg in failed_magnets:
@@ -545,18 +565,28 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
                 if success_magnets:  # Upload successful
                     logger.info(f"Successfully uploaded to PikPak: {torrent['name']}")
 
-                    # Try to delete from the correct qBittorrent instance
-                    target_qb = torrent_qb_map.get(torrent['hash'], qb)
-                    try:
-                        target_qb.delete_torrents([torrent['hash']], delete_files=True)
+                    # Delete from every QB instance that still holds this hash.
+                    target_clients = torrent_qb_map.get(torrent['hash']) or {qb}
+                    delete_errors = []
+                    for client in target_clients:
+                        try:
+                            client.delete_torrents([torrent['hash']], delete_files=True)
+                        except Exception as delete_error:
+                            delete_errors.append(delete_error)
+                            logger.error(
+                                f"Failed to delete from one qBittorrent instance "
+                                f"after successful PikPak upload: {torrent['name']}, "
+                                f"Error: {delete_error}"
+                            )
+                    if not delete_errors:
                         logger.info(f"Successfully deleted from qBittorrent: {torrent['name']}")
                         save_to_pikpak_history(torrent, 'success')
                         successfully_transferred.append(torrent)
-                    except Exception as delete_error:
-                        logger.error(f"Failed to delete from qBittorrent after successful PikPak upload: {torrent['name']}, Error: {delete_error}")
-                        save_to_pikpak_history(torrent, 'failed_but_deleted', str(delete_error))
+                    else:
+                        combined = "; ".join(str(e) for e in delete_errors)
+                        save_to_pikpak_history(torrent, 'failed_but_deleted', combined)
                         delete_failed_count += 1
-                        failed_transfers.append((torrent, f"qB delete failed: {delete_error}"))
+                        failed_transfers.append((torrent, f"qB delete failed: {combined}"))
                         
                 else:  # Upload failed
                     error_msg = failed_magnets[0][1] if failed_magnets else "Unknown error"
