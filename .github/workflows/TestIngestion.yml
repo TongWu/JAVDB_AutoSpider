@@ -1,17 +1,21 @@
 name: JavDB Test Ingestion Pipeline (Mock)
 
-# This is a mock workflow to test the full ingestion functionality
-# without pushing changes to the remote repository.
-# It runs both Daily and AdHoc ingestion with minimal data for quick testing.
-# 
+# This is a mock workflow to smoke-test the spider portion of the ingestion
+# pipeline without touching the remote repository or downstream integrations.
+# It runs both Daily and AdHoc spider flows with minimal data for quick testing.
+#
 # SIMPLIFIED VERSION:
 # - No qBittorrent upload
 # - No PikPak bridge
 # - No email notification
+# - No git commit / push (results only exist as encrypted artifacts)
 # - Minimal secrets/variables required
+#
+# Proxy behaviour matches Daily/AdHoc: Spider uses the proxy pool by default on
+# push/schedule, and honours the `proxy_spider` toggle on workflow_dispatch.
 
 permissions:
-  contents: read  # Least privilege: only commit-results job needs write (overrides at job level)
+  contents: read  # Least privilege: test ingestion only reads code and uploads encrypted artifacts
 
 on:
   # >>>> PRIVATE_ONLY_PUSH_BEGIN
@@ -67,10 +71,6 @@ jobs:
   run-pipeline:
     runs-on: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
     environment: Production
-    outputs:
-      branch: ${{ steps.branch_check.outputs.branch }}
-      daily_csv_filename: ${{ steps.daily_spider.outputs.csv_filename }}
-      adhoc_csv_filename: ${{ steps.adhoc_spider.outputs.csv_filename }}
     env:
       TZ: Asia/Singapore
     
@@ -79,11 +79,9 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Get current branch
-        id: branch_check
         run: |
           CURRENT_BRANCH="${GITHUB_REF#refs/heads/}"
           echo "Current branch: $CURRENT_BRANCH"
-          echo "branch=$CURRENT_BRANCH" >> $GITHUB_OUTPUT
 
       - name: Set up Python, venv, dependencies, Rust extension
         uses: ./.github/actions/setup-python-env
@@ -101,7 +99,9 @@ jobs:
           VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
           VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
           VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
-          VAR_PROXY_SPIDER_ENABLED: ${{ inputs.proxy_spider && 'true' || 'false' }}
+          # Spider proxy: default ON for push/schedule (matches Daily/AdHoc behaviour);
+          # workflow_dispatch honours the user's toggle.
+          VAR_PROXY_SPIDER_ENABLED: ${{ github.event_name == 'workflow_dispatch' && (inputs.proxy_spider && 'true' || 'false') || 'true' }}
           VAR_PROXY_QBITTORRENT_ENABLED: 'false'
           VAR_PROXY_PIKPAK_ENABLED: 'false'
           VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
@@ -145,7 +145,7 @@ jobs:
           echo "  - Max movies phase 1: 1"
           echo "  - Max movies phase 2: 1"
           echo ""
-          echo "NOTE: This workflow will COMMIT but NOT PUSH changes"
+          echo "NOTE: This workflow does NOT commit or push any changes"
           echo "NOTE: qBittorrent, PikPak, and Email steps are DISABLED"
           echo "============================================"
 
@@ -334,127 +334,3 @@ jobs:
           path: encrypted_artifacts/reports.tar.gz.enc
           retention-days: 7
           if-no-files-found: ignore
-
-  # =============================================================================
-  # Job 2: Commit Results - Commit CSV files (NO PUSH)
-  # This tests the commit functionality without affecting the remote repository
-  # =============================================================================
-  commit-results:
-    runs-on: ubuntu-latest
-    environment: Production
-    needs: [run-pipeline]
-    if: ${{ !cancelled() }}
-    permissions:
-      contents: write
-    env:
-      TZ: Asia/Singapore
-    
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Download encrypted reports
-        uses: actions/download-artifact@v7
-        with:
-          name: pipeline-reports-encrypted
-          path: encrypted_artifacts
-        continue-on-error: true
-
-      - name: Decrypt reports
-        env:
-          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
-        run: |
-          # Guard: fail workflow if ARTIFACT_KEY is not configured (prevent unencrypted artifacts)
-          if [ -z "$ARTIFACT_KEY" ]; then
-            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
-            echo "This secret is required to decrypt artifacts."
-            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
-            exit 1
-          fi
-          
-          if [ -f encrypted_artifacts/reports.tar.gz.enc ]; then
-            openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
-              -in encrypted_artifacts/reports.tar.gz.enc \
-              -pass pass:"$ARTIFACT_KEY" | tar -xzf -
-            rm -rf encrypted_artifacts
-            echo "✓ Reports decrypted successfully"
-            echo "Extracted files:"
-            find reports -type f -name "*.csv" 2>/dev/null | head -20 || echo "No CSV files found"
-          else
-            echo "No encrypted reports found"
-          fi
-
-      - name: Commit Results (NO PUSH - Test Mode)
-        env:
-          REPORTS_DIR: 'reports'
-          DAILY_REPORT_DIR: 'reports/DailyReport'
-          AD_HOC_DIR: 'reports/AdHoc'
-        run: |
-          set -e
-          
-          echo "============================================"
-          echo "COMMIT RESULTS - TEST MODE (NO PUSH)"
-          echo "============================================"
-          
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          CURRENT_BRANCH="${{ needs.run-pipeline.outputs.branch }}"
-          echo "Current branch: $CURRENT_BRANCH"
-          
-          # ============================================================
-          # STEP 1: Stage all files
-          # ============================================================
-          echo ""
-          echo "Step 1: Staging files..."
-          
-          # Stage history files
-          git add "$REPORTS_DIR/parsed_movies_history.csv" 2>/dev/null || true
-          
-          # Stage Daily report CSVs
-          find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
-          
-          # Stage AdHoc report CSVs
-          find "$AD_HOC_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
-          
-          # Check if there are any changes to commit
-          if git diff --cached --quiet; then
-            echo ""
-            echo "✓ No changes to commit"
-            exit 0
-          fi
-          
-          # Show what will be committed
-          echo ""
-          echo "Files staged for commit:"
-          git diff --cached --name-only
-          
-          # ============================================================
-          # STEP 2: Create local commit (NO PUSH)
-          # ============================================================
-          echo ""
-          echo "Step 2: Creating local commit..."
-          git commit -m "Test-commit: Mock ingestion results $(date +'%Y-%m-%d %H:%M:%S SGT')"
-          LOCAL_COMMIT=$(git rev-parse HEAD)
-          echo "Created local commit: $LOCAL_COMMIT"
-          
-          # ============================================================
-          # STEP 3: Verify commit (NO PUSH)
-          # ============================================================
-          echo ""
-          echo "Step 3: Verifying commit..."
-          echo "============================================"
-          echo "COMMIT DETAILS:"
-          git log -1 --stat
-          echo "============================================"
-          
-          # Show what would be pushed (but don't actually push)
-          echo ""
-          echo "NOTE: This is TEST MODE - NO PUSH will be performed"
-          echo "The commit remains local and will not affect the remote repository."
-          echo ""
-          echo "To verify the commit locally, you can check:"
-          echo "  - git log -1"
-          echo "  - git show HEAD"
-          echo ""
-          echo "✓ Test commit completed successfully (NO PUSH)"
