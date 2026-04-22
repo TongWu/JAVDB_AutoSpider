@@ -39,9 +39,7 @@ from scripts.qb_file_filter import (
     set_file_priority,
     get_torrent_properties,
     delete_local_file,
-    get_completed_torrents_by_categories,
-    delete_torrents,
-    remove_completed_torrents_keep_files,
+    cleanup_completed_torrents,
 )
 
 
@@ -960,214 +958,40 @@ class TestFilterIntegration:
         assert mock_delete.call_count == 2
 
 
-class TestGetCompletedTorrentsByCategories:
-    """Tests for get_completed_torrents_by_categories."""
+class TestCleanupCompletedTorrentsAdapter:
+    """Tests for the qb_file_filter adapter that wires the shared
+    ``qb_client.remove_completed_torrents_keep_files`` into qb_file_filter's
+    existing requests.Session."""
 
     @patch('scripts.qb_file_filter.get_proxies_dict')
-    def test_fetches_each_category_with_completed_filter(self, mock_proxies):
+    def test_empty_categories_short_circuits(self, mock_proxies):
         mock_proxies.return_value = None
 
         mock_session = MagicMock()
-        resp1 = MagicMock()
-        resp1.status_code = 200
-        resp1.json.return_value = [
-            {'hash': 'h1', 'name': 'T1', 'category': 'Ad Hoc'},
-        ]
-        resp2 = MagicMock()
-        resp2.status_code = 200
-        resp2.json.return_value = [
-            {'hash': 'h2', 'name': 'T2', 'category': 'Daily Ingestion'},
-        ]
-        mock_session.get.side_effect = [resp1, resp2]
-
-        result = get_completed_torrents_by_categories(
-            mock_session, ['Ad Hoc', 'Daily Ingestion'], use_proxy=False
+        result = cleanup_completed_torrents(
+            mock_session, [], dry_run=False, use_proxy=False
         )
 
-        assert len(result) == 2
-        assert mock_session.get.call_count == 2
-        # Verify filter=completed was passed for each call
-        for call in mock_session.get.call_args_list:
-            params = call.kwargs.get('params', {})
-            assert params.get('filter') == 'completed'
-
-    @patch('scripts.qb_file_filter.get_proxies_dict')
-    def test_deduplicates_hashes_across_categories(self, mock_proxies):
-        mock_proxies.return_value = None
-
-        mock_session = MagicMock()
-        resp1 = MagicMock()
-        resp1.status_code = 200
-        resp1.json.return_value = [{'hash': 'h1', 'name': 'Same torrent'}]
-        resp2 = MagicMock()
-        resp2.status_code = 200
-        resp2.json.return_value = [{'hash': 'h1', 'name': 'Same torrent'}]
-        mock_session.get.side_effect = [resp1, resp2]
-
-        result = get_completed_torrents_by_categories(
-            mock_session, ['Ad Hoc', 'Daily Ingestion']
-        )
-        assert len(result) == 1
-
-    @patch('scripts.qb_file_filter.get_proxies_dict')
-    def test_empty_categories_returns_empty(self, mock_proxies):
-        mock_proxies.return_value = None
-        mock_session = MagicMock()
-
-        result = get_completed_torrents_by_categories(mock_session, [])
-        assert result == []
+        assert result == {'scanned': 0, 'deleted': 0, 'hashes': []}
         mock_session.get.assert_not_called()
-
-    @patch('scripts.qb_file_filter.get_proxies_dict')
-    def test_handles_api_failure_gracefully(self, mock_proxies):
-        mock_proxies.return_value = None
-
-        mock_session = MagicMock()
-        bad = MagicMock()
-        bad.status_code = 500
-        good = MagicMock()
-        good.status_code = 200
-        good.json.return_value = [{'hash': 'ok1'}]
-        mock_session.get.side_effect = [bad, good]
-
-        result = get_completed_torrents_by_categories(
-            mock_session, ['bad', 'good']
-        )
-        assert len(result) == 1
-        assert result[0]['hash'] == 'ok1'
-
-
-class TestDeleteTorrents:
-    """Tests for delete_torrents."""
-
-    @patch('scripts.qb_file_filter.get_proxies_dict')
-    def test_sends_correct_payload_keep_files(self, mock_proxies):
-        mock_proxies.return_value = None
-
-        mock_session = MagicMock()
-        resp = MagicMock()
-        resp.status_code = 200
-        mock_session.post.return_value = resp
-
-        result = delete_torrents(
-            mock_session, ['h1', 'h2'], delete_files=False
-        )
-        assert result is True
-        call = mock_session.post.call_args
-        data = call.kwargs.get('data') or {}
-        assert data['hashes'] == 'h1|h2'
-        assert data['deleteFiles'] == 'false'
-
-    @patch('scripts.qb_file_filter.get_proxies_dict')
-    def test_sends_correct_payload_delete_files(self, mock_proxies):
-        mock_proxies.return_value = None
-
-        mock_session = MagicMock()
-        resp = MagicMock()
-        resp.status_code = 200
-        mock_session.post.return_value = resp
-
-        delete_torrents(mock_session, ['h1'], delete_files=True)
-        data = mock_session.post.call_args.kwargs.get('data') or {}
-        assert data['deleteFiles'] == 'true'
-
-    @patch('scripts.qb_file_filter.get_proxies_dict')
-    def test_empty_hashes_is_noop(self, mock_proxies):
-        mock_proxies.return_value = None
-
-        mock_session = MagicMock()
-        result = delete_torrents(mock_session, [])
-        assert result is True
         mock_session.post.assert_not_called()
 
+    @patch('packages.python.javdb_integrations.qb_client.remove_completed_torrents_keep_files')
     @patch('scripts.qb_file_filter.get_proxies_dict')
-    def test_returns_false_on_http_error(self, mock_proxies):
+    def test_delegates_to_shared_implementation(self, mock_proxies, mock_shared):
         mock_proxies.return_value = None
+        mock_shared.return_value = {'scanned': 1, 'deleted': 1, 'hashes': ['h1']}
 
         mock_session = MagicMock()
-        resp = MagicMock()
-        resp.status_code = 403
-        mock_session.post.return_value = resp
-
-        result = delete_torrents(mock_session, ['h1'])
-        assert result is False
-
-
-class TestRemoveCompletedTorrentsKeepFiles:
-    """Tests for remove_completed_torrents_keep_files."""
-
-    @patch('scripts.qb_file_filter.delete_torrents')
-    @patch('scripts.qb_file_filter.get_completed_torrents_by_categories')
-    def test_calls_delete_with_keep_files(self, mock_get, mock_delete):
-        mock_get.return_value = [
-            {'hash': 'h1', 'name': 'done1'},
-            {'hash': 'h2', 'name': 'done2'},
-        ]
-        mock_delete.return_value = True
-
-        mock_session = MagicMock()
-        result = remove_completed_torrents_keep_files(
-            mock_session, ['Ad Hoc'], dry_run=False
+        result = cleanup_completed_torrents(
+            mock_session, ['Ad Hoc'], dry_run=True, use_proxy=False
         )
 
-        mock_get.assert_called_once_with(
-            mock_session, ['Ad Hoc'], use_proxy=False
-        )
-        mock_delete.assert_called_once_with(
-            mock_session, ['h1', 'h2'], delete_files=False, use_proxy=False
-        )
-        assert result['scanned'] == 2
-        assert result['deleted'] == 2
-
-    @patch('scripts.qb_file_filter.delete_torrents')
-    @patch('scripts.qb_file_filter.get_completed_torrents_by_categories')
-    def test_skips_when_no_completed(self, mock_get, mock_delete):
-        mock_get.return_value = []
-
-        mock_session = MagicMock()
-        result = remove_completed_torrents_keep_files(
-            mock_session, ['Ad Hoc'], dry_run=False
-        )
-
-        mock_delete.assert_not_called()
-        assert result['scanned'] == 0
-        assert result['deleted'] == 0
-
-    @patch('scripts.qb_file_filter.delete_torrents')
-    @patch('scripts.qb_file_filter.get_completed_torrents_by_categories')
-    def test_dry_run_does_not_delete(self, mock_get, mock_delete):
-        mock_get.return_value = [{'hash': 'h1', 'name': 'done1'}]
-
-        mock_session = MagicMock()
-        result = remove_completed_torrents_keep_files(
-            mock_session, ['Ad Hoc'], dry_run=True
-        )
-
-        mock_delete.assert_not_called()
-        assert result['scanned'] == 1
-        assert result['deleted'] == 0
-
-    @patch('scripts.qb_file_filter.delete_torrents')
-    @patch('scripts.qb_file_filter.get_completed_torrents_by_categories')
-    def test_empty_categories_skips(self, mock_get, mock_delete):
-        mock_session = MagicMock()
-        result = remove_completed_torrents_keep_files(
-            mock_session, [], dry_run=False
-        )
-        mock_get.assert_not_called()
-        mock_delete.assert_not_called()
-        assert result['scanned'] == 0
-        assert result['deleted'] == 0
-
-    @patch('scripts.qb_file_filter.delete_torrents')
-    @patch('scripts.qb_file_filter.get_completed_torrents_by_categories')
-    def test_returns_zero_deleted_on_api_failure(self, mock_get, mock_delete):
-        mock_get.return_value = [{'hash': 'h1'}]
-        mock_delete.return_value = False
-
-        mock_session = MagicMock()
-        result = remove_completed_torrents_keep_files(
-            mock_session, ['Ad Hoc'], dry_run=False
-        )
-        assert result['scanned'] == 1
-        assert result['deleted'] == 0
+        # The adapter should hand off to the shared helper exactly once,
+        # passing the category list and dry_run flag.
+        assert mock_shared.call_count == 1
+        args, kwargs = mock_shared.call_args
+        # First positional arg is the wrapped QBittorrentClient.
+        assert args[1] == ['Ad Hoc']
+        assert kwargs.get('dry_run') is True
+        assert result == {'scanned': 1, 'deleted': 1, 'hashes': ['h1']}
