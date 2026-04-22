@@ -310,31 +310,10 @@ def login_to_qbittorrent(session, use_proxy=False):
     return False
 
 
-def extract_hash_from_magnet(magnet_link):
-    """
-    Extract info hash from magnet link.
-    
-    Args:
-        magnet_link: Magnet URI string
-        
-    Returns:
-        str: Info hash in lowercase, or None if not found
-    """
-    import re
-    # Magnet link format: magnet:?xt=urn:btih:HASH&...
-    match = re.search(r'xt=urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})', magnet_link)
-    if match:
-        hash_value = match.group(1)
-        # Convert base32 to hex if necessary (32 chars = base32, 40 chars = hex)
-        if len(hash_value) == 32:
-            try:
-                import base64
-                decoded = base64.b32decode(hash_value.upper())
-                hash_value = decoded.hex()
-            except Exception:
-                pass
-        return hash_value.lower()
-    return None
+from packages.python.javdb_integrations.qb_client import (
+    extract_hash_from_magnet,
+    is_torrent_exists,
+)
 
 
 def _wrap_session_as_client(session, use_proxy=False):
@@ -370,23 +349,6 @@ def get_existing_torrents(session, use_proxy=False):
         f"(excluding errors)"
     )
     return existing_hashes
-
-
-def is_torrent_exists(magnet_link, existing_hashes):
-    """
-    Check if a torrent already exists in qBittorrent.
-    
-    Args:
-        magnet_link: Magnet URI string
-        existing_hashes: Set of existing torrent hashes
-        
-    Returns:
-        bool: True if torrent already exists
-    """
-    torrent_hash = extract_hash_from_magnet(magnet_link)
-    if torrent_hash and torrent_hash in existing_hashes:
-        return True
-    return False
 
 
 def add_torrent_to_qbittorrent(
