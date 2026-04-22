@@ -362,49 +362,39 @@ def extract_hash_from_magnet(magnet_link):
     return None
 
 
+def _wrap_session_as_client(session, use_proxy=False):
+    """Wrap ``qb_uploader``'s already-logged-in ``requests.Session`` into
+    a :class:`QBittorrentClient` so it can reuse the shared helpers
+    without doing a second login."""
+    from packages.python.javdb_integrations.qb_client import QBittorrentClient
+    return QBittorrentClient.from_existing_session(
+        session,
+        base_url=QB_BASE_URL,
+        proxies=get_proxies_dict('qbittorrent', use_proxy),
+        request_timeout=REQUEST_TIMEOUT,
+    )
+
+
 def get_existing_torrents(session, use_proxy=False):
     """
     Get all existing torrents from qBittorrent.
-    
+
+    Thin wrapper around :meth:`QBittorrentClient.get_existing_hashes`.
+
     Args:
         session: Requests session with login cookies
         use_proxy: Whether to use proxy
-        
+
     Returns:
         set: Set of torrent hashes (lowercase) that are not in error state
     """
-    info_url = f'{QB_BASE_URL}/api/v2/torrents/info'
-    proxies = get_proxies_dict('qbittorrent', use_proxy)
-    
-    try:
-        response = session.get(
-            info_url,
-            timeout=REQUEST_TIMEOUT,
-            proxies=proxies,
-            verify=QB_VERIFY_TLS,
-        )
-        
-        if response.status_code == 200:
-            torrents = response.json()
-            # Exclude torrents in error state
-            existing_hashes = set()
-            for t in torrents:
-                state = t.get('state', '')
-                # Skip torrents in error state
-                if state not in ('error', 'missingFiles'):
-                    hash_value = t.get('hash', '').lower()
-                    if hash_value:
-                        existing_hashes.add(hash_value)
-            
-            logger.info(f"Found {len(existing_hashes)} existing torrents in qBittorrent (excluding errors)")
-            return existing_hashes
-        else:
-            logger.warning(f"Failed to get torrent list: {response.status_code}")
-            return set()
-            
-    except requests.RequestException as e:
-        logger.error(f"Error getting torrent list: {e}")
-        return set()
+    client = _wrap_session_as_client(session, use_proxy=use_proxy)
+    existing_hashes = client.get_existing_hashes()
+    logger.info(
+        f"Found {len(existing_hashes)} existing torrents in qBittorrent "
+        f"(excluding errors)"
+    )
+    return existing_hashes
 
 
 def is_torrent_exists(magnet_link, existing_hashes):
@@ -424,50 +414,43 @@ def is_torrent_exists(magnet_link, existing_hashes):
     return False
 
 
-def add_torrent_to_qbittorrent(session, magnet_link, title, mode='daily', use_proxy=False, category_override=None):
-    """Add a torrent to qBittorrent"""
-    add_url = f'{QB_BASE_URL}/api/v2/torrents/add'
-    
-    # Choose category: use override if provided, otherwise based on mode
+def add_torrent_to_qbittorrent(
+    session, magnet_link, title, mode='daily', use_proxy=False, category_override=None
+):
+    """Add a torrent to qBittorrent.
+
+    Thin wrapper around :meth:`QBittorrentClient.add_torrent` that wires
+    in the uploader's global defaults (save path, auto-TMM, skip
+    checking, content layout, ratio/seed-time limits, paused state).
+    """
     if category_override:
         category = category_override
     else:
         category = TORRENT_CATEGORY_ADHOC if mode == 'adhoc' else TORRENT_CATEGORY
-    
-    # Prepare the data for adding torrent
-    torrent_data = {
-        'urls': magnet_link,
-        'name': title,
-        'category': category,
-        'autoTMM': 'true',
-        'savepath': TORRENT_SAVE_PATH,
-        'downloadPath': '',
-        'skip_checking': str(SKIP_CHECKING).lower(),
-        'contentLayout': 'Original',
-        'ratioLimit': '-2',
-        'seedingTimeLimit': '-2',
-        'addPaused': str(not AUTO_START).lower()
-    }
-    
-    proxies = get_proxies_dict('qbittorrent', use_proxy)
-    
+
+    client = _wrap_session_as_client(session, use_proxy=use_proxy)
+
     try:
         logger.debug(f"Adding torrent: {title} with category: {category}")
-        response = session.post(
-            add_url,
-            data=torrent_data,
-            timeout=REQUEST_TIMEOUT,
-            proxies=proxies,
-            verify=QB_VERIFY_TLS,
+        ok = client.add_torrent(
+            magnet_link=magnet_link,
+            name=title,
+            category=category,
+            save_path=TORRENT_SAVE_PATH,
+            auto_tmm=True,
+            skip_checking=SKIP_CHECKING,
+            content_layout='Original',
+            ratio_limit='-2',
+            seeding_time_limit='-2',
+            paused=not AUTO_START,
         )
-        
-        if response.status_code == 200:
-            logger.debug(f"Successfully added torrent: {title} to category: {category}")
+        if ok:
+            logger.debug(
+                f"Successfully added torrent: {title} to category: {category}"
+            )
             return True
-        else:
-            logger.error(f"Failed to add torrent '{title}' with status code: {response.status_code}")
-            return False
-            
+        logger.error(f"Failed to add torrent '{title}'")
+        return False
     except requests.RequestException as e:
         logger.error(f"Error adding torrent '{title}': {e}")
         return False
