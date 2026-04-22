@@ -39,6 +39,7 @@ from scripts.qb_file_filter import (
     set_file_priority,
     get_torrent_properties,
     delete_local_file,
+    cleanup_completed_torrents,
 )
 
 
@@ -955,3 +956,42 @@ class TestFilterIntegration:
         # Only files with progress > 0 should be deleted: sample.mp4 and small2.txt
         assert stats['local_files_deleted'] == 2
         assert mock_delete.call_count == 2
+
+
+class TestCleanupCompletedTorrentsAdapter:
+    """Tests for the qb_file_filter adapter that wires the shared
+    ``qb_client.remove_completed_torrents_keep_files`` into qb_file_filter's
+    existing requests.Session."""
+
+    @patch('scripts.qb_file_filter.get_proxies_dict')
+    def test_empty_categories_short_circuits(self, mock_proxies):
+        mock_proxies.return_value = None
+
+        mock_session = MagicMock()
+        result = cleanup_completed_torrents(
+            mock_session, [], dry_run=False, use_proxy=False
+        )
+
+        assert result == {'scanned': 0, 'deleted': 0, 'hashes': []}
+        mock_session.get.assert_not_called()
+        mock_session.post.assert_not_called()
+
+    @patch('packages.python.javdb_integrations.qb_client.remove_completed_torrents_keep_files')
+    @patch('scripts.qb_file_filter.get_proxies_dict')
+    def test_delegates_to_shared_implementation(self, mock_proxies, mock_shared):
+        mock_proxies.return_value = None
+        mock_shared.return_value = {'scanned': 1, 'deleted': 1, 'hashes': ['h1']}
+
+        mock_session = MagicMock()
+        result = cleanup_completed_torrents(
+            mock_session, ['Ad Hoc'], dry_run=True, use_proxy=False
+        )
+
+        # The adapter should hand off to the shared helper exactly once,
+        # passing the category list and dry_run flag.
+        assert mock_shared.call_count == 1
+        args, kwargs = mock_shared.call_args
+        # First positional arg is the wrapped QBittorrentClient.
+        assert args[1] == ['Ad Hoc']
+        assert kwargs.get('dry_run') is True
+        assert result == {'scanned': 1, 'deleted': 1, 'hashes': ['h1']}
