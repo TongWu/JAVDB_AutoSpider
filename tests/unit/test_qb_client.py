@@ -237,3 +237,160 @@ class TestRemoveCompletedTorrentsKeepFiles:
 
         combined = "\n".join(r.getMessage() for r in caplog.records)
         assert 'Primary QB' in combined
+
+
+# ---------------------------------------------------------------------------
+# QBittorrentClient.test_connection
+# ---------------------------------------------------------------------------
+
+
+class TestTestConnection:
+    def test_returns_true_on_200(self):
+        resp = MagicMock(); resp.status_code = 200
+        client, session = _make_client(resp_sequence_get=[resp])
+        assert client.test_connection() is True
+        assert session.get.call_args.args[0].endswith('/api/v2/app/version')
+
+    def test_returns_true_on_403(self):
+        resp = MagicMock(); resp.status_code = 403
+        client, _ = _make_client(resp_sequence_get=[resp])
+        assert client.test_connection() is True
+
+    def test_returns_false_on_500(self):
+        resp = MagicMock(); resp.status_code = 500
+        client, _ = _make_client(resp_sequence_get=[resp])
+        assert client.test_connection() is False
+
+    def test_returns_false_on_network_error(self):
+        import requests as _requests
+        session = MagicMock()
+        session.get.side_effect = _requests.RequestException("boom")
+        client = QBittorrentClient.from_existing_session(
+            session, base_url='https://qb.example:8080'
+        )
+        assert client.test_connection() is False
+
+
+# ---------------------------------------------------------------------------
+# QBittorrentClient.get_existing_hashes
+# ---------------------------------------------------------------------------
+
+
+class TestGetExistingHashes:
+    def test_returns_lowercase_hashes(self):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = [
+            {'hash': 'AAAA', 'state': 'downloading'},
+            {'hash': 'BBBB', 'state': 'seeding'},
+        ]
+        client, _ = _make_client(resp_sequence_get=[resp])
+        assert client.get_existing_hashes() == {'aaaa', 'bbbb'}
+
+    def test_excludes_error_states_by_default(self):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = [
+            {'hash': 'a', 'state': 'downloading'},
+            {'hash': 'b', 'state': 'error'},
+            {'hash': 'c', 'state': 'missingFiles'},
+            {'hash': 'd', 'state': 'seeding'},
+        ]
+        client, _ = _make_client(resp_sequence_get=[resp])
+        assert client.get_existing_hashes() == {'a', 'd'}
+
+    def test_custom_exclude_states(self):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = [
+            {'hash': 'a', 'state': 'pausedUP'},
+            {'hash': 'b', 'state': 'seeding'},
+        ]
+        client, _ = _make_client(resp_sequence_get=[resp])
+        assert client.get_existing_hashes(exclude_states=('pausedUP',)) == {'b'}
+
+    def test_returns_empty_set_on_http_error(self):
+        resp = MagicMock(); resp.status_code = 500
+        client, _ = _make_client(resp_sequence_get=[resp])
+        assert client.get_existing_hashes() == set()
+
+    def test_returns_empty_set_on_network_error(self):
+        import requests as _requests
+        session = MagicMock()
+        session.get.side_effect = _requests.RequestException("boom")
+        client = QBittorrentClient.from_existing_session(
+            session, base_url='https://qb.example:8080'
+        )
+        assert client.get_existing_hashes() == set()
+
+    def test_skips_entries_with_no_hash(self):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = [
+            {'state': 'downloading'},
+            {'hash': '', 'state': 'seeding'},
+            {'hash': 'real', 'state': 'downloading'},
+        ]
+        client, _ = _make_client(resp_sequence_get=[resp])
+        assert client.get_existing_hashes() == {'real'}
+
+
+# ---------------------------------------------------------------------------
+# QBittorrentClient.add_torrent
+# ---------------------------------------------------------------------------
+
+
+class TestAddTorrent:
+    def test_sends_all_defaults_and_returns_true_on_200(self):
+        resp = MagicMock(); resp.status_code = 200
+        client, session = _make_client(resp_sequence_post=[resp])
+
+        ok = client.add_torrent(
+            magnet_link='magnet:?xt=urn:btih:abc',
+            name='TEST-001',
+            category='JavDB',
+            save_path='/downloads',
+        )
+        assert ok is True
+        call = session.post.call_args
+        assert call.args[0].endswith('/api/v2/torrents/add')
+        data = call.kwargs['data']
+        assert data['urls'] == 'magnet:?xt=urn:btih:abc'
+        assert data['name'] == 'TEST-001'
+        assert data['category'] == 'JavDB'
+        assert data['savepath'] == '/downloads'
+        # Defaults
+        assert data['autoTMM'] == 'true'
+        assert data['skip_checking'] == 'false'
+        assert data['contentLayout'] == 'Original'
+        assert data['ratioLimit'] == '-2'
+        assert data['seedingTimeLimit'] == '-2'
+        assert data['addPaused'] == 'false'
+
+    def test_paused_toggle(self):
+        resp = MagicMock(); resp.status_code = 200
+        client, session = _make_client(resp_sequence_post=[resp])
+
+        client.add_torrent('magnet:?xt=urn:btih:x', paused=True)
+        assert session.post.call_args.kwargs['data']['addPaused'] == 'true'
+
+    def test_skip_checking_toggle(self):
+        resp = MagicMock(); resp.status_code = 200
+        client, session = _make_client(resp_sequence_post=[resp])
+
+        client.add_torrent('magnet:?xt=urn:btih:x', skip_checking=True)
+        assert session.post.call_args.kwargs['data']['skip_checking'] == 'true'
+
+    def test_omits_name_and_category_when_none(self):
+        resp = MagicMock(); resp.status_code = 200
+        client, session = _make_client(resp_sequence_post=[resp])
+
+        client.add_torrent('magnet:?xt=urn:btih:x')
+        data = session.post.call_args.kwargs['data']
+        assert 'name' not in data
+        assert 'category' not in data
+
+    def test_returns_false_on_non_200(self):
+        resp = MagicMock(); resp.status_code = 400
+        client, _ = _make_client(resp_sequence_post=[resp])
+        assert client.add_torrent('magnet:?xt=urn:btih:x') is False
