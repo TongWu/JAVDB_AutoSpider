@@ -495,4 +495,72 @@ def remove_completed_torrents_keep_files(
     return {"scanned": len(completed), "deleted": len(hashes), "hashes": hashes}
 
 
-__all__ = ["QBittorrentClient", "remove_completed_torrents_keep_files"]
+# ---------------------------------------------------------------------------
+# Magnet-link helpers
+#
+# These are qB-semantics utilities (qB identifies torrents by info-hash), not
+# uploader-specific logic, so they belong next to the client.
+# ---------------------------------------------------------------------------
+
+
+_MAGNET_HASH_RE = None  # compiled lazily so ``import re`` only happens once
+
+
+def extract_hash_from_magnet(magnet_link: str) -> Optional[str]:
+    """Extract the BitTorrent info-hash from a magnet URI.
+
+    Returns a lowercased 40-char hex hash on success, ``None`` if the
+    magnet does not embed an ``xt=urn:btih:…`` parameter. Accepts both
+    40-char hex and 32-char base32 forms (the latter is converted to hex).
+    """
+    if not magnet_link:
+        return None
+
+    import re
+
+    global _MAGNET_HASH_RE
+    if _MAGNET_HASH_RE is None:
+        _MAGNET_HASH_RE = re.compile(
+            r"xt=urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})"
+        )
+
+    match = _MAGNET_HASH_RE.search(magnet_link)
+    if not match:
+        return None
+
+    hash_value = match.group(1)
+    if len(hash_value) == 32:
+        try:
+            import base64
+            decoded = base64.b32decode(hash_value.upper())
+            hash_value = decoded.hex()
+        except Exception:
+            pass
+    return hash_value.lower()
+
+
+def is_torrent_exists(magnet_link: str, existing_hashes: Iterable[str]) -> bool:
+    """Return True if the torrent referenced by ``magnet_link`` is already
+    present in ``existing_hashes`` (typically the set returned by
+    :meth:`QBittorrentClient.get_existing_hashes`).
+
+    The magnet's info-hash is compared case-insensitively against the
+    given collection."""
+    torrent_hash = extract_hash_from_magnet(magnet_link)
+    if not torrent_hash:
+        return False
+    # ``existing_hashes`` may be a set (O(1)) or a list — either works.
+    return torrent_hash in existing_hashes
+
+
+__all__ = [
+    "QBittorrentClient",
+    "remove_completed_torrents_keep_files",
+    "try_ping_base_urls",
+    "try_login_base_urls",
+    "LOGIN_SUCCESS",
+    "LOGIN_REJECTED",
+    "LOGIN_UNREACHABLE",
+    "extract_hash_from_magnet",
+    "is_torrent_exists",
+]
