@@ -10,8 +10,13 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 from packages.python.javdb_integrations.qb_client import (
+    LOGIN_REJECTED,
+    LOGIN_SUCCESS,
+    LOGIN_UNREACHABLE,
     QBittorrentClient,
     remove_completed_torrents_keep_files,
+    try_login_base_urls,
+    try_ping_base_urls,
 )
 
 
@@ -394,3 +399,201 @@ class TestAddTorrent:
         resp = MagicMock(); resp.status_code = 400
         client, _ = _make_client(resp_sequence_post=[resp])
         assert client.add_torrent('magnet:?xt=urn:btih:x') is False
+
+
+# ---------------------------------------------------------------------------
+# Module-level try_ping_base_urls
+# ---------------------------------------------------------------------------
+
+
+class TestTryPingBaseUrls:
+    def test_returns_first_reachable_url_200(self):
+        resp = MagicMock(); resp.status_code = 200
+        get_fn = MagicMock(return_value=resp)
+
+        url, err = try_ping_base_urls(
+            ['https://qb.internal:8080', 'http://qb.internal:8080'],
+            get_fn=get_fn,
+        )
+        assert url == 'https://qb.internal:8080'
+        assert err is None
+        assert get_fn.call_count == 1
+
+    def test_403_counts_as_reachable(self):
+        resp = MagicMock(); resp.status_code = 403
+        get_fn = MagicMock(return_value=resp)
+
+        url, err = try_ping_base_urls(['https://qb.internal:8080'], get_fn=get_fn)
+        assert url == 'https://qb.internal:8080'
+        assert err is None
+
+    def test_falls_back_from_ssl_error_to_http(self):
+        import requests as _requests
+        get_fn = MagicMock(side_effect=[
+            _requests.exceptions.SSLError("ssl error"),
+            MagicMock(status_code=200),
+        ])
+        url, err = try_ping_base_urls(
+            ['https://qb.internal:8080', 'http://qb.internal:8080'],
+            get_fn=get_fn,
+        )
+        assert url == 'http://qb.internal:8080'
+        assert err is None
+        assert get_fn.call_count == 2
+
+    def test_500_is_not_reachable_keeps_trying(self):
+        get_fn = MagicMock(side_effect=[
+            MagicMock(status_code=500),
+            MagicMock(status_code=200),
+        ])
+        url, _ = try_ping_base_urls(
+            ['https://qb.internal:8080', 'http://qb.internal:8080'],
+            get_fn=get_fn,
+        )
+        assert url == 'http://qb.internal:8080'
+
+    def test_all_candidates_fail_returns_none_with_error(self):
+        import requests as _requests
+        get_fn = MagicMock(side_effect=[
+            _requests.exceptions.SSLError("e1"),
+            _requests.exceptions.ConnectionError("e2"),
+        ])
+        url, err = try_ping_base_urls(
+            ['https://qb.internal:8080', 'http://qb.internal:8080'],
+            get_fn=get_fn,
+        )
+        assert url is None
+        assert err is not None
+
+    def test_empty_candidate_list(self):
+        url, err = try_ping_base_urls([], get_fn=MagicMock())
+        assert url is None
+        assert err is None
+
+
+# ---------------------------------------------------------------------------
+# Module-level try_login_base_urls
+# ---------------------------------------------------------------------------
+
+
+class TestTryLoginBaseUrls:
+    def test_success_on_first_candidate(self):
+        ok = MagicMock(status_code=200, text='Ok.')
+        post_fn = MagicMock(return_value=ok)
+
+        outcome, url, err = try_login_base_urls(
+            ['https://qb.internal:8080', 'http://qb.internal:8080'],
+            'admin', 'pw', post_fn=post_fn,
+        )
+        assert outcome == LOGIN_SUCCESS
+        assert url == 'https://qb.internal:8080'
+        assert err is None
+        assert post_fn.call_count == 1
+
+    def test_falls_back_to_http_after_ssl_error(self):
+        import requests as _requests
+        post_fn = MagicMock(side_effect=[
+            _requests.exceptions.SSLError("ssl"),
+            MagicMock(status_code=200, text='Ok.'),
+        ])
+        outcome, url, err = try_login_base_urls(
+            ['https://qb.internal:8080', 'http://qb.internal:8080'],
+            'admin', 'pw', post_fn=post_fn,
+        )
+        assert outcome == LOGIN_SUCCESS
+        assert url == 'http://qb.internal:8080'
+        assert err is None
+
+    def test_credential_rejection_stops_trying(self):
+        bad = MagicMock(status_code=403, text='Fails.')
+        post_fn = MagicMock(return_value=bad)
+
+        outcome, url, err = try_login_base_urls(
+            ['https://qb.internal:8080', 'http://qb.internal:8080'],
+            'admin', 'wrong', post_fn=post_fn,
+        )
+        assert outcome == LOGIN_REJECTED
+        assert url is None
+        assert err is not None
+        # Must not retry on alternative URLs after a 401/403.
+        assert post_fn.call_count == 1
+
+    def test_401_also_rejected(self):
+        bad = MagicMock(status_code=401, text='Unauthorized')
+        post_fn = MagicMock(return_value=bad)
+
+        outcome, _, _ = try_login_base_urls(
+            ['https://qb.internal:8080'], 'a', 'b', post_fn=post_fn,
+        )
+        assert outcome == LOGIN_REJECTED
+
+    def test_all_candidates_unreachable(self):
+        import requests as _requests
+        post_fn = MagicMock(side_effect=[
+            _requests.exceptions.ConnectionError("e1"),
+            _requests.exceptions.ConnectionError("e2"),
+        ])
+        outcome, url, err = try_login_base_urls(
+            ['https://qb.internal:8080', 'http://qb.internal:8080'],
+            'a', 'b', post_fn=post_fn,
+        )
+        assert outcome == LOGIN_UNREACHABLE
+        assert url is None
+        assert err is not None
+
+    def test_passes_credentials_in_post_body(self):
+        ok = MagicMock(status_code=200, text='Ok.')
+        post_fn = MagicMock(return_value=ok)
+
+        try_login_base_urls(
+            ['https://qb.internal:8080'],
+            'alice', 's3cret',
+            post_fn=post_fn,
+        )
+        call = post_fn.call_args
+        assert call.args[0].endswith('/api/v2/auth/login')
+        assert call.kwargs['data'] == {'username': 'alice', 'password': 's3cret'}
+
+
+# ---------------------------------------------------------------------------
+# QBittorrentClient constructor uses the shared login helper
+# ---------------------------------------------------------------------------
+
+
+class TestQBittorrentClientLoginFallback:
+    def test_constructor_uses_shared_fallback(self):
+        """Regression check: constructing a client should walk through base
+        URL candidates using the same logic as the module-level
+        try_login_base_urls helper."""
+        import requests as _requests
+
+        # Patch requests.Session so we can drive its post() return sequence.
+        with patch(
+            'packages.python.javdb_integrations.qb_client.requests.Session'
+        ) as session_cls:
+            mock_session = MagicMock()
+            session_cls.return_value = mock_session
+            mock_session.post.side_effect = [
+                _requests.exceptions.SSLError("ssl"),
+                MagicMock(status_code=200, text='Ok.'),
+            ]
+
+            client = QBittorrentClient(
+                ['https://qb.internal:8080', 'http://qb.internal:8080'],
+                'admin', 'pw',
+            )
+            assert client.base_url == 'http://qb.internal:8080'
+            assert mock_session.post.call_count == 2
+
+    def test_constructor_raises_when_all_fail(self):
+        import requests as _requests
+
+        with patch(
+            'packages.python.javdb_integrations.qb_client.requests.Session'
+        ) as session_cls:
+            mock_session = MagicMock()
+            session_cls.return_value = mock_session
+            mock_session.post.side_effect = _requests.exceptions.ConnectionError("x")
+
+            with pytest.raises(Exception):
+                QBittorrentClient(['https://qb.internal:8080'], 'a', 'b')
