@@ -313,169 +313,31 @@ def login_to_qbittorrent(session, use_proxy=False):
     return False
 
 
-def get_completed_torrents_by_categories(session, categories, use_proxy=False):
+def cleanup_completed_torrents(session, categories, dry_run=False, use_proxy=False):
+    """Remove completed/seeding torrent entries for the given categories
+    while keeping files on disk.
+
+    Thin adapter that wires ``qb_file_filter``'s already-authenticated
+    session into the shared helper
+    ``packages.python.javdb_integrations.qb_client.remove_completed_torrents_keep_files``.
+    Returns a stats dict ``{'scanned', 'deleted', 'hashes'}``.
     """
-    Fetch torrents with qBittorrent's ``filter=completed`` (i.e. already finished /
-    seeding / paused-completed) that belong to any of the given categories.
+    from packages.python.javdb_integrations.qb_client import (
+        QBittorrentClient as _SharedQBClient,
+        remove_completed_torrents_keep_files as _shared_remove,
+    )
 
-    qBittorrent's /api/v2/torrents/info only accepts a single category per request,
-    so we iterate over the provided categories and merge the results.
-
-    Args:
-        session: Requests session with login cookies
-        categories: List of category names to fetch completed torrents for
-        use_proxy: Whether to use proxy
-
-    Returns:
-        list: List of torrent info dictionaries (possibly empty). Duplicate
-              hashes are collapsed.
-    """
-    if not categories:
-        return []
-
-    info_url = f'{QB_BASE_URL}/api/v2/torrents/info'
-    proxies = get_proxies_dict('qbittorrent', use_proxy)
-
-    seen_hashes = set()
-    merged = []
-    for category in categories:
-        try:
-            response = session.get(
-                info_url,
-                params={'category': category, 'filter': 'completed'},
-                timeout=REQUEST_TIMEOUT,
-                proxies=proxies,
-                verify=QB_VERIFY_TLS,
-            )
-        except requests.RequestException as e:
-            logger.warning(f"Error querying completed torrents for category '{category}': {e}")
-            continue
-
-        if response.status_code != 200:
-            logger.warning(
-                f"Failed to get completed torrents for category '{category}': "
-                f"status {response.status_code}"
-            )
-            continue
-
-        try:
-            torrents = response.json()
-        except ValueError as e:
-            logger.warning(f"Failed to parse completed-torrents response for '{category}': {e}")
-            continue
-
-        logger.debug(
-            f"Found {len(torrents)} completed torrent(s) in category '{category}'"
-        )
-        for t in torrents:
-            h = t.get('hash')
-            if not h or h in seen_hashes:
-                continue
-            seen_hashes.add(h)
-            merged.append(t)
-
-    return merged
-
-
-def delete_torrents(session, hashes, delete_files=False, use_proxy=False):
-    """
-    Remove torrent entries from qBittorrent.
-
-    Args:
-        session: Requests session with login cookies
-        hashes: Iterable of torrent hashes to delete
-        delete_files: If True, also delete content files on disk. Default False,
-                      which removes only the torrent entry and keeps files.
-        use_proxy: Whether to use proxy
-
-    Returns:
-        bool: True on API success, False otherwise.
-    """
-    hash_list = [h for h in hashes if h]
-    if not hash_list:
-        return True
-
-    delete_url = f'{QB_BASE_URL}/api/v2/torrents/delete'
-    proxies = get_proxies_dict('qbittorrent', use_proxy)
-
-    try:
-        response = session.post(
-            delete_url,
-            data={
-                'hashes': '|'.join(hash_list),
-                'deleteFiles': 'true' if delete_files else 'false',
-            },
-            timeout=REQUEST_TIMEOUT,
-            proxies=proxies,
-            verify=QB_VERIFY_TLS,
-        )
-        if response.status_code == 200:
-            logger.info(
-                f"Deleted {len(hash_list)} torrent(s) from qBittorrent "
-                f"(delete_files={delete_files})."
-            )
-            return True
-        logger.warning(
-            f"Failed to delete torrents: status {response.status_code}"
-        )
-        return False
-    except requests.RequestException as e:
-        logger.error(f"Error deleting torrents: {e}")
-        return False
-
-
-def remove_completed_torrents_keep_files(session, categories, dry_run=False, use_proxy=False):
-    """
-    Remove completed (100% — seeding / paused-completed) torrents that belong to
-    any of the given categories. Only the torrent *entries* are removed from the
-    qBittorrent client; the content files on disk are preserved.
-
-    This mirrors the behaviour of ``pikpak_bridge.remove_completed_torrents_keep_files``
-    so the same clean-up can happen as part of the qBittorrent File Filter run.
-
-    Args:
-        session: Requests session with login cookies
-        categories: List of category names to inspect
-        dry_run: If True, only report what would be deleted
-        use_proxy: Whether to use proxy
-
-    Returns:
-        dict: Stats with keys ``scanned`` (int), ``deleted`` (int) and ``hashes`` (list).
-    """
     if not categories:
         logger.info("No categories provided for completed-torrent cleanup — skipping.")
         return {'scanned': 0, 'deleted': 0, 'hashes': []}
 
-    completed = get_completed_torrents_by_categories(session, categories, use_proxy=use_proxy)
-    if not completed:
-        logger.info(
-            f"No completed torrents to remove in categories {categories}."
-        )
-        return {'scanned': 0, 'deleted': 0, 'hashes': []}
-
-    hashes = [t['hash'] for t in completed if t.get('hash')]
-    if dry_run:
-        sample = ", ".join(t.get('name', '') for t in completed[:5])
-        extra = " …" if len(completed) > 5 else ""
-        logger.info(
-            f"[Dry-Run] Would remove {len(hashes)} completed torrent(s) "
-            f"from qBittorrent in categories {categories} "
-            f"(torrent entry only, files kept). Sample: {sample}{extra}"
-        )
-        return {'scanned': len(completed), 'deleted': 0, 'hashes': hashes}
-
-    success = delete_torrents(session, hashes, delete_files=False, use_proxy=use_proxy)
-    if success:
-        logger.info(
-            f"Removed {len(hashes)} completed torrent(s) from qBittorrent "
-            f"in categories {categories} (files kept on disk)."
-        )
-        return {'scanned': len(completed), 'deleted': len(hashes), 'hashes': hashes}
-
-    logger.warning(
-        f"Failed to remove completed torrents in categories {categories}."
+    qb_client = _SharedQBClient.from_existing_session(
+        session,
+        base_url=QB_BASE_URL,
+        proxies=get_proxies_dict('qbittorrent', use_proxy),
+        request_timeout=REQUEST_TIMEOUT,
     )
-    return {'scanned': len(completed), 'deleted': 0, 'hashes': hashes}
+    return _shared_remove(qb_client, list(categories), dry_run=dry_run)
 
 
 def get_recent_torrents(session, days=2, category=None, categories=None, use_proxy=False):
@@ -940,8 +802,9 @@ def main():
 
     def _run_completed_cleanup():
         """Run completed-torrent cleanup (remove entry, keep files) on the same
-        categories the filter was asked to process. Mirrors
-        ``pikpak_bridge.remove_completed_torrents_keep_files``."""
+        categories the filter was asked to process. Delegates to the shared
+        implementation in
+        ``packages.python.javdb_integrations.qb_client``."""
         if not cleanup_categories:
             logger.info(
                 "Skipping completed-torrent cleanup: no categories specified "
@@ -953,7 +816,7 @@ def main():
             f"Running completed-torrent cleanup for categories {cleanup_categories} "
             f"(remove torrent entry, keep files on disk)..."
         )
-        remove_completed_torrents_keep_files(
+        cleanup_completed_torrents(
             session,
             cleanup_categories,
             dry_run=args.dry_run,
