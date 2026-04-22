@@ -14,6 +14,8 @@ from packages.python.javdb_integrations.qb_client import (
     LOGIN_SUCCESS,
     LOGIN_UNREACHABLE,
     QBittorrentClient,
+    extract_hash_from_magnet,
+    is_torrent_exists,
     remove_completed_torrents_keep_files,
     try_login_base_urls,
     try_ping_base_urls,
@@ -597,3 +599,104 @@ class TestQBittorrentClientLoginFallback:
 
             with pytest.raises(Exception):
                 QBittorrentClient(['https://qb.internal:8080'], 'a', 'b')
+
+
+# ---------------------------------------------------------------------------
+# Magnet-link helpers
+# ---------------------------------------------------------------------------
+
+
+class TestExtractHashFromMagnet:
+    def test_extract_40_char_hex(self):
+        magnet = (
+            "magnet:?xt=urn:btih:"
+            "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2&dn=x"
+        )
+        assert extract_hash_from_magnet(magnet) == (
+            "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+        )
+
+    def test_uppercase_hex_is_lowercased(self):
+        magnet = (
+            "magnet:?xt=urn:btih:"
+            "A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2&dn=x"
+        )
+        result = extract_hash_from_magnet(magnet)
+        assert result == result.lower() if result else True
+        assert result == "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+
+    def test_base32_is_converted_to_hex(self):
+        magnet = (
+            "magnet:?xt=urn:btih:"
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2&dn=x"
+        )
+        result = extract_hash_from_magnet(magnet)
+        assert result is not None
+        assert len(result) == 40
+        assert result == result.lower()
+
+    def test_no_btih_returns_none(self):
+        magnet = "magnet:?dn=test&tr=http://tracker.example.com"
+        assert extract_hash_from_magnet(magnet) is None
+
+    def test_empty_string_returns_none(self):
+        assert extract_hash_from_magnet("") is None
+
+    def test_none_returns_none(self):
+        # Guard against callers that might pass None.
+        assert extract_hash_from_magnet(None) is None
+
+    def test_hash_anywhere_in_querystring(self):
+        magnet = (
+            "magnet:?dn=test"
+            "&xt=urn:btih:abcdef1234567890abcdef1234567890abcdef12"
+        )
+        assert extract_hash_from_magnet(magnet) == (
+            "abcdef1234567890abcdef1234567890abcdef12"
+        )
+
+
+class TestIsTorrentExists:
+    def test_existing_in_set(self):
+        existing = {"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"}
+        magnet = (
+            "magnet:?xt=urn:btih:"
+            "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2&dn=x"
+        )
+        assert is_torrent_exists(magnet, existing) is True
+
+    def test_existing_case_insensitive(self):
+        existing = {"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"}
+        magnet_upper = (
+            "magnet:?xt=urn:btih:"
+            "A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2&dn=x"
+        )
+        assert is_torrent_exists(magnet_upper, existing) is True
+
+    def test_not_in_set(self):
+        existing = {"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"}
+        magnet = (
+            "magnet:?xt=urn:btih:"
+            "c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4&dn=x"
+        )
+        assert is_torrent_exists(magnet, existing) is False
+
+    def test_empty_existing(self):
+        magnet = (
+            "magnet:?xt=urn:btih:"
+            "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2&dn=x"
+        )
+        assert is_torrent_exists(magnet, set()) is False
+
+    def test_invalid_magnet_returns_false(self):
+        existing = {"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"}
+        assert is_torrent_exists("not-a-magnet", existing) is False
+
+    def test_accepts_list_existing(self):
+        # Argument is declared as Iterable[str], so a list should work.
+        existing = ["a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"]
+        magnet = (
+            "magnet:?xt=urn:btih:"
+            "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2&dn=x"
+        )
+        assert is_torrent_exists(magnet, existing) is True
