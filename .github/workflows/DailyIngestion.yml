@@ -46,7 +46,7 @@ on:
       enable_dedup:
         description: 'Enable rclone dedup (detect + execute)'
         required: false
-        default: true
+        default: false
         type: boolean
       enable_redownload:
         description: 'Enable torrent re-download (洗版) when a same-category torrent is significantly larger'
