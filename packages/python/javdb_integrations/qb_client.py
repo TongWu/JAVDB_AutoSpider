@@ -19,16 +19,168 @@ Typical usage:
 
 from __future__ import annotations
 
-from typing import Iterable, List, Optional
+from typing import Callable, Iterable, List, Optional, Tuple
 
 import requests
 
-from packages.python.javdb_core.masking import mask_ip_address, mask_username
+from packages.python.javdb_core.masking import mask_error, mask_ip_address, mask_username
 from packages.python.javdb_platform.logging_config import get_logger
-from packages.python.javdb_platform.qb_config import qb_verify_tls
+from packages.python.javdb_platform.qb_config import (
+    masked_qb_base_url as _masked_qb_base_url,
+    qb_verify_tls,
+)
 
 
 logger = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Module-level login / ping helpers
+#
+# These are extracted so the three qB consumers (the QBittorrentClient class
+# itself, qb_uploader and qb_file_filter) all share the same URL-fallback
+# state machine. The helpers take ``requester``/``get``/``post`` callables
+# as dependencies, which keeps consumers' mocking surface (e.g. patching
+# ``scripts.qb_uploader.requests.get``) intact and avoids forcing every
+# caller into the class API.
+# ---------------------------------------------------------------------------
+
+
+def try_ping_base_urls(
+    base_urls: Iterable[str],
+    get_fn: Callable,
+    *,
+    allow_insecure_http: bool = False,
+    proxies: Optional[dict] = None,
+    timeout: Optional[float] = 10,
+    verify: bool = True,
+) -> Tuple[Optional[str], Optional[BaseException]]:
+    """Try ``GET {base_url}/api/v2/app/version`` against each candidate
+    base URL in order; return ``(reachable_url, None)`` on the first
+    response whose status code is 200 or 403, else ``(None, last_error)``.
+
+    qB returns 403 for unauthenticated /app/version requests; that still
+    proves the endpoint is reachable, which is why both codes are treated
+    as success.
+    """
+    candidates = [str(u).rstrip("/") for u in base_urls if str(u).strip()]
+    primary = candidates[0] if candidates else None
+    last_error: Optional[BaseException] = None
+
+    for base_url in candidates:
+        masked_url = _masked_qb_base_url(
+            base_url, allow_insecure_http=allow_insecure_http
+        )
+        try:
+            logger.info(f"Testing connection to qBittorrent at {masked_url}")
+            response = get_fn(
+                f"{base_url}/api/v2/app/version",
+                timeout=timeout,
+                proxies=proxies,
+                verify=verify,
+            )
+        except requests.RequestException as exc:
+            last_error = exc
+            logger.warning(
+                f"Connection attempt failed for {masked_url}: "
+                f"{mask_error(str(exc))}"
+            )
+            continue
+
+        if response.status_code in (200, 403):
+            if base_url != primary:
+                logger.info(
+                    f"qBittorrent is accessible after retrying over HTTP at "
+                    f"{masked_url}"
+                )
+            else:
+                logger.info("qBittorrent is accessible")
+            return base_url, None
+        logger.warning(
+            f"qBittorrent responded with status code {response.status_code} "
+            f"at {masked_url}"
+        )
+
+    if last_error is not None:
+        logger.error(
+            f"Cannot connect to qBittorrent: {mask_error(str(last_error))}"
+        )
+    return None, last_error
+
+
+LOGIN_SUCCESS = "success"          # first candidate that returned 200/Ok.
+LOGIN_REJECTED = "rejected"        # 401/403 or 'Fails.' — credentials wrong
+LOGIN_UNREACHABLE = "unreachable"  # network errors / non-auth statuses
+
+
+def try_login_base_urls(
+    base_urls: Iterable[str],
+    username: str,
+    password: str,
+    post_fn: Callable,
+    *,
+    allow_insecure_http: bool = False,
+    proxies: Optional[dict] = None,
+    timeout: Optional[float] = None,
+    verify: bool = True,
+) -> Tuple[str, Optional[str], Optional[BaseException]]:
+    """Try ``POST {base_url}/api/v2/auth/login`` against each candidate in
+    order.
+
+    Returns ``(outcome, successful_base_url, last_error)`` where ``outcome``
+    is one of ``LOGIN_SUCCESS`` / ``LOGIN_REJECTED`` / ``LOGIN_UNREACHABLE``.
+    On ``LOGIN_REJECTED`` the caller should stop retrying (credentials are
+    wrong — no amount of URL fallback will fix that).
+    """
+    candidates = [str(u).rstrip("/") for u in base_urls if str(u).strip()]
+    primary = candidates[0] if candidates else None
+    last_error: Optional[BaseException] = None
+
+    for base_url in candidates:
+        masked_url = _masked_qb_base_url(
+            base_url, allow_insecure_http=allow_insecure_http
+        )
+        try:
+            logger.info(
+                f"Attempting to login to qBittorrent at {masked_url} as "
+                f"{mask_username(username)}"
+            )
+            response = post_fn(
+                f"{base_url}/api/v2/auth/login",
+                data={"username": username, "password": password},
+                timeout=timeout,
+                proxies=proxies,
+                verify=verify,
+            )
+        except requests.RequestException as exc:
+            last_error = exc
+            logger.warning(
+                f"Login error at {masked_url}: {mask_error(str(exc))}"
+            )
+            continue
+
+        if response.status_code == 200 and response.text == "Ok.":
+            if base_url != primary:
+                logger.info(
+                    f"qBittorrent HTTPS login failed; retried successfully "
+                    f"over HTTP at {masked_url}."
+                )
+            logger.info("Successfully logged in to qBittorrent")
+            return LOGIN_SUCCESS, base_url, None
+
+        logger.error(
+            f"Login failed with status code {response.status_code} at "
+            f"{masked_url}"
+        )
+        if response.status_code in {401, 403} or (
+            isinstance(response.text, str) and response.text.strip() == "Fails."
+        ):
+            # Credentials rejected — no point trying other URLs.
+            return LOGIN_REJECTED, None, Exception(response.text)
+
+        last_error = Exception(response.text)
+
+    return LOGIN_UNREACHABLE, None, last_error
 
 
 class QBittorrentClient:
@@ -104,47 +256,30 @@ class QBittorrentClient:
         return kwargs
 
     def login(self, username: str, password: str) -> None:
-        last_error: Optional[BaseException] = None
-        primary_url = self.base_urls[0]
+        def _post(url, **kwargs):
+            # Keep ``verify`` out of kwargs: the session-level verify flag
+            # already applies. Drop ``timeout=None`` so requests uses its
+            # default when no timeout was configured.
+            kwargs.pop("verify", None)
+            if kwargs.get("timeout") is None:
+                kwargs.pop("timeout", None)
+            return self.session.post(url, **kwargs)
 
-        for candidate in self.base_urls:
-            try:
-                resp = self.session.post(
-                    f"{candidate}/api/v2/auth/login",
-                    data={"username": username, "password": password},
-                    **self._request_kwargs(),
-                )
-            except requests.RequestException as exc:
-                last_error = exc
-                logger.warning(
-                    f"qBittorrent login attempt failed at "
-                    f"{mask_ip_address(candidate)}: {exc}"
-                )
-                continue
-
-            if resp.status_code == 200 and resp.text == "Ok.":
-                self.base_url = candidate
-                masked_url = mask_ip_address(self.base_url)
-                if candidate != primary_url:
-                    logger.info(
-                        f"qBittorrent HTTPS login failed; retried successfully "
-                        f"over HTTP at {masked_url}."
-                    )
-                logger.info(
-                    f"Logged into qBittorrent at {masked_url} as "
-                    f"{mask_username(username)} successfully."
-                )
-                return
-
-            last_error = Exception(resp.text)
-            logger.warning(
-                f"qBittorrent login failed at {mask_ip_address(candidate)}: "
-                f"{resp.text}"
-            )
-
-        if last_error is None:
+        outcome, url, err = try_login_base_urls(
+            self.base_urls,
+            username,
+            password,
+            post_fn=_post,
+            proxies=self.proxies,
+            timeout=self.request_timeout,
+            verify=self.session.verify,
+        )
+        if outcome == LOGIN_SUCCESS and url:
+            self.base_url = url
+            return
+        if err is None:
             raise Exception("Failed to login qBittorrent")
-        raise Exception(f"Failed to login qBittorrent: {last_error}")
+        raise Exception(f"Failed to login qBittorrent: {err}")
 
     def get_torrents(
         self, category: Optional[str] = None, torrent_filter: str = "downloading"
