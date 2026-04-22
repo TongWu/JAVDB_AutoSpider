@@ -165,6 +165,110 @@ class QBittorrentClient:
         resp.raise_for_status()
         return resp.json()
 
+    def test_connection(self) -> bool:
+        """Ping ``/api/v2/app/version`` on ``self.base_url``.
+
+        Returns True when qB responds with 200 or 403 (403 is what qB
+        returns for an unauthenticated /app/version — it still proves the
+        endpoint is reachable)."""
+        try:
+            resp = self.session.get(
+                f"{self.base_url}/api/v2/app/version",
+                **self._request_kwargs(),
+            )
+        except requests.RequestException as exc:
+            logger.warning(
+                f"qBittorrent /app/version ping failed at "
+                f"{mask_ip_address(self.base_url)}: {exc}"
+            )
+            return False
+        return resp.status_code in (200, 403)
+
+    def get_existing_hashes(
+        self,
+        exclude_states: Iterable[str] = ("error", "missingFiles"),
+    ) -> set:
+        """Return a ``set`` of lowercased torrent hashes currently in the
+        client, excluding anything whose state is listed in
+        ``exclude_states`` (default: error / missingFiles).
+
+        On HTTP failure we log a warning and return an empty set, matching
+        the previous qb_uploader behaviour.
+        """
+        exclude = set(exclude_states or ())
+        try:
+            resp = self.session.get(
+                f"{self.base_url}/api/v2/torrents/info",
+                **self._request_kwargs(),
+            )
+        except requests.RequestException as exc:
+            logger.error(f"Error getting torrent list: {exc}")
+            return set()
+
+        if resp.status_code != 200:
+            logger.warning(f"Failed to get torrent list: {resp.status_code}")
+            return set()
+
+        hashes: set = set()
+        for t in resp.json():
+            if t.get("state", "") in exclude:
+                continue
+            h = (t.get("hash") or "").lower()
+            if h:
+                hashes.add(h)
+        return hashes
+
+    def add_torrent(
+        self,
+        magnet_link: str,
+        name: Optional[str] = None,
+        category: Optional[str] = None,
+        save_path: str = "",
+        auto_tmm: bool = True,
+        skip_checking: bool = False,
+        content_layout: str = "Original",
+        ratio_limit: str = "-2",
+        seeding_time_limit: str = "-2",
+        paused: bool = False,
+    ) -> bool:
+        """Add a torrent via qB's ``/api/v2/torrents/add`` endpoint.
+
+        All knobs are keyword-only and optional to keep the shared
+        implementation free of consumer-specific defaults — callers
+        (e.g. qb_uploader) wire the global config values in themselves.
+
+        Returns True on HTTP 200, False otherwise. Network exceptions
+        propagate so callers can decide how to log them.
+        """
+        data = {
+            "urls": magnet_link,
+            "autoTMM": "true" if auto_tmm else "false",
+            "savepath": save_path,
+            "downloadPath": "",
+            "skip_checking": str(bool(skip_checking)).lower(),
+            "contentLayout": content_layout,
+            "ratioLimit": ratio_limit,
+            "seedingTimeLimit": seeding_time_limit,
+            "addPaused": "true" if paused else "false",
+        }
+        if name is not None:
+            data["name"] = name
+        if category is not None:
+            data["category"] = category
+
+        resp = self.session.post(
+            f"{self.base_url}/api/v2/torrents/add",
+            data=data,
+            **self._request_kwargs(),
+        )
+        if resp.status_code == 200:
+            return True
+        logger.error(
+            f"Failed to add torrent (category={category}): "
+            f"status {resp.status_code}"
+        )
+        return False
+
     def get_torrents_multiple_categories(
         self, categories: Iterable[str], torrent_filter: str = "downloading"
     ) -> list:
