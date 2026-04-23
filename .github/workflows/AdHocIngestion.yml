@@ -516,8 +516,9 @@ jobs:
             CATEGORY="$TORRENT_CATEGORY_ADHOC"
           fi
 
-          # Build JSON array of categories for --categories
-          CATEGORIES_JSON=$(printf '["%s"]' "$CATEGORY")
+          # Build JSON array of categories for --categories using Python's json
+          # module so quotes, backslashes, and newlines in CATEGORY are escaped safely.
+          CATEGORIES_JSON=$(CATEGORY="$CATEGORY" python3 -c 'import json, os; print(json.dumps([os.environ["CATEGORY"]]))')
 
           CMD_ARGS=(
             python3 -m apps.cli.qb_file_filter

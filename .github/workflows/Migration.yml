@@ -112,6 +112,12 @@ on:
           - 'self-hosted'
 
   # Allow other workflows (e.g. WeeklyDedup.yml) to invoke this as a reusable workflow.
+  # NOTE: The full authoritative input schema (with descriptions and choice
+  # definitions) lives under `workflow_dispatch` above. The inputs below mirror
+  # that schema with minimal metadata because workflow_call inputs do not
+  # support `type: choice` and do not render descriptions in the UI. When adding
+  # or changing inputs, update `workflow_dispatch` first and keep this block in
+  # sync.
   workflow_call:
     inputs:
       dry_run:
@@ -186,6 +192,9 @@ on:
         required: false
         default: ''
         type: string
+      # Intentionally typed as string for workflow_call (workflow_call does not
+      # support `type: choice`). Callers must pass a valid runner label
+      # (e.g. 'self-hosted' or 'ubuntu-latest').
       runner:
         required: false
         default: 'self-hosted'
@@ -198,7 +207,7 @@ on:
 
 jobs:
   run-migration:
-    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     # GitHub-hosted runners are capped at 6h regardless; self-hosted allows up to ~5 days.
     # Timeout can be overridden via `timeout_minutes` input when invoked through workflow_call.
     timeout-minutes: ${{ inputs.timeout_minutes || 1440 }}
@@ -224,7 +233,7 @@ jobs:
       INPUT_ALIGN_ENQUEUE_QB: ${{ inputs.align_enqueue_qb }}
       INPUT_ALIGN_EXECUTE_DELETE: ${{ inputs.align_execute_delete }}
       INPUT_ALIGN_QB_CATEGORY: ${{ inputs.align_qb_category }}
-      INPUT_RUNNER: ${{ inputs.runner || 'ubuntu-latest' }}
+      INPUT_RUNNER: ${{ inputs.runner || 'self-hosted' }}
 
     steps:
       - name: Checkout repository

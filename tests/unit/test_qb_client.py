@@ -93,8 +93,12 @@ class TestGetTorrents:
 
 class TestGetTorrentsMultipleCategories:
     def test_aggregates_results(self):
-        r1 = MagicMock(); r1.json.return_value = [{'hash': 'h1'}]; r1.raise_for_status = MagicMock()
-        r2 = MagicMock(); r2.json.return_value = [{'hash': 'h2'}]; r2.raise_for_status = MagicMock()
+        r1 = MagicMock()
+        r1.json.return_value = [{'hash': 'h1'}]
+        r1.raise_for_status = MagicMock()
+        r2 = MagicMock()
+        r2.json.return_value = [{'hash': 'h2'}]
+        r2.raise_for_status = MagicMock()
 
         client, session = _make_client(resp_sequence_get=[r1, r2])
         result = client.get_torrents_multiple_categories(
@@ -253,18 +257,21 @@ class TestRemoveCompletedTorrentsKeepFiles:
 
 class TestTestConnection:
     def test_returns_true_on_200(self):
-        resp = MagicMock(); resp.status_code = 200
+        resp = MagicMock()
+        resp.status_code = 200
         client, session = _make_client(resp_sequence_get=[resp])
         assert client.test_connection() is True
         assert session.get.call_args.args[0].endswith('/api/v2/app/version')
 
     def test_returns_true_on_403(self):
-        resp = MagicMock(); resp.status_code = 403
+        resp = MagicMock()
+        resp.status_code = 403
         client, _ = _make_client(resp_sequence_get=[resp])
         assert client.test_connection() is True
 
     def test_returns_false_on_500(self):
-        resp = MagicMock(); resp.status_code = 500
+        resp = MagicMock()
+        resp.status_code = 500
         client, _ = _make_client(resp_sequence_get=[resp])
         assert client.test_connection() is False
 
@@ -317,7 +324,8 @@ class TestGetExistingHashes:
         assert client.get_existing_hashes(exclude_states=('pausedUP',)) == {'b'}
 
     def test_returns_empty_set_on_http_error(self):
-        resp = MagicMock(); resp.status_code = 500
+        resp = MagicMock()
+        resp.status_code = 500
         client, _ = _make_client(resp_sequence_get=[resp])
         assert client.get_existing_hashes() == set()
 
@@ -349,7 +357,8 @@ class TestGetExistingHashes:
 
 class TestAddTorrent:
     def test_sends_all_defaults_and_returns_true_on_200(self):
-        resp = MagicMock(); resp.status_code = 200
+        resp = MagicMock()
+        resp.status_code = 200
         client, session = _make_client(resp_sequence_post=[resp])
 
         ok = client.add_torrent(
@@ -363,7 +372,7 @@ class TestAddTorrent:
         assert call.args[0].endswith('/api/v2/torrents/add')
         data = call.kwargs['data']
         assert data['urls'] == 'magnet:?xt=urn:btih:abc'
-        assert data['name'] == 'TEST-001'
+        assert data['rename'] == 'TEST-001'
         assert data['category'] == 'JavDB'
         assert data['savepath'] == '/downloads'
         # Defaults
@@ -372,33 +381,37 @@ class TestAddTorrent:
         assert data['contentLayout'] == 'Original'
         assert data['ratioLimit'] == '-2'
         assert data['seedingTimeLimit'] == '-2'
-        assert data['addPaused'] == 'false'
+        assert data['paused'] == 'false'
 
     def test_paused_toggle(self):
-        resp = MagicMock(); resp.status_code = 200
+        resp = MagicMock()
+        resp.status_code = 200
         client, session = _make_client(resp_sequence_post=[resp])
 
         client.add_torrent('magnet:?xt=urn:btih:x', paused=True)
-        assert session.post.call_args.kwargs['data']['addPaused'] == 'true'
+        assert session.post.call_args.kwargs['data']['paused'] == 'true'
 
     def test_skip_checking_toggle(self):
-        resp = MagicMock(); resp.status_code = 200
+        resp = MagicMock()
+        resp.status_code = 200
         client, session = _make_client(resp_sequence_post=[resp])
 
         client.add_torrent('magnet:?xt=urn:btih:x', skip_checking=True)
         assert session.post.call_args.kwargs['data']['skip_checking'] == 'true'
 
     def test_omits_name_and_category_when_none(self):
-        resp = MagicMock(); resp.status_code = 200
+        resp = MagicMock()
+        resp.status_code = 200
         client, session = _make_client(resp_sequence_post=[resp])
 
         client.add_torrent('magnet:?xt=urn:btih:x')
         data = session.post.call_args.kwargs['data']
-        assert 'name' not in data
+        assert 'rename' not in data
         assert 'category' not in data
 
     def test_returns_false_on_non_200(self):
-        resp = MagicMock(); resp.status_code = 400
+        resp = MagicMock()
+        resp.status_code = 400
         client, _ = _make_client(resp_sequence_post=[resp])
         assert client.add_torrent('magnet:?xt=urn:btih:x') is False
 
@@ -410,7 +423,8 @@ class TestAddTorrent:
 
 class TestTryPingBaseUrls:
     def test_returns_first_reachable_url_200(self):
-        resp = MagicMock(); resp.status_code = 200
+        resp = MagicMock()
+        resp.status_code = 200
         get_fn = MagicMock(return_value=resp)
 
         url, err = try_ping_base_urls(
@@ -422,7 +436,8 @@ class TestTryPingBaseUrls:
         assert get_fn.call_count == 1
 
     def test_403_counts_as_reachable(self):
-        resp = MagicMock(); resp.status_code = 403
+        resp = MagicMock()
+        resp.status_code = 403
         get_fn = MagicMock(return_value=resp)
 
         url, err = try_ping_base_urls(['https://qb.internal:8080'], get_fn=get_fn)
@@ -507,6 +522,8 @@ class TestTryLoginBaseUrls:
         assert err is None
 
     def test_credential_rejection_stops_trying(self):
+        # qBittorrent returns body "Fails." on wrong credentials; that is
+        # the only signal we treat as a definitive credential rejection.
         bad = MagicMock(status_code=403, text='Fails.')
         post_fn = MagicMock(return_value=bad)
 
@@ -517,17 +534,38 @@ class TestTryLoginBaseUrls:
         assert outcome == LOGIN_REJECTED
         assert url is None
         assert err is not None
-        # Must not retry on alternative URLs after a 401/403.
+        # Must not retry on alternative URLs after a qB "Fails." response.
         assert post_fn.call_count == 1
 
-    def test_401_also_rejected(self):
+    def test_401_without_fails_text_falls_back(self):
+        # Bare 401/403 without qB's "Fails." body may come from a
+        # front-end (reverse proxy / WAF) in front of the primary URL.
+        # We should keep trying the remaining candidates instead of
+        # hard-failing as credential rejection.
+        import requests as _requests
         bad = MagicMock(status_code=401, text='Unauthorized')
+        good = MagicMock(status_code=200, text='Ok.')
+        post_fn = MagicMock(side_effect=[bad, good])
+
+        outcome, url, _ = try_login_base_urls(
+            ['https://qb.internal:8080', 'http://qb.internal:8080'],
+            'a', 'b', post_fn=post_fn,
+        )
+        assert outcome == LOGIN_SUCCESS
+        assert url == 'http://qb.internal:8080'
+        assert post_fn.call_count == 2
+
+    def test_fails_text_with_200_still_rejected(self):
+        # Some qB versions return 200 with body "Fails." for wrong creds.
+        bad = MagicMock(status_code=200, text='Fails.')
         post_fn = MagicMock(return_value=bad)
 
         outcome, _, _ = try_login_base_urls(
-            ['https://qb.internal:8080'], 'a', 'b', post_fn=post_fn,
+            ['https://qb.internal:8080', 'http://qb.internal:8080'],
+            'a', 'b', post_fn=post_fn,
         )
         assert outcome == LOGIN_REJECTED
+        assert post_fn.call_count == 1
 
     def test_all_candidates_unreachable(self):
         import requests as _requests
