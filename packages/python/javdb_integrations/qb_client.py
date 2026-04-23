@@ -172,10 +172,17 @@ def try_login_base_urls(
             f"Login failed with status code {response.status_code} at "
             f"{masked_url}"
         )
-        if response.status_code in {401, 403} or (
-            isinstance(response.text, str) and response.text.strip() == "Fails."
-        ):
-            # Credentials rejected — no point trying other URLs.
+        # Only qBittorrent's own credential-rejection response ("Fails.") is
+        # treated as a definitive credentials-wrong signal that should stop
+        # the URL-fallback walk. Bare 401/403 status codes are deliberately
+        # NOT treated as credential rejection here, because an edge
+        # front-end (e.g. a reverse proxy or WAF in front of HTTPS) can
+        # return 403 while a later HTTP candidate would actually accept
+        # the login. Stopping early in that case would regress the
+        # HTTPS→HTTP fallback that qb_base_url_candidates() exists to
+        # enable. See review note: "403 on first URL should not hard-fail
+        # when later candidates may succeed."
+        if isinstance(response.text, str) and response.text.strip() == "Fails.":
             return LOGIN_REJECTED, None, Exception(response.text)
 
         last_error = Exception(response.text)
@@ -203,13 +210,22 @@ class QBittorrentClient:
         request_timeout: Optional[float] = None,
     ) -> "QBittorrentClient":
         """Wrap an already-authenticated ``requests.Session`` without
-        performing a new login. Used by qb_file_filter, which manages
-        its own session+login lifecycle but wants to reuse the shared
-        API helpers."""
+        performing a new login. Used by qb_file_filter / qb_uploader,
+        which manage their own session+login lifecycle but want to reuse
+        the shared API helpers.
+
+        The session's ``verify`` flag is aligned with :func:`qb_verify_tls`
+        so that deployments using self-signed or internal-CA certificates
+        (``QB_VERIFY_TLS=false``) continue to work for follow-up API
+        calls made through the shared client — otherwise
+        :class:`requests.Session` defaults to verifying TLS regardless of
+        how the caller performed the initial login.
+        """
         obj = cls.__new__(cls)
         obj.base_urls = [base_url.rstrip("/")]
         obj.base_url = obj.base_urls[0]
         obj.session = session
+        obj.session.verify = qb_verify_tls()
         obj.use_proxy = False
         obj.proxies = proxies
         obj.request_timeout = request_timeout
@@ -384,10 +400,16 @@ class QBittorrentClient:
             "contentLayout": content_layout,
             "ratioLimit": ratio_limit,
             "seedingTimeLimit": seeding_time_limit,
-            "addPaused": "true" if paused else "false",
+            # qBittorrent Web API uses "paused" (not "addPaused") on
+            # /api/v2/torrents/add. On qB v5.1.0+ the server-side semantics
+            # were reworked around "is_stopped"; see issue #22766. Revisit
+            # this assignment if we bump the minimum supported qB version.
+            "paused": "true" if paused else "false",
         }
         if name is not None:
-            data["name"] = name
+            # /api/v2/torrents/add names the override field "rename"; "name"
+            # is ignored by qB and has no effect on the resulting torrent.
+            data["rename"] = name
         if category is not None:
             data["category"] = category
 
@@ -545,12 +567,20 @@ def is_torrent_exists(magnet_link: str, existing_hashes: Iterable[str]) -> bool:
     :meth:`QBittorrentClient.get_existing_hashes`).
 
     The magnet's info-hash is compared case-insensitively against the
-    given collection."""
+    given collection. ``existing_hashes`` may be any ``Iterable[str]``
+    (set, list, generator…); it is normalised to a lowercased ``set`` so
+    membership lookup is O(1) and case-insensitive, and generators are
+    consumed exactly once.
+    """
     torrent_hash = extract_hash_from_magnet(magnet_link)
     if not torrent_hash:
         return False
-    # ``existing_hashes`` may be a set (O(1)) or a list — either works.
-    return torrent_hash in existing_hashes
+    if existing_hashes is None:
+        return False
+    normalised = {
+        h.lower() for h in existing_hashes if isinstance(h, str) and h
+    }
+    return torrent_hash.lower() in normalised
 
 
 __all__ = [
