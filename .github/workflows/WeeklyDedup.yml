@@ -10,7 +10,8 @@ permissions:
 
 on:
   schedule:
-    # Sunday 04:00 UTC+8 = Saturday 20:00 UTC
+    # Sunday 20:00 UTC (= Monday 04:00 UTC+8 / SGT).
+    # DOW 0 = Sunday in cron, so this fires at 20:00 UTC on Sundays.
     - cron: '0 20 * * 0'
 
   workflow_dispatch:
