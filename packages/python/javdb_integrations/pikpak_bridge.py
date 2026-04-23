@@ -177,13 +177,27 @@ class QBittorrentClient(_SharedQBittorrentClient):
     the module-level import path working and wires the proxy helper that
     pikpak_bridge uses ('pikpak' module)."""
 
-    def __init__(self, base_urls, username, password, use_proxy=False):
+    def __init__(
+        self,
+        base_urls,
+        username,
+        password,
+        use_proxy=False,
+        request_timeout=None,
+    ):
+        # Default to the module's REQUEST_TIMEOUT when the caller didn't
+        # pass one explicitly, so qB/proxy HTTP calls don't hang forever
+        # on flaky networks. Keep ``None`` as an opt-out (requests' own
+        # default).
+        if request_timeout is None:
+            request_timeout = cfg('REQUEST_TIMEOUT', 30)
         super().__init__(
             base_urls,
             username,
             password,
             use_proxy=use_proxy,
             proxies_getter=lambda flag=use_proxy: get_proxies_dict('pikpak', flag),
+            request_timeout=request_timeout,
         )
 
 
