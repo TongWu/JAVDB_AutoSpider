@@ -24,30 +24,30 @@ on:
   # block for the public repo (the BEGIN / END markers are preserved), so in
   # the public repo only workflow_dispatch remains active while this config
   # stays visible for reference.
-  push:
-    branches:
-      - main
-    paths:
+  # push:
+    # branches:
+      # - main
+    # paths:
       # Python entry points & CLI modules
-      - 'apps/**/*.py'
-      - 'pipeline.py'
-      - 'compat.py'
+      # - 'apps/**/*.py'
+      # - 'pipeline.py'
+      # - 'compat.py'
       # Python libraries used by daily & adhoc ingestion
-      - 'packages/python/**/*.py'
-      - 'utils/**/*.py'
-      - 'scripts/**/*.py'
+      # - 'packages/python/**/*.py'
+      # - 'utils/**/*.py'
+      # - 'scripts/**/*.py'
       # Python dependency manifest
-      - 'requirements.txt'
+      # - 'requirements.txt'
       # Rust extension (affects spider / dedup / rclone / history ops)
-      - 'packages/rust/javdb_rust_core/**/*.rs'
-      - 'packages/rust/javdb_rust_core/Cargo.toml'
-      - 'packages/rust/javdb_rust_core/Cargo.lock'
-      - 'packages/rust/javdb_rust_core/pyproject.toml'
+      # - 'packages/rust/javdb_rust_core/**/*.rs'
+      # - 'packages/rust/javdb_rust_core/Cargo.toml'
+      # - 'packages/rust/javdb_rust_core/Cargo.lock'
+      # - 'packages/rust/javdb_rust_core/pyproject.toml'
       # The workflow itself
-      - '.github/workflows/TestIngestion.yml'
-      - '.github/actions/setup-python-env/**'
-      - '.github/actions/restore-encrypted-config/**'
-      - '.github/actions/install-rust-wheel/**'
+      # - '.github/workflows/TestIngestion.yml'
+      # - '.github/actions/setup-python-env/**'
+      # - '.github/actions/restore-encrypted-config/**'
+      # - '.github/actions/install-rust-wheel/**'
   # <<<< PRIVATE_ONLY_PUSH_END
 
   workflow_dispatch:
