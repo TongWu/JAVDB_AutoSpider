@@ -394,8 +394,9 @@ jobs:
           set -e
           set -o pipefail
 
-          # Build JSON array of categories for --categories
-          CATEGORIES_JSON=$(printf '["%s"]' "$TORRENT_CATEGORY")
+          # Build JSON array of categories for --categories using Python's json
+          # module so quotes, backslashes, and newlines in TORRENT_CATEGORY are escaped safely.
+          CATEGORIES_JSON=$(TORRENT_CATEGORY="$TORRENT_CATEGORY" python3 -c 'import json, os; print(json.dumps([os.environ["TORRENT_CATEGORY"]]))')
 
           CMD_ARGS=(
             python3 -m apps.cli.qb_file_filter
