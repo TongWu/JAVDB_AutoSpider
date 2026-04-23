@@ -295,3 +295,14 @@ jobs:
               echo "Records: $((LINES - 1))" >> $GITHUB_STEP_SUMMARY
             fi
           fi
+
+  # After the weekly dedup finishes, run Migration.yml's align_inventory_history
+  # task with default settings. Capped at 10 hours (600 minutes).
+  align-inventory-history:
+    needs: weekly-dedup
+    uses: ./.github/workflows/Migration.yml
+    secrets: inherit
+    with:
+      align_inventory_history: true
+      runner: ${{ inputs.runner || 'self-hosted' }}
+      timeout_minutes: 600
