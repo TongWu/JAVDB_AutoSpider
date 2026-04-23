@@ -232,85 +232,77 @@ def initialize_proxy_helper(proxy_override):
 
 
 def test_qbittorrent_connection(use_proxy=False):
-    """Test if qBittorrent is accessible"""
+    """Test if qBittorrent is accessible.
+
+    Thin wrapper around :func:`qb_client.try_ping_base_urls`."""
+    from packages.python.javdb_integrations.qb_client import try_ping_base_urls
+
     proxies = get_proxies_dict('qbittorrent', use_proxy)
-    primary_url = QB_BASE_URL_CANDIDATES[0]
-    last_error = None
-
-    for base_url in _ordered_qb_base_urls():
-        masked_url = masked_qb_base_url(
-            base_url,
-            allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
-        )
-        try:
-            logger.info(f"Testing connection to qBittorrent at {masked_url}")
-            response = requests.get(
-                f'{base_url}/api/v2/app/version',
-                timeout=10,
-                proxies=proxies,
-                verify=QB_VERIFY_TLS,
-            )
-            if response.status_code == 200 or response.status_code == 403:
-                _set_active_qb_base_url(base_url)
-                if base_url != primary_url:
-                    logger.info(f"qBittorrent is accessible after retrying over HTTP at {masked_url}")
-                else:
-                    logger.info("qBittorrent is accessible")
-                return True
-            logger.warning(f"qBittorrent responded with status code {response.status_code} at {masked_url}")
-        except requests.RequestException as e:
-            last_error = e
-            logger.warning(
-                f"Connection attempt failed for {masked_url}: {mask_error(str(e))}"
-            )
-
-    if last_error is not None:
-        logger.error(f"Cannot connect to qBittorrent: {mask_error(str(last_error))}")
+    url, _ = try_ping_base_urls(
+        _ordered_qb_base_urls(),
+        get_fn=requests.get,
+        allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
+        proxies=proxies,
+        timeout=10,
+        verify=QB_VERIFY_TLS,
+    )
+    if url:
+        _set_active_qb_base_url(url)
+        return True
     return False
 
 
 def login_to_qbittorrent(session, use_proxy=False):
-    """Login to qBittorrent web UI"""
-    login_data = {
-        'username': QB_USERNAME,
-        'password': QB_PASSWORD
-    }
-    
+    """Login to qBittorrent web UI.
+
+    Thin wrapper around :func:`qb_client.try_login_base_urls`."""
+    from packages.python.javdb_integrations.qb_client import (
+        LOGIN_SUCCESS,
+        try_login_base_urls,
+    )
+
     proxies = get_proxies_dict('qbittorrent', use_proxy)
-    
-    last_error = None
-
-    for base_url in _ordered_qb_base_urls():
-        login_url = f'{base_url}/api/v2/auth/login'
-        masked_url = masked_qb_base_url(
-            base_url,
-            allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
-        )
-        try:
-            logger.info(f"Attempting to login to qBittorrent at {masked_url} as {mask_username(QB_USERNAME)}")
-            response = session.post(
-                login_url,
-                data=login_data,
-                timeout=REQUEST_TIMEOUT,
-                proxies=proxies,
-                verify=QB_VERIFY_TLS,
-            )
-
-            if response.status_code == 200 and response.text == 'Ok.':
-                _set_active_qb_base_url(base_url)
-                logger.info("Successfully logged in to qBittorrent")
-                return True
-
-            logger.error(f"Login failed with status code {response.status_code} at {masked_url}")
-            if response.status_code in {401, 403} or response.text.strip() == 'Fails.':
-                return False
-        except requests.RequestException as e:
-            last_error = e
-            logger.warning(f"Login error at {masked_url}: {mask_error(str(e))}")
-
-    if last_error is not None:
-        logger.error(f"Login error: {mask_error(str(last_error))}")
+    outcome, url, _ = try_login_base_urls(
+        _ordered_qb_base_urls(),
+        QB_USERNAME,
+        QB_PASSWORD,
+        post_fn=session.post,
+        allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
+        proxies=proxies,
+        timeout=REQUEST_TIMEOUT,
+        verify=QB_VERIFY_TLS,
+    )
+    if outcome == LOGIN_SUCCESS and url:
+        _set_active_qb_base_url(url)
+        return True
     return False
+
+
+def cleanup_completed_torrents(session, categories, dry_run=False, use_proxy=False):
+    """Remove completed/seeding torrent entries for the given categories
+    while keeping files on disk.
+
+    Thin adapter that wires ``qb_file_filter``'s already-authenticated
+    session into the shared helper
+    ``packages.python.javdb_integrations.qb_client.remove_completed_torrents_keep_files``.
+    Returns a stats dict ``{'scanned', 'deleted', 'hashes'}``.
+    """
+    from packages.python.javdb_integrations.qb_client import (
+        QBittorrentClient as _SharedQBClient,
+        remove_completed_torrents_keep_files as _shared_remove,
+    )
+
+    if not categories:
+        logger.info("No categories provided for completed-torrent cleanup — skipping.")
+        return {'scanned': 0, 'deleted': 0, 'hashes': []}
+
+    qb_client = _SharedQBClient.from_existing_session(
+        session,
+        base_url=QB_BASE_URL,
+        proxies=get_proxies_dict('qbittorrent', use_proxy),
+        request_timeout=REQUEST_TIMEOUT,
+    )
+    return _shared_remove(qb_client, list(categories), dry_run=dry_run)
 
 
 def get_recent_torrents(session, days=2, category=None, categories=None, use_proxy=False):
@@ -766,6 +758,36 @@ def main():
         logger.error("Failed to login to qBittorrent.")
         sys.exit(1)
     
+    # Compute the set of categories used for the completed-torrent cleanup.
+    # We reuse whatever the user passed for filtering so that the clean-up
+    # scope matches the filter scope.
+    cleanup_categories = categories_list if categories_list else (
+        [args.category] if args.category else []
+    )
+
+    def _run_completed_cleanup():
+        """Run completed-torrent cleanup (remove entry, keep files) on the same
+        categories the filter was asked to process. Delegates to the shared
+        implementation in
+        ``packages.python.javdb_integrations.qb_client``."""
+        if not cleanup_categories:
+            logger.info(
+                "Skipping completed-torrent cleanup: no categories specified "
+                "(pass --categories or --category to enable)."
+            )
+            return
+        logger.info("-" * 70)
+        logger.info(
+            f"Running completed-torrent cleanup for categories {cleanup_categories} "
+            f"(remove torrent entry, keep files on disk)..."
+        )
+        cleanup_completed_torrents(
+            session,
+            cleanup_categories,
+            dry_run=args.dry_run,
+            use_proxy=proxy_override,
+        )
+
     # Get recent torrents
     torrents = get_recent_torrents(
         session,
@@ -774,7 +796,7 @@ def main():
         categories=categories_list,
         use_proxy=proxy_override
     )
-    
+
     if not torrents:
         logger.info("No recent torrents found to process.")
         print_summary({
@@ -789,8 +811,11 @@ def main():
             'errors': 0,
             'details': []
         }, args.min_size, args.days, args.dry_run, args.delete_local_files)
+        # Still run the cleanup — completed torrents may not overlap with the
+        # ``recent`` window but we still want to free seeding slots each run.
+        _run_completed_cleanup()
         return
-    
+
     # Filter small files
     stats = filter_small_files(
         session,
@@ -800,16 +825,18 @@ def main():
         use_proxy=proxy_override,
         delete_local_files_flag=args.delete_local_files
     )
-    
+
     # Print summary
     print_summary(stats, args.min_size, args.days, args.dry_run, args.delete_local_files)
-    
+
+    _run_completed_cleanup()
+
     # Exit with error code only if there were actual errors (not pending metadata)
     # Pending metadata is a normal condition for recently added torrents
     if stats['errors'] > 0 and stats['torrents_processed'] == 0:
         logger.error("All torrent processing failed due to errors!")
         sys.exit(1)
-    
+
     # Log info if all torrents are pending metadata (this is normal, not an error)
     if stats.get('pending_metadata', 0) > 0 and stats['torrents_processed'] == 0 and stats['errors'] == 0:
         logger.info("All torrents are waiting for metadata. They will be processed on the next run.")

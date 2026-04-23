@@ -75,6 +75,10 @@ from packages.python.javdb_platform.qb_config import (
     qb_base_url_candidates,
     qb_verify_tls,
 )
+from packages.python.javdb_integrations.qb_client import (
+    QBittorrentClient as _SharedQBittorrentClient,
+    remove_completed_torrents_keep_files as _shared_remove_completed,
+)
 
 QB_ALLOW_INSECURE_HTTP = qb_allow_insecure_http(QB_ALLOW_INSECURE_HTTP)
 
@@ -165,103 +169,48 @@ def initialize_proxy_helper(proxy_override):
 # --------------------------
 # qBittorrent Client
 # --------------------------
-class QBittorrentClient:
-    def __init__(self, base_urls, username, password, use_proxy=False):
-        if isinstance(base_urls, str):
-            self.base_urls = [base_urls.rstrip('/')]
-        else:
-            self.base_urls = [str(url).rstrip('/') for url in base_urls if str(url).strip()]
-        self.base_url = self.base_urls[0]
-        self.session = requests.Session()
-        self.session.verify = qb_verify_tls()
-        self.use_proxy = use_proxy
-        self.proxies = get_proxies_dict('pikpak', use_proxy)
-        self.login(username, password)
+class QBittorrentClient(_SharedQBittorrentClient):
+    """Backwards-compatible alias of the shared ``QBittorrentClient``.
 
-    def login(self, username, password):
-        last_error = None
-        primary_url = self.base_urls[0]
+    The pikpak_bridge historically owned this class; it now lives in
+    ``packages.python.javdb_integrations.qb_client``. This subclass keeps
+    the module-level import path working and wires the proxy helper that
+    pikpak_bridge uses ('pikpak' module)."""
 
-        for candidate in self.base_urls:
-            try:
-                resp = self.session.post(
-                    f"{candidate}/api/v2/auth/login",
-                    data={
-                        'username': username,
-                        'password': password
-                    },
-                    proxies=self.proxies,
-                )
-            except requests.RequestException as exc:
-                last_error = exc
-                logger.warning(f"qBittorrent login attempt failed at {mask_ip_address(candidate)}: {exc}")
-                continue
-
-            if resp.status_code == 200 and resp.text == 'Ok.':
-                self.base_url = candidate
-                masked_url = mask_ip_address(self.base_url)
-                if candidate != primary_url:
-                    logger.info(f"qBittorrent HTTPS login failed; retried successfully over HTTP at {masked_url}.")
-                logger.info(f"Logged into qBittorrent at {masked_url} as {mask_username(username)} successfully.")
-                return
-
-            last_error = Exception(resp.text)
-            logger.warning(f"qBittorrent login failed at {mask_ip_address(candidate)}: {resp.text}")
-
-        if last_error is None:
-            raise Exception("Failed to login qBittorrent")
-        raise Exception(f"Failed to login qBittorrent: {last_error}")
-
-    def get_torrents(self, category, torrent_filter="downloading"):
-        resp = self.session.get(f"{self.base_url}/api/v2/torrents/info",
-                                params={"category": category, "filter": torrent_filter},
-                                proxies=self.proxies)
-        resp.raise_for_status()
-        return resp.json()
-
-    def get_torrents_multiple_categories(self, categories, torrent_filter="downloading"):
-        """Get torrents from multiple categories."""
-        all_torrents = []
-        for category in categories:
-            try:
-                torrents = self.get_torrents(category, torrent_filter=torrent_filter)
-                logger.debug(f"Found {len(torrents)} torrents in category '{category}' (filter={torrent_filter})")
-                all_torrents.extend(torrents)
-            except Exception as e:
-                logger.warning(f"Failed to get torrents from category '{category}': {e}")
-        return all_torrents
-
-    def delete_torrents(self, hashes, delete_files=True):
-        resp = self.session.post(f"{self.base_url}/api/v2/torrents/delete", data={
-            'hashes': '|'.join(hashes),
-            'deleteFiles': 'true' if delete_files else 'false'
-        }, proxies=self.proxies)
-        resp.raise_for_status()
-        logger.info(f"Deleted {len(hashes)} torrents from qBittorrent.")
-        return True
-
-
-def remove_completed_torrents_keep_files(qb_client, categories, dry_run=False, qb_label="qBittorrent"):
-    """
-    Remove completed (100%) torrents: remove torrent entries only, keep content files on disk.
-    Runs on each configured qBittorrent (primary and optional adhoc) before PikPak upload.
-    """
-    completed = qb_client.get_torrents_multiple_categories(categories, torrent_filter="completed")
-    if not completed:
-        logger.info(f"{qb_label}: no completed torrents to remove before PikPak upload.")
-        return
-    hashes = [t["hash"] for t in completed]
-    if dry_run:
-        sample = ", ".join(t.get("name", "") for t in completed[:5])
-        extra = " …" if len(completed) > 5 else ""
-        logger.info(
-            f"[Dry-Run] Would remove {len(hashes)} completed torrent(s) from {qb_label} "
-            f"(torrent only, files kept). Sample: {sample}{extra}"
+    def __init__(
+        self,
+        base_urls,
+        username,
+        password,
+        use_proxy=False,
+        request_timeout=None,
+    ):
+        # Default to the module's REQUEST_TIMEOUT when the caller didn't
+        # pass one explicitly, so qB/proxy HTTP calls don't hang forever
+        # on flaky networks. Keep ``None`` as an opt-out (requests' own
+        # default).
+        if request_timeout is None:
+            request_timeout = cfg('REQUEST_TIMEOUT', 30)
+        super().__init__(
+            base_urls,
+            username,
+            password,
+            use_proxy=use_proxy,
+            proxies_getter=lambda flag=use_proxy: get_proxies_dict('pikpak', flag),
+            request_timeout=request_timeout,
         )
-        return
-    qb_client.delete_torrents(hashes, delete_files=False)
-    logger.info(
-        f"{qb_label}: removed {len(hashes)} completed torrent(s) from client (files kept on disk)."
+
+
+def remove_completed_torrents_keep_files(
+    qb_client, categories, dry_run=False, qb_label="qBittorrent"
+):
+    """Thin wrapper around the shared cleanup implementation, kept here so
+    existing callers and tests that import it from ``pikpak_bridge``
+    continue to work. See
+    ``packages.python.javdb_integrations.qb_client.remove_completed_torrents_keep_files``
+    for the canonical implementation."""
+    return _shared_remove_completed(
+        qb_client, categories, dry_run=dry_run, qb_label=qb_label
     )
 
 

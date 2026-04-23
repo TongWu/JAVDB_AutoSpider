@@ -46,7 +46,7 @@ on:
       enable_dedup:
         description: 'Enable rclone dedup (detect + execute)'
         required: false
-        default: true
+        default: false
         type: boolean
       enable_redownload:
         description: 'Enable torrent re-download (洗版) when a same-category torrent is significantly larger'
@@ -59,13 +59,8 @@ on:
         default: '0.30'
         type: string
   # schedule: # DISABLED FOR PUBLIC REPO
-<<<<<<< dev
     # Run daily at 14:00 UTC (22:00 Beijing Time)
     # - cron: '00 14 * * *'
-=======
-    # Run daily at 15:15 UTC (23:15 Beijing Time)
-    # - cron: '15 15 * * *'
->>>>>>> main
 
 jobs:
   # =============================================================================
@@ -387,6 +382,33 @@ jobs:
           
           echo "Executing: ${CMD_ARGS[*]}"
           "${CMD_ARGS[@]}"
+
+      - name: Step 2b - Run qBittorrent File Filter
+        id: file_filter
+        if: ${{ success() && steps.uploader.outcome == 'success' }}
+        env:
+          # Filter/clean-up scope = the category the uploader just used for daily mode
+          TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY || 'JavDB' }}
+          MIN_SIZE_MB: ${{ vars.QB_FILE_FILTER_MIN_SIZE_MB || '100' }}
+        run: |
+          set -e
+          set -o pipefail
+
+          # Build JSON array of categories for --categories using Python's json
+          # module so quotes, backslashes, and newlines in TORRENT_CATEGORY are escaped safely.
+          CATEGORIES_JSON=$(TORRENT_CATEGORY="$TORRENT_CATEGORY" python3 -c 'import json, os; print(json.dumps([os.environ["TORRENT_CATEGORY"]]))')
+
+          CMD_ARGS=(
+            python3 -m apps.cli.qb_file_filter
+            --min-size "$MIN_SIZE_MB"
+            --days 2
+            --categories "$CATEGORIES_JSON"
+            --delete-local-files
+          )
+
+          echo "Executing: ${CMD_ARGS[*]}"
+          "${CMD_ARGS[@]}"
+        continue-on-error: true
 
       - name: Step 3 - Run PikPak Bridge
         id: pikpak

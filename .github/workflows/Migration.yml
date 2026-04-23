@@ -111,11 +111,106 @@ on:
           - 'ubuntu-latest'
           - 'self-hosted'
 
+  # Allow other workflows (e.g. WeeklyDedup.yml) to invoke this as a reusable workflow.
+  # NOTE: The full authoritative input schema (with descriptions and choice
+  # definitions) lives under `workflow_dispatch` above. The inputs below mirror
+  # that schema with minimal metadata because workflow_call inputs do not
+  # support `type: choice` and do not render descriptions in the UI. When adding
+  # or changing inputs, update `workflow_dispatch` first and keep this block in
+  # sync.
+  workflow_call:
+    inputs:
+      dry_run:
+        required: false
+        default: false
+        type: boolean
+      backup:
+        required: false
+        default: false
+        type: boolean
+      verify:
+        required: false
+        default: false
+        type: boolean
+      skip_schema:
+        required: false
+        default: false
+        type: boolean
+      normalize_datetimes:
+        required: false
+        default: false
+        type: boolean
+      backfill_actors:
+        required: false
+        default: false
+        type: boolean
+      align_inventory_history:
+        required: false
+        default: false
+        type: boolean
+      backfill_limit:
+        required: false
+        default: '0'
+        type: string
+      no_proxy:
+        required: false
+        default: false
+        type: boolean
+      use_cf_bypass:
+        required: false
+        default: false
+        type: boolean
+      align_limit_per_worker:
+        required: false
+        default: '0'
+        type: string
+      align_codes:
+        required: false
+        default: ''
+        type: string
+      align_no_proxy:
+        required: false
+        default: false
+        type: boolean
+      align_no_login:
+        required: false
+        default: false
+        type: boolean
+      align_shuffle:
+        required: false
+        default: true
+        type: boolean
+      align_enqueue_qb:
+        required: false
+        default: true
+        type: boolean
+      align_execute_delete:
+        required: false
+        default: false
+        type: boolean
+      align_qb_category:
+        required: false
+        default: ''
+        type: string
+      # Intentionally typed as string for workflow_call (workflow_call does not
+      # support `type: choice`). Callers must pass a valid runner label
+      # (e.g. 'self-hosted' or 'ubuntu-latest').
+      runner:
+        required: false
+        default: 'self-hosted'
+        type: string
+      timeout_minutes:
+        description: 'Job timeout in minutes (caller override)'
+        required: false
+        default: 1440
+        type: number
+
 jobs:
   run-migration:
-    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     # GitHub-hosted runners are capped at 6h regardless; self-hosted allows up to ~5 days.
-    timeout-minutes: 1440
+    # Timeout can be overridden via `timeout_minutes` input when invoked through workflow_call.
+    timeout-minutes: ${{ inputs.timeout_minutes || 1440 }}
     environment: Production
     env:
       TZ: Asia/Singapore
@@ -138,7 +233,7 @@ jobs:
       INPUT_ALIGN_ENQUEUE_QB: ${{ inputs.align_enqueue_qb }}
       INPUT_ALIGN_EXECUTE_DELETE: ${{ inputs.align_execute_delete }}
       INPUT_ALIGN_QB_CATEGORY: ${{ inputs.align_qb_category }}
-      INPUT_RUNNER: ${{ inputs.runner || 'ubuntu-latest' }}
+      INPUT_RUNNER: ${{ inputs.runner || 'self-hosted' }}
 
     steps:
       - name: Checkout repository
