@@ -165,6 +165,13 @@ jobs:
           VAR_RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
           VAR_RCLONE_FOLDER_PATH: ${{ vars.RCLONE_FOLDER_PATH }}
           VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
+          # D1 / Cloudflare (only required when STORAGE_BACKEND in {d1,dual})
+          VAR_STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
+          VAR_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VAR_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          VAR_D1_HISTORY_DB_ID: ${{ secrets.D1_HISTORY_DB_ID }}
+          VAR_D1_REPORTS_DB_ID: ${{ secrets.D1_REPORTS_DB_ID }}
+          VAR_D1_OPERATIONS_DB_ID: ${{ secrets.D1_OPERATIONS_DB_ID }}
         run: python3 -m apps.cli.config_generator --github-actions
 
       - name: Pull latest changes from remote
@@ -237,12 +244,10 @@ jobs:
       # ── Storage backend selection (sqlite | d1 | dual) ──
       # Set GitHub Variable STORAGE_BACKEND=dual to mirror writes to D1 and
       # serve reads from D1 while still committing reports/*.db to git LFS.
+      # Cloudflare/D1 credentials live in config.py (rendered by setup job
+      # from secrets) — we only surface STORAGE_BACKEND here so the
+      # downstream `if:` gates can short-circuit cheaply.
       STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_API_TOKEN:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      D1_HISTORY_DB_ID:      ${{ secrets.D1_HISTORY_DB_ID }}
-      D1_REPORTS_DB_ID:      ${{ secrets.D1_REPORTS_DB_ID }}
-      D1_OPERATIONS_DB_ID:   ${{ secrets.D1_OPERATIONS_DB_ID }}
     
     steps:
       - name: Checkout repository
@@ -456,7 +461,10 @@ jobs:
         continue-on-error: true
 
       - name: Backup D1 databases to Google Drive
-        if: always() && env.STORAGE_BACKEND != 'sqlite' && env.CLOUDFLARE_API_TOKEN != ''
+        # Gated only on backend selection — if STORAGE_BACKEND is dual/d1
+        # but CF creds are missing the action will fail loudly, which is
+        # the right signal (mis-configuration must not silently skip backup).
+        if: always() && env.STORAGE_BACKEND != 'sqlite'
         uses: ./.github/actions/d1-backup-to-gdrive
         with:
           instance-name: 'DailyIngestion'
