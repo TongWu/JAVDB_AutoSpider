@@ -202,16 +202,6 @@ jobs:
           echo "Running: ${CMD[*]}"
           "${CMD[@]}"
 
-      - name: Backup D1 databases to Google Drive
-        if: always() && (vars.STORAGE_BACKEND == 'd1' || vars.STORAGE_BACKEND == 'dual')
-        uses: ./.github/actions/d1-backup-to-gdrive
-        with:
-          instance-name: 'WeeklyDedup'
-          cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          rclone-config-base64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
-        continue-on-error: true
-
       - name: Commit and push results
         run: |
           git config user.name "github-actions[bot]"
