@@ -98,7 +98,7 @@ def load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
     if use_sqlite():
         _ensure_db()
     if use_sqlite():
-        from packages.python.javdb_platform.db import db_load_rclone_inventory
+        from packages.python.javdb_platform.db import db_load_rclone_inventory, current_backend
         raw = db_load_rclone_inventory()
         inventory: Dict[str, List[RcloneEntry]] = {}
         for code, entries in raw.items():
@@ -114,10 +114,11 @@ def load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
                 )
                 for e in entries
             ]
+        backend = current_backend()
         if inventory:
-            logger.info(f"Loaded rclone inventory: {len(inventory)} unique codes from SQLite")
+            logger.info(f"Loaded rclone inventory: {len(inventory)} unique codes from {backend} backend")
         else:
-            logger.info("Rclone inventory is empty in SQLite - dedup skipped")
+            logger.info(f"Rclone inventory is empty in {backend} backend - dedup skipped")
         return inventory
 
     return _csv_load_rclone_inventory(csv_path)

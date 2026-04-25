@@ -1388,7 +1388,7 @@ def main():
     try:
         from packages.python.javdb_platform.config_helper import use_sqlite as _use_sqlite
         if _use_sqlite():
-            from packages.python.javdb_platform.db import init_db, db_get_latest_session, db_get_spider_stats, db_get_uploader_stats, db_get_pikpak_stats
+            from packages.python.javdb_platform.db import init_db, db_get_latest_session, db_get_spider_stats, db_get_uploader_stats, db_get_pikpak_stats, current_backend as _cur_be
             init_db()
             _sid = args.session_id
             if _sid is None:
@@ -1436,7 +1436,7 @@ def main():
                 spider_stats['failed_movies'] = []
         else:
             spider_stats['failed_movies'] = []
-        logger.info("Spider stats loaded from SQLite")
+        logger.info(f"Spider stats loaded from {_cur_be()} backend")
     else:
         spider_stats = extract_spider_statistics(SPIDER_LOG_FILE) if spider_log_exists else None
 
@@ -1451,7 +1451,7 @@ def main():
             'no_subtitle': _db_uploader_stats.get('NoSubtitleCount', _db_uploader_stats.get('no_subtitle_count', 0)),
             'success_rate': _db_uploader_stats.get('SuccessRate', _db_uploader_stats.get('success_rate', 0.0)),
         }
-        logger.info("Uploader stats loaded from SQLite")
+        logger.info(f"Uploader stats loaded from {_cur_be()} backend")
     else:
         uploader_stats = extract_uploader_statistics(UPLOADER_LOG_FILE) if uploader_log_exists else None
 
@@ -1464,7 +1464,7 @@ def main():
             'failed': _db_pikpak_stats.get('FailedCount', _db_pikpak_stats.get('failed_count', 0)),
             'threshold_days': _db_pikpak_stats.get('ThresholdDays', _db_pikpak_stats.get('threshold_days', 3)),
         }
-        logger.info("PikPak stats loaded from SQLite")
+        logger.info(f"PikPak stats loaded from {_cur_be()} backend")
     else:
         pikpak_stats = extract_pikpak_statistics(PIKPAK_LOG_FILE) if pikpak_log_exists else None
     ban_summary = get_proxy_ban_summary()

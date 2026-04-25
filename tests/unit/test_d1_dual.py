@@ -447,3 +447,25 @@ def test_no_drift_log_when_d1_healthy(monkeypatch, sqlite_conn, tmp_path):
     dual.commit()
 
     assert not drift_path.exists()
+
+
+def test_current_backend_reflects_env(monkeypatch):
+    """``current_backend()`` should reflect the active STORAGE_BACKEND."""
+    from packages.python.javdb_platform import db as _db
+
+    monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
+
+    monkeypatch.setenv("STORAGE_BACKEND", "sqlite")
+    assert _db.current_backend() == "sqlite"
+
+    monkeypatch.setenv("STORAGE_BACKEND", "d1")
+    assert _db.current_backend() == "d1"
+
+    monkeypatch.setenv("STORAGE_BACKEND", "dual")
+    assert _db.current_backend() == "dual"
+
+    monkeypatch.setenv("STORAGE_BACKEND", "DUAL")
+    assert _db.current_backend() == "dual"
+
+    monkeypatch.setenv("STORAGE_BACKEND", "garbage")
+    assert _db.current_backend() == "sqlite"

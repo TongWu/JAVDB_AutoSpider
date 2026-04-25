@@ -72,6 +72,16 @@ def _backend_mode() -> str:
     return 'sqlite'
 
 
+def current_backend() -> str:
+    """Public alias of :func:`_backend_mode` for use in non-db modules.
+
+    Returns one of ``'sqlite'``, ``'d1'``, ``'dual'``. Useful when callers
+    want to log or branch on the configured storage backend without
+    importing private helpers.
+    """
+    return _backend_mode()
+
+
 def _logical_name_for(db_path: str) -> str:
     name = _DB_PATH_TO_LOGICAL_NAME.get(db_path)
     if name is None:

@@ -299,7 +299,7 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
             init_db()
             db_append_pikpak_history(record)
         except Exception as e:
-            logger.warning(f"Failed to write pikpak history to SQLite: {e}")
+            logger.warning(f"Failed to write pikpak history to db backend: {e}")
 
     if use_csv():
         os.makedirs(os.path.dirname(PIKPAK_HISTORY_FILE), exist_ok=True)
@@ -622,9 +622,10 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
                     'uploaded_count': successful_count + delete_failed_count,
                     'delete_failed_count': delete_failed_count,
                 })
-                logger.info(f"PikPak stats saved to SQLite (session_id={session_id})")
+                from packages.python.javdb_platform.db import current_backend
+                logger.info(f"PikPak stats saved to {current_backend()} backend (session_id={session_id})")
         except Exception as e:
-            logger.warning(f"Failed to save pikpak stats to SQLite: {e}")
+            logger.warning(f"Failed to save pikpak stats to db backend: {e}")
 
     # Git commit pikpak results (only if credentials are available)
     if not dry_run and has_git_credentials(GIT_USERNAME, GIT_PASSWORD):
