@@ -43,6 +43,44 @@ HISTORY_DB_PATH = cfg('HISTORY_DB_PATH', os.path.join(_REPORTS_DIR, 'history.db'
 REPORTS_DB_PATH = cfg('REPORTS_DB_PATH', os.path.join(_REPORTS_DIR, 'reports.db'))
 OPERATIONS_DB_PATH = cfg('OPERATIONS_DB_PATH', os.path.join(_REPORTS_DIR, 'operations.db'))
 
+# Logical-name mapping for D1 / dual backends.
+_DB_PATH_TO_LOGICAL_NAME = {
+    HISTORY_DB_PATH: 'history',
+    REPORTS_DB_PATH: 'reports',
+    OPERATIONS_DB_PATH: 'operations',
+}
+
+
+def _backend_mode() -> str:
+    """Resolve the active storage backend.
+
+    ``STORAGE_BACKEND`` env var (or ``config.STORAGE_BACKEND``) selects between:
+
+    * ``sqlite`` (default) — original behaviour, local files only.
+    * ``d1`` — all reads/writes go to Cloudflare D1.
+    * ``dual`` — writes mirror to both SQLite and D1; reads come from D1
+      (used during migration validation).
+    """
+    override = os.environ.get('_STORAGE_BACKEND_INIT_OVERRIDE')
+    if override:
+        return override.strip().lower()
+    val = os.environ.get('STORAGE_BACKEND') or cfg('STORAGE_BACKEND', None)
+    if isinstance(val, str):
+        val = val.strip().lower()
+    if val in ('d1', 'dual'):
+        return val
+    return 'sqlite'
+
+
+def _logical_name_for(db_path: str) -> str:
+    name = _DB_PATH_TO_LOGICAL_NAME.get(db_path)
+    if name is None:
+        raise ValueError(
+            f"No D1 logical-name mapping for db_path={db_path!r}. "
+            "Add it to _DB_PATH_TO_LOGICAL_NAME or use STORAGE_BACKEND=sqlite."
+        )
+    return name
+
 # Legacy single-DB path — kept for migration source detection
 DB_PATH = cfg('SQLITE_DB_PATH', os.path.join(_REPORTS_DIR, 'javdb_autospider.db'))
 
@@ -63,20 +101,8 @@ def _is_valid_sqlite(path: str) -> bool:
         return False
 
 
-def _get_connection(db_path: str) -> sqlite3.Connection:
-    """Return a thread-local connection for *db_path*, creating it if needed.
-
-    Multiple connections (one per distinct path) are cached per thread.
-    """
-    conns: dict = getattr(_local, 'conns', None)
-    if conns is None:
-        conns = {}
-        _local.conns = conns
-
-    conn = conns.get(db_path)
-    if conn is not None:
-        return conn
-
+def _open_sqlite_connection(db_path: str) -> sqlite3.Connection:
+    """Open and configure a fresh local SQLite connection."""
     os.makedirs(os.path.dirname(db_path) or '.', exist_ok=True)
     if os.path.exists(db_path) and os.path.getsize(db_path) > 0 and not _is_valid_sqlite(db_path):
         raise sqlite3.DatabaseError(
@@ -88,6 +114,43 @@ def _get_connection(db_path: str) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=5000")
+    return conn
+
+
+def _get_connection(db_path: str):
+    """Return a thread-local connection for *db_path*, creating it if needed.
+
+    Multiple connections (one per distinct path) are cached per thread.
+
+    Honours ``STORAGE_BACKEND`` to return either a plain ``sqlite3.Connection``
+    (default), a ``D1Connection``, or a ``DualConnection`` mirroring writes
+    across both backends.
+    """
+    conns: dict = getattr(_local, 'conns', None)
+    if conns is None:
+        conns = {}
+        _local.conns = conns
+
+    conn = conns.get(db_path)
+    if conn is not None:
+        return conn
+
+    backend = _backend_mode()
+
+    if backend == 'sqlite':
+        conn = _open_sqlite_connection(db_path)
+    elif backend == 'd1':
+        from packages.python.javdb_platform.d1_client import make_d1_connection
+        conn = make_d1_connection(_logical_name_for(db_path))
+    elif backend == 'dual':
+        from packages.python.javdb_platform.d1_client import make_d1_connection
+        from packages.python.javdb_platform.dual_connection import DualConnection
+        sqlite_conn = _open_sqlite_connection(db_path)
+        d1_conn = make_d1_connection(_logical_name_for(db_path))
+        conn = DualConnection(sqlite_conn, d1_conn, logical_name=_logical_name_for(db_path))
+    else:
+        raise RuntimeError(f"Unknown STORAGE_BACKEND={backend!r}")
+
     conns[db_path] = conn
     return conn
 
@@ -114,10 +177,13 @@ def close_db():
     if not conns:
         return
     for path, conn in list(conns.items()):
-        try:
-            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        except Exception:
-            pass
+        # Only attempt WAL checkpoint on real SQLite connections; D1 / Dual
+        # facades reject PRAGMA writes so we skip them silently.
+        if isinstance(conn, sqlite3.Connection):
+            try:
+                conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            except Exception:
+                pass
         try:
             conn.close()
         except Exception:
@@ -997,20 +1063,51 @@ def init_db(db_path: Optional[str] = None, *, force: bool = False):
 
     When called **with** *db_path*, only that single file is initialised
     using the combined DDL (backward compat for csv_to_sqlite.py and tests).
+
+    Under ``STORAGE_BACKEND=d1``, this is a no-op — schema is managed via
+    ``wrangler d1 migrations`` outside the Python process.  Under
+    ``STORAGE_BACKEND=dual`` the local SQLite side is still initialised so
+    that the dual-write path has somewhere to write; D1 is assumed to
+    already match.
     """
     if not force:
         from packages.python.javdb_platform.config_helper import use_sqlite
         if not use_sqlite():
             return
 
+    backend = _backend_mode()
+
+    if backend == 'd1':
+        logger.debug("init_db skipped under STORAGE_BACKEND=d1 (schema managed via wrangler)")
+        return
+
+    # For backend == 'dual' we temporarily downgrade to sqlite-only init so
+    # that the DDL/migration plumbing only touches the local file (D1 schema
+    # was created out-of-band by `wrangler d1 import`).
+    if backend == 'dual':
+        os.environ['_STORAGE_BACKEND_INIT_OVERRIDE'] = 'sqlite'
+        prev_conns = getattr(_local, 'conns', None)
+        _local.conns = {}
+        try:
+            _do_init(db_path)
+        finally:
+            os.environ.pop('_STORAGE_BACKEND_INIT_OVERRIDE', None)
+            if prev_conns is not None:
+                _local.conns = prev_conns
+            else:
+                _local.conns = {}
+        return
+
+    _do_init(db_path)
+
+
+def _do_init(db_path: Optional[str]) -> None:
+    """Original sqlite-only init path."""
     if db_path is not None:
-        # Single-DB mode (testing, csv_to_sqlite, explicit path)
         _init_single_legacy_db(db_path, force=True)
         return
 
-    # Try automatic split migration from legacy single DB
     _migrate_single_to_split()
-
     _init_single_db(HISTORY_DB_PATH, _HISTORY_DDL, force=True)
     _init_single_db(REPORTS_DB_PATH, _REPORTS_DDL, force=True)
     _init_single_db(OPERATIONS_DB_PATH, _OPERATIONS_DDL, force=True)
