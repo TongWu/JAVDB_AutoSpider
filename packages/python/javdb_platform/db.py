@@ -1390,13 +1390,20 @@ def db_batch_update_last_visited(hrefs: List[str], db_path: Optional[str] = None
     if not lookup_hrefs:
         return 0
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # D1 caps bound parameters at ~100 per statement, so chunk the IN-list.
+    # Leave 1 slot for the ``now`` value; use 90 hrefs per batch for safety.
+    CHUNK = 90
+    total = 0
     with get_db(db_path or HISTORY_DB_PATH) as conn:
-        placeholders = ','.join('?' for _ in lookup_hrefs)
-        cur = conn.execute(
-            f"UPDATE MovieHistory SET DateTimeVisited=? WHERE Href IN ({placeholders})",
-            [now] + lookup_hrefs,
-        )
-        return cur.rowcount
+        for i in range(0, len(lookup_hrefs), CHUNK):
+            chunk = lookup_hrefs[i:i + CHUNK]
+            placeholders = ','.join('?' for _ in chunk)
+            cur = conn.execute(
+                f"UPDATE MovieHistory SET DateTimeVisited=? WHERE Href IN ({placeholders})",
+                [now] + chunk,
+            )
+            total += cur.rowcount or 0
+        return total
 
 
 def db_batch_update_movie_actors(
