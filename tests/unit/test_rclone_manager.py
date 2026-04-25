@@ -223,7 +223,8 @@ class TestLoadInventoryAsFolderStructure:
         assert all_folders[0].full_path.startswith('gdrive:')
 
     @patch('scripts.rclone_manager.get_configured_drive_name', return_value='gdrive')
-    def test_loads_from_db(self, _mock_dn, storage_mode_db):
+    @patch('scripts.rclone_manager.get_configured_root_folder', return_value='root')
+    def test_loads_from_db(self, _mock_root, _mock_dn, storage_mode_db):
         from utils.infra.db import db_replace_rclone_inventory
         db_replace_rclone_inventory([
             {
@@ -291,7 +292,49 @@ class TestLoadInventoryAsFolderStructure:
         assert structure == {}
 
     @patch('scripts.rclone_manager.get_configured_drive_name', return_value='gdrive')
-    def test_folder_info_fields(self, _mock_dn, tmp_path, storage_mode_csv):
+    @patch('scripts.rclone_manager.get_configured_root_folder', return_value='root')
+    def test_loads_new_layout_with_code_dir(self, _mock_root, _mock_dn, tmp_path, storage_mode_csv):
+        """New layout: <root>/<year>/<actor>/<movie_code>/<sensor-subtitle>."""
+        csv_path = str(tmp_path / 'inventory.csv')
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=INVENTORY_FIELDNAMES)
+            writer.writeheader()
+            writer.writerow({
+                'video_code': 'ABC-123',
+                'sensor_category': '有码',
+                'subtitle_category': '中字',
+                'folder_path': '2025/Actor/ABC-123/有码-中字',
+                'folder_size': '1000',
+                'file_count': '3',
+                'scan_datetime': '2026-01-01 00:00:00',
+            })
+            writer.writerow({
+                'video_code': 'DEF-456',
+                'sensor_category': '无码流出',
+                'subtitle_category': '无字',
+                'folder_path': '2025/ActorB/DEF-456/无码流出-无字',
+                'folder_size': '2000',
+                'file_count': '5',
+                'scan_datetime': '2026-01-01 00:00:00',
+            })
+
+        structure = load_inventory_as_folder_structure(csv_path)
+        all_folders = [
+            f for actors in structure.values()
+            for folders in actors.values() for f in folders
+        ]
+        by_code = {f.movie_code: f for f in all_folders}
+        assert set(by_code) == {'ABC-123', 'DEF-456'}
+        assert by_code['ABC-123'].year == '2025'
+        assert by_code['ABC-123'].actor == 'Actor'
+        assert by_code['ABC-123'].folder_name == '有码-中字'
+        assert by_code['ABC-123'].full_path == 'gdrive:root/2025/Actor/ABC-123/有码-中字'
+        assert by_code['DEF-456'].actor == 'ActorB'
+        assert by_code['DEF-456'].folder_name == '无码流出-无字'
+
+    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='gdrive')
+    @patch('scripts.rclone_manager.get_configured_root_folder', return_value='root')
+    def test_folder_info_fields(self, _mock_root, _mock_dn, tmp_path, storage_mode_csv):
         csv_path = str(tmp_path / 'inventory.csv')
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=INVENTORY_FIELDNAMES)
