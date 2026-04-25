@@ -129,6 +129,11 @@ jobs:
           VAR_D1_HISTORY_DB_ID: ${{ secrets.D1_HISTORY_DB_ID }}
           VAR_D1_REPORTS_DB_ID: ${{ secrets.D1_REPORTS_DB_ID }}
           VAR_D1_OPERATIONS_DB_ID: ${{ secrets.D1_OPERATIONS_DB_ID }}
+          # Cross-instance proxy coordinator (Cloudflare DO).  Both empty
+          # means "disabled — use local throttling only".  See
+          # docs/PROXY_COORDINATOR_DEPLOY.md for setup steps.
+          VAR_PROXY_COORDINATOR_URL: ${{ vars.PROXY_COORDINATOR_URL }}
+          VAR_PROXY_COORDINATOR_TOKEN: ${{ secrets.PROXY_COORDINATOR_TOKEN }}
         run: python3 -m apps.cli.config_generator --github-actions
 
       - name: Encrypt config for artifact
@@ -227,6 +232,11 @@ jobs:
           VAR_D1_HISTORY_DB_ID: ${{ secrets.D1_HISTORY_DB_ID }}
           VAR_D1_REPORTS_DB_ID: ${{ secrets.D1_REPORTS_DB_ID }}
           VAR_D1_OPERATIONS_DB_ID: ${{ secrets.D1_OPERATIONS_DB_ID }}
+          # Cross-instance proxy coordinator (Cloudflare DO).  Both empty
+          # means "disabled — use local throttling only".  See
+          # docs/PROXY_COORDINATOR_DEPLOY.md for setup steps.
+          VAR_PROXY_COORDINATOR_URL: ${{ vars.PROXY_COORDINATOR_URL }}
+          VAR_PROXY_COORDINATOR_TOKEN: ${{ secrets.PROXY_COORDINATOR_TOKEN }}
         run: python3 -m apps.cli.config_generator --github-actions
 
       - name: Encrypt adhoc config for artifact
