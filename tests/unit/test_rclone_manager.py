@@ -641,3 +641,215 @@ class TestMigrateStripDriveNames:
         assert row is not None
         assert row[0] == 'root/2025/Actor/MIG-003 [有码-中字]'
         assert ':' not in row[0]
+
+
+# ============================================================================
+# Path validation & self-healing
+# ============================================================================
+
+from scripts.rclone_manager import (
+    validate_dedup_records_against_inventory,
+    run_validate_inventory,
+    ORPHAN_REASON_SUFFIX,
+)
+
+
+def _add_inventory(rows):
+    from utils.infra.db import db_replace_rclone_inventory
+    entries = []
+    for code, path in rows:
+        entries.append({
+            'video_code': code, 'sensor_category': '有码',
+            'subtitle_category': '中字', 'folder_path': path,
+            'folder_size': 1, 'file_count': 1,
+            'scan_datetime': '2026-01-01 00:00:00',
+        })
+    db_replace_rclone_inventory(entries)
+
+
+def _add_dedup_pending(code, path, reason='Subtitle upgrade'):
+    from utils.infra.db import db_append_dedup_record
+    db_append_dedup_record({
+        'video_code': code, 'existing_sensor': '有码',
+        'existing_subtitle': '中字', 'existing_gdrive_path': path,
+        'existing_folder_size': 100, 'new_torrent_category': '有码',
+        'deletion_reason': reason, 'detect_datetime': '2026-01-01 00:00:00',
+        'is_deleted': 0, 'delete_datetime': None,
+    })
+
+
+class TestValidateDedupRecords:
+    def test_marks_only_orphan_pendings(self, storage_mode_db, tmp_path, monkeypatch):
+        import scripts.rclone_manager as rm
+        monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
+        monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
+
+        _add_inventory([
+            ('A', '2025/Actor/A/有码-中字'),
+            ('B', '2025/Actor/B/有码-中字'),
+        ])
+        _add_dedup_pending('A', '2025/Actor/A/有码-中字')
+        _add_dedup_pending('B', '2025/Actor/B/有码-中字')
+        _add_dedup_pending('C', '2025/Actor/C/有码-中字')
+
+        count, orphans = validate_dedup_records_against_inventory()
+        assert count == 1
+        assert len(orphans) == 1
+        assert orphans[0]['VideoCode'] == 'C'
+
+        from utils.infra.db import db_load_dedup_records
+        rows = db_load_dedup_records()
+        deleted = [r for r in rows if int(r.get('IsDeleted') or 0) == 1]
+        pending = [r for r in rows if int(r.get('IsDeleted') or 0) == 0]
+        assert {r['VideoCode'] for r in deleted} == {'C'}
+        assert {r['VideoCode'] for r in pending} == {'A', 'B'}
+        c_row = deleted[0]
+        assert ORPHAN_REASON_SUFFIX in c_row['DeletionReason']
+        assert c_row['DateTimeDeleted']
+
+    def test_no_orphans_returns_zero(self, storage_mode_db, tmp_path, monkeypatch):
+        import scripts.rclone_manager as rm
+        monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
+        monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
+        _add_inventory([('A', '2025/Actor/A/有码-中字')])
+        _add_dedup_pending('A', '2025/Actor/A/有码-中字')
+        count, orphans = validate_dedup_records_against_inventory()
+        assert count == 0 and orphans == []
+
+    def test_empty_inventory_skips(self, storage_mode_db, tmp_path, monkeypatch):
+        import scripts.rclone_manager as rm
+        monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
+        monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
+        _add_dedup_pending('X', '2025/Actor/X/有码-中字')
+        count, orphans = validate_dedup_records_against_inventory()
+        assert count == 0 and orphans == []
+        from utils.infra.db import db_load_dedup_records
+        rows = db_load_dedup_records()
+        assert int(rows[0].get('IsDeleted') or 0) == 0
+
+    def test_writes_orphan_csv(self, storage_mode_db, tmp_path, monkeypatch):
+        import scripts.rclone_manager as rm
+        monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
+        monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
+        _add_inventory([('A', 'p/A')])
+        _add_dedup_pending('B', 'p/B')
+        validate_dedup_records_against_inventory()
+        # Find the orphan CSV under DEDUP_DIR
+        files = list((tmp_path / 'Dedup').rglob('orphans-*.csv'))
+        assert len(files) == 1
+        with open(files[0], encoding='utf-8') as f:
+            text = f.read()
+        assert 'p/B' in text
+        assert ORPHAN_REASON_SUFFIX in text
+
+
+class TestRunValidateInventory:
+    def test_prunes_inventory_and_chains_dedup_self_heal(
+        self, storage_mode_db, tmp_path, monkeypatch,
+    ):
+        import scripts.rclone_manager as rm
+        monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
+        monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
+        monkeypatch.setattr(
+            rm, 'RCLONE_INVENTORY_CSV', 'rclone_inventory.csv'
+        )
+
+        _add_inventory([
+            ('A', '2025/Actor/A/有码-中字'),
+            ('B', '2025/Actor/B/有码-中字'),
+            ('X', '2025/Actor/X/有码-中字'),
+        ])
+        _add_dedup_pending('A', '2025/Actor/A/有码-中字')
+        _add_dedup_pending('X', '2025/Actor/X/有码-中字')
+
+        # Mock the remote-listing to drop 'X' and the year-folder discovery.
+        def fake_year_folders(*_a, **_k):
+            return ['2025']
+
+        def fake_list(remote_name, root_folder, year):
+            return [
+                '2025/Actor/A/有码-中字',
+                '2025/Actor/B/有码-中字',
+            ]
+
+        monkeypatch.setattr(rm, 'get_year_folders', fake_year_folders)
+        monkeypatch.setattr(rm, '_list_remote_dirs_for_year', fake_list)
+
+        rc = run_validate_inventory(
+            'gdrive', 'root', year_filter=None, max_workers=1, prune=True,
+        )
+        assert rc == 0
+
+        from utils.infra.db import db_load_rclone_inventory, db_load_dedup_records
+        inv = db_load_rclone_inventory()
+        assert 'A' in inv and 'B' in inv
+        assert 'X' not in inv
+
+        rows = db_load_dedup_records()
+        x_row = [r for r in rows if r['VideoCode'] == 'X'][0]
+        assert int(x_row['IsDeleted']) == 1
+        assert ORPHAN_REASON_SUFFIX in x_row['DeletionReason']
+
+        # Inventory orphan CSV written.
+        orphans_csv = tmp_path / 'inventory_orphans.csv'
+        assert orphans_csv.exists()
+        assert '2025/Actor/X/有码-中字' in orphans_csv.read_text(encoding='utf-8')
+
+    def test_no_prune_keeps_inventory(self, storage_mode_db, tmp_path, monkeypatch):
+        import scripts.rclone_manager as rm
+        monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
+        monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
+
+        _add_inventory([
+            ('A', '2025/Actor/A/有码-中字'),
+            ('X', '2025/Actor/X/有码-中字'),
+        ])
+
+        monkeypatch.setattr(rm, 'get_year_folders', lambda *_a, **_k: ['2025'])
+        monkeypatch.setattr(
+            rm, '_list_remote_dirs_for_year',
+            lambda *_a, **_k: ['2025/Actor/A/有码-中字'],
+        )
+
+        rc = run_validate_inventory(
+            'gdrive', 'root', year_filter=None, max_workers=1, prune=False,
+        )
+        assert rc == 0
+        from utils.infra.db import db_load_rclone_inventory
+        inv = db_load_rclone_inventory()
+        assert 'A' in inv and 'X' in inv  # not pruned
+
+    def test_aborts_when_remote_returns_zero(self, storage_mode_db, tmp_path, monkeypatch):
+        import scripts.rclone_manager as rm
+        monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
+        monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
+
+        _add_inventory([('A', '2025/Actor/A/有码-中字')])
+        monkeypatch.setattr(rm, 'get_year_folders', lambda *_a, **_k: ['2025'])
+        monkeypatch.setattr(rm, '_list_remote_dirs_for_year', lambda *_a, **_k: [])
+
+        rc = run_validate_inventory(
+            'gdrive', 'root', year_filter=None, max_workers=1, prune=True,
+        )
+        assert rc == 1
+        from utils.infra.db import db_load_rclone_inventory
+        assert 'A' in db_load_rclone_inventory()
+
+
+class TestValidateCli:
+    def test_validate_alone_ok(self):
+        args = parse_arguments(['--validate'])
+        assert args.validate is True
+        assert args.validate_prune is True
+
+    def test_no_validate_prune(self):
+        args = parse_arguments(['--validate', '--no-validate-prune'])
+        assert args.validate_prune is False
+
+    def test_validate_conflicts_with_scan(self):
+        with pytest.raises(SystemExit):
+            parse_arguments(['--validate', '--scan'])
+
+    def test_validate_conflicts_with_report(self):
+        with pytest.raises(SystemExit):
+            parse_arguments(['--validate', '--report'])

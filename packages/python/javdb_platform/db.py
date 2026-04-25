@@ -17,7 +17,7 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from apps.api.parsers.common import (
     movie_href_lookup_values,
@@ -1397,6 +1397,24 @@ def db_load_rclone_inventory(db_path: Optional[str] = None) -> Dict[str, list]:
     return inventory
 
 
+def db_delete_rclone_inventory_paths(
+    paths: Iterable[str],
+    db_path: Optional[str] = None,
+) -> int:
+    """Bulk delete RcloneInventory rows by FolderPath. Returns affected row count."""
+    path_list = [p for p in paths if p]
+    if not path_list:
+        return 0
+    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
+        deleted = 0
+        for p in path_list:
+            cur = conn.execute(
+                "DELETE FROM RcloneInventory WHERE FolderPath = ?", (p,)
+            )
+            deleted += cur.rowcount
+        return deleted
+
+
 # ── DedupRecords helpers ─────────────────────────────────────────────────
 
 def db_load_dedup_records(db_path: Optional[str] = None) -> List[dict]:
@@ -1444,6 +1462,41 @@ def db_mark_records_deleted(
                 "UPDATE DedupRecords SET IsDeleted=1, DateTimeDeleted=? "
                 "WHERE ExistingGdrivePath=? AND IsDeleted=0",
                 (dt, path),
+            )
+            updated += cur.rowcount
+        return updated
+
+
+def db_mark_orphan_records(
+    paths: Iterable[str],
+    reason_suffix: str,
+    when: str,
+    db_path: Optional[str] = None,
+) -> int:
+    """Mark dedup pending rows as deleted with custom reason suffix appended.
+
+    For each path in ``paths`` whose ``DedupRecords`` row has ``IsDeleted=0``:
+      - sets ``IsDeleted=1`` and ``DateTimeDeleted=when``
+      - appends ``reason_suffix`` to the existing ``DeletionReason`` (space-
+        separated). If ``DeletionReason`` is NULL/empty, it becomes the suffix.
+
+    Returns total affected row count.
+    """
+    path_list = [p for p in paths if p]
+    if not path_list:
+        return 0
+    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
+        updated = 0
+        for path in path_list:
+            cur = conn.execute(
+                """UPDATE DedupRecords
+                   SET IsDeleted = 1,
+                       DateTimeDeleted = ?,
+                       DeletionReason = TRIM(
+                         COALESCE(DeletionReason, '') || ' ' || ?
+                       )
+                   WHERE ExistingGdrivePath = ? AND IsDeleted = 0""",
+                (when, reason_suffix, path),
             )
             updated += cur.rowcount
         return updated

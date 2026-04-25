@@ -420,6 +420,64 @@ class TestDedupRecords:
         assert removed == 1
         assert len(db_mod.db_load_dedup_records()) == 0
 
+    def test_mark_orphan_records_appends_reason(self, _isolate_sqlite):
+        db_mod.db_append_dedup_record(self._rec('A'))
+        updated = db_mod.db_mark_orphan_records(
+            ['remote:/A'], '[orphan: missing in inventory]', '2024-06-01 12:00:00',
+        )
+        assert updated == 1
+        rows = db_mod.db_load_dedup_records()
+        a_row = [r for r in rows if r['VideoCode'] == 'A'][0]
+        assert a_row['IsDeleted'] == 1
+        assert a_row['DateTimeDeleted'] == '2024-06-01 12:00:00'
+        assert '[orphan: missing in inventory]' in a_row['DeletionReason']
+        assert 'Subtitle upgrade' in a_row['DeletionReason']
+
+    def test_mark_orphan_records_skips_already_deleted(self, _isolate_sqlite):
+        db_mod.db_append_dedup_record(self._rec('A'))
+        db_mod.db_mark_records_deleted([('remote:/A', '2024-06-01 00:00:00')])
+        updated = db_mod.db_mark_orphan_records(
+            ['remote:/A'], '[orphan]', '2024-07-01 00:00:00',
+        )
+        assert updated == 0
+
+    def test_mark_orphan_records_empty_input(self, _isolate_sqlite):
+        assert db_mod.db_mark_orphan_records([], '[orphan]', '2024-01-01') == 0
+
+
+# ── rclone_inventory orphan deletion ──────────────────────────────────────
+
+class TestDeleteRcloneInventoryPaths:
+    def _entry(self, code, path):
+        return {
+            'video_code': code, 'sensor_category': '有码',
+            'subtitle_category': '中字', 'folder_path': path,
+            'folder_size': 1, 'file_count': 1,
+            'scan_datetime': '2024-01-01 00:00:00',
+        }
+
+    def test_delete_subset(self, _isolate_sqlite):
+        db_mod.db_replace_rclone_inventory([
+            self._entry('A', '2025/Actor/A/有码-中字'),
+            self._entry('B', '2025/Actor/B/有码-中字'),
+            self._entry('C', '2025/Actor/C/有码-中字'),
+        ])
+        deleted = db_mod.db_delete_rclone_inventory_paths([
+            '2025/Actor/B/有码-中字',
+            '2025/Actor/C/有码-中字',
+        ])
+        assert deleted == 2
+        inv = db_mod.db_load_rclone_inventory()
+        assert 'A' in inv
+        assert 'B' not in inv and 'C' not in inv
+
+    def test_delete_missing_path_is_noop(self, _isolate_sqlite):
+        db_mod.db_replace_rclone_inventory([self._entry('A', 'p/a')])
+        assert db_mod.db_delete_rclone_inventory_paths(['p/missing']) == 0
+
+    def test_delete_empty_input(self, _isolate_sqlite):
+        assert db_mod.db_delete_rclone_inventory_paths([]) == 0
+
 
 # ── pikpak_history ────────────────────────────────────────────────────────
 
