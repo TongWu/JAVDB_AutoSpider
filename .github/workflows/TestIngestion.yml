@@ -245,6 +245,16 @@ jobs:
             echo "  parsed_movies_history.csv: NOT FOUND"
           fi
 
+      - name: Backup D1 databases to Google Drive
+        if: always() && (vars.STORAGE_BACKEND == 'd1' || vars.STORAGE_BACKEND == 'dual')
+        uses: ./.github/actions/d1-backup-to-gdrive
+        with:
+          instance-name: 'TestIngestion'
+          cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          rclone-config-base64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
+        continue-on-error: true
+
       - name: Encrypt and upload logs artifact
         if: always()
         env:
