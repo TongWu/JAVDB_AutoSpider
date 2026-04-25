@@ -300,15 +300,15 @@ def load_inventory_as_folder_structure(
 
     if use_sqlite():
         try:
-            from packages.python.javdb_platform.db import db_load_rclone_inventory
+            from packages.python.javdb_platform.db import db_load_rclone_inventory, current_backend
             raw = db_load_rclone_inventory()
             for code, entries in raw.items():
                 for e in entries:
                     rows.append(e)
             if rows:
-                logger.info(f"Loaded {len(rows)} inventory records from SQLite")
+                logger.info(f"Loaded {len(rows)} inventory records from {current_backend()} backend")
         except Exception as e:
-            logger.warning(f"Could not load inventory from SQLite: {e}")
+            logger.warning(f"Could not load inventory from db backend: {e}")
 
     if not rows and os.path.exists(csv_path):
         try:
