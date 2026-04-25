@@ -135,7 +135,8 @@ class D1Connection:
         self.row_factory = None
 
     def execute(self, sql: str, params: Iterable[Any] = ()) -> D1Cursor:
-        cursors = self._post_with_retry([{"sql": sql, "params": list(params)}])
+        # CF /query single-statement shape: {sql, params}
+        cursors = self._post_with_retry({"sql": sql, "params": list(params)})
         if not cursors:
             # success=true but empty result[] — should never happen per CF docs,
             # but guard against API regressions / proxy stripping the body.
@@ -148,11 +149,12 @@ class D1Connection:
         return cursor
 
     def executemany(self, sql: str, seq_of_params: Iterable[Iterable[Any]]) -> None:
-        batch = [{"sql": sql, "params": list(p)} for p in seq_of_params]
-        if not batch:
+        statements = [{"sql": sql, "params": list(p)} for p in seq_of_params]
+        if not statements:
             return
-        for chunk in _split(batch, _BATCH_LIMIT):
-            cursors = self._post_with_retry(chunk)
+        for chunk in _split(statements, _BATCH_LIMIT):
+            # CF /query batch shape: {batch: [{sql, params}, ...]}
+            cursors = self._post_with_retry({"batch": chunk})
             for c in cursors:
                 self._total_changes += c.rowcount
 
@@ -160,9 +162,9 @@ class D1Connection:
         statements = [s.strip() for s in script.split(";") if s.strip()]
         if not statements:
             return
-        body = [{"sql": s, "params": []} for s in statements]
-        for chunk in _split(body, _BATCH_LIMIT):
-            self._post_with_retry(chunk)
+        body_statements = [{"sql": s, "params": []} for s in statements]
+        for chunk in _split(body_statements, _BATCH_LIMIT):
+            self._post_with_retry({"batch": chunk})
 
     def commit(self) -> None:
         return None
@@ -180,7 +182,7 @@ class D1Connection:
     def total_changes(self) -> int:
         return self._total_changes
 
-    def _post_with_retry(self, body: list) -> List[D1Cursor]:
+    def _post_with_retry(self, body: dict) -> List[D1Cursor]:
         """Execute ``_post`` with exponential backoff on :class:`D1TransientError`.
 
         Honours ``Retry-After`` for 429 responses. Permanent errors are raised
@@ -230,7 +232,7 @@ class D1Connection:
         base = _RETRY_BASE_SEC * (2 ** attempt)
         return min(base, _RETRY_MAX_SLEEP_SEC) + random.uniform(0, 0.5)
 
-    def _post(self, body: list) -> List[D1Cursor]:
+    def _post(self, body: dict) -> List[D1Cursor]:
         try:
             response = requests.post(
                 self._url, headers=self._headers, json=body, timeout=self._timeout
