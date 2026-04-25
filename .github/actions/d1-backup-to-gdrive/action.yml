@@ -1,0 +1,66 @@
+name: 'D1 backup to Google Drive'
+description: >-
+  Export the three javdb-* D1 databases via wrangler and upload the bundle
+  to gdrive:/剧集/不可以色色/JAVDB_AutoSpider/D1_Backup/{datetime}_{instance}/
+
+inputs:
+  instance-name:
+    description: 'Logical instance name (e.g. DailyIngestion, WeeklyDedup)'
+    required: true
+  cloudflare-api-token:
+    description: 'Cloudflare API token with D1 read access'
+    required: true
+  cloudflare-account-id:
+    description: 'Cloudflare account id'
+    required: true
+  rclone-config-base64:
+    description: 'Base64-encoded rclone.conf (same secret used elsewhere)'
+    required: true
+  backup-base:
+    description: 'rclone destination base path (override for testing)'
+    required: false
+    default: 'gdrive:/剧集/不可以色色/JAVDB_AutoSpider/D1_Backup'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install wrangler (if missing)
+      shell: bash
+      run: |
+        if ! command -v wrangler >/dev/null 2>&1; then
+          echo "Installing wrangler..."
+          npm install -g wrangler@4
+        fi
+        wrangler --version
+
+    - name: Install rclone (if missing)
+      shell: bash
+      run: |
+        if ! command -v rclone >/dev/null 2>&1; then
+          bash .github/scripts/install_rclone.sh
+        fi
+        rclone version | head -1
+
+    - name: Write rclone config
+      shell: bash
+      env:
+        RCLONE_CONFIG_BASE64: ${{ inputs.rclone-config-base64 }}
+      run: |
+        set -euo pipefail
+        if [ -z "$RCLONE_CONFIG_BASE64" ]; then
+          echo "::error::rclone-config-base64 input is empty"
+          exit 1
+        fi
+        mkdir -p "$HOME/.config/rclone"
+        echo "$RCLONE_CONFIG_BASE64" | base64 -d > "$HOME/.config/rclone/rclone.conf"
+        chmod 600 "$HOME/.config/rclone/rclone.conf"
+
+    - name: Export D1 databases and upload to Google Drive
+      shell: bash
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
+        RCLONE_D1_BACKUP_BASE: ${{ inputs.backup-base }}
+      run: |
+        set -euo pipefail
+        bash scripts/d1_backup_to_gdrive.sh "${{ inputs.instance-name }}"
