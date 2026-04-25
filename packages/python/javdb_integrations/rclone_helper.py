@@ -271,6 +271,81 @@ def get_configured_drive_name() -> str:
     return ''
 
 
+def get_configured_root_folder() -> str:
+    """Return the configured root folder path (without drive prefix).
+
+    Priority:
+    1) ``RCLONE_FOLDER_PATH`` (e.g. ``gdrive:/剧集/不可以色色/JAV-Sync``)
+    2) ``RCLONE_ROOT_FOLDER`` (e.g. ``/剧集/不可以色色/JAV-Sync``)
+
+    The returned value is normalised: no leading/trailing ``/``.
+    """
+    from packages.python.javdb_platform.config_helper import cfg as _cfg
+
+    folder_path = _cfg('RCLONE_FOLDER_PATH', None)
+    if folder_path and has_remote_prefix(str(folder_path)):
+        # keep only the path part (after ':') and normalise slashes
+        raw = str(folder_path).split(':', 1)[1]
+        return str(raw).strip().strip('/')
+
+    root = _cfg('RCLONE_ROOT_FOLDER', None)
+    if root is None:
+        return ''
+    return str(root).strip().strip('/')
+
+
+def strip_root_folder(path: str, root: str = '') -> str:
+    """Strip the configured root folder prefix from *path* and return a relative path.
+
+    - Accepts paths with or without a drive prefix (``gdrive:...``).
+    - Accepts paths with or without a leading ``/``.
+    - Idempotent: already-relative paths are returned unchanged.
+    """
+    if not path:
+        return ''
+    root_norm = (root or get_configured_root_folder()).strip().strip('/')
+    raw = strip_drive_name(path).strip()
+    if not raw:
+        return ''
+    raw = raw.lstrip('/')
+    if not root_norm:
+        return raw
+    if raw == root_norm:
+        return ''
+    prefix = root_norm + '/'
+    if raw.startswith(prefix):
+        return raw[len(prefix):]
+    return raw
+
+
+def prepend_root_folder(rel_path: str, root: str = '') -> str:
+    """Prepend root folder to a relative path.
+
+    If *rel_path* already contains a drive prefix or already starts with the root
+    folder, it is returned unchanged.
+    """
+    if rel_path is None:
+        return ''
+    p = str(rel_path).strip()
+    if not p:
+        return ''
+    if has_remote_prefix(p):
+        return p
+    root_norm = (root or get_configured_root_folder()).strip().strip('/')
+    if not root_norm:
+        return p.lstrip('/')
+    p2 = p.lstrip('/')
+    if p2 == root_norm or p2.startswith(root_norm + '/'):
+        return p2
+    return f"{root_norm}/{p2}"
+
+
+def to_full_remote_path(rel_path: str, drive: str = '', root: str = '') -> str:
+    """Build a full rclone remote path from a stored relative path."""
+    with_root = prepend_root_folder(rel_path, root=root)
+    return prepend_drive_name(with_root, drive_name=drive)
+
+
 def prepend_drive_name(folder_path: str, drive_name: str = '') -> str:
     """Prepend rclone drive name to a relative folder path.
 
@@ -422,8 +497,20 @@ def run_health_checks(remote_name: str, root_folder: str) -> bool:
 # Folder Structure Parsing Functions
 # ============================================================================
 
+_VALID_SENSORS = (
+    SensorCategory.YOUMA, SensorCategory.WUMA,
+    SensorCategory.WUMA_LIUCHU, SensorCategory.WUMA_POJIE,
+)
+_VALID_SUBTITLES = (SubtitleCategory.ZHONGZI, SubtitleCategory.WUZI)
+
+
 def _py_parse_folder_name(folder_name: str) -> Optional[Tuple[str, str, str]]:
-    """Pure-Python fallback for folder name parsing."""
+    """Pure-Python fallback for **legacy** folder names ``code [sensor-subtitle]``.
+
+    The current on-remote layout no longer uses this combined form (see
+    :func:`parse_leaf_name`), but the helper is kept for backward
+    compatibility with older inventory data and external callers/tests.
+    """
     pattern = r'^(.+?)\s*\[(.+?)-(.+?)\]$'
     match = re.match(pattern, folder_name.strip())
     if not match:
@@ -433,29 +520,44 @@ def _py_parse_folder_name(folder_name: str) -> Optional[Tuple[str, str, str]]:
     sensor_category = match.group(2).strip()
     subtitle_category = match.group(3).strip()
 
-    valid_sensors = [SensorCategory.YOUMA, SensorCategory.WUMA,
-                     SensorCategory.WUMA_LIUCHU, SensorCategory.WUMA_POJIE]
-    if sensor_category not in valid_sensors:
+    if sensor_category not in _VALID_SENSORS:
         logger.warning(f"Unknown sensor category '{sensor_category}' in folder: {folder_name}")
         return None
-
-    valid_subtitles = [SubtitleCategory.ZHONGZI, SubtitleCategory.WUZI]
-    if subtitle_category not in valid_subtitles:
+    if subtitle_category not in _VALID_SUBTITLES:
         logger.warning(f"Unknown subtitle category '{subtitle_category}' in folder: {folder_name}")
         return None
 
     return movie_code, sensor_category, subtitle_category
 
 
+def parse_leaf_name(leaf_name: str) -> Optional[Tuple[str, str]]:
+    """Parse a leaf directory name ``<sensor>-<subtitle>`` into ``(sensor, subtitle)``.
+
+    The new on-remote layout (after ``rclone_group_jav.py``) places per-token
+    leaf directories one level below the ``<movie_code>/`` directory, so the
+    leaf name no longer contains the movie code or surrounding brackets.
+    """
+    if not leaf_name:
+        return None
+    name = leaf_name.strip().strip('[]()')
+    if '-' not in name:
+        return None
+    sensor, _, subtitle = name.rpartition('-')
+    sensor = sensor.strip()
+    subtitle = subtitle.strip()
+    if sensor not in _VALID_SENSORS or subtitle not in _VALID_SUBTITLES:
+        return None
+    return sensor, subtitle
+
+
 try:
     from javdb_rust_core import (
         parse_folder_name as _rs_parse_folder_name,
-        parse_lsjson_for_year as _rs_parse_lsjson_for_year,
     )
     _RUST_RCLONE_PARSE = True
 
     def parse_folder_name(folder_name: str) -> Optional[Tuple[str, str, str]]:
-        """Parse a movie folder name (Rust-accelerated)."""
+        """Parse a legacy movie folder name (Rust-accelerated)."""
         return _rs_parse_folder_name(folder_name)
 except ImportError:
     _RUST_RCLONE_PARSE = False
@@ -513,35 +615,55 @@ def get_actor_folders(remote_name: str, root_folder: str, year: str) -> List[str
 
 
 def get_movie_folders(remote_name: str, root_folder: str, year: str, actor: str) -> List[FolderInfo]:
-    """Get list of movie folders under an actor folder."""
+    """Get movie folders under an actor folder.
+
+    Layout (post ``rclone_group_jav.py``)::
+
+        <root>/<year>/<actor>/<movie_code>/<sensor-subtitle>
+
+    Each returned :class:`FolderInfo` corresponds to a leaf
+    ``<sensor-subtitle>`` directory; ``movie_code`` is taken from the
+    parent (depth-1) directory name.  Size/file counts are not populated
+    here — use :func:`get_movie_folders_with_stats` for that.
+    """
     remote_path = f"{remote_name}:{root_folder}/{year}/{actor}"
     try:
         result = subprocess.run(
-            ['rclone', 'lsd', remote_path],
-            capture_output=True, text=True, timeout=120,
+            ['rclone', 'lsjson', remote_path, '-R',
+             '--dirs-only', '--no-modtime', '--no-mimetype',
+             '--fast-list'],
+            capture_output=True, text=True, timeout=180,
         )
         if result.returncode != 0:
             if "directory not found" in result.stderr.lower():
                 return []
             raise RuntimeError(f"Failed to list movie folders: {result.stderr}")
-        folders = []
-        for line in result.stdout.strip().split('\n'):
-            if line.strip():
-                parts = line.strip().split()
-                if len(parts) >= 5:
-                    folder_name = ' '.join(parts[4:])
-                    parsed = parse_folder_name(folder_name)
-                    if parsed:
-                        movie_code, sensor, subtitle = parsed
-                        full_path = f"{remote_path}/{folder_name}"
-                        folders.append(FolderInfo(
-                            full_path=full_path,
-                            year=year, actor=actor,
-                            movie_code=movie_code,
-                            sensor_category=sensor,
-                            subtitle_category=subtitle,
-                            folder_name=folder_name,
-                        ))
+        try:
+            entries = json.loads(result.stdout or '[]')
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Invalid JSON from rclone for {remote_path}: {exc}") from exc
+
+        folders: List[FolderInfo] = []
+        for entry in entries:
+            path = entry.get('Path', '')
+            if not entry.get('IsDir'):
+                continue
+            parts = path.split('/')
+            if len(parts) != 2:
+                continue
+            movie_code, leaf = parts[0], parts[1]
+            parsed = parse_leaf_name(leaf)
+            if not parsed:
+                continue
+            sensor, subtitle = parsed
+            folders.append(FolderInfo(
+                full_path=f"{remote_path}/{movie_code}/{leaf}",
+                year=year, actor=actor,
+                movie_code=movie_code,
+                sensor_category=sensor,
+                subtitle_category=subtitle,
+                folder_name=leaf,
+            ))
         return folders
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"Timeout listing movie folders from {remote_path}")
@@ -567,38 +689,40 @@ def get_movie_folders_with_stats(
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"Invalid JSON from rclone for {remote_path}: {exc}") from exc
 
-    top_dirs: set = set()
-    dir_sizes: Dict[str, int] = defaultdict(int)
-    dir_counts: Dict[str, int] = defaultdict(int)
+    # Layout: <actor>/<movie_code>/<sensor-subtitle>/<files...>
+    movie_dirs: set = set()
+    dir_sizes: Dict[Tuple[str, str], int] = defaultdict(int)
+    dir_counts: Dict[Tuple[str, str], int] = defaultdict(int)
 
     for entry in entries:
         path = entry.get('Path', '')
         is_dir = entry.get('IsDir', False)
-        if is_dir:
-            if '/' not in path:
-                top_dirs.add(path)
+        parts = path.split('/')
+        if is_dir and len(parts) == 2:
+            movie_dirs.add((parts[0], parts[1]))
             continue
-        if '/' in path:
-            dir_name = path.split('/', 1)[0]
-            top_dirs.add(dir_name)
-            dir_sizes[dir_name] += entry.get('Size', 0)
-            dir_counts[dir_name] += 1
+        if not is_dir and len(parts) >= 3:
+            key = (parts[0], parts[1])
+            movie_dirs.add(key)
+            dir_sizes[key] += entry.get('Size', 0)
+            dir_counts[key] += 1
 
     folders: List[FolderInfo] = []
-    for dir_name in top_dirs:
-        parsed = parse_folder_name(dir_name)
+    for movie_code, leaf in movie_dirs:
+        parsed = parse_leaf_name(leaf)
         if not parsed:
             continue
-        movie_code, sensor, subtitle = parsed
+        sensor, subtitle = parsed
+        key = (movie_code, leaf)
         folders.append(FolderInfo(
-            full_path=f"{remote_path}/{dir_name}",
+            full_path=f"{remote_path}/{movie_code}/{leaf}",
             year=year, actor=actor,
             movie_code=movie_code,
             sensor_category=sensor,
             subtitle_category=subtitle,
-            folder_name=dir_name,
-            size=dir_sizes.get(dir_name, 0),
-            file_count=dir_counts.get(dir_name, 0),
+            folder_name=leaf,
+            size=dir_sizes.get(key, 0),
+            file_count=dir_counts.get(key, 0),
         ))
     return folders
 
@@ -620,64 +744,47 @@ def get_all_movie_folders_for_year(
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"Timeout listing {remote_path}")
 
-    if _RUST_RCLONE_PARSE:
-        try:
-            parsed_items = _rs_parse_lsjson_for_year(result.stdout)
-            folders: List[FolderInfo] = []
-            for item in parsed_items:
-                actor = item.get('actor', '')
-                folder_name = item.get('folder_name', '')
-                folders.append(FolderInfo(
-                    full_path=f"{remote_path}/{actor}/{folder_name}",
-                    year=year,
-                    actor=actor,
-                    movie_code=item.get('movie_code', ''),
-                    sensor_category=item.get('sensor', ''),
-                    subtitle_category=item.get('subtitle', ''),
-                    folder_name=folder_name,
-                    size=int(item.get('size', 0) or 0),
-                    file_count=int(item.get('file_count', 0) or 0),
-                ))
-            return folders
-        except Exception as exc:
-            logger.debug(f"Rust parse_lsjson_for_year failed: {exc}, falling back to Python parser")
-
+    # NOTE: the Rust ``parse_lsjson_for_year`` helper still expects the legacy
+    # 2-level ``<actor>/<code [sensor-subtitle]>`` layout; the new layout adds
+    # a ``<code>/`` directory so we route the Python parser unconditionally
+    # until the Rust side is updated.
     try:
         entries = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"Invalid JSON from rclone for {remote_path}: {exc}") from exc
 
+    # Layout: <actor>/<movie_code>/<sensor-subtitle>/<files...>
     movie_dirs: set = set()
-    dir_sizes: Dict[Tuple[str, str], int] = defaultdict(int)
-    dir_counts: Dict[Tuple[str, str], int] = defaultdict(int)
+    dir_sizes: Dict[Tuple[str, str, str], int] = defaultdict(int)
+    dir_counts: Dict[Tuple[str, str, str], int] = defaultdict(int)
 
     for entry in entries:
         path = entry.get('Path', '')
         is_dir = entry.get('IsDir', False)
         parts = path.split('/')
-        if is_dir and len(parts) == 2:
-            movie_dirs.add((parts[0], parts[1]))
+        if is_dir and len(parts) == 3:
+            movie_dirs.add((parts[0], parts[1], parts[2]))
             continue
-        if not is_dir and len(parts) >= 3:
-            key = (parts[0], parts[1])
+        if not is_dir and len(parts) >= 4:
+            key = (parts[0], parts[1], parts[2])
             movie_dirs.add(key)
             dir_sizes[key] += entry.get('Size', 0)
             dir_counts[key] += 1
 
     folders: List[FolderInfo] = []
-    for actor, folder_name in movie_dirs:
-        parsed = parse_folder_name(folder_name)
+    for actor, movie_code, leaf in movie_dirs:
+        parsed = parse_leaf_name(leaf)
         if not parsed:
             continue
-        movie_code, sensor, subtitle = parsed
-        key = (actor, folder_name)
+        sensor, subtitle = parsed
+        key = (actor, movie_code, leaf)
         folders.append(FolderInfo(
-            full_path=f"{remote_path}/{actor}/{folder_name}",
+            full_path=f"{remote_path}/{actor}/{movie_code}/{leaf}",
             year=year, actor=actor,
             movie_code=movie_code,
             sensor_category=sensor,
             subtitle_category=subtitle,
-            folder_name=folder_name,
+            folder_name=leaf,
             size=dir_sizes.get(key, 0),
             file_count=dir_counts.get(key, 0),
         ))

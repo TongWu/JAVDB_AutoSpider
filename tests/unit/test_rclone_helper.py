@@ -24,6 +24,7 @@ from utils.rclone_helper import (
     DRY_RUN_MAX_ACTORS_PER_YEAR,
     DRY_RUN_MAX_COMBINATIONS,
     parse_folder_name,
+    parse_leaf_name,
     analyze_duplicates_for_code,
     group_folders_by_movie_code,
     format_size,
@@ -35,6 +36,10 @@ from utils.rclone_helper import (
     get_year_folders,
     get_actor_folders,
     get_movie_folders,
+    get_configured_root_folder,
+    strip_root_folder,
+    prepend_root_folder,
+    to_full_remote_path,
     setup_rclone_config_from_base64,
     rclone_purge,
 )
@@ -120,6 +125,82 @@ class TestParseFolderName:
     def test_parse_invalid_subtitle_category(self):
         assert parse_folder_name("ABC-123 [有码-未知]") is None
 
+
+# ============================================================================
+# Test parse_leaf_name (new code/leaf layout)
+# ============================================================================
+
+class TestParseLeafName:
+    def test_youma_zhongzi(self):
+        assert parse_leaf_name("有码-中字") == ("有码", "中字")
+
+    def test_wuma_liuchu_zhongzi(self):
+        assert parse_leaf_name("无码流出-中字") == ("无码流出", "中字")
+
+    def test_wuma_pojie_wuzi(self):
+        assert parse_leaf_name("无码破解-无字") == ("无码破解", "无字")
+
+    def test_strips_brackets(self):
+        # tolerate residual brackets in case of partial migrations
+        assert parse_leaf_name("[有码-中字]") == ("有码", "中字")
+        assert parse_leaf_name("(无码-无字)") == ("无码", "无字")
+
+    def test_invalid_no_dash(self):
+        assert parse_leaf_name("有码中字") is None
+
+    def test_invalid_sensor(self):
+        assert parse_leaf_name("未知-中字") is None
+
+    def test_invalid_subtitle(self):
+        assert parse_leaf_name("有码-未知") is None
+
+    def test_empty(self):
+        assert parse_leaf_name("") is None
+
+
+# ============================================================================
+# Test root-folder path helpers
+# ============================================================================
+
+class TestRootFolderHelpers:
+    @patch('packages.python.javdb_platform.config_helper.cfg', autospec=True)
+    def test_get_configured_root_folder_prefers_folder_path(self, mock_cfg):
+        mock_cfg.side_effect = lambda k, d=None: {
+            'RCLONE_FOLDER_PATH': 'gdrive:/剧集/不可以色色/JAV-Sync',
+            'RCLONE_ROOT_FOLDER': '/should/not/use',
+        }.get(k, d)
+        assert get_configured_root_folder() == '剧集/不可以色色/JAV-Sync'
+
+    @patch('packages.python.javdb_platform.config_helper.cfg', autospec=True)
+    def test_get_configured_root_folder_falls_back_to_root_folder(self, mock_cfg):
+        mock_cfg.side_effect = lambda k, d=None: {
+            'RCLONE_FOLDER_PATH': None,
+            'RCLONE_ROOT_FOLDER': '/剧集/不可以色色/JAV-Sync/',
+        }.get(k, d)
+        assert get_configured_root_folder() == '剧集/不可以色色/JAV-Sync'
+
+    def test_strip_root_folder_idempotent_relative(self):
+        assert strip_root_folder('2012/演员/010112-902/无码-无字', root='剧集/不可以色色/JAV-Sync') == '2012/演员/010112-902/无码-无字'
+
+    def test_strip_root_folder_strips_drive_and_root(self):
+        p = 'gdrive:剧集/不可以色色/JAV-Sync/2012/演员/010112-902/无码-无字'
+        assert strip_root_folder(p, root='剧集/不可以色色/JAV-Sync') == '2012/演员/010112-902/无码-无字'
+
+    def test_strip_root_folder_accepts_leading_slash(self):
+        p = '/剧集/不可以色色/JAV-Sync/2012/演员/010112-902/无码-无字'
+        assert strip_root_folder(p, root='剧集/不可以色色/JAV-Sync') == '2012/演员/010112-902/无码-无字'
+
+    def test_prepend_root_folder_noop_when_already_prefixed(self):
+        rel = '剧集/不可以色色/JAV-Sync/2012/演员/010112-902/无码-无字'
+        assert prepend_root_folder(rel, root='剧集/不可以色色/JAV-Sync') == rel
+
+    def test_prepend_root_folder_adds_root(self):
+        rel = '2012/演员/010112-902/无码-无字'
+        assert prepend_root_folder(rel, root='剧集/不可以色色/JAV-Sync') == '剧集/不可以色色/JAV-Sync/2012/演员/010112-902/无码-无字'
+
+    def test_to_full_remote_path_builds_drive_root(self):
+        rel = '2012/演员/010112-902/无码-无字'
+        assert to_full_remote_path(rel, drive='gdrive', root='剧集/不可以色色/JAV-Sync') == 'gdrive:剧集/不可以色色/JAV-Sync/2012/演员/010112-902/无码-无字'
 
 # ============================================================================
 # Test format_size
@@ -503,20 +584,29 @@ class TestFolderStructureParsing:
 
     @patch('utils.rclone_helper.subprocess.run')
     def test_get_movie_folders(self, mock_run):
+        # New layout (post rclone_group_jav.py):
+        #   <root>/<year>/<actor>/<movie_code>/<sensor-subtitle>
+        # ``get_movie_folders`` now uses ``lsjson -R --dirs-only`` and only
+        # picks entries at exactly depth 2 (``code/leaf``).
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout=(
-                "-1 2024-01-01 00:00:00 -1 ABC-123 [有码-中字]\n"
-                "-1 2024-01-01 00:00:00 -1 DEF-456 [无码-无字]\n"
-                "-1 2024-01-01 00:00:00 -1 Invalid Folder\n"
-            ),
+            stdout=json.dumps([
+                {"Path": "ABC-123", "IsDir": True},
+                {"Path": "ABC-123/有码-中字", "IsDir": True},
+                {"Path": "DEF-456", "IsDir": True},
+                {"Path": "DEF-456/无码-无字", "IsDir": True},
+                {"Path": "Invalid Folder", "IsDir": True},
+                {"Path": "Invalid Folder/garbage", "IsDir": True},
+            ]),
         )
         folders = get_movie_folders("gdrive", "Movies", "2024", "Actor")
-        assert len(folders) == 2
-        assert folders[0].movie_code == "ABC-123"
-        assert folders[0].sensor_category == "有码"
-        assert folders[1].movie_code == "DEF-456"
-        assert folders[1].sensor_category == "无码"
+        by_code = {f.movie_code: f for f in folders}
+        assert set(by_code) == {"ABC-123", "DEF-456"}
+        assert by_code["ABC-123"].sensor_category == "有码"
+        assert by_code["ABC-123"].subtitle_category == "中字"
+        assert by_code["ABC-123"].folder_name == "有码-中字"
+        assert by_code["ABC-123"].full_path.endswith("Movies/2024/Actor/ABC-123/有码-中字")
+        assert by_code["DEF-456"].sensor_category == "无码"
 
 
 # ============================================================================
