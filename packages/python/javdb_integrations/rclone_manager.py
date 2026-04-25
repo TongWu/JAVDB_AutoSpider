@@ -80,6 +80,9 @@ from packages.python.javdb_integrations.rclone_helper import (
     strip_drive_name,
     get_configured_drive_name,
     prepend_drive_name,
+    get_configured_root_folder,
+    strip_root_folder,
+    to_full_remote_path,
     has_remote_prefix,
     INCREMENTAL_DAYS,
 )
@@ -138,9 +141,11 @@ def resolve_rclone_root(cli_root_path: Optional[str]) -> Optional[Tuple[str, str
 
 
 def _folder_to_row(folder: FolderInfo, remote_name: str, root_folder: str, scan_time: str) -> dict:
-    folder_path = strip_drive_name(folder.full_path)
+    # Persist only the relative path under the configured root folder.
+    folder_path = strip_root_folder(strip_drive_name(folder.full_path))
     if not folder_path:
-        folder_path = f"{root_folder}/{folder.year}/{folder.actor}/{folder.folder_name}"
+        # Fallback: always relative (no root prefix).
+        folder_path = f"{folder.year}/{folder.actor}/{folder.movie_code}/{folder.folder_name}"
     return {
         'video_code': folder.movie_code,
         'sensor_category': folder.sensor_category,
@@ -319,16 +324,25 @@ def load_inventory_as_folder_structure(
         return {}
 
     drive_name = get_configured_drive_name()
+    root = get_configured_root_folder()
 
     structure: Dict[str, Dict[str, List[FolderInfo]]] = {}
     for row in rows:
         folder_path = row.get('FolderPath', row.get('folder_path', ''))
-        raw_path = strip_drive_name(folder_path)
-        parts = raw_path.split('/')
+        # folder_path is stored relative to root.  Still accept older absolute
+        # paths and strip root if present.
+        raw_rel = strip_root_folder(strip_drive_name(folder_path), root=root)
+        parts = raw_rel.split('/') if raw_rel else []
         year = ''
         actor = ''
         folder_name = ''
-        if len(parts) >= 3:
+        # New layout: <year>/<actor>/<movie_code>/<sensor-subtitle>
+        # Legacy layout: <year>/<actor>/<movie_code [sensor-subtitle]>
+        if len(parts) >= 4:
+            folder_name = parts[-1]
+            actor = parts[-3]
+            year = parts[-4]
+        elif len(parts) >= 3:
             folder_name = parts[-1]
             actor = parts[-2]
             year = parts[-3]
@@ -338,7 +352,7 @@ def load_inventory_as_folder_structure(
             continue
 
         fi = FolderInfo(
-            full_path=prepend_drive_name(raw_path, drive_name),
+            full_path=to_full_remote_path(raw_rel, drive=drive_name, root=root),
             year=year,
             actor=actor,
             movie_code=code,
@@ -424,7 +438,7 @@ def _persist_dedup_records(dedup_results: List[DedupResult]) -> None:
                     video_code=folder.movie_code,
                     existing_sensor=folder.sensor_category,
                     existing_subtitle=folder.subtitle_category,
-                    existing_gdrive_path=strip_drive_name(folder.full_path),
+                    existing_gdrive_path=strip_root_folder(strip_drive_name(folder.full_path)),
                     existing_folder_size=folder.size,
                     new_torrent_category='',
                     deletion_reason=reason,
@@ -590,6 +604,7 @@ def run_execute_from_csv(
     skip_count = 0
 
     drive_name = get_configured_drive_name()
+    root = get_configured_root_folder()
 
     unique_paths: Dict[str, bool] = {}
     for row in pending:
@@ -606,7 +621,7 @@ def run_execute_from_csv(
 
     purged_pairs: list = []
     for folder_path in unique_paths:
-        full_path = prepend_drive_name(folder_path, drive_name)
+        full_path = to_full_remote_path(folder_path, drive=drive_name, root=root)
         ok = rclone_purge(full_path, dry_run=dry_run)
         if ok:
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -659,6 +674,7 @@ def run_execute_soft_delete_from_csv(
         return 0
 
     drive_name = get_configured_drive_name()
+    root = get_configured_root_folder()
     success = 0
     failed = 0
     skipped = 0
@@ -683,16 +699,16 @@ def run_execute_soft_delete_from_csv(
         seen_sources.add(source_path)
 
         destination_path = (row.get('destination_path') or row.get('DestinationPath') or '').strip()
-        full_source = prepend_drive_name(source_path, drive_name)
+        full_source = to_full_remote_path(source_path, drive=drive_name, root=root)
         if not destination_path:
             if not backup_prefix:
                 logger.warning("Missing destination_path and no backup_prefix set for source: %s", source_path)
                 failed += 1
                 continue
-            src_rel = strip_drive_name(source_path).lstrip('/')
+            src_rel = strip_root_folder(strip_drive_name(source_path), root=root).lstrip('/')
             destination_path = f"{backup_prefix.rstrip('/')}/{src_rel}"
         else:
-            destination_path = prepend_drive_name(destination_path, drive_name)
+            destination_path = to_full_remote_path(destination_path, drive=drive_name, root=root)
 
         if rclone_move(full_source, destination_path, dry_run=dry_run):
             success += 1
@@ -734,6 +750,7 @@ def run_execute_inventory_purge_from_csv(
         return 0
 
     drive_name = get_configured_drive_name()
+    root = get_configured_root_folder()
     success = 0
     failed = 0
     skipped = 0
@@ -757,7 +774,7 @@ def run_execute_inventory_purge_from_csv(
             continue
         seen_sources.add(source_path)
 
-        full_path = prepend_drive_name(source_path, drive_name)
+        full_path = to_full_remote_path(source_path, drive=drive_name, root=root)
         if rclone_purge(full_path, dry_run=dry_run):
             success += 1
         else:
