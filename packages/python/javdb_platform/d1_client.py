@@ -135,7 +135,15 @@ class D1Connection:
         self.row_factory = None
 
     def execute(self, sql: str, params: Iterable[Any] = ()) -> D1Cursor:
-        cursor = self._post_with_retry([{"sql": sql, "params": list(params)}])[0]
+        cursors = self._post_with_retry([{"sql": sql, "params": list(params)}])
+        if not cursors:
+            # success=true but empty result[] — should never happen per CF docs,
+            # but guard against API regressions / proxy stripping the body.
+            raise D1PermanentError(
+                "D1 API returned success with empty result list; "
+                f"expected 1 cursor for SQL: {sql[:200]}"
+            )
+        cursor = cursors[0]
         self._total_changes += cursor.rowcount
         return cursor
 
