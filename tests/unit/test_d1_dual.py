@@ -246,6 +246,50 @@ def no_sleep(monkeypatch):
     return sleeps
 
 
+def test_execute_sends_single_object_body(monkeypatch, d1_conn, no_sleep):
+    """CF /query rejects bare arrays; single statement must be {sql, params}."""
+    captured = {}
+
+    def fake_post(url, headers, json, timeout):
+        captured["json"] = json
+        return _FakeResponse(
+            status_code=200,
+            json_body={"success": True, "result": [{"meta": {"changes": 1}, "results": []}]},
+        )
+
+    monkeypatch.setattr(_d1_client_module.requests, "post", fake_post)
+    d1_conn.execute("SELECT * FROM t WHERE id = ?", (1,))
+    assert isinstance(captured["json"], dict)
+    assert captured["json"] == {"sql": "SELECT * FROM t WHERE id = ?", "params": [1]}
+
+
+def test_executemany_sends_batch_object_body(monkeypatch, d1_conn, no_sleep):
+    """Multi-statement must be {batch: [...]}, not a bare array."""
+    captured = []
+
+    def fake_post(url, headers, json, timeout):
+        captured.append(json)
+        return _FakeResponse(
+            status_code=200,
+            json_body={
+                "success": True,
+                "result": [{"meta": {"changes": 1}, "results": []}] * len(json["batch"]),
+            },
+        )
+
+    monkeypatch.setattr(_d1_client_module.requests, "post", fake_post)
+    d1_conn.executemany("INSERT INTO t (v) VALUES (?)", [("a",), ("b",), ("c",)])
+
+    assert len(captured) == 1
+    assert isinstance(captured[0], dict)
+    assert "batch" in captured[0]
+    assert captured[0]["batch"] == [
+        {"sql": "INSERT INTO t (v) VALUES (?)", "params": ["a"]},
+        {"sql": "INSERT INTO t (v) VALUES (?)", "params": ["b"]},
+        {"sql": "INSERT INTO t (v) VALUES (?)", "params": ["c"]},
+    ]
+
+
 def test_retry_on_5xx_then_succeeds(monkeypatch, d1_conn, no_sleep):
     calls = []
 
