@@ -908,6 +908,80 @@ def _is_redownload_dedup_reason(reason):
     return normalized.startswith('re-download upgrade') or normalized.startswith('redownload upgrade')
 
 
+def _extract_last_dedup_executor_run(log_path=None):
+    """Parse the dedup executor log and return stats for the most recent run.
+
+    The executor (``rclone_manager.py --execute``) emits a deterministic
+    block per run::
+
+        2026-04-26 00:59:08,094 - Rclone - INFO - ====...====
+        2026-04-26 00:59:08,094 - Rclone - INFO - RCLONE DEDUP EXECUTOR
+        ...
+        2026-04-26 01:00:26,894 - Rclone - INFO - DEDUP EXECUTOR COMPLETE
+        2026-04-26 01:00:26,894 - Rclone - INFO - Pending rows: 15, unique paths: 15
+        2026-04-26 01:00:26,894 - Rclone - INFO - Purged: 10, failed: 5, skipped (empty path): 0
+
+    Returns a dict with keys ``start_time``, ``end_time``, ``pending``,
+    ``purged``, ``failed``, ``skipped`` for the LAST such block, or
+    ``None`` when the log is missing / no completed run found.
+    """
+    path = log_path or DEDUP_LOG_FILE
+    if not path or not os.path.exists(path):
+        return None
+
+    try:
+        with open(path, 'r', encoding='utf-8', errors='replace') as f:
+            lines = f.readlines()
+    except Exception as e:
+        logger.debug(f"Could not read dedup executor log {path}: {e}")
+        return None
+
+    # Find the LAST 'RCLONE DEDUP EXECUTOR' marker
+    start_idx = None
+    for i in range(len(lines) - 1, -1, -1):
+        if 'RCLONE DEDUP EXECUTOR' in lines[i]:
+            start_idx = i
+            break
+    if start_idx is None:
+        return None
+
+    # Timestamp prefix: '2026-04-26 00:59:08,094 - ...'
+    ts_re = re.compile(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})')
+    start_match = ts_re.match(lines[start_idx])
+    if not start_match:
+        return None
+    start_time = start_match.group(1)
+
+    block = lines[start_idx:]
+    pending = purged = failed = skipped = None
+    end_time = None
+    for ln in block:
+        if 'DEDUP EXECUTOR COMPLETE' in ln:
+            m = ts_re.match(ln)
+            if m:
+                end_time = m.group(1)
+        m = re.search(r'Pending rows:\s*(\d+)', ln)
+        if m:
+            pending = int(m.group(1))
+        m = re.search(r'Purged:\s*(\d+),\s*failed:\s*(\d+)(?:,\s*skipped\s*\(empty path\):\s*(\d+))?', ln)
+        if m:
+            purged = int(m.group(1))
+            failed = int(m.group(2))
+            skipped = int(m.group(3)) if m.group(3) is not None else 0
+
+    if purged is None or failed is None:
+        return None
+
+    return {
+        'start_time': start_time,
+        'end_time': end_time or start_time,
+        'pending': pending if pending is not None else (purged + failed),
+        'purged': purged,
+        'failed': failed,
+        'skipped': skipped or 0,
+    }
+
+
 def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
     """Extract dedup statistics for the email report.
 
@@ -965,11 +1039,29 @@ def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
     if not rows:
         return None
 
-    # Determine the cutoff for "current session" records.
-    # When session_start_time is unavailable, cutoff stays None and all rows
-    # are treated as in-session (avoids dropping pre-midnight rows on
-    # cross-midnight runs).
-    cutoff = session_start_time or None
+    # Prefer the dedup executor's own log as the authoritative window:
+    # it contains the exact pending/purged/failed counts for the LAST run
+    # and a precise start timestamp.  Falling back on session_start_time
+    # is unreliable because the DB retains up to 30 days of dedup history,
+    # so any miss in the cutoff would inflate the counts to the entire
+    # retained set (e.g. 682 detected / 677 deleted instead of 15 / 10).
+    executor_run = _extract_last_dedup_executor_run()
+    cutoff = None
+    if executor_run is not None:
+        cutoff = executor_run['start_time']
+        logger.debug(
+            f"Dedup executor window: start={executor_run['start_time']} "
+            f"pending={executor_run['pending']} purged={executor_run['purged']} "
+            f"failed={executor_run['failed']}"
+        )
+    else:
+        # Fall back to ReportSessions cutoff, or no filter as a last resort.
+        cutoff = session_start_time or None
+        if cutoff is None:
+            logger.warning(
+                "Dedup executor log not found and no session_start_time provided — "
+                "dedup counts will reflect ALL retained DB records, not just this run."
+            )
 
     detected_session = sum(
         1 for r in rows
@@ -996,10 +1088,22 @@ def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
                 f"-> {r.get('deletion_reason', '?')}"
             )
 
+    # When we have authoritative executor counts, override the totals so the
+    # email matches the executor's behaviour exactly.  The deleted_items list
+    # has already been narrowed to the executor window above.
+    if executor_run is not None:
+        detected_total = executor_run['pending']
+        deleted_total = executor_run['purged']
+        failed_total = executor_run['failed']
+    else:
+        detected_total = detected_session
+        deleted_total = len(deleted_session_items)
+        failed_total = detected_total - deleted_total if detected_total > deleted_total else 0
+
     return {
-        'detected': detected_session,
-        'deleted': len(deleted_session_items),
-        'failed': detected_session - len(deleted_session_items) if detected_session > len(deleted_session_items) else 0,
+        'detected': detected_total,
+        'deleted': deleted_total,
+        'failed': failed_total,
         'redownload_detected': redownload_detected_session,
         'redownload_deleted': redownload_deleted_session,
         'deleted_items': deleted_session_items,
