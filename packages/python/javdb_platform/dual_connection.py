@@ -175,6 +175,52 @@ class DualCursor:
         return iter(self._sqlite_cur) if self._sqlite_cur is not None else iter(())
 
 
+def _sqlite_row_to_dict(row):
+    """Convert a sqlite3.Row (or compatible mapping) into a plain dict.
+
+    Mirrors the helper used by the D1 reconciler so callers in the read
+    fallback path see the same dict-shaped rows whether the data came
+    from D1 or local SQLite.
+    """
+    if row is None:
+        return None
+    if isinstance(row, dict):
+        return row
+    try:
+        return {k: row[k] for k in row.keys()}
+    except Exception:  # noqa: BLE001 — last-resort fallback, never raise
+        return dict(row)
+
+
+class _SqliteFallbackCursor:
+    """Wraps a ``sqlite3.Cursor`` so iteration / fetch* return dict rows.
+
+    The read path in :meth:`DualConnection.execute` falls back to SQLite
+    when D1 is unreachable; D1 yields dict-like rows natively, but
+    ``sqlite3.Row`` is *not* a dict (no ``.get()``, no ``in`` membership
+    over keys, etc.). Callers in the codebase routinely treat SELECT
+    results as mappings, so we wrap the cursor here to keep the contract
+    consistent regardless of which backend served the query.
+    """
+
+    __slots__ = ("_cur", "lastrowid", "rowcount")
+
+    def __init__(self, sqlite_cur):
+        self._cur = sqlite_cur
+        self.lastrowid = sqlite_cur.lastrowid
+        self.rowcount = sqlite_cur.rowcount
+
+    def fetchone(self):
+        return _sqlite_row_to_dict(self._cur.fetchone())
+
+    def fetchall(self):
+        return [_sqlite_row_to_dict(r) for r in self._cur.fetchall()]
+
+    def __iter__(self):
+        for row in self._cur:
+            yield _sqlite_row_to_dict(row)
+
+
 class DualConnection:
     """Facade that writes to SQLite + D1, reads from D1.
 
@@ -201,8 +247,12 @@ class DualConnection:
             try:
                 return self._d1.execute(sql, params)
             except Exception as exc:
-                self._record_d1_failure(sql, exc, kind="read")
-                return self._sqlite.execute(sql, params)
+                # Read failures are NOT drift — we transparently fall back to
+                # SQLite and keep serving the request. Counting them as drift
+                # would inflate ``failure_count`` in the JSONL and trigger
+                # spurious reconciliation passes.
+                self._record_d1_read_failure(sql, exc)
+                return _SqliteFallbackCursor(self._sqlite.execute(sql, params))
 
         sqlite_cur = self._sqlite.execute(sql, params)
         d1_cur = None
@@ -261,20 +311,34 @@ class DualConnection:
 
     # ── Diagnostics ─────────────────────────────────────────────────────
 
+    def _track_failure_signature(self, sql: str) -> int:
+        """Update the LRU and return the prior count for this signature.
+
+        Shared between read- and write-failure paths so both honour the
+        same WARNING-vs-DEBUG throttling without double-counting.
+        """
+        sig = _signature(sql)
+        prior = self._recent_failure_signatures.get(sig, 0)
+        self._recent_failure_signatures[sig] = prior + 1
+        self._recent_failure_signatures.move_to_end(sig)
+        while len(self._recent_failure_signatures) > _RECENT_FAILURE_LRU_MAX:
+            self._recent_failure_signatures.popitem(last=False)
+        return prior
+
     def _record_d1_failure(self, sql: str, exc: Exception, *, kind: str) -> None:
+        """Record a D1 *write*-side failure (counts toward drift JSONL).
+
+        Only call this for paths that mutate D1 state (INSERT / UPDATE /
+        DELETE / executemany / executescript / commit). Read failures
+        must use :meth:`_record_d1_read_failure` so they don't pollute
+        the drift counters.
+        """
         self._d1_failure_count += 1
         if self._d1_failure_first_sql is None:
             self._d1_failure_first_sql = _shorten(sql, 200)
             self._d1_failure_first_error = f"{type(exc).__name__}: {exc}"
 
-        sig = _signature(sql)
-        prior = self._recent_failure_signatures.get(sig, 0)
-        self._recent_failure_signatures[sig] = prior + 1
-        # Keep LRU bounded.
-        self._recent_failure_signatures.move_to_end(sig)
-        while len(self._recent_failure_signatures) > _RECENT_FAILURE_LRU_MAX:
-            self._recent_failure_signatures.popitem(last=False)
-
+        prior = self._track_failure_signature(sql)
         if prior >= 1:
             logger.debug(
                 "D1 %s failed (repeat #%d for this signature): %s | sql=%s",
@@ -284,6 +348,27 @@ class DualConnection:
             logger.warning(
                 "D1 %s failed (SQLite still applied): %s | sql=%s",
                 kind, exc, _shorten(sql),
+            )
+
+    def _record_d1_read_failure(self, sql: str, exc: Exception) -> None:
+        """Log a D1 *read* failure WITHOUT incrementing the drift counter.
+
+        Read failures are recoverable: the caller transparently falls back
+        to local SQLite and keeps serving the query. They do NOT represent
+        SQLite-vs-D1 row divergence, so ``commit()`` and ``d1_drift.jsonl``
+        must remain untouched. We still apply the LRU throttle so a flaky
+        D1 doesn't flood WARNING logs.
+        """
+        prior = self._track_failure_signature(sql)
+        if prior >= 1:
+            logger.debug(
+                "D1 read failed (repeat #%d, falling back to SQLite): %s | sql=%s",
+                prior + 1, exc, _shorten(sql),
+            )
+        else:
+            logger.warning(
+                "D1 read failed (falling back to SQLite, not counted as drift): %s | sql=%s",
+                exc, _shorten(sql),
             )
 
     def _flush_drift_record(self, *, committed: bool) -> None:
