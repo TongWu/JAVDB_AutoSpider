@@ -110,6 +110,15 @@ The spider operates in two modes:
 - Works with both local and remote proxy setups
 - Automatically activated as a fallback when direct requests fail
 
+### Cross-Runner Proxy Coordinator (Optional)
+- Cloudflare Worker + Durable Object that serializes per-proxy request pacing across **all concurrent GitHub Actions runners**, so multiple workflows sharing the same `PROXY_POOL_JSON` no longer hammer the same physical proxy in parallel
+- Per-`proxy_id` global mutex via `idFromName(proxy_id)` — one DO instance per proxy, persistent state, hibernates when idle
+- Shared `penalty_factor` propagation: when one runner hits a CF Turnstile, all other runners pick it up on the next `/lease` call
+- **Fail-open by design**: if the Worker is unreachable / token mismatched / network is down, the spider transparently falls back to local throttling (`MovieSleepManager`) — no retries, no extra latency on the hot path
+- Free-tier-friendly: SQLite-backed DO, ~1 HTTP roundtrip per scheduled request, well under Cloudflare's 100 k/day Worker + DO request quotas
+- **Worker source lives in a dedicated repo**: [TongWu/JAVDB_AutoSpider_Proxycoordinator](https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator) (TypeScript + wrangler + vitest). Python client stays in this monorepo at [`packages/python/javdb_platform/proxy_coordinator_client.py`](packages/python/javdb_platform/proxy_coordinator_client.py).
+- Full deploy walkthrough: [docs/PROXY_COORDINATOR_DEPLOY.md](docs/PROXY_COORDINATOR_DEPLOY.md)
+
 ## Installation
 
 1. Install Python dependencies:
@@ -1652,6 +1661,8 @@ python3 -m apps.cli.qb_file_filter --min-size 100 --days 3 --dry-run  # Preview 
 - [JavDB Login Guide](utils/login/JAVDB_LOGIN_README.md)
 - [Rust Installation Guide (macOS)](docs/RUST_INSTALLATION_MAC.md)
 - [API Usage Guide](docs/API_USAGE_GUIDE.md)
+- [Proxy Coordinator Worker repo](https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator) — Cloudflare Worker + Durable Object source
+- [Proxy Coordinator Deployment Guide](docs/PROXY_COORDINATOR_DEPLOY.md) — step-by-step deploy + GitHub Actions wiring
 
 ## Contributing
 
