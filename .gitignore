@@ -106,3 +106,5 @@ rust_core/target/sdist/
 *.db-shm
 .cursorrules
 pytest-of-tedwu/*
+
+proxy_coordinator/
