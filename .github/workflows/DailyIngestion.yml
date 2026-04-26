@@ -550,6 +550,15 @@ jobs:
               echo "Including: $HIST_FILE"
             fi
           done
+          # D1 drift audit logs MUST be archived so commit-results can stage
+          # the actual generated files after its fresh checkout, including on
+          # failed runs where the audit trail is most valuable.
+          for DRIFT_FILE in "$REPORTS_DIR/d1_drift.jsonl" "$REPORTS_DIR/d1_drift.processed.jsonl"; do
+            if [ -f "$DRIFT_FILE" ]; then
+              FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $DRIFT_FILE"
+              echo "Including: $DRIFT_FILE"
+            fi
+          done
           # Add dedup reports (reports/Dedup/YYYY/MM/*.csv)
           if [ -d "$REPORTS_DIR/Dedup" ]; then
             while IFS= read -r f; do
