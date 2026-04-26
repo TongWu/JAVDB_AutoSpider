@@ -811,19 +811,20 @@ class _EngineWorker(threading.Thread):
                     continue
                 self._first_request = False
             else:
-                sleep_time = self._sleep_mgr.get_sleep_time()
-                pf = (
-                    self._sleep_mgr._penalty_tracker.get_penalty_factor()
-                    if self._sleep_mgr._penalty_tracker else 1.0
-                )
-                logger.debug(
-                    "Movie sleep: %.2fs (penalty=%.2f)", sleep_time, pf,
-                )
+                # Consult the cross-instance proxy coordinator (when
+                # configured) before sleeping.  ``plan_sleep`` returns the
+                # total wait we should observe and a flag indicating
+                # whether the cross-instance throttle was already enforced
+                # — in that case we skip the local TripleWindowThrottle to
+                # avoid double-counting waits.  Fall-open path (no
+                # coordinator, or coordinator unreachable) preserves the
+                # original local sleep + throttle behaviour.
+                sleep_time, used_coordinator = self._sleep_mgr.plan_sleep()
                 if self._interruptible_sleep(sleep_time):
                     if not task._speculative:
                         self.task_queue.put(task)
                     continue
-                if self._sleep_mgr._throttle:
+                if not used_coordinator and self._sleep_mgr._throttle:
                     self._sleep_mgr._throttle.wait_if_needed()
 
             if self._stop_event.is_set():
