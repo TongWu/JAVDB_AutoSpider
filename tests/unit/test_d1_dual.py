@@ -606,6 +606,81 @@ def test_no_drift_log_when_d1_healthy(monkeypatch, sqlite_conn, tmp_path):
     assert not drift_path.exists()
 
 
+def test_rollback_after_successful_d1_writes_logs_drift(monkeypatch, sqlite_conn, tmp_path):
+    """SQLite rolled back, D1 already auto-committed → real divergence.
+
+    Even with zero D1 failures the transaction still leaves D1 holding
+    rows SQLite no longer has, which the reconciler must see.
+    """
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    fake_d1 = FakeD1Connection()
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
+
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("x",))
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("y",))
+    dual.rollback()
+
+    assert drift_path.exists()
+    lines = drift_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["db"] == "history"
+    assert record["committed"] is False
+    assert record["failure_count"] == 0
+    assert record["uncommitted_d1_writes"] == 2
+    # No failure happened so first_failed_sql stays empty.
+    assert record["first_failed_sql"] is None
+
+
+def test_rollback_with_no_writes_does_not_log_drift(monkeypatch, sqlite_conn, tmp_path):
+    """Read-only or empty transactions must not emit drift on rollback."""
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    fake_d1 = FakeD1Connection()
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
+    # SELECT routes to D1 only; no write happens on either side.
+    dual.execute("SELECT COUNT(*) AS n FROM t")
+    dual.rollback()
+
+    assert not drift_path.exists()
+
+
+def test_rollback_drift_includes_executemany_count(monkeypatch, sqlite_conn, tmp_path):
+    """Successful executemany writes must inflate uncommitted_d1_writes."""
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    fake_d1 = FakeD1Connection()
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
+    dual.executemany(
+        "INSERT INTO t (v) VALUES (?)", [("a",), ("b",), ("c",)]
+    )
+    dual.rollback()
+
+    record = json.loads(drift_path.read_text(encoding="utf-8").strip())
+    assert record["uncommitted_d1_writes"] == 3
+    assert record["failure_count"] == 0
+
+
+def test_uncommitted_writes_reset_after_commit(monkeypatch, sqlite_conn, tmp_path):
+    """Successful commit must zero the counter so a later read-only
+    rollback doesn't replay the previous transaction's writes as drift."""
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    fake_d1 = FakeD1Connection()
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
+
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("x",))
+    dual.commit()  # both backends in sync, counter resets
+    dual.rollback()  # nothing to roll back
+
+    assert not drift_path.exists()
+
+
 def test_current_backend_reflects_env(monkeypatch):
     """``current_backend()`` should reflect the active STORAGE_BACKEND."""
     from packages.python.javdb_platform import db as _db
