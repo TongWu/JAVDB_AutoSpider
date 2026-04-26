@@ -16,8 +16,17 @@ pipeline keeps running even if the D1 mirror is temporarily unavailable.
 
 Drift tracking
 --------------
-Each :class:`DualConnection` keeps a per-transaction counter of D1 write
-failures. On ``commit()`` (or ``rollback()``), if any D1 failures occurred,
+Each :class:`DualConnection` keeps two per-transaction counters that
+together cover both ways SQLite and D1 can diverge:
+
+* ``_d1_failure_count`` — number of D1 write failures (caller's SQL
+  applied locally but the mirrored D1 statement raised).
+* ``_d1_uncommitted_writes`` — number of D1 writes that succeeded since
+  the last ``commit()``/``rollback()``.  Because D1 auto-commits every
+  HTTP statement, a SQLite ``rollback()`` with a non-zero count means
+  D1 still holds rows SQLite has just discarded — also drift.
+
+On ``commit()`` (or ``rollback()``), if either counter signals divergence,
 a structured record is appended to ``reports/d1_drift.jsonl`` so an out-of-
 band reconciliation job can later inspect what diverged.
 
@@ -236,6 +245,11 @@ class DualConnection:
         self._d1_failure_count = 0
         self._d1_failure_first_sql: Optional[str] = None
         self._d1_failure_first_error: Optional[str] = None
+        # Successful D1 writes since the last commit/rollback. Tracked
+        # separately from failures because D1 auto-commits each statement,
+        # so a SQLite rollback with N>0 means D1 keeps rows SQLite no
+        # longer has — that's drift even when zero failures occurred.
+        self._d1_uncommitted_writes = 0
         self._recent_failure_signatures: "collections.OrderedDict[str, int]" = (
             collections.OrderedDict()
         )
@@ -258,6 +272,7 @@ class DualConnection:
         d1_cur = None
         try:
             d1_cur = self._d1.execute(sql, params)
+            self._d1_uncommitted_writes += 1
             self._maybe_warn_id_drift(sqlite_cur, d1_cur, sql)
         except Exception as exc:
             self._record_d1_failure(sql, exc, kind="write")
@@ -268,13 +283,18 @@ class DualConnection:
         self._sqlite.executemany(sql, seq_list)
         try:
             self._d1.executemany(sql, seq_list)
+            self._d1_uncommitted_writes += len(seq_list)
         except Exception as exc:
+            # On partial failure D1 may still have applied a prefix of the
+            # batch; ``_d1_uncommitted_writes`` is intentionally a lower
+            # bound so the failure record is the source of truth here.
             self._record_d1_failure(sql, exc, kind="executemany")
 
     def executescript(self, script: str):
         self._sqlite.executescript(script)
         try:
             self._d1.executescript(script)
+            self._d1_uncommitted_writes += 1
         except Exception as exc:
             self._record_d1_failure(script, exc, kind="executescript")
 
@@ -290,10 +310,16 @@ class DualConnection:
 
     def rollback(self):
         self._sqlite.rollback()
-        logger.warning(
-            "DualConnection.rollback(): SQLite rolled back; D1 cannot truly "
-            "roll back per-statement auto-commits — drift may have been introduced."
-        )
+        # Only warn when there's actually something to be concerned about:
+        # if no D1 writes happened (read-only transaction) and no failures
+        # were recorded, the rollback is a true no-op for both backends.
+        if self._d1_uncommitted_writes > 0:
+            logger.warning(
+                "DualConnection.rollback(): SQLite rolled back, but %d "
+                "previously-applied D1 write(s) cannot be rolled back "
+                "(D1 auto-commits per statement) — drift introduced.",
+                self._d1_uncommitted_writes,
+            )
         self._flush_drift_record(committed=False)
 
     def close(self):
@@ -372,7 +398,13 @@ class DualConnection:
             )
 
     def _flush_drift_record(self, *, committed: bool) -> None:
-        if self._d1_failure_count <= 0:
+        # Two independent ways the transaction can leave SQLite and D1 out
+        # of sync:
+        #   1. One or more D1 writes raised — captured by failure_count.
+        #   2. SQLite rolled back successful D1 writes — D1 auto-commits
+        #      per statement so those rows are now orphans on D1's side.
+        rollback_drift = (not committed) and self._d1_uncommitted_writes > 0
+        if self._d1_failure_count <= 0 and not rollback_drift:
             self._reset_failure_state()
             return
         record = {
@@ -380,21 +412,35 @@ class DualConnection:
             "db": self._logical_name,
             "committed": committed,
             "failure_count": self._d1_failure_count,
+            # Only meaningful on rollback; on commit both backends agree
+            # and the count represents successful (and now matching) writes.
+            "uncommitted_d1_writes": (
+                self._d1_uncommitted_writes if not committed else 0
+            ),
             "first_failed_sql": self._d1_failure_first_sql,
             "first_error": self._d1_failure_first_error,
         }
         _append_drift_record(record)
-        logger.error(
-            "Transaction %s with %d D1 write failure(s) on db=%s; drift logged to %s",
-            "committed" if committed else "rolled back",
-            self._d1_failure_count, self._logical_name, _DRIFT_LOG_PATH,
-        )
+        if self._d1_failure_count > 0:
+            logger.error(
+                "Transaction %s with %d D1 write failure(s) on db=%s; "
+                "drift logged to %s",
+                "committed" if committed else "rolled back",
+                self._d1_failure_count, self._logical_name, _DRIFT_LOG_PATH,
+            )
+        else:  # rollback_drift only
+            logger.error(
+                "Transaction rolled back after %d successful D1 write(s) on "
+                "db=%s; D1 cannot undo them — drift logged to %s",
+                self._d1_uncommitted_writes, self._logical_name, _DRIFT_LOG_PATH,
+            )
         self._reset_failure_state()
 
     def _reset_failure_state(self) -> None:
         self._d1_failure_count = 0
         self._d1_failure_first_sql = None
         self._d1_failure_first_error = None
+        self._d1_uncommitted_writes = 0
         self._recent_failure_signatures.clear()
 
     @staticmethod
