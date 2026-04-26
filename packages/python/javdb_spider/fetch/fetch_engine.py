@@ -38,6 +38,7 @@ Usage (advanced mode — multi-step fetch inside process_fn)::
 
 from __future__ import annotations
 
+import hashlib
 import queue as queue_module
 import random
 import sys
@@ -377,6 +378,41 @@ class WorkerContext:
 
 
 # ---------------------------------------------------------------------------
+# Coordinator addressing
+# ---------------------------------------------------------------------------
+
+
+def _stable_proxy_id(proxy_config: dict, worker_id: int) -> str:
+    """Derive a stable identifier for the cross-instance proxy coordinator.
+
+    Different GH Actions runners (and successive runs on the same runner)
+    must hash to the same Durable Object for a given physical proxy,
+    otherwise the per-proxy mutex silently splits and we lose the global
+    rate-limit guarantee. Resolution order:
+
+    1. ``proxy_config['name']`` — explicitly configured identity wins.
+    2. SHA-1 of ``https``/``http`` URL — deterministic across runners that
+       share the same proxy endpoint, even if they happen to start workers
+       in different orders.
+    3. ``Proxy-{worker_id}`` — last-resort label. Unstable across runs
+       because ``worker_id`` is just an enumeration index, but at least
+       keeps the spider running when neither name nor URL is configured.
+
+    The ordinal label remains in :attr:`_EngineWorker.proxy_name` for
+    human-readable logs / ban manager / thread name; coordination uses
+    only the value returned here.
+    """
+    name = proxy_config.get('name')
+    if isinstance(name, str) and name.strip():
+        return name.strip()[:256]
+    url = proxy_config.get('https') or proxy_config.get('http')
+    if isinstance(url, str) and url.strip():
+        digest = hashlib.sha1(url.strip().encode('utf-8')).hexdigest()[:16]
+        return f"proxy-{digest}"
+    return f"Proxy-{worker_id}"
+
+
+# ---------------------------------------------------------------------------
 # _EngineWorker — internal worker thread (not part of public API)
 # ---------------------------------------------------------------------------
 
@@ -429,7 +465,12 @@ class _EngineWorker(threading.Thread):
         self._per_worker_completed = 0
         self._task_timeout = max(0.0, float(task_timeout))
         self.proxy_config = proxy_config
+        # proxy_name is the human-readable label (logs, ban manager, thread
+        # name) and intentionally falls back to the ordinal index. The
+        # coordinator addressing key is computed separately by
+        # _stable_proxy_id() so DO routing stays consistent across runs.
         self.proxy_name: str = proxy_config.get('name', f'Proxy-{worker_id}')
+        self._coordinator_proxy_id: str = _stable_proxy_id(proxy_config, worker_id)
         self.task_queue = task_queue
         self.result_queue = result_queue
         self.login_queue = login_queue
@@ -462,16 +503,17 @@ class _EngineWorker(threading.Thread):
         # worker must raise the penalty factor for all workers' adaptive sleep.
         # Per-worker TripleWindowThrottle stays isolated (independent proxy IPs).
         # When a cross-instance proxy coordinator is configured, each worker
-        # passes its proxy_name as proxy_id so the per-proxy DO mutex
-        # serialises requests across all GH Actions runners holding this proxy.
-        # Coordinator absence (None) preserves the original local-only path.
+        # passes its STABLE coordinator id (configured name / hashed URL) as
+        # proxy_id so the per-proxy DO mutex serialises requests across all GH
+        # Actions runners holding this proxy regardless of worker startup
+        # order. Coordinator absence (None) preserves the local-only path.
         self._sleep_mgr = MovieSleepManager(
             sleep_min, sleep_max,
             penalty_tracker=penalty_tracker,
             throttle=TripleWindowThrottle(),
             proxy_label=self.proxy_name,
             coordinator=state.global_proxy_coordinator,
-            proxy_id=self.proxy_name,
+            proxy_id=self._coordinator_proxy_id,
         )
 
         self._proxy_pool = create_proxy_pool_from_config(
@@ -483,15 +525,15 @@ class _EngineWorker(threading.Thread):
         # Per-proxy CF/failure callback wires into the cross-instance
         # coordinator so other GH Actions runners using this same proxy
         # also see the elevated penalty_factor on their next /lease call.
-        # Captures self.proxy_name and the global coordinator at construction
-        # time; no-op when no coordinator is configured.
+        # Captures the STABLE coordinator id (NOT proxy_name, which can fall
+        # back to an ordinal index) so reports route to the same DO every run.
         coordinator = state.global_proxy_coordinator
-        proxy_name = self.proxy_name
-        if coordinator is not None and proxy_name:
+        coord_proxy_id = self._coordinator_proxy_id
+        if coordinator is not None and coord_proxy_id:
             # Per-worker callback is pinned to a single proxy via closure;
             # the positional arg from RequestHandler is intentionally ignored
             # (only the global fallback handler uses it).
-            def _cf_event_cb(_unused_proxy_name=None, _c=coordinator, _p=proxy_name):
+            def _cf_event_cb(_unused_proxy_name=None, _c=coordinator, _p=coord_proxy_id):
                 _c.report_async(_p, "cf")
         else:
             _cf_event_cb = None
