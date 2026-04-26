@@ -41,14 +41,45 @@ from packages.python.javdb_platform.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-_READ_PREFIX_RE = re.compile(
-    r"^\s*(?:--[^\n]*\n\s*|/\*.*?\*/\s*)*(SELECT|WITH|PRAGMA|EXPLAIN)\b",
-    re.IGNORECASE | re.DOTALL,
-)
+_READ_KEYWORDS = ("SELECT", "WITH", "PRAGMA", "EXPLAIN")
 
 
 def _is_read(sql: str) -> bool:
-    return bool(_READ_PREFIX_RE.match(sql))
+    # Linear scan that skips leading whitespace, ``--`` line comments, and
+    # ``/* ... */`` block comments before matching a read-only keyword.
+    #
+    # Implemented without regex on purpose: a pattern like
+    # ``(?:--[^\n]*\n\s*|/\*.*?\*/\s*)*`` exhibits catastrophic backtracking
+    # on inputs that begin with ``/`` followed by many ``/*`` fragments
+    # (classic ReDoS), because the engine retries every alternation split.
+    n = len(sql)
+    i = 0
+    while i < n:
+        ch = sql[i]
+        if ch.isspace():
+            i += 1
+            continue
+        if ch == "-" and i + 1 < n and sql[i + 1] == "-":
+            nl = sql.find("\n", i + 2)
+            if nl == -1:
+                return False
+            i = nl + 1
+            continue
+        if ch == "/" and i + 1 < n and sql[i + 1] == "*":
+            end = sql.find("*/", i + 2)
+            if end == -1:
+                return False
+            i = end + 2
+            continue
+        break
+
+    tail = sql[i : i + 8].upper()
+    for kw in _READ_KEYWORDS:
+        if tail.startswith(kw):
+            after = i + len(kw)
+            if after >= n or not (sql[after].isalnum() or sql[after] == "_"):
+                return True
+    return False
 
 
 # ── Drift log file ──────────────────────────────────────────────────────
