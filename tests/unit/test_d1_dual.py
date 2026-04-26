@@ -375,6 +375,91 @@ def test_d1_reset_do_classified_transient(monkeypatch, d1_conn, no_sleep):
     assert len(calls) == 2
 
 
+def test_400_long_running_export_treated_as_transient(monkeypatch, d1_conn, no_sleep):
+    """CF returns HTTP 400 + code 7500 when an export holds a DB-wide lock.
+
+    Without explicit handling this would raise D1PermanentError on the very
+    first call and silently drop the write into the d1_drift.jsonl bucket.
+    """
+    calls = []
+
+    def fake_post(url, headers, json, timeout):
+        calls.append(json)
+        if len(calls) == 1:
+            return _FakeResponse(
+                status_code=400,
+                json_body={
+                    "messages": [],
+                    "result": [],
+                    "success": False,
+                    "errors": [
+                        {"code": 7500, "message": "Currently processing a long-running export."}
+                    ],
+                },
+            )
+        return _FakeResponse(
+            status_code=200,
+            json_body={"success": True, "result": [{"meta": {"changes": 1}, "results": []}]},
+        )
+
+    monkeypatch.setattr(_d1_client_module.requests, "post", fake_post)
+    cur = d1_conn.execute("INSERT INTO x VALUES (1)")
+    assert cur.rowcount == 1
+    assert len(calls) == 2
+    assert len(no_sleep) == 1
+    # Export-lock backoff floor must apply (default 15s).
+    assert no_sleep[0] >= _d1_client_module._EXPORT_LOCK_BACKOFF_FLOOR_SEC
+
+
+def test_400_real_sql_error_remains_permanent(monkeypatch, d1_conn, no_sleep):
+    """Genuine SQL errors must still raise D1PermanentError without retries."""
+    calls = []
+
+    def fake_post(url, headers, json, timeout):
+        calls.append(json)
+        return _FakeResponse(
+            status_code=400,
+            json_body={
+                "success": False,
+                "errors": [{"code": 7400, "message": "near \"FORM\": syntax error"}],
+            },
+        )
+
+    monkeypatch.setattr(_d1_client_module.requests, "post", fake_post)
+    with pytest.raises(D1PermanentError):
+        d1_conn.execute("SELEKT * FORM t")
+    assert len(calls) == 1
+    assert no_sleep == []
+
+
+def test_export_lock_backoff_capped_by_max_sleep(monkeypatch, d1_conn, no_sleep):
+    """Even with the export floor, backoff is bounded by D1_RETRY_MAX_SLEEP_SEC."""
+    monkeypatch.setattr(_d1_client_module, "_RETRY_MAX_SLEEP_SEC", 5.0)
+    monkeypatch.setattr(_d1_client_module, "_EXPORT_LOCK_BACKOFF_FLOOR_SEC", 30.0)
+
+    calls = []
+
+    def fake_post(url, headers, json, timeout):
+        calls.append(json)
+        if len(calls) == 1:
+            return _FakeResponse(
+                status_code=400,
+                json_body={
+                    "success": False,
+                    "errors": [{"code": 7500, "message": "long-running export"}],
+                },
+            )
+        return _FakeResponse(
+            status_code=200,
+            json_body={"success": True, "result": [{"meta": {}, "results": []}]},
+        )
+
+    monkeypatch.setattr(_d1_client_module.requests, "post", fake_post)
+    d1_conn.execute("SELECT 1")
+    # Cap (5s) + jitter (<=0.5s) → cannot exceed 5.5s.
+    assert no_sleep[0] <= 5.5
+
+
 # ── DualConnection drift tracking ────────────────────────────────────────
 
 
