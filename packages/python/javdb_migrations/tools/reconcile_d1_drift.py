@@ -45,7 +45,7 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(REPO_ROOT) not in sys.path:
@@ -226,33 +226,45 @@ def _batch_select_existing(
     key_value_tuples: Sequence[Tuple],
     *,
     progress_label: Optional[str] = None,
-) -> Dict[Tuple, dict]:
+) -> Tuple[Dict[Tuple, dict], Set[Tuple]]:
     """Bulk-fetch existing D1 rows keyed by *key_cols*, one HTTP roundtrip per
     50 keys.
 
-    Returns ``{key_tuple: row_dict}`` containing rows that exist in D1; missing
-    keys are absent from the map. Always includes the ``Id`` column in the
-    SELECT so callers can resolve foreign keys via the returned map.
+    Returns ``(out, lookup_failures)``:
+
+    * ``out`` — ``{key_tuple: row_dict}`` for rows that **definitely** exist in
+      D1. Always includes the ``Id`` column so callers can resolve FKs.
+    * ``lookup_failures`` — set of key_tuples whose per-row SELECT raised
+      :class:`D1Error` after the batched fallback. These are *ambiguous*:
+      neither confirmed-present nor confirmed-absent. Callers MUST treat them
+      as "skip" rather than "missing", otherwise a transient D1 hiccup turns
+      into a spurious INSERT and a UNIQUE-constraint violation downstream.
 
     Falls back to per-row :meth:`D1Connection.execute` on batch failure so a
     single malformed key doesn't mask the rest.
     """
     if not key_value_tuples:
-        return {}
+        return {}, set()
 
     where = " AND ".join(f"{c} = ?" for c in key_cols)
     cols = ", ".join(["Id", *select_cols]) if select_cols else "Id"
     sql = f"SELECT {cols} FROM {table} WHERE {where} LIMIT 1"
 
     out: Dict[Tuple, dict] = {}
+    lookup_failures: Set[Tuple] = set()
     total = len(key_value_tuples)
     label = progress_label or f"{table} lookup"
+
+    # Sentinel distinguishes "lookup raised D1Error" from "fetched but no row";
+    # we can't smuggle that through cursors=None alone because the consumer
+    # would conflate it with an empty fetch.
+    _LOOKUP_FAILED = object()
 
     for chunk_start in range(0, total, _BATCH_SIZE):
         chunk_keys = key_value_tuples[chunk_start : chunk_start + _BATCH_SIZE]
         statements = [(sql, list(k)) for k in chunk_keys]
         try:
-            cursors = d1.batch_execute(statements)
+            cursors: List[Any] = list(d1.batch_execute(statements))
         except D1Error as batch_exc:
             logger.warning(
                 "%s: batched SELECT (%d keys) failed, falling back per-row: %s",
@@ -264,9 +276,10 @@ def _batch_select_existing(
                     cursors.append(d1.execute(sql, list(k)))
                 except D1Error as exc:
                     logger.warning("%s: SELECT key=%s failed: %s", label, k, exc)
-                    cursors.append(None)
+                    cursors.append(_LOOKUP_FAILED)
         for key, cur in zip(chunk_keys, cursors):
-            if cur is None:
+            if cur is _LOOKUP_FAILED:
+                lookup_failures.add(tuple(key))
                 continue
             row = cur.fetchone()
             if row is not None:
@@ -278,9 +291,12 @@ def _batch_select_existing(
         if total > _BATCH_SIZE and (
             scanned == total or scanned % (_BATCH_SIZE * 10) == 0
         ):
-            logger.info("  %s: scanned %d/%d (found %d)", label, scanned, total, len(out))
+            logger.info(
+                "  %s: scanned %d/%d (found %d, failed %d)",
+                label, scanned, total, len(out), len(lookup_failures),
+            )
 
-    return out
+    return out, lookup_failures
 
 
 def _flush_writes(
@@ -359,12 +375,22 @@ def _process_table(
     logger.info(
         "%s: prefetching existing D1 rows for %d candidates...", table, len(key_tuples)
     )
-    existing = _batch_select_existing(
+    existing, lookup_failures = _batch_select_existing(
         d1, table, key_cols, payload_cols, key_tuples,
         progress_label=f"{table} lookup",
     )
+    if lookup_failures:
+        logger.warning(
+            "%s: %d keys could not be classified (D1 lookup error) — skipping "
+            "to avoid spurious INSERTs; will retry on next reconcile pass",
+            table, len(lookup_failures),
+        )
     logger.info(
-        "%s: %d already in D1, %d missing", table, len(existing), len(rows) - len(existing)
+        "%s: %d already in D1, %d missing, %d ambiguous",
+        table,
+        len(existing),
+        len(rows) - len(existing) - len(lookup_failures),
+        len(lookup_failures),
     )
 
     all_cols = list(key_cols) + list(payload_cols)
@@ -378,6 +404,16 @@ def _process_table(
     update_stmts: List[Tuple[str, list]] = []
 
     for key, row in zip(key_tuples, rows):
+        if key in lookup_failures:
+            # Ambiguous existence — skip rather than risk inserting a duplicate
+            # that D1 already holds. The drift log keeps the row queued so the
+            # next reconcile pass gets another shot once D1 recovers.
+            stats.errors += 1
+            if len(stats.error_messages) < 10:
+                stats.error_messages.append(
+                    f"D1 lookup failed for {table} key={key!r}; row deferred"
+                )
+            continue
         existing_row = existing.get(key)
         if existing_row is None:
             insert_stmts.append((insert_sql, [row[c] for c in all_cols]))
@@ -567,11 +603,20 @@ def _reconcile_history(
             "history: looking up %d additional MovieHistory parents in D1",
             len(missing_parents),
         )
-        extra = _batch_select_existing(
+        extra, parent_lookup_failures = _batch_select_existing(
             d1, "MovieHistory", _MOVIE_HISTORY_KEY, (),
             [(h,) for h in missing_parents],
             progress_label="MovieHistory parent-FK lookup",
         )
+        if parent_lookup_failures:
+            # Parent FK can't be resolved for these on this pass; downstream
+            # TorrentHistory rows will fall through to skipped_missing_parent
+            # via the href_to_d1_id miss path.
+            logger.warning(
+                "MovieHistory parent-FK lookup: %d keys ambiguous (D1 error) "
+                "— their TorrentHistory children will be deferred",
+                len(parent_lookup_failures),
+            )
         for key, row in extra.items():
             href_to_d1_id[key] = int(row["Id"])
 
