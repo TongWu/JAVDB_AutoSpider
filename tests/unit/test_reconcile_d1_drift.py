@@ -595,6 +595,52 @@ def test_lastrowid_resolves_torrent_parent_within_same_run(history_sqlite):
     assert torrent_parent == parent_id
 
 
+def test_lookup_failure_does_not_trigger_spurious_insert(history_sqlite):
+    """When per-row D1 SELECT raises D1Error, the row must be deferred — not
+    INSERTed. The previous behaviour appended ``None`` to cursors which the
+    consumer treated as "row missing → INSERT", producing duplicates the next
+    time D1 came back online.
+    """
+    from packages.python.javdb_platform.d1_client import D1Error
+
+    sqlite_path, sqlite_conn = history_sqlite
+    sqlite_conn.execute(
+        "INSERT INTO MovieHistory (VideoCode, Href, DateTimeUpdated)"
+        " VALUES (?, ?, ?)",
+        ("STARS-700", "/v/flaky", "2026-04-26 02:00:00"),
+    )
+    sqlite_conn.commit()
+    sqlite_conn.close()
+
+    class FlakyLookupD1(FakeD1Connection):
+        def batch_execute(self, statements):
+            sql = statements[0][0] if statements else ""
+            if sql.startswith("SELECT"):
+                raise D1Error("simulated transient SELECT failure")
+            return super().batch_execute(statements)
+
+        def execute(self, sql, params=()):
+            if sql.startswith("SELECT") and "/v/flaky" in list(params):
+                raise D1Error("simulated per-row SELECT failure")
+            return super().execute(sql, params)
+
+    fake_d1 = FlakyLookupD1(_HISTORY_DDL)
+
+    ro_conn = recon._open_sqlite_readonly(str(sqlite_path))
+    try:
+        stats = recon._reconcile_history(ro_conn, fake_d1, since_text=None, dry_run=False)
+    finally:
+        ro_conn.close()
+
+    by_table = {s.table: s for s in stats}
+    assert by_table["MovieHistory"].inserted == 0, (
+        "ambiguous lookup must NOT trigger INSERT; row should be deferred"
+    )
+    assert by_table["MovieHistory"].errors == 1
+    n = fake_d1._conn.execute("SELECT COUNT(*) AS n FROM MovieHistory").fetchone()
+    assert n["n"] == 0, "no row may land in D1 when its existence is unknown"
+
+
 def test_flush_writes_falls_back_per_row_on_batch_failure():
     """When a CF batch raises, _flush_writes retries each row to attribute the bad one.
 
