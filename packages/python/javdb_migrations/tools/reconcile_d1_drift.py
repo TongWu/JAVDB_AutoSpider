@@ -642,6 +642,7 @@ def _archive_processed_records(
             for rec in consumed:
                 fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
+    os.makedirs(os.path.dirname(drift_log) or ".", exist_ok=True)
     tmp_path = drift_log + ".tmp"
     with open(tmp_path, "w", encoding="utf-8") as fh:
         for rec in leftover:
