@@ -53,7 +53,17 @@ def _env_float(name: str, default: float) -> float:
 
 
 _API_TIMEOUT = _env_int("D1_HTTP_TIMEOUT", 30)
-_BATCH_LIMIT = 50  # D1 caps statements per request
+# D1 doesn't actually advertise a fixed "statements per /query" cap. The real
+# limits per Cloudflare's D1 Platform Limits page (last reviewed 2026-04) are:
+#   • per-statement bound parameters: 100
+#   • per-statement SQL length: 100 KB
+#   • per-request execution time: 30 s (matches our default _API_TIMEOUT)
+#   • response payload size: ~10 MB
+# Empirically, batches above ~50 row-INSERT statements start nudging the 30 s
+# wall on cold DOs; 50 has been a comfortable, conservative chunk size in
+# production. Override via ``D1_BATCH_LIMIT`` if you have a workload with very
+# small / very large rows that warrants a different trade-off.
+_BATCH_LIMIT = _env_int("D1_BATCH_LIMIT", 50)
 _MAX_RETRIES = _env_int("D1_MAX_RETRIES", 5)
 _RETRY_BASE_SEC = _env_float("D1_RETRY_BASE_SEC", 1.0)
 _RETRY_MAX_SLEEP_SEC = _env_float("D1_RETRY_MAX_SLEEP_SEC", 30.0)
@@ -187,6 +197,19 @@ class D1Connection:
                 self._total_changes += c.rowcount
 
     def executescript(self, script: str) -> None:
+        """Execute a sequence of DDL statements separated by ``;``.
+
+        Intentionally limited: ``script`` is split on the literal ``;``
+        character and is therefore only safe for **schema DDL with no
+        semicolons inside string literals, triggers, or CHECK
+        expressions**. The codebase only ever feeds simple
+        ``CREATE TABLE`` / ``CREATE INDEX`` / ``ALTER TABLE`` / ``DROP``
+        statements through this path (see ``packages/python/javdb_platform/db.py``),
+        so a full SQL parser would be overkill — but if you ever extend
+        this to user-supplied scripts or trigger bodies, swap the naive
+        split for a real parser (``sqlparse.split`` is the obvious
+        choice) before doing so.
+        """
         statements = [s.strip() for s in script.split(";") if s.strip()]
         if not statements:
             return
