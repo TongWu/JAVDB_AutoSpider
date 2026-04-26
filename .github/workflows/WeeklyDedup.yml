@@ -216,6 +216,8 @@ jobs:
 
           git add "$REPORTS_DIR/$RCLONE_INVENTORY_CSV" 2>/dev/null || true
           git add "$REPORTS_DIR/operations.db" 2>/dev/null || true
+          git add "$REPORTS_DIR/d1_drift.jsonl" 2>/dev/null || true
+          git add "$REPORTS_DIR/d1_drift.processed.jsonl" 2>/dev/null || true
           git add "$REPORTS_DIR/dedup_history.csv" 2>/dev/null || true
           find "$DEDUP_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
 
