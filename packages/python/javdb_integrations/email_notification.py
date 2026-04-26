@@ -936,9 +936,20 @@ def _extract_last_dedup_executor_run(log_path=None):
         logger.debug(f"Could not read dedup executor log {path}: {e}")
         return None
 
-    # Find the LAST 'RCLONE DEDUP EXECUTOR' marker
-    start_idx = None
+    # Anchor on the LAST 'DEDUP EXECUTOR COMPLETE' line first so we never
+    # surface stats from an aborted (start-only) run that left the COMPLETE
+    # footer unwritten. From there we walk backwards to the matching
+    # 'RCLONE DEDUP EXECUTOR' header.
+    complete_idx = None
     for i in range(len(lines) - 1, -1, -1):
+        if 'DEDUP EXECUTOR COMPLETE' in lines[i]:
+            complete_idx = i
+            break
+    if complete_idx is None:
+        return None
+
+    start_idx = None
+    for i in range(complete_idx, -1, -1):
         if 'RCLONE DEDUP EXECUTOR' in lines[i]:
             start_idx = i
             break
@@ -952,14 +963,12 @@ def _extract_last_dedup_executor_run(log_path=None):
         return None
     start_time = start_match.group(1)
 
-    block = lines[start_idx:]
+    end_match = ts_re.match(lines[complete_idx])
+    end_time = end_match.group(1) if end_match else None
+
+    block = lines[start_idx:complete_idx + 1]
     pending = purged = failed = skipped = None
-    end_time = None
     for ln in block:
-        if 'DEDUP EXECUTOR COMPLETE' in ln:
-            m = ts_re.match(ln)
-            if m:
-                end_time = m.group(1)
         m = re.search(r'Pending rows:\s*(\d+)', ln)
         if m:
             pending = int(m.group(1))
