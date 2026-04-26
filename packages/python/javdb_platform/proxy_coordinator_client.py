@@ -1,7 +1,9 @@
 """HTTP client for the Cloudflare Worker + Durable Object proxy coordinator.
 
-This module is the *client* counterpart of the Worker living in
-``cloudflare/proxy_coordinator/``.  It lets multiple GitHub Actions runners
+This module is the *client* counterpart of the Worker maintained in the
+sibling repo
+[`TongWu/JAVDB_AutoSpider_Proxycoordinator`](https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator).
+It lets multiple GitHub Actions runners
 (or any concurrent spider instance) coordinate per-proxy request pacing
 through a single, globally-consistent authority.
 
