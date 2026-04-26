@@ -150,6 +150,14 @@ class D1Connection:
         }
         self._timeout = timeout
         self._total_changes = 0
+        # A single Session reuses the underlying urllib3 connection pool, so we
+        # avoid repeating the ~70-80ms TCP+TLS handshake on every D1 request
+        # (the reconciler in particular issues thousands of SELECTs per run).
+        # ``_post_request`` is captured as an instance attribute so unit tests
+        # can monkey-patch a single instance without touching the global
+        # ``requests`` module.
+        self._session = requests.Session()
+        self._post_request = self._session.post
         # Attribute compatibility with sqlite3.Connection — D1 returns dict rows
         # natively so row_factory is a no-op (callers can still set it).
         self.row_factory = None
@@ -186,6 +194,32 @@ class D1Connection:
         for chunk in _split(body_statements, _BATCH_LIMIT):
             self._post_with_retry({"batch": chunk})
 
+    def batch_execute(
+        self,
+        statements: Sequence[Tuple[str, Sequence[Any]]],
+    ) -> List[D1Cursor]:
+        """Execute a list of ``(sql, params)`` tuples with CF batch ``/query``.
+
+        Unlike :meth:`executemany`, statements may differ in SQL and the result
+        cursors are returned in submission order so the caller can read SELECT
+        rows back. Splits at :data:`_BATCH_LIMIT` (CF caps batches at 50).
+
+        Note: each batch is atomic on D1's side — if any statement in a chunk
+        fails the whole chunk rolls back. Callers that need per-row error
+        attribution should fall back to per-statement :meth:`execute` on
+        :class:`D1Error`.
+        """
+        cursors: List[D1Cursor] = []
+        if not statements:
+            return cursors
+        body_stmts = [{"sql": s, "params": list(p)} for s, p in statements]
+        for chunk in _split(body_stmts, _BATCH_LIMIT):
+            chunk_cursors = self._post_with_retry({"batch": chunk})
+            for c in chunk_cursors:
+                self._total_changes += c.rowcount
+            cursors.extend(chunk_cursors)
+        return cursors
+
     def commit(self) -> None:
         return None
 
@@ -196,7 +230,10 @@ class D1Connection:
         )
 
     def close(self) -> None:
-        return None
+        try:
+            self._session.close()
+        except Exception:  # noqa: BLE001 — closing must not raise
+            pass
 
     @property
     def total_changes(self) -> int:
@@ -258,7 +295,7 @@ class D1Connection:
 
     def _post(self, body: dict) -> List[D1Cursor]:
         try:
-            response = requests.post(
+            response = self._post_request(
                 self._url, headers=self._headers, json=body, timeout=self._timeout
             )
         except (requests.Timeout, requests.ConnectionError) as exc:

@@ -77,6 +77,10 @@ _LOGICAL_TO_DB_PATH = {
     "operations": cfg("OPERATIONS_DB_PATH", os.path.join(_REPORTS_DIR, "operations.db")),
 }
 
+# CF D1 caps per-request batches at 50 statements. Using the same constant
+# avoids importing it from d1_client and keeps the reconciler self-documenting.
+_BATCH_SIZE = 50
+
 
 # ── Stats per table ───────────────────────────────────────────────────────
 
@@ -211,109 +215,213 @@ def _rows_match(d1_row: dict, sqlite_row: dict, columns: Sequence[str]) -> bool:
     return True
 
 
-# ── D1 identity-map helpers ───────────────────────────────────────────────
+# ── Batched D1 helpers ────────────────────────────────────────────────────
 
 
-class _D1IdResolver:
-    """Cache lookups of D1 row IDs by business key.
+def _batch_select_existing(
+    d1: D1Connection,
+    table: str,
+    key_cols: Sequence[str],
+    select_cols: Sequence[str],
+    key_value_tuples: Sequence[Tuple],
+    *,
+    progress_label: Optional[str] = None,
+) -> Dict[Tuple, dict]:
+    """Bulk-fetch existing D1 rows keyed by *key_cols*, one HTTP roundtrip per
+    50 keys.
 
-    Each (table, key_cols, key_values) tuple is hit at most once per run.
+    Returns ``{key_tuple: row_dict}`` containing rows that exist in D1; missing
+    keys are absent from the map. Always includes the ``Id`` column in the
+    SELECT so callers can resolve foreign keys via the returned map.
+
+    Falls back to per-row :meth:`D1Connection.execute` on batch failure so a
+    single malformed key doesn't mask the rest.
     """
+    if not key_value_tuples:
+        return {}
 
-    def __init__(self, d1_conn: D1Connection):
-        self._d1 = d1_conn
-        self._cache: Dict[Tuple[str, Tuple[str, ...], Tuple[Any, ...]], Optional[int]] = {}
+    where = " AND ".join(f"{c} = ?" for c in key_cols)
+    cols = ", ".join(["Id", *select_cols]) if select_cols else "Id"
+    sql = f"SELECT {cols} FROM {table} WHERE {where} LIMIT 1"
 
-    def get(self, table: str, key_cols: Sequence[str], key_values: Sequence[Any]) -> Optional[int]:
-        cache_key = (table, tuple(key_cols), tuple(key_values))
-        if cache_key in self._cache:
-            return self._cache[cache_key]
-        where = " AND ".join(f"{c} = ?" for c in key_cols)
-        sql = f"SELECT Id FROM {table} WHERE {where} LIMIT 1"
+    out: Dict[Tuple, dict] = {}
+    total = len(key_value_tuples)
+    label = progress_label or f"{table} lookup"
+
+    for chunk_start in range(0, total, _BATCH_SIZE):
+        chunk_keys = key_value_tuples[chunk_start : chunk_start + _BATCH_SIZE]
+        statements = [(sql, list(k)) for k in chunk_keys]
         try:
-            row = self._d1.execute(sql, list(key_values)).fetchone()
-        except D1Error as exc:
-            logger.warning("D1 lookup %s by %s failed: %s", table, key_cols, exc)
-            self._cache[cache_key] = None
-            return None
-        d1_id = row.get("Id") if row else None
-        self._cache[cache_key] = d1_id
-        return d1_id
+            cursors = d1.batch_execute(statements)
+        except D1Error as batch_exc:
+            logger.warning(
+                "%s: batched SELECT (%d keys) failed, falling back per-row: %s",
+                label, len(chunk_keys), batch_exc,
+            )
+            cursors = []
+            for k in chunk_keys:
+                try:
+                    cursors.append(d1.execute(sql, list(k)))
+                except D1Error as exc:
+                    logger.warning("%s: SELECT key=%s failed: %s", label, k, exc)
+                    cursors.append(None)
+        for key, cur in zip(chunk_keys, cursors):
+            if cur is None:
+                continue
+            row = cur.fetchone()
+            if row is not None:
+                out[tuple(key)] = _row_to_dict(row)
+
+        scanned = min(chunk_start + _BATCH_SIZE, total)
+        # Heartbeat every 10 batches (500 rows) for long scans, plus once at
+        # end so users always see the final tally.
+        if total > _BATCH_SIZE and (
+            scanned == total or scanned % (_BATCH_SIZE * 10) == 0
+        ):
+            logger.info("  %s: scanned %d/%d (found %d)", label, scanned, total, len(out))
+
+    return out
 
 
-# ── Generic upsert engine ─────────────────────────────────────────────────
+def _flush_writes(
+    d1: D1Connection,
+    statements: Sequence[Tuple[str, Sequence[Any]]],
+    *,
+    label: str,
+    stats: TableStats,
+    on_success=None,
+) -> None:
+    """Apply a batch of write statements via ``D1Connection.batch_execute``.
+
+    Each batch of <=50 is sent as one CF /query call. CF batches are atomic on
+    failure, so if a chunk raises (UNIQUE collision from a parallel writer,
+    etc.) we retry that chunk one row at a time to attribute the error.
+
+    *on_success* is called as ``on_success(global_index, cursor)`` after each
+    succeeded statement; INSERT batches use it to capture ``cursor.lastrowid``.
+    """
+    if not statements:
+        return
+    total = len(statements)
+    for chunk_start in range(0, total, _BATCH_SIZE):
+        chunk = list(statements[chunk_start : chunk_start + _BATCH_SIZE])
+        try:
+            cursors = d1.batch_execute(chunk)
+            if on_success is not None:
+                for offset, cur in enumerate(cursors):
+                    on_success(chunk_start + offset, cur)
+        except D1Error as batch_exc:
+            logger.warning(
+                "%s: batch (%d rows) failed, retrying per-row: %s",
+                label, len(chunk), batch_exc,
+            )
+            for offset, (sql, params) in enumerate(chunk):
+                try:
+                    cur = d1.execute(sql, list(params))
+                    if on_success is not None:
+                        on_success(chunk_start + offset, cur)
+                except D1Error as exc:
+                    stats.errors += 1
+                    msg = f"{label} row failed: {exc}"
+                    stats.error_messages.append(msg)
+                    logger.warning(msg)
+        scanned = min(chunk_start + _BATCH_SIZE, total)
+        if total > _BATCH_SIZE and (
+            scanned == total or scanned % (_BATCH_SIZE * 10) == 0
+        ):
+            logger.info("  %s: applied %d/%d", label, scanned, total)
 
 
-def _upsert_by_business_key(
+def _process_table(
     *,
     d1: D1Connection,
     table: str,
     key_cols: Sequence[str],
     payload_cols: Sequence[str],
-    sqlite_row_values: Dict[str, Any],
-    stats: TableStats,
+    rows: Sequence[Dict[str, Any]],
     dry_run: bool,
-) -> None:
-    """Upsert one row into D1, keyed by *key_cols*; write *payload_cols*.
+    stats: TableStats,
+) -> Dict[Tuple, int]:
+    """Reconcile one table from a list of FK-resolved SQLite-row dicts.
 
-    Algorithm: SELECT-by-key. If missing, INSERT. If present and any payload
-    column differs, UPDATE. Otherwise no-op.
-
-    Unlike SQL ``ON CONFLICT``, this works on tables that have no UNIQUE
-    constraint declared on the business key (most reports.db tables don't).
+    Updates *stats* (checked / inserted / updated / skipped_equal / errors) and
+    returns ``{key_tuple: d1_id}`` for both pre-existing rows and rows just
+    inserted in this run. Children resolve their FK by looking up the returned
+    map.
     """
-    stats.checked += 1
-    key_values = [sqlite_row_values[c] for c in key_cols]
+    key_to_id: Dict[Tuple, int] = {}
+    stats.checked += len(rows)
 
-    where = " AND ".join(f"{c} = ?" for c in key_cols)
-    select_sql = f"SELECT Id, {', '.join(payload_cols)} FROM {table} WHERE {where} LIMIT 1"
-    try:
-        existing = d1.execute(select_sql, key_values).fetchone()
-    except D1Error as exc:
-        stats.errors += 1
-        msg = f"SELECT {table} by {key_cols}={key_values} failed: {exc}"
-        stats.error_messages.append(msg)
-        logger.warning(msg)
-        return
+    if not rows:
+        return key_to_id
 
-    payload_values = [sqlite_row_values[c] for c in payload_cols]
+    key_tuples: List[Tuple] = [tuple(r[c] for c in key_cols) for r in rows]
+    logger.info(
+        "%s: prefetching existing D1 rows for %d candidates...", table, len(key_tuples)
+    )
+    existing = _batch_select_existing(
+        d1, table, key_cols, payload_cols, key_tuples,
+        progress_label=f"{table} lookup",
+    )
+    logger.info(
+        "%s: %d already in D1, %d missing", table, len(existing), len(rows) - len(existing)
+    )
 
-    if existing is None:
-        if dry_run:
-            stats.inserted += 1
-            return
-        all_cols = list(key_cols) + list(payload_cols)
-        all_vals = list(key_values) + list(payload_values)
-        placeholders = ", ".join("?" for _ in all_cols)
-        insert_sql = f"INSERT INTO {table} ({', '.join(all_cols)}) VALUES ({placeholders})"
-        try:
-            d1.execute(insert_sql, all_vals)
-            stats.inserted += 1
-        except D1Error as exc:
-            stats.errors += 1
-            msg = f"INSERT {table} by {key_cols}={key_values} failed: {exc}"
-            stats.error_messages.append(msg)
-            logger.warning(msg)
-        return
-
-    existing_dict = _row_to_dict(existing)
-    if _rows_match(existing_dict, sqlite_row_values, payload_cols):
-        stats.skipped_equal += 1
-        return
-
-    if dry_run:
-        stats.updated += 1
-        return
+    all_cols = list(key_cols) + list(payload_cols)
+    placeholders = ", ".join("?" for _ in all_cols)
+    insert_sql = f"INSERT INTO {table} ({', '.join(all_cols)}) VALUES ({placeholders})"
     set_clause = ", ".join(f"{c} = ?" for c in payload_cols)
     update_sql = f"UPDATE {table} SET {set_clause} WHERE Id = ?"
-    try:
-        d1.execute(update_sql, list(payload_values) + [existing_dict["Id"]])
-        stats.updated += 1
-    except D1Error as exc:
-        stats.errors += 1
-        msg = f"UPDATE {table} Id={existing_dict.get('Id')} failed: {exc}"
-        stats.error_messages.append(msg)
-        logger.warning(msg)
+
+    insert_stmts: List[Tuple[str, list]] = []
+    insert_keys: List[Tuple] = []
+    update_stmts: List[Tuple[str, list]] = []
+
+    for key, row in zip(key_tuples, rows):
+        existing_row = existing.get(key)
+        if existing_row is None:
+            insert_stmts.append((insert_sql, [row[c] for c in all_cols]))
+            insert_keys.append(key)
+            continue
+        d1_id = int(existing_row["Id"])
+        key_to_id[key] = d1_id
+        if _rows_match(existing_row, row, payload_cols):
+            stats.skipped_equal += 1
+        else:
+            update_stmts.append(
+                (update_sql, [row[c] for c in payload_cols] + [d1_id])
+            )
+
+    if dry_run:
+        stats.inserted += len(insert_stmts)
+        stats.updated += len(update_stmts)
+        return key_to_id
+
+    if insert_stmts:
+        logger.info("%s: inserting %d new rows", table, len(insert_stmts))
+
+        def _capture_id(idx: int, cur) -> None:
+            stats.inserted += 1
+            if cur.lastrowid is not None:
+                key_to_id[insert_keys[idx]] = int(cur.lastrowid)
+
+        _flush_writes(
+            d1, insert_stmts, label=f"INSERT {table}", stats=stats,
+            on_success=_capture_id,
+        )
+
+    if update_stmts:
+        logger.info("%s: updating %d changed rows", table, len(update_stmts))
+
+        def _bump(_idx: int, _cur) -> None:
+            stats.updated += 1
+
+        _flush_writes(
+            d1, update_stmts, label=f"UPDATE {table}", stats=stats,
+            on_success=_bump,
+        )
+
+    return key_to_id
 
 
 # ── Per-database reconcilers ──────────────────────────────────────────────
@@ -386,11 +494,17 @@ def _reconcile_history(
     since_text: Optional[str],
     dry_run: bool,
 ) -> List[TableStats]:
-    """Sync history.db's two tables (MovieHistory + TorrentHistory) into D1."""
+    """Sync history.db's two tables (MovieHistory + TorrentHistory) into D1.
+
+    Uses batched D1 SELECTs (50 per HTTP roundtrip) for existence checks and
+    batched INSERT/UPDATE for writes. Children resolve their parent FK from
+    the in-memory ``href_to_d1_id`` map populated by the MovieHistory pass
+    (covers both pre-existing and newly-inserted parents).
+    """
     movie_stats = TableStats("MovieHistory")
     torrent_stats = TableStats("TorrentHistory")
-    resolver = _D1IdResolver(d1)
 
+    # ── 1. MovieHistory ────────────────────────────────────────────────
     if since_text:
         movie_query = (
             "SELECT * FROM MovieHistory "
@@ -402,19 +516,23 @@ def _reconcile_history(
         movie_query = "SELECT * FROM MovieHistory ORDER BY Id"
         movie_params = []
 
-    movie_rows = sqlite_conn.execute(movie_query, movie_params).fetchall()
+    movie_rows = [
+        _row_to_dict(r)
+        for r in sqlite_conn.execute(movie_query, movie_params).fetchall()
+    ]
     logger.info("history: scanning %d MovieHistory rows", len(movie_rows))
-    for row in movie_rows:
-        _upsert_by_business_key(
-            d1=d1,
-            table="MovieHistory",
-            key_cols=_MOVIE_HISTORY_KEY,
-            payload_cols=_MOVIE_HISTORY_PAYLOAD,
-            sqlite_row_values=_row_to_dict(row),
-            stats=movie_stats,
-            dry_run=dry_run,
-        )
 
+    href_to_d1_id = _process_table(
+        d1=d1,
+        table="MovieHistory",
+        key_cols=_MOVIE_HISTORY_KEY,
+        payload_cols=_MOVIE_HISTORY_PAYLOAD,
+        rows=movie_rows,
+        dry_run=dry_run,
+        stats=movie_stats,
+    )
+
+    # ── 2. TorrentHistory ─────────────────────────────────────────────
     if since_text:
         torrent_query = (
             "SELECT t.*, mh.Href AS _ParentHref "
@@ -433,33 +551,60 @@ def _reconcile_history(
         )
         torrent_params = []
 
-    torrent_rows = sqlite_conn.execute(torrent_query, torrent_params).fetchall()
-    logger.info("history: scanning %d TorrentHistory rows", len(torrent_rows))
-    for row in torrent_rows:
-        d = _row_to_dict(row)
+    raw_torrent_rows = sqlite_conn.execute(torrent_query, torrent_params).fetchall()
+    logger.info("history: scanning %d TorrentHistory rows", len(raw_torrent_rows))
+
+    # Resolve any parent Hrefs not seen by the MovieHistory pass — possible
+    # when --since cuts movie rows but their torrents fall in scope (movie
+    # was created earlier but not modified inside the window).
+    missing_parents = {
+        d.get("_ParentHref")
+        for d in (_row_to_dict(r) for r in raw_torrent_rows)
+        if d.get("_ParentHref") and (d.get("_ParentHref"),) not in href_to_d1_id
+    }
+    if missing_parents:
+        logger.info(
+            "history: looking up %d additional MovieHistory parents in D1",
+            len(missing_parents),
+        )
+        extra = _batch_select_existing(
+            d1, "MovieHistory", _MOVIE_HISTORY_KEY, (),
+            [(h,) for h in missing_parents],
+            progress_label="MovieHistory parent-FK lookup",
+        )
+        for key, row in extra.items():
+            href_to_d1_id[key] = int(row["Id"])
+
+    prepared_torrents: List[Dict[str, Any]] = []
+    for raw in raw_torrent_rows:
+        d = _row_to_dict(raw)
         parent_href = d.pop("_ParentHref", None)
         if not parent_href:
+            torrent_stats.checked += 1
             torrent_stats.skipped_missing_parent += 1
             continue
-        d1_movie_id = resolver.get("MovieHistory", ("Href",), (parent_href,))
+        d1_movie_id = href_to_d1_id.get((parent_href,))
         if d1_movie_id is None:
+            torrent_stats.checked += 1
             torrent_stats.skipped_missing_parent += 1
             logger.warning(
                 "TorrentHistory Id=%s skipped: parent MovieHistory(Href=%s) "
-                "not found in D1 yet (will be retried on next pass)",
+                "not in D1 (will retry on next pass)",
                 d.get("Id"), parent_href,
             )
             continue
         d["MovieHistoryId"] = d1_movie_id
-        _upsert_by_business_key(
-            d1=d1,
-            table="TorrentHistory",
-            key_cols=_TORRENT_HISTORY_KEY,
-            payload_cols=_TORRENT_HISTORY_PAYLOAD,
-            sqlite_row_values=d,
-            stats=torrent_stats,
-            dry_run=dry_run,
-        )
+        prepared_torrents.append(d)
+
+    _process_table(
+        d1=d1,
+        table="TorrentHistory",
+        key_cols=_TORRENT_HISTORY_KEY,
+        payload_cols=_TORRENT_HISTORY_PAYLOAD,
+        rows=prepared_torrents,
+        dry_run=dry_run,
+        stats=torrent_stats,
+    )
 
     return [movie_stats, torrent_stats]
 
@@ -471,12 +616,17 @@ def _reconcile_reports(
     since_text: Optional[str],
     dry_run: bool,
 ) -> List[TableStats]:
-    """Sync reports.db: ReportSessions → ReportMovies → ReportTorrents."""
+    """Sync reports.db: ReportSessions → ReportMovies → ReportTorrents.
+
+    All three levels use batched SELECT/INSERT/UPDATE; child levels resolve
+    parent FK via the maps returned by the parent pass, augmented by a
+    one-shot batched D1 lookup for any parents not in the SQLite scan window.
+    """
     sessions_stats = TableStats("ReportSessions")
     movies_stats = TableStats("ReportMovies")
     torrents_stats = TableStats("ReportTorrents")
-    resolver = _D1IdResolver(d1)
 
+    # ── 1. ReportSessions ────────────────────────────────────────────
     if since_text:
         sessions_query = (
             "SELECT * FROM ReportSessions WHERE DateTimeCreated >= ? ORDER BY Id"
@@ -486,68 +636,70 @@ def _reconcile_reports(
         sessions_query = "SELECT * FROM ReportSessions ORDER BY Id"
         sessions_params = []
 
-    session_rows = sqlite_conn.execute(sessions_query, sessions_params).fetchall()
+    session_rows = [
+        _row_to_dict(r)
+        for r in sqlite_conn.execute(sessions_query, sessions_params).fetchall()
+    ]
     logger.info("reports: scanning %d ReportSessions rows", len(session_rows))
 
-    sqlite_session_id_to_csv: Dict[int, str] = {}
-    for row in session_rows:
-        d = _row_to_dict(row)
-        sqlite_session_id_to_csv[int(d["Id"])] = d["CsvFilename"]
-        _upsert_by_business_key(
-            d1=d1,
-            table="ReportSessions",
-            key_cols=_REPORT_SESSIONS_KEY,
-            payload_cols=_REPORT_SESSIONS_PAYLOAD,
-            sqlite_row_values=d,
-            stats=sessions_stats,
-            dry_run=dry_run,
-        )
+    csv_to_d1_session_id = _process_table(
+        d1=d1,
+        table="ReportSessions",
+        key_cols=_REPORT_SESSIONS_KEY,
+        payload_cols=_REPORT_SESSIONS_PAYLOAD,
+        rows=session_rows,
+        dry_run=dry_run,
+        stats=sessions_stats,
+    )
 
-    if not sqlite_session_id_to_csv:
+    sqlite_session_ids = [int(r["Id"]) for r in session_rows]
+    if not sqlite_session_ids:
         return [sessions_stats, movies_stats, torrents_stats]
 
-    placeholders = ", ".join("?" for _ in sqlite_session_id_to_csv)
+    # ── 2. ReportMovies ───────────────────────────────────────────────
+    placeholders = ", ".join("?" for _ in sqlite_session_ids)
     movies_query = (
         "SELECT rm.*, rs.CsvFilename AS _SessionCsv "
         "FROM ReportMovies rm "
         "JOIN ReportSessions rs ON rs.Id = rm.SessionId "
         f"WHERE rm.SessionId IN ({placeholders}) ORDER BY rm.Id"
     )
-    movie_rows = sqlite_conn.execute(
-        movies_query, list(sqlite_session_id_to_csv.keys())
-    ).fetchall()
-    logger.info("reports: scanning %d ReportMovies rows", len(movie_rows))
+    raw_movie_rows = sqlite_conn.execute(movies_query, sqlite_session_ids).fetchall()
+    logger.info("reports: scanning %d ReportMovies rows", len(raw_movie_rows))
 
-    sqlite_movie_id_to_keys: Dict[int, Tuple[str, str]] = {}
-    for row in movie_rows:
-        d = _row_to_dict(row)
+    prepared_movies: List[Dict[str, Any]] = []
+    for raw in raw_movie_rows:
+        d = _row_to_dict(raw)
         session_csv = d.pop("_SessionCsv", None)
         movie_href = d.get("Href")
-        if not session_csv or not movie_href:
+        if not (session_csv and movie_href):
+            movies_stats.checked += 1
             movies_stats.skipped_missing_parent += 1
             continue
-        d1_session_id = resolver.get(
-            "ReportSessions", ("CsvFilename",), (session_csv,)
-        )
+        d1_session_id = csv_to_d1_session_id.get((session_csv,))
         if d1_session_id is None:
+            movies_stats.checked += 1
             movies_stats.skipped_missing_parent += 1
             continue
         d["SessionId"] = d1_session_id
-        sqlite_movie_id_to_keys[int(d["Id"])] = (session_csv, movie_href)
-        _upsert_by_business_key(
-            d1=d1,
-            table="ReportMovies",
-            key_cols=_REPORT_MOVIES_KEY,
-            payload_cols=_REPORT_MOVIES_PAYLOAD,
-            sqlite_row_values=d,
-            stats=movies_stats,
-            dry_run=dry_run,
-        )
+        prepared_movies.append(d)
 
-    if not sqlite_movie_id_to_keys:
+    movie_keys_to_d1_id = _process_table(
+        d1=d1,
+        table="ReportMovies",
+        key_cols=_REPORT_MOVIES_KEY,
+        payload_cols=_REPORT_MOVIES_PAYLOAD,
+        rows=prepared_movies,
+        dry_run=dry_run,
+        stats=movies_stats,
+    )
+
+    if not prepared_movies:
         return [sessions_stats, movies_stats, torrents_stats]
 
-    movie_id_placeholders = ", ".join("?" for _ in sqlite_movie_id_to_keys)
+    # ── 3. ReportTorrents ─────────────────────────────────────────────
+    sqlite_movie_ids = [int(d["Id"]) for d in prepared_movies]
+    movie_id_placeholders = ", ".join("?" for _ in sqlite_movie_ids)
     torrents_query = (
         "SELECT rt.*, rm.Href AS _MovieHref, rs.CsvFilename AS _SessionCsv "
         "FROM ReportTorrents rt "
@@ -555,41 +707,41 @@ def _reconcile_reports(
         "JOIN ReportSessions rs ON rs.Id = rm.SessionId "
         f"WHERE rt.ReportMovieId IN ({movie_id_placeholders}) ORDER BY rt.Id"
     )
-    torrent_rows = sqlite_conn.execute(
-        torrents_query, list(sqlite_movie_id_to_keys.keys())
-    ).fetchall()
-    logger.info("reports: scanning %d ReportTorrents rows", len(torrent_rows))
+    raw_torrent_rows = sqlite_conn.execute(torrents_query, sqlite_movie_ids).fetchall()
+    logger.info("reports: scanning %d ReportTorrents rows", len(raw_torrent_rows))
 
-    for row in torrent_rows:
-        d = _row_to_dict(row)
+    prepared_torrents: List[Dict[str, Any]] = []
+    for raw in raw_torrent_rows:
+        d = _row_to_dict(raw)
         movie_href = d.pop("_MovieHref", None)
         session_csv = d.pop("_SessionCsv", None)
         magnet = d.get("MagnetUri")
         if not (movie_href and session_csv and magnet):
+            torrents_stats.checked += 1
             torrents_stats.skipped_missing_parent += 1
             continue
-        d1_session_id = resolver.get(
-            "ReportSessions", ("CsvFilename",), (session_csv,)
-        )
+        d1_session_id = csv_to_d1_session_id.get((session_csv,))
         if d1_session_id is None:
+            torrents_stats.checked += 1
             torrents_stats.skipped_missing_parent += 1
             continue
-        d1_movie_id = resolver.get(
-            "ReportMovies", ("SessionId", "Href"), (d1_session_id, movie_href)
-        )
+        d1_movie_id = movie_keys_to_d1_id.get((d1_session_id, movie_href))
         if d1_movie_id is None:
+            torrents_stats.checked += 1
             torrents_stats.skipped_missing_parent += 1
             continue
         d["ReportMovieId"] = d1_movie_id
-        _upsert_by_business_key(
-            d1=d1,
-            table="ReportTorrents",
-            key_cols=_REPORT_TORRENTS_KEY,
-            payload_cols=_REPORT_TORRENTS_PAYLOAD,
-            sqlite_row_values=d,
-            stats=torrents_stats,
-            dry_run=dry_run,
-        )
+        prepared_torrents.append(d)
+
+    _process_table(
+        d1=d1,
+        table="ReportTorrents",
+        key_cols=_REPORT_TORRENTS_KEY,
+        payload_cols=_REPORT_TORRENTS_PAYLOAD,
+        rows=prepared_torrents,
+        dry_run=dry_run,
+        stats=torrents_stats,
+    )
 
     return [sessions_stats, movies_stats, torrents_stats]
 

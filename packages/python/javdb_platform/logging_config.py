@@ -189,9 +189,14 @@ def setup_logging(log_file=None, log_level=None):
         root_logger.addHandler(file_handler)
         _primary_log_file = os.path.abspath(log_file)
 
-    # Silence noisy third-party loggers
+    # Silence noisy third-party loggers. urllib3 in particular emits two DEBUG
+    # lines per HTTP request ("Starting new HTTPS connection" + the response
+    # status line), which buries the JAVDB-side logs whenever the user runs
+    # with --log-level DEBUG (e.g. against the D1 client / reconciler).
     logging.getLogger("httpx").setLevel(logging.INFO)
     logging.getLogger("httpcore").setLevel(logging.INFO)
+    logging.getLogger("urllib3").setLevel(logging.INFO)
+    logging.getLogger("requests").setLevel(logging.INFO)
 
     return root_logger
 
