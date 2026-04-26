@@ -166,7 +166,13 @@ class ProxyCoordinatorClient:
         on any failure (timeout, non-2xx, connection error, malformed
         response).  Never retries.
         """
-        normalized = _normalize_proxy_id(proxy_id)
+        # _normalize_proxy_id raises ValueError on bad/missing input; route it
+        # through CoordinatorUnavailable so the spider's hot path stays on the
+        # documented fail-open contract instead of crashing the worker.
+        try:
+            normalized = _normalize_proxy_id(proxy_id)
+        except ValueError as e:
+            raise CoordinatorUnavailable(f"invalid proxy_id: {e}") from e
         intended = max(0, int(intended_sleep_ms))
         try:
             resp = self._session.post(
@@ -208,7 +214,10 @@ class ProxyCoordinatorClient:
         """
         if kind not in ("cf", "failure"):
             kind = "cf"
-        normalized = _normalize_proxy_id(proxy_id)
+        try:
+            normalized = _normalize_proxy_id(proxy_id)
+        except ValueError as e:
+            raise CoordinatorUnavailable(f"invalid proxy_id: {e}") from e
         try:
             resp = self._session.post(
                 f"{self._base_url}/report",
