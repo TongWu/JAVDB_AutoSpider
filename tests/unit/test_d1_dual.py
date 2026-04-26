@@ -257,7 +257,7 @@ def test_execute_sends_single_object_body(monkeypatch, d1_conn, no_sleep):
             json_body={"success": True, "result": [{"meta": {"changes": 1}, "results": []}]},
         )
 
-    monkeypatch.setattr(_d1_client_module.requests, "post", fake_post)
+    monkeypatch.setattr(d1_conn, "_post_request", fake_post)
     d1_conn.execute("SELECT * FROM t WHERE id = ?", (1,))
     assert isinstance(captured["json"], dict)
     assert captured["json"] == {"sql": "SELECT * FROM t WHERE id = ?", "params": [1]}
@@ -277,7 +277,7 @@ def test_executemany_sends_batch_object_body(monkeypatch, d1_conn, no_sleep):
             },
         )
 
-    monkeypatch.setattr(_d1_client_module.requests, "post", fake_post)
+    monkeypatch.setattr(d1_conn, "_post_request", fake_post)
     d1_conn.executemany("INSERT INTO t (v) VALUES (?)", [("a",), ("b",), ("c",)])
 
     assert len(captured) == 1
@@ -302,7 +302,7 @@ def test_retry_on_5xx_then_succeeds(monkeypatch, d1_conn, no_sleep):
             json_body={"success": True, "result": [{"meta": {"changes": 1}, "results": []}]},
         )
 
-    monkeypatch.setattr(_d1_client_module.requests, "post", fake_post)
+    monkeypatch.setattr(d1_conn, "_post_request", fake_post)
     cur = d1_conn.execute("INSERT INTO x VALUES (1)")
     assert cur.rowcount == 1
     assert len(calls) == 2
@@ -321,7 +321,7 @@ def test_retry_on_429_respects_retry_after(monkeypatch, d1_conn, no_sleep):
             json_body={"success": True, "result": [{"meta": {}, "results": []}]},
         )
 
-    monkeypatch.setattr(_d1_client_module.requests, "post", fake_post)
+    monkeypatch.setattr(d1_conn, "_post_request", fake_post)
     d1_conn.execute("SELECT 1")
     assert len(calls) == 2
     assert no_sleep == [2.0]
@@ -334,7 +334,7 @@ def test_no_retry_on_4xx(monkeypatch, d1_conn, no_sleep):
         calls.append(json)
         return _FakeResponse(status_code=400, text="bad request")
 
-    monkeypatch.setattr(_d1_client_module.requests, "post", fake_post)
+    monkeypatch.setattr(d1_conn, "_post_request", fake_post)
     with pytest.raises(D1PermanentError):
         d1_conn.execute("INSERT INTO x VALUES (1)")
     assert len(calls) == 1
@@ -348,7 +348,7 @@ def test_retry_exhausted_raises_transient(monkeypatch, d1_conn, no_sleep):
         calls.append(json)
         return _FakeResponse(status_code=503, text="still down")
 
-    monkeypatch.setattr(_d1_client_module.requests, "post", fake_post)
+    monkeypatch.setattr(d1_conn, "_post_request", fake_post)
     with pytest.raises(D1TransientError):
         d1_conn.execute("INSERT INTO x VALUES (1)")
     assert len(calls) == _d1_client_module._MAX_RETRIES
@@ -370,7 +370,7 @@ def test_d1_reset_do_classified_transient(monkeypatch, d1_conn, no_sleep):
             json_body={"success": True, "result": [{"meta": {}, "results": []}]},
         )
 
-    monkeypatch.setattr(_d1_client_module.requests, "post", fake_post)
+    monkeypatch.setattr(d1_conn, "_post_request", fake_post)
     d1_conn.execute("SELECT 1")
     assert len(calls) == 2
 
@@ -402,7 +402,7 @@ def test_400_long_running_export_treated_as_transient(monkeypatch, d1_conn, no_s
             json_body={"success": True, "result": [{"meta": {"changes": 1}, "results": []}]},
         )
 
-    monkeypatch.setattr(_d1_client_module.requests, "post", fake_post)
+    monkeypatch.setattr(d1_conn, "_post_request", fake_post)
     cur = d1_conn.execute("INSERT INTO x VALUES (1)")
     assert cur.rowcount == 1
     assert len(calls) == 2
@@ -425,7 +425,7 @@ def test_400_real_sql_error_remains_permanent(monkeypatch, d1_conn, no_sleep):
             },
         )
 
-    monkeypatch.setattr(_d1_client_module.requests, "post", fake_post)
+    monkeypatch.setattr(d1_conn, "_post_request", fake_post)
     with pytest.raises(D1PermanentError):
         d1_conn.execute("SELEKT * FORM t")
     assert len(calls) == 1
@@ -454,10 +454,82 @@ def test_export_lock_backoff_capped_by_max_sleep(monkeypatch, d1_conn, no_sleep)
             json_body={"success": True, "result": [{"meta": {}, "results": []}]},
         )
 
-    monkeypatch.setattr(_d1_client_module.requests, "post", fake_post)
+    monkeypatch.setattr(d1_conn, "_post_request", fake_post)
     d1_conn.execute("SELECT 1")
     # Cap (5s) + jitter (<=0.5s) → cannot exceed 5.5s.
     assert no_sleep[0] <= 5.5
+
+
+def test_d1_connection_uses_session_for_keepalive():
+    """A real Session reuses the urllib3 connection pool across requests."""
+    import requests as _requests
+
+    conn = D1Connection(account_id="a", database_id="b", api_token="t")
+    try:
+        assert isinstance(conn._session, _requests.Session)
+        # The bound post must come from the same Session, not the module.
+        assert conn._post_request.__self__ is conn._session
+    finally:
+        conn.close()
+
+
+def test_d1_close_releases_session(d1_conn):
+    """close() must close the underlying Session so its connection pool exits."""
+    closed = []
+    original_close = d1_conn._session.close
+
+    def _track():
+        closed.append(True)
+        original_close()
+
+    d1_conn._session.close = _track
+    d1_conn.close()
+    assert closed == [True]
+
+
+def test_batch_execute_packs_chunks_of_50(monkeypatch, d1_conn, no_sleep):
+    """120 statements → 3 HTTP calls (50, 50, 20), one cursor per statement."""
+    posts: list = []
+
+    def fake_post(url, headers, json, timeout):
+        posts.append(json)
+        n = len(json["batch"])
+        return _FakeResponse(
+            status_code=200,
+            json_body={
+                "success": True,
+                "result": [
+                    {"meta": {"changes": 1, "last_row_id": idx + 1}, "results": []}
+                    for idx in range(n)
+                ],
+            },
+        )
+
+    monkeypatch.setattr(d1_conn, "_post_request", fake_post)
+
+    statements = [
+        ("INSERT INTO t (v) VALUES (?)", [i]) for i in range(120)
+    ]
+    cursors = d1_conn.batch_execute(statements)
+
+    # Exactly one cursor per input statement, in order.
+    assert len(cursors) == 120
+    # Three HTTP roundtrips of 50/50/20.
+    assert [len(p["batch"]) for p in posts] == [50, 50, 20]
+    # All bodies must use the {batch: [...]} shape, never bare arrays.
+    assert all("batch" in p and "sql" not in p for p in posts)
+
+
+def test_batch_execute_empty_returns_no_cursors(monkeypatch, d1_conn, no_sleep):
+    posts = []
+
+    def fake_post(*a, **kw):
+        posts.append(kw.get("json"))
+        return _FakeResponse()
+
+    monkeypatch.setattr(d1_conn, "_post_request", fake_post)
+    assert d1_conn.batch_execute([]) == []
+    assert posts == []
 
 
 # ── DualConnection drift tracking ────────────────────────────────────────

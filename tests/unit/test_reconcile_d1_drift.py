@@ -50,12 +50,23 @@ class FakeD1Connection:
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(schema_sql)
         self.executed: List[tuple] = []
+        self.batches: List[List[tuple]] = []
 
     def execute(self, sql: str, params: Iterable[Any] = ()):  # noqa: D401 - facade
         self.executed.append((sql, list(params)))
         cur = self._conn.execute(sql, list(params))
         rows = [dict(r) for r in cur.fetchall()]
         return FakeD1Cursor(rows=rows, lastrowid=cur.lastrowid, rowcount=cur.rowcount)
+
+    def batch_execute(self, statements):
+        """Mimic D1Connection.batch_execute: run each statement, return cursors.
+
+        Records the batch so tests can assert on batching behaviour. Real CF
+        batches are atomic — we don't simulate that here since the reconciler's
+        per-row fallback path is exercised in dedicated tests.
+        """
+        self.batches.append([(s, list(p)) for s, p in statements])
+        return [self.execute(sql, params) for sql, params in statements]
 
     def close(self):
         self._conn.close()
@@ -469,6 +480,160 @@ def test_archive_processed_records_atomic_write(tmp_path):
     remaining = [json.loads(line) for line in drift_log.read_text(encoding="utf-8").splitlines()]
     assert archived == consumed
     assert remaining == leftover
+
+
+def test_history_uses_batched_selects_not_per_row(history_sqlite):
+    """3 SQLite rows must produce 1 batched D1 SELECT call (not 3 separate ones).
+
+    Locks in the connection-pool / batching optimisation: regressing back to
+    per-row SELECTs would trash D1 round-trip cost on the live reconciler.
+    """
+    sqlite_path, sqlite_conn = history_sqlite
+    for i in range(3):
+        sqlite_conn.execute(
+            "INSERT INTO MovieHistory (VideoCode, Href, DateTimeUpdated)"
+            " VALUES (?, ?, ?)",
+            (f"AAA-{i:03d}", f"/v/b{i}", "2026-04-26 02:00:00"),
+        )
+    sqlite_conn.commit()
+    sqlite_conn.close()
+
+    fake_d1 = FakeD1Connection(_HISTORY_DDL)
+    ro_conn = recon._open_sqlite_readonly(str(sqlite_path))
+    try:
+        recon._reconcile_history(ro_conn, fake_d1, since_text=None, dry_run=False)
+    finally:
+        ro_conn.close()
+
+    # The 3 SELECT-by-Href existence checks must collapse into ONE batch
+    # (one per table — torrents have no rows here so no extra batch).
+    movie_lookup_batches = [
+        b for b in fake_d1.batches
+        if any("SELECT" in s and "MovieHistory" in s for s, _ in b)
+    ]
+    assert len(movie_lookup_batches) == 1, (
+        f"expected 1 batched SELECT for MovieHistory, got {len(movie_lookup_batches)}: "
+        f"{movie_lookup_batches}"
+    )
+    assert len(movie_lookup_batches[0]) == 3, (
+        f"all 3 SELECTs must ride one CF /query call, got {movie_lookup_batches[0]}"
+    )
+
+
+def test_inserts_are_batched_in_a_single_call(history_sqlite):
+    """Inserting 4 movies should produce ONE batched INSERT call (not 4)."""
+    sqlite_path, sqlite_conn = history_sqlite
+    for i in range(4):
+        sqlite_conn.execute(
+            "INSERT INTO MovieHistory (VideoCode, Href, DateTimeUpdated)"
+            " VALUES (?, ?, ?)",
+            (f"BB-{i:03d}", f"/v/i{i}", "2026-04-26 02:00:00"),
+        )
+    sqlite_conn.commit()
+    sqlite_conn.close()
+
+    fake_d1 = FakeD1Connection(_HISTORY_DDL)
+    ro_conn = recon._open_sqlite_readonly(str(sqlite_path))
+    try:
+        recon._reconcile_history(ro_conn, fake_d1, since_text=None, dry_run=False)
+    finally:
+        ro_conn.close()
+
+    insert_batches = [
+        b for b in fake_d1.batches
+        if any(s.startswith("INSERT INTO MovieHistory") for s, _ in b)
+    ]
+    assert len(insert_batches) == 1
+    assert len(insert_batches[0]) == 4
+    # And all 4 movies must actually be in D1 now.
+    n = fake_d1._conn.execute("SELECT COUNT(*) AS n FROM MovieHistory").fetchone()
+    assert n["n"] == 4
+
+
+def test_lastrowid_resolves_torrent_parent_within_same_run(history_sqlite):
+    """Children inserted in the same run must bind to lastrowid of new parents.
+
+    Verifies the in-memory key→D1-Id map captures lastrowid from INSERT batches.
+    Without this the second-pass torrent reconciliation would skip every newly
+    added movie's torrents as 'parent missing'.
+    """
+    sqlite_path, sqlite_conn = history_sqlite
+    sqlite_conn.execute(
+        "INSERT INTO MovieHistory (VideoCode, Href, DateTimeUpdated)"
+        " VALUES (?, ?, ?)",
+        ("ZZZ-001", "/v/lastrowid", "2026-04-26 02:00:00"),
+    )
+    sqlite_conn.execute(
+        "INSERT INTO TorrentHistory (MovieHistoryId, MagnetUri,"
+        " SubtitleIndicator, CensorIndicator, DateTimeUpdated)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (1, "magnet:?xt=q", 0, 1, "2026-04-26 02:00:00"),
+    )
+    sqlite_conn.commit()
+    sqlite_conn.close()
+
+    fake_d1 = FakeD1Connection(_HISTORY_DDL)
+    ro_conn = recon._open_sqlite_readonly(str(sqlite_path))
+    try:
+        stats = recon._reconcile_history(
+            ro_conn, fake_d1, since_text=None, dry_run=False
+        )
+    finally:
+        ro_conn.close()
+
+    by_table = {s.table: s for s in stats}
+    assert by_table["TorrentHistory"].inserted == 1
+    assert by_table["TorrentHistory"].skipped_missing_parent == 0
+
+    # Confirm the FK was actually wired to the new MovieHistory row.
+    parent_id = fake_d1._conn.execute(
+        "SELECT Id FROM MovieHistory WHERE Href = ?", ("/v/lastrowid",)
+    ).fetchone()["Id"]
+    torrent_parent = fake_d1._conn.execute(
+        "SELECT MovieHistoryId FROM TorrentHistory"
+    ).fetchone()["MovieHistoryId"]
+    assert torrent_parent == parent_id
+
+
+def test_flush_writes_falls_back_per_row_on_batch_failure():
+    """When a CF batch raises, _flush_writes retries each row to attribute the bad one.
+
+    Locks in resilience against race-induced UNIQUE collisions: one bad row
+    must not cause the whole batch's worth of work to be lost.
+    """
+    from packages.python.javdb_platform.d1_client import D1Error
+
+    class FlakyD1:
+        def __init__(self):
+            self.batch_calls = 0
+            self.execute_calls = []
+
+        def batch_execute(self, statements):
+            self.batch_calls += 1
+            raise D1Error("simulated batch UNIQUE collision")
+
+        def execute(self, sql, params):
+            self.execute_calls.append((sql, list(params)))
+
+            class _C:
+                lastrowid = len(self.execute_calls)
+                rowcount = 1
+
+            if "row-2" in str(params):
+                raise D1Error("simulated row failure")
+            return _C()
+
+    flaky = FlakyD1()
+    stats = recon.TableStats("TestTbl")
+    statements = [
+        ("INSERT INTO TestTbl (v) VALUES (?)", [f"row-{i}"]) for i in range(3)
+    ]
+    recon._flush_writes(flaky, statements, label="INSERT TestTbl", stats=stats)
+
+    assert flaky.batch_calls == 1
+    assert len(flaky.execute_calls) == 3
+    assert stats.errors == 1
+    assert any("row failed" in m for m in stats.error_messages)
 
 
 def test_main_returns_zero_when_no_drift(tmp_path, monkeypatch, capsys):
