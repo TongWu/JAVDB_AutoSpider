@@ -107,4 +107,8 @@ rust_core/target/sdist/
 .cursorrules
 pytest-of-tedwu/*
 
+# proxy_coordinator/ source has been moved to a dedicated repo:
+#   https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator
+# Keep the path ignored so any stray local clone here won't accidentally
+# get committed back into this monorepo.
 proxy_coordinator/
