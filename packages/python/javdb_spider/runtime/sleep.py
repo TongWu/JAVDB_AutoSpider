@@ -274,6 +274,14 @@ DualWindowThrottle = TripleWindowThrottle
 # ---------------------------------------------------------------------------
 # Module-level shared instances
 # ---------------------------------------------------------------------------
+# The shared ``penalty_tracker`` is intentionally constructed *without* a
+# coordinator + ``proxy_id``: a single tracker is reused across every proxy
+# in the pool, so it cannot meaningfully address one specific per-proxy DO
+# from inside ``record_event()``.  Cross-instance CF reporting therefore
+# flows exclusively through ``RequestHandler.on_cf_event`` callbacks, which
+# carry the per-proxy identity (per-worker handlers via closure, the global
+# handler via the positional ``proxy_name`` arg).  This tracker still does
+# the *local* aggregation that drives single-instance penalty decay.
 penalty_tracker = PenaltyTracker()
 triple_window_throttle = TripleWindowThrottle()
 dual_window_throttle = triple_window_throttle

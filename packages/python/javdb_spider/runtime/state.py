@@ -277,8 +277,23 @@ def initialize_request_handler():
         proxy_mode=PROXY_MODE,
         between_attempt_sleep=_mgr.sleep,
     )
+    # Cross-instance CF event callback for the global handler.  Unlike the
+    # per-worker handlers in fetch_engine.py — which bind a single proxy via
+    # closure — the global handler walks the proxy pool, so the proxy that
+    # actually triggered the CF event is only known per-call.  We therefore
+    # accept the positional ``proxy_name`` from RequestHandler and forward
+    # it to the coordinator at report time.  A live ``global_proxy_coordinator``
+    # is required; without it (or without a proxy_name) reports are skipped
+    # silently — matching the local-only fallback semantics elsewhere.
+    def _global_cf_event_cb(proxy_name):
+        coord = global_proxy_coordinator
+        if coord is None or not proxy_name:
+            return
+        coord.report_async(proxy_name, "cf")
+
     global_request_handler = RequestHandler(
         proxy_pool=global_proxy_pool, config=config, penalty_tracker=_pt,
+        on_cf_event=_global_cf_event_cb,
     )
     logger.info("Request handler initialized successfully")
 
