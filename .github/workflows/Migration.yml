@@ -496,6 +496,8 @@ jobs:
           git add "$REPORTS_DIR/history.db" 2>/dev/null || true
           git add "$REPORTS_DIR/reports.db" 2>/dev/null || true
           git add "$REPORTS_DIR/operations.db" 2>/dev/null || true
+          git add "$REPORTS_DIR/d1_drift.jsonl" 2>/dev/null || true
+          git add "$REPORTS_DIR/d1_drift.processed.jsonl" 2>/dev/null || true
           find "$REPORTS_DIR/Migration" -type f -exec git add {} \; 2>/dev/null || true
 
           if git diff --cached --quiet; then
