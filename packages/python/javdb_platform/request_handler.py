@@ -151,24 +151,32 @@ class RequestHandler:
     BYPASS_HEADERS = {}
     
     def __init__(self, proxy_pool=None, config: Optional[RequestConfig] = None,
-                 penalty_tracker=None):
+                 penalty_tracker=None, on_cf_event=None):
         """
         Initialize request handler.
-        
+
         Args:
             proxy_pool: ProxyPool instance for proxy management
             config: RequestConfig instance with configuration settings
             penalty_tracker: Optional PenaltyTracker for CF event feedback
+            on_cf_event: Optional zero-arg callback invoked after each
+                ``penalty_tracker.record_event()``.  Used by the cross-instance
+                proxy coordinator wiring to notify the per-proxy DO that
+                this proxy just hit a CF / failure event, so the DO can
+                publish an elevated ``penalty_factor`` to *other* GH Actions
+                runners using the same proxy.  Failures are silently
+                swallowed (best-effort telemetry; never blocks the request).
         """
         self.proxy_pool = proxy_pool
         self.config = config or RequestConfig()
         self.session = requests.Session()
         self.penalty_tracker = penalty_tracker
-        
+        self._on_cf_event = on_cf_event
+
         # Counter for consecutive CF bypass failures (small responses)
         self.cf_bypass_failure_count: int = 0
         self.cf_bypass_force_refresh: bool = False
-        
+
         # Initialize curl_cffi session if available and enabled
         self.curl_cffi_session = None
         self.use_curl_cffi = False
@@ -184,6 +192,22 @@ class RequestHandler:
                 self.use_curl_cffi = False
         elif not CURL_CFFI_AVAILABLE and self.config.use_curl_cffi:
             logger.info("curl_cffi not installed - using standard requests (install with: pip install curl_cffi)")
+
+    def _record_cf_event(self) -> None:
+        """Combined hook for local penalty tracking + cross-instance report.
+
+        Replaces the bare ``penalty_tracker.record_event()`` calls in the
+        CF fallback chain.  Always invokes the local tracker first
+        (preserves single-instance behaviour) and then the optional
+        per-proxy coordinator notifier.
+        """
+        if self.penalty_tracker:
+            self.penalty_tracker.record_event()
+        if self._on_cf_event is not None:
+            try:
+                self._on_cf_event()
+            except Exception:  # noqa: BLE001 — telemetry must not block requests
+                logger.debug("on_cf_event callback raised", exc_info=True)
 
     def _is_deadline_exceeded(self) -> bool:
         """Return ``True`` if the task-level time budget has been exhausted."""
@@ -1002,8 +1026,8 @@ class RequestHandler:
             f"Starting fallback sequence (cooldown: {self.config.fallback_cooldown}s between steps)..."
         )
         self.cf_bypass_failure_count += 1
-        if is_turnstile and self.penalty_tracker:
-            self.penalty_tracker.record_event()
+        if is_turnstile:
+            self._record_cf_event()
         
         if self._is_deadline_exceeded():
             logger.debug(f"[{module_name}] Task deadline exceeded before fallback step (a)")
@@ -1031,8 +1055,8 @@ class RequestHandler:
             elif result:
                 logger.warning(f"{log_ctx} Step (a) returned small response ({len(result)} bytes), continuing to next step")
         
-        if is_turnstile and self.penalty_tracker:
-            self.penalty_tracker.record_event()
+        if is_turnstile:
+            self._record_cf_event()
         turnstile_detected = turnstile_detected or is_turnstile
         
         # Refresh bypass cache between step (a) and (b) if turnstile detected
@@ -1061,8 +1085,8 @@ class RequestHandler:
                     if use_proxy_pool_mode and self.proxy_pool:
                         self.proxy_pool.mark_success()
                     return result
-            if is_turnstile and self.penalty_tracker:
-                self.penalty_tracker.record_event()
+            if is_turnstile:
+                self._record_cf_event()
             turnstile_detected = turnstile_detected or is_turnstile
         
         # Step (c) & (d): Try other proxies if in pool mode
@@ -1096,8 +1120,8 @@ class RequestHandler:
                     if result and len(result) >= 10000:
                         self.proxy_pool.mark_success()
                         return result
-                if is_turnstile and self.penalty_tracker:
-                    self.penalty_tracker.record_event()
+                if is_turnstile:
+                    self._record_cf_event()
                 turnstile_detected = turnstile_detected or is_turnstile
                 
                 if self.config.fallback_cooldown > 0:
@@ -1120,8 +1144,8 @@ class RequestHandler:
                     elif result:
                         logger.warning(f"{log_ctx} Step (d) returned small response ({len(result)} bytes), continuing to next proxy")
                 
-                if is_turnstile and self.penalty_tracker:
-                    self.penalty_tracker.record_event()
+                if is_turnstile:
+                    self._record_cf_event()
                 turnstile_detected = turnstile_detected or is_turnstile
                 
                 # Refresh bypass cache after step (d) if turnstile detected
@@ -1135,8 +1159,7 @@ class RequestHandler:
         # All fallbacks failed
         logger.error(f"{log_ctx} All CF bypass fallback attempts exhausted for {url}")
         self.cf_bypass_failure_count += 1
-        if self.penalty_tracker:
-            self.penalty_tracker.record_event()
+        self._record_cf_event()
         if self.cf_bypass_failure_count >= self.config.cf_bypass_ban_threshold:
             logger.error(
                 f"{log_ctx} CF Bypass has failed {self.cf_bypass_failure_count} "
@@ -1184,8 +1207,7 @@ class RequestHandler:
                         return result
             
             if is_turnstile:
-                if self.penalty_tracker:
-                    self.penalty_tracker.record_event()
+                self._record_cf_event()
                 if retry_count < max_retries - 1:
                     logger.warning(f"[{module_name}] Turnstile detected, waiting {self.config.cf_turnstile_cooldown}s before retry...")
                     self._pause_between_attempts(legacy_seconds=self.config.cf_turnstile_cooldown)

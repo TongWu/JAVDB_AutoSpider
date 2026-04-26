@@ -13,6 +13,9 @@ from typing import Optional, Dict
 from datetime import datetime
 
 from packages.python.javdb_platform.logging_config import get_logger
+from packages.python.javdb_platform.proxy_coordinator_client import (
+    ProxyCoordinatorClient,
+)
 from packages.python.javdb_platform.proxy_pool import ProxyPool, create_proxy_pool_from_config
 from packages.python.javdb_platform.proxy_policy import should_proxy_module
 from packages.python.javdb_platform.request_handler import RequestHandler, RequestConfig
@@ -37,6 +40,10 @@ logger = get_logger(__name__)
 
 global_proxy_pool: Optional[ProxyPool] = None
 global_request_handler: Optional[RequestHandler] = None
+# Cross-instance proxy coordinator (Cloudflare DO).  Lazily initialised by
+# :func:`setup_proxy_coordinator`; ``None`` means "use local throttling
+# only" — equivalent to the pre-coordinator behaviour.
+global_proxy_coordinator: Optional[ProxyCoordinatorClient] = None
 
 parsed_links: set = set()
 proxy_ban_html_files: list = []
@@ -200,6 +207,53 @@ def is_cf_bypass_failure(html_content: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def setup_proxy_coordinator() -> Optional[ProxyCoordinatorClient]:
+    """Initialise the cross-instance proxy coordinator from configuration.
+
+    Reads ``PROXY_COORDINATOR_URL`` / ``PROXY_COORDINATOR_TOKEN`` from the
+    rendered ``config.py`` (i.e. injected by ``config_generator``).  Both
+    must be non-empty to enable the coordinator; otherwise spider continues
+    with local-only throttling (this is the supported "disabled" path).
+
+    Returns ``None`` (and logs an ERROR) when configured but the
+    ``/health`` probe fails, so deployment misconfiguration surfaces
+    early without breaking the spider.
+
+    The result is cached in :data:`global_proxy_coordinator`.  Idempotent:
+    calling twice returns the existing client.
+    """
+    global global_proxy_coordinator
+    if global_proxy_coordinator is not None:
+        return global_proxy_coordinator
+
+    from packages.python.javdb_platform.config_helper import cfg
+    url = (cfg('PROXY_COORDINATOR_URL', '') or '').strip()
+    token = (cfg('PROXY_COORDINATOR_TOKEN', '') or '').strip()
+    if not url or not token:
+        logger.info(
+            "Proxy coordinator not configured (PROXY_COORDINATOR_URL/TOKEN unset) "
+            "— using local throttling only",
+        )
+        global_proxy_coordinator = None
+        return None
+
+    client = ProxyCoordinatorClient(base_url=url, token=token)
+    if not client.health_check():
+        logger.error(
+            "Proxy coordinator URL %s is configured but /health did not respond — "
+            "falling back to local throttling for this run",
+            url,
+        )
+        global_proxy_coordinator = None
+        return None
+    logger.info(
+        "Proxy coordinator client initialised: base_url=%s",
+        url,
+    )
+    global_proxy_coordinator = client
+    return client
+
+
 def initialize_request_handler():
     """Create the global RequestHandler from configuration."""
     global global_request_handler
@@ -230,9 +284,16 @@ def initialize_request_handler():
 
 
 def setup_proxy_pool(use_proxy) -> None:
-    """Initialize the global proxy pool from configuration."""
+    """Initialize the global proxy pool from configuration.
+
+    Also lazily initialises the cross-instance proxy coordinator so that
+    every worker thread spawned later automatically picks it up via
+    :data:`global_proxy_coordinator`.
+    """
     from packages.python.javdb_platform.proxy_policy import is_proxy_mode_disabled
     global global_proxy_pool
+
+    setup_proxy_coordinator()
 
     if is_proxy_mode_disabled(PROXY_MODE):
         logger.info("Proxy globally disabled (PROXY_MODE='%s') - skipping pool init", PROXY_MODE)
