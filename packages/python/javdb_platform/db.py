@@ -60,7 +60,20 @@ def _backend_mode() -> str:
     * ``d1`` — all reads/writes go to Cloudflare D1.
     * ``dual`` — writes mirror to both SQLite and D1; reads come from D1
       (used during migration validation).
+
+    During ``init_db`` under the ``dual`` backend we temporarily downgrade
+    to sqlite-only init so the DDL plumbing only touches the local file.
+    That override lives in a *thread-local* (``_local._storage_backend_init_override``)
+    and is preferred over the module-level ``_STORAGE_BACKEND_INIT_OVERRIDE``
+    env var, so the override is invisible to other threads — preventing
+    them from accidentally caching plain ``sqlite3`` connections during
+    a concurrent ``init_db`` window. The env var is still honoured (for
+    back-compat and for tests that defensively unset it) but should be
+    considered deprecated for new code.
     """
+    tl_override = getattr(_local, '_storage_backend_init_override', None)
+    if tl_override:
+        return tl_override.strip().lower()
     override = os.environ.get('_STORAGE_BACKEND_INIT_OVERRIDE')
     if override:
         return override.strip().lower()
@@ -99,6 +112,13 @@ SCHEMA_VERSION = 10
 # ── Connection management ────────────────────────────────────────────────
 
 _local = threading.local()
+
+# Serializes the dual-backend init window. Without this, two threads racing
+# into ``init_db`` would both try to mutate ``_local.conns`` and the env-var /
+# thread-local override, with the second thread potentially observing a
+# half-applied state. ``_do_init`` also touches the file system, which is
+# itself unsafe to run concurrently against the same SQLite paths.
+_init_lock = threading.Lock()
 
 
 def _is_valid_sqlite(path: str) -> bool:
@@ -1094,18 +1114,32 @@ def init_db(db_path: Optional[str] = None, *, force: bool = False):
     # For backend == 'dual' we temporarily downgrade to sqlite-only init so
     # that the DDL/migration plumbing only touches the local file (D1 schema
     # was created out-of-band by `wrangler d1 import`).
+    #
+    # The override is set on a *thread-local* sentinel so concurrent
+    # ``_get_connection`` calls from sibling threads continue to see the
+    # configured ``dual`` backend and DO NOT accidentally cache plain
+    # ``sqlite3.Connection`` objects during this window. The module-level
+    # ``_init_lock`` serializes any concurrent ``init_db(dual)`` callers, and
+    # the env-var manipulation is preserved as a back-compat hint (some test
+    # fixtures defensively unset it) but is no longer the primary mechanism.
     if backend == 'dual':
-        os.environ['_STORAGE_BACKEND_INIT_OVERRIDE'] = 'sqlite'
-        prev_conns = getattr(_local, 'conns', None)
-        _local.conns = {}
-        try:
-            _do_init(db_path)
-        finally:
-            os.environ.pop('_STORAGE_BACKEND_INIT_OVERRIDE', None)
-            if prev_conns is not None:
-                _local.conns = prev_conns
-            else:
-                _local.conns = {}
+        with _init_lock:
+            _local._storage_backend_init_override = 'sqlite'
+            os.environ['_STORAGE_BACKEND_INIT_OVERRIDE'] = 'sqlite'
+            prev_conns = getattr(_local, 'conns', None)
+            _local.conns = {}
+            try:
+                _do_init(db_path)
+            finally:
+                os.environ.pop('_STORAGE_BACKEND_INIT_OVERRIDE', None)
+                try:
+                    del _local._storage_backend_init_override
+                except AttributeError:
+                    pass
+                if prev_conns is not None:
+                    _local.conns = prev_conns
+                else:
+                    _local.conns = {}
         return
 
     _do_init(db_path)
