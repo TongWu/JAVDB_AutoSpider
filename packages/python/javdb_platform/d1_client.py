@@ -54,11 +54,12 @@ def _env_float(name: str, default: float) -> float:
 
 _API_TIMEOUT = _env_int("D1_HTTP_TIMEOUT", 30)
 _BATCH_LIMIT = 50  # D1 caps statements per request
-_MAX_RETRIES = _env_int("D1_MAX_RETRIES", 3)
+_MAX_RETRIES = _env_int("D1_MAX_RETRIES", 5)
 _RETRY_BASE_SEC = _env_float("D1_RETRY_BASE_SEC", 1.0)
-_RETRY_MAX_SLEEP_SEC = 8.0
+_RETRY_MAX_SLEEP_SEC = _env_float("D1_RETRY_MAX_SLEEP_SEC", 30.0)
 
-# Substrings in CF "errors[].message" that signal a recoverable backend hiccup.
+# Substrings in CF "errors[].message" / errors[].code that signal a recoverable
+# backend hiccup. Compared case-insensitively against the stringified errors.
 _TRANSIENT_ERROR_KEYWORDS = (
     "D1_RESET_DO",
     "busy",
@@ -66,7 +67,21 @@ _TRANSIENT_ERROR_KEYWORDS = (
     "overloaded",
     "internal error",
     "temporarily",
+    # CF D1 returns this 400/code-7500 when a manual or scheduled D1 export is
+    # holding a database-wide read/write lock. Treat as transient so callers
+    # back off and retry instead of dropping the write.
+    "long-running export",
+    "7500",
 )
+
+# Substrings indicating the export-lock case specifically. Backoff for these is
+# overridden to a longer fixed floor since exports typically last 10-60s and
+# short retries waste round-trips on the lock window.
+_EXPORT_LOCK_KEYWORDS = (
+    "long-running export",
+    "7500",
+)
+_EXPORT_LOCK_BACKOFF_FLOOR_SEC = _env_float("D1_EXPORT_LOCK_FLOOR_SEC", 15.0)
 
 
 class D1Error(RuntimeError):
@@ -105,6 +120,11 @@ class D1Cursor:
 def _split(seq: Sequence, n: int):
     for i in range(0, len(seq), n):
         yield seq[i : i + n]
+
+
+def _matches_keyword(text: str, keywords: Sequence[str]) -> bool:
+    haystack = text.lower()
+    return any(kw.lower() in haystack for kw in keywords)
 
 
 class D1Connection:
@@ -230,6 +250,10 @@ class D1Connection:
             except (TypeError, ValueError):
                 pass
         base = _RETRY_BASE_SEC * (2 ** attempt)
+        # Export-lock errors require a longer floor: short retries reliably
+        # land back inside the same lock window.
+        if getattr(exc, "is_export_lock", False):
+            base = max(base, _EXPORT_LOCK_BACKOFF_FLOOR_SEC)
         return min(base, _RETRY_MAX_SLEEP_SEC) + random.uniform(0, 0.5)
 
     def _post(self, body: dict) -> List[D1Cursor]:
@@ -252,6 +276,23 @@ class D1Connection:
                 err.retry_after = retry_after  # type: ignore[attr-defined]
             raise err
         if 400 <= status < 500:
+            # CF returns HTTP 400 for application-level errors too, including the
+            # "long-running export" lock (code 7500). Inspect the JSON body so we
+            # can promote those to D1TransientError and let _post_with_retry back
+            # off — otherwise a single CF export would silently drop every write.
+            errors = self._extract_errors(response)
+            if errors is not None:
+                err_text = str(errors)
+                if _matches_keyword(err_text, _TRANSIENT_ERROR_KEYWORDS):
+                    transient = D1TransientError(
+                        f"D1 API returned HTTP {status} (transient): {errors}"
+                    )
+                    if _matches_keyword(err_text, _EXPORT_LOCK_KEYWORDS):
+                        transient.is_export_lock = True  # type: ignore[attr-defined]
+                    raise transient
+                raise D1PermanentError(
+                    f"D1 API returned HTTP {status}: {errors}"
+                )
             raise D1PermanentError(
                 f"D1 API returned HTTP {status}: {response.text[:500]}"
             )
@@ -269,11 +310,29 @@ class D1Connection:
         if not payload.get("success"):
             errors = payload.get("errors") or payload.get("messages") or []
             err_text = str(errors)
-            if any(kw.lower() in err_text.lower() for kw in _TRANSIENT_ERROR_KEYWORDS):
-                raise D1TransientError(f"D1 API transient error: {errors}")
+            if _matches_keyword(err_text, _TRANSIENT_ERROR_KEYWORDS):
+                transient = D1TransientError(f"D1 API transient error: {errors}")
+                if _matches_keyword(err_text, _EXPORT_LOCK_KEYWORDS):
+                    transient.is_export_lock = True  # type: ignore[attr-defined]
+                raise transient
             raise D1PermanentError(f"D1 API error: {errors}")
 
         return [D1Cursor(item) for item in payload.get("result") or []]
+
+    @staticmethod
+    def _extract_errors(response) -> Optional[list]:
+        """Best-effort extraction of CF ``errors`` array from a 4xx response.
+
+        Returns ``None`` when the body is not JSON or has no ``errors`` /
+        ``messages`` array — caller should then fall back to raw-text error.
+        """
+        try:
+            payload = response.json()
+        except ValueError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        return payload.get("errors") or payload.get("messages") or []
 
 
 # ── Resolution helpers ───────────────────────────────────────────────────
