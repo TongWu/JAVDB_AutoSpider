@@ -26,7 +26,12 @@ from datetime import datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-os.chdir(REPO_ROOT)
+# NB: previously this module also called ``os.chdir(REPO_ROOT)`` at import
+# time, which made ``parse_args`` unsafe to import from another script (it
+# would silently change that script's CWD). The chdir is now performed only
+# inside :func:`main` after argparse has run. ``sys.path`` insertion is kept
+# at import time because the ``from packages.python...`` imports below need
+# the repo root to be importable as soon as this module loads.
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -160,6 +165,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    # Default CSV / DB paths are relative — anchor the process to the repo
+    # root so the script behaves consistently regardless of the caller's CWD.
+    os.chdir(str(REPO_ROOT))
     root = get_configured_root_folder()
     logger.info("=" * 60)
     logger.info("STRIP RCLONE ROOT FOLDER (store relative paths)")
