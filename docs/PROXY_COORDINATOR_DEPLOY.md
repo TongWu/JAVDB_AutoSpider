@@ -1,8 +1,19 @@
 # Proxy Coordinator —— 从零开始的部署手册
 
-> 面向运维的 step-by-step 指南。把 `cloudflare/proxy_coordinator/` 部署到
-> Cloudflare 免费层，并把 GitHub Actions 的 5 个 workflow 接入跨实例的
-> per-proxy 节流协调。**全程零成本，可随时无代价回滚。**
+> 面向运维的 step-by-step 指南。把 Cloudflare Worker + Durable Object
+> 部署到 Cloudflare 免费层，并把 GitHub Actions 的 5 个 workflow 接入
+> 跨实例的 per-proxy 节流协调。**全程零成本，可随时无代价回滚。**
+
+> **Worker 源码仓库**：
+> [TongWu/JAVDB_AutoSpider_Proxycoordinator](https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator)
+>
+> Worker / Durable Object 的 TypeScript 源码、`wrangler.toml`、单测、
+> 配额脚本都已经从本 monorepo 拆到上述独立 repo 中（拆分原因：部署生命
+> 周期、依赖工具链 (Node + wrangler) 与 Python spider 完全独立）。
+> 本文中所有 `cd JAVDB_AutoSpider_Proxycoordinator` 步骤都假设你已经
+> `git clone` 了那个仓库到本地任意目录。Python 客户端
+> ([`packages/python/javdb_platform/proxy_coordinator_client.py`](../packages/python/javdb_platform/proxy_coordinator_client.py))
+> 仍然在本仓库内，这两边通过 HTTP + token 解耦。
 
 ---
 
@@ -44,10 +55,12 @@ node --version   # 应 >= 20
 npm --version
 ```
 
-### 1.3 一次性 OAuth 登录
+### 1.3 克隆 Worker 仓库 + 一次性 OAuth 登录
 
 ```bash
-cd cloudflare/proxy_coordinator
+# 任选一个本地目录（与本 spider repo 平级最方便）
+git clone https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator.git
+cd JAVDB_AutoSpider_Proxycoordinator
 npm install              # 安装 wrangler 等依赖
 npx wrangler login       # 弹出浏览器，点 Allow
 ```
@@ -59,7 +72,7 @@ npx wrangler login       # 弹出浏览器，点 Allow
 ## 2. 项目目录速览
 
 ```
-cloudflare/proxy_coordinator/
+JAVDB_AutoSpider_Proxycoordinator/   # 独立 GitHub repo（已 git clone）
 ├── wrangler.toml                    # Worker + DO 绑定 + 可调常量
 ├── package.json
 ├── tsconfig.json
@@ -82,7 +95,7 @@ cloudflare/proxy_coordinator/
 ## 3. 本地开发与单测
 
 ```bash
-cd cloudflare/proxy_coordinator
+cd JAVDB_AutoSpider_Proxycoordinator
 npm install
 npx wrangler dev                       # http://localhost:8787 开发服务器
 ```
@@ -131,7 +144,7 @@ echo -n "$TOKEN" | npx wrangler secret put PROXY_COORDINATOR_TOKEN
 ## 5. 首次部署
 
 ```bash
-cd cloudflare/proxy_coordinator
+cd JAVDB_AutoSpider_Proxycoordinator
 npx wrangler deploy
 ```
 
@@ -240,7 +253,7 @@ SQL
 ```bash
 export CLOUDFLARE_ACCOUNT_ID=...
 export CLOUDFLARE_API_TOKEN=...
-bash cloudflare/proxy_coordinator/scripts/check-quota.sh
+bash JAVDB_AutoSpider_Proxycoordinator/scripts/check-quota.sh
 # 输出: Last-24h lease count: 4823 (threshold: 70000)
 ```
 
@@ -261,8 +274,11 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - run: bash cloudflare/proxy_coordinator/scripts/check-quota.sh
+      - name: Checkout coordinator repo
+        uses: actions/checkout@v6
+        with:
+          repository: TongWu/JAVDB_AutoSpider_Proxycoordinator
+      - run: bash scripts/check-quota.sh
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -287,7 +303,7 @@ Proxy coordinator not configured (PROXY_COORDINATOR_URL/TOKEN unset) — using l
 ### 8.2 完全拆除
 
 ```bash
-cd cloudflare/proxy_coordinator
+cd JAVDB_AutoSpider_Proxycoordinator
 npx wrangler delete
 ```
 
