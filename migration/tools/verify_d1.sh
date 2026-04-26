@@ -3,6 +3,11 @@
 # macOS bash 3.x compatible (no associative arrays).
 set -euo pipefail
 
+# Aggregate non-zero exit signal across every table on every DB so the script
+# fails CI when ANY row count diverges; without this, callers (CI gates, Make
+# targets) would happily treat a "[MISMATCH]" log line as success.
+overall_status=0
+
 verify_db() {
   local db="$1"; shift
   echo "================ $db ================"
@@ -17,7 +22,10 @@ try:
 except Exception:
   print('ERR')")
     flag="OK"
-    [[ "$local_n" != "$d1_n" ]] && flag="MISMATCH"
+    if [[ "$local_n" == "ERR" || "$d1_n" == "ERR" || "$local_n" != "$d1_n" ]]; then
+      flag="MISMATCH"
+      overall_status=1
+    fi
     printf "  %-32s local=%-8s  d1=%-8s  [%s]\n" "$tbl" "$local_n" "$d1_n" "$flag"
   done
 }
@@ -25,3 +33,5 @@ except Exception:
 verify_db history    MovieHistory TorrentHistory SchemaVersion
 verify_db reports    ReportSessions ReportMovies ReportTorrents SpiderStats UploaderStats PikpakStats SchemaVersion
 verify_db operations RcloneInventory DedupRecords PikpakHistory InventoryAlignNoExactMatch SchemaVersion
+
+exit "$overall_status"
