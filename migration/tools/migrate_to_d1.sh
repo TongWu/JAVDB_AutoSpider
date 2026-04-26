@@ -30,11 +30,12 @@ split_one() {
   local clean_sql="$1"
   local prefix="$2"
 
-  # schema goes to ${prefix}_00_schema.sql
-  awk '/^INSERT INTO/{exit} {print}' "$clean_sql" > "${prefix}_00_schema.sql"
-
-  # chunked data files: ${prefix}_data_001.sql, _002.sql, ...
-  awk -v rpc="$ROWS_PER_CHUNK" -v prefix="$prefix" '
+  # Single pass: route INSERTs into chunked data files; everything else (CREATE
+  # TABLE/INDEX/TRIGGER, etc.) lands in ${prefix}_00_schema.sql. SQLite .dump
+  # interleaves trigger / index DDL after the inserts, so a one-shot pre-INSERT
+  # split would silently drop those statements.
+  : > "${prefix}_00_schema.sql"
+  awk -v rpc="$ROWS_PER_CHUNK" -v prefix="$prefix" -v schema="${prefix}_00_schema.sql" '
     /^INSERT INTO/ {
       if ((NR_in_chunk % rpc) == 0) {
         if (out != "") close(out)
@@ -43,7 +44,9 @@ split_one() {
       }
       print > out
       NR_in_chunk++
+      next
     }
+    { print >> schema }
   ' "$clean_sql"
 }
 
@@ -98,22 +101,44 @@ cmd_import() {
 
 cmd_verify() {
   for db in "${DBS[@]}"; do
-    echo "=== $db: local ==="
-    sqlite3 "reports/${db}.db" "
-      SELECT name, (SELECT COUNT(*) FROM \"' || name || '\")
-      FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'" 2>/dev/null \
-      || sqlite3 "reports/${db}.db" \
-        ".tables" \
-        | tr ' ' '\n' | sort -u | grep -v '^$' \
-        | while read -r tbl; do
-            cnt=$(sqlite3 "reports/${db}.db" "SELECT COUNT(*) FROM \"$tbl\"")
-            printf "  %-30s %s\n" "$tbl" "$cnt"
-          done
+    echo "================ $db ================"
+    local_db="reports/${db}.db"
+    if [[ ! -f "$local_db" ]]; then
+      echo "  SKIP: $local_db not found"
+      continue
+    fi
 
-    echo "=== $db: D1 ==="
-    wrangler d1 execute "javdb-${db}" --remote --command="
-      SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'
-    " -y 2>/dev/null || true
+    # Authoritative table list comes from the local DB so we compare every
+    # table that exists locally; tables present only in D1 will surface as
+    # local=ERR rows when read by sqlite3 below.
+    tables=$(sqlite3 "$local_db" \
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;" \
+      2>/dev/null || true)
+    if [[ -z "$tables" ]]; then
+      echo "  (no user tables found in $local_db)"
+      continue
+    fi
+
+    while IFS= read -r tbl; do
+      [[ -z "$tbl" ]] && continue
+      cnt=$(sqlite3 "$local_db" "SELECT COUNT(*) FROM \"$tbl\";" 2>/dev/null || echo "ERR")
+      d1_json=$(wrangler d1 execute "javdb-${db}" --remote --json \
+        --command="SELECT COUNT(*) AS n FROM \"$tbl\";" 2>/dev/null || echo "")
+      d1_cnt=$(printf '%s' "$d1_json" | python3 -c "import json,sys
+try:
+  data=json.load(sys.stdin)
+  print(data[0]['results'][0]['n'])
+except Exception:
+  print('ERR')" 2>/dev/null || echo "ERR")
+      # Trim whitespace so numeric equality doesn't trip on stray newlines.
+      cnt=$(printf '%s' "$cnt" | tr -d '[:space:]')
+      d1_cnt=$(printf '%s' "$d1_cnt" | tr -d '[:space:]')
+      if [[ "$cnt" != "ERR" && "$d1_cnt" != "ERR" && "$cnt" == "$d1_cnt" ]]; then
+        printf "  %-32s OK            (count=%s)\n" "$tbl" "$cnt"
+      else
+        printf "  %-32s MISMATCH local=%s remote=%s\n" "$tbl" "$cnt" "$d1_cnt"
+      fi
+    done <<< "$tables"
   done
 }
 
