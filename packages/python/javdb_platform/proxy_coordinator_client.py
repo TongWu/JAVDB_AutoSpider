@@ -27,9 +27,10 @@ from __future__ import annotations
 
 import hashlib
 import os
+import queue
 import threading
 from dataclasses import dataclass
-from typing import Optional
+from typing import List, Optional, Tuple
 
 import requests
 
@@ -40,6 +41,22 @@ logger = get_logger(__name__)
 
 _DEFAULT_TIMEOUT_SEC = 5.0
 _DEFAULT_USER_AGENT = "javdb-spider-proxy-coordinator-client/1.0"
+
+# ── Async report dispatch ────────────────────────────────────────────────
+# ``report_async`` is fired from CF / failure handlers in the request hot
+# path (potentially many events per URL during turnstile storms). The
+# previous implementation spawned a fresh ``threading.Thread`` per call,
+# which could accumulate hundreds of threads each blocked on an HTTP
+# timeout when the coordinator was slow — risking thread/memory exhaustion.
+#
+# Instead we run a small fixed pool of daemon workers behind a bounded
+# queue. When the queue is full we drop new events with a throttled
+# WARNING; cf/failure events are best-effort by design and the lease
+# endpoint already carries the authoritative penalty factor.
+_ASYNC_REPORT_WORKERS = 2
+_ASYNC_REPORT_QUEUE_SIZE = 64
+# Sentinel pushed at shutdown to release blocking ``queue.get`` calls.
+_ASYNC_QUEUE_SENTINEL: Tuple = (None, None)
 
 
 class CoordinatorUnavailable(Exception):
@@ -137,6 +154,8 @@ class ProxyCoordinatorClient:
         *,
         timeout: float = _DEFAULT_TIMEOUT_SEC,
         user_agent: str = _DEFAULT_USER_AGENT,
+        async_workers: int = _ASYNC_REPORT_WORKERS,
+        async_queue_size: int = _ASYNC_REPORT_QUEUE_SIZE,
     ):
         if not base_url or not isinstance(base_url, str):
             raise ValueError("base_url must be a non-empty string")
@@ -151,6 +170,22 @@ class ProxyCoordinatorClient:
             "Content-Type": "application/json",
             "User-Agent": user_agent,
         })
+        # Bounded fire-and-forget pool for ``report_async``.
+        self._async_queue: "queue.Queue[Tuple[Optional[str], Optional[str]]]" = (
+            queue.Queue(maxsize=max(1, int(async_queue_size)))
+        )
+        self._async_dropped = 0
+        self._async_lock = threading.Lock()
+        self._async_shutdown = False
+        self._async_workers: List[threading.Thread] = []
+        for i in range(max(1, int(async_workers))):
+            t = threading.Thread(
+                target=self._async_report_loop,
+                name=f"coord-report-{i}",
+                daemon=True,
+            )
+            t.start()
+            self._async_workers.append(t)
 
     @property
     def base_url(self) -> str:
@@ -253,20 +288,84 @@ class ProxyCoordinatorClient:
         """Fire-and-forget variant of :meth:`report`.
 
         Intended for use inside ``PenaltyTracker.record_event()`` where the
-        caller (a CF/failure detection handler) MUST NOT block.  Errors
-        are swallowed and only logged at WARNING level.
+        caller (a CF/failure detection handler) MUST NOT block. Events are
+        funneled into a bounded queue served by a small daemon-thread pool
+        so a slow/unavailable coordinator can't accumulate unbounded
+        threads or memory during turnstile storms. When the queue is full
+        the event is dropped and a throttled WARNING is logged; the next
+        successful ``lease`` call will still fetch the authoritative
+        penalty factor from the server.
         """
+        if self._async_shutdown:
+            return
+        try:
+            self._async_queue.put_nowait((proxy_id, kind))
+        except queue.Full:
+            with self._async_lock:
+                self._async_dropped += 1
+                count = self._async_dropped
+            # Log first drop loudly, then once every 50 to avoid log floods
+            # while still surfacing sustained backpressure.
+            if count == 1 or count % 50 == 0:
+                logger.warning(
+                    "Coordinator report_async queue full "
+                    "(capacity=%d, workers=%d); dropping event "
+                    "proxy_id=%s kind=%s (total dropped=%d)",
+                    self._async_queue.maxsize, len(self._async_workers),
+                    proxy_id, kind, count,
+                )
 
-        def _send():
+    def _async_report_loop(self) -> None:
+        """Worker loop: drain the async queue serialising calls to ``report``."""
+        while True:
+            item = self._async_queue.get()
             try:
-                self.report(proxy_id, kind)
-            except CoordinatorUnavailable as e:
-                logger.warning("Coordinator report_async failed: %s", e)
-            except Exception:  # noqa: BLE001 — must never escape a daemon thread
-                logger.exception("Coordinator report_async crashed unexpectedly")
+                if item is _ASYNC_QUEUE_SENTINEL or item[0] is None:
+                    return
+                proxy_id, kind = item
+                try:
+                    self.report(proxy_id, kind)
+                except CoordinatorUnavailable as e:
+                    logger.warning("Coordinator report_async failed: %s", e)
+                except Exception:  # noqa: BLE001 — must never escape a daemon worker
+                    logger.exception("Coordinator report_async crashed unexpectedly")
+            finally:
+                self._async_queue.task_done()
 
-        t = threading.Thread(target=_send, daemon=True, name="coord-report")
-        t.start()
+    def close(self, *, wait: bool = False, timeout: Optional[float] = None) -> None:
+        """Stop the async-report worker pool. Idempotent.
+
+        Daemon workers exit at process shutdown anyway, but tests and
+        long-lived hosts that recycle clients should call this to release
+        blocked HTTP sockets and join the threads cleanly.
+
+        Args:
+            wait: If ``True``, block until each worker exits.
+            timeout: Per-worker ``Thread.join`` timeout in seconds.
+        """
+        if self._async_shutdown:
+            return
+        self._async_shutdown = True
+        # Drop any pending events so we can guarantee enqueueing exactly
+        # one sentinel per worker even when the queue was previously full.
+        while True:
+            try:
+                self._async_queue.get_nowait()
+            except queue.Empty:
+                break
+            self._async_queue.task_done()
+        for _ in self._async_workers:
+            try:
+                self._async_queue.put_nowait(_ASYNC_QUEUE_SENTINEL)
+            except queue.Full:
+                # In-flight work freed all slots above, so this is rare;
+                # if it does happen, the worker will see the sentinel
+                # after the current backlog drains. close() must stay
+                # non-blocking on the unhappy path.
+                pass
+        if wait:
+            for t in self._async_workers:
+                t.join(timeout=timeout)
 
     def health_check(self) -> bool:
         """Return ``True`` if ``GET /health`` returns 200, else ``False``.
