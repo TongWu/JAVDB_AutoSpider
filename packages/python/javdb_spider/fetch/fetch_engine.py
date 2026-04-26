@@ -488,7 +488,10 @@ class _EngineWorker(threading.Thread):
         coordinator = state.global_proxy_coordinator
         proxy_name = self.proxy_name
         if coordinator is not None and proxy_name:
-            def _cf_event_cb(_c=coordinator, _p=proxy_name):
+            # Per-worker callback is pinned to a single proxy via closure;
+            # the positional arg from RequestHandler is intentionally ignored
+            # (only the global fallback handler uses it).
+            def _cf_event_cb(_unused_proxy_name=None, _c=coordinator, _p=proxy_name):
                 _c.report_async(_p, "cf")
         else:
             _cf_event_cb = None
