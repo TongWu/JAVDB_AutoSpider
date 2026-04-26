@@ -77,9 +77,13 @@ _LOGICAL_TO_DB_PATH = {
     "operations": cfg("OPERATIONS_DB_PATH", os.path.join(_REPORTS_DIR, "operations.db")),
 }
 
-# CF D1 caps per-request batches at 50 statements. Using the same constant
-# avoids importing it from d1_client and keeps the reconciler self-documenting.
-_BATCH_SIZE = 50
+# Conservative chunk size for batched D1 SELECT/INSERT/UPDATE round-trips.
+# CF D1 doesn't impose a hard "statements per request" cap — the real
+# constraints are 30 s execution time and ~100 KB per statement (see the
+# notes alongside ``_BATCH_LIMIT`` in d1_client.py). 50 is the safe default;
+# override via ``D1_BATCH_LIMIT`` to widen/narrow chunks across the whole
+# stack consistently.
+_BATCH_SIZE = int(os.environ.get("D1_BATCH_LIMIT", "50"))
 
 
 # ── Stats per table ───────────────────────────────────────────────────────
@@ -189,17 +193,57 @@ def _row_to_dict(row) -> dict:
         return dict(row)
 
 
+# SQLite's ``SQLITE_MAX_VARIABLE_NUMBER`` defaults to 999 on pre-3.32 builds
+# and 32 766 on newer ones, but distributors occasionally ship lower limits
+# (e.g. some Linux ARM builds). Cap our per-query placeholder count well
+# below the conservative floor so ``--all-rows`` against a large reports DB
+# never trips ``sqlite3.OperationalError: too many SQL variables``.
+_SQLITE_IN_CHUNK = 500
+
+
+def _fetch_in_chunks(
+    sqlite_conn: sqlite3.Connection,
+    *,
+    sql_template: str,
+    ids: Sequence[int],
+    chunk_size: int = _SQLITE_IN_CHUNK,
+) -> List[Any]:
+    """Expand an ``IN ({placeholders})`` clause across chunks of *ids*.
+
+    *sql_template* MUST contain a single ``{placeholders}`` format slot —
+    each chunk's matching SQL is built by substituting that with the
+    appropriate ``?, ?, ...`` string. Results across chunks are simply
+    concatenated; callers that previously relied on a global ``ORDER BY``
+    on the inner query should re-sort the union in Python if needed
+    (the reconciler's downstream loops are order-independent).
+    """
+    if not ids:
+        return []
+    rows: List[Any] = []
+    for start in range(0, len(ids), chunk_size):
+        chunk = list(ids[start : start + chunk_size])
+        placeholders = ", ".join("?" for _ in chunk)
+        sql = sql_template.format(placeholders=placeholders)
+        rows.extend(sqlite_conn.execute(sql, chunk).fetchall())
+    return rows
+
+
 def _values_equal(a, b) -> bool:
     """Row-cell equality with type-loose comparison.
 
     SQLite returns Python ints / floats / str / None; D1's HTTP API returns
-    JSON-decoded values which may swap int/float. Compare strings stripped,
-    and numeric values via ``float()`` to absorb that drift.
+    JSON-decoded values which may swap int/float. We coerce to ``float`` only
+    when at least one side is genuinely a float, since ``float(big_int)``
+    silently loses precision above 2**53 and would falsely report distinct
+    large integers (e.g. magnet hashes, AUTOINCREMENT IDs near 2**60) as equal.
     """
     if a is None and b is None:
         return True
     if a is None or b is None:
         return False
+    # Booleans are ints in Python; treat them as numeric here.
+    if isinstance(a, int) and isinstance(b, int):
+        return a == b
     if isinstance(a, (int, float)) and isinstance(b, (int, float)):
         try:
             return float(a) == float(b)
@@ -702,14 +746,19 @@ def _reconcile_reports(
         return [sessions_stats, movies_stats, torrents_stats]
 
     # ── 2. ReportMovies ───────────────────────────────────────────────
-    placeholders = ", ".join("?" for _ in sqlite_session_ids)
-    movies_query = (
+    # Chunk the IN-list across multiple queries so that ``--all-rows`` on a
+    # large reports DB does not exceed ``SQLITE_MAX_VARIABLE_NUMBER``.
+    movies_sql_template = (
         "SELECT rm.*, rs.CsvFilename AS _SessionCsv "
         "FROM ReportMovies rm "
         "JOIN ReportSessions rs ON rs.Id = rm.SessionId "
-        f"WHERE rm.SessionId IN ({placeholders}) ORDER BY rm.Id"
+        "WHERE rm.SessionId IN ({placeholders}) ORDER BY rm.Id"
     )
-    raw_movie_rows = sqlite_conn.execute(movies_query, sqlite_session_ids).fetchall()
+    raw_movie_rows = _fetch_in_chunks(
+        sqlite_conn,
+        sql_template=movies_sql_template,
+        ids=sqlite_session_ids,
+    )
     logger.info("reports: scanning %d ReportMovies rows", len(raw_movie_rows))
 
     prepared_movies: List[Dict[str, Any]] = []
@@ -744,15 +793,19 @@ def _reconcile_reports(
 
     # ── 3. ReportTorrents ─────────────────────────────────────────────
     sqlite_movie_ids = [int(d["Id"]) for d in prepared_movies]
-    movie_id_placeholders = ", ".join("?" for _ in sqlite_movie_ids)
-    torrents_query = (
+    # Same chunking rationale as the ReportMovies pass — see _fetch_in_chunks.
+    torrents_sql_template = (
         "SELECT rt.*, rm.Href AS _MovieHref, rs.CsvFilename AS _SessionCsv "
         "FROM ReportTorrents rt "
         "JOIN ReportMovies rm ON rm.Id = rt.ReportMovieId "
         "JOIN ReportSessions rs ON rs.Id = rm.SessionId "
-        f"WHERE rt.ReportMovieId IN ({movie_id_placeholders}) ORDER BY rt.Id"
+        "WHERE rt.ReportMovieId IN ({placeholders}) ORDER BY rt.Id"
     )
-    raw_torrent_rows = sqlite_conn.execute(torrents_query, sqlite_movie_ids).fetchall()
+    raw_torrent_rows = _fetch_in_chunks(
+        sqlite_conn,
+        sql_template=torrents_sql_template,
+        ids=sqlite_movie_ids,
+    )
     logger.info("reports: scanning %d ReportTorrents rows", len(raw_torrent_rows))
 
     prepared_torrents: List[Dict[str, Any]] = []
@@ -926,16 +979,25 @@ def reconcile(
             db, sqlite_path, since_text or "<all>", dry_run,
         )
 
+        # ``d1_conn`` owns a ``requests.Session`` (urllib3 connection pool);
+        # it must be closed on every code path — including unhandled
+        # reconciler exceptions — to release sockets, mirror how
+        # ``sqlite_conn`` is handled, and satisfy
+        # ``test_d1_close_releases_session``.
         try:
-            stats = _DB_RECONCILERS[db](
-                sqlite_conn, d1_conn, since_text=since_text, dry_run=dry_run
-            )
-        except Exception as exc:
-            logger.exception("Unhandled error reconciling %s: %s", db, exc)
-            overall_errors += 1
-            sqlite_conn.close()
-            continue
+            try:
+                stats = _DB_RECONCILERS[db](
+                    sqlite_conn, d1_conn, since_text=since_text, dry_run=dry_run
+                )
+            except Exception as exc:
+                logger.exception("Unhandled error reconciling %s: %s", db, exc)
+                overall_errors += 1
+                continue
         finally:
+            try:
+                d1_conn.close()
+            except Exception:  # noqa: BLE001 — close must not mask earlier errors
+                logger.warning("Failed to close D1 connection for %s", db, exc_info=True)
             sqlite_conn.close()
 
         all_stats.extend(stats)
