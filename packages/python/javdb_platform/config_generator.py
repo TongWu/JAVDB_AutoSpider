@@ -406,6 +406,11 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('D1_HISTORY_DB_ID', 'D1_HISTORY_DB_ID', get_env, '', 'D1 / CLOUDFLARE CONFIGURATION'),
         ('D1_REPORTS_DB_ID', 'D1_REPORTS_DB_ID', get_env, '', 'D1 / CLOUDFLARE CONFIGURATION'),
         ('D1_OPERATIONS_DB_ID', 'D1_OPERATIONS_DB_ID', get_env, '', 'D1 / CLOUDFLARE CONFIGURATION'),
+        # Proxy Coordinator (Cloudflare DO) — both empty means "disabled, use
+        # local throttling only".  Enable by setting both via GH Variables /
+        # Secrets after deploying cloudflare/proxy_coordinator/.
+        ('PROXY_COORDINATOR_URL', 'PROXY_COORDINATOR_URL', get_env, '', 'D1 / CLOUDFLARE CONFIGURATION'),
+        ('PROXY_COORDINATOR_TOKEN', 'PROXY_COORDINATOR_TOKEN', get_env, '', 'D1 / CLOUDFLARE CONFIGURATION'),
         # Dedup Configuration
         ('RCLONE_INVENTORY_CSV', 'RCLONE_INVENTORY_CSV', get_env, 'rclone_inventory.csv', 'DEDUP CONFIGURATION'),
         ('DEDUP_CSV', 'DEDUP_CSV', get_env, 'dedup.csv', 'DEDUP CONFIGURATION'),
