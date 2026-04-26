@@ -501,21 +501,29 @@ class MovieSleepManager:
         eff_min, _ = self._effective_range()
         return min(round(eff_min * COOLDOWN_FRACTION, 2), COOLDOWN_MAX)
 
-    def sleep(self) -> float:
-        """Sleep for a human-like duration, then pass through the throttle.
+    def plan_sleep(self) -> Tuple[float, bool]:
+        """Decide how long the caller should sleep, **without** sleeping.
 
-        When a coordinator is configured, the locally-sampled sleep is
-        first sent to the per-proxy DO via ``lease(proxy_id, intended_ms)``;
-        the DO returns a ``wait_ms`` that is at least ``intended_ms`` but
-        may be longer to satisfy the cross-instance ``next_available_at``
-        and three throttle windows.  The caller MUST honour ``wait_ms``.
+        This is the non-blocking equivalent of :meth:`sleep` for callers
+        that need to perform the actual wait themselves (e.g. an
+        ``_interruptible_sleep`` loop that must respond to a stop
+        event).  All non-sleep side-effects of :meth:`sleep` are still
+        applied here:
 
-        Fail-open: any coordinator failure (timeout, 5xx, malformed JSON)
-        is logged at ERROR and the call falls back to the original local
-        path (``time.sleep(t) + throttle.wait_if_needed()``) so a Worker
-        outage cannot block the spider.
+        - Consults the coordinator (when configured) via
+          ``lease(proxy_id, intended_ms)``.
+        - Updates ``PenaltyTracker.set_remote_factor`` on success.
+        - Increments / resets ``self._coord_failures`` and emits the
+          first ~3 fail-open ERROR logs.
 
-        Returns the total time spent (sleep + any throttle wait).
+        Returns ``(wait_seconds, used_coordinator)``:
+
+        - When ``used_coordinator`` is ``True`` the returned wait already
+          satisfies the cross-instance throttle; the caller MUST NOT
+          additionally call ``throttle.wait_if_needed()``.
+        - When ``False`` (no coordinator configured or fail-open path),
+          the caller SHOULD invoke ``throttle.wait_if_needed()`` after
+          sleeping to preserve the original local-only behaviour.
         """
         t = self.get_sleep_time()
         pf = self._penalty_tracker.get_penalty_factor() if self._penalty_tracker else 1.0
@@ -539,8 +547,7 @@ class MovieSleepManager:
                         lease.penalty_factor, ttl_sec=self._remote_factor_ttl_sec,
                     )
                 self._coord_failures = 0
-                time.sleep(wait_seconds)
-                return wait_seconds
+                return wait_seconds, True
             except Exception as e:
                 # Log only the first ~3 failures at ERROR to avoid log spam
                 # when the Worker is down for an extended period; the
@@ -553,7 +560,31 @@ class MovieSleepManager:
                         self._coord_failures, self._proxy_id, e,
                     )
 
-        time.sleep(t)
+        return t, False
+
+    def sleep(self) -> float:
+        """Sleep for a human-like duration, then pass through the throttle.
+
+        When a coordinator is configured, the locally-sampled sleep is
+        first sent to the per-proxy DO via ``lease(proxy_id, intended_ms)``;
+        the DO returns a ``wait_ms`` that is at least ``intended_ms`` but
+        may be longer to satisfy the cross-instance ``next_available_at``
+        and three throttle windows.  The caller MUST honour ``wait_ms``.
+
+        Fail-open: any coordinator failure (timeout, 5xx, malformed JSON)
+        is logged at ERROR and the call falls back to the original local
+        path (``time.sleep(t) + throttle.wait_if_needed()``) so a Worker
+        outage cannot block the spider.
+
+        Returns the total time spent (sleep + any throttle wait).
+        """
+        wait_seconds, used_coordinator = self.plan_sleep()
+
+        if used_coordinator:
+            time.sleep(wait_seconds)
+            return wait_seconds
+
+        time.sleep(wait_seconds)
 
         throttle_wait = 0.0
         if self._throttle:
@@ -561,7 +592,7 @@ class MovieSleepManager:
             if throttle_wait > 0:
                 logger.debug("Throttle additional wait: %.1fs", throttle_wait)
 
-        return t + throttle_wait
+        return wait_seconds + throttle_wait
 
 
 def _resolve_base_range():
