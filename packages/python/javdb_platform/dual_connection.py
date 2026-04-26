@@ -82,6 +82,37 @@ def _signature(sql: str) -> str:
     return s[:200]
 
 
+# ── ID drift delta tracking ──────────────────────────────────────────────
+# AUTOINCREMENT counters between SQLite and D1 typically diverge once early
+# in the migration and then stay offset by a constant delta forever. A naive
+# per-row warning floods logs with noise that says nothing new.
+#
+# We instead remember the last observed ``(d1_lastrowid - sqlite_lastrowid)``
+# delta per table (process-wide) and only emit:
+#   • one INFO line the first time a table's delta is seen (the baseline);
+#   • a WARNING when the delta *changes* (a real new asymmetric INSERT — i.e.
+#     one side committed a row the other did not, since this run started);
+#   • DEBUG for the unchanged steady-state case.
+#
+# State is keyed by table name, lives for the lifetime of the process, and
+# is guarded by a lock since DualConnection is used from multiple threads.
+_INSERT_TABLE_RE = re.compile(
+    r"^\s*(?:INSERT|REPLACE)\s+(?:OR\s+\w+\s+)?INTO\s+[\"`']?([\w.]+)[\"`']?",
+    re.IGNORECASE,
+)
+_ID_DELTA_LOCK = threading.Lock()
+_ID_DELTA_BY_TABLE: "dict[str, int]" = {}
+
+
+def _extract_insert_table(sql: str) -> Optional[str]:
+    """Return the target table name of an INSERT/REPLACE, or ``None``."""
+    m = _INSERT_TABLE_RE.match(sql)
+    if not m:
+        return None
+    name = m.group(1)
+    return name.split(".")[-1] if name else None
+
+
 class DualCursor:
     """Cursor wrapper exposing SQLite values as the canonical result."""
 
@@ -252,20 +283,60 @@ class DualConnection:
 
     @staticmethod
     def _maybe_warn_id_drift(sqlite_cur, d1_cur, sql: str) -> None:
-        """Log a warning if AUTOINCREMENT IDs diverged between SQLite and D1."""
+        """Track AUTOINCREMENT delta drift per table; warn only on *changes*.
+
+        A constant offset between SQLite and D1 ``lastrowid`` is the normal
+        post-migration steady state and is harmless (FK resolution uses
+        business keys). What *is* a real signal is the offset *changing* —
+        that means one side committed an INSERT the other did not since
+        this process started, i.e. fresh asymmetric drift.
+
+        Emits:
+          * INFO once per table for the baseline delta (first observation).
+          * WARNING when the delta changes (real new drift event).
+          * DEBUG for steady-state matches (unchanged delta).
+        """
         if sqlite_cur is None or d1_cur is None:
             return
         s_id = getattr(sqlite_cur, "lastrowid", None)
         d_id = getattr(d1_cur, "lastrowid", None)
         if s_id is None or d_id is None or s_id == 0 or d_id == 0:
             return
-        if s_id != d_id:
-            logger.warning(
-                "Dual-write ID drift: sqlite.lastrowid=%s vs d1.lastrowid=%s | sql=%s",
-                s_id,
-                d_id,
-                _shorten(sql),
+
+        delta = int(d_id) - int(s_id)
+        table = _extract_insert_table(sql) or "<unknown>"
+
+        with _ID_DELTA_LOCK:
+            prior = _ID_DELTA_BY_TABLE.get(table)
+            _ID_DELTA_BY_TABLE[table] = delta
+
+        if prior is None:
+            if delta == 0:
+                logger.debug(
+                    "Dual-write ID baseline aligned for %s (sqlite=%s d1=%s)",
+                    table, s_id, d_id,
+                )
+            else:
+                logger.info(
+                    "Dual-write ID baseline delta for %s: d1-sqlite=%+d "
+                    "(sqlite=%s d1=%s) — constant offsets are expected "
+                    "post-migration; will only warn on future delta changes",
+                    table, delta, s_id, d_id,
+                )
+            return
+
+        if delta == prior:
+            logger.debug(
+                "Dual-write ID delta unchanged for %s: %+d (sqlite=%s d1=%s)",
+                table, delta, s_id, d_id,
             )
+            return
+
+        logger.warning(
+            "Dual-write ID drift CHANGED for %s: delta %+d -> %+d "
+            "(sqlite=%s d1=%s) — one side committed an asymmetric INSERT | sql=%s",
+            table, prior, delta, s_id, d_id, _shorten(sql),
+        )
 
 
 def _shorten(sql: str, n: int = 100) -> str:
