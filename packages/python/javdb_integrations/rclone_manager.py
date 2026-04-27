@@ -40,6 +40,7 @@ Usage
 """
 
 import os
+import re
 import sys
 import csv
 import gc
@@ -47,6 +48,8 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
+
+_YEAR_RE = re.compile(r"^\d{4}$")
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 os.chdir(REPO_ROOT)
@@ -302,9 +305,8 @@ def load_inventory_as_folder_structure(
         try:
             from packages.python.javdb_platform.db import db_load_rclone_inventory, current_backend
             raw = db_load_rclone_inventory()
-            for code, entries in raw.items():
-                for e in entries:
-                    rows.append(e)
+            for entries in raw.values():
+                rows.extend(entries)
             if rows:
                 logger.info(f"Loaded {len(rows)} inventory records from {current_backend()} backend")
         except Exception as e:
@@ -338,14 +340,24 @@ def load_inventory_as_folder_structure(
         folder_name = ''
         # New layout: <year>/<actor>/<movie_code>/<sensor-subtitle>
         # Legacy layout: <year>/<actor>/<movie_code [sensor-subtitle]>
-        if len(parts) >= 4:
+        # Validate the candidate year against ^\d{4}$ before accepting it —
+        # without this, a folder whose upstream segments contain extra
+        # slashes (or any path that simply lacks a year prefix) silently
+        # gets misclassified with a non-numeric "year" like "Actor".
+        if len(parts) >= 4 and _YEAR_RE.match(parts[-4]):
             folder_name = parts[-1]
             actor = parts[-3]
             year = parts[-4]
-        elif len(parts) >= 3:
+        elif len(parts) >= 3 and _YEAR_RE.match(parts[-3]):
             folder_name = parts[-1]
             actor = parts[-2]
             year = parts[-3]
+        else:
+            logger.warning(
+                "Inventory path missing 4-digit year segment, skipping: %s",
+                folder_path,
+            )
+            continue
 
         code = row.get('VideoCode', row.get('video_code', '')).strip().upper()
         if not code:
@@ -555,7 +567,16 @@ def validate_dedup_records_against_inventory() -> Tuple[int, List[dict]]:
     inventory_paths.discard('')
 
     if not inventory_paths:
-        logger.info("Dedup self-heal: inventory is empty, nothing to validate against.")
+        # Mirror :func:`run_validate_inventory`: an empty truth-set is a
+        # serious signal (operations DB lost the inventory, or the scan
+        # never ran), not an "all clean" no-op. Logging at error so the
+        # signal isn't lost in default INFO-only log handlers; the function
+        # still returns ``(0, [])`` without marking anything deleted because
+        # treating every dedup record as orphan would be destructive.
+        logger.error(
+            "Dedup self-heal: inventory is empty — refusing to validate "
+            "(would risk marking every pending dedup record as orphan)."
+        )
         return 0, []
 
     try:
@@ -600,26 +621,43 @@ def validate_dedup_records_against_inventory() -> Tuple[int, List[dict]]:
     return updated, orphans
 
 
+_DEFAULT_LIST_YEAR_TIMEOUT_SEC = 600
+
+
 def _list_remote_dirs_for_year(
     remote_name: str, root_folder: str, year: str,
+    timeout_sec: int = _DEFAULT_LIST_YEAR_TIMEOUT_SEC,
 ) -> List[str]:
     """Return relative paths ``<year>/<actor>/<code>/<leaf>`` for a year via
     a single dirs-only ``rclone lsjson -R`` call (no sizes, no file counts).
 
     Used by :func:`run_validate_inventory` to build a fresh truth set with
     minimal remote cost (vs. a full :func:`scan_inventory`).
+
+    ``timeout_sec`` is the per-year subprocess wall-clock budget. Callers
+    that want a global validation deadline can pass ``min(remaining, default)``
+    so a stuck rclone on year N doesn't push validation past the operator's
+    expected window.
     """
     import json as _json
     import subprocess as _subprocess
 
-    remote_path = f"{remote_name}:{root_folder}/{year}"
+    # Avoid emitting "remote:/year" (with a stray leading slash on the path)
+    # when ``root_folder`` is empty — rclone treats those as different paths.
+    if root_folder:
+        remote_path = f"{remote_name}:{root_folder}/{year}"
+    else:
+        remote_path = f"{remote_name}:{year}"
     try:
         result = _subprocess.run(
             ['rclone', 'lsjson', remote_path, '-R', '--dirs-only', '--fast-list'],
-            capture_output=True, text=True, timeout=600,
+            capture_output=True, text=True, timeout=timeout_sec,
         )
     except _subprocess.TimeoutExpired:
-        logger.error(f"Timeout listing {remote_path} for validation")
+        logger.error(
+            f"Timeout listing {remote_path} for validation "
+            f"(per-year budget: {timeout_sec}s)"
+        )
         return []
     if result.returncode != 0:
         if 'directory not found' in (result.stderr or '').lower():
