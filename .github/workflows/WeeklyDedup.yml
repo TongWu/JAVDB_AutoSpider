@@ -93,6 +93,13 @@ jobs:
           VAR_RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
           VAR_RCLONE_FOLDER_PATH: ${{ vars.RCLONE_FOLDER_PATH }}
           VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
+          # D1 / Cloudflare (only required when STORAGE_BACKEND in {d1,dual})
+          VAR_STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
+          VAR_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VAR_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          VAR_D1_HISTORY_DB_ID: ${{ secrets.D1_HISTORY_DB_ID }}
+          VAR_D1_REPORTS_DB_ID: ${{ secrets.D1_REPORTS_DB_ID }}
+          VAR_D1_OPERATIONS_DB_ID: ${{ secrets.D1_OPERATIONS_DB_ID }}
           # File paths / logging
           VAR_REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
           VAR_DEDUP_DIR: ${{ vars.DEDUP_DIR }}
@@ -158,6 +165,13 @@ jobs:
           INPUT_DRY_RUN: ${{ inputs.dry_run || 'false' }}
           INPUT_INCREMENTAL: ${{ inputs.incremental || 'false' }}
           VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
+          # D1 / Cloudflare (only required when STORAGE_BACKEND in {d1,dual})
+          VAR_STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
+          VAR_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VAR_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          VAR_D1_HISTORY_DB_ID: ${{ secrets.D1_HISTORY_DB_ID }}
+          VAR_D1_REPORTS_DB_ID: ${{ secrets.D1_REPORTS_DB_ID }}
+          VAR_D1_OPERATIONS_DB_ID: ${{ secrets.D1_OPERATIONS_DB_ID }}
         run: |
           set -e
           set -o pipefail
@@ -202,6 +216,8 @@ jobs:
 
           git add "$REPORTS_DIR/$RCLONE_INVENTORY_CSV" 2>/dev/null || true
           git add "$REPORTS_DIR/operations.db" 2>/dev/null || true
+          git add "$REPORTS_DIR/d1_drift.jsonl" 2>/dev/null || true
+          git add "$REPORTS_DIR/d1_drift.processed.jsonl" 2>/dev/null || true
           git add "$REPORTS_DIR/dedup_history.csv" 2>/dev/null || true
           find "$DEDUP_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
 

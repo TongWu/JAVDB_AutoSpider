@@ -461,11 +461,17 @@ class _EngineWorker(threading.Thread):
         # One PenaltyTracker per engine (passed in): CF/failure events from any
         # worker must raise the penalty factor for all workers' adaptive sleep.
         # Per-worker TripleWindowThrottle stays isolated (independent proxy IPs).
+        # When a cross-instance proxy coordinator is configured, each worker
+        # passes its proxy_name as proxy_id so the per-proxy DO mutex
+        # serialises requests across all GH Actions runners holding this proxy.
+        # Coordinator absence (None) preserves the original local-only path.
         self._sleep_mgr = MovieSleepManager(
             sleep_min, sleep_max,
             penalty_tracker=penalty_tracker,
             throttle=TripleWindowThrottle(),
             proxy_label=self.proxy_name,
+            coordinator=state.global_proxy_coordinator,
+            proxy_id=self.proxy_name,
         )
 
         self._proxy_pool = create_proxy_pool_from_config(
@@ -473,6 +479,23 @@ class _EngineWorker(threading.Thread):
             max_failures=PROXY_POOL_MAX_FAILURES,
         )
         _cd = self._sleep_mgr.get_cooldown()
+
+        # Per-proxy CF/failure callback wires into the cross-instance
+        # coordinator so other GH Actions runners using this same proxy
+        # also see the elevated penalty_factor on their next /lease call.
+        # Captures self.proxy_name and the global coordinator at construction
+        # time; no-op when no coordinator is configured.
+        coordinator = state.global_proxy_coordinator
+        proxy_name = self.proxy_name
+        if coordinator is not None and proxy_name:
+            # Per-worker callback is pinned to a single proxy via closure;
+            # the positional arg from RequestHandler is intentionally ignored
+            # (only the global fallback handler uses it).
+            def _cf_event_cb(_unused_proxy_name=None, _c=coordinator, _p=proxy_name):
+                _c.report_async(_p, "cf")
+        else:
+            _cf_event_cb = None
+
         self._handler = RequestHandler(
             proxy_pool=self._proxy_pool,
             config=RequestConfig(
@@ -491,6 +514,7 @@ class _EngineWorker(threading.Thread):
                 between_attempt_sleep=self._sleep_mgr.sleep,
             ),
             penalty_tracker=penalty_tracker,
+            on_cf_event=_cf_event_cb,
         )
 
     # -- task deadline -------------------------------------------------------
@@ -787,19 +811,20 @@ class _EngineWorker(threading.Thread):
                     continue
                 self._first_request = False
             else:
-                sleep_time = self._sleep_mgr.get_sleep_time()
-                pf = (
-                    self._sleep_mgr._penalty_tracker.get_penalty_factor()
-                    if self._sleep_mgr._penalty_tracker else 1.0
-                )
-                logger.debug(
-                    "Movie sleep: %.2fs (penalty=%.2f)", sleep_time, pf,
-                )
+                # Consult the cross-instance proxy coordinator (when
+                # configured) before sleeping.  ``plan_sleep`` returns the
+                # total wait we should observe and a flag indicating
+                # whether the cross-instance throttle was already enforced
+                # — in that case we skip the local TripleWindowThrottle to
+                # avoid double-counting waits.  Fall-open path (no
+                # coordinator, or coordinator unreachable) preserves the
+                # original local sleep + throttle behaviour.
+                sleep_time, used_coordinator = self._sleep_mgr.plan_sleep()
                 if self._interruptible_sleep(sleep_time):
                     if not task._speculative:
                         self.task_queue.put(task)
                     continue
-                if self._sleep_mgr._throttle:
+                if not used_coordinator and self._sleep_mgr._throttle:
                     self._sleep_mgr._throttle.wait_if_needed()
 
             if self._stop_event.is_set():

@@ -80,6 +80,9 @@ from packages.python.javdb_integrations.rclone_helper import (
     strip_drive_name,
     get_configured_drive_name,
     prepend_drive_name,
+    get_configured_root_folder,
+    strip_root_folder,
+    to_full_remote_path,
     has_remote_prefix,
     INCREMENTAL_DAYS,
 )
@@ -138,9 +141,11 @@ def resolve_rclone_root(cli_root_path: Optional[str]) -> Optional[Tuple[str, str
 
 
 def _folder_to_row(folder: FolderInfo, remote_name: str, root_folder: str, scan_time: str) -> dict:
-    folder_path = strip_drive_name(folder.full_path)
+    # Persist only the relative path under the configured root folder.
+    folder_path = strip_root_folder(strip_drive_name(folder.full_path))
     if not folder_path:
-        folder_path = f"{root_folder}/{folder.year}/{folder.actor}/{folder.folder_name}"
+        # Fallback: always relative (no root prefix).
+        folder_path = f"{folder.year}/{folder.actor}/{folder.movie_code}/{folder.folder_name}"
     return {
         'video_code': folder.movie_code,
         'sensor_category': folder.sensor_category,
@@ -295,15 +300,15 @@ def load_inventory_as_folder_structure(
 
     if use_sqlite():
         try:
-            from packages.python.javdb_platform.db import db_load_rclone_inventory
+            from packages.python.javdb_platform.db import db_load_rclone_inventory, current_backend
             raw = db_load_rclone_inventory()
             for code, entries in raw.items():
                 for e in entries:
                     rows.append(e)
             if rows:
-                logger.info(f"Loaded {len(rows)} inventory records from SQLite")
+                logger.info(f"Loaded {len(rows)} inventory records from {current_backend()} backend")
         except Exception as e:
-            logger.warning(f"Could not load inventory from SQLite: {e}")
+            logger.warning(f"Could not load inventory from db backend: {e}")
 
     if not rows and os.path.exists(csv_path):
         try:
@@ -319,16 +324,25 @@ def load_inventory_as_folder_structure(
         return {}
 
     drive_name = get_configured_drive_name()
+    root = get_configured_root_folder()
 
     structure: Dict[str, Dict[str, List[FolderInfo]]] = {}
     for row in rows:
         folder_path = row.get('FolderPath', row.get('folder_path', ''))
-        raw_path = strip_drive_name(folder_path)
-        parts = raw_path.split('/')
+        # folder_path is stored relative to root.  Still accept older absolute
+        # paths and strip root if present.
+        raw_rel = strip_root_folder(strip_drive_name(folder_path), root=root)
+        parts = raw_rel.split('/') if raw_rel else []
         year = ''
         actor = ''
         folder_name = ''
-        if len(parts) >= 3:
+        # New layout: <year>/<actor>/<movie_code>/<sensor-subtitle>
+        # Legacy layout: <year>/<actor>/<movie_code [sensor-subtitle]>
+        if len(parts) >= 4:
+            folder_name = parts[-1]
+            actor = parts[-3]
+            year = parts[-4]
+        elif len(parts) >= 3:
             folder_name = parts[-1]
             actor = parts[-2]
             year = parts[-3]
@@ -338,7 +352,7 @@ def load_inventory_as_folder_structure(
             continue
 
         fi = FolderInfo(
-            full_path=prepend_drive_name(raw_path, drive_name),
+            full_path=to_full_remote_path(raw_rel, drive=drive_name, root=root),
             year=year,
             actor=actor,
             movie_code=code,
@@ -398,6 +412,11 @@ def run_report_from_inventory(
     print_summary(csv_report, 0, 0, 0, 0, dry_run=True)
 
     _persist_dedup_records(dedup_results)
+
+    # Self-heal: drop any pending DedupRecords whose path is no longer in
+    # the freshly loaded inventory. Zero remote calls; safe to run always.
+    validate_dedup_records_against_inventory()
+
     export_dedup_history()
 
     return 0
@@ -424,7 +443,7 @@ def _persist_dedup_records(dedup_results: List[DedupResult]) -> None:
                     video_code=folder.movie_code,
                     existing_sensor=folder.sensor_category,
                     existing_subtitle=folder.subtitle_category,
-                    existing_gdrive_path=strip_drive_name(folder.full_path),
+                    existing_gdrive_path=strip_root_folder(strip_drive_name(folder.full_path)),
                     existing_folder_size=folder.size,
                     new_torrent_category='',
                     deletion_reason=reason,
@@ -440,6 +459,314 @@ def _persist_dedup_records(dedup_results: List[DedupResult]) -> None:
         logger.info(f"Persisted dedup records: {appended} appended, {skipped} duplicates skipped")
     except Exception as e:
         logger.warning(f"Could not persist dedup records: {e}")
+
+
+# ============================================================================
+# Path validation & self-healing
+# ============================================================================
+
+ORPHAN_REASON_SUFFIX = '[orphan: missing in inventory]'
+
+DEDUP_ORPHAN_FIELDNAMES = [
+    'VideoCode', 'ExistingSensor', 'ExistingSubtitle',
+    'ExistingGdrivePath', 'ExistingFolderSize',
+    'NewTorrentCategory', 'DeletionReason',
+    'DateTimeDetected', 'DateTimeDeleted',
+]
+
+INVENTORY_ORPHAN_FIELDNAMES = [
+    'video_code', 'sensor_category', 'subtitle_category',
+    'folder_path', 'folder_size', 'file_count', 'scan_datetime',
+]
+
+
+def _write_dedup_orphan_csv(rows: List[dict], when: str) -> Optional[str]:
+    """Persist orphan dedup rows to ``reports/Dedup/<YYYYMMDD>/orphans-*.csv``.
+
+    Returns the absolute file path written, or ``None`` if no rows.
+    """
+    if not rows:
+        return None
+    date_str = when.split(' ', 1)[0].replace('-', '')
+    time_str = when.split(' ', 1)[1].replace(':', '') if ' ' in when else '000000'
+    try:
+        out_dir = ensure_dated_dir(DEDUP_DIR, date_str)
+    except Exception:
+        out_dir = os.path.join(DEDUP_DIR, date_str)
+        os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, f'orphans-{date_str}-{time_str}.csv')
+    with open(out_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=DEDUP_ORPHAN_FIELDNAMES, extrasaction='ignore')
+        writer.writeheader()
+        for r in rows:
+            writer.writerow({k: r.get(k, '') for k in DEDUP_ORPHAN_FIELDNAMES})
+    return out_path
+
+
+def _write_inventory_orphan_csv(rows: List[dict]) -> Optional[str]:
+    """Persist orphan inventory rows to ``reports/inventory_orphans.csv``."""
+    if not rows:
+        return None
+    os.makedirs(REPORTS_DIR, exist_ok=True)
+    out_path = os.path.join(REPORTS_DIR, 'inventory_orphans.csv')
+    with open(out_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=INVENTORY_ORPHAN_FIELDNAMES, extrasaction='ignore')
+        writer.writeheader()
+        for r in rows:
+            writer.writerow({k: r.get(k, '') for k in INVENTORY_ORPHAN_FIELDNAMES})
+    return out_path
+
+
+def validate_dedup_records_against_inventory() -> Tuple[int, List[dict]]:
+    """Self-heal DedupRecords whose path no longer exists in the inventory.
+
+    The truth set is the current ``RcloneInventory`` (FolderPath column,
+    already stored as a relative path). Pending dedup records (``IsDeleted=0``)
+    whose ``ExistingGdrivePath`` is not in this set are considered orphans:
+
+    - Marked ``IsDeleted=1`` with ``DateTimeDeleted=now``.
+    - ``DeletionReason`` is suffixed with :data:`ORPHAN_REASON_SUFFIX`.
+    - The original row dicts are returned (and persisted to a CSV report
+      by the caller) so operators can audit the self-heal.
+
+    Returns ``(orphan_count, orphan_rows)``. Zero remote calls are made.
+    """
+    try:
+        from packages.python.javdb_platform.db import (
+            db_load_rclone_inventory,
+            db_load_dedup_records,
+            db_mark_orphan_records,
+        )
+    except Exception as e:
+        logger.warning(f"Skipping dedup self-heal — DB helpers unavailable: {e}")
+        return 0, []
+
+    try:
+        inventory = db_load_rclone_inventory()
+    except Exception as e:
+        logger.warning(f"Skipping dedup self-heal — could not load inventory: {e}")
+        return 0, []
+
+    inventory_paths = {
+        (entry.get('FolderPath') or '').strip()
+        for entries in inventory.values()
+        for entry in entries
+    }
+    inventory_paths.discard('')
+
+    if not inventory_paths:
+        logger.info("Dedup self-heal: inventory is empty, nothing to validate against.")
+        return 0, []
+
+    try:
+        all_records = db_load_dedup_records()
+    except Exception as e:
+        logger.warning(f"Skipping dedup self-heal — could not load dedup records: {e}")
+        return 0, []
+
+    orphans: List[dict] = []
+    orphan_paths: List[str] = []
+    for rec in all_records:
+        if int(rec.get('IsDeleted') or 0) != 0:
+            continue
+        path = (rec.get('ExistingGdrivePath') or '').strip()
+        if not path:
+            continue
+        if path not in inventory_paths:
+            orphans.append(rec)
+            orphan_paths.append(path)
+
+    if not orphans:
+        logger.info("Dedup self-heal: no orphan records found.")
+        return 0, []
+
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    updated = db_mark_orphan_records(orphan_paths, ORPHAN_REASON_SUFFIX, now_str)
+    for r in orphans:
+        r['DateTimeDeleted'] = now_str
+        existing_reason = (r.get('DeletionReason') or '').strip()
+        r['DeletionReason'] = (
+            f"{existing_reason} {ORPHAN_REASON_SUFFIX}".strip()
+            if existing_reason else ORPHAN_REASON_SUFFIX
+        )
+    logger.warning(
+        f"Dedup self-heal: marked {updated} orphan record(s) as deleted "
+        f"(path missing in inventory). Sample: "
+        f"{orphan_paths[:3]}{'...' if len(orphan_paths) > 3 else ''}"
+    )
+    csv_path = _write_dedup_orphan_csv(orphans, now_str)
+    if csv_path:
+        logger.info(f"Dedup orphans report written: {csv_path}")
+    return updated, orphans
+
+
+def _list_remote_dirs_for_year(
+    remote_name: str, root_folder: str, year: str,
+) -> List[str]:
+    """Return relative paths ``<year>/<actor>/<code>/<leaf>`` for a year via
+    a single dirs-only ``rclone lsjson -R`` call (no sizes, no file counts).
+
+    Used by :func:`run_validate_inventory` to build a fresh truth set with
+    minimal remote cost (vs. a full :func:`scan_inventory`).
+    """
+    import json as _json
+    import subprocess as _subprocess
+
+    remote_path = f"{remote_name}:{root_folder}/{year}"
+    try:
+        result = _subprocess.run(
+            ['rclone', 'lsjson', remote_path, '-R', '--dirs-only', '--fast-list'],
+            capture_output=True, text=True, timeout=600,
+        )
+    except _subprocess.TimeoutExpired:
+        logger.error(f"Timeout listing {remote_path} for validation")
+        return []
+    if result.returncode != 0:
+        if 'directory not found' in (result.stderr or '').lower():
+            return []
+        logger.error(f"Failed to list {remote_path}: {result.stderr}")
+        return []
+    try:
+        entries = _json.loads(result.stdout)
+    except Exception as exc:
+        logger.error(f"Invalid JSON for {remote_path}: {exc}")
+        return []
+    out: List[str] = []
+    for entry in entries:
+        path = entry.get('Path', '')
+        parts = path.split('/')
+        # depth 3 == <actor>/<movie_code>/<sensor-subtitle>
+        if entry.get('IsDir') and len(parts) == 3:
+            out.append(f"{year}/{path}")
+    return out
+
+
+def list_remote_truth_paths(
+    remote_name: str, root_folder: str,
+    year_filter: Optional[List[str]] = None,
+    max_workers: int = 4,
+) -> set:
+    """Build a fresh remote truth-set of relative paths for validation."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    years = get_year_folders(remote_name, root_folder)
+    if year_filter:
+        years = [y for y in years if y in year_filter]
+    if not years:
+        return set()
+
+    truth: set = set()
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futs = {
+            executor.submit(_list_remote_dirs_for_year, remote_name, root_folder, y): y
+            for y in years
+        }
+        for fut in as_completed(futs):
+            year = futs[fut]
+            try:
+                paths = fut.result()
+                truth.update(paths)
+                logger.info(f"Validate: year {year} → {len(paths)} dirs")
+            except Exception as e:
+                logger.error(f"Validate: error listing year {year}: {e}")
+    return truth
+
+
+def run_validate_inventory(
+    remote_name: str, root_folder: str,
+    year_filter: Optional[List[str]] = None,
+    max_workers: int = 4,
+    prune: bool = True,
+) -> int:
+    """Re-validate ``RcloneInventory`` against the remote.
+
+    Lists the remote with one ``lsjson -R --dirs-only`` per year, diffs
+    against the locally stored inventory, and (when *prune* is True) deletes
+    inventory rows whose path no longer exists. Always writes
+    ``reports/inventory_orphans.csv`` with the orphan rows. Then chains
+    :func:`validate_dedup_records_against_inventory` to clean up any
+    DedupRecords pending rows that point to those removed paths.
+
+    Returns 0 on success, 1 on failure.
+    """
+    from packages.python.javdb_platform.db import (
+        db_load_rclone_inventory,
+        db_delete_rclone_inventory_paths,
+    )
+
+    logger.info("Building remote truth-set (dirs-only listing)...")
+    truth = list_remote_truth_paths(
+        remote_name, root_folder,
+        year_filter=year_filter, max_workers=max_workers,
+    )
+    logger.info(f"Validate: remote truth-set size = {len(truth)}")
+
+    if not truth:
+        logger.error(
+            "Validate: remote returned 0 directories — refusing to prune "
+            "inventory (would wipe everything). Aborting."
+        )
+        return 1
+
+    try:
+        inventory = db_load_rclone_inventory()
+    except Exception as e:
+        logger.error(f"Validate: could not load inventory: {e}")
+        return 1
+
+    # Flatten and (optionally) restrict to year_filter.
+    year_set = set(year_filter) if year_filter else None
+    orphan_rows: List[dict] = []
+    inventory_total = 0
+    for entries in inventory.values():
+        for r in entries:
+            inventory_total += 1
+            path = (r.get('FolderPath') or '').strip()
+            if not path:
+                continue
+            if year_set:
+                head = path.split('/', 1)[0]
+                if head not in year_set:
+                    continue
+            if path not in truth:
+                orphan_rows.append({
+                    'video_code': r.get('VideoCode', ''),
+                    'sensor_category': r.get('SensorCategory', ''),
+                    'subtitle_category': r.get('SubtitleCategory', ''),
+                    'folder_path': path,
+                    'folder_size': r.get('FolderSize', 0),
+                    'file_count': r.get('FileCount', 0),
+                    'scan_datetime': r.get('DateTimeScanned', ''),
+                })
+
+    logger.info(
+        f"Validate: inventory rows = {inventory_total} "
+        f"(filtered scope) → orphans = {len(orphan_rows)}"
+    )
+
+    csv_path = _write_inventory_orphan_csv(orphan_rows)
+    if csv_path:
+        logger.info(f"Inventory orphans report written: {csv_path}")
+
+    if orphan_rows and prune:
+        deleted = db_delete_rclone_inventory_paths(
+            r['folder_path'] for r in orphan_rows
+        )
+        logger.warning(f"Validate: pruned {deleted} orphan inventory row(s)")
+        try:
+            csv_export_path = os.path.join(REPORTS_DIR, RCLONE_INVENTORY_CSV)
+            os.makedirs(REPORTS_DIR, exist_ok=True)
+            export_db_to_csv(csv_export_path)
+        except Exception as e:
+            logger.warning(f"Validate: could not refresh inventory CSV: {e}")
+    elif orphan_rows and not prune:
+        logger.info("Validate: --validate-prune disabled, leaving inventory untouched")
+
+    # Chain dedup self-heal so callers don't need to run --report just to
+    # clean up dedup pendings that referenced removed paths.
+    validate_dedup_records_against_inventory()
+
+    return 0
 
 
 def export_dedup_history() -> int:
@@ -590,6 +917,7 @@ def run_execute_from_csv(
     skip_count = 0
 
     drive_name = get_configured_drive_name()
+    root = get_configured_root_folder()
 
     unique_paths: Dict[str, bool] = {}
     for row in pending:
@@ -606,7 +934,7 @@ def run_execute_from_csv(
 
     purged_pairs: list = []
     for folder_path in unique_paths:
-        full_path = prepend_drive_name(folder_path, drive_name)
+        full_path = to_full_remote_path(folder_path, drive=drive_name, root=root)
         ok = rclone_purge(full_path, dry_run=dry_run)
         if ok:
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -659,6 +987,7 @@ def run_execute_soft_delete_from_csv(
         return 0
 
     drive_name = get_configured_drive_name()
+    root = get_configured_root_folder()
     success = 0
     failed = 0
     skipped = 0
@@ -683,16 +1012,16 @@ def run_execute_soft_delete_from_csv(
         seen_sources.add(source_path)
 
         destination_path = (row.get('destination_path') or row.get('DestinationPath') or '').strip()
-        full_source = prepend_drive_name(source_path, drive_name)
+        full_source = to_full_remote_path(source_path, drive=drive_name, root=root)
         if not destination_path:
             if not backup_prefix:
                 logger.warning("Missing destination_path and no backup_prefix set for source: %s", source_path)
                 failed += 1
                 continue
-            src_rel = strip_drive_name(source_path).lstrip('/')
+            src_rel = strip_root_folder(strip_drive_name(source_path), root=root).lstrip('/')
             destination_path = f"{backup_prefix.rstrip('/')}/{src_rel}"
         else:
-            destination_path = prepend_drive_name(destination_path, drive_name)
+            destination_path = to_full_remote_path(destination_path, drive=drive_name, root=root)
 
         if rclone_move(full_source, destination_path, dry_run=dry_run):
             success += 1
@@ -734,6 +1063,7 @@ def run_execute_inventory_purge_from_csv(
         return 0
 
     drive_name = get_configured_drive_name()
+    root = get_configured_root_folder()
     success = 0
     failed = 0
     skipped = 0
@@ -757,7 +1087,7 @@ def run_execute_inventory_purge_from_csv(
             continue
         seen_sources.add(source_path)
 
-        full_path = prepend_drive_name(source_path, drive_name)
+        full_path = to_full_remote_path(source_path, drive=drive_name, root=root)
         if rclone_purge(full_path, dry_run=dry_run):
             success += 1
         else:
@@ -791,6 +1121,8 @@ def _describe_mode(args: argparse.Namespace) -> str:
         parts.append('EXECUTE')
     if args.execute_soft_delete:
         parts.append('EXECUTE_SOFT_DELETE')
+    if getattr(args, 'validate', False):
+        parts.append('VALIDATE')
     return '+'.join(parts) or 'NONE'
 
 
@@ -815,6 +1147,11 @@ Examples:
     mode_group.add_argument('--report', action='store_true', help='Generate dedup report from inventory')
     mode_group.add_argument('--execute', action='store_true', help='Execute pending deletions from dedup CSV')
     mode_group.add_argument('--execute-soft-delete', action='store_true', help='Execute soft-delete moves from CSV plan')
+    mode_group.add_argument(
+        '--validate', action='store_true',
+        help='Re-validate inventory against the remote (dirs-only listing); '
+             'prunes orphan inventory rows and self-heals related dedup pendings',
+    )
 
     parser.add_argument('--root-path', type=str, default=None, help='rclone path (remote:/path)')
     parser.add_argument('--years', type=str, default=None, help='Comma-separated years')
@@ -840,12 +1177,21 @@ Examples:
         help='Backup destination prefix for rows without destination_path',
     )
 
+    validate_group = parser.add_argument_group('validate options')
+    validate_group.add_argument(
+        '--no-validate-prune', dest='validate_prune', action='store_false',
+        default=True,
+        help='Validate mode: only report orphans, do not delete from inventory',
+    )
+
     args = parser.parse_args(argv)
 
-    if not (args.scan or args.report or args.execute or args.execute_soft_delete):
+    if not (args.scan or args.report or args.execute or args.execute_soft_delete or args.validate):
         parser.error('At least one mode flag is required')
     if args.scan and args.execute and not args.report:
         parser.error('--scan --execute requires --report (use --scan --report --execute)')
+    if args.validate and (args.scan or args.report or args.execute or args.execute_soft_delete):
+        parser.error('--validate must be used on its own (no other mode flag)')
 
     return args
 
@@ -884,7 +1230,7 @@ def main() -> int:
             backup_prefix=backup_prefix,
         )
 
-    # ── Scan / Report (/ Execute) need a remote ───────────────────────
+    # ── Scan / Report (/ Execute) / Validate need a remote ────────────
     resolved = resolve_rclone_root(args.root_path)
     if not resolved:
         logger.error(
@@ -932,6 +1278,20 @@ def main() -> int:
         logger.error(msg)
         return 1
     logger.info(f"  {msg}")
+
+    # ── Validate phase (mutually exclusive with scan/report/execute) ──
+    if args.validate:
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info("VALIDATE PHASE — re-validating inventory against remote")
+        logger.info(f"Prune orphans: {args.validate_prune}")
+        logger.info("=" * 60)
+        return run_validate_inventory(
+            remote_name, root_folder,
+            year_filter=year_filter,
+            max_workers=args.workers,
+            prune=args.validate_prune,
+        )
 
     # ── Scan phase ───────────────────────────────────────────────────
     if args.scan:

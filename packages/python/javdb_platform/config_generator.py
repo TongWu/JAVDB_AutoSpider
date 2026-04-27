@@ -395,6 +395,24 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('RCLONE_FOLDER_PATH', 'RCLONE_FOLDER_PATH', get_env, 'gdrive:', 'RCLONE CONFIGURATION'),
         # Storage Mode
         ('STORAGE_MODE', 'STORAGE_MODE', get_env, 'duo', 'STORAGE MODE'),
+        # D1 / Cloudflare Configuration
+        # STORAGE_BACKEND selects which DB layer db.py talks to:
+        #   'sqlite' (default) → local LFS-backed SQLite only
+        #   'd1'                → Cloudflare D1 only (requires D1_*_DB_ID + CF creds)
+        #   'dual'              → write to both, read from D1 (parallel-test phase)
+        ('STORAGE_BACKEND', 'STORAGE_BACKEND', get_env, 'sqlite', 'D1 / CLOUDFLARE CONFIGURATION'),
+        ('CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_ACCOUNT_ID', get_env, '', 'D1 / CLOUDFLARE CONFIGURATION'),
+        ('CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_API_TOKEN', get_env, '', 'D1 / CLOUDFLARE CONFIGURATION'),
+        ('D1_HISTORY_DB_ID', 'D1_HISTORY_DB_ID', get_env, '', 'D1 / CLOUDFLARE CONFIGURATION'),
+        ('D1_REPORTS_DB_ID', 'D1_REPORTS_DB_ID', get_env, '', 'D1 / CLOUDFLARE CONFIGURATION'),
+        ('D1_OPERATIONS_DB_ID', 'D1_OPERATIONS_DB_ID', get_env, '', 'D1 / CLOUDFLARE CONFIGURATION'),
+        # Proxy Coordinator (Cloudflare DO) — both empty means "disabled, use
+        # local throttling only".  Enable by setting both via GH Variables /
+        # Secrets after deploying the Worker from
+        # https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator
+        # (see docs/PROXY_COORDINATOR_DEPLOY.md for the full walkthrough).
+        ('PROXY_COORDINATOR_URL', 'PROXY_COORDINATOR_URL', get_env, '', 'D1 / CLOUDFLARE CONFIGURATION'),
+        ('PROXY_COORDINATOR_TOKEN', 'PROXY_COORDINATOR_TOKEN', get_env, '', 'D1 / CLOUDFLARE CONFIGURATION'),
         # Dedup Configuration
         ('RCLONE_INVENTORY_CSV', 'RCLONE_INVENTORY_CSV', get_env, 'rclone_inventory.csv', 'DEDUP CONFIGURATION'),
         ('DEDUP_CSV', 'DEDUP_CSV', get_env, 'dedup.csv', 'DEDUP CONFIGURATION'),

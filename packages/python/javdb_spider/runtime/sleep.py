@@ -24,9 +24,14 @@ import random
 import threading
 import time
 from collections import deque
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple
 
 from packages.python.javdb_platform.logging_config import get_logger
+
+if TYPE_CHECKING:
+    from packages.python.javdb_platform.proxy_coordinator_client import (
+        ProxyCoordinatorClient,
+    )
 
 logger = get_logger(__name__)
 
@@ -100,31 +105,71 @@ class PenaltyTracker:
     """Track CF / failure events and compute a dynamic penalty factor.
 
     Events older than ``WINDOW_SECONDS`` are automatically discarded.
+
+    When a coordinator is wired in (multi-instance mode), the *remote*
+    penalty factor reported by the DO can be folded into the local
+    decision via :meth:`set_remote_factor`.  The local deque is still
+    maintained so a coordinator outage degrades to the original
+    single-instance behaviour without intervention.
     """
 
     WINDOW_SECONDS = 300  # 5 minutes
     TIERS = [(1, 1.30), (2, 1.65), (4, 2.00)]
 
-    def __init__(self):
+    def __init__(self, *, coordinator: Optional["ProxyCoordinatorClient"] = None,
+                 proxy_id: Optional[str] = None):
         self._events: deque = deque()
         self._lock = threading.Lock()
+        self._coordinator = coordinator
+        self._proxy_id = proxy_id
+        self._remote_factor: float = 1.0
+        self._remote_expires_at: float = 0.0
+        self._remote_ttl_sec: float = 10.0
 
     def record_event(self) -> None:
         with self._lock:
             self._events.append(time.monotonic())
+        if self._coordinator and self._proxy_id:
+            self._coordinator.report_async(self._proxy_id, "cf")
 
-    def get_penalty_factor(self) -> float:
-        now = time.monotonic()
-        cutoff = now - self.WINDOW_SECONDS
+    def set_remote_factor(self, factor: float, ttl_sec: float = 10.0) -> None:
+        """Cache a coordinator-reported penalty factor for ``ttl_sec`` seconds.
+
+        While the cached value is fresh, :meth:`get_penalty_factor` returns
+        ``max(local, remote)`` so any instance touching CF on this proxy
+        slows everyone down — but a stale/expired remote value silently
+        falls back to the local-only computation.
+        """
+        try:
+            f = float(factor)
+        except (TypeError, ValueError):
+            return
+        if f < 1.0:
+            f = 1.0
         with self._lock:
-            while self._events and self._events[0] < cutoff:
-                self._events.popleft()
-            count = len(self._events)
+            self._remote_factor = f
+            self._remote_expires_at = time.monotonic() + max(0.0, float(ttl_sec))
+            self._remote_ttl_sec = max(0.0, float(ttl_sec))
+
+    def _local_penalty_factor_locked(self, now: float) -> float:
+        """Helper: compute factor from the local deque only (caller holds lock)."""
+        cutoff = now - self.WINDOW_SECONDS
+        while self._events and self._events[0] < cutoff:
+            self._events.popleft()
+        count = len(self._events)
         factor = 1.0
         for threshold, f in self.TIERS:
             if count >= threshold:
                 factor = f
         return factor
+
+    def get_penalty_factor(self) -> float:
+        now = time.monotonic()
+        with self._lock:
+            local = self._local_penalty_factor_locked(now)
+            if now < self._remote_expires_at:
+                return max(local, self._remote_factor)
+            return local
 
     def recent_event_count(self) -> int:
         now = time.monotonic()
@@ -229,6 +274,14 @@ DualWindowThrottle = TripleWindowThrottle
 # ---------------------------------------------------------------------------
 # Module-level shared instances
 # ---------------------------------------------------------------------------
+# The shared ``penalty_tracker`` is intentionally constructed *without* a
+# coordinator + ``proxy_id``: a single tracker is reused across every proxy
+# in the pool, so it cannot meaningfully address one specific per-proxy DO
+# from inside ``record_event()``.  Cross-instance CF reporting therefore
+# flows exclusively through ``RequestHandler.on_cf_event`` callbacks, which
+# carry the per-proxy identity (per-worker handlers via closure, the global
+# handler via the positional ``proxy_name`` arg).  This tracker still does
+# the *local* aggregation that drives single-instance penalty decay.
 penalty_tracker = PenaltyTracker()
 triple_window_throttle = TripleWindowThrottle()
 dual_window_throttle = triple_window_throttle
@@ -261,6 +314,9 @@ class MovieSleepManager:
         throttle: TripleWindowThrottle | None = None,
         *,
         proxy_label: Optional[str] = None,
+        coordinator: Optional["ProxyCoordinatorClient"] = None,
+        proxy_id: Optional[str] = None,
+        remote_factor_ttl_sec: float = 10.0,
     ):
         drift = random.uniform(-0.5, 0.5)
         self.base_min = max(1.0, float(sleep_min) + drift)
@@ -274,6 +330,14 @@ class MovieSleepManager:
         self._penalty_tracker = penalty_tracker
         self._throttle = throttle
         self._proxy_label = proxy_label
+        self._coordinator = coordinator
+        # When proxy_id is omitted, fall back to proxy_label so the DO
+        # addressing matches the human-readable label that already appears
+        # in logs.  All runners must agree on this string for the per-proxy
+        # mutex to work.
+        self._proxy_id = proxy_id or proxy_label
+        self._remote_factor_ttl_sec = float(remote_factor_ttl_sec)
+        self._coord_failures = 0
 
         self._lock = threading.Lock()
         self._rng = random.Random()
@@ -437,10 +501,29 @@ class MovieSleepManager:
         eff_min, _ = self._effective_range()
         return min(round(eff_min * COOLDOWN_FRACTION, 2), COOLDOWN_MAX)
 
-    def sleep(self) -> float:
-        """Sleep for a human-like duration, then pass through the throttle.
+    def plan_sleep(self) -> Tuple[float, bool]:
+        """Decide how long the caller should sleep, **without** sleeping.
 
-        Returns the total time spent (sleep + any throttle wait).
+        This is the non-blocking equivalent of :meth:`sleep` for callers
+        that need to perform the actual wait themselves (e.g. an
+        ``_interruptible_sleep`` loop that must respond to a stop
+        event).  All non-sleep side-effects of :meth:`sleep` are still
+        applied here:
+
+        - Consults the coordinator (when configured) via
+          ``lease(proxy_id, intended_ms)``.
+        - Updates ``PenaltyTracker.set_remote_factor`` on success.
+        - Increments / resets ``self._coord_failures`` and emits the
+          first ~3 fail-open ERROR logs.
+
+        Returns ``(wait_seconds, used_coordinator)``:
+
+        - When ``used_coordinator`` is ``True`` the returned wait already
+          satisfies the cross-instance throttle; the caller MUST NOT
+          additionally call ``throttle.wait_if_needed()``.
+        - When ``False`` (no coordinator configured or fail-open path),
+          the caller SHOULD invoke ``throttle.wait_if_needed()`` after
+          sleeping to preserve the original local-only behaviour.
         """
         t = self.get_sleep_time()
         pf = self._penalty_tracker.get_penalty_factor() if self._penalty_tracker else 1.0
@@ -448,7 +531,60 @@ class MovieSleepManager:
             "Movie sleep: %.2fs (penalty=%.2f, force_high_next=%s)",
             t, pf, self._force_high,
         )
-        time.sleep(t)
+
+        if self._coordinator is not None and self._proxy_id:
+            try:
+                lease = self._coordinator.lease(self._proxy_id, int(t * 1000))
+                wait_seconds = max(0.0, lease.wait_ms / 1000.0)
+                logger.debug(
+                    "Coordinator lease: wait=%.2fs (local=%.2fs, reason=%s, "
+                    "remote_penalty=%.2f, proxy=%s)",
+                    wait_seconds, t, lease.reason, lease.penalty_factor,
+                    self._proxy_id,
+                )
+                if self._penalty_tracker is not None:
+                    self._penalty_tracker.set_remote_factor(
+                        lease.penalty_factor, ttl_sec=self._remote_factor_ttl_sec,
+                    )
+                self._coord_failures = 0
+                return wait_seconds, True
+            except Exception as e:
+                # Log only the first ~3 failures at ERROR to avoid log spam
+                # when the Worker is down for an extended period; the
+                # behaviour after that is identical (silent fail-open).
+                self._coord_failures += 1
+                if self._coord_failures <= 3:
+                    logger.error(
+                        "Coordinator unavailable (#%d), falling back to local "
+                        "throttle for proxy '%s': %s",
+                        self._coord_failures, self._proxy_id, e,
+                    )
+
+        return t, False
+
+    def sleep(self) -> float:
+        """Sleep for a human-like duration, then pass through the throttle.
+
+        When a coordinator is configured, the locally-sampled sleep is
+        first sent to the per-proxy DO via ``lease(proxy_id, intended_ms)``;
+        the DO returns a ``wait_ms`` that is at least ``intended_ms`` but
+        may be longer to satisfy the cross-instance ``next_available_at``
+        and three throttle windows.  The caller MUST honour ``wait_ms``.
+
+        Fail-open: any coordinator failure (timeout, 5xx, malformed JSON)
+        is logged at ERROR and the call falls back to the original local
+        path (``time.sleep(t) + throttle.wait_if_needed()``) so a Worker
+        outage cannot block the spider.
+
+        Returns the total time spent (sleep + any throttle wait).
+        """
+        wait_seconds, used_coordinator = self.plan_sleep()
+
+        if used_coordinator:
+            time.sleep(wait_seconds)
+            return wait_seconds
+
+        time.sleep(wait_seconds)
 
         throttle_wait = 0.0
         if self._throttle:
@@ -456,7 +592,7 @@ class MovieSleepManager:
             if throttle_wait > 0:
                 logger.debug("Throttle additional wait: %.1fs", throttle_wait)
 
-        return t + throttle_wait
+        return wait_seconds + throttle_wait
 
 
 def _resolve_base_range():

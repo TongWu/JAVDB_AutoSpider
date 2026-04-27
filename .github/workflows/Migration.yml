@@ -307,6 +307,18 @@ jobs:
           VAR_RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
           VAR_RCLONE_FOLDER_PATH: ${{ vars.RCLONE_FOLDER_PATH }}
           VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
+          # D1 / Cloudflare (only required when STORAGE_BACKEND in {d1,dual})
+          VAR_STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
+          VAR_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VAR_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          VAR_D1_HISTORY_DB_ID: ${{ secrets.D1_HISTORY_DB_ID }}
+          VAR_D1_REPORTS_DB_ID: ${{ secrets.D1_REPORTS_DB_ID }}
+          VAR_D1_OPERATIONS_DB_ID: ${{ secrets.D1_OPERATIONS_DB_ID }}
+          # Cross-instance proxy coordinator (Cloudflare DO).  Both empty
+          # means "disabled — use local throttling only".  See
+          # docs/PROXY_COORDINATOR_DEPLOY.md for setup steps.
+          VAR_PROXY_COORDINATOR_URL: ${{ vars.PROXY_COORDINATOR_URL }}
+          VAR_PROXY_COORDINATOR_TOKEN: ${{ secrets.PROXY_COORDINATOR_TOKEN }}
         run: python3 -m apps.cli.config_generator --github-actions
 
       - name: Pull latest changes
@@ -484,6 +496,8 @@ jobs:
           git add "$REPORTS_DIR/history.db" 2>/dev/null || true
           git add "$REPORTS_DIR/reports.db" 2>/dev/null || true
           git add "$REPORTS_DIR/operations.db" 2>/dev/null || true
+          git add "$REPORTS_DIR/d1_drift.jsonl" 2>/dev/null || true
+          git add "$REPORTS_DIR/d1_drift.processed.jsonl" 2>/dev/null || true
           find "$REPORTS_DIR/Migration" -type f -exec git add {} \; 2>/dev/null || true
 
           if git diff --cached --quiet; then

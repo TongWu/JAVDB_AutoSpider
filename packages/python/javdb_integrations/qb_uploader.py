@@ -711,9 +711,10 @@ def main():
                     'no_subtitle_count': no_subtitle_count,
                     'success_rate': _rate,
                 })
-                logger.info(f"Uploader stats saved to SQLite (session_id={_session_id})")
+                from packages.python.javdb_platform.db import current_backend
+                logger.info(f"Uploader stats saved to {current_backend()} backend (session_id={_session_id})")
         except Exception as e:
-            logger.warning(f"Failed to save uploader stats to SQLite: {e}")
+            logger.warning(f"Failed to save uploader stats to db backend: {e}")
 
     # Git commit uploader results (only if credentials are available)
     from_pipeline = args.from_pipeline if hasattr(args, 'from_pipeline') else False
