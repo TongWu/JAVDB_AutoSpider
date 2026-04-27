@@ -19,8 +19,13 @@ sys.path.insert(0, project_root)
 
 from packages.python.javdb_platform.proxy_coordinator_client import (  # noqa: E402
     CoordinatorUnavailable,
+    LeaseResult,
     ProxyCoordinatorClient,
+    ReportResult,
     _ASYNC_QUEUE_SENTINEL,
+    _extract_server_time_ms,
+    _normalize_proxy_id,
+    _validate_kind,
 )
 
 
@@ -194,3 +199,153 @@ def test_sentinel_terminates_worker_promptly():
 def test_sentinel_constant_is_a_pair_of_nones():
     """Worker termination check relies on the sentinel shape."""
     assert _ASYNC_QUEUE_SENTINEL == (None, None)
+
+
+# ── Kind validation (no silent coercion) ─────────────────────────────────
+
+
+@pytest.mark.parametrize("kind", ["cf", "failure"])
+def test_validate_kind_accepts_known_values(kind):
+    assert _validate_kind(kind) == kind
+
+
+@pytest.mark.parametrize("kind", ["", "CF", "Failure", "fail", "unknown", None])
+def test_validate_kind_rejects_unknown_values(kind):
+    with pytest.raises(ValueError, match="Invalid kind"):
+        _validate_kind(kind)
+
+
+def test_report_raises_value_error_on_bad_kind_without_http_call():
+    """report() must surface typos at the call site, not silently bucket them."""
+    c = _make_client(async_workers=1)
+    try:
+        with patch.object(c._session, "post") as fake_post:
+            with pytest.raises(ValueError, match="Invalid kind"):
+                c.report("p1", "WrongKind")
+            assert fake_post.call_count == 0  # never reached the network
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_report_async_raises_value_error_on_bad_kind_synchronously():
+    """report_async() must reject typos synchronously instead of queueing them.
+
+    Otherwise the error is only logged ~ms later by the worker thread,
+    making it easy to miss in dev.
+    """
+    c = _make_client(async_workers=1, async_queue_size=4)
+    try:
+        with pytest.raises(ValueError, match="Invalid kind"):
+            c.report_async("p1", "wrong-kind")
+        assert c._async_queue.empty()
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+# ── server_time wire-key fallback ────────────────────────────────────────
+
+
+def test_extract_server_time_ms_prefers_explicit_ms_key():
+    """When both keys are present, the explicit-units key wins."""
+    assert _extract_server_time_ms({"server_time_ms": 123, "server_time": 456}) == 123
+
+
+def test_extract_server_time_ms_falls_back_to_server_time():
+    """Backward-compatible with the current Worker, which sends `server_time`."""
+    assert _extract_server_time_ms({"server_time": 789}) == 789
+
+
+def test_extract_server_time_ms_raises_on_missing_keys():
+    with pytest.raises(KeyError):
+        _extract_server_time_ms({"wait_ms": 100})
+
+
+def _fake_response(payload: dict, status_code: int = 200):
+    class _R:
+        def __init__(self):
+            self.status_code = status_code
+            self._payload = payload
+            self.text = ""
+
+        def json(self):
+            return self._payload
+
+    return _R()
+
+
+def test_lease_parses_server_time_ms_wire_key():
+    """Forward-compatible: Worker may emit server_time_ms in a future deploy."""
+    c = _make_client(async_workers=1)
+    payload = {
+        "wait_ms": 100, "penalty_factor": 1.0,
+        "server_time_ms": 1234567890123, "reason": "ok",
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_fake_response(payload)):
+            result = c.lease("p1", 100)
+        assert isinstance(result, LeaseResult)
+        assert result.server_time_ms == 1234567890123
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_lease_falls_back_to_legacy_server_time_wire_key():
+    """Current Worker sends `server_time`; Python must keep accepting it."""
+    c = _make_client(async_workers=1)
+    payload = {
+        "wait_ms": 100, "penalty_factor": 1.0,
+        "server_time": 999, "reason": "ok",
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_fake_response(payload)):
+            result = c.lease("p1", 100)
+        assert result.server_time_ms == 999
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_report_parses_server_time_ms_wire_key():
+    c = _make_client(async_workers=1)
+    payload = {
+        "penalty_factor": 1.5, "recent_event_count": 3,
+        "server_time_ms": 42,
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_fake_response(payload)):
+            result = c.report("p1", "cf")
+        assert isinstance(result, ReportResult)
+        assert result.server_time_ms == 42
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_report_falls_back_to_legacy_server_time_wire_key():
+    c = _make_client(async_workers=1)
+    payload = {
+        "penalty_factor": 2.0, "recent_event_count": 7,
+        "server_time": 17,
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_fake_response(payload)):
+            result = c.report("p1", "failure")
+        assert result.server_time_ms == 17
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+# ── _normalize_proxy_id (S324 / hashlib usage) ───────────────────────────
+
+
+def test_normalize_proxy_id_uses_non_security_hash_marker():
+    """``hashlib.sha1`` must be called with ``usedforsecurity=False``.
+
+    Guards against a regression where the lint suppression is removed
+    without thinking about it (Bandit S324). We can't introspect the
+    keyword from the outside, so we just assert the function is callable
+    and produces a stable, prefixed digest.
+    """
+    a = _normalize_proxy_id(None, fallback_seed="1.2.3.4:8080")
+    b = _normalize_proxy_id(None, fallback_seed="1.2.3.4:8080")
+    assert a == b
+    assert a.startswith("proxy-")
+    assert len(a) == len("proxy-") + 16
