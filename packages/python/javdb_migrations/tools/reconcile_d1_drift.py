@@ -77,13 +77,30 @@ _LOGICAL_TO_DB_PATH = {
     "operations": cfg("OPERATIONS_DB_PATH", os.path.join(_REPORTS_DIR, "operations.db")),
 }
 
+def _env_int(name: str, default: int) -> int:
+    """Read an int env var, returning *default* on missing or unparsable values.
+
+    Mirrors :func:`packages.python.javdb_platform.d1_client._env_int` so a
+    typo in ``D1_BATCH_LIMIT`` doesn't crash module import (which previously
+    happened with a bare ``int(os.environ.get(...))`` here while
+    ``d1_client.py`` quietly fell back to its default).
+    """
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 # Conservative chunk size for batched D1 SELECT/INSERT/UPDATE round-trips.
 # CF D1 doesn't impose a hard "statements per request" cap — the real
 # constraints are 30 s execution time and ~100 KB per statement (see the
 # notes alongside ``_BATCH_LIMIT`` in d1_client.py). 50 is the safe default;
 # override via ``D1_BATCH_LIMIT`` to widen/narrow chunks across the whole
 # stack consistently.
-_BATCH_SIZE = int(os.environ.get("D1_BATCH_LIMIT", "50"))
+_BATCH_SIZE = _env_int("D1_BATCH_LIMIT", 50)
 
 
 # ── Stats per table ───────────────────────────────────────────────────────
@@ -1022,7 +1039,14 @@ def reconcile(
         return overall_errors
 
     if consumed:
-        leftover = [r for r in drift_records if r not in consumed]
+        # ``consumed`` holds the same dict objects that were yielded from
+        # ``drift_records`` (no copies), so identity-based filtering is both
+        # correct and O(N): two distinct drift entries with byte-identical
+        # contents (e.g. the same row drifted twice) would collide under
+        # equality-based ``r not in consumed`` and both be wrongly dropped
+        # from leftover.
+        consumed_ids = {id(r) for r in consumed}
+        leftover = [r for r in drift_records if id(r) not in consumed_ids]
         try:
             _archive_processed_records(drift_log, processed_log, consumed, leftover)
             logger.info(
