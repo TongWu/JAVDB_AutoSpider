@@ -120,7 +120,14 @@ def _normalize_proxy_id(raw: Optional[str], *, fallback_seed: Optional[str] = No
         if trimmed:
             return trimmed[:256]
     if fallback_seed:
-        digest = hashlib.sha1(fallback_seed.encode("utf-8")).hexdigest()[:16]
+        # Not a security-critical hash — only used to bucket a configurable
+        # ``host:port`` into a stable 16-char DO key. ``usedforsecurity=False``
+        # silences the Bandit S324 / Ruff S324 lint without changing the
+        # produced digest, so existing runners that may have already derived
+        # IDs continue to agree on the same DO key.
+        digest = hashlib.sha1(  # noqa: S324 — see comment above
+            fallback_seed.encode("utf-8"), usedforsecurity=False
+        ).hexdigest()[:16]
         derived = f"proxy-{digest}"
         logger.warning(
             "Coordinator proxy_id derived from host:port hash: %s — "
@@ -129,6 +136,37 @@ def _normalize_proxy_id(raw: Optional[str], *, fallback_seed: Optional[str] = No
         )
         return derived
     raise ValueError("proxy_id is empty and no fallback_seed was provided")
+
+
+_VALID_REPORT_KINDS = ("cf", "failure")
+
+
+def _validate_kind(kind: str) -> str:
+    """Validate ``kind`` against the wire-protocol's accepted values.
+
+    Surfaces typos (e.g. ``"cF"``, ``"fail"``) loudly at call time instead of
+    silently coercing them to ``"cf"`` — the previous behaviour caused
+    misclassified events to be reported under the CF bucket without warning.
+    """
+    if kind not in _VALID_REPORT_KINDS:
+        raise ValueError(
+            f"Invalid kind: {kind!r}; expected one of {_VALID_REPORT_KINDS}"
+        )
+    return kind
+
+
+def _extract_server_time_ms(data: dict) -> int:
+    """Read the server-side timestamp from a coordinator response.
+
+    Prefers the ``server_time_ms`` wire key (matches the dataclass field
+    name) and falls back to ``server_time`` for backward compatibility with
+    the current Worker, which emits ``server_time`` from a ``Date.now()``
+    call (already in milliseconds). The fallback lets the Worker migrate to
+    the explicit ``server_time_ms`` key without coordinated Python deploys.
+    """
+    if "server_time_ms" in data:
+        return int(data["server_time_ms"])
+    return int(data["server_time"])
 
 
 class ProxyCoordinatorClient:
@@ -233,7 +271,7 @@ class ProxyCoordinatorClient:
             return LeaseResult(
                 wait_ms=int(data["wait_ms"]),
                 penalty_factor=float(data["penalty_factor"]),
-                server_time_ms=int(data["server_time"]),
+                server_time_ms=_extract_server_time_ms(data),
                 reason=str(data.get("reason", "ok")),
             )
         except (KeyError, TypeError, ValueError) as e:
@@ -245,10 +283,12 @@ class ProxyCoordinatorClient:
         """Report a CF / failure event on *proxy_id*.
 
         Same failure semantics as :meth:`lease` — never retries, raises
-        :class:`CoordinatorUnavailable` on any error.
+        :class:`CoordinatorUnavailable` on any error. ``kind`` must be one of
+        :data:`_VALID_REPORT_KINDS`; passing anything else raises
+        :class:`ValueError` so typos surface at call time rather than being
+        silently bucketed under ``"cf"``.
         """
-        if kind not in ("cf", "failure"):
-            kind = "cf"
+        _validate_kind(kind)
         try:
             normalized = _normalize_proxy_id(proxy_id)
         except ValueError as e:
@@ -277,7 +317,7 @@ class ProxyCoordinatorClient:
             return ReportResult(
                 penalty_factor=float(data["penalty_factor"]),
                 recent_event_count=int(data["recent_event_count"]),
-                server_time_ms=int(data["server_time"]),
+                server_time_ms=_extract_server_time_ms(data),
             )
         except (KeyError, TypeError, ValueError) as e:
             raise CoordinatorUnavailable(
@@ -295,7 +335,12 @@ class ProxyCoordinatorClient:
         the event is dropped and a throttled WARNING is logged; the next
         successful ``lease`` call will still fetch the authoritative
         penalty factor from the server.
+
+        ``kind`` is validated synchronously so typos surface at the call
+        site (a ``ValueError``) rather than being swallowed by the worker's
+        broad exception handler 5–500 ms later.
         """
+        _validate_kind(kind)
         if self._async_shutdown:
             return
         try:
