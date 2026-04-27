@@ -363,6 +363,50 @@ class TestLoadInventoryAsFolderStructure:
         assert fi.file_count == 10
         assert fi.full_path == 'gdrive:root/2024/SomeActor/XYZ-789 [无码流出-无字]'
 
+    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='gdrive')
+    @patch('scripts.rclone_manager.get_configured_root_folder', return_value='root')
+    def test_skips_paths_without_4digit_year_segment(
+        self, _mock_root, _mock_dn, tmp_path, storage_mode_csv, caplog,
+    ):
+        """A folder whose suffix-by-position would land on a non-year segment
+        (e.g. extra prefix slashes) must be skipped with a WARNING instead of
+        being silently misclassified with ``year='Actor'``.
+        """
+        csv_path = str(tmp_path / 'inventory.csv')
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=INVENTORY_FIELDNAMES)
+            writer.writeheader()
+            writer.writerow({
+                'video_code': 'OK-001',
+                'sensor_category': '有码',
+                'subtitle_category': '中字',
+                'folder_path': '2025/Actor/OK-001/有码-中字',
+                'folder_size': '1', 'file_count': '1',
+                'scan_datetime': '2026-01-01 00:00:00',
+            })
+            writer.writerow({
+                # 5 segments — parts[-4]='Actor' is not a 4-digit year, so
+                # this should be skipped, not stored under year='Actor'.
+                'video_code': 'BAD-001',
+                'sensor_category': '有码',
+                'subtitle_category': '中字',
+                'folder_path': 'unexpected/Actor/BAD-001/有码-中字',
+                'folder_size': '1', 'file_count': '1',
+                'scan_datetime': '2026-01-01 00:00:00',
+            })
+
+        caplog.set_level('WARNING')
+        structure = load_inventory_as_folder_structure(csv_path)
+        all_folders = [
+            f for actors in structure.values()
+            for folders in actors.values() for f in folders
+        ]
+        codes = {f.movie_code for f in all_folders}
+        assert codes == {'OK-001'}
+        assert any(
+            'missing 4-digit year' in r.getMessage() for r in caplog.records
+        )
+
 
 # ============================================================================
 # Test dedup CSV filtering (is_deleted skip logic) — migrated from executor

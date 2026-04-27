@@ -712,3 +712,62 @@ def test_main_uses_default_window_from_drift_log(tmp_path, monkeypatch):
     assert captured["dbs"] == ("history",)
     assert captured["since"] is None  # delegated; reconcile() reads jsonl itself
     assert captured["dry_run"] is True
+
+
+# ── _env_int / D1_BATCH_LIMIT parsing ─────────────────────────────────────
+
+
+class TestEnvIntFallback:
+    """Bug fix: bare ``int(os.environ[...])`` crashed module import on
+    misconfiguration; the helper must mirror ``d1_client._env_int`` and
+    quietly fall back to the supplied default for unparsable values.
+    """
+
+    def test_returns_default_when_var_missing(self, monkeypatch):
+        monkeypatch.delenv("D1_BATCH_LIMIT", raising=False)
+        assert recon._env_int("D1_BATCH_LIMIT", 50) == 50
+
+    def test_parses_valid_integer(self, monkeypatch):
+        monkeypatch.setenv("D1_BATCH_LIMIT", "12")
+        assert recon._env_int("D1_BATCH_LIMIT", 50) == 12
+
+    def test_negative_values_are_passed_through(self, monkeypatch):
+        # We don't second-guess the operator: negative is "weird but parseable",
+        # not a parse error. ``range()``-based callers will degenerate
+        # gracefully; the point of the helper is only ValueError safety.
+        monkeypatch.setenv("D1_BATCH_LIMIT", "-1")
+        assert recon._env_int("D1_BATCH_LIMIT", 50) == -1
+
+    @pytest.mark.parametrize(
+        "bad_value", ["", " ", "abc", "12.5", "0x40", "1e2", "fifty"]
+    )
+    def test_falls_back_on_unparsable(self, monkeypatch, bad_value):
+        monkeypatch.setenv("D1_BATCH_LIMIT", bad_value)
+        assert recon._env_int("D1_BATCH_LIMIT", 50) == 50, (
+            f"D1_BATCH_LIMIT={bad_value!r} should fall back to default, "
+            "not raise ValueError as the previous bare-int() conversion did."
+        )
+
+
+def test_module_imports_with_unparsable_d1_batch_limit(monkeypatch):
+    """Regression: ``import reconcile_d1_drift`` must succeed even when
+    ``D1_BATCH_LIMIT`` is set to something unparsable, mirroring the
+    behaviour of :mod:`packages.python.javdb_platform.d1_client`.
+
+    Re-imports the module under a poisoned env var to exercise the
+    module-level ``_BATCH_SIZE = _env_int(...)`` line specifically.
+    """
+    import importlib
+
+    monkeypatch.setenv("D1_BATCH_LIMIT", "not-a-number")
+    reloaded = importlib.reload(recon)
+    try:
+        assert reloaded._BATCH_SIZE == 50, (
+            "module-level _BATCH_SIZE must fall back to the documented "
+            f"default on bad input; got {reloaded._BATCH_SIZE!r}"
+        )
+    finally:
+        # Restore the canonical module state so subsequent tests don't
+        # observe a poisoned _BATCH_SIZE.
+        monkeypatch.delenv("D1_BATCH_LIMIT", raising=False)
+        importlib.reload(recon)

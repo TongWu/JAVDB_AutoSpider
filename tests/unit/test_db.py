@@ -478,6 +478,75 @@ class TestDeleteRcloneInventoryPaths:
     def test_delete_empty_input(self, _isolate_sqlite):
         assert db_mod.db_delete_rclone_inventory_paths([]) == 0
 
+    def test_delete_chunks_above_chunk_size(self, _isolate_sqlite):
+        """Pass >90 paths to exercise the chunked IN(...) DELETE batching."""
+        entries = [
+            self._entry(f'C{i:03d}', f'2025/Actor/C{i:03d}/有码-中字')
+            for i in range(120)
+        ]
+        db_mod.db_replace_rclone_inventory(entries)
+        targets = [e['folder_path'] for e in entries[:100]]
+        deleted = db_mod.db_delete_rclone_inventory_paths(targets)
+        assert deleted == 100
+        inv = db_mod.db_load_rclone_inventory()
+        # 20 entries should remain (indices 100-119).
+        remaining_codes = set(inv.keys())
+        assert remaining_codes == {f'C{i:03d}' for i in range(100, 120)}
+
+
+class TestMarkRecordsDeletedBatching:
+    """The batched grouping path of ``db_mark_records_deleted``."""
+
+    def _rec(self, code, path=None, sub='中字', cen='有码'):
+        return {
+            'video_code': code,
+            'existing_sensor': cen, 'existing_subtitle': sub,
+            'existing_gdrive_path': path or f'remote:/{code}',
+            'existing_folder_size': 100,
+            'new_torrent_category': 'cat',
+            'deletion_reason': 'Subtitle upgrade',
+            'detect_datetime': '2024-01-01 00:00:00',
+            'is_deleted': 'False', 'delete_datetime': '',
+        }
+
+    def test_mark_distinct_datetimes_per_pair(self, _isolate_sqlite):
+        """Each path gets its own distinct DateTimeDeleted value."""
+        for c in ('A', 'B', 'C'):
+            db_mod.db_append_dedup_record(self._rec(c, f'remote:/{c}'))
+        updated = db_mod.db_mark_records_deleted([
+            ('remote:/A', '2024-06-01 10:00:00'),
+            ('remote:/B', '2024-06-02 11:00:00'),
+            ('remote:/C', '2024-06-03 12:00:00'),
+        ])
+        assert updated == 3
+        rows = {r['ExistingGdrivePath']: r for r in db_mod.db_load_dedup_records()}
+        assert rows['remote:/A']['DateTimeDeleted'] == '2024-06-01 10:00:00'
+        assert rows['remote:/B']['DateTimeDeleted'] == '2024-06-02 11:00:00'
+        assert rows['remote:/C']['DateTimeDeleted'] == '2024-06-03 12:00:00'
+
+    def test_mark_chunks_above_chunk_size_with_shared_datetime(self, _isolate_sqlite):
+        """Real callers use a single shared timestamp; chunked IN(...) UPDATE
+        must still hit every record regardless of how many >90 are passed."""
+        codes = [f'B{i:03d}' for i in range(120)]
+        for c in codes:
+            db_mod.db_append_dedup_record(self._rec(c, f'remote:/{c}'))
+        shared_dt = '2024-09-15 09:00:00'
+        pairs = [(f'remote:/{c}', shared_dt) for c in codes]
+        updated = db_mod.db_mark_records_deleted(pairs)
+        assert updated == 120
+        rows = db_mod.db_load_dedup_records()
+        assert all(r['DateTimeDeleted'] == shared_dt for r in rows)
+        assert all(r['IsDeleted'] in (1, True) for r in rows)
+
+    def test_mark_skips_blank_paths(self, _isolate_sqlite):
+        """Empty path strings must not produce a degenerate ``... IN ()`` query."""
+        db_mod.db_append_dedup_record(self._rec('A', 'remote:/A'))
+        updated = db_mod.db_mark_records_deleted([
+            ('', '2024-06-01 10:00:00'),
+            ('remote:/A', '2024-06-01 10:00:00'),
+        ])
+        assert updated == 1
+
 
 # ── pikpak_history ────────────────────────────────────────────────────────
 
