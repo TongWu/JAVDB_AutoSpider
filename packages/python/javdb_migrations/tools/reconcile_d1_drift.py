@@ -100,7 +100,7 @@ def _env_int(name: str, default: int) -> int:
 # notes alongside ``_BATCH_LIMIT`` in d1_client.py). 50 is the safe default;
 # override via ``D1_BATCH_LIMIT`` to widen/narrow chunks across the whole
 # stack consistently.
-_BATCH_SIZE = _env_int("D1_BATCH_LIMIT", 50)
+_BATCH_SIZE = max(1, _env_int("D1_BATCH_LIMIT", 50))
 
 
 # ── Stats per table ───────────────────────────────────────────────────────
@@ -338,6 +338,11 @@ def _batch_select_existing(
                 except D1Error as exc:
                     logger.warning("%s: SELECT key=%s failed: %s", label, k, exc)
                     cursors.append(_LOOKUP_FAILED)
+        if len(cursors) != len(chunk_keys):
+            raise RuntimeError(
+                f"{label}: batch_execute returned {len(cursors)} cursors for "
+                f"{len(chunk_keys)} lookup keys at chunk_start={chunk_start}"
+            )
         for key, cur in zip(chunk_keys, cursors):
             if cur is _LOOKUP_FAILED:
                 lookup_failures.add(tuple(key))
