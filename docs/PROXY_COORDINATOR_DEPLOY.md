@@ -339,7 +339,7 @@ Python 客户端的归一化规则（见
 抛错，pipeline 不中断）：
 
 ```
-Coordinator proxy_id derived from host:port hash: <hash> — recommend setting `name` in PROXY_POOL_JSON so all runners agree
+Coordinator proxy_id derived from host:port hash: proxy-<16hex> — recommend setting `name` in PROXY_POOL_JSON so all runners agree
 ```
 
 ---
