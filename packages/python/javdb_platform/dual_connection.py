@@ -7,7 +7,7 @@ Used for the parallel-test phase of the SQLite → D1 migration:
   database.  SQLite is the canonical source for ``cursor.lastrowid`` and
   ``total_changes`` because the existing codebase relies on the IDs it
   generates for follow-up inserts.
-* Every **read** (``SELECT`` / ``WITH ... SELECT`` / ``PRAGMA``) is routed
+* Every **read** (``SELECT`` / ``PRAGMA``) is routed
   to D1 only — proving that D1 already serves the application's read path
   before we cut over.
 
@@ -50,7 +50,7 @@ from packages.python.javdb_platform.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-_READ_KEYWORDS = ("SELECT", "WITH", "PRAGMA", "EXPLAIN")
+_READ_KEYWORDS = ("SELECT", "PRAGMA", "EXPLAIN")
 
 
 def _is_read(sql: str) -> bool:
