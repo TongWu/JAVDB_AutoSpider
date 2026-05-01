@@ -208,15 +208,17 @@ class ProxyCoordinatorClient:
             "Content-Type": "application/json",
             "User-Agent": user_agent,
         })
-        # Bounded fire-and-forget pool for ``report_async``.
+        self._async_worker_count = max(1, int(async_workers))
+        # Bounded fire-and-forget pool for ``report_async``. Keep capacity at
+        # least equal to the worker count so shutdown can enqueue one sentinel
+        # per worker after draining pending events.
         self._async_queue: "queue.Queue[Tuple[Optional[str], Optional[str]]]" = (
-            queue.Queue(maxsize=max(1, int(async_queue_size)))
+            queue.Queue(maxsize=max(self._async_worker_count, int(async_queue_size)))
         )
         self._async_dropped = 0
         self._async_lock = threading.Lock()
         self._async_shutdown = False
         self._async_workers: List[threading.Thread] = []
-        self._async_worker_count = max(1, int(async_workers))
 
     def _close_session(self) -> None:
         try:
@@ -388,8 +390,17 @@ class ProxyCoordinatorClient:
                 self._async_queue.task_done()
 
     def _enqueue_async_sentinel(self) -> None:
-        """Reliably enqueue one shutdown sentinel for a worker."""
-        self._async_queue.put(_ASYNC_QUEUE_SENTINEL)
+        """Reliably enqueue one shutdown sentinel for a worker without blocking."""
+        while True:
+            try:
+                self._async_queue.put_nowait(_ASYNC_QUEUE_SENTINEL)
+                return
+            except queue.Full:
+                try:
+                    self._async_queue.get_nowait()
+                except queue.Empty:
+                    continue
+                self._async_queue.task_done()
 
     def close(self, *, wait: bool = False, timeout: Optional[float] = None) -> None:
         """Stop the async-report worker pool. Idempotent.
