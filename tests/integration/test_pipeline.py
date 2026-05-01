@@ -13,6 +13,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 # Import functions from email_notification script
+import scripts.email_notification as email_notification
 from scripts.email_notification import (
     analyze_spider_log,
     analyze_uploader_log,
@@ -642,6 +643,7 @@ class TestExtractDedupStatistics:
         import packages.python.javdb_platform.config_helper as config_helper
 
         monkeypatch.setattr(config_helper, 'use_sqlite', lambda: False)
+        monkeypatch.setattr(email_notification, 'DEDUP_LOG_FILE', '/nonexistent/path')
 
         csv_path = os.path.join(temp_dir, 'dedup_history.csv')
         with open(csv_path, 'w', encoding='utf-8') as f:
