@@ -44,8 +44,7 @@ split_one() {
       normalized = toupper(line)
       sub(/^[[:space:]]+/, "", normalized)
       return normalized ~ /^CREATE[[:space:]]+(UNIQUE[[:space:]]+)?INDEX[[:space:]]/ ||
-        normalized ~ /^CREATE[[:space:]]+(TEMP[[:space:]]+|TEMPORARY[[:space:]]+)?TRIGGER[[:space:]]/ ||
-        normalized ~ /^ALTER[[:space:]]+INDEX[[:space:]]/
+        normalized ~ /^CREATE[[:space:]]+(TEMP[[:space:]]+|TEMPORARY[[:space:]]+)?TRIGGER[[:space:]]/
     }
     function is_trigger_ddl(line, normalized) {
       normalized = toupper(line)
