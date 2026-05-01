@@ -216,14 +216,13 @@ class ProxyCoordinatorClient:
         self._async_lock = threading.Lock()
         self._async_shutdown = False
         self._async_workers: List[threading.Thread] = []
-        for i in range(max(1, int(async_workers))):
-            t = threading.Thread(
-                target=self._async_report_loop,
-                name=f"coord-report-{i}",
-                daemon=True,
-            )
-            t.start()
-            self._async_workers.append(t)
+        self._async_worker_count = max(1, int(async_workers))
+
+    def _close_session(self) -> None:
+        try:
+            self._session.close()
+        except Exception as exc:  # noqa: BLE001 - cleanup must be best-effort
+            logger.warning("Failed to close proxy coordinator HTTP session: %s", exc)
 
     @property
     def base_url(self) -> str:
@@ -341,14 +340,25 @@ class ProxyCoordinatorClient:
         broad exception handler 5–500 ms later.
         """
         _validate_kind(kind)
-        if self._async_shutdown:
-            return
-        try:
-            self._async_queue.put_nowait((proxy_id, kind))
-        except queue.Full:
-            with self._async_lock:
+        with self._async_lock:
+            if self._async_shutdown:
+                return
+            if not self._async_workers:
+                for i in range(self._async_worker_count):
+                    t = threading.Thread(
+                        target=self._async_report_loop,
+                        name=f"coord-report-{i}",
+                        daemon=True,
+                    )
+                    t.start()
+                    self._async_workers.append(t)
+            try:
+                self._async_queue.put_nowait((proxy_id, kind))
+            except queue.Full:
                 self._async_dropped += 1
                 count = self._async_dropped
+            else:
+                return
             # Log first drop loudly, then once every 50 to avoid log floods
             # while still surfacing sustained backpressure.
             if count == 1 or count % 50 == 0:
@@ -388,9 +398,20 @@ class ProxyCoordinatorClient:
             wait: If ``True``, block until each worker exits.
             timeout: Per-worker ``Thread.join`` timeout in seconds.
         """
-        if self._async_shutdown:
+        with self._async_lock:
+            if self._async_shutdown:
+                workers = list(self._async_workers)
+                already_shutdown = True
+            else:
+                self._async_shutdown = True
+                workers = list(self._async_workers)
+                already_shutdown = False
+        if already_shutdown:
+            if wait:
+                for t in workers:
+                    t.join(timeout=timeout)
+            self._close_session()
             return
-        self._async_shutdown = True
         # Drop any pending events so we can guarantee enqueueing exactly
         # one sentinel per worker even when the queue was previously full.
         while True:
@@ -399,7 +420,7 @@ class ProxyCoordinatorClient:
             except queue.Empty:
                 break
             self._async_queue.task_done()
-        for _ in self._async_workers:
+        for _ in workers:
             try:
                 self._async_queue.put_nowait(_ASYNC_QUEUE_SENTINEL)
             except queue.Full:
@@ -409,8 +430,9 @@ class ProxyCoordinatorClient:
                 # non-blocking on the unhappy path.
                 pass
         if wait:
-            for t in self._async_workers:
+            for t in workers:
                 t.join(timeout=timeout)
+        self._close_session()
 
     def health_check(self) -> bool:
         """Return ``True`` if ``GET /health`` returns 200, else ``False``.
@@ -457,6 +479,7 @@ def create_coordinator_from_env(
             "falling back to local throttling for this run",
             url,
         )
+        client.close()
         return None
     logger.info(
         "Proxy coordinator client initialised: base_url=%s",
