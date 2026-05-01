@@ -214,16 +214,27 @@ def migrate_db(db_path: str, *, dry_run: bool) -> None:
                     logger.info("DB updated (DedupRecords): %s", db_path)
         except sqlite3.IntegrityError as exc:
             # Re-raise after logging so the operator sees both the offending
-            # context and the underlying constraint message; RcloneInventory
-            # changes from the prior block are already committed.
-            logger.error(
-                "DedupRecords migration hit an IntegrityError on db=%s "
-                "(backup=%s, table=DedupRecords, column=ExistingGdrivePath): "
-                "RcloneInventory changes were committed while DedupRecords rolled back. "
-                "Restore from the backup path or inspect/fix conflicting DedupRecords "
-                "rows and re-run migration. Original exception: %s",
-                db_path, backup, exc,
-            )
+            # context and the underlying constraint message. Dry-runs do not
+            # create backups or commit either table, so keep that guidance
+            # separate from the real migration recovery path.
+            if dry_run:
+                logger.error(
+                    "DedupRecords migration hit an IntegrityError on db=%s "
+                    "(dry-run, table=DedupRecords, column=ExistingGdrivePath): "
+                    "No backup was created and no database changes were committed "
+                    "by dry-run. Inspect/fix conflicting DedupRecords rows and "
+                    "re-run migration. Original exception: %s",
+                    db_path, exc,
+                )
+            else:
+                logger.error(
+                    "DedupRecords migration hit an IntegrityError on db=%s "
+                    "(backup=%s, table=DedupRecords, column=ExistingGdrivePath): "
+                    "RcloneInventory changes were committed while DedupRecords rolled back. "
+                    "Restore from the backup path or inspect/fix conflicting DedupRecords "
+                    "rows and re-run migration. Original exception: %s",
+                    db_path, backup, exc,
+                )
             raise
     else:
         logger.warning("Table DedupRecords missing in %s", db_path)
