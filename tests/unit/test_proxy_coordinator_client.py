@@ -103,6 +103,34 @@ def test_close_is_idempotent_and_joins_workers():
         assert not t.is_alive()
 
 
+def test_close_joins_all_workers_when_worker_count_exceeds_queue_size():
+    c = _make_client(async_workers=3, async_queue_size=1)
+    started = threading.Semaphore(0)
+    block = threading.Event()
+
+    def slow_report(proxy_id, kind="cf"):
+        started.release()
+        block.wait(timeout=2.0)
+
+    with patch.object(c, "report", side_effect=slow_report):
+        try:
+            for i in range(3):
+                c.report_async(f"proxy-{i}", "cf")
+                assert started.acquire(timeout=2.0)
+            for i in range(3, 8):
+                c.report_async(f"proxy-{i}", "cf")
+            block.set()
+            c._async_queue.join()
+            assert c._async_dropped > 0
+            c.close(wait=True, timeout=2.0)
+        finally:
+            block.set()
+            c.close(wait=True, timeout=2.0)
+
+    for t in c._async_workers:
+        assert not t.is_alive()
+
+
 def test_close_closes_http_session():
     c = _make_client(async_workers=1)
     with patch.object(c._session, "close") as close_session:
