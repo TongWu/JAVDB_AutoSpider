@@ -387,6 +387,10 @@ class ProxyCoordinatorClient:
             finally:
                 self._async_queue.task_done()
 
+    def _enqueue_async_sentinel(self) -> None:
+        """Reliably enqueue one shutdown sentinel for a worker."""
+        self._async_queue.put(_ASYNC_QUEUE_SENTINEL)
+
     def close(self, *, wait: bool = False, timeout: Optional[float] = None) -> None:
         """Stop the async-report worker pool. Idempotent.
 
@@ -421,14 +425,7 @@ class ProxyCoordinatorClient:
                 break
             self._async_queue.task_done()
         for _ in workers:
-            try:
-                self._async_queue.put_nowait(_ASYNC_QUEUE_SENTINEL)
-            except queue.Full:
-                # In-flight work freed all slots above, so this is rare;
-                # if it does happen, the worker will see the sentinel
-                # after the current backlog drains. close() must stay
-                # non-blocking on the unhappy path.
-                pass
+            self._enqueue_async_sentinel()
         if wait:
             for t in workers:
                 t.join(timeout=timeout)
