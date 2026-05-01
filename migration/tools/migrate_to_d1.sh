@@ -35,6 +35,7 @@ split_one() {
   # interleaves trigger / index DDL after the inserts, so a one-shot pre-INSERT
   # split would silently drop those statements.
   : > "${prefix}_00_schema.sql"
+  rm -f "${prefix}_data_"*.sql
   awk -v rpc="$ROWS_PER_CHUNK" -v prefix="$prefix" -v schema="${prefix}_00_schema.sql" '
     /^INSERT INTO/ {
       if ((NR_in_chunk % rpc) == 0) {
@@ -100,6 +101,7 @@ cmd_import() {
 }
 
 cmd_verify() {
+  local failed=0
   for db in "${DBS[@]}"; do
     echo "================ $db ================"
     local_db="reports/${db}.db"
@@ -137,9 +139,13 @@ except Exception:
         printf "  %-32s OK            (count=%s)\n" "$tbl" "$cnt"
       else
         printf "  %-32s MISMATCH local=%s remote=%s\n" "$tbl" "$cnt" "$d1_cnt"
+        failed=1
       fi
     done <<< "$tables"
   done
+  if [[ "$failed" -eq 1 ]]; then
+    exit 1
+  fi
 }
 
 case "${1:-}" in
