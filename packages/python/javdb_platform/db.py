@@ -1136,6 +1136,12 @@ def init_db(db_path: Optional[str] = None, *, force: bool = False):
             try:
                 _do_init(db_path)
             finally:
+                temp_conns = getattr(_local, 'conns', {})
+                for conn in set(temp_conns.values()):
+                    try:
+                        conn.close()
+                    except Exception as exc:  # noqa: BLE001 - best-effort cleanup
+                        logger.warning("Failed to close temporary init_db connection: %s", exc)
                 try:
                     del _local._storage_backend_init_override
                 except AttributeError:
