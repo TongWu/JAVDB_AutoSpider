@@ -43,11 +43,12 @@ import sys
 import zlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Optional, Set, Tuple
 
 LOG = logging.getLogger("jav_nfo_title")
 
 MIN_TEMP_FILE_SIZE_BYTES = 100 * 1024 * 1024
+EXCLUDED_ROOT_DIRS = {"temp"}
 
 TITLE_CDATA_RE = re.compile(
     r"(?P<prefix><title>\s*<!\[CDATA\[)(?P<title>.*?)(?P<suffix>\]\]>\s*</title>)",
@@ -82,6 +83,49 @@ def normalize_classification(classification: str) -> str:
         subtitle_out = subtitle
 
     return "-".join(part for part in (mosaic_out, subtitle_out) if part)
+
+
+def parse_year_dir(name: str) -> Optional[int]:
+    """返回目录名表示的年份；非纯数字年份目录返回 ``None``。"""
+    return int(name) if re.fullmatch(r"\d{4}", name) else None
+
+
+def year_sort_key(name: str) -> Tuple[int, int, str]:
+    """数字年份排前面，非年份目录按未知年份排在最后。"""
+    year = parse_year_dir(name)
+    if year is None:
+        return 1, 0, name
+    return 0, year, name
+
+
+def select_year_dirs(
+    dirs: List[str],
+    *,
+    requested_years: Optional[List[str]] = None,
+    start_from: Optional[int] = None,
+) -> Tuple[List[str], Set[str]]:
+    """筛选 root 下需要处理的一级目录。
+
+    ``temp`` 永远排除。非年份目录被视为未知年份，排序在所有数字年份之后；
+    使用 ``start_from`` 时，非年份目录仍会保留。
+    """
+    candidates = [name for name in dirs if name.casefold() not in EXCLUDED_ROOT_DIRS]
+
+    missing: Set[str] = set()
+    if requested_years:
+        wanted = set(requested_years)
+        missing = wanted - set(candidates)
+        candidates = [name for name in candidates if name in wanted]
+
+    if start_from is not None:
+        filtered = []
+        for name in candidates:
+            year = parse_year_dir(name)
+            if year is None or year >= start_from:
+                filtered.append(name)
+        candidates = filtered
+
+    return sorted(candidates, key=year_sort_key), missing
 
 
 def transform_title(old_title: str, first_actor: str) -> Optional[str]:
@@ -530,6 +574,12 @@ def parse_args() -> argparse.Namespace:
         help="只处理指定年份，可重复指定；不传则处理全部",
     )
     parser.add_argument(
+        "--start-from",
+        type=int,
+        metavar="YEAR",
+        help="从指定年份开始处理；非年份目录视为未知年份并排在所有年份之后",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="仅读取并打印将要更新/清理的内容，不实际写回或删除 rclone 文件",
@@ -556,26 +606,27 @@ def main() -> int:
         LOG.error("rclone unavailable: %s", exc)
         return 2
 
-    years = list_dirs(args.root)
-    if not years:
+    root_dirs = list_dirs(args.root)
+    if not root_dirs:
         LOG.error("no year directories under %s", args.root)
         return 1
 
-    if args.year:
-        wanted = set(args.year)
-        missing = wanted - set(years)
-        if missing:
-            LOG.warning("requested years not found: %s", ", ".join(sorted(missing)))
-        years = [year for year in years if year in wanted]
-        if not years:
-            LOG.error("no matching year directories under %s", args.root)
-            return 1
+    years, missing = select_year_dirs(
+        root_dirs,
+        requested_years=args.year,
+        start_from=args.start_from,
+    )
+    if missing:
+        LOG.warning("requested years not found: %s", ", ".join(sorted(missing)))
+    if not years:
+        LOG.error("no matching year directories under %s", args.root)
+        return 1
 
-    years.sort()
     LOG.info(
-        "root=%s years=%s workers=%d dry_run=%s",
+        "root=%s years=%s start_from=%s workers=%d dry_run=%s",
         args.root,
         years,
+        args.start_from,
         args.workers,
         args.dry_run,
     )

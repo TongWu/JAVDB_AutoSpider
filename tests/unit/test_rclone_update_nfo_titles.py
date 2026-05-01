@@ -17,6 +17,36 @@ def test_run_rclone_uses_default_timeout(monkeypatch):
     assert calls[1][1]["timeout"] is None
 
 
+def test_select_year_dirs_excludes_temp_and_sorts_unknown_after_years():
+    years, missing = updater.select_year_dirs(
+        ["temp", "2026", "unknown", "2018", "2017", "Temp"]
+    )
+
+    assert years == ["2017", "2018", "2026", "unknown"]
+    assert missing == set()
+
+
+def test_select_year_dirs_start_from_keeps_unknown_dirs_after_matching_years():
+    years, missing = updater.select_year_dirs(
+        ["2017", "2018", "2020", "2026", "manual", "temp"],
+        start_from=2018,
+    )
+
+    assert years == ["2018", "2020", "2026", "manual"]
+    assert missing == set()
+
+
+def test_select_year_dirs_requested_years_intersect_start_from_and_exclude_temp():
+    years, missing = updater.select_year_dirs(
+        ["2017", "2018", "2026", "manual", "temp"],
+        requested_years=["2017", "2018", "manual", "temp", "missing"],
+        start_from=2018,
+    )
+
+    assert years == ["2018", "manual"]
+    assert missing == {"temp", "missing"}
+
+
 def test_transform_title_hides_coded_and_no_subtitle_suffix():
     title = "从放学后到第二天早晨 [MNGS-030 有码-无字]"
 
