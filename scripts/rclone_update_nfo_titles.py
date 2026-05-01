@@ -28,7 +28,7 @@
     python scripts/rclone_update_nfo_titles.py gdrive:/不可以色色/JAV-Sync --year 2024 --year 2025
 
 如果某个第四层目录没有任何 ``.nfo`` 文件，脚本会把该目录内大于 100M 的文件
-移动到 ``<root>/temp/``，然后删除原目录。
+移动到 ``<root>/temp/<唯一目录>/``，然后删除原目录。
 """
 
 from __future__ import annotations
@@ -40,6 +40,7 @@ import logging
 import re
 import subprocess
 import sys
+import zlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
@@ -150,7 +151,7 @@ def run_rclone(
     check: bool = True,
     capture: bool = True,
     input_text: Optional[str] = None,
-    timeout: Optional[float] = None,
+    timeout: Optional[float] = 300.0,
 ) -> subprocess.CompletedProcess:
     cmd = ["rclone", *args]
     LOG.debug("exec: %s", " ".join(cmd))
@@ -271,6 +272,15 @@ class CleanupJob:
     rel_leaf: str
 
 
+def cleanup_temp_path(root: str, job: CleanupJob) -> str:
+    """Return a per-leaf temp directory for files rescued before purging."""
+    temp_root = join_remote(root, "temp")
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "_", job.rel_leaf).strip("._-")
+    slug = slug[-80:] if slug else "leaf"
+    checksum = zlib.crc32(job.rel_leaf.encode("utf-8")) & 0xFFFFFFFF
+    return join_remote(temp_root, f"{slug}-{checksum:08x}")
+
+
 def _list_code_dirs(year_path: str, year: str, actor: str) -> Tuple[str, str, List[str]]:
     actor_path = join_remote(year_path, actor)
     rel_actor = f"{year}/{actor}"
@@ -389,7 +399,7 @@ def execute_update(job: NfoJob, dry_run: bool) -> Tuple[NfoJob, str, Optional[st
 def execute_cleanup(
     job: CleanupJob, root: str, dry_run: bool
 ) -> Tuple[CleanupJob, str, str]:
-    temp_path = join_remote(root, "temp")
+    unique_temp_path = cleanup_temp_path(root, job)
     try:
         large_files = [
             file
@@ -402,10 +412,10 @@ def execute_cleanup(
     if dry_run:
         for file in large_files:
             LOG.debug(
-                "    cleanup move: %s/%s -> temp/%s",
+                "    cleanup move: %s/%s -> %s",
                 job.rel_leaf,
                 file.name,
-                file.name,
+                join_remote(unique_temp_path, file.name),
             )
         return (
             job,
@@ -415,10 +425,10 @@ def execute_cleanup(
 
     try:
         if large_files:
-            mkdir_remote(temp_path)
+            mkdir_remote(unique_temp_path)
         for file in large_files:
             src = join_remote(job.leaf_path, file.name)
-            dst = join_remote(temp_path, file.name)
+            dst = join_remote(unique_temp_path, file.name)
             LOG.debug("    cleanup move: %s -> %s", src, dst)
             moveto_remote(src, dst)
         purge_remote(job.leaf_path)
