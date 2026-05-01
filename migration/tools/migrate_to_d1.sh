@@ -30,13 +30,47 @@ split_one() {
   local clean_sql="$1"
   local prefix="$2"
 
-  # Single pass: route INSERTs into chunked data files; everything else (CREATE
-  # TABLE/INDEX/TRIGGER, etc.) lands in ${prefix}_00_schema.sql. SQLite .dump
-  # interleaves trigger / index DDL after the inserts, so a one-shot pre-INSERT
-  # split would silently drop those statements.
+  # Single pass: route INSERTs into chunked data files, pre-data DDL into
+  # ${prefix}_00_schema.sql, and post-data DDL (indexes/triggers) into
+  # ${prefix}_99_post_data.sql so it runs after all rows are loaded.
   : > "${prefix}_00_schema.sql"
+  : > "${prefix}_99_post_data.sql"
   rm -f "${prefix}_data_"*.sql
-  awk -v rpc="$ROWS_PER_CHUNK" -v prefix="$prefix" -v schema="${prefix}_00_schema.sql" '
+  awk -v rpc="$ROWS_PER_CHUNK" \
+    -v prefix="$prefix" \
+    -v schema="${prefix}_00_schema.sql" \
+    -v post="${prefix}_99_post_data.sql" '
+    function is_post_data_ddl(line, normalized) {
+      normalized = toupper(line)
+      sub(/^[[:space:]]+/, "", normalized)
+      return normalized ~ /^CREATE[[:space:]]+(UNIQUE[[:space:]]+)?INDEX[[:space:]]/ ||
+        normalized ~ /^CREATE[[:space:]]+(TEMP[[:space:]]+|TEMPORARY[[:space:]]+)?TRIGGER[[:space:]]/ ||
+        normalized ~ /^ALTER[[:space:]]+INDEX[[:space:]]/
+    }
+    function is_trigger_ddl(line, normalized) {
+      normalized = toupper(line)
+      sub(/^[[:space:]]+/, "", normalized)
+      return normalized ~ /^CREATE[[:space:]]+(TEMP[[:space:]]+|TEMPORARY[[:space:]]+)?TRIGGER[[:space:]]/
+    }
+    function statement_done(line) {
+      return line ~ /;[[:space:]]*$/
+    }
+    function post_data_statement_done(line, normalized) {
+      if (!in_trigger_ddl) {
+        return statement_done(line)
+      }
+      normalized = toupper(line)
+      sub(/^[[:space:]]+/, "", normalized)
+      return normalized ~ /(^|[[:space:]])END;[[:space:]]*$/
+    }
+    in_post_data_ddl {
+      print >> post
+      if (post_data_statement_done($0)) {
+        in_post_data_ddl = 0
+        in_trigger_ddl = 0
+      }
+      next
+    }
     /^INSERT INTO/ {
       if ((NR_in_chunk % rpc) == 0) {
         if (out != "") close(out)
@@ -45,6 +79,16 @@ split_one() {
       }
       print > out
       NR_in_chunk++
+      next
+    }
+    is_post_data_ddl($0) {
+      print >> post
+      in_trigger_ddl = is_trigger_ddl($0)
+      if (!post_data_statement_done($0)) {
+        in_post_data_ddl = 1
+      } else {
+        in_trigger_ddl = 0
+      }
       next
     }
     { print >> schema }
@@ -97,6 +141,15 @@ cmd_import() {
         return 1
       fi
     done
+
+    post_data="${CHUNK_DIR}/${db}_99_post_data.sql"
+    if [[ -s "$post_data" ]]; then
+      echo "==> [$db] post-data DDL"
+      if ! wrangler d1 execute "javdb-${db}" --remote --file="$post_data" -y; then
+        echo "FAILED on $post_data — aborting $db" >&2
+        return 1
+      fi
+    fi
   done
 }
 
@@ -113,9 +166,20 @@ cmd_verify() {
     # Authoritative table list comes from the local DB so we compare every
     # table that exists locally; tables present only in D1 will surface as
     # local=ERR rows when read by sqlite3 below.
-    tables=$(sqlite3 "$local_db" \
+    tables_err=$(mktemp)
+    if ! tables=$(sqlite3 "$local_db" \
       "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;" \
-      2>/dev/null || true)
+      2>"$tables_err"); then
+      echo "  ERROR: failed to enumerate user tables in $local_db" >&2
+      if [[ -s "$tables_err" ]]; then
+        while IFS= read -r line; do
+          echo "    $line" >&2
+        done < "$tables_err"
+      fi
+      rm -f "$tables_err"
+      exit 1
+    fi
+    rm -f "$tables_err"
     if [[ -z "$tables" ]]; then
       echo "  (no user tables found in $local_db)"
       continue
