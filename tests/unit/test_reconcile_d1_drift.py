@@ -641,6 +641,22 @@ def test_lookup_failure_does_not_trigger_spurious_insert(history_sqlite):
     assert n["n"] == 0, "no row may land in D1 when its existence is unknown"
 
 
+def test_batch_select_existing_fails_on_partial_batch_response():
+    class PartialBatchD1:
+        def batch_execute(self, statements):
+            return [FakeD1Cursor()]
+
+    with pytest.raises(RuntimeError, match="returned 1 cursors for 2 lookup keys"):
+        recon._batch_select_existing(
+            PartialBatchD1(),
+            "MovieHistory",
+            ["Href"],
+            ["VideoCode"],
+            [("/v/a",), ("/v/b",)],
+            progress_label="MovieHistory lookup",
+        )
+
+
 def test_flush_writes_falls_back_per_row_on_batch_failure():
     """When a CF batch raises, _flush_writes retries each row to attribute the bad one.
 
@@ -733,8 +749,8 @@ class TestEnvIntFallback:
 
     def test_negative_values_are_passed_through(self, monkeypatch):
         # We don't second-guess the operator: negative is "weird but parseable",
-        # not a parse error. ``range()``-based callers will degenerate
-        # gracefully; the point of the helper is only ValueError safety.
+        # not a parse error. The module-level _BATCH_SIZE assignment clamps
+        # parseable non-positive values to keep range() batching safe.
         monkeypatch.setenv("D1_BATCH_LIMIT", "-1")
         assert recon._env_int("D1_BATCH_LIMIT", 50) == -1
 
@@ -769,5 +785,18 @@ def test_module_imports_with_unparsable_d1_batch_limit(monkeypatch):
     finally:
         # Restore the canonical module state so subsequent tests don't
         # observe a poisoned _BATCH_SIZE.
+        monkeypatch.delenv("D1_BATCH_LIMIT", raising=False)
+        importlib.reload(recon)
+
+
+@pytest.mark.parametrize("value", ["0", "-1"])
+def test_module_clamps_non_positive_d1_batch_limit(monkeypatch, value):
+    import importlib
+
+    monkeypatch.setenv("D1_BATCH_LIMIT", value)
+    reloaded = importlib.reload(recon)
+    try:
+        assert reloaded._BATCH_SIZE == 1
+    finally:
         monkeypatch.delenv("D1_BATCH_LIMIT", raising=False)
         importlib.reload(recon)

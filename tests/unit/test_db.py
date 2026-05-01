@@ -478,20 +478,25 @@ class TestDeleteRcloneInventoryPaths:
     def test_delete_empty_input(self, _isolate_sqlite):
         assert db_mod.db_delete_rclone_inventory_paths([]) == 0
 
-    def test_delete_chunks_above_chunk_size(self, _isolate_sqlite):
-        """Pass >90 paths to exercise the chunked IN(...) DELETE batching."""
+    def test_delete_chunks_above_chunk_size(self, _isolate_sqlite, monkeypatch):
+        """Delete CHUNK+1 paths to force multiple IN(...) DELETE batches."""
+        monkeypatch.setenv("_STORAGE_BACKEND_INIT_OVERRIDE", "sqlite")
+        batch_size = 90
+        extra_entries = 30
+        target_count = batch_size + 1
         entries = [
             self._entry(f'C{i:03d}', f'2025/Actor/C{i:03d}/有码-中字')
-            for i in range(120)
+            for i in range(batch_size + extra_entries)
         ]
         db_mod.db_replace_rclone_inventory(entries)
-        targets = [e['folder_path'] for e in entries[:100]]
+        targets = [e['folder_path'] for e in entries[:target_count]]
         deleted = db_mod.db_delete_rclone_inventory_paths(targets)
-        assert deleted == 100
+        assert deleted == target_count
         inv = db_mod.db_load_rclone_inventory()
-        # 20 entries should remain (indices 100-119).
         remaining_codes = set(inv.keys())
-        assert remaining_codes == {f'C{i:03d}' for i in range(100, 120)}
+        assert remaining_codes == {
+            f'C{i:03d}' for i in range(target_count, batch_size + extra_entries)
+        }
 
 
 class TestMarkRecordsDeletedBatching:
