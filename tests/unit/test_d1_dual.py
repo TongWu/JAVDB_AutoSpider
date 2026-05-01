@@ -36,7 +36,6 @@ from packages.python.javdb_platform.dual_connection import (  # noqa: E402
     [
         "SELECT 1",
         "  SELECT * FROM x",
-        "WITH foo AS (SELECT 1) SELECT * FROM foo",
         "PRAGMA table_info(x)",
         "EXPLAIN SELECT 1",
         "-- comment line\nSELECT 1",
@@ -55,6 +54,10 @@ def test_is_read_true(sql):
         "CREATE TABLE x(a)",
         "REPLACE INTO x VALUES(1)",
         "DROP TABLE x",
+        "WITH foo AS (SELECT 1) SELECT * FROM foo",
+        "WITH foo AS (SELECT 1) INSERT INTO x SELECT * FROM foo",
+        "WITH foo AS (SELECT 1) UPDATE x SET y=1",
+        "WITH foo AS (SELECT 1) DELETE FROM x",
     ],
 )
 def test_is_read_false(sql):
