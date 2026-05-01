@@ -105,6 +105,7 @@ def test_close_is_idempotent_and_joins_workers():
 
 def test_close_joins_all_workers_when_worker_count_exceeds_queue_size():
     c = _make_client(async_workers=3, async_queue_size=1)
+    assert c._async_queue.maxsize == 3
     started = threading.Semaphore(0)
     block = threading.Event()
 
@@ -123,6 +124,36 @@ def test_close_joins_all_workers_when_worker_count_exceeds_queue_size():
             c._async_queue.join()
             assert c._async_dropped > 0
             c.close(wait=True, timeout=2.0)
+        finally:
+            block.set()
+            c.close(wait=True, timeout=2.0)
+
+    for t in c._async_workers:
+        assert not t.is_alive()
+
+
+def test_close_wait_false_never_blocks_when_workers_exceed_requested_queue_size():
+    c = _make_client(async_workers=3, async_queue_size=1)
+    started = threading.Semaphore(0)
+    block = threading.Event()
+    close_done = threading.Event()
+
+    def slow_report(proxy_id, kind="cf"):
+        started.release()
+        block.wait(timeout=2.0)
+
+    with patch.object(c, "report", side_effect=slow_report):
+        try:
+            for i in range(3):
+                c.report_async(f"proxy-{i}", "cf")
+                assert started.acquire(timeout=2.0)
+
+            closer = threading.Thread(
+                target=lambda: (c.close(wait=False), close_done.set()),
+                daemon=True,
+            )
+            closer.start()
+            assert close_done.wait(timeout=0.5)
         finally:
             block.set()
             c.close(wait=True, timeout=2.0)

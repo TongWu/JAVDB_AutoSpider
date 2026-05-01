@@ -1,6 +1,22 @@
 from scripts import rclone_update_nfo_titles as updater
 
 
+def test_run_rclone_uses_default_timeout(monkeypatch):
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return updater.subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(updater.subprocess, "run", fake_run)
+
+    updater.run_rclone(["lsjson", "remote:path"])
+    updater.run_rclone(["cat", "remote:path/file.nfo"], timeout=None)
+
+    assert calls[0][1]["timeout"] == 300.0
+    assert calls[1][1]["timeout"] is None
+
+
 def test_transform_title_hides_coded_and_no_subtitle_suffix():
     title = "从放学后到第二天早晨 [MNGS-030 有码-无字]"
 
@@ -160,6 +176,7 @@ def test_execute_cleanup_moves_large_files_then_purges(monkeypatch):
         leaf_path="remote/2026/演员A/ABC-123/有码-中字",
         rel_leaf="2026/演员A/ABC-123/有码-中字",
     )
+    temp_path = updater.cleanup_temp_path("remote", job)
 
     monkeypatch.setattr(
         updater,
@@ -183,11 +200,26 @@ def test_execute_cleanup_moves_large_files_then_purges(monkeypatch):
     assert status == "OK"
     assert msg == "moved_large_files=1 purged=2026/演员A/ABC-123/有码-中字"
     assert calls == [
-        ("mkdir", "remote/temp"),
+        ("mkdir", temp_path),
         (
             "moveto",
             "remote/2026/演员A/ABC-123/有码-中字/movie.mp4",
-            "remote/temp/movie.mp4",
+            updater.join_remote(temp_path, "movie.mp4"),
         ),
         ("purge", "remote/2026/演员A/ABC-123/有码-中字"),
     ]
+
+
+def test_cleanup_temp_path_is_unique_per_leaf():
+    job_a = updater.CleanupJob(
+        leaf_path="remote/2026/演员A/ABC-123/有码-中字",
+        rel_leaf="2026/演员A/ABC-123/有码-中字",
+    )
+    job_b = updater.CleanupJob(
+        leaf_path="remote/2026/演员B/ABC-123/有码-中字",
+        rel_leaf="2026/演员B/ABC-123/有码-中字",
+    )
+
+    assert updater.cleanup_temp_path("remote", job_a) != updater.cleanup_temp_path(
+        "remote", job_b
+    )
