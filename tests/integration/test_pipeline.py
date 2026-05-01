@@ -543,6 +543,29 @@ class TestExtractDedupStatistics:
             'skipped': 2,
         }
 
+    def test_extract_last_dedup_executor_run_skips_blank_lines_before_summary(self, temp_dir):
+        log_path = os.path.join(temp_dir, 'rclone_dedup.log')
+        with open(log_path, 'w', encoding='utf-8') as f:
+            f.write(
+                "2026-04-26 00:59:08,094 - Rclone - INFO - RCLONE DEDUP EXECUTOR\n"
+                "2026-04-26 01:00:26,894 - Rclone - INFO - DEDUP EXECUTOR COMPLETE\n"
+                "\n"
+                "2026-04-26 01:00:26,894 - Rclone - INFO - Pending rows: 15, unique paths: 15\n"
+                "\n"
+                "2026-04-26 01:00:26,894 - Rclone - INFO - Purged: 10, failed: 5, skipped (empty path): 2\n"
+            )
+
+        stats = _extract_last_dedup_executor_run(log_path)
+
+        assert stats == {
+            'start_time': '2026-04-26 00:59:08',
+            'end_time': '2026-04-26 01:00:26',
+            'pending': 15,
+            'purged': 10,
+            'failed': 5,
+            'skipped': 2,
+        }
+
     def test_extract_dedup_statistics_tracks_redownload_upgrades(self, temp_dir, monkeypatch):
         import packages.python.javdb_platform.config_helper as config_helper
 
