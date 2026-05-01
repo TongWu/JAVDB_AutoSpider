@@ -13,6 +13,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 # Import functions from email_notification script
+import scripts.email_notification as email_notification
 from scripts.email_notification import (
     analyze_spider_log,
     analyze_uploader_log,
@@ -24,6 +25,7 @@ from scripts.email_notification import (
     extract_pikpak_statistics,
     format_email_report,
     get_report_display_datetime,
+    _extract_last_dedup_executor_run,
 )
 
 # Import mask_sensitive_info from git_helper (it's now the canonical location)
@@ -521,10 +523,127 @@ class TestFormatEmailReport:
 
 
 class TestExtractDedupStatistics:
+    def test_extract_last_dedup_executor_run_includes_post_complete_summary(self, temp_dir):
+        log_path = os.path.join(temp_dir, 'rclone_dedup.log')
+        with open(log_path, 'w', encoding='utf-8') as f:
+            f.write(
+                "2026-04-26 00:59:08,094 - Rclone - INFO - RCLONE DEDUP EXECUTOR\n"
+                "2026-04-26 01:00:26,894 - Rclone - INFO - DEDUP EXECUTOR COMPLETE\n"
+                "2026-04-26 01:00:26,894 - Rclone - INFO - Pending rows: 15, unique paths: 15\n"
+                "2026-04-26 01:00:26,894 - Rclone - INFO - Purged: 10, failed: 5, skipped (empty path): 2\n"
+            )
+
+        stats = _extract_last_dedup_executor_run(log_path)
+
+        assert stats == {
+            'start_time': '2026-04-26 00:59:08',
+            'end_time': '2026-04-26 01:00:26',
+            'pending': 15,
+            'purged': 10,
+            'failed': 5,
+            'skipped': 2,
+        }
+
+    def test_extract_last_dedup_executor_run_skips_blank_lines_before_summary(self, temp_dir):
+        log_path = os.path.join(temp_dir, 'rclone_dedup.log')
+        with open(log_path, 'w', encoding='utf-8') as f:
+            f.write(
+                "2026-04-26 00:59:08,094 - Rclone - INFO - RCLONE DEDUP EXECUTOR\n"
+                "2026-04-26 01:00:26,894 - Rclone - INFO - DEDUP EXECUTOR COMPLETE\n"
+                "\n"
+                "2026-04-26 01:00:26,894 - Rclone - INFO - Pending rows: 15, unique paths: 15\n"
+                "\n"
+                "2026-04-26 01:00:26,894 - Rclone - INFO - Purged: 10, failed: 5, skipped (empty path): 2\n"
+            )
+
+        stats = _extract_last_dedup_executor_run(log_path)
+
+        assert stats == {
+            'start_time': '2026-04-26 00:59:08',
+            'end_time': '2026-04-26 01:00:26',
+            'pending': 15,
+            'purged': 10,
+            'failed': 5,
+            'skipped': 2,
+        }
+
+    def test_extract_last_dedup_executor_run_ignores_incomplete_trailing_run(self, temp_dir):
+        log_path = os.path.join(temp_dir, 'rclone_dedup.log')
+        with open(log_path, 'w', encoding='utf-8') as f:
+            f.write(
+                "2026-04-26 00:59:08,094 - Rclone - INFO - RCLONE DEDUP EXECUTOR\n"
+                "2026-04-26 01:00:26,894 - Rclone - INFO - DEDUP EXECUTOR COMPLETE\n"
+                "2026-04-26 01:00:26,894 - Rclone - INFO - Pending rows: 15, unique paths: 15\n"
+                "2026-04-26 01:00:26,894 - Rclone - INFO - Purged: 10, failed: 5, skipped (empty path): 2\n"
+                "2026-04-26 02:00:00,000 - Rclone - INFO - RCLONE DEDUP EXECUTOR\n"
+                "2026-04-26 02:00:01,000 - Rclone - INFO - Pending rows: 99, unique paths: 99\n"
+            )
+
+        stats = _extract_last_dedup_executor_run(log_path)
+
+        assert stats == {
+            'start_time': '2026-04-26 00:59:08',
+            'end_time': '2026-04-26 01:00:26',
+            'pending': 15,
+            'purged': 10,
+            'failed': 5,
+            'skipped': 2,
+        }
+
+    def test_extract_dedup_statistics_filters_items_to_executor_window(self, temp_dir, monkeypatch):
+        import packages.python.javdb_platform.config_helper as config_helper
+        import scripts.email_notification as email_notification
+
+        monkeypatch.setattr(config_helper, 'use_sqlite', lambda: False)
+
+        log_path = os.path.join(temp_dir, 'rclone_dedup.log')
+        with open(log_path, 'w', encoding='utf-8') as f:
+            f.write(
+                "2026-03-25 21:54:00,000 - Rclone - INFO - RCLONE DEDUP EXECUTOR\n"
+                "2026-03-25 22:00:00,000 - Rclone - INFO - DEDUP EXECUTOR COMPLETE\n"
+                "2026-03-25 22:00:00,000 - Rclone - INFO - Pending rows: 2, unique paths: 2\n"
+                "2026-03-25 22:00:00,000 - Rclone - INFO - Purged: 1, failed: 1, skipped (empty path): 0\n"
+            )
+        monkeypatch.setattr(email_notification, 'DEDUP_LOG_FILE', log_path)
+
+        csv_path = os.path.join(temp_dir, 'dedup_history.csv')
+        with open(csv_path, 'w', encoding='utf-8') as f:
+            f.write(
+                'video_code,existing_sensor,existing_subtitle,existing_gdrive_path,'
+                'existing_folder_size,new_torrent_category,deletion_reason,'
+                'detect_datetime,is_deleted,delete_datetime\n'
+            )
+            f.write(
+                'IPZZ-414,有码,无字,/old/ipzz414,1513977000,no_subtitle,'
+                '"Re-download upgrade (no_subtitle: larger same-category torrent 3.52GB found)",'
+                '2026-03-25 21:55:00,True,2026-03-25 21:56:00\n'
+            )
+            f.write(
+                'ABC-123,有码,无字,/old/abc123,1111111111,subtitle,'
+                '"Subtitle upgrade: replaced with subtitle torrent",'
+                '2026-03-25 21:57:00,False,\n'
+            )
+            f.write(
+                'LATE-999,有码,无字,/old/late999,999999999,no_subtitle,'
+                '"Re-download upgrade (no_subtitle: larger same-category torrent 3.52GB found)",'
+                '2026-03-25 22:05:00,True,2026-03-25 22:06:00\n'
+            )
+
+        stats = extract_dedup_statistics(csv_path, session_start_time='2026-03-25 21:00:00')
+
+        assert stats['detected'] == 2
+        assert stats['deleted'] == 1
+        assert stats['failed'] == 1
+        assert stats['redownload_detected'] == 1
+        assert stats['redownload_deleted'] == 1
+        assert len(stats['deleted_items']) == 1
+        assert 'IPZZ-414' in stats['deleted_items'][0]
+
     def test_extract_dedup_statistics_tracks_redownload_upgrades(self, temp_dir, monkeypatch):
         import packages.python.javdb_platform.config_helper as config_helper
 
         monkeypatch.setattr(config_helper, 'use_sqlite', lambda: False)
+        monkeypatch.setattr(email_notification, 'DEDUP_LOG_FILE', '/nonexistent/path')
 
         csv_path = os.path.join(temp_dir, 'dedup_history.csv')
         with open(csv_path, 'w', encoding='utf-8') as f:

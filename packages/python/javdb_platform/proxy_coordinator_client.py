@@ -27,9 +27,10 @@ from __future__ import annotations
 
 import hashlib
 import os
+import queue
 import threading
 from dataclasses import dataclass
-from typing import Optional
+from typing import List, Optional, Tuple
 
 import requests
 
@@ -40,6 +41,22 @@ logger = get_logger(__name__)
 
 _DEFAULT_TIMEOUT_SEC = 5.0
 _DEFAULT_USER_AGENT = "javdb-spider-proxy-coordinator-client/1.0"
+
+# ── Async report dispatch ────────────────────────────────────────────────
+# ``report_async`` is fired from CF / failure handlers in the request hot
+# path (potentially many events per URL during turnstile storms). The
+# previous implementation spawned a fresh ``threading.Thread`` per call,
+# which could accumulate hundreds of threads each blocked on an HTTP
+# timeout when the coordinator was slow — risking thread/memory exhaustion.
+#
+# Instead we run a small fixed pool of daemon workers behind a bounded
+# queue. When the queue is full we drop new events with a throttled
+# WARNING; cf/failure events are best-effort by design and the lease
+# endpoint already carries the authoritative penalty factor.
+_ASYNC_REPORT_WORKERS = 2
+_ASYNC_REPORT_QUEUE_SIZE = 64
+# Sentinel pushed at shutdown to release blocking ``queue.get`` calls.
+_ASYNC_QUEUE_SENTINEL: Tuple = (None, None)
 
 
 class CoordinatorUnavailable(Exception):
@@ -103,7 +120,14 @@ def _normalize_proxy_id(raw: Optional[str], *, fallback_seed: Optional[str] = No
         if trimmed:
             return trimmed[:256]
     if fallback_seed:
-        digest = hashlib.sha1(fallback_seed.encode("utf-8")).hexdigest()[:16]
+        # Not a security-critical hash — only used to bucket a configurable
+        # ``host:port`` into a stable 16-char DO key. ``usedforsecurity=False``
+        # silences the Bandit S324 / Ruff S324 lint without changing the
+        # produced digest, so existing runners that may have already derived
+        # IDs continue to agree on the same DO key.
+        digest = hashlib.sha1(  # noqa: S324 — see comment above
+            fallback_seed.encode("utf-8"), usedforsecurity=False
+        ).hexdigest()[:16]
         derived = f"proxy-{digest}"
         logger.warning(
             "Coordinator proxy_id derived from host:port hash: %s — "
@@ -112,6 +136,37 @@ def _normalize_proxy_id(raw: Optional[str], *, fallback_seed: Optional[str] = No
         )
         return derived
     raise ValueError("proxy_id is empty and no fallback_seed was provided")
+
+
+_VALID_REPORT_KINDS = ("cf", "failure")
+
+
+def _validate_kind(kind: str) -> str:
+    """Validate ``kind`` against the wire-protocol's accepted values.
+
+    Surfaces typos (e.g. ``"cF"``, ``"fail"``) loudly at call time instead of
+    silently coercing them to ``"cf"`` — the previous behaviour caused
+    misclassified events to be reported under the CF bucket without warning.
+    """
+    if kind not in _VALID_REPORT_KINDS:
+        raise ValueError(
+            f"Invalid kind: {kind!r}; expected one of {_VALID_REPORT_KINDS}"
+        )
+    return kind
+
+
+def _extract_server_time_ms(data: dict) -> int:
+    """Read the server-side timestamp from a coordinator response.
+
+    Prefers the ``server_time_ms`` wire key (matches the dataclass field
+    name) and falls back to ``server_time`` for backward compatibility with
+    the current Worker, which emits ``server_time`` from a ``Date.now()``
+    call (already in milliseconds). The fallback lets the Worker migrate to
+    the explicit ``server_time_ms`` key without coordinated Python deploys.
+    """
+    if "server_time_ms" in data:
+        return int(data["server_time_ms"])
+    return int(data["server_time"])
 
 
 class ProxyCoordinatorClient:
@@ -137,6 +192,8 @@ class ProxyCoordinatorClient:
         *,
         timeout: float = _DEFAULT_TIMEOUT_SEC,
         user_agent: str = _DEFAULT_USER_AGENT,
+        async_workers: int = _ASYNC_REPORT_WORKERS,
+        async_queue_size: int = _ASYNC_REPORT_QUEUE_SIZE,
     ):
         if not base_url or not isinstance(base_url, str):
             raise ValueError("base_url must be a non-empty string")
@@ -151,6 +208,23 @@ class ProxyCoordinatorClient:
             "Content-Type": "application/json",
             "User-Agent": user_agent,
         })
+        self._async_worker_count = max(1, int(async_workers))
+        # Bounded fire-and-forget pool for ``report_async``. Keep capacity at
+        # least equal to the worker count so shutdown can enqueue one sentinel
+        # per worker after draining pending events.
+        self._async_queue: "queue.Queue[Tuple[Optional[str], Optional[str]]]" = (
+            queue.Queue(maxsize=max(self._async_worker_count, int(async_queue_size)))
+        )
+        self._async_dropped = 0
+        self._async_lock = threading.Lock()
+        self._async_shutdown = False
+        self._async_workers: List[threading.Thread] = []
+
+    def _close_session(self) -> None:
+        try:
+            self._session.close()
+        except Exception as exc:  # noqa: BLE001 - cleanup must be best-effort
+            logger.warning("Failed to close proxy coordinator HTTP session: %s", exc)
 
     @property
     def base_url(self) -> str:
@@ -166,7 +240,13 @@ class ProxyCoordinatorClient:
         on any failure (timeout, non-2xx, connection error, malformed
         response).  Never retries.
         """
-        normalized = _normalize_proxy_id(proxy_id)
+        # _normalize_proxy_id raises ValueError on bad/missing input; route it
+        # through CoordinatorUnavailable so the spider's hot path stays on the
+        # documented fail-open contract instead of crashing the worker.
+        try:
+            normalized = _normalize_proxy_id(proxy_id)
+        except ValueError as e:
+            raise CoordinatorUnavailable(f"invalid proxy_id: {e}") from e
         intended = max(0, int(intended_sleep_ms))
         try:
             resp = self._session.post(
@@ -192,7 +272,7 @@ class ProxyCoordinatorClient:
             return LeaseResult(
                 wait_ms=int(data["wait_ms"]),
                 penalty_factor=float(data["penalty_factor"]),
-                server_time_ms=int(data["server_time"]),
+                server_time_ms=_extract_server_time_ms(data),
                 reason=str(data.get("reason", "ok")),
             )
         except (KeyError, TypeError, ValueError) as e:
@@ -204,11 +284,16 @@ class ProxyCoordinatorClient:
         """Report a CF / failure event on *proxy_id*.
 
         Same failure semantics as :meth:`lease` — never retries, raises
-        :class:`CoordinatorUnavailable` on any error.
+        :class:`CoordinatorUnavailable` on any error. ``kind`` must be one of
+        :data:`_VALID_REPORT_KINDS`; passing anything else raises
+        :class:`ValueError` so typos surface at call time rather than being
+        silently bucketed under ``"cf"``.
         """
-        if kind not in ("cf", "failure"):
-            kind = "cf"
-        normalized = _normalize_proxy_id(proxy_id)
+        _validate_kind(kind)
+        try:
+            normalized = _normalize_proxy_id(proxy_id)
+        except ValueError as e:
+            raise CoordinatorUnavailable(f"invalid proxy_id: {e}") from e
         try:
             resp = self._session.post(
                 f"{self._base_url}/report",
@@ -233,7 +318,7 @@ class ProxyCoordinatorClient:
             return ReportResult(
                 penalty_factor=float(data["penalty_factor"]),
                 recent_event_count=int(data["recent_event_count"]),
-                server_time_ms=int(data["server_time"]),
+                server_time_ms=_extract_server_time_ms(data),
             )
         except (KeyError, TypeError, ValueError) as e:
             raise CoordinatorUnavailable(
@@ -244,20 +329,118 @@ class ProxyCoordinatorClient:
         """Fire-and-forget variant of :meth:`report`.
 
         Intended for use inside ``PenaltyTracker.record_event()`` where the
-        caller (a CF/failure detection handler) MUST NOT block.  Errors
-        are swallowed and only logged at WARNING level.
+        caller (a CF/failure detection handler) MUST NOT block. Events are
+        funneled into a bounded queue served by a small daemon-thread pool
+        so a slow/unavailable coordinator can't accumulate unbounded
+        threads or memory during turnstile storms. When the queue is full
+        the event is dropped and a throttled WARNING is logged; the next
+        successful ``lease`` call will still fetch the authoritative
+        penalty factor from the server.
+
+        ``kind`` is validated synchronously so typos surface at the call
+        site (a ``ValueError``) rather than being swallowed by the worker's
+        broad exception handler 5–500 ms later.
         """
-
-        def _send():
+        _validate_kind(kind)
+        with self._async_lock:
+            if self._async_shutdown:
+                return
+            if not self._async_workers:
+                for i in range(self._async_worker_count):
+                    t = threading.Thread(
+                        target=self._async_report_loop,
+                        name=f"coord-report-{i}",
+                        daemon=True,
+                    )
+                    t.start()
+                    self._async_workers.append(t)
             try:
-                self.report(proxy_id, kind)
-            except CoordinatorUnavailable as e:
-                logger.warning("Coordinator report_async failed: %s", e)
-            except Exception:  # noqa: BLE001 — must never escape a daemon thread
-                logger.exception("Coordinator report_async crashed unexpectedly")
+                self._async_queue.put_nowait((proxy_id, kind))
+            except queue.Full:
+                self._async_dropped += 1
+                count = self._async_dropped
+            else:
+                return
+            # Log first drop loudly, then once every 50 to avoid log floods
+            # while still surfacing sustained backpressure.
+            if count == 1 or count % 50 == 0:
+                logger.warning(
+                    "Coordinator report_async queue full "
+                    "(capacity=%d, workers=%d); dropping event "
+                    "proxy_id=%s kind=%s (total dropped=%d)",
+                    self._async_queue.maxsize, len(self._async_workers),
+                    proxy_id, kind, count,
+                )
 
-        t = threading.Thread(target=_send, daemon=True, name="coord-report")
-        t.start()
+    def _async_report_loop(self) -> None:
+        """Worker loop: drain the async queue serialising calls to ``report``."""
+        while True:
+            item = self._async_queue.get()
+            try:
+                if item is _ASYNC_QUEUE_SENTINEL or item[0] is None:
+                    return
+                proxy_id, kind = item
+                try:
+                    self.report(proxy_id, kind)
+                except CoordinatorUnavailable as e:
+                    logger.warning("Coordinator report_async failed: %s", e)
+                except Exception:  # noqa: BLE001 — must never escape a daemon worker
+                    logger.exception("Coordinator report_async crashed unexpectedly")
+            finally:
+                self._async_queue.task_done()
+
+    def _enqueue_async_sentinel(self) -> None:
+        """Reliably enqueue one shutdown sentinel for a worker without blocking."""
+        while True:
+            try:
+                self._async_queue.put_nowait(_ASYNC_QUEUE_SENTINEL)
+                return
+            except queue.Full:
+                try:
+                    self._async_queue.get_nowait()
+                except queue.Empty:
+                    continue
+                self._async_queue.task_done()
+
+    def close(self, *, wait: bool = False, timeout: Optional[float] = None) -> None:
+        """Stop the async-report worker pool. Idempotent.
+
+        Daemon workers exit at process shutdown anyway, but tests and
+        long-lived hosts that recycle clients should call this to release
+        blocked HTTP sockets and join the threads cleanly.
+
+        Args:
+            wait: If ``True``, block until each worker exits.
+            timeout: Per-worker ``Thread.join`` timeout in seconds.
+        """
+        with self._async_lock:
+            if self._async_shutdown:
+                workers = list(self._async_workers)
+                already_shutdown = True
+            else:
+                self._async_shutdown = True
+                workers = list(self._async_workers)
+                already_shutdown = False
+        if already_shutdown:
+            if wait:
+                for t in workers:
+                    t.join(timeout=timeout)
+            self._close_session()
+            return
+        # Drop any pending events so we can guarantee enqueueing exactly
+        # one sentinel per worker even when the queue was previously full.
+        while True:
+            try:
+                self._async_queue.get_nowait()
+            except queue.Empty:
+                break
+            self._async_queue.task_done()
+        for _ in workers:
+            self._enqueue_async_sentinel()
+        if wait:
+            for t in workers:
+                t.join(timeout=timeout)
+        self._close_session()
 
     def health_check(self) -> bool:
         """Return ``True`` if ``GET /health`` returns 200, else ``False``.
@@ -304,6 +487,7 @@ def create_coordinator_from_env(
             "falling back to local throttling for this run",
             url,
         )
+        client.close()
         return None
     logger.info(
         "Proxy coordinator client initialised: base_url=%s",

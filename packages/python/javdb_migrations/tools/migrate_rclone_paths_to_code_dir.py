@@ -169,45 +169,100 @@ def migrate_db(db_path: str, *, dry_run: bool) -> None:
         logger.warning("DB not found, skipping: %s", db_path)
         return
 
+    backup = None
     if not dry_run:
         backup = f"{db_path}.backup_rclone_paths_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         shutil.copy2(db_path, backup)
         logger.info("DB backup: %s", backup)
 
-    with sqlite3.connect(db_path) as conn:
+    with sqlite3.connect(db_path) as probe:
         existing = {
-            row[0] for row in conn.execute(
+            row[0] for row in probe.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'"
             )
         }
 
-        if "RcloneInventory" in existing:
-            _migrate_table(
+    # Each table is migrated in its OWN connection / transaction so that a
+    # ``sqlite3.IntegrityError`` from the DedupRecords UNIQUE index (active
+    # paths can collide post-rewrite when old and new layout rows coexist)
+    # does NOT roll back the already-applied RcloneInventory updates.
+    rclone_inventory_exists = "RcloneInventory" in existing
+    rclone_inventory_rewrites = 0
+    rclone_inventory_committed = False
+    if rclone_inventory_exists:
+        with sqlite3.connect(db_path) as conn:
+            rclone_inventory_rewrites, _ = _migrate_table(
                 conn,
                 table="RcloneInventory",
                 column="FolderPath",
                 dry_run=dry_run,
             )
-        else:
-            logger.warning("Table RcloneInventory missing in %s", db_path)
+            if rclone_inventory_rewrites > 0 and not dry_run:
+                conn.commit()
+                rclone_inventory_committed = True
+                logger.info("DB updated (RcloneInventory): %s", db_path)
+    else:
+        logger.warning("Table RcloneInventory missing in %s", db_path)
 
-        if "DedupRecords" in existing:
-            # The unique index ``uq_dedup_active_path`` covers active paths only;
-            # rewriting may produce a value that already exists for another row
-            # (e.g. when both old and new paths somehow coexist).  We therefore
-            # update inside the transaction and let SQLite raise on conflict.
-            _migrate_table(
-                conn,
-                table="DedupRecords",
-                column="ExistingGdrivePath",
-                dry_run=dry_run,
-            )
-        else:
-            logger.warning("Table DedupRecords missing in %s", db_path)
-
-        if not dry_run:
-            conn.commit()
-            logger.info("DB updated: %s", db_path)
+    if "DedupRecords" in existing:
+        try:
+            with sqlite3.connect(db_path) as conn:
+                dedup_rewrites, _ = _migrate_table(
+                    conn,
+                    table="DedupRecords",
+                    column="ExistingGdrivePath",
+                    dry_run=dry_run,
+                )
+                if dedup_rewrites > 0 and not dry_run:
+                    conn.commit()
+                    logger.info("DB updated (DedupRecords): %s", db_path)
+        except sqlite3.IntegrityError as exc:
+            # Re-raise after logging so the operator sees both the offending
+            # context and the underlying constraint message. Dry-runs do not
+            # create backups or commit either table, so keep that guidance
+            # separate from the real migration recovery path.
+            if dry_run:
+                logger.error(
+                    "DedupRecords migration hit an IntegrityError on db=%s "
+                    "(dry-run, table=DedupRecords, column=ExistingGdrivePath): "
+                    "No backup was created and no database changes were committed "
+                    "by dry-run. RcloneInventory existed=%s, rewrites=%d, committed=%s. "
+                    "Inspect/fix conflicting DedupRecords rows and re-run migration. "
+                    "Original exception: %s",
+                    db_path,
+                    rclone_inventory_exists,
+                    rclone_inventory_rewrites,
+                    rclone_inventory_committed,
+                    exc,
+                )
+            else:
+                if rclone_inventory_committed:
+                    rclone_guidance = (
+                        "RcloneInventory changes were committed while DedupRecords rolled back. "
+                        "Restore from the backup path or inspect/fix conflicting DedupRecords "
+                        "rows and re-run migration."
+                    )
+                else:
+                    rclone_guidance = (
+                        "No RcloneInventory rewrite was committed before DedupRecords rolled back. "
+                        "Inspect/fix conflicting DedupRecords rows and re-run migration."
+                    )
+                logger.error(
+                    "DedupRecords migration hit an IntegrityError on db=%s "
+                    "(backup=%s, table=DedupRecords, column=ExistingGdrivePath): "
+                    "RcloneInventory existed=%s, rewrites=%d, committed=%s. %s "
+                    "Original exception: %s",
+                    db_path,
+                    backup,
+                    rclone_inventory_exists,
+                    rclone_inventory_rewrites,
+                    rclone_inventory_committed,
+                    rclone_guidance,
+                    exc,
+                )
+            raise
+    else:
+        logger.warning("Table DedupRecords missing in %s", db_path)
 
 
 # ---------------------------------------------------------------------------

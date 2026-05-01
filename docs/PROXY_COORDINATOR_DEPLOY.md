@@ -334,10 +334,12 @@ Python 客户端的归一化规则（见
 ]
 ```
 
-如果某代理缺少 `name`，Python 端会打 ERROR 日志：
+如果某代理缺少 `name`，`PROXY_POOL_JSON` 没有提供该项，Python 端会从
+`host:port` 派生一个稳定的 `proxy_id` 并打一条 **WARNING** 日志（不会
+抛错，pipeline 不中断）：
 
 ```
-Coordinator proxy_id derived from host:port hash: <hash> — recommend setting `name` in PROXY_POOL_JSON
+Coordinator proxy_id derived from host:port hash: proxy-<16hex> — recommend setting `name` in PROXY_POOL_JSON so all runners agree
 ```
 
 ---

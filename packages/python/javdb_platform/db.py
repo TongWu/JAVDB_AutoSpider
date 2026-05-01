@@ -60,7 +60,25 @@ def _backend_mode() -> str:
     * ``d1`` — all reads/writes go to Cloudflare D1.
     * ``dual`` — writes mirror to both SQLite and D1; reads come from D1
       (used during migration validation).
+
+    During ``init_db`` under the ``dual`` backend we temporarily downgrade
+    to sqlite-only init so the DDL plumbing only touches the local file.
+    That override lives in a *thread-local*
+    (``_local._storage_backend_init_override``); ``init_db`` deliberately
+    does NOT mirror it into the process-wide environment because doing so
+    would leak the override to sibling threads — those threads have no
+    thread-local of their own and would then fall through to the env-var
+    branch below, incorrectly caching plain ``sqlite3`` connections in
+    place of the configured DualConnections.
+
+    The ``_STORAGE_BACKEND_INIT_OVERRIDE`` env var is still consulted as a
+    deliberate escape hatch for callers (e.g. external scripts or test
+    harnesses) that want to force sqlite-only behaviour for an entire
+    process. It is intentionally **not** written from inside ``init_db``.
     """
+    tl_override = getattr(_local, '_storage_backend_init_override', None)
+    if tl_override:
+        return tl_override.strip().lower()
     override = os.environ.get('_STORAGE_BACKEND_INIT_OVERRIDE')
     if override:
         return override.strip().lower()
@@ -99,6 +117,13 @@ SCHEMA_VERSION = 10
 # ── Connection management ────────────────────────────────────────────────
 
 _local = threading.local()
+
+# Serializes the dual-backend init window. Without this, two threads racing
+# into ``init_db`` would both try to mutate ``_local.conns`` and the env-var /
+# thread-local override, with the second thread potentially observing a
+# half-applied state. ``_do_init`` also touches the file system, which is
+# itself unsafe to run concurrently against the same SQLite paths.
+_init_lock = threading.Lock()
 
 
 def _is_valid_sqlite(path: str) -> bool:
@@ -1094,18 +1119,37 @@ def init_db(db_path: Optional[str] = None, *, force: bool = False):
     # For backend == 'dual' we temporarily downgrade to sqlite-only init so
     # that the DDL/migration plumbing only touches the local file (D1 schema
     # was created out-of-band by `wrangler d1 import`).
+    #
+    # The override is set ONLY on the thread-local sentinel — we deliberately
+    # do NOT write ``os.environ['_STORAGE_BACKEND_INIT_OVERRIDE']`` here.
+    # Doing so would leak the 'sqlite' downgrade to sibling threads (which
+    # have no thread-local of their own and would then return 'sqlite' from
+    # ``_backend_mode`` and cache plain ``sqlite3.Connection`` objects
+    # instead of DualConnections). The module-level ``_init_lock`` serializes
+    # concurrent ``init_db(dual)`` callers so the thread-local + ``_local.conns``
+    # bookkeeping stays consistent.
     if backend == 'dual':
-        os.environ['_STORAGE_BACKEND_INIT_OVERRIDE'] = 'sqlite'
-        prev_conns = getattr(_local, 'conns', None)
-        _local.conns = {}
-        try:
-            _do_init(db_path)
-        finally:
-            os.environ.pop('_STORAGE_BACKEND_INIT_OVERRIDE', None)
-            if prev_conns is not None:
-                _local.conns = prev_conns
-            else:
-                _local.conns = {}
+        with _init_lock:
+            _local._storage_backend_init_override = 'sqlite'
+            prev_conns = getattr(_local, 'conns', None)
+            _local.conns = {}
+            try:
+                _do_init(db_path)
+            finally:
+                temp_conns = getattr(_local, 'conns', {})
+                for conn in set(temp_conns.values()):
+                    try:
+                        conn.close()
+                    except Exception as exc:  # noqa: BLE001 - best-effort cleanup
+                        logger.warning("Failed to close temporary init_db connection: %s", exc)
+                try:
+                    del _local._storage_backend_init_override
+                except AttributeError:
+                    pass
+                if prev_conns is not None:
+                    _local.conns = prev_conns
+                else:
+                    _local.conns = {}
         return
 
     _do_init(db_path)
@@ -1515,17 +1559,27 @@ def db_delete_rclone_inventory_paths(
     paths: Iterable[str],
     db_path: Optional[str] = None,
 ) -> int:
-    """Bulk delete RcloneInventory rows by FolderPath. Returns affected row count."""
+    """Bulk delete RcloneInventory rows by FolderPath. Returns affected row count.
+
+    Uses chunked ``IN (...)`` deletes so each chunk is a single statement
+    (one D1 round-trip per chunk instead of one per path). The chunk size
+    matches :func:`db_batch_update_last_visited` — D1 caps bound parameters
+    at ~100 per statement, so we use 90 placeholders per batch for safety.
+    """
     path_list = [p for p in paths if p]
     if not path_list:
         return 0
+    CHUNK = 90
     with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         deleted = 0
-        for p in path_list:
+        for i in range(0, len(path_list), CHUNK):
+            chunk = path_list[i:i + CHUNK]
+            placeholders = ','.join('?' for _ in chunk)
             cur = conn.execute(
-                "DELETE FROM RcloneInventory WHERE FolderPath = ?", (p,)
+                f"DELETE FROM RcloneInventory WHERE FolderPath IN ({placeholders})",
+                chunk,
             )
-            deleted += cur.rowcount
+            deleted += cur.rowcount or 0
         return deleted
 
 
@@ -1568,16 +1622,38 @@ def db_mark_records_deleted(
     path_datetime_pairs: List[Tuple[str, str]],
     db_path: Optional[str] = None,
 ) -> int:
-    """Mark specific dedup records as deleted by gdrive path."""
+    """Mark specific dedup records as deleted by gdrive path.
+
+    Real-world callers (e.g. the rclone purge loop) use a single
+    ``DateTimeDeleted`` value for all paths in one batch, so we group by
+    datetime and issue one chunked ``IN (...)`` update per group instead of
+    one statement per pair. The chunk size matches
+    :func:`db_batch_update_last_visited` (90 placeholders per batch, leaving
+    headroom under D1's ~100-parameter cap once the ``DateTimeDeleted`` slot
+    is reserved).
+    """
+    if not path_datetime_pairs:
+        return 0
+    grouped: Dict[str, List[str]] = {}
+    for path, dt in path_datetime_pairs:
+        if not path:
+            continue
+        grouped.setdefault(dt, []).append(path)
+    if not grouped:
+        return 0
+    CHUNK = 90
     with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         updated = 0
-        for path, dt in path_datetime_pairs:
-            cur = conn.execute(
-                "UPDATE DedupRecords SET IsDeleted=1, DateTimeDeleted=? "
-                "WHERE ExistingGdrivePath=? AND IsDeleted=0",
-                (dt, path),
-            )
-            updated += cur.rowcount
+        for dt, paths in grouped.items():
+            for i in range(0, len(paths), CHUNK):
+                chunk = paths[i:i + CHUNK]
+                placeholders = ','.join('?' for _ in chunk)
+                cur = conn.execute(
+                    f"UPDATE DedupRecords SET IsDeleted=1, DateTimeDeleted=? "
+                    f"WHERE ExistingGdrivePath IN ({placeholders}) AND IsDeleted=0",
+                    [dt] + chunk,
+                )
+                updated += cur.rowcount or 0
         return updated
 
 

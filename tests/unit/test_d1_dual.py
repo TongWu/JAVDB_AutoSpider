@@ -36,7 +36,6 @@ from packages.python.javdb_platform.dual_connection import (  # noqa: E402
     [
         "SELECT 1",
         "  SELECT * FROM x",
-        "WITH foo AS (SELECT 1) SELECT * FROM foo",
         "PRAGMA table_info(x)",
         "EXPLAIN SELECT 1",
         "-- comment line\nSELECT 1",
@@ -55,6 +54,10 @@ def test_is_read_true(sql):
         "CREATE TABLE x(a)",
         "REPLACE INTO x VALUES(1)",
         "DROP TABLE x",
+        "WITH foo AS (SELECT 1) SELECT * FROM foo",
+        "WITH foo AS (SELECT 1) INSERT INTO x SELECT * FROM foo",
+        "WITH foo AS (SELECT 1) UPDATE x SET y=1",
+        "WITH foo AS (SELECT 1) DELETE FROM x",
     ],
 )
 def test_is_read_false(sql):
@@ -606,6 +609,81 @@ def test_no_drift_log_when_d1_healthy(monkeypatch, sqlite_conn, tmp_path):
     assert not drift_path.exists()
 
 
+def test_rollback_after_successful_d1_writes_logs_drift(monkeypatch, sqlite_conn, tmp_path):
+    """SQLite rolled back, D1 already auto-committed → real divergence.
+
+    Even with zero D1 failures the transaction still leaves D1 holding
+    rows SQLite no longer has, which the reconciler must see.
+    """
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    fake_d1 = FakeD1Connection()
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
+
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("x",))
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("y",))
+    dual.rollback()
+
+    assert drift_path.exists()
+    lines = drift_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["db"] == "history"
+    assert record["committed"] is False
+    assert record["failure_count"] == 0
+    assert record["uncommitted_d1_writes"] == 2
+    # No failure happened so first_failed_sql stays empty.
+    assert record["first_failed_sql"] is None
+
+
+def test_rollback_with_no_writes_does_not_log_drift(monkeypatch, sqlite_conn, tmp_path):
+    """Read-only or empty transactions must not emit drift on rollback."""
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    fake_d1 = FakeD1Connection()
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
+    # SELECT routes to D1 only; no write happens on either side.
+    dual.execute("SELECT COUNT(*) AS n FROM t")
+    dual.rollback()
+
+    assert not drift_path.exists()
+
+
+def test_rollback_drift_includes_executemany_count(monkeypatch, sqlite_conn, tmp_path):
+    """Successful executemany writes must inflate uncommitted_d1_writes."""
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    fake_d1 = FakeD1Connection()
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
+    dual.executemany(
+        "INSERT INTO t (v) VALUES (?)", [("a",), ("b",), ("c",)]
+    )
+    dual.rollback()
+
+    record = json.loads(drift_path.read_text(encoding="utf-8").strip())
+    assert record["uncommitted_d1_writes"] == 3
+    assert record["failure_count"] == 0
+
+
+def test_uncommitted_writes_reset_after_commit(monkeypatch, sqlite_conn, tmp_path):
+    """Successful commit must zero the counter so a later read-only
+    rollback doesn't replay the previous transaction's writes as drift."""
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    fake_d1 = FakeD1Connection()
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
+
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("x",))
+    dual.commit()  # both backends in sync, counter resets
+    dual.rollback()  # nothing to roll back
+
+    assert not drift_path.exists()
+
+
 def test_current_backend_reflects_env(monkeypatch):
     """``current_backend()`` should reflect the active STORAGE_BACKEND."""
     from packages.python.javdb_platform import db as _db
@@ -626,3 +704,148 @@ def test_current_backend_reflects_env(monkeypatch):
 
     monkeypatch.setenv("STORAGE_BACKEND", "garbage")
     assert _db.current_backend() == "sqlite"
+
+
+# ── init_db dual-backend override isolation ───────────────────────────────
+
+
+def test_backend_mode_thread_local_invisible_to_siblings(monkeypatch):
+    """Thread-local override must NOT leak to sibling threads.
+
+    The dual-backend ``init_db`` window stashes ``'sqlite'`` into a
+    per-thread sentinel so the calling thread's DDL plumbing only touches
+    the local file. Sibling threads, however, must keep observing the
+    configured ``STORAGE_BACKEND='dual'`` so that any concurrent
+    ``_get_connection`` calls cache real ``DualConnection`` objects rather
+    than plain ``sqlite3.Connection`` ones.
+    """
+    import threading
+
+    from packages.python.javdb_platform import db as _db
+
+    monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
+    monkeypatch.setenv("STORAGE_BACKEND", "dual")
+
+    main_set = threading.Event()
+    sibling_done = threading.Event()
+    sibling_observed: dict = {}
+
+    def sibling():
+        if not main_set.wait(timeout=5):
+            sibling_observed["error"] = "timed out waiting for main"
+            return
+        sibling_observed["mode"] = _db._backend_mode()
+        sibling_observed["env"] = os.environ.get("_STORAGE_BACKEND_INIT_OVERRIDE")
+        sibling_done.set()
+
+    t = threading.Thread(target=sibling, name="sibling-mode-probe")
+    t.start()
+
+    _db._local._storage_backend_init_override = "sqlite"
+    try:
+        # Main thread sees its own override (proves the mechanism works).
+        assert _db._backend_mode() == "sqlite"
+        main_set.set()
+        assert sibling_done.wait(timeout=5), "sibling never reported"
+    finally:
+        try:
+            del _db._local._storage_backend_init_override
+        except AttributeError:
+            pass
+
+    t.join(timeout=5)
+
+    assert "error" not in sibling_observed, sibling_observed.get("error")
+    assert sibling_observed["mode"] == "dual", (
+        "Sibling thread saw the init-time override leak: expected 'dual', "
+        f"got {sibling_observed['mode']!r}. The thread-local must NOT be "
+        "mirrored into the process env or it breaks concurrent "
+        "_get_connection callers."
+    )
+    assert sibling_observed["env"] is None, (
+        "init_db(dual) must not write _STORAGE_BACKEND_INIT_OVERRIDE into "
+        f"os.environ; sibling observed {sibling_observed['env']!r}."
+    )
+
+
+def test_init_db_dual_does_not_set_global_env_var(monkeypatch):
+    """Regression: ``init_db`` under STORAGE_BACKEND=dual must keep the
+    override thread-local — never writing ``_STORAGE_BACKEND_INIT_OVERRIDE``
+    into ``os.environ`` where sibling threads would observe it.
+
+    Earlier code paired the thread-local with an ``os.environ`` write so
+    that any thread calling ``_backend_mode()`` while ``init_db`` was in
+    flight saw ``'sqlite'`` and cached a plain SQLite connection — a silent
+    correctness bug for the dual-write contract.
+    """
+    import threading
+
+    import packages.python.javdb_platform.config_helper as _cfg
+    from packages.python.javdb_platform import db as _db
+
+    monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
+    monkeypatch.setenv("STORAGE_BACKEND", "dual")
+    monkeypatch.setattr(_cfg, "use_sqlite", lambda: True)
+
+    inside_init = threading.Event()
+    sibling_done = threading.Event()
+    observed: dict = {}
+
+    def fake_do_init(db_path):
+        # While we're in the dual-init window the env var must remain unset.
+        observed["env_during_init_main_view"] = os.environ.get(
+            "_STORAGE_BACKEND_INIT_OVERRIDE"
+        )
+        # Main thread (which set the thread-local) must see 'sqlite'.
+        observed["mode_during_init_main_view"] = _db._backend_mode()
+        inside_init.set()
+        # Block until the sibling has had a chance to probe.
+        if not sibling_done.wait(timeout=5):
+            observed["error"] = "sibling never finished probing"
+
+    monkeypatch.setattr(_db, "_do_init", fake_do_init)
+
+    def sibling():
+        if not inside_init.wait(timeout=5):
+            observed["sibling_error"] = "init never reached fake_do_init"
+            sibling_done.set()
+            return
+        # Sibling has no thread-local; with the old bug it would fall
+        # through to the env-var branch and see 'sqlite'.
+        observed["sibling_mode"] = _db._backend_mode()
+        observed["sibling_env"] = os.environ.get("_STORAGE_BACKEND_INIT_OVERRIDE")
+        sibling_done.set()
+
+    t = threading.Thread(target=sibling, name="sibling-init-probe")
+    t.start()
+
+    _db.init_db(force=True)
+    t.join(timeout=5)
+
+    assert "error" not in observed, observed.get("error")
+    assert "sibling_error" not in observed, observed.get("sibling_error")
+
+    # While init is mid-flight on the main thread, the env var MUST stay
+    # unset so sibling threads keep seeing the configured 'dual' backend.
+    assert observed["env_during_init_main_view"] is None, (
+        "init_db(dual) wrote _STORAGE_BACKEND_INIT_OVERRIDE into os.environ "
+        f"(saw {observed['env_during_init_main_view']!r}); the override must "
+        "stay thread-local so siblings don't cache plain SQLite connections."
+    )
+    assert observed["mode_during_init_main_view"] == "sqlite", (
+        "The calling thread should still see its own 'sqlite' downgrade "
+        f"during init; got {observed['mode_during_init_main_view']!r}."
+    )
+    assert observed["sibling_mode"] == "dual", (
+        "Sibling thread saw the init-time override leak: expected 'dual', "
+        f"got {observed['sibling_mode']!r}."
+    )
+    assert observed["sibling_env"] is None, (
+        "Sibling observed _STORAGE_BACKEND_INIT_OVERRIDE in os.environ "
+        f"({observed['sibling_env']!r}); init_db(dual) must not write it."
+    )
+
+    # Post-init: state is fully restored.
+    assert os.environ.get("_STORAGE_BACKEND_INIT_OVERRIDE") is None
+    assert not hasattr(_db._local, "_storage_backend_init_override")
+    assert _db._backend_mode() == "dual"

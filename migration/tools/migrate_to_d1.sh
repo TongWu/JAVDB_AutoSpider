@@ -30,11 +30,46 @@ split_one() {
   local clean_sql="$1"
   local prefix="$2"
 
-  # schema goes to ${prefix}_00_schema.sql
-  awk '/^INSERT INTO/{exit} {print}' "$clean_sql" > "${prefix}_00_schema.sql"
-
-  # chunked data files: ${prefix}_data_001.sql, _002.sql, ...
-  awk -v rpc="$ROWS_PER_CHUNK" -v prefix="$prefix" '
+  # Single pass: route INSERTs into chunked data files, pre-data DDL into
+  # ${prefix}_00_schema.sql, and post-data DDL (indexes/triggers) into
+  # ${prefix}_99_post_data.sql so it runs after all rows are loaded.
+  : > "${prefix}_00_schema.sql"
+  : > "${prefix}_99_post_data.sql"
+  rm -f "${prefix}_data_"*.sql
+  awk -v rpc="$ROWS_PER_CHUNK" \
+    -v prefix="$prefix" \
+    -v schema="${prefix}_00_schema.sql" \
+    -v post="${prefix}_99_post_data.sql" '
+    function is_post_data_ddl(line, normalized) {
+      normalized = toupper(line)
+      sub(/^[[:space:]]+/, "", normalized)
+      return normalized ~ /^CREATE[[:space:]]+(UNIQUE[[:space:]]+)?INDEX[[:space:]]/ ||
+        normalized ~ /^CREATE[[:space:]]+(TEMP[[:space:]]+|TEMPORARY[[:space:]]+)?TRIGGER[[:space:]]/
+    }
+    function is_trigger_ddl(line, normalized) {
+      normalized = toupper(line)
+      sub(/^[[:space:]]+/, "", normalized)
+      return normalized ~ /^CREATE[[:space:]]+(TEMP[[:space:]]+|TEMPORARY[[:space:]]+)?TRIGGER[[:space:]]/
+    }
+    function statement_done(line) {
+      return line ~ /;[[:space:]]*$/
+    }
+    function post_data_statement_done(line, normalized) {
+      if (!in_trigger_ddl) {
+        return statement_done(line)
+      }
+      normalized = toupper(line)
+      sub(/^[[:space:]]+/, "", normalized)
+      return normalized ~ /(^|[[:space:]])END;[[:space:]]*$/
+    }
+    in_post_data_ddl {
+      print >> post
+      if (post_data_statement_done($0)) {
+        in_post_data_ddl = 0
+        in_trigger_ddl = 0
+      }
+      next
+    }
     /^INSERT INTO/ {
       if ((NR_in_chunk % rpc) == 0) {
         if (out != "") close(out)
@@ -43,7 +78,19 @@ split_one() {
       }
       print > out
       NR_in_chunk++
+      next
     }
+    is_post_data_ddl($0) {
+      print >> post
+      in_trigger_ddl = is_trigger_ddl($0)
+      if (!post_data_statement_done($0)) {
+        in_post_data_ddl = 1
+      } else {
+        in_trigger_ddl = 0
+      }
+      next
+    }
+    { print >> schema }
   ' "$clean_sql"
 }
 
@@ -93,28 +140,75 @@ cmd_import() {
         return 1
       fi
     done
+
+    post_data="${CHUNK_DIR}/${db}_99_post_data.sql"
+    if [[ -s "$post_data" ]]; then
+      echo "==> [$db] post-data DDL"
+      if ! wrangler d1 execute "javdb-${db}" --remote --file="$post_data" -y; then
+        echo "FAILED on $post_data — aborting $db" >&2
+        return 1
+      fi
+    fi
   done
 }
 
 cmd_verify() {
+  local failed=0
   for db in "${DBS[@]}"; do
-    echo "=== $db: local ==="
-    sqlite3 "reports/${db}.db" "
-      SELECT name, (SELECT COUNT(*) FROM \"' || name || '\")
-      FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'" 2>/dev/null \
-      || sqlite3 "reports/${db}.db" \
-        ".tables" \
-        | tr ' ' '\n' | sort -u | grep -v '^$' \
-        | while read -r tbl; do
-            cnt=$(sqlite3 "reports/${db}.db" "SELECT COUNT(*) FROM \"$tbl\"")
-            printf "  %-30s %s\n" "$tbl" "$cnt"
-          done
+    echo "================ $db ================"
+    local_db="reports/${db}.db"
+    if [[ ! -f "$local_db" ]]; then
+      echo "  SKIP: $local_db not found"
+      continue
+    fi
 
-    echo "=== $db: D1 ==="
-    wrangler d1 execute "javdb-${db}" --remote --command="
-      SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'
-    " -y 2>/dev/null || true
+    # Authoritative table list comes from the local DB so we compare every
+    # table that exists locally; tables present only in D1 will surface as
+    # local=ERR rows when read by sqlite3 below.
+    tables_err=$(mktemp)
+    if ! tables=$(sqlite3 "$local_db" \
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;" \
+      2>"$tables_err"); then
+      echo "  ERROR: failed to enumerate user tables in $local_db" >&2
+      if [[ -s "$tables_err" ]]; then
+        while IFS= read -r line; do
+          echo "    $line" >&2
+        done < "$tables_err"
+      fi
+      rm -f "$tables_err"
+      exit 1
+    fi
+    rm -f "$tables_err"
+    if [[ -z "$tables" ]]; then
+      echo "  (no user tables found in $local_db)"
+      continue
+    fi
+
+    while IFS= read -r tbl; do
+      [[ -z "$tbl" ]] && continue
+      cnt=$(sqlite3 "$local_db" "SELECT COUNT(*) FROM \"$tbl\";" 2>/dev/null || echo "ERR")
+      d1_json=$(wrangler d1 execute "javdb-${db}" --remote --json \
+        --command="SELECT COUNT(*) AS n FROM \"$tbl\";" 2>/dev/null || echo "")
+      d1_cnt=$(printf '%s' "$d1_json" | python3 -c "import json,sys
+try:
+  data=json.load(sys.stdin)
+  print(data[0]['results'][0]['n'])
+except Exception:
+  print('ERR')" 2>/dev/null || echo "ERR")
+      # Trim whitespace so numeric equality doesn't trip on stray newlines.
+      cnt=$(printf '%s' "$cnt" | tr -d '[:space:]')
+      d1_cnt=$(printf '%s' "$d1_cnt" | tr -d '[:space:]')
+      if [[ "$cnt" != "ERR" && "$d1_cnt" != "ERR" && "$cnt" == "$d1_cnt" ]]; then
+        printf "  %-32s OK            (count=%s)\n" "$tbl" "$cnt"
+      else
+        printf "  %-32s MISMATCH local=%s remote=%s\n" "$tbl" "$cnt" "$d1_cnt"
+        failed=1
+      fi
+    done <<< "$tables"
   done
+  if [[ "$failed" -eq 1 ]]; then
+    exit 1
+  fi
 }
 
 case "${1:-}" in

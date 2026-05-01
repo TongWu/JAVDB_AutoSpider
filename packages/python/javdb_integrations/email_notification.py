@@ -936,9 +936,20 @@ def _extract_last_dedup_executor_run(log_path=None):
         logger.debug(f"Could not read dedup executor log {path}: {e}")
         return None
 
-    # Find the LAST 'RCLONE DEDUP EXECUTOR' marker
-    start_idx = None
+    # Anchor on the LAST 'DEDUP EXECUTOR COMPLETE' line first so we never
+    # surface stats from an aborted (start-only) run that left the COMPLETE
+    # footer unwritten. From there we walk backwards to the matching
+    # 'RCLONE DEDUP EXECUTOR' header.
+    complete_idx = None
     for i in range(len(lines) - 1, -1, -1):
+        if 'DEDUP EXECUTOR COMPLETE' in lines[i]:
+            complete_idx = i
+            break
+    if complete_idx is None:
+        return None
+
+    start_idx = None
+    for i in range(complete_idx, -1, -1):
         if 'RCLONE DEDUP EXECUTOR' in lines[i]:
             start_idx = i
             break
@@ -952,14 +963,19 @@ def _extract_last_dedup_executor_run(log_path=None):
         return None
     start_time = start_match.group(1)
 
-    block = lines[start_idx:]
+    end_match = ts_re.match(lines[complete_idx])
+    end_time = end_match.group(1) if end_match else None
+
+    block_end_idx = complete_idx + 1
+    for i in range(complete_idx + 1, len(lines)):
+        if 'RCLONE DEDUP EXECUTOR' in lines[i]:
+            break
+        block_end_idx = i + 1
+        if re.search(r'Purged:\s*\d+,\s*failed:\s*\d+', lines[i]):
+            break
+    block = lines[start_idx:block_end_idx]
     pending = purged = failed = skipped = None
-    end_time = None
     for ln in block:
-        if 'DEDUP EXECUTOR COMPLETE' in ln:
-            m = ts_re.match(ln)
-            if m:
-                end_time = m.group(1)
         m = re.search(r'Pending rows:\s*(\d+)', ln)
         if m:
             pending = int(m.group(1))
@@ -1046,40 +1062,51 @@ def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
     # so any miss in the cutoff would inflate the counts to the entire
     # retained set (e.g. 682 detected / 677 deleted instead of 15 / 10).
     executor_run = _extract_last_dedup_executor_run()
-    cutoff = None
+    window_start = None
+    window_end = None
     if executor_run is not None:
-        cutoff = executor_run['start_time']
+        window_start = executor_run['start_time']
+        window_end = executor_run.get('end_time') or None
         logger.debug(
-            f"Dedup executor window: start={executor_run['start_time']} "
+            f"Dedup executor window: start={window_start} end={window_end} "
             f"pending={executor_run['pending']} purged={executor_run['purged']} "
             f"failed={executor_run['failed']}"
         )
     else:
         # Fall back to ReportSessions cutoff, or no filter as a last resort.
-        cutoff = session_start_time or None
-        if cutoff is None:
+        window_start = session_start_time or None
+        if window_start is None:
             logger.warning(
                 "Dedup executor log not found and no session_start_time provided — "
                 "dedup counts will reflect ALL retained DB records, not just this run."
             )
 
+    def _in_dedup_window(timestamp: str) -> bool:
+        if window_start is None:
+            return True
+        if not timestamp or timestamp < window_start:
+            return False
+        if window_end is not None and timestamp > window_end:
+            return False
+        return True
+
     detected_session = sum(
         1 for r in rows
-        if cutoff is None or r.get('detect_datetime', '') >= cutoff
+        if _in_dedup_window(r.get('detect_datetime', ''))
     )
     redownload_detected_session = sum(
         1 for r in rows
-        if (cutoff is None or r.get('detect_datetime', '') >= cutoff)
+        if _in_dedup_window(r.get('detect_datetime', ''))
         and _is_redownload_dedup_reason(r.get('deletion_reason', ''))
     )
     deleted_session_items = []
     redownload_deleted_session = 0
     for r in rows:
-        in_session = cutoff is None or r.get('detect_datetime', '') >= cutoff
+        in_session = _in_dedup_window(r.get('detect_datetime', ''))
         is_redownload = _is_redownload_dedup_reason(r.get('deletion_reason', ''))
         if (in_session
                 and r.get('is_deleted', 'False') == 'True'
-                and (cutoff is None or r.get('delete_datetime', '') >= cutoff)):
+                and _in_dedup_window(r.get('delete_datetime', ''))):
             if is_redownload:
                 redownload_deleted_session += 1
             label = '[Redownload upgrade] ' if is_redownload else ''
