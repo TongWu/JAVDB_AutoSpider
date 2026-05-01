@@ -23,6 +23,7 @@ from packages.python.javdb_platform.proxy_coordinator_client import (  # noqa: E
     ProxyCoordinatorClient,
     ReportResult,
     _ASYNC_QUEUE_SENTINEL,
+    create_coordinator_from_env,
     _extract_server_time_ms,
     _normalize_proxy_id,
     _validate_kind,
@@ -42,8 +43,8 @@ def _make_client(*, async_workers: int = 2, async_queue_size: int = 8) -> ProxyC
 # ── Worker pool lifecycle ────────────────────────────────────────────────
 
 
-def test_init_starts_fixed_worker_pool():
-    """__init__ should start exactly ``async_workers`` daemon threads."""
+def test_init_does_not_start_worker_pool_until_report_async():
+    """__init__ should not leak daemon threads before the client is validated."""
     pre = {t.name for t in threading.enumerate()}
     c = _make_client(async_workers=3)
     try:
@@ -51,8 +52,12 @@ def test_init_starts_fixed_worker_pool():
             t for t in threading.enumerate()
             if t.name.startswith("coord-report-") and t.name not in pre
         ]
-        assert len(new_workers) == 3
-        for t in new_workers:
+        assert new_workers == []
+        with patch.object(c, "report"):
+            c.report_async("proxy-A", "cf")
+            c._async_queue.join()
+        assert len(c._async_workers) == 3
+        for t in c._async_workers:
             assert t.daemon is True
     finally:
         c.close(wait=True, timeout=2.0)
@@ -77,9 +82,9 @@ def test_report_async_does_not_spawn_per_call_threads():
             post_threads = threading.active_count()
 
         # At most the 2 worker threads were already counted in pre_threads;
-        # nothing else should appear. A small slack covers GC / stdlib
-        # housekeeping threads.
-        assert post_threads - pre_threads <= 1, (
+        # nothing else should appear beyond the lazily-started fixed pool.
+        # A small slack covers GC / stdlib housekeeping threads.
+        assert post_threads - pre_threads <= 3, (
             f"thread count grew from {pre_threads} to {post_threads} after "
             f"200 report_async calls — should stay bounded by the worker pool"
         )
@@ -89,10 +94,29 @@ def test_report_async_does_not_spawn_per_call_threads():
 
 def test_close_is_idempotent_and_joins_workers():
     c = _make_client(async_workers=2)
+    with patch.object(c, "report"):
+        c.report_async("proxy-A", "cf")
+        c._async_queue.join()
     c.close(wait=True, timeout=2.0)
     c.close(wait=True, timeout=2.0)  # second call is a no-op
     for t in c._async_workers:
         assert not t.is_alive()
+
+
+def test_close_closes_http_session():
+    c = _make_client(async_workers=1)
+    with patch.object(c._session, "close") as close_session:
+        c.close(wait=True, timeout=2.0)
+    close_session.assert_called_once()
+
+
+def test_factory_closes_client_when_health_check_fails(monkeypatch):
+    monkeypatch.setenv("PROXY_COORDINATOR_URL", "https://coord.example.test")
+    monkeypatch.setenv("PROXY_COORDINATOR_TOKEN", "dummy")
+    with patch.object(ProxyCoordinatorClient, "health_check", return_value=False), \
+            patch.object(ProxyCoordinatorClient, "close") as close_client:
+        assert create_coordinator_from_env() is None
+    close_client.assert_called_once()
 
 
 # ── Queue dispatch ───────────────────────────────────────────────────────
@@ -190,6 +214,9 @@ def test_report_async_after_close_is_noop():
 
 def test_sentinel_terminates_worker_promptly():
     c = _make_client(async_workers=1)
+    with patch.object(c, "report"):
+        c.report_async("proxy-A", "cf")
+        c._async_queue.join()
     worker = c._async_workers[0]
     c.close()
     worker.join(timeout=2.0)

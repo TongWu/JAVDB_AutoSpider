@@ -72,6 +72,23 @@ def _patch_workers(engine, fetch_fn):
         w._startup_jitter = 0.01
 
 
+class TestStableProxyId:
+    def test_url_fallback_matches_coordinator_host_port_hash(self):
+        from packages.python.javdb_platform.proxy_coordinator_client import _normalize_proxy_id
+        from packages.python.javdb_spider.fetch.fetch_engine import _stable_proxy_id
+
+        expected = _normalize_proxy_id(None, fallback_seed="proxy.example.com:8080")
+
+        assert _stable_proxy_id(
+            {"http": "http://user:pass@Proxy.Example.com:8080/"},
+            worker_id=1,
+        ) == expected
+        assert _stable_proxy_id(
+            {"https": "https://other-creds@proxy.example.com:8080/path"},
+            worker_id=2,
+        ) == expected
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
