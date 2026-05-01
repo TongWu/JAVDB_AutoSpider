@@ -169,6 +169,7 @@ def migrate_db(db_path: str, *, dry_run: bool) -> None:
         logger.warning("DB not found, skipping: %s", db_path)
         return
 
+    backup = None
     if not dry_run:
         backup = f"{db_path}.backup_rclone_paths_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         shutil.copy2(db_path, backup)
@@ -217,8 +218,11 @@ def migrate_db(db_path: str, *, dry_run: bool) -> None:
             # changes from the prior block are already committed.
             logger.error(
                 "DedupRecords migration hit an IntegrityError on db=%s "
-                "(table=DedupRecords, column=ExistingGdrivePath): %s",
-                db_path, exc,
+                "(backup=%s, table=DedupRecords, column=ExistingGdrivePath): "
+                "RcloneInventory changes were committed while DedupRecords rolled back. "
+                "Restore from the backup path or inspect/fix conflicting DedupRecords "
+                "rows and re-run migration. Original exception: %s",
+                db_path, backup, exc,
             )
             raise
     else:
