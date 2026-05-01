@@ -38,7 +38,6 @@ Usage (advanced mode — multi-step fetch inside process_fn)::
 
 from __future__ import annotations
 
-import hashlib
 import queue as queue_module
 import random
 import sys
@@ -46,8 +45,10 @@ import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator, List, Optional, Union
+from urllib.parse import urlparse
 
 from packages.python.javdb_platform.logging_config import get_logger
+from packages.python.javdb_platform.proxy_coordinator_client import _normalize_proxy_id
 from packages.python.javdb_platform.proxy_ban_manager import get_ban_manager
 from packages.python.javdb_platform.proxy_pool import create_proxy_pool_from_config
 from packages.python.javdb_platform.request_handler import (
@@ -391,9 +392,8 @@ def _stable_proxy_id(proxy_config: dict, worker_id: int) -> str:
     rate-limit guarantee. Resolution order:
 
     1. ``proxy_config['name']`` — explicitly configured identity wins.
-    2. SHA-1 of ``https``/``http`` URL — deterministic across runners that
-       share the same proxy endpoint, even if they happen to start workers
-       in different orders.
+    2. ``proxy-<sha1(host:port)[:16]>`` via the coordinator client's shared
+       normalisation rule.
     3. ``Proxy-{worker_id}`` — last-resort label. Unstable across runs
        because ``worker_id`` is just an enumeration index, but at least
        keeps the spider running when neither name nor URL is configured.
@@ -407,8 +407,14 @@ def _stable_proxy_id(proxy_config: dict, worker_id: int) -> str:
         return name.strip()[:256]
     url = proxy_config.get('https') or proxy_config.get('http')
     if isinstance(url, str) and url.strip():
-        digest = hashlib.sha1(url.strip().encode('utf-8')).hexdigest()[:16]
-        return f"proxy-{digest}"
+        parsed = urlparse(url.strip())
+        try:
+            port = parsed.port
+        except ValueError:
+            port = None
+        if parsed.hostname and port is not None:
+            fallback_seed = f"{parsed.hostname.lower()}:{port}"
+            return _normalize_proxy_id(None, fallback_seed=fallback_seed)
     return f"Proxy-{worker_id}"
 
 
