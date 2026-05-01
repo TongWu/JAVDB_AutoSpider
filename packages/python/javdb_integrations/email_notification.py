@@ -966,7 +966,16 @@ def _extract_last_dedup_executor_run(log_path=None):
     end_match = ts_re.match(lines[complete_idx])
     end_time = end_match.group(1) if end_match else None
 
-    block = lines[start_idx:complete_idx + 1]
+    block_end_idx = complete_idx + 1
+    for i in range(complete_idx + 1, len(lines)):
+        if 'RCLONE DEDUP EXECUTOR' in lines[i]:
+            break
+        block_end_idx = i + 1
+        if re.search(r'Purged:\s*\d+,\s*failed:\s*\d+', lines[i]):
+            break
+        if not lines[i].strip():
+            break
+    block = lines[start_idx:block_end_idx]
     pending = purged = failed = skipped = None
     for ln in block:
         m = re.search(r'Pending rows:\s*(\d+)', ln)
