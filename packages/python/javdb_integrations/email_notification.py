@@ -973,8 +973,6 @@ def _extract_last_dedup_executor_run(log_path=None):
         block_end_idx = i + 1
         if re.search(r'Purged:\s*\d+,\s*failed:\s*\d+', lines[i]):
             break
-        if not lines[i].strip():
-            break
     block = lines[start_idx:block_end_idx]
     pending = purged = failed = skipped = None
     for ln in block:
