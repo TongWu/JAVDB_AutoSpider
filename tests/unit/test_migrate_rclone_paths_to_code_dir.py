@@ -71,6 +71,36 @@ def test_integrity_error_message_reports_no_rclone_inventory_commit(
     assert "Restore from the backup path" not in message
 
 
+def test_integrity_error_message_reports_committed_rclone_inventory(
+    tmp_path,
+    monkeypatch,
+    caplog,
+):
+    db_path = tmp_path / "operations.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE RcloneInventory (Id INTEGER PRIMARY KEY, FolderPath TEXT)")
+        conn.execute("CREATE TABLE DedupRecords (Id INTEGER PRIMARY KEY, ExistingGdrivePath TEXT)")
+
+    def fake_migrate_table(conn, *, table, column, pk="Id", dry_run):
+        if table == "RcloneInventory":
+            return 1, True
+        if table == "DedupRecords":
+            raise sqlite3.IntegrityError("duplicate path")
+        return 0, 0
+
+    monkeypatch.setattr(migrate, "_migrate_table", fake_migrate_table)
+    caplog.set_level(logging.ERROR, logger=migrate.logger.name)
+
+    with pytest.raises(sqlite3.IntegrityError, match="duplicate path"):
+        migrate.migrate_db(str(db_path), dry_run=False)
+
+    message = "\n".join(record.getMessage() for record in caplog.records)
+    assert "RcloneInventory existed=True, rewrites=1, committed=True" in message
+    assert "RcloneInventory changes were committed while DedupRecords rolled back" in message
+    assert "Restore from the backup path" in message
+    assert "No RcloneInventory rewrite was committed" not in message
+
+
 def test_migrate_db_does_not_log_updated_when_no_rows_change(tmp_path, caplog):
     db_path = tmp_path / "operations.db"
     with sqlite3.connect(db_path) as conn:
