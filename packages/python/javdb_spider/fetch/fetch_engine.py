@@ -542,8 +542,23 @@ class _EngineWorker(threading.Thread):
             # (only the global fallback handler uses it).
             def _cf_event_cb(_unused_proxy_name=None, _c=coordinator, _p=coord_proxy_id):
                 _c.report_async(_p, "cf")
+
+            # P2-D — per-attempt success/failure + latency reporting.  Pinned
+            # to ``coord_proxy_id`` via closure (same pattern as
+            # ``_cf_event_cb``); the worker-passed ``proxy_name`` is ignored
+            # because every call from this engine routes through the single
+            # proxy this engine is bound to.
+            def _request_complete_cb(
+                _unused_proxy_name=None,
+                kind="success",
+                latency_ms=0,
+                _c=coordinator,
+                _p=coord_proxy_id,
+            ):
+                _c.report_async(_p, kind, latency_ms=latency_ms)
         else:
             _cf_event_cb = None
+            _request_complete_cb = None
 
         self._handler = RequestHandler(
             proxy_pool=self._proxy_pool,
@@ -564,6 +579,7 @@ class _EngineWorker(threading.Thread):
             ),
             penalty_tracker=penalty_tracker,
             on_cf_event=_cf_event_cb,
+            on_request_complete=_request_complete_cb,
         )
 
     # -- task deadline -------------------------------------------------------
