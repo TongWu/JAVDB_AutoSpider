@@ -626,3 +626,148 @@ class TestProxyPoolBanProxy:
         results = [pool.get_next_proxy() for _ in range(4)]
         banned_dict = {"http": "http://skip-next2:8080"}
         assert banned_dict not in results
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# P2-D — health-weighted next_proxy selection.
+# Verifies the optional ``health_provider`` hook used by the cross-instance
+# proxy coordinator: when scores are present, higher-score proxies must be
+# picked more often; missing/invalid scores degrade to uniform random;
+# without a provider the default round-robin behaviour is preserved.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class TestHealthWeightedNextProxy:
+    def _build_pool(self, names):
+        pool = ProxyPool()
+        for name in names:
+            pool.add_proxy(http_url=f"http://{name}:8080", name=name)
+        return pool
+
+    def test_round_robin_preserved_without_health_provider(self):
+        pool = self._build_pool(["rr-1", "rr-2", "rr-3"])
+        # 3 calls visit each proxy exactly once in round-robin order.
+        first_round = [pool.get_next_proxy() for _ in range(3)]
+        seen_urls = {next(iter(d.values())) for d in first_round}
+        assert seen_urls == {
+            "http://rr-1:8080", "http://rr-2:8080", "http://rr-3:8080",
+        }
+
+    def test_health_weighted_prefers_higher_scoring_proxies(self):
+        """High-score proxy should be picked far more often than low-score."""
+        pool = self._build_pool(["good", "bad"])
+        scores = {"good": 0.95, "bad": 0.10}
+        pool.set_health_provider(lambda name: scores.get(name))
+
+        import random as _r
+        _r.seed(42)  # Deterministic for the test.
+
+        picks = {"good": 0, "bad": 0}
+        for _ in range(2000):
+            d = pool.get_next_proxy()
+            url = next(iter(d.values()))
+            if "good" in url:
+                picks["good"] += 1
+            else:
+                picks["bad"] += 1
+        # With weights ≈ 0.95 / 0.10 (clamped to 0.10 floor), the
+        # better proxy gets ~ 0.95 / 1.05 ≈ 90% of the picks.  Allow
+        # generous slack for RNG noise.
+        assert picks["good"] > 5 * picks["bad"]
+        assert picks["bad"] > 0  # Floor must let bad proxy still get traffic.
+
+    def test_unknown_proxies_fall_back_to_neutral_score(self):
+        """``provider`` returning None for an unseen proxy must yield neutral."""
+        pool = self._build_pool(["seen", "unseen"])
+        # Only "seen" has a score; "unseen" returns None → 0.5 baseline.
+        pool.set_health_provider(lambda name: 0.5 if name == "seen" else None)
+
+        import random as _r
+        _r.seed(0)
+        picks = {"seen": 0, "unseen": 0}
+        for _ in range(400):
+            d = pool.get_next_proxy()
+            url = next(iter(d.values()))
+            if "unseen" in url:
+                picks["unseen"] += 1
+            else:
+                picks["seen"] += 1
+        # With both proxies effectively at 0.5, distribution is roughly
+        # uniform.  Allow ±30% slack on a 200/200 expectation.
+        assert 100 < picks["seen"] < 300
+        assert 100 < picks["unseen"] < 300
+
+    def test_provider_exception_does_not_crash_selection(self):
+        pool = self._build_pool(["a", "b"])
+
+        def boom(_name):
+            raise RuntimeError("simulated coordinator outage")
+
+        pool.set_health_provider(boom)
+        # All scores degrade to 0.5; picks are still legal.
+        result = pool.get_next_proxy()
+        assert result is not None
+
+    def test_provider_returning_invalid_types_falls_back_to_neutral(self):
+        pool = self._build_pool(["a", "b"])
+
+        def weird(name):
+            return "not-a-number" if name == "a" else float("nan")
+
+        pool.set_health_provider(weird)
+        # Both proxies degrade to 0.5; selection must still succeed.
+        result = pool.get_next_proxy()
+        assert result is not None
+
+    def test_set_health_provider_to_none_restores_round_robin(self):
+        pool = self._build_pool(["x", "y"])
+        pool.set_health_provider(lambda name: 1.0 if name == "x" else 0.01)
+        # First, weighted: "x" should dominate.
+        import random as _r
+        _r.seed(123)
+        weighted_picks = {"x": 0, "y": 0}
+        for _ in range(200):
+            d = pool.get_next_proxy()
+            url = next(iter(d.values()))
+            weighted_picks["x" if "x" in url else "y"] += 1
+        assert weighted_picks["x"] > weighted_picks["y"] * 2
+
+        # Now clear the provider; round-robin must resume (alternating).
+        pool.set_health_provider(None)
+        rr_results = [pool.get_next_proxy() for _ in range(4)]
+        urls = [next(iter(d.values())) for d in rr_results]
+        # Each proxy appears exactly twice in 4 round-robin picks.
+        assert urls.count("http://x:8080") == 2
+        assert urls.count("http://y:8080") == 2
+
+    def test_skips_unavailable_proxies_under_weighting(self):
+        pool = self._build_pool(["live", "dead"])
+        pool.proxies[1].banned = True
+        pool.proxies[1].is_available = False
+        pool.set_health_provider(lambda name: 0.99 if name == "dead" else 0.01)
+        # Even with a much higher weight, the banned proxy MUST never
+        # be returned.
+        for _ in range(50):
+            d = pool.get_next_proxy()
+            assert d == {"http": "http://live:8080"}
+
+    def test_golden_no_provider_round_robin_matches_pre_p2d_behaviour(self):
+        """Lock the «no coordinator → identical to today» contract.
+
+        With no health_provider installed the iteration order on a
+        fresh pool MUST stay fixed round-robin (advance-then-return,
+        starting from the proxy AFTER ``current_index=0``), which is
+        the sequence the Python ``ProxyPool`` always produced before
+        P2-D.  This pins down the fail-open behaviour against
+        accidental regressions in the weighted-selection branch.
+        """
+        pool = self._build_pool(["a", "b", "c"])
+        # The pool's pre-P2-D contract advances ``current_index`` first,
+        # so the first call returns index 1 (b), then 2 (c), then 0 (a),
+        # repeating.  Locking that exact order is the goal.
+        results = [pool.get_next_proxy() for _ in range(6)]
+        urls = [next(iter(d.values())) for d in results]
+        assert urls == [
+            "http://b:8080", "http://c:8080", "http://a:8080",
+            "http://b:8080", "http://c:8080", "http://a:8080",
+        ]

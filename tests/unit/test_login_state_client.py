@@ -28,6 +28,7 @@ from packages.python.javdb_platform.login_state_client import (  # noqa: E402
     LoginStateGetResult,
     LoginStateUnavailable,
     PublishResult,
+    RecordAttemptResult,
     ReleaseLeaseResult,
     create_login_state_client_from_env,
     _extract_server_time_ms,
@@ -326,6 +327,137 @@ def test_release_lease_rejects_empty_holder_id():
     c = _make_client()
     with pytest.raises(LoginStateUnavailable, match="holder_id"):
         c.release_lease("")
+
+
+# ── P2-C: acquire_lease cooldown_until_ms parsing ───────────────────────
+
+
+def test_acquire_lease_parses_p2c_cooldown_metadata():
+    """Workers post-P2-C surface ``cooldown_until_ms`` +
+    ``recent_attempt_count`` on every acquire response."""
+    c = _make_client()
+    body = {
+        "acquired": True,
+        "holder_id": "runner-A",
+        "target_proxy_name": "JP-1",
+        "lease_expires_at": 100_000,
+        "cooldown_until_ms": 200_000,
+        "recent_attempt_count": 6,
+        "server_time": 50_000,
+    }
+    with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+        r = c.acquire_lease("runner-A", "JP-1", 60_000)
+    assert r.cooldown_until_ms == 200_000
+    assert r.recent_attempt_count == 6
+
+
+def test_acquire_lease_p2c_fields_default_to_zero_for_legacy_worker():
+    """Pre-P2-C Workers omit the cooldown fields; the client MUST treat
+    a missing field as ``0`` so the legacy happy path keeps working."""
+    c = _make_client()
+    body = {
+        "acquired": True,
+        "holder_id": "runner-A",
+        "target_proxy_name": "JP-1",
+        "lease_expires_at": 100_000,
+        "server_time": 50_000,
+    }
+    with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+        r = c.acquire_lease("runner-A", "JP-1", 60_000)
+    assert r.cooldown_until_ms == 0
+    assert r.recent_attempt_count == 0
+
+
+# ── P2-C: record_attempt ───────────────────────────────────────────────
+
+
+def test_record_attempt_sends_full_body():
+    c = _make_client()
+    captured: dict = {}
+
+    def fake_post(url, json, timeout):  # noqa: A002
+        captured.update({"url": url, "body": json})
+        return _mock_response(200, {
+            "recent_attempt_count": 3,
+            "recent_failure_count": 2,
+            "cooldown_until_ms": 0,
+            "server_time": 1,
+        })
+
+    with patch.object(c._session, "post", side_effect=fake_post):
+        r = c.record_attempt("runner-A", "JP-1", "failure")
+    assert isinstance(r, RecordAttemptResult)
+    assert r.recent_attempt_count == 3
+    assert r.recent_failure_count == 2
+    assert r.cooldown_until_ms == 0
+    assert captured["url"].endswith("/login_state/record_attempt")
+    assert captured["body"] == {
+        "holder_id": "runner-A",
+        "proxy_name": "JP-1",
+        "outcome": "failure",
+    }
+
+
+def test_record_attempt_success_outcome_round_trips():
+    c = _make_client()
+    body = {
+        "recent_attempt_count": 7,
+        "recent_failure_count": 4,
+        "cooldown_until_ms": 999_999,
+        "server_time_ms": 1_000,
+    }
+    with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+        r = c.record_attempt("runner-A", "JP-1", "success")
+    assert r.cooldown_until_ms == 999_999
+    assert r.server_time_ms == 1_000
+
+
+def test_record_attempt_rejects_empty_holder_id():
+    c = _make_client()
+    with pytest.raises(LoginStateUnavailable, match="holder_id"):
+        c.record_attempt("", "JP-1", "failure")
+
+
+def test_record_attempt_rejects_empty_proxy_name():
+    c = _make_client()
+    with pytest.raises(LoginStateUnavailable, match="proxy_name"):
+        c.record_attempt("runner-A", "", "failure")
+
+
+def test_record_attempt_rejects_invalid_outcome():
+    c = _make_client()
+    with pytest.raises(LoginStateUnavailable, match="outcome"):
+        c.record_attempt("runner-A", "JP-1", "neutral")
+
+
+def test_record_attempt_collapses_503_into_unavailable():
+    c = _make_client()
+    with patch.object(
+        c._session, "post",
+        return_value=_mock_response(503, {"error": "x"}, "x"),
+    ):
+        with pytest.raises(LoginStateUnavailable, match="HTTP 503"):
+            c.record_attempt("runner-A", "JP-1", "failure")
+
+
+def test_record_attempt_collapses_malformed_json_into_unavailable():
+    c = _make_client()
+    with patch.object(
+        c._session, "post",
+        return_value=_mock_response(200, {"server_time": 1}),  # missing fields
+    ):
+        with pytest.raises(LoginStateUnavailable, match="malformed record_attempt"):
+            c.record_attempt("runner-A", "JP-1", "failure")
+
+
+def test_record_attempt_collapses_network_error_into_unavailable():
+    c = _make_client()
+    with patch.object(
+        c._session, "post",
+        side_effect=requests.ConnectionError("nope"),
+    ):
+        with pytest.raises(LoginStateUnavailable, match="network error"):
+            c.record_attempt("runner-A", "JP-1", "failure")
 
 
 # ── health_check ────────────────────────────────────────────────────────────
