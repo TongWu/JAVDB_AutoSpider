@@ -501,6 +501,59 @@ class MovieSleepManager:
         eff_min, _ = self._effective_range()
         return min(round(eff_min * COOLDOWN_FRACTION, 2), COOLDOWN_MAX)
 
+    def _mirror_remote_ban_locally(self, proxy_id: str) -> None:
+        """Mirror a coordinator-reported ban onto the local proxy pool.
+
+        Resolved lazily via ``runtime.state`` to avoid an import cycle
+        (``state`` imports ``sleep`` indirectly via ``initialize_request_handler``).
+        Best-effort: any failure (no pool, proxy not in pool, exception)
+        falls back to a logged WARNING and the lease grant still proceeds —
+        the original local-only behaviour, plus the throttle from the DO.
+        """
+        try:
+            from packages.python.javdb_spider.runtime import state as _state
+            pool = _state.global_proxy_pool
+            if pool is None:
+                # Without a pool there's nowhere to mark the ban locally; we
+                # still record the proxy in the global ban manager so any
+                # future pool init sees it as banned.
+                from packages.python.javdb_platform.proxy_ban_manager import get_ban_manager
+                get_ban_manager().add_ban(proxy_id)
+                return
+            ban_proxy = getattr(pool, "ban_proxy", None)
+            if callable(ban_proxy):
+                ban_proxy(proxy_id)
+            else:
+                # Fallback: at minimum, register the ban so subsequent
+                # ``add_proxy`` calls reject the ID.
+                from packages.python.javdb_platform.proxy_ban_manager import get_ban_manager
+                get_ban_manager().add_ban(proxy_id)
+        except Exception:  # noqa: BLE001 — must never block lease processing
+            logger.warning(
+                "Failed to mirror remote ban for '%s' into local state",
+                proxy_id, exc_info=True,
+            )
+
+    def _mirror_remote_cf_bypass_locally(self, proxy_id: str) -> None:
+        """Mirror a coordinator-reported CF bypass requirement locally.
+
+        Best-effort fail-open; same caveats as :meth:`_mirror_remote_ban_locally`.
+        """
+        try:
+            from packages.python.javdb_spider.runtime import state as _state
+            # Only mirror when the local switch is enabled — otherwise we'd
+            # populate ``proxies_requiring_cf_bypass`` with no consumers and
+            # surprise the operator who explicitly disabled CF bypass via
+            # ``always_bypass_time is None``.
+            if _state.always_bypass_time is None:
+                return
+            _state.proxies_requiring_cf_bypass[proxy_id] = time.time()
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "Failed to mirror remote CF bypass marker for '%s' locally",
+                proxy_id, exc_info=True,
+            )
+
     def plan_sleep(self) -> Tuple[float, bool]:
         """Decide how long the caller should sleep, **without** sleeping.
 
@@ -546,6 +599,16 @@ class MovieSleepManager:
                     self._penalty_tracker.set_remote_factor(
                         lease.penalty_factor, ttl_sec=self._remote_factor_ttl_sec,
                     )
+                # P1-A — passively sync remote ban / cf_bypass markers into
+                # local state so the next proxy selection naturally avoids
+                # banned proxies and the next request wakes CF bypass when
+                # required.  Both calls are best-effort; their internal
+                # dedup (ban manager already-banned check / cf_bypass dict
+                # idempotent set) makes repeated arrivals harmless.
+                if getattr(lease, "banned", False):
+                    self._mirror_remote_ban_locally(self._proxy_id)
+                if getattr(lease, "requires_cf_bypass", False):
+                    self._mirror_remote_cf_bypass_locally(self._proxy_id)
                 self._coord_failures = 0
                 return wait_seconds, True
             except Exception as e:
