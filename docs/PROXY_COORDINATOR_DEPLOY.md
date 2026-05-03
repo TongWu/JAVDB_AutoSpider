@@ -418,3 +418,80 @@ DO 的 `next_available_at` + 三窗口把每代理总吞吐限死在拟人化节
   `wrangler deploy`，无需改 Python 端
 - **新增端点**：在 `src/index.ts` 加路由，`src/proxy_coordinator.ts`
   加 DO 方法
+
+---
+
+## 13. Cross-runtime login state DO（GlobalLoginState）
+
+第 0–12 节描述的 `ProxyCoordinator`（per-proxy 节流 DO）解决了**请求节奏**
+跨 runner 的协调问题。但 JavDB 还有第二个跨 runner 隐患——**at-most-one
+登录会话**：在代理 A 上登录会让代理 B 此前持有的 cookie 失效。如果 N 个
+GH Actions 同时跑，每个 runner 都各自 attempt_login_refresh，会出现：
+
+1. 重复登录浪费 GPT 验证码 / 账号 lockout 风险升高；
+2. 后登录的 runner 抢占 cookie → 其它 runner 全部 cookie 失效 → 重新登录
+   → 死循环。
+
+`GlobalLoginState` 是部署在**同一个 Worker** 内的**第二个 DO 类**（singleton
+`idFromName("global")`），存储 `(logged_in_proxy_name, encrypted_cookie,
+version, last_verified_at)` 加一个 `lease` 互斥锁。同一个
+`PROXY_COORDINATOR_TOKEN` 同时承担：
+- 5 个 `/login_state*` 端点的 Bearer 鉴权；
+- AES-GCM 256 加密 cookie 的密钥推导（HKDF-SHA256）。
+
+### 13.1 工作流程（Python 端）
+
+启动时 `_inherit_login_state` 先 `GET /login_state` 拿一份现成的 cookie；
+没有 cookie 时按需走 `acquire_lease` → 实际登录 → `publish` →
+`release_lease`。被另一 runner 抢锁的 worker 不会阻塞——LoginCoordinator
+把 `LoginRequired` 的 task 投到本地 `_pending_login_tasks` deque，由
+`_poll_login_state_loop` daemon 每 3s 轮询 DO；一旦观察到 `version`
+增长就把新 cookie 注入对应 worker 并重新分发 parked task。**期间其它
+代理的 worker 完全不受影响**，正常拉非登录页面。
+
+### 13.2 端点速查
+
+> 完整 schema 与示例 curl 见 Worker repo README 的 "GlobalLoginState
+> endpoints" 一节。
+
+| 端点 | 用途 |
+|---|---|
+| `GET /login_state` | 读当前 (proxy_name, 解密 cookie, version) |
+| `POST /login_state/acquire_lease` | 获取 5–300s 的再登录互斥锁 |
+| `POST /login_state/publish` | 持锁者发布新 cookie（version+1） |
+| `POST /login_state/invalidate` | 乐观锁标记 cookie 失效 |
+| `POST /login_state/release_lease` | 持锁者释放互斥锁 |
+
+### 13.3 部署（与 §5 同步）
+
+`wrangler deploy` 时新增的 `[[migrations]] tag = "v2"` 会自动创建
+`GlobalLoginState` 类。无需新增 secret——加密 key 与 Bearer 鉴权共享
+`PROXY_COORDINATOR_TOKEN`，**轮换 token 即同时强制下次登录**（旧 cookie
+解密失败 → DO 端返回 `cookie:null` → 下个 runner 走 `acquire_lease` 重登）。
+
+### 13.4 Python 端配置
+
+无需新增任何环境变量。`packages/python/javdb_platform/login_state_client.py`
+复用 `PROXY_COORDINATOR_URL` / `PROXY_COORDINATOR_TOKEN`；`setup_proxy_pool`
+顺带 `setup_login_state_client`，未配置 / `/health` 失败时静默 fail-open
+退化为「per-runner 各自登录」的旧行为。每个 runner 启动时生成一次
+`runtime_holder_id = f"runner-<uuid>"`（`state.runtime_holder_id`）作为
+lease 持有者标识，整个进程生命周期内保持不变。
+
+### 13.5 故障排查
+
+| 症状 | 排查 |
+|---|---|
+| 启动日志只见 `Proxy coordinator client initialised` 而无 `Login-state client initialised` | Worker 部署版本太旧，没有 `/login_state*` 路由——重新跑 §5 部署最新 Worker |
+| 多个 runner 仍各自登录 | 检查 Worker 端 `wrangler tail` 是否看到 `/login_state/acquire_lease` 请求；常见原因：旧 client 没升级 / token 仅在部分 runner 注入 |
+| `409 lease_required` warning | 旧的顺序 fallback 路径调 `attempt_login_refresh` 时没先 acquire——预期内的 fail-open，本 runner 仍能用 cookie，只是没有跨 runner 共享 |
+| `invalidate no-op (current_version > our N)` | 版本竞态——其它 runner 先 publish 了新 cookie；poller 在下一 tick 拉取并自动同步，无需人工干预 |
+| Cookie 频繁被刷掉 | 用户在浏览器里登录了同一账号——这是 JavDB 单会话约束；提高 `LOGIN_VERIFICATION_URLS` 命中率减少误检 |
+
+### 13.6 回滚
+
+软关：与 §8.1 一样，删除 `PROXY_COORDINATOR_URL` 即同时关掉 throttle 与
+login-state 协调。
+
+硬删：`wrangler delete --class-name GlobalLoginState`（仅删 v2 引入的
+`GlobalLoginState`，不影响 v1 的 `ProxyCoordinator`）。
