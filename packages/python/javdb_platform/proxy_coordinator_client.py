@@ -30,7 +30,7 @@ import os
 import queue
 import threading
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import requests
 
@@ -41,6 +41,13 @@ logger = get_logger(__name__)
 
 _DEFAULT_TIMEOUT_SEC = 5.0
 _DEFAULT_USER_AGENT = "javdb-spider-proxy-coordinator-client/1.0"
+
+# P1-A — default ban duration (3 days) used by `mark_proxy_banned` and the
+# Worker's `loadBanTtlMs` fallback.  Keeping the value here lets every spider
+# call site stay consistent without having to thread the constant through
+# config; if ops want to override globally they can set the Worker's
+# `BAN_TTL_MS` via `wrangler.toml [vars]` instead.
+DEFAULT_BAN_TTL_MS = 3 * 24 * 60 * 60 * 1000  # 259_200_000
 
 # ── Async report dispatch ────────────────────────────────────────────────
 # ``report_async`` is fired from CF / failure handlers in the request hot
@@ -69,6 +76,40 @@ class CoordinatorUnavailable(Exception):
 
 
 @dataclass(frozen=True)
+class ProxyHealthSnapshot:
+    """P2-D — derived per-proxy health metrics returned alongside a lease.
+
+    All four fields default to ``None`` / ``0`` so older Workers that
+    don't surface ``health`` look identical to the pre-P2-D behaviour;
+    callers must treat ``score is None`` as "no signal, use neutral
+    weighting" (the Python ``ProxyPool.next_proxy`` weighting falls back
+    to a uniform distribution in that case).
+
+    Attributes:
+        success_count: Number of successful HTTP responses observed in
+            the rolling window (``CF_RECENT_WINDOW_MS`` on the Worker
+            side, currently 5 min).
+        failure_count: Number of CF / 4xx / 5xx / connection failures
+            observed in the same window.
+        latency_ema_ms: Exponential moving average (alpha=0.2) of the
+            ``latency_ms`` reported via ``report(kind=…, latency_ms=…)``.
+            ``0`` means "no latency samples yet".
+        score: Derived proxy-quality score in [0, 1]:
+
+            - ``0.5`` when no events are recorded yet (neutral baseline).
+            - Otherwise ``success_count / (success + failure)`` minus a
+              latency penalty (``(latency_ema_ms - 500) / 10000``,
+              capped at 0.5) so a 100%-success proxy that takes 5 s per
+              request scores worse than a 100%-success 200 ms proxy.
+    """
+
+    success_count: int = 0
+    failure_count: int = 0
+    latency_ema_ms: float = 0.0
+    score: float = 0.5
+
+
+@dataclass(frozen=True)
 class LeaseResult:
     """Reply from ``POST /lease``.
 
@@ -84,13 +125,39 @@ class LeaseResult:
             sleep adaptation; see :meth:`PenaltyTracker.set_remote_factor`.
         server_time_ms: Server-side ``Date.now()`` at lease grant time, for
             clock-skew diagnostics.
-        reason: Why the wait is what it is — useful for logs.
+        reason: Why the wait is what it is — useful for logs.  When the
+            proxy is currently banned the Worker emits ``"banned"`` (the
+            P1-A addition); old Worker deploys never produce this value.
+        banned: P1-A — ``True`` iff the Worker reports the proxy as
+            currently banned at lease time.  Defaults to ``False`` so
+            old Workers (which never set this key) keep the
+            pre-coordinator behaviour.
+        banned_until: P1-A — wall-clock ms epoch when the current ban
+            auto-expires; ``None`` when not banned (or when the Worker
+            predates this field).
+        requires_cf_bypass: P1-A — ``True`` iff the proxy needs CF bypass
+            to talk to JavDB.  Mirrors ``state.proxies_requiring_cf_bypass``
+            on the Python side; defaults to ``False`` for old Workers.
+        cf_bypass_until: P1-A — wall-clock ms epoch when CF bypass
+            requirement auto-expires.  ``0`` is the *permanent for this
+            session* sentinel (mirrors ``state.always_bypass_time == 0``);
+            ``None`` when no bypass requirement is currently set or the
+            Worker predates this field.
     """
 
     wait_ms: int
     penalty_factor: float
     server_time_ms: int
     reason: str
+    # P1-A — all four optional fields default to "no signal", so a Worker
+    # that doesn't know about them looks identical to the old behaviour.
+    banned: bool = False
+    banned_until: Optional[int] = None
+    requires_cf_bypass: bool = False
+    cf_bypass_until: Optional[int] = None
+    # P2-D — derived per-proxy health snapshot. ``None`` means the Worker
+    # predates the field; callers must fall back to uniform weighting.
+    health: Optional[ProxyHealthSnapshot] = None
 
 
 @dataclass(frozen=True)
@@ -138,7 +205,21 @@ def _normalize_proxy_id(raw: Optional[str], *, fallback_seed: Optional[str] = No
     raise ValueError("proxy_id is empty and no fallback_seed was provided")
 
 
-_VALID_REPORT_KINDS = ("cf", "failure")
+# P1-A — ``ban`` / ``unban`` / ``cf_bypass`` are *out-of-band* report kinds
+# that mutate the Worker's per-proxy ``bannedUntil`` / ``cfBypassUntil`` state
+# fields without touching the throttle history (``cfEvents`` / penalty factor).
+# See ``JAVDB_AutoSpider_Proxycoordinator/src/proxy_coordinator.ts`` handleReport.
+_VALID_REPORT_KINDS = (
+    "cf",
+    "failure",
+    "ban",
+    "unban",
+    "cf_bypass",
+    # P2-D — successful HTTP completion. Augments ``success_count`` and
+    # the latency EMA on the Worker side, but does NOT touch the cf-event
+    # bucket / penalty factor (kept distinct from "cf" on purpose).
+    "success",
+)
 
 
 def _validate_kind(kind: str) -> str:
@@ -219,6 +300,14 @@ class ProxyCoordinatorClient:
         self._async_lock = threading.Lock()
         self._async_shutdown = False
         self._async_workers: List[threading.Thread] = []
+        # P2-D — cache the most recent ``health`` snapshot per proxy so
+        # ``ProxyPool.next_proxy`` can read scores without a per-pick HTTP
+        # round-trip.  Populated as a side-effect of ``lease()``; survives
+        # for the lifetime of the client.  Keyed by the *normalised* proxy
+        # id so lookups from the pool (which uses the configured ``name``)
+        # match the keys produced by leases.
+        self._health_cache: Dict[str, ProxyHealthSnapshot] = {}
+        self._health_cache_lock = threading.Lock()
 
     def _close_session(self) -> None:
         try:
@@ -269,35 +358,112 @@ class ProxyCoordinatorClient:
             raise CoordinatorUnavailable(f"invalid JSON: {e}") from e
 
         try:
+            # P1-A — surface ban / cf_bypass piggy-backed on the lease.  All
+            # four fields are optional on the wire so an older Worker keeps
+            # working unchanged.  ``banned_until`` / ``cf_bypass_until`` are
+            # left as ``None`` when the key is missing OR when the Worker
+            # explicitly sends ``null``; ``cf_bypass_until == 0`` is preserved
+            # because it carries the *permanent for this session* meaning.
+            banned_until_raw = data.get("banned_until")
+            banned_until = (
+                int(banned_until_raw) if banned_until_raw is not None else None
+            )
+            cf_bypass_until_raw = data.get("cf_bypass_until")
+            cf_bypass_until = (
+                int(cf_bypass_until_raw) if cf_bypass_until_raw is not None else None
+            )
+            # P2-D — ``health`` is optional. We treat a missing key, ``null``,
+            # or a non-dict value as "no signal" (-> ``None``) so a malformed
+            # response from a partially-deployed Worker can never crash the
+            # spider. ``ProxyPool.next_proxy`` falls back to uniform weighting
+            # when ``health is None``.
+            health_raw = data.get("health")
+            health: Optional[ProxyHealthSnapshot]
+            if isinstance(health_raw, dict):
+                try:
+                    health = ProxyHealthSnapshot(
+                        success_count=int(health_raw.get("success_count", 0)),
+                        failure_count=int(health_raw.get("failure_count", 0)),
+                        latency_ema_ms=float(health_raw.get("latency_ema_ms", 0.0)),
+                        score=float(health_raw.get("score", 0.5)),
+                    )
+                except (TypeError, ValueError):
+                    health = None
+            else:
+                health = None
+            # P2-D — refresh the cache so subsequent ``get_proxy_health()``
+            # calls (driven by ``ProxyPool.next_proxy`` weighting) see the
+            # latest snapshot without an extra round-trip.
+            if health is not None:
+                with self._health_cache_lock:
+                    self._health_cache[normalized] = health
             return LeaseResult(
                 wait_ms=int(data["wait_ms"]),
                 penalty_factor=float(data["penalty_factor"]),
                 server_time_ms=_extract_server_time_ms(data),
                 reason=str(data.get("reason", "ok")),
+                banned=bool(data.get("banned", False)),
+                banned_until=banned_until,
+                requires_cf_bypass=bool(data.get("requires_cf_bypass", False)),
+                cf_bypass_until=cf_bypass_until,
+                health=health,
             )
         except (KeyError, TypeError, ValueError) as e:
             raise CoordinatorUnavailable(
                 f"malformed response: {data!r} ({e})"
             ) from e
 
-    def report(self, proxy_id: str, kind: str = "cf") -> ReportResult:
-        """Report a CF / failure event on *proxy_id*.
+    def report(
+        self,
+        proxy_id: str,
+        kind: str = "cf",
+        *,
+        ttl_ms: Optional[int] = None,
+        reason: Optional[str] = None,
+        latency_ms: Optional[int] = None,
+    ) -> ReportResult:
+        """Report a CF / failure / ban / unban / cf_bypass / success event on *proxy_id*.
 
         Same failure semantics as :meth:`lease` — never retries, raises
         :class:`CoordinatorUnavailable` on any error. ``kind`` must be one of
         :data:`_VALID_REPORT_KINDS`; passing anything else raises
         :class:`ValueError` so typos surface at call time rather than being
         silently bucketed under ``"cf"``.
+
+        ``ttl_ms`` is honoured by ``kind="ban"`` and ``kind="cf_bypass"``;
+        ignored otherwise.  ``reason`` is a free-form ops annotation
+        (e.g. ``"manual"``, ``"penalty_2"``); the Worker stores it in the
+        analytics dataset but does not act on it.
+
+        ``latency_ms`` (P2-D) is folded into the per-proxy latency EMA on
+        the Worker side and is honoured for any ``kind`` (typically
+        ``"success"`` or ``"failure"`` from the request handler).  ``None``
+        skips the EMA update.
+
+        See ``JAVDB_AutoSpider_Proxycoordinator/src/proxy_coordinator.ts``
+        ``handleReport`` for the precise tri-state semantics of
+        ``cf_bypass`` (``ttl_ms == 0`` / omitted = permanent for this
+        session; ``> 0`` = wall-clock TTL window).
         """
         _validate_kind(kind)
         try:
             normalized = _normalize_proxy_id(proxy_id)
         except ValueError as e:
             raise CoordinatorUnavailable(f"invalid proxy_id: {e}") from e
+        body: dict = {"proxy_id": normalized, "kind": kind}
+        if ttl_ms is not None:
+            body["ttl_ms"] = int(ttl_ms)
+        if reason is not None:
+            body["reason"] = str(reason)
+        if latency_ms is not None:
+            # Clamp negatives to 0 so a clock-skew artefact can't poison the
+            # EMA.  The Worker also defends against this but doing it here
+            # keeps the wire payload tidy.
+            body["latency_ms"] = max(0, int(latency_ms))
         try:
             resp = self._session.post(
                 f"{self._base_url}/report",
-                json={"proxy_id": normalized, "kind": kind},
+                json=body,
                 timeout=self._timeout,
             )
         except (requests.Timeout, requests.ConnectionError) as e:
@@ -325,7 +491,15 @@ class ProxyCoordinatorClient:
                 f"malformed response: {data!r} ({e})"
             ) from e
 
-    def report_async(self, proxy_id: str, kind: str = "cf") -> None:
+    def report_async(
+        self,
+        proxy_id: str,
+        kind: str = "cf",
+        *,
+        ttl_ms: Optional[int] = None,
+        reason: Optional[str] = None,
+        latency_ms: Optional[int] = None,
+    ) -> None:
         """Fire-and-forget variant of :meth:`report`.
 
         Intended for use inside ``PenaltyTracker.record_event()`` where the
@@ -340,6 +514,10 @@ class ProxyCoordinatorClient:
         ``kind`` is validated synchronously so typos surface at the call
         site (a ``ValueError``) rather than being swallowed by the worker's
         broad exception handler 5–500 ms later.
+
+        ``ttl_ms`` / ``reason`` / ``latency_ms`` are forwarded verbatim to
+        :meth:`report` (used by the P1-A ``ban`` / ``cf_bypass`` kinds and
+        the P2-D ``success`` / ``failure`` kinds, respectively).
         """
         _validate_kind(kind)
         with self._async_lock:
@@ -355,7 +533,11 @@ class ProxyCoordinatorClient:
                     t.start()
                     self._async_workers.append(t)
             try:
-                self._async_queue.put_nowait((proxy_id, kind))
+                # Always enqueue a 5-tuple; the worker unpacks defensively so
+                # legacy 2-/4-tuples in flight at upgrade time still work.
+                self._async_queue.put_nowait(
+                    (proxy_id, kind, ttl_ms, reason, latency_ms)
+                )
             except queue.Full:
                 self._async_dropped += 1
                 count = self._async_dropped
@@ -372,6 +554,55 @@ class ProxyCoordinatorClient:
                     proxy_id, kind, count,
                 )
 
+    # ── P1-A convenience helpers ─────────────────────────────────────────
+    # These wrap ``report_async`` so call-sites in ``proxy_ban_manager`` and
+    # ``runtime/state.mark_proxy_cf_bypass`` don't have to remember the
+    # ``ttl_ms`` defaults / kind strings.  All are fire-and-forget and inherit
+    # the queue-full / unavailable behaviour of ``report_async``.
+
+    def mark_proxy_banned(
+        self,
+        proxy_id: str,
+        *,
+        ttl_ms: int = DEFAULT_BAN_TTL_MS,
+        reason: Optional[str] = None,
+    ) -> None:
+        """Persist a cross-runner ban on *proxy_id* (default 3 days).
+
+        The Worker takes the maximum of any concurrent ban TTL so two
+        runners reporting different durations on the same proxy never
+        accidentally shorten an existing ban.  Auto-expires server-side;
+        no client-side cleanup is required.
+        """
+        self.report_async(proxy_id, "ban", ttl_ms=ttl_ms, reason=reason)
+
+    def mark_proxy_unbanned(
+        self,
+        proxy_id: str,
+        *,
+        reason: Optional[str] = None,
+    ) -> None:
+        """Clear any active ban on *proxy_id* immediately."""
+        self.report_async(proxy_id, "unban", reason=reason)
+
+    def mark_cf_bypass(
+        self,
+        proxy_id: str,
+        *,
+        ttl_ms: Optional[int] = None,
+        reason: Optional[str] = None,
+    ) -> None:
+        """Flag *proxy_id* as needing CF bypass.
+
+        Mirrors ``state.mark_proxy_cf_bypass`` semantics:
+
+        - ``ttl_ms is None`` or ``ttl_ms == 0`` → permanent for this session
+          (the Worker stores ``cfBypassUntil = 0``, which is sticky and never
+          downgraded by a follow-up finite-TTL refresh).
+        - ``ttl_ms > 0`` → expires ``ttl_ms`` after the Worker receives it.
+        """
+        self.report_async(proxy_id, "cf_bypass", ttl_ms=ttl_ms, reason=reason)
+
     def _async_report_loop(self) -> None:
         """Worker loop: drain the async queue serialising calls to ``report``."""
         while True:
@@ -379,9 +610,27 @@ class ProxyCoordinatorClient:
             try:
                 if item is _ASYNC_QUEUE_SENTINEL or item[0] is None:
                     return
-                proxy_id, kind = item
+                # Backwards-compat: existing tests / call sites may push a
+                # 2-tuple ``(proxy_id, kind)`` or a 4-tuple including
+                # ``ttl_ms`` / ``reason``; new P2-D sites push a 5-tuple
+                # adding ``latency_ms``.  Unpack defensively.
+                proxy_id = item[0]
+                kind = item[1]
+                ttl_ms = item[2] if len(item) > 2 else None
+                reason = item[3] if len(item) > 3 else None
+                latency_ms = item[4] if len(item) > 4 else None
+                # Only forward optional kwargs when explicitly set so test
+                # stubs that monkeypatch ``report`` with the legacy 2-arg
+                # signature stay compatible.
+                kwargs: dict = {}
+                if ttl_ms is not None:
+                    kwargs["ttl_ms"] = ttl_ms
+                if reason is not None:
+                    kwargs["reason"] = reason
+                if latency_ms is not None:
+                    kwargs["latency_ms"] = latency_ms
                 try:
-                    self.report(proxy_id, kind)
+                    self.report(proxy_id, kind, **kwargs)
                 except CoordinatorUnavailable as e:
                     logger.warning("Coordinator report_async failed: %s", e)
                 except Exception:  # noqa: BLE001 — must never escape a daemon worker
@@ -441,6 +690,35 @@ class ProxyCoordinatorClient:
             for t in workers:
                 t.join(timeout=timeout)
         self._close_session()
+
+    def get_proxy_health(self, proxy_id: str) -> Optional[ProxyHealthSnapshot]:
+        """P2-D — return the most recently observed health snapshot, if any.
+
+        Reads the in-process cache populated as a side-effect of
+        :meth:`lease`; never fires its own HTTP request.  Returns ``None``
+        when the proxy hasn't been leased yet (so ``ProxyPool.next_proxy``
+        falls back to the neutral 0.5 baseline) or when the proxy id is
+        empty/invalid.  Thread-safe.
+        """
+        if not proxy_id or not isinstance(proxy_id, str):
+            return None
+        try:
+            normalized = _normalize_proxy_id(proxy_id)
+        except ValueError:
+            return None
+        with self._health_cache_lock:
+            return self._health_cache.get(normalized)
+
+    def get_proxy_health_score(self, proxy_id: str) -> Optional[float]:
+        """Convenience wrapper that returns just the ``score`` field.
+
+        ``ProxyPool`` accepts ``Callable[[str], Optional[float]]`` as its
+        ``health_provider`` so this method matches that signature
+        directly: callers can pass ``client.get_proxy_health_score`` as
+        the provider.
+        """
+        snap = self.get_proxy_health(proxy_id)
+        return snap.score if snap is not None else None
 
     def health_check(self) -> bool:
         """Return ``True`` if ``GET /health`` returns 200, else ``False``.
