@@ -151,7 +151,8 @@ class RequestHandler:
     BYPASS_HEADERS = {}
     
     def __init__(self, proxy_pool=None, config: Optional[RequestConfig] = None,
-                 penalty_tracker=None, on_cf_event=None):
+                 penalty_tracker=None, on_cf_event=None,
+                 on_request_complete=None):
         """
         Initialize request handler.
 
@@ -174,12 +175,25 @@ class RequestHandler:
                 Actions runners using the same proxy.  Failures are
                 silently swallowed (best-effort telemetry; never blocks
                 the request).
+            on_request_complete: P2-D — optional callback invoked after
+                every HTTP attempt with the per-attempt outcome and
+                wall-clock latency.  Signature is
+                ``callback(proxy_name: Optional[str], kind: str,
+                latency_ms: int) -> None`` where ``kind`` is one of
+                ``"success"`` / ``"failure"``.  Used by the
+                cross-instance proxy coordinator wiring to feed the
+                per-proxy ``successEvents`` / ``failureEvents`` /
+                ``latencyEma`` health snapshot returned alongside each
+                lease.  Best-effort; exceptions are swallowed so a
+                slow/unavailable coordinator can't block the request
+                hot path.
         """
         self.proxy_pool = proxy_pool
         self.config = config or RequestConfig()
         self.session = requests.Session()
         self.penalty_tracker = penalty_tracker
         self._on_cf_event = on_cf_event
+        self._on_request_complete = on_request_complete
 
         # Counter for consecutive CF bypass failures (small responses)
         self.cf_bypass_failure_count: int = 0
@@ -200,6 +214,27 @@ class RequestHandler:
                 self.use_curl_cffi = False
         elif not CURL_CFFI_AVAILABLE and self.config.use_curl_cffi:
             logger.info("curl_cffi not installed - using standard requests (install with: pip install curl_cffi)")
+
+    def _record_request_complete(
+        self,
+        proxy_name: Optional[str],
+        kind: str,
+        latency_ms: int,
+    ) -> None:
+        """P2-D — fire the per-attempt success/failure callback.
+
+        Wraps the optional ``on_request_complete`` callback in a try/except
+        so a slow or buggy coordinator can never break the request hot
+        path.  ``proxy_name`` is intentionally allowed to be ``None`` so
+        direct (no-proxy) requests still go through the same code path
+        and the wiring can decide whether to skip them.
+        """
+        if self._on_request_complete is None:
+            return
+        try:
+            self._on_request_complete(proxy_name, kind, max(0, int(latency_ms)))
+        except Exception:  # noqa: BLE001 — telemetry must not block requests
+            logger.debug("on_request_complete callback raised", exc_info=True)
 
     def _record_cf_event(self, proxy_name: Optional[str] = None) -> None:
         """Combined hook for local penalty tracking + cross-instance report.
@@ -411,11 +446,32 @@ class RequestHandler:
         
         return None, False
     
-    def _do_request(self, target_url: str, req_headers: Dict, req_proxies: Optional[Dict], 
-                    timeout: int, context_msg: str, session: Optional[requests.Session] = None) -> Tuple[Optional[str], Optional[Exception]]:
-        """Execute a single HTTP request using standard requests library."""
+    def _do_request(
+        self,
+        target_url: str,
+        req_headers: Dict,
+        req_proxies: Optional[Dict],
+        timeout: int,
+        context_msg: str,
+        session: Optional[requests.Session] = None,
+        *,
+        proxy_name: Optional[str] = None,
+        report_health: bool = False,
+    ) -> Tuple[Optional[str], Optional[Exception]]:
+        """Execute a single HTTP request using standard requests library.
+
+        ``report_health`` (P2-D) opts the call into the per-proxy
+        health-snapshot pipeline: the wall-clock latency is measured and
+        emitted via :meth:`_record_request_complete` so the cross-instance
+        coordinator can fold the sample into ``successEvents`` /
+        ``failureEvents`` / ``latencyEma`` for downstream proxy weighting.
+        Requests against the local CF-bypass service (a ``localhost``-style
+        port that does NOT carry the spider's outbound proxy) MUST leave
+        ``report_health=False`` so their latency doesn't poison the
+        proxy-quality metric.
+        """
         use_session = session or self.session
-        
+        start_monotonic = time.monotonic()
         try:
             logger.debug(f"[{context_msg}] Requesting: {target_url}")
             logger.debug(f"[{context_msg}] Headers: {req_headers}")
@@ -424,11 +480,15 @@ class RequestHandler:
             
             response = use_session.get(target_url, headers=req_headers, proxies=req_proxies, timeout=timeout)
 
+            elapsed_ms = int((time.monotonic() - start_monotonic) * 1000)
+
             # On 403 Forbidden, preserve the response body so callers can
             # inspect it for ban-page patterns before deciding how to handle.
             if response.status_code == 403:
                 body = response.text
                 logger.debug(f"[{context_msg}] HTTP 403 Forbidden (body {len(body)} bytes)")
+                if report_health:
+                    self._record_request_complete(proxy_name, "failure", elapsed_ms)
                 return body, requests.HTTPError(
                     f"403 Client Error: Forbidden for url: {target_url}",
                     response=response,
@@ -445,13 +505,27 @@ class RequestHandler:
             preview = response.text[:200].replace('\n', ' ').replace('\r', '')
             logger.debug(f"[{context_msg}] Response preview: {preview}...")
             
+            if report_health:
+                self._record_request_complete(proxy_name, "success", elapsed_ms)
             return response.text, None
         except requests.RequestException as e:
+            elapsed_ms = int((time.monotonic() - start_monotonic) * 1000)
             logger.debug(f"[{context_msg}] {type(e).__name__}: {mask_error(str(e))}")
+            if report_health:
+                self._record_request_complete(proxy_name, "failure", elapsed_ms)
             return None, e
     
-    def _do_request_curl_cffi(self, target_url: str, req_headers: Dict, req_proxies: Optional[Dict], 
-                               timeout: int, context_msg: str) -> Tuple[Optional[str], Optional[Exception]]:
+    def _do_request_curl_cffi(
+        self,
+        target_url: str,
+        req_headers: Dict,
+        req_proxies: Optional[Dict],
+        timeout: int,
+        context_msg: str,
+        *,
+        proxy_name: Optional[str] = None,
+        report_health: bool = False,
+    ) -> Tuple[Optional[str], Optional[Exception]]:
         """
         Execute a single HTTP request using curl_cffi for better TLS fingerprint.
         
@@ -471,7 +545,8 @@ class RequestHandler:
         if not self.use_curl_cffi or self.curl_cffi_session is None:
             logger.debug(f"[{context_msg}] curl_cffi not available, falling back to standard requests")
             return None, Exception("curl_cffi not available")
-        
+
+        start_monotonic = time.monotonic()
         try:
             logger.debug(f"[{context_msg}] [curl_cffi] Requesting: {target_url}")
             logger.debug(f"[{context_msg}] [curl_cffi] Impersonate: {self.config.curl_cffi_impersonate}")
@@ -541,9 +616,13 @@ class RequestHandler:
                 timeout=timeout
             )
 
+            elapsed_ms = int((time.monotonic() - start_monotonic) * 1000)
+
             if response.status_code == 403:
                 body = response.text
                 logger.debug(f"[{context_msg}] [curl_cffi] HTTP 403 Forbidden (body {len(body)} bytes)")
+                if report_health:
+                    self._record_request_complete(proxy_name, "failure", elapsed_ms)
                 return body, Exception(
                     f"403 Client Error: Forbidden for url: {target_url}"
                 )
@@ -559,9 +638,14 @@ class RequestHandler:
             preview = response.text[:200].replace('\n', ' ').replace('\r', '')
             logger.debug(f"[{context_msg}] [curl_cffi] Response preview: {preview}...")
             
+            if report_health:
+                self._record_request_complete(proxy_name, "success", elapsed_ms)
             return response.text, None
         except Exception as e:
+            elapsed_ms = int((time.monotonic() - start_monotonic) * 1000)
             logger.debug(f"[{context_msg}] [curl_cffi] {type(e).__name__}: {mask_error(str(e))}")
+            if report_health:
+                self._record_request_complete(proxy_name, "failure", elapsed_ms)
             return None, e
     
     def _get_bypass_ip(self, req_proxies: Optional[Dict], force_local: bool = False) -> Optional[str]:
@@ -813,11 +897,15 @@ class RequestHandler:
         html_content = None
         error = None
         
-        # Try curl_cffi first if available (better TLS fingerprint)
+        # Try curl_cffi first if available (better TLS fingerprint).  P2-D —
+        # this is a target-site request (proxy carries the actual outbound
+        # traffic), so opt into the per-proxy health pipeline.
         if self.use_curl_cffi:
             html_content, error = self._do_request_curl_cffi(
                 url, headers, req_proxies, timeout=30, 
-                context_msg=f"Direct {context_msg}"
+                context_msg=f"Direct {context_msg}",
+                proxy_name=proxy_name,
+                report_health=True,
             )
             if html_content:
                 logger.debug(f"[Direct] {context_msg} succeeded with curl_cffi")
@@ -825,12 +913,19 @@ class RequestHandler:
                 logger.debug(f"[Direct] {context_msg} curl_cffi failed, falling back to standard requests: {error}")
                 self._pause_between_attempts(legacy_seconds=0)
         
-        # Fall back to standard requests if curl_cffi failed or not available
+        # Fall back to standard requests if curl_cffi failed or not available.
+        # When the curl_cffi attempt already emitted a failure event, this
+        # follow-up attempt may emit a second event for the same logical
+        # request — that's intentional and gives the EMA two latency samples
+        # in the rare double-attempt path; the success/failure ratio still
+        # converges correctly because each attempt is its own observation.
         if not html_content:
             html_content, error = self._do_request(
                 url, headers, req_proxies, timeout=30, 
                 context_msg=f"Direct {context_msg}",
-                session=session
+                session=session,
+                proxy_name=proxy_name,
+                report_health=True,
             )
         
         if html_content:
