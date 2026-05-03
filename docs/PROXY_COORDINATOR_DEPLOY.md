@@ -495,3 +495,341 @@ login-state 协调。
 
 硬删：`wrangler delete --class-name GlobalLoginState`（仅删 v2 引入的
 `GlobalLoginState`，不影响 v1 的 `ProxyCoordinator`）。
+
+---
+
+## 14. P1-A：跨 run proxy ban + CF bypass 共享（搭车 ProxyCoordinator）
+
+第 0–13 节解决了**节流**与**登录**的跨 runner 协调。**P1-A** 进一步把
+两类原本只在单 runner 内存里的状态搭车进 `ProxyCoordinator` DO：
+
+| 状态 | 之前 | P1-A 之后 |
+|---|---|---|
+| `proxy_ban_manager` 黑名单 | session-scoped、进程死即清零 | 跨 run 持久化，默认 **3 天 TTL**（259_200_000 ms），到期自动解封 |
+| `proxies_requiring_cf_bypass` | per-runner 字典 | 每个 runner 在下一次 `/lease` 时被动同步，避免重复探测 CF |
+
+**零额外 DO 调用**——这两类信号都搭车在已有的 `/lease`（读路径）和
+`/report`（写路径）上。
+
+### 14.1 协议改动（向后兼容）
+
+- `ReportRequest.kind` union 扩展为
+  `"cf" | "failure" | "ban" | "unban" | "cf_bypass" | "success"`，body 加
+  可选 `ttl_ms?: number` 与 `reason?: string`。
+- `LeaseResponse` 加可选字段 `banned: boolean`（默认 `false`）、
+  `banned_until: number | null`、`requires_cf_bypass: boolean`、
+  `cf_bypass_until: number | null`。
+- 老 Worker 不发新字段时 Python 客户端 dataclass 全部默认为
+  「无信号」，行为与今天完全一致。
+
+### 14.2 默认 TTL（`wrangler.toml [vars]`）
+
+| 变量 | 默认 | 含义 |
+|---|---|---|
+| `BAN_TTL_MS` | `259200000` | 单次 `mark_proxy_banned` 默认 3 天 |
+| `CF_BYPASS_TTL_MS` | 由调用方按 `ttl_ms` 指定；`0` = 永久 | 与 `state.always_bypass_time` 语义一致 |
+
+### 14.3 运维 cheat sheet
+
+```bash
+# 手动解封某代理（例如人工确认健康度恢复后提前重启探测）：
+curl -H "Authorization: Bearer $PROXY_COORDINATOR_TOKEN" \
+     -H "content-type: application/json" \
+     -d '{"proxy_id":"JP-1","kind":"unban","reason":"manual"}' \
+     "$PROXY_COORDINATOR_URL/report"
+
+# 临时把代理标记为永久 CF bypass（直至 wrangler delete）：
+curl -H "Authorization: Bearer $PROXY_COORDINATOR_TOKEN" \
+     -H "content-type: application/json" \
+     -d '{"proxy_id":"JP-1","kind":"cf_bypass","ttl_ms":0,"reason":"sticky"}' \
+     "$PROXY_COORDINATOR_URL/report"
+
+# 读取某代理的实时 ban / bypass 状态（需要 GET /state，仅调试用）：
+curl -H "Authorization: Bearer $PROXY_COORDINATOR_TOKEN" \
+     "$PROXY_COORDINATOR_URL/state?proxy_id=JP-1"
+```
+
+### 14.4 回滚
+
+零代码改动：删除 `PROXY_COORDINATOR_URL` 即同时关掉 ban / bypass 共享，
+spider 退回到内存黑名单 + per-runner CF 字典（即「PR 之前」的行为）。
+
+---
+
+## 15. P1-B / P2-A：MovieClaim DO（跨 runner detail 互斥 + 失败冷却）
+
+### 15.1 解决的问题
+
+两个并发 ingestion（例：DailyIngestion + 手动 AdHoc）对同一 actor 拉
+同一 movie 的 `/v/<id>` 详情页时，进程内的 `_completed_entries`
+**不跨 runner 协调**——双方都会发 HTTP、各自 6–20 s sleep、双倍 parser
+开销。**P1-B** 引入新 DO 类 `MovieClaimState`，**按天分片**
+（`idFromName("YYYY-MM-DD-Asia/Singapore")`），用单 key snapshot +
+`cached` 内存层 + DO Alarm 每 10 min GC 实现。
+
+**P2-A** 在同一 schema 上加 `fail_count` / `next_attempt_at` /
+`last_error_kind`：detail-fetch 失败时通过 `/report_failure` 进入冷却
+ladder（指数退避到 3 day cap），多次失败后变 dead-letter，其它 runner
+在 `claim_movie` 时被直接拒绝。
+
+### 15.2 协议端点
+
+| 端点 | 用途 |
+|---|---|
+| `POST /claim_movie` | body `{ href, holder_id, ttl_ms }` → `{ acquired, current_holder_id, expires_at, already_completed, cooldown_until?, last_error_kind?, fail_count? }` |
+| `POST /release_movie` | body `{ href, holder_id }` 持有者释放 |
+| `POST /complete_movie` | body `{ href, holder_id }` 标记完成；同时清除 P2-A 失败记录 |
+| `POST /report_failure` | body `{ href, holder_id, error_kind }` 进入冷却 / dead-letter |
+| `GET /movie_status?href=X&date=YYYY-MM-DD` | 调试 dump |
+
+### 15.3 部署（与 §5 同步）
+
+`wrangler deploy` 时新的 `[[migrations]] tag = "v3" new_sqlite_classes
+= ["MovieClaimState", "RunnerRegistry"]` 会一次性创建 P1-B 与 P2-E 两
+个新类（共享 v3 tag）。`wrangler.toml` 已添加 `MOVIE_CLAIM_DO`
+binding 与 `[vars]` 段的 `MOVIE_CLAIM_TTL_MS`（默认 `1800000`，30 分）。
+
+### 15.4 默认 OFF：`MOVIE_CLAIM_ENABLED`
+
+单 runner 场景启用 P1-B 完全没有收益却仍要付 +2 DO 调用/页的成本。
+故 GitHub → Variables → `MOVIE_CLAIM_ENABLED`，**默认 `false`**，
+确认有 ≥2 runner 并发时再设为 `true`：
+
+```
+MOVIE_CLAIM_ENABLED = true
+```
+
+Python 端 `setup_movie_claim_client` 在该开关为假时直接返回 `None`，
+`detail/runner.py` 的 claim/complete/release 调用全部退化为 no-op，
+行为与「未配置 DO」完全一致。
+
+### 15.5 跨日 ingestion 注意
+
+shard date 由**任务发起时刻**派生（不是 claim 调用时刻），保证跨日
+ingestion 不会因为越过午夜把同一 movie 路由到两个 shard 而失去互斥。
+
+### 15.6 故障排查
+
+| 症状 | 排查 |
+|---|---|
+| `Movie claim client not initialised` 但 `MOVIE_CLAIM_ENABLED=true` | Worker 部署版本太旧或 `/health` 失败；查看 `wrangler tail` 看是否有 `/movie_status` 404 |
+| 同一 movie 跨日被两个 runner 同时抓 | 客户端时区配置漂移；检查 `Asia/Singapore` 与 `path_helper.ensure_dated_dir` 是否一致 |
+| 某 movie 「永远」claim 不到 | 该 href 进入 P2-A dead-letter（`fail_count >= 5`）；用 `complete_movie` 强制清除或等 24 h 自动 GC |
+| Alarm GC 没触发 | DO 必须在第一次写入后才会注册 alarm；冷启动后第一次 claim 才开始 10 min 周期 |
+
+### 15.7 回滚
+
+- 软关：删除 `MOVIE_CLAIM_ENABLED` 即可（其它 DO 不受影响）。
+- 完全删类：`npx wrangler delete --class-name MovieClaimState`（不影响
+  v1/v2/v3 的其它类）。
+
+---
+
+## 16. P2-E：RunnerRegistry（运维可观测 + 配置漂移检测）
+
+### 16.1 解决的问题
+
+多 runner 并发时无法回答：
+- 「现在有几个 runner 在跑？」
+- 「另一个 runner 的 `workflow_run_id` 是什么？」
+- 「他们的 `PROXY_POOL_JSON` 跟我一致吗？」（**配置漂移**——原计划 P3-B
+  的全部目的）
+
+**P2-E** 新增 singleton DO `RunnerRegistry`（`idFromName("runners")`），
+在 `setup_proxy_pool` 末尾 `register`，daemon 每 60 s `heartbeat`，
+`atexit` `unregister`。DO 内 Alarm 每 5 min 清 `last_heartbeat <
+now - 10 min` 的 stale runner。
+
+### 16.2 协议端点
+
+| 端点 | 用途 |
+|---|---|
+| `POST /register` | body `{ holder_id, workflow_run_id, workflow_name, started_at, proxy_pool_hash, page_range? }` → 返回所有当前 runner 的 `proxy_pool_hash[]` |
+| `POST /heartbeat` | body `{ holder_id }` |
+| `POST /unregister` | body `{ holder_id }` |
+| `GET /active_runners` | 调试 dump |
+
+### 16.3 配置漂移告警
+
+`register` 响应中包含其它 runner 的 `proxy_pool_hash`。本 runner 启动
+时若发现自己的 `sha1(PROXY_POOL_JSON)[:16]` 与现有某个 runner 不同，
+会打一条 **WARNING**：
+
+```
+PROXY_POOL_JSON drift detected: this runner=<my_hash> peers=[<other_hash>] —
+two runners are working with different proxy pools, ban / claim coordination may be inconsistent
+```
+
+这是「轻量级」告警，不阻塞启动。运维需要做的是确认两个 GH Actions
+workflow 的 `PROXY_POOL_JSON` Secret 是否同步更新。
+
+### 16.4 部署
+
+`wrangler.toml` 已添加 `RUNNER_REGISTRY_DO` binding。第一次 `wrangler
+deploy` 时与 P1-B 共用 `[[migrations]] tag = "v3"` 一并创建。
+`[vars]` 段：
+
+| 变量 | 默认 | 含义 |
+|---|---|---|
+| `RUNNER_REGISTRY_ENABLED` | `"true"` | Worker 端总开关；GH Variables 同名变量优先 |
+| `RUNNER_STALE_TTL_MS` | `600000` | heartbeat 超 10 分钟即视为 stale |
+
+### 16.5 故障排查
+
+| 症状 | 排查 |
+|---|---|
+| `Runner registry client not initialised` | 同 §15.6 第 1 行 |
+| `unregister failed: HTTP 503` | atexit 钩子；预期内（容错），不影响 5 min 后的 alarm GC |
+| `proxy_pool_hash` 全部不同 | 多 workflow 的 Secret 没同步；提交 PR 把 `PROXY_POOL_JSON` 拉成 reusable workflow 输入 |
+
+### 16.6 回滚
+
+- 软关：GitHub Variables → `RUNNER_REGISTRY_ENABLED=false`（或删除
+  `PROXY_COORDINATOR_URL`）。
+- 完全删类：`npx wrangler delete --class-name RunnerRegistry`。
+
+---
+
+## 17. P2-C：登录配额跨 runner 冷却
+
+### 17.1 解决的问题
+
+`login_total_budget`（`state.py`）按当前 run 的
+`len(PROXY_POOL) * LOGIN_ATTEMPTS_PER_PROXY_LIMIT` 计算。即便有
+`GlobalLoginState.acquire_lease` 串行化，N 个 runner 同一天仍会按
+**各自的 budget** 独立累加 attempt——5 个 runner × 5 attempt = 25 次
+登录尝试，远超 JavDB 风控阈值。
+
+**P2-C** 在 `GlobalLoginStateData` 加 `recent_attempts[]`（24 h 滚动窗口
++ 缓冲上限），在 `acquire_lease` 超阈值时**仍授予 lease 但同时返回
+`cooldown_until_ms > 0`**。Python 端 `LoginCoordinator` 检测到
+cooldown 即刻 release lease 并把所有 `LoginRequired` task 投入
+`_pending_login_tasks` deque；daemon `_poll_login_state_loop` 每 3 s
+轮询，cooldown 解除后自动重新分发。
+
+### 17.2 协议改动（向后兼容）
+
+- `AcquireLeaseResponse` 加可选字段 `cooldown_until_ms?: number`、
+  `recent_attempt_count?: number`（默认 0，老 client 忽略）。
+- 新增 `POST /login_state/record_attempt` body `{ holder_id, proxy_name,
+  outcome }`，publisher 在 `publish` 成功 / 失败时调用一次，让 DO 累积
+  attempt。
+
+### 17.3 默认配置（`wrangler.toml [vars]`）
+
+| 变量 | 默认 | 含义 |
+|---|---|---|
+| `LOGIN_COOLDOWN_THRESHOLD` | `"5"` | 24 h 内 ≥5 次失败 attempt 触发 cooldown |
+| `LOGIN_COOLDOWN_WINDOW_SEC` | `"3600"` | 滚动窗口 1 小时 |
+| `LOGIN_COOLDOWN_DURATION_MS` | `"1800000"` | 命中后所有 runner 暂停 30 分钟 |
+
+### 17.4 故障排查
+
+| 症状 | 排查 |
+|---|---|
+| 启动后 spider 日志一直 `parking <N> tasks (cooldown active)` | 预期行为；查 `wrangler tail` 确认 cooldown_until_ms 是否合理 |
+| Cooldown 过频触发 | 调高 `LOGIN_COOLDOWN_THRESHOLD` 或 `LOGIN_COOLDOWN_WINDOW_SEC` |
+| 老 Worker 不返回 `cooldown_until_ms` | Python 客户端默认 0 即「无冷却」，行为与今天一致 |
+
+### 17.5 回滚
+
+软关同 §8.1（删 `PROXY_COORDINATOR_URL`）。Worker 端只想关 P2-C 不关
+其它的话：把 `LOGIN_COOLDOWN_THRESHOLD` 设为一个很大的数（例 `99999`）
+然后 `wrangler deploy`。
+
+---
+
+## 18. P2-D：代理池跨 run 健康度评分
+
+### 18.1 解决的问题
+
+`ProxyPool` 在单 run 内统计 `success/fail/latency`，跨 run 不持久化。
+**P2-D** 在 `ProxyCoordinator.CoordinatorState` 加
+`successEvents[] / failureEvents[] / latencyEma`，每次 `/lease` 响应里
+捎带派生 `health` 字段（`success_count / failure_count /
+latency_ema_ms / score ∈ [0,1]`）。Python 端 `ProxyPool.get_next_proxy`
+当且仅当 `coordinator` 已配置时切换为**健康度加权随机**——好代理被选
+中概率显著更高，坏代理仍有 5% 地板概率获得流量以便恢复。
+
+### 18.2 协议改动（向后兼容）
+
+- `ReportRequest.kind` union 加 `"success"`，body 加可选
+  `latency_ms?: number`。
+- `LeaseResponse` 加可选 `health: { success_count, failure_count,
+  latency_ema_ms, score } | null`（老 client 忽略；新 client 在缺字段
+  时退回到 0.5 中性分）。
+- 写路径同步刷新 `cached`，避免同 instance 后续 `/lease` 读到旧值。
+
+### 18.3 客户端集成
+
+- `request_handler.RequestHandler._do_request` /
+  `_do_request_curl_cffi` 在每次目标站点 HTTP 完成时调
+  `coord.report_async(proxy_id, "success"|"failure",
+  latency_ms=elapsed_ms)`。**CF bypass service 调用不计入**（避免本地
+  bypass 的延迟污染代理质量评分）。
+- `setup_proxy_pool` 末尾把
+  `coordinator.get_proxy_health_score` 注入 Python `ProxyPool` 的
+  `health_provider`；Rust 池暂保留 round-robin（不影响正确性）。
+
+### 18.4 调参建议
+
+健康度评分公式（`proxy_coordinator.ts` `computeHealthSnapshot`）：
+- `ratio = success_count / (success_count + failure_count)`
+- `latency_penalty = clamp((latency_ema_ms - 500) / 10000, 0, 0.5)`
+- `score = ratio - latency_penalty`（无样本时 `score = 0.5`）
+
+如需更激进（坏代理更快被旁路），可在 Python 端把
+`ProxyPool._safe_health_score` 的地板从 `0.05` 降到 `0.01`；如需更
+保守（避免抖动），可把权重做平方：`weights[i] **= 2`。
+
+### 18.5 回滚
+
+软关同 §8.1。Worker 端不能单独「只关 P2-D 保留 P1-A」——它们共用同一
+DO；如有需要可在 Python 端把 `ProxyPool.set_health_provider(None)` 调
+用注释掉，pool 即退回 round-robin（仍然继承 P1-A 的 ban/bypass）。
+
+---
+
+## 19. Post-deploy 烟雾测试脚本
+
+仓库内提供
+[`scripts/verify_proxy_coordinator_deploy.sh`](../scripts/verify_proxy_coordinator_deploy.sh)
+作为 `wrangler deploy` 之后、触发真实 AdHocIngestion 之前的快速健康
+检查。脚本对 4 个 DO 类的关键端点各发一次 canary 请求，逐行打印
+PASS/FAIL：
+
+```bash
+PROXY_COORDINATOR_URL=https://your-worker.workers.dev \
+PROXY_COORDINATOR_TOKEN=$(wrangler secret list | grep TOKEN ...) \
+    ./scripts/verify_proxy_coordinator_deploy.sh
+```
+
+期望输出末尾：
+
+```
+RESULT: all DO classes responded OK.  Safe to trigger AdHocIngestion.
+```
+
+任何 FAIL 都意味着某个 DO 类没正确部署（migration tag 错配、binding
+没生效、token 写错等），**先解决再触发 AdHocIngestion**，避免一次跑
+30+ min 后才发现登录或 claim 全部 fail-open 退化。
+
+之后触发一次 AdHocIngestion，在它的 GH Actions 日志中应看到 4 行
+`… client initialised`：
+
+| 日志行 | 来自 |
+|---|---|
+| `Proxy coordinator client initialised: base_url=…` | `setup_proxy_coordinator` |
+| `Login-state client initialised: base_url=…, holder_id=…` | `setup_login_state_client` |
+| `Movie-claim client initialised: base_url=…, holder_id=…` | `setup_movie_claim_client`（仅当 `MOVIE_CLAIM_ENABLED=true`）|
+| `Runner-registry client initialised: base_url=…, holder_id=…, …` | `setup_runner_registry_client` |
+
+最后：从 GH Variables 删 `PROXY_COORDINATOR_URL`，再触发一次 run，
+应该看到：
+
+```
+Proxy coordinator not configured (PROXY_COORDINATOR_URL/TOKEN unset) — using local throttling only
+```
+
+且 spider 行为与 PR 之前完全一致——**这是用户「确保未配置 DO 时回退
+默认机制」契约的最终验证**。
