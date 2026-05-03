@@ -1205,6 +1205,7 @@ TWOCAPTCHA_API_KEY = ''  # 用于自动验证码解决
 在以下情况下重新运行 `python3 javdb_login.py`:
 - ✅ 会话 cookie 过期(通常几天/几周后)
 - ✅ 爬虫在有效 URL 上显示"No movie list found"
+- ✅ JavDB 返回 "Due to copyright restrictions, this page is not available in your country."
 - ✅ 出现年龄验证或登录错误
 - ✅ 首次使用 `--url` 参数前
 

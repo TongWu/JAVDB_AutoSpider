@@ -172,6 +172,12 @@ pub fn is_login_page(html_content: &str) -> bool {
     if html_content.is_empty() {
         return false;
     }
+    let lower_html = html_content.to_lowercase();
+    if lower_html.contains("due to copyright restrictions")
+        && lower_html.contains("not available in your country")
+    {
+        return true;
+    }
     let document = Html::parse_document(html_content);
     let title_sel = Selector::parse("title").unwrap();
     if let Some(title_tag) = document.select(&title_sel).next() {
@@ -288,5 +294,11 @@ mod tests {
     #[test]
     fn test_detect_page_type_index() {
         assert_eq!(detect_page_type("<div class=\"movie-list\">"), "index");
+    }
+
+    #[test]
+    fn test_is_login_page_copyright_restriction() {
+        let html = "<html><body>Due to copyright restrictions, this page is not available in your country.</body></html>";
+        assert!(is_login_page(html));
     }
 }
