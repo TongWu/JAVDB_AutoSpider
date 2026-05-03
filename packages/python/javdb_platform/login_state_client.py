@@ -95,6 +95,17 @@ class AcquireLeaseResult:
     ``False``, ``holder_id`` and ``lease_expires_at`` describe the *current*
     owner so callers can decide whether to back off briefly or park their
     work indefinitely.
+
+    P2-C — ``cooldown_until_ms`` is set to a non-zero ms epoch when the
+    cross-runner failure rate has crossed the Worker's
+    ``LOGIN_COOLDOWN_THRESHOLD`` inside ``LOGIN_COOLDOWN_WINDOW_SEC``.
+    The lease is **still granted** when set; the caller is responsible
+    for parking its login flow until ``cooldown_until_ms`` so concurrent
+    runners don't burn through more attempts during the back-off.
+    Defaults to ``0`` for backward-compat with pre-P2-C Workers
+    (which simply omit the field).  ``recent_attempt_count`` surfaces
+    how many entries are currently in the rolling window — ops only,
+    the spider does not branch on it.
     """
 
     acquired: bool
@@ -102,6 +113,8 @@ class AcquireLeaseResult:
     target_proxy_name: str
     lease_expires_at: int
     server_time_ms: int
+    cooldown_until_ms: int = 0
+    recent_attempt_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -130,6 +143,24 @@ class InvalidateResult:
 
     invalidated: bool
     current_version: int
+    server_time_ms: int
+
+
+@dataclass(frozen=True)
+class RecordAttemptResult:
+    """Reply from ``POST /login_state/record_attempt`` (P2-C).
+
+    ``recent_attempt_count`` covers all outcomes (success + failure) in
+    the rolling window; ``recent_failure_count`` is the subset used by
+    the cooldown function.  ``cooldown_until_ms`` is recomputed against
+    the current buffer after the new record is appended, so the caller
+    can ack the next ``acquire_lease`` decision without an extra
+    round-trip.
+    """
+
+    recent_attempt_count: int
+    recent_failure_count: int
+    cooldown_until_ms: int
     server_time_ms: int
 
 
@@ -262,6 +293,8 @@ class LoginStateClient:
                 target_proxy_name=str(resp["target_proxy_name"]),
                 lease_expires_at=int(resp["lease_expires_at"]),
                 server_time_ms=_extract_server_time_ms(resp),
+                cooldown_until_ms=int(resp.get("cooldown_until_ms", 0) or 0),
+                recent_attempt_count=int(resp.get("recent_attempt_count", 0) or 0),
             )
         except (KeyError, TypeError, ValueError) as e:
             raise LoginStateUnavailable(
@@ -323,6 +356,52 @@ class LoginStateClient:
         except (KeyError, TypeError, ValueError) as e:
             raise LoginStateUnavailable(
                 f"malformed invalidate response: {resp!r} ({e})"
+            ) from e
+
+    def record_attempt(
+        self,
+        holder_id: str,
+        proxy_name: str,
+        outcome: str,
+    ) -> RecordAttemptResult:
+        """Record a login attempt outcome on the cross-runner DO (P2-C).
+
+        ``outcome`` MUST be one of ``"success"`` or ``"failure"``;
+        anything else raises :class:`LoginStateUnavailable` (since the
+        Worker would reject it with a 400 anyway, the early local
+        check saves a round-trip).
+
+        The call is best-effort and **not** retried on failure — a
+        missing record is harmless (one fewer data point inside the
+        window) and re-trying would race with the lease holder's
+        publish/release pipeline.  Callers MUST treat
+        :class:`LoginStateUnavailable` as a fail-open signal exactly
+        like every other method on this client.
+        """
+        if not holder_id:
+            raise LoginStateUnavailable("holder_id must be a non-empty string")
+        if not proxy_name:
+            raise LoginStateUnavailable("proxy_name must be a non-empty string")
+        if outcome not in ("success", "failure"):
+            raise LoginStateUnavailable(
+                f"outcome must be 'success' or 'failure'; got {outcome!r}"
+            )
+        body = {
+            "holder_id": holder_id,
+            "proxy_name": proxy_name,
+            "outcome": outcome,
+        }
+        resp = self._do_request("POST", "/login_state/record_attempt", body)
+        try:
+            return RecordAttemptResult(
+                recent_attempt_count=int(resp["recent_attempt_count"]),
+                recent_failure_count=int(resp["recent_failure_count"]),
+                cooldown_until_ms=int(resp.get("cooldown_until_ms", 0) or 0),
+                server_time_ms=_extract_server_time_ms(resp),
+            )
+        except (KeyError, TypeError, ValueError) as e:
+            raise LoginStateUnavailable(
+                f"malformed record_attempt response: {resp!r} ({e})"
             ) from e
 
     def release_lease(self, holder_id: str) -> ReleaseLeaseResult:
