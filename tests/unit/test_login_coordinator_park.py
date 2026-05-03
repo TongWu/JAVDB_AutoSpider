@@ -43,6 +43,7 @@ from packages.python.javdb_platform.login_state_client import (  # noqa: E402
     LoginStateGetResult,
     LoginStateUnavailable,
     PublishResult,
+    RecordAttemptResult,
     ReleaseLeaseResult,
 )
 from packages.python.javdb_spider.fetch import login_coordinator as lc_mod  # noqa: E402
@@ -548,3 +549,250 @@ class TestHandleLoginRequiredFailOpenWithoutDO:
         assert state_mod.refreshed_session_cookie is None
         assert state_mod.logged_in_proxy_name is None
         assert state_mod.current_login_state_version is None
+
+
+# ── P2-C: cross-runner login cooldown ───────────────────────────────────
+
+
+class TestP2CLoginCooldown:
+    """End-to-end behaviour of the P2-C ``cooldown_until_ms`` field.
+
+    Verifies the three contracts called out in the plan:
+
+    1. When ``acquire_lease`` returns a future ``cooldown_until_ms``
+       the lease is released and the task is parked — no local login
+       attempt fires.
+    2. ``_record_login_attempt`` posts to ``record_attempt`` after every
+       login attempt regardless of outcome.
+    3. The poller drains parked tasks back to their ``login_queue``
+       once the cooldown clock has expired.
+    """
+
+    def test_cooldown_response_parks_task_and_releases_lease(self):
+        """Cooldown active → caller parks; lease that the DO granted is
+        released so peer runners aren't blocked needlessly."""
+        worker = _make_worker(0, "P1")
+        coord = LoginCoordinator(all_workers=[worker])
+        client = MagicMock()
+        client.acquire_lease.return_value = AcquireLeaseResult(
+            acquired=True,
+            holder_id="runner-test",
+            target_proxy_name="P1",
+            lease_expires_at=99_999,
+            server_time_ms=1_000,
+            cooldown_until_ms=999_999_999,
+            recent_attempt_count=6,
+        )
+        client.release_lease.return_value = ReleaseLeaseResult(
+            released=True, server_time_ms=1_000,
+        )
+        # The poller would call get_state on tick; return "no version progress".
+        client.get_state.return_value = LoginStateGetResult(
+            proxy_name=None, cookie=None, version=0,
+            last_verified_at=0, has_active_lease=False, server_time_ms=1_000,
+        )
+        state_mod.global_login_state_client = client
+        login_queue: queue.Queue = queue.Queue()
+        task = _make_task()
+
+        with patch.object(coord, "_login_and_verify") as mock_lv:
+            verified, cookie, parked = coord._login_and_verify_with_lease(
+                worker, task, login_queue,
+            )
+
+        assert parked is True
+        assert verified is False
+        assert cookie is None
+        # Release MUST have fired so the lease isn't blocking peer runners.
+        client.release_lease.assert_called_once_with("runner-test")
+        # ``_login_and_verify`` was NEVER reached — the cooldown short-circuited.
+        mock_lv.assert_not_called()
+        # Cooldown clock was recorded.
+        assert coord._cooldown_until_ms == 999_999_999
+        # Task is in the pending queue, not the login queue.
+        assert len(coord._pending_login_tasks) == 1
+        assert login_queue.empty()
+
+    def test_no_cooldown_proceeds_normally(self):
+        """``cooldown_until_ms == 0`` → caller follows the regular path."""
+        worker = _make_worker(0, "P1")
+        coord = LoginCoordinator(all_workers=[worker])
+        client = MagicMock()
+        client.acquire_lease.return_value = AcquireLeaseResult(
+            acquired=True, holder_id="runner-test", target_proxy_name="P1",
+            lease_expires_at=99_999, server_time_ms=1_000,
+            cooldown_until_ms=0, recent_attempt_count=2,
+        )
+        client.release_lease.return_value = ReleaseLeaseResult(
+            released=True, server_time_ms=1_000,
+        )
+        client.record_attempt.return_value = RecordAttemptResult(
+            recent_attempt_count=3, recent_failure_count=0,
+            cooldown_until_ms=0, server_time_ms=1_000,
+        )
+        state_mod.global_login_state_client = client
+        login_queue: queue.Queue = queue.Queue()
+        task = _make_task()
+
+        with patch.object(coord, "_login_and_verify", return_value=(True, "cookie-NEW")):
+            verified, cookie, parked = coord._login_and_verify_with_lease(
+                worker, task, login_queue,
+            )
+
+        assert parked is False
+        assert verified is True
+        assert cookie == "cookie-NEW"
+        assert coord._cooldown_until_ms == 0
+
+    def test_record_attempt_called_after_every_login(self):
+        """Both success and failure outcomes are recorded."""
+        worker = _make_worker(0, "P1")
+        coord = LoginCoordinator(all_workers=[worker])
+        client = MagicMock()
+        client.acquire_lease.return_value = AcquireLeaseResult(
+            acquired=True, holder_id="runner-test", target_proxy_name="P1",
+            lease_expires_at=99_999, server_time_ms=1_000,
+            cooldown_until_ms=0, recent_attempt_count=0,
+        )
+        client.release_lease.return_value = ReleaseLeaseResult(
+            released=True, server_time_ms=1_000,
+        )
+        client.record_attempt.return_value = RecordAttemptResult(
+            recent_attempt_count=1, recent_failure_count=1,
+            cooldown_until_ms=0, server_time_ms=1_000,
+        )
+        state_mod.global_login_state_client = client
+        login_queue: queue.Queue = queue.Queue()
+
+        with patch.object(coord, "_login_and_verify", return_value=(False, None)):
+            coord._login_and_verify_with_lease(worker, _make_task(), login_queue)
+        client.record_attempt.assert_called_once_with(
+            "runner-test", "P1", "failure",
+        )
+
+        client.record_attempt.reset_mock()
+        with patch.object(coord, "_login_and_verify", return_value=(True, "cookie")):
+            coord._login_and_verify_with_lease(worker, _make_task(), login_queue)
+        client.record_attempt.assert_called_once_with(
+            "runner-test", "P1", "success",
+        )
+
+    def test_record_attempt_failures_are_tolerated(self):
+        """``record_attempt`` raising must not break the login path."""
+        worker = _make_worker(0, "P1")
+        coord = LoginCoordinator(all_workers=[worker])
+        client = MagicMock()
+        client.acquire_lease.return_value = AcquireLeaseResult(
+            acquired=True, holder_id="runner-test", target_proxy_name="P1",
+            lease_expires_at=99_999, server_time_ms=1_000,
+            cooldown_until_ms=0, recent_attempt_count=0,
+        )
+        client.release_lease.return_value = ReleaseLeaseResult(
+            released=True, server_time_ms=1_000,
+        )
+        client.record_attempt.side_effect = LoginStateUnavailable("boom")
+        state_mod.global_login_state_client = client
+        login_queue: queue.Queue = queue.Queue()
+
+        with patch.object(coord, "_login_and_verify", return_value=(True, "cookie")):
+            verified, _, parked = coord._login_and_verify_with_lease(
+                worker, _make_task(), login_queue,
+            )
+        assert verified is True
+        assert parked is False
+
+    def test_record_attempt_updates_local_cooldown_when_returned(self):
+        """When ``record_attempt`` itself reports a cooldown (i.e. this
+        very failure crossed the threshold), the coordinator must
+        record it locally so the *next* attempt parks straight away
+        without an extra acquire round-trip."""
+        worker = _make_worker(0, "P1")
+        coord = LoginCoordinator(all_workers=[worker])
+        client = MagicMock()
+        client.acquire_lease.return_value = AcquireLeaseResult(
+            acquired=True, holder_id="runner-test", target_proxy_name="P1",
+            lease_expires_at=99_999, server_time_ms=1_000,
+            cooldown_until_ms=0, recent_attempt_count=0,
+        )
+        client.release_lease.return_value = ReleaseLeaseResult(
+            released=True, server_time_ms=1_000,
+        )
+        client.record_attempt.return_value = RecordAttemptResult(
+            recent_attempt_count=5, recent_failure_count=5,
+            cooldown_until_ms=999_999_999, server_time_ms=1_000,
+        )
+        state_mod.global_login_state_client = client
+        login_queue: queue.Queue = queue.Queue()
+
+        with patch.object(coord, "_login_and_verify", return_value=(False, None)):
+            coord._login_and_verify_with_lease(worker, _make_task(), login_queue)
+        assert coord._cooldown_until_ms == 999_999_999
+
+    def test_record_attempt_skipped_when_client_none(self):
+        """Fail-open: no DO client means no record_attempt call."""
+        worker = _make_worker(0, "P1")
+        coord = LoginCoordinator(all_workers=[worker])
+        state_mod.global_login_state_client = None
+        login_queue: queue.Queue = queue.Queue()
+
+        with patch.object(coord, "_login_and_verify", return_value=(True, "cookie")):
+            coord._login_and_verify_with_lease(worker, _make_task(), login_queue)
+        # No exception, no AttributeError on a None client.
+
+    def _wait_until(self, predicate, timeout: float = 2.0):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if predicate():
+                return True
+            time.sleep(0.05)
+        return False
+
+    def test_poller_dispatches_parked_tasks_when_cooldown_lifts(self):
+        """Poller drains parked tasks once the cooldown clock has passed.
+
+        Synthesise the cooldown state directly so the test doesn't need
+        to wait several minutes; the real cooldown is anchored on
+        ``Date.now()`` server-side and we only care here about the
+        poller's transition logic.
+        """
+        worker = _make_worker(0, "P1")
+        coord = LoginCoordinator(all_workers=[worker])
+        client = MagicMock()
+        # Park one task with cooldown active.
+        client.acquire_lease.return_value = AcquireLeaseResult(
+            acquired=True, holder_id="runner-test", target_proxy_name="P1",
+            lease_expires_at=99_999, server_time_ms=1_000,
+            cooldown_until_ms=999_999_999, recent_attempt_count=6,
+        )
+        client.release_lease.return_value = ReleaseLeaseResult(
+            released=True, server_time_ms=1_000,
+        )
+        # The poller will call get_state, but because the cooldown has
+        # expired (we'll rewind it manually below), it should drain the
+        # parked tasks BEFORE doing any get_state work.
+        client.get_state.side_effect = AssertionError(
+            "get_state must not run before cooldown drain",
+        )
+        state_mod.global_login_state_client = client
+        login_queue: queue.Queue = queue.Queue()
+        task = _make_task()
+
+        with patch.object(lc_mod, "_POLL_INTERVAL_SEC", 0.05):
+            with patch.object(coord, "_login_and_verify"):
+                _, _, parked = coord._login_and_verify_with_lease(
+                    worker, task, login_queue,
+                )
+            assert parked is True
+            assert coord._cooldown_until_ms > 0
+            # Rewind the cooldown clock so the poller's next tick will
+            # observe "cooldown lifted" and drain the parked tasks.
+            with coord._lock:
+                coord._cooldown_until_ms = 1
+            ok = self._wait_until(lambda: not login_queue.empty(), timeout=2.0)
+            assert ok, "poller did not re-dispatch parked tasks after cooldown"
+
+        dispatched = login_queue.get_nowait()
+        assert dispatched is task
+        with coord._lock:
+            assert coord._cooldown_until_ms == 0
+            assert len(coord._pending_login_tasks) == 0

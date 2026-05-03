@@ -288,3 +288,154 @@ class TestPenaltyTrackerRemoteFactor:
     def test_record_event_without_coordinator_is_silent(self):
         pt = PenaltyTracker()
         pt.record_event()  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# P1-A — passive sync of remote ban / cf_bypass markers from /lease responses.
+# These guard against a regression where the DO surfaces ``banned: true`` /
+# ``requires_cf_bypass: true`` but the local proxy pool keeps using the
+# proxy.  Mirroring is best-effort and must NOT break the lease grant.
+# ---------------------------------------------------------------------------
+
+
+def _mk_lease_with_p1a(
+    wait_ms: int = 10,
+    *,
+    banned: bool = False,
+    banned_until: int | None = None,
+    requires_cf_bypass: bool = False,
+    cf_bypass_until: int | None = None,
+    reason: str = "ok",
+) -> LeaseResult:
+    return LeaseResult(
+        wait_ms=wait_ms,
+        penalty_factor=1.0,
+        server_time_ms=int(time.time() * 1000),
+        reason=reason,
+        banned=banned,
+        banned_until=banned_until,
+        requires_cf_bypass=requires_cf_bypass,
+        cf_bypass_until=cf_bypass_until,
+    )
+
+
+class TestSleepMirrorsRemoteBan:
+
+    def test_lease_with_banned_true_calls_pool_ban_proxy(self):
+        from packages.python.javdb_spider.runtime import state as _state
+        coord = MagicMock()
+        coord.lease.return_value = _mk_lease_with_p1a(
+            banned=True, banned_until=999, reason="banned",
+        )
+        pool = MagicMock()
+        original_pool = _state.global_proxy_pool
+        _state.global_proxy_pool = pool
+        try:
+            mgr = MovieSleepManager(2.0, 3.0, coordinator=coord, proxy_id="proxy-X")
+            mgr.sleep()
+            pool.ban_proxy.assert_called_once_with("proxy-X")
+        finally:
+            _state.global_proxy_pool = original_pool
+
+    def test_lease_with_banned_false_does_not_touch_pool(self):
+        from packages.python.javdb_spider.runtime import state as _state
+        coord = MagicMock()
+        coord.lease.return_value = _mk_lease_with_p1a(banned=False)
+        pool = MagicMock()
+        original_pool = _state.global_proxy_pool
+        _state.global_proxy_pool = pool
+        try:
+            mgr = MovieSleepManager(2.0, 3.0, coordinator=coord, proxy_id="proxy-X")
+            mgr.sleep()
+            pool.ban_proxy.assert_not_called()
+        finally:
+            _state.global_proxy_pool = original_pool
+
+    def test_lease_with_banned_true_falls_back_to_ban_manager_when_pool_is_none(self):
+        from packages.python.javdb_spider.runtime import state as _state
+        from packages.python.javdb_platform.proxy_ban_manager import (
+            ProxyBanManager,
+            set_remote_ban_hook,
+        )
+        # Use a real Python ban manager (not the global singleton) so we can
+        # observe the side-effect deterministically without leaking into
+        # other tests.
+        manager = ProxyBanManager()
+        original_pool = _state.global_proxy_pool
+        _state.global_proxy_pool = None
+        # Pin the global ban manager to our local instance for the duration
+        # of this test.
+        import packages.python.javdb_platform.proxy_ban_manager as pbm
+        original_global = pbm._global_ban_manager
+        pbm._global_ban_manager = manager
+        # Clear remote hook so add_ban does not try to call a real coordinator.
+        set_remote_ban_hook(None)
+        try:
+            coord = MagicMock()
+            coord.lease.return_value = _mk_lease_with_p1a(banned=True)
+            mgr = MovieSleepManager(2.0, 3.0, coordinator=coord, proxy_id="proxy-X")
+            mgr.sleep()
+            assert manager.is_proxy_banned("proxy-X") is True
+        finally:
+            _state.global_proxy_pool = original_pool
+            pbm._global_ban_manager = original_global
+
+    def test_lease_with_pool_ban_exception_does_not_break_sleep(self):
+        from packages.python.javdb_spider.runtime import state as _state
+        coord = MagicMock()
+        coord.lease.return_value = _mk_lease_with_p1a(banned=True)
+        pool = MagicMock()
+        pool.ban_proxy.side_effect = RuntimeError("simulated pool fault")
+        original_pool = _state.global_proxy_pool
+        _state.global_proxy_pool = pool
+        try:
+            mgr = MovieSleepManager(2.0, 3.0, coordinator=coord, proxy_id="proxy-X")
+            # Must not raise — sleep must still complete (returning the
+            # coordinator's wait_ms / 1000).
+            elapsed = mgr.sleep()
+            assert elapsed >= 0
+        finally:
+            _state.global_proxy_pool = original_pool
+
+
+class TestSleepMirrorsRemoteCfBypass:
+
+    def test_lease_with_requires_cf_bypass_marks_local_dict(self):
+        from packages.python.javdb_spider.runtime import state as _state
+        coord = MagicMock()
+        coord.lease.return_value = _mk_lease_with_p1a(
+            requires_cf_bypass=True, cf_bypass_until=0,
+        )
+        original_always = _state.always_bypass_time
+        original_dict = dict(_state.proxies_requiring_cf_bypass)
+        _state.always_bypass_time = 0  # enable CF bypass locally
+        _state.proxies_requiring_cf_bypass.clear()
+        try:
+            mgr = MovieSleepManager(2.0, 3.0, coordinator=coord, proxy_id="proxy-X")
+            mgr.sleep()
+            assert "proxy-X" in _state.proxies_requiring_cf_bypass
+        finally:
+            _state.always_bypass_time = original_always
+            _state.proxies_requiring_cf_bypass.clear()
+            _state.proxies_requiring_cf_bypass.update(original_dict)
+
+    def test_lease_with_requires_cf_bypass_skipped_when_locally_disabled(self):
+        """``always_bypass_time is None`` means CF bypass is operator-disabled;
+        we must not silently re-enable it from a stale DO marker."""
+        from packages.python.javdb_spider.runtime import state as _state
+        coord = MagicMock()
+        coord.lease.return_value = _mk_lease_with_p1a(
+            requires_cf_bypass=True, cf_bypass_until=0,
+        )
+        original_always = _state.always_bypass_time
+        original_dict = dict(_state.proxies_requiring_cf_bypass)
+        _state.always_bypass_time = None
+        _state.proxies_requiring_cf_bypass.clear()
+        try:
+            mgr = MovieSleepManager(2.0, 3.0, coordinator=coord, proxy_id="proxy-X")
+            mgr.sleep()
+            assert "proxy-X" not in _state.proxies_requiring_cf_bypass
+        finally:
+            _state.always_bypass_time = original_always
+            _state.proxies_requiring_cf_bypass.clear()
+            _state.proxies_requiring_cf_bypass.update(original_dict)
