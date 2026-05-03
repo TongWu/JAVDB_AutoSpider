@@ -4,6 +4,8 @@ Every module that needs to read or *mutate* shared state should
 ``import packages.python.javdb_spider.runtime.state as state`` and access ``state.<var>``.
 """
 
+import atexit
+import json
 import os
 import re
 import logging
@@ -17,8 +19,22 @@ from packages.python.javdb_platform.logging_config import get_logger
 from packages.python.javdb_platform.login_state_client import (
     LoginStateClient,
 )
+from packages.python.javdb_platform.movie_claim_client import (
+    MovieClaimClient,
+    create_movie_claim_client_from_env,
+)
+from packages.python.javdb_platform.proxy_ban_manager import (
+    set_remote_ban_hook,
+    set_remote_unban_hook,
+)
 from packages.python.javdb_platform.proxy_coordinator_client import (
     ProxyCoordinatorClient,
+)
+from packages.python.javdb_platform.runner_registry_client import (
+    RunnerRegistryClient,
+    RunnerRegistryUnavailable,
+    create_runner_registry_client_from_env,
+    proxy_pool_hash,
 )
 from packages.python.javdb_platform.proxy_pool import ProxyPool, create_proxy_pool_from_config
 from packages.python.javdb_platform.proxy_policy import should_proxy_module
@@ -54,6 +70,32 @@ global_proxy_coordinator: Optional[ProxyCoordinatorClient] = None
 # "per-runner login only" — equivalent to the pre-DO behaviour.  Both
 # coordinators are independent: either, neither, or both can be active.
 global_login_state_client: Optional[LoginStateClient] = None
+# Cross-instance movie-detail claim coordinator (P1-B; per-day-sharded
+# ``MovieClaimState`` DO on the same Worker as the proxy/login DOs).
+# Lazily initialised by :func:`setup_movie_claim_client`; ``None`` means
+# "per-process dedup only" — equivalent to the pre-DO behaviour.  Default
+# OFF: only enabled when ``MOVIE_CLAIM_ENABLED`` is truthy AND the URL/token
+# pair is configured AND the Worker's ``/health`` probe succeeds.
+global_movie_claim_client: Optional[MovieClaimClient] = None
+# Cross-instance runner registry (P2-E; singleton ``RunnerRegistry`` DO).
+# Lazily initialised by :func:`setup_runner_registry_client`; ``None``
+# means "no registry, runner is invisible to peers" — equivalent to the
+# pre-DO behaviour.  Default OFF: only enabled when
+# ``RUNNER_REGISTRY_ENABLED`` is truthy AND the URL/token pair is
+# configured AND the Worker's ``/health`` probe succeeds.
+global_runner_registry_client: Optional[RunnerRegistryClient] = None
+# Background daemon thread that pings ``/heartbeat`` every 60 s once a
+# registry client is configured.  Holds a reference here so the atexit
+# handler can flag it for shutdown without leaking a reference cycle.
+_runner_heartbeat_thread: Optional[threading.Thread] = None
+_runner_heartbeat_stop = threading.Event()
+# Track that we already ran ``unregister`` so atexit + signal handlers
+# can both fire without sending two requests.
+_runner_unregistered: bool = False
+
+# Heartbeat cadence; matches the Worker's ``RUNNER_STALE_TTL_MS / 5``
+# default so a single missed heartbeat never evicts a healthy runner.
+_RUNNER_HEARTBEAT_INTERVAL_SEC = 60.0
 
 parsed_links: set = set()
 proxy_ban_html_files: list = []
@@ -171,7 +213,15 @@ def proxy_needs_cf_bypass(proxy_name: str) -> bool:
 
 
 def mark_proxy_cf_bypass(proxy_name: str):
-    """Mark a proxy for CF bypass reuse according to --always-bypass-time."""
+    """Mark a proxy for CF bypass reuse according to --always-bypass-time.
+
+    Side effect (P1-A): when the cross-instance proxy coordinator is wired
+    up, the requirement is also published to the Worker DO via
+    :meth:`ProxyCoordinatorClient.mark_cf_bypass` so peer runners pick it
+    up on their next ``/lease``.  This is fire-and-forget and never raises;
+    when the coordinator is not configured the call is a no-op and the
+    behaviour is identical to the pre-DO world.
+    """
     if always_bypass_time is None:
         return
 
@@ -182,6 +232,23 @@ def mark_proxy_cf_bypass(proxy_name: str):
         logger.info(
             f"Proxy '{proxy_name}' marked for CF bypass reuse for {always_bypass_time} minute(s)"
         )
+
+    coord = global_proxy_coordinator
+    if coord is not None and proxy_name:
+        # ``always_bypass_time``:
+        #   - 0       → permanent for this session  → DO ttl_ms = 0
+        #   - N (min) → expires after N minutes     → DO ttl_ms = N * 60_000
+        # The Worker stores the tri-state so peers see the right window.
+        ttl_ms = (
+            0 if always_bypass_time == 0 else int(always_bypass_time) * 60 * 1000
+        )
+        try:
+            coord.mark_cf_bypass(proxy_name, ttl_ms=ttl_ms)
+        except Exception:  # noqa: BLE001 — fail-open; never break local marker
+            logger.warning(
+                "Failed to dispatch CF bypass marker for '%s' to coordinator",
+                proxy_name, exc_info=True,
+            )
 
 # ---------------------------------------------------------------------------
 # Request delegation
@@ -271,6 +338,11 @@ def setup_proxy_coordinator() -> Optional[ProxyCoordinatorClient]:
         url,
     )
     global_proxy_coordinator = client
+    # P1-A — wire the ProxyBanManager → coordinator bridge.  Bound to ``client``
+    # via closure so a later disable / re-init naturally rebinds; pure
+    # fire-and-forget so a coordinator outage cannot stall the ban path.
+    set_remote_ban_hook(lambda name: client.mark_proxy_banned(name))
+    set_remote_unban_hook(lambda name: client.mark_proxy_unbanned(name))
     return client
 
 
@@ -319,6 +391,332 @@ def setup_login_state_client() -> Optional[LoginStateClient]:
     return client
 
 
+def setup_movie_claim_client() -> Optional[MovieClaimClient]:
+    """Initialise the cross-instance movie-detail claim coordinator (P1-B).
+
+    Companion of :func:`setup_proxy_coordinator` /
+    :func:`setup_login_state_client`: the three DO clients live behind the
+    same Cloudflare Worker but each gates independently so an operator
+    can roll any subset out without touching the others.
+
+    Three independent disable paths (all return ``None`` for fail-open):
+
+    - ``MOVIE_CLAIM_ENABLED`` is unset / not in ``{"1", "true", "yes"}``.
+      This is the **default OFF**, so single-runner deployments and
+      operators who haven't yet applied the v3 ``MovieClaimState`` DO
+      migration pay zero claim overhead and behave identically to the
+      pre-P1-B world.
+    - ``PROXY_COORDINATOR_URL`` / ``PROXY_COORDINATOR_TOKEN`` is empty.
+    - URL/token configured but Worker's ``/health`` does not respond
+      (logs ERROR — surfaces deployment misconfiguration).
+
+    Cached in :data:`global_movie_claim_client`.  Idempotent.
+    """
+    global global_movie_claim_client
+    if global_movie_claim_client is not None:
+        return global_movie_claim_client
+
+    from packages.python.javdb_platform.config_helper import cfg
+    url = (cfg('PROXY_COORDINATOR_URL', '') or '').strip()
+    token = (cfg('PROXY_COORDINATOR_TOKEN', '') or '').strip()
+    enabled_raw = (str(cfg('MOVIE_CLAIM_ENABLED', '') or '')).strip().lower()
+    if enabled_raw not in {"1", "true", "yes"}:
+        logger.info(
+            "Movie-claim client disabled (MOVIE_CLAIM_ENABLED=%r) — "
+            "using per-process dedup only",
+            enabled_raw,
+        )
+        global_movie_claim_client = None
+        return None
+    if not url or not token:
+        logger.info(
+            "Movie-claim client not configured (PROXY_COORDINATOR_URL/TOKEN "
+            "unset) — using per-process dedup only",
+        )
+        global_movie_claim_client = None
+        return None
+
+    # Set the env vars expected by the factory for the duration of the call,
+    # then delegate to ``create_movie_claim_client_from_env`` so the
+    # disable paths and ``/health`` semantics stay defined in one place.
+    prior = (
+        os.environ.get('PROXY_COORDINATOR_URL'),
+        os.environ.get('PROXY_COORDINATOR_TOKEN'),
+        os.environ.get('MOVIE_CLAIM_ENABLED'),
+    )
+    try:
+        os.environ['PROXY_COORDINATOR_URL'] = url
+        os.environ['PROXY_COORDINATOR_TOKEN'] = token
+        os.environ['MOVIE_CLAIM_ENABLED'] = enabled_raw
+        client = create_movie_claim_client_from_env()
+    finally:
+        for key, value in zip(
+            ('PROXY_COORDINATOR_URL', 'PROXY_COORDINATOR_TOKEN', 'MOVIE_CLAIM_ENABLED'),
+            prior,
+        ):
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    if client is None:
+        global_movie_claim_client = None
+        return None
+    logger.info(
+        "Movie-claim client initialised: base_url=%s, holder_id=%s",
+        url, runtime_holder_id,
+    )
+    global_movie_claim_client = client
+    return client
+
+
+def _resolve_proxy_pool_json() -> str:
+    """Pull the rendered ``PROXY_POOL_JSON`` payload (or its env override).
+
+    Used for the cross-runner ``proxy_pool_hash`` drift signal — falls back
+    to a JSON-serialised view of :data:`PROXY_POOL` so the hash still
+    catches drift even when ``config.PROXY_POOL_JSON`` is empty.  Returns
+    an empty string when nothing is configured (no drift detection
+    available); callers must accept the empty hash as "no info".
+    """
+    from packages.python.javdb_platform.config_helper import cfg
+    raw = (cfg('PROXY_POOL_JSON', '') or '').strip()
+    if raw:
+        return raw
+    if PROXY_POOL:
+        try:
+            return json.dumps(PROXY_POOL, sort_keys=True, separators=(",", ":"))
+        except (TypeError, ValueError):
+            return ""
+    return ""
+
+
+def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None:
+    """Background thread: ping ``/heartbeat`` every 60 s until stopped.
+
+    On ``alive=False`` (the holder was evicted by the registry's GC alarm
+    after we missed the staleness window) we re-``register`` so the
+    registry recovers without operator intervention.  All exceptions are
+    swallowed — the registry is purely operational metadata and must
+    NEVER take down the spider.
+    """
+    while not _runner_heartbeat_stop.wait(_RUNNER_HEARTBEAT_INTERVAL_SEC):
+        try:
+            result = client.heartbeat(holder_id)
+        except RunnerRegistryUnavailable:
+            # Transient outage; just try again on the next tick.
+            logger.debug("Runner-registry heartbeat unavailable; will retry")
+            continue
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "Unexpected runner-registry heartbeat error; will retry",
+                exc_info=True,
+            )
+            continue
+
+        if not result.alive:
+            # Registry GC'd us (heartbeat lapsed past stale TTL) — try to
+            # rejoin so ops dashboards stop showing us as missing.  No
+            # need to re-emit drift summaries on reconnection: the
+            # response was already logged at original ``register`` time.
+            try:
+                client.register(
+                    holder_id=holder_id,
+                    workflow_run_id=os.environ.get("GITHUB_RUN_ID", ""),
+                    workflow_name=os.environ.get("GITHUB_WORKFLOW", ""),
+                    proxy_pool_hash=proxy_pool_hash(_resolve_proxy_pool_json()),
+                )
+                logger.info("Runner-registry recovered after eviction")
+            except RunnerRegistryUnavailable:
+                logger.debug("Runner-registry re-register unavailable; will retry")
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "Unexpected runner-registry re-register error",
+                    exc_info=True,
+                )
+
+
+def _unregister_runner_at_exit() -> None:
+    """Best-effort cleanup of this runner's registry entry.
+
+    Registered via :func:`atexit.register` from :func:`setup_runner_registry_client`.
+    Idempotent (``_runner_unregistered`` flag) so atexit + a signal
+    handler both calling this is safe.  Never raises — registry hygiene
+    must not block the spider's shutdown.
+    """
+    global _runner_unregistered
+    if _runner_unregistered:
+        return
+    client = global_runner_registry_client
+    if client is None:
+        return
+    _runner_heartbeat_stop.set()
+    try:
+        client.unregister(runtime_holder_id)
+    except RunnerRegistryUnavailable:
+        logger.debug("Runner-registry unregister unavailable at exit")
+    except Exception:  # noqa: BLE001
+        logger.warning("Unexpected runner-registry unregister error", exc_info=True)
+    _runner_unregistered = True
+    try:
+        client.close()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _warn_on_proxy_pool_drift(
+    self_hash: str,
+    summary,  # type: ignore[no-untyped-def] — sequence of PoolHashBucket
+) -> None:
+    """Emit a single WARNING when *self_hash* is not the majority hash.
+
+    Mirrors the contract of the Worker's ``pool_hash_summary`` field
+    (subsumes the original P3-B "drift detection" plan item): a runner
+    joining with a hash that doesn't match the rest of the cohort gets
+    one log line at startup so ops can act before throughput skews.
+    """
+    if not summary or not self_hash:
+        return
+    by_hash = {bucket.hash: bucket.count for bucket in summary}
+    own_count = by_hash.get(self_hash, 0)
+    other_total = sum(c for h, c in by_hash.items() if h != self_hash)
+    if other_total > 0 and own_count <= other_total:
+        # Render compact summary for the ops log.  Keep it on one line so
+        # log aggregators can grep for "proxy_pool_hash drift".
+        rendered = ", ".join(
+            f"{b.hash or '<empty>'}={b.count}"
+            for b in summary
+        )
+        logger.warning(
+            "proxy_pool_hash drift detected: this runner has %s but cohort is {%s} — "
+            "check PROXY_POOL_JSON across workflows",
+            self_hash, rendered,
+        )
+
+
+def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
+    """Initialise the singleton runner-registry client (P2-E).
+
+    Companion of :func:`setup_proxy_coordinator` /
+    :func:`setup_login_state_client` / :func:`setup_movie_claim_client`:
+    all four DO clients live behind the same Cloudflare Worker but each
+    gates independently so an operator can roll any subset out without
+    touching the others.
+
+    On a successful initialisation we ALSO:
+
+    1. Send a ``/register`` call with this runner's GH Actions metadata
+       (``GITHUB_RUN_ID`` / ``GITHUB_WORKFLOW``) and the canonical
+       ``proxy_pool_hash`` of ``PROXY_POOL_JSON``.  The server response
+       is inspected for cohort drift — if peers have a different hash
+       we emit one ``WARNING`` log line so ops can investigate.
+    2. Spawn a daemon thread that calls ``/heartbeat`` every 60 s.
+    3. Register an :mod:`atexit` hook that calls ``/unregister``.
+
+    All three are best-effort: any failure is logged and the spider
+    continues exactly as if the registry were not configured.
+
+    Cached in :data:`global_runner_registry_client`.  Idempotent.
+    """
+    global global_runner_registry_client, _runner_heartbeat_thread
+
+    if global_runner_registry_client is not None:
+        return global_runner_registry_client
+
+    from packages.python.javdb_platform.config_helper import cfg
+    url = (cfg('PROXY_COORDINATOR_URL', '') or '').strip()
+    token = (cfg('PROXY_COORDINATOR_TOKEN', '') or '').strip()
+    enabled_raw = (str(cfg('RUNNER_REGISTRY_ENABLED', '') or '')).strip().lower()
+    if enabled_raw not in {"1", "true", "yes"}:
+        logger.info(
+            "Runner-registry client disabled (RUNNER_REGISTRY_ENABLED=%r) — "
+            "runner is invisible to peers",
+            enabled_raw,
+        )
+        global_runner_registry_client = None
+        return None
+    if not url or not token:
+        logger.info(
+            "Runner-registry client not configured (PROXY_COORDINATOR_URL/TOKEN "
+            "unset) — runner is invisible to peers",
+        )
+        global_runner_registry_client = None
+        return None
+
+    # Delegate to the factory so the disable paths and ``/health`` semantics
+    # stay defined in one place.  Mirror the trick used in setup_movie_claim_client.
+    prior = (
+        os.environ.get('PROXY_COORDINATOR_URL'),
+        os.environ.get('PROXY_COORDINATOR_TOKEN'),
+        os.environ.get('RUNNER_REGISTRY_ENABLED'),
+    )
+    try:
+        os.environ['PROXY_COORDINATOR_URL'] = url
+        os.environ['PROXY_COORDINATOR_TOKEN'] = token
+        os.environ['RUNNER_REGISTRY_ENABLED'] = enabled_raw
+        client = create_runner_registry_client_from_env()
+    finally:
+        for key, value in zip(
+            ('PROXY_COORDINATOR_URL', 'PROXY_COORDINATOR_TOKEN', 'RUNNER_REGISTRY_ENABLED'),
+            prior,
+        ):
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    if client is None:
+        global_runner_registry_client = None
+        return None
+
+    # Best-effort startup register — failure here MUST NOT block the spider.
+    pool_json = _resolve_proxy_pool_json()
+    self_hash = proxy_pool_hash(pool_json)
+    try:
+        result = client.register(
+            holder_id=runtime_holder_id,
+            workflow_run_id=os.environ.get("GITHUB_RUN_ID", ""),
+            workflow_name=os.environ.get("GITHUB_WORKFLOW", ""),
+            proxy_pool_hash=self_hash,
+        )
+        logger.info(
+            "Runner-registry client initialised: base_url=%s, holder_id=%s, "
+            "active_runners=%d",
+            url, runtime_holder_id, len(result.active_runners),
+        )
+        _warn_on_proxy_pool_drift(self_hash, result.pool_hash_summary)
+    except RunnerRegistryUnavailable:
+        logger.warning(
+            "Runner-registry register failed at startup; continuing without "
+            "registry coordination this run",
+        )
+        client.close()
+        global_runner_registry_client = None
+        return None
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Unexpected runner-registry register error; continuing without "
+            "registry coordination this run",
+            exc_info=True,
+        )
+        client.close()
+        global_runner_registry_client = None
+        return None
+
+    global_runner_registry_client = client
+    _runner_heartbeat_stop.clear()
+    if _runner_heartbeat_thread is None or not _runner_heartbeat_thread.is_alive():
+        _runner_heartbeat_thread = threading.Thread(
+            target=_runner_heartbeat_loop,
+            args=(client, runtime_holder_id),
+            name="runner-heartbeat",
+            daemon=True,
+        )
+        _runner_heartbeat_thread.start()
+    atexit.register(_unregister_runner_at_exit)
+    return client
+
+
 def initialize_request_handler():
     """Create the global RequestHandler from configuration."""
     global global_request_handler
@@ -356,9 +754,22 @@ def initialize_request_handler():
             return
         coord.report_async(proxy_name, "cf")
 
+    # P2-D — fold per-attempt success/failure + latency into the per-proxy
+    # health snapshot.  Like ``_global_cf_event_cb`` above, this fallback
+    # handler walks the proxy pool so the proxy_name is per-call, not bound
+    # at construction time.  No-op when the coordinator is absent or the
+    # request was direct (proxy_name=None) — the spider falls back to the
+    # local proxy_pool's success/failure counters in that case.
+    def _global_request_complete_cb(proxy_name, kind, latency_ms):
+        coord = global_proxy_coordinator
+        if coord is None or not proxy_name:
+            return
+        coord.report_async(proxy_name, kind, latency_ms=latency_ms)
+
     global_request_handler = RequestHandler(
         proxy_pool=global_proxy_pool, config=config, penalty_tracker=_pt,
         on_cf_event=_global_cf_event_cb,
+        on_request_complete=_global_request_complete_cb,
     )
     logger.info("Request handler initialized successfully")
 
@@ -366,17 +777,22 @@ def initialize_request_handler():
 def setup_proxy_pool(use_proxy) -> None:
     """Initialize the global proxy pool from configuration.
 
-    Also lazily initialises both cross-instance coordinators
-    (per-proxy throttle + global login state) so every worker thread
-    spawned later automatically picks them up via
-    :data:`global_proxy_coordinator` and :data:`global_login_state_client`.
-    Both are independent and may be ``None`` (fail-open).
+    Also lazily initialises all four cross-instance coordinators
+    (per-proxy throttle, global login state, per-day movie-claim
+    mutex, and runner registry) so every worker thread spawned later
+    automatically picks them up via :data:`global_proxy_coordinator`,
+    :data:`global_login_state_client`,
+    :data:`global_movie_claim_client`, and
+    :data:`global_runner_registry_client`.  All four are independent
+    and may be ``None`` (fail-open).
     """
     from packages.python.javdb_platform.proxy_policy import is_proxy_mode_disabled
     global global_proxy_pool
 
     setup_proxy_coordinator()
     setup_login_state_client()
+    setup_movie_claim_client()
+    setup_runner_registry_client()
 
     if is_proxy_mode_disabled(PROXY_MODE):
         logger.info("Proxy globally disabled (PROXY_MODE='%s') - skipping pool init", PROXY_MODE)
@@ -415,6 +831,30 @@ def setup_proxy_pool(use_proxy) -> None:
         if should_proxy_module('spider', use_proxy, PROXY_MODULES, proxy_mode=PROXY_MODE):
             logger.warning("Proxy enabled but no proxy configuration found (neither PROXY_POOL nor PROXY_HTTP/PROXY_HTTPS)")
         global_proxy_pool = None
+
+    # P2-D — when both the pool and the cross-instance coordinator are
+    # available AND the pool exposes ``set_health_provider`` (Python
+    # ProxyPool only — the Rust pool currently keeps round-robin), wire
+    # the coordinator's per-proxy health cache as the weighting source.
+    # Reads from the cache populated by ``lease()`` so weighted selection
+    # piggy-backs on the requests the spider was already making.
+    if (
+        global_proxy_pool is not None
+        and global_proxy_coordinator is not None
+        and hasattr(global_proxy_pool, "set_health_provider")
+    ):
+        try:
+            global_proxy_pool.set_health_provider(
+                global_proxy_coordinator.get_proxy_health_score
+            )
+            logger.info(
+                "Proxy pool health-weighted selection enabled (P2-D coordinator)"
+            )
+        except Exception:  # noqa: BLE001 — wiring must not block startup
+            logger.warning(
+                "Failed to wire proxy health provider; falling back to round-robin",
+                exc_info=True,
+            )
 
 # ---------------------------------------------------------------------------
 # Directory / file helpers
