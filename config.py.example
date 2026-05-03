@@ -169,6 +169,13 @@ PROXY_HTTPS = None  # Deprecated: Use PROXY_POOL instead
 # Use ['all'] to enable proxy for all modules
 PROXY_MODULES = ['spider']
 
+# Cloudflare Worker URL + Bearer token for cross-runner proxy coordination
+# (throttle, ban sync, login-state, etc.). Leave both empty to disable.
+# GitHub Actions: set repo Variable PROXY_COORDINATOR_URL and Secret
+# PROXY_COORDINATOR_TOKEN; config_generator writes them into config.py.
+PROXY_COORDINATOR_URL = ''
+PROXY_COORDINATOR_TOKEN = ''
+
 # Example configurations:
 # PROXY_MODULES = ['spider']  # Default: only spider (including login), not qBittorrent/PikPak
 # PROXY_MODULES = ['all']  # Enable proxy for all modules
