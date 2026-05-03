@@ -17,7 +17,8 @@ Features:
 
 import time
 import logging
-from typing import Optional, Dict, List, Tuple
+import random
+from typing import Optional, Dict, List, Tuple, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from threading import Lock
@@ -35,7 +36,11 @@ except ImportError as e:
     RUST_PROXY_AVAILABLE = False
     RUST_IMPORT_ERROR = str(e)
 
-from packages.python.javdb_platform.proxy_ban_manager import get_ban_manager, ProxyBanManager
+from packages.python.javdb_platform.proxy_ban_manager import (
+    _dispatch_remote_ban,
+    get_ban_manager,
+    ProxyBanManager,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -153,6 +158,7 @@ class ProxyPool:
     
     def __init__(self, cooldown_seconds: int = _SESSION_BAN_COOLDOWN,
                  max_failures_before_cooldown: int = 3,
+                 health_provider: Optional[Callable[[str], Optional[float]]] = None,
                  **_kwargs):
         self.proxies: List[ProxyInfo] = []
         self.current_index: int = 0
@@ -160,7 +166,15 @@ class ProxyPool:
         self.max_failures_before_cooldown = max_failures_before_cooldown
         self.lock = Lock()
         self.no_proxy_mode = False
-        
+        # P2-D — optional ``proxy_name -> health_score`` lookup.  When set,
+        # ``get_next_proxy`` switches from naive round-robin to weighted
+        # random selection (heavier weight = better-scoring proxies are
+        # picked more often).  ``None``/exceptions/unknown proxies fall
+        # back to the neutral 0.5 baseline so a partial coordinator
+        # outage degrades gracefully into uniform random instead of
+        # crashing or pinning a single proxy.
+        self._health_provider = health_provider
+
         self.ban_manager = get_ban_manager()
         
     def add_proxy(self, http_url: Optional[str] = None, https_url: Optional[str] = None, 
@@ -242,8 +256,57 @@ class ProxyPool:
             logger.debug("All proxies are unavailable or in cooldown")
             return None
     
+    def set_health_provider(
+        self,
+        provider: Optional[Callable[[str], Optional[float]]],
+    ) -> None:
+        """P2-D — install (or clear) the proxy-health lookup.
+
+        Setting ``provider`` to ``None`` reverts the pool to round-robin
+        selection.  This is exposed as a public method so the coordinator
+        wiring can be installed lazily, after the pool itself is built
+        (e.g. when the coordinator client is initialised in a different
+        bootstrap path).
+        """
+        with self.lock:
+            self._health_provider = provider
+
+    def _safe_health_score(self, proxy_name: str) -> float:
+        """Look up a health score, defaulting to 0.5 on any failure.
+
+        Defensively coerces to ``float`` and clamps to ``[0.0, 1.0]`` so
+        a malformed Worker response can't break the weighting math.
+        """
+        provider = self._health_provider
+        if provider is None:
+            return 0.5
+        try:
+            score = provider(proxy_name)
+        except Exception:  # noqa: BLE001 — telemetry must never block selection
+            logger.debug("health_provider raised for %r", proxy_name, exc_info=True)
+            return 0.5
+        if score is None:
+            return 0.5
+        try:
+            score_f = float(score)
+        except (TypeError, ValueError):
+            return 0.5
+        if score_f != score_f:  # NaN check (NaN != NaN)
+            return 0.5
+        return max(0.0, min(1.0, score_f))
+
     def get_next_proxy(self) -> Optional[Dict[str, str]]:
-        """Get the next available proxy in round-robin fashion."""
+        """Get the next available proxy.
+
+        When a P2-D ``health_provider`` is configured the selection is
+        weighted by ``health.score`` (higher score → higher pick
+        probability), with a small floor (``0.05``) so that a freshly
+        introduced or temporarily-bad-scoring proxy still gets occasional
+        traffic and a chance to recover.  Without a provider — or when
+        all available proxies happen to score zero — the method falls
+        back to deterministic round-robin so behaviour matches the
+        pre-P2-D default.
+        """
         if self.no_proxy_mode:
             return None
             
@@ -254,14 +317,36 @@ class ProxyPool:
         with self.lock:
             self._check_cooldowns()
             
-            available_count = sum(
-                1 for p in self.proxies
+            available = [
+                (i, p) for i, p in enumerate(self.proxies)
                 if p.is_available and not p.banned and not p.is_in_cooldown()
-            )
-            if available_count == 0:
+            ]
+            if not available:
                 logger.debug("All proxies are unavailable or in cooldown")
                 return None
-            
+
+            if self._health_provider is not None and len(available) > 1:
+                # Floor each weight at 0.05 so even a 0-scoring proxy gets
+                # some traffic — needed for recovery after a transient
+                # outage and to keep newly-added proxies in rotation
+                # before they accumulate any samples.
+                weights = [
+                    max(0.05, self._safe_health_score(p.name))
+                    for _, p in available
+                ]
+                total = sum(weights)
+                if total > 0:
+                    chosen_idx = random.choices(
+                        range(len(available)), weights=weights, k=1
+                    )[0]
+                    pool_idx, proxy = available[chosen_idx]
+                    self.current_index = pool_idx
+                    logger.debug(
+                        "Health-weighted selected proxy: %s (score=%.3f)",
+                        proxy.name, weights[chosen_idx],
+                    )
+                    return proxy.get_proxies_dict()
+
             attempts = 0
             while attempts < len(self.proxies):
                 self.current_index = (self.current_index + 1) % len(self.proxies)
@@ -313,7 +398,15 @@ class ProxyPool:
             if current_proxy.failures >= self.max_failures_before_cooldown:
                 proxy_url = current_proxy.http_url or current_proxy.https_url
                 self.ban_manager.add_ban(current_proxy.name, proxy_url)
-                
+                # P1-A — also fire the cross-runner ban dispatcher.  When
+                # ``self.ban_manager`` is the Rust implementation the call
+                # above bypasses our Python add_ban, so we must dispatch
+                # explicitly here.  When the manager is the Python
+                # ProxyBanManager this is a no-op (the dispatcher has
+                # already fired inside ``add_ban``); either way the Worker
+                # takes the max TTL on concurrent bans so dedup is harmless.
+                _dispatch_remote_ban(current_proxy.name)
+
                 current_proxy.mark_failure(self.cooldown_seconds)
                 logger.warning(
                     "Proxy '%s' reached %d failures, banned for this session",
@@ -381,6 +474,8 @@ class ProxyPool:
 
             proxy_url = target.http_url or target.https_url
             self.ban_manager.add_ban(target.name, proxy_url)
+            # P1-A — see comment in mark_failure_and_switch above.
+            _dispatch_remote_ban(target.name)
             target.banned = True
             target.is_available = False
             logger.debug(
