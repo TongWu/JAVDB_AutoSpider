@@ -62,6 +62,7 @@
 - **现在默认检查历史记录**以跳过已下载的条目
 - 使用 `--ignore-history` 重新下载所有内容
 - 在 qBittorrent 中使用"Ad Hoc"分类
+- GitHub Actions Ad-Hoc Ingestion 中 `qb_category` 传入 `顶级` 时，使用 Daily Ingestion 的 qBittorrent 地址和凭据
 - 示例: `python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ"`
 
 ### qBittorrent 集成

@@ -64,6 +64,7 @@ The spider operates in two modes:
 - **Now checks history by default** to skip already downloaded entries
 - Use `--ignore-history` to re-download everything
 - Uses "Ad Hoc" category in qBittorrent
+- In GitHub Actions Ad-Hoc Ingestion, `qb_category` set to `顶级` uses the Daily Ingestion qBittorrent URL and credentials
 - Example: `python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ"`
 
 ### qBittorrent Integration
