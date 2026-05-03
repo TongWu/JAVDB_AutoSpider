@@ -109,14 +109,18 @@
 - 支持本地和远程代理设置
 - 直接请求失败时自动作为 fallback 启用
 
-### 跨 Runner 代理协调器(可选)
-- Cloudflare Worker + Durable Object，将 **per-proxy 节流跨所有并发 GitHub Actions runner 串行化**，多个共享同一份 `PROXY_POOL_JSON` 的 workflow 不再会同时打同一个物理代理
-- 通过 `idFromName(proxy_id)` 实现每个代理一个全局 DO 实例：天然单线程、状态持久、闲置时休眠
+### 跨 Runner 代理协调器 + 登录态共享(可选)
+- 一个 Cloudflare Worker 同时托管**两个 Durable Object 类**为所有并发的 GH Actions runner 提供共享协调：
+  - **`ProxyCoordinator`**（per-proxy DO）—— 把 per-proxy 节流跨 runner 串行化，多个共享同一份 `PROXY_POOL_JSON` 的 workflow 不再会同时打同一个物理代理。每个 `idFromName(proxy_id)` 一个 DO 实例。
+  - **`GlobalLoginState`**（singleton DO，`idFromName("global")`）—— 协调 JavDB 的「同账号同时只能一个登录会话」约束：存「当前登录代理 + AES-GCM 加密的 cookie + 再登录互斥 lease」。新启动的 runner 直接拉 cookie，不再各自登录；抢锁失败的 runner 把 `LoginRequired` 任务 park 到本地 deque，winner 一旦发布新 cookie，daemon 把 parked task 重新分发——其它代理的 worker 期间正常拉非登录页面，**不被阻塞**。
 - `penalty_factor` 全局共享：任意一个 runner 命中 CF Turnstile，其他 runner 在下次 `/lease` 时立即收到提升后的退避因子
-- **Fail-open 设计**：Worker 不可达 / token 错配 / 网络故障时，spider 自动退回本地 `MovieSleepManager` 节流——不重试、不阻塞业务热路径
-- 免费层友好：SQLite-backed DO，每次发请求只增 1 次 HTTP 往返，远低于 Cloudflare 100k/天的 Worker + DO 配额
-- **Worker 源码已拆到独立 repo**：[TongWu/JAVDB_AutoSpider_Proxycoordinator](https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator)（TypeScript + wrangler + vitest）。Python 客户端仍保留在本仓库 [`packages/python/javdb_platform/proxy_coordinator_client.py`](packages/python/javdb_platform/proxy_coordinator_client.py)
-- 完整部署指南见 [docs/PROXY_COORDINATOR_DEPLOY.md](docs/PROXY_COORDINATOR_DEPLOY.md)
+- **Fail-open 设计**：Worker 不可达 / token 错配 / 网络故障时，spider 自动退回本地 `MovieSleepManager` 节流 + per-runner 登录——不重试、不阻塞业务热路径
+- 免费层友好：SQLite-backed DO，每次发请求只增 1 次 HTTP 往返，远低于 Cloudflare 100k/天的 Worker + DO 配额；登录态轮询仅在再登录进行中每分钟几次
+- **共用一个 Bearer token、一个 Worker，两族端点**：
+  - `/lease`、`/report`、`/state` —— per-proxy 节流（ProxyCoordinator）
+  - `/login_state`、`/login_state/{acquire_lease,publish,invalidate,release_lease}` —— 跨 runtime JavDB 登录态（GlobalLoginState）
+- **Worker 源码已拆到独立 repo**：[TongWu/JAVDB_AutoSpider_Proxycoordinator](https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator)（TypeScript + wrangler + vitest，46 个测试）。Python 客户端仍保留在本仓库 [`packages/python/javdb_platform/proxy_coordinator_client.py`](packages/python/javdb_platform/proxy_coordinator_client.py) 与 [`packages/python/javdb_platform/login_state_client.py`](packages/python/javdb_platform/login_state_client.py)
+- 完整部署指南见 [docs/PROXY_COORDINATOR_DEPLOY.md](docs/PROXY_COORDINATOR_DEPLOY.md)（§13 描述 GlobalLoginState DO）
 
 ## 安装
 

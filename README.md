@@ -111,14 +111,18 @@ The spider operates in two modes:
 - Works with both local and remote proxy setups
 - Automatically activated as a fallback when direct requests fail
 
-### Cross-Runner Proxy Coordinator (Optional)
-- Cloudflare Worker + Durable Object that serializes per-proxy request pacing across **all concurrent GitHub Actions runners**, so multiple workflows sharing the same `PROXY_POOL_JSON` no longer hammer the same physical proxy in parallel
-- Per-`proxy_id` global mutex via `idFromName(proxy_id)` — one DO instance per proxy, persistent state, hibernates when idle
+### Cross-Runner Proxy Coordinator + Login State (Optional)
+- Cloudflare Worker that fronts **two** Durable Object classes serving every concurrent GH Actions runner from one shared deployment:
+  - **`ProxyCoordinator`** (per-proxy DO) — serialises request pacing across runners so multiple workflows sharing the same `PROXY_POOL_JSON` no longer hammer the same physical proxy in parallel. One DO instance per `idFromName(proxy_id)`.
+  - **`GlobalLoginState`** (singleton DO at `idFromName("global")`) — coordinates JavDB's at-most-one-login-per-account constraint: stores the currently logged-in proxy + AES-GCM-encrypted session cookie + a re-login `lease` mutex. Other runners pull the cookie on startup instead of attempting their own login, and `LoginRequired` tasks parked on a runner that lost the lease are automatically re-dispatched once the winner publishes a fresh cookie — meanwhile non-login workers keep running on their own proxies, never blocked.
 - Shared `penalty_factor` propagation: when one runner hits a CF Turnstile, all other runners pick it up on the next `/lease` call
-- **Fail-open by design**: if the Worker is unreachable / token mismatched / network is down, the spider transparently falls back to local throttling (`MovieSleepManager`) — no retries, no extra latency on the hot path
-- Free-tier-friendly: SQLite-backed DO, ~1 HTTP roundtrip per scheduled request, well under Cloudflare's 100 k/day Worker + DO request quotas
-- **Worker source lives in a dedicated repo**: [TongWu/JAVDB_AutoSpider_Proxycoordinator](https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator) (TypeScript + wrangler + vitest). Python client stays in this monorepo at [`packages/python/javdb_platform/proxy_coordinator_client.py`](packages/python/javdb_platform/proxy_coordinator_client.py).
-- Full deploy walkthrough: [docs/PROXY_COORDINATOR_DEPLOY.md](docs/PROXY_COORDINATOR_DEPLOY.md)
+- **Fail-open by design**: if the Worker is unreachable / token mismatched / network is down, the spider transparently falls back to local throttling (`MovieSleepManager`) and per-runner login — no retries, no extra latency on the hot path
+- Free-tier-friendly: SQLite-backed DOs, ~1 HTTP roundtrip per scheduled request, well under Cloudflare's 100 k/day Worker + DO request quotas. Login-state polling adds a few requests/min only while a re-login is in flight.
+- **Single bearer token**, single Cloudflare Worker, two endpoints families:
+  - `/lease`, `/report`, `/state` — per-proxy throttle (ProxyCoordinator)
+  - `/login_state`, `/login_state/{acquire_lease,publish,invalidate,release_lease}` — cross-runtime JavDB login (GlobalLoginState)
+- **Worker source lives in a dedicated repo**: [TongWu/JAVDB_AutoSpider_Proxycoordinator](https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator) (TypeScript + wrangler + vitest, 46 tests). Python clients stay in this monorepo at [`packages/python/javdb_platform/proxy_coordinator_client.py`](packages/python/javdb_platform/proxy_coordinator_client.py) and [`packages/python/javdb_platform/login_state_client.py`](packages/python/javdb_platform/login_state_client.py).
+- Full deploy walkthrough: [docs/PROXY_COORDINATOR_DEPLOY.md](docs/PROXY_COORDINATOR_DEPLOY.md) (§13 covers the GlobalLoginState DO).
 
 ## Installation
 
