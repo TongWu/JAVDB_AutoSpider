@@ -12,7 +12,7 @@ falling back to the pure-Python implementation otherwise.
 
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 from threading import Lock
 
 try:
@@ -26,6 +26,69 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__)
+
+
+# P1-A — cross-runner ban dispatcher.  ``state.setup_proxy_coordinator``
+# registers a hook here that fires
+# ``ProxyCoordinatorClient.mark_proxy_banned(name)`` when the local ban
+# manager records a new ban; this propagates the ban into the Worker
+# Durable Object so peer runners pick it up via their next ``/lease``.
+#
+# The hook is intentionally module-level (not threaded through ProxyBanManager
+# constructors) because:
+#   1. The Rust ban manager bypasses the Python ``add_ban`` entry point, so
+#      a constructor-injected hook would miss Rust-mediated bans;
+#   2. Tests can simply ``set_remote_ban_hook(None)`` to short-circuit;
+#   3. Fail-open is preserved: when the coordinator is not configured the
+#      hook stays ``None`` and behaviour matches the pre-coordinator world.
+_remote_ban_hook: Optional[Callable[[str], None]] = None
+_remote_unban_hook: Optional[Callable[[str], None]] = None
+
+
+def set_remote_ban_hook(hook: Optional[Callable[[str], None]]) -> None:
+    """Register the cross-runner ban dispatcher.  Pass ``None`` to clear."""
+    global _remote_ban_hook
+    _remote_ban_hook = hook
+
+
+def set_remote_unban_hook(hook: Optional[Callable[[str], None]]) -> None:
+    """Register the cross-runner unban dispatcher.  Pass ``None`` to clear."""
+    global _remote_unban_hook
+    _remote_unban_hook = hook
+
+
+def _dispatch_remote_ban(proxy_name: str) -> None:
+    """Best-effort fire of the registered remote-ban hook.
+
+    Never raises; failures are logged at WARNING and otherwise ignored so
+    that local ban bookkeeping is never blocked by a coordinator outage.
+    Idempotency is delegated to the hook implementation (``mark_proxy_banned``
+    is naturally idempotent: the Worker takes the max TTL of concurrent bans).
+    """
+    hook = _remote_ban_hook
+    if hook is None or not proxy_name:
+        return
+    try:
+        hook(proxy_name)
+    except Exception:  # noqa: BLE001 — must NEVER escape the ban path
+        logger.warning(
+            "Remote ban hook for '%s' failed; ban remains local-only",
+            proxy_name, exc_info=True,
+        )
+
+
+def _dispatch_remote_unban(proxy_name: str) -> None:
+    """Best-effort fire of the registered remote-unban hook.  Never raises."""
+    hook = _remote_unban_hook
+    if hook is None or not proxy_name:
+        return
+    try:
+        hook(proxy_name)
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Remote unban hook for '%s' failed; unban remains local-only",
+            proxy_name, exc_info=True,
+        )
 
 
 class ProxyBanRecord:
@@ -79,17 +142,24 @@ class ProxyBanManager:
             proxy_name: Name of the proxy
             proxy_url: Full proxy URL with IP (for email reporting)
         """
+        newly_banned = False
         with self.lock:
             if proxy_name in self.banned_proxies:
                 logger.debug(f"Proxy '{proxy_name}' is already banned this session, not updating")
-                return
-            
-            record = ProxyBanRecord(proxy_name, datetime.now(), proxy_url)
-            self.banned_proxies[proxy_name] = record
-            
-            logger.debug(
-                f"Proxy '{proxy_name}' banned [session-permanent]"
-            )
+            else:
+                record = ProxyBanRecord(proxy_name, datetime.now(), proxy_url)
+                self.banned_proxies[proxy_name] = record
+                newly_banned = True
+                logger.debug(
+                    f"Proxy '{proxy_name}' banned [session-permanent]"
+                )
+
+        # P1-A — fire the cross-runner ban dispatcher OUTSIDE the lock so a
+        # slow / unavailable coordinator can never block the ban path.  Only
+        # dispatched when the ban is *newly* recorded; repeats are idempotent
+        # but firing on every call would amplify queue pressure pointlessly.
+        if newly_banned:
+            _dispatch_remote_ban(proxy_name)
     
     def get_banned_proxies(self) -> List[ProxyBanRecord]:
         """Get list of currently banned proxies."""
