@@ -233,6 +233,40 @@ class TestNoProxyFallbackShortCircuit:
         assert result[5] is False  # parse_success
 
 
+class TestIndexCopyrightRestrictionLogin:
+    """Verify that copyright restriction pages are treated as login-required."""
+
+    def test_index_copyright_restriction_triggers_login_retry(self):
+        copyright_html = (
+            "<html><body>Due to copyright restrictions, "
+            "this page is not available in your country.</body></html>"
+        )
+        valid_index_html = (
+            "<html><body><div class='movie-list'>"
+            "<div class='item'></div>"
+            "</div></body></html>"
+        )
+
+        with patch.object(state_mod, 'global_proxy_pool', None), \
+             patch.object(fallback_mod, 'can_attempt_login', return_value=True), \
+             patch.object(fallback_mod, '_login_refresh_for_spider', return_value=(True, 'ck', None)) as login_refresh, \
+             patch.object(fallback_mod, '_sleep_between_fetches'), \
+             patch.object(state_mod, 'get_page', side_effect=[copyright_html, valid_index_html]):
+            result = fallback_mod.fetch_index_page_with_fallback(
+                page_url='http://javdb.com/actors/abc',
+                session=MagicMock(),
+                use_cookie=True,
+                use_proxy=False,
+                use_cf_bypass=False,
+                page_num=1,
+                is_adhoc_mode=True,
+            )
+
+        login_refresh.assert_called_once_with(False)
+        assert result[0] == valid_index_html
+        assert result[1] is True  # has_movie_list
+
+
 class TestDetailLoginRetrySendsCookie:
     """run_service sets use_cookie=False for daily runs; post-login retry must still attach cookie."""
 

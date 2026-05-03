@@ -25,6 +25,17 @@ except ImportError:
     _rust_validate_index_html = None
 
 
+_LOGIN_REQUIRED_TEXT_MARKERS = (
+    "due to copyright restrictions",
+    "not available in your country",
+)
+
+
+def _has_login_required_text(html: str) -> bool:
+    lower_html = html.lower()
+    return all(marker in lower_html for marker in _LOGIN_REQUIRED_TEXT_MARKERS)
+
+
 def result_to_dict(result: Any) -> dict:
     if hasattr(result, "to_dict"):
         return result.to_dict()
@@ -34,6 +45,8 @@ def result_to_dict(result: Any) -> dict:
 def is_login_page(html: str) -> bool:
     if not html:
         return False
+    if _has_login_required_text(html):
+        return True
     if RUST_PARSER_EXTRAS_AVAILABLE:
         try:
             return bool(_rust_is_login_page(html))

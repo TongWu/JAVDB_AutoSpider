@@ -1251,6 +1251,7 @@ TWOCAPTCHA_API_KEY = ''  # For automatic captcha solving
 Re-run `python3 javdb_login.py` when:
 - ✅ Session cookie expires (usually after days/weeks)
 - ✅ Spider shows "No movie list found" on valid URLs
+- ✅ JavDB returns "Due to copyright restrictions, this page is not available in your country."
 - ✅ Age verification or login errors appear
 - ✅ Before using `--url` parameter for first time
 
