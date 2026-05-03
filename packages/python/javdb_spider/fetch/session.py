@@ -3,6 +3,7 @@
 from typing import Iterable, Optional
 
 from packages.python.javdb_platform.logging_config import get_logger
+from packages.python.javdb_platform.login_state_client import LoginStateUnavailable
 from packages.python.javdb_platform.bridges.rust_adapters.parser_adapter import is_login_page
 import packages.python.javdb_spider.runtime.state as state
 from packages.python.javdb_spider.runtime.config import (
@@ -17,6 +18,51 @@ from packages.python.javdb_spider.runtime.config import (
 )
 
 logger = get_logger(__name__)
+
+
+def _publish_login_state_to_do(proxy_name: str, cookie: str) -> None:
+    """Best-effort publish of a freshly-obtained cookie to the GlobalLoginState DO.
+
+    Called after every successful :func:`attempt_login_refresh`; silently
+    no-ops when the DO is not configured (``state.global_login_state_client
+    is None`` is the supported "per-runner login only" path).
+
+    Failure modes that are explicitly tolerated:
+
+    - ``LoginStateUnavailable`` from a network/server error → fail-open;
+      this runner's local cookie still works, only other runners miss out.
+    - ``409 lease_required`` (also surfaced as ``LoginStateUnavailable``)
+      when the caller did not first acquire the re-login lease — typical
+      for the legacy single-process fallback paths in
+      ``fetch/fallback.py``.  The :class:`LoginCoordinator` parallel path
+      always acquires the lease before login, so its publishes succeed.
+
+    On success, :data:`state.current_login_state_version` is updated so
+    downstream :meth:`LoginStateClient.invalidate` calls have the correct
+    optimistic-lock token.
+    """
+    client = state.global_login_state_client
+    if client is None or not proxy_name or not cookie:
+        return
+    try:
+        result = client.publish(
+            holder_id=state.runtime_holder_id,
+            proxy_name=proxy_name,
+            cookie=cookie,
+        )
+    except LoginStateUnavailable as exc:
+        logger.warning(
+            "Failed to publish login state to DO (proxy=%s): %s — "
+            "this runner still has the cookie locally; other runners may "
+            "re-login independently",
+            proxy_name, exc,
+        )
+        return
+    state.current_login_state_version = result.version
+    logger.info(
+        "Published login state to DO: proxy=%s, version=%d",
+        proxy_name, result.version,
+    )
 
 
 def resolve_login_proxy_endpoints():
@@ -179,6 +225,7 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
                 if state.global_request_handler:
                     state.global_request_handler.config.javdb_session_cookie = new_cookie
                     logger.info("✓ Updated request handler with new session cookie")
+                _publish_login_state_to_do(used_proxy_name, new_cookie)
                 logger.info("=" * 60)
                 return True, new_cookie, used_proxy_name
             else:
@@ -187,6 +234,7 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
                 if state.global_request_handler:
                     state.global_request_handler.config.javdb_session_cookie = session_cookie
                     logger.info("✓ Updated request handler with new session cookie")
+                _publish_login_state_to_do(used_proxy_name, session_cookie)
                 logger.info("=" * 60)
                 return True, session_cookie, used_proxy_name
         else:

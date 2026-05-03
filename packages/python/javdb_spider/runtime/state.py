@@ -9,10 +9,14 @@ import re
 import logging
 import threading
 import time
+import uuid
 from typing import Optional, Dict
 from datetime import datetime
 
 from packages.python.javdb_platform.logging_config import get_logger
+from packages.python.javdb_platform.login_state_client import (
+    LoginStateClient,
+)
 from packages.python.javdb_platform.proxy_coordinator_client import (
     ProxyCoordinatorClient,
 )
@@ -44,6 +48,12 @@ global_request_handler: Optional[RequestHandler] = None
 # :func:`setup_proxy_coordinator`; ``None`` means "use local throttling
 # only" — equivalent to the pre-coordinator behaviour.
 global_proxy_coordinator: Optional[ProxyCoordinatorClient] = None
+# Cross-instance login-state coordinator (singleton GlobalLoginState DO on
+# the same Cloudflare Worker as ``global_proxy_coordinator``).  Lazily
+# initialised by :func:`setup_login_state_client`; ``None`` means
+# "per-runner login only" — equivalent to the pre-DO behaviour.  Both
+# coordinators are independent: either, neither, or both can be active.
+global_login_state_client: Optional[LoginStateClient] = None
 
 parsed_links: set = set()
 proxy_ban_html_files: list = []
@@ -51,6 +61,16 @@ proxy_ban_html_files: list = []
 login_attempted: bool = False
 refreshed_session_cookie: Optional[str] = None
 logged_in_proxy_name: Optional[str] = None
+# Monotonic version of the cookie published in
+# :data:`global_login_state_client`.  Tracked so we can pass it back to
+# :meth:`LoginStateClient.invalidate` as the optimistic lock token; ``None``
+# when the DO is not configured or this runner has never observed a publish.
+current_login_state_version: Optional[int] = None
+# Per-process opaque identity used as the ``holder_id`` for DO leases.
+# Generated once at import time so every module in this runner sees the
+# same value — required by ``acquire_lease`` / ``publish`` /
+# ``release_lease`` to stay matched across the re-login flow.
+runtime_holder_id: str = f"runner-{uuid.uuid4().hex[:16]}"
 
 # Per-proxy and global login budget tracking
 login_attempts_per_proxy: Dict[str, int] = {}
@@ -254,6 +274,51 @@ def setup_proxy_coordinator() -> Optional[ProxyCoordinatorClient]:
     return client
 
 
+def setup_login_state_client() -> Optional[LoginStateClient]:
+    """Initialise the cross-instance login-state coordinator.
+
+    Sister function of :func:`setup_proxy_coordinator`: reads the **same**
+    ``PROXY_COORDINATOR_URL`` / ``PROXY_COORDINATOR_TOKEN`` (the Worker
+    hosts both the per-proxy throttle DO and the singleton login-state
+    DO).  Returns ``None`` (the supported disabled path) when env vars
+    are unset; returns ``None`` and logs an ERROR when configured but the
+    Worker's ``/health`` probe fails.
+
+    The result is cached in :data:`global_login_state_client`; idempotent.
+    """
+    global global_login_state_client
+    if global_login_state_client is not None:
+        return global_login_state_client
+
+    from packages.python.javdb_platform.config_helper import cfg
+    url = (cfg('PROXY_COORDINATOR_URL', '') or '').strip()
+    token = (cfg('PROXY_COORDINATOR_TOKEN', '') or '').strip()
+    if not url or not token:
+        logger.info(
+            "Login-state client not configured (PROXY_COORDINATOR_URL/TOKEN unset) "
+            "— using per-runner login only",
+        )
+        global_login_state_client = None
+        return None
+
+    client = LoginStateClient(base_url=url, token=token)
+    if not client.health_check():
+        logger.error(
+            "Login-state Worker URL %s is configured but /health did not respond — "
+            "falling back to per-runner login for this run",
+            url,
+        )
+        client.close()
+        global_login_state_client = None
+        return None
+    logger.info(
+        "Login-state client initialised: base_url=%s, holder_id=%s",
+        url, runtime_holder_id,
+    )
+    global_login_state_client = client
+    return client
+
+
 def initialize_request_handler():
     """Create the global RequestHandler from configuration."""
     global global_request_handler
@@ -301,14 +366,17 @@ def initialize_request_handler():
 def setup_proxy_pool(use_proxy) -> None:
     """Initialize the global proxy pool from configuration.
 
-    Also lazily initialises the cross-instance proxy coordinator so that
-    every worker thread spawned later automatically picks it up via
-    :data:`global_proxy_coordinator`.
+    Also lazily initialises both cross-instance coordinators
+    (per-proxy throttle + global login state) so every worker thread
+    spawned later automatically picks them up via
+    :data:`global_proxy_coordinator` and :data:`global_login_state_client`.
+    Both are independent and may be ``None`` (fail-open).
     """
     from packages.python.javdb_platform.proxy_policy import is_proxy_mode_disabled
     global global_proxy_pool
 
     setup_proxy_coordinator()
+    setup_login_state_client()
 
     if is_proxy_mode_disabled(PROXY_MODE):
         logger.info("Proxy globally disabled (PROXY_MODE='%s') - skipping pool init", PROXY_MODE)

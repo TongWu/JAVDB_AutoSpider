@@ -3,15 +3,34 @@
 Used by ``ProxyWorker`` (spider), ``BackfillWorker`` (migration), and
 ``AlignWorker`` (inventory alignment) — single source of truth for all
 login retry / proxy-switch / budget logic.
+
+When the cross-runtime ``GlobalLoginState`` Durable Object is configured
+(:data:`state.global_login_state_client` is not ``None``), all calls into
+:meth:`_login_and_verify` are wrapped in a DO ``acquire_lease`` ↔
+``release_lease`` mutex so that **at most one runner globally** performs
+the actual login at a time.  Runners that lose the race **park** the
+offending tasks in :attr:`LoginCoordinator._pending_login_tasks` and a
+background daemon (`_poll_login_state_loop`) re-dispatches them once the
+winning runner publishes the fresh cookie to the DO — meanwhile the rest
+of the worker pool continues processing non-login tasks unimpeded.
+
+Fail-open contract: when the DO is unreachable the coordinator silently
+falls back to the legacy per-runner behaviour; nothing in this module
+ever raises a ``LoginStateUnavailable`` to the caller.
 """
 
 from __future__ import annotations
 
 import queue as queue_module
 import threading
-from typing import Optional
+import time
+from collections import deque
+from typing import Deque, Optional, Tuple
 
 import packages.python.javdb_spider.runtime.state as state
+from packages.python.javdb_platform.login_state_client import (
+    LoginStateUnavailable,
+)
 from packages.python.javdb_spider.fetch.session import (
     attempt_login_refresh,
     verify_login_via_fixed_pages,
@@ -24,6 +43,23 @@ from packages.python.javdb_spider.runtime.config import (
 from packages.python.javdb_platform.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+
+# ── Cross-runtime DO tuning ──────────────────────────────────────────────
+# Lease TTL: a successful JavDB login + fixed-page verification typically
+# completes in 5–30 s on this runner.  60 s gives ample headroom while
+# still letting another runner reclaim within a minute if this process
+# crashes mid-login.
+_DO_LEASE_TTL_MS = 60_000
+# Poll interval for the parked-task dispatcher.  Three seconds keeps
+# perceived latency low for the user-facing tasks waiting on a re-login,
+# while staying well within Cloudflare's free-tier request budget (a
+# typical run parks ≤ a handful of tasks for a few seconds at most).
+_POLL_INTERVAL_SEC = 3.0
+# After the parked queue drains, the poll thread keeps running for this
+# many idle iterations before exiting — so a quick succession of
+# park-then-dispatch-then-park does not pay the thread spawn cost twice.
+_POLL_IDLE_ITERATIONS_BEFORE_EXIT = 5
 
 
 def _task_worker_ctx(entry_index: str, worker_name: str) -> str:
@@ -130,11 +166,252 @@ class LoginCoordinator:
         self._all_workers = all_workers
         self._login_proxy_name = login_proxy_name
         self.logged_in_worker_id: int | None = None
+        # Tasks parked while another runner holds the DO re-login lease.
+        # Each entry is ``(worker_proxy_name, task, login_queue)`` so the
+        # poller knows where to re-dispatch once the winning runner
+        # publishes a fresh cookie.  Always touched while holding
+        # ``self._lock``.
+        self._pending_login_tasks: Deque[
+            Tuple[str, object, queue_module.Queue]
+        ] = deque()
+        # Daemon thread that drains :attr:`_pending_login_tasks`; lazily
+        # started on first park, exits on its own after a few idle
+        # iterations.  Touched only while holding ``self._lock`` for
+        # creation; the thread itself uses ``self._lock`` to mutate state.
+        self._poll_thread: Optional[threading.Thread] = None
 
     @property
     def lock(self) -> threading.Lock:
         """Expose the lock for ``_get_next_task`` synchronization."""
         return self._lock
+
+    # -- DO lease / park / poll helpers ------------------------------------
+
+    def _try_acquire_login_lease(self, hint_proxy_name: str) -> bool:
+        """Try to take the cross-runtime re-login mutex.
+
+        Returns:
+            ``True`` when the caller may proceed with a real login attempt
+            (DO not configured, lease freshly acquired, or this runner
+            already owns it via an idempotent renewal).
+            ``False`` when another runner currently owns the lease;
+            caller should park the task instead.
+        """
+        client = state.global_login_state_client
+        if client is None:
+            return True  # fail-open: pre-DO behaviour
+        try:
+            result = client.acquire_lease(
+                state.runtime_holder_id,
+                hint_proxy_name,
+                _DO_LEASE_TTL_MS,
+            )
+        except LoginStateUnavailable as exc:
+            logger.warning(
+                "DO acquire_lease failed (%s) — proceeding with local login "
+                "(fail-open)",
+                exc,
+            )
+            return True
+        if result.acquired:
+            return True
+        logger.info(
+            "DO re-login lease held by %s (target=%s, expires_in=%dms) — "
+            "parking task and waiting for the winner to publish",
+            result.holder_id,
+            result.target_proxy_name,
+            max(0, result.lease_expires_at - result.server_time_ms),
+        )
+        return False
+
+    def _release_login_lease(self) -> None:
+        """Best-effort release of the DO re-login mutex.
+
+        Safe to call even when the lease was never acquired (DO not
+        configured, or another runner already reclaimed an expired lease).
+        Errors are swallowed — the lease will time out on its own at
+        worst.
+        """
+        client = state.global_login_state_client
+        if client is None:
+            return
+        try:
+            client.release_lease(state.runtime_holder_id)
+        except LoginStateUnavailable as exc:
+            logger.warning(
+                "DO release_lease failed (%s) — relying on TTL for cleanup",
+                exc,
+            )
+
+    def _invalidate_do_state_if_owned(self) -> None:
+        """Mark the current published cookie as stale.
+
+        Called when the local logged-in worker observes a fresh login
+        wall on a previously-verified session: the cookie we (or another
+        runner) published is no longer valid, so other runners should
+        stop trusting it ASAP.  Uses the optimistic version lock so we
+        never wipe a newer cookie that someone else just published.
+        """
+        client = state.global_login_state_client
+        version = state.current_login_state_version
+        if client is None or version is None:
+            return
+        try:
+            result = client.invalidate(version)
+        except LoginStateUnavailable as exc:
+            logger.warning("DO invalidate failed (%s) — ignored", exc)
+            return
+        if result.invalidated:
+            state.current_login_state_version = result.current_version
+            logger.info("DO invalidated stale cookie (new version=%d)", result.current_version)
+        else:
+            # Stale view: someone else already published a fresher cookie
+            # while we were running this branch.  Pick it up via the
+            # poller on its next tick.
+            state.current_login_state_version = result.current_version
+            logger.info(
+                "DO invalidate no-op (current_version=%d > our %d) — "
+                "polling will pick up the fresher cookie",
+                result.current_version, version,
+            )
+
+    def _park_login_task(
+        self,
+        worker,
+        task,
+        login_queue: queue_module.Queue,
+    ) -> None:
+        """Add *task* to the pending queue and ensure the poller is running.
+
+        Caller MUST hold :attr:`_lock`.  After this, the calling worker
+        thread should ``return`` immediately — the parked task will be
+        re-dispatched to ``login_queue`` by :meth:`_poll_login_state_loop`
+        as soon as another runner publishes a fresh cookie to the DO.
+        """
+        self._pending_login_tasks.append((worker.proxy_name, task, login_queue))
+        if self._poll_thread is None or not self._poll_thread.is_alive():
+            self._poll_thread = threading.Thread(
+                target=self._poll_login_state_loop,
+                name="login-state-poller",
+                daemon=True,
+            )
+            self._poll_thread.start()
+            logger.info(
+                "Started login-state poller (daemon) — %d task(s) parked",
+                len(self._pending_login_tasks),
+            )
+
+    def _poll_login_state_loop(self) -> None:
+        """Drain :attr:`_pending_login_tasks` as the DO publishes new cookies.
+
+        Periodically polls the GlobalLoginState DO; whenever the observed
+        ``version`` advances past our local view, injects the fresh cookie
+        into the matching worker's request handler, sets that worker as
+        the new ``logged_in_worker_id``, and dispatches every parked task
+        to its ``login_queue``.
+
+        Exits after a few consecutive idle ticks once the parked queue is
+        empty so the runtime does not leak threads after a brief contention
+        episode.  A future park will respawn the thread.
+        """
+        idle_iterations = 0
+        while True:
+            time.sleep(_POLL_INTERVAL_SEC)
+
+            with self._lock:
+                if not self._pending_login_tasks:
+                    idle_iterations += 1
+                    if idle_iterations >= _POLL_IDLE_ITERATIONS_BEFORE_EXIT:
+                        # Drop the reference so the next park will spawn a
+                        # fresh thread rather than racing against an exiting one.
+                        self._poll_thread = None
+                        logger.info(
+                            "Login-state poller exiting after %d idle ticks",
+                            idle_iterations,
+                        )
+                        return
+                    continue
+                idle_iterations = 0
+
+            client = state.global_login_state_client
+            if client is None:
+                # DO went away mid-flight (extremely unlikely).  Drain the
+                # parked tasks back to their original queues so the rest
+                # of the run still progresses; treat them as proxy
+                # failures and let the normal retry path take over.
+                with self._lock:
+                    drained = list(self._pending_login_tasks)
+                    self._pending_login_tasks.clear()
+                    self._poll_thread = None
+                for proxy_name, task, login_queue in drained:
+                    if hasattr(task, "failed_proxies"):
+                        task.failed_proxies.add(proxy_name)
+                    requeue_front(login_queue, task)
+                logger.warning(
+                    "DO disappeared while %d tasks were parked — "
+                    "re-dispatched as proxy failures",
+                    len(drained),
+                )
+                return
+
+            try:
+                snapshot = client.get_state()
+            except LoginStateUnavailable as exc:
+                logger.warning(
+                    "Login-state poller: get_state failed (%s) — will retry",
+                    exc,
+                )
+                continue
+
+            current_version = state.current_login_state_version or 0
+            if snapshot.version <= current_version:
+                continue
+            if not snapshot.proxy_name or not snapshot.cookie:
+                # Version advanced via an ``invalidate`` (cookie cleared),
+                # not a fresh ``publish`` — keep polling for the next
+                # publish to come in.
+                state.current_login_state_version = snapshot.version
+                continue
+
+            with self._lock:
+                # Re-check after re-entering the lock: another worker may
+                # have raced and published locally already.
+                if (state.current_login_state_version or 0) >= snapshot.version:
+                    continue
+                state.current_login_state_version = snapshot.version
+                state.refreshed_session_cookie = snapshot.cookie
+                state.logged_in_proxy_name = snapshot.proxy_name
+
+                injected_worker_id: Optional[int] = None
+                for w in self._all_workers:
+                    if w.proxy_name == snapshot.proxy_name:
+                        w._handler.config.javdb_session_cookie = snapshot.cookie
+                        injected_worker_id = w.worker_id
+                        break
+
+                if injected_worker_id is None:
+                    logger.warning(
+                        "Poller: published proxy '%s' is not in this runner's "
+                        "pool — %d task(s) remain parked",
+                        snapshot.proxy_name,
+                        len(self._pending_login_tasks),
+                    )
+                    continue
+
+                self.logged_in_worker_id = injected_worker_id
+                tasks_to_dispatch = list(self._pending_login_tasks)
+                self._pending_login_tasks.clear()
+
+            for proxy_name, task, login_queue in tasks_to_dispatch:
+                if hasattr(task, "failed_proxies"):
+                    task.failed_proxies.discard(snapshot.proxy_name)
+                _set_login_verified(task, True)
+                login_queue.put(task)
+            logger.info(
+                "Poller: dispatched %d parked task(s) to login_queue after "
+                "DO version advanced to %d (proxy=%s)",
+                len(tasks_to_dispatch), snapshot.version, snapshot.proxy_name,
+            )
 
     # -- login execution helpers (must hold lock) --------------------------
 
@@ -215,6 +492,11 @@ class LoginCoordinator:
 
         On success sets ``logged_in_worker_id`` and updates the winning
         worker's cookie.  Returns the worker id, or ``None`` on failure.
+
+        Note: this method assumes the caller already holds the DO
+        re-login lease (when DO is configured); it does not arbitrate
+        per-iteration.  Use :meth:`_find_and_login_next_worker_with_lease`
+        from the public ``handle_login_required`` paths.
         """
         exclude = exclude or set()
 
@@ -241,6 +523,79 @@ class LoginCoordinator:
                 return w.worker_id
 
         return None
+
+    # -- DO-lease-aware wrappers around the private login helpers ----------
+
+    def _login_and_verify_with_lease(
+        self,
+        worker,
+        task,
+        login_queue: queue_module.Queue,
+    ) -> Tuple[bool, Optional[str], bool]:
+        """Run :meth:`_login_and_verify` under the cross-runtime DO lease.
+
+        Returns ``(verified, new_cookie, parked)``:
+
+        - ``parked=True``: the lease is held by another runner; ``task``
+          has been added to :attr:`_pending_login_tasks` and the poller
+          will re-dispatch it.  Caller MUST ``return`` from
+          :meth:`handle_login_required` immediately and MUST NOT requeue
+          the task or mark it as failed.
+        - ``parked=False``: the local login attempt completed (verified
+          may be True or False); existing branch logic applies.
+        """
+        if not self._try_acquire_login_lease(worker.proxy_name):
+            self._park_login_task(worker, task, login_queue)
+            return False, None, True
+        try:
+            verified, new_cookie = self._login_and_verify(worker)
+        finally:
+            self._release_login_lease()
+        return verified, new_cookie, False
+
+    def _find_and_login_next_worker_with_lease(
+        self,
+        exclude: set | None,
+        task,
+        login_queue: queue_module.Queue,
+        hint_proxy_name: str,
+    ) -> Tuple[Optional[int], bool]:
+        """Run :meth:`_find_and_login_next_worker` under the DO lease.
+
+        Returns ``(next_worker_id, parked)``.  ``parked=True`` semantics
+        match :meth:`_login_and_verify_with_lease` — caller must
+        ``return`` immediately.  ``hint_proxy_name`` is recorded as the
+        lease's ``target_proxy_name`` for diagnostics; the lease is held
+        for the entire iteration regardless of which proxy ultimately
+        succeeds.
+        """
+        if not self._try_acquire_login_lease(hint_proxy_name):
+            self._park_login_task_for_unknown_target(task, login_queue, hint_proxy_name)
+            return None, True
+        try:
+            next_wid = self._find_and_login_next_worker(exclude=exclude)
+        finally:
+            self._release_login_lease()
+        return next_wid, False
+
+    def _park_login_task_for_unknown_target(
+        self,
+        task,
+        login_queue: queue_module.Queue,
+        hint_proxy_name: str,
+    ) -> None:
+        """Park *task* even though we don't know which proxy will end up logging in.
+
+        Reuses :meth:`_park_login_task` with the hint proxy name; the
+        poller treats ``proxy_name`` as a free-form tag (only used to
+        ``failed_proxies.discard`` on the eventual published proxy).
+        """
+        # Synthesize a worker-shaped object since we don't have one to
+        # hand; the poller only reads ``proxy_name``.
+        class _PsuedoWorker:  # noqa: N801 — internal class kept name-pyish
+            def __init__(self, proxy_name: str):
+                self.proxy_name = proxy_name
+        self._park_login_task(_PsuedoWorker(hint_proxy_name), task, login_queue)
 
     # -- public API --------------------------------------------------------
 
@@ -338,6 +693,13 @@ class LoginCoordinator:
                     requeue_front(task_queue, task)
                     return
 
+                # Inform the cross-runtime DO that the published cookie is
+                # bad before we attempt to publish a replacement; the
+                # optimistic version lock prevents us from clobbering a
+                # newer cookie a peer may have just published while we
+                # were spinning up.
+                self._invalidate_do_state_if_owned()
+
                 stale_count = (
                     state.login_failures_per_proxy.get(worker.proxy_name, 0) + 1
                 )
@@ -360,7 +722,11 @@ class LoginCoordinator:
                         stale_count, LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH,
                         proxy_attempts, LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
                     )
-                    verified, _ = self._login_and_verify(worker)
+                    verified, _, parked = self._login_and_verify_with_lease(
+                        worker, task, login_queue,
+                    )
+                    if parked:
+                        return
                     if verified:
                         self.logged_in_worker_id = worker.worker_id
                         _set_login_verified(task, True)
@@ -385,9 +751,14 @@ class LoginCoordinator:
                 state.refreshed_session_cookie = None
                 state.logged_in_proxy_name = None
 
-                next_wid = self._find_and_login_next_worker(
+                next_wid, parked = self._find_and_login_next_worker_with_lease(
                     exclude={worker.proxy_name},
+                    task=task,
+                    login_queue=login_queue,
+                    hint_proxy_name=worker.proxy_name,
                 )
+                if parked:
+                    return
                 if next_wid is not None:
                     task.failed_proxies.discard(
                         self._all_workers[next_wid].proxy_name,
@@ -403,7 +774,11 @@ class LoginCoordinator:
                 )
                 if cur_attempts < LOGIN_ATTEMPTS_PER_PROXY_LIMIT:
                     state.login_failures_per_proxy[worker.proxy_name] = 0
-                    verified, _ = self._login_and_verify(worker)
+                    verified, _, parked = self._login_and_verify_with_lease(
+                        worker, task, login_queue,
+                    )
+                    if parked:
+                        return
                     if verified:
                         self.logged_in_worker_id = worker.worker_id
                         _set_login_verified(task, True)
@@ -441,7 +816,11 @@ class LoginCoordinator:
                 worker.proxy_name, 0,
             )
             if own_attempts < LOGIN_ATTEMPTS_PER_PROXY_LIMIT:
-                verified, _ = self._login_and_verify(worker)
+                verified, _, parked = self._login_and_verify_with_lease(
+                    worker, task, login_queue,
+                )
+                if parked:
+                    return
                 if verified:
                     self.logged_in_worker_id = worker.worker_id
                     logger.info(
@@ -454,9 +833,14 @@ class LoginCoordinator:
                     return
 
             # Try every other proxy
-            next_wid = self._find_and_login_next_worker(
+            next_wid, parked = self._find_and_login_next_worker_with_lease(
                 exclude={worker.proxy_name},
+                task=task,
+                login_queue=login_queue,
+                hint_proxy_name=worker.proxy_name,
             )
+            if parked:
+                return
             if next_wid is not None:
                 task.failed_proxies.discard(
                     self._all_workers[next_wid].proxy_name,
