@@ -179,6 +179,16 @@ class LoginCoordinator:
         # iterations.  Touched only while holding ``self._lock`` for
         # creation; the thread itself uses ``self._lock`` to mutate state.
         self._poll_thread: Optional[threading.Thread] = None
+        # P2-C — wall-clock ms epoch until which the cross-runner login
+        # pool is in cooldown after repeated failures crossed the
+        # Worker-side ``LOGIN_COOLDOWN_THRESHOLD`` inside
+        # ``LOGIN_COOLDOWN_WINDOW_SEC``.  When non-zero and in the future,
+        # this coordinator parks all ``LoginRequired`` tasks instead of
+        # attempting another login — the poller resumes dispatching once
+        # the cooldown expires (or another runner publishes a fresh
+        # cookie, whichever happens first).  ``0`` means "no cooldown".
+        # Always read/written under ``self._lock``.
+        self._cooldown_until_ms: int = 0
 
     @property
     def lock(self) -> threading.Lock:
@@ -196,6 +206,14 @@ class LoginCoordinator:
             already owns it via an idempotent renewal).
             ``False`` when another runner currently owns the lease;
             caller should park the task instead.
+
+        P2-C: even when ``acquired=True``, the response may carry
+        ``cooldown_until_ms > server_time_ms`` after the cross-runner
+        failure budget was exhausted within the rolling window.  In that
+        case we record the cooldown deadline, immediately release the
+        lease so other runners aren't blocked, and return ``False`` so
+        the caller parks its task — the poller will replay parked tasks
+        once the cooldown expires.
         """
         client = state.global_login_state_client
         if client is None:
@@ -213,6 +231,33 @@ class LoginCoordinator:
                 exc,
             )
             return True
+        # P2-C: honour the cooldown signal regardless of who owns the
+        # lease.  Caller MUST be holding ``self._lock`` so this update
+        # races safely with the poller.
+        if (
+            result.cooldown_until_ms > 0
+            and result.cooldown_until_ms > result.server_time_ms
+        ):
+            previous = self._cooldown_until_ms
+            self._cooldown_until_ms = max(previous, result.cooldown_until_ms)
+            if previous != self._cooldown_until_ms:
+                logger.warning(
+                    "P2-C login cooldown active (until=%d, recent=%d) — "
+                    "parking login task; daemon will not initiate another "
+                    "attempt before cooldown lifts",
+                    self._cooldown_until_ms,
+                    result.recent_attempt_count,
+                )
+            # Release any lease we may have just acquired so peer runners
+            # observing the same cooldown can still drain their queues
+            # (the cooldown is informational; the lease is still
+            # exclusive).  Best-effort — failure here is harmless.
+            if result.acquired:
+                try:
+                    client.release_lease(state.runtime_holder_id)
+                except LoginStateUnavailable:
+                    pass
+            return False
         if result.acquired:
             return True
         logger.info(
@@ -223,6 +268,54 @@ class LoginCoordinator:
             max(0, result.lease_expires_at - result.server_time_ms),
         )
         return False
+
+    def _record_login_attempt(
+        self,
+        proxy_name: str,
+        outcome: str,
+    ) -> None:
+        """P2-C — best-effort `record_attempt` after each login attempt.
+
+        Called from the lease-aware wrappers regardless of whether the
+        attempt succeeded.  Uses the post-append ``cooldown_until_ms``
+        from the response to update the local cooldown clock so a
+        subsequent local-only ``handle_login_required`` (no DO acquire
+        between calls) still parks correctly.  Never raises — the
+        cooldown is a soft signal and a missed record is harmless.
+        """
+        client = state.global_login_state_client
+        if client is None:
+            return
+        try:
+            result = client.record_attempt(
+                state.runtime_holder_id, proxy_name, outcome,
+            )
+        except LoginStateUnavailable as exc:
+            logger.debug(
+                "DO record_attempt(%s) failed (%s) — ignored", outcome, exc,
+            )
+            return
+        except Exception as exc:  # noqa: BLE001 — never break callers on bookkeeping
+            logger.debug(
+                "DO record_attempt(%s) raised unexpectedly (%s) — ignored",
+                outcome, exc,
+            )
+            return
+        # ``result`` may be a MagicMock or any duck-typed object in tests;
+        # coerce to int defensively so a non-numeric attribute can't
+        # break the post-attempt path.  A failed coercion just skips
+        # the cooldown update — no harm, the next acquire will resync
+        # against the DO's authoritative view anyway.
+        try:
+            cooldown = int(result.cooldown_until_ms)
+            server_now = int(result.server_time_ms)
+        except (AttributeError, TypeError, ValueError):
+            return
+        if cooldown > server_now:
+            with self._lock:
+                self._cooldown_until_ms = max(
+                    self._cooldown_until_ms, cooldown,
+                )
 
     def _release_login_lease(self) -> None:
         """Best-effort release of the DO re-login mutex.
@@ -310,6 +403,14 @@ class LoginCoordinator:
         the new ``logged_in_worker_id``, and dispatches every parked task
         to its ``login_queue``.
 
+        P2-C — when the cross-runner login cooldown is active (see
+        :attr:`_cooldown_until_ms`), the poller does NOT initiate a
+        fresh login attempt; it waits for the cooldown to expire and
+        then re-dispatches all parked tasks back through the normal
+        ``handle_login_required`` flow (treating them as if they just
+        hit a fresh login wall — the next ``acquire_lease`` will
+        observe the cooldown has lifted).
+
         Exits after a few consecutive idle ticks once the parked queue is
         empty so the runtime does not leak threads after a brief contention
         episode.  A future park will respawn the thread.
@@ -332,6 +433,37 @@ class LoginCoordinator:
                         return
                     continue
                 idle_iterations = 0
+                # P2-C — if we know about an active cooldown, check
+                # whether it has expired.  If so, drain parked tasks
+                # back to their original ``login_queue`` and clear the
+                # cooldown clock so the next ``handle_login_required``
+                # cycle proceeds.  We re-queue at the front so the
+                # post-cooldown attempts hit the workers as soon as
+                # possible.
+                now_ms = int(time.time() * 1000)
+                if (
+                    self._cooldown_until_ms > 0
+                    and now_ms >= self._cooldown_until_ms
+                ):
+                    drained = list(self._pending_login_tasks)
+                    self._pending_login_tasks.clear()
+                    self._cooldown_until_ms = 0
+                    logger.info(
+                        "P2-C login cooldown lifted — re-dispatching %d "
+                        "parked task(s) to retry login",
+                        len(drained),
+                    )
+                    for proxy_name, task, login_queue in drained:
+                        login_queue.put(task)
+                    continue
+                if (
+                    self._cooldown_until_ms > 0
+                    and now_ms < self._cooldown_until_ms
+                ):
+                    # Cooldown still active — skip the version-bump check
+                    # so we don't burn DO calls during a back-off window
+                    # that we already know will reject any acquire.
+                    continue
 
             client = state.global_login_state_client
             if client is None:
@@ -536,13 +668,19 @@ class LoginCoordinator:
 
         Returns ``(verified, new_cookie, parked)``:
 
-        - ``parked=True``: the lease is held by another runner; ``task``
-          has been added to :attr:`_pending_login_tasks` and the poller
-          will re-dispatch it.  Caller MUST ``return`` from
-          :meth:`handle_login_required` immediately and MUST NOT requeue
-          the task or mark it as failed.
-        - ``parked=False``: the local login attempt completed (verified
-          may be True or False); existing branch logic applies.
+        - ``parked=True``: the lease is held by another runner OR the
+          P2-C cross-runner cooldown is active; ``task`` has been added
+          to :attr:`_pending_login_tasks` and the poller will
+          re-dispatch it (after the cooldown lifts or after another
+          runner publishes a fresh cookie, whichever happens first).
+          Caller MUST ``return`` from :meth:`handle_login_required`
+          immediately and MUST NOT requeue the task or mark it as
+          failed.
+        - ``parked=False``: the local login attempt completed
+          (``verified`` may be True or False); existing branch logic
+          applies.  Each completed attempt is reported back to the DO
+          via ``record_attempt`` so the next acquire across all runners
+          sees the up-to-date failure ratio.
         """
         if not self._try_acquire_login_lease(worker.proxy_name):
             self._park_login_task(worker, task, login_queue)
@@ -551,6 +689,11 @@ class LoginCoordinator:
             verified, new_cookie = self._login_and_verify(worker)
         finally:
             self._release_login_lease()
+        # P2-C: bookkeeping fires AFTER the lease release so the next
+        # runner doesn't have to wait on our network round-trip.
+        self._record_login_attempt(
+            worker.proxy_name, "success" if verified else "failure",
+        )
         return verified, new_cookie, False
 
     def _find_and_login_next_worker_with_lease(
@@ -576,6 +719,15 @@ class LoginCoordinator:
             next_wid = self._find_and_login_next_worker(exclude=exclude)
         finally:
             self._release_login_lease()
+        # P2-C: report the aggregate outcome of the multi-proxy sweep so
+        # the cross-runner failure budget reflects this attempt.  We
+        # attribute it to the proxy that ultimately succeeded
+        # (``next_wid``) or to the hint proxy when nothing worked.
+        if next_wid is not None:
+            success_proxy = self._all_workers[next_wid].proxy_name
+            self._record_login_attempt(success_proxy, "success")
+        else:
+            self._record_login_attempt(hint_proxy_name, "failure")
         return next_wid, False
 
     def _park_login_task_for_unknown_target(
