@@ -367,6 +367,7 @@ class TestSleepMirrorsRemoteBan:
         # of this test.
         import packages.python.javdb_platform.proxy_ban_manager as pbm
         original_global = pbm._global_ban_manager
+        original_hook = pbm._remote_ban_hook
         pbm._global_ban_manager = manager
         # Clear remote hook so add_ban does not try to call a real coordinator.
         set_remote_ban_hook(None)
@@ -379,6 +380,7 @@ class TestSleepMirrorsRemoteBan:
         finally:
             _state.global_proxy_pool = original_pool
             pbm._global_ban_manager = original_global
+            set_remote_ban_hook(original_hook)
 
     def test_lease_with_pool_ban_exception_does_not_break_sleep(self):
         from packages.python.javdb_spider.runtime import state as _state

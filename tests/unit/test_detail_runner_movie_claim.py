@@ -1,4 +1,4 @@
-"""P1-B integration tests: ``process_detail_entries`` × MovieClaim coordinator.
+"""P1-B integration tests: ``process_detail_entries`` x MovieClaim coordinator.
 
 Goals
 -----

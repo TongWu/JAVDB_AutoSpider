@@ -1333,6 +1333,13 @@ class ParallelFetchBackend(FetchBackend):
                     "falling back to index-phase login state",
                     exc,
                 )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Engine startup: unexpected DO get_state error (%s) — "
+                    "falling back to index-phase login state",
+                    exc,
+                    exc_info=True,
+                )
             else:
                 already_local = state.current_login_state_version or 0
                 if (
