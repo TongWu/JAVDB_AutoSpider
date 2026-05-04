@@ -204,12 +204,24 @@ class TestRollbackRefusesCommitted:
 
     def test_force_overrides(self):
         sid = _create_session()
+        with db_mod.get_db() as conn:
+            conn.execute(
+                "INSERT INTO ReportMovies (SessionId, Href, VideoCode) "
+                "VALUES (?, ?, ?)",
+                (sid, "/v/force", "FORCE-001"),
+            )
         db_mod.db_mark_session_committed(sid)
         result = db_mod.db_rollback_session(sid, force=True, scope="reports")
         # Even with force, _rollback_reports keeps committed ReportSessions
         # row intact (only it would have been deleted by removing the WHERE
         # clause). The other tables still get cleaned.
         assert "reports" in result
+        with db_mod.get_db() as conn:
+            remaining = conn.execute(
+                "SELECT COUNT(*) AS n FROM ReportMovies WHERE SessionId=?",
+                (sid,),
+            ).fetchone()["n"]
+        assert remaining == 0
 
     def test_unknown_scope_raises(self):
         sid = _create_session()
@@ -261,26 +273,84 @@ class TestRollbackOperations:
                 (sid_b,),
             ).fetchone()["n"] == 1
 
-    def test_dedup_keeps_already_deleted_rows(self):
-        """`IsDeleted=1` rows survive rollback (they represent real rclone deletes)."""
+    def test_dedup_deletes_session_rows_even_when_marked_deleted(self):
+        """Rows created by the failed session are deleted even after soft-delete."""
         sid = _create_session()
         db_mod.db_append_dedup_record(
             {"video_code": "ABC-001", "existing_gdrive_path": "/a/1"},
             session_id=sid,
         )
         db_mod.db_mark_records_deleted(
-            [("/a/1", "2026-05-04 10:00:00")]
+            [("/a/1", "2026-05-04 10:00:00")],
+            session_id=sid,
         )
 
         result = db_mod.db_rollback_session(sid, scope="operations")
-        assert result["operations"]["DedupRecords"] == 0
+        assert result["operations"]["DedupRecords"] == 1
 
         with db_mod.get_db() as conn:
             n = conn.execute(
                 "SELECT COUNT(*) AS n FROM DedupRecords WHERE SessionId=?",
                 (sid,),
             ).fetchone()["n"]
-        assert n == 1
+        assert n == 0
+
+    def test_dedup_restores_preexisting_rows_marked_deleted_by_session(self):
+        sid = _create_session()
+        row_id = db_mod.db_append_dedup_record(
+            {"video_code": "ABC-003", "existing_gdrive_path": "/a/3"},
+            session_id=None,
+        )
+        db_mod.db_mark_records_deleted(
+            [("/a/3", "2026-05-04 10:00:00")],
+            session_id=sid,
+        )
+
+        result = db_mod.db_rollback_session(sid, scope="operations")
+        assert result["operations"]["DedupRecords.restored"] == 1
+        assert result["operations"]["DedupRecords"] == 0
+
+        with db_mod.get_db() as conn:
+            row = conn.execute(
+                "SELECT IsDeleted, DateTimeDeleted, SessionId "
+                "FROM DedupRecords WHERE Id=?",
+                (row_id,),
+            ).fetchone()
+            backup = conn.execute(
+                "SELECT name FROM sqlite_master WHERE name=?",
+                (f"DedupRecordsRollback_{sid}",),
+            ).fetchone()
+        assert row["IsDeleted"] == 0
+        assert row["DateTimeDeleted"] is None
+        assert row["SessionId"] is None
+        assert backup is None
+
+    def test_explicit_none_session_id_opts_out_of_active_context(self):
+        sid = _create_session()
+        db_mod.set_active_session_id(sid)
+        try:
+            dedup_id = db_mod.db_append_dedup_record(
+                {"video_code": "ABC-004", "existing_gdrive_path": "/a/4"},
+                session_id=None,
+            )
+            db_mod.db_upsert_align_no_exact_match(
+                "XYZ-004",
+                session_id=None,
+            )
+        finally:
+            db_mod.set_active_session_id(None)
+
+        with db_mod.get_db() as conn:
+            dedup = conn.execute(
+                "SELECT SessionId FROM DedupRecords WHERE Id=?",
+                (dedup_id,),
+            ).fetchone()
+            align = conn.execute(
+                "SELECT SessionId FROM InventoryAlignNoExactMatch WHERE VideoCode=?",
+                ("XYZ-004",),
+            ).fetchone()
+        assert dedup["SessionId"] is None
+        assert align["SessionId"] is None
 
 
 # ── Rclone staging-then-swap ─────────────────────────────────────────────
