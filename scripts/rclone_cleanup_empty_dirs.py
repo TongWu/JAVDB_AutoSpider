@@ -31,6 +31,16 @@ YEAR_DIR_RE = re.compile(r"^\d{4}$")
 UNKNOWN_YEAR_DIR = "未知"
 
 
+def positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
 # ---------------------------------------------------------------------------
 # rclone 封装
 # ---------------------------------------------------------------------------
@@ -129,7 +139,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-w",
         "--workers",
-        type=int,
+        type=positive_int,
         default=32,
         help="传给 rclone --checkers 的并发数（默认 32）",
     )

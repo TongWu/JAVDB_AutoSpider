@@ -565,6 +565,7 @@ _REPORT_SESSIONS_PAYLOAD = (
     "StartPage",
     "EndPage",
     "DateTimeCreated",
+    "Status",
 )
 
 
@@ -587,6 +588,19 @@ _REPORT_TORRENTS_PAYLOAD = (
     "Size",
     "FileCount",
 )
+
+
+def _payload_cols_present(
+    rows: Sequence[Dict[str, Any]],
+    payload_cols: Sequence[str],
+) -> Tuple[str, ...]:
+    """Keep optional payload columns only when the SQLite source exposes them."""
+    if not rows:
+        return tuple(payload_cols)
+    available = set(rows[0])
+    for row in rows[1:]:
+        available &= set(row)
+    return tuple(col for col in payload_cols if col in available)
 
 
 def _reconcile_history(
@@ -753,11 +767,15 @@ def _reconcile_reports(
     ]
     logger.info("reports: scanning %d ReportSessions rows", len(session_rows))
 
+    session_payload_cols = _payload_cols_present(
+        session_rows,
+        _REPORT_SESSIONS_PAYLOAD,
+    )
     csv_to_d1_session_id = _process_table(
         d1=d1,
         table="ReportSessions",
         key_cols=_REPORT_SESSIONS_KEY,
-        payload_cols=_REPORT_SESSIONS_PAYLOAD,
+        payload_cols=session_payload_cols,
         rows=session_rows,
         dry_run=dry_run,
         stats=sessions_stats,

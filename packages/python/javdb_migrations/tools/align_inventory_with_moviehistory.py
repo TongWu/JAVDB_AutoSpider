@@ -1101,6 +1101,7 @@ def main() -> int:
             logger.warning(
                 f"Could not set active session_id={args.session_id} for align run: {e}"
             )
+            raise
     return run_alignment(args)
 
 

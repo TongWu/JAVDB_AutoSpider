@@ -1,3 +1,5 @@
+import pytest
+
 from scripts import rclone_update_nfo_titles as updater
 
 
@@ -45,6 +47,13 @@ def test_select_year_dirs_requested_years_intersect_start_from_and_exclude_temp(
 
     assert years == ["2018", "manual"]
     assert missing == {"temp", "missing"}
+
+
+def test_validate_year_requires_exactly_four_digits():
+    assert updater.validate_year("2026") == 2026
+    for value in ("20", "99999", "abcd"):
+        with pytest.raises(updater.argparse.ArgumentTypeError):
+            updater.validate_year(value)
 
 
 def test_transform_title_hides_coded_and_no_subtitle_suffix():
