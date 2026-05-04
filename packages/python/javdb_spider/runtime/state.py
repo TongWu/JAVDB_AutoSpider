@@ -548,6 +548,21 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
       deployments stay mounted with zero operator action.
 
     Cached in :data:`global_movie_claim_client`.  Idempotent.
+
+    Thread safety: the network I/O (cfg lookup, env splice,
+    ``/health`` probe inside :func:`create_movie_claim_client_with_mode_from_env`)
+    must NOT run under :data:`_movie_claim_lock` — a slow Worker would
+    otherwise stall every other lock acquirer (including the heartbeat
+    thread reading interval state and :func:`_apply_movie_claim_recommendation`).
+    The fix is to bracket the I/O with two short critical sections:
+
+    1. First section: handle the idempotent fast paths.
+    2. I/O outside the lock.
+    3. Second section: re-check (another thread may have raced past us
+       during the I/O window) and commit ``_movie_claim_mode``,
+       ``_movie_claim_client_pending``, ``global_movie_claim_client``
+       atomically. Any client we constructed but lost the race for is
+       :meth:`MovieClaimClient.close`-d so we don't leak its session.
     """
     global global_movie_claim_client, _movie_claim_client_pending, _movie_claim_mode
     with _movie_claim_lock:
@@ -604,44 +619,79 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
             else:
                 os.environ[key] = value
 
-    # Persist the resolved mode so the registry-signal handler and the
-    # heartbeat-interval picker can branch on it later.
-    _movie_claim_mode = mode
+    # Re-acquire the lock to commit the resolved state atomically with the
+    # other readers (``_apply_movie_claim_recommendation``,
+    # ``_next_heartbeat_interval``, the early-return paths above, and any
+    # idempotent re-entry of this function).
+    with _movie_claim_lock:
+        # Double-checked locking: another thread may have completed
+        # ``setup_movie_claim_client`` while we were doing I/O. If so,
+        # mirror its decision and dispose of our duplicate client to
+        # avoid leaking the underlying ``requests.Session``.
+        if global_movie_claim_client is not None:
+            if client is not None and client is not global_movie_claim_client:
+                try:
+                    client.close()
+                except Exception:  # noqa: BLE001 - best-effort cleanup
+                    pass
+            return global_movie_claim_client
+        if _movie_claim_client_pending is not None:
+            if client is not None and client is not _movie_claim_client_pending:
+                try:
+                    client.close()
+                except Exception:  # noqa: BLE001 - best-effort cleanup
+                    pass
+            if (
+                _movie_claim_mode == MOVIE_CLAIM_MODE_FORCE_ON
+                or (
+                    _movie_claim_mode == MOVIE_CLAIM_MODE_AUTO
+                    and _movie_claim_last_recommended
+                )
+            ):
+                global_movie_claim_client = _movie_claim_client_pending
+            return _movie_claim_client_pending
 
-    if client is None or mode == MOVIE_CLAIM_MODE_OFF:
-        # Off path covers: explicit disable, missing URL/token, /health
-        # failure, or auto/force_on resolved → off due to the gates.
-        # Make sure the pending slot is empty so a stale handle from a
-        # prior `setup_movie_claim_client` doesn't accidentally mount.
-        _movie_claim_client_pending = None
-        global_movie_claim_client = None
-        return None
+        # We're the winner — persist the resolved mode so the
+        # registry-signal handler and the heartbeat-interval picker can
+        # branch on it later.
+        _movie_claim_mode = mode
 
-    _movie_claim_client_pending = client
+        if client is None or mode == MOVIE_CLAIM_MODE_OFF:
+            # Off path covers: explicit disable, missing URL/token,
+            # /health failure, or auto/force_on resolved → off due to
+            # the gates. Make sure the pending slot is empty so a stale
+            # handle from a prior ``setup_movie_claim_client`` doesn't
+            # accidentally mount.
+            _movie_claim_client_pending = None
+            global_movie_claim_client = None
+            return None
 
-    if mode == MOVIE_CLAIM_MODE_FORCE_ON:
-        # Legacy P1-B contract: mount immediately so the first detail
-        # page coordinates with peers.  Subsequent registry signals are
-        # ignored by ``_apply_movie_claim_recommendation``.
+        _movie_claim_client_pending = client
+
+        if mode == MOVIE_CLAIM_MODE_FORCE_ON:
+            # Legacy P1-B contract: mount immediately so the first
+            # detail page coordinates with peers. Subsequent registry
+            # signals are ignored by ``_apply_movie_claim_recommendation``.
+            global_movie_claim_client = client
+            logger.info(
+                "Movie-claim client mounted (force_on): base_url=%s, holder_id=%s",
+                url, runtime_holder_id,
+            )
+            return client
+
+        # Auto mode: mount optimistically so the runner doesn't spend
+        # the first few seconds (before the first ``register`` response
+        # lands) racing peers without coordination. The maximum cost
+        # is N claim DO calls per page during that startup window for
+        # a single-runner deploy, immediately reverted on the first
+        # ``register`` response.
         global_movie_claim_client = client
         logger.info(
-            "Movie-claim client mounted (force_on): base_url=%s, holder_id=%s",
+            "Movie-claim client optimistically mounted (auto, awaiting registry signal): "
+            "base_url=%s, holder_id=%s",
             url, runtime_holder_id,
         )
         return client
-
-    # Auto mode: mount optimistically so the runner doesn't spend the
-    # first few seconds (before the first ``register`` response lands)
-    # racing peers without coordination.  The maximum cost is N claim
-    # DO calls per page during that startup window for a single-runner
-    # deploy, immediately reverted on the first ``register`` response.
-    global_movie_claim_client = client
-    logger.info(
-        "Movie-claim client optimistically mounted (auto, awaiting registry signal): "
-        "base_url=%s, holder_id=%s",
-        url, runtime_holder_id,
-    )
-    return client
 
 
 def _resolve_proxy_pool_json() -> str:
@@ -686,12 +736,23 @@ def _next_heartbeat_interval() -> float:
     (rather than :data:`_HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC` directly)
     so existing tests that monkeypatch the legacy alias to a small
     value keep speeding the loop up as before.
+
+    Thread safety: ``_movie_claim_mode`` and ``_movie_claim_last_recommended``
+    are mutated under :data:`_movie_claim_lock` (by
+    :func:`setup_movie_claim_client` and :func:`_apply_movie_claim_recommendation`),
+    so we briefly take the lock here too in order to read a consistent
+    snapshot. The lock is released before returning so a slow caller
+    (e.g. ``_runner_heartbeat_stop.wait`` followed by an HTTP heartbeat)
+    doesn't block writers.
     """
-    if _movie_claim_mode != MOVIE_CLAIM_MODE_AUTO:
+    with _movie_claim_lock:
+        mode = _movie_claim_mode
+        recommended = _movie_claim_last_recommended
+    if mode != MOVIE_CLAIM_MODE_AUTO:
         return _RUNNER_HEARTBEAT_INTERVAL_SEC
     return (
         _RUNNER_HEARTBEAT_INTERVAL_SEC
-        if _movie_claim_last_recommended
+        if recommended
         else _HEARTBEAT_INTERVAL_SINGLE_RUNNER_SEC
     )
 

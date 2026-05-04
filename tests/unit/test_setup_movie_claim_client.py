@@ -240,3 +240,191 @@ def test_setup_auto_mode_health_failure_falls_back_to_off(monkeypatch):
     assert state.global_movie_claim_client is None
     assert state._movie_claim_client_pending is None
     assert state._movie_claim_mode == state.MOVIE_CLAIM_MODE_OFF
+
+
+# ── concurrency: writes to module-globals must stay under the lock ─────────
+
+
+def test_setup_commits_state_under_lock_after_io(monkeypatch):
+    """Regression: ``setup_movie_claim_client`` must take :data:`_movie_claim_lock`
+    again after the ``/health`` I/O before mutating ``_movie_claim_mode``,
+    ``_movie_claim_client_pending``, and ``global_movie_claim_client``.
+
+    Earlier the I/O released the lock and never re-acquired it, so the
+    daemon heartbeat thread reading ``_movie_claim_mode`` and
+    ``_apply_movie_claim_recommendation`` reading
+    ``_movie_claim_client_pending`` could race with these writes. We
+    detect the regression by verifying the lock is held while the
+    final mount happens — see ``LockProbe`` below for the technique.
+    """
+    import threading
+
+    _patch_cfg(monkeypatch, MOVIE_CLAIM_ENABLED="auto",
+               PROXY_COORDINATOR_URL="https://coord.test",
+               PROXY_COORDINATOR_TOKEN="t")
+
+    class LockProbe:
+        """Wrap the real lock and record which calls happen with it held."""
+
+        def __init__(self, real):
+            self._real = real
+            self.events = []
+
+        def __enter__(self):
+            self.events.append(("acquire", threading.get_ident()))
+            return self._real.__enter__()
+
+        def __exit__(self, *exc):
+            self.events.append(("release", threading.get_ident()))
+            return self._real.__exit__(*exc)
+
+        def acquire(self, *a, **kw):
+            self.events.append(("acquire", threading.get_ident()))
+            return self._real.acquire(*a, **kw)
+
+        def release(self):
+            self.events.append(("release", threading.get_ident()))
+            return self._real.release()
+
+        def locked(self):
+            return self._real.locked()
+
+    probe = LockProbe(state._movie_claim_lock)
+    monkeypatch.setattr(state, "_movie_claim_lock", probe, raising=True)
+
+    real_factory = state.create_movie_claim_client_with_mode_from_env
+    factory_was_called_unlocked = []
+
+    def wrapped_factory():
+        # /health must run with NO threads holding _movie_claim_lock —
+        # otherwise a slow Worker would stall heartbeat readers.
+        factory_was_called_unlocked.append(not probe.locked())
+        return real_factory()
+
+    monkeypatch.setattr(
+        state, "create_movie_claim_client_with_mode_from_env",
+        wrapped_factory, raising=True,
+    )
+
+    with patch.object(MovieClaimClient, "health_check", return_value=True):
+        client = state.setup_movie_claim_client()
+
+    assert client is not None
+    # I/O ran outside the lock (the original perf-correctness invariant).
+    assert factory_was_called_unlocked == [True]
+    # The lock was acquired exactly twice: once for the early-return
+    # checks, once again after the I/O to commit the resolved state.
+    acquires = [e for e in probe.events if e[0] == "acquire"]
+    releases = [e for e in probe.events if e[0] == "release"]
+    assert len(acquires) == 2, probe.events
+    assert len(releases) == 2, probe.events
+    # And the lock is fully released by the time we return.
+    assert not probe.locked()
+    client.close()
+
+
+def test_setup_double_checked_lock_drops_duplicate_when_other_thread_wins(
+    monkeypatch,
+):
+    """If another thread completes setup while we're doing I/O, our newly
+    constructed client must be ``close()``-d and the winner returned.
+
+    Without double-checked locking the late writer would clobber the
+    winner's mount, leaking the just-discarded ``requests.Session`` AND
+    overwriting state the heartbeat thread has already reacted to.
+    """
+    import threading
+
+    _patch_cfg(monkeypatch, MOVIE_CLAIM_ENABLED="auto",
+               PROXY_COORDINATOR_URL="https://coord.test",
+               PROXY_COORDINATOR_TOKEN="t")
+
+    factory_started = threading.Event()
+    other_thread_done = threading.Event()
+    real_factory = state.create_movie_claim_client_with_mode_from_env
+
+    def slow_factory():
+        # Signal that we've entered the I/O window, then block until the
+        # rival thread has cached its winner under the lock.
+        factory_started.set()
+        other_thread_done.wait(timeout=5.0)
+        return real_factory()
+
+    monkeypatch.setattr(
+        state, "create_movie_claim_client_with_mode_from_env",
+        slow_factory, raising=True,
+    )
+
+    with patch.object(MovieClaimClient, "health_check", return_value=True), \
+            patch.object(MovieClaimClient, "close") as close_mock:
+        result_holder: dict = {}
+
+        def slow_caller():
+            result_holder["slow"] = state.setup_movie_claim_client()
+
+        slow_thread = threading.Thread(target=slow_caller, daemon=True)
+        slow_thread.start()
+        assert factory_started.wait(timeout=5.0)
+
+        # While the slow thread is in I/O, simulate a rival ``setup`` that
+        # already finished and cached a winner. We re-bind the global
+        # under the lock to mirror the production "winner committed first"
+        # path.
+        winner = MovieClaimClient(base_url="https://coord.test", token="t")
+        with state._movie_claim_lock:
+            state.global_movie_claim_client = winner
+            state._movie_claim_client_pending = winner
+            state._movie_claim_mode = state.MOVIE_CLAIM_MODE_AUTO
+        other_thread_done.set()
+        slow_thread.join(timeout=5.0)
+        assert not slow_thread.is_alive()
+
+    # Slow caller saw the winner and disposed of its own duplicate.
+    assert result_holder["slow"] is winner
+    assert state.global_movie_claim_client is winner
+    # ``close`` was called on the duplicate (the winner is still mounted,
+    # so it is NOT closed — close_mock counts only the duplicate).
+    assert close_mock.call_count == 1
+    winner.close()
+
+
+def test_next_heartbeat_interval_takes_lock_to_read_state(monkeypatch):
+    """Regression: ``_next_heartbeat_interval`` reads ``_movie_claim_mode``
+    and ``_movie_claim_last_recommended`` under :data:`_movie_claim_lock`
+    so writers in ``setup_movie_claim_client`` /
+    ``_apply_movie_claim_recommendation`` see a happens-before barrier.
+    """
+    import threading
+
+    monkeypatch.setattr(state, "_movie_claim_mode",
+                        state.MOVIE_CLAIM_MODE_AUTO, raising=False)
+    monkeypatch.setattr(state, "_movie_claim_last_recommended",
+                        False, raising=False)
+
+    acquired = threading.Event()
+    real_lock = state._movie_claim_lock
+
+    class Probe:
+        def __enter__(self):
+            acquired.set()
+            return real_lock.__enter__()
+
+        def __exit__(self, *exc):
+            return real_lock.__exit__(*exc)
+
+        def acquire(self, *a, **kw):
+            acquired.set()
+            return real_lock.acquire(*a, **kw)
+
+        def release(self):
+            return real_lock.release()
+
+        def locked(self):
+            return real_lock.locked()
+
+    monkeypatch.setattr(state, "_movie_claim_lock", Probe(), raising=True)
+
+    interval = state._next_heartbeat_interval()
+    assert acquired.is_set(), \
+        "_next_heartbeat_interval must take _movie_claim_lock to read state"
+    assert interval == state._HEARTBEAT_INTERVAL_SINGLE_RUNNER_SEC
