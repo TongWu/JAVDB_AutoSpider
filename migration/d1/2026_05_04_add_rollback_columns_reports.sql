@@ -2,7 +2,7 @@
 --
 -- Apply with:
 --   wrangler d1 execute javdb-reports --remote \
---     --file=migrations/d1/2026_05_04_add_rollback_columns_reports.sql
+--     --file=migration/d1/2026_05_04_add_rollback_columns_reports.sql
 --
 -- Values:
 --   'in_progress' (default for new rows; default for legacy rows is NULL,
