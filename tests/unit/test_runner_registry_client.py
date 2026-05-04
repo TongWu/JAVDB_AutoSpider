@@ -472,6 +472,132 @@ def test_parse_runner_info_coerces_missing_fields_to_safe_defaults():
     assert info.page_range is None
 
 
+# ── movie_claim_recommended forward-compat parsing ─────────────────────────
+
+
+def test_register_parses_movie_claim_recommended_when_present():
+    """New Worker → fields populated → parser surfaces them verbatim."""
+    c = _make_client()
+    body = {
+        "registered": True,
+        "active_runners": [],
+        "pool_hash_summary": [],
+        "server_time_ms": 1,
+        "movie_claim_recommended": True,
+        "movie_claim_min_runners": 2,
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+            r = c.register(holder_id="x")
+        assert r.movie_claim_recommended is True
+        assert r.movie_claim_min_runners == 2
+    finally:
+        c.close()
+
+
+def test_register_defaults_movie_claim_fields_when_missing():
+    """Old Worker (pre-auto-toggle) omits the fields → parser defaults to
+    False / 0 → ``state._apply_movie_claim_recommendation`` interprets
+    that as "single runner, do not mount" (the safe default)."""
+    c = _make_client()
+    body = {
+        "registered": True,
+        "active_runners": [],
+        "pool_hash_summary": [],
+        "server_time_ms": 1,
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+            r = c.register(holder_id="x")
+        assert r.movie_claim_recommended is False
+        assert r.movie_claim_min_runners == 0
+    finally:
+        c.close()
+
+
+def test_register_movie_claim_min_runners_handles_string_and_zero():
+    """Coercion mirrors the rest of the parser: ``None`` / 0 → 0,
+    a numeric string parses cleanly."""
+    c = _make_client()
+    body_zero = {
+        "registered": True,
+        "active_runners": [],
+        "pool_hash_summary": [],
+        "server_time_ms": 1,
+        "movie_claim_recommended": False,
+        "movie_claim_min_runners": 0,
+    }
+    body_none = {
+        "registered": True,
+        "active_runners": [],
+        "pool_hash_summary": [],
+        "server_time_ms": 1,
+        "movie_claim_recommended": False,
+        "movie_claim_min_runners": None,
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_mock_response(200, body_zero)):
+            r = c.register(holder_id="x")
+        assert r.movie_claim_min_runners == 0
+        with patch.object(c._session, "post", return_value=_mock_response(200, body_none)):
+            r = c.register(holder_id="x")
+        assert r.movie_claim_min_runners == 0
+    finally:
+        c.close()
+
+
+def test_heartbeat_parses_movie_claim_recommended_when_present():
+    c = _make_client()
+    body = {
+        "alive": True,
+        "server_time_ms": 1,
+        "movie_claim_recommended": True,
+        "movie_claim_min_runners": 2,
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+            r = c.heartbeat("x")
+        assert r.alive is True
+        assert r.movie_claim_recommended is True
+        assert r.movie_claim_min_runners == 2
+    finally:
+        c.close()
+
+
+def test_heartbeat_defaults_movie_claim_fields_when_missing():
+    """Old Worker → missing fields → safe defaults preserve fail-open."""
+    c = _make_client()
+    body = {"alive": True, "server_time_ms": 1}
+    try:
+        with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+            r = c.heartbeat("x")
+        assert r.alive is True
+        assert r.movie_claim_recommended is False
+        assert r.movie_claim_min_runners == 0
+    finally:
+        c.close()
+
+
+def test_heartbeat_alive_false_still_parses_recommendation():
+    """An evicted holder still surfaces the cohort recommendation
+    because the Worker computes it from the pruned cohort."""
+    c = _make_client()
+    body = {
+        "alive": False,
+        "server_time_ms": 1,
+        "movie_claim_recommended": True,
+        "movie_claim_min_runners": 2,
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+            r = c.heartbeat("evicted")
+        assert r.alive is False
+        assert r.movie_claim_recommended is True
+        assert r.movie_claim_min_runners == 2
+    finally:
+        c.close()
+
+
 def test_parse_hash_summary_skips_malformed_buckets():
     """One malformed bucket must NOT crash the entire parse."""
     buckets = _parse_hash_summary([
