@@ -730,6 +730,111 @@ def test_main_uses_default_window_from_drift_log(tmp_path, monkeypatch):
     assert captured["dry_run"] is True
 
 
+# ── Compatibility with X3 rollback schema additions ─────────────────────
+
+
+# Schemas that mirror the post-migration shape of the SQLite source DBs
+# (with SessionId on history tables, Status on ReportSessions, and the new
+# audit tables). The reconciler should not crash or produce drift on these
+# extra columns/tables — they're managed exclusively by db_rollback_session.
+
+_HISTORY_DDL_WITH_ROLLBACK = _HISTORY_DDL + """
+ALTER TABLE MovieHistory   ADD COLUMN SessionId INTEGER;
+ALTER TABLE TorrentHistory ADD COLUMN SessionId INTEGER;
+
+CREATE TABLE MovieHistoryAudit (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    TargetId INTEGER NOT NULL,
+    Action TEXT NOT NULL,
+    OldRowJson TEXT,
+    SessionId INTEGER NOT NULL,
+    DateTimeCreated TEXT
+);
+CREATE TABLE TorrentHistoryAudit (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    TargetId INTEGER NOT NULL,
+    Action TEXT NOT NULL,
+    OldRowJson TEXT,
+    SessionId INTEGER NOT NULL,
+    DateTimeCreated TEXT
+);
+"""
+
+_REPORTS_DDL_WITH_ROLLBACK = _REPORTS_DDL + """
+ALTER TABLE ReportSessions ADD COLUMN Status TEXT DEFAULT 'in_progress';
+"""
+
+
+def test_reconcile_history_handles_rollback_columns(tmp_path):
+    """SessionId and audit tables must not break the reconciler."""
+    sqlite_path = tmp_path / "history_rollback.db"
+    conn = sqlite3.connect(sqlite_path)
+    conn.row_factory = sqlite3.Row
+    conn.executescript(_HISTORY_DDL_WITH_ROLLBACK)
+    conn.execute(
+        "INSERT INTO MovieHistory "
+        "(VideoCode, Href, ActorName, DateTimeCreated, DateTimeUpdated, SessionId) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        ("ABC-001", "/v/abc-001", "Test Actor",
+         "2026-05-04 19:00:00", "2026-05-04 19:30:00", 42),
+    )
+    conn.execute(
+        "INSERT INTO MovieHistoryAudit "
+        "(TargetId, Action, OldRowJson, SessionId, DateTimeCreated) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (1, "INSERT", None, 42, "2026-05-04 19:30:00"),
+    )
+    conn.commit()
+    conn.close()
+
+    fake_d1 = FakeD1Connection(_HISTORY_DDL_WITH_ROLLBACK)
+
+    ro_conn = recon._open_sqlite_readonly(str(sqlite_path))
+    try:
+        stats = recon._reconcile_history(
+            ro_conn, fake_d1, since_text="2026-05-04 00:00:00", dry_run=False,
+        )
+    finally:
+        ro_conn.close()
+
+    by_table = {s.table: s for s in stats}
+    # MovieHistory row was inserted to D1; audit table is intentionally
+    # ignored — no errors expected.
+    assert by_table["MovieHistory"].inserted == 1
+    assert by_table["MovieHistory"].errors == 0
+
+
+def test_reconcile_reports_handles_status_column(tmp_path):
+    """ReportSessions.Status default 'in_progress' must round-trip cleanly."""
+    sqlite_path = tmp_path / "reports_rollback.db"
+    conn = sqlite3.connect(sqlite_path)
+    conn.row_factory = sqlite3.Row
+    conn.executescript(_REPORTS_DDL_WITH_ROLLBACK)
+    conn.execute(
+        "INSERT INTO ReportSessions "
+        "(ReportType, ReportDate, CsvFilename, DateTimeCreated, Status) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ("DailyReport", "2026-05-04", "rolled.csv",
+         "2026-05-04 19:30:00", "committed"),
+    )
+    conn.commit()
+    conn.close()
+
+    fake_d1 = FakeD1Connection(_REPORTS_DDL_WITH_ROLLBACK)
+
+    ro_conn = recon._open_sqlite_readonly(str(sqlite_path))
+    try:
+        stats = recon._reconcile_reports(
+            ro_conn, fake_d1, since_text=None, dry_run=False,
+        )
+    finally:
+        ro_conn.close()
+
+    by_table = {s.table: s for s in stats}
+    assert by_table["ReportSessions"].inserted == 1
+    assert by_table["ReportSessions"].errors == 0
+
+
 # ── _env_int / D1_BATCH_LIMIT parsing ─────────────────────────────────────
 
 
