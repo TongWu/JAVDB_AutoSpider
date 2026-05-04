@@ -65,6 +65,12 @@ NO_SUBTITLES = {"无字", "无字幕"}
 CHINESE_SUBTITLES = {"有字", "有字幕"}
 
 
+def validate_year(value: str) -> int:
+    if not re.fullmatch(r"\d{4}", value):
+        raise argparse.ArgumentTypeError("must be a 4-digit year")
+    return int(value)
+
+
 # ---------------------------------------------------------------------------
 # NFO title 解析与变换
 # ---------------------------------------------------------------------------
@@ -575,7 +581,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--start-from",
-        type=int,
+        type=validate_year,
         metavar="YEAR",
         help="从指定年份开始处理；非年份目录视为未知年份并排在所有年份之后",
     )

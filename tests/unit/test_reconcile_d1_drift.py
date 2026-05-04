@@ -833,6 +833,11 @@ def test_reconcile_reports_handles_status_column(tmp_path):
     by_table = {s.table: s for s in stats}
     assert by_table["ReportSessions"].inserted == 1
     assert by_table["ReportSessions"].errors == 0
+    inserted = fake_d1.execute(
+        "SELECT Status FROM ReportSessions WHERE CsvFilename = ?",
+        ("rolled.csv",),
+    ).fetchone()
+    assert inserted["Status"] == "committed"
 
 
 # ── _env_int / D1_BATCH_LIMIT parsing ─────────────────────────────────────

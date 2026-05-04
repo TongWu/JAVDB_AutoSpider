@@ -1,5 +1,7 @@
 import subprocess
 
+import pytest
+
 from scripts import rclone_cleanup_empty_dirs as cleaner
 
 
@@ -67,6 +69,16 @@ def test_rmdirs_year_omits_optional_flags_by_default(monkeypatch):
         "--leave-root",
         "remote/2026",
     ]
+
+
+def test_parse_args_rejects_non_positive_workers(monkeypatch):
+    monkeypatch.setattr(
+        cleaner.sys,
+        "argv",
+        ["rclone_cleanup_empty_dirs.py", "remote", "--workers", "0"],
+    )
+    with pytest.raises(SystemExit):
+        cleaner.parse_args()
 
 
 def test_main_processes_years_one_by_one_and_skips_non_year_dirs(monkeypatch):
