@@ -26,10 +26,28 @@ from packages.python.javdb_platform.movie_claim_client import (  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def _reset_globals(monkeypatch):
-    """Force a clean factory state for every test."""
+    """Force a clean factory state for every test.
+
+    The auto-toggle adds three module-level singletons that shadow the
+    old ``global_movie_claim_client``-only singleton; reset them all so
+    a previous test's ``force_on`` doesn't leak ``mode='force_on'``
+    into a later test that asserts ``mode='auto'`` etc.
+    """
     monkeypatch.setattr(state, "global_movie_claim_client", None, raising=False)
+    monkeypatch.setattr(state, "_movie_claim_client_pending", None, raising=False)
+    monkeypatch.setattr(
+        state, "_movie_claim_mode",
+        state.MOVIE_CLAIM_MODE_OFF, raising=False,
+    )
+    monkeypatch.setattr(state, "_movie_claim_last_recommended", False, raising=False)
     yield
     monkeypatch.setattr(state, "global_movie_claim_client", None, raising=False)
+    monkeypatch.setattr(state, "_movie_claim_client_pending", None, raising=False)
+    monkeypatch.setattr(
+        state, "_movie_claim_mode",
+        state.MOVIE_CLAIM_MODE_OFF, raising=False,
+    )
+    monkeypatch.setattr(state, "_movie_claim_last_recommended", False, raising=False)
 
 
 def _patch_cfg(monkeypatch, **values):
@@ -121,3 +139,87 @@ def test_setup_does_not_clobber_unrelated_env_vars(monkeypatch):
     assert os.environ["PROXY_COORDINATOR_TOKEN"] == "EXTERNAL_TOKEN"
     assert "MOVIE_CLAIM_ENABLED" not in os.environ
     client.close()
+
+
+# ── tri-state / auto-toggle behaviour ──────────────────────────────────────
+
+
+def test_setup_auto_mode_optimistically_mounts_global_and_pending(monkeypatch):
+    """Auto mode + healthy /health → mode=auto, pending=client, global=client.
+
+    Optimistic mounting is the contract: the runner's first detail page
+    must coordinate with peers immediately, even though the registry
+    signal hasn't landed yet.  ``setup_runner_registry_client`` then
+    reconciles by feeding the first ``register`` response into
+    ``_apply_movie_claim_recommendation``."""
+    _patch_cfg(monkeypatch, MOVIE_CLAIM_ENABLED="auto",
+               PROXY_COORDINATOR_URL="https://coord.test",
+               PROXY_COORDINATOR_TOKEN="t")
+    with patch.object(MovieClaimClient, "health_check", return_value=True):
+        client = state.setup_movie_claim_client()
+    assert client is not None
+    assert state.global_movie_claim_client is client
+    assert state._movie_claim_client_pending is client
+    assert state._movie_claim_mode == state.MOVIE_CLAIM_MODE_AUTO
+    client.close()
+
+
+def test_setup_default_unset_resolves_to_auto_mode(monkeypatch):
+    """When ``MOVIE_CLAIM_ENABLED`` isn't set in config at all, the new
+    default is ``auto`` (not ``off`` like before)."""
+    _patch_cfg(monkeypatch, PROXY_COORDINATOR_URL="https://coord.test",
+               PROXY_COORDINATOR_TOKEN="t")  # MOVIE_CLAIM_ENABLED omitted
+    with patch.object(MovieClaimClient, "health_check", return_value=True):
+        client = state.setup_movie_claim_client()
+    assert client is not None
+    assert state._movie_claim_mode == state.MOVIE_CLAIM_MODE_AUTO
+
+
+def test_setup_force_on_mode_keeps_legacy_behaviour(monkeypatch):
+    """``MOVIE_CLAIM_ENABLED=true`` reproduces the legacy P1-B contract:
+    client is mounted on global immediately and the registry signal is
+    ignored thereafter (verified separately in test_movie_claim_auto_toggle.py)."""
+    _patch_cfg(monkeypatch, MOVIE_CLAIM_ENABLED="true",
+               PROXY_COORDINATOR_URL="https://coord.test",
+               PROXY_COORDINATOR_TOKEN="t")
+    with patch.object(MovieClaimClient, "health_check", return_value=True):
+        client = state.setup_movie_claim_client()
+    assert client is not None
+    assert state.global_movie_claim_client is client
+    assert state._movie_claim_client_pending is client
+    assert state._movie_claim_mode == state.MOVIE_CLAIM_MODE_FORCE_ON
+    client.close()
+
+
+def test_setup_off_mode_via_explicit_false(monkeypatch):
+    _patch_cfg(monkeypatch, MOVIE_CLAIM_ENABLED="false",
+               PROXY_COORDINATOR_URL="https://coord.test",
+               PROXY_COORDINATOR_TOKEN="t")
+    assert state.setup_movie_claim_client() is None
+    assert state.global_movie_claim_client is None
+    assert state._movie_claim_client_pending is None
+    assert state._movie_claim_mode == state.MOVIE_CLAIM_MODE_OFF
+
+
+def test_setup_off_mode_via_empty_string(monkeypatch):
+    """Empty string preserves the operator intuition that ``MOVIE_CLAIM_ENABLED=``
+    silences the feature, distinct from "var unset → auto"."""
+    _patch_cfg(monkeypatch, MOVIE_CLAIM_ENABLED="",
+               PROXY_COORDINATOR_URL="https://coord.test",
+               PROXY_COORDINATOR_TOKEN="t")
+    assert state.setup_movie_claim_client() is None
+    assert state._movie_claim_mode == state.MOVIE_CLAIM_MODE_OFF
+
+
+def test_setup_auto_mode_health_failure_falls_back_to_off(monkeypatch):
+    """Auto mode + /health 5xx → mode collapses to off + pending stays
+    None; later registry signals become no-ops, identical to today."""
+    _patch_cfg(monkeypatch, MOVIE_CLAIM_ENABLED="auto",
+               PROXY_COORDINATOR_URL="https://coord.test",
+               PROXY_COORDINATOR_TOKEN="t")
+    with patch.object(MovieClaimClient, "health_check", return_value=False):
+        result = state.setup_movie_claim_client()
+    assert result is None
+    assert state.global_movie_claim_client is None
+    assert state._movie_claim_client_pending is None
+    assert state._movie_claim_mode == state.MOVIE_CLAIM_MODE_OFF
