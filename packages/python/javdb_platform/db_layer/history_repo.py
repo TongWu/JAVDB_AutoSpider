@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from apps.api.parsers.common import (
     normalize_javdb_href_path,
@@ -96,18 +96,31 @@ def _has_meaningful_actor_data(an: str, al: str, sup: str) -> bool:
     return bool(s and s != '[]')
 
 
-def batch_update_movie_actors(conn, updates: List[Tuple[str, str, str, str, str]]) -> int:
+def batch_update_movie_actors(
+    conn,
+    updates: List[Tuple[str, str, str, str, str]],
+    *,
+    session_id: Optional[int] = None,
+    audit_record_movie_change=None,
+) -> int:
     """Batch update actor fields using executemany.
 
     Entries with no meaningful actor data (empty name/link and only ``'[]'``
     supporting actors) are silently skipped to avoid overwriting existing
     good data with empty values.
+
+    When *session_id* is set, each affected MovieHistory row also gets
+    ``SessionId=?`` and (if *audit_record_movie_change* is also provided)
+    a companion ``MovieHistoryAudit`` row capturing the prior state. The
+    callback is injected from :mod:`packages.python.javdb_platform.db`
+    to avoid an import cycle.
     """
     if not updates:
         return 0
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     base_url = cfg('BASE_URL', 'https://javdb.com')
     payload = []
+    href_pair_lookup: List[Tuple[str, str]] = []
     for href, an, ag, al, sup in updates:
         if not _has_meaningful_actor_data(an, al, sup):
             continue
@@ -115,6 +128,7 @@ def batch_update_movie_actors(conn, updates: List[Tuple[str, str, str, str, str]
         if not path_href and not abs_href:
             path_href = href
             abs_href = href
+        href_pair_lookup.append((path_href, abs_href))
         payload.append((
             an,
             ag,
@@ -126,6 +140,44 @@ def batch_update_movie_actors(conn, updates: List[Tuple[str, str, str, str, str]
         ))
     if not payload:
         return 0
+
+    if session_id is not None and audit_record_movie_change is not None:
+        # Snapshot pre-update rows for audit. We record one audit row per
+        # affected MovieHistory.Id; since several updates could resolve to
+        # the same Href pair, dedupe by Id.
+        seen_ids = set()
+        for path_href, abs_href in href_pair_lookup:
+            old_rows = conn.execute(
+                "SELECT * FROM MovieHistory WHERE Href IN (?, ?)",
+                (path_href, abs_href),
+            ).fetchall()
+            for row in old_rows:
+                rid = row['Id']
+                if rid in seen_ids:
+                    continue
+                seen_ids.add(rid)
+                audit_record_movie_change(
+                    conn, rid, action='UPDATE', session_id=session_id,
+                    old_row=row, when=now,
+                )
+        before = conn.total_changes
+        # Tag each updated row with SessionId. Build an extended payload
+        # that puts session_id alongside the other UPDATE values.
+        ext_payload = [
+            (an, ag, al, sup, now_v, session_id, p, a)
+            for (an, ag, al, sup, now_v, p, a) in payload
+        ]
+        conn.executemany(
+            """
+            UPDATE MovieHistory
+            SET ActorName=?, ActorGender=?, ActorLink=?, SupportingActors=?,
+                DateTimeUpdated=?, SessionId=?
+            WHERE Href IN (?, ?)
+            """,
+            ext_payload,
+        )
+        return conn.total_changes - before
+
     before = conn.total_changes
     conn.executemany(
         """
