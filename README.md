@@ -96,6 +96,7 @@ The spider operates in two modes:
 - Email notifications with results and logs
 - Complete workflow automation
 - GitHub Actions ingestion workflows ([`.github/workflows/DailyIngestion.yml`](.github/workflows/DailyIngestion.yml), [`.github/workflows/AdHocIngestion.yml`](.github/workflows/AdHocIngestion.yml)) use shared composite actions ([`.github/actions/setup-python-env`](.github/actions/setup-python-env), [`.github/actions/restore-encrypted-config`](.github/actions/restore-encrypted-config)) for Python + pip cache + Rust wheel; health checks run as the first step of `run-pipeline` (no separate job)
+- **D1 / SQLite rollback**: every run is tagged with a `ReportSessions.Id` and lifecycle status (`in_progress` → `committed`/`failed`). Failed pipelines auto-trigger the `cleanup-on-failure` job that unwinds uncommitted writes via the audit-table replay + per-session staging swap. Manual recovery is available through [`.github/workflows/RollbackD1.yml`](.github/workflows/RollbackD1.yml). Full SOP, "Re-run failed jobs" safety matrix, and audit-table forensics: [docs/D1_ROLLBACK.md](docs/D1_ROLLBACK.md).
 
 ### JavDB Auto Login
 - Automatic session cookie refresh
