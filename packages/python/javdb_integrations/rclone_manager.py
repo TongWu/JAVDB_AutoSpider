@@ -207,7 +207,7 @@ def scan_inventory(
     max_workers: int = 4,
     year_filter: Optional[List[str]] = None,
     row_callback=None,
-) -> int:
+) -> Tuple[int, int]:
     """Scan the full folder tree using year-level parallelism with fallback."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -215,16 +215,17 @@ def scan_inventory(
     years = get_year_folders(remote_name, root_folder)
     if not years:
         logger.warning("No year folders found")
-        return 0
+        return 0, 0
 
     if year_filter:
         years = [y for y in years if y in year_filter]
         logger.info(f"Year filter applied: {years}")
         if not years:
-            return 0
+            return 0, 0
 
     scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     total_rows = 0
+    error_count = 0
     completed = 0
     total = len(years)
 
@@ -252,10 +253,14 @@ def scan_inventory(
                     f"year {year}: {len(rows)} folders, total so far: {total_rows}"
                 )
             except Exception as e:
+                error_count += 1
                 logger.error(f"Error processing year {year}: {e}")
 
-    logger.info(f"Scan complete: {total_rows} movie folders found")
-    return total_rows
+    logger.info(
+        f"Scan complete: {total_rows} movie folders found "
+        f"({error_count} year error(s))"
+    )
+    return total_rows, error_count
 
 
 def export_db_to_csv(output_path: str) -> int:
@@ -1385,13 +1390,21 @@ def main() -> int:
             total_written += len(rows)
 
         scan_failed = False
+        scan_error_count = 0
         try:
-            total_found = scan_inventory(
+            total_found, scan_error_count = scan_inventory(
                 remote_name, root_folder,
                 max_workers=args.workers,
                 year_filter=year_filter,
                 row_callback=on_rows,
             )
+            if scan_error_count:
+                scan_failed = True
+                logger.error(
+                    "Inventory scan had %s year-level error(s); dropping "
+                    "staging and leaving live RcloneInventory untouched.",
+                    scan_error_count,
+                )
         except Exception:
             scan_failed = True
             raise
@@ -1411,6 +1424,9 @@ def main() -> int:
 
         if _csv_file is not None:
             _csv_file.close()
+
+        if scan_failed:
+            return 1
 
         if _sqlite_ok and _staging_session_id is not None:
             try:
