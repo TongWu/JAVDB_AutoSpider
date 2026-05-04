@@ -486,6 +486,38 @@ class TestCrossRuntimeDoIntegration:
             for p in reversed(patches):
                 p.stop()
 
+    def test_unexpected_publish_failure_is_swallowed(self):
+        """Unexpected client.publish errors also preserve fail-open login."""
+        do_client = MagicMock()
+        do_client.publish.side_effect = RuntimeError("boom")
+
+        patches = self._common_patches() + [
+            patch.object(state_mod, 'global_login_state_client', do_client),
+            patch.object(state_mod, 'runtime_holder_id', 'runner-test'),
+            patch.object(state_mod, 'current_login_state_version', None),
+        ]
+        for p in patches:
+            p.start()
+        try:
+            with patch('sys.exit'), patch(
+                'packages.python.javdb_integrations.login.login_with_retry',
+                return_value=(True, 'cookie-XYZ', 'ok'),
+            ), patch(
+                'packages.python.javdb_integrations.login.update_config_file',
+                return_value=False,
+            ):
+                success, _cookie, _proxy_name = session_mod.attempt_login_refresh(
+                    explicit_proxies={'http': 'http://e:1'},
+                    explicit_proxy_name='ProxyE',
+                    spider_uses_proxy=True,
+                )
+            assert success is True
+            do_client.publish.assert_called_once()
+            assert state_mod.current_login_state_version is None
+        finally:
+            for p in reversed(patches):
+                p.stop()
+
     def test_publish_skipped_when_used_proxy_name_missing(self):
         """If we somehow log in without a proxy name (no-proxy mode),
         ``_publish_login_state_to_do`` short-circuits without touching the
