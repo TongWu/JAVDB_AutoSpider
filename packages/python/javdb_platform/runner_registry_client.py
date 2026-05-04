@@ -46,7 +46,7 @@ import hashlib
 import json
 import os
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import requests
 
@@ -87,7 +87,10 @@ def proxy_pool_hash(proxy_pool_json: str) -> str:
         # still hash the raw bytes so a mismatch is at least detectable,
         # rather than collapsing to "" and silencing all drift.
         normalized = proxy_pool_json
-    return hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha1(
+        normalized.encode("utf-8"),
+        usedforsecurity=False,
+    ).hexdigest()[:16]
 
 
 class RunnerRegistryUnavailable(Exception):
@@ -215,9 +218,13 @@ def _extract_server_time_ms(data: dict) -> int:
     return int(data.get("server_time", 0) or 0)
 
 
-def _parse_runner_info(payload: dict) -> RunnerInfo:
+def _parse_runner_info(payload: Any) -> RunnerInfo:
     """Decode one ``RunnerInfo`` JSON row into the dataclass."""
+    if not isinstance(payload, dict):
+        raise ValueError(f"runner entry must be an object, got {type(payload).__name__}")
     page_range = payload.get("page_range", None)
+    if page_range is not None and not isinstance(page_range, str):
+        raise ValueError("runner entry page_range must be a string or null")
     return RunnerInfo(
         holder_id=str(payload.get("holder_id", "") or ""),
         workflow_run_id=str(payload.get("workflow_run_id", "") or ""),
@@ -229,19 +236,29 @@ def _parse_runner_info(payload: dict) -> RunnerInfo:
     )
 
 
-def _parse_hash_summary(payload: list) -> List[PoolHashBucket]:
+def _parse_runner_list(payload: Any) -> List[RunnerInfo]:
+    """Decode ``active_runners`` while rejecting malformed list entries."""
+    if payload is None:
+        return []
+    if not isinstance(payload, list):
+        raise ValueError("active_runners must be a list")
+    return [_parse_runner_info(r) for r in payload]
+
+
+def _parse_hash_summary(payload: Any) -> List[PoolHashBucket]:
     """Decode the ``pool_hash_summary`` array into typed buckets."""
+    if payload is None:
+        return []
+    if not isinstance(payload, list):
+        raise ValueError("pool_hash_summary must be a list")
     out: List[PoolHashBucket] = []
-    for entry in payload or []:
-        try:
-            out.append(PoolHashBucket(
-                hash=str(entry.get("hash", "") or ""),
-                count=int(entry.get("count", 0) or 0),
-            ))
-        except (TypeError, AttributeError, ValueError):
-            # Malformed bucket → skip; better to under-report drift than
-            # to break the spider's startup on a server-side change.
-            continue
+    for entry in payload:
+        if not isinstance(entry, dict):
+            raise ValueError("pool_hash_summary entries must be objects")
+        out.append(PoolHashBucket(
+            hash=str(entry.get("hash", "") or ""),
+            count=int(entry.get("count", 0) or 0),
+        ))
     return out
 
 
@@ -330,9 +347,7 @@ class RunnerRegistryClient:
         try:
             return RegisterResult(
                 registered=bool(resp["registered"]),
-                active_runners=[
-                    _parse_runner_info(r) for r in resp.get("active_runners", []) or []
-                ],
+                active_runners=_parse_runner_list(resp.get("active_runners", [])),
                 pool_hash_summary=_parse_hash_summary(resp.get("pool_hash_summary", []) or []),
                 server_time_ms=_extract_server_time_ms(resp),
                 # Auto-toggle signals (added with the per-day MovieClaim
@@ -415,9 +430,7 @@ class RunnerRegistryClient:
         resp = self._do_request("GET", "/active_runners")
         try:
             return ActiveRunnersResult(
-                active_runners=[
-                    _parse_runner_info(r) for r in resp.get("active_runners", []) or []
-                ],
+                active_runners=_parse_runner_list(resp.get("active_runners", [])),
                 pool_hash_summary=_parse_hash_summary(resp.get("pool_hash_summary", []) or []),
                 server_time_ms=_extract_server_time_ms(resp),
             )
