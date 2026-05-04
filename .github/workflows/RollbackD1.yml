@@ -1,0 +1,280 @@
+name: Rollback D1 Session
+
+# Manual D1 / SQLite rollback for an in-progress (or failed) workflow run.
+# See docs/D1_ROLLBACK.md for the X3 hybrid strategy and SOP.
+#
+# Defaults to --dry-run so an operator can inspect the planned changes before
+# committing. Flip `dry_run=false` once the diff looks correct.
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      session_id:
+        description: 'ReportSessions.Id to roll back (highest priority). Leave blank to use run_id + run_started_at.'
+        required: false
+        default: ''
+        type: string
+      run_id:
+        description: 'GitHub run id of the failed pipeline (for audit trail).'
+        required: false
+        default: ''
+        type: string
+      attempt:
+        description: 'GitHub run attempt of the failed pipeline (for audit trail).'
+        required: false
+        default: ''
+        type: string
+      run_started_at:
+        description: 'ISO timestamp lower bound for in-progress session lookup (e.g. 2026-05-04T19:30:00Z). Required when session_id is blank.'
+        required: false
+        default: ''
+        type: string
+      scope:
+        description: 'Limit cleanup to one logical DB.'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - reports
+          - operations
+          - history
+      dry_run:
+        description: 'Dry run — show what would be deleted without modifying any DB. Default: true.'
+        required: false
+        default: true
+        type: boolean
+      force:
+        description: 'Allow rolling back a session whose Status="committed". DANGEROUS — leave off unless you know what you are doing.'
+        required: false
+        default: false
+        type: boolean
+      log_level:
+        description: 'CLI log level.'
+        required: false
+        default: 'INFO'
+        type: choice
+        options:
+          - DEBUG
+          - INFO
+          - WARNING
+          - ERROR
+      runner:
+        description: 'Runner type.'
+        required: false
+        default: 'self-hosted'
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'self-hosted'
+
+# Serialize rollback runs so we don't have two operators clobbering audit
+# state simultaneously.
+concurrency:
+  group: rollback-d1
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
+    timeout-minutes: 60
+    environment: Production
+    env:
+      TZ: Asia/Singapore
+      INPUT_SESSION_ID: ${{ inputs.session_id }}
+      INPUT_RUN_ID: ${{ inputs.run_id }}
+      INPUT_ATTEMPT: ${{ inputs.attempt }}
+      INPUT_RUN_STARTED_AT: ${{ inputs.run_started_at }}
+      INPUT_SCOPE: ${{ inputs.scope || 'all' }}
+      INPUT_DRY_RUN: ${{ inputs.dry_run }}
+      INPUT_FORCE: ${{ inputs.force }}
+      INPUT_LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
+
+    steps:
+      - name: Validate inputs
+        run: |
+          set -e
+          if [ -z "$INPUT_SESSION_ID" ] && [ -z "$INPUT_RUN_STARTED_AT" ]; then
+            echo "::error::Either 'session_id' or 'run_started_at' must be provided."
+            echo "  - 'session_id' (preferred): a single ReportSessions.Id to roll back"
+            echo "  - 'run_started_at' (fallback): ISO timestamp; rolls back every"
+            echo "    in-progress session created at-or-after that timestamp."
+            exit 1
+          fi
+          if [ "$INPUT_FORCE" = "true" ] && [ "$INPUT_DRY_RUN" != "true" ]; then
+            echo "::warning::--force enabled with dry_run=false. Committed sessions"
+            echo "  WILL be rolled back. This is destructive; double-check the"
+            echo "  inputs before proceeding."
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          lfs: true
+
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.11'
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          # ============ SECRETS ============
+          VAR_QB_URL: ${{ secrets.QB_URL }}
+          VAR_QB_USERNAME: ${{ secrets.QB_USERNAME }}
+          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
+          VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
+          VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
+          VAR_JAVDB_SESSION_COOKIE: ${{ secrets.JAVDB_SESSION_COOKIE }}
+          VAR_PIKPAK_PASSWORD: ${{ secrets.PIKPAK_PASSWORD }}
+          # ============ VARIABLES ============
+          VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
+          VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
+          VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
+          VAR_TORRENT_SAVE_PATH: ${{ vars.TORRENT_SAVE_PATH }}
+          VAR_AUTO_START: ${{ vars.AUTO_START }}
+          VAR_SKIP_CHECKING: ${{ vars.SKIP_CHECKING || 'False' }}
+          VAR_REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT || '30' }}
+          VAR_DELAY_BETWEEN_ADDITIONS: ${{ vars.DELAY_BETWEEN_ADDITIONS }}
+          VAR_SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          VAR_SMTP_PORT: ${{ vars.SMTP_PORT }}
+          VAR_SMTP_USER: ${{ secrets.SMTP_USER }}
+          VAR_EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          VAR_EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
+          VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES || 3 }}
+          VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
+          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
+          VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED || 'True' }}
+          VAR_PAGE_START: ${{ vars.PAGE_START }}
+          VAR_PAGE_END: ${{ vars.PAGE_END }}
+          VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}
+          VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
+          VAR_BASE_URL: ${{ vars.BASE_URL || 'https://javdb.com' }}
+          VAR_JAVDB_USERNAME: ${{ secrets.JAVDB_USERNAME }}
+          VAR_GPT_API_URL: ${{ secrets.GPT_API_URL }}
+          VAR_GPT_API_KEY: ${{ secrets.GPT_API_KEY }}
+          VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+          VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE || 'logs/spider.log' }}
+          VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE || 'logs/qb_uploader.log' }}
+          VAR_PIPELINE_LOG_FILE: ${{ vars.PIPELINE_LOG_FILE || 'logs/pipeline.log' }}
+          VAR_EMAIL_NOTIFICATION_LOG_FILE: ${{ vars.EMAIL_NOTIFICATION_LOG_FILE || 'logs/email_notification.log' }}
+          VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER || 'False' }}
+          VAR_INCLUDE_DOWNLOADED_IN_REPORT: ${{ vars.INCLUDE_DOWNLOADED_IN_REPORT || 'False' }}
+          VAR_REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+          VAR_DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'reports/DailyReport' }}
+          VAR_AD_HOC_DIR: ${{ vars.AD_HOC_DIR || 'reports/AdHoc' }}
+          VAR_PARSED_MOVIES_CSV: ${{ vars.PARSED_MOVIES_CSV }}
+          VAR_PIKPAK_EMAIL: ${{ secrets.PIKPAK_EMAIL }}
+          VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE || 'logs/pikpak_bridge.log' }}
+          VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
+          VAR_RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
+          VAR_RCLONE_FOLDER_PATH: ${{ vars.RCLONE_FOLDER_PATH }}
+          VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
+          # D1 / Cloudflare — required when STORAGE_BACKEND in {d1,dual}
+          VAR_STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
+          VAR_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VAR_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          VAR_D1_HISTORY_DB_ID: ${{ secrets.D1_HISTORY_DB_ID }}
+          VAR_D1_REPORTS_DB_ID: ${{ secrets.D1_REPORTS_DB_ID }}
+          VAR_D1_OPERATIONS_DB_ID: ${{ secrets.D1_OPERATIONS_DB_ID }}
+          VAR_PROXY_COORDINATOR_URL: ${{ vars.PROXY_COORDINATOR_URL }}
+          VAR_PROXY_COORDINATOR_TOKEN: ${{ secrets.PROXY_COORDINATOR_TOKEN }}
+        run: python3 -m apps.cli.config_generator --github-actions
+
+      - name: Pull latest changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          CURRENT_BRANCH="${GITHUB_REF#refs/heads/}"
+          REPO_URL=$(git remote get-url origin)
+          if [[ "$REPO_URL" == https://* ]]; then
+            REPO_SSH=$(echo "$REPO_URL" | sed 's|https://github.com/|git@github.com:|')
+            git remote set-url origin "$REPO_SSH"
+          fi
+          git fetch origin "$CURRENT_BRANCH"
+          git pull --rebase origin "$CURRENT_BRANCH" || git pull --no-edit origin "$CURRENT_BRANCH" || true
+
+      - name: Display rollback parameters
+        run: |
+          echo "============================================"
+          echo "Rollback parameters:"
+          echo "============================================"
+          printf 'session_id:     %s\n' "${INPUT_SESSION_ID:-(none — using run_started_at)}"
+          printf 'run_id:         %s\n' "${INPUT_RUN_ID:-(none)}"
+          printf 'attempt:        %s\n' "${INPUT_ATTEMPT:-(none)}"
+          printf 'run_started_at: %s\n' "${INPUT_RUN_STARTED_AT:-(none)}"
+          printf 'scope:          %s\n' "$INPUT_SCOPE"
+          printf 'dry_run:        %s\n' "$INPUT_DRY_RUN"
+          printf 'force:          %s\n' "$INPUT_FORCE"
+          printf 'log_level:      %s\n' "$INPUT_LOG_LEVEL"
+          echo "============================================"
+
+      - name: Run rollback
+        run: |
+          set -e
+          set -o pipefail
+
+          CMD=(python3 -m apps.cli.rollback
+               --scope "$INPUT_SCOPE"
+               --log-level "$INPUT_LOG_LEVEL")
+
+          if [ -n "$INPUT_SESSION_ID" ]; then
+            CMD+=(--session-id "$INPUT_SESSION_ID")
+          fi
+          if [ -n "$INPUT_RUN_ID" ]; then
+            CMD+=(--run-id "$INPUT_RUN_ID")
+          fi
+          if [ -n "$INPUT_ATTEMPT" ]; then
+            CMD+=(--attempt "$INPUT_ATTEMPT")
+          fi
+          if [ -n "$INPUT_RUN_STARTED_AT" ]; then
+            CMD+=(--run-started-at "$INPUT_RUN_STARTED_AT")
+          fi
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
+            CMD+=(--dry-run)
+          fi
+          if [ "$INPUT_FORCE" = "true" ]; then
+            CMD+=(--force)
+          fi
+
+          mkdir -p logs
+          echo "Executing: ${CMD[*]}"
+          "${CMD[@]}" 2>&1 | tee logs/rollback.log
+
+      - name: Upload rollback log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rollback-log
+          path: logs/rollback.log
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## D1 Rollback Summary"
+            echo ""
+            printf -- '- **Mode**: %s\n' "$([ "$INPUT_DRY_RUN" = "true" ] && echo 'Dry run' || echo 'Apply (destructive)')"
+            printf -- '- **Scope**: %s\n' "$INPUT_SCOPE"
+            if [ -n "$INPUT_SESSION_ID" ]; then
+              printf -- '- **Session id**: %s\n' "$INPUT_SESSION_ID"
+            else
+              printf -- '- **Run started at**: %s\n' "$INPUT_RUN_STARTED_AT"
+            fi
+            if [ -n "$INPUT_RUN_ID" ]; then
+              printf -- '- **Run id**: %s (attempt %s)\n' "$INPUT_RUN_ID" "${INPUT_ATTEMPT:-?}"
+            fi
+            printf -- '- **Force committed rollback**: %s\n' "$INPUT_FORCE"
+            echo ""
+            echo "See the **rollback-log** artifact for the full JSON summary."
+          } >> $GITHUB_STEP_SUMMARY
