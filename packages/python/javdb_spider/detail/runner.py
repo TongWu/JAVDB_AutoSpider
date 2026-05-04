@@ -154,17 +154,40 @@ def _release_movie_claim(href: str, shard_date: Optional[str]) -> None:
         logger.warning("Unexpected MovieClaim release error for %s", href, exc_info=True)
 
 
-def _complete_movie_claim(href: str, shard_date: Optional[str]) -> None:
-    """Best-effort completion of a MovieClaim lease.  Never raises."""
+def _complete_movie_claim(href: str, shard_date: Optional[str]) -> bool:
+    """Best-effort completion of a MovieClaim lease.  Never raises.
+
+    Returns ``True`` only when the coordinator explicitly confirmed
+    completion (``CompleteResult.completed=True``); ``False`` on any
+    error path (``MovieClaimUnavailable``, malformed response,
+    unexpected exception) **or** when the Worker returned
+    ``completed=False`` — that latter case happens when the active
+    claim has already been re-leased by another runner (typically
+    after our TTL expired or a stale-holder mismatch).  In every
+    ``False`` branch the lease is still attributed to this runner on
+    the Worker side, so the caller MUST follow up with
+    :func:`_release_movie_claim` before dropping the href from
+    ``held_claims``; otherwise peer runners stay blocked until the
+    default 30-minute TTL expires.
+    """
     client = state.global_movie_claim_client
     if client is None or shard_date is None or not href:
-        return
+        return False
     try:
-        client.complete(href, state.runtime_holder_id, date=shard_date)
+        result = client.complete(href, state.runtime_holder_id, date=shard_date)
     except MovieClaimUnavailable:
-        logger.debug("MovieClaim complete unavailable for %s — ignoring", href)
+        logger.debug(
+            "MovieClaim complete unavailable for %s — falling back to release",
+            href,
+        )
+        return False
     except Exception:  # noqa: BLE001
-        logger.warning("Unexpected MovieClaim complete error for %s", href, exc_info=True)
+        logger.warning(
+            "Unexpected MovieClaim complete error for %s — falling back to release",
+            href, exc_info=True,
+        )
+        return False
+    return bool(getattr(result, "completed", False))
 
 
 def _classify_fetch_error_kind(error: Optional[str]) -> str:
@@ -459,8 +482,18 @@ def process_detail_entries(
             # actually leased this href (i.e. ``claim`` returned
             # ``acquired=True``); fail-open candidates skip this.
             # Idempotent on the Worker side.
+            #
+            # Bug fix: when ``complete`` fails (timeout / Unavailable /
+            # unexpected error) or the Worker returns ``completed=False``
+            # (stale-holder), the lease is still attributed to this
+            # runner on the Worker side.  Discarding the href from
+            # ``held_claims`` without releasing would skip the
+            # ``finally:`` cleanup below and force peers to wait for
+            # the 30-minute TTL.  Fall back to an explicit ``release``
+            # so the slot frees up promptly.
             if href in held_claims:
-                _complete_movie_claim(href, shard_date)
+                if not _complete_movie_claim(href, shard_date):
+                    _release_movie_claim(href, shard_date)
                 held_claims.discard(href)
 
             current_runtime_state = backend.runtime_state()
