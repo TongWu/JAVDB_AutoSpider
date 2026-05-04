@@ -31,6 +31,9 @@ from packages.python.javdb_platform.movie_claim_client import (  # noqa: E402
     CLAIM_TTL_MAX_MS,
     CLAIM_TTL_MIN_MS,
     DEFAULT_CLAIM_TTL_MS,
+    MOVIE_CLAIM_MODE_AUTO,
+    MOVIE_CLAIM_MODE_FORCE_ON,
+    MOVIE_CLAIM_MODE_OFF,
     ClaimResult,
     CompleteResult,
     MovieClaimClient,
@@ -39,7 +42,9 @@ from packages.python.javdb_platform.movie_claim_client import (  # noqa: E402
     ReportFailureResult,
     StatusResult,
     create_movie_claim_client_from_env,
+    create_movie_claim_client_with_mode_from_env,
     current_shard_date,
+    parse_movie_claim_mode,
     _extract_server_time_ms,
 )
 
@@ -648,11 +653,14 @@ def test_health_check_swallows_exceptions():
 # ── factory: env-var disable / unconfigured / health failure ────────────────
 
 
-def test_factory_returns_none_when_movie_claim_disabled(monkeypatch):
-    """Default OFF: factory returns None unless MOVIE_CLAIM_ENABLED is truthy."""
-    monkeypatch.setenv("PROXY_COORDINATOR_URL", "https://coord.test")
-    monkeypatch.setenv("PROXY_COORDINATOR_TOKEN", "t")
+def test_factory_returns_none_when_unconfigured(monkeypatch):
+    """Auto-default (MOVIE_CLAIM_ENABLED unset) collapses to None when
+    URL/TOKEN are missing — same fail-open behaviour the rest of the
+    coordinator family follows.  See ``test_with_mode_factory_default_unset_is_auto``
+    for the matching healthy path that DOES yield a client."""
     monkeypatch.delenv("MOVIE_CLAIM_ENABLED", raising=False)
+    monkeypatch.delenv("PROXY_COORDINATOR_URL", raising=False)
+    monkeypatch.delenv("PROXY_COORDINATOR_TOKEN", raising=False)
     assert create_movie_claim_client_from_env() is None
 
 
@@ -697,3 +705,117 @@ def test_factory_returns_none_and_closes_when_health_fails(monkeypatch):
             patch.object(MovieClaimClient, "close") as close_mock:
         assert create_movie_claim_client_from_env() is None
     close_mock.assert_called_once()
+
+
+# ── three-state mode parser ────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("raw", ["1", "true", "yes", "TRUE", "Yes", "  true  "])
+def test_parse_mode_force_on_values(raw):
+    assert parse_movie_claim_mode(raw) == MOVIE_CLAIM_MODE_FORCE_ON
+
+
+@pytest.mark.parametrize("raw", ["0", "false", "no", "FALSE", "  no  ", ""])
+def test_parse_mode_off_values(raw):
+    assert parse_movie_claim_mode(raw) == MOVIE_CLAIM_MODE_OFF
+
+
+@pytest.mark.parametrize("raw", ["auto", "AUTO", "  Auto  "])
+def test_parse_mode_auto_values(raw):
+    assert parse_movie_claim_mode(raw) == MOVIE_CLAIM_MODE_AUTO
+
+
+def test_parse_mode_none_input_is_off():
+    """``None`` (i.e. function-level "no value") is treated as "explicit off"
+    so callers that need the "var unset → auto" semantic must apply it
+    themselves; the parser stays a pure value→mode mapping."""
+    assert parse_movie_claim_mode(None) == MOVIE_CLAIM_MODE_OFF
+
+
+@pytest.mark.parametrize("raw", ["maybe", "trure", "garbage", "ato"])
+def test_parse_mode_unknown_falls_back_to_auto(raw):
+    """Typos must not silently disable the mutex on a multi-runner deploy."""
+    assert parse_movie_claim_mode(raw) == MOVIE_CLAIM_MODE_AUTO
+
+
+# ── with-mode factory ──────────────────────────────────────────────────────
+
+
+def test_with_mode_factory_default_unset_is_auto(monkeypatch):
+    """``MOVIE_CLAIM_ENABLED`` not set in env → ``auto`` (new default)."""
+    monkeypatch.setenv("PROXY_COORDINATOR_URL", "https://coord.test")
+    monkeypatch.setenv("PROXY_COORDINATOR_TOKEN", "t")
+    monkeypatch.delenv("MOVIE_CLAIM_ENABLED", raising=False)
+    with patch.object(MovieClaimClient, "health_check", return_value=True):
+        client, mode = create_movie_claim_client_with_mode_from_env()
+    assert client is not None
+    assert mode == MOVIE_CLAIM_MODE_AUTO
+    client.close()
+
+
+def test_with_mode_factory_explicit_auto_returns_auto(monkeypatch):
+    monkeypatch.setenv("MOVIE_CLAIM_ENABLED", "auto")
+    monkeypatch.setenv("PROXY_COORDINATOR_URL", "https://coord.test")
+    monkeypatch.setenv("PROXY_COORDINATOR_TOKEN", "t")
+    with patch.object(MovieClaimClient, "health_check", return_value=True):
+        client, mode = create_movie_claim_client_with_mode_from_env()
+    assert client is not None
+    assert mode == MOVIE_CLAIM_MODE_AUTO
+    client.close()
+
+
+def test_with_mode_factory_force_on_returns_force_on(monkeypatch):
+    monkeypatch.setenv("MOVIE_CLAIM_ENABLED", "true")
+    monkeypatch.setenv("PROXY_COORDINATOR_URL", "https://coord.test")
+    monkeypatch.setenv("PROXY_COORDINATOR_TOKEN", "t")
+    with patch.object(MovieClaimClient, "health_check", return_value=True):
+        client, mode = create_movie_claim_client_with_mode_from_env()
+    assert client is not None
+    assert mode == MOVIE_CLAIM_MODE_FORCE_ON
+    client.close()
+
+
+@pytest.mark.parametrize("raw", ["false", "0", "no", ""])
+def test_with_mode_factory_off_returns_none_and_off(monkeypatch, raw):
+    monkeypatch.setenv("MOVIE_CLAIM_ENABLED", raw)
+    monkeypatch.setenv("PROXY_COORDINATOR_URL", "https://coord.test")
+    monkeypatch.setenv("PROXY_COORDINATOR_TOKEN", "t")
+    client, mode = create_movie_claim_client_with_mode_from_env()
+    assert client is None
+    assert mode == MOVIE_CLAIM_MODE_OFF
+
+
+def test_with_mode_factory_unconfigured_collapses_to_off(monkeypatch):
+    """Auto mode + missing URL/TOKEN → (None, off) so the runtime layer
+    short-circuits the auto-toggle path entirely."""
+    monkeypatch.setenv("MOVIE_CLAIM_ENABLED", "auto")
+    monkeypatch.delenv("PROXY_COORDINATOR_URL", raising=False)
+    monkeypatch.setenv("PROXY_COORDINATOR_TOKEN", "t")
+    client, mode = create_movie_claim_client_with_mode_from_env()
+    assert client is None
+    assert mode == MOVIE_CLAIM_MODE_OFF
+
+
+def test_with_mode_factory_health_failure_collapses_to_off(monkeypatch):
+    monkeypatch.setenv("MOVIE_CLAIM_ENABLED", "auto")
+    monkeypatch.setenv("PROXY_COORDINATOR_URL", "https://coord.test")
+    monkeypatch.setenv("PROXY_COORDINATOR_TOKEN", "t")
+    with patch.object(MovieClaimClient, "health_check", return_value=False):
+        client, mode = create_movie_claim_client_with_mode_from_env()
+    assert client is None
+    assert mode == MOVIE_CLAIM_MODE_OFF
+
+
+def test_legacy_factory_default_unset_now_returns_client_in_auto_mode(monkeypatch):
+    """Backward-compat shim: callers using the legacy single-return
+    factory observe ``auto`` as the new default → they get a client
+    even without an explicit MOVIE_CLAIM_ENABLED=true.  Pre-auto callers
+    that want the old "default off" must now set MOVIE_CLAIM_ENABLED=
+    explicitly (covered by the factory-disabled case above)."""
+    monkeypatch.setenv("PROXY_COORDINATOR_URL", "https://coord.test")
+    monkeypatch.setenv("PROXY_COORDINATOR_TOKEN", "t")
+    monkeypatch.delenv("MOVIE_CLAIM_ENABLED", raising=False)
+    with patch.object(MovieClaimClient, "health_check", return_value=True):
+        client = create_movie_claim_client_from_env()
+    assert client is not None
+    client.close()
