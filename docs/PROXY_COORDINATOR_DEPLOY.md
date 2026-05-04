@@ -71,7 +71,7 @@ npx wrangler login       # 弹出浏览器，点 Allow
 
 ## 2. 项目目录速览
 
-```
+```text
 JAVDB_AutoSpider_Proxycoordinator/   # 独立 GitHub repo（已 git clone）
 ├── wrangler.toml                    # Worker + DO 绑定 + 可调常量
 ├── package.json
@@ -150,7 +150,7 @@ npx wrangler deploy
 
 输出形如：
 
-```
+```text
 Total Upload: 6.71 KiB / gzip: 2.34 KiB
 Uploaded proxy-coordinator (3.21 sec)
 Published proxy-coordinator (1.42 sec)
@@ -203,14 +203,14 @@ curl -X POST https://proxy-coordinator.wuengineer.workers.dev/lease \
 
 预期日志变化（在 `Step 1 - Run Spider` 步骤里）：
 
-```
+```text
 INFO:SpiderState: Proxy coordinator client initialised: base_url=https://proxy-coordinator.acme.workers.dev
 DEBUG:SleepMgr: Coordinator lease: wait=8.42s (local=7.30s, reason=ok, remote_penalty=1.00, proxy=JP-1)
 ```
 
 如果反而看到：
 
-```
+```text
 INFO:SpiderState: Proxy coordinator not configured (PROXY_COORDINATOR_URL/TOKEN unset) — using local throttling only
 ```
 
@@ -294,7 +294,7 @@ GitHub → Settings → Variables → 删除 `PROXY_COORDINATOR_URL`（或清空
 
 下一次 spider 运行启动时会输出：
 
-```
+```text
 Proxy coordinator not configured (PROXY_COORDINATOR_URL/TOKEN unset) — using local throttling only
 ```
 
@@ -338,7 +338,7 @@ Python 客户端的归一化规则（见
 `host:port` 派生一个稳定的 `proxy_id` 并打一条 **WARNING** 日志（不会
 抛错，pipeline 不中断）：
 
-```
+```text
 Coordinator proxy_id derived from host:port hash: proxy-<16hex> — recommend setting `name` in PROXY_POOL_JSON so all runners agree
 ```
 
@@ -695,7 +695,7 @@ now - 10 min` 的 stale runner。
 时若发现自己的 `sha1(PROXY_POOL_JSON)[:16]` 与现有某个 runner 不同，
 会打一条 **WARNING**：
 
-```
+```text
 PROXY_POOL_JSON drift detected: this runner=<my_hash> peers=[<other_hash>] —
 two runners are working with different proxy pools, ban / claim coordination may be inconsistent
 ```
@@ -846,7 +846,7 @@ PROXY_COORDINATOR_TOKEN=$(wrangler secret list | grep TOKEN ...) \
 
 期望输出末尾：
 
-```
+```text
 RESULT: all DO classes responded OK.  Safe to trigger AdHocIngestion.
 ```
 
@@ -871,7 +871,7 @@ RESULT: all DO classes responded OK.  Safe to trigger AdHocIngestion.
 最后：从 GH Variables 删 `PROXY_COORDINATOR_URL`，再触发一次 run，
 应该看到：
 
-```
+```text
 Proxy coordinator not configured (PROXY_COORDINATOR_URL/TOKEN unset) — using local throttling only
 ```
 
