@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import logging
 import sys
 from typing import List, Optional, Set
 
@@ -100,7 +99,7 @@ def _normalize_run_started_at(raw: Optional[str]) -> Optional[str]:
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = _parse_args(argv)
-    setup_logging(level=getattr(logging, args.log_level))
+    setup_logging(log_level=args.log_level)
 
     logger.info(
         "Commit-session CLI invoked: session_id=%s run_started_at=%s",
