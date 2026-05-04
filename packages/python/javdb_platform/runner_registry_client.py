@@ -136,12 +136,21 @@ class RegisterResult:
     ``active_runners`` and ``pool_hash_summary`` always reflect the live
     state *after* this register — so a freshly-joining runner can warn
     about drift from its very first registry call without an extra GET.
+
+    ``movie_claim_recommended`` is the Worker's derived signal for whether
+    the per-day MovieClaim mutex should currently be active (= the live
+    cohort has reached ``movie_claim_min_runners``).  Defaults to
+    ``False`` / ``0`` for forward compatibility with older Workers that
+    don't ship the field — matching the safe "single-runner" semantics
+    the auto-toggle uses to keep claim coordination off.
     """
 
     registered: bool
     active_runners: List[RunnerInfo] = field(default_factory=list)
     pool_hash_summary: List[PoolHashBucket] = field(default_factory=list)
     server_time_ms: int = 0
+    movie_claim_recommended: bool = False
+    movie_claim_min_runners: int = 0
 
 
 @dataclass(frozen=True)
@@ -153,10 +162,18 @@ class HeartbeatResult:
     re-register on ``alive=False`` rather than treating it as fatal —
     the registry is designed so a transient outage automatically heals
     without operator intervention.
+
+    ``movie_claim_recommended`` mirrors the field on
+    :class:`RegisterResult` so the heartbeat loop can feed cohort
+    changes (e.g. a peer's atexit ``unregister`` arriving) into
+    ``state._apply_movie_claim_recommendation`` without an extra
+    register round-trip.  Defaults to ``False`` / ``0`` for old Workers.
     """
 
     alive: bool
     server_time_ms: int
+    movie_claim_recommended: bool = False
+    movie_claim_min_runners: int = 0
 
 
 @dataclass(frozen=True)
@@ -318,6 +335,18 @@ class RunnerRegistryClient:
                 ],
                 pool_hash_summary=_parse_hash_summary(resp.get("pool_hash_summary", []) or []),
                 server_time_ms=_extract_server_time_ms(resp),
+                # Auto-toggle signals (added with the per-day MovieClaim
+                # auto-mount feature).  Missing keys are NOT treated as
+                # malformed: an older Worker that predates the contract
+                # extension simply returns the safe "single-runner"
+                # default, which `state._apply_movie_claim_recommendation`
+                # interprets as "do not mount".
+                movie_claim_recommended=bool(
+                    resp.get("movie_claim_recommended", False)
+                ),
+                movie_claim_min_runners=int(
+                    resp.get("movie_claim_min_runners", 0) or 0
+                ),
             )
         except (KeyError, TypeError, ValueError) as e:
             raise RunnerRegistryUnavailable(
@@ -339,6 +368,16 @@ class RunnerRegistryClient:
             return HeartbeatResult(
                 alive=bool(resp["alive"]),
                 server_time_ms=_extract_server_time_ms(resp),
+                # Same forward-compat defaults as `register`: missing keys
+                # collapse to "single-runner safe", letting old Workers
+                # coexist with new clients without spurious mount/unmount
+                # churn.  See `RegisterResult` docstring.
+                movie_claim_recommended=bool(
+                    resp.get("movie_claim_recommended", False)
+                ),
+                movie_claim_min_runners=int(
+                    resp.get("movie_claim_min_runners", 0) or 0
+                ),
             )
         except (KeyError, TypeError, ValueError) as e:
             raise RunnerRegistryUnavailable(
