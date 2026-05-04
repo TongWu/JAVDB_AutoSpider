@@ -48,7 +48,13 @@ check() {
     local method="$1"; shift
     local path="$1"; shift
     local data="${1:-}"
-    local args=(-sS -o /tmp/coord_verify_body.$$ -w '%{http_code}' \
+    local body_file
+    body_file=$(mktemp "${TMPDIR:-/tmp}/coord_verify_body.XXXXXX") || {
+        printf "  %-40s  FAIL  %s\n" "$label" "mktemp failed"
+        fail_count+=1
+        return
+    }
+    local args=(-sS -o "$body_file" -w '%{http_code}' \
                 -H "$AUTH" -H "$CT" -X "$method" "${URL}${path}")
     if [[ -n "$data" ]]; then
         args+=(--data "$data")
@@ -59,9 +65,10 @@ check() {
         printf "  %-40s  PASS  HTTP %s\n" "$label" "$code"
     else
         printf "  %-40s  FAIL  HTTP %s\n" "$label" "$code"
-        printf "      body: %s\n" "$(head -c 200 /tmp/coord_verify_body.$$ 2>/dev/null || echo '<empty>')"
+        printf "      body: %s\n" "$(head -c 200 "$body_file" 2>/dev/null || echo '<empty>')"
         fail_count+=1
     fi
+    rm -f "$body_file"
 }
 
 echo "== Proxy coordinator post-deploy smoke check =="
@@ -97,7 +104,7 @@ check "POST /login_state/record_attempt failure"   POST "/login_state/record_att
 echo
 
 echo "4) MovieClaimState (per-day shard):"
-TODAY=$(date -u +%Y-%m-%d)
+TODAY=$(TZ=Asia/Singapore date +%Y-%m-%d)
 HREF="/v/__verify_canary__"
 check "POST /claim_movie (smoke)" POST "/claim_movie" \
     "{\"href\":\"$HREF\",\"holder_id\":\"$HOLDER_ID\",\"ttl_ms\":60000,\"shard_date\":\"$TODAY\"}"
