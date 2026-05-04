@@ -1337,11 +1337,29 @@ def main() -> int:
 
         total_written = 0
         _sqlite_ok = False
+        _staging_session_id: Optional[int] = None
         if _use_sqlite():
             try:
-                from packages.python.javdb_platform.db import init_db, db_clear_rclone_inventory, db_append_rclone_inventory
+                from packages.python.javdb_platform.db import (
+                    init_db,
+                    db_clear_rclone_inventory,
+                    db_append_rclone_inventory,
+                    db_open_rclone_staging,
+                    db_append_rclone_staging,
+                    db_swap_rclone_inventory,
+                    db_drop_rclone_staging,
+                    get_active_session_id,
+                )
                 init_db()
-                db_clear_rclone_inventory()
+                _staging_session_id = get_active_session_id()
+                if _staging_session_id is not None:
+                    # X3 staging-then-swap: rows go into a per-session
+                    # staging table; the live RcloneInventory only gets
+                    # rewritten in a single atomic swap at the end. A
+                    # failed scan therefore can't half-overwrite.
+                    db_open_rclone_staging(_staging_session_id)
+                else:
+                    db_clear_rclone_inventory()
                 _sqlite_ok = True
             except Exception as e:
                 logger.warning(f"Failed initializing SQLite for rclone inventory: {e}")
@@ -1360,18 +1378,57 @@ def main() -> int:
                     _csv_writer.writerow(row)
                 _csv_file.flush()
             if _sqlite_ok:
-                db_append_rclone_inventory(rows)
+                if _staging_session_id is not None:
+                    db_append_rclone_staging(rows, session_id=_staging_session_id)
+                else:
+                    db_append_rclone_inventory(rows)
             total_written += len(rows)
 
-        total_found = scan_inventory(
-            remote_name, root_folder,
-            max_workers=args.workers,
-            year_filter=year_filter,
-            row_callback=on_rows,
-        )
+        scan_failed = False
+        try:
+            total_found = scan_inventory(
+                remote_name, root_folder,
+                max_workers=args.workers,
+                year_filter=year_filter,
+                row_callback=on_rows,
+            )
+        except Exception:
+            scan_failed = True
+            raise
+        finally:
+            if scan_failed and _sqlite_ok and _staging_session_id is not None:
+                try:
+                    db_drop_rclone_staging(_staging_session_id)
+                    logger.info(
+                        "Dropped RcloneInventoryStaging_%s after scan failure; "
+                        "live RcloneInventory left untouched.",
+                        _staging_session_id,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to drop staging table after scan error: {e}"
+                    )
 
         if _csv_file is not None:
             _csv_file.close()
+
+        if _sqlite_ok and _staging_session_id is not None:
+            try:
+                committed = db_swap_rclone_inventory(session_id=_staging_session_id)
+                logger.info(
+                    "Swapped RcloneInventoryStaging_%s into RcloneInventory "
+                    "(committed=%s rows)", _staging_session_id, committed,
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to swap RcloneInventory staging — "
+                    f"main table left UNCHANGED: {e}"
+                )
+                try:
+                    db_drop_rclone_staging(_staging_session_id)
+                except Exception:
+                    pass
+                raise
 
         if _sqlite_ok:
             csv_export_path = os.path.join(REPORTS_DIR, RCLONE_INVENTORY_CSV)
