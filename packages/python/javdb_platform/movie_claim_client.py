@@ -32,7 +32,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, Tuple
 
 import requests
 
@@ -43,6 +43,72 @@ logger = get_logger(__name__)
 
 _DEFAULT_TIMEOUT_SEC = 5.0
 _DEFAULT_USER_AGENT = "javdb-spider-movie-claim-client/1.0"
+
+# ── three-state ``MOVIE_CLAIM_ENABLED`` semantics ─────────────────────────
+#
+# Operations historically had to keep ``MOVIE_CLAIM_ENABLED`` in sync with
+# the actual number of live runners by hand: enable when ≥2 runners are
+# scheduled, disable for single-runner deploys.  The auto-toggle replaces
+# that with a registry-driven signal, so the env-var grows from "boolean
+# enable" to a tri-state mode selector:
+#
+#   ``auto``  (new default) — driven by ``RunnerRegistry.movie_claim_recommended``
+#                              on every register / heartbeat.
+#   ``true`` / ``1`` / ``yes`` — force-on (legacy P1-B behaviour).  Runner
+#                                 mounts the global client unconditionally
+#                                 and ignores the registry signal.  This
+#                                 is the operator's escape hatch for the
+#                                 mixed old-Worker / new-client window.
+#   ``false`` / ``0`` / ``no`` / empty — force-off.  Runner pays zero claim
+#                                         overhead, identical to the
+#                                         pre-auto world.
+#
+# Comparison is case-insensitive after ``str.strip()``.  Unknown values
+# fall back to ``auto`` so a typo doesn't silently disable the mutex on
+# a multi-runner deploy.
+_MOVIE_CLAIM_FORCE_ON_VALUES = frozenset({"1", "true", "yes"})
+_MOVIE_CLAIM_OFF_VALUES = frozenset({"0", "false", "no", ""})
+_MOVIE_CLAIM_AUTO_VALUES = frozenset({"auto"})
+
+#: Mode constants returned by :func:`parse_movie_claim_mode`.
+MOVIE_CLAIM_MODE_OFF = "off"
+MOVIE_CLAIM_MODE_AUTO = "auto"
+MOVIE_CLAIM_MODE_FORCE_ON = "force_on"
+
+
+def parse_movie_claim_mode(raw: Optional[str]) -> str:
+    """Translate a ``MOVIE_CLAIM_ENABLED`` value to one of three modes.
+
+    Returns one of :data:`MOVIE_CLAIM_MODE_OFF` /
+    :data:`MOVIE_CLAIM_MODE_AUTO` / :data:`MOVIE_CLAIM_MODE_FORCE_ON`.
+    Unknown values resolve to ``auto`` so a typo on a multi-runner
+    deploy errs on the side of "let the registry decide" instead of
+    silently disabling the mutex.
+
+    Args:
+        raw: Env-var value as captured from ``os.environ`` /
+            ``config.MOVIE_CLAIM_ENABLED``.  ``None`` and empty strings
+            are treated as "explicitly off" — this matches the ergonomic
+            expectation that ``MOVIE_CLAIM_ENABLED=`` (empty) disables
+            the feature, regardless of the new ``auto`` default applied
+            when the variable is *unset altogether*.  The "unset"
+            distinction is enforced by the caller via the ``defaulted``
+            wrapper in :func:`create_movie_claim_client_with_mode_from_env`.
+    """
+    if raw is None:
+        return MOVIE_CLAIM_MODE_OFF
+    cleaned = raw.strip().lower()
+    if cleaned in _MOVIE_CLAIM_FORCE_ON_VALUES:
+        return MOVIE_CLAIM_MODE_FORCE_ON
+    if cleaned in _MOVIE_CLAIM_OFF_VALUES:
+        return MOVIE_CLAIM_MODE_OFF
+    if cleaned in _MOVIE_CLAIM_AUTO_VALUES:
+        return MOVIE_CLAIM_MODE_AUTO
+    # Unknown value (e.g. typo "ato" or "trure") — fall back to ``auto``.
+    # Logging here would spam at every spider call; callers that care
+    # about the literal value (factories) log once per process at
+    # construction time.
+    return MOVIE_CLAIM_MODE_AUTO
 
 # Mirror of ``DEFAULT_MOVIE_CLAIM_TTL_MS`` /
 # ``MOVIE_CLAIM_TTL_{MIN,MAX}_MS`` on the Worker side.  Exposed here so
@@ -499,55 +565,101 @@ class MovieClaimClient:
             raise MovieClaimUnavailable(f"invalid JSON: {e}") from e
 
 
+def create_movie_claim_client_with_mode_from_env(
+    *,
+    url_env: str = "PROXY_COORDINATOR_URL",
+    token_env: str = "PROXY_COORDINATOR_TOKEN",
+    enabled_env: str = "MOVIE_CLAIM_ENABLED",
+) -> Tuple[Optional[MovieClaimClient], str]:
+    """Build a client + resolve the activation mode from env vars.
+
+    Returns a ``(client_or_none, mode)`` tuple.  The mode is one of
+    :data:`MOVIE_CLAIM_MODE_OFF` / :data:`MOVIE_CLAIM_MODE_AUTO` /
+    :data:`MOVIE_CLAIM_MODE_FORCE_ON` and reflects what the env var
+    actually said *plus* the configuration / health gates: a healthy
+    auto deploy returns ``(client, "auto")``, an unhealthy or
+    unconfigured auto deploy returns ``(None, "off")`` so the runtime
+    state can short-circuit downstream signal handling.
+
+    Three independent disable paths, all returning
+    ``(None, MOVIE_CLAIM_MODE_OFF)`` so the spider transparently falls
+    back to its pre-DO behaviour:
+
+    - ``MOVIE_CLAIM_ENABLED`` resolves to ``off`` via
+      :func:`parse_movie_claim_mode` (default semantics: explicit
+      ``false`` / ``0`` / empty string force off; **unset** maps to
+      ``auto``);
+    - either of ``PROXY_COORDINATOR_URL`` / ``PROXY_COORDINATOR_TOKEN``
+      is empty (the supported way to disable *all* coordinator features);
+    - the URL is configured but ``/health`` does not respond (logs an
+      ERROR so deployment misconfiguration surfaces early).
+
+    The `force_on` and `auto` happy paths both return a ready-to-use
+    client; the difference lives in `state.setup_movie_claim_client`,
+    which mounts the auto-mode client behind the registry signal while
+    force-on mode unconditionally publishes it on
+    `state.global_movie_claim_client`.
+    """
+    raw_value = os.environ.get(enabled_env)
+    # ``None`` means "var not set at all" → apply the new ``auto`` default.
+    # Empty string means "set to nothing" → keep the old "force-off" intuition
+    # so an operator who wants to silence the feature can still use
+    # ``MOVIE_CLAIM_ENABLED=``.
+    mode = MOVIE_CLAIM_MODE_AUTO if raw_value is None else parse_movie_claim_mode(raw_value)
+
+    if mode == MOVIE_CLAIM_MODE_OFF:
+        logger.info(
+            "Movie-claim client disabled (%s=%r, mode=off) — "
+            "using per-process dedup only",
+            enabled_env, raw_value if raw_value is not None else "",
+        )
+        return None, MOVIE_CLAIM_MODE_OFF
+
+    url = (os.environ.get(url_env) or "").strip()
+    token = (os.environ.get(token_env) or "").strip()
+    if not url or not token:
+        logger.info(
+            "Movie-claim client not configured (%s/%s unset, mode=%s) — "
+            "using per-process dedup only",
+            url_env, token_env, mode,
+        )
+        return None, MOVIE_CLAIM_MODE_OFF
+
+    client = MovieClaimClient(base_url=url, token=token)
+    if not client.health_check():
+        logger.error(
+            "Movie-claim Worker URL %s is configured but /health did not respond "
+            "(mode=%s) — falling back to per-process dedup for this run",
+            url, mode,
+        )
+        client.close()
+        return None, MOVIE_CLAIM_MODE_OFF
+    logger.info(
+        "Movie-claim client initialised: base_url=%s, mode=%s",
+        url, mode,
+    )
+    return client, mode
+
+
 def create_movie_claim_client_from_env(
     *,
     url_env: str = "PROXY_COORDINATOR_URL",
     token_env: str = "PROXY_COORDINATOR_TOKEN",
     enabled_env: str = "MOVIE_CLAIM_ENABLED",
 ) -> Optional[MovieClaimClient]:
-    """Build a client from env vars, returning ``None`` when disabled.
+    """Backward-compatible thin wrapper over the with-mode factory.
 
-    Three independent disable paths, all returning ``None`` so the spider
-    transparently falls back to its pre-DO behaviour:
-
-    - ``MOVIE_CLAIM_ENABLED`` is unset / not in ``{"1", "true", "yes"}``
-      (default OFF — single-runner deployments pay zero claim overhead);
-    - either of ``PROXY_COORDINATOR_URL`` / ``PROXY_COORDINATOR_TOKEN``
-      is empty (the supported way to disable *all* coordinator features);
-    - the URL is configured but ``/health`` does not respond (logs an
-      ERROR so deployment misconfiguration surfaces early).
+    Preserves the legacy single-return signature for callers that only
+    care about "is there a client at all".  ``auto`` and ``force_on`` modes
+    both yield a constructed client here (the runtime layer is responsible
+    for deciding when to actually mount it on the global state).
 
     Designed to mirror :func:`create_login_state_client_from_env` so
     wiring code can decide independently whether the per-proxy throttle,
     cross-runtime login state, and movie-claim coordinator are each
     enabled — without juggling three sets of env vars.
     """
-    raw_enabled = (os.environ.get(enabled_env) or "").strip().lower()
-    if raw_enabled not in {"1", "true", "yes"}:
-        logger.info(
-            "Movie-claim client disabled (%s=%r) — using per-process dedup only",
-            enabled_env, os.environ.get(enabled_env, ""),
-        )
-        return None
-
-    url = (os.environ.get(url_env) or "").strip()
-    token = (os.environ.get(token_env) or "").strip()
-    if not url or not token:
-        logger.info(
-            "Movie-claim client not configured (%s/%s unset) — "
-            "using per-process dedup only",
-            url_env, token_env,
-        )
-        return None
-
-    client = MovieClaimClient(base_url=url, token=token)
-    if not client.health_check():
-        logger.error(
-            "Movie-claim Worker URL %s is configured but /health did not respond — "
-            "falling back to per-process dedup for this run",
-            url,
-        )
-        client.close()
-        return None
-    logger.info("Movie-claim client initialised: base_url=%s", url)
+    client, _mode = create_movie_claim_client_with_mode_from_env(
+        url_env=url_env, token_env=token_env, enabled_env=enabled_env,
+    )
     return client
