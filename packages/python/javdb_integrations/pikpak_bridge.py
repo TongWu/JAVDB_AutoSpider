@@ -323,6 +323,15 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
 def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=False, session_id=None):
     cutoff_date = (datetime.now() - timedelta(days=days)).date()
     logger.info(f"Processing torrents older than {days} days (before {cutoff_date})")
+
+    # Tag every D1 write inside this PikPak run with the workflow's session id
+    # so a downstream rollback can scope cleanly to just our rows.
+    if session_id is not None:
+        try:
+            from packages.python.javdb_platform.db import set_active_session_id
+            set_active_session_id(int(session_id))
+        except Exception as e:
+            logger.warning(f"Could not set active session_id for PikPak: {e}")
     
     # Initialize proxy helper
     initialize_proxy_helper(use_proxy)
