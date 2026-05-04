@@ -122,6 +122,36 @@ check "GET  /active_runners" GET "/active_runners"
 check "POST /unregister"  POST "/unregister"  "{\"holder_id\":\"$HOLDER_ID\"}"
 echo
 
+# 6) movie_claim_recommended derived field (auto-toggle contract).
+# A new Worker MUST include `movie_claim_recommended` and
+# `movie_claim_min_runners` on every register/heartbeat response.  Old
+# Workers omit them — clients survive but fall back to "single-runner
+# safe" defaults; the verify script flags the missing fields as a
+# warning so operators know they're on a pre-auto Worker version.
+echo "6) Auto-toggle derived fields (movie_claim_recommended, P1-B + P2-E):"
+register_body=$(curl -sS -H "$AUTH" -H "$CT" -X POST \
+    --data "{\"holder_id\":\"$HOLDER_ID-derived\",\"proxy_pool_hash\":\"verify\"}" \
+    "${URL}/register" 2>/dev/null || echo '')
+if echo "$register_body" | grep -q '"movie_claim_recommended"'; then
+    if echo "$register_body" | grep -q '"movie_claim_min_runners"'; then
+        printf "  %-40s  PASS  fields present\n" "register response carries auto-toggle"
+    else
+        printf "  %-40s  WARN  movie_claim_min_runners missing\n" \
+            "register response (partial)"
+    fi
+else
+    printf "  %-40s  WARN  Worker predates auto-toggle PR-1\n" \
+        "register response (auto-toggle)"
+    echo "      hint: redeploy Worker to pick up MOVIE_CLAIM_MIN_RUNNERS,"
+    echo "            then re-run this script.  Until then, set"
+    echo "            MOVIE_CLAIM_ENABLED=true to keep claim coordination on."
+fi
+# Cleanup the derived-field probe runner so it doesn't pollute /active_runners.
+curl -sS -o /dev/null -H "$AUTH" -H "$CT" -X POST \
+    --data "{\"holder_id\":\"$HOLDER_ID-derived\"}" \
+    "${URL}/unregister" >/dev/null 2>&1 || true
+echo
+
 if (( fail_count > 0 )); then
     echo "RESULT: $fail_count check(s) failed.  See body lines above."
     exit 1
@@ -133,9 +163,16 @@ echo "  1. Trigger an AdHocIngestion run with PROXY_COORDINATOR_URL set."
 echo "  2. In its logs, expect FOUR initialised lines:"
 echo "       - Proxy coordinator client initialised: base_url=…"
 echo "       - Login-state client initialised: base_url=…"
-echo "       - Movie-claim client initialised: base_url=…    (only if MOVIE_CLAIM_ENABLED=true)"
+echo "       - Movie-claim client initialised: base_url=…, mode=auto|force_on"
+echo "         (only if MOVIE_CLAIM_ENABLED in {auto, true} AND /health is up)"
 echo "       - Runner-registry client initialised: base_url=…"
-echo "  3. Roll back: delete the PROXY_COORDINATOR_URL Variable; the next"
-echo "     run should log \"Proxy coordinator not configured … using local"
-echo "     throttling only\" and behave identically to the pre-DO baseline."
+echo "     In auto mode, additional INFO lines on cohort transitions:"
+echo "       - movie-claim auto: mounted (active_runners >= threshold)"
+echo "       - movie-claim auto: unmounted (active_runners < threshold)"
+echo "  3. Roll back options:"
+echo "     * Soft (keep DO running): GH Variables → MOVIE_CLAIM_ENABLED=false"
+echo "     * Legacy P1-B always-on:  GH Variables → MOVIE_CLAIM_ENABLED=true"
+echo "     * Full disable:           delete the PROXY_COORDINATOR_URL Variable;"
+echo "       the next run should log \"Proxy coordinator not configured … using"
+echo "       local throttling only\" and behave identically to the pre-DO baseline."
 exit 0
