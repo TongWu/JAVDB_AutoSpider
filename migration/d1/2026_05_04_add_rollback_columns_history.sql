@@ -2,7 +2,7 @@
 --
 -- Apply with:
 --   wrangler d1 execute javdb-history --remote \
---     --file=migrations/d1/2026_05_04_add_rollback_columns_history.sql
+--     --file=migration/d1/2026_05_04_add_rollback_columns_history.sql
 --
 -- The columns are NULLABLE so existing rows (SessionId IS NULL) remain
 -- valid; rollback CLI only targets rows whose SessionId matches the run.

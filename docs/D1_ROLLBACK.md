@@ -27,7 +27,7 @@ The plan in `.cursor/plans/d1_workflow_rollback_plan_*.plan.md` (kept for refere
 |---|---|---|
 | `ReportMovies`, `ReportTorrents`, `ReportSessions`, `SpiderStats`, `UploaderStats`, `PikpakStats` | Cascade-delete by `SessionId`; refuse to delete `ReportSessions` rows whose `Status='committed'` | `ReportSessions.Status TEXT DEFAULT 'in_progress'` |
 | `MovieHistory`, `TorrentHistory` | Replay `*_Audit` tables in reverse to undo each `INSERT` / `UPDATE` / `DELETE`; skip rows whose current `SessionId` no longer matches (drift) | `SessionId INTEGER` on each table; new `MovieHistoryAudit` and `TorrentHistoryAudit` tables |
-| `PikpakHistory`, `DedupRecords`, `InventoryAlignNoExactMatch` | Plain `DELETE WHERE SessionId=?`. `DedupRecords` keeps any `IsDeleted=1` rows because they represent real rclone deletions | `SessionId INTEGER` on each table |
+| `PikpakHistory`, `DedupRecords`, `InventoryAlignNoExactMatch` | Delete session-scoped rows. `DedupRecords` soft-delete/orphan updates first snapshot their pre-image into `DedupRecordsRollback_<session_id>`, so rollback restores pre-existing rows and deletes rows created by the failed session | `SessionId INTEGER` on each table; per-session `DedupRecordsRollback_<session_id>` backup table |
 | `RcloneInventory` | Per-session staging table → atomic D1 batch swap. A failed scan drops staging; the live table never sees a half-written scan | `RcloneInventoryStaging_<session_id>` (created/dropped per run) |
 
 ### Why audit tables for history?
@@ -46,7 +46,7 @@ Replaying these in reverse `Id` order (highest first) cleanly unwinds every chan
 
 ## Session lifecycle
 
-```
+```text
 db_create_report_session()       →  Status='in_progress'  (every D1 write tagged)
               │
               ▼
@@ -61,7 +61,7 @@ db_create_report_session()       →  Status='in_progress'  (every D1 write tagg
  committed()        ├─ Status='failed'
        │            ├─ DELETE … WHERE SessionId=?
        ▼            ├─ replay *_Audit in reverse
- Status='committed' └─ DROP staging table
+  Status='committed' └─ DROP staging table
 ```
 
 - `Status='in_progress'` rows are the **only** ones cleanup-on-failure / RollbackD1 will touch.
@@ -77,7 +77,7 @@ Each ingestion workflow now has a job:
 ```yaml
 cleanup-on-failure:
   needs: [setup, run-pipeline]
-  if: ${{ failure() && needs.run-pipeline.result == 'failure' }}
+  if: ${{ needs.run-pipeline.result == 'failure' || needs.run-pipeline.result == 'cancelled' }}
   steps:
     - name: Roll back uncommitted D1 writes
       run: |
@@ -123,7 +123,7 @@ For incident response, ad-hoc cleanup, or rolling back a specific session you kn
 
 **Standard SOP:**
 
-```
+```text
 1. Open Actions → Rollback D1 Session → Run workflow.
 2. Fill in either:
    - session_id  (preferred — exact target), or
@@ -151,7 +151,7 @@ GitHub's native **Re-run failed jobs** button is convenient, but only safe for s
 | `run-pipeline` → Step 2 (qb_uploader) | ⚠️ Only after cleanup | Adds torrents to qBittorrent (external side-effect) and writes `UploaderStats` keyed by `SessionId`. Without cleanup you'll re-upload already-added torrents and duplicate stats rows. |
 | `run-pipeline` → Step 2.5 (qb_file_filter) | ✅ Yes | `continue-on-error: true`, idempotent qB pause/delete operations. |
 | `run-pipeline` → Step 3 (pikpak_bridge) | ⚠️ Only after cleanup | Calls PikPak API (external side-effect) and appends `PikpakHistory` / `PikpakStats`. Re-running without rollback re-uploads torrents that were already PikPak'd. |
-| `run-pipeline` → Step 4 (rclone_dedup) | ✅ Mostly | `continue-on-error: true`; rclone purge is idempotent on already-deleted paths. `DedupRecords` writes are session-scoped but cleanup keeps `IsDeleted=1` rows. |
+| `run-pipeline` → Step 4 (rclone_dedup) | ✅ Mostly | `continue-on-error: true`; rclone purge is idempotent on already-deleted paths. Rollback now restores pre-existing `DedupRecords` rows that were soft-deleted by the failed session and deletes newly-created rows. |
 | `Mark sessions as committed` | ✅ Yes | Idempotent UPDATE; second run is a no-op. |
 | `cleanup-on-failure` | ✅ Yes | Re-running rollback on already-rolled-back data is idempotent (audit rows already consumed). |
 | `email-notification` / `commit-results` | ✅ Yes | No DB writes. |
@@ -257,9 +257,9 @@ If you upgraded from a pre-X3 build, run the bundled migrations to add the new c
 python3 -m apps.cli.migration --backup
 
 # Cloudflare D1 — apply the SQL bundle:
-wrangler d1 execute history    --file=migrations/d1/2026_05_04_add_rollback_columns_history.sql
-wrangler d1 execute reports    --file=migrations/d1/2026_05_04_add_rollback_columns_reports.sql
-wrangler d1 execute operations --file=migrations/d1/2026_05_04_add_rollback_columns_operations.sql
+wrangler d1 execute history    --file=migration/d1/2026_05_04_add_rollback_columns_history.sql
+wrangler d1 execute reports    --file=migration/d1/2026_05_04_add_rollback_columns_reports.sql
+wrangler d1 execute operations --file=migration/d1/2026_05_04_add_rollback_columns_operations.sql
 ```
 
 After migration, `db.SCHEMA_VERSION == 11`. The `_ensure_rollback_columns` helper inside `init_db` adds the columns on subsequent boots if a partial migration occurred.
@@ -296,5 +296,5 @@ If anything in the validation deviates from the above, do **not** merge — capt
 - CLI: [`apps/cli/rollback.py`](../apps/cli/rollback.py), [`apps/cli/commit_session.py`](../apps/cli/commit_session.py)
 - Core helpers: [`packages/python/javdb_platform/db.py`](../packages/python/javdb_platform/db.py) (`db_rollback_session`, `db_mark_session_committed`, `db_find_in_progress_sessions`, `_audit_record_movie_change`, `_rollback_history`, etc.)
 - Workflows: [`.github/workflows/DailyIngestion.yml`](../.github/workflows/DailyIngestion.yml), [`.github/workflows/AdHocIngestion.yml`](../.github/workflows/AdHocIngestion.yml), [`.github/workflows/RollbackD1.yml`](../.github/workflows/RollbackD1.yml)
-- Migrations: [`migrations/d1/2026_05_04_add_rollback_columns_*.sql`](../migrations/d1/)
+- Migrations: [`migration/d1/2026_05_04_add_rollback_columns_*.sql`](../migration/d1/)
 - Tests: [`tests/unit/test_rollback.py`](../tests/unit/test_rollback.py)
