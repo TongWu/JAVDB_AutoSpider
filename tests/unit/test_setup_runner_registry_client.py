@@ -328,6 +328,7 @@ def test_unregister_at_exit_calls_unregister_and_close(monkeypatch):
     fake_client.unregister.assert_called_once_with(state.runtime_holder_id)
     fake_client.close.assert_called_once()
     assert state._runner_unregistered is True
+    assert state.global_runner_registry_client is None
 
 
 def test_unregister_at_exit_is_idempotent(monkeypatch):

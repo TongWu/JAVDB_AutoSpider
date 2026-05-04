@@ -76,7 +76,7 @@ def create_detail_backend(
     )
 
 
-def main():
+def _main():
     args = parse_arguments()
 
     start_page = args.start_page
@@ -546,6 +546,21 @@ def main():
         )
     elif not dry_run:
         logger.info("Skipping git commit - no credentials provided (commit will be handled by workflow)")
+
+
+def main():
+    try:
+        return _main()
+    finally:
+        try:
+            from packages.python.javdb_platform.db import (
+                set_active_session_id as _set_active_session_id,
+            )
+            _set_active_session_id(None)
+        except Exception as _e:
+            logger.warning(
+                f"Could not clear db audit session context on exit: {_e}"
+            )
 
 
 class SpiderRunService:

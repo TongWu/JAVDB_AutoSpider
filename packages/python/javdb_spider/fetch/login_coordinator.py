@@ -454,7 +454,7 @@ class LoginCoordinator:
                         len(drained),
                     )
                     for proxy_name, task, login_queue in drained:
-                        login_queue.put(task)
+                        requeue_front(login_queue, task)
                     continue
                 if (
                     self._cooldown_until_ms > 0

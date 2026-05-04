@@ -336,6 +336,7 @@ class MovieSleepManager:
         # in logs.  All runners must agree on this string for the per-proxy
         # mutex to work.
         self._proxy_id = proxy_id or proxy_label
+        self._local_proxy_key = proxy_label or self._proxy_id
         self._remote_factor_ttl_sec = float(remote_factor_ttl_sec)
         self._coord_failures = 0
 
@@ -605,10 +606,11 @@ class MovieSleepManager:
                 # required.  Both calls are best-effort; their internal
                 # dedup (ban manager already-banned check / cf_bypass dict
                 # idempotent set) makes repeated arrivals harmless.
+                local_proxy_key = getattr(self, "_local_proxy_key", self._proxy_id)
                 if getattr(lease, "banned", False):
-                    self._mirror_remote_ban_locally(self._proxy_id)
+                    self._mirror_remote_ban_locally(local_proxy_key)
                 if getattr(lease, "requires_cf_bypass", False):
-                    self._mirror_remote_cf_bypass_locally(self._proxy_id)
+                    self._mirror_remote_cf_bypass_locally(local_proxy_key)
                 self._coord_failures = 0
                 return wait_seconds, True
             except Exception as e:

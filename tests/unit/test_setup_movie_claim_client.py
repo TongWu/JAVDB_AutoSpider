@@ -61,9 +61,9 @@ def _patch_cfg(monkeypatch, **values):
 
 
 def test_returns_none_when_movie_claim_disabled(monkeypatch):
-    """Default OFF: no MOVIE_CLAIM_ENABLED → no client, no log spam."""
+    """Explicit OFF: MOVIE_CLAIM_ENABLED=false → no client, no log spam."""
     _patch_cfg(monkeypatch, PROXY_COORDINATOR_URL="https://coord.test",
-               PROXY_COORDINATOR_TOKEN="t")
+               PROXY_COORDINATOR_TOKEN="t", MOVIE_CLAIM_ENABLED="false")
     assert state.setup_movie_claim_client() is None
     assert state.global_movie_claim_client is None
 
@@ -120,6 +120,23 @@ def test_setup_is_idempotent(monkeypatch):
     # health_check called exactly once (first invocation only).
     assert hc.call_count == 1
     first.close()
+
+
+def test_setup_reuses_pending_client_after_auto_unmount(monkeypatch):
+    """Auto mode can unmount global while keeping the pending client alive."""
+    _patch_cfg(monkeypatch, MOVIE_CLAIM_ENABLED="auto",
+               PROXY_COORDINATOR_URL="https://coord.test",
+               PROXY_COORDINATOR_TOKEN="t")
+    with patch.object(MovieClaimClient, "health_check", return_value=True) as hc:
+        client = state.setup_movie_claim_client()
+        state._apply_movie_claim_recommendation(False)
+        again = state.setup_movie_claim_client()
+
+    assert again is client
+    assert state._movie_claim_client_pending is client
+    assert state.global_movie_claim_client is None
+    assert hc.call_count == 1
+    client.close()
 
 
 def test_setup_does_not_clobber_unrelated_env_vars(monkeypatch):

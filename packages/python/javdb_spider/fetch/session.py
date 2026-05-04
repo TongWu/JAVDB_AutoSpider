@@ -58,6 +58,15 @@ def _publish_login_state_to_do(proxy_name: str, cookie: str) -> None:
             proxy_name, exc,
         )
         return
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Unexpected error publishing login state to DO (proxy=%s): %s — "
+            "this runner still has the cookie locally; other runners may "
+            "re-login independently",
+            proxy_name, exc,
+            exc_info=True,
+        )
+        return
     state.current_login_state_version = result.version
     logger.info(
         "Published login state to DO: proxy=%s, version=%d",

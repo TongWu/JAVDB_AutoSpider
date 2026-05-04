@@ -550,6 +550,22 @@ class TestHandleLoginRequiredFailOpenWithoutDO:
         assert state_mod.logged_in_proxy_name is None
         assert state_mod.current_login_state_version is None
 
+    def test_inherit_login_state_swallows_unexpected_do_error(self):
+        from packages.python.javdb_spider.fetch import fetch_engine as fe_mod
+
+        client = MagicMock()
+        client.get_state.side_effect = RuntimeError("boom")
+        state_mod.global_login_state_client = client
+        state_mod.refreshed_session_cookie = "index-cookie"
+        state_mod.logged_in_proxy_name = "P1"
+        state_mod.current_login_state_version = None
+
+        fake_backend = SimpleNamespace(_workers=[], _coordinator=MagicMock())
+        fe_mod.ParallelFetchBackend._inherit_login_state(fake_backend)
+
+        assert state_mod.refreshed_session_cookie == "index-cookie"
+        assert state_mod.logged_in_proxy_name == "P1"
+
 
 # ── P2-C: cross-runner login cooldown ───────────────────────────────────
 
@@ -758,14 +774,17 @@ class TestP2CLoginCooldown:
         worker = _make_worker(0, "P1")
         coord = LoginCoordinator(all_workers=[worker])
         client = MagicMock()
+        cooldown_until_ms = int(time.time() * 1000) + 60_000
         # Park one task with cooldown active.
         client.acquire_lease.return_value = AcquireLeaseResult(
             acquired=True, holder_id="runner-test", target_proxy_name="P1",
-            lease_expires_at=99_999, server_time_ms=1_000,
-            cooldown_until_ms=999_999_999, recent_attempt_count=6,
+            lease_expires_at=cooldown_until_ms + 99_000,
+            server_time_ms=cooldown_until_ms - 1_000,
+            cooldown_until_ms=cooldown_until_ms,
+            recent_attempt_count=6,
         )
         client.release_lease.return_value = ReleaseLeaseResult(
-            released=True, server_time_ms=1_000,
+            released=True, server_time_ms=cooldown_until_ms - 1_000,
         )
         # The poller will call get_state, but because the cooldown has
         # expired (we'll rewind it manually below), it should drain the
@@ -775,6 +794,7 @@ class TestP2CLoginCooldown:
         )
         state_mod.global_login_state_client = client
         login_queue: queue.Queue = queue.Queue()
+        login_queue.put("already-waiting")
         task = _make_task()
 
         with patch.object(lc_mod, "_POLL_INTERVAL_SEC", 0.05):
@@ -788,11 +808,12 @@ class TestP2CLoginCooldown:
             # observe "cooldown lifted" and drain the parked tasks.
             with coord._lock:
                 coord._cooldown_until_ms = 1
-            ok = self._wait_until(lambda: not login_queue.empty(), timeout=2.0)
+            ok = self._wait_until(lambda: login_queue.qsize() >= 2, timeout=2.0)
             assert ok, "poller did not re-dispatch parked tasks after cooldown"
 
         dispatched = login_queue.get_nowait()
         assert dispatched is task
+        assert login_queue.get_nowait() == "already-waiting"
         with coord._lock:
             assert coord._cooldown_until_ms == 0
             assert len(coord._pending_login_tasks) == 0

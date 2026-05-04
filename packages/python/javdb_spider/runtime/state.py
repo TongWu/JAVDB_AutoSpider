@@ -550,8 +550,19 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
     Cached in :data:`global_movie_claim_client`.  Idempotent.
     """
     global global_movie_claim_client, _movie_claim_client_pending, _movie_claim_mode
-    if global_movie_claim_client is not None:
-        return global_movie_claim_client
+    with _movie_claim_lock:
+        if global_movie_claim_client is not None:
+            return global_movie_claim_client
+        if _movie_claim_client_pending is not None:
+            if (
+                _movie_claim_mode == MOVIE_CLAIM_MODE_FORCE_ON
+                or (
+                    _movie_claim_mode == MOVIE_CLAIM_MODE_AUTO
+                    and _movie_claim_last_recommended
+                )
+            ):
+                global_movie_claim_client = _movie_claim_client_pending
+            return _movie_claim_client_pending
 
     from packages.python.javdb_platform.config_helper import cfg
     url = (cfg('PROXY_COORDINATOR_URL', '') or '').strip()
@@ -761,24 +772,39 @@ def _unregister_runner_at_exit() -> None:
     handler both calling this is safe.  Never raises — registry hygiene
     must not block the spider's shutdown.
     """
-    global _runner_unregistered
+    global global_runner_registry_client, _runner_heartbeat_thread, _runner_unregistered
     if _runner_unregistered:
         return
     client = global_runner_registry_client
     if client is None:
         return
     _runner_heartbeat_stop.set()
+    thread = _runner_heartbeat_thread
+    if (
+        thread is not None
+        and thread.is_alive()
+        and thread is not threading.current_thread()
+    ):
+        thread.join(timeout=5.0)
+        if thread.is_alive():
+            logger.warning("Runner-registry heartbeat thread did not stop before unregister")
+        else:
+            _runner_heartbeat_thread = None
     try:
         client.unregister(runtime_holder_id)
     except RunnerRegistryUnavailable:
         logger.debug("Runner-registry unregister unavailable at exit")
     except Exception:  # noqa: BLE001
         logger.warning("Unexpected runner-registry unregister error", exc_info=True)
-    _runner_unregistered = True
+    else:
+        _runner_unregistered = True
     try:
         client.close()
     except Exception:  # noqa: BLE001
         pass
+    global_runner_registry_client = None
+    if _runner_heartbeat_thread is not None and not _runner_heartbeat_thread.is_alive():
+        _runner_heartbeat_thread = None
 
 
 def _warn_on_proxy_pool_drift(
