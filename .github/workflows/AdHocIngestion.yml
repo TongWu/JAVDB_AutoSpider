@@ -576,6 +576,25 @@ jobs:
           python3 -m apps.cli.rclone_manager --execute
         continue-on-error: true
 
+      - name: Mark sessions as committed
+        # Only flip Status='in_progress' → 'committed' when every D1-writing
+        # step (spider / uploader / pikpak) completed successfully. Failures
+        # in continue-on-error steps (file_filter / dedup) don't block this.
+        if: ${{ success() }}
+        env:
+          SPIDER_SESSION_ID: ${{ steps.spider.outputs.session_id }}
+          RUN_STARTED_AT: ${{ needs.setup.outputs.pipeline_workflow_run_started_at }}
+        run: |
+          set -e
+          set -o pipefail
+          CMD_ARGS=(python3 -m apps.cli.commit_session
+                    --run-started-at "$RUN_STARTED_AT")
+          if [ -n "$SPIDER_SESSION_ID" ]; then
+            CMD_ARGS+=(--session-id "$SPIDER_SESSION_ID")
+          fi
+          echo "Executing: ${CMD_ARGS[*]}"
+          "${CMD_ARGS[@]}"
+
       - name: Encrypt and upload logs artifact
         if: always()
         env:
@@ -698,7 +717,71 @@ jobs:
           if-no-files-found: ignore
 
   # =============================================================================
-  # Job 3: Email Notification - Always runs (success, failure, or cancel)
+  # Job 3: Cleanup on failure — undo any in-progress D1 writes from a failed
+  # run-pipeline so the next attempt starts from a consistent baseline.
+  # See docs/D1_ROLLBACK.md for the X3 hybrid strategy.
+  # =============================================================================
+  cleanup-on-failure:
+    runs-on: ubuntu-latest
+    environment: Production
+    permissions:
+      contents: read
+    needs: [setup, run-pipeline]
+    if: ${{ failure() && needs.run-pipeline.result == 'failure' }}
+    env:
+      TZ: Asia/Singapore
+      STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          lfs: true
+
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.11'
+
+      - name: Restore encrypted config
+        uses: ./.github/actions/restore-encrypted-config
+        with:
+          artifact-name: config-encrypted
+          artifact-key: ${{ secrets.ARTIFACT_KEY }}
+
+      - name: Roll back uncommitted D1 writes
+        env:
+          RUN_STARTED_AT: ${{ needs.setup.outputs.pipeline_workflow_run_started_at }}
+          SPIDER_SESSION_ID: ${{ needs.run-pipeline.outputs.session_id }}
+        run: |
+          set -e
+          set -o pipefail
+          CMD_ARGS=(python3 -m apps.cli.rollback
+                    --run-id "${{ github.run_id }}"
+                    --attempt "${{ github.run_attempt }}"
+                    --run-started-at "$RUN_STARTED_AT"
+                    --scope all)
+          # If we have a known session_id from the spider, target it
+          # explicitly — that's faster and avoids the time-window race.
+          if [ -n "$SPIDER_SESSION_ID" ]; then
+            CMD_ARGS+=(--session-id "$SPIDER_SESSION_ID")
+          fi
+          echo "Executing: ${CMD_ARGS[*]}"
+          mkdir -p logs
+          "${CMD_ARGS[@]}" 2>&1 | tee logs/rollback.log
+
+      - name: Upload rollback log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rollback-log
+          path: logs/rollback.log
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # =============================================================================
+  # Job 4: Email Notification - Always runs (success, failure, or cancel)
   # (Runs in parallel with commit-results on GitHub-hosted runner)
   # =============================================================================
   email-notification:
