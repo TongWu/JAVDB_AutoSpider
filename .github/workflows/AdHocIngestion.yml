@@ -727,7 +727,7 @@ jobs:
     permissions:
       contents: read
     needs: [setup, run-pipeline]
-    if: ${{ failure() && needs.run-pipeline.result == 'failure' }}
+    if: ${{ always() && (needs.run-pipeline.result == 'failure' || needs.run-pipeline.result == 'cancelled') }}
     env:
       TZ: Asia/Singapore
       STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
