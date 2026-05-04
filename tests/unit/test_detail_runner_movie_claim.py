@@ -470,8 +470,19 @@ def test_claim_unavailable_keeps_candidate(monkeypatch):
     client.release.assert_not_called()
 
 
-def test_complete_unavailable_does_not_break_acknowledge(monkeypatch):
-    """If ``complete`` raises Unavailable, the result is still acked."""
+def test_complete_unavailable_falls_back_to_release(monkeypatch):
+    """If ``complete`` raises Unavailable, we still ack AND release.
+
+    Regression for the lease-leak bug: previously the success path
+    discarded the href from ``held_claims`` immediately after calling
+    ``_complete_movie_claim``, even when the call timed out or raised
+    :class:`MovieClaimUnavailable`.  That left the lease attributed to
+    this runner on the Worker side until the 30-minute TTL expired,
+    blocking peer runners from claiming the same href.  The fix falls
+    back to an explicit ``release`` whenever completion was not
+    confirmed, so the slot frees up promptly while the result is still
+    acked locally.
+    """
     _patch_runner_filters(monkeypatch)
     _patch_persist(monkeypatch)
     entry = _entry()
@@ -481,6 +492,7 @@ def test_complete_unavailable_does_not_break_acknowledge(monkeypatch):
     client = MagicMock()
     client.claim.return_value = _claim_ok()
     client.complete.side_effect = MovieClaimUnavailable("upstream timeout")
+    client.release.return_value = ReleaseResult(released=True, server_time_ms=1)
     monkeypatch.setattr(state, "global_movie_claim_client", client)
 
     out = process_detail_entries(
@@ -491,6 +503,85 @@ def test_complete_unavailable_does_not_break_acknowledge(monkeypatch):
     assert len(success.ack_calls) == 1
     assert success.ack_calls[0][0] == "reported"
     assert out["failed"] == 0
+    # Fallback release MUST fire for the held href (not via the
+    # ``finally:`` sweep — that branch already discarded the href —
+    # but inline, so peers see the slot free without a TTL wait).
+    client.complete.assert_called_once()
+    client.release.assert_called_once()
+    args, kwargs = client.release.call_args
+    assert args[0] == entry["href"]
+    assert args[1] == state.runtime_holder_id
+    assert kwargs.get("date") and len(kwargs["date"]) == 10  # YYYY-MM-DD
+
+
+def test_complete_returning_false_falls_back_to_release(monkeypatch):
+    """``completed=False`` is a stale-holder signal → release the lease.
+
+    The Worker returns ``completed=False`` when the active claim has
+    already been re-leased by another runner (e.g. our TTL expired
+    mid-fetch and a peer picked the slot up).  In that case our
+    ``complete`` call did NOT free the href on the Worker, so the
+    runner must still issue ``release`` before forgetting about it
+    locally.  Otherwise the next ``GC`` alarm is the only thing that
+    can free the lease, and peers wait minutes for nothing.
+    """
+    _patch_runner_filters(monkeypatch)
+    _patch_persist(monkeypatch)
+    entry = _entry(href="/v/stale-holder")
+    success = _make_success_result(entry)
+    backend = _StubBackend(results=[success])
+
+    client = MagicMock()
+    client.claim.return_value = _claim_ok(href=entry["href"])
+    client.complete.return_value = CompleteResult(
+        completed=False, href=entry["href"], server_time_ms=1,
+    )
+    client.release.return_value = ReleaseResult(released=True, server_time_ms=1)
+    monkeypatch.setattr(state, "global_movie_claim_client", client)
+
+    out = process_detail_entries(
+        backend=backend, entries=[entry], phase=1, **_common_kwargs(),
+    )
+
+    assert out["failed"] == 0
+    assert len(success.ack_calls) == 1
+    assert success.ack_calls[0][0] == "reported"
+    client.complete.assert_called_once()
+    client.release.assert_called_once()
+    args, _ = client.release.call_args
+    assert args[0] == entry["href"]
+
+
+def test_complete_unexpected_error_falls_back_to_release(monkeypatch):
+    """Non-:class:`MovieClaimUnavailable` exceptions also trigger the fallback.
+
+    The bug applied uniformly to *every* unconfirmed completion: a
+    bare ``RuntimeError`` from a malformed Worker response was just
+    as capable of leaking the lease as a network timeout.  The
+    ``except Exception`` branch in ``_complete_movie_claim`` must
+    surface ``False`` so the caller releases.
+    """
+    _patch_runner_filters(monkeypatch)
+    _patch_persist(monkeypatch)
+    entry = _entry(href="/v/oops")
+    success = _make_success_result(entry)
+    backend = _StubBackend(results=[success])
+
+    client = MagicMock()
+    client.claim.return_value = _claim_ok(href=entry["href"])
+    client.complete.side_effect = RuntimeError("unexpected boom")
+    client.release.return_value = ReleaseResult(released=True, server_time_ms=1)
+    monkeypatch.setattr(state, "global_movie_claim_client", client)
+
+    out = process_detail_entries(
+        backend=backend, entries=[entry], phase=1, **_common_kwargs(),
+    )
+
+    assert out["failed"] == 0
+    assert len(success.ack_calls) == 1
+    assert success.ack_calls[0][0] == "reported"
+    client.complete.assert_called_once()
+    client.release.assert_called_once()
 
 
 def test_release_unavailable_does_not_break_failure_path(monkeypatch):
