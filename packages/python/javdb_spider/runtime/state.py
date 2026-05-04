@@ -20,8 +20,12 @@ from packages.python.javdb_platform.login_state_client import (
     LoginStateClient,
 )
 from packages.python.javdb_platform.movie_claim_client import (
+    MOVIE_CLAIM_MODE_AUTO,
+    MOVIE_CLAIM_MODE_FORCE_ON,
+    MOVIE_CLAIM_MODE_OFF,
     MovieClaimClient,
     create_movie_claim_client_from_env,
+    create_movie_claim_client_with_mode_from_env,
 )
 from packages.python.javdb_platform.proxy_ban_manager import (
     set_remote_ban_hook,
@@ -77,6 +81,30 @@ global_login_state_client: Optional[LoginStateClient] = None
 # OFF: only enabled when ``MOVIE_CLAIM_ENABLED`` is truthy AND the URL/token
 # pair is configured AND the Worker's ``/health`` probe succeeds.
 global_movie_claim_client: Optional[MovieClaimClient] = None
+# Auto-toggle scaffolding for ``global_movie_claim_client``.  See
+# :func:`_apply_movie_claim_recommendation` for the state machine.
+#
+# - ``_movie_claim_client_pending`` keeps a constructed-but-not-yet-public
+#   client when the runner is in ``auto`` mode and the registry has not
+#   yet recommended activation; mounting / unmounting flips the public
+#   ``global_movie_claim_client`` reference but never recreates the
+#   underlying ``requests.Session``.
+# - ``_movie_claim_mode`` is the resolved tri-state from
+#   :data:`MOVIE_CLAIM_MODE_AUTO` / ``FORCE_ON`` / ``OFF``.  ``force_on``
+#   reproduces the legacy P1-B behaviour (always mounted, signal
+#   ignored); ``off`` is the never-mount path.
+# - ``_movie_claim_last_recommended`` caches the most recent
+#   ``movie_claim_recommended`` flag the registry surfaced; the
+#   heartbeat loop reads it (under the lock) to pick the next sleep
+#   interval, and ``_apply_movie_claim_recommendation`` updates it on
+#   every successful signal.
+# - ``_movie_claim_lock`` serialises mount/unmount transitions so a
+#   concurrent heartbeat tick + atexit unregister cannot toggle the
+#   global out from under each other.
+_movie_claim_client_pending: Optional[MovieClaimClient] = None
+_movie_claim_mode: str = MOVIE_CLAIM_MODE_OFF
+_movie_claim_last_recommended: bool = False
+_movie_claim_lock: threading.Lock = threading.Lock()
 # Cross-instance runner registry (P2-E; singleton ``RunnerRegistry`` DO).
 # Lazily initialised by :func:`setup_runner_registry_client`; ``None``
 # means "no registry, runner is invisible to peers" — equivalent to the
@@ -93,9 +121,27 @@ _runner_heartbeat_stop = threading.Event()
 # can both fire without sending two requests.
 _runner_unregistered: bool = False
 
-# Heartbeat cadence; matches the Worker's ``RUNNER_STALE_TTL_MS / 5``
-# default so a single missed heartbeat never evicts a healthy runner.
-_RUNNER_HEARTBEAT_INTERVAL_SEC = 60.0
+# Heartbeat cadences.
+#
+# ``_HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC`` (60 s) matches the Worker's
+# ``RUNNER_STALE_TTL_MS / 5`` so a single missed heartbeat never evicts a
+# healthy runner.  Used in ``force_on`` / ``off`` modes and in ``auto``
+# mode once the registry has recommended activation.
+#
+# ``_HEARTBEAT_INTERVAL_SINGLE_RUNNER_SEC`` (15 s) is used in ``auto`` mode
+# while the registry still says "single runner": the cohort is one tick
+# away from crossing the threshold, and the worst-case "lock-leak"
+# window when a peer joins but neither side has refreshed yet is bounded
+# by the heartbeat cadence.  15 s keeps that window small without
+# materially increasing cost — heartbeats hit a singleton DO, far cheaper
+# than per-href claim DO calls.
+#
+# ``_RUNNER_HEARTBEAT_INTERVAL_SEC`` is preserved as an alias for the
+# multi-runner cadence so existing tests / docs that monkeypatch it keep
+# working unchanged.
+_HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC = 60.0
+_HEARTBEAT_INTERVAL_SINGLE_RUNNER_SEC = 15.0
+_RUNNER_HEARTBEAT_INTERVAL_SEC = _HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC
 
 parsed_links: set = set()
 proxy_ban_html_files: list = []
@@ -391,6 +437,87 @@ def setup_login_state_client() -> Optional[LoginStateClient]:
     return client
 
 
+def _apply_movie_claim_recommendation(recommended: bool) -> None:
+    """Mount or unmount :data:`global_movie_claim_client` per *recommended*.
+
+    Called from three places: once at the end of
+    :func:`setup_runner_registry_client` (the first ``register`` response),
+    on every successful heartbeat in :func:`_runner_heartbeat_loop`, and
+    on every successful re-register inside the same loop.  The function
+    is idempotent and edge-triggered: the mount/unmount transition only
+    happens when the public ``global_movie_claim_client`` actually
+    changes, so a steady-state cluster doesn't spam INFO logs.
+
+    Mode semantics (matches the docs in §15.4 of
+    ``docs/PROXY_COORDINATOR_DEPLOY.md``):
+
+    - :data:`MOVIE_CLAIM_MODE_OFF` — never mount; signal is ignored.
+      ``_movie_claim_last_recommended`` is still updated so the
+      heartbeat-interval helper can run uniformly across modes.
+    - :data:`MOVIE_CLAIM_MODE_FORCE_ON` — always mount (idempotently);
+      signal is ignored.  Reproduces the legacy P1-B "operator
+      explicitly enabled it" behaviour.  Mounts ``_movie_claim_client_pending``
+      onto the global if the global is still ``None`` (defensive: keeps
+      the function safe even if a future caller blanks the global).
+    - :data:`MOVIE_CLAIM_MODE_AUTO` — drive the global purely from the
+      recommendation: ``True`` mounts pending → global, ``False``
+      unmounts global (keeps pending alive so the next ``True`` is a
+      cheap pointer copy, no new HTTP session).
+
+    Thread safety: held under :data:`_movie_claim_lock` so a concurrent
+    heartbeat tick + atexit unregister cannot toggle the global out
+    from under each other.  Callers must NEVER hold the lock across
+    network I/O.
+    """
+    global global_movie_claim_client, _movie_claim_last_recommended
+
+    with _movie_claim_lock:
+        _movie_claim_last_recommended = bool(recommended)
+        mode = _movie_claim_mode
+
+        if mode == MOVIE_CLAIM_MODE_OFF:
+            # Signal ignored; never mount.  Update the cached flag so
+            # the heartbeat interval helper still has a value to read,
+            # even though it will only honour 60 s for non-auto modes.
+            return
+
+        if mode == MOVIE_CLAIM_MODE_FORCE_ON:
+            # Force-on: idempotently mount pending → global if the
+            # global got blanked for any reason.  Do NOT log on the
+            # steady-state path (already-mounted is the common case).
+            if (
+                global_movie_claim_client is None
+                and _movie_claim_client_pending is not None
+            ):
+                global_movie_claim_client = _movie_claim_client_pending
+                logger.info(
+                    "movie-claim force_on: mounted (signal recommended=%s ignored)",
+                    recommended,
+                )
+            return
+
+        # Auto mode: drive the global from the registry signal,
+        # edge-triggered so steady state stays log-quiet.
+        if recommended:
+            if (
+                global_movie_claim_client is None
+                and _movie_claim_client_pending is not None
+            ):
+                global_movie_claim_client = _movie_claim_client_pending
+                logger.info(
+                    "movie-claim auto: mounted (active_runners >= threshold)",
+                )
+        else:
+            if global_movie_claim_client is not None:
+                # Keep ``_movie_claim_client_pending`` alive (do NOT
+                # close it) so a subsequent recommended=True can mount
+                # the same client without rebuilding the session.
+                global_movie_claim_client = None
+                logger.info(
+                    "movie-claim auto: unmounted (active_runners < threshold)",
+                )
+
+
 def setup_movie_claim_client() -> Optional[MovieClaimClient]:
     """Initialise the cross-instance movie-detail claim coordinator (P1-B).
 
@@ -399,56 +526,63 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
     same Cloudflare Worker but each gates independently so an operator
     can roll any subset out without touching the others.
 
-    Three independent disable paths (all return ``None`` for fail-open):
+    Behaviour now branches on the resolved
+    ``MOVIE_CLAIM_ENABLED`` mode (see
+    :func:`packages.python.javdb_platform.movie_claim_client.parse_movie_claim_mode`):
 
-    - ``MOVIE_CLAIM_ENABLED`` is unset / not in ``{"1", "true", "yes"}``.
-      This is the **default OFF**, so single-runner deployments and
-      operators who haven't yet applied the v3 ``MovieClaimState`` DO
-      migration pay zero claim overhead and behave identically to the
-      pre-P1-B world.
-    - ``PROXY_COORDINATOR_URL`` / ``PROXY_COORDINATOR_TOKEN`` is empty.
-    - URL/token configured but Worker's ``/health`` does not respond
-      (logs ERROR — surfaces deployment misconfiguration).
+    - :data:`MOVIE_CLAIM_MODE_OFF` — return ``None`` and leave
+      :data:`global_movie_claim_client` un-mounted, identical to the
+      pre-auto world.  This is the explicit ``MOVIE_CLAIM_ENABLED=false``
+      / ``0`` / ``no`` / ``""`` path.
+    - :data:`MOVIE_CLAIM_MODE_FORCE_ON` — create the client, run the
+      ``/health`` probe, then mount immediately on the global so peers
+      observe claim coordination from the very first detail page (this
+      is the legacy P1-B contract preserved for the mixed old-Worker /
+      new-client window).
+    - :data:`MOVIE_CLAIM_MODE_AUTO` — same construction + ``/health`` as
+      force-on, BUT mount the client *optimistically* on the global and
+      keep a copy in :data:`_movie_claim_client_pending`.  The first
+      ``register`` response from the registry then drives the final
+      mount/unmount via :func:`_apply_movie_claim_recommendation` —
+      single-runner deployments unmount within seconds, multi-runner
+      deployments stay mounted with zero operator action.
 
     Cached in :data:`global_movie_claim_client`.  Idempotent.
     """
-    global global_movie_claim_client
+    global global_movie_claim_client, _movie_claim_client_pending, _movie_claim_mode
     if global_movie_claim_client is not None:
         return global_movie_claim_client
 
     from packages.python.javdb_platform.config_helper import cfg
     url = (cfg('PROXY_COORDINATOR_URL', '') or '').strip()
     token = (cfg('PROXY_COORDINATOR_TOKEN', '') or '').strip()
-    enabled_raw = (str(cfg('MOVIE_CLAIM_ENABLED', '') or '')).strip().lower()
-    if enabled_raw not in {"1", "true", "yes"}:
-        logger.info(
-            "Movie-claim client disabled (MOVIE_CLAIM_ENABLED=%r) — "
-            "using per-process dedup only",
-            enabled_raw,
-        )
-        global_movie_claim_client = None
-        return None
-    if not url or not token:
-        logger.info(
-            "Movie-claim client not configured (PROXY_COORDINATOR_URL/TOKEN "
-            "unset) — using per-process dedup only",
-        )
-        global_movie_claim_client = None
-        return None
+    raw_enabled_cfg = cfg('MOVIE_CLAIM_ENABLED', None)
 
     # Set the env vars expected by the factory for the duration of the call,
-    # then delegate to ``create_movie_claim_client_from_env`` so the
-    # disable paths and ``/health`` semantics stay defined in one place.
+    # then delegate to ``create_movie_claim_client_with_mode_from_env`` so
+    # the disable paths and ``/health`` semantics stay defined in one place.
     prior = (
         os.environ.get('PROXY_COORDINATOR_URL'),
         os.environ.get('PROXY_COORDINATOR_TOKEN'),
         os.environ.get('MOVIE_CLAIM_ENABLED'),
     )
     try:
-        os.environ['PROXY_COORDINATOR_URL'] = url
-        os.environ['PROXY_COORDINATOR_TOKEN'] = token
-        os.environ['MOVIE_CLAIM_ENABLED'] = enabled_raw
-        client = create_movie_claim_client_from_env()
+        if url:
+            os.environ['PROXY_COORDINATOR_URL'] = url
+        else:
+            os.environ.pop('PROXY_COORDINATOR_URL', None)
+        if token:
+            os.environ['PROXY_COORDINATOR_TOKEN'] = token
+        else:
+            os.environ.pop('PROXY_COORDINATOR_TOKEN', None)
+        # Pass the cfg value through verbatim so the factory can
+        # distinguish "var not set in config" (→ auto default) from
+        # "var explicitly empty" (→ off, matches operator intuition).
+        if raw_enabled_cfg is None:
+            os.environ.pop('MOVIE_CLAIM_ENABLED', None)
+        else:
+            os.environ['MOVIE_CLAIM_ENABLED'] = str(raw_enabled_cfg)
+        client, mode = create_movie_claim_client_with_mode_from_env()
     finally:
         for key, value in zip(
             ('PROXY_COORDINATOR_URL', 'PROXY_COORDINATOR_TOKEN', 'MOVIE_CLAIM_ENABLED'),
@@ -459,14 +593,43 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
             else:
                 os.environ[key] = value
 
-    if client is None:
+    # Persist the resolved mode so the registry-signal handler and the
+    # heartbeat-interval picker can branch on it later.
+    _movie_claim_mode = mode
+
+    if client is None or mode == MOVIE_CLAIM_MODE_OFF:
+        # Off path covers: explicit disable, missing URL/token, /health
+        # failure, or auto/force_on resolved → off due to the gates.
+        # Make sure the pending slot is empty so a stale handle from a
+        # prior `setup_movie_claim_client` doesn't accidentally mount.
+        _movie_claim_client_pending = None
         global_movie_claim_client = None
         return None
+
+    _movie_claim_client_pending = client
+
+    if mode == MOVIE_CLAIM_MODE_FORCE_ON:
+        # Legacy P1-B contract: mount immediately so the first detail
+        # page coordinates with peers.  Subsequent registry signals are
+        # ignored by ``_apply_movie_claim_recommendation``.
+        global_movie_claim_client = client
+        logger.info(
+            "Movie-claim client mounted (force_on): base_url=%s, holder_id=%s",
+            url, runtime_holder_id,
+        )
+        return client
+
+    # Auto mode: mount optimistically so the runner doesn't spend the
+    # first few seconds (before the first ``register`` response lands)
+    # racing peers without coordination.  The maximum cost is N claim
+    # DO calls per page during that startup window for a single-runner
+    # deploy, immediately reverted on the first ``register`` response.
+    global_movie_claim_client = client
     logger.info(
-        "Movie-claim client initialised: base_url=%s, holder_id=%s",
+        "Movie-claim client optimistically mounted (auto, awaiting registry signal): "
+        "base_url=%s, holder_id=%s",
         url, runtime_holder_id,
     )
-    global_movie_claim_client = client
     return client
 
 
@@ -491,16 +654,60 @@ def _resolve_proxy_pool_json() -> str:
     return ""
 
 
+def _next_heartbeat_interval() -> float:
+    """Pick the next ``_runner_heartbeat_stop.wait`` duration.
+
+    The auto-toggle wants two cadences:
+
+    - 60 s (multi-runner) — the cohort has crossed the threshold and the
+      claim mutex is mounted; further refresh is purely for liveness so
+      the canonical TTL/5 cadence is enough.
+    - 15 s (single-runner) — the cohort is below the threshold and the
+      next peer to join would otherwise have to wait up to a heartbeat
+      interval before either side notices.  15 s caps that "lock-leak"
+      window without inflating heartbeat costs (the heartbeat hits a
+      singleton DO, far cheaper than per-href claim DO calls).
+
+    Force-on / off modes always use the multi-runner cadence — there is
+    no recommendation edge to detect, so the faster cadence buys nothing.
+
+    The multi-runner branch reads :data:`_RUNNER_HEARTBEAT_INTERVAL_SEC`
+    (rather than :data:`_HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC` directly)
+    so existing tests that monkeypatch the legacy alias to a small
+    value keep speeding the loop up as before.
+    """
+    if _movie_claim_mode != MOVIE_CLAIM_MODE_AUTO:
+        return _RUNNER_HEARTBEAT_INTERVAL_SEC
+    return (
+        _RUNNER_HEARTBEAT_INTERVAL_SEC
+        if _movie_claim_last_recommended
+        else _HEARTBEAT_INTERVAL_SINGLE_RUNNER_SEC
+    )
+
+
 def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None:
-    """Background thread: ping ``/heartbeat`` every 60 s until stopped.
+    """Background thread: ping ``/heartbeat`` until stopped.
+
+    Cadence is dynamic via :func:`_next_heartbeat_interval` so that auto
+    mode can shorten the polling interval while it's still single-runner
+    (= claim coordination off) and fall back to the canonical 60 s once a
+    peer joins.
 
     On ``alive=False`` (the holder was evicted by the registry's GC alarm
     after we missed the staleness window) we re-``register`` so the
     registry recovers without operator intervention.  All exceptions are
     swallowed — the registry is purely operational metadata and must
     NEVER take down the spider.
+
+    The successful ``heartbeat`` and re-``register`` paths each forward
+    the response's ``movie_claim_recommended`` flag into
+    :func:`_apply_movie_claim_recommendation` so an `auto`-mode runner
+    mounts / unmounts ``global_movie_claim_client`` automatically.
+    Failure paths (network blip, malformed response) intentionally do
+    NOT update the cached recommendation — a single transient hiccup
+    must not unmount an already-active claim coordinator.
     """
-    while not _runner_heartbeat_stop.wait(_RUNNER_HEARTBEAT_INTERVAL_SEC):
+    while not _runner_heartbeat_stop.wait(_next_heartbeat_interval()):
         try:
             result = client.heartbeat(holder_id)
         except RunnerRegistryUnavailable:
@@ -520,13 +727,17 @@ def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None
             # need to re-emit drift summaries on reconnection: the
             # response was already logged at original ``register`` time.
             try:
-                client.register(
+                rereg = client.register(
                     holder_id=holder_id,
                     workflow_run_id=os.environ.get("GITHUB_RUN_ID", ""),
                     workflow_name=os.environ.get("GITHUB_WORKFLOW", ""),
                     proxy_pool_hash=proxy_pool_hash(_resolve_proxy_pool_json()),
                 )
                 logger.info("Runner-registry recovered after eviction")
+                # Feed the registry's fresh recommendation so the auto-
+                # toggle re-syncs after eviction (the cohort may have
+                # changed while we were missing).
+                _apply_movie_claim_recommendation(rereg.movie_claim_recommended)
             except RunnerRegistryUnavailable:
                 logger.debug("Runner-registry re-register unavailable; will retry")
             except Exception:  # noqa: BLE001
@@ -534,6 +745,12 @@ def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None
                     "Unexpected runner-registry re-register error",
                     exc_info=True,
                 )
+            continue
+
+        # Healthy heartbeat: forward the cohort signal to the auto-toggle.
+        # Old Workers omit the field; the parser defaults it to False
+        # which the auto path treats as "single runner, unmount".
+        _apply_movie_claim_recommendation(result.movie_claim_recommended)
 
 
 def _unregister_runner_at_exit() -> None:
@@ -681,10 +898,16 @@ def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
         )
         logger.info(
             "Runner-registry client initialised: base_url=%s, holder_id=%s, "
-            "active_runners=%d",
+            "active_runners=%d, movie_claim_recommended=%s",
             url, runtime_holder_id, len(result.active_runners),
+            result.movie_claim_recommended,
         )
         _warn_on_proxy_pool_drift(self_hash, result.pool_hash_summary)
+        # Feed the auto-toggle with the very first cohort snapshot.  In
+        # auto mode this either keeps the optimistically-mounted client
+        # in place (≥2 runners) or unmounts it (single runner) within
+        # milliseconds of startup; force_on / off modes ignore it.
+        _apply_movie_claim_recommendation(result.movie_claim_recommended)
     except RunnerRegistryUnavailable:
         logger.warning(
             "Runner-registry register failed at startup; continuing without "
