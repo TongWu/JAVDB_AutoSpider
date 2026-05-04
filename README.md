@@ -216,7 +216,7 @@ docker pull ghcr.io/YOUR_USERNAME/javdb-autospider:latest
 2. **Prepare configuration files:**
 ```bash
 cp config.py.example config.py
-cp env.example .env
+cp .env.example .env
 # Edit config.py with your settings
 ```
 
@@ -245,7 +245,7 @@ Or manually:
 ```bash
 # Prepare configuration
 cp config.py.example config.py
-cp env.example .env
+cp .env.example .env
 
 # Build and start
 docker-compose -f docker/docker-compose.yml build
