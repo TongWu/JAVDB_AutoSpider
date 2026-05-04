@@ -1337,7 +1337,7 @@ class TestRequestCompleteCallback:
     @patch.object(requests.Session, 'get')
     def test_fetch_direct_propagates_proxy_name_and_health_flag(self, mock_get):
         """``_fetch_direct`` is the request hot path — make sure it threads
-        through proxy_name + report_health=True so the telemetry pipeline
+        through real proxy_name + report_health=True so the telemetry pipeline
         actually fires for spider-issued target-site requests."""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -1358,6 +1358,26 @@ class TestRequestCompleteCallback:
         assert len(events) == 1
         assert events[0][0] == 'proxy-Y'
         assert events[0][1] == 'success'
+
+    @patch.object(requests.Session, 'get')
+    def test_fetch_direct_does_not_report_sentinel_none_proxy(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '<html><div class="movie-list">x</div></html>'
+        mock_response.content = mock_response.text.encode()
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        events = []
+        handler = RequestHandler(
+            config=RequestConfig(use_curl_cffi=False),
+            on_request_complete=lambda *args: events.append(args),
+        )
+        handler._fetch_direct(
+            'http://javdb.com/v/abc', None, 'Test',
+            proxy_name='None',
+        )
+        assert events == []
 
     @patch.object(requests.Session, 'get')
     def test_negative_latency_is_clamped_to_zero_at_callback(self, mock_get):

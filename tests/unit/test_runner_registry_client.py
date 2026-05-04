@@ -443,6 +443,27 @@ def test_register_collapses_missing_registered_field_into_unavailable():
         c.close()
 
 
+def test_register_collapses_malformed_active_runner_into_unavailable():
+    c = _make_client()
+    try:
+        with patch.object(
+            c._session, "post",
+            return_value=_mock_response(
+                200,
+                {
+                    "registered": True,
+                    "active_runners": ["not a dict"],
+                    "pool_hash_summary": [],
+                    "server_time": 1,
+                },
+            ),
+        ):
+            with pytest.raises(RunnerRegistryUnavailable, match="malformed register"):
+                c.register(holder_id="x")
+    finally:
+        c.close()
+
+
 # ── server_time wire-key fallback ──────────────────────────────────────────
 
 
@@ -470,6 +491,16 @@ def test_parse_runner_info_coerces_missing_fields_to_safe_defaults():
     assert info.last_heartbeat == 0
     assert info.proxy_pool_hash == ""
     assert info.page_range is None
+
+
+def test_parse_runner_info_rejects_malformed_entry():
+    with pytest.raises(ValueError, match="runner entry"):
+        _parse_runner_info("not a dict")
+
+
+def test_parse_runner_info_rejects_non_string_page_range():
+    with pytest.raises(ValueError, match="page_range"):
+        _parse_runner_info({"page_range": ["1-10"]})
 
 
 # ── movie_claim_recommended forward-compat parsing ─────────────────────────
@@ -598,19 +629,16 @@ def test_heartbeat_alive_false_still_parses_recommendation():
         c.close()
 
 
-def test_parse_hash_summary_skips_malformed_buckets():
-    """One malformed bucket must NOT crash the entire parse."""
-    buckets = _parse_hash_summary([
-        {"hash": "h1", "count": 3},
-        "not a dict",
-        {"hash": "h2", "count": "not a number"},
-        {"hash": "h3", "count": 1},
-    ])
-    hashes = [b.hash for b in buckets]
-    assert "h1" in hashes
-    assert "h3" in hashes
-    # ``"not a dict"`` is skipped; ``"h2"`` is skipped (count parse fails).
-    assert "h2" not in hashes
+def test_parse_hash_summary_rejects_malformed_buckets():
+    with pytest.raises(ValueError, match="entries"):
+        _parse_hash_summary([
+            {"hash": "h1", "count": 3},
+            "not a dict",
+        ])
+    with pytest.raises(ValueError):
+        _parse_hash_summary([
+            {"hash": "h2", "count": "not a number"},
+        ])
 
 
 # ── health_check ────────────────────────────────────────────────────────────

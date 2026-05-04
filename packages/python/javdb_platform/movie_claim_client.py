@@ -451,6 +451,8 @@ class MovieClaimClient:
         """
         if not href:
             raise MovieClaimUnavailable("href must be a non-empty string")
+        if not holder_id:
+            raise MovieClaimUnavailable("holder_id must be a non-empty string")
         body = {
             "href": href,
             "holder_id": holder_id,
