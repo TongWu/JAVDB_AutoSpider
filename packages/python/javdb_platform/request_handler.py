@@ -900,12 +900,13 @@ class RequestHandler:
         # Try curl_cffi first if available (better TLS fingerprint).  P2-D —
         # this is a target-site request (proxy carries the actual outbound
         # traffic), so opt into the per-proxy health pipeline.
+        should_report = bool(proxy_name and proxy_name != "None")
         if self.use_curl_cffi:
             html_content, error = self._do_request_curl_cffi(
                 url, headers, req_proxies, timeout=30, 
                 context_msg=f"Direct {context_msg}",
                 proxy_name=proxy_name,
-                report_health=True,
+                report_health=should_report,
             )
             if html_content:
                 logger.debug(f"[Direct] {context_msg} succeeded with curl_cffi")
@@ -925,7 +926,7 @@ class RequestHandler:
                 context_msg=f"Direct {context_msg}",
                 session=session,
                 proxy_name=proxy_name,
-                report_health=True,
+                report_health=should_report,
             )
         
         if html_content:

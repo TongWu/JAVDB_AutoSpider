@@ -487,6 +487,15 @@ def test_report_failure_validates_empty_href():
         c.close()
 
 
+def test_report_failure_validates_empty_holder_id():
+    c = _make_client()
+    try:
+        with pytest.raises(MovieClaimUnavailable, match="holder_id"):
+            c.report_failure("/v/abc", "")
+    finally:
+        c.close()
+
+
 def test_report_failure_collapses_503_into_unavailable():
     """``/report_failure`` is a P2-A endpoint; pre-P2-A Workers may 404
     or 503.  Either way the client surfaces Unavailable so the caller
