@@ -333,6 +333,18 @@ def main():
                 start_page=start_page,
             )
             set_active_session(_session_id)
+            # Tag every history / dedup / align write that follows in this
+            # process with this session id so a downstream rollback can
+            # surgically undo just our rows (X3 hybrid strategy).
+            try:
+                from packages.python.javdb_platform.db import (
+                    set_active_session_id as _set_active_session_id,
+                )
+                _set_active_session_id(_session_id)
+            except Exception as _e:
+                logger.warning(
+                    f"Could not propagate session_id to db audit context: {_e}"
+                )
             logger.info(f"Created report session: id={_session_id}")
     except Exception as e:
         logger.warning(f"Failed to create report session: {e}")
