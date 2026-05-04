@@ -141,25 +141,26 @@ def batch_update_movie_actors(
     if not payload:
         return 0
 
-    if session_id is not None and audit_record_movie_change is not None:
-        # Snapshot pre-update rows for audit. We record one audit row per
-        # affected MovieHistory.Id; since several updates could resolve to
-        # the same Href pair, dedupe by Id.
-        seen_ids = set()
-        for path_href, abs_href in href_pair_lookup:
-            old_rows = conn.execute(
-                "SELECT * FROM MovieHistory WHERE Href IN (?, ?)",
-                (path_href, abs_href),
-            ).fetchall()
-            for row in old_rows:
-                rid = row['Id']
-                if rid in seen_ids:
-                    continue
-                seen_ids.add(rid)
-                audit_record_movie_change(
-                    conn, rid, action='UPDATE', session_id=session_id,
-                    old_row=row, when=now,
-                )
+    if session_id is not None:
+        if audit_record_movie_change is not None:
+            # Snapshot pre-update rows for audit. We record one audit row per
+            # affected MovieHistory.Id; since several updates could resolve to
+            # the same Href pair, dedupe by Id.
+            seen_ids = set()
+            for path_href, abs_href in href_pair_lookup:
+                old_rows = conn.execute(
+                    "SELECT * FROM MovieHistory WHERE Href IN (?, ?)",
+                    (path_href, abs_href),
+                ).fetchall()
+                for row in old_rows:
+                    rid = row['Id']
+                    if rid in seen_ids:
+                        continue
+                    seen_ids.add(rid)
+                    audit_record_movie_change(
+                        conn, rid, action='UPDATE', session_id=session_id,
+                        old_row=row, when=now,
+                    )
         before = conn.total_changes
         # Tag each updated row with SessionId. Build an extended payload
         # that puts session_id alongside the other UPDATE values.
@@ -188,4 +189,3 @@ def batch_update_movie_actors(
         payload,
     )
     return conn.total_changes - before
-
