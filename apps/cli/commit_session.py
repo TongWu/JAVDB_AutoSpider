@@ -141,12 +141,13 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     committed: List[int] = []
     skipped: List[int] = []
+    failed_commits: List[int] = []
     for sid in sorted(targets):
         try:
             n = db_mark_session_committed(sid)
         except Exception as e:
             logger.error("Failed to commit session %s: %s", sid, e)
-            skipped.append(sid)
+            failed_commits.append(sid)
             continue
         if n > 0:
             committed.append(sid)
@@ -159,14 +160,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         "session_id": args.session_id,
         "committed": committed,
         "already_committed_or_missing": skipped,
+        "failed_commits": failed_commits,
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     logger.info(
-        "Commit done: committed=%d already_committed_or_missing=%d",
-        len(committed), len(skipped),
+        "Commit done: committed=%d already_committed_or_missing=%d failed=%d",
+        len(committed), len(skipped), len(failed_commits),
     )
 
     close_db()
+    if failed_commits:
+        return 1
     return 0
 
 
