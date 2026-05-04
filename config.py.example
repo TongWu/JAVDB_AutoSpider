@@ -176,6 +176,26 @@ PROXY_MODULES = ['spider']
 PROXY_COORDINATOR_URL = ''
 PROXY_COORDINATOR_TOKEN = ''
 
+# MovieClaim per-day mutex activation (P1-B / P2-E auto-toggle).
+# Three-state semantics; case-insensitive, leading/trailing whitespace ignored:
+#   'auto'  (default) - driven by RunnerRegistry's `movie_claim_recommended`
+#                       signal: claim mutex is mounted only when the live
+#                       runner cohort reaches MOVIE_CLAIM_MIN_RUNNERS (Worker
+#                       var, default 2).  Single-runner deploys pay zero
+#                       claim overhead, multi-runner deploys auto-coordinate.
+#   'true' / '1' / 'yes' - force-on.  Mounts the claim client unconditionally
+#                          and ignores the registry signal.  Use during the
+#                          mixed old-Worker / new-client rollout window or
+#                          when the operator explicitly wants the legacy
+#                          P1-B always-on behaviour.
+#   'false' / '0' / 'no' / '' - force-off.  Spider runs identically to
+#                                "DO not configured" (per-process dedup only).
+#                                Note: the *unset* default is 'auto'; the
+#                                *empty string* is an explicit force-off.
+# GH Variables → MOVIE_CLAIM_ENABLED feeds this (config_generator writes it
+# into config.py).  Leaving it unset here keeps the new default.
+MOVIE_CLAIM_ENABLED = 'auto'
+
 # Example configurations:
 # PROXY_MODULES = ['spider']  # Default: only spider (including login), not qBittorrent/PikPak
 # PROXY_MODULES = ['all']  # Enable proxy for all modules
