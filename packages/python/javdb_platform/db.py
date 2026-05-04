@@ -139,6 +139,8 @@ SCHEMA_VERSION = 11
 
 _local = threading.local()
 
+_SESSION_ID_SENTINEL = object()
+
 
 # ── Active session context (X3 rollback) ─────────────────────────────────
 # Module-global so subprocess workers and main pipeline share a single
@@ -171,11 +173,11 @@ def get_active_session_id() -> Optional[int]:
         return _active_session_id_value
 
 
-def _resolve_session_id(explicit: Optional[int]) -> Optional[int]:
+def _resolve_session_id(explicit: Any = _SESSION_ID_SENTINEL) -> Optional[int]:
     """Pick the explicit override or fall back to the active context."""
-    if explicit is not None:
-        return explicit
-    return get_active_session_id()
+    if explicit is _SESSION_ID_SENTINEL:
+        return get_active_session_id()
+    return explicit
 
 # Serializes the dual-backend init window. Without this, two threads racing
 # into ``init_db`` would both try to mutate ``_local.conns`` and the env-var /
@@ -1039,6 +1041,17 @@ def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
 
     with get_db(db_path) as conn:
         current = _detect_version(conn)
+
+        # Pre-DDL rollback-column migration: existing tables created before
+        # X3 rollback (schema v11) lack SessionId / Status columns, so any
+        # CREATE INDEX in *ddl* that references those columns would raise
+        # "no such column" before _ensure_rollback_columns gets a chance
+        # to ALTER TABLE them in. Running it first is safe — _has_table
+        # gates every ALTER, so on a fresh DB this is a no-op and the DDL
+        # below creates everything from scratch. The post-DDL call kept
+        # below is a redundant idempotent safety net.
+        _ensure_rollback_columns(conn)
+
         conn.executescript(ddl)
 
         # Forward-compat migration: add FailedMovies to SpiderStats
@@ -1357,6 +1370,13 @@ def _init_single_legacy_db(db_path: str, *, force: bool = False):
 
     with get_db(db_path) as conn:
         current = _detect_version(conn)
+
+        # Pre-DDL rollback-column migration — see _init_single_db for the
+        # rationale. Without this, _TABLES_SQL's CREATE INDEX statements
+        # that reference SessionId / Status would fail on a legacy DB
+        # whose tables predate X3 rollback.
+        _ensure_rollback_columns(conn)
+
         conn.executescript(_TABLES_SQL)
 
         # Forward-compat migration: add FailedMovies to SpiderStats
@@ -1493,7 +1513,7 @@ def db_upsert_history(
     actor_link: Optional[str] = None,
     supporting_actors: Optional[str] = None,
     db_path: Optional[str] = None,
-    session_id: Optional[int] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
 ) -> None:
     """Insert or update history across MovieHistory + TorrentHistory.
 
@@ -1778,7 +1798,7 @@ def _update_movie_indicators(
 def db_batch_update_last_visited(
     hrefs: List[str],
     db_path: Optional[str] = None,
-    session_id: Optional[int] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
     """Update DateTimeVisited for a batch of hrefs.
 
@@ -1840,7 +1860,7 @@ def db_batch_update_last_visited(
 def db_batch_update_movie_actors(
     updates: List[Tuple[str, str, str, str, str]],
     db_path: Optional[str] = None,
-    session_id: Optional[int] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
     """Set actor columns and DateTimeUpdated for each
     ``(href, actor_name, actor_gender, actor_link, supporting_actors)``.
@@ -1905,7 +1925,7 @@ def db_get_all_history_records(db_path: Optional[str] = None) -> List[dict]:
 def db_replace_rclone_inventory(
     entries: List[dict],
     db_path: Optional[str] = None,
-    session_id: Optional[int] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
     """Replace the entire RcloneInventory table (full scan refresh).
 
@@ -1920,7 +1940,7 @@ def db_replace_rclone_inventory(
 
 
 def db_open_rclone_staging(
-    session_id: Optional[int] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
     db_path: Optional[str] = None,
 ) -> Optional[str]:
     """Initialise this session's RcloneInventory staging table.
@@ -1938,7 +1958,7 @@ def db_open_rclone_staging(
 
 def db_append_rclone_staging(
     entries: List[dict],
-    session_id: Optional[int] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
     db_path: Optional[str] = None,
 ) -> int:
     """Append rows to this session's RcloneInventory staging table."""
@@ -1954,7 +1974,7 @@ def db_append_rclone_staging(
 
 
 def db_swap_rclone_inventory(
-    session_id: Optional[int] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
     db_path: Optional[str] = None,
 ) -> int:
     """Atomically swap this session's staging into the live RcloneInventory."""
@@ -2058,10 +2078,118 @@ def db_load_dedup_records(db_path: Optional[str] = None) -> List[dict]:
         return [dict(r) for r in rows]
 
 
+_DEDUP_RECORD_COLUMNS = (
+    'VideoCode',
+    'ExistingSensor',
+    'ExistingSubtitle',
+    'ExistingGdrivePath',
+    'ExistingFolderSize',
+    'NewTorrentCategory',
+    'DeletionReason',
+    'DateTimeDetected',
+    'IsDeleted',
+    'DateTimeDeleted',
+    'SessionId',
+)
+
+
+def _dedup_rollback_table(session_id: int) -> str:
+    return f"DedupRecordsRollback_{int(session_id)}"
+
+
+def _dedup_rollback_table_exists(conn, session_id: int) -> bool:
+    table = _dedup_rollback_table(session_id)
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (table,),
+    ).fetchone()
+    return row is not None
+
+
+def _ensure_dedup_rollback_table(conn, session_id: int) -> str:
+    table = _dedup_rollback_table(session_id)
+    conn.execute(
+        f"""CREATE TABLE IF NOT EXISTS {table} (
+            DedupRecordId INTEGER PRIMARY KEY,
+            OldRowJson TEXT NOT NULL
+        )"""
+    )
+    return table
+
+
+def _snapshot_dedup_rows_for_rollback(conn, session_id: Optional[int], rows) -> None:
+    if session_id is None or not rows:
+        return
+    table = _ensure_dedup_rollback_table(conn, session_id)
+    conn.executemany(
+        f"INSERT OR IGNORE INTO {table} (DedupRecordId, OldRowJson) VALUES (?, ?)",
+        [
+            (
+                row['Id'],
+                json.dumps(dict(row), ensure_ascii=False),
+            )
+            for row in rows
+        ],
+    )
+
+
+def _same_session_id(value, session_id: int) -> bool:
+    if value is None:
+        return False
+    try:
+        return int(value) == int(session_id)
+    except (TypeError, ValueError):
+        return False
+
+
+def _restore_dedup_records_from_rollback(conn, session_id: int) -> Tuple[int, int]:
+    table = _dedup_rollback_table(session_id)
+    if not _dedup_rollback_table_exists(conn, session_id):
+        return 0, 0
+    rows = conn.execute(
+        f"SELECT DedupRecordId, OldRowJson FROM {table} ORDER BY DedupRecordId"
+    ).fetchall()
+    restored = 0
+    skipped = 0
+    for row in rows:
+        try:
+            old = json.loads(row['OldRowJson'])
+        except (TypeError, ValueError) as e:
+            skipped += 1
+            logger.warning(
+                "Malformed DedupRecords rollback backup for Id=%s: %s",
+                row['DedupRecordId'], e,
+            )
+            continue
+
+        if _same_session_id(old.get('SessionId'), session_id):
+            # The row was created by this same session and should be removed
+            # by the session-scoped DELETE below, not restored.
+            continue
+
+        set_clause = ', '.join(f'{col}=?' for col in _DEDUP_RECORD_COLUMNS)
+        params = [old.get(col) for col in _DEDUP_RECORD_COLUMNS]
+        params.extend([row['DedupRecordId'], session_id])
+        cur = conn.execute(
+            f"UPDATE DedupRecords SET {set_clause} WHERE Id=? AND SessionId=?",
+            params,
+        )
+        if (cur.rowcount or 0) > 0:
+            restored += 1
+        else:
+            skipped += 1
+            logger.warning(
+                "Rollback drift: DedupRecords row Id=%s SessionId mismatch "
+                "or row already gone",
+                row['DedupRecordId'],
+            )
+    return restored, skipped
+
+
 def db_append_dedup_record(
     record: dict,
     db_path: Optional[str] = None,
-    session_id: Optional[int] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
     """Append a single dedup record. Returns the new row id, or -1 if duplicate.
 
@@ -2098,6 +2226,7 @@ def db_append_dedup_record(
 def db_mark_records_deleted(
     path_datetime_pairs: List[Tuple[str, str]],
     db_path: Optional[str] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
     """Mark specific dedup records as deleted by gdrive path.
 
@@ -2118,6 +2247,7 @@ def db_mark_records_deleted(
         grouped.setdefault(dt, []).append(path)
     if not grouped:
         return 0
+    sid = _resolve_session_id(session_id)
     CHUNK = 90
     with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         updated = 0
@@ -2125,11 +2255,25 @@ def db_mark_records_deleted(
             for i in range(0, len(paths), CHUNK):
                 chunk = paths[i:i + CHUNK]
                 placeholders = ','.join('?' for _ in chunk)
-                cur = conn.execute(
-                    f"UPDATE DedupRecords SET IsDeleted=1, DateTimeDeleted=? "
-                    f"WHERE ExistingGdrivePath IN ({placeholders}) AND IsDeleted=0",
-                    [dt] + chunk,
-                )
+                if sid is not None:
+                    rows = conn.execute(
+                        f"SELECT * FROM DedupRecords "
+                        f"WHERE ExistingGdrivePath IN ({placeholders}) AND IsDeleted=0",
+                        chunk,
+                    ).fetchall()
+                    _snapshot_dedup_rows_for_rollback(conn, sid, rows)
+                    cur = conn.execute(
+                        f"UPDATE DedupRecords "
+                        f"SET IsDeleted=1, DateTimeDeleted=?, SessionId=? "
+                        f"WHERE ExistingGdrivePath IN ({placeholders}) AND IsDeleted=0",
+                        [dt, sid] + chunk,
+                    )
+                else:
+                    cur = conn.execute(
+                        f"UPDATE DedupRecords SET IsDeleted=1, DateTimeDeleted=? "
+                        f"WHERE ExistingGdrivePath IN ({placeholders}) AND IsDeleted=0",
+                        [dt] + chunk,
+                    )
                 updated += cur.rowcount or 0
         return updated
 
@@ -2139,6 +2283,7 @@ def db_mark_orphan_records(
     reason_suffix: str,
     when: str,
     db_path: Optional[str] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
     """Mark dedup pending rows as deleted with custom reason suffix appended.
 
@@ -2152,19 +2297,39 @@ def db_mark_orphan_records(
     path_list = [p for p in paths if p]
     if not path_list:
         return 0
+    sid = _resolve_session_id(session_id)
     with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         updated = 0
         for path in path_list:
-            cur = conn.execute(
-                """UPDATE DedupRecords
-                   SET IsDeleted = 1,
-                       DateTimeDeleted = ?,
-                       DeletionReason = TRIM(
-                         COALESCE(DeletionReason, '') || ' ' || ?
-                       )
-                   WHERE ExistingGdrivePath = ? AND IsDeleted = 0""",
-                (when, reason_suffix, path),
-            )
+            if sid is not None:
+                rows = conn.execute(
+                    "SELECT * FROM DedupRecords "
+                    "WHERE ExistingGdrivePath = ? AND IsDeleted = 0",
+                    (path,),
+                ).fetchall()
+                _snapshot_dedup_rows_for_rollback(conn, sid, rows)
+                cur = conn.execute(
+                    """UPDATE DedupRecords
+                       SET IsDeleted = 1,
+                           DateTimeDeleted = ?,
+                           DeletionReason = TRIM(
+                             COALESCE(DeletionReason, '') || ' ' || ?
+                           ),
+                           SessionId = ?
+                       WHERE ExistingGdrivePath = ? AND IsDeleted = 0""",
+                    (when, reason_suffix, sid, path),
+                )
+            else:
+                cur = conn.execute(
+                    """UPDATE DedupRecords
+                       SET IsDeleted = 1,
+                           DateTimeDeleted = ?,
+                           DeletionReason = TRIM(
+                             COALESCE(DeletionReason, '') || ' ' || ?
+                           )
+                       WHERE ExistingGdrivePath = ? AND IsDeleted = 0""",
+                    (when, reason_suffix, path),
+                )
             updated += cur.rowcount
         return updated
 
@@ -2219,7 +2384,7 @@ def db_save_dedup_records(rows: List[dict], db_path: Optional[str] = None) -> No
 def db_append_pikpak_history(
     record: dict,
     db_path: Optional[str] = None,
-    session_id: Optional[int] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
     """Append a PikPak transfer record.
 
@@ -2255,7 +2420,7 @@ def db_upsert_align_no_exact_match(
     video_code: str,
     reason: str = 'exact_video_code_not_found',
     db_path: Optional[str] = None,
-    session_id: Optional[int] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
 ) -> None:
     """Record a video code that had no exact match on JavDB search.
 
@@ -2458,23 +2623,28 @@ def _rollback_operations(
     """Delete operations-DB rows tagged with *session_id* and DROP its staging."""
     counts: Dict[str, int] = {}
     staging_table = f"RcloneInventoryStaging_{int(session_id)}"
+    dedup_backup_table = _dedup_rollback_table(session_id)
     with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         op_specs = [
             ('PikpakHistory', "DELETE FROM PikpakHistory WHERE SessionId=?"),
             ('DedupRecords',
-             "DELETE FROM DedupRecords WHERE SessionId=? AND IsDeleted=0"),
+             "DELETE FROM DedupRecords WHERE SessionId=?"),
             ('InventoryAlignNoExactMatch',
              "DELETE FROM InventoryAlignNoExactMatch WHERE SessionId=?"),
         ]
         if dry_run:
             for table, _ in op_specs:
                 where = "WHERE SessionId=?"
-                if table == 'DedupRecords':
-                    where = "WHERE SessionId=? AND IsDeleted=0"
                 counts[table] = (conn.execute(
                     f"SELECT COUNT(*) AS n FROM {table} {where}",
                     (session_id,),
                 ).fetchone() or {'n': 0})['n']
+            if _dedup_rollback_table_exists(conn, session_id):
+                counts['DedupRecords.restored'] = (conn.execute(
+                    f"SELECT COUNT(*) AS n FROM {dedup_backup_table}",
+                ).fetchone() or {'n': 0})['n']
+            else:
+                counts['DedupRecords.restored'] = 0
             counts[staging_table] = 0
             try:
                 row = conn.execute(
@@ -2485,10 +2655,29 @@ def _rollback_operations(
                     counts[staging_table] = 1  # would DROP this many tables
             except Exception:
                 pass
+            counts[dedup_backup_table] = 1 if _dedup_rollback_table_exists(
+                conn, session_id,
+            ) else 0
             return counts
 
+        restored, restore_skipped = _restore_dedup_records_from_rollback(
+            conn, session_id,
+        )
+        counts['DedupRecords.restored'] = restored
+        counts['DedupRecords.restore_skipped'] = restore_skipped
         for table, sql in op_specs:
             counts[table] = (conn.execute(sql, (session_id,)).rowcount or 0)
+        if restore_skipped == 0:
+            try:
+                conn.execute(f"DROP TABLE IF EXISTS {dedup_backup_table}")
+                counts[dedup_backup_table] = 1
+            except Exception as e:
+                logger.warning(
+                    f"DROP TABLE {dedup_backup_table} failed during rollback: {e}"
+                )
+                counts[dedup_backup_table] = 0
+        else:
+            counts[dedup_backup_table] = 0
         try:
             conn.execute(f"DROP TABLE IF EXISTS {staging_table}")
             counts[staging_table] = 1
@@ -2543,6 +2732,7 @@ def _rollback_history(
             counts[audit_table] = len(audit_rows)
             if dry_run or not audit_rows:
                 continue
+            drift_before = counts['drift_skipped']
             for row in audit_rows:
                 action = row['Action']
                 target_id = row['TargetId']
@@ -2622,10 +2812,17 @@ def _rollback_history(
                         main_table, action, target_id, e,
                     )
 
-            # Tidy up the audit rows we just consumed.
-            conn.execute(
-                f"DELETE FROM {audit_table} WHERE SessionId=?", (session_id,),
-            )
+            if counts['drift_skipped'] == drift_before:
+                # Tidy up the audit rows we just consumed.
+                conn.execute(
+                    f"DELETE FROM {audit_table} WHERE SessionId=?", (session_id,),
+                )
+            else:
+                logger.warning(
+                    "Keeping %s rows for SessionId=%s because rollback "
+                    "encountered drift or row-level errors",
+                    audit_table, session_id,
+                )
     return counts
 
 
