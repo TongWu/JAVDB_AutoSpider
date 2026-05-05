@@ -547,6 +547,37 @@ class TestRollbackHistoryAudit:
             ).fetchone()["n"]
         assert still == 1  # other run's data must survive
 
+    def test_successful_audit_rows_are_cleaned_when_later_row_drifts(self):
+        sid_failed = _create_session()
+        applied_id = _insert_movie("/v/DDD-001", "DDD-001", sid_failed)
+        drift_id = _insert_movie("/v/DDD-002", "DDD-002", sid_failed)
+
+        sid_other = _create_session()
+        with db_mod.get_db() as conn:
+            conn.execute(
+                "UPDATE MovieHistory SET SessionId=? WHERE Id=?",
+                (sid_other, drift_id),
+            )
+
+        result = db_mod.db_rollback_session(sid_failed, scope="history")
+        assert result["history"]["MovieHistory.deleted"] >= 1
+        assert result["history"]["drift_skipped"] >= 1
+
+        with db_mod.get_db() as conn:
+            applied_left = conn.execute(
+                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
+                "WHERE SessionId=? AND TargetId=?",
+                (sid_failed, applied_id),
+            ).fetchone()["n"]
+            drift_left = conn.execute(
+                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
+                "WHERE SessionId=? AND TargetId=?",
+                (sid_failed, drift_id),
+            ).fetchone()["n"]
+
+        assert applied_left == 0
+        assert drift_left == 1
+
 
 # ── Scope filtering ──────────────────────────────────────────────────────
 

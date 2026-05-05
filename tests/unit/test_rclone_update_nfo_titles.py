@@ -56,6 +56,14 @@ def test_validate_year_requires_exactly_four_digits():
             updater.validate_year(value)
 
 
+def test_validate_requested_year_accepts_year_or_unknown():
+    assert updater.validate_requested_year("2026") == "2026"
+    assert updater.validate_requested_year("未知") == "未知"
+    for value in ("20", "99999", "abcd", "unknown"):
+        with pytest.raises(updater.argparse.ArgumentTypeError):
+            updater.validate_requested_year(value)
+
+
 def test_transform_title_hides_coded_and_no_subtitle_suffix():
     title = "从放学后到第二天早晨 [MNGS-030 有码-无字]"
 

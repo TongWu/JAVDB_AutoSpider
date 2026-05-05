@@ -1,10 +1,27 @@
 from apps.cli import commit_session, rollback
 
 
+class _Args:
+    session_id = 7
+    run_started_at = "2026-05-04T00:00:00Z"
+
+
 def test_rollback_defaults_to_dry_run_and_apply_opts_in():
     assert rollback._parse_args(["--session-id", "1"]).dry_run is True
     assert rollback._parse_args(["--session-id", "1", "--dry-run"]).dry_run is True
     assert rollback._parse_args(["--session-id", "1", "--apply"]).dry_run is False
+
+
+def test_rollback_resolve_unions_explicit_and_window_sessions(monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        rollback,
+        "db_find_in_progress_sessions",
+        lambda *, since=None: seen.append(since) or [7, 8],
+    )
+
+    assert rollback._resolve_target_sessions(_Args()) == [7, 8]
+    assert seen == ["2026-05-04 00:00:00"]
 
 
 def test_rollback_returns_partial_failure_on_real_drift(monkeypatch, capsys):
