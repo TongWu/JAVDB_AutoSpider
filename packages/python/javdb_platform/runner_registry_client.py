@@ -68,9 +68,8 @@ def proxy_pool_hash(proxy_pool_json: str) -> str:
     leaving 2^32 collision-resistance for the realistic case of
     O(N) live runners.
 
-    Returns the empty string when the input is empty or invalid JSON —
-    callers should fail open (an empty hash registers as "no hash" in
-    the DO's drift summary).
+    Empty input still maps to the empty hash ("no hash"). Invalid JSON is
+    hashed from its raw bytes and should be treated as a valid drift hash.
     """
     if not proxy_pool_json or not proxy_pool_json.strip():
         return ""
