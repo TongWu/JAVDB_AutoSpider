@@ -92,7 +92,7 @@ cleanup-on-failure:
 
 What it does:
 
-1. Looks up every `ReportSessions` row with `Status='in_progress'` and `DateTimeCreated >= run_started_at`. If `--session-id` is supplied, that's used directly.
+1. Looks up every `ReportSessions` row with `Status='in_progress'` and `DateTimeCreated >= run_started_at`. If `--session-id` is supplied, it is added to that window lookup so the explicit session and any same-run in-progress sessions are rolled back together.
 2. For each session, runs the X3 rollback orchestration (reports → operations → history).
 3. Marks each session `Status='failed'` for traceability.
 4. Uploads `logs/rollback.log` (artifact: `rollback-log`, retention: 14 days).
@@ -101,7 +101,7 @@ It's a no-op if the spider failed before `db_create_report_session` returned an 
 
 > **Safety guarantee:** the cleanup job has a separate `cleanup-on-failure` artifact and never touches `Status='committed'` sessions, so a parallel run that just succeeded is never disturbed.
 
-The companion **Mark sessions as committed** step runs at the very end of `run-pipeline`'s success path (`if: ${{ success() }}`), flipping `Status` from `in_progress` to `committed`. This must execute *after* every D1-writing step (`spider`, `qb_uploader`, `pikpak_bridge`) but *before* the optional `qb_file_filter` and `dedup` continue-on-error steps so transient post-failures of those steps don't delay protection of the canonical writes.
+The companion **Mark sessions as committed** step runs at the end of `run-pipeline`'s success path (`if: ${{ success() }}`), after `spider`, `qb_uploader`, `qb_file_filter`, `pikpak_bridge`, and `dedup` have had their turn. The optional `qb_file_filter` / `dedup` steps keep `continue-on-error: true`, so their transient failures do not prevent the session from being protected once the required D1-writing steps have succeeded.
 
 ---
 
@@ -113,9 +113,9 @@ For incident response, ad-hoc cleanup, or rolling back a specific session you kn
 
 | Input | Default | Notes |
 |---|---|---|
-| `session_id` | (blank) | Highest priority. Pass `ReportSessions.Id` to target one specific run. |
+| `session_id` | (blank) | Pass `ReportSessions.Id` to include a specific run. |
 | `run_id`, `attempt` | (blank) | For audit/log only. |
-| `run_started_at` | (blank) | ISO timestamp lower bound; used when `session_id` is blank to discover all in-progress sessions in that window. |
+| `run_started_at` | (blank) | ISO timestamp lower bound; discovers all in-progress sessions in that window and unions them with `session_id` when both are supplied. |
 | `scope` | `all` | One of `all`, `reports`, `operations`, `history`. |
 | `dry_run` | `true` | **Always preview first.** |
 | `force` | `false` | Set only when you really need to roll back a `Status='committed'` session. Logs a `::warning::`. |
