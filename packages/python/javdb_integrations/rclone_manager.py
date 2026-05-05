@@ -1352,12 +1352,13 @@ def main() -> int:
         total_written = 0
         _sqlite_ok = False
         _staging_session_id: Optional[int] = None
+        _created_local_staging_session = False
         if _use_sqlite():
             try:
                 from packages.python.javdb_platform.db import (
                     init_db,
-                    db_clear_rclone_inventory,
-                    db_append_rclone_inventory,
+                    db_create_report_session,
+                    db_mark_session_committed,
                     db_open_rclone_staging,
                     db_append_rclone_staging,
                     db_swap_rclone_inventory,
@@ -1366,14 +1367,22 @@ def main() -> int:
                 )
                 init_db()
                 _staging_session_id = get_active_session_id()
-                if _staging_session_id is not None:
-                    # X3 staging-then-swap: rows go into a per-session
-                    # staging table; the live RcloneInventory only gets
-                    # rewritten in a single atomic swap at the end. A
-                    # failed scan therefore can't half-overwrite.
-                    db_open_rclone_staging(_staging_session_id)
-                else:
-                    db_clear_rclone_inventory()
+                if _staging_session_id is None:
+                    _staging_session_id = db_create_report_session(
+                        report_type="rclone_inventory",
+                        report_date=datetime.now().strftime("%Y%m%d"),
+                        csv_filename=os.path.basename(output_path),
+                    )
+                    _created_local_staging_session = True
+                    logger.info(
+                        "Created local rclone inventory staging session: id=%s",
+                        _staging_session_id,
+                    )
+                # X3 staging-then-swap: rows go into a per-session staging
+                # table; the live RcloneInventory only gets rewritten in a
+                # single atomic swap at the end. A failed scan therefore
+                # can't half-overwrite.
+                db_open_rclone_staging(_staging_session_id)
                 _sqlite_ok = True
             except Exception as e:
                 logger.warning(f"Failed initializing SQLite for rclone inventory: {e}")
@@ -1406,8 +1415,6 @@ def main() -> int:
             if _sqlite_ok:
                 if _staging_session_id is not None:
                     db_append_rclone_staging(rows, session_id=_staging_session_id)
-                else:
-                    db_append_rclone_inventory(rows)
             total_written += len(rows)
 
         scan_failed = False
@@ -1463,6 +1470,8 @@ def main() -> int:
                     "Swapped RcloneInventoryStaging_%s into RcloneInventory "
                     "(committed=%s rows)", _staging_session_id, committed,
                 )
+                if _created_local_staging_session:
+                    db_mark_session_committed(_staging_session_id)
             except Exception as e:
                 logger.error(
                     f"Failed to swap RcloneInventory staging — "
