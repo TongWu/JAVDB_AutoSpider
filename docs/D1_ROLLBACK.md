@@ -86,6 +86,7 @@ cleanup-on-failure:
           --attempt "${{ github.run_attempt }}" \
           --run-started-at "${{ needs.setup.outputs.pipeline_workflow_run_started_at }}" \
           --scope all \
+          --apply \
           --session-id "${{ needs.run-pipeline.outputs.session_id }}"   # if known
 ```
 
@@ -166,19 +167,19 @@ When operating from a developer machine or a terminal session on the runner:
 
 ```bash
 # Dry-run preview (no DB writes):
-python3 -m apps.cli.rollback --session-id 123 --dry-run
-
-# Apply the rollback:
 python3 -m apps.cli.rollback --session-id 123
 
+# Apply the rollback:
+python3 -m apps.cli.rollback --session-id 123 --apply
+
 # Roll back every in-progress session created today:
-python3 -m apps.cli.rollback --run-started-at 2026-05-04T00:00:00Z
+python3 -m apps.cli.rollback --run-started-at 2026-05-04T00:00:00Z --apply
 
 # Partial scope (only history audit replay):
-python3 -m apps.cli.rollback --session-id 123 --scope history
+python3 -m apps.cli.rollback --session-id 123 --scope history --apply
 
 # Force rollback of a committed session (DANGEROUS):
-python3 -m apps.cli.rollback --session-id 123 --force
+python3 -m apps.cli.rollback --session-id 123 --force --apply
 ```
 
 **Exit codes:**
@@ -242,7 +243,7 @@ When `drift_total > 0`:
 
 1. Read the warning lines from the rollback log — they include the table name and the conflicting row's `Id`.
 2. Decide whether the concurrent run's data is more recent (usually yes — leave the drift in place).
-3. Optionally re-run `apps.cli.rollback --scope history --session-id <id>` later if you decide the concurrent run was also wrong.
+3. Optionally re-run `apps.cli.rollback --scope history --session-id <id> --apply` later if you decide the concurrent run was also wrong.
 
 The CLI exits with code `4` to surface partial failures so an operator notices.
 

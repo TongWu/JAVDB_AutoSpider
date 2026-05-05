@@ -253,6 +253,25 @@ def test_register_recognises_re_register_as_idempotent():
         c.close()
 
 
+def test_register_treats_string_booleans_as_false():
+    """Worker contract booleans must be real JSON booleans, not truthy strings."""
+    c = _make_client()
+    body = {
+        "registered": "false",
+        "movie_claim_recommended": "true",
+        "active_runners": [],
+        "pool_hash_summary": [],
+        "server_time": 1,
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+            r = c.register(holder_id="runner")
+        assert r.registered is False
+        assert r.movie_claim_recommended is False
+    finally:
+        c.close()
+
+
 # ── heartbeat / unregister — body + parsing ─────────────────────────────────
 
 
@@ -283,6 +302,24 @@ def test_heartbeat_alive_false_for_evicted_holder():
         ):
             r = c.heartbeat("evicted")
         assert r.alive is False
+    finally:
+        c.close()
+
+
+def test_heartbeat_treats_string_booleans_as_false():
+    c = _make_client()
+    try:
+        with patch.object(
+            c._session, "post",
+            return_value=_mock_response(200, {
+                "alive": "true",
+                "movie_claim_recommended": "true",
+                "server_time": 1,
+            }),
+        ):
+            r = c.heartbeat("runner")
+        assert r.alive is False
+        assert r.movie_claim_recommended is False
     finally:
         c.close()
 
@@ -322,6 +359,22 @@ def test_unregister_unknown_holder_returns_false():
             return_value=_mock_response(200, {"unregistered": False, "server_time": 1}),
         ):
             r = c.unregister("unknown")
+        assert r.unregistered is False
+    finally:
+        c.close()
+
+
+def test_unregister_treats_string_boolean_as_false():
+    c = _make_client()
+    try:
+        with patch.object(
+            c._session, "post",
+            return_value=_mock_response(200, {
+                "unregistered": "true",
+                "server_time": 1,
+            }),
+        ):
+            r = c.unregister("runner")
         assert r.unregistered is False
     finally:
         c.close()
@@ -430,15 +483,15 @@ def test_register_collapses_malformed_json_into_unavailable():
         c.close()
 
 
-def test_register_collapses_missing_registered_field_into_unavailable():
+def test_register_missing_registered_field_defaults_false():
     c = _make_client()
     try:
         with patch.object(
             c._session, "post",
             return_value=_mock_response(200, {"server_time": 1}),
         ):
-            with pytest.raises(RunnerRegistryUnavailable, match="malformed register"):
-                c.register(holder_id="x")
+            r = c.register(holder_id="x")
+        assert r.registered is False
     finally:
         c.close()
 

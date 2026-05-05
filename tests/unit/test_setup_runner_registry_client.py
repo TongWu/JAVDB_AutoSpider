@@ -54,6 +54,9 @@ def _reset_globals(monkeypatch):
     yield
     # Stop any daemon the test left running, defensively.
     state._runner_heartbeat_stop.set()
+    thread = state._runner_heartbeat_thread
+    if isinstance(thread, threading.Thread) and thread.is_alive():
+        thread.join(timeout=1.0)
     monkeypatch.setattr(state, "global_runner_registry_client", None, raising=False)
     monkeypatch.setattr(state, "_runner_heartbeat_thread", None, raising=False)
     monkeypatch.setattr(state, "_runner_unregistered", False, raising=False)

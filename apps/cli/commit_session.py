@@ -121,12 +121,20 @@ def main(argv: Optional[List[str]] = None) -> int:
         try:
             window_sessions = db_find_in_progress_sessions(since=since)
         except Exception as e:
-            logger.error(
-                "Failed to look up in-progress sessions since %s: %s",
-                since, e,
-            )
-            close_db()
-            return 1
+            if args.session_id is not None:
+                logger.warning(
+                    "Failed to look up in-progress sessions since %s: %s; "
+                    "continuing with explicit session_id=%s",
+                    since, e, args.session_id,
+                )
+                window_sessions = []
+            else:
+                logger.error(
+                    "Failed to look up in-progress sessions since %s: %s",
+                    since, e,
+                )
+                close_db()
+                return 1
         for sid in window_sessions:
             targets.add(int(sid))
 

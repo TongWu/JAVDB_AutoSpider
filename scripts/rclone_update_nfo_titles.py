@@ -49,6 +49,7 @@ LOG = logging.getLogger("jav_nfo_title")
 
 MIN_TEMP_FILE_SIZE_BYTES = 100 * 1024 * 1024
 EXCLUDED_ROOT_DIRS = {"temp"}
+UNKNOWN_YEAR_DIR = "未知"
 
 TITLE_CDATA_RE = re.compile(
     r"(?P<prefix><title>\s*<!\[CDATA\[)(?P<title>.*?)(?P<suffix>\]\]>\s*</title>)",
@@ -112,10 +113,14 @@ def select_year_dirs(
 ) -> Tuple[List[str], Set[str]]:
     """筛选 root 下需要处理的一级目录。
 
-    ``temp`` 永远排除。非年份目录被视为未知年份，排序在所有数字年份之后；
-    使用 ``start_from`` 时，非年份目录仍会保留。
+    ``temp`` 永远排除。仅处理四位数字年份目录和显式 ``未知`` 目录；
+    使用 ``start_from`` 时，``未知`` 仍会保留。
     """
-    candidates = [name for name in dirs if name.casefold() not in EXCLUDED_ROOT_DIRS]
+    candidates = [
+        name for name in dirs
+        if name.casefold() not in EXCLUDED_ROOT_DIRS
+        and (parse_year_dir(name) is not None or name == UNKNOWN_YEAR_DIR)
+    ]
 
     missing: Set[str] = set()
     if requested_years:
@@ -583,7 +588,7 @@ def parse_args() -> argparse.Namespace:
         "--start-from",
         type=validate_year,
         metavar="YEAR",
-        help="从指定年份开始处理；非年份目录视为未知年份并排在所有年份之后",
+        help="从指定年份开始处理；显式“未知”目录排在所有年份之后",
     )
     parser.add_argument(
         "--dry-run",

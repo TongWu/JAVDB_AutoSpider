@@ -305,14 +305,14 @@ def _main():
     use_cf_bypass = idx_result['use_cf_bypass']
     csv_path = idx_result['csv_path']
 
-    # Create a report session in SQLite (when enabled)
+    # Create a report session in DB-backed storage (when enabled)
     _session_id = None
     try:
-        from packages.python.javdb_platform.config_helper import use_sqlite as _use_sqlite
-        if _use_sqlite():
+        from packages.python.javdb_platform.config_helper import use_db_storage
+        if use_db_storage():
             from packages.python.javdb_platform.db import init_db, db_create_report_session
             from packages.python.javdb_core.url_helper import detect_url_type, extract_url_identifier
-            init_db()
+            init_db(force=True)
             report_type = 'adhoc' if custom_url else 'daily'
             report_date = datetime.now().strftime('%Y%m%d')
             url_type = None

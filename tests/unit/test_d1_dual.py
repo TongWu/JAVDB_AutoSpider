@@ -706,6 +706,21 @@ def test_current_backend_reflects_env(monkeypatch):
     assert _db.current_backend() == "sqlite"
 
 
+def test_use_db_storage_includes_d1_backends(monkeypatch):
+    from packages.python.javdb_platform import config_helper
+
+    monkeypatch.setattr(config_helper, "storage_mode", lambda: "csv")
+    monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
+    monkeypatch.setenv("STORAGE_BACKEND", "d1")
+    assert config_helper.use_db_storage() is True
+
+    monkeypatch.setenv("STORAGE_BACKEND", "dual")
+    assert config_helper.use_db_storage() is True
+
+    monkeypatch.setenv("STORAGE_BACKEND", "sqlite")
+    assert config_helper.use_db_storage() is False
+
+
 # ── init_db dual-backend override isolation ───────────────────────────────
 
 
