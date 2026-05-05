@@ -941,10 +941,11 @@ def _normalize_moviehistory_actor_column_order(conn: sqlite3.Connection) -> None
         "MovieHistory: rebuilding table so columns are ordered "
         "ActorName, ActorGender, ActorLink, SupportingActors (SQLite storage order)",
     )
+    session_id_expr = "SessionId" if "SessionId" in names else "NULL"
     conn.execute("PRAGMA foreign_keys=OFF")
     try:
         conn.executescript(
-            """
+            f"""
             CREATE TABLE MovieHistory__colorder (
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
                 VideoCode TEXT NOT NULL,
@@ -957,22 +958,25 @@ def _normalize_moviehistory_actor_column_order(conn: sqlite3.Connection) -> None
                 DateTimeUpdated TEXT,
                 DateTimeVisited TEXT,
                 PerfectMatchIndicator INTEGER,
-                HiResIndicator INTEGER
+                HiResIndicator INTEGER,
+                SessionId INTEGER
             );
             INSERT INTO MovieHistory__colorder (
                 Id, VideoCode, Href, ActorName, ActorGender, ActorLink, SupportingActors,
                 DateTimeCreated, DateTimeUpdated, DateTimeVisited,
-                PerfectMatchIndicator, HiResIndicator
+                PerfectMatchIndicator, HiResIndicator, SessionId
             )
             SELECT Id, VideoCode, Href,
                 ActorName, ActorGender, ActorLink,
                 SupportingActors,
                 DateTimeCreated, DateTimeUpdated, DateTimeVisited,
-                PerfectMatchIndicator, HiResIndicator
+                PerfectMatchIndicator, HiResIndicator,
+                {session_id_expr}
             FROM MovieHistory;
             DROP TABLE MovieHistory;
             ALTER TABLE MovieHistory__colorder RENAME TO MovieHistory;
             CREATE INDEX IF NOT EXISTS idx_movie_history_video_code ON MovieHistory(VideoCode);
+            CREATE INDEX IF NOT EXISTS idx_movie_history_session ON MovieHistory(SessionId);
             """
         )
     finally:
@@ -1153,6 +1157,66 @@ def _moviehistory_actor_select_exprs_from_attached_old_db(conn: sqlite3.Connecti
     return ", ".join(parts)
 
 
+def _quote_ident(name: str) -> str:
+    return "[" + name.replace("]", "]]") + "]"
+
+
+def _attached_table_info(
+    conn: sqlite3.Connection,
+    schema: str,
+    table: str,
+) -> List[sqlite3.Row]:
+    return conn.execute(
+        f"PRAGMA {schema}.table_info({_quote_ident(table)})"
+    ).fetchall()
+
+
+def _attached_table_column_names(
+    conn: sqlite3.Connection,
+    schema: str,
+    table: str,
+) -> List[str]:
+    return [row[1] for row in _attached_table_info(conn, schema, table)]
+
+
+def _copy_attached_table_by_common_columns(
+    conn: sqlite3.Connection,
+    table: str,
+) -> None:
+    """Copy ``old_db.table`` into ``main.table`` using explicit common columns."""
+    main_info = _attached_table_info(conn, "main", table)
+    old_info = _attached_table_info(conn, "old_db", table)
+    if not old_info:
+        logger.debug(f"Table {table} not found in old DB, skipping")
+        return
+
+    old_names = {row[1] for row in old_info}
+    missing_required = [
+        row[1]
+        for row in main_info
+        if row[1] not in old_names
+        and row[3]
+        and row[4] is None
+        and not row[5]
+    ]
+    if missing_required:
+        raise sqlite3.OperationalError(
+            f"Table {table} missing required column(s) in old DB: "
+            f"{', '.join(missing_required)}"
+        )
+
+    columns = [row[1] for row in main_info if row[1] in old_names]
+    if not columns:
+        raise sqlite3.OperationalError(
+            f"Table {table} has no compatible columns in old DB"
+        )
+    column_sql = ", ".join(_quote_ident(col) for col in columns)
+    conn.execute(
+        f"INSERT INTO main.{_quote_ident(table)} ({column_sql}) "
+        f"SELECT {column_sql} FROM old_db.{_quote_ident(table)}"
+    )
+
+
 def _migrate_single_to_split():
     """Migrate a legacy single-DB (v6) into three separate databases.
 
@@ -1238,27 +1302,35 @@ def _migrate_single_to_split():
         except sqlite3.OperationalError:
             pass
         for table in tables:
+            if not _attached_table_info(new_conn, "old_db", table):
+                logger.debug(f"Table {table} not found in old DB, skipping")
+                continue
             try:
                 if table == 'MovieHistory':
                     actor_exprs = _moviehistory_actor_select_exprs_from_attached_old_db(
                         new_conn,
                     )
+                    old_columns = set(
+                        _attached_table_column_names(new_conn, "old_db", table)
+                    )
+                    session_id_expr = (
+                        "SessionId" if "SessionId" in old_columns else "NULL"
+                    )
                     new_conn.execute(
                         f"""INSERT INTO main.MovieHistory (
                             Id, VideoCode, Href, ActorName, ActorGender, ActorLink, SupportingActors,
                             DateTimeCreated, DateTimeUpdated, DateTimeVisited,
-                            PerfectMatchIndicator, HiResIndicator)
+                            PerfectMatchIndicator, HiResIndicator, SessionId)
                         SELECT Id, VideoCode, Href, {actor_exprs},
                                DateTimeCreated, DateTimeUpdated, DateTimeVisited,
-                               PerfectMatchIndicator, HiResIndicator
+                               PerfectMatchIndicator, HiResIndicator, {session_id_expr}
                         FROM old_db.MovieHistory"""
                     )
                 else:
-                    new_conn.execute(
-                        f"INSERT INTO main.[{table}] SELECT * FROM old_db.[{table}]"
-                    )
-            except sqlite3.OperationalError:
-                logger.debug(f"Table {table} not found in old DB, skipping")
+                    _copy_attached_table_by_common_columns(new_conn, table)
+            except sqlite3.OperationalError as exc:
+                logger.error(f"Failed migrating table {table} from old DB: {exc}")
+                raise
         new_conn.execute("INSERT OR REPLACE INTO SchemaVersion (Version) VALUES (?)",
                          (SCHEMA_VERSION,))
         new_conn.commit()

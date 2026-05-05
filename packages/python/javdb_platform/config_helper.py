@@ -72,3 +72,23 @@ def use_sqlite() -> bool:
 def use_csv() -> bool:
     """True when CSV writes/reads are needed (``csv`` or ``duo``)."""
     return storage_mode() in ('csv', 'duo')
+
+
+def storage_backend() -> str:
+    """Return the DB backend configured for platform DB connections."""
+    import os
+    backend = (
+        os.environ.get('_STORAGE_BACKEND_INIT_OVERRIDE')
+        or os.environ.get('STORAGE_BACKEND')
+        or cfg('STORAGE_BACKEND', None)
+    )
+    if isinstance(backend, str):
+        backend = backend.strip().lower()
+    if backend in ('d1', 'dual'):
+        return backend
+    return 'sqlite'
+
+
+def use_db_storage() -> bool:
+    """True when any DB-backed storage path is enabled."""
+    return use_sqlite() or storage_backend() in ('d1', 'dual')

@@ -694,6 +694,10 @@ def test_shard_date_is_pinned_for_complete_and_release(monkeypatch):
         backend=backend, entries=[e_ok, e_fail], phase=1, **_common_kwargs(),
     )
 
+    assert client.claim.call_count == 2
+    assert client.complete.call_count == 1
+    assert client.report_failure.call_count == 1
+
     # Collect the ``date`` passed to every call site; they MUST all match.
     claim_dates = {kw["date"] for _, kw in client.claim.call_args_list}
     complete_dates = {kw["date"] for _, kw in client.complete.call_args_list}

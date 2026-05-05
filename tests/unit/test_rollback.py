@@ -59,14 +59,9 @@ def _insert_movie(href: str, video_code: str, session_id: int) -> int:
     )
     with db_mod.get_db() as conn:
         row = conn.execute(
-            "SELECT Id FROM MovieHistory WHERE Href LIKE ?",
-            (f"%{href.lstrip('/').lstrip('h')}%",),
+            "SELECT Id FROM MovieHistory WHERE VideoCode=?",
+            (video_code,),
         ).fetchone()
-        if row is None:
-            row = conn.execute(
-                "SELECT Id FROM MovieHistory WHERE VideoCode=?",
-                (video_code,),
-            ).fetchone()
     return row["Id"] if row else -1
 
 

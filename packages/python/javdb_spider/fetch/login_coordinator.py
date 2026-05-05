@@ -312,10 +312,9 @@ class LoginCoordinator:
         except (AttributeError, TypeError, ValueError):
             return
         if cooldown > server_now:
-            with self._lock:
-                self._cooldown_until_ms = max(
-                    self._cooldown_until_ms, cooldown,
-                )
+            self._cooldown_until_ms = max(
+                self._cooldown_until_ms, cooldown,
+            )
 
     def _release_login_lease(self) -> None:
         """Best-effort release of the DO re-login mutex.
@@ -405,11 +404,10 @@ class LoginCoordinator:
 
         P2-C — when the cross-runner login cooldown is active (see
         :attr:`_cooldown_until_ms`), the poller does NOT initiate a
-        fresh login attempt; it waits for the cooldown to expire and
-        then re-dispatches all parked tasks back through the normal
-        ``handle_login_required`` flow (treating them as if they just
-        hit a fresh login wall — the next ``acquire_lease`` will
-        observe the cooldown has lifted).
+        fresh login attempt. It still polls for a peer-published cookie
+        and dispatches immediately if one appears; otherwise it waits for
+        the cooldown to expire and re-dispatches parked tasks through the
+        normal ``handle_login_required`` flow.
 
         Exits after a few consecutive idle ticks once the parked queue is
         empty so the runtime does not leak threads after a brief contention
@@ -460,10 +458,10 @@ class LoginCoordinator:
                     self._cooldown_until_ms > 0
                     and now_ms < self._cooldown_until_ms
                 ):
-                    # Cooldown still active — skip the version-bump check
-                    # so we don't burn DO calls during a back-off window
-                    # that we already know will reject any acquire.
-                    continue
+                    # Cooldown still parks local login attempts, but keep
+                    # checking DO state so a peer-published cookie can
+                    # release parked tasks immediately.
+                    pass
 
             client = state.global_login_state_client
             if client is None:
@@ -513,6 +511,7 @@ class LoginCoordinator:
                 state.current_login_state_version = snapshot.version
                 state.refreshed_session_cookie = snapshot.cookie
                 state.logged_in_proxy_name = snapshot.proxy_name
+                self._cooldown_until_ms = 0
 
                 injected_worker_id: Optional[int] = None
                 for w in self._all_workers:

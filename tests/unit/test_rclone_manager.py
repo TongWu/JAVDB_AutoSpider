@@ -126,6 +126,63 @@ class TestParseArguments:
         assert args.execute is True
 
 
+def test_scan_inventory_counts_process_year_none_as_error(monkeypatch):
+    import scripts.rclone_manager as rm
+
+    callbacks = []
+    monkeypatch.setattr(rm, "get_year_folders", lambda *_args: ["2026"])
+    monkeypatch.setattr(rm, "_process_year", lambda *_args, **_kwargs: None)
+
+    total, errors = rm.scan_inventory(
+        "gdrive", "root", row_callback=lambda rows: callbacks.append(rows)
+    )
+
+    assert total == 0
+    assert errors == 1
+    assert callbacks == []
+
+
+def test_scan_csv_temp_removed_on_scan_failure(monkeypatch, tmp_path):
+    import scripts.rclone_manager as rm
+    from packages.python.javdb_platform import config_helper
+
+    output = tmp_path / "inventory.csv"
+    row = {field: "" for field in INVENTORY_FIELDNAMES}
+    row.update({
+        "video_code": "ABC-001",
+        "folder_path": "2026/a/ABC-001",
+        "folder_size": 1,
+        "file_count": 1,
+    })
+
+    def fake_scan(*_args, row_callback=None, **_kwargs):
+        row_callback([row])
+        return 1, 1
+
+    monkeypatch.setattr(rm, "RCLONE_CONFIG_BASE64", "")
+    monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
+    monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
+    monkeypatch.setattr(rm, "scan_inventory", fake_scan)
+    monkeypatch.setattr(config_helper, "use_sqlite", lambda: False)
+    monkeypatch.setattr(config_helper, "use_csv", lambda: True)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "rclone_manager",
+            "--scan",
+            "--root-path",
+            "gdrive:/root",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert rm.main() == 1
+    assert not output.exists()
+    assert list(tmp_path.glob("inventory.csv.*.tmp")) == []
+
+
 # ============================================================================
 # Test parse_root_path
 # ============================================================================

@@ -218,6 +218,10 @@ def _extract_server_time_ms(data: dict) -> int:
     return int(data.get("server_time", 0) or 0)
 
 
+def _strict_bool(value) -> bool:
+    return value is True
+
+
 def _parse_runner_info(payload: Any) -> RunnerInfo:
     """Decode one ``RunnerInfo`` JSON row into the dataclass."""
     if not isinstance(payload, dict):
@@ -346,7 +350,7 @@ class RunnerRegistryClient:
         resp = self._do_request("POST", "/register", body)
         try:
             return RegisterResult(
-                registered=bool(resp["registered"]),
+                registered=_strict_bool(resp.get("registered")),
                 active_runners=_parse_runner_list(resp.get("active_runners", [])),
                 pool_hash_summary=_parse_hash_summary(resp.get("pool_hash_summary", []) or []),
                 server_time_ms=_extract_server_time_ms(resp),
@@ -356,8 +360,8 @@ class RunnerRegistryClient:
                 # extension simply returns the safe "single-runner"
                 # default, which `state._apply_movie_claim_recommendation`
                 # interprets as "do not mount".
-                movie_claim_recommended=bool(
-                    resp.get("movie_claim_recommended", False)
+                movie_claim_recommended=_strict_bool(
+                    resp.get("movie_claim_recommended")
                 ),
                 movie_claim_min_runners=int(
                     resp.get("movie_claim_min_runners", 0) or 0
@@ -381,14 +385,14 @@ class RunnerRegistryClient:
         resp = self._do_request("POST", "/heartbeat", {"holder_id": holder_id})
         try:
             return HeartbeatResult(
-                alive=bool(resp["alive"]),
+                alive=_strict_bool(resp.get("alive")),
                 server_time_ms=_extract_server_time_ms(resp),
                 # Same forward-compat defaults as `register`: missing keys
                 # collapse to "single-runner safe", letting old Workers
                 # coexist with new clients without spurious mount/unmount
                 # churn.  See `RegisterResult` docstring.
-                movie_claim_recommended=bool(
-                    resp.get("movie_claim_recommended", False)
+                movie_claim_recommended=_strict_bool(
+                    resp.get("movie_claim_recommended")
                 ),
                 movie_claim_min_runners=int(
                     resp.get("movie_claim_min_runners", 0) or 0
@@ -412,7 +416,7 @@ class RunnerRegistryClient:
         resp = self._do_request("POST", "/unregister", {"holder_id": holder_id})
         try:
             return UnregisterResult(
-                unregistered=bool(resp["unregistered"]),
+                unregistered=_strict_bool(resp.get("unregistered")),
                 server_time_ms=_extract_server_time_ms(resp),
             )
         except (KeyError, TypeError, ValueError) as e:

@@ -761,7 +761,8 @@ jobs:
                     --run-id "${{ github.run_id }}"
                     --attempt "${{ github.run_attempt }}"
                     --run-started-at "$RUN_STARTED_AT"
-                    --scope all)
+                    --scope all
+                    --apply)
           # If we have a known session_id from the spider, target it
           # explicitly — that's faster and avoids the time-window race.
           if [ -n "$SPIDER_SESSION_ID" ]; then
