@@ -32,6 +32,7 @@ from packages.python.javdb_platform.login_state_client import (
     LoginStateUnavailable,
 )
 from packages.python.javdb_spider.fetch.session import (
+    _publish_login_state_to_do,
     attempt_login_refresh,
     verify_login_via_fixed_pages,
 )
@@ -564,6 +565,7 @@ class LoginCoordinator:
             explicit_proxies=proxy_for_login,
             explicit_proxy_name=proxy_name,
             spider_uses_proxy=True,
+            publish_to_do=False,
         )
 
     def _login_and_verify(self, worker) -> tuple[bool, str | None]:
@@ -592,6 +594,7 @@ class LoginCoordinator:
         worker._handler.config.javdb_session_cookie = new_cookie
 
         if not LOGIN_VERIFICATION_URLS:
+            _publish_login_state_to_do(worker.proxy_name, new_cookie)
             return True, new_cookie
 
         verified = verify_login_via_fixed_pages(
@@ -599,6 +602,7 @@ class LoginCoordinator:
             urls=LOGIN_VERIFICATION_URLS,
         )
         if verified:
+            _publish_login_state_to_do(worker.proxy_name, new_cookie)
             return True, new_cookie
 
         logger.warning(
@@ -607,13 +611,10 @@ class LoginCoordinator:
             worker.proxy_name,
         )
         worker._handler.config.javdb_session_cookie = ''
-        # ``attempt_login_refresh`` publishes the freshly-minted cookie on the
-        # global state (see fetch/session.py).  A verification failure means
-        # that cookie is untrusted, so clear it from the globals too —
-        # otherwise downstream code (e.g. fetch_engine cookie seeding) would
-        # hand the rejected cookie to other workers.  Use ``None`` (not an
-        # empty string) to match the ``Optional[str]`` declaration in
-        # ``state.py`` and the other clears in this module.
+        # This coordinator publishes only after verification succeeds, but the
+        # cookie still lives in local globals until we discard it here. Use
+        # ``None`` (not an empty string) to match the ``Optional[str]``
+        # declaration in ``state.py`` and the other clears in this module.
         state.refreshed_session_cookie = None
         state.logged_in_proxy_name = None
         return False, None
