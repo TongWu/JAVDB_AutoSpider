@@ -2804,8 +2804,9 @@ def _rollback_history(
             counts[audit_table] = len(audit_rows)
             if dry_run or not audit_rows:
                 continue
-            drift_before = counts['drift_skipped']
+            applied_ids: List[int] = []
             for row in audit_rows:
+                audit_id = int(row['Id'])
                 action = row['Action']
                 target_id = row['TargetId']
                 old_json = row['OldRowJson']
@@ -2821,6 +2822,7 @@ def _rollback_history(
                         )
                         if (cur.rowcount or 0) > 0:
                             counts[f'{main_table}.deleted'] += 1
+                            applied_ids.append(audit_id)
                         else:
                             counts['drift_skipped'] += 1
                             logger.warning(
@@ -2844,6 +2846,7 @@ def _rollback_history(
                         )
                         if (cur.rowcount or 0) > 0:
                             counts[f'{main_table}.restored'] += 1
+                            applied_ids.append(audit_id)
                         else:
                             # Concurrent run touched the row after us; can't
                             # safely overwrite their state — log drift.
@@ -2869,6 +2872,7 @@ def _rollback_history(
                                 params,
                             )
                             counts[f'{main_table}.reinserted'] += 1
+                            applied_ids.append(audit_id)
                         except sqlite3.IntegrityError as e:
                             # E.g. UNIQUE conflict — concurrent run reinserted
                             # something with the same key. Skip + drift log.
@@ -2884,16 +2888,21 @@ def _rollback_history(
                         main_table, action, target_id, e,
                     )
 
-            if counts['drift_skipped'] == drift_before:
-                # Tidy up the audit rows we just consumed.
-                conn.execute(
-                    f"DELETE FROM {audit_table} WHERE SessionId=?", (session_id,),
-                )
-            else:
+            if applied_ids:
+                # Tidy only the audit rows that replayed successfully. Any
+                # drifted tail remains for manual recovery.
+                for i in range(0, len(applied_ids), 900):
+                    chunk = applied_ids[i:i + 900]
+                    placeholders = ', '.join('?' for _ in chunk)
+                    conn.execute(
+                        f"DELETE FROM {audit_table} WHERE Id IN ({placeholders})",
+                        tuple(chunk),
+                    )
+            if len(applied_ids) != len(audit_rows):
                 logger.warning(
-                    "Keeping %s rows for SessionId=%s because rollback "
-                    "encountered drift or row-level errors",
-                    audit_table, session_id,
+                    "Kept %s unapplied %s row(s) for SessionId=%s because "
+                    "rollback encountered drift or row-level errors",
+                    len(audit_rows) - len(applied_ids), audit_table, session_id,
                 )
     return counts
 
