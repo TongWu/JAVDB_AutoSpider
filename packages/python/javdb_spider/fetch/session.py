@@ -19,8 +19,10 @@ from packages.python.javdb_spider.runtime.config import (
 
 logger = get_logger(__name__)
 
+DIRECT_LOGIN_PROXY_NAME = "direct"
 
-def _publish_login_state_to_do(proxy_name: str, cookie: str) -> None:
+
+def _publish_login_state_to_do(proxy_name: Optional[str], cookie: str) -> None:
     """Best-effort publish of a freshly-obtained cookie to the GlobalLoginState DO.
 
     Called after every successful :func:`attempt_login_refresh`; silently
@@ -42,12 +44,13 @@ def _publish_login_state_to_do(proxy_name: str, cookie: str) -> None:
     optimistic-lock token.
     """
     client = state.global_login_state_client
-    if client is None or not proxy_name or not cookie:
+    if client is None or not cookie:
         return
+    publish_proxy_name = proxy_name or DIRECT_LOGIN_PROXY_NAME
     try:
         result = client.publish(
             holder_id=state.runtime_holder_id,
-            proxy_name=proxy_name,
+            proxy_name=publish_proxy_name,
             cookie=cookie,
         )
     except LoginStateUnavailable as exc:
@@ -55,7 +58,7 @@ def _publish_login_state_to_do(proxy_name: str, cookie: str) -> None:
             "Failed to publish login state to DO (proxy=%s): %s — "
             "this runner still has the cookie locally; other runners may "
             "re-login independently",
-            proxy_name, exc,
+            publish_proxy_name, exc,
         )
         return
     except Exception as exc:  # noqa: BLE001
@@ -63,14 +66,14 @@ def _publish_login_state_to_do(proxy_name: str, cookie: str) -> None:
             "Unexpected error publishing login state to DO (proxy=%s): %s — "
             "this runner still has the cookie locally; other runners may "
             "re-login independently",
-            proxy_name, exc,
+            publish_proxy_name, exc,
             exc_info=True,
         )
         return
     state.current_login_state_version = result.version
     logger.info(
         "Published login state to DO: proxy=%s, version=%d",
-        proxy_name, result.version,
+        publish_proxy_name, result.version,
     )
 
 
@@ -122,7 +125,8 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
     When ``spider_uses_proxy`` is ``False`` (i.e. spider is running with
     ``--no-proxy``), implicit proxy resolution (``LOGIN_PROXY_NAME`` and
     ``global_proxy_pool``) is skipped and login runs via direct connection,
-    matching the spider's own network path.
+    matching the spider's own network path. The published proxy label is
+    the stable ``direct`` sentinel.
 
     Args:
         explicit_proxies: If provided, use these proxies for login instead of
@@ -152,6 +156,8 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
 
     login_proxies = explicit_proxies
     used_proxy_name = explicit_proxy_name
+    if not spider_uses_proxy and not used_proxy_name:
+        used_proxy_name = DIRECT_LOGIN_PROXY_NAME
 
     if login_proxies is None and spider_uses_proxy:
         named_proxies, named_nm = resolve_login_proxy_endpoints()

@@ -1380,6 +1380,52 @@ class TestRequestCompleteCallback:
         assert events == []
 
     @patch.object(requests.Session, 'get')
+    def test_fetch_direct_does_not_report_turnstile_as_success(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '<html>Security Verification turnstile</html>'
+        mock_response.content = mock_response.text.encode()
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        events = []
+        handler = RequestHandler(
+            config=RequestConfig(use_curl_cffi=False),
+            on_request_complete=lambda *args: events.append(args),
+        )
+        html, success, is_turnstile = handler._fetch_direct(
+            'http://javdb.com/v/abc', None, 'Test',
+            proxy_name='proxy-Y',
+        )
+
+        assert html == mock_response.text
+        assert success is False
+        assert is_turnstile is True
+        assert events == []
+
+    @patch.object(requests.Session, 'get')
+    def test_fetch_direct_does_not_report_ban_page_as_success(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '<html>banned your access</html>'
+        mock_response.content = mock_response.text.encode()
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        events = []
+        handler = RequestHandler(
+            config=RequestConfig(use_curl_cffi=False),
+            on_request_complete=lambda *args: events.append(args),
+        )
+
+        with pytest.raises(ProxyBannedError):
+            handler._fetch_direct(
+                'http://javdb.com/v/abc', None, 'Test',
+                proxy_name='proxy-Y',
+            )
+        assert events == []
+
+    @patch.object(requests.Session, 'get')
     def test_negative_latency_is_clamped_to_zero_at_callback(self, mock_get):
         """Defence-in-depth — clock skew (monotonic going backwards is
         impossible but the callback still validates) must produce a

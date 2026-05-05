@@ -11,8 +11,8 @@ Used in two contexts:
    ``--session-id <id>`` to target a specific session, optionally
    combined with ``--scope`` to restrict the cleanup to one logical DB.
 
-The default mode is ``--dry-run`` so an operator can inspect what would
-be deleted before flipping it off and committing.
+The default mode is dry-run so an operator can inspect what would be
+deleted before passing ``--apply``.
 
 Exit codes
 ----------
@@ -61,8 +61,8 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
             "  python -m apps.cli.rollback \\\n"
             "    --run-id 12345 --attempt 1 --run-started-at 2026-05-04T19:30:00Z\n\n"
             "  # Manual targeted rollback (preferred when you know the id):\n"
-            "  python -m apps.cli.rollback --session-id 42 --dry-run\n"
-            "  python -m apps.cli.rollback --session-id 42  # commit\n\n"
+            "  python -m apps.cli.rollback --session-id 42\n"
+            "  python -m apps.cli.rollback --session-id 42 --apply\n\n"
             "  # Partial scope:\n"
             "  python -m apps.cli.rollback --session-id 42 --scope history\n"
         ),
@@ -99,10 +99,19 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         default="all",
         help="Limit cleanup to one logical DB. Default: all.",
     )
-    parser.add_argument(
+    parser.set_defaults(dry_run=True)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--dry-run",
+        dest="dry_run",
         action="store_true",
-        help="Show what would be deleted but do not modify any DB.",
+        help="Show what would be deleted but do not modify any DB (default).",
+    )
+    mode.add_argument(
+        "--apply",
+        dest="dry_run",
+        action="store_false",
+        help="Actually perform the rollback; omit to run in dry-run mode.",
     )
     parser.add_argument(
         "--force",
@@ -251,6 +260,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             "settles.",
             drift_total,
         )
+        return 4
     return 0
 
 

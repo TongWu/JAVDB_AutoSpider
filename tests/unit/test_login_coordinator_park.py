@@ -817,3 +817,42 @@ class TestP2CLoginCooldown:
         with coord._lock:
             assert coord._cooldown_until_ms == 0
             assert len(coord._pending_login_tasks) == 0
+
+    def test_poller_checks_state_during_active_cooldown(self):
+        """A peer-published cookie should release parked tasks immediately."""
+        worker = _make_worker(0, "P1")
+        coord = LoginCoordinator(all_workers=[worker])
+        client = MagicMock()
+        cooldown_until_ms = int(time.time() * 1000) + 60_000
+        client.acquire_lease.return_value = AcquireLeaseResult(
+            acquired=True, holder_id="runner-test", target_proxy_name="P1",
+            lease_expires_at=cooldown_until_ms + 99_000,
+            server_time_ms=cooldown_until_ms - 1_000,
+            cooldown_until_ms=cooldown_until_ms,
+            recent_attempt_count=6,
+        )
+        client.release_lease.return_value = ReleaseLeaseResult(
+            released=True, server_time_ms=cooldown_until_ms - 1_000,
+        )
+        client.get_state.return_value = LoginStateGetResult(
+            proxy_name="P1", cookie="cookie-NEW", version=5,
+            last_verified_at=99_999, has_active_lease=False, server_time_ms=0,
+        )
+        state_mod.global_login_state_client = client
+        login_queue: queue.Queue = queue.Queue()
+        task = _make_task()
+
+        with patch.object(lc_mod, "_POLL_INTERVAL_SEC", 0.05):
+            with patch.object(coord, "_login_and_verify"):
+                _, _, parked = coord._login_and_verify_with_lease(
+                    worker, task, login_queue,
+                )
+            assert parked is True
+            ok = self._wait_until(lambda: not login_queue.empty(), timeout=2.0)
+            assert ok, "poller did not dispatch after peer publish"
+
+        assert login_queue.get_nowait() is task
+        assert worker._handler.config.javdb_session_cookie == "cookie-NEW"
+        assert state_mod.refreshed_session_cookie == "cookie-NEW"
+        with coord._lock:
+            assert coord._cooldown_until_ms == 0

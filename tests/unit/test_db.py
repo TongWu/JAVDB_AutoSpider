@@ -56,6 +56,13 @@ class TestInitDb:
             ALTER TABLE MovieHistory ADD COLUMN ActorLink TEXT;
             ALTER TABLE MovieHistory ADD COLUMN ActorGender TEXT;
             ALTER TABLE MovieHistory ADD COLUMN SupportingActors TEXT;
+            ALTER TABLE MovieHistory ADD COLUMN SessionId INTEGER;
+            INSERT INTO MovieHistory (
+              VideoCode, Href, ActorName, ActorGender, ActorLink,
+              SupportingActors, SessionId
+            ) VALUES (
+              'ABC-001', '/v/abc-001', 'A', 'F', '/actors/a', 'B', 123
+            );
             """
         )
         conn.commit()
@@ -79,6 +86,17 @@ class TestInitDb:
             i_l = names.index("ActorLink")
             i_s = names.index("SupportingActors")
             assert i_n < i_g < i_l < i_s
+            assert "SessionId" in names
+            indexes = {
+                r[1] for r in c3.execute(
+                    "PRAGMA index_list(MovieHistory)"
+                ).fetchall()
+            }
+            assert "idx_movie_history_session" in indexes
+            row = c3.execute(
+                "SELECT SessionId FROM MovieHistory WHERE VideoCode='ABC-001'"
+            ).fetchone()
+            assert row[0] == 123
         finally:
             c3.close()
 

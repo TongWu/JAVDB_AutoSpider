@@ -457,6 +457,7 @@ class RequestHandler:
         *,
         proxy_name: Optional[str] = None,
         report_health: bool = False,
+        defer_success_health: bool = False,
     ) -> Tuple[Optional[str], Optional[Exception]]:
         """Execute a single HTTP request using standard requests library.
 
@@ -505,7 +506,7 @@ class RequestHandler:
             preview = response.text[:200].replace('\n', ' ').replace('\r', '')
             logger.debug(f"[{context_msg}] Response preview: {preview}...")
             
-            if report_health:
+            if report_health and not defer_success_health:
                 self._record_request_complete(proxy_name, "success", elapsed_ms)
             return response.text, None
         except requests.RequestException as e:
@@ -525,6 +526,7 @@ class RequestHandler:
         *,
         proxy_name: Optional[str] = None,
         report_health: bool = False,
+        defer_success_health: bool = False,
     ) -> Tuple[Optional[str], Optional[Exception]]:
         """
         Execute a single HTTP request using curl_cffi for better TLS fingerprint.
@@ -638,7 +640,7 @@ class RequestHandler:
             preview = response.text[:200].replace('\n', ' ').replace('\r', '')
             logger.debug(f"[{context_msg}] [curl_cffi] Response preview: {preview}...")
             
-            if report_health:
+            if report_health and not defer_success_health:
                 self._record_request_complete(proxy_name, "success", elapsed_ms)
             return response.text, None
         except Exception as e:
@@ -901,13 +903,17 @@ class RequestHandler:
         # this is a target-site request (proxy carries the actual outbound
         # traffic), so opt into the per-proxy health pipeline.
         should_report = bool(proxy_name and proxy_name != "None")
+        success_elapsed_ms = 0
         if self.use_curl_cffi:
+            attempt_started = time.monotonic()
             html_content, error = self._do_request_curl_cffi(
                 url, headers, req_proxies, timeout=30, 
                 context_msg=f"Direct {context_msg}",
                 proxy_name=proxy_name,
                 report_health=should_report,
+                defer_success_health=True,
             )
+            success_elapsed_ms = int((time.monotonic() - attempt_started) * 1000)
             if html_content:
                 logger.debug(f"[Direct] {context_msg} succeeded with curl_cffi")
             elif error:
@@ -921,13 +927,16 @@ class RequestHandler:
         # in the rare double-attempt path; the success/failure ratio still
         # converges correctly because each attempt is its own observation.
         if not html_content:
+            attempt_started = time.monotonic()
             html_content, error = self._do_request(
                 url, headers, req_proxies, timeout=30, 
                 context_msg=f"Direct {context_msg}",
                 session=session,
                 proxy_name=proxy_name,
                 report_health=should_report,
+                defer_success_health=True,
             )
+            success_elapsed_ms = int((time.monotonic() - attempt_started) * 1000)
         
         if html_content:
             # Check for IP ban page before any other inspection
@@ -942,7 +951,12 @@ class RequestHandler:
             if is_turnstile:
                 logger.warning(f"[Direct] {context_msg} returned Turnstile page (size={len(html_content)} bytes)")
                 return html_content, False, True
-            return html_content, error is None, False
+            success = error is None
+            if success and should_report:
+                self._record_request_complete(
+                    proxy_name, "success", success_elapsed_ms,
+                )
+            return html_content, success, False
         return None, False, False
     
     def _process_html(self, url: str, html_content: Optional[str], req_proxies: Optional[Dict],

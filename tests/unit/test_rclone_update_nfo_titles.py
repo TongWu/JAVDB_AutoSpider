@@ -21,32 +21,32 @@ def test_run_rclone_uses_default_timeout(monkeypatch):
 
 def test_select_year_dirs_excludes_temp_and_sorts_unknown_after_years():
     years, missing = updater.select_year_dirs(
-        ["temp", "2026", "unknown", "2018", "2017", "Temp"]
+        ["temp", "2026", "unknown", "2018", "2017", "未知", "Temp"]
     )
 
-    assert years == ["2017", "2018", "2026", "unknown"]
+    assert years == ["2017", "2018", "2026", "未知"]
     assert missing == set()
 
 
 def test_select_year_dirs_start_from_keeps_unknown_dirs_after_matching_years():
     years, missing = updater.select_year_dirs(
-        ["2017", "2018", "2020", "2026", "manual", "temp"],
+        ["2017", "2018", "2020", "2026", "manual", "未知", "temp"],
         start_from=2018,
     )
 
-    assert years == ["2018", "2020", "2026", "manual"]
+    assert years == ["2018", "2020", "2026", "未知"]
     assert missing == set()
 
 
 def test_select_year_dirs_requested_years_intersect_start_from_and_exclude_temp():
     years, missing = updater.select_year_dirs(
-        ["2017", "2018", "2026", "manual", "temp"],
-        requested_years=["2017", "2018", "manual", "temp", "missing"],
+        ["2017", "2018", "2026", "manual", "未知", "temp"],
+        requested_years=["2017", "2018", "manual", "未知", "temp", "missing"],
         start_from=2018,
     )
 
-    assert years == ["2018", "manual"]
-    assert missing == {"temp", "missing"}
+    assert years == ["2018", "未知"]
+    assert missing == {"manual", "temp", "missing"}
 
 
 def test_validate_year_requires_exactly_four_digits():

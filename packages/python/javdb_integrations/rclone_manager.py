@@ -45,6 +45,7 @@ import sys
 import csv
 import gc
 import argparse
+import tempfile
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
@@ -163,7 +164,7 @@ def _folder_to_row(folder: FolderInfo, remote_name: str, root_folder: str, scan_
 def _process_year(
     remote_name: str, root_folder: str, year: str, scan_time: str,
     fallback_workers: int = 8,
-) -> List[dict]:
+) -> Optional[List[dict]]:
     """Scan a year tree — try year-level first, fall back to actor-level."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -181,12 +182,13 @@ def _process_year(
         actors = get_actor_folders(remote_name, root_folder, year)
     except Exception as e:
         logger.error(f"Error listing actors for year {year}: {e}")
-        return []
+        return None
 
     if not actors:
         return []
 
     all_rows: List[dict] = []
+    actor_failed = False
     with ThreadPoolExecutor(max_workers=fallback_workers) as executor:
         futures = {
             executor.submit(get_movie_folders_with_stats, remote_name, root_folder, year, actor): actor
@@ -198,7 +200,10 @@ def _process_year(
                 folders = future.result()
                 all_rows.extend(_folder_to_row(f, remote_name, root_folder, scan_time) for f in folders)
             except Exception as exc:
-                logger.debug(f"Error scanning {year}/{actor}: {exc}")
+                actor_failed = True
+                logger.error(f"Error scanning {year}/{actor}: {exc}")
+    if actor_failed:
+        return None
     return all_rows
 
 
@@ -244,6 +249,10 @@ def scan_inventory(
             completed += 1
             try:
                 rows = future.result()
+                if rows is None:
+                    error_count += 1
+                    logger.error(f"Error processing year {year}: fallback scan incomplete")
+                    continue
                 if rows:
                     if row_callback:
                         row_callback(rows)
@@ -1371,8 +1380,20 @@ def main() -> int:
 
         _csv_file = None
         _csv_writer = None
+        _csv_tmp_path = None
         if _use_csv():
-            _csv_file = open(output_path, 'w', newline='', encoding='utf-8')
+            output_dir = os.path.dirname(output_path) or '.'
+            os.makedirs(output_dir, exist_ok=True)
+            _csv_file = tempfile.NamedTemporaryFile(
+                'w',
+                newline='',
+                encoding='utf-8',
+                dir=output_dir,
+                prefix=f"{os.path.basename(output_path)}.",
+                suffix=".tmp",
+                delete=False,
+            )
+            _csv_tmp_path = _csv_file.name
             _csv_writer = csv.DictWriter(_csv_file, fieldnames=INVENTORY_FIELDNAMES)
             _csv_writer.writeheader()
 
@@ -1421,8 +1442,15 @@ def main() -> int:
                     logger.warning(
                         f"Failed to drop staging table after scan error: {e}"
                     )
+            if scan_failed and _csv_file is not None:
+                _csv_file.close()
+                if _csv_tmp_path is not None:
+                    try:
+                        os.remove(_csv_tmp_path)
+                    except FileNotFoundError:
+                        pass
 
-        if _csv_file is not None:
+        if _csv_file is not None and not _csv_file.closed:
             _csv_file.close()
 
         if scan_failed:
@@ -1444,7 +1472,15 @@ def main() -> int:
                     db_drop_rclone_staging(_staging_session_id)
                 except Exception:
                     pass
+                if _csv_tmp_path is not None:
+                    try:
+                        os.remove(_csv_tmp_path)
+                    except FileNotFoundError:
+                        pass
                 raise
+
+        if _csv_tmp_path is not None:
+            os.replace(_csv_tmp_path, output_path)
 
         if _sqlite_ok:
             csv_export_path = os.path.join(REPORTS_DIR, RCLONE_INVENTORY_CSV)

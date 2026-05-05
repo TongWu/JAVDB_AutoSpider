@@ -83,10 +83,11 @@ class TestSpiderUsesProxyFlag:
                 'packages.python.javdb_integrations.login.update_config_file',
                 return_value=False,
             ):
-                success, _cookie, _proxy_name = session_mod.attempt_login_refresh(
+                success, _cookie, proxy_name = session_mod.attempt_login_refresh(
                     spider_uses_proxy=False,
                 )
             assert success is True
+            assert proxy_name == "direct"
             mock_login.assert_called_once()
             _, kwargs = mock_login.call_args
             assert kwargs.get('proxies') is None, \
@@ -518,11 +519,10 @@ class TestCrossRuntimeDoIntegration:
             for p in reversed(patches):
                 p.stop()
 
-    def test_publish_skipped_when_used_proxy_name_missing(self):
-        """If we somehow log in without a proxy name (no-proxy mode),
-        ``_publish_login_state_to_do`` short-circuits without touching the
-        client."""
+    def test_no_proxy_publish_uses_direct_sentinel(self):
+        """No-proxy logins still publish with a stable DO proxy label."""
         do_client = MagicMock()
+        do_client.publish.return_value = MagicMock(version=7)
         patches = self._common_patches() + [
             patch.object(state_mod, 'global_login_state_client', do_client),
             patch.object(state_mod, 'runtime_holder_id', 'runner-test'),
@@ -537,11 +537,16 @@ class TestCrossRuntimeDoIntegration:
                 'packages.python.javdb_integrations.login.update_config_file',
                 return_value=False,
             ):
-                success, _cookie, _proxy_name = session_mod.attempt_login_refresh(
-                    spider_uses_proxy=False,  # no proxy → used_proxy_name stays None
+                success, _cookie, proxy_name = session_mod.attempt_login_refresh(
+                    spider_uses_proxy=False,
                 )
             assert success is True
-            do_client.publish.assert_not_called()
+            assert proxy_name == "direct"
+            do_client.publish.assert_called_once_with(
+                holder_id='runner-test',
+                proxy_name='direct',
+                cookie='cookie-XYZ',
+            )
         finally:
             for p in reversed(patches):
                 p.stop()
