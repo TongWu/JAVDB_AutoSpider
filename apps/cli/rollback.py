@@ -71,8 +71,8 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--session-id",
         type=int,
         default=None,
-        help="ReportSessions.Id to roll back. Highest priority — overrides "
-             "--run-id / --run-started-at lookup when set.",
+        help="ReportSessions.Id to roll back. When --run-started-at is also "
+             "set, this id is unioned with the in-progress session lookup.",
     )
     parser.add_argument(
         "--run-id",
@@ -153,11 +153,15 @@ def _normalize_run_started_at(raw: Optional[str]) -> Optional[str]:
 
 
 def _resolve_target_sessions(args: argparse.Namespace) -> List[int]:
+    targets = set()
     if args.session_id is not None:
-        return [int(args.session_id)]
+        targets.add(int(args.session_id))
+
     since = _normalize_run_started_at(args.run_started_at)
     sessions = db_find_in_progress_sessions(since=since)
-    return sessions
+    for sid in sessions:
+        targets.add(int(sid))
+    return sorted(targets)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
