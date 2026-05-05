@@ -11,6 +11,11 @@ name: JavDB Test Ingestion Pipeline (Mock)
 # - No git commit / push (results only exist as encrypted artifacts)
 # - Minimal secrets/variables required
 #
+# LFS: checkout uses `ssh-key + lfs: true` (matching Daily/AdHoc/Migration etc.)
+# so that `reports/{history,reports,operations}.db` are pulled as real SQLite
+# files instead of LFS pointer text.  Without this, init_db()/db_create_report_session
+# in run_service.py aborts the run under STORAGE_MODE in {db,duo}.
+#
 # Proxy behaviour matches Daily/AdHoc: Spider uses the proxy pool by default on
 # push/schedule, and honours the `proxy_spider` toggle on workflow_dispatch.
 
@@ -79,6 +84,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          lfs: true
 
       - name: Get current branch
         run: |
