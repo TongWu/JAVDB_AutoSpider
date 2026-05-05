@@ -1404,7 +1404,7 @@ class TestRequestCompleteCallback:
         assert events == []
 
     @patch.object(requests.Session, 'get')
-    def test_fetch_direct_does_not_report_ban_page_as_success(self, mock_get):
+    def test_fetch_direct_reports_ban_page_as_failure(self, mock_get):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = '<html>banned your access</html>'
@@ -1423,7 +1423,9 @@ class TestRequestCompleteCallback:
                 'http://javdb.com/v/abc', None, 'Test',
                 proxy_name='proxy-Y',
             )
-        assert events == []
+        assert len(events) == 1
+        assert events[0][0] == 'proxy-Y'
+        assert events[0][1] == 'failure'
 
     @patch.object(requests.Session, 'get')
     def test_negative_latency_is_clamped_to_zero_at_callback(self, mock_get):

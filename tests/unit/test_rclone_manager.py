@@ -183,6 +183,66 @@ def test_scan_csv_temp_removed_on_scan_failure(monkeypatch, tmp_path):
     assert list(tmp_path.glob("inventory.csv.*.tmp")) == []
 
 
+def test_scan_sqlite_uses_staging_when_no_active_session(
+    monkeypatch, tmp_path, storage_mode_db
+):
+    import scripts.rclone_manager as rm
+    from utils.infra import db as db_mod
+
+    output = tmp_path / "inventory.csv"
+    seed = {
+        "VideoCode": "OLD-001",
+        "FolderPath": "2026/old/OLD-001",
+        "FolderSize": 1,
+        "FileCount": 1,
+        "DateTimeScanned": "2026-05-04 00:00:00",
+    }
+    incoming = {field: "" for field in INVENTORY_FIELDNAMES}
+    incoming.update({
+        "video_code": "NEW-001",
+        "folder_path": "2026/new/NEW-001",
+        "folder_size": 1,
+        "file_count": 1,
+        "scan_datetime": "2026-05-05 00:00:00",
+    })
+
+    db_mod.set_active_session_id(None)
+    db_mod.db_replace_rclone_inventory([seed])
+
+    def fake_scan(*_args, row_callback=None, **_kwargs):
+        row_callback([incoming])
+        return 1, 1
+
+    monkeypatch.setattr(rm, "RCLONE_CONFIG_BASE64", "")
+    monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
+    monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
+    monkeypatch.setattr(rm, "scan_inventory", fake_scan)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "rclone_manager",
+            "--scan",
+            "--root-path",
+            "gdrive:/root",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert rm.main() == 1
+    with db_mod.get_db() as conn:
+        rows = conn.execute(
+            "SELECT VideoCode FROM RcloneInventory ORDER BY VideoCode"
+        ).fetchall()
+        staging_tables = conn.execute(
+            "SELECT name FROM sqlite_master "
+            "WHERE name LIKE 'RcloneInventoryStaging_%'"
+        ).fetchall()
+    assert [row["VideoCode"] for row in rows] == ["OLD-001"]
+    assert staging_tables == []
+
+
 # ============================================================================
 # Test parse_root_path
 # ============================================================================
