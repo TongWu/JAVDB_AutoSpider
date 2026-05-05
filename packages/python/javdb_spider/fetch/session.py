@@ -110,7 +110,7 @@ def resolve_login_proxy_endpoints():
 
 
 def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
-                          *, spider_uses_proxy=True):
+                          *, spider_uses_proxy=True, publish_to_do=True):
     """Attempt to refresh session cookie by logging in via login.py.
 
     Can be called multiple times within a session, subject to per-proxy
@@ -135,6 +135,9 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
         explicit_proxy_name: Human-readable name of the proxy being used.
         spider_uses_proxy: Whether the calling spider is using proxies.
             When ``False``, login is performed via direct connection.
+        publish_to_do: Whether to publish the cookie immediately. Parallel
+            login coordination disables this and publishes only after fixed-page
+            verification succeeds.
 
     Returns:
         tuple: (success: bool, new_cookie: str or None, proxy_name: str or None)
@@ -240,7 +243,8 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
                 if state.global_request_handler:
                     state.global_request_handler.config.javdb_session_cookie = new_cookie
                     logger.info("✓ Updated request handler with new session cookie")
-                _publish_login_state_to_do(used_proxy_name, new_cookie)
+                if publish_to_do:
+                    _publish_login_state_to_do(used_proxy_name, new_cookie)
                 logger.info("=" * 60)
                 return True, new_cookie, used_proxy_name
             else:
@@ -249,7 +253,8 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
                 if state.global_request_handler:
                     state.global_request_handler.config.javdb_session_cookie = session_cookie
                     logger.info("✓ Updated request handler with new session cookie")
-                _publish_login_state_to_do(used_proxy_name, session_cookie)
+                if publish_to_do:
+                    _publish_login_state_to_do(used_proxy_name, session_cookie)
                 logger.info("=" * 60)
                 return True, session_cookie, used_proxy_name
         else:
