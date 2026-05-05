@@ -941,6 +941,10 @@ class RequestHandler:
         if html_content:
             # Check for IP ban page before any other inspection
             if self.is_ban_page(html_content):
+                if should_report and error is None:
+                    self._record_request_complete(
+                        proxy_name, "failure", success_elapsed_ms,
+                    )
                 raise ProxyBannedError(
                     proxy_name=proxy_name or 'unknown',
                     reason='ban page detected',
