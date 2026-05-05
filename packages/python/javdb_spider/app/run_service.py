@@ -307,9 +307,15 @@ def _main():
 
     # Create a report session in DB-backed storage (when enabled)
     _session_id = None
+    db_storage_enabled = False
     try:
         from packages.python.javdb_platform.config_helper import use_db_storage
-        if use_db_storage():
+        db_storage_enabled = use_db_storage()
+    except Exception as e:
+        logger.warning(f"Failed to evaluate use_db_storage: {e}")
+
+    if db_storage_enabled:
+        try:
             from packages.python.javdb_platform.db import init_db, db_create_report_session
             from packages.python.javdb_core.url_helper import detect_url_type, extract_url_identifier
             init_db(force=True)
@@ -346,8 +352,14 @@ def _main():
                     f"Could not propagate session_id to db audit context: {_e}"
                 )
             logger.info(f"Created report session: id={_session_id}")
-    except Exception as e:
-        logger.warning(f"Failed to create report session: {e}")
+        except Exception as e:
+            logger.error(
+                "Aborting after init_db/db_create_report_session failure under "
+                "use_db_storage=True; downstream DB writes require "
+                "set_active_session/_set_active_session_id: %s",
+                e,
+            )
+            sys.exit(1)
 
     # ======================================================================
     # Process Phase 1 entries
