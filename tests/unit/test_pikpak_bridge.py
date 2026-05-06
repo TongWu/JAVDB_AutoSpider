@@ -327,6 +327,144 @@ class TestAdhocQBMergeLogic:
         assert torrent_qb_map.get('unknown', default_qb) == 'primary'
 
 
+class TestPikpakTargetPath:
+    """Tests for ``_build_pikpak_target_path`` and segment normalization."""
+
+    def test_default_root_when_none(self):
+        from packages.python.javdb_integrations.pikpak_bridge import (
+            _build_pikpak_target_path,
+            PIKPAK_ROOT_FOLDER_DEFAULT,
+        )
+        assert _build_pikpak_target_path(None, 'Ad Hoc') == f"{PIKPAK_ROOT_FOLDER_DEFAULT}/Ad Hoc"
+
+    def test_explicit_root_with_category(self):
+        from packages.python.javdb_integrations.pikpak_bridge import (
+            _build_pikpak_target_path,
+        )
+        assert _build_pikpak_target_path('/Javdb_AutoSpider', 'Ad Hoc') == '/Javdb_AutoSpider/Ad Hoc'
+
+    def test_root_without_leading_slash_is_normalized(self):
+        from packages.python.javdb_integrations.pikpak_bridge import (
+            _build_pikpak_target_path,
+        )
+        assert _build_pikpak_target_path('Javdb_AutoSpider', 'JavDB') == '/Javdb_AutoSpider/JavDB'
+
+    def test_root_with_trailing_slash_is_stripped(self):
+        from packages.python.javdb_integrations.pikpak_bridge import (
+            _build_pikpak_target_path,
+        )
+        assert _build_pikpak_target_path('/Javdb_AutoSpider/', 'Ad Hoc') == '/Javdb_AutoSpider/Ad Hoc'
+
+    def test_empty_category_falls_back_to_root(self):
+        from packages.python.javdb_integrations.pikpak_bridge import (
+            _build_pikpak_target_path,
+        )
+        assert _build_pikpak_target_path('/Javdb_AutoSpider', '') == '/Javdb_AutoSpider'
+        assert _build_pikpak_target_path('/Javdb_AutoSpider', None) == '/Javdb_AutoSpider'
+
+    def test_slash_in_category_is_collapsed(self):
+        """A category like ``foo/bar`` must not become two folders."""
+        from packages.python.javdb_integrations.pikpak_bridge import (
+            _build_pikpak_target_path,
+        )
+        assert _build_pikpak_target_path('/Javdb_AutoSpider', 'foo/bar') == '/Javdb_AutoSpider/foo_bar'
+
+
+class TestProcessPikpakBatchRouting:
+    """``process_pikpak_batch`` routes magnets via path_to_id + parent_id."""
+
+    def test_batch_uploads_each_magnet_to_its_category_folder(self):
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+        from packages.python.javdb_integrations.pikpak_bridge import (
+            process_pikpak_batch,
+        )
+
+        magnets = [
+            'magnet:?xt=urn:btih:aaa',
+            'magnet:?xt=urn:btih:bbb',
+            'magnet:?xt=urn:btih:ccc',
+        ]
+        magnet_to_category = {
+            magnets[0]: 'JavDB',
+            magnets[1]: 'Ad Hoc',
+            magnets[2]: 'JavDB',  # repeat: cache should avoid second path_to_id call
+        }
+
+        fake_client = AsyncMock()
+        fake_client.login = AsyncMock(return_value=None)
+        fake_client.refresh_access_token = AsyncMock(return_value=None)
+
+        async def fake_path_to_id(path, create=False):
+            mapping = {
+                '/Javdb_AutoSpider/JavDB': [{'id': 'id-javdb', 'name': 'JavDB'}],
+                '/Javdb_AutoSpider/Ad Hoc': [{'id': 'id-adhoc', 'name': 'Ad Hoc'}],
+            }
+            return mapping[path]
+
+        fake_client.path_to_id = AsyncMock(side_effect=fake_path_to_id)
+        fake_client.offline_download = AsyncMock(return_value={'task': {'id': 't1'}})
+
+        with patch(
+            'packages.python.javdb_integrations.pikpak_bridge.PikPakApi',
+            return_value=fake_client,
+        ):
+            success, failed = asyncio.run(
+                process_pikpak_batch(
+                    magnets,
+                    'user@example.com',
+                    'pw',
+                    delay_between_requests=0,
+                    root_folder='/Javdb_AutoSpider',
+                    magnet_to_category=magnet_to_category,
+                )
+            )
+
+        assert success == magnets
+        assert failed == []
+        # path_to_id is cached per path → 2 unique paths, 2 calls.
+        assert fake_client.path_to_id.await_count == 2
+        # offline_download must receive the parent_id for the matching folder.
+        calls = fake_client.offline_download.await_args_list
+        parent_ids = [c.kwargs.get('parent_id') for c in calls]
+        assert parent_ids == ['id-javdb', 'id-adhoc', 'id-javdb']
+
+    def test_batch_falls_back_to_root_when_path_lookup_fails(self):
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+        from packages.python.javdb_integrations.pikpak_bridge import (
+            process_pikpak_batch,
+        )
+
+        magnets = ['magnet:?xt=urn:btih:zzz']
+        fake_client = AsyncMock()
+        fake_client.login = AsyncMock(return_value=None)
+        fake_client.refresh_access_token = AsyncMock(return_value=None)
+        fake_client.path_to_id = AsyncMock(side_effect=Exception('quota exceeded'))
+        fake_client.offline_download = AsyncMock(return_value={'task': {'id': 't1'}})
+
+        with patch(
+            'packages.python.javdb_integrations.pikpak_bridge.PikPakApi',
+            return_value=fake_client,
+        ):
+            success, failed = asyncio.run(
+                process_pikpak_batch(
+                    magnets,
+                    'user@example.com',
+                    'pw',
+                    delay_between_requests=0,
+                    root_folder='/Javdb_AutoSpider',
+                    magnet_to_category={magnets[0]: 'JavDB'},
+                )
+            )
+
+        assert success == magnets
+        assert failed == []
+        # Folder resolution failed → fall back to account root (parent_id=None).
+        fake_client.offline_download.assert_awaited_once()
+        assert fake_client.offline_download.await_args.kwargs.get('parent_id') is None
+
+
 class TestRemoveCompletedTorrentsKeepFiles:
     """remove_completed_torrents_keep_files (per-qB cleanup before PikPak)."""
 
