@@ -39,6 +39,12 @@ GIT_BRANCH = cfg('GIT_BRANCH', 'main')
 
 PIKPAK_REQUEST_DELAY = cfg('PIKPAK_REQUEST_DELAY', 3)
 
+# PikPak root folder. All torrents are uploaded under this folder, with one
+# sub-folder per qBittorrent category (e.g. ``/Javdb_AutoSpider/Ad Hoc``).
+# Override via GitHub variable ``PIKPAK_ROOT_FOLDER`` or CLI ``--root-folder``.
+PIKPAK_ROOT_FOLDER_DEFAULT = '/Javdb_AutoSpider'
+PIKPAK_ROOT_FOLDER = cfg('PIKPAK_ROOT_FOLDER', PIKPAK_ROOT_FOLDER_DEFAULT)
+
 PROXY_HTTP = cfg('PROXY_HTTP', None)
 PROXY_HTTPS = cfg('PROXY_HTTPS', None)
 PROXY_MODULES = cfg('PROXY_MODULES', ['spider'])
@@ -217,59 +223,169 @@ def remove_completed_torrents_keep_files(
 # --------------------------
 # PikPak API (using pikpakapi)
 # --------------------------
-async def process_pikpak_batch(magnets, email, password, delay_between_requests=3):
+def _normalize_pikpak_path_segment(name):
+    """Sanitize a single PikPak path segment.
+
+    PikPak ``path_to_id`` splits on ``/``, so embedded slashes in a category
+    name would be interpreted as additional folder levels. Strip whitespace
+    and collapse any path separators to ``_`` so the resulting folder name
+    matches the qBittorrent category 1:1.
     """
-    Process PikPak offline downloads in batch with delay between requests to avoid rate limiting
-    
+    if name is None:
+        return ''
+    seg = str(name).strip()
+    if not seg:
+        return ''
+    return seg.replace('/', '_').replace('\\', '_')
+
+
+def _build_pikpak_target_path(root_folder, category):
+    """Compose ``{root_folder}/{category}`` with sane defaults.
+
+    - Empty/missing root_folder falls back to ``PIKPAK_ROOT_FOLDER_DEFAULT``.
+    - Empty/missing category lands directly under the root folder.
+    - Leading slashes are normalized so callers can pass either ``foo`` or
+      ``/foo`` for the root.
+    """
+    root = (root_folder or PIKPAK_ROOT_FOLDER_DEFAULT).strip() or PIKPAK_ROOT_FOLDER_DEFAULT
+    if not root.startswith('/'):
+        root = '/' + root
+    root = root.rstrip('/') or '/'
+
+    seg = _normalize_pikpak_path_segment(category)
+    if not seg:
+        return root
+    if root == '/':
+        return f"/{seg}"
+    return f"{root}/{seg}"
+
+
+async def _resolve_pikpak_parent_id(client, target_path, cache):
+    """Resolve the PikPak folder id for ``target_path``, creating folders
+    as needed. Results are memoised in ``cache`` keyed by the full path so a
+    batch run only pays the lookup/create cost once per category.
+
+    Returns ``None`` (root) when resolution fails so the caller can still
+    upload the magnet — the caller logs the failure.
+    """
+    if not target_path or target_path == '/':
+        return None
+    if target_path in cache:
+        return cache[target_path]
+    try:
+        path_ids = await client.path_to_id(target_path, create=True)
+        if not path_ids:
+            logger.warning(
+                f"PikPak path_to_id returned empty result for '{target_path}', "
+                f"falling back to account root"
+            )
+            cache[target_path] = None
+            return None
+        parent_id = path_ids[-1].get('id')
+        cache[target_path] = parent_id
+        logger.info(f"Resolved PikPak folder '{target_path}' -> id={parent_id}")
+        return parent_id
+    except Exception as e:
+        logger.error(
+            f"Failed to resolve/create PikPak folder '{target_path}': {e}. "
+            f"Falling back to account root."
+        )
+        cache[target_path] = None
+        return None
+
+
+async def process_pikpak_batch(
+    magnets,
+    email,
+    password,
+    delay_between_requests=3,
+    root_folder=None,
+    magnet_to_category=None,
+):
+    """
+    Process PikPak offline downloads in batch with delay between requests to avoid rate limiting.
+
     Args:
         magnets: List of magnet URIs to download
         email: PikPak email
         password: PikPak password
         delay_between_requests: Delay in seconds between each download request (default: 3)
+        root_folder: PikPak root folder under which all torrents are stored.
+            Defaults to ``PIKPAK_ROOT_FOLDER`` from config (``/Javdb_AutoSpider``).
+        magnet_to_category: Optional mapping ``magnet -> category`` so each
+            torrent is placed under ``{root_folder}/{category}``. Magnets
+            missing from the map (or with empty category) land directly under
+            ``root_folder``.
     """
     if not magnets:
         return [], []
-        
+
     client = PikPakApi(username=email, password=password)
     await client.login()
     await client.refresh_access_token()
 
+    effective_root = root_folder or PIKPAK_ROOT_FOLDER or PIKPAK_ROOT_FOLDER_DEFAULT
+    magnet_to_category = magnet_to_category or {}
+    folder_id_cache: dict = {}
+
     success_magnets = []
     failed_magnets = []
-    
-    logger.info(f"Starting batch upload of {len(magnets)} torrents to PikPak as {mask_email(email)}...")
-    
+
+    logger.info(
+        f"Starting batch upload of {len(magnets)} torrents to PikPak "
+        f"as {mask_email(email)} (root='{effective_root}')..."
+    )
+
     for i, magnet in enumerate(magnets):
         try:
-            logger.info(f"Processing magnet {i+1}/{len(magnets)}: {magnet[:100]}...")
-            result = await client.offline_download(magnet)
-            
-            logger.info(f"Successfully added magnet to PikPak: {magnet[:100]}...")
+            category = magnet_to_category.get(magnet)
+            target_path = _build_pikpak_target_path(effective_root, category)
+            parent_id = await _resolve_pikpak_parent_id(
+                client, target_path, folder_id_cache
+            )
+
+            logger.info(
+                f"Processing magnet {i+1}/{len(magnets)} -> '{target_path}': {magnet[:100]}..."
+            )
+            await client.offline_download(magnet, parent_id=parent_id)
+
+            logger.info(
+                f"Successfully added magnet to PikPak ('{target_path}'): {magnet[:100]}..."
+            )
             success_magnets.append(magnet)
-            
-            # Add delay between requests (except for the last one)
+
             if i < len(magnets) - 1:
                 logger.debug(f"Waiting {delay_between_requests} seconds before next request...")
                 await asyncio.sleep(delay_between_requests)
-                
+
         except Exception as e:
             logger.error(f"Failed to add magnet: {magnet[:100]}..., Error: {e}")
             failed_magnets.append((magnet, str(e)))
-            
+
             # Still add delay even after failed requests to be respectful
             if i < len(magnets) - 1:
                 logger.debug(f"Waiting {delay_between_requests} seconds before next request...")
                 await asyncio.sleep(delay_between_requests)
-    
+
     logger.info(f"Batch upload completed: {len(success_magnets)} successful, {len(failed_magnets)} failed")
     return success_magnets, failed_magnets
 
 
-async def process_pikpak_single(magnet, email, password):
+async def process_pikpak_single(magnet, email, password, root_folder=None, category=None):
     """
-    Process a single PikPak offline download (for backward compatibility)
+    Process a single PikPak offline download (for backward compatibility).
+
+    Optional ``root_folder`` / ``category`` route the upload into the same
+    ``{root_folder}/{category}`` subfolder used by batch mode.
     """
-    return await process_pikpak_batch([magnet], email, password)
+    magnet_to_category = {magnet: category} if category else None
+    return await process_pikpak_batch(
+        [magnet],
+        email,
+        password,
+        root_folder=root_folder,
+        magnet_to_category=magnet_to_category,
+    )
 
 
 # --------------------------
@@ -320,9 +436,13 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
 # --------------------------
 # Main Logic
 # --------------------------
-def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=False, session_id=None):
+def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=False,
+                  session_id=None, root_folder=None):
     cutoff_date = (datetime.now() - timedelta(days=days)).date()
     logger.info(f"Processing torrents older than {days} days (before {cutoff_date})")
+
+    effective_root = (root_folder or PIKPAK_ROOT_FOLDER or PIKPAK_ROOT_FOLDER_DEFAULT)
+    logger.info(f"PikPak target root folder: '{effective_root}' (categorised by qB torrent category)")
 
     # Tag every D1 write inside this PikPak run with the workflow's session id
     # so a downstream rollback can scope cleanly to just our rows.
@@ -424,7 +544,11 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
     if dry_run:
         logger.info(f"[Dry-Run] Would process {len(old_torrents)} torrents:")
         for torrent in old_torrents:
-            logger.info(f"[Dry-Run] {torrent['name']} (added: {datetime.fromtimestamp(torrent['added_on']).strftime('%Y-%m-%d %H:%M:%S')})")
+            target_path = _build_pikpak_target_path(effective_root, torrent.get('category', ''))
+            logger.info(
+                f"[Dry-Run] {torrent['name']} -> '{target_path}' "
+                f"(added: {datetime.fromtimestamp(torrent['added_on']).strftime('%Y-%m-%d %H:%M:%S')})"
+            )
         
         # Dry-run summary with category breakdown
         category_counts = {}
@@ -460,13 +584,24 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
         # Collect all magnet URIs for batch processing
         magnets_to_upload = [torrent['magnet_uri'] for torrent in old_torrents]
         torrent_by_magnet = {torrent['magnet_uri']: torrent for torrent in old_torrents}
-        
+        magnet_to_category = {
+            torrent['magnet_uri']: torrent.get('category', '') or ''
+            for torrent in old_torrents
+        }
+
         logger.info(f"Starting batch upload of {len(magnets_to_upload)} torrents to PikPak...")
-        
+
         try:
-            # Batch upload all magnets to PikPak
+            # Batch upload all magnets to PikPak, routed by qB category
             success_magnets, failed_magnets = asyncio.run(
-                process_pikpak_batch(magnets_to_upload, PIKPAK_EMAIL, PIKPAK_PASSWORD, delay_between_requests=PIKPAK_REQUEST_DELAY)
+                process_pikpak_batch(
+                    magnets_to_upload,
+                    PIKPAK_EMAIL,
+                    PIKPAK_PASSWORD,
+                    delay_between_requests=PIKPAK_REQUEST_DELAY,
+                    root_folder=effective_root,
+                    magnet_to_category=magnet_to_category,
+                )
             )
             
             # Process successful uploads
@@ -522,7 +657,13 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
             try:
                 # Try to upload to PikPak first (with configurable delay between requests)
                 success_magnets, failed_magnets = asyncio.run(
-                    process_pikpak_single(torrent['magnet_uri'], PIKPAK_EMAIL, PIKPAK_PASSWORD)
+                    process_pikpak_single(
+                        torrent['magnet_uri'],
+                        PIKPAK_EMAIL,
+                        PIKPAK_PASSWORD,
+                        root_folder=effective_root,
+                        category=torrent.get('category', '') or '',
+                    )
                 )
                 
                 if success_magnets:  # Upload successful
@@ -678,14 +819,23 @@ def main():
     )
     parser.add_argument("--from-pipeline", action="store_true", help="Running from pipeline.py - use GIT_USERNAME for commits")
     parser.add_argument("--session-id", type=int, default=None, help="Report session ID for saving pikpak stats to SQLite")
+    parser.add_argument(
+        "--root-folder",
+        default=None,
+        help=(
+            "PikPak root folder for uploads. Each torrent is placed under "
+            "{root}/{qB category}. Defaults to PIKPAK_ROOT_FOLDER from "
+            "config (/Javdb_AutoSpider)."
+        ),
+    )
     args = parser.parse_args()
 
     # Default to batch mode unless --individual is specified
     batch_mode = not args.individual
     proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
-    
+
     pikpak_bridge(args.days, args.dry_run, batch_mode, proxy_override, args.from_pipeline,
-                  session_id=args.session_id)
+                  session_id=args.session_id, root_folder=args.root_folder)
 
 
 if __name__ == "__main__":
