@@ -24,6 +24,7 @@ from __future__ import annotations
 import queue as queue_module
 import threading
 import time
+import types
 from collections import deque
 from typing import Deque, Optional, Tuple
 
@@ -452,7 +453,7 @@ class LoginCoordinator:
                         "parked task(s) to retry login",
                         len(drained),
                     )
-                    for proxy_name, task, login_queue in drained:
+                    for _proxy_name, task, login_queue in drained:
                         requeue_front(login_queue, task)
                     continue
                 if (
@@ -534,7 +535,7 @@ class LoginCoordinator:
                 tasks_to_dispatch = list(self._pending_login_tasks)
                 self._pending_login_tasks.clear()
 
-            for proxy_name, task, login_queue in tasks_to_dispatch:
+            for _proxy_name, task, login_queue in tasks_to_dispatch:
                 if hasattr(task, "failed_proxies"):
                     task.failed_proxies.discard(snapshot.proxy_name)
                 _set_login_verified(task, True)
@@ -742,12 +743,11 @@ class LoginCoordinator:
         poller treats ``proxy_name`` as a free-form tag (only used to
         ``failed_proxies.discard`` on the eventual published proxy).
         """
-        # Synthesize a worker-shaped object since we don't have one to
-        # hand; the poller only reads ``proxy_name``.
-        class _PsuedoWorker:  # noqa: N801 — internal class kept name-pyish
-            def __init__(self, proxy_name: str):
-                self.proxy_name = proxy_name
-        self._park_login_task(_PsuedoWorker(hint_proxy_name), task, login_queue)
+        self._park_login_task(
+            types.SimpleNamespace(proxy_name=hint_proxy_name),
+            task,
+            login_queue,
+        )
 
     # -- public API --------------------------------------------------------
 
