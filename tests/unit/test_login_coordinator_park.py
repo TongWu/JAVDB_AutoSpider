@@ -415,6 +415,37 @@ class TestPollerDispatch:
         assert dispatched is task
         assert "P1" in task.failed_proxies
 
+    def test_poller_drains_after_repeated_get_state_failures(self):
+        """Repeated DO read failures must not strand parked login tasks."""
+        worker_p1 = _make_worker(0, "P1")
+        coord = LoginCoordinator(all_workers=[worker_p1])
+
+        client = MagicMock()
+        client.acquire_lease.return_value = AcquireLeaseResult(
+            acquired=False, holder_id="winner", target_proxy_name="P1",
+            lease_expires_at=10_000, server_time_ms=5_000,
+        )
+        client.get_state.side_effect = LoginStateUnavailable("network down")
+        state_mod.global_login_state_client = client
+        login_queue: queue.Queue = queue.Queue()
+        task = _make_task()
+
+        with patch.object(lc_mod, "_POLL_INTERVAL_SEC", 0.05):
+            with patch.object(lc_mod, "_POLL_MAX_CONSECUTIVE_GET_STATE_FAILURES", 1):
+                with patch.object(coord, "_login_and_verify"):
+                    _, _, parked = coord._login_and_verify_with_lease(
+                        worker_p1, task, login_queue,
+                    )
+                assert parked is True
+                ok = self._wait_until(lambda: not login_queue.empty(), timeout=2.0)
+                assert ok, "poller did not re-queue parked tasks after get_state failures"
+
+        dispatched = login_queue.get_nowait()
+        assert dispatched is task
+        assert "P1" in task.failed_proxies
+        assert len(coord._pending_login_tasks) == 0
+        assert coord._poll_thread is None
+
 
 # ── End-to-end fail-open ─────────────────────────────────────────────────────
 

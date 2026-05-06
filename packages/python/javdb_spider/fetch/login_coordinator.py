@@ -62,6 +62,7 @@ _POLL_INTERVAL_SEC = 3.0
 # many idle iterations before exiting — so a quick succession of
 # park-then-dispatch-then-park does not pay the thread spawn cost twice.
 _POLL_IDLE_ITERATIONS_BEFORE_EXIT = 5
+_POLL_MAX_CONSECUTIVE_GET_STATE_FAILURES = 3
 
 
 def _task_worker_ctx(entry_index: str, worker_name: str) -> str:
@@ -416,6 +417,7 @@ class LoginCoordinator:
         episode.  A future park will respawn the thread.
         """
         idle_iterations = 0
+        consecutive_get_state_failures = 0
         while True:
             time.sleep(_POLL_INTERVAL_SEC)
 
@@ -489,11 +491,36 @@ class LoginCoordinator:
             try:
                 snapshot = client.get_state()
             except LoginStateUnavailable as exc:
+                consecutive_get_state_failures += 1
                 logger.warning(
-                    "Login-state poller: get_state failed (%s) — will retry",
+                    "Login-state poller: get_state failed (%s) — will retry "
+                    "(%d/%d)",
                     exc,
+                    consecutive_get_state_failures,
+                    _POLL_MAX_CONSECUTIVE_GET_STATE_FAILURES,
                 )
+                if (
+                    consecutive_get_state_failures
+                    > _POLL_MAX_CONSECUTIVE_GET_STATE_FAILURES
+                ):
+                    with self._lock:
+                        drained = list(self._pending_login_tasks)
+                        self._pending_login_tasks.clear()
+                        self._poll_thread = None
+                    for proxy_name, task, login_queue in drained:
+                        if hasattr(task, "failed_proxies"):
+                            task.failed_proxies.add(proxy_name)
+                        requeue_front(login_queue, task)
+                    logger.warning(
+                        "Login-state poller: get_state failed %d consecutive "
+                        "time(s); re-dispatched %d parked task(s) as proxy "
+                        "failures",
+                        consecutive_get_state_failures,
+                        len(drained),
+                    )
+                    return
                 continue
+            consecutive_get_state_failures = 0
 
             current_version = state.current_login_state_version or 0
             if snapshot.version <= current_version:
