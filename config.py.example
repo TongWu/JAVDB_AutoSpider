@@ -359,6 +359,14 @@ PIKPAK_LOG_FILE = "logs/pikpak_bridge.log"
 # This helps avoid rate limiting when processing multiple torrents
 PIKPAK_REQUEST_DELAY = 2
 
+# PikPak root folder for offline downloads.
+# pikpak_bridge stores every magnet under ``{PIKPAK_ROOT_FOLDER}/{qB category}``,
+# so a torrent in qBittorrent category "Ad Hoc" lands in
+# ``/Javdb_AutoSpider/Ad Hoc`` on PikPak. Missing folders are auto-created.
+# Override at runtime via ``--root-folder`` or the GitHub Variable
+# ``PIKPAK_ROOT_FOLDER``.
+PIKPAK_ROOT_FOLDER = "/Javdb_AutoSpider"
+
 # =============================================================================
 # Rclone Configuration (for Google Drive inventory and dedup)
 # =============================================================================
