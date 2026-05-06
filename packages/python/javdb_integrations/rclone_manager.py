@@ -1359,6 +1359,7 @@ def main() -> int:
                     init_db,
                     db_create_report_session,
                     db_mark_session_committed,
+                    db_mark_session_failed,
                     db_open_rclone_staging,
                     db_append_rclone_staging,
                     db_swap_rclone_inventory,
@@ -1385,7 +1386,24 @@ def main() -> int:
                 db_open_rclone_staging(_staging_session_id)
                 _sqlite_ok = True
             except Exception as e:
-                logger.warning(f"Failed initializing SQLite for rclone inventory: {e}")
+                logger.error(f"Failed initializing SQLite for rclone inventory; aborting scan: {e}")
+                if _staging_session_id is not None:
+                    try:
+                        db_drop_rclone_staging(_staging_session_id)
+                    except Exception:
+                        pass
+                if _created_local_staging_session and _staging_session_id is not None:
+                    try:
+                        db_mark_session_failed(_staging_session_id)
+                    except Exception as mark_error:
+                        logger.warning(
+                            "Failed to mark rclone inventory staging session "
+                            "failed after init error: %s",
+                            mark_error,
+                        )
+                _staging_session_id = None
+                _created_local_staging_session = False
+                return 1
 
         _csv_file = None
         _csv_writer = None
@@ -1464,27 +1482,13 @@ def main() -> int:
             return 1
 
         if _sqlite_ok and _staging_session_id is not None:
-            swap_attempted = False
             try:
-                if _created_local_staging_session:
-                    db_mark_session_committed(_staging_session_id)
-                swap_attempted = True
                 committed = db_swap_rclone_inventory(session_id=_staging_session_id)
-                logger.info(
-                    "Swapped RcloneInventoryStaging_%s into RcloneInventory "
-                    "(committed=%s rows)", _staging_session_id, committed,
-                )
             except Exception as e:
-                if swap_attempted:
-                    logger.error(
-                        f"Failed to swap RcloneInventory staging — "
-                        f"main table left UNCHANGED: {e}"
-                    )
-                else:
-                    logger.error(
-                        f"Failed to mark rclone inventory session committed "
-                        f"before swap — main table left UNCHANGED: {e}"
-                    )
+                logger.error(
+                    f"Failed to swap RcloneInventory staging — "
+                    f"main table left UNCHANGED: {e}"
+                )
                 try:
                     db_drop_rclone_staging(_staging_session_id)
                 except Exception:
@@ -1495,6 +1499,25 @@ def main() -> int:
                     except FileNotFoundError:
                         pass
                 raise
+            try:
+                if _created_local_staging_session:
+                    db_mark_session_committed(_staging_session_id)
+            except Exception as e:
+                logger.error(
+                    "Failed to mark rclone inventory session committed after "
+                    "a successful swap: %s",
+                    e,
+                )
+                if _csv_tmp_path is not None:
+                    try:
+                        os.remove(_csv_tmp_path)
+                    except FileNotFoundError:
+                        pass
+                raise
+            logger.info(
+                "Swapped RcloneInventoryStaging_%s into RcloneInventory "
+                "(committed=%s rows)", _staging_session_id, committed,
+            )
 
         if _csv_tmp_path is not None:
             os.replace(_csv_tmp_path, output_path)
