@@ -184,7 +184,23 @@ class TestGetProxiesDictLogic:
 
 class TestPikpakBridgeLogic:
     """Test cases for pikpak_bridge function logic."""
-    
+
+    def test_clears_active_session_id_after_impl_returns(self, monkeypatch):
+        import scripts.pikpak_bridge as pikpak_mod
+        from utils.infra import db as db_mod
+
+        def fake_impl(*_args, **_kwargs):
+            assert db_mod.get_active_session_id() == 42
+            return "done"
+
+        db_mod.set_active_session_id(999)
+        monkeypatch.setattr(pikpak_mod, "_pikpak_bridge_impl", fake_impl)
+
+        assert pikpak_mod.pikpak_bridge(
+            3, True, session_id=42, root_folder="/root",
+        ) == "done"
+        assert db_mod.get_active_session_id() is None
+
     def test_filter_old_torrents(self):
         """Test filtering old torrents by date."""
         days = 3
@@ -518,4 +534,3 @@ def temp_dir():
     temp_path = tempfile.mkdtemp()
     yield temp_path
     shutil.rmtree(temp_path, ignore_errors=True)
-

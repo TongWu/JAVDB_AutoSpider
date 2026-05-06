@@ -438,20 +438,37 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
 # --------------------------
 def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=False,
                   session_id=None, root_folder=None):
-    cutoff_date = (datetime.now() - timedelta(days=days)).date()
-    logger.info(f"Processing torrents older than {days} days (before {cutoff_date})")
-
-    effective_root = (root_folder or PIKPAK_ROOT_FOLDER or PIKPAK_ROOT_FOLDER_DEFAULT)
-    logger.info(f"PikPak target root folder: '{effective_root}' (categorised by qB torrent category)")
-
+    active_session_setter = None
     # Tag every D1 write inside this PikPak run with the workflow's session id
     # so a downstream rollback can scope cleanly to just our rows.
     if session_id is not None:
         try:
             from packages.python.javdb_platform.db import set_active_session_id
-            set_active_session_id(int(session_id))
+            active_session_setter = set_active_session_id
+            active_session_setter(int(session_id))
         except Exception as e:
             logger.warning(f"Could not set active session_id for PikPak: {e}")
+
+    try:
+        return _pikpak_bridge_impl(
+            days, dry_run, batch_mode, use_proxy, from_pipeline,
+            session_id=session_id, root_folder=root_folder,
+        )
+    finally:
+        if active_session_setter is not None:
+            try:
+                active_session_setter(None)
+            except Exception as e:
+                logger.warning(f"Could not clear active session_id for PikPak: {e}")
+
+
+def _pikpak_bridge_impl(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=False,
+                        session_id=None, root_folder=None):
+    cutoff_date = (datetime.now() - timedelta(days=days)).date()
+    logger.info(f"Processing torrents older than {days} days (before {cutoff_date})")
+
+    effective_root = (root_folder or PIKPAK_ROOT_FOLDER or PIKPAK_ROOT_FOLDER_DEFAULT)
+    logger.info(f"PikPak target root folder: '{effective_root}' (categorised by qB torrent category)")
     
     # Initialize proxy helper
     initialize_proxy_helper(use_proxy)
