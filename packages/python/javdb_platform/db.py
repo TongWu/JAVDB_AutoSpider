@@ -2961,7 +2961,7 @@ def db_rollback_session(
             f"undo a successful run's writes."
         )
 
-    if not dry_run:
+    if not dry_run and current_status != 'committed':
         # Best-effort flag — failure here shouldn't block the rollback.
         try:
             db_mark_session_failed(session_id, db_path=reports_db_path)
