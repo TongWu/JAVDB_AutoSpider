@@ -336,7 +336,7 @@ class RunnerRegistryClient:
         :class:`RunnerRegistryUnavailable` on registry failures
         (timeout, non-2xx, malformed response).
         """
-        if not holder_id:
+        if not isinstance(holder_id, str) or not holder_id:
             raise ValueError("holder_id must be a non-empty string")
         body = {
             "holder_id": holder_id,
@@ -380,7 +380,7 @@ class RunnerRegistryClient:
         evicted the holder — the daemon should re-register and keep
         running rather than treating eviction as a crash.
         """
-        if not holder_id:
+        if not isinstance(holder_id, str) or not holder_id:
             raise ValueError("holder_id must be a non-empty string")
         resp = self._do_request("POST", "/heartbeat", {"holder_id": holder_id})
         try:
@@ -411,7 +411,7 @@ class RunnerRegistryClient:
         signal-driven shutdown handlers can call this without
         coordination.
         """
-        if not holder_id:
+        if not isinstance(holder_id, str) or not holder_id:
             raise ValueError("holder_id must be a non-empty string")
         resp = self._do_request("POST", "/unregister", {"holder_id": holder_id})
         try:

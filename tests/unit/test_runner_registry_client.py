@@ -189,7 +189,7 @@ def test_register_omits_started_at_when_none():
         c.close()
 
 
-@pytest.mark.parametrize("holder_id", ["", None])
+@pytest.mark.parametrize("holder_id", ["", None, 123, True])
 def test_register_validates_empty_holder_id(holder_id):
     c = _make_client()
     try:
@@ -326,7 +326,7 @@ def test_heartbeat_treats_string_booleans_as_false():
         c.close()
 
 
-@pytest.mark.parametrize("holder_id", ["", None])
+@pytest.mark.parametrize("holder_id", ["", None, 123, True])
 def test_heartbeat_validates_empty_holder_id(holder_id):
     c = _make_client()
     try:
@@ -383,7 +383,7 @@ def test_unregister_treats_string_boolean_as_false():
         c.close()
 
 
-@pytest.mark.parametrize("holder_id", ["", None])
+@pytest.mark.parametrize("holder_id", ["", None, 123, True])
 def test_unregister_validates_empty_holder_id(holder_id):
     c = _make_client()
     try:

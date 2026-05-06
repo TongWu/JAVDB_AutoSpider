@@ -742,17 +742,26 @@ class TestSleepManagerHumanLike:
 
     def test_dual_window_throttle_enforces_burst_limit(self):
         """DualWindowThrottle blocks when the short-window burst limit is hit."""
+        short_window_sec = 0.6
+        short_max = 2
         dwt = DualWindowThrottle(
-            short_window_sec=0.6, short_max=2,
+            short_window_sec=short_window_sec, short_max=short_max,
             long_window_sec=600.0, long_max=100,
         )
+        start = time.monotonic()
         dwt.wait_if_needed()
         dwt.wait_if_needed()
+        elapsed = time.monotonic() - start
+        assert elapsed < short_window_sec - 0.05, (
+            "First two requests should not consume the short window before "
+            "the burst-limit assertion"
+        )
 
         start = time.monotonic()
         dwt.wait_if_needed()
         elapsed = time.monotonic() - start
-        assert elapsed >= 0.05, "Third request should be delayed by throttle"
+        expected_delay = short_window_sec - 0.1
+        assert elapsed >= expected_delay, "Third request should be delayed by throttle"
 
     def test_sleep_method_combines_sleep_and_throttle(self):
         """MovieSleepManager.sleep() calls both get_sleep_time() and throttle."""
