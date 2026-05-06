@@ -332,11 +332,12 @@ class RunnerRegistryClient:
         :func:`proxy_pool_hash` of the runner's ``PROXY_POOL_JSON`` so
         peers see a consistent hash across logically-equivalent JSON.
 
-        Raises :class:`RunnerRegistryUnavailable` on any failure
+        Raises :class:`ValueError` for invalid caller input and
+        :class:`RunnerRegistryUnavailable` on registry failures
         (timeout, non-2xx, malformed response).
         """
         if not holder_id:
-            raise RunnerRegistryUnavailable("holder_id must be a non-empty string")
+            raise ValueError("holder_id must be a non-empty string")
         body = {
             "holder_id": holder_id,
             "workflow_run_id": workflow_run_id,
@@ -380,7 +381,7 @@ class RunnerRegistryClient:
         running rather than treating eviction as a crash.
         """
         if not holder_id:
-            raise RunnerRegistryUnavailable("holder_id must be a non-empty string")
+            raise ValueError("holder_id must be a non-empty string")
         resp = self._do_request("POST", "/heartbeat", {"holder_id": holder_id})
         try:
             return HeartbeatResult(
@@ -411,7 +412,7 @@ class RunnerRegistryClient:
         coordination.
         """
         if not holder_id:
-            raise RunnerRegistryUnavailable("holder_id must be a non-empty string")
+            raise ValueError("holder_id must be a non-empty string")
         resp = self._do_request("POST", "/unregister", {"holder_id": holder_id})
         try:
             return UnregisterResult(
@@ -473,9 +474,10 @@ class RunnerRegistryClient:
     ) -> dict:
         """Issue a single HTTP call and decode its JSON body.
 
-        All four exception paths (timeout, connection error, non-2xx,
-        malformed JSON) collapse into :class:`RunnerRegistryUnavailable`
-        so callsites only handle one type.  Never retries.
+        All remote/response exception paths (timeout, connection error,
+        non-2xx, malformed or non-object JSON) collapse into
+        :class:`RunnerRegistryUnavailable` so callsites only handle one
+        type.  Never retries.
         """
         url = f"{self._base_url}{path}"
         try:
@@ -496,9 +498,15 @@ class RunnerRegistryClient:
                 f"HTTP {resp.status_code}: {resp.text[:200]}"
             )
         try:
-            return resp.json()
+            parsed = resp.json()
         except ValueError as e:
             raise RunnerRegistryUnavailable(f"invalid JSON: {e}") from e
+        if not isinstance(parsed, dict):
+            raise RunnerRegistryUnavailable(
+                "invalid JSON: expected object, got "
+                f"{type(parsed).__name__}"
+            )
+        return parsed
 
 
 def create_runner_registry_client_from_env(
