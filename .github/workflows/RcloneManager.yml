@@ -124,6 +124,7 @@ jobs:
           VAR_D1_HISTORY_DB_ID: ${{ secrets.D1_HISTORY_DB_ID }}
           VAR_D1_REPORTS_DB_ID: ${{ secrets.D1_REPORTS_DB_ID }}
           VAR_D1_OPERATIONS_DB_ID: ${{ secrets.D1_OPERATIONS_DB_ID }}
+          VAR_MOVIE_CLAIM_ENABLED: ${{ vars.MOVIE_CLAIM_ENABLED || 'auto' }}
           # File paths / logging
           VAR_REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
           VAR_DEDUP_DIR: ${{ vars.DEDUP_DIR }}
