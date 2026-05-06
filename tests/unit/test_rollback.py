@@ -20,6 +20,7 @@ Covers:
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 
@@ -128,6 +129,68 @@ class TestFindInProgressSessions:
         assert old not in ids
 
 
+# ── Rollback CLI target resolution ───────────────────────────────────────
+
+
+class TestRollbackCliTargetResolution:
+    def test_session_id_only_skips_in_progress_lookup(self, monkeypatch):
+        from apps.cli import rollback as rollback_cli
+
+        def fail_lookup(*_args, **_kwargs):
+            raise AssertionError("lookup should not run for --session-id alone")
+
+        monkeypatch.setattr(
+            rollback_cli, "db_find_in_progress_sessions", fail_lookup,
+        )
+        args = argparse.Namespace(session_id=42, run_started_at=None)
+
+        assert rollback_cli._resolve_target_sessions(args) == [42]
+
+    def test_run_started_at_unions_explicit_and_window_sessions(self, monkeypatch):
+        from apps.cli import rollback as rollback_cli
+
+        captured = {}
+
+        def fake_lookup(*, since=None):
+            captured["since"] = since
+            return [7, 42]
+
+        monkeypatch.setattr(
+            rollback_cli, "db_find_in_progress_sessions", fake_lookup,
+        )
+        args = argparse.Namespace(
+            session_id=42,
+            run_started_at="2026-05-04T19:30:00Z",
+        )
+
+        assert rollback_cli._resolve_target_sessions(args) == [7, 42]
+        assert captured["since"] == "2026-05-04 19:30:00"
+
+    def test_main_continues_after_refused_session(self, monkeypatch):
+        from apps.cli import rollback as rollback_cli
+
+        calls = []
+        closed = []
+
+        monkeypatch.setattr(rollback_cli, "init_db", lambda: None)
+        monkeypatch.setattr(rollback_cli, "close_db", lambda: closed.append(True))
+        monkeypatch.setattr(
+            rollback_cli, "_resolve_target_sessions", lambda _args: [1, 2],
+        )
+
+        def fake_rollback(sid, **_kwargs):
+            calls.append(sid)
+            if sid == 1:
+                raise ValueError("committed")
+            return {"history": {"drift_skipped": 0}}
+
+        monkeypatch.setattr(rollback_cli, "db_rollback_session", fake_rollback)
+
+        assert rollback_cli.main(["--apply"]) == 2
+        assert calls == [1, 2]
+        assert len(closed) == 1
+
+
 # ── Reports-scope rollback ───────────────────────────────────────────────
 
 
@@ -216,7 +279,12 @@ class TestRollbackRefusesCommitted:
                 "SELECT COUNT(*) AS n FROM ReportMovies WHERE SessionId=?",
                 (sid,),
             ).fetchone()["n"]
+            session = conn.execute(
+                "SELECT Status FROM ReportSessions WHERE Id=?", (sid,),
+            ).fetchone()
         assert remaining == 0
+        assert session is not None
+        assert session["Status"] == "committed"
 
     def test_unknown_scope_raises(self):
         sid = _create_session()
