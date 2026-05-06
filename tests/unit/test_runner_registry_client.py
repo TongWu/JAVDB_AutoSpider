@@ -4,7 +4,8 @@ Mirror the structure of ``test_movie_claim_client.py``: keep the network
 mocked at the ``requests.Session`` boundary so the suite is deterministic
 and runs offline, and assert that every failure path collapses into
 :class:`RunnerRegistryUnavailable` (the fail-open contract documented in
-``runner_registry_client.py``).
+``runner_registry_client.py``), while local argument errors raise
+:class:`ValueError` before any HTTP call.
 
 The "three-piece" fail-open harness (``fail-open-test-harness`` todo)
 is the union of:
@@ -188,11 +189,12 @@ def test_register_omits_started_at_when_none():
         c.close()
 
 
-def test_register_validates_empty_holder_id():
+@pytest.mark.parametrize("holder_id", ["", None])
+def test_register_validates_empty_holder_id(holder_id):
     c = _make_client()
     try:
-        with pytest.raises(RunnerRegistryUnavailable, match="holder_id"):
-            c.register(holder_id="")
+        with pytest.raises(ValueError, match="holder_id"):
+            c.register(holder_id=holder_id)
     finally:
         c.close()
 
@@ -324,11 +326,12 @@ def test_heartbeat_treats_string_booleans_as_false():
         c.close()
 
 
-def test_heartbeat_validates_empty_holder_id():
+@pytest.mark.parametrize("holder_id", ["", None])
+def test_heartbeat_validates_empty_holder_id(holder_id):
     c = _make_client()
     try:
-        with pytest.raises(RunnerRegistryUnavailable, match="holder_id"):
-            c.heartbeat("")
+        with pytest.raises(ValueError, match="holder_id"):
+            c.heartbeat(holder_id)
     finally:
         c.close()
 
@@ -376,6 +379,16 @@ def test_unregister_treats_string_boolean_as_false():
         ):
             r = c.unregister("runner")
         assert r.unregistered is False
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("holder_id", ["", None])
+def test_unregister_validates_empty_holder_id(holder_id):
+    c = _make_client()
+    try:
+        with pytest.raises(ValueError, match="holder_id"):
+            c.unregister(holder_id)
     finally:
         c.close()
 
@@ -478,6 +491,22 @@ def test_register_collapses_malformed_json_into_unavailable():
     try:
         with patch.object(c._session, "post", return_value=bad):
             with pytest.raises(RunnerRegistryUnavailable, match="invalid JSON"):
+                c.register(holder_id="x")
+    finally:
+        c.close()
+
+
+def test_register_collapses_non_object_json_into_unavailable():
+    c = _make_client()
+    try:
+        with patch.object(
+            c._session, "post",
+            return_value=_mock_response(200, ["not", "an", "object"]),
+        ):
+            with pytest.raises(
+                RunnerRegistryUnavailable,
+                match="invalid JSON: expected object, got list",
+            ):
                 c.register(holder_id="x")
     finally:
         c.close()

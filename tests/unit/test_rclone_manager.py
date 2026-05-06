@@ -243,6 +243,76 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
     assert staging_tables == []
 
 
+def test_scan_marks_local_session_committed_before_inventory_swap(
+    monkeypatch, tmp_path, storage_mode_db
+):
+    import scripts.rclone_manager as rm
+    from utils.infra import db as db_mod
+
+    output = tmp_path / "inventory.csv"
+    incoming = {field: "" for field in INVENTORY_FIELDNAMES}
+    incoming.update({
+        "video_code": "NEW-001",
+        "folder_path": "2026/new/NEW-001",
+        "folder_size": 1,
+        "file_count": 1,
+        "scan_datetime": "2026-05-05 00:00:00",
+    })
+    order = []
+
+    def fake_scan(*_args, row_callback=None, **_kwargs):
+        row_callback([incoming])
+        return 1, 0
+
+    monkeypatch.setattr(rm, "RCLONE_CONFIG_BASE64", "")
+    monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
+    monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
+    monkeypatch.setattr(rm, "scan_inventory", fake_scan)
+    monkeypatch.setattr(rm, "export_db_to_csv", lambda _path: order.append("export"))
+    monkeypatch.setattr(db_mod, "init_db", lambda: order.append("init_db"))
+    monkeypatch.setattr(db_mod, "get_active_session_id", lambda: None)
+    monkeypatch.setattr(
+        db_mod,
+        "db_create_report_session",
+        lambda **_kwargs: order.append("create_session") or 123,
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_open_rclone_staging",
+        lambda sid: order.append(("open_staging", sid)),
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_append_rclone_staging",
+        lambda rows, session_id: order.append(("append_staging", session_id)),
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_mark_session_committed",
+        lambda sid: order.append(("mark_committed", sid)) or 1,
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_swap_rclone_inventory",
+        lambda session_id: order.append(("swap_inventory", session_id)) or 1,
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "rclone_manager",
+            "--scan",
+            "--root-path",
+            "gdrive:/root",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert rm.main() == 0
+    assert order.index(("mark_committed", 123)) < order.index(("swap_inventory", 123))
+
+
 # ============================================================================
 # Test parse_root_path
 # ============================================================================
