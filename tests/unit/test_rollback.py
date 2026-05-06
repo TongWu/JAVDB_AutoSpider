@@ -21,13 +21,6 @@ Covers:
 from __future__ import annotations
 
 import argparse
-import os
-import sys
-
-project_root = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
-sys.path.insert(0, project_root)
 
 import pytest
 
@@ -214,13 +207,8 @@ class TestRollbackReports:
         assert result["reports"]["ReportMovies"] == 1
         assert result["reports"]["ReportSessions"] == 1
 
-        # ReportSessions row for sid_good must survive even if a buggy
-        # rollback request later tries to re-target it.
-        result_force_fail = db_mod.db_rollback_session(
-            sid_good, scope="reports",
-        ) if False else None
-        # Direct attempt without force should be refused at the orchestrator
-        # level; verified separately below.
+        # Forced rollback coverage lives in
+        # TestRollbackRefusesCommitted::test_refuses_without_force.
 
         with db_mod.get_db() as conn:
             ids = [r["Id"] for r in conn.execute(
@@ -580,14 +568,9 @@ class TestRollbackHistoryAudit:
             row = conn.execute(
                 "SELECT ActorName FROM MovieHistory WHERE VideoCode='BBB-001'"
             ).fetchone()
-        # The audit replay should have restored the OldActor value (or at
-        # minimum reverted the SessionId tag — drift_skipped is acceptable
-        # if a concurrent newer run reclaimed the row, but in this single-
-        # threaded test we expect a clean restore).
         assert row is not None
-        # If drift_skipped triggered, ActorName won't match — guard for it.
-        if result["history"].get("drift_skipped", 0) == 0:
-            assert row["ActorName"] == "OldActor"
+        assert result["history"].get("drift_skipped", 0) == 0
+        assert row["ActorName"] == "OldActor"
 
     def test_drift_skipped_when_concurrent_run_owns_row(self):
         """Audit row's TargetId no longer matches `SessionId` → drift, no overwrite."""
@@ -690,4 +673,4 @@ class TestRollbackScopeFiltering:
         # _rollback_session marks the session 'failed' as a side-effect
         # for traceability — that's expected.
         assert row is not None
-        assert row["Status"] in ("failed", "in_progress")
+        assert row["Status"] == "failed"

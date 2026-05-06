@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from packages.python.javdb_platform.db import (
@@ -129,28 +130,24 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
 
 def _normalize_run_started_at(raw: Optional[str]) -> Optional[str]:
-    """Convert a GitHub-formatted ISO timestamp into the SQLite-friendly form.
+    """Convert an ISO timestamp into the SQLite-friendly UTC form.
 
     GitHub passes timestamps like ``2026-05-04T19:30:00Z``; ``ReportSessions
-    .DateTimeCreated`` stores them as ``2026-05-04 19:30:00``. We strip the
-    ``T``/``Z`` so the ``DateTimeCreated >= ?`` comparison works as a plain
-    lexicographic string compare.
+    .DateTimeCreated`` stores UTC as ``2026-05-04 19:30:00``. Offset-aware
+    inputs are normalized to naive UTC before lexicographic comparison.
     """
     if not raw:
         return None
     s = raw.strip()
     if not s:
         return None
-    # Drop trailing 'Z' (UTC suffix) and possible fractional seconds.
-    if s.endswith("Z"):
-        s = s[:-1]
-    if "+" in s and "T" in s:
-        # e.g. 2026-05-04T19:30:00+00:00 — keep the part before the offset.
-        s = s.split("+", 1)[0]
-    s = s.replace("T", " ")
-    if "." in s:
-        s = s.split(".", 1)[0]
-    return s
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _resolve_target_sessions(args: argparse.Namespace) -> List[int]:

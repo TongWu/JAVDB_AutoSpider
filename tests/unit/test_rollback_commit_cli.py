@@ -24,6 +24,17 @@ def test_rollback_resolve_unions_explicit_and_window_sessions(monkeypatch):
     assert seen == ["2026-05-04 00:00:00"]
 
 
+def test_rollback_normalizes_offset_timestamp_to_utc():
+    assert (
+        rollback._normalize_run_started_at("2026-05-04T19:30:00-04:00")
+        == "2026-05-04 23:30:00"
+    )
+
+
+def test_rollback_normalize_returns_none_for_invalid_timestamp():
+    assert rollback._normalize_run_started_at("not-a-time") is None
+
+
 def test_rollback_returns_partial_failure_on_real_drift(monkeypatch, capsys):
     monkeypatch.setattr(rollback, "init_db", lambda: None)
     monkeypatch.setattr(rollback, "close_db", lambda: None)
