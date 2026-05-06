@@ -157,6 +157,7 @@ jobs:
           VAR_PIKPAK_EMAIL: ${{ secrets.PIKPAK_EMAIL }}
           VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE || 'logs/pikpak_bridge.log' }}
           VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
+          VAR_PIKPAK_ROOT_FOLDER: ${{ vars.PIKPAK_ROOT_FOLDER || '/Javdb_AutoSpider' }}
           # Adhoc qBittorrent instance (optional — pikpak_bridge scans both when set)
           VAR_QB_URL_ADHOC: ${{ secrets.QB_URL_ADHOC }}
           VAR_QB_USERNAME_ADHOC: ${{ secrets.QB_USERNAME_ADHOC || secrets.QB_USERNAME }}

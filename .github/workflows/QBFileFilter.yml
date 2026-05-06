@@ -119,6 +119,7 @@ jobs:
           VAR_PIKPAK_EMAIL: ${{ secrets.PIKPAK_EMAIL }}
           VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE || 'logs/pikpak_bridge.log' }}
           VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
+          VAR_PIKPAK_ROOT_FOLDER: ${{ vars.PIKPAK_ROOT_FOLDER || '/Javdb_AutoSpider' }}
           VAR_QB_FILE_FILTER_MIN_SIZE_MB: ${{ vars.QB_FILE_FILTER_MIN_SIZE_MB }}
           VAR_QB_FILE_FILTER_LOG_FILE: ${{ vars.QB_FILE_FILTER_LOG_FILE || 'logs/qb_file_filter.log' }}
           VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
@@ -222,6 +223,7 @@ jobs:
           VAR_PIKPAK_EMAIL: ${{ secrets.PIKPAK_EMAIL }}
           VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE || 'logs/pikpak_bridge.log' }}
           VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
+          VAR_PIKPAK_ROOT_FOLDER: ${{ vars.PIKPAK_ROOT_FOLDER || '/Javdb_AutoSpider' }}
           VAR_QB_FILE_FILTER_MIN_SIZE_MB: ${{ vars.QB_FILE_FILTER_MIN_SIZE_MB }}
           VAR_QB_FILE_FILTER_LOG_FILE: ${{ vars.QB_FILE_FILTER_LOG_FILE || 'logs/qb_file_filter.log' }}
           VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}

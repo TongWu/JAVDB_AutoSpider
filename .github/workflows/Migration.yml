@@ -303,6 +303,7 @@ jobs:
           VAR_PIKPAK_EMAIL: ${{ secrets.PIKPAK_EMAIL }}
           VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE || 'logs/pikpak_bridge.log' }}
           VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
+          VAR_PIKPAK_ROOT_FOLDER: ${{ vars.PIKPAK_ROOT_FOLDER || '/Javdb_AutoSpider' }}
           # Rclone / Dedup Configuration
           VAR_RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
           VAR_RCLONE_FOLDER_PATH: ${{ vars.RCLONE_FOLDER_PATH }}
