@@ -320,6 +320,7 @@ jobs:
           # docs/PROXY_COORDINATOR_DEPLOY.md for setup steps.
           VAR_PROXY_COORDINATOR_URL: ${{ vars.PROXY_COORDINATOR_URL }}
           VAR_PROXY_COORDINATOR_TOKEN: ${{ secrets.PROXY_COORDINATOR_TOKEN }}
+          VAR_MOVIE_CLAIM_ENABLED: ${{ vars.MOVIE_CLAIM_ENABLED || 'auto' }}
         run: python3 -m apps.cli.config_generator --github-actions
 
       - name: Pull latest changes

@@ -301,6 +301,14 @@ class TestGetConfigMap:
         assert entry[4] == 'PROXY CONFIGURATION'
         assert entry[1] == 'LOGIN_PROXY_NAME'
 
+    def test_contains_movie_claim_enabled(self):
+        """Should expose MOVIE_CLAIM_ENABLED for generated config.py."""
+        config_map = get_config_map()
+        entry = next((item for item in config_map if item[0] == 'MOVIE_CLAIM_ENABLED'), None)
+        assert entry is not None
+        assert entry[1] == 'MOVIE_CLAIM_ENABLED'
+        assert entry[3] == 'auto'
+
 
 class TestGenerateConfigContent:
     """Tests for generate_config_content function."""
@@ -583,6 +591,12 @@ class TestGenerateConfigContentExtended:
         with patch.dict(os.environ, env, clear=True):
             content = generate_config_content()
         assert 'QB_ALLOW_INSECURE_HTTP = False' in content
+
+    def test_movie_claim_enabled_from_environment(self):
+        env = {'VAR_MOVIE_CLAIM_ENABLED': 'false'}
+        with patch.dict(os.environ, env, clear=True):
+            content = generate_config_content()
+        assert "MOVIE_CLAIM_ENABLED = 'false'" in content
 
 
 class TestMaskSensitiveValuesExtended:
