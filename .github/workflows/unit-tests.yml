@@ -80,14 +80,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-wheel]
     if: always() && !cancelled()
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     strategy:
       matrix:
         python-version: [
           # '3.9',
           # '3.10',
-          # '3.11',
+          '3.11',
           '3.12'
         ]
 

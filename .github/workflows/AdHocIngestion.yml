@@ -215,6 +215,7 @@ jobs:
           # docs/PROXY_COORDINATOR_DEPLOY.md for setup steps.
           VAR_PROXY_COORDINATOR_URL: ${{ vars.PROXY_COORDINATOR_URL }}
           VAR_PROXY_COORDINATOR_TOKEN: ${{ secrets.PROXY_COORDINATOR_TOKEN }}
+          VAR_MOVIE_CLAIM_ENABLED: ${{ vars.MOVIE_CLAIM_ENABLED || 'auto' }}
         run: python3 -m apps.cli.config_generator --github-actions
 
       - name: Pull latest changes from remote
@@ -591,7 +592,11 @@ jobs:
           CMD_ARGS=(python3 -m apps.cli.commit_session
                     --run-started-at "$RUN_STARTED_AT")
           if [ -n "$SPIDER_SESSION_ID" ]; then
-            CMD_ARGS+=(--session-id "$SPIDER_SESSION_ID")
+            if [[ "$SPIDER_SESSION_ID" =~ ^[0-9]+$ ]]; then
+              CMD_ARGS+=(--session-id "$SPIDER_SESSION_ID")
+            else
+              echo "::warning::Skipping non-numeric SPIDER_SESSION_ID for commit_session: $SPIDER_SESSION_ID"
+            fi
           fi
           echo "Executing: ${CMD_ARGS[*]}"
           "${CMD_ARGS[@]}"
@@ -767,7 +772,11 @@ jobs:
           # If we have a known session_id from the spider, target it
           # explicitly — that's faster and avoids the time-window race.
           if [ -n "$SPIDER_SESSION_ID" ]; then
-            CMD_ARGS+=(--session-id "$SPIDER_SESSION_ID")
+            if [[ "$SPIDER_SESSION_ID" =~ ^[0-9]+$ ]]; then
+              CMD_ARGS+=(--session-id "$SPIDER_SESSION_ID")
+            else
+              echo "::warning::Skipping non-numeric SPIDER_SESSION_ID for rollback: $SPIDER_SESSION_ID"
+            fi
           fi
           echo "Executing: ${CMD_ARGS[*]}"
           mkdir -p logs
@@ -965,7 +974,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: Production
     needs: [setup, run-pipeline]
-    if: ${{ !cancelled() }}
+    if: ${{ needs.run-pipeline.result == 'success' }}
     permissions:
       contents: write
       pull-requests: write
