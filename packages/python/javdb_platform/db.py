@@ -2891,8 +2891,8 @@ def _rollback_history(
             if applied_ids:
                 # Tidy only the audit rows that replayed successfully. Any
                 # drifted tail remains for manual recovery.
-                for i in range(0, len(applied_ids), 900):
-                    chunk = applied_ids[i:i + 900]
+                for i in range(0, len(applied_ids), 90):
+                    chunk = applied_ids[i:i + 90]
                     placeholders = ', '.join('?' for _ in chunk)
                     conn.execute(
                         f"DELETE FROM {audit_table} WHERE Id IN ({placeholders})",
