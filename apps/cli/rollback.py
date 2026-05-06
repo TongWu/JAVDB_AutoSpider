@@ -71,8 +71,9 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--session-id",
         type=int,
         default=None,
-        help="ReportSessions.Id to roll back. When --run-started-at is also "
-             "set, this id is unioned with the in-progress session lookup.",
+        help="ReportSessions.Id to roll back. By itself this targets only "
+             "that session; when --run-started-at is also set, this id is "
+             "unioned with the in-progress session lookup.",
     )
     parser.add_argument(
         "--run-id",
@@ -157,10 +158,11 @@ def _resolve_target_sessions(args: argparse.Namespace) -> List[int]:
     if args.session_id is not None:
         targets.add(int(args.session_id))
 
-    since = _normalize_run_started_at(args.run_started_at)
-    sessions = db_find_in_progress_sessions(since=since)
-    for sid in sessions:
-        targets.add(int(sid))
+    if args.run_started_at is not None or args.session_id is None:
+        since = _normalize_run_started_at(args.run_started_at)
+        sessions = db_find_in_progress_sessions(since=since)
+        for sid in sessions:
+            targets.add(int(sid))
     return sorted(targets)
 
 
@@ -206,6 +208,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     drift_total = 0
     failed_sessions: List[int] = []
+    refused_sessions: List[int] = []
     summaries: List[dict] = []
     for sid in sessions:
         try:
@@ -217,8 +220,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
         except ValueError as e:
             logger.error("Refused to roll back session %s: %s", sid, e)
-            close_db()
-            return 2
+            failed_sessions.append(sid)
+            refused_sessions.append(sid)
+            summaries.append({"session_id": sid, "error": str(e)})
+            continue
         except Exception as e:
             logger.error("Rollback of session %s failed: %s", sid, e)
             failed_sessions.append(sid)
@@ -251,10 +256,12 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if failed_sessions:
         logger.error(
-            "Rollback partially failed for sessions %s — "
-            "they remain Status='failed' for manual review.",
+            "Rollback partially failed or was refused for sessions %s — "
+            "check the per-session summary for details.",
             failed_sessions,
         )
+        if len(refused_sessions) == len(failed_sessions):
+            return 2
         return 4
     if drift_total > 0 and not args.dry_run:
         logger.warning(
