@@ -1464,19 +1464,27 @@ def main() -> int:
             return 1
 
         if _sqlite_ok and _staging_session_id is not None:
+            swap_attempted = False
             try:
+                if _created_local_staging_session:
+                    db_mark_session_committed(_staging_session_id)
+                swap_attempted = True
                 committed = db_swap_rclone_inventory(session_id=_staging_session_id)
                 logger.info(
                     "Swapped RcloneInventoryStaging_%s into RcloneInventory "
                     "(committed=%s rows)", _staging_session_id, committed,
                 )
-                if _created_local_staging_session:
-                    db_mark_session_committed(_staging_session_id)
             except Exception as e:
-                logger.error(
-                    f"Failed to swap RcloneInventory staging — "
-                    f"main table left UNCHANGED: {e}"
-                )
+                if swap_attempted:
+                    logger.error(
+                        f"Failed to swap RcloneInventory staging — "
+                        f"main table left UNCHANGED: {e}"
+                    )
+                else:
+                    logger.error(
+                        f"Failed to mark rclone inventory session committed "
+                        f"before swap — main table left UNCHANGED: {e}"
+                    )
                 try:
                     db_drop_rclone_staging(_staging_session_id)
                 except Exception:
