@@ -104,6 +104,10 @@ jobs:
             echo "    in-progress session created at-or-after that timestamp."
             exit 1
           fi
+          if [ -n "$INPUT_SESSION_ID" ] && ! [[ "$INPUT_SESSION_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::session_id must be an integer ReportSessions.Id; got '$INPUT_SESSION_ID'."
+            exit 1
+          fi
           if [ "$INPUT_FORCE" = "true" ] && [ "$INPUT_DRY_RUN" != "true" ]; then
             echo "::warning::--force enabled with dry_run=false. Committed sessions"
             echo "  WILL be rolled back. This is destructive; double-check the"
@@ -188,6 +192,7 @@ jobs:
           VAR_D1_OPERATIONS_DB_ID: ${{ secrets.D1_OPERATIONS_DB_ID }}
           VAR_PROXY_COORDINATOR_URL: ${{ vars.PROXY_COORDINATOR_URL }}
           VAR_PROXY_COORDINATOR_TOKEN: ${{ secrets.PROXY_COORDINATOR_TOKEN }}
+          VAR_MOVIE_CLAIM_ENABLED: ${{ vars.MOVIE_CLAIM_ENABLED || 'auto' }}
         run: python3 -m apps.cli.config_generator --github-actions
 
       - name: Pull latest changes
