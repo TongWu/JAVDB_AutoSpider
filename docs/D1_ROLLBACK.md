@@ -58,7 +58,7 @@ db_create_report_session()       →  Status='in_progress'  (every D1 write tagg
        │             │
        ▼             ▼
  db_mark_session_   db_rollback_session()
- committed()        ├─ Status='failed'
+ committed()        ├─ Status='failed' (non-committed)
        │            ├─ DELETE … WHERE SessionId=?
        ▼            ├─ replay *_Audit in reverse
   Status='committed' └─ DROP staging table
@@ -66,7 +66,7 @@ db_create_report_session()       →  Status='in_progress'  (every D1 write tagg
 
 - `Status='in_progress'` rows are the **only** ones cleanup-on-failure / RollbackD1 will touch.
 - `Status='committed'` rows are immutable (`db_rollback_session` raises `ValueError` unless `force=True`).
-- `Status='failed'` is a debug breadcrumb — it's set by `db_rollback_session` *before* the deletes so a partially-failed rollback leaves the row in a recognisable state for follow-up.
+- `Status='failed'` is a debug breadcrumb — for non-committed sessions, it's set by `db_rollback_session` *before* the deletes so a partially-failed rollback leaves the row in a recognisable state for follow-up.
 
 ---
 
@@ -92,14 +92,14 @@ cleanup-on-failure:
 
 What it does:
 
-1. Looks up every `ReportSessions` row with `Status='in_progress'` and `DateTimeCreated >= run_started_at`. If `--session-id` is supplied, it is added to that window lookup so the explicit session and any same-run in-progress sessions are rolled back together.
+1. Looks up every `ReportSessions` row with `Status='in_progress'` and `DateTimeCreated >= run_started_at` when `--run-started-at` is supplied. If `--session-id` is supplied by itself, only that explicit session is targeted; if both are supplied, the explicit session is unioned with the window lookup.
 2. For each session, runs the X3 rollback orchestration (reports → operations → history).
 3. Marks each session `Status='failed'` for traceability.
 4. Uploads `logs/rollback.log` (artifact: `rollback-log`, retention: 14 days).
 
 It's a no-op if the spider failed before `db_create_report_session` returned an id.
 
-> **Safety guarantee:** the cleanup job has a separate `cleanup-on-failure` artifact and never touches `Status='committed'` sessions, so a parallel run that just succeeded is never disturbed.
+> **Safety guarantee:** the cleanup job uploads a separate `rollback-log` artifact and never touches `Status='committed'` sessions, so a parallel run that just succeeded is never disturbed and operators can reliably locate rollback evidence.
 
 The companion **Mark sessions as committed** step runs at the end of `run-pipeline`'s success path (`if: ${{ success() }}`), after `spider`, `qb_uploader`, `qb_file_filter`, `pikpak_bridge`, and `dedup` have had their turn. The optional `qb_file_filter` / `dedup` steps keep `continue-on-error: true`, so their transient failures do not prevent the session from being protected once the required D1-writing steps have succeeded.
 
@@ -115,7 +115,7 @@ For incident response, ad-hoc cleanup, or rolling back a specific session you kn
 |---|---|---|
 | `session_id` | (blank) | Pass `ReportSessions.Id` to include a specific run. |
 | `run_id`, `attempt` | (blank) | For audit/log only. |
-| `run_started_at` | (blank) | ISO timestamp lower bound; discovers all in-progress sessions in that window and unions them with `session_id` when both are supplied. |
+| `run_started_at` | (blank) | ISO timestamp lower bound; discovers all in-progress sessions in that window and unions them with `session_id` when both are supplied. When omitted, `session_id` alone stays targeted to that session. |
 | `scope` | `all` | One of `all`, `reports`, `operations`, `history`. |
 | `dry_run` | `true` | **Always preview first.** |
 | `force` | `false` | Set only when you really need to roll back a `Status='committed'` session. Logs a `::warning::`. |
@@ -187,7 +187,7 @@ python3 -m apps.cli.rollback --session-id 123 --force --apply
 - `0` — success / dry-run completed cleanly
 - `2` — refused: session has `Status='committed'` and `--force` was not passed
 - `3` — could not connect to D1 / SQLite
-- `4` — partial failure (one or more sessions left `Status='failed'` with `drift_skipped > 0`)
+- `4` — partial failure or rollback drift; inspect the JSON summary and logs
 
 The CLI prints a JSON summary at the end with per-table counts; pipe it to `jq` for inspection.
 
