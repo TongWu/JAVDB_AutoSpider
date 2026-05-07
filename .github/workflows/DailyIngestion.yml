@@ -58,9 +58,9 @@ on:
         required: false
         default: '0.30'
         type: string
-  schedule:
+  # schedule: # DISABLED FOR PUBLIC REPO
     # Run daily at 12:00 UTC (20:00 Beijing Time)
-    - cron: '00 12 * * *'
+    # - cron: '00 12 * * *'
 
 jobs:
   # =============================================================================
