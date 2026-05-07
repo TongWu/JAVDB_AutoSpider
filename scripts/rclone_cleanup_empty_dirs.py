@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
-"""Remove empty directories under an rclone remote root.
+"""Remove empty directories under year folders on an rclone remote.
 
-传入的 ``root`` 被视为保留根目录；脚本只清理 root 下面的空子目录，不删除
-root 本身。目录会按从深到浅的顺序处理，因此如果某个父目录只包含空子目录，
-这些子目录删除后父目录也会被清理。
+传入的 ``root`` 被视为 JAV-Sync 根目录。脚本会先列出 root 下的四位数字年份
+目录和 ``未知`` 目录，然后逐个调用 ``rclone rmdirs --leave-root`` 清理这些
+目录下面的空子目录；年份/未知目录本身不会被删除。
+
+相比在 Python 里递归逐目录检查，本脚本把递归扫描交给 rclone 内部执行，并用
+``--workers`` 映射到 rclone 的 ``--checkers`` 来提高远端并发。对于支持
+``--fast-list`` 的远端，也可以打开该选项来减少递归列目录请求数。
 
 用法示例::
 
     python scripts/rclone_cleanup_empty_dirs.py gdrive:/不可以色色/JAV-Sync
     python scripts/rclone_cleanup_empty_dirs.py gdrive:/不可以色色/JAV-Sync --dry-run
-    python scripts/rclone_cleanup_empty_dirs.py gdrive:/不可以色色/JAV-Sync --verbose
+    python scripts/rclone_cleanup_empty_dirs.py gdrive:/不可以色色/JAV-Sync -w 64 --fast-list
 """
 
 from __future__ import annotations
@@ -17,21 +21,24 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import subprocess
 import sys
-from dataclasses import dataclass
-from typing import List, Optional, Set, Tuple
+from typing import List, Optional, Tuple
 
 LOG = logging.getLogger("rclone_empty_dirs")
+YEAR_DIR_RE = re.compile(r"^\d{4}$")
+UNKNOWN_YEAR_DIR = "未知"
 
 
-@dataclass(frozen=True)
-class DirState:
-    remote_path: str
-    rel_path: str
-    child_rels: List[str]
-    file_count: int
-    scan_failed: bool = False
+def positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
 
 
 # ---------------------------------------------------------------------------
@@ -60,141 +67,61 @@ def join_remote(base: str, name: str) -> str:
     return base + name if base.endswith("/") else f"{base}/{name}"
 
 
-def list_entries(remote_path: str) -> Tuple[List[str], int]:
-    """列出 remote_path 下的一级子目录名和一级文件数量。"""
+def list_dirs(remote_path: str) -> List[str]:
+    """列出某个 remote 路径下的一级子目录名。"""
     proc = run_rclone(
-        ["lsjson", "--no-modtime", "--no-mimetype", remote_path],
+        ["lsjson", "--dirs-only", "--no-modtime", "--no-mimetype", remote_path],
         check=True,
         capture=True,
     )
     items = json.loads(proc.stdout or "[]")
-
-    dirs: List[str] = []
-    file_count = 0
-    for item in items:
-        name = str(item.get("Name", ""))
-        if not name:
-            continue
-        if item.get("IsDir"):
-            dirs.append(name)
-        else:
-            file_count += 1
-    return dirs, file_count
+    return [
+        str(item.get("Name", ""))
+        for item in items
+        if item.get("IsDir") and str(item.get("Name", ""))
+    ]
 
 
-def rmdir_remote(remote_path: str) -> None:
-    run_rclone(["rmdir", remote_path], check=True, capture=True)
+def is_year_dir(name: str) -> bool:
+    """四位数字年份和“未知”都作为年份目录处理。"""
+    return bool(YEAR_DIR_RE.fullmatch(name)) or name == UNKNOWN_YEAR_DIR
 
 
-# ---------------------------------------------------------------------------
-# 扫描与清理计划
-# ---------------------------------------------------------------------------
-def collect_dir_tree(root: str) -> List[DirState]:
-    """递归收集目录树，返回 children-first 顺序。"""
-    states: List[DirState] = []
-
-    def walk(remote_path: str, rel_path: str) -> None:
-        try:
-            child_names, file_count = list_entries(remote_path)
-        except subprocess.CalledProcessError as exc:
-            LOG.error("lsjson failed for %s: %s", remote_path, (exc.stderr or "").strip())
-            states.append(
-                DirState(
-                    remote_path=remote_path,
-                    rel_path=rel_path,
-                    child_rels=[],
-                    file_count=1,
-                    scan_failed=True,
-                )
-            )
-            return
-        except (json.JSONDecodeError, OSError) as exc:
-            LOG.error("listing failed for %s: %s", remote_path, exc)
-            states.append(
-                DirState(
-                    remote_path=remote_path,
-                    rel_path=rel_path,
-                    child_rels=[],
-                    file_count=1,
-                    scan_failed=True,
-                )
-            )
-            return
-
-        child_rels: List[str] = []
-        for child in child_names:
-            child_rel = child if not rel_path else f"{rel_path}/{child}"
-            child_rels.append(child_rel)
-            walk(join_remote(remote_path, child), child_rel)
-
-        states.append(
-            DirState(
-                remote_path=remote_path,
-                rel_path=rel_path,
-                child_rels=child_rels,
-                file_count=file_count,
-            )
-        )
-
-    walk(root, "")
-    return states
+def year_sort_key(name: str) -> Tuple[int, str]:
+    """数字年份排前面，“未知”排在所有数字年份之后。"""
+    if YEAR_DIR_RE.fullmatch(name):
+        return 0, name
+    return 1, name
 
 
-def find_empty_dirs(states: List[DirState]) -> List[DirState]:
-    """从扫描结果中找出可删除空目录，不包含 root 本身。"""
-    removable: Set[str] = set()
-    empty_dirs: List[DirState] = []
-
-    for state in states:
-        if not state.rel_path or state.scan_failed:
-            continue
-
-        if state.file_count == 0 and all(child in removable for child in state.child_rels):
-            empty_dirs.append(state)
-            removable.add(state.rel_path)
-
-    return empty_dirs
+def select_year_dirs(dirs: List[str]) -> Tuple[List[str], List[str]]:
+    """返回 ``(year_dirs, skipped_dirs)``。处理四位数字年份目录和“未知”。"""
+    year_dirs = sorted((name for name in dirs if is_year_dir(name)), key=year_sort_key)
+    skipped_dirs = sorted(name for name in dirs if not is_year_dir(name))
+    return year_dirs, skipped_dirs
 
 
-def execute_cleanup(empty_dirs: List[DirState], dry_run: bool) -> Tuple[int, int, int]:
-    """返回 ``(removed, skipped, failed)``。"""
-    planned_empty = {state.rel_path for state in empty_dirs}
-    removed_rels: Set[str] = set()
-    removed = skipped = failed = 0
+def rmdirs_year(
+    year_path: str,
+    *,
+    workers: int,
+    dry_run: bool,
+    fast_list: bool,
+) -> subprocess.CompletedProcess:
+    """用 rclone 内建 rmdirs 清理年份目录下的空目录，并保留年份目录本身。"""
+    args: List[str] = []
+    if dry_run:
+        args.append("--dry-run")
+    if fast_list:
+        args.append("--fast-list")
+    args.extend(["--checkers", str(workers), "rmdirs", "--leave-root", year_path])
+    return run_rclone(args, check=True, capture=True, timeout=None)
 
-    for state in empty_dirs:
-        child_empty_rels = [child for child in state.child_rels if child in planned_empty]
-        if any(child not in removed_rels for child in child_empty_rels):
-            skipped += 1
-            LOG.warning("    [SKIP] %s :: child directory was not removed", state.rel_path)
-            continue
 
-        if dry_run:
-            removed += 1
-            removed_rels.add(state.rel_path)
-            LOG.info("    [DRY-RUN rmdir] %s", state.rel_path)
-            continue
-
-        try:
-            rmdir_remote(state.remote_path)
-        except subprocess.CalledProcessError as exc:
-            failed += 1
-            LOG.error(
-                "    [FAIL rmdir] %s :: %s",
-                state.rel_path,
-                (exc.stderr or exc.stdout or str(exc)).strip(),
-            )
-            continue
-        except OSError as exc:
-            failed += 1
-            LOG.error("    [FAIL rmdir] %s :: %s", state.rel_path, exc)
-            continue
-
-        removed += 1
-        removed_rels.add(state.rel_path)
-        LOG.info("    [OK rmdir] %s", state.rel_path)
-
-    return removed, skipped, failed
+def _log_rclone_output(proc: subprocess.CompletedProcess) -> None:
+    output = "\n".join(part.strip() for part in (proc.stdout, proc.stderr) if part.strip())
+    if output:
+        LOG.info("%s", output)
 
 
 # ---------------------------------------------------------------------------
@@ -202,7 +129,7 @@ def execute_cleanup(empty_dirs: List[DirState], dry_run: bool) -> Tuple[int, int
 # ---------------------------------------------------------------------------
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Remove empty directories under an rclone remote root.",
+        description="Remove empty directories under year folders on an rclone remote.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
@@ -210,9 +137,21 @@ def parse_args() -> argparse.Namespace:
         help="rclone 远端根路径，例如 gdrive:/不可以色色/JAV-Sync",
     )
     parser.add_argument(
+        "-w",
+        "--workers",
+        type=positive_int,
+        default=32,
+        help="传给 rclone --checkers 的并发数（默认 32）",
+    )
+    parser.add_argument(
+        "--fast-list",
+        action="store_true",
+        help="启用 rclone --fast-list；通常更快但会使用更多内存",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="仅打印将要删除的空目录，不实际执行 rclone rmdir",
+        help="仅打印将要删除的空目录，不实际执行删除",
     )
     parser.add_argument(
         "-v",
@@ -236,22 +175,53 @@ def main() -> int:
         LOG.error("rclone unavailable: %s", exc)
         return 2
 
-    LOG.info("root=%s dry_run=%s", args.root, args.dry_run)
-    states = collect_dir_tree(args.root)
-    empty_dirs = find_empty_dirs(states)
+    try:
+        root_dirs = list_dirs(args.root)
+    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError) as exc:
+        LOG.error("failed to list root directories under %s: %s", args.root, exc)
+        return 1
 
-    LOG.info("scanned_dirs=%d empty_dirs=%d", max(len(states) - 1, 0), len(empty_dirs))
-    if not empty_dirs:
-        LOG.info("nothing to clean")
-        return 0
+    year_dirs, skipped_dirs = select_year_dirs(root_dirs)
+    if skipped_dirs:
+        LOG.info("skipped non-year root dirs: %s", ", ".join(skipped_dirs))
+    if not year_dirs:
+        LOG.error("no year directories under %s", args.root)
+        return 1
 
-    removed, skipped, failed = execute_cleanup(empty_dirs, args.dry_run)
     LOG.info(
-        "=== finished removed=%d skipped=%d failed=%d ===",
-        removed,
-        skipped,
-        failed,
+        "root=%s years=%s workers=%d dry_run=%s fast_list=%s",
+        args.root,
+        year_dirs,
+        args.workers,
+        args.dry_run,
+        args.fast_list,
     )
+
+    cleaned = failed = 0
+    for year in year_dirs:
+        year_path = join_remote(args.root, year)
+        LOG.info("==> [%s] start", year)
+        try:
+            proc = rmdirs_year(
+                year_path,
+                workers=args.workers,
+                dry_run=args.dry_run,
+                fast_list=args.fast_list,
+            )
+        except subprocess.CalledProcessError as exc:
+            failed += 1
+            LOG.error(
+                "<== [%s] failed :: %s",
+                year,
+                (exc.stderr or exc.stdout or str(exc)).strip(),
+            )
+            continue
+
+        cleaned += 1
+        _log_rclone_output(proc)
+        LOG.info("<== [%s] done", year)
+
+    LOG.info("=== finished years=%d cleaned=%d failed=%d ===", len(year_dirs), cleaned, failed)
     return 0 if failed == 0 else 1
 
 

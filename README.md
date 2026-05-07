@@ -64,6 +64,7 @@ The spider operates in two modes:
 - **Now checks history by default** to skip already downloaded entries
 - Use `--ignore-history` to re-download everything
 - Uses "Ad Hoc" category in qBittorrent
+- In GitHub Actions Ad-Hoc Ingestion, `qb_category` set to `顶级` uses the Daily Ingestion qBittorrent URL and credentials
 - Example: `python3 -m apps.cli.spider --url "https://javdb.com/actors/EvkJ"`
 
 ### qBittorrent Integration
@@ -95,6 +96,7 @@ The spider operates in two modes:
 - Email notifications with results and logs
 - Complete workflow automation
 - GitHub Actions ingestion workflows ([`.github/workflows/DailyIngestion.yml`](.github/workflows/DailyIngestion.yml), [`.github/workflows/AdHocIngestion.yml`](.github/workflows/AdHocIngestion.yml)) use shared composite actions ([`.github/actions/setup-python-env`](.github/actions/setup-python-env), [`.github/actions/restore-encrypted-config`](.github/actions/restore-encrypted-config)) for Python + pip cache + Rust wheel; health checks run as the first step of `run-pipeline` (no separate job)
+- **D1 / SQLite rollback**: every run is tagged with a `ReportSessions.Id` and lifecycle status (`in_progress` → `committed`/`failed`). Failed pipelines auto-trigger the `cleanup-on-failure` job that unwinds uncommitted writes via the audit-table replay + per-session staging swap. Manual recovery is available through [`.github/workflows/RollbackD1.yml`](.github/workflows/RollbackD1.yml). Full SOP, "Re-run failed jobs" safety matrix, and audit-table forensics: [docs/D1_ROLLBACK.md](docs/D1_ROLLBACK.md).
 
 ### JavDB Auto Login
 - Automatic session cookie refresh
@@ -110,14 +112,18 @@ The spider operates in two modes:
 - Works with both local and remote proxy setups
 - Automatically activated as a fallback when direct requests fail
 
-### Cross-Runner Proxy Coordinator (Optional)
-- Cloudflare Worker + Durable Object that serializes per-proxy request pacing across **all concurrent GitHub Actions runners**, so multiple workflows sharing the same `PROXY_POOL_JSON` no longer hammer the same physical proxy in parallel
-- Per-`proxy_id` global mutex via `idFromName(proxy_id)` — one DO instance per proxy, persistent state, hibernates when idle
+### Cross-Runner Proxy Coordinator + Login State (Optional)
+- Cloudflare Worker that fronts **two** Durable Object classes serving every concurrent GH Actions runner from one shared deployment:
+  - **`ProxyCoordinator`** (per-proxy DO) — serialises request pacing across runners so multiple workflows sharing the same `PROXY_POOL_JSON` no longer hammer the same physical proxy in parallel. One DO instance per `idFromName(proxy_id)`.
+  - **`GlobalLoginState`** (singleton DO at `idFromName("global")`) — coordinates JavDB's at-most-one-login-per-account constraint: stores the currently logged-in proxy + AES-GCM-encrypted session cookie + a re-login `lease` mutex. Other runners pull the cookie on startup instead of attempting their own login, and `LoginRequired` tasks parked on a runner that lost the lease are automatically re-dispatched once the winner publishes a fresh cookie — meanwhile non-login workers keep running on their own proxies, never blocked.
 - Shared `penalty_factor` propagation: when one runner hits a CF Turnstile, all other runners pick it up on the next `/lease` call
-- **Fail-open by design**: if the Worker is unreachable / token mismatched / network is down, the spider transparently falls back to local throttling (`MovieSleepManager`) — no retries, no extra latency on the hot path
-- Free-tier-friendly: SQLite-backed DO, ~1 HTTP roundtrip per scheduled request, well under Cloudflare's 100 k/day Worker + DO request quotas
-- **Worker source lives in a dedicated repo**: [TongWu/JAVDB_AutoSpider_Proxycoordinator](https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator) (TypeScript + wrangler + vitest). Python client stays in this monorepo at [`packages/python/javdb_platform/proxy_coordinator_client.py`](packages/python/javdb_platform/proxy_coordinator_client.py).
-- Full deploy walkthrough: [docs/PROXY_COORDINATOR_DEPLOY.md](docs/PROXY_COORDINATOR_DEPLOY.md)
+- **Fail-open by design**: if the Worker is unreachable / token mismatched / network is down, the spider transparently falls back to local throttling (`MovieSleepManager`) and per-runner login — no retries, no extra latency on the hot path
+- Free-tier-friendly: SQLite-backed DOs, ~1 HTTP roundtrip per scheduled request, well under Cloudflare's 100 k/day Worker + DO request quotas. Login-state polling adds a few requests/min only while a re-login is in flight.
+- **Single bearer token**, single Cloudflare Worker, two endpoint families:
+  - `/lease`, `/report`, `/state` — per-proxy throttle (ProxyCoordinator)
+  - `/login_state`, `/login_state/{acquire_lease,publish,invalidate,release_lease}` — cross-runtime JavDB login (GlobalLoginState)
+- **Worker source lives in a dedicated repo**: [TongWu/JAVDB_AutoSpider_Proxycoordinator](https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator) (TypeScript + wrangler + vitest, 46 tests). Python clients stay in this monorepo at [`packages/python/javdb_platform/proxy_coordinator_client.py`](packages/python/javdb_platform/proxy_coordinator_client.py) and [`packages/python/javdb_platform/login_state_client.py`](packages/python/javdb_platform/login_state_client.py).
+- Full deploy walkthrough: [docs/PROXY_COORDINATOR_DEPLOY.md](docs/PROXY_COORDINATOR_DEPLOY.md) (§13 covers the GlobalLoginState DO).
 
 ## Installation
 
@@ -210,7 +216,7 @@ docker pull ghcr.io/YOUR_USERNAME/javdb-autospider:latest
 2. **Prepare configuration files:**
 ```bash
 cp config.py.example config.py
-cp env.example .env
+cp .env.example .env
 # Edit config.py with your settings
 ```
 
@@ -239,7 +245,7 @@ Or manually:
 ```bash
 # Prepare configuration
 cp config.py.example config.py
-cp env.example .env
+cp .env.example .env
 
 # Build and start
 docker-compose -f docker/docker-compose.yml build
@@ -1250,6 +1256,7 @@ TWOCAPTCHA_API_KEY = ''  # For automatic captcha solving
 Re-run `python3 javdb_login.py` when:
 - ✅ Session cookie expires (usually after days/weeks)
 - ✅ Spider shows "No movie list found" on valid URLs
+- ✅ JavDB returns "Due to copyright restrictions, this page is not available in your country."
 - ✅ Age verification or login errors appear
 - ✅ Before using `--url` parameter for first time
 

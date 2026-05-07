@@ -1,3 +1,5 @@
+import pytest
+
 from scripts import rclone_update_nfo_titles as updater
 
 
@@ -15,6 +17,51 @@ def test_run_rclone_uses_default_timeout(monkeypatch):
 
     assert calls[0][1]["timeout"] == 300.0
     assert calls[1][1]["timeout"] is None
+
+
+def test_select_year_dirs_excludes_temp_and_sorts_unknown_after_years():
+    years, missing = updater.select_year_dirs(
+        ["temp", "2026", "unknown", "2018", "2017", "未知", "Temp"]
+    )
+
+    assert years == ["2017", "2018", "2026", "未知"]
+    assert missing == set()
+
+
+def test_select_year_dirs_start_from_keeps_unknown_dirs_after_matching_years():
+    years, missing = updater.select_year_dirs(
+        ["2017", "2018", "2020", "2026", "manual", "未知", "temp"],
+        start_from=2018,
+    )
+
+    assert years == ["2018", "2020", "2026", "未知"]
+    assert missing == set()
+
+
+def test_select_year_dirs_requested_years_intersect_start_from_and_exclude_temp():
+    years, missing = updater.select_year_dirs(
+        ["2017", "2018", "2026", "manual", "未知", "temp"],
+        requested_years=["2017", "2018", "manual", "未知", "temp", "missing"],
+        start_from=2018,
+    )
+
+    assert years == ["2018", "未知"]
+    assert missing == {"manual", "temp", "missing"}
+
+
+def test_validate_year_requires_exactly_four_digits():
+    assert updater.validate_year("2026") == 2026
+    for value in ("20", "99999", "abcd"):
+        with pytest.raises(updater.argparse.ArgumentTypeError):
+            updater.validate_year(value)
+
+
+def test_validate_requested_year_accepts_year_or_unknown():
+    assert updater.validate_requested_year("2026") == "2026"
+    assert updater.validate_requested_year("未知") == "未知"
+    for value in ("20", "99999", "abcd", "unknown"):
+        with pytest.raises(updater.argparse.ArgumentTypeError):
+            updater.validate_requested_year(value)
 
 
 def test_transform_title_hides_coded_and_no_subtitle_suffix():

@@ -83,10 +83,11 @@ class TestSpiderUsesProxyFlag:
                 'packages.python.javdb_integrations.login.update_config_file',
                 return_value=False,
             ):
-                success, _cookie, _proxy_name = session_mod.attempt_login_refresh(
+                success, _cookie, proxy_name = session_mod.attempt_login_refresh(
                     spider_uses_proxy=False,
                 )
             assert success is True
+            assert proxy_name == "direct"
             mock_login.assert_called_once()
             _, kwargs = mock_login.call_args
             assert kwargs.get('proxies') is None, \
@@ -233,6 +234,40 @@ class TestNoProxyFallbackShortCircuit:
         assert result[5] is False  # parse_success
 
 
+class TestIndexCopyrightRestrictionLogin:
+    """Verify that copyright restriction pages are treated as login-required."""
+
+    def test_index_copyright_restriction_triggers_login_retry(self):
+        copyright_html = (
+            "<html><body>Due to copyright restrictions, "
+            "this page is not available in your country.</body></html>"
+        )
+        valid_index_html = (
+            "<html><body><div class='movie-list'>"
+            "<div class='item'></div>"
+            "</div></body></html>"
+        )
+
+        with patch.object(state_mod, 'global_proxy_pool', None), \
+             patch.object(fallback_mod, 'can_attempt_login', return_value=True), \
+             patch.object(fallback_mod, '_login_refresh_for_spider', return_value=(True, 'ck', None)) as login_refresh, \
+             patch.object(fallback_mod, '_sleep_between_fetches'), \
+             patch.object(state_mod, 'get_page', side_effect=[copyright_html, valid_index_html]):
+            result = fallback_mod.fetch_index_page_with_fallback(
+                page_url='http://javdb.com/actors/abc',
+                session=MagicMock(),
+                use_cookie=True,
+                use_proxy=False,
+                use_cf_bypass=False,
+                page_num=1,
+                is_adhoc_mode=True,
+            )
+
+        login_refresh.assert_called_once_with(False)
+        assert result[0] == valid_index_html
+        assert result[1] is True  # has_movie_list
+
+
 class TestDetailLoginRetrySendsCookie:
     """run_service sets use_cookie=False for daily runs; post-login retry must still attach cookie."""
 
@@ -322,3 +357,196 @@ class TestProxyModeDisabled:
         finally:
             state_mod.global_proxy_pool = orig_pool
             session_mod.PROXY_MODE = orig_mode
+
+
+class TestCrossRuntimeDoIntegration:
+    """Verify ``attempt_login_refresh`` publishes to the GlobalLoginState DO
+    on success and stays silent (fail-open) on every error path.
+
+    These tests exercise the wiring added in :func:`_publish_login_state_to_do`
+    — the actual DO endpoint behaviour is covered by the Worker repo's
+    vitest suite.
+    """
+
+    def _common_patches(self):
+        return [
+            patch.object(session_mod, 'LOGIN_FEATURE_AVAILABLE', True),
+            patch.object(session_mod, 'JAVDB_USERNAME', 'user'),
+            patch.object(session_mod, 'JAVDB_PASSWORD', 'pass'),
+            patch.object(state_mod, 'login_total_budget', 0),
+            patch.object(state_mod, 'login_total_attempts', 0),
+            patch.object(state_mod, 'login_attempted', False),
+            patch.object(session_mod, 'LOGIN_PROXY_NAME', None),
+            patch.object(session_mod, 'PROXY_POOL', []),
+            patch.object(state_mod, 'global_proxy_pool', None),
+        ]
+
+    def test_publish_called_with_runtime_holder_id_on_success(self):
+        """A successful login should publish ``(holder_id, proxy_name, cookie)``
+        and stash the returned version in ``state.current_login_state_version``.
+        """
+        do_client = MagicMock()
+        do_client.publish.return_value = MagicMock(version=42)
+
+        patches = self._common_patches() + [
+            patch.object(state_mod, 'global_login_state_client', do_client),
+            patch.object(state_mod, 'runtime_holder_id', 'runner-test'),
+            patch.object(state_mod, 'current_login_state_version', None),
+        ]
+
+        for p in patches:
+            p.start()
+        try:
+            with patch('sys.exit'), patch(
+                'packages.python.javdb_integrations.login.login_with_retry',
+                return_value=(True, 'cookie-XYZ', 'ok'),
+            ), patch(
+                'packages.python.javdb_integrations.login.update_config_file',
+                return_value=False,  # simulates write failure → second return path
+            ):
+                success, _cookie, _proxy_name = session_mod.attempt_login_refresh(
+                    explicit_proxies={'http': 'http://e:1'},
+                    explicit_proxy_name='ProxyE',
+                    spider_uses_proxy=True,
+                )
+            assert success is True
+            do_client.publish.assert_called_once_with(
+                holder_id='runner-test',
+                proxy_name='ProxyE',
+                cookie='cookie-XYZ',
+            )
+            assert state_mod.current_login_state_version == 42
+        finally:
+            for p in reversed(patches):
+                p.stop()
+
+    def test_no_publish_when_do_client_unconfigured(self):
+        """Without a configured DO, ``attempt_login_refresh`` must not crash
+        (fail-open) and ``current_login_state_version`` stays at its
+        sentinel."""
+        patches = self._common_patches() + [
+            patch.object(state_mod, 'global_login_state_client', None),
+            patch.object(state_mod, 'current_login_state_version', None),
+        ]
+        for p in patches:
+            p.start()
+        try:
+            with patch('sys.exit'), patch(
+                'packages.python.javdb_integrations.login.login_with_retry',
+                return_value=(True, 'cookie-XYZ', 'ok'),
+            ), patch(
+                'packages.python.javdb_integrations.login.update_config_file',
+                return_value=False,
+            ):
+                success, _cookie, _proxy_name = session_mod.attempt_login_refresh(
+                    explicit_proxies={'http': 'http://e:1'},
+                    explicit_proxy_name='ProxyE',
+                    spider_uses_proxy=True,
+                )
+            assert success is True
+            assert state_mod.current_login_state_version is None
+        finally:
+            for p in reversed(patches):
+                p.stop()
+
+    def test_publish_failure_is_swallowed_and_login_still_succeeds(self):
+        """If the DO publish raises ``LoginStateUnavailable`` (e.g. 409
+        lease_required when caller didn't acquire), the login result is
+        still surfaced as success — local cookie is intact, only other
+        runners miss the broadcast."""
+        from packages.python.javdb_platform.login_state_client import (
+            LoginStateUnavailable,
+        )
+        do_client = MagicMock()
+        do_client.publish.side_effect = LoginStateUnavailable("HTTP 409 lease_required")
+
+        patches = self._common_patches() + [
+            patch.object(state_mod, 'global_login_state_client', do_client),
+            patch.object(state_mod, 'runtime_holder_id', 'runner-test'),
+            patch.object(state_mod, 'current_login_state_version', None),
+        ]
+        for p in patches:
+            p.start()
+        try:
+            with patch('sys.exit'), patch(
+                'packages.python.javdb_integrations.login.login_with_retry',
+                return_value=(True, 'cookie-XYZ', 'ok'),
+            ), patch(
+                'packages.python.javdb_integrations.login.update_config_file',
+                return_value=False,
+            ):
+                success, _cookie, _proxy_name = session_mod.attempt_login_refresh(
+                    explicit_proxies={'http': 'http://e:1'},
+                    explicit_proxy_name='ProxyE',
+                    spider_uses_proxy=True,
+                )
+            assert success is True
+            do_client.publish.assert_called_once()
+            assert state_mod.current_login_state_version is None  # never updated
+        finally:
+            for p in reversed(patches):
+                p.stop()
+
+    def test_unexpected_publish_failure_is_swallowed(self):
+        """Unexpected client.publish errors also preserve fail-open login."""
+        do_client = MagicMock()
+        do_client.publish.side_effect = RuntimeError("boom")
+
+        patches = self._common_patches() + [
+            patch.object(state_mod, 'global_login_state_client', do_client),
+            patch.object(state_mod, 'runtime_holder_id', 'runner-test'),
+            patch.object(state_mod, 'current_login_state_version', None),
+        ]
+        for p in patches:
+            p.start()
+        try:
+            with patch('sys.exit'), patch(
+                'packages.python.javdb_integrations.login.login_with_retry',
+                return_value=(True, 'cookie-XYZ', 'ok'),
+            ), patch(
+                'packages.python.javdb_integrations.login.update_config_file',
+                return_value=False,
+            ):
+                success, _cookie, _proxy_name = session_mod.attempt_login_refresh(
+                    explicit_proxies={'http': 'http://e:1'},
+                    explicit_proxy_name='ProxyE',
+                    spider_uses_proxy=True,
+                )
+            assert success is True
+            do_client.publish.assert_called_once()
+            assert state_mod.current_login_state_version is None
+        finally:
+            for p in reversed(patches):
+                p.stop()
+
+    def test_no_proxy_publish_uses_direct_sentinel(self):
+        """No-proxy logins still publish with a stable DO proxy label."""
+        do_client = MagicMock()
+        do_client.publish.return_value = MagicMock(version=7)
+        patches = self._common_patches() + [
+            patch.object(state_mod, 'global_login_state_client', do_client),
+            patch.object(state_mod, 'runtime_holder_id', 'runner-test'),
+        ]
+        for p in patches:
+            p.start()
+        try:
+            with patch('sys.exit'), patch(
+                'packages.python.javdb_integrations.login.login_with_retry',
+                return_value=(True, 'cookie-XYZ', 'ok'),
+            ), patch(
+                'packages.python.javdb_integrations.login.update_config_file',
+                return_value=False,
+            ):
+                success, _cookie, proxy_name = session_mod.attempt_login_refresh(
+                    spider_uses_proxy=False,
+                )
+            assert success is True
+            assert proxy_name == "direct"
+            do_client.publish.assert_called_once_with(
+                holder_id='runner-test',
+                proxy_name='direct',
+                cookie='cookie-XYZ',
+            )
+        finally:
+            for p in reversed(patches):
+                p.stop()

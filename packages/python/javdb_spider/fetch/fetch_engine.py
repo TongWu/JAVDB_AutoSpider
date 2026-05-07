@@ -48,6 +48,7 @@ from typing import Any, Callable, Iterator, List, Optional, Union
 from urllib.parse import urlparse
 
 from packages.python.javdb_platform.logging_config import get_logger
+from packages.python.javdb_platform.login_state_client import LoginStateUnavailable
 from packages.python.javdb_platform.proxy_coordinator_client import _normalize_proxy_id
 from packages.python.javdb_platform.proxy_ban_manager import get_ban_manager
 from packages.python.javdb_platform.proxy_pool import create_proxy_pool_from_config
@@ -541,8 +542,23 @@ class _EngineWorker(threading.Thread):
             # (only the global fallback handler uses it).
             def _cf_event_cb(_unused_proxy_name=None, _c=coordinator, _p=coord_proxy_id):
                 _c.report_async(_p, "cf")
+
+            # P2-D — per-attempt success/failure + latency reporting.  Pinned
+            # to ``coord_proxy_id`` via closure (same pattern as
+            # ``_cf_event_cb``); the worker-passed ``proxy_name`` is ignored
+            # because every call from this engine routes through the single
+            # proxy this engine is bound to.
+            def _request_complete_cb(
+                _unused_proxy_name=None,
+                kind="success",
+                latency_ms=0,
+                _c=coordinator,
+                _p=coord_proxy_id,
+            ):
+                _c.report_async(_p, kind, latency_ms=latency_ms)
         else:
             _cf_event_cb = None
+            _request_complete_cb = None
 
         self._handler = RequestHandler(
             proxy_pool=self._proxy_pool,
@@ -563,6 +579,7 @@ class _EngineWorker(threading.Thread):
             ),
             penalty_tracker=penalty_tracker,
             on_cf_event=_cf_event_cb,
+            on_request_complete=_request_complete_cb,
         )
 
     # -- task deadline -------------------------------------------------------
@@ -1284,7 +1301,61 @@ class ParallelFetchBackend(FetchBackend):
             w.start()
 
     def _inherit_login_state(self) -> None:
-        """Propagate index-phase login to the matching worker."""
+        """Propagate index-phase or cross-runtime login to the matching worker.
+
+        Two sources of login state, in order of preference:
+
+        1. **Cross-runtime DO** (when configured): another GitHub Actions
+           runner may have already published a fresh cookie via
+           :class:`GlobalLoginState`.  Pulling it here lets this runner
+           skip its own re-login entirely on startup, mirroring the
+           cookie + proxy_name into ``state`` so the existing per-worker
+           injection path below picks it up.
+        2. **Index phase** (legacy single-runtime path): when the index
+           fetcher inside *this* runner just performed a login, the
+           cookie is already in ``state.refreshed_session_cookie``.
+
+        DO failures fall through silently — the legacy path remains the
+        source of truth in that case (per the fail-open contract).
+        """
+        # 1. Pull the latest published login state from the DO singleton
+        #    so a fresh runner can adopt a peer's cookie without paying
+        #    the cost of its own login.  Skip when the DO is not
+        #    configured or when this runner has already observed the
+        #    same version (e.g. via a poller tick that happened earlier).
+        do_client = state.global_login_state_client
+        if do_client is not None:
+            try:
+                snapshot = do_client.get_state()
+            except LoginStateUnavailable as exc:
+                logger.warning(
+                    "Engine startup: DO get_state failed (%s) — "
+                    "falling back to index-phase login state",
+                    exc,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Engine startup: unexpected DO get_state error (%s) — "
+                    "falling back to index-phase login state",
+                    exc,
+                    exc_info=True,
+                )
+            else:
+                already_local = state.current_login_state_version or 0
+                if (
+                    snapshot.proxy_name
+                    and snapshot.cookie
+                    and snapshot.version > already_local
+                ):
+                    state.logged_in_proxy_name = snapshot.proxy_name
+                    state.refreshed_session_cookie = snapshot.cookie
+                    state.current_login_state_version = snapshot.version
+                    logger.info(
+                        "Engine startup: adopted cross-runtime login state "
+                        "from DO (proxy=%s, version=%d)",
+                        snapshot.proxy_name, snapshot.version,
+                    )
+
         if not (state.logged_in_proxy_name and state.refreshed_session_cookie):
             return
 

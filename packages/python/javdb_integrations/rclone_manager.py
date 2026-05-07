@@ -45,6 +45,7 @@ import sys
 import csv
 import gc
 import argparse
+import tempfile
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
@@ -163,7 +164,7 @@ def _folder_to_row(folder: FolderInfo, remote_name: str, root_folder: str, scan_
 def _process_year(
     remote_name: str, root_folder: str, year: str, scan_time: str,
     fallback_workers: int = 8,
-) -> List[dict]:
+) -> Optional[List[dict]]:
     """Scan a year tree — try year-level first, fall back to actor-level."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -181,12 +182,13 @@ def _process_year(
         actors = get_actor_folders(remote_name, root_folder, year)
     except Exception as e:
         logger.error(f"Error listing actors for year {year}: {e}")
-        return []
+        return None
 
     if not actors:
         return []
 
     all_rows: List[dict] = []
+    actor_failed = False
     with ThreadPoolExecutor(max_workers=fallback_workers) as executor:
         futures = {
             executor.submit(get_movie_folders_with_stats, remote_name, root_folder, year, actor): actor
@@ -198,7 +200,10 @@ def _process_year(
                 folders = future.result()
                 all_rows.extend(_folder_to_row(f, remote_name, root_folder, scan_time) for f in folders)
             except Exception as exc:
-                logger.debug(f"Error scanning {year}/{actor}: {exc}")
+                actor_failed = True
+                logger.error(f"Error scanning {year}/{actor}: {exc}")
+    if actor_failed:
+        return None
     return all_rows
 
 
@@ -207,7 +212,7 @@ def scan_inventory(
     max_workers: int = 4,
     year_filter: Optional[List[str]] = None,
     row_callback=None,
-) -> int:
+) -> Tuple[int, int]:
     """Scan the full folder tree using year-level parallelism with fallback."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -215,16 +220,17 @@ def scan_inventory(
     years = get_year_folders(remote_name, root_folder)
     if not years:
         logger.warning("No year folders found")
-        return 0
+        return 0, 0
 
     if year_filter:
         years = [y for y in years if y in year_filter]
         logger.info(f"Year filter applied: {years}")
         if not years:
-            return 0
+            return 0, 0
 
     scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     total_rows = 0
+    error_count = 0
     completed = 0
     total = len(years)
 
@@ -243,6 +249,10 @@ def scan_inventory(
             completed += 1
             try:
                 rows = future.result()
+                if rows is None:
+                    error_count += 1
+                    logger.error(f"Error processing year {year}: fallback scan incomplete")
+                    continue
                 if rows:
                     if row_callback:
                         row_callback(rows)
@@ -252,10 +262,14 @@ def scan_inventory(
                     f"year {year}: {len(rows)} folders, total so far: {total_rows}"
                 )
             except Exception as e:
+                error_count += 1
                 logger.error(f"Error processing year {year}: {e}")
 
-    logger.info(f"Scan complete: {total_rows} movie folders found")
-    return total_rows
+    logger.info(
+        f"Scan complete: {total_rows} movie folders found "
+        f"({error_count} year error(s))"
+    )
+    return total_rows, error_count
 
 
 def export_db_to_csv(output_path: str) -> int:
@@ -1337,19 +1351,76 @@ def main() -> int:
 
         total_written = 0
         _sqlite_ok = False
+        _staging_session_id: Optional[int] = None
+        _created_local_staging_session = False
         if _use_sqlite():
             try:
-                from packages.python.javdb_platform.db import init_db, db_clear_rclone_inventory, db_append_rclone_inventory
+                from packages.python.javdb_platform.db import (
+                    init_db,
+                    db_create_report_session,
+                    db_mark_session_committed,
+                    db_mark_session_failed,
+                    db_open_rclone_staging,
+                    db_append_rclone_staging,
+                    db_swap_rclone_inventory,
+                    db_merge_rclone_inventory_from_stage,
+                    db_drop_rclone_staging,
+                    get_active_session_id,
+                )
                 init_db()
-                db_clear_rclone_inventory()
+                _staging_session_id = get_active_session_id()
+                if _staging_session_id is None:
+                    _staging_session_id = db_create_report_session(
+                        report_type="rclone_inventory",
+                        report_date=datetime.now().strftime("%Y%m%d"),
+                        csv_filename=os.path.basename(output_path),
+                    )
+                    _created_local_staging_session = True
+                    logger.info(
+                        "Created local rclone inventory staging session: id=%s",
+                        _staging_session_id,
+                    )
+                # X3 staging-then-swap: rows go into a per-session staging
+                # table; the live RcloneInventory only gets rewritten in a
+                # single atomic swap at the end. A failed scan therefore
+                # can't half-overwrite.
+                db_open_rclone_staging(_staging_session_id)
                 _sqlite_ok = True
             except Exception as e:
-                logger.warning(f"Failed initializing SQLite for rclone inventory: {e}")
+                logger.error(f"Failed initializing SQLite for rclone inventory; aborting scan: {e}")
+                if _staging_session_id is not None:
+                    try:
+                        db_mark_session_failed(_staging_session_id)
+                    except Exception as mark_error:
+                        logger.warning(
+                            "Failed to mark rclone inventory staging session "
+                            "failed after init error: %s",
+                            mark_error,
+                        )
+                    try:
+                        db_drop_rclone_staging(_staging_session_id)
+                    except Exception:
+                        pass
+                _staging_session_id = None
+                _created_local_staging_session = False
+                return 1
 
         _csv_file = None
         _csv_writer = None
+        _csv_tmp_path = None
         if _use_csv():
-            _csv_file = open(output_path, 'w', newline='', encoding='utf-8')
+            output_dir = os.path.dirname(output_path) or '.'
+            os.makedirs(output_dir, exist_ok=True)
+            _csv_file = tempfile.NamedTemporaryFile(
+                'w',
+                newline='',
+                encoding='utf-8',
+                dir=output_dir,
+                prefix=f"{os.path.basename(output_path)}.",
+                suffix=".tmp",
+                delete=False,
+            )
+            _csv_tmp_path = _csv_file.name
             _csv_writer = csv.DictWriter(_csv_file, fieldnames=INVENTORY_FIELDNAMES)
             _csv_writer.writeheader()
 
@@ -1360,18 +1431,129 @@ def main() -> int:
                     _csv_writer.writerow(row)
                 _csv_file.flush()
             if _sqlite_ok:
-                db_append_rclone_inventory(rows)
+                if _staging_session_id is not None:
+                    db_append_rclone_staging(rows, session_id=_staging_session_id)
             total_written += len(rows)
 
-        total_found = scan_inventory(
-            remote_name, root_folder,
-            max_workers=args.workers,
-            year_filter=year_filter,
-            row_callback=on_rows,
-        )
+        scan_failed = False
+        scan_error_count = 0
+        try:
+            total_found, scan_error_count = scan_inventory(
+                remote_name, root_folder,
+                max_workers=args.workers,
+                year_filter=year_filter,
+                row_callback=on_rows,
+            )
+            if scan_error_count:
+                scan_failed = True
+                logger.error(
+                    "Inventory scan had %s year-level error(s); dropping "
+                    "staging and leaving live RcloneInventory untouched.",
+                    scan_error_count,
+                )
+        except Exception:
+            scan_failed = True
+            raise
+        finally:
+            if scan_failed and _sqlite_ok and _staging_session_id is not None:
+                try:
+                    db_mark_session_failed(_staging_session_id)
+                except Exception as mark_error:
+                    logger.warning(
+                        "Failed to mark rclone inventory staging session "
+                        "failed after scan error: %s",
+                        mark_error,
+                    )
+                try:
+                    db_drop_rclone_staging(_staging_session_id)
+                    logger.info(
+                        "Dropped RcloneInventoryStaging_%s after scan failure; "
+                        "live RcloneInventory left untouched.",
+                        _staging_session_id,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to drop staging table after scan error: {e}"
+                    )
+            if scan_failed and _csv_file is not None:
+                _csv_file.close()
+                if _csv_tmp_path is not None:
+                    try:
+                        os.remove(_csv_tmp_path)
+                    except FileNotFoundError:
+                        pass
 
-        if _csv_file is not None:
+        if _csv_file is not None and not _csv_file.closed:
             _csv_file.close()
+
+        if scan_failed:
+            return 1
+
+        if _sqlite_ok and _staging_session_id is not None:
+            cleanup_failed = False
+            try:
+                if year_filter:
+                    committed = db_merge_rclone_inventory_from_stage(
+                        session_id=_staging_session_id,
+                        years=year_filter,
+                    )
+                else:
+                    committed = db_swap_rclone_inventory(
+                        session_id=_staging_session_id,
+                    )
+            except Exception as e:
+                action = "merge" if year_filter else "swap"
+                logger.error(
+                    f"Failed to {action} RcloneInventory staging — "
+                    f"main table left UNCHANGED: {e}"
+                )
+                try:
+                    db_mark_session_failed(_staging_session_id)
+                except Exception as mark_error:
+                    logger.warning(
+                        "Failed to mark rclone inventory staging session "
+                        "failed after swap error: %s",
+                        mark_error,
+                    )
+                try:
+                    db_drop_rclone_staging(_staging_session_id)
+                except Exception:
+                    pass
+                if _csv_tmp_path is not None:
+                    try:
+                        os.remove(_csv_tmp_path)
+                    except FileNotFoundError:
+                        pass
+                raise
+            if _created_local_staging_session:
+                cleanup_failed = True
+                for attempt in range(1, 4):
+                    try:
+                        db_mark_session_committed(_staging_session_id)
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to mark rclone inventory session committed "
+                            "after successful swap (attempt %d/3): %s",
+                            attempt, e,
+                        )
+                    else:
+                        cleanup_failed = False
+                        break
+                if cleanup_failed:
+                    logger.error(
+                        "Rclone inventory swap succeeded, but post-success "
+                        "session cleanup failed for session_id=%s; leaving "
+                        "the scan output intact for inspection.",
+                        _staging_session_id,
+                    )
+            action = "Merged" if year_filter else "Swapped"
+            logger.info(
+                "%s RcloneInventoryStaging_%s into RcloneInventory "
+                "(committed=%s rows)", action, _staging_session_id, committed,
+            )
+
+        if _csv_tmp_path is not None:
+            os.replace(_csv_tmp_path, output_path)
 
         if _sqlite_ok:
             csv_export_path = os.path.join(REPORTS_DIR, RCLONE_INVENTORY_CSV)

@@ -203,3 +203,96 @@ class TestGetBanManager:
         assert manager1 is manager2
         
         pbm._global_ban_manager = None
+
+
+class TestRemoteBanHook:
+    """P1-A — cross-runner ban dispatcher (``set_remote_ban_hook``).
+
+    These verify (a) the hook fires once per *newly* recorded ban,
+    (b) repeats are deduped (no over-amplification of report_async),
+    (c) hook exceptions are swallowed, and (d) ``set_remote_ban_hook(None)``
+    cleanly disables the integration so the local manager keeps the
+    pre-coordinator behaviour.
+    """
+
+    def setup_method(self):
+        # Defensive: every test starts with the hook cleared so cross-test
+        # leaks (a previous test forgetting to unregister) can't mask bugs.
+        from packages.python.javdb_platform.proxy_ban_manager import (
+            set_remote_ban_hook,
+            set_remote_unban_hook,
+        )
+        set_remote_ban_hook(None)
+        set_remote_unban_hook(None)
+
+    def teardown_method(self):
+        from packages.python.javdb_platform.proxy_ban_manager import (
+            set_remote_ban_hook,
+            set_remote_unban_hook,
+        )
+        set_remote_ban_hook(None)
+        set_remote_unban_hook(None)
+
+    def test_add_ban_fires_remote_hook_exactly_once(self):
+        from packages.python.javdb_platform.proxy_ban_manager import (
+            set_remote_ban_hook,
+        )
+        captured: list = []
+        set_remote_ban_hook(lambda name: captured.append(name))
+
+        manager = ProxyBanManager()
+        manager.add_ban("proxy-A")
+        assert captured == ["proxy-A"]
+
+    def test_add_ban_does_not_fire_for_already_banned_proxy(self):
+        from packages.python.javdb_platform.proxy_ban_manager import (
+            set_remote_ban_hook,
+        )
+        captured: list = []
+        set_remote_ban_hook(lambda name: captured.append(name))
+
+        manager = ProxyBanManager()
+        manager.add_ban("proxy-A")
+        manager.add_ban("proxy-A")
+        manager.add_ban("proxy-A")
+        # Only the first add fires the hook; subsequent calls are dedup'd.
+        assert captured == ["proxy-A"]
+
+    def test_add_ban_swallows_hook_exceptions(self):
+        from packages.python.javdb_platform.proxy_ban_manager import (
+            set_remote_ban_hook,
+        )
+
+        def boom(name):
+            raise RuntimeError("simulated coordinator outage")
+
+        set_remote_ban_hook(boom)
+        manager = ProxyBanManager()
+        # Must NOT raise — the local ban must commit even when the hook fails.
+        manager.add_ban("proxy-A")
+        assert manager.is_proxy_banned("proxy-A") is True
+
+    def test_clearing_remote_hook_restores_local_only_behaviour(self):
+        from packages.python.javdb_platform.proxy_ban_manager import (
+            set_remote_ban_hook,
+        )
+        captured: list = []
+        set_remote_ban_hook(lambda name: captured.append(name))
+        set_remote_ban_hook(None)  # explicit clear
+
+        manager = ProxyBanManager()
+        manager.add_ban("proxy-A")
+        assert captured == []
+        assert manager.is_proxy_banned("proxy-A") is True
+
+    def test_remote_hook_skips_empty_proxy_name(self):
+        """Defensive: a falsy name must not reach the hook (which would 4xx)."""
+        from packages.python.javdb_platform.proxy_ban_manager import (
+            _dispatch_remote_ban,
+            set_remote_ban_hook,
+        )
+        captured: list = []
+        set_remote_ban_hook(lambda name: captured.append(name))
+        _dispatch_remote_ban("")
+        _dispatch_remote_ban(None)  # type: ignore[arg-type]
+        assert captured == []

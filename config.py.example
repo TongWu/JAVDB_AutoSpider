@@ -169,6 +169,33 @@ PROXY_HTTPS = None  # Deprecated: Use PROXY_POOL instead
 # Use ['all'] to enable proxy for all modules
 PROXY_MODULES = ['spider']
 
+# Cloudflare Worker URL + Bearer token for cross-runner proxy coordination
+# (throttle, ban sync, login-state, etc.). Leave both empty to disable.
+# GitHub Actions: set repo Variable PROXY_COORDINATOR_URL and Secret
+# PROXY_COORDINATOR_TOKEN; config_generator writes them into config.py.
+PROXY_COORDINATOR_URL = ''
+PROXY_COORDINATOR_TOKEN = ''
+
+# MovieClaim per-day mutex activation (P1-B / P2-E auto-toggle).
+# Three-state semantics; case-insensitive, leading/trailing whitespace ignored:
+#   'auto'  (default) - driven by RunnerRegistry's `movie_claim_recommended`
+#                       signal: claim mutex is mounted only when the live
+#                       runner cohort reaches MOVIE_CLAIM_MIN_RUNNERS (Worker
+#                       var, default 2).  Single-runner deploys pay zero
+#                       claim overhead, multi-runner deploys auto-coordinate.
+#   'true' / '1' / 'yes' - force-on.  Mounts the claim client unconditionally
+#                          and ignores the registry signal.  Use during the
+#                          mixed old-Worker / new-client rollout window or
+#                          when the operator explicitly wants the legacy
+#                          P1-B always-on behaviour.
+#   'false' / '0' / 'no' / '' - force-off.  Spider runs identically to
+#                                "DO not configured" (per-process dedup only).
+#                                Note: the *unset* default is 'auto'; the
+#                                *empty string* is an explicit force-off.
+# GH Variables → MOVIE_CLAIM_ENABLED feeds this (config_generator writes it
+# into config.py).  Leaving it unset here keeps the new default.
+MOVIE_CLAIM_ENABLED = 'auto'
+
 # Example configurations:
 # PROXY_MODULES = ['spider']  # Default: only spider (including login), not qBittorrent/PikPak
 # PROXY_MODULES = ['all']  # Enable proxy for all modules
@@ -331,6 +358,14 @@ PIKPAK_LOG_FILE = "logs/pikpak_bridge.log"
 # Delay between PikPak offline download requests (in seconds)
 # This helps avoid rate limiting when processing multiple torrents
 PIKPAK_REQUEST_DELAY = 2
+
+# PikPak root folder for offline downloads.
+# pikpak_bridge stores every magnet under ``{PIKPAK_ROOT_FOLDER}/{qB category}``,
+# so a torrent in qBittorrent category "Ad Hoc" lands in
+# ``/Javdb_AutoSpider/Ad Hoc`` on PikPak. Missing folders are auto-created.
+# Override at runtime via ``--root-folder`` or the GitHub Variable
+# ``PIKPAK_ROOT_FOLDER``.
+PIKPAK_ROOT_FOLDER = "/Javdb_AutoSpider"
 
 # =============================================================================
 # Rclone Configuration (for Google Drive inventory and dedup)

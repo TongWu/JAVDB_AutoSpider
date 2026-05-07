@@ -2,7 +2,7 @@
 
 ## 本地开发
 
-- 在项目根目录复制环境模板：`cp .env.example .env`，填写 `API_SECRET_KEY`、`ADMIN_USERNAME`、`ADMIN_PASSWORD` 等；`api/server.py` 启动时会**自动加载根目录 `.env`**（不会覆盖已在 shell 里 `export` 的变量）。
+- 在项目根目录复制环境模板：`cp .env.example .env`。同一文件包含 **Web API** 变量（如 `API_SECRET_KEY`、`ADMIN_USERNAME`、`ADMIN_PASSWORD`）以及 **Docker/cron** 段落；`api/server.py` 启动时会**自动加载根目录 `.env`**（不会覆盖已在 shell 里 `export` 的变量）。
 - 后端 API：`uvicorn api.server:app --reload --port 8100`
 - 前端目录：`web/`
 - 前端环境变量：`VITE_API_BASE=http://localhost:8100`

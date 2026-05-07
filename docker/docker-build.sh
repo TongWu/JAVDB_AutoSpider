@@ -87,14 +87,14 @@ echo ""
 if [ ! -f ".env" ]; then
     echo "WARNING: .env file not found!"
     echo ""
-    if [ -f "env.example" ]; then
-        echo "Would you like to copy env.example to .env? (y/n)"
+    if [ -f ".env.example" ]; then
+        echo "Would you like to copy .env.example to .env? (y/n)"
         read -r response
         if [[ "$response" =~ ^[Yy]$ ]]; then
-            cp env.example .env
-            echo "✓ Copied env.example to .env"
+            cp .env.example .env
+            echo "✓ Copied .env.example to .env"
             echo ""
-            echo "You can edit .env to configure cron schedules"
+            echo "You can edit .env for Docker/cron schedules and (if needed) API secrets"
             echo "Edit .env now? (y/n)"
             read -r edit_response
             if [[ "$edit_response" =~ ^[Yy]$ ]]; then
@@ -102,11 +102,11 @@ if [ ! -f ".env" ]; then
             fi
         else
             echo "Creating default .env file..."
-            cp env.example .env
+            cp .env.example .env
             echo "✓ Created default .env"
         fi
     else
-        echo "WARNING: env.example not found, creating minimal .env"
+        echo "WARNING: .env.example not found, creating minimal .env"
         cat > .env << 'EOF'
 CRON_SPIDER=0 3 * * *
 SPIDER_COMMAND=cd /app && /usr/local/bin/python -m apps.cli.spider --use-proxy >> /var/log/cron.log 2>&1

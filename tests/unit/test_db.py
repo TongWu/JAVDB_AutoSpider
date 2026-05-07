@@ -56,6 +56,13 @@ class TestInitDb:
             ALTER TABLE MovieHistory ADD COLUMN ActorLink TEXT;
             ALTER TABLE MovieHistory ADD COLUMN ActorGender TEXT;
             ALTER TABLE MovieHistory ADD COLUMN SupportingActors TEXT;
+            ALTER TABLE MovieHistory ADD COLUMN SessionId INTEGER;
+            INSERT INTO MovieHistory (
+              VideoCode, Href, ActorName, ActorGender, ActorLink,
+              SupportingActors, SessionId
+            ) VALUES (
+              'ABC-001', '/v/abc-001', 'A', 'F', '/actors/a', 'B', 123
+            );
             """
         )
         conn.commit()
@@ -79,6 +86,17 @@ class TestInitDb:
             i_l = names.index("ActorLink")
             i_s = names.index("SupportingActors")
             assert i_n < i_g < i_l < i_s
+            assert "SessionId" in names
+            indexes = {
+                r[1] for r in c3.execute(
+                    "PRAGMA index_list(MovieHistory)"
+                ).fetchall()
+            }
+            assert "idx_movie_history_session" in indexes
+            row = c3.execute(
+                "SELECT SessionId FROM MovieHistory WHERE VideoCode='ABC-001'"
+            ).fetchone()
+            assert row[0] == 123
         finally:
             c3.close()
 
@@ -140,6 +158,226 @@ class TestInitDb:
             db_mod.REPORTS_DB_PATH = orig_r
             db_mod.OPERATIONS_DB_PATH = orig_o
             _cfg_mod._storage_mode_override = orig_override
+
+    def test_init_with_pre_rollback_schema_does_not_raise(self, tmp_path):
+        """Regression: init_db on a legacy DB created before X3 rollback (v11) must not fail.
+
+        The bug: ``_HISTORY_DDL`` etc. include ``CREATE INDEX ... ON
+        MovieHistory(SessionId)`` which fails with ``no such column:
+        SessionId`` if the on-disk table predates the rollback migration
+        — because ``executescript(ddl)`` ran *before*
+        ``_ensure_rollback_columns`` could ALTER the column in. After the
+        fix, ``_ensure_rollback_columns`` runs both before AND after the
+        DDL, so the columns exist when the index DDL is evaluated.
+        """
+        import utils.infra.config_helper as _cfg_mod
+        orig_override = _cfg_mod._storage_mode_override
+        _cfg_mod._storage_mode_override = 'db'
+
+        orig_db = db_mod.DB_PATH
+        orig_h = db_mod.HISTORY_DB_PATH
+        orig_r = db_mod.REPORTS_DB_PATH
+        orig_o = db_mod.OPERATIONS_DB_PATH
+
+        history_path = str(tmp_path / 'history.db')
+        reports_path = str(tmp_path / 'reports.db')
+        operations_path = str(tmp_path / 'operations.db')
+
+        db_mod.DB_PATH = str(tmp_path / 'old.db')
+        db_mod.HISTORY_DB_PATH = history_path
+        db_mod.REPORTS_DB_PATH = reports_path
+        db_mod.OPERATIONS_DB_PATH = operations_path
+
+        try:
+            # Hand-craft pre-rollback schema (no SessionId / Status columns,
+            # no SessionId-indexed indexes). Mirrors a real legacy file
+            # produced before migration/d1/2026_05_04_add_rollback_columns_*.sql.
+            legacy_history_ddl = """
+            CREATE TABLE SchemaVersion (Version INTEGER NOT NULL);
+            CREATE TABLE MovieHistory (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                VideoCode TEXT NOT NULL,
+                Href TEXT NOT NULL UNIQUE,
+                ActorName TEXT,
+                ActorGender TEXT,
+                ActorLink TEXT,
+                SupportingActors TEXT,
+                DateTimeCreated TEXT,
+                DateTimeUpdated TEXT,
+                DateTimeVisited TEXT,
+                PerfectMatchIndicator INTEGER,
+                HiResIndicator INTEGER
+            );
+            CREATE INDEX idx_movie_history_video_code ON MovieHistory(VideoCode);
+            CREATE TABLE TorrentHistory (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                MovieHistoryId INTEGER NOT NULL REFERENCES MovieHistory(Id),
+                MagnetUri TEXT,
+                SubtitleIndicator INTEGER,
+                CensorIndicator INTEGER,
+                ResolutionType INTEGER,
+                Size TEXT,
+                FileCount INTEGER,
+                DateTimeCreated TEXT,
+                DateTimeUpdated TEXT
+            );
+            CREATE UNIQUE INDEX uq_torrent_type
+                ON TorrentHistory(MovieHistoryId, SubtitleIndicator, CensorIndicator);
+            INSERT INTO SchemaVersion (Version) VALUES (10);
+            """
+            legacy_reports_ddl = """
+            CREATE TABLE SchemaVersion (Version INTEGER NOT NULL);
+            CREATE TABLE ReportSessions (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ReportType TEXT NOT NULL,
+                ReportDate TEXT NOT NULL,
+                UrlType TEXT,
+                DisplayName TEXT,
+                Url TEXT,
+                StartPage INTEGER,
+                EndPage INTEGER,
+                CsvFilename TEXT NOT NULL,
+                DateTimeCreated TEXT NOT NULL
+            );
+            INSERT INTO SchemaVersion (Version) VALUES (10);
+            """
+            legacy_operations_ddl = """
+            CREATE TABLE SchemaVersion (Version INTEGER NOT NULL);
+            CREATE TABLE PikpakHistory (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                TorrentHash TEXT,
+                TorrentName TEXT,
+                Category TEXT,
+                MagnetUri TEXT,
+                DateTimeAddedToQb TEXT,
+                DateTimeDeletedFromQb TEXT,
+                DateTimeUploadedToPikpak TEXT,
+                TransferStatus TEXT,
+                ErrorMessage TEXT
+            );
+            CREATE TABLE DedupRecords (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                VideoCode TEXT,
+                ExistingSensor TEXT,
+                ExistingSubtitle TEXT,
+                ExistingGdrivePath TEXT,
+                ExistingFolderSize INTEGER,
+                NewTorrentCategory TEXT,
+                DeletionReason TEXT,
+                DateTimeDetected TEXT,
+                IsDeleted INTEGER,
+                DateTimeDeleted TEXT
+            );
+            CREATE TABLE InventoryAlignNoExactMatch (
+                VideoCode TEXT PRIMARY KEY,
+                Reason TEXT,
+                DateTimeRecorded TEXT
+            );
+            INSERT INTO SchemaVersion (Version) VALUES (10);
+            """
+            for path, ddl in [
+                (history_path, legacy_history_ddl),
+                (reports_path, legacy_reports_ddl),
+                (operations_path, legacy_operations_ddl),
+            ]:
+                conn = sqlite3.connect(path)
+                conn.executescript(ddl)
+                conn.commit()
+                conn.close()
+
+            # Must not raise "no such column: SessionId"
+            db_mod.init_db(force=True)
+
+            # Verify rollback columns / indexes were added by _ensure_rollback_columns.
+            def _columns(path, table):
+                conn = sqlite3.connect(path)
+                try:
+                    return {r[1] for r in conn.execute(
+                        f"PRAGMA table_info({table})"
+                    ).fetchall()}
+                finally:
+                    conn.close()
+
+            def _indexes(path, table):
+                conn = sqlite3.connect(path)
+                try:
+                    return {r[1] for r in conn.execute(
+                        f"PRAGMA index_list({table})"
+                    ).fetchall()}
+                finally:
+                    conn.close()
+
+            assert 'SessionId' in _columns(history_path, 'MovieHistory')
+            assert 'SessionId' in _columns(history_path, 'TorrentHistory')
+            assert 'Status' in _columns(reports_path, 'ReportSessions')
+            assert 'SessionId' in _columns(operations_path, 'PikpakHistory')
+            assert 'SessionId' in _columns(operations_path, 'DedupRecords')
+            assert 'SessionId' in _columns(
+                operations_path, 'InventoryAlignNoExactMatch')
+
+            assert 'idx_movie_history_session' in _indexes(history_path, 'MovieHistory')
+            assert 'idx_torrent_history_session' in _indexes(
+                history_path, 'TorrentHistory')
+            assert 'idx_report_sessions_status' in _indexes(
+                reports_path, 'ReportSessions')
+
+            # Audit tables auto-created by _ensure_rollback_columns.
+            conn = sqlite3.connect(history_path)
+            try:
+                tables = {r[0] for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()}
+                assert 'MovieHistoryAudit' in tables
+                assert 'TorrentHistoryAudit' in tables
+            finally:
+                conn.close()
+        finally:
+            db_mod.close_db()
+            db_mod.DB_PATH = orig_db
+            db_mod.HISTORY_DB_PATH = orig_h
+            db_mod.REPORTS_DB_PATH = orig_r
+            db_mod.OPERATIONS_DB_PATH = orig_o
+            _cfg_mod._storage_mode_override = orig_override
+
+    def test_legacy_single_db_v5_sessions_keep_in_progress_status(self, tmp_path):
+        db_path = str(tmp_path / 'legacy_v5.db')
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.executescript("""
+            CREATE TABLE schema_version (version INTEGER NOT NULL);
+            INSERT INTO schema_version (version) VALUES (5);
+            CREATE TABLE report_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                report_type TEXT NOT NULL,
+                report_date TEXT NOT NULL,
+                url_type TEXT,
+                display_name TEXT,
+                url TEXT,
+                start_page INTEGER,
+                end_page INTEGER,
+                csv_filename TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            INSERT INTO report_sessions (
+                report_type, report_date, url_type, display_name, url,
+                start_page, end_page, csv_filename, created_at
+            ) VALUES (
+                'daily', '20260507', 'index', 'Daily', 'https://example.test',
+                1, 2, 'report.csv', '2026-05-07 00:00:00'
+            );
+            """)
+            conn.commit()
+        finally:
+            conn.close()
+
+        db_mod._init_single_legacy_db(db_path, force=True)
+
+        with db_mod.get_db(db_path) as migrated:
+            row = migrated.execute(
+                "SELECT Status FROM ReportSessions LIMIT 1"
+            ).fetchone()
+        assert row["Status"] == "in_progress"
+        assert db_mod.db_find_in_progress_sessions(db_path=db_path) == [1]
 
     def test_split_migration_from_single_db(self, tmp_path):
         """Placing a v6 single DB at DB_PATH triggers automatic split."""

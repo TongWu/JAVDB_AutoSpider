@@ -76,7 +76,7 @@ def create_detail_backend(
     )
 
 
-def main():
+def _main():
     args = parse_arguments()
 
     start_page = args.start_page
@@ -305,14 +305,20 @@ def main():
     use_cf_bypass = idx_result['use_cf_bypass']
     csv_path = idx_result['csv_path']
 
-    # Create a report session in SQLite (when enabled)
+    # Create a report session in DB-backed storage (when enabled)
     _session_id = None
+    db_storage_enabled = False
     try:
-        from packages.python.javdb_platform.config_helper import use_sqlite as _use_sqlite
-        if _use_sqlite():
+        from packages.python.javdb_platform.config_helper import use_db_storage
+        db_storage_enabled = use_db_storage()
+    except Exception as e:
+        logger.warning(f"Failed to evaluate use_db_storage: {e}")
+
+    if db_storage_enabled:
+        try:
             from packages.python.javdb_platform.db import init_db, db_create_report_session
             from packages.python.javdb_core.url_helper import detect_url_type, extract_url_identifier
-            init_db()
+            init_db(force=True)
             report_type = 'adhoc' if custom_url else 'daily'
             report_date = datetime.now().strftime('%Y%m%d')
             url_type = None
@@ -333,9 +339,27 @@ def main():
                 start_page=start_page,
             )
             set_active_session(_session_id)
+            # Tag every history / dedup / align write that follows in this
+            # process with this session id so a downstream rollback can
+            # surgically undo just our rows (X3 hybrid strategy).
+            try:
+                from packages.python.javdb_platform.db import (
+                    set_active_session_id as _set_active_session_id,
+                )
+                _set_active_session_id(_session_id)
+            except Exception as _e:
+                logger.warning(
+                    f"Could not propagate session_id to db audit context: {_e}"
+                )
             logger.info(f"Created report session: id={_session_id}")
-    except Exception as e:
-        logger.warning(f"Failed to create report session: {e}")
+        except Exception as e:
+            logger.error(
+                "Aborting after init_db/db_create_report_session failure under "
+                "use_db_storage=True; downstream DB writes require "
+                "set_active_session/_set_active_session_id: %s",
+                e,
+            )
+            sys.exit(1)
 
     # ======================================================================
     # Process Phase 1 entries
@@ -534,6 +558,21 @@ def main():
         )
     elif not dry_run:
         logger.info("Skipping git commit - no credentials provided (commit will be handled by workflow)")
+
+
+def main():
+    try:
+        return _main()
+    finally:
+        try:
+            from packages.python.javdb_platform.db import (
+                set_active_session_id as _set_active_session_id,
+            )
+            _set_active_session_id(None)
+        except Exception as _e:
+            logger.warning(
+                f"Could not clear db audit session context on exit: {_e}"
+            )
 
 
 class SpiderRunService:

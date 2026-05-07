@@ -3,6 +3,7 @@
 from typing import Iterable, Optional
 
 from packages.python.javdb_platform.logging_config import get_logger
+from packages.python.javdb_platform.login_state_client import LoginStateUnavailable
 from packages.python.javdb_platform.bridges.rust_adapters.parser_adapter import is_login_page
 import packages.python.javdb_spider.runtime.state as state
 from packages.python.javdb_spider.runtime.config import (
@@ -17,6 +18,63 @@ from packages.python.javdb_spider.runtime.config import (
 )
 
 logger = get_logger(__name__)
+
+DIRECT_LOGIN_PROXY_NAME = "direct"
+
+
+def _publish_login_state_to_do(proxy_name: Optional[str], cookie: str) -> None:
+    """Best-effort publish of a freshly-obtained cookie to the GlobalLoginState DO.
+
+    Called after every successful :func:`attempt_login_refresh`; silently
+    no-ops when the DO is not configured (``state.global_login_state_client
+    is None`` is the supported "per-runner login only" path).
+
+    Failure modes that are explicitly tolerated:
+
+    - ``LoginStateUnavailable`` from a network/server error → fail-open;
+      this runner's local cookie still works, only other runners miss out.
+    - ``409 lease_required`` (also surfaced as ``LoginStateUnavailable``)
+      when the caller did not first acquire the re-login lease — typical
+      for the legacy single-process fallback paths in
+      ``fetch/fallback.py``.  The :class:`LoginCoordinator` parallel path
+      always acquires the lease before login, so its publishes succeed.
+
+    On success, :data:`state.current_login_state_version` is updated so
+    downstream :meth:`LoginStateClient.invalidate` calls have the correct
+    optimistic-lock token.
+    """
+    client = state.global_login_state_client
+    if client is None or not cookie:
+        return
+    publish_proxy_name = proxy_name or DIRECT_LOGIN_PROXY_NAME
+    try:
+        result = client.publish(
+            holder_id=state.runtime_holder_id,
+            proxy_name=publish_proxy_name,
+            cookie=cookie,
+        )
+    except LoginStateUnavailable as exc:
+        logger.warning(
+            "Failed to publish login state to DO (proxy=%s): %s — "
+            "this runner still has the cookie locally; other runners may "
+            "re-login independently",
+            publish_proxy_name, exc,
+        )
+        return
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Unexpected error publishing login state to DO (proxy=%s): %s — "
+            "this runner still has the cookie locally; other runners may "
+            "re-login independently",
+            publish_proxy_name, exc,
+            exc_info=True,
+        )
+        return
+    state.current_login_state_version = result.version
+    logger.info(
+        "Published login state to DO: proxy=%s, version=%d",
+        publish_proxy_name, result.version,
+    )
 
 
 def resolve_login_proxy_endpoints():
@@ -52,7 +110,7 @@ def resolve_login_proxy_endpoints():
 
 
 def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
-                          *, spider_uses_proxy=True):
+                          *, spider_uses_proxy=True, publish_to_do=True):
     """Attempt to refresh session cookie by logging in via login.py.
 
     Can be called multiple times within a session, subject to per-proxy
@@ -67,7 +125,8 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
     When ``spider_uses_proxy`` is ``False`` (i.e. spider is running with
     ``--no-proxy``), implicit proxy resolution (``LOGIN_PROXY_NAME`` and
     ``global_proxy_pool``) is skipped and login runs via direct connection,
-    matching the spider's own network path.
+    matching the spider's own network path. The published proxy label is
+    the stable ``direct`` sentinel.
 
     Args:
         explicit_proxies: If provided, use these proxies for login instead of
@@ -76,6 +135,9 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
         explicit_proxy_name: Human-readable name of the proxy being used.
         spider_uses_proxy: Whether the calling spider is using proxies.
             When ``False``, login is performed via direct connection.
+        publish_to_do: Whether to publish the cookie immediately. Parallel
+            login coordination disables this and publishes only after fixed-page
+            verification succeeds.
 
     Returns:
         tuple: (success: bool, new_cookie: str or None, proxy_name: str or None)
@@ -97,6 +159,8 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
 
     login_proxies = explicit_proxies
     used_proxy_name = explicit_proxy_name
+    if not spider_uses_proxy and not used_proxy_name:
+        used_proxy_name = DIRECT_LOGIN_PROXY_NAME
 
     if login_proxies is None and spider_uses_proxy:
         named_proxies, named_nm = resolve_login_proxy_endpoints()
@@ -179,6 +243,8 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
                 if state.global_request_handler:
                     state.global_request_handler.config.javdb_session_cookie = new_cookie
                     logger.info("✓ Updated request handler with new session cookie")
+                if publish_to_do:
+                    _publish_login_state_to_do(used_proxy_name, new_cookie)
                 logger.info("=" * 60)
                 return True, new_cookie, used_proxy_name
             else:
@@ -187,6 +253,8 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
                 if state.global_request_handler:
                     state.global_request_handler.config.javdb_session_cookie = session_cookie
                     logger.info("✓ Updated request handler with new session cookie")
+                if publish_to_do:
+                    _publish_login_state_to_do(used_proxy_name, session_cookie)
                 logger.info("=" * 60)
                 return True, session_cookie, used_proxy_name
         else:

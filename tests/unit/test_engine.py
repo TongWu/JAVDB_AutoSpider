@@ -54,6 +54,10 @@ def _reset_state():
     st.parsed_links.clear()
     if hasattr(st, '_login_budget_deducted_proxies'):
         st._login_budget_deducted_proxies.clear()
+    # Keep unit tests deterministic: disable cross-runner login DO plumbing
+    # so login-required paths do not park indefinitely waiting on peers.
+    st.global_login_state_client = None
+    st.current_login_state_version = None
     yield
 
 
@@ -214,10 +218,8 @@ class TestEngineLoginDetection:
     @patch('scripts.spider.fetch.fetch_engine.is_login_page', return_value=True)
     @_engine_patches
     def test_login_page_triggers_coordinator(self, *_mocks):
-        import scripts.spider.runtime.state as st
         from scripts.spider.fetch.fetch_engine import FetchEngine
-
-        st.login_total_budget = 2
+        from scripts.spider.fetch.login_coordinator import requeue_front
 
         engine = FetchEngine.simple(
             parse_fn=lambda html, task: {'ok': True},
@@ -227,12 +229,24 @@ class TestEngineLoginDetection:
         engine.start()
         _patch_workers(engine, lambda url, _cf: '<html>login</html>')
 
-        engine.submit('https://javdb.com/v/login')
-        engine.mark_done()
+        def _fast_handle_login_required(_coord, worker, task, *_args, task_queue, **_kwargs):
+            # Keep this test focused on "login page routes into coordinator".
+            # Full coordinator retry state-machine has dedicated tests.
+            task.failed_proxies.add(worker.proxy_name)
+            requeue_front(task_queue, task)
 
-        results = list(engine.results())
+        with patch(
+            'scripts.spider.fetch.fetch_engine.LoginCoordinator.handle_login_required',
+            autospec=True,
+            side_effect=_fast_handle_login_required,
+        ) as mock_handle_login_required:
+            engine.submit('https://javdb.com/v/login')
+            engine.mark_done()
+            results = list(engine.results())
+
         engine.shutdown()
 
+        assert mock_handle_login_required.call_count >= 1
         assert len(results) == 1
         assert results[0].success is False
 

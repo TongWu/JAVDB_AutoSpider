@@ -126,6 +126,502 @@ class TestParseArguments:
         assert args.execute is True
 
 
+def test_scan_inventory_counts_process_year_none_as_error(monkeypatch):
+    import scripts.rclone_manager as rm
+
+    callbacks = []
+    monkeypatch.setattr(rm, "get_year_folders", lambda *_args: ["2026"])
+    monkeypatch.setattr(rm, "_process_year", lambda *_args, **_kwargs: None)
+
+    total, errors = rm.scan_inventory(
+        "gdrive", "root", row_callback=lambda rows: callbacks.append(rows)
+    )
+
+    assert total == 0
+    assert errors == 1
+    assert callbacks == []
+
+
+def test_scan_csv_temp_removed_on_scan_failure(monkeypatch, tmp_path):
+    import scripts.rclone_manager as rm
+    from packages.python.javdb_platform import config_helper
+
+    output = tmp_path / "inventory.csv"
+    row = {field: "" for field in INVENTORY_FIELDNAMES}
+    row.update({
+        "video_code": "ABC-001",
+        "folder_path": "2026/a/ABC-001",
+        "folder_size": 1,
+        "file_count": 1,
+    })
+
+    def fake_scan(*_args, row_callback=None, **_kwargs):
+        row_callback([row])
+        return 1, 1
+
+    monkeypatch.setattr(rm, "RCLONE_CONFIG_BASE64", "")
+    monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
+    monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
+    monkeypatch.setattr(rm, "scan_inventory", fake_scan)
+    monkeypatch.setattr(config_helper, "use_sqlite", lambda: False)
+    monkeypatch.setattr(config_helper, "use_csv", lambda: True)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "rclone_manager",
+            "--scan",
+            "--root-path",
+            "gdrive:/root",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert rm.main() == 1
+    assert not output.exists()
+    assert list(tmp_path.glob("inventory.csv.*.tmp")) == []
+
+
+def test_scan_sqlite_uses_staging_when_no_active_session(
+    monkeypatch, tmp_path, storage_mode_db
+):
+    import scripts.rclone_manager as rm
+    from utils.infra import db as db_mod
+
+    output = tmp_path / "inventory.csv"
+    seed = {
+        "VideoCode": "OLD-001",
+        "FolderPath": "2026/old/OLD-001",
+        "FolderSize": 1,
+        "FileCount": 1,
+        "DateTimeScanned": "2026-05-04 00:00:00",
+    }
+    incoming = {field: "" for field in INVENTORY_FIELDNAMES}
+    incoming.update({
+        "video_code": "NEW-001",
+        "folder_path": "2026/new/NEW-001",
+        "folder_size": 1,
+        "file_count": 1,
+        "scan_datetime": "2026-05-05 00:00:00",
+    })
+
+    db_mod.set_active_session_id(None)
+    db_mod.db_replace_rclone_inventory([seed])
+
+    def fake_scan(*_args, row_callback=None, **_kwargs):
+        row_callback([incoming])
+        return 1, 1
+
+    monkeypatch.setattr(rm, "RCLONE_CONFIG_BASE64", "")
+    monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
+    monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
+    monkeypatch.setattr(rm, "scan_inventory", fake_scan)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "rclone_manager",
+            "--scan",
+            "--root-path",
+            "gdrive:/root",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert rm.main() == 1
+    with db_mod.get_db() as conn:
+        rows = conn.execute(
+            "SELECT VideoCode FROM RcloneInventory ORDER BY VideoCode"
+        ).fetchall()
+        staging_tables = conn.execute(
+            "SELECT name FROM sqlite_master "
+            "WHERE name LIKE 'RcloneInventoryStaging_%'"
+        ).fetchall()
+        sessions = conn.execute(
+            "SELECT Status FROM ReportSessions "
+            "WHERE ReportType='rclone_inventory'"
+        ).fetchall()
+    assert [row["VideoCode"] for row in rows] == ["OLD-001"]
+    assert staging_tables == []
+    assert [row["Status"] for row in sessions] == ["failed"]
+
+
+def test_scan_marks_local_session_committed_after_inventory_swap(
+    monkeypatch, tmp_path, storage_mode_db
+):
+    import scripts.rclone_manager as rm
+    from utils.infra import db as db_mod
+
+    output = tmp_path / "inventory.csv"
+    incoming = {field: "" for field in INVENTORY_FIELDNAMES}
+    incoming.update({
+        "video_code": "NEW-001",
+        "folder_path": "2026/new/NEW-001",
+        "folder_size": 1,
+        "file_count": 1,
+        "scan_datetime": "2026-05-05 00:00:00",
+    })
+    order = []
+
+    def fake_scan(*_args, row_callback=None, **_kwargs):
+        row_callback([incoming])
+        return 1, 0
+
+    monkeypatch.setattr(rm, "RCLONE_CONFIG_BASE64", "")
+    monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
+    monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
+    monkeypatch.setattr(rm, "scan_inventory", fake_scan)
+    monkeypatch.setattr(rm, "export_db_to_csv", lambda _path: order.append("export"))
+    monkeypatch.setattr(db_mod, "init_db", lambda: order.append("init_db"))
+    monkeypatch.setattr(db_mod, "get_active_session_id", lambda: None)
+    monkeypatch.setattr(
+        db_mod,
+        "db_create_report_session",
+        lambda **_kwargs: order.append("create_session") or 123,
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_open_rclone_staging",
+        lambda sid: order.append(("open_staging", sid)),
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_append_rclone_staging",
+        lambda rows, session_id: order.append(("append_staging", session_id)),
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_mark_session_committed",
+        lambda sid: order.append(("mark_committed", sid)) or 1,
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_swap_rclone_inventory",
+        lambda session_id: order.append(("swap_inventory", session_id)) or 1,
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_merge_rclone_inventory_from_stage",
+        lambda session_id, years: order.append(("merge_inventory", session_id, years)) or 1,
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "rclone_manager",
+            "--scan",
+            "--root-path",
+            "gdrive:/root",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert rm.main() == 0
+    assert order.index(("swap_inventory", 123)) < order.index(("mark_committed", 123))
+    assert not any(item[0] == "merge_inventory" for item in order if isinstance(item, tuple))
+
+
+def test_scan_year_filter_merges_staging_instead_of_full_swap(
+    monkeypatch, tmp_path, storage_mode_db
+):
+    import scripts.rclone_manager as rm
+    from utils.infra import db as db_mod
+
+    output = tmp_path / "inventory.csv"
+    incoming = {field: "" for field in INVENTORY_FIELDNAMES}
+    incoming.update({
+        "video_code": "NEW-001",
+        "folder_path": "2026/new/NEW-001",
+        "folder_size": 1,
+        "file_count": 1,
+        "scan_datetime": "2026-05-05 00:00:00",
+    })
+    order = []
+
+    def fake_scan(*_args, row_callback=None, **_kwargs):
+        row_callback([incoming])
+        return 1, 0
+
+    def fail_swap(session_id):
+        order.append(("swap_inventory", session_id))
+        raise AssertionError("year-filtered scans must not full-swap inventory")
+
+    monkeypatch.setattr(rm, "RCLONE_CONFIG_BASE64", "")
+    monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
+    monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
+    monkeypatch.setattr(rm, "scan_inventory", fake_scan)
+    monkeypatch.setattr(rm, "export_db_to_csv", lambda _path: order.append("export"))
+    monkeypatch.setattr(db_mod, "init_db", lambda: order.append("init_db"))
+    monkeypatch.setattr(db_mod, "get_active_session_id", lambda: None)
+    monkeypatch.setattr(
+        db_mod,
+        "db_create_report_session",
+        lambda **_kwargs: order.append("create_session") or 123,
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_open_rclone_staging",
+        lambda sid: order.append(("open_staging", sid)),
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_append_rclone_staging",
+        lambda rows, session_id: order.append(("append_staging", session_id)),
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_mark_session_committed",
+        lambda sid: order.append(("mark_committed", sid)) or 1,
+    )
+    monkeypatch.setattr(db_mod, "db_swap_rclone_inventory", fail_swap)
+    monkeypatch.setattr(
+        db_mod,
+        "db_merge_rclone_inventory_from_stage",
+        lambda session_id, years: order.append(("merge_inventory", session_id, years)) or 1,
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "rclone_manager",
+            "--scan",
+            "--years",
+            "2026",
+            "--root-path",
+            "gdrive:/root",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert rm.main() == 0
+    assert ("merge_inventory", 123, ["2026"]) in order
+    assert ("swap_inventory", 123) not in order
+    assert order.index(("merge_inventory", 123, ["2026"])) < order.index(("mark_committed", 123))
+
+
+def test_scan_does_not_mark_local_session_committed_when_swap_fails(
+    monkeypatch, tmp_path, storage_mode_db
+):
+    import scripts.rclone_manager as rm
+    from utils.infra import db as db_mod
+
+    output = tmp_path / "inventory.csv"
+    incoming = {field: "" for field in INVENTORY_FIELDNAMES}
+    incoming.update({
+        "video_code": "NEW-001",
+        "folder_path": "2026/new/NEW-001",
+        "folder_size": 1,
+        "file_count": 1,
+        "scan_datetime": "2026-05-05 00:00:00",
+    })
+    order = []
+
+    def fake_scan(*_args, row_callback=None, **_kwargs):
+        row_callback([incoming])
+        return 1, 0
+
+    def fail_swap(session_id):
+        order.append(("swap_inventory", session_id))
+        raise RuntimeError("swap failed")
+
+    monkeypatch.setattr(rm, "RCLONE_CONFIG_BASE64", "")
+    monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
+    monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
+    monkeypatch.setattr(rm, "scan_inventory", fake_scan)
+    monkeypatch.setattr(db_mod, "init_db", lambda: order.append("init_db"))
+    monkeypatch.setattr(db_mod, "get_active_session_id", lambda: None)
+    monkeypatch.setattr(
+        db_mod,
+        "db_create_report_session",
+        lambda **_kwargs: order.append("create_session") or 123,
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_open_rclone_staging",
+        lambda sid: order.append(("open_staging", sid)),
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_append_rclone_staging",
+        lambda rows, session_id: order.append(("append_staging", session_id)),
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_mark_session_committed",
+        lambda sid: order.append(("mark_committed", sid)) or 1,
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_mark_session_failed",
+        lambda sid: order.append(("mark_failed", sid)) or 1,
+    )
+    monkeypatch.setattr(db_mod, "db_swap_rclone_inventory", fail_swap)
+    monkeypatch.setattr(
+        db_mod,
+        "db_drop_rclone_staging",
+        lambda sid: order.append(("drop_staging", sid)),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "rclone_manager",
+            "--scan",
+            "--root-path",
+            "gdrive:/root",
+            "--output",
+            str(output),
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="swap failed"):
+        rm.main()
+    assert ("mark_committed", 123) not in order
+    assert ("mark_failed", 123) in order
+    assert ("drop_staging", 123) in order
+    assert order.index(("mark_failed", 123)) < order.index(("drop_staging", 123))
+
+
+def test_scan_succeeds_when_post_swap_commit_marking_fails(
+    monkeypatch, tmp_path, storage_mode_db
+):
+    import scripts.rclone_manager as rm
+    from utils.infra import db as db_mod
+
+    output = tmp_path / "inventory.csv"
+    incoming = {field: "" for field in INVENTORY_FIELDNAMES}
+    incoming.update({
+        "video_code": "NEW-001",
+        "folder_path": "2026/new/NEW-001",
+        "folder_size": 1,
+        "file_count": 1,
+        "scan_datetime": "2026-05-05 00:00:00",
+    })
+    order = []
+
+    def fake_scan(*_args, row_callback=None, **_kwargs):
+        row_callback([incoming])
+        return 1, 0
+
+    def fail_mark(sid):
+        order.append(("mark_committed", sid))
+        raise RuntimeError("mark failed")
+
+    monkeypatch.setattr(rm, "RCLONE_CONFIG_BASE64", "")
+    monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
+    monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
+    monkeypatch.setattr(rm, "scan_inventory", fake_scan)
+    monkeypatch.setattr(rm, "export_db_to_csv", lambda _path: order.append("export"))
+    monkeypatch.setattr(db_mod, "init_db", lambda: order.append("init_db"))
+    monkeypatch.setattr(db_mod, "get_active_session_id", lambda: None)
+    monkeypatch.setattr(
+        db_mod,
+        "db_create_report_session",
+        lambda **_kwargs: order.append("create_session") or 123,
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_open_rclone_staging",
+        lambda sid: order.append(("open_staging", sid)),
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_append_rclone_staging",
+        lambda rows, session_id: order.append(("append_staging", session_id)),
+    )
+    monkeypatch.setattr(db_mod, "db_mark_session_committed", fail_mark)
+    monkeypatch.setattr(
+        db_mod,
+        "db_swap_rclone_inventory",
+        lambda session_id: order.append(("swap_inventory", session_id)) or 1,
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_drop_rclone_staging",
+        lambda sid: order.append(("drop_staging", sid)),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "rclone_manager",
+            "--scan",
+            "--root-path",
+            "gdrive:/root",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert rm.main() == 0
+    assert order.count(("mark_committed", 123)) == 3
+    assert ("drop_staging", 123) not in order
+
+
+def test_scan_aborts_when_sqlite_staging_init_fails(
+    monkeypatch, tmp_path, storage_mode_duo
+):
+    import scripts.rclone_manager as rm
+    from utils.infra import db as db_mod
+
+    output = tmp_path / "inventory.csv"
+    order = []
+
+    def fake_scan(*_args, **_kwargs):
+        order.append("scan")
+        return 1, 0
+
+    monkeypatch.setattr(rm, "RCLONE_CONFIG_BASE64", "")
+    monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
+    monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
+    monkeypatch.setattr(rm, "scan_inventory", fake_scan)
+    monkeypatch.setattr(db_mod, "init_db", lambda: order.append("init_db"))
+    monkeypatch.setattr(db_mod, "get_active_session_id", lambda: None)
+    monkeypatch.setattr(
+        db_mod,
+        "db_create_report_session",
+        lambda **_kwargs: order.append("create_session") or 123,
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_open_rclone_staging",
+        lambda sid: (_ for _ in ()).throw(RuntimeError("staging failed")),
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_drop_rclone_staging",
+        lambda sid: order.append(("drop_staging", sid)),
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_mark_session_failed",
+        lambda sid: order.append(("mark_failed", sid)) or 1,
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "rclone_manager",
+            "--scan",
+            "--report",
+            "--root-path",
+            "gdrive:/root",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert rm.main() == 1
+    assert "scan" not in order
+    assert ("drop_staging", 123) in order
+    assert ("mark_failed", 123) in order
+    assert not output.exists()
+
+
 # ============================================================================
 # Test parse_root_path
 # ============================================================================

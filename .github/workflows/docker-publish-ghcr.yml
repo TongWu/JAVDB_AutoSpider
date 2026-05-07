@@ -9,11 +9,16 @@ on:
       - 'v*.*.*'
     paths:
       - '**/*.py'
-      - 'pytest.ini'
       - 'docker/**'
-  #     - 'requirements.txt'
-  #     - '**/Cargo.toml'
-  #     - '**/pyproject.toml'
+      - '**/pyproject.toml'
+      - '**/Pipfile*'
+      - '**/poetry.lock'
+      - '**/requirements*.txt'
+      - '**/requirements.lock'
+      - '**/setup.cfg'
+      - '**/setup.py'
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
   workflow_dispatch:  # Allow manual trigger
 
 env:

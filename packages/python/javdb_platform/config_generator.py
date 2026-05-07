@@ -387,6 +387,7 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('PIKPAK_PASSWORD', 'PIKPAK_PASSWORD', get_env, '', 'PIKPAK CONFIGURATION'),
         ('PIKPAK_LOG_FILE', 'PIKPAK_LOG_FILE', get_env, 'logs/pikpak_bridge.log', 'PIKPAK CONFIGURATION'),
         ('PIKPAK_REQUEST_DELAY', 'PIKPAK_REQUEST_DELAY', get_env_int, 2, 'PIKPAK CONFIGURATION'),
+        ('PIKPAK_ROOT_FOLDER', 'PIKPAK_ROOT_FOLDER', get_env, '/Javdb_AutoSpider', 'PIKPAK CONFIGURATION'),
         # qBittorrent File Filter Configuration
         ('QB_FILE_FILTER_MIN_SIZE_MB', 'QB_FILE_FILTER_MIN_SIZE_MB', get_env_int, 100, 'QBITTORRENT FILE FILTER CONFIGURATION'),
         ('QB_FILE_FILTER_LOG_FILE', 'QB_FILE_FILTER_LOG_FILE', get_env, 'logs/qb_file_filter.log', 'QBITTORRENT FILE FILTER CONFIGURATION'),
@@ -413,6 +414,7 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # (see docs/PROXY_COORDINATOR_DEPLOY.md for the full walkthrough).
         ('PROXY_COORDINATOR_URL', 'PROXY_COORDINATOR_URL', get_env, '', 'D1 / CLOUDFLARE CONFIGURATION'),
         ('PROXY_COORDINATOR_TOKEN', 'PROXY_COORDINATOR_TOKEN', get_env, '', 'D1 / CLOUDFLARE CONFIGURATION'),
+        ('MOVIE_CLAIM_ENABLED', 'MOVIE_CLAIM_ENABLED', get_env, 'auto', 'MOVIE CLAIM CONFIGURATION'),
         # Dedup Configuration
         ('RCLONE_INVENTORY_CSV', 'RCLONE_INVENTORY_CSV', get_env, 'rclone_inventory.csv', 'DEDUP CONFIGURATION'),
         ('DEDUP_CSV', 'DEDUP_CSV', get_env, 'dedup.csv', 'DEDUP CONFIGURATION'),

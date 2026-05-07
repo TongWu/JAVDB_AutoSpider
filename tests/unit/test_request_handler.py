@@ -1213,3 +1213,237 @@ class TestPauseBetweenAttempts:
 
         assert result is not None
         assert call_count >= 1, "injected sleep should be called on Turnstile retry"
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# P2-D — on_request_complete callback (per-attempt success/failure +
+# latency).  Verifies that target-site requests through ``_do_request``
+# emit telemetry events while local CF-bypass requests do NOT poison the
+# proxy-quality metric.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class TestRequestCompleteCallback:
+    @patch.object(requests.Session, 'get')
+    def test_emits_success_with_latency_when_report_health_enabled(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '<html>ok</html>'
+        mock_response.content = b'<html>ok</html>'
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        events = []
+        handler = RequestHandler(
+            config=RequestConfig(use_curl_cffi=False),
+            on_request_complete=lambda *args: events.append(args),
+        )
+        handler._do_request(
+            'http://target.com', {}, None,
+            timeout=30, context_msg='Test',
+            proxy_name='proxy-X', report_health=True,
+        )
+        assert len(events) == 1
+        proxy_name, kind, latency_ms = events[0]
+        assert proxy_name == 'proxy-X'
+        assert kind == 'success'
+        assert latency_ms >= 0
+
+    @patch.object(requests.Session, 'get')
+    def test_emits_failure_on_request_exception(self, mock_get):
+        mock_get.side_effect = requests.RequestException("simulated outage")
+        events = []
+        handler = RequestHandler(
+            config=RequestConfig(use_curl_cffi=False),
+            on_request_complete=lambda *args: events.append(args),
+        )
+        handler._do_request(
+            'http://target.com', {}, None,
+            timeout=30, context_msg='Test',
+            proxy_name='proxy-X', report_health=True,
+        )
+        assert len(events) == 1
+        assert events[0][1] == 'failure'
+
+    @patch.object(requests.Session, 'get')
+    def test_emits_failure_on_403_forbidden(self, mock_get):
+        """A 403 carries a body but is treated as a failure for health metrics."""
+        mock_response = MagicMock()
+        mock_response.status_code = 403
+        mock_response.text = '<html>banned</html>'
+        mock_response.content = b'<html>banned</html>'
+        mock_get.return_value = mock_response
+
+        events = []
+        handler = RequestHandler(
+            config=RequestConfig(use_curl_cffi=False),
+            on_request_complete=lambda *args: events.append(args),
+        )
+        handler._do_request(
+            'http://target.com', {}, None,
+            timeout=30, context_msg='Test',
+            proxy_name='proxy-X', report_health=True,
+        )
+        assert len(events) == 1
+        assert events[0][1] == 'failure'
+
+    @patch.object(requests.Session, 'get')
+    def test_does_not_emit_when_report_health_false(self, mock_get):
+        """CF-bypass-service calls (report_health=False) must NOT emit events."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '<html>ok</html>'
+        mock_response.content = b'<html>ok</html>'
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        events = []
+        handler = RequestHandler(
+            config=RequestConfig(use_curl_cffi=False),
+            on_request_complete=lambda *args: events.append(args),
+        )
+        handler._do_request(
+            'http://target.com', {}, None,
+            timeout=30, context_msg='Test',
+            # Default report_health=False → silent.
+        )
+        assert events == []
+
+    @patch.object(requests.Session, 'get')
+    def test_callback_exception_does_not_break_request(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '<html>ok</html>'
+        mock_response.content = b'<html>ok</html>'
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        def boom(*_args):
+            raise RuntimeError("simulated coordinator outage")
+
+        handler = RequestHandler(
+            config=RequestConfig(use_curl_cffi=False),
+            on_request_complete=boom,
+        )
+        # Must NOT raise.
+        html, error = handler._do_request(
+            'http://target.com', {}, None,
+            timeout=30, context_msg='Test',
+            proxy_name='proxy-X', report_health=True,
+        )
+        assert html == '<html>ok</html>'
+        assert error is None
+
+    @patch.object(requests.Session, 'get')
+    def test_fetch_direct_propagates_proxy_name_and_health_flag(self, mock_get):
+        """``_fetch_direct`` is the request hot path — make sure it threads
+        through real proxy_name + report_health=True so the telemetry pipeline
+        actually fires for spider-issued target-site requests."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '<html><div class="movie-list">x</div></html>'
+        mock_response.content = mock_response.text.encode()
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        events = []
+        handler = RequestHandler(
+            config=RequestConfig(use_curl_cffi=False),
+            on_request_complete=lambda *args: events.append(args),
+        )
+        handler._fetch_direct(
+            'http://javdb.com/v/abc', None, 'Test',
+            proxy_name='proxy-Y',
+        )
+        assert len(events) == 1
+        assert events[0][0] == 'proxy-Y'
+        assert events[0][1] == 'success'
+
+    @patch.object(requests.Session, 'get')
+    def test_fetch_direct_does_not_report_sentinel_none_proxy(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '<html><div class="movie-list">x</div></html>'
+        mock_response.content = mock_response.text.encode()
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        events = []
+        handler = RequestHandler(
+            config=RequestConfig(use_curl_cffi=False),
+            on_request_complete=lambda *args: events.append(args),
+        )
+        handler._fetch_direct(
+            'http://javdb.com/v/abc', None, 'Test',
+            proxy_name='None',
+        )
+        assert events == []
+
+    @patch.object(requests.Session, 'get')
+    def test_fetch_direct_does_not_report_turnstile_as_success(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '<html>Security Verification turnstile</html>'
+        mock_response.content = mock_response.text.encode()
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        events = []
+        handler = RequestHandler(
+            config=RequestConfig(use_curl_cffi=False),
+            on_request_complete=lambda *args: events.append(args),
+        )
+        html, success, is_turnstile = handler._fetch_direct(
+            'http://javdb.com/v/abc', None, 'Test',
+            proxy_name='proxy-Y',
+        )
+
+        assert html == mock_response.text
+        assert success is False
+        assert is_turnstile is True
+        assert events == []
+
+    @patch.object(requests.Session, 'get')
+    def test_fetch_direct_reports_ban_page_as_failure(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '<html>banned your access</html>'
+        mock_response.content = mock_response.text.encode()
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        events = []
+        handler = RequestHandler(
+            config=RequestConfig(use_curl_cffi=False),
+            on_request_complete=lambda *args: events.append(args),
+        )
+
+        with pytest.raises(ProxyBannedError):
+            handler._fetch_direct(
+                'http://javdb.com/v/abc', None, 'Test',
+                proxy_name='proxy-Y',
+            )
+        assert len(events) == 1
+        assert events[0][0] == 'proxy-Y'
+        assert events[0][1] == 'failure'
+
+    @patch.object(requests.Session, 'get')
+    def test_negative_latency_is_clamped_to_zero_at_callback(self, mock_get):
+        """Defence-in-depth — clock skew (monotonic going backwards is
+        impossible but the callback still validates) must produce a
+        non-negative latency_ms."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = 'ok'
+        mock_response.content = b'ok'
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        events = []
+        handler = RequestHandler(
+            config=RequestConfig(use_curl_cffi=False),
+            on_request_complete=lambda *args: events.append(args),
+        )
+        # Direct call to the helper bypasses the timing measurement.
+        handler._record_request_complete('proxy-X', 'success', -50)
+        assert events == [('proxy-X', 'success', 0)]

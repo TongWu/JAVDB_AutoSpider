@@ -19,8 +19,10 @@ sys.path.insert(0, project_root)
 
 from packages.python.javdb_platform.proxy_coordinator_client import (  # noqa: E402
     CoordinatorUnavailable,
+    DEFAULT_BAN_TTL_MS,
     LeaseResult,
     ProxyCoordinatorClient,
+    ProxyHealthSnapshot,
     ReportResult,
     _ASYNC_QUEUE_SENTINEL,
     create_coordinator_from_env,
@@ -290,7 +292,7 @@ def test_sentinel_constant_is_a_pair_of_nones():
 # ── Kind validation (no silent coercion) ─────────────────────────────────
 
 
-@pytest.mark.parametrize("kind", ["cf", "failure"])
+@pytest.mark.parametrize("kind", ["cf", "failure", "ban", "unban", "cf_bypass"])
 def test_validate_kind_accepts_known_values(kind):
     assert _validate_kind(kind) == kind
 
@@ -422,6 +424,226 @@ def test_report_falls_back_to_legacy_server_time_wire_key():
 # ── _normalize_proxy_id (S324 / hashlib usage) ───────────────────────────
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# P1-A — proxy ban + cf_bypass piggy-backed on /lease & /report.  These
+# verify the wire-protocol additions on the Python side: optional
+# LeaseResult fields default to "no signal", new report kinds carry
+# ttl_ms / reason in the request body, and the convenience helpers
+# (mark_proxy_banned / unbanned / cf_bypass) thread through ``report_async``
+# with the right payload.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def test_default_ban_ttl_ms_is_three_days():
+    """Plan-mandated default: 3-day ban TTL."""
+    assert DEFAULT_BAN_TTL_MS == 3 * 24 * 60 * 60 * 1000
+
+
+def test_lease_defaults_p1a_fields_when_worker_omits_them():
+    """An older Worker that doesn't know about the P1-A fields must look
+    indistinguishable from the legacy behaviour to existing call sites."""
+    c = _make_client(async_workers=1)
+    payload = {
+        "wait_ms": 10, "penalty_factor": 1.0,
+        "server_time": 100, "reason": "ok",
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_fake_response(payload)):
+            r = c.lease("p1", 0)
+        assert r.banned is False
+        assert r.banned_until is None
+        assert r.requires_cf_bypass is False
+        assert r.cf_bypass_until is None
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_lease_parses_p1a_fields_when_worker_emits_them():
+    c = _make_client(async_workers=1)
+    payload = {
+        "wait_ms": 10, "penalty_factor": 1.0,
+        "server_time": 100, "reason": "banned",
+        "banned": True, "banned_until": 9_999_999,
+        "requires_cf_bypass": True, "cf_bypass_until": 0,
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_fake_response(payload)):
+            r = c.lease("p1", 0)
+        assert r.banned is True
+        assert r.banned_until == 9_999_999
+        assert r.requires_cf_bypass is True
+        # 0 (the "permanent for this session" sentinel) must round-trip as
+        # int(0), NOT be coerced to None by truthiness checks.
+        assert r.cf_bypass_until == 0
+        assert r.reason == "banned"
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_lease_handles_explicit_null_p1a_fields():
+    """The Worker may send ``"banned_until": null`` explicitly.  Treat as None."""
+    c = _make_client(async_workers=1)
+    payload = {
+        "wait_ms": 10, "penalty_factor": 1.0,
+        "server_time": 100, "reason": "ok",
+        "banned": False, "banned_until": None,
+        "requires_cf_bypass": False, "cf_bypass_until": None,
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_fake_response(payload)):
+            r = c.lease("p1", 0)
+        assert r.banned_until is None
+        assert r.cf_bypass_until is None
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_report_includes_ttl_ms_and_reason_in_body_for_ban_kind():
+    c = _make_client(async_workers=1)
+    seen_body: dict = {}
+
+    def fake_post(url, json, timeout):  # noqa: A002 — mirroring requests' kw
+        seen_body.update(json)
+        return _fake_response({
+            "penalty_factor": 1.0, "recent_event_count": 0, "server_time": 1,
+        })
+
+    try:
+        with patch.object(c._session, "post", side_effect=fake_post):
+            c.report("proxy-A", "ban", ttl_ms=60_000, reason="manual")
+        assert seen_body["kind"] == "ban"
+        assert seen_body["ttl_ms"] == 60_000
+        assert seen_body["reason"] == "manual"
+        assert "proxy_id" in seen_body
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_report_omits_ttl_ms_and_reason_when_not_provided():
+    """Legacy callers `report(p, "cf")` must not regress to pushing extra keys."""
+    c = _make_client(async_workers=1)
+    seen_body: dict = {}
+
+    def fake_post(url, json, timeout):  # noqa: A002
+        seen_body.update(json)
+        return _fake_response({
+            "penalty_factor": 1.0, "recent_event_count": 0, "server_time": 1,
+        })
+
+    try:
+        with patch.object(c._session, "post", side_effect=fake_post):
+            c.report("proxy-A", "cf")
+        assert "ttl_ms" not in seen_body
+        assert "reason" not in seen_body
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_mark_proxy_banned_dispatches_default_3_day_ttl():
+    c = _make_client(async_workers=1)
+    captured: list = []
+
+    def fake_report(proxy_id, kind, *, ttl_ms=None, reason=None):
+        captured.append((proxy_id, kind, ttl_ms, reason))
+
+    try:
+        with patch.object(c, "report", side_effect=fake_report):
+            c.mark_proxy_banned("proxy-A")
+            c._async_queue.join()
+        assert len(captured) == 1
+        proxy_id, kind, ttl_ms, reason = captured[0]
+        assert proxy_id == "proxy-A"
+        assert kind == "ban"
+        assert ttl_ms == DEFAULT_BAN_TTL_MS
+        assert reason is None
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_mark_proxy_banned_accepts_custom_ttl_and_reason():
+    c = _make_client(async_workers=1)
+    captured: list = []
+
+    def fake_report(proxy_id, kind, *, ttl_ms=None, reason=None):
+        captured.append((proxy_id, kind, ttl_ms, reason))
+
+    try:
+        with patch.object(c, "report", side_effect=fake_report):
+            c.mark_proxy_banned("proxy-A", ttl_ms=60_000, reason="penalty_2")
+            c._async_queue.join()
+        assert captured == [("proxy-A", "ban", 60_000, "penalty_2")]
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_mark_proxy_unbanned_dispatches_unban_kind_without_ttl():
+    c = _make_client(async_workers=1)
+    captured: list = []
+
+    def fake_report(proxy_id, kind, *, ttl_ms=None, reason=None):
+        captured.append((proxy_id, kind, ttl_ms, reason))
+
+    try:
+        with patch.object(c, "report", side_effect=fake_report):
+            c.mark_proxy_unbanned("proxy-A")
+            c._async_queue.join()
+        assert captured == [("proxy-A", "unban", None, None)]
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_mark_cf_bypass_permanent_when_ttl_omitted():
+    """``ttl_ms is None`` means "permanent for this session" — Worker stores 0."""
+    c = _make_client(async_workers=1)
+    captured: list = []
+
+    def fake_report(proxy_id, kind, *, ttl_ms=None, reason=None):
+        captured.append((proxy_id, kind, ttl_ms, reason))
+
+    try:
+        with patch.object(c, "report", side_effect=fake_report):
+            c.mark_cf_bypass("proxy-A")
+            c._async_queue.join()
+        assert captured == [("proxy-A", "cf_bypass", None, None)]
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_mark_cf_bypass_with_explicit_ttl():
+    c = _make_client(async_workers=1)
+    captured: list = []
+
+    def fake_report(proxy_id, kind, *, ttl_ms=None, reason=None):
+        captured.append((proxy_id, kind, ttl_ms, reason))
+
+    try:
+        with patch.object(c, "report", side_effect=fake_report):
+            c.mark_cf_bypass("proxy-A", ttl_ms=30_000, reason="cf-detected")
+            c._async_queue.join()
+        assert captured == [("proxy-A", "cf_bypass", 30_000, "cf-detected")]
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_mark_helpers_are_fire_and_forget_on_unavailable_coordinator():
+    """If the coordinator is unreachable, the helpers must not raise."""
+    c = _make_client(async_workers=1)
+
+    def boom(proxy_id, kind, **kwargs):
+        raise CoordinatorUnavailable("simulated outage")
+
+    try:
+        with patch.object(c, "report", side_effect=boom):
+            # None of these should raise — the caller is a hot path
+            # (proxy_ban_manager.add_ban, state.mark_proxy_cf_bypass).
+            c.mark_proxy_banned("proxy-A")
+            c.mark_proxy_unbanned("proxy-A")
+            c.mark_cf_bypass("proxy-A", ttl_ms=10_000)
+            c._async_queue.join()
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
 def test_normalize_proxy_id_uses_non_security_hash_marker():
     """``hashlib.sha1`` must be called with ``usedforsecurity=False``.
 
@@ -435,3 +657,234 @@ def test_normalize_proxy_id_uses_non_security_hash_marker():
     assert a == b
     assert a.startswith("proxy-")
     assert len(a) == len("proxy-") + 16
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# P2-D — proxy health snapshot (success/failure events + latency EMA).
+# Cover the wire-protocol expansion of ``LeaseResult`` and the new
+# ``"success"`` report kind, plus the in-process health cache that
+# ``ProxyPool.next_proxy`` reads through ``get_proxy_health_score``.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def test_lease_defaults_p2d_health_to_none_when_worker_omits_field():
+    """Old Worker without ``health`` must still produce a valid LeaseResult."""
+    c = _make_client(async_workers=1)
+    payload = {
+        "wait_ms": 0, "penalty_factor": 1.0,
+        "server_time": 0, "reason": "ok",
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_fake_response(payload)):
+            r = c.lease("p1", 0)
+        assert r.health is None
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_lease_parses_p2d_health_when_worker_emits_it():
+    c = _make_client(async_workers=1)
+    payload = {
+        "wait_ms": 0, "penalty_factor": 1.0,
+        "server_time": 0, "reason": "ok",
+        "health": {
+            "success_count": 7, "failure_count": 3,
+            "latency_ema_ms": 1234.5, "score": 0.65,
+        },
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_fake_response(payload)):
+            r = c.lease("p1", 0)
+        assert isinstance(r.health, ProxyHealthSnapshot)
+        assert r.health.success_count == 7
+        assert r.health.failure_count == 3
+        assert r.health.latency_ema_ms == 1234.5
+        assert r.health.score == 0.65
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_lease_handles_explicit_null_p2d_health_field():
+    c = _make_client(async_workers=1)
+    payload = {
+        "wait_ms": 0, "penalty_factor": 1.0,
+        "server_time": 0, "reason": "ok",
+        "health": None,
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_fake_response(payload)):
+            r = c.lease("p1", 0)
+        assert r.health is None
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_lease_handles_malformed_p2d_health_payload():
+    """A non-dict ``health`` (or one with bad types) must NOT crash the spider."""
+    c = _make_client(async_workers=1)
+    payload = {
+        "wait_ms": 0, "penalty_factor": 1.0,
+        "server_time": 0, "reason": "ok",
+        # int instead of dict — must be ignored, not raise
+        "health": 42,
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_fake_response(payload)):
+            r = c.lease("p1", 0)
+        assert r.health is None
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_report_accepts_success_kind_and_includes_latency_ms():
+    c = _make_client(async_workers=1)
+    seen_body: dict = {}
+
+    def fake_post(url, json, timeout):  # noqa: A002
+        seen_body.update(json)
+        return _fake_response({
+            "penalty_factor": 1.0, "recent_event_count": 0, "server_time": 1,
+        })
+
+    try:
+        with patch.object(c._session, "post", side_effect=fake_post):
+            c.report("proxy-A", "success", latency_ms=850)
+        assert seen_body["kind"] == "success"
+        assert seen_body["latency_ms"] == 850
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_report_validates_success_kind_against_typos():
+    """``successs`` should be rejected synchronously to surface typos."""
+    c = _make_client(async_workers=1)
+    try:
+        with pytest.raises(ValueError, match="Invalid kind"):
+            c.report("p1", "successs")
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_report_clamps_negative_latency_to_zero():
+    """A clock-skew artefact must NOT poison the EMA; client clamps to 0."""
+    c = _make_client(async_workers=1)
+    seen_body: dict = {}
+
+    def fake_post(url, json, timeout):  # noqa: A002
+        seen_body.update(json)
+        return _fake_response({
+            "penalty_factor": 1.0, "recent_event_count": 0, "server_time": 1,
+        })
+
+    try:
+        with patch.object(c._session, "post", side_effect=fake_post):
+            c.report("proxy-A", "success", latency_ms=-100)
+        assert seen_body["latency_ms"] == 0
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_report_async_forwards_latency_ms_to_synchronous_report():
+    c = _make_client(async_workers=1)
+    captured: list = []
+
+    def fake_report(proxy_id, kind, *, ttl_ms=None, reason=None, latency_ms=None):
+        captured.append((proxy_id, kind, ttl_ms, reason, latency_ms))
+
+    try:
+        with patch.object(c, "report", side_effect=fake_report):
+            c.report_async("proxy-A", "success", latency_ms=420)
+            c._async_queue.join()
+        assert captured == [("proxy-A", "success", None, None, 420)]
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_report_async_legacy_call_does_not_pass_latency_ms_kwarg():
+    """``report_async(p, "cf")`` (no latency) must keep monkeypatched
+    legacy ``report`` stubs working — the worker only forwards
+    ``latency_ms=…`` when explicitly set."""
+    c = _make_client(async_workers=1)
+    captured: list = []
+
+    # NB: signature does NOT accept ``latency_ms`` — exercises the
+    # worker's "skip kwarg when None" logic.
+    def fake_report(proxy_id, kind, *, ttl_ms=None, reason=None):
+        captured.append((proxy_id, kind, ttl_ms, reason))
+
+    try:
+        with patch.object(c, "report", side_effect=fake_report):
+            c.report_async("proxy-A", "cf")
+            c._async_queue.join()
+        assert captured == [("proxy-A", "cf", None, None)]
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_lease_populates_health_cache_for_subsequent_pool_weighting():
+    c = _make_client(async_workers=1)
+    payload = {
+        "wait_ms": 0, "penalty_factor": 1.0,
+        "server_time": 0, "reason": "ok",
+        "health": {
+            "success_count": 5, "failure_count": 0,
+            "latency_ema_ms": 200.0, "score": 0.9,
+        },
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_fake_response(payload)):
+            c.lease("proxy-A", 0)
+        # Cached snapshot survives independently of the dataclass instance.
+        assert c.get_proxy_health("proxy-A").score == 0.9
+        assert c.get_proxy_health_score("proxy-A") == 0.9
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_get_proxy_health_returns_none_for_unseen_proxy():
+    c = _make_client(async_workers=1)
+    try:
+        assert c.get_proxy_health("never-leased") is None
+        assert c.get_proxy_health_score("never-leased") is None
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_get_proxy_health_handles_invalid_proxy_id_gracefully():
+    """Empty/whitespace IDs must NOT crash the pool's weighting code."""
+    c = _make_client(async_workers=1)
+    try:
+        assert c.get_proxy_health("") is None
+        assert c.get_proxy_health(None) is None  # type: ignore[arg-type]
+        assert c.get_proxy_health_score("") is None
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_lease_does_not_overwrite_cache_when_health_is_missing():
+    """A subsequent lease without ``health`` (e.g. partial Worker rollback)
+    must NOT clear a previously-cached snapshot — that would leave the
+    pool weighting flapping during deploys."""
+    c = _make_client(async_workers=1)
+    payload_with = {
+        "wait_ms": 0, "penalty_factor": 1.0,
+        "server_time": 0, "reason": "ok",
+        "health": {
+            "success_count": 5, "failure_count": 0,
+            "latency_ema_ms": 200.0, "score": 0.9,
+        },
+    }
+    payload_without = {
+        "wait_ms": 0, "penalty_factor": 1.0,
+        "server_time": 0, "reason": "ok",
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_fake_response(payload_with)):
+            c.lease("proxy-A", 0)
+        assert c.get_proxy_health_score("proxy-A") == 0.9
+        with patch.object(c._session, "post", return_value=_fake_response(payload_without)):
+            c.lease("proxy-A", 0)
+        # Cache is sticky on missing ``health`` — last good value wins.
+        assert c.get_proxy_health_score("proxy-A") == 0.9
+    finally:
+        c.close(wait=True, timeout=2.0)

@@ -1068,6 +1068,14 @@ def parse_args() -> argparse.Namespace:
         action='store_true',
         help='After planning, run rclone purge on each source_path in the purge-plan CSV (destructive).',
     )
+    parser.add_argument(
+        '--session-id',
+        type=int,
+        default=None,
+        help='Tag every D1 write inside this run with the given ReportSessions.Id '
+             'so a downstream cleanup can roll back precisely. Optional; if omitted '
+             'no SessionId is recorded and the writes are immune to scoped rollback.',
+    )
     args = parser.parse_args()
     if args.no_proxy and args.legacy_use_proxy:
         parser.error('--no-proxy and deprecated --use-proxy cannot be used together')
@@ -1082,6 +1090,18 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    # Propagate the (optional) session_id into the db audit context so all
+    # db_upsert_history / db_upsert_align_no_exact_match calls inside this
+    # process tag their writes with it.
+    if getattr(args, 'session_id', None) is not None:
+        try:
+            from packages.python.javdb_platform.db import set_active_session_id
+            set_active_session_id(int(args.session_id))
+        except Exception as e:
+            logger.warning(
+                f"Could not set active session_id={args.session_id} for align run: {e}"
+            )
+            raise
     return run_alignment(args)
 
 

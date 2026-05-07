@@ -13,6 +13,17 @@ def test_parser_adapter_is_login_page_python_fallback(monkeypatch):
     assert parser_adapter.is_login_page(html) is True
 
 
+def test_parser_adapter_copyright_restriction_is_login_page_before_rust(monkeypatch):
+    monkeypatch.setattr(parser_adapter, "RUST_PARSER_EXTRAS_AVAILABLE", True)
+    monkeypatch.setattr(parser_adapter, "_rust_is_login_page", lambda _html: False)
+    html = (
+        "<html><body>Due to copyright restrictions, "
+        "this page is not available in your country.</body></html>"
+    )
+
+    assert parser_adapter.is_login_page(html) is True
+
+
 def test_parser_adapter_validate_index_html_python_fallback(monkeypatch):
     monkeypatch.setattr(parser_adapter, "RUST_PARSER_EXTRAS_AVAILABLE", False)
     html = "<html><body><div class='movie-list'><div class='item'></div></div></body></html>"
