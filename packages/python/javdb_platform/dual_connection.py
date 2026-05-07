@@ -43,7 +43,7 @@ import re
 import sqlite3
 import threading
 from datetime import datetime, timezone
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Optional, Sequence, Tuple
 
 from packages.python.javdb_platform.logging_config import get_logger
 
@@ -297,6 +297,42 @@ class DualConnection:
             self._d1_uncommitted_writes += 1
         except Exception as exc:
             self._record_d1_failure(script, exc, kind="executescript")
+
+    def batch_execute(self, statements: Sequence[Tuple[str, Sequence[Any]]]):
+        sqlite_cursors = [
+            self._sqlite.execute(sql, params)
+            for sql, params in statements
+        ]
+        d1_cursors = [None] * len(sqlite_cursors)
+        if not statements:
+            return []
+        first_sql = statements[0][0]
+        try:
+            batch = getattr(self._d1, "batch_execute", None)
+            if callable(batch):
+                d1_cursors = batch(statements)
+            else:
+                d1_cursors = [
+                    self._d1.execute(sql, params)
+                    for sql, params in statements
+                ]
+            self._d1_uncommitted_writes += sum(
+                1 for sql, _params in statements if not _is_read(sql)
+            )
+            for sqlite_cur, d1_cur, (sql, _params) in zip(
+                sqlite_cursors, d1_cursors, statements,
+            ):
+                self._maybe_warn_id_drift(sqlite_cur, d1_cur, sql)
+        except Exception as exc:
+            self._record_d1_failure(first_sql, exc, kind="batch_execute")
+        if len(d1_cursors) < len(sqlite_cursors):
+            d1_cursors = list(d1_cursors) + [None] * (
+                len(sqlite_cursors) - len(d1_cursors)
+            )
+        return [
+            DualCursor(sqlite_cur, d1_cur)
+            for sqlite_cur, d1_cur in zip(sqlite_cursors, d1_cursors)
+        ]
 
     # ── Transaction & lifecycle ─────────────────────────────────────────
 

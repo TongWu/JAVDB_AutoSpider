@@ -339,6 +339,46 @@ class TestInitDb:
             db_mod.OPERATIONS_DB_PATH = orig_o
             _cfg_mod._storage_mode_override = orig_override
 
+    def test_legacy_single_db_v5_sessions_keep_in_progress_status(self, tmp_path):
+        db_path = str(tmp_path / 'legacy_v5.db')
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.executescript("""
+            CREATE TABLE schema_version (version INTEGER NOT NULL);
+            INSERT INTO schema_version (version) VALUES (5);
+            CREATE TABLE report_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                report_type TEXT NOT NULL,
+                report_date TEXT NOT NULL,
+                url_type TEXT,
+                display_name TEXT,
+                url TEXT,
+                start_page INTEGER,
+                end_page INTEGER,
+                csv_filename TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            INSERT INTO report_sessions (
+                report_type, report_date, url_type, display_name, url,
+                start_page, end_page, csv_filename, created_at
+            ) VALUES (
+                'daily', '20260507', 'index', 'Daily', 'https://example.test',
+                1, 2, 'report.csv', '2026-05-07 00:00:00'
+            );
+            """)
+            conn.commit()
+        finally:
+            conn.close()
+
+        db_mod._init_single_legacy_db(db_path, force=True)
+
+        with db_mod.get_db(db_path) as migrated:
+            row = migrated.execute(
+                "SELECT Status FROM ReportSessions LIMIT 1"
+            ).fetchone()
+        assert row["Status"] == "in_progress"
+        assert db_mod.db_find_in_progress_sessions(db_path=db_path) == [1]
+
     def test_split_migration_from_single_db(self, tmp_path):
         """Placing a v6 single DB at DB_PATH triggers automatic split."""
         import utils.infra.config_helper as _cfg_mod
