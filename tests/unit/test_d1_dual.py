@@ -535,6 +535,24 @@ def test_batch_execute_empty_returns_no_cursors(monkeypatch, d1_conn, no_sleep):
     assert posts == []
 
 
+def test_dual_batch_execute_read_failure_falls_back_without_drift(sqlite_conn, tmp_path, monkeypatch):
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    class FailingBatchD1(FakeD1Connection):
+        def batch_execute(self, statements):
+            raise RuntimeError("simulated D1 read outage")
+
+    dual = DualConnection(sqlite_conn, FailingBatchD1(), logical_name="history")
+    cursors = dual.batch_execute([("SELECT COUNT(*) AS n FROM t", ())])
+
+    assert len(cursors) == 1
+    assert dict(cursors[0].fetchone()) == {"n": 0}
+    assert dual._d1_uncommitted_writes == 0
+    dual.commit()
+    assert not drift_path.exists()
+
+
 # ── DualConnection drift tracking ────────────────────────────────────────
 
 

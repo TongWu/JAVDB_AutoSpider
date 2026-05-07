@@ -324,7 +324,8 @@ class DualConnection:
             ):
                 self._maybe_warn_id_drift(sqlite_cur, d1_cur, sql)
         except Exception as exc:
-            self._record_d1_failure(first_sql, exc, kind="batch_execute")
+            if any(not _is_read(sql) for sql, _params in statements):
+                self._record_d1_failure(first_sql, exc, kind="batch_execute")
         if len(d1_cursors) < len(sqlite_cursors):
             d1_cursors = list(d1_cursors) + [None] * (
                 len(sqlite_cursors) - len(d1_cursors)
