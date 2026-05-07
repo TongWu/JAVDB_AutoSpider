@@ -803,7 +803,7 @@ def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None
                     holder_id=holder_id,
                     workflow_run_id=os.environ.get("GITHUB_RUN_ID", ""),
                     workflow_name=os.environ.get("GITHUB_WORKFLOW", ""),
-                    proxy_pool_hash=proxy_pool_hash(_resolve_proxy_pool_json()),
+                    proxy_hash=proxy_pool_hash(_resolve_proxy_pool_json()),
                 )
                 logger.info("Runner-registry recovered after eviction")
                 # Feed the registry's fresh recommendation so the auto-
@@ -981,7 +981,7 @@ def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
             holder_id=runtime_holder_id,
             workflow_run_id=os.environ.get("GITHUB_RUN_ID", ""),
             workflow_name=os.environ.get("GITHUB_WORKFLOW", ""),
-            proxy_pool_hash=self_hash,
+            proxy_hash=self_hash,
         )
         logger.info(
             "Runner-registry client initialised: base_url=%s, holder_id=%s, "
