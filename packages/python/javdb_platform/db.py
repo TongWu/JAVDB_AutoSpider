@@ -929,6 +929,23 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
             pass
 
 
+def _materialize_report_session_status_default(conn: sqlite3.Connection) -> None:
+    """Persist the rollback Status default before default-stripping migrations."""
+    if not _has_table(conn, 'ReportSessions'):
+        return
+    try:
+        columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(ReportSessions)")
+        }
+        if 'Status' in columns:
+            conn.execute(
+                "UPDATE ReportSessions "
+                "SET Status='in_progress' WHERE Status IS NULL"
+            )
+    except sqlite3.OperationalError:
+        pass
+
+
 def _normalize_moviehistory_actor_column_order(conn: sqlite3.Connection) -> None:
     """Rebuild MovieHistory if actor columns were added in a non-canonical order (legacy ALTER)."""
     if not _has_table(conn, 'MovieHistory'):
@@ -1068,6 +1085,7 @@ def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
         _ensure_moviehistory_actor_columns(conn)
         _normalize_moviehistory_actor_column_order(conn)
         _ensure_rollback_columns(conn)
+        _materialize_report_session_status_default(conn)
 
         if current > 0 and current < 10:
             _migrate_defaults_to_null(conn)
@@ -1461,19 +1479,18 @@ def _init_single_legacy_db(db_path: str, *, force: bool = False):
         _ensure_moviehistory_actor_columns(conn)
         _normalize_moviehistory_actor_column_order(conn)
         _ensure_rollback_columns(conn)
+        _materialize_report_session_status_default(conn)
 
-        if current == 0:
+        if current < 6:
+            _migrate_v5_to_v6(conn)
+        if current < 10:
+            _migrate_defaults_to_null(conn)
+
+        existing = conn.execute("SELECT Version FROM SchemaVersion LIMIT 1").fetchone()
+        if existing is None:
             conn.execute("INSERT INTO SchemaVersion (Version) VALUES (?)", (SCHEMA_VERSION,))
-        else:
-            if current < 6:
-                _migrate_v5_to_v6(conn)
-            if current < 10:
-                _migrate_defaults_to_null(conn)
-            existing = conn.execute("SELECT Version FROM SchemaVersion LIMIT 1").fetchone()
-            if existing is None:
-                conn.execute("INSERT INTO SchemaVersion (Version) VALUES (?)", (SCHEMA_VERSION,))
-            elif current < SCHEMA_VERSION:
-                conn.execute("UPDATE SchemaVersion SET Version = ?", (SCHEMA_VERSION,))
+        elif current < SCHEMA_VERSION:
+            conn.execute("UPDATE SchemaVersion SET Version = ?", (SCHEMA_VERSION,))
 
     logger.debug(f"Legacy single-DB initialised at {db_path} (schema v{SCHEMA_VERSION})")
 
