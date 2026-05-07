@@ -287,9 +287,14 @@ async def _resolve_pikpak_parent_id(client, target_path, cache):
                 f"PikPak path_to_id returned empty result for '{target_path}', "
                 f"falling back to account root"
             )
-            cache[target_path] = None
             return None
         parent_id = path_ids[-1].get('id')
+        if not parent_id:
+            logger.warning(
+                f"PikPak path_to_id returned no folder id for '{target_path}', "
+                f"falling back to account root"
+            )
+            return None
         cache[target_path] = parent_id
         logger.info(f"Resolved PikPak folder '{target_path}' -> id={parent_id}")
         return parent_id
@@ -298,7 +303,6 @@ async def _resolve_pikpak_parent_id(client, target_path, cache):
             f"Failed to resolve/create PikPak folder '{target_path}': {e}. "
             f"Falling back to account root."
         )
-        cache[target_path] = None
         return None
 
 
