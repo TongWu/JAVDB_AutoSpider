@@ -53,6 +53,7 @@ from packages.python.javdb_platform.db_layer.operations_repo import (
     open_rclone_staging as _open_rclone_staging,
     append_rclone_staging as _append_rclone_staging,
     swap_rclone_inventory as _swap_rclone_inventory,
+    merge_rclone_inventory_from_stage as _merge_rclone_inventory_from_stage,
     drop_rclone_staging as _drop_rclone_staging,
 )
 
@@ -2212,6 +2213,24 @@ def db_swap_rclone_inventory(
         return _swap_rclone_inventory(conn, sid)
 
 
+def db_merge_rclone_inventory_from_stage(
+    session_id: Any = _SESSION_ID_SENTINEL,
+    years: Optional[Iterable[str]] = None,
+    db_path: Optional[str] = None,
+) -> int:
+    """Merge this session's staging rows into selected RcloneInventory years."""
+    sid = _resolve_session_id(session_id)
+    if sid is None:
+        raise ValueError(
+            "db_merge_rclone_inventory_from_stage requires an active "
+            "session_id (set via set_active_session_id or pass explicitly)."
+        )
+    if years is None:
+        raise ValueError("db_merge_rclone_inventory_from_stage requires years")
+    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
+        return _merge_rclone_inventory_from_stage(conn, sid, years)
+
+
 def db_drop_rclone_staging(
     session_id: int,
     db_path: Optional[str] = None,
@@ -2945,8 +2964,8 @@ def _rollback_history(
     }
     with get_db(db_path or HISTORY_DB_PATH) as conn:
         for kind, audit_table, main_table in (
-            ('movie', 'MovieHistoryAudit', 'MovieHistory'),
             ('torrent', 'TorrentHistoryAudit', 'TorrentHistory'),
+            ('movie', 'MovieHistoryAudit', 'MovieHistory'),
         ):
             audit_rows = conn.execute(
                 f"SELECT Id, TargetId, Action, OldRowJson FROM {audit_table} "
