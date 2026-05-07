@@ -480,6 +480,47 @@ class TestProcessPikpakBatchRouting:
         fake_client.offline_download.assert_awaited_once()
         assert fake_client.offline_download.await_args.kwargs.get('parent_id') is None
 
+    def test_failed_path_lookup_is_not_cached(self):
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+        from packages.python.javdb_integrations.pikpak_bridge import (
+            process_pikpak_batch,
+        )
+
+        magnets = ['magnet:?xt=urn:btih:one', 'magnet:?xt=urn:btih:two']
+        fake_client = AsyncMock()
+        fake_client.login = AsyncMock(return_value=None)
+        fake_client.refresh_access_token = AsyncMock(return_value=None)
+        fake_client.path_to_id = AsyncMock(side_effect=[
+            Exception('quota exceeded'),
+            [{'id': 'id-javdb'}],
+        ])
+        fake_client.offline_download = AsyncMock(return_value={'task': {'id': 't1'}})
+
+        with patch(
+            'packages.python.javdb_integrations.pikpak_bridge.PikPakApi',
+            return_value=fake_client,
+        ):
+            success, failed = asyncio.run(
+                process_pikpak_batch(
+                    magnets,
+                    'user@example.com',
+                    'pw',
+                    delay_between_requests=0,
+                    root_folder='/Javdb_AutoSpider',
+                    magnet_to_category={m: 'JavDB' for m in magnets},
+                )
+            )
+
+        assert success == magnets
+        assert failed == []
+        assert fake_client.path_to_id.await_count == 2
+        parent_ids = [
+            call.kwargs.get('parent_id')
+            for call in fake_client.offline_download.await_args_list
+        ]
+        assert parent_ids == [None, 'id-javdb']
+
 
 class TestRemoveCompletedTorrentsKeepFiles:
     """remove_completed_torrents_keep_files (per-qB cleanup before PikPak)."""
