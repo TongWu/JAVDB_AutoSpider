@@ -1461,20 +1461,18 @@ def _init_single_legacy_db(db_path: str, *, force: bool = False):
         _normalize_moviehistory_actor_column_order(conn)
         _ensure_rollback_columns(conn)
 
-        if current > 0 and current < 10:
-            _migrate_defaults_to_null(conn)
-
         if current == 0:
             conn.execute("INSERT INTO SchemaVersion (Version) VALUES (?)", (SCHEMA_VERSION,))
-        elif current < 6:
-            _migrate_v5_to_v6(conn)
+        else:
+            if current < 6:
+                _migrate_v5_to_v6(conn)
+            if current < 10:
+                _migrate_defaults_to_null(conn)
             existing = conn.execute("SELECT Version FROM SchemaVersion LIMIT 1").fetchone()
             if existing is None:
                 conn.execute("INSERT INTO SchemaVersion (Version) VALUES (?)", (SCHEMA_VERSION,))
-            else:
+            elif current < SCHEMA_VERSION:
                 conn.execute("UPDATE SchemaVersion SET Version = ?", (SCHEMA_VERSION,))
-        elif current < SCHEMA_VERSION:
-            conn.execute("UPDATE SchemaVersion SET Version = ?", (SCHEMA_VERSION,))
 
     logger.debug(f"Legacy single-DB initialised at {db_path} (schema v{SCHEMA_VERSION})")
 
@@ -1500,14 +1498,120 @@ def db_load_history(db_path: Optional[str] = None, phase: Optional[int] = None) 
 # reverse order to undo the mutations of a failed run while leaving the
 # committed state of any other concurrent run untouched.
 #
-# The audit row is written WITHIN the same ``with get_db(...)`` block as
-# the main mutation, so:
-#   - SQLite: implicit transaction ties them; if the main write fails,
-#     the audit row is rolled back together (or vice versa).
-#   - D1 / Dual: each statement auto-commits, but the worst case is an
-#     orphan audit row (Action='INSERT' with no corresponding TargetId
-#     in the main table). Rollback handles this gracefully — DELETE on
-#     a non-existent row is a no-op, and UPDATE-restore is idempotent.
+# The audit row is sent in the same backend batch as the matching
+# mutation whenever a session_id is active. SQLite executes the batch
+# inside the surrounding transaction; D1 treats each backend batch as
+# atomic, so the mutation and audit row succeed or fail together.
+
+_MOVIE_AUDIT_SQL = """INSERT INTO MovieHistoryAudit
+   (TargetId, Action, OldRowJson, SessionId, DateTimeCreated)
+   VALUES (?, ?, ?, ?, ?)"""
+
+_MOVIE_AUDIT_FOR_HREF_SQL = """INSERT INTO MovieHistoryAudit
+   (TargetId, Action, OldRowJson, SessionId, DateTimeCreated)
+   VALUES ((SELECT Id FROM MovieHistory WHERE Href=?), ?, ?, ?, ?)"""
+
+_TORRENT_AUDIT_SQL = """INSERT INTO TorrentHistoryAudit
+   (TargetId, Action, OldRowJson, SessionId, DateTimeCreated)
+   VALUES (?, ?, ?, ?, ?)"""
+
+_TORRENT_AUDIT_FOR_TYPE_SQL = """INSERT INTO TorrentHistoryAudit
+   (TargetId, Action, OldRowJson, SessionId, DateTimeCreated)
+   VALUES (
+       (SELECT Id FROM TorrentHistory
+        WHERE MovieHistoryId=? AND SubtitleIndicator=? AND CensorIndicator=?),
+       ?, ?, ?, ?
+   )"""
+
+
+def _execute_backend_batch(conn, statements: List[Tuple[str, Tuple[Any, ...]]]):
+    if not statements:
+        return []
+    batch = getattr(conn, "batch_execute", None)
+    if callable(batch):
+        return batch(statements)
+    cursors = []
+    for sql, params in statements:
+        cursors.append(conn.execute(sql, params))
+    return cursors
+
+
+def _audit_old_json(old_row: Any = None) -> Optional[str]:
+    if old_row is None:
+        return None
+    return json.dumps(
+        _row_to_jsonable_dict(old_row),
+        ensure_ascii=False,
+        default=str,
+    )
+
+
+def _movie_audit_statement(
+    target_id: int,
+    *,
+    action: str,
+    session_id: Optional[int],
+    old_row: Any = None,
+    when: Optional[str] = None,
+) -> Optional[Tuple[str, Tuple[Any, ...]]]:
+    if session_id is None:
+        return None
+    if when is None:
+        when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return (
+        _MOVIE_AUDIT_SQL,
+        (target_id, action, _audit_old_json(old_row), session_id, when),
+    )
+
+
+def _movie_insert_audit_statement_for_href(
+    href: str,
+    *,
+    session_id: Optional[int],
+    when: Optional[str] = None,
+) -> Optional[Tuple[str, Tuple[Any, ...]]]:
+    if session_id is None:
+        return None
+    if when is None:
+        when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return (_MOVIE_AUDIT_FOR_HREF_SQL, (href, 'INSERT', None, session_id, when))
+
+
+def _torrent_audit_statement(
+    target_id: int,
+    *,
+    action: str,
+    session_id: Optional[int],
+    old_row: Any = None,
+    when: Optional[str] = None,
+) -> Optional[Tuple[str, Tuple[Any, ...]]]:
+    if session_id is None:
+        return None
+    if when is None:
+        when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return (
+        _TORRENT_AUDIT_SQL,
+        (target_id, action, _audit_old_json(old_row), session_id, when),
+    )
+
+
+def _torrent_insert_audit_statement_for_type(
+    movie_id: int,
+    sub_ind: int,
+    cen_ind: int,
+    *,
+    session_id: Optional[int],
+    when: Optional[str] = None,
+) -> Optional[Tuple[str, Tuple[Any, ...]]]:
+    if session_id is None:
+        return None
+    if when is None:
+        when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return (
+        _TORRENT_AUDIT_FOR_TYPE_SQL,
+        (movie_id, sub_ind, cen_ind, 'INSERT', None, session_id, when),
+    )
+
 
 def _audit_record_movie_change(
     conn,
@@ -1519,20 +1623,15 @@ def _audit_record_movie_change(
     when: Optional[str] = None,
 ) -> None:
     """Append a row to ``MovieHistoryAudit`` for this session_id."""
-    if session_id is None:
-        return
-    if when is None:
-        when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    old_json = None
-    if old_row is not None:
-        old_json = json.dumps(_row_to_jsonable_dict(old_row),
-                              ensure_ascii=False, default=str)
-    conn.execute(
-        """INSERT INTO MovieHistoryAudit
-           (TargetId, Action, OldRowJson, SessionId, DateTimeCreated)
-           VALUES (?, ?, ?, ?, ?)""",
-        (target_id, action, old_json, session_id, when),
+    stmt = _movie_audit_statement(
+        target_id,
+        action=action,
+        session_id=session_id,
+        old_row=old_row,
+        when=when,
     )
+    if stmt is not None:
+        conn.execute(stmt[0], stmt[1])
 
 
 def _audit_record_torrent_change(
@@ -1545,20 +1644,15 @@ def _audit_record_torrent_change(
     when: Optional[str] = None,
 ) -> None:
     """Append a row to ``TorrentHistoryAudit`` for this session_id."""
-    if session_id is None:
-        return
-    if when is None:
-        when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    old_json = None
-    if old_row is not None:
-        old_json = json.dumps(_row_to_jsonable_dict(old_row),
-                              ensure_ascii=False, default=str)
-    conn.execute(
-        """INSERT INTO TorrentHistoryAudit
-           (TargetId, Action, OldRowJson, SessionId, DateTimeCreated)
-           VALUES (?, ?, ?, ?, ?)""",
-        (target_id, action, old_json, session_id, when),
+    stmt = _torrent_audit_statement(
+        target_id,
+        action=action,
+        session_id=session_id,
+        old_row=old_row,
+        when=when,
     )
+    if stmt is not None:
+        conn.execute(stmt[0], stmt[1])
 
 
 def _row_to_jsonable_dict(row) -> dict:
@@ -1642,7 +1736,7 @@ def db_upsert_history(
             ).fetchone()
 
         if existing is None:
-            cur = conn.execute(
+            insert_movie = (
                 """INSERT INTO MovieHistory
                    (VideoCode, Href, DateTimeCreated, DateTimeUpdated, DateTimeVisited,
                     ActorName, ActorGender, ActorLink, SupportingActors, SessionId)
@@ -1651,10 +1745,22 @@ def db_upsert_history(
                  actor_name, actor_gender, prepared_actor_link,
                  prepared_supporting_actors, sid),
             )
-            movie_id = cur.lastrowid
-            _audit_record_movie_change(
-                conn, movie_id, action='INSERT', session_id=sid, when=now,
+            statements = [insert_movie]
+            audit_stmt = _movie_insert_audit_statement_for_href(
+                normalized_href,
+                session_id=sid,
+                when=now,
             )
+            if audit_stmt is not None:
+                statements.append(audit_stmt)
+            cursors = _execute_backend_batch(conn, statements)
+            movie_id = getattr(cursors[0], "lastrowid", None) if cursors else None
+            if not movie_id:
+                row = conn.execute(
+                    "SELECT Id FROM MovieHistory WHERE Href=?",
+                    (normalized_href,),
+                ).fetchone()
+                movie_id = row['Id']
         else:
             movie_id = existing['Id']
             old_full = conn.execute(
@@ -1688,7 +1794,7 @@ def db_upsert_history(
                     new_ag = row_m['ActorGender']
                     new_al = row_m['ActorLink']
                     new_sup = row_m['SupportingActors']
-                conn.execute(
+                update_movie = (
                     """UPDATE MovieHistory SET DateTimeUpdated=?, DateTimeVisited=?,
                        Href=?, ActorName=?, ActorGender=?, ActorLink=?,
                        SupportingActors=?, SessionId=? WHERE Id=?""",
@@ -1696,15 +1802,22 @@ def db_upsert_history(
                      sid, movie_id),
                 )
             else:
-                conn.execute(
+                update_movie = (
                     """UPDATE MovieHistory SET DateTimeUpdated=?, DateTimeVisited=?,
                        Href=?, SessionId=? WHERE Id=?""",
                     (now, now, normalized_href, sid, movie_id),
                 )
-            _audit_record_movie_change(
-                conn, movie_id, action='UPDATE', session_id=sid,
-                old_row=old_full, when=now,
+            statements = [update_movie]
+            audit_stmt = _movie_audit_statement(
+                movie_id,
+                action='UPDATE',
+                session_id=sid,
+                old_row=old_full,
+                when=now,
             )
+            if audit_stmt is not None:
+                statements.append(audit_stmt)
+            _execute_backend_batch(conn, statements)
 
         # Upsert torrents
         has_hacked_subtitle = False
@@ -1725,7 +1838,7 @@ def db_upsert_history(
             ).fetchone()
 
             if existing_t is None:
-                cur_t = conn.execute(
+                insert_torrent = (
                     """INSERT INTO TorrentHistory
                        (MovieHistoryId, MagnetUri, SubtitleIndicator, CensorIndicator,
                         ResolutionType, Size, FileCount, DateTimeCreated,
@@ -1734,22 +1847,36 @@ def db_upsert_history(
                     (movie_id, magnet, sub_ind, cen_ind, res, size, fc, now, now,
                      sid),
                 )
-                _audit_record_torrent_change(
-                    conn, cur_t.lastrowid, action='INSERT',
-                    session_id=sid, when=now,
+                statements = [insert_torrent]
+                audit_stmt = _torrent_insert_audit_statement_for_type(
+                    movie_id,
+                    sub_ind,
+                    cen_ind,
+                    session_id=sid,
+                    when=now,
                 )
+                if audit_stmt is not None:
+                    statements.append(audit_stmt)
+                _execute_backend_batch(conn, statements)
             else:
-                conn.execute(
+                update_torrent = (
                     """UPDATE TorrentHistory
                        SET MagnetUri=?, Size=?, FileCount=?, ResolutionType=?,
                            DateTimeUpdated=?, SessionId=?
                        WHERE Id=?""",
                     (magnet, size, fc, res, now, sid, existing_t['Id']),
                 )
-                _audit_record_torrent_change(
-                    conn, existing_t['Id'], action='UPDATE', session_id=sid,
-                    old_row=existing_t, when=now,
+                statements = [update_torrent]
+                audit_stmt = _torrent_audit_statement(
+                    existing_t['Id'],
+                    action='UPDATE',
+                    session_id=sid,
+                    old_row=existing_t,
+                    when=now,
                 )
+                if audit_stmt is not None:
+                    statements.append(audit_stmt)
+                _execute_backend_batch(conn, statements)
 
             if tt == 'hacked_subtitle':
                 has_hacked_subtitle = True
@@ -1797,17 +1924,25 @@ def _delete_torrents_with_audit(
         "AND SubtitleIndicator=? AND CensorIndicator=?",
         (movie_id, sub_ind, cen_ind),
     ).fetchall()
-    for row in rows:
-        _audit_record_torrent_change(
-            conn, row['Id'], action='DELETE', session_id=session_id,
-            old_row=row, when=when,
-        )
     if rows:
-        conn.execute(
-            "DELETE FROM TorrentHistory WHERE MovieHistoryId=? "
-            "AND SubtitleIndicator=? AND CensorIndicator=?",
-            (movie_id, sub_ind, cen_ind),
-        )
+        statements = [
+            (
+                "DELETE FROM TorrentHistory WHERE MovieHistoryId=? "
+                "AND SubtitleIndicator=? AND CensorIndicator=?",
+                (movie_id, sub_ind, cen_ind),
+            )
+        ]
+        for row in rows:
+            audit_stmt = _torrent_audit_statement(
+                row['Id'],
+                action='DELETE',
+                session_id=session_id,
+                old_row=row,
+                when=when,
+            )
+            if audit_stmt is not None:
+                statements.append(audit_stmt)
+        _execute_backend_batch(conn, statements)
 
 
 def _update_movie_indicators(
@@ -1850,15 +1985,22 @@ def _update_movie_indicators(
                 or (old_full['HiResIndicator'] or 0) != hires_val
             )
         ):
-            conn.execute(
+            update_movie = (
                 """UPDATE MovieHistory SET PerfectMatchIndicator=?,
                    HiResIndicator=?, SessionId=? WHERE Id=?""",
                 (perfect_val, hires_val, session_id, movie_id),
             )
-            _audit_record_movie_change(
-                conn, movie_id, action='UPDATE', session_id=session_id,
-                old_row=old_full, when=when,
+            statements = [update_movie]
+            audit_stmt = _movie_audit_statement(
+                movie_id,
+                action='UPDATE',
+                session_id=session_id,
+                old_row=old_full,
+                when=when,
             )
+            if audit_stmt is not None:
+                statements.append(audit_stmt)
+            _execute_backend_batch(conn, statements)
         return
 
     conn.execute(
@@ -1896,9 +2038,9 @@ def db_batch_update_last_visited(
     if not lookup_hrefs:
         return 0
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # D1 caps bound parameters at ~100 per statement, so chunk the IN-list.
-    # Leave 2 slots for ``now`` and ``SessionId``; use 90 hrefs per batch for safety.
-    CHUNK = 90
+    # D1 caps bound parameters and batch statements. Keep session-tagged
+    # chunks small enough for one UPDATE plus per-row audit INSERTs.
+    CHUNK = 40 if sid is not None else 90
     total = 0
     with get_db(db_path or HISTORY_DB_PATH) as conn:
         for i in range(0, len(lookup_hrefs), CHUNK):
@@ -1910,16 +2052,25 @@ def db_batch_update_last_visited(
                     f"SELECT * FROM MovieHistory WHERE Href IN ({placeholders})",
                     chunk,
                 ).fetchall()
-                for row in affected_rows:
-                    _audit_record_movie_change(
-                        conn, row['Id'], action='UPDATE',
-                        session_id=sid, old_row=row, when=now,
+                statements = [
+                    (
+                        f"UPDATE MovieHistory SET DateTimeVisited=?, SessionId=? "
+                        f"WHERE Href IN ({placeholders})",
+                        tuple([now, sid] + chunk),
                     )
-                cur = conn.execute(
-                    f"UPDATE MovieHistory SET DateTimeVisited=?, SessionId=? "
-                    f"WHERE Href IN ({placeholders})",
-                    [now, sid] + chunk,
-                )
+                ]
+                for row in affected_rows:
+                    audit_stmt = _movie_audit_statement(
+                        row['Id'],
+                        action='UPDATE',
+                        session_id=sid,
+                        old_row=row,
+                        when=now,
+                    )
+                    if audit_stmt is not None:
+                        statements.append(audit_stmt)
+                cursors = _execute_backend_batch(conn, statements)
+                cur = cursors[0]
             else:
                 cur = conn.execute(
                     f"UPDATE MovieHistory SET DateTimeVisited=? WHERE Href IN ({placeholders})",
@@ -1951,6 +2102,7 @@ def db_batch_update_movie_actors(
             conn, updates,
             session_id=sid,
             audit_record_movie_change=_audit_record_movie_change,
+            audit_movie_change_statement=_movie_audit_statement,
         )
 
 
