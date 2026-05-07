@@ -404,11 +404,12 @@ def test_scan_year_filter_merges_staging_instead_of_full_swap(
 
 
 def test_scan_does_not_mark_local_session_committed_when_swap_fails(
-    monkeypatch, tmp_path, storage_mode_db
+    monkeypatch, tmp_path, storage_mode_db, caplog
 ):
     import scripts.rclone_manager as rm
     from utils.infra import db as db_mod
 
+    caplog.set_level("ERROR", logger=rm.logger.name)
     output = tmp_path / "inventory.csv"
     incoming = {field: "" for field in INVENTORY_FIELDNAMES}
     incoming.update({
@@ -427,6 +428,10 @@ def test_scan_does_not_mark_local_session_committed_when_swap_fails(
     def fail_swap(session_id):
         order.append(("swap_inventory", session_id))
         raise RuntimeError("swap failed")
+
+    def fail_drop(session_id):
+        order.append(("drop_staging", session_id))
+        raise RuntimeError("drop failed")
 
     monkeypatch.setattr(rm, "RCLONE_CONFIG_BASE64", "")
     monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
@@ -463,7 +468,7 @@ def test_scan_does_not_mark_local_session_committed_when_swap_fails(
     monkeypatch.setattr(
         db_mod,
         "db_drop_rclone_staging",
-        lambda sid: order.append(("drop_staging", sid)),
+        fail_drop,
     )
     monkeypatch.setattr(
         sys,
@@ -484,6 +489,11 @@ def test_scan_does_not_mark_local_session_committed_when_swap_fails(
     assert ("mark_failed", 123) in order
     assert ("drop_staging", 123) in order
     assert order.index(("mark_failed", 123)) < order.index(("drop_staging", 123))
+    assert any(
+        "session 123 after swap error" in record.getMessage()
+        and "drop failed" in record.getMessage()
+        for record in caplog.records
+    )
 
 
 def test_scan_succeeds_when_post_swap_commit_marking_fails(
@@ -563,17 +573,22 @@ def test_scan_succeeds_when_post_swap_commit_marking_fails(
 
 
 def test_scan_aborts_when_sqlite_staging_init_fails(
-    monkeypatch, tmp_path, storage_mode_duo
+    monkeypatch, tmp_path, storage_mode_duo, caplog
 ):
     import scripts.rclone_manager as rm
     from utils.infra import db as db_mod
 
+    caplog.set_level("ERROR", logger=rm.logger.name)
     output = tmp_path / "inventory.csv"
     order = []
 
     def fake_scan(*_args, **_kwargs):
         order.append("scan")
         return 1, 0
+
+    def fail_drop(session_id):
+        order.append(("drop_staging", session_id))
+        raise RuntimeError("drop failed")
 
     monkeypatch.setattr(rm, "RCLONE_CONFIG_BASE64", "")
     monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
@@ -594,7 +609,7 @@ def test_scan_aborts_when_sqlite_staging_init_fails(
     monkeypatch.setattr(
         db_mod,
         "db_drop_rclone_staging",
-        lambda sid: order.append(("drop_staging", sid)),
+        fail_drop,
     )
     monkeypatch.setattr(
         db_mod,
@@ -620,6 +635,11 @@ def test_scan_aborts_when_sqlite_staging_init_fails(
     assert ("drop_staging", 123) in order
     assert ("mark_failed", 123) in order
     assert not output.exists()
+    assert any(
+        "session 123 after init error" in record.getMessage()
+        and "drop failed" in record.getMessage()
+        for record in caplog.records
+    )
 
 
 # ============================================================================

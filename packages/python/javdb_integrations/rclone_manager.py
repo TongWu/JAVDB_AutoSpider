@@ -1399,8 +1399,14 @@ def main() -> int:
                         )
                     try:
                         db_drop_rclone_staging(_staging_session_id)
-                    except Exception:
-                        pass
+                    except Exception as drop_error:
+                        logger.error(
+                            "Failed to drop rclone inventory staging table "
+                            "for session %s after init error: %s",
+                            _staging_session_id,
+                            drop_error,
+                            exc_info=True,
+                        )
                 _staging_session_id = None
                 _created_local_staging_session = False
                 return 1
@@ -1517,8 +1523,14 @@ def main() -> int:
                     )
                 try:
                     db_drop_rclone_staging(_staging_session_id)
-                except Exception:
-                    pass
+                except Exception as drop_error:
+                    logger.error(
+                        "Failed to drop rclone inventory staging table "
+                        "for session %s after swap error: %s",
+                        _staging_session_id,
+                        drop_error,
+                        exc_info=True,
+                    )
                 if _csv_tmp_path is not None:
                     try:
                         os.remove(_csv_tmp_path)
