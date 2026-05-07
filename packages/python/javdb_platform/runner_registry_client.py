@@ -318,7 +318,7 @@ class RunnerRegistryClient:
         workflow_run_id: str = "",
         workflow_name: str = "",
         started_at: Optional[int] = None,
-        proxy_pool_hash: str = "",
+        proxy_hash: str = "",
         page_range: Optional[str] = None,
     ) -> RegisterResult:
         """Register *this* runner with the singleton registry.
@@ -328,9 +328,10 @@ class RunnerRegistryClient:
         ``last_heartbeat``.  This lets a defensive client re-register
         after a network partition without polluting "uptime" telemetry.
 
-        ``proxy_pool_hash`` powers the cross-runner drift check; pass
-        :func:`proxy_pool_hash` of the runner's ``PROXY_POOL_JSON`` so
-        peers see a consistent hash across logically-equivalent JSON.
+        The request's ``proxy_pool_hash`` field powers the cross-runner
+        drift check; pass :func:`proxy_pool_hash` of the runner's
+        ``PROXY_POOL_JSON`` so peers see a consistent hash across
+        logically-equivalent JSON.
 
         Raises :class:`ValueError` for invalid caller input and
         :class:`RunnerRegistryUnavailable` on registry failures
@@ -342,7 +343,7 @@ class RunnerRegistryClient:
             "holder_id": holder_id,
             "workflow_run_id": workflow_run_id,
             "workflow_name": workflow_name,
-            "proxy_pool_hash": proxy_pool_hash,
+            "proxy_pool_hash": proxy_hash,
             "page_range": page_range,
         }
         if started_at is not None:
@@ -512,7 +513,7 @@ class RunnerRegistryClient:
 def create_runner_registry_client_from_env(
     *,
     url_env: str = "PROXY_COORDINATOR_URL",
-    token_env: str = "PROXY_COORDINATOR_TOKEN",
+    token_env: str = "PROXY_COORDINATOR_TOKEN",  # noqa: S107
     enabled_env: str = "RUNNER_REGISTRY_ENABLED",
 ) -> Optional[RunnerRegistryClient]:
     """Build a client from env vars, returning ``None`` when disabled.
