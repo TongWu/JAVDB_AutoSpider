@@ -1363,6 +1363,7 @@ def main() -> int:
                     db_open_rclone_staging,
                     db_append_rclone_staging,
                     db_swap_rclone_inventory,
+                    db_merge_rclone_inventory_from_stage,
                     db_drop_rclone_staging,
                     get_active_session_id,
                 )
@@ -1389,11 +1390,6 @@ def main() -> int:
                 logger.error(f"Failed initializing SQLite for rclone inventory; aborting scan: {e}")
                 if _staging_session_id is not None:
                     try:
-                        db_drop_rclone_staging(_staging_session_id)
-                    except Exception:
-                        pass
-                if _created_local_staging_session and _staging_session_id is not None:
-                    try:
                         db_mark_session_failed(_staging_session_id)
                     except Exception as mark_error:
                         logger.warning(
@@ -1401,6 +1397,10 @@ def main() -> int:
                             "failed after init error: %s",
                             mark_error,
                         )
+                    try:
+                        db_drop_rclone_staging(_staging_session_id)
+                    except Exception:
+                        pass
                 _staging_session_id = None
                 _created_local_staging_session = False
                 return 1
@@ -1457,6 +1457,14 @@ def main() -> int:
         finally:
             if scan_failed and _sqlite_ok and _staging_session_id is not None:
                 try:
+                    db_mark_session_failed(_staging_session_id)
+                except Exception as mark_error:
+                    logger.warning(
+                        "Failed to mark rclone inventory staging session "
+                        "failed after scan error: %s",
+                        mark_error,
+                    )
+                try:
                     db_drop_rclone_staging(_staging_session_id)
                     logger.info(
                         "Dropped RcloneInventoryStaging_%s after scan failure; "
@@ -1484,12 +1492,29 @@ def main() -> int:
         if _sqlite_ok and _staging_session_id is not None:
             cleanup_failed = False
             try:
-                committed = db_swap_rclone_inventory(session_id=_staging_session_id)
+                if year_filter:
+                    committed = db_merge_rclone_inventory_from_stage(
+                        session_id=_staging_session_id,
+                        years=year_filter,
+                    )
+                else:
+                    committed = db_swap_rclone_inventory(
+                        session_id=_staging_session_id,
+                    )
             except Exception as e:
+                action = "merge" if year_filter else "swap"
                 logger.error(
-                    f"Failed to swap RcloneInventory staging — "
+                    f"Failed to {action} RcloneInventory staging — "
                     f"main table left UNCHANGED: {e}"
                 )
+                try:
+                    db_mark_session_failed(_staging_session_id)
+                except Exception as mark_error:
+                    logger.warning(
+                        "Failed to mark rclone inventory staging session "
+                        "failed after swap error: %s",
+                        mark_error,
+                    )
                 try:
                     db_drop_rclone_staging(_staging_session_id)
                 except Exception:
@@ -1521,9 +1546,10 @@ def main() -> int:
                         "the scan output intact for inspection.",
                         _staging_session_id,
                     )
+            action = "Merged" if year_filter else "Swapped"
             logger.info(
-                "Swapped RcloneInventoryStaging_%s into RcloneInventory "
-                "(committed=%s rows)", _staging_session_id, committed,
+                "%s RcloneInventoryStaging_%s into RcloneInventory "
+                "(committed=%s rows)", action, _staging_session_id, committed,
             )
 
         if _csv_tmp_path is not None:

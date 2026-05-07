@@ -239,8 +239,13 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
             "SELECT name FROM sqlite_master "
             "WHERE name LIKE 'RcloneInventoryStaging_%'"
         ).fetchall()
+        sessions = conn.execute(
+            "SELECT Status FROM ReportSessions "
+            "WHERE ReportType='rclone_inventory'"
+        ).fetchall()
     assert [row["VideoCode"] for row in rows] == ["OLD-001"]
     assert staging_tables == []
+    assert [row["Status"] for row in sessions] == ["failed"]
 
 
 def test_scan_marks_local_session_committed_after_inventory_swap(
@@ -297,6 +302,11 @@ def test_scan_marks_local_session_committed_after_inventory_swap(
         lambda session_id: order.append(("swap_inventory", session_id)) or 1,
     )
     monkeypatch.setattr(
+        db_mod,
+        "db_merge_rclone_inventory_from_stage",
+        lambda session_id, years: order.append(("merge_inventory", session_id, years)) or 1,
+    )
+    monkeypatch.setattr(
         sys,
         "argv",
         [
@@ -311,6 +321,86 @@ def test_scan_marks_local_session_committed_after_inventory_swap(
 
     assert rm.main() == 0
     assert order.index(("swap_inventory", 123)) < order.index(("mark_committed", 123))
+    assert not any(item[0] == "merge_inventory" for item in order if isinstance(item, tuple))
+
+
+def test_scan_year_filter_merges_staging_instead_of_full_swap(
+    monkeypatch, tmp_path, storage_mode_db
+):
+    import scripts.rclone_manager as rm
+    from utils.infra import db as db_mod
+
+    output = tmp_path / "inventory.csv"
+    incoming = {field: "" for field in INVENTORY_FIELDNAMES}
+    incoming.update({
+        "video_code": "NEW-001",
+        "folder_path": "2026/new/NEW-001",
+        "folder_size": 1,
+        "file_count": 1,
+        "scan_datetime": "2026-05-05 00:00:00",
+    })
+    order = []
+
+    def fake_scan(*_args, row_callback=None, **_kwargs):
+        row_callback([incoming])
+        return 1, 0
+
+    def fail_swap(session_id):
+        order.append(("swap_inventory", session_id))
+        raise AssertionError("year-filtered scans must not full-swap inventory")
+
+    monkeypatch.setattr(rm, "RCLONE_CONFIG_BASE64", "")
+    monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
+    monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
+    monkeypatch.setattr(rm, "scan_inventory", fake_scan)
+    monkeypatch.setattr(rm, "export_db_to_csv", lambda _path: order.append("export"))
+    monkeypatch.setattr(db_mod, "init_db", lambda: order.append("init_db"))
+    monkeypatch.setattr(db_mod, "get_active_session_id", lambda: None)
+    monkeypatch.setattr(
+        db_mod,
+        "db_create_report_session",
+        lambda **_kwargs: order.append("create_session") or 123,
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_open_rclone_staging",
+        lambda sid: order.append(("open_staging", sid)),
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_append_rclone_staging",
+        lambda rows, session_id: order.append(("append_staging", session_id)),
+    )
+    monkeypatch.setattr(
+        db_mod,
+        "db_mark_session_committed",
+        lambda sid: order.append(("mark_committed", sid)) or 1,
+    )
+    monkeypatch.setattr(db_mod, "db_swap_rclone_inventory", fail_swap)
+    monkeypatch.setattr(
+        db_mod,
+        "db_merge_rclone_inventory_from_stage",
+        lambda session_id, years: order.append(("merge_inventory", session_id, years)) or 1,
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "rclone_manager",
+            "--scan",
+            "--years",
+            "2026",
+            "--root-path",
+            "gdrive:/root",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert rm.main() == 0
+    assert ("merge_inventory", 123, ["2026"]) in order
+    assert ("swap_inventory", 123) not in order
+    assert order.index(("merge_inventory", 123, ["2026"])) < order.index(("mark_committed", 123))
 
 
 def test_scan_does_not_mark_local_session_committed_when_swap_fails(
@@ -364,6 +454,11 @@ def test_scan_does_not_mark_local_session_committed_when_swap_fails(
         "db_mark_session_committed",
         lambda sid: order.append(("mark_committed", sid)) or 1,
     )
+    monkeypatch.setattr(
+        db_mod,
+        "db_mark_session_failed",
+        lambda sid: order.append(("mark_failed", sid)) or 1,
+    )
     monkeypatch.setattr(db_mod, "db_swap_rclone_inventory", fail_swap)
     monkeypatch.setattr(
         db_mod,
@@ -386,7 +481,9 @@ def test_scan_does_not_mark_local_session_committed_when_swap_fails(
     with pytest.raises(RuntimeError, match="swap failed"):
         rm.main()
     assert ("mark_committed", 123) not in order
+    assert ("mark_failed", 123) in order
     assert ("drop_staging", 123) in order
+    assert order.index(("mark_failed", 123)) < order.index(("drop_staging", 123))
 
 
 def test_scan_succeeds_when_post_swap_commit_marking_fails(
