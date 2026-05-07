@@ -471,7 +471,10 @@ class TestRcloneStagingSwap:
 
         staging = db_mod.db_open_rclone_staging(sid)
         db_mod.db_append_rclone_staging(
-            [self._entry("NEW-001", "2026/actor/NEW-001")],
+            [
+                self._entry("NEW-001", "2026/actor/NEW-001"),
+                self._entry("SKIP-001", "2025/actor/SKIP-001"),
+            ],
             session_id=sid,
         )
 

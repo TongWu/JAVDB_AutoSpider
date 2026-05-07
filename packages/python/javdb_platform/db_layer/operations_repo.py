@@ -166,8 +166,9 @@ def merge_rclone_inventory_from_stage(
         ),
         (
             f"INSERT INTO RcloneInventory ({main_cols}) "
-            f"SELECT {main_cols} FROM {staging}",
-            (),
+            f"SELECT {main_cols} FROM {staging} "
+            "WHERE " + " OR ".join(where_parts),
+            tuple(params),
         ),
         (f"DROP TABLE {staging}", ()),
     ]
