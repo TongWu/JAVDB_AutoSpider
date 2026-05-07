@@ -330,6 +330,13 @@ class DualConnection:
             d1_cursors = list(d1_cursors) + [None] * (
                 len(sqlite_cursors) - len(d1_cursors)
             )
+        else:
+            d1_cursors = list(d1_cursors)
+        for idx, ((sql, _params), sqlite_cur, d1_cur) in enumerate(zip(
+            statements, sqlite_cursors, d1_cursors,
+        )):
+            if d1_cur is None and _is_read(sql):
+                d1_cursors[idx] = _SqliteFallbackCursor(sqlite_cur)
         return [
             DualCursor(sqlite_cur, d1_cur)
             for sqlite_cur, d1_cur in zip(sqlite_cursors, d1_cursors)

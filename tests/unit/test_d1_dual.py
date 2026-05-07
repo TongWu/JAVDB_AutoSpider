@@ -547,10 +547,25 @@ def test_dual_batch_execute_read_failure_falls_back_without_drift(sqlite_conn, t
     cursors = dual.batch_execute([("SELECT COUNT(*) AS n FROM t", ())])
 
     assert len(cursors) == 1
-    assert dict(cursors[0].fetchone()) == {"n": 0}
+    row = cursors[0].fetchone()
+    assert row == {"n": 0}
+    assert row.get("n") == 0
     assert dual._d1_uncommitted_writes == 0
     dual.commit()
     assert not drift_path.exists()
+
+
+def test_dual_batch_execute_read_none_cursor_uses_dict_fallback(sqlite_conn):
+    class MissingReadCursorD1(FakeD1Connection):
+        def batch_execute(self, statements):
+            return [None for _statement in statements]
+
+    dual = DualConnection(sqlite_conn, MissingReadCursorD1(), logical_name="history")
+    cursors = dual.batch_execute([("SELECT COUNT(*) AS n FROM t", ())])
+
+    row = cursors[0].fetchone()
+    assert row == {"n": 0}
+    assert row.get("n") == 0
 
 
 # ── DualConnection drift tracking ────────────────────────────────────────
