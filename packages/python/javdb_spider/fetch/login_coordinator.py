@@ -550,12 +550,16 @@ class LoginCoordinator:
                         break
 
                 if injected_worker_id is None:
+                    tasks_to_retry = list(self._pending_login_tasks)
+                    self._pending_login_tasks.clear()
                     logger.warning(
                         "Poller: published proxy '%s' is not in this runner's "
-                        "pool — %d task(s) remain parked",
+                        "pool — re-dispatching %d parked task(s)",
                         snapshot.proxy_name,
-                        len(self._pending_login_tasks),
+                        len(tasks_to_retry),
                     )
+                    for _proxy_name, task, login_queue in tasks_to_retry:
+                        requeue_front(login_queue, task)
                     continue
 
                 self.logged_in_worker_id = injected_worker_id
@@ -646,6 +650,12 @@ class LoginCoordinator:
         state.refreshed_session_cookie = None
         state.logged_in_proxy_name = None
         return False, None
+
+    def _worker_for_id(self, worker_id: int):
+        for worker in self._all_workers:
+            if worker.worker_id == worker_id:
+                return worker
+        return None
 
     def _find_and_login_next_worker(self, exclude: set | None = None) -> int | None:
         """Find the next proxy with remaining budget, login through it.
@@ -752,8 +762,15 @@ class LoginCoordinator:
         # attribute it to the proxy that ultimately succeeded
         # (``next_wid``) or to the hint proxy when nothing worked.
         if next_wid is not None:
-            success_proxy = self._all_workers[next_wid].proxy_name
-            self._record_login_attempt(success_proxy, "success")
+            success_worker = self._worker_for_id(next_wid)
+            if success_worker is None:
+                logger.warning(
+                    "Login helper returned unknown worker_id=%s; "
+                    "skipping success attribution",
+                    next_wid,
+                )
+            else:
+                self._record_login_attempt(success_worker.proxy_name, "success")
         else:
             self._record_login_attempt(hint_proxy_name, "failure")
         return next_wid, False
@@ -939,9 +956,14 @@ class LoginCoordinator:
                 if parked:
                     return
                 if next_wid is not None:
-                    task.failed_proxies.discard(
-                        self._all_workers[next_wid].proxy_name,
-                    )
+                    next_worker = self._worker_for_id(next_wid)
+                    if next_worker is not None:
+                        task.failed_proxies.discard(next_worker.proxy_name)
+                    else:
+                        logger.warning(
+                            "Login helper returned unknown worker_id=%s",
+                            next_wid,
+                        )
                     _set_login_verified(task, True)
                     login_queue.put(task)
                     return
@@ -1021,9 +1043,14 @@ class LoginCoordinator:
             if parked:
                 return
             if next_wid is not None:
-                task.failed_proxies.discard(
-                    self._all_workers[next_wid].proxy_name,
-                )
+                next_worker = self._worker_for_id(next_wid)
+                if next_worker is not None:
+                    task.failed_proxies.discard(next_worker.proxy_name)
+                else:
+                    logger.warning(
+                        "Login helper returned unknown worker_id=%s",
+                        next_wid,
+                    )
                 _set_login_verified(task, True)
                 login_queue.put(task)
                 return
