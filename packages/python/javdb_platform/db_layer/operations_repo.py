@@ -10,7 +10,7 @@ just drops the staging table.
 
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 from packages.python.javdb_core.contracts import (
     get_video_code,
     get_sensor_category,
@@ -120,6 +120,64 @@ def swap_rclone_inventory(conn, session_id: int) -> int:
         # already gives us all-or-nothing semantics.
         for sql, params in statements:
             conn.execute(sql, params)
+
+    row = conn.execute(
+        "SELECT COUNT(*) AS n FROM RcloneInventory"
+    ).fetchone()
+    if row is None:
+        return 0
+    try:
+        return int(row["n"])
+    except (KeyError, TypeError):
+        return int(row[0])
+
+
+def merge_rclone_inventory_from_stage(
+    conn,
+    session_id: int,
+    years: Iterable[str],
+) -> int:
+    """Refresh only the requested year prefixes from this session's staging."""
+    staging = _staging_table_name(session_id)
+    normalized_years = [
+        str(year).strip().strip("/")
+        for year in years
+        if str(year).strip().strip("/")
+    ]
+    if not normalized_years:
+        raise ValueError(
+            "merge_rclone_inventory_from_stage requires at least one year"
+        )
+
+    where_parts = []
+    params = []
+    for year in normalized_years:
+        where_parts.append("(FolderPath = ? OR FolderPath LIKE ?)")
+        params.extend([year, f"{year}/%"])
+
+    main_cols = (
+        "VideoCode, SensorCategory, SubtitleCategory, FolderPath, "
+        "FolderSize, FileCount, DateTimeScanned"
+    )
+    statements = [
+        (
+            "DELETE FROM RcloneInventory WHERE " + " OR ".join(where_parts),
+            tuple(params),
+        ),
+        (
+            f"INSERT INTO RcloneInventory ({main_cols}) "
+            f"SELECT {main_cols} FROM {staging}",
+            (),
+        ),
+        (f"DROP TABLE {staging}", ()),
+    ]
+
+    batch = getattr(conn, "batch_execute", None)
+    if callable(batch):
+        batch(statements)
+    else:
+        for sql, stmt_params in statements:
+            conn.execute(sql, stmt_params)
 
     row = conn.execute(
         "SELECT COUNT(*) AS n FROM RcloneInventory"

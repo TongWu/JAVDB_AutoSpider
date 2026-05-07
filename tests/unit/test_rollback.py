@@ -460,6 +460,37 @@ class TestRcloneStagingSwap:
         assert codes == ["NEW-001", "NEW-002"]
         assert staging_exists is None
 
+    def test_merge_staging_refreshes_only_selected_years(self):
+        sid = _create_session()
+        db_mod.db_replace_rclone_inventory(
+            [
+                self._entry("KEEP-001", "2025/actor/KEEP-001"),
+                self._entry("OLD-001", "2026/actor/OLD-001"),
+            ],
+        )
+
+        staging = db_mod.db_open_rclone_staging(sid)
+        db_mod.db_append_rclone_staging(
+            [self._entry("NEW-001", "2026/actor/NEW-001")],
+            session_id=sid,
+        )
+
+        n = db_mod.db_merge_rclone_inventory_from_stage(
+            session_id=sid,
+            years=["2026"],
+        )
+
+        with db_mod.get_db() as conn:
+            rows = conn.execute(
+                "SELECT VideoCode FROM RcloneInventory ORDER BY VideoCode"
+            ).fetchall()
+            staging_exists = conn.execute(
+                "SELECT name FROM sqlite_master WHERE name=?", (staging,),
+            ).fetchone()
+        assert n == 2
+        assert [row["VideoCode"] for row in rows] == ["KEEP-001", "NEW-001"]
+        assert staging_exists is None
+
     def test_drop_staging_leaves_main_untouched(self):
         sid = _create_session()
         db_mod.db_replace_rclone_inventory(
@@ -530,6 +561,31 @@ class TestRollbackHistoryAudit:
             ).fetchone()["n"]
         assert still == 0
         assert audit_left == 0  # consumed audit rows are tidied up
+
+    def test_insert_audit_deletes_torrents_before_parent_movie(self):
+        sid = _create_session()
+        db_mod.db_upsert_history(
+            href="/v/PARENT-001",
+            video_code="PARENT-001",
+            magnet_links={"subtitle": "magnet:?xt=urn:btih:parent001"},
+            session_id=sid,
+        )
+
+        result = db_mod.db_rollback_session(sid, scope="history")
+
+        assert result["history"]["TorrentHistory.deleted"] >= 1
+        assert result["history"]["MovieHistory.deleted"] >= 1
+        assert result["history"].get("drift_skipped", 0) == 0
+        with db_mod.get_db() as conn:
+            movie_count = conn.execute(
+                "SELECT COUNT(*) AS n FROM MovieHistory "
+                "WHERE VideoCode='PARENT-001'"
+            ).fetchone()["n"]
+            torrent_count = conn.execute(
+                "SELECT COUNT(*) AS n FROM TorrentHistory"
+            ).fetchone()["n"]
+        assert movie_count == 0
+        assert torrent_count == 0
 
     def test_update_audit_restores_old_row(self):
         # Run #1 creates a movie with actor "OldActor".
