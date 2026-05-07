@@ -47,10 +47,7 @@ from packages.python.javdb_platform.runner_registry_client import (  # noqa: E40
 
 def _make_client() -> RunnerRegistryClient:
     """Build a client without any network I/O during construction."""
-    return RunnerRegistryClient(
-        base_url="https://coord.example.test",
-        token="dummy",
-    )
+    return RunnerRegistryClient(base_url="https://coord.example.test", token="dummy")  # noqa: S106
 
 
 def _mock_response(status: int = 200, json_body=None, text: str = "") -> MagicMock:
@@ -108,16 +105,16 @@ def test_proxy_pool_hash_handles_invalid_json_without_raising():
 
 def test_init_rejects_empty_base_url():
     with pytest.raises(ValueError, match="base_url"):
-        RunnerRegistryClient(base_url="", token="t")
+        RunnerRegistryClient(base_url="", token="t")  # noqa: S106
 
 
 def test_init_rejects_empty_token():
     with pytest.raises(ValueError, match="token"):
-        RunnerRegistryClient(base_url="https://coord.test", token="")
+        RunnerRegistryClient(base_url="https://coord.test", token="")  # noqa: S106
 
 
 def test_init_strips_trailing_slash_from_base_url():
-    c = RunnerRegistryClient(base_url="https://coord.test/", token="t")
+    c = RunnerRegistryClient(base_url="https://coord.test/", token="t")  # noqa: S106
     assert c.base_url == "https://coord.test"
 
 
@@ -149,7 +146,7 @@ def test_register_sends_full_body_with_optional_fields():
                 workflow_run_id="123",
                 workflow_name="DailyIngestion",
                 started_at=1000,
-                proxy_pool_hash="abc123",
+                proxy_hash="abc123",
                 page_range="1-50",
             )
         assert isinstance(r, RegisterResult)
@@ -228,7 +225,7 @@ def test_register_parses_active_runners_list():
     }
     try:
         with patch.object(c._session, "post", return_value=_mock_response(200, body)):
-            r = c.register(holder_id="caller", proxy_pool_hash="h1")
+            r = c.register(holder_id="caller", proxy_hash="h1")
         assert len(r.active_runners) == 2
         assert r.active_runners[0].holder_id == "runner-A"
         assert r.active_runners[0].page_range == "1-10"
@@ -648,6 +645,14 @@ def test_register_movie_claim_min_runners_handles_string_and_zero():
         "movie_claim_recommended": False,
         "movie_claim_min_runners": None,
     }
+    body_string = {
+        "registered": True,
+        "active_runners": [],
+        "pool_hash_summary": [],
+        "server_time_ms": 1,
+        "movie_claim_recommended": False,
+        "movie_claim_min_runners": "2",
+    }
     try:
         with patch.object(c._session, "post", return_value=_mock_response(200, body_zero)):
             r = c.register(holder_id="x")
@@ -655,6 +660,9 @@ def test_register_movie_claim_min_runners_handles_string_and_zero():
         with patch.object(c._session, "post", return_value=_mock_response(200, body_none)):
             r = c.register(holder_id="x")
         assert r.movie_claim_min_runners == 0
+        with patch.object(c._session, "post", return_value=_mock_response(200, body_string)):
+            r = c.register(holder_id="x")
+        assert r.movie_claim_min_runners == 2
     finally:
         c.close()
 
