@@ -352,8 +352,7 @@ class TestPollerDispatch:
         assert task.login_verified_after_refresh is True
 
     def test_poller_skips_when_published_proxy_not_in_pool(self):
-        """If the DO publishes for a proxy this runner doesn't have, leave
-        the task parked (warning logged, no crash)."""
+        """If the DO publishes for an unknown proxy, parked tasks retry locally."""
         worker_p1 = _make_worker(0, "P1")
         coord = LoginCoordinator(all_workers=[worker_p1])
 
@@ -368,18 +367,20 @@ class TestPollerDispatch:
         )
         state_mod.global_login_state_client = client
         login_queue: queue.Queue = queue.Queue()
+        task = _make_task()
 
         with patch.object(lc_mod, "_POLL_INTERVAL_SEC", 0.05):
             with patch.object(coord, "_login_and_verify"):
                 _, _, parked = coord._login_and_verify_with_lease(
-                    worker_p1, _make_task(), login_queue,
+                    worker_p1, task, login_queue,
                 )
             assert parked is True
-            # Give the poller a couple of ticks; it should NOT dispatch.
-            time.sleep(0.3)
+            ok = self._wait_until(lambda: not login_queue.empty(), timeout=2.0)
+            assert ok, "poller did not re-queue parked tasks for unknown proxy"
 
-        assert login_queue.empty()
+        assert login_queue.get_nowait() is task
         assert worker_p1._handler.config.javdb_session_cookie == ""
+        assert len(coord._pending_login_tasks) == 0
 
     def test_poller_handles_do_disappearance(self):
         """If the DO client is unset mid-flight, parked tasks are returned
