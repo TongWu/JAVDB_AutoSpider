@@ -1482,6 +1482,7 @@ def main() -> int:
             return 1
 
         if _sqlite_ok and _staging_session_id is not None:
+            cleanup_failed = False
             try:
                 committed = db_swap_rclone_inventory(session_id=_staging_session_id)
             except Exception as e:
@@ -1499,21 +1500,27 @@ def main() -> int:
                     except FileNotFoundError:
                         pass
                 raise
-            try:
-                if _created_local_staging_session:
-                    db_mark_session_committed(_staging_session_id)
-            except Exception as e:
-                logger.error(
-                    "Failed to mark rclone inventory session committed after "
-                    "a successful swap: %s",
-                    e,
-                )
-                if _csv_tmp_path is not None:
+            if _created_local_staging_session:
+                cleanup_failed = True
+                for attempt in range(1, 4):
                     try:
-                        os.remove(_csv_tmp_path)
-                    except FileNotFoundError:
-                        pass
-                raise
+                        db_mark_session_committed(_staging_session_id)
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to mark rclone inventory session committed "
+                            "after successful swap (attempt %d/3): %s",
+                            attempt, e,
+                        )
+                    else:
+                        cleanup_failed = False
+                        break
+                if cleanup_failed:
+                    logger.error(
+                        "Rclone inventory swap succeeded, but post-success "
+                        "session cleanup failed for session_id=%s; leaving "
+                        "the scan output intact for inspection.",
+                        _staging_session_id,
+                    )
             logger.info(
                 "Swapped RcloneInventoryStaging_%s into RcloneInventory "
                 "(committed=%s rows)", _staging_session_id, committed,
