@@ -1,6 +1,7 @@
 import asyncio
 import argparse
 import csv
+import hashlib
 import os
 import time
 import sys
@@ -260,6 +261,13 @@ def _build_pikpak_target_path(root_folder, category):
     return f"{root}/{seg}"
 
 
+def _magnet_log_identifier(magnet, category=None):
+    digest = hashlib.sha256(magnet.encode("utf-8")).hexdigest()[:12]
+    if category:
+        return f"category='{category}', magnet_sha256={digest}"
+    return f"magnet_sha256={digest}"
+
+
 async def _resolve_pikpak_parent_id(client, target_path, cache):
     """Resolve the PikPak folder id for ``target_path``, creating folders
     as needed. Results are memoised in ``cache`` keyed by the full path so a
@@ -339,18 +347,21 @@ async def process_pikpak_batch(
     for i, magnet in enumerate(magnets):
         try:
             category = magnet_to_category.get(magnet)
+            magnet_id = _magnet_log_identifier(magnet, category)
             target_path = _build_pikpak_target_path(effective_root, category)
             parent_id = await _resolve_pikpak_parent_id(
                 client, target_path, folder_id_cache
             )
 
             logger.info(
-                f"Processing magnet {i+1}/{len(magnets)} -> '{target_path}': {magnet[:100]}..."
+                "Processing magnet %d/%d -> '%s' (%s)",
+                i + 1, len(magnets), target_path, magnet_id,
             )
             await client.offline_download(magnet, parent_id=parent_id)
 
             logger.info(
-                f"Successfully added magnet to PikPak ('{target_path}'): {magnet[:100]}..."
+                "Successfully added magnet to PikPak ('%s') (%s)",
+                target_path, magnet_id,
             )
             success_magnets.append(magnet)
 
@@ -359,7 +370,8 @@ async def process_pikpak_batch(
                 await asyncio.sleep(delay_between_requests)
 
         except Exception as e:
-            logger.error(f"Failed to add magnet: {magnet[:100]}..., Error: {e}")
+            magnet_id = _magnet_log_identifier(magnet, magnet_to_category.get(magnet))
+            logger.error("Failed to add magnet (%s), Error: %s", magnet_id, e)
             failed_magnets.append((magnet, str(e)))
 
             # Still add delay even after failed requests to be respectful
