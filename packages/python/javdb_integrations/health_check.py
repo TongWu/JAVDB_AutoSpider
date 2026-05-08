@@ -126,7 +126,14 @@ def check_qbittorrent_connection() -> Tuple[bool, str]:
                 last_message = f"Connection timeout to {masked_url}"
                 continue
 
-            if response.status_code == 200 and response.text == 'Ok.':
+            # qB <=5.1.x returns 200 + "Ok."; qB >=5.2.0 returns 204
+            # (No Content) for a successful login. See qbittorrent PR
+            # #21349 (milestone 5.2). Accept both.
+            login_ok = (
+                (response.status_code == 200 and response.text == 'Ok.')
+                or response.status_code == 204
+            )
+            if login_ok:
                 version_response = session.get(
                     f"{base_url}/api/v2/app/version",
                     timeout=5,
@@ -140,7 +147,10 @@ def check_qbittorrent_connection() -> Tuple[bool, str]:
                 if base_url != base_urls[0]:
                     return True, f"Connected and authenticated via HTTP fallback at {masked_url}"
                 return True, "Connected and authenticated"
-            if response.status_code == 403:
+            # qB <=5.1.x rejects bad credentials with 403; qB >=5.2.0
+            # surfaces them as 401 (APIErrorType::Unauthorized in
+            # AuthController::loginAction).
+            if response.status_code in (401, 403):
                 last_message = "Authentication failed - check QB_USERNAME and QB_PASSWORD"
                 continue
 

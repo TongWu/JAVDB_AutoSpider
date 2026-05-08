@@ -71,26 +71,47 @@ class TestCheckQbittorrentConnectionLogic:
     """Test cases for qBittorrent connection checking logic."""
     
     def test_parse_ok_response(self):
-        """Test parsing successful login response."""
+        """qB <=5.1.x returns 200 + 'Ok.' on a successful login."""
         response_text = 'Ok.'
         status_code = 200
-        
-        success = status_code == 200 and response_text == 'Ok.'
-        assert success is True
-    
+
+        login_ok = (
+            (status_code == 200 and response_text == 'Ok.')
+            or status_code == 204
+        )
+        assert login_ok is True
+
+    def test_parse_qb_v520_no_content_response(self):
+        """qB >=5.2.0 returns 204 No Content with empty body on success."""
+        response_text = ''
+        status_code = 204
+
+        login_ok = (
+            (status_code == 200 and response_text == 'Ok.')
+            or status_code == 204
+        )
+        assert login_ok is True
+
     def test_parse_forbidden_response(self):
-        """Test parsing 403 forbidden response."""
+        """qB <=5.1.x returns 403 for invalid credentials."""
         status_code = 403
-        
-        is_auth_failure = status_code == 403
+
+        is_auth_failure = status_code in (401, 403)
         assert is_auth_failure is True
-    
+
+    def test_parse_unauthorized_response_qb_v520(self):
+        """qB >=5.2.0 returns 401 for invalid credentials (was 403)."""
+        status_code = 401
+
+        is_auth_failure = status_code in (401, 403)
+        assert is_auth_failure is True
+
     def test_parse_unexpected_response(self):
         """Test parsing unexpected response."""
         status_code = 500
         response_text = 'Error'
-        
-        is_unexpected = status_code not in [200, 403]
+
+        is_unexpected = status_code not in [200, 204, 401, 403]
         assert is_unexpected is True
 
 
