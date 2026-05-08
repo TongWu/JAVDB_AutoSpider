@@ -8,7 +8,10 @@ from urllib.parse import urljoin
 
 from packages.python.javdb_platform.logging_config import get_logger
 from packages.python.javdb_platform.config_helper import use_sqlite
-from packages.python.javdb_platform.db import db_batch_update_movie_actors
+from packages.python.javdb_platform.db import (
+    db_batch_update_movie_actors,
+    get_active_session_id,
+)
 from packages.python.javdb_platform.history_manager import (
     save_parsed_movie_to_history,
     batch_update_last_visited,
@@ -85,6 +88,13 @@ def _claim_detail_candidates(
 
     shard_date = current_shard_date()
     holder = state.runtime_holder_id
+    # Phase-1 — thread the active ReportSessions.Id through every claim
+    # call so the DO can scope ``staged_complete`` skips to the same
+    # session.  Falls back to an empty string when the session context
+    # is not yet set (e.g. legacy callers, dry-runs, or test harnesses);
+    # the Worker treats that as "legacy claim with no session affinity".
+    session_id_int = get_active_session_id()
+    session_id_str = str(session_id_int) if session_id_int is not None else ""
     kept: List["DetailEntryCandidate"] = []
     leased: Set[str] = set()
     skipped_completed = 0
@@ -96,6 +106,7 @@ def _claim_detail_candidates(
                 holder,
                 ttl_ms=DEFAULT_CLAIM_TTL_MS,
                 date=shard_date,
+                session_id=session_id_str or None,
             )
         except MovieClaimUnavailable:
             # Fail-open: surface as an INFO so ops can correlate, but
@@ -154,40 +165,85 @@ def _release_movie_claim(href: str, shard_date: Optional[str]) -> None:
         logger.warning("Unexpected MovieClaim release error for %s", href, exc_info=True)
 
 
-def _complete_movie_claim(href: str, shard_date: Optional[str]) -> bool:
-    """Best-effort completion of a MovieClaim lease.  Never raises.
+def _stage_complete_movie_claim(
+    href: str,
+    shard_date: Optional[str],
+    session_id: str,
+) -> bool:
+    """Best-effort Phase-1 stage of a successful detail fetch.
 
-    Returns ``True`` only when the coordinator explicitly confirmed
-    completion (``CompleteResult.completed=True``); ``False`` on any
-    error path (``MovieClaimUnavailable``, malformed response,
-    unexpected exception) **or** when the Worker returned
-    ``completed=False`` — that latter case happens when the active
-    claim has already been re-leased by another runner (typically
-    after our TTL expired or a stale-holder mismatch).  In every
-    ``False`` branch the lease is still attributed to this runner on
-    the Worker side, so the caller MUST follow up with
-    :func:`_release_movie_claim` before dropping the href from
-    ``held_claims``; otherwise peer runners stay blocked until the
-    default 30-minute TTL expires.
+    Replaces the legacy ``complete_movie`` call: writes into the DO's
+    ``staged_complete{}`` map keyed by the active ``ReportSessions.Id``
+    (``session_id``).  The downstream session-end CLI then either
+    promotes the stage to committed
+    (:meth:`MovieClaimClient.commit_completed_movies` from
+    ``apps.cli.commit_session``) or drops it
+    (:meth:`MovieClaimClient.rollback_staged_movies` from
+    ``apps.cli.rollback``).
+
+    Returns ``True`` only when the coordinator explicitly confirmed the
+    stage (``StageCompleteResult.staged=True``); ``False`` on any error
+    path **or** when the Worker returned ``staged=False`` — that latter
+    case happens when the active claim has already been re-leased by
+    another runner (stale-holder mismatch).  In every ``False`` branch
+    the lease is still attributed to this runner on the Worker side, so
+    the caller MUST follow up with :func:`_release_movie_claim` before
+    dropping the href from ``held_claims``; otherwise peer runners stay
+    blocked until the default 30-minute TTL expires.
+
+    When *session_id* is empty (no active session context), the call
+    falls back to legacy ``complete_movie`` semantics so the spider
+    keeps working in code paths where the session id is not propagated
+    (notably dry-runs, test harnesses, and one-off CLIs).  The legacy
+    path commits the href immediately; rollback safety only applies in
+    the new staged path.
     """
     client = state.global_movie_claim_client
     if client is None or shard_date is None or not href:
         return False
+    if not session_id:
+        # Legacy fallback so non-session-aware callers (dry-run, tests,
+        # CLIs that bypass run_service) keep working unchanged.  The
+        # downside is no rollback safety — those paths typically don't
+        # need it.
+        try:
+            result = client.complete(
+                href, state.runtime_holder_id, date=shard_date,
+            )
+        except MovieClaimUnavailable:
+            logger.debug(
+                "MovieClaim complete unavailable for %s — falling back to release",
+                href,
+            )
+            return False
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "Unexpected MovieClaim complete error for %s — falling back to release",
+                href, exc_info=True,
+            )
+            return False
+        return bool(getattr(result, "completed", False))
+
     try:
-        result = client.complete(href, state.runtime_holder_id, date=shard_date)
+        result = client.stage_complete(
+            href,
+            state.runtime_holder_id,
+            session_id,
+            date=shard_date,
+        )
     except MovieClaimUnavailable:
         logger.debug(
-            "MovieClaim complete unavailable for %s — falling back to release",
+            "MovieClaim stage_complete unavailable for %s — falling back to release",
             href,
         )
         return False
     except Exception:  # noqa: BLE001
         logger.warning(
-            "Unexpected MovieClaim complete error for %s — falling back to release",
+            "Unexpected MovieClaim stage_complete error for %s — falling back to release",
             href, exc_info=True,
         )
         return False
-    return bool(getattr(result, "completed", False))
+    return bool(getattr(result, "staged", False))
 
 
 def _classify_fetch_error_kind(error: Optional[str]) -> str:
@@ -321,8 +377,8 @@ def process_detail_entries(
     # P1-B: filter through the cross-runner MovieClaim mutex.  Returns the
     # candidates this runner won the lease on; peer-completed and
     # peer-contended hrefs are dropped.  Pinned ``shard_date`` MUST be
-    # carried into ``complete``/``release`` to avoid re-fragmenting across
-    # midnight (see :func:`movie_claim_client.current_shard_date`).
+    # carried into ``stage_complete``/``release`` to avoid re-fragmenting
+    # across midnight (see :func:`movie_claim_client.current_shard_date`).
     (
         prepared_entries,
         skipped_completed,
@@ -330,6 +386,13 @@ def process_detail_entries(
         shard_date,
         leased_hrefs,
     ) = _claim_detail_candidates(prepared_entries)
+    # Phase-1 — capture the active ReportSessions.Id once at the top so
+    # every ``stage_complete`` call below carries the same session
+    # affinity.  Empty string when no DB session is active (dry-runs,
+    # tests, etc.); ``_stage_complete_movie_claim`` falls back to legacy
+    # ``complete_movie`` semantics in that case.
+    _active_session_id = get_active_session_id()
+    _session_id_str = str(_active_session_id) if _active_session_id is not None else ""
     skipped_history += skipped_completed
     if skipped_contention:
         logger.info(
@@ -476,23 +539,27 @@ def process_detail_entries(
             if outcome.row is not None:
                 phase_rows.append(outcome.row)
 
-            # P1-B: success path — mark the claim completed so peer
-            # runners observe ``already_completed=True`` on subsequent
-            # claim attempts in the same shard.  Only fires if we
-            # actually leased this href (i.e. ``claim`` returned
-            # ``acquired=True``); fail-open candidates skip this.
-            # Idempotent on the Worker side.
+            # Phase-1 success path — stage the claim instead of jumping
+            # straight to ``completed_committed``.  Subsequent claim
+            # attempts inside the SAME session_id observe
+            # ``already_completed=true`` (idempotent skip), while peer
+            # sessions are not blocked — that's the whole point of the
+            # rollback-safety split.  Only fires if we actually leased
+            # this href (``claim`` returned ``acquired=True``); fail-
+            # open candidates skip this.  Idempotent on the Worker side.
             #
-            # Bug fix: when ``complete`` fails (timeout / Unavailable /
-            # unexpected error) or the Worker returns ``completed=False``
-            # (stale-holder), the lease is still attributed to this
-            # runner on the Worker side.  Discarding the href from
-            # ``held_claims`` without releasing would skip the
-            # ``finally:`` cleanup below and force peers to wait for
-            # the 30-minute TTL.  Fall back to an explicit ``release``
-            # so the slot frees up promptly.
+            # Bug fix carried over from P1-B: when stage_complete fails
+            # (timeout / Unavailable / unexpected error) OR the Worker
+            # returns ``staged=false`` (stale-holder), the lease is
+            # still attributed to this runner on the Worker side.
+            # Discarding the href from ``held_claims`` without releasing
+            # would skip the ``finally:`` cleanup below and force peers
+            # to wait for the 30-minute TTL.  Fall back to an explicit
+            # ``release`` so the slot frees up promptly.
             if href in held_claims:
-                if not _complete_movie_claim(href, shard_date):
+                if not _stage_complete_movie_claim(
+                    href, shard_date, _session_id_str,
+                ):
                     _release_movie_claim(href, shard_date)
                 held_claims.discard(href)
 

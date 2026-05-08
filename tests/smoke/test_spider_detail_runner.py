@@ -443,3 +443,189 @@ def test_process_detail_entries_acknowledges_runtime_state_changes(monkeypatch):
     )
 
     assert backend.ack_calls == [('reported', True), ('skipped', False)]
+
+
+# ---------------------------------------------------------------------------
+# Phase-1 — staged_complete / completed_committed split (rollback safety)
+# ---------------------------------------------------------------------------
+#
+# These smoke tests pin the contract that ``detail/runner.py`` always
+# threads the active ``ReportSessions.Id`` through ``MovieClaimClient``
+# so the Durable Object can scope ``staged_complete`` skips to the same
+# session.  The end-to-end cross-session rollback story (daily session
+# stages → rollback → adhoc same href re-fetched) is verified at the
+# Worker layer (`JAVDB_AutoSpider_Proxycoordinator/test/movie_claim_state.test.ts`,
+# Phase-1 describe blocks).  Here we only assert the spider-side wiring:
+# the right method is called with the right session id.
+
+
+class _FakeClaimClient:
+    """Minimal stand-in for ``MovieClaimClient`` in the spider tests."""
+
+    def __init__(self, *, claim_result=None, stage_result=True, complete_result=True):
+        from packages.python.javdb_platform.movie_claim_client import (
+            ClaimResult,
+            CompleteResult,
+            StageCompleteResult,
+        )
+
+        self._ClaimResult = ClaimResult
+        self._CompleteResult = CompleteResult
+        self._StageCompleteResult = StageCompleteResult
+        self._claim_result = claim_result
+        self._stage_result = stage_result
+        self._complete_result = complete_result
+        self.claim_calls: list = []
+        self.stage_calls: list = []
+        self.complete_calls: list = []
+        self.release_calls: list = []
+
+    def claim(self, href, holder, *, ttl_ms, date, session_id=None):
+        self.claim_calls.append(
+            {'href': href, 'holder': holder, 'ttl_ms': ttl_ms,
+             'date': date, 'session_id': session_id}
+        )
+        if self._claim_result is not None:
+            return self._claim_result
+        return self._ClaimResult(
+            acquired=True,
+            current_holder_id=holder,
+            expires_at=0,
+            already_completed=False,
+            server_time_ms=0,
+        )
+
+    def stage_complete(self, href, holder, session_id, *, date):
+        self.stage_calls.append(
+            {'href': href, 'holder': holder, 'session_id': session_id, 'date': date}
+        )
+        return self._StageCompleteResult(
+            staged=bool(self._stage_result),
+            href=href,
+            session_id=session_id,
+            server_time_ms=0,
+        )
+
+    def complete(self, href, holder, *, date):
+        self.complete_calls.append({'href': href, 'holder': holder, 'date': date})
+        return self._CompleteResult(
+            completed=bool(self._complete_result),
+            href=href,
+            server_time_ms=0,
+        )
+
+    def release(self, href, holder, *, date):
+        self.release_calls.append({'href': href, 'holder': holder, 'date': date})
+
+
+def test_claim_detail_candidates_threads_session_id_through_claim(monkeypatch):
+    """``_claim_detail_candidates`` must pass the active session id to ``client.claim``."""
+    import scripts.spider.detail.runner as dc
+
+    fake = _FakeClaimClient()
+    monkeypatch.setattr(dc.state, 'global_movie_claim_client', fake)
+    monkeypatch.setattr(dc.state, 'runtime_holder_id', 'runner-test')
+    monkeypatch.setattr(dc, 'current_shard_date', lambda: '2026-05-09')
+    monkeypatch.setattr(dc, 'get_active_session_id', lambda: 4242)
+
+    candidates = [
+        dc.DetailEntryCandidate(
+            entry=make_entry('ABC-123'),
+            href='/v/abc123',
+            page_num=1,
+            entry_index='1/1',
+        ),
+    ]
+    kept, skipped_done, skipped_busy, shard_date, leased = dc._claim_detail_candidates(
+        candidates,
+    )
+
+    assert len(kept) == 1
+    assert leased == {'/v/abc123'}
+    assert shard_date == '2026-05-09'
+    assert skipped_done == 0
+    assert skipped_busy == 0
+    assert fake.claim_calls == [{
+        'href': '/v/abc123',
+        'holder': 'runner-test',
+        'ttl_ms': dc.DEFAULT_CLAIM_TTL_MS,
+        'date': '2026-05-09',
+        'session_id': '4242',
+    }]
+
+
+def test_claim_detail_candidates_passes_none_session_when_no_active_session(monkeypatch):
+    """Empty-string session ids are normalised to ``None`` for the client API."""
+    import scripts.spider.detail.runner as dc
+
+    fake = _FakeClaimClient()
+    monkeypatch.setattr(dc.state, 'global_movie_claim_client', fake)
+    monkeypatch.setattr(dc.state, 'runtime_holder_id', 'runner-test')
+    monkeypatch.setattr(dc, 'current_shard_date', lambda: '2026-05-09')
+    monkeypatch.setattr(dc, 'get_active_session_id', lambda: None)
+
+    candidates = [
+        dc.DetailEntryCandidate(
+            entry=make_entry('ABC-123'),
+            href='/v/abc123',
+            page_num=1,
+            entry_index='1/1',
+        ),
+    ]
+    dc._claim_detail_candidates(candidates)
+
+    assert fake.claim_calls and fake.claim_calls[0]['session_id'] is None
+
+
+def test_stage_complete_movie_claim_uses_stage_path_when_session_id_present(monkeypatch):
+    """With an active session id the new ``stage_complete`` path is invoked."""
+    import scripts.spider.detail.runner as dc
+
+    fake = _FakeClaimClient(stage_result=True)
+    monkeypatch.setattr(dc.state, 'global_movie_claim_client', fake)
+    monkeypatch.setattr(dc.state, 'runtime_holder_id', 'runner-test')
+
+    ok = dc._stage_complete_movie_claim('/v/abc123', '2026-05-09', '4242')
+
+    assert ok is True
+    assert fake.stage_calls == [{
+        'href': '/v/abc123',
+        'holder': 'runner-test',
+        'session_id': '4242',
+        'date': '2026-05-09',
+    }]
+    assert fake.complete_calls == []
+
+
+def test_stage_complete_movie_claim_falls_back_to_legacy_complete_without_session(monkeypatch):
+    """Without a session id the helper falls back to ``client.complete`` for legacy callers."""
+    import scripts.spider.detail.runner as dc
+
+    fake = _FakeClaimClient(complete_result=True)
+    monkeypatch.setattr(dc.state, 'global_movie_claim_client', fake)
+    monkeypatch.setattr(dc.state, 'runtime_holder_id', 'runner-test')
+
+    ok = dc._stage_complete_movie_claim('/v/abc123', '2026-05-09', '')
+
+    assert ok is True
+    assert fake.complete_calls == [{
+        'href': '/v/abc123',
+        'holder': 'runner-test',
+        'date': '2026-05-09',
+    }]
+    assert fake.stage_calls == []
+
+
+def test_stage_complete_movie_claim_returns_false_when_worker_rejects_stage(monkeypatch):
+    """``staged=False`` (e.g. stale-holder mismatch) propagates as ``False`` so
+    the caller knows to issue an explicit release."""
+    import scripts.spider.detail.runner as dc
+
+    fake = _FakeClaimClient(stage_result=False)
+    monkeypatch.setattr(dc.state, 'global_movie_claim_client', fake)
+    monkeypatch.setattr(dc.state, 'runtime_holder_id', 'runner-test')
+
+    ok = dc._stage_complete_movie_claim('/v/abc123', '2026-05-09', '4242')
+
+    assert ok is False
+    assert fake.stage_calls and fake.complete_calls == []

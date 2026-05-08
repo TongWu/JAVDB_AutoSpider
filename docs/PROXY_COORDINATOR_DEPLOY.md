@@ -576,11 +576,15 @@ ladder（指数退避到 3 day cap），多次失败后变 dead-letter，其它 
 
 | 端点 | 用途 |
 |---|---|
-| `POST /claim_movie` | body `{ href, holder_id, ttl_ms }` → `{ acquired, current_holder_id, expires_at, already_completed, cooldown_until?, last_error_kind?, fail_count? }` |
+| `POST /claim_movie` | body `{ href, holder_id, ttl_ms, session_id? }` → `{ acquired, current_holder_id, expires_at, already_completed, cooldown_until?, last_error_kind?, fail_count?, staged_session_id? }`。Phase-1：`session_id` 与 `staged_complete{}` 中的 owner 匹配时返回 `already_completed=true`（同 session 幂等）；不匹配则不阻塞。 |
 | `POST /release_movie` | body `{ href, holder_id }` 持有者释放 |
-| `POST /complete_movie` | body `{ href, holder_id }` 标记完成；同时清除 P2-A 失败记录 |
+| `POST /complete_movie` | body `{ href, holder_id }` 标记完成（直接进 `completed_committed[]`，**legacy P1-B 路径**）；同时清除 P2-A 失败记录 |
+| `POST /stage_complete_movie` | **Phase-1**：body `{ href, holder_id, session_id }` 写入 `staged_complete{}`（per-session）。成功后在 commit/rollback CLI 之前不进 `completed_committed[]`。 |
+| `POST /commit_completed_movies` | **Phase-1**：body `{ session_id }`，把该 session 的 `staged_complete` 项整批升级为 `completed_committed[]`。`apps/cli/commit_session.py` 在 `db_mark_session_committed` 之后调用。 |
+| `POST /rollback_staged_movies` | **Phase-1**：body `{ session_id }`，删除该 session 的 `staged_complete`。`apps/cli/rollback.py` 在回滚 reports/operations 后调用，最多重试 3 次；失败写入 `reports/D1/d1_drift.jsonl`，不阻塞 DB 回滚。 |
 | `POST /report_failure` | body `{ href, holder_id, error_kind }` 进入冷却 / dead-letter |
-| `GET /movie_status?href=X&date=YYYY-MM-DD` | 调试 dump |
+| `GET /sweep_orphan_stages?older_than_ms=N&date=YYYY-MM-DD` | **Phase-1**：清理 `staged_complete{}` 中超过 `older_than_ms` 的 orphan 条目（服务端 floor 1 h，最大不限）。`apps/cli/sweep_movie_claim_stages.py` 由 `StaleSessionCleanup.yml` cron 调度。 |
+| `GET /movie_status?href=X&date=YYYY-MM-DD` | 调试 dump（包含 `staged_session_id` / `staged_at`） |
 
 ### 15.3 部署（与 §5 同步）
 
