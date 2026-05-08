@@ -33,7 +33,7 @@ on:
       apply:
         description: 'Apply cleanup. Default false (dry-run).'
         required: false
-        default: false
+        default: true
         type: boolean
       scope:
         description: 'Limit cleanup to one logical DB.'
