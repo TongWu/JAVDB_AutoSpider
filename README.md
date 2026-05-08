@@ -1611,6 +1611,8 @@ LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
   - `tests/unit/`: module-level unit tests
   - `tests/integration/`: multi-module and API/runtime integration coverage
   - `tests/smoke/`: CLI/entrypoint/backends smoke coverage
+- **scripts/ci/**: CI helper scripts, including the impact-based test selector used by `unit-tests.yml`
+- **CI test selection**: [`.github/workflows/unit-tests.yml`](.github/workflows/unit-tests.yml) runs `scripts/ci/select_tests.py` first to map changed Python/Rust files to strongly and weakly related pytest targets; high-risk CI, dependency, fixture, and broad shared-code changes fall back to full tests.
 - **utils/login/**: JavDB login related files and documentation
 - **docker/**: Docker configuration files
 

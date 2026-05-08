@@ -1565,6 +1565,8 @@ LOG_LEVEL = 'DEBUG'  # 显示详细的调试信息
   - `tests/unit/`: 模块级单元测试
   - `tests/integration/`: 多模块与 API/runtime 集成测试
   - `tests/smoke/`: CLI / 入口 / backend 冒烟覆盖
+- **scripts/ci/**: CI 辅助脚本，包括 `unit-tests.yml` 使用的影响面测试选择器
+- **CI 测试选择**: [`.github/workflows/unit-tests.yml`](.github/workflows/unit-tests.yml) 会先运行 `scripts/ci/select_tests.py`，把 Python/Rust 改动映射到强相关和弱相关的 pytest 目标；CI、依赖、公共 fixture 和大范围共享代码等高风险改动会自动退回全量测试。
 - **utils/login/**: JavDB 登录相关文件和文档
 - **docker/**: Docker 配置文件
 

@@ -9,14 +9,27 @@ permissions:
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '17 2 * * *'
   push:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
+      - dev
+      - feature/**
+      - codex/**
     paths:
       - '**.py'
       - '**.rs'
+      - '.github/actions/install-rust-wheel/**'
+      - '.github/actions/setup-python-env/**'
+      - '.github/workflows/unit-tests.yml'
+      - 'config.py.example'
+      - 'html/**'
       - 'packages/rust/javdb_rust_core/Cargo.toml'
       - 'packages/rust/javdb_rust_core/Cargo.lock'
       - 'pytest.ini'
+      - 'requirements.txt'
       - 'docker/**'
   pull_request:
     branches: [ main, master ]
@@ -24,14 +37,68 @@ on:
     paths:
       - '**.py'
       - '**.rs'
+      - '.github/actions/install-rust-wheel/**'
+      - '.github/actions/setup-python-env/**'
+      - '.github/workflows/unit-tests.yml'
+      - 'config.py.example'
+      - 'html/**'
       - 'packages/rust/javdb_rust_core/Cargo.toml'
       - 'packages/rust/javdb_rust_core/Cargo.lock'
       - 'pytest.ini'
+      - 'requirements.txt'
       - 'docker/**'
 
 jobs:
+  detect-impact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      build_rust_wheel: ${{ steps.select.outputs.build_rust_wheel }}
+      changed_files_json: ${{ steps.select.outputs.changed_files_json }}
+      pytest_targets: ${{ steps.select.outputs.pytest_targets }}
+      pytest_targets_json: ${{ steps.select.outputs.pytest_targets_json }}
+      reason: ${{ steps.select.outputs.reason }}
+      run_fallback_tests: ${{ steps.select.outputs.run_fallback_tests }}
+      run_full_python: ${{ steps.select.outputs.run_full_python }}
+      run_rust: ${{ steps.select.outputs.run_rust }}
+      run_selected_python: ${{ steps.select.outputs.run_selected_python }}
+      rust_full: ${{ steps.select.outputs.rust_full }}
+      rust_test_filters: ${{ steps.select.outputs.rust_test_filters }}
+      selected_count: ${{ steps.select.outputs.selected_count }}
+      total_test_files: ${{ steps.select.outputs.total_test_files }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.11'
+
+    - name: Detect impacted tests
+      id: select
+      env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+      run: |
+        python scripts/ci/select_tests.py \
+          --event-name "${{ github.event_name }}" \
+          --ref-name "${{ github.ref_name }}" \
+          --base "$BASE_SHA" \
+          --head HEAD \
+          --json-output impact.json \
+          --github-output "$GITHUB_OUTPUT"
+
+    - name: Summarize impact decision
+      run: |
+        cat impact.json
+
   rust-check:
     runs-on: ubuntu-latest
+    needs: [detect-impact]
+    if: needs.detect-impact.outputs.run_rust == 'true'
     timeout-minutes: 15
 
     steps:
@@ -58,11 +125,50 @@ jobs:
 
     - name: Run cargo test
       working-directory: packages/rust/javdb_rust_core
-      run: cargo test
+      env:
+        RUST_FULL: ${{ needs.detect-impact.outputs.rust_full }}
+        RUST_TEST_FILTERS: ${{ needs.detect-impact.outputs.rust_test_filters }}
+      run: |
+        if [ "$RUST_FULL" = "true" ] || [ -z "$RUST_TEST_FILTERS" ]; then
+          cargo test
+        else
+          for filter in $RUST_TEST_FILTERS; do
+            cargo test "$filter"
+          done
+        fi
 
-  build-wheel:
+  python-selected:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    needs: [detect-impact]
+    if: needs.detect-impact.outputs.run_selected_python == 'true'
+    timeout-minutes: 25
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Set up Python, venv, dependencies, optional Rust extension
+      uses: ./.github/actions/setup-python-env
+      with:
+        python-version: '3.12'
+        upgrade-pip: 'true'
+        install-rust: ${{ needs.detect-impact.outputs.build_rust_wheel }}
+
+    - name: Create config.py from example
+      run: |
+        cp config.py.example config.py
+
+    - name: Run impacted pytest targets
+      env:
+        PYTEST_TARGETS: ${{ needs.detect-impact.outputs.pytest_targets }}
+      run: |
+        pytest $PYTEST_TARGETS -v --tb=short
+
+  python-full:
+    runs-on: ubuntu-latest
+    needs: [detect-impact]
+    if: needs.detect-impact.outputs.run_full_python == 'true'
+    timeout-minutes: 25
 
     strategy:
       matrix:
@@ -72,58 +178,53 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v6
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v6
-      with:
-        python-version: ${{ matrix.python-version }}
-
-    - name: Build and cache Rust wheel
-      uses: ./.github/actions/install-rust-wheel
-
-  test:
-    runs-on: ubuntu-latest
-    needs: [build-wheel]
-    if: always() && !cancelled()
-    timeout-minutes: 25
-
-    strategy:
-      matrix:
-        python-version: [
-          # '3.9',
-          # '3.10',
-          '3.11',
-          '3.12'
-        ]
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v6
-
-    - name: Set up Python, venv, dependencies, Rust extension
+    - name: Set up Python, venv, dependencies, optional Rust extension
       uses: ./.github/actions/setup-python-env
       with:
         python-version: ${{ matrix.python-version }}
         upgrade-pip: 'true'
+        install-rust: ${{ needs.detect-impact.outputs.build_rust_wheel }}
 
     - name: Create config.py from example
       run: |
         cp config.py.example config.py
 
-    - name: Run unit tests with pytest
+    - name: Run full unit tests with coverage
       run: |
         pytest tests/ -v --tb=short --cov=. --cov-report=xml --cov-report=term-missing
-
-    - name: Run fallback tests without Rust extension
-      run: |
-        pip uninstall -y javdb-rust-core || true
-        pip uninstall -y javdb_rust_core || true
-        pytest tests/unit/test_rust_adapters_fallback.py tests/unit/test_dedup_checker_rust_adapter.py -v --tb=short
 
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v5
       if: matrix.python-version == '3.12'
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
+
+  fallback-without-rust:
+    runs-on: ubuntu-latest
+    needs: [detect-impact]
+    if: needs.detect-impact.outputs.run_fallback_tests == 'true'
+    timeout-minutes: 15
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Set up Python, venv, dependencies
+      uses: ./.github/actions/setup-python-env
+      with:
+        python-version: '3.12'
+        upgrade-pip: 'true'
+        install-rust: 'false'
+
+    - name: Create config.py from example
+      run: |
+        cp config.py.example config.py
+
+    - name: Run fallback tests without Rust extension
+      run: |
+        pip uninstall -y javdb-rust-core || true
+        pip uninstall -y javdb_rust_core || true
+        pytest tests/unit/test_rust_adapters_fallback.py tests/unit/test_dedup_checker_rust_adapter.py -v --tb=short
 
   lint:
     runs-on: ubuntu-latest
