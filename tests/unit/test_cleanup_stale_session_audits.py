@@ -58,12 +58,15 @@ class TestDetection:
         assert rc == 0
 
         # Find the dry-run report file.
+        report_dir = os.path.join(
+            reports_dir, "D1", "cleanup_stale_session_audits"
+        )
         files = [
-            f for f in os.listdir(reports_dir)
+            f for f in os.listdir(report_dir)
             if f.startswith("cleanup_stale_session_audits_")
         ]
         assert files
-        with open(os.path.join(reports_dir, files[0])) as f:
+        with open(os.path.join(report_dir, files[0])) as f:
             report = json.load(f)
         # Locate the sqlite result.
         sqlite = next(
@@ -88,11 +91,14 @@ class TestDetection:
         ])
         assert rc == 0
 
+        report_dir = os.path.join(
+            reports_dir, "D1", "cleanup_stale_session_audits"
+        )
         files = [
-            f for f in os.listdir(reports_dir)
+            f for f in os.listdir(report_dir)
             if f.startswith("cleanup_stale_session_audits_")
         ]
-        with open(os.path.join(reports_dir, files[0])) as f:
+        with open(os.path.join(report_dir, files[0])) as f:
             report = json.load(f)
         sqlite = next(
             r for r in report["results"] if r.get("side") == "sqlite"
@@ -119,11 +125,14 @@ class TestDetection:
         ])
         assert rc == 0
 
+        report_dir = os.path.join(
+            reports_dir, "D1", "cleanup_stale_session_audits"
+        )
         files = [
-            f for f in os.listdir(reports_dir)
+            f for f in os.listdir(report_dir)
             if f.startswith("cleanup_stale_session_audits_")
         ]
-        with open(os.path.join(reports_dir, files[0])) as f:
+        with open(os.path.join(report_dir, files[0])) as f:
             report = json.load(f)
         sqlite = next(
             r for r in report["results"] if r.get("side") == "sqlite"
