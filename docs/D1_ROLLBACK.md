@@ -228,7 +228,7 @@ python3 -m apps.cli.rollback --session-id 123 --run-started-at 2026-05-04T00:00:
 - `3` — could not connect to D1 / SQLite
 - `4` — partial failure or rollback drift; inspect the JSON summary and logs
 
-The CLI prints a JSON summary at the end with per-table counts; pipe it to `jq` for inspection. Drift / orphan_pruned counters are also appended to `reports/d1_drift.jsonl` and (under GitHub Actions) `$GITHUB_OUTPUT` so downstream steps and email notifications can react.
+The CLI prints a JSON summary at the end with per-table counts; pipe it to `jq` for inspection. Drift / orphan_pruned counters are also appended to `reports/D1/d1_drift.jsonl` and (under GitHub Actions) `$GITHUB_OUTPUT` so downstream steps and email notifications can react.
 
 ### Incident-response tooling (one-shot scripts)
 
