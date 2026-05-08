@@ -8,14 +8,16 @@ This document is the operator's reference for rolling back partial Cloudflare D1
 - A "Re-run failed jobs" safety matrix telling you when GitHub's native retry button is safe to press without first running a rollback.
 - Direct CLI usage and the audit-table forensics workflow.
 
-> Every workflow run that performs D1 writes is now logically tied to a single `ReportSessions.Id` — the **session_id**. Rollback always operates per-session.
+> Every workflow run that performs D1 writes is now logically tied to a single `ReportSessions.Id` — the **session_id** — *and* a `(RunId, RunAttempt)` pair derived from `GITHUB_RUN_ID` / `GITHUB_RUN_ATTEMPT`. Rollback can be addressed by either; the run identity is the primary lookup path because it remains valid even if a prior failed rollback deleted the owning `ReportSessions` row.
 
 ## TL;DR
 
 - **Failed run?** Don't touch anything. The `cleanup-on-failure` job runs automatically on `DailyIngestion` / `AdHocIngestion` and undoes uncommitted D1 writes for that run.
 - **Need to manually clean up?** Run the `Rollback D1 Session` workflow with `dry_run=true` to preview, then re-run with `dry_run=false`.
-- **Lost the session_id?** Pass `run_started_at` (the failed run's start ISO timestamp) and the rollback CLI will discover every `Status='in_progress'` session created in that window.
-- **Successful runs are protected.** Any session marked `Status='committed'` is refused for rollback unless `force=true` is set.
+- **Lost the session_id?** Pass `run_id` + `attempt` (the failed run's GitHub identity) — the rollback CLI's primary lookup path will find every session that workflow run touched, even if the `ReportSessions` row was already deleted. `run_started_at` is still accepted as a fallback time-window scan, but only when `--include-orphaned` is set (the legacy unconditional sweep is now opt-in to avoid clobbering sibling sessions).
+- **Cross-day reject:** the CLI refuses any candidate session whose `DateTimeCreated` predates `--run-started-at` by more than one hour. This prevents the 2026-05-08 incident class where a stale `--session-id` accidentally pointed at a session from a prior day. Pass `--force` to override.
+- **Successful runs are protected.** Any session marked `Status='committed'` is refused for rollback unless `force=true` is set. Committed sessions also have their `MovieHistoryAudit` / `TorrentHistoryAudit` rows pruned automatically (no rollback needed → no audit needed).
+- **Stale-session cron:** [`StaleSessionCleanup.yml`](../.github/workflows/StaleSessionCleanup.yml) runs daily at 02:00 UTC and unwinds any session stuck `in_progress` for more than 48h, tagging them `FailureReason='stale_timeout'`.
 
 ---
 
@@ -39,8 +41,39 @@ The audit tables capture, *before* every write:
 - `Action` — `INSERT`, `UPDATE`, or `DELETE`
 - `OldRowJson` — full JSON snapshot of the previous row state (for `UPDATE` / `DELETE`)
 - `SessionId` — the run that performed the change
+- `RunId` / `RunAttempt` (added 2026-05-08) — the GitHub Actions workflow run that owns the audit row, so rollback can address by run identity even if the `ReportSessions` row is missing.
 
 Replaying these in reverse `Id` order (highest first) cleanly unwinds every change made by a single session, while leaving rows that were last modified by other sessions alone (logged as `drift_skipped`).
+
+### SessionId generation (2026-05-08+)
+
+`ReportSessions.Id` is **no longer** allocated by the per-backend AUTOINCREMENT counter. The application generates the id itself via `_generate_session_id()` in [`packages/python/javdb_platform/db.py`](../packages/python/javdb_platform/db.py):
+
+```python
+candidate = (time.time_ns() // 1_000_000) << 10  # 41-bit ms timestamp + 10-bit slot
+```
+
+The same id is INSERTed explicitly on both backends. Why:
+
+- Under `STORAGE_BACKEND=dual`, SQLite and D1 each maintain their own AUTOINCREMENT counter; any past asymmetric INSERT (one side committed, the other failed) leaves them permanently out of sync.
+- `DualCursor.lastrowid` returns whichever backend the cursor wraps. Trusting it as `SessionId` for downstream tables is what caused the 2026-05-08 incident: the SQLite-side allocated `Id=332`, but on D1 `Id=332` was a stale row from a 2026-05-07 workflow, and the spider tagged its history writes with `SessionId=332`. The rollback CLI later saw 145 audit rows spanning 35 hours and refused to roll most of them back as drift.
+- See [`migration/d1/2026_05_08_sessionid_decouple.md`](../migration/d1/2026_05_08_sessionid_decouple.md) for the migration writeup.
+
+A guard in [`packages/python/javdb_platform/dual_connection.py`](../packages/python/javdb_platform/dual_connection.py) (`DualCursor.for_write`) raises `DualWriteIdMismatchError` if any future code path attempts to INSERT into a guarded table (`APPLICATION_GENERATED_ID_TABLES`) without supplying an explicit Id and the two backends disagree on `lastrowid`.
+
+### Rollback CLI lookup precedence
+
+The CLI ([`apps/cli/rollback.py`](../apps/cli/rollback.py)) walks three sources in order, unioning the results:
+
+1. **`--session-id`** (most specific). Targets that one session and **does not expand** into a window scan unless `--include-orphaned` is set.
+2. **`--run-id` + `--attempt`** (primary path for run-aware lookups). Calls `db_find_sessions_by_run` which queries both `ReportSessions` and the audit tables (so a run whose `ReportSessions` row was already deleted by a previous failed rollback is still recoverable).
+3. **`--run-started-at` window scan** (legacy fallback). Only consulted when `--include-orphaned` is set OR when no other source yielded any session id (the auto-cleanup job needs this so a run that died before printing its session id can still be cleaned by date window).
+
+Cross-day sanity filter: every candidate session's `DateTimeCreated` is checked against `--run-started-at`. Sessions older than `run_started_at - 1h` are refused (`exit code 2`) unless `--force` is set.
+
+### Audit retention on commit
+
+Once `db_mark_session_committed` flips a session to `Status='committed'`, the rollback CLI refuses to roll it back (without `--force`). The `MovieHistoryAudit` / `TorrentHistoryAudit` rows for that session are no longer needed and would only bloat the tables, so the same call eagerly `DELETE`s them (no-op if the session is already committed). `db_count_in_progress_sessions_for_run` powers the spider self-check that prevents the same workflow run from ever creating two sibling sessions.
 
 ---
 
@@ -172,24 +205,49 @@ python3 -m apps.cli.rollback --session-id 123
 # Apply the rollback:
 python3 -m apps.cli.rollback --session-id 123 --apply
 
-# Roll back every in-progress session created today:
-python3 -m apps.cli.rollback --run-started-at 2026-05-04T00:00:00Z --apply
+# Roll back by GitHub run identity (preferred — survives a deleted ReportSessions row):
+python3 -m apps.cli.rollback --run-id 12345 --attempt 1 --apply
+
+# Legacy time-window scan (now opt-in via --include-orphaned):
+python3 -m apps.cli.rollback --run-started-at 2026-05-04T00:00:00Z --include-orphaned --apply
 
 # Partial scope (only history audit replay):
 python3 -m apps.cli.rollback --session-id 123 --scope history --apply
 
 # Force rollback of a committed session (DANGEROUS):
 python3 -m apps.cli.rollback --session-id 123 --force --apply
+
+# Override cross-day reject for a deliberately ancient session:
+python3 -m apps.cli.rollback --session-id 123 --run-started-at 2026-05-04T00:00:00Z --force --apply
 ```
 
 **Exit codes:**
 
 - `0` — success / dry-run completed cleanly
-- `2` — refused: session has `Status='committed'` and `--force` was not passed
+- `2` — refused: session has `Status='committed'` and `--force` was not passed, OR a candidate session predates `--run-started-at` by more than 1 hour (cross-day reject — pass `--force` to override)
 - `3` — could not connect to D1 / SQLite
 - `4` — partial failure or rollback drift; inspect the JSON summary and logs
 
-The CLI prints a JSON summary at the end with per-table counts; pipe it to `jq` for inspection.
+The CLI prints a JSON summary at the end with per-table counts; pipe it to `jq` for inspection. Drift / orphan_pruned counters are also appended to `reports/d1_drift.jsonl` and (under GitHub Actions) `$GITHUB_OUTPUT` so downstream steps and email notifications can react.
+
+### Incident-response tooling (one-shot scripts)
+
+For the rare situation where the audit / history tables are corrupted (e.g. the 2026-05-08 SessionId-collision incident left ~1 k phantom audit rows on D1):
+
+```bash
+# 1. Pull every business table from D1 down into local sqlite (default dry-run):
+python3 -m scripts.sync_d1_to_sqlite                # report what would change
+python3 -m scripts.sync_d1_to_sqlite --apply        # actually overwrite reports/*.db
+
+# 2. Detect & delete phantom audit rows on either / both sides:
+python3 -m scripts.cleanup_stale_session_audits                  # dry-run on both sides
+python3 -m scripts.cleanup_stale_session_audits --apply          # commit deletions
+python3 -m scripts.cleanup_stale_session_audits --target d1 --apply
+```
+
+Both scripts default to dry-run and write a JSON report under `reports/`. Use `--target` to restrict to one side; `--session-ids 332,346` to restrict to specific ids; `--cross-day-hours 12` to tune the cross-day phantom threshold for `cleanup_stale_session_audits`.
+
+Neither script is meant to be wired into a cron — they are manual incident-response tools. The recurring stale-cleanup job lives in [`StaleSessionCleanup.yml`](../.github/workflows/StaleSessionCleanup.yml) and uses [`apps.cli.cleanup_stale_in_progress`](../apps/cli/cleanup_stale_in_progress.py).
 
 ### Marking a session committed manually
 
@@ -261,6 +319,12 @@ python3 -m apps.cli.migration --backup
 wrangler d1 execute history    --file=migration/d1/2026_05_04_add_rollback_columns_history.sql
 wrangler d1 execute reports    --file=migration/d1/2026_05_04_add_rollback_columns_reports.sql
 wrangler d1 execute operations --file=migration/d1/2026_05_04_add_rollback_columns_operations.sql
+
+# 2026-05-08 follow-up: add (RunId, RunAttempt, FailureReason) columns
+# so rollback can address sessions by GitHub run identity. See
+# migration/d1/2026_05_08_sessionid_decouple.md for the rationale.
+wrangler d1 execute reports --file=migration/d1/2026_05_08_add_run_identity_columns_reports.sql
+wrangler d1 execute history --file=migration/d1/2026_05_08_add_run_identity_columns_history.sql
 ```
 
 After migration, `db.SCHEMA_VERSION == 11`. The `_ensure_rollback_columns` helper inside `init_db` adds the columns on subsequent boots if a partial migration occurred.
