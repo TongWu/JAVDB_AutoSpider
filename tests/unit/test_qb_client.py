@@ -594,6 +594,52 @@ class TestTryLoginBaseUrls:
         assert call.args[0].endswith('/api/v2/auth/login')
         assert call.kwargs['data'] == {'username': 'alice', 'password': 's3cret'}
 
+    def test_qb_v520_no_content_is_success(self):
+        # qBittorrent v5.2.0+ returns 204 No Content with empty body for
+        # a successful auth/login (qbittorrent/qBittorrent PR #21349).
+        # The helper must accept this in addition to the legacy
+        # 200 + "Ok." response.
+        ok = MagicMock(status_code=204, text='')
+        post_fn = MagicMock(return_value=ok)
+
+        outcome, url, err = try_login_base_urls(
+            ['https://qb.internal:8080'],
+            'admin', 'pw', post_fn=post_fn,
+        )
+        assert outcome == LOGIN_SUCCESS
+        assert url == 'https://qb.internal:8080'
+        assert err is None
+        assert post_fn.call_count == 1
+
+    def test_qb_v520_no_content_after_https_ssl_fallback(self):
+        # SSL error on HTTPS, then HTTP candidate returns the v5.2.0
+        # 204 No Content — should still resolve to LOGIN_SUCCESS on
+        # the HTTP base URL.
+        import requests as _requests
+        post_fn = MagicMock(side_effect=[
+            _requests.exceptions.SSLError('ssl'),
+            MagicMock(status_code=204, text=''),
+        ])
+        outcome, url, _ = try_login_base_urls(
+            ['https://qb.internal:8080', 'http://qb.internal:8080'],
+            'admin', 'pw', post_fn=post_fn,
+        )
+        assert outcome == LOGIN_SUCCESS
+        assert url == 'http://qb.internal:8080'
+
+    def test_200_with_unexpected_body_is_not_success(self):
+        # Defensive: a 200 with neither "Ok." nor empty body should not
+        # be silently accepted as a successful login. (Reverse proxies
+        # have been observed to return 200 + HTML login pages.)
+        bad = MagicMock(status_code=200, text='<html>login</html>')
+        post_fn = MagicMock(return_value=bad)
+
+        outcome, _, _ = try_login_base_urls(
+            ['https://qb.internal:8080'],
+            'a', 'b', post_fn=post_fn,
+        )
+        assert outcome == LOGIN_UNREACHABLE
+
 
 # ---------------------------------------------------------------------------
 # QBittorrentClient constructor uses the shared login helper

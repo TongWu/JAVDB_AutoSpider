@@ -159,7 +159,19 @@ def try_login_base_urls(
             )
             continue
 
-        if response.status_code == 200 and response.text == "Ok.":
+        # qBittorrent's auth/login success response varies by server version:
+        #   * qB <= 5.1.x: 200 OK with body "Ok."
+        #   * qB >= 5.2.0: 204 No Content with empty body, after the WebAPI
+        #     was changed to return semantically correct status codes for
+        #     responses that carry no payload (qbittorrent/qBittorrent
+        #     PR #21349, milestone 5.2). The auth/login handler now only
+        #     calls setStatus(APIStatus::Ok) without setResult("Ok."),
+        #     which the WebAPI layer translates into 204.
+        # Accepting both keeps backward compatibility with older
+        # deployments while supporting v5.2.0+.
+        is_legacy_ok = response.status_code == 200 and response.text == "Ok."
+        is_v52_no_content = response.status_code == 204
+        if is_legacy_ok or is_v52_no_content:
             if base_url != primary:
                 logger.info(
                     f"qBittorrent HTTPS login failed; retried successfully "
@@ -182,6 +194,15 @@ def try_login_base_urls(
         # HTTPS→HTTP fallback that qb_base_url_candidates() exists to
         # enable. See review note: "403 on first URL should not hard-fail
         # when later candidates may succeed."
+        #
+        # Note for qB v5.2.0+: invalid credentials now surface as bare
+        # 401 Unauthorized (no "Fails." body) because the AuthController
+        # throws APIError(APIErrorType::Unauthorized) instead of
+        # writing a body. We keep the fallback behaviour above so a
+        # reverse-proxy 401 still gets a chance at HTTP. If every
+        # candidate returns 401, the loop exits as LOGIN_UNREACHABLE
+        # with the last 401 attached, which still surfaces clearly to
+        # the operator.
         if isinstance(response.text, str) and response.text.strip() == "Fails.":
             return LOGIN_REJECTED, None, Exception(response.text)
 
