@@ -649,18 +649,31 @@ jobs:
       - name: Roll back uncommitted D1 writes
         env:
           RUN_STARTED_AT: ${{ needs.setup.outputs.pipeline_workflow_run_started_at }}
+          # SPIDER_SESSION_ID format change (2026-05-08): the application
+          # now generates ReportSessions.Id as a 51-bit snowflake instead
+          # of letting AUTOINCREMENT pick it. The shell regex below still
+          # accepts the new shape (digits only) — no update needed — but
+          # values are now ~16 digits long instead of ~3.
           SPIDER_SESSION_ID: ${{ needs.run-pipeline.outputs.session_id }}
+          # ROLLBACK_REASON is consumed by apps.cli.rollback to populate
+          # ReportSessions.FailureReason. cleanup-on-failure runs because
+          # the prior job either failed or was cancelled.
+          ROLLBACK_REASON: cleanup_on_failure
         run: |
           set -e
           set -o pipefail
+          # --run-id + --attempt are the *primary* lookup path: they
+          # find every session this workflow run touched, even if a
+          # prior failed rollback already deleted the owning
+          # ReportSessions row. --run-started-at is the legacy fallback
+          # that kicks in only when no session_id was captured (run
+          # died before the spider printed SPIDER_SESSION_ID).
           CMD_ARGS=(python3 -m apps.cli.rollback
                     --run-id "${{ github.run_id }}"
                     --attempt "${{ github.run_attempt }}"
                     --run-started-at "$RUN_STARTED_AT"
                     --scope all
                     --apply)
-          # If we have a known session_id from the spider, include it
-          # explicitly alongside the run-started-at in-progress lookup.
           if [ -n "$SPIDER_SESSION_ID" ]; then
             if [[ "$SPIDER_SESSION_ID" =~ ^[0-9]+$ ]]; then
               CMD_ARGS+=(--session-id "$SPIDER_SESSION_ID")
