@@ -83,6 +83,15 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         default="INFO",
     )
+    p.add_argument(
+        "--include-legacy",
+        action="store_true",
+        default=False,
+        help=(
+            "Also include legacy in_progress sessions with empty RunId. "
+            "Default false to avoid sweeping pre-run-identity history."
+        ),
+    )
     return p.parse_args(argv)
 
 
@@ -104,8 +113,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     setup_logging(log_level=args.log_level)
 
     logger.info(
-        "StaleSessionCleanup invoked: max_age_hours=%s scope=%s dry_run=%s",
-        args.max_age_hours, args.scope, args.dry_run,
+        "StaleSessionCleanup invoked: max_age_hours=%s scope=%s dry_run=%s "
+        "include_legacy=%s",
+        args.max_age_hours, args.scope, args.dry_run, args.include_legacy,
     )
 
     try:
@@ -117,6 +127,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         sessions = db_find_in_progress_sessions(
             max_age_hours=args.max_age_hours,
+            require_run_identity=not args.include_legacy,
         )
     except Exception as e:
         logger.error("Failed to query in_progress sessions: %s", e)
