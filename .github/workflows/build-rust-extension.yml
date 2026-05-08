@@ -68,9 +68,12 @@ jobs:
   # =============================================================================
   # ARM build (self-hosted)
   # Timeout after 5 min if no runner picks it up; failure does not block x64.
+  # The `# PUBLIC_RUNNER:` marker is rewritten by publish-to-public.yml so the
+  # public repo (which has no self-hosted runner) falls back to GitHub-hosted
+  # ARM. Format: `runs-on: <private-runner>  # PUBLIC_RUNNER: <public-runner>`.
   # =============================================================================
   build-arm:
-    runs-on: self-hosted
+    runs-on: self-hosted  # PUBLIC_RUNNER: ubuntu-24.04-arm
     timeout-minutes: 30
     continue-on-error: true
     env:
