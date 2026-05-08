@@ -20,7 +20,7 @@ on:
       categories:
         description: 'JSON array of categories to filter (e.g., ["Ad Hoc", "Daily Ingestion"])'
         required: false
-        default: '["Ad Hoc", "Daily Ingestion"]'
+        default: '["Ad Hoc", "Daily Ingestion", "顶级"]'
       dry_run:
         description: 'Dry run mode (no actual changes)'
         required: false
