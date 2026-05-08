@@ -574,6 +574,7 @@ def test_dual_batch_execute_read_none_cursor_uses_dict_fallback(sqlite_conn):
 
 
 def test_rclone_inventory_swap_raises_when_dual_batch_d1_write_fails(sqlite_conn):
+    sqlite_conn.execute("DROP TABLE IF EXISTS RcloneInventory")
     sqlite_conn.execute(
         """
         CREATE TABLE RcloneInventory (
