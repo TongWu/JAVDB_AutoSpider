@@ -86,6 +86,28 @@ def append_rclone_staging(
     return len(entries)
 
 
+def _d1_failure_count(conn) -> int:
+    try:
+        return int(getattr(conn, "d1_failure_count", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _execute_inventory_batch(conn, statements, *, action: str) -> None:
+    before_failures = _d1_failure_count(conn)
+    batch = getattr(conn, "batch_execute", None)
+    if callable(batch):
+        batch(statements)
+        if _d1_failure_count(conn) > before_failures:
+            raise RuntimeError(
+                f"D1 mirror failed during rclone inventory {action}; "
+                "rolling back SQLite changes"
+            )
+    else:
+        for sql, params in statements:
+            conn.execute(sql, params)
+
+
 def swap_rclone_inventory(conn, session_id: int) -> int:
     """Atomically replace ``RcloneInventory`` with this session's staging rows.
 
@@ -111,15 +133,11 @@ def swap_rclone_inventory(conn, session_id: int) -> int:
         (f"DROP TABLE {staging}", ()),
     ]
 
-    batch = getattr(conn, "batch_execute", None)
-    if callable(batch):
-        # D1 (and DualConnection's D1 side) treat each batch as atomic.
-        batch(statements)
-    else:
-        # Plain SQLite — implicit transaction inside ``with get_db()``
-        # already gives us all-or-nothing semantics.
-        for sql, params in statements:
-            conn.execute(sql, params)
+    # Plain SQLite relies on the surrounding ``with get_db()`` transaction.
+    # DualConnection suppresses D1 write exceptions, so detect that signal and
+    # re-raise here; callers must not mark a live inventory swap successful
+    # unless both backends applied this all-or-nothing batch.
+    _execute_inventory_batch(conn, statements, action="swap")
 
     row = conn.execute(
         "SELECT COUNT(*) AS n FROM RcloneInventory"
@@ -173,12 +191,7 @@ def merge_rclone_inventory_from_stage(
         (f"DROP TABLE {staging}", ()),
     ]
 
-    batch = getattr(conn, "batch_execute", None)
-    if callable(batch):
-        batch(statements)
-    else:
-        for sql, stmt_params in statements:
-            conn.execute(sql, stmt_params)
+    _execute_inventory_batch(conn, statements, action="merge")
 
     row = conn.execute(
         "SELECT COUNT(*) AS n FROM RcloneInventory"
