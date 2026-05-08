@@ -26,6 +26,11 @@ from packages.python.javdb_platform.dual_connection import (  # noqa: E402
     DualConnection,
     _is_read,
 )
+from packages.python.javdb_platform.db_layer.operations_repo import (  # noqa: E402
+    append_rclone_staging,
+    open_rclone_staging,
+    swap_rclone_inventory,
+)
 
 
 # ── _is_read ─────────────────────────────────────────────────────────────
@@ -566,6 +571,68 @@ def test_dual_batch_execute_read_none_cursor_uses_dict_fallback(sqlite_conn):
     row = cursors[0].fetchone()
     assert row == {"n": 0}
     assert row.get("n") == 0
+
+
+def test_rclone_inventory_swap_raises_when_dual_batch_d1_write_fails(sqlite_conn):
+    sqlite_conn.execute("DROP TABLE IF EXISTS RcloneInventory")
+    sqlite_conn.execute(
+        """
+        CREATE TABLE RcloneInventory (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            VideoCode TEXT NOT NULL,
+            SensorCategory TEXT,
+            SubtitleCategory TEXT,
+            FolderPath TEXT,
+            FolderSize INTEGER,
+            FileCount INTEGER,
+            DateTimeScanned TEXT
+        )
+        """
+    )
+    sqlite_conn.execute(
+        """
+        INSERT INTO RcloneInventory
+        (VideoCode, SensorCategory, SubtitleCategory, FolderPath,
+         FolderSize, FileCount, DateTimeScanned)
+        VALUES ('OLD-001', NULL, NULL, '2025/old/OLD-001', 1, 1, '2026-05-07')
+        """
+    )
+    staging = open_rclone_staging(sqlite_conn, 7)
+    append_rclone_staging(
+        sqlite_conn,
+        [{
+            "VideoCode": "NEW-001",
+            "FolderPath": "2026/new/NEW-001",
+            "FolderSize": 2,
+            "FileCount": 1,
+            "DateTimeScanned": "2026-05-08",
+        }],
+        7,
+    )
+    sqlite_conn.commit()
+
+    class FailingInventoryBatchD1(FakeD1Connection):
+        def batch_execute(self, statements):
+            raise RuntimeError("simulated D1 batch outage")
+
+    dual = DualConnection(
+        sqlite_conn, FailingInventoryBatchD1(), logical_name="operations",
+    )
+
+    try:
+        with pytest.raises(RuntimeError, match="D1 mirror failed"):
+            swap_rclone_inventory(dual, 7)
+        assert dual.d1_failure_count == 1
+    finally:
+        dual.rollback()
+
+    rows = sqlite_conn.execute(
+        "SELECT VideoCode FROM RcloneInventory ORDER BY VideoCode"
+    ).fetchall()
+    assert [row["VideoCode"] for row in rows] == ["OLD-001"]
+    assert sqlite_conn.execute(
+        "SELECT name FROM sqlite_master WHERE name=?", (staging,),
+    ).fetchone() is not None
 
 
 # ── DualConnection drift tracking ────────────────────────────────────────
