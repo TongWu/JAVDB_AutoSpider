@@ -379,6 +379,11 @@ class DualConnection:
     def total_changes(self) -> int:
         return self._sqlite.total_changes
 
+    @property
+    def d1_failure_count(self) -> int:
+        """Number of D1 write failures recorded in the current transaction."""
+        return self._d1_failure_count
+
     # ── Diagnostics ─────────────────────────────────────────────────────
 
     def _track_failure_signature(self, sql: str) -> int:
