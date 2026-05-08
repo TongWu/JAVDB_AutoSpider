@@ -30,6 +30,33 @@ from typing import Optional
 _storage_mode_override: Optional[str] = None
 
 
+# ── DB-write kill switch ──────────────────────────────────────────────────
+#
+# ``JAVDB_FORBID_DB_WRITES=1`` is a one-way override intended for
+# TestIngestion / smoke-test workflows that exercise the spider on every
+# code change but **must not** mutate D1 or any persisted SQLite database.
+# When set:
+#   * :func:`storage_backend` is forced to ``'sqlite'`` (never returns
+#     ``d1`` / ``dual``), so no D1 client is ever constructed.
+#   * :func:`storage_mode` is forced to ``'csv'`` so ``use_db_storage()``
+#     returns ``False`` and the spider skips ``db_create_report_session``
+#     entirely.  CSV writes still happen so the test can verify spider
+#     output.
+#   * Lower-level entry points (``init_db``, ``db_create_report_session``,
+#     ``DualConnection``) raise ``RuntimeError`` defensively if anything
+#     ever tries to take the DB-write path while the switch is engaged.
+#
+# Returning a bool (rather than reading the env var ad hoc) gives callers
+# a single, testable contract.
+def db_writes_forbidden() -> bool:
+    """True when the ``JAVDB_FORBID_DB_WRITES`` kill switch is engaged."""
+    import os
+    val = os.environ.get('JAVDB_FORBID_DB_WRITES', '')
+    if isinstance(val, str):
+        val = val.strip().lower()
+    return val in ('1', 'true', 'yes', 'on')
+
+
 def force_storage_mode(mode: str) -> None:
     """Override storage mode for the rest of the process lifetime.
 
@@ -51,6 +78,10 @@ def storage_mode() -> str:
     so that both SQLite and CSV outputs are produced — the uploader path
     requires the spider CSV as input.
     """
+    if db_writes_forbidden():
+        # Kill switch overrides everything — TestIngestion must produce
+        # CSVs only, never DB rows.
+        return 'csv'
     if _storage_mode_override is not None:
         return _storage_mode_override
     import os
@@ -76,6 +107,9 @@ def use_csv() -> bool:
 
 def storage_backend() -> str:
     """Return the DB backend configured for platform DB connections."""
+    if db_writes_forbidden():
+        # Kill switch — never construct a D1 client, regardless of vars.
+        return 'sqlite'
     import os
     backend = (
         os.environ.get('_STORAGE_BACKEND_INIT_OVERRIDE')

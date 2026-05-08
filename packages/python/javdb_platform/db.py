@@ -2938,6 +2938,17 @@ def db_create_report_session(
     after the pipeline successfully finishes to flip the flag and protect
     the session's writes from being cleaned up.
     """
+    from packages.python.javdb_platform.config_helper import (
+        db_writes_forbidden,
+    )
+    if db_writes_forbidden():
+        raise RuntimeError(
+            "db_create_report_session refused: "
+            "JAVDB_FORBID_DB_WRITES=1 is engaged. This kill switch is "
+            "set by smoke-test workflows (TestIngestion) that must not "
+            "pollute production D1 / SQLite. Unset it if you really "
+            "need to write to a database."
+        )
     if created_at is None:
         created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     sid = int(session_id) if session_id is not None else _generate_session_id()
