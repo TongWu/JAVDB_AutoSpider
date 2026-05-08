@@ -484,6 +484,17 @@ CREATE INDEX IF NOT EXISTS idx_report_sessions_type_date ON ReportSessions(Repor
 CREATE INDEX IF NOT EXISTS idx_report_sessions_csv ON ReportSessions(CsvFilename);
 CREATE INDEX IF NOT EXISTS idx_report_sessions_status ON ReportSessions(Status, DateTimeCreated);
 CREATE INDEX IF NOT EXISTS idx_report_sessions_run ON ReportSessions(RunId, RunAttempt);
+-- Partial UNIQUE index (added 2026-05-08 evening) — schema-level invariant
+-- "no two in-progress sessions share the same (RunId, RunAttempt, CsvFilename)".
+-- Already-resolved (committed/failed) sessions are intentionally excluded so
+-- the same CSV can be re-ingested in a later attempt.  Legacy rows where
+-- RunId IS NULL are also excluded to keep the migration backwards compatible.
+-- This is the real defence against dual-write lastrowid drift / spider
+-- re-entry double-INSERT — the application-layer self-check is now
+-- defence-in-depth on top of this DB-enforced invariant.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_reportsessions_runidentity_csv
+    ON ReportSessions(RunId, RunAttempt, CsvFilename)
+    WHERE Status = 'in_progress' AND RunId IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS ReportMovies (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1062,6 +1073,22 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
                 f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}({columns})"
             )
         except sqlite3.OperationalError:
+            pass
+
+    # Partial UNIQUE index — DB-level invariant against same-CSV double-INSERT
+    # in the same workflow run.  Only enforced for in_progress + RunId NOT NULL
+    # so legacy rows and resolved sessions remain free.
+    if _has_table(conn, 'ReportSessions'):
+        try:
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "uq_reportsessions_runidentity_csv "
+                "ON ReportSessions(RunId, RunAttempt, CsvFilename) "
+                "WHERE Status = 'in_progress' AND RunId IS NOT NULL"
+            )
+        except sqlite3.OperationalError:
+            # Older SQLite without partial index support — should never
+            # happen for our minimum (3.8+) but stay defensive.
             pass
 
 
@@ -3092,6 +3119,39 @@ def db_count_in_progress_sessions_for_run(
                 (run_id, int(run_attempt)),
             ).fetchone()
     return int((row or {'n': 0})['n'] or 0)
+
+
+def db_find_in_progress_session_ids_for_run_csv(
+    run_id: str,
+    run_attempt: Optional[int],
+    csv_filename: str,
+    *,
+    db_path: Optional[str] = None,
+) -> List[int]:
+    """Return ``in_progress`` SessionIds for the same (RunId, RunAttempt, CSVFilename).
+
+    Used by the spider self-check to distinguish *legitimate* sibling
+    sessions in the same workflow run (e.g. DailyIngestion's TodayTitle
+    spider followed by an AdHoc spider — different CSV files) from a
+    *true* duplicate (same CSV being ingested twice in the same run, which
+    indicates a re-entry / retry-without-cleanup bug worth aborting on).
+    Matching by CSV filename is exact and case-sensitive; callers should
+    pass the basename only.
+    """
+    with get_db(db_path or REPORTS_DB_PATH) as conn:
+        if run_attempt is None:
+            rows = conn.execute(
+                "SELECT Id FROM ReportSessions "
+                "WHERE Status='in_progress' AND RunId=? AND CSVFilename=?",
+                (run_id, csv_filename),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT Id FROM ReportSessions WHERE Status='in_progress' "
+                "AND RunId=? AND RunAttempt=? AND CSVFilename=?",
+                (run_id, int(run_attempt), csv_filename),
+            ).fetchall()
+    return [int(r['Id']) for r in rows]
 
 
 def db_find_sessions_by_run(
