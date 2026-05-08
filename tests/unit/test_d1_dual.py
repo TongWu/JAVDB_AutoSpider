@@ -23,7 +23,9 @@ from packages.python.javdb_platform.d1_client import (  # noqa: E402
 from packages.python.javdb_platform import d1_client as _d1_client_module  # noqa: E402
 from packages.python.javdb_platform import dual_connection as _dual_module  # noqa: E402
 from packages.python.javdb_platform.dual_connection import (  # noqa: E402
+    APPLICATION_GENERATED_ID_TABLES,
     DualConnection,
+    DualWriteIdMismatchError,
     _is_read,
 )
 from packages.python.javdb_platform.db_layer.operations_repo import (  # noqa: E402
@@ -964,3 +966,141 @@ def test_init_db_dual_does_not_set_global_env_var(monkeypatch):
     assert os.environ.get("_STORAGE_BACKEND_INIT_OVERRIDE") is None
     assert not hasattr(_db._local, "_storage_backend_init_override")
     assert _db._backend_mode() == "dual"
+
+
+# ── Application-generated id guard (Phase 3) ────────────────────────────
+
+
+def _make_report_sessions_sqlite(tmp_path):
+    """Set up a sqlite connection with the ReportSessions schema."""
+    path = tmp_path / "rs.db"
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    conn.execute(
+        "CREATE TABLE ReportSessions ("
+        "Id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "ReportType TEXT, ReportDate TEXT, CsvFilename TEXT, "
+        "DateTimeCreated TEXT, Status TEXT, RunId TEXT, RunAttempt INTEGER)"
+    )
+    return conn
+
+
+def test_report_sessions_in_application_id_guard_set():
+    assert "ReportSessions" in APPLICATION_GENERATED_ID_TABLES
+
+
+def test_explicit_id_into_report_sessions_is_accepted(tmp_path):
+    sqlite_conn = _make_report_sessions_sqlite(tmp_path)
+    fake_d1 = FakeD1Connection()
+
+    # Configure the fake to return the same lastrowid for the explicit
+    # Id INSERT — simulating both backends honouring the application-
+    # supplied id.
+    SAME_ID = 1234567890
+    sqlite_conn.execute(
+        "INSERT INTO ReportSessions (Id, ReportType, ReportDate, "
+        "CsvFilename, DateTimeCreated, Status) "
+        "VALUES (?, 'daily', '2026-05-08', 'x.csv', '2026-05-08 00:00:00', "
+        "'in_progress')",
+        (SAME_ID,),
+    )
+
+    class _Cursor:
+        def __init__(self, lastrowid, rowcount=1, rows=None):
+            self.lastrowid = lastrowid
+            self.rowcount = rowcount
+            self._rows = rows or []
+        def fetchone(self):
+            return self._rows[0] if self._rows else None
+        def fetchall(self):
+            return list(self._rows)
+
+    fake_d1.execute = lambda sql, params=(): _Cursor(  # type: ignore[assignment]
+        lastrowid=SAME_ID, rowcount=1,
+    )
+
+    # Simulate a *fresh* INSERT that uses an explicit Id — the guard
+    # should NOT raise because lastrowid agrees on both sides.
+    sqlite_conn.execute("DELETE FROM ReportSessions")
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="reports")
+    cur = dual.execute(
+        "INSERT INTO ReportSessions (Id, ReportType, ReportDate, "
+        "CsvFilename, DateTimeCreated, Status) "
+        "VALUES (?, ?, ?, ?, ?, 'in_progress')",
+        (SAME_ID, "daily", "2026-05-08", "x.csv", "2026-05-08 00:00:00"),
+    )
+    assert cur.lastrowid == SAME_ID
+
+
+def test_lastrowid_mismatch_on_report_sessions_raises(monkeypatch, tmp_path):
+    sqlite_conn = _make_report_sessions_sqlite(tmp_path)
+    fake_d1 = FakeD1Connection()
+
+    class _Cursor:
+        def __init__(self, lastrowid, rowcount=1):
+            self.lastrowid = lastrowid
+            self.rowcount = rowcount
+            self._rows = []
+        def fetchone(self):
+            return None
+        def fetchall(self):
+            return []
+
+    # SQLite will use AUTOINCREMENT (1), D1 returns 999 → mismatch.
+    fake_d1.execute = lambda sql, params=(): _Cursor(  # type: ignore[assignment]
+        lastrowid=999, rowcount=1,
+    )
+
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="reports")
+
+    with pytest.raises(DualWriteIdMismatchError):
+        dual.execute(
+            "INSERT INTO ReportSessions (ReportType, ReportDate, "
+            "CsvFilename, DateTimeCreated) "
+            "VALUES (?, ?, ?, ?)",
+            ("daily", "2026-05-08", "x.csv", "2026-05-08 00:00:00"),
+        )
+
+    # Drift log captured the event.
+    assert drift_path.exists()
+    contents = drift_path.read_text(encoding="utf-8").splitlines()
+    assert any(
+        "application_id_mismatch" in line for line in contents
+    )
+
+
+def test_unguarded_table_id_drift_is_warning_not_error(tmp_path):
+    """For tables not in APPLICATION_GENERATED_ID_TABLES, divergent
+    lastrowid is just a warning (legacy behaviour)."""
+    path = tmp_path / "t.db"
+    sqlite_conn = sqlite3.connect(path)
+    sqlite_conn.row_factory = sqlite3.Row
+    sqlite_conn.execute(
+        "CREATE TABLE OtherTable ("
+        "Id INTEGER PRIMARY KEY AUTOINCREMENT, v TEXT)"
+    )
+    fake_d1 = FakeD1Connection()
+
+    class _Cursor:
+        def __init__(self, lastrowid, rowcount=1):
+            self.lastrowid = lastrowid
+            self.rowcount = rowcount
+            self._rows = []
+        def fetchone(self):
+            return None
+        def fetchall(self):
+            return []
+
+    fake_d1.execute = lambda sql, params=(): _Cursor(  # type: ignore[assignment]
+        lastrowid=999, rowcount=1,
+    )
+
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="other")
+    # Should not raise.
+    cur = dual.execute(
+        "INSERT INTO OtherTable (v) VALUES (?)", ("hi",),
+    )
+    assert cur is not None

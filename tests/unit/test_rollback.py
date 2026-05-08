@@ -135,16 +135,46 @@ class TestRollbackCliTargetResolution:
         monkeypatch.setattr(
             rollback_cli, "db_find_in_progress_sessions", fail_lookup,
         )
-        args = argparse.Namespace(session_id=42, run_started_at=None)
+        args = argparse.Namespace(
+            session_id=42,
+            run_id=None,
+            attempt=None,
+            run_started_at=None,
+            include_orphaned=False,
+        )
 
-        assert rollback_cli._resolve_target_sessions(args) == [42]
+        assert rollback_cli._resolve_target_sessions(args, None) == [42]
 
-    def test_run_started_at_unions_explicit_and_window_sessions(self, monkeypatch):
+    def test_window_scan_requires_include_orphaned(self, monkeypatch):
+        from apps.cli import rollback as rollback_cli
+
+        def fail_lookup(*_args, **_kwargs):
+            raise AssertionError(
+                "window scan must NOT run by default; only with --include-orphaned"
+            )
+
+        monkeypatch.setattr(
+            rollback_cli, "db_find_in_progress_sessions", fail_lookup,
+        )
+        args = argparse.Namespace(
+            session_id=42,
+            run_id=None,
+            attempt=None,
+            run_started_at="2026-05-04T19:30:00Z",
+            include_orphaned=False,
+        )
+
+        # Default: only the explicit session id, no expansion.
+        assert rollback_cli._resolve_target_sessions(
+            args, "2026-05-04 19:30:00",
+        ) == [42]
+
+    def test_include_orphaned_unions_window_sessions(self, monkeypatch):
         from apps.cli import rollback as rollback_cli
 
         captured = {}
 
-        def fake_lookup(*, since=None):
+        def fake_lookup(*, since=None, max_age_hours=None):
             captured["since"] = since
             return [7, 42]
 
@@ -153,11 +183,46 @@ class TestRollbackCliTargetResolution:
         )
         args = argparse.Namespace(
             session_id=42,
+            run_id=None,
+            attempt=None,
             run_started_at="2026-05-04T19:30:00Z",
+            include_orphaned=True,
         )
 
-        assert rollback_cli._resolve_target_sessions(args) == [7, 42]
+        assert rollback_cli._resolve_target_sessions(
+            args, "2026-05-04 19:30:00",
+        ) == [7, 42]
         assert captured["since"] == "2026-05-04 19:30:00"
+
+    def test_run_id_resolution_unions_with_session_id(self, monkeypatch):
+        from apps.cli import rollback as rollback_cli
+
+        monkeypatch.setattr(
+            rollback_cli,
+            "db_find_sessions_by_run",
+            lambda run_id, attempt: [101, 102],
+        )
+        # Also assert that window scan does NOT run when targets came
+        # from the run-id path.
+        monkeypatch.setattr(
+            rollback_cli,
+            "db_find_in_progress_sessions",
+            lambda *args, **kwargs: pytest.fail(
+                "window scan must not run when run-id yielded targets"
+            ),
+        )
+
+        args = argparse.Namespace(
+            session_id=42,
+            run_id="r-test",
+            attempt="3",
+            run_started_at=None,
+            include_orphaned=False,
+        )
+
+        assert rollback_cli._resolve_target_sessions(args, None) == [
+            42, 101, 102,
+        ]
 
     def test_main_continues_after_refused_session(self, monkeypatch):
         from apps.cli import rollback as rollback_cli
@@ -168,7 +233,16 @@ class TestRollbackCliTargetResolution:
         monkeypatch.setattr(rollback_cli, "init_db", lambda: None)
         monkeypatch.setattr(rollback_cli, "close_db", lambda: closed.append(True))
         monkeypatch.setattr(
-            rollback_cli, "_resolve_target_sessions", lambda _args: [1, 2],
+            rollback_cli,
+            "_resolve_target_sessions",
+            lambda _args, _normalized: [1, 2],
+        )
+        # Default _detect_cross_day reads from the live DB; short-circuit
+        # to keep this test focused on the refusal path.
+        monkeypatch.setattr(
+            rollback_cli,
+            "_detect_cross_day",
+            lambda *args, **kwargs: False,
         )
 
         def fake_rollback(sid, **_kwargs):
@@ -687,6 +761,274 @@ class TestRollbackHistoryAudit:
 
         assert applied_left == 0
         assert drift_left == 1
+
+
+# ── Application-generated session id (Phase 2) ───────────────────────────
+
+
+class TestApplicationGeneratedSessionId:
+    def test_db_create_report_session_returns_application_id(self):
+        sid = db_mod.db_create_report_session(
+            report_type="DailyReport",
+            report_date="2026-05-08",
+            csv_filename="phase2.csv",
+        )
+        # The id must be a sufficiently large snowflake-style integer
+        # (millisecond timestamp << 10).  AUTOINCREMENT would have
+        # produced a tiny value (~1).
+        assert sid > 1 << 32, (
+            "Application-generated id should be a millisecond "
+            "timestamp << 10, not an autoincrement starting at 1."
+        )
+
+        with db_mod.get_db() as conn:
+            row = conn.execute(
+                "SELECT Id FROM ReportSessions WHERE CsvFilename=?",
+                ("phase2.csv",),
+            ).fetchone()
+        assert row is not None
+        assert row["Id"] == sid
+
+    def test_consecutive_session_ids_are_strictly_increasing(self):
+        a = db_mod.db_create_report_session(
+            report_type="DailyReport",
+            report_date="2026-05-08",
+            csv_filename="phase2-a.csv",
+        )
+        b = db_mod.db_create_report_session(
+            report_type="DailyReport",
+            report_date="2026-05-08",
+            csv_filename="phase2-b.csv",
+        )
+        assert b > a
+
+    def test_run_identity_columns_are_persisted(self):
+        sid = db_mod.db_create_report_session(
+            report_type="DailyReport",
+            report_date="2026-05-08",
+            csv_filename="phase2-runid.csv",
+            run_id="123456789",
+            run_attempt=2,
+        )
+        with db_mod.get_db() as conn:
+            row = conn.execute(
+                "SELECT RunId, RunAttempt FROM ReportSessions WHERE Id=?",
+                (sid,),
+            ).fetchone()
+        assert row["RunId"] == "123456789"
+        assert row["RunAttempt"] == 2
+
+    def test_db_count_in_progress_sessions_for_run(self):
+        db_mod.db_create_report_session(
+            report_type="DailyReport",
+            report_date="2026-05-08",
+            csv_filename="phase2-count-1.csv",
+            run_id="rid-A",
+            run_attempt=1,
+        )
+        db_mod.db_create_report_session(
+            report_type="DailyReport",
+            report_date="2026-05-08",
+            csv_filename="phase2-count-2.csv",
+            run_id="rid-A",
+            run_attempt=1,
+        )
+        db_mod.db_create_report_session(
+            report_type="DailyReport",
+            report_date="2026-05-08",
+            csv_filename="phase2-count-3.csv",
+            run_id="rid-B",
+            run_attempt=1,
+        )
+
+        assert db_mod.db_count_in_progress_sessions_for_run("rid-A", 1) == 2
+        assert db_mod.db_count_in_progress_sessions_for_run("rid-A", 2) == 0
+        assert db_mod.db_count_in_progress_sessions_for_run("rid-B", 1) == 1
+
+    def test_db_find_sessions_by_run_unions_audit_and_reports(self):
+        sid = db_mod.db_create_report_session(
+            report_type="DailyReport",
+            report_date="2026-05-08",
+            csv_filename="phase2-by-run.csv",
+            run_id="rid-find",
+            run_attempt=3,
+        )
+        # Generate a MovieHistoryAudit row tagged with the same RunId so
+        # we exercise the union-from-audit branch as well.
+        db_mod.set_active_run_identity("rid-find", 3)
+        try:
+            _insert_movie("/v/PH2-001", "PH2-001", sid)
+        finally:
+            db_mod.set_active_run_identity(None, None)
+
+        ids = db_mod.db_find_sessions_by_run("rid-find", 3)
+        assert ids == [sid]
+
+        # Removing the ReportSessions row but leaving the audit trail
+        # behind still surfaces the SessionId via the audit-table union.
+        with db_mod.get_db() as conn:
+            conn.execute("DELETE FROM ReportSessions WHERE Id=?", (sid,))
+        ids = db_mod.db_find_sessions_by_run("rid-find", 3)
+        assert ids == [sid]
+
+
+# ── Audit retention on commit (Phase 6) ──────────────────────────────────
+
+
+class TestAuditRetentionOnCommit:
+    def test_commit_prunes_audit_rows(self):
+        sid = _create_session()
+        _insert_movie("/v/PRN-001", "PRN-001", sid)
+
+        with db_mod.get_db() as conn:
+            before = conn.execute(
+                "SELECT COUNT(*) AS n FROM MovieHistoryAudit WHERE SessionId=?",
+                (sid,),
+            ).fetchone()["n"]
+        assert before >= 1
+
+        db_mod.db_mark_session_committed(sid)
+
+        with db_mod.get_db() as conn:
+            after = conn.execute(
+                "SELECT COUNT(*) AS n FROM MovieHistoryAudit WHERE SessionId=?",
+                (sid,),
+            ).fetchone()["n"]
+        assert after == 0
+
+
+# ── Orphan pruning (Phase 4) ─────────────────────────────────────────────
+
+
+class TestOrphanPruning:
+    def test_orphan_audit_pruned_when_target_missing_and_old(self):
+        # Set up: an audit row whose target row no longer exists, dated
+        # well before run_started_at - 24h.
+        sid = _create_session(when="2026-04-01 00:00:00")
+        movie_id = _insert_movie("/v/ORP-001", "ORP-001", sid)
+        # Delete the underlying movie so the audit's TargetId is dangling.
+        with db_mod.get_db() as conn:
+            conn.execute("DELETE FROM MovieHistory WHERE Id=?", (movie_id,))
+            # Force the audit row's DateTimeCreated to look ancient.
+            conn.execute(
+                "UPDATE MovieHistoryAudit SET DateTimeCreated=? "
+                "WHERE SessionId=?",
+                ("2026-04-01 00:00:01", sid),
+            )
+
+        result = db_mod.db_rollback_session(
+            sid,
+            scope="history",
+            run_started_at="2026-05-08 00:00:00",
+        )
+        history = result["history"]
+        # Orphan branch fires; drift_skipped doesn't (it would on a
+        # recent audit row).
+        assert history.get("orphan_pruned", 0) >= 1
+        assert history.get("drift_skipped", 0) == 0
+
+        with db_mod.get_db() as conn:
+            left = conn.execute(
+                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
+                "WHERE SessionId=?",
+                (sid,),
+            ).fetchone()["n"]
+        assert left == 0
+
+    def test_recent_drift_is_not_pruned_as_orphan(self):
+        sid = _create_session()
+        movie_id = _insert_movie("/v/ORP-002", "ORP-002", sid)
+        with db_mod.get_db() as conn:
+            conn.execute("DELETE FROM MovieHistory WHERE Id=?", (movie_id,))
+
+        # No run_started_at supplied → orphan window is disabled, so
+        # the row remains as drift.
+        result = db_mod.db_rollback_session(sid, scope="history")
+        history = result["history"]
+        assert history.get("drift_skipped", 0) >= 1
+        assert history.get("orphan_pruned", 0) == 0
+
+
+# ── _rollback_history idempotency (Phase 4) ─────────────────────────────
+
+
+class TestRollbackIdempotency:
+    def test_replaying_rollback_is_a_noop(self):
+        """Successful rollback drains its audit rows row-by-row, so a
+        second invocation has nothing to do."""
+        sid = _create_session()
+        _insert_movie("/v/IDM-001", "IDM-001", sid)
+        _insert_movie("/v/IDM-002", "IDM-002", sid)
+
+        first = db_mod.db_rollback_session(sid, scope="history")
+        assert first["history"]["MovieHistory.deleted"] >= 1
+
+        # After the first run, all audit rows for this session must be
+        # gone — that's the new row-by-row idempotent behaviour.
+        with db_mod.get_db() as conn:
+            n = conn.execute(
+                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
+                "WHERE SessionId=?",
+                (sid,),
+            ).fetchone()["n"]
+        assert n == 0
+
+    def test_drift_does_not_block_other_audits_from_being_drained(self):
+        """An audit row that drifts must NOT be deleted, but the rest
+        still get pruned individually."""
+        sid_failed = _create_session()
+        applied_id = _insert_movie("/v/IDM-DRT-001", "IDM-DRT-001", sid_failed)
+        drift_id = _insert_movie("/v/IDM-DRT-002", "IDM-DRT-002", sid_failed)
+
+        # Make drift_id be owned by a sibling session so the rollback's
+        # SessionId guard refuses to touch it.
+        sid_other = _create_session()
+        with db_mod.get_db() as conn:
+            conn.execute(
+                "UPDATE MovieHistory SET SessionId=? WHERE Id=?",
+                (sid_other, drift_id),
+            )
+
+        result = db_mod.db_rollback_session(sid_failed, scope="history")
+        assert result["history"]["MovieHistory.deleted"] >= 1
+        assert result["history"]["drift_skipped"] >= 1
+
+        with db_mod.get_db() as conn:
+            applied_left = conn.execute(
+                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
+                "WHERE SessionId=? AND TargetId=?",
+                (sid_failed, applied_id),
+            ).fetchone()["n"]
+            drift_left = conn.execute(
+                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
+                "WHERE SessionId=? AND TargetId=?",
+                (sid_failed, drift_id),
+            ).fetchone()["n"]
+        # Successful row had its audit pruned individually.
+        assert applied_left == 0
+        # Drifted row's audit is preserved for manual review.
+        assert drift_left == 1
+
+
+# ── FailureReason persistence ────────────────────────────────────────────
+
+
+class TestFailureReason:
+    def test_rollback_persists_failure_reason(self):
+        sid = _create_session()
+        db_mod.db_rollback_session(
+            sid, scope="reports", failure_reason="workflow_cancel",
+        )
+        # ReportSessions row was deleted (reports scope), so a fresh
+        # mark_failed call exercises the same column path on a new row.
+        sid2 = _create_session()
+        db_mod.db_mark_session_failed(sid2, reason="runtime_error")
+        with db_mod.get_db() as conn:
+            row = conn.execute(
+                "SELECT FailureReason FROM ReportSessions WHERE Id=?",
+                (sid2,),
+            ).fetchone()
+        assert row["FailureReason"] == "runtime_error"
 
 
 # ── Scope filtering ──────────────────────────────────────────────────────

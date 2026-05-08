@@ -3,7 +3,10 @@ from apps.cli import commit_session, rollback
 
 class _Args:
     session_id = 7
+    run_id = None
+    attempt = None
     run_started_at = "2026-05-04T00:00:00Z"
+    include_orphaned = True
 
 
 def test_rollback_defaults_to_dry_run_and_apply_opts_in():
@@ -17,10 +20,15 @@ def test_rollback_resolve_unions_explicit_and_window_sessions(monkeypatch):
     monkeypatch.setattr(
         rollback,
         "db_find_in_progress_sessions",
-        lambda *, since=None: seen.append(since) or [7, 8],
+        lambda *, since=None, max_age_hours=None: seen.append(since) or [7, 8],
     )
 
-    assert rollback._resolve_target_sessions(_Args()) == [7, 8]
+    # 2026-05-08: window scan only kicks in when --include-orphaned is set
+    # (or no other source yielded anything).  ``_Args`` opts into the
+    # legacy behaviour via ``include_orphaned=True``.
+    assert rollback._resolve_target_sessions(
+        _Args(), "2026-05-04 00:00:00",
+    ) == [7, 8]
     assert seen == ["2026-05-04 00:00:00"]
 
 
@@ -38,12 +46,25 @@ def test_rollback_normalize_returns_none_for_invalid_timestamp():
 def test_rollback_returns_partial_failure_on_real_drift(monkeypatch, capsys):
     monkeypatch.setattr(rollback, "init_db", lambda: None)
     monkeypatch.setattr(rollback, "close_db", lambda: None)
-    monkeypatch.setattr(rollback, "_resolve_target_sessions", lambda _args: [7])
+    monkeypatch.setattr(
+        rollback,
+        "_resolve_target_sessions",
+        lambda _args, _normalized: [7],
+    )
+    # Cross-day reject reads ReportSessions.DateTimeCreated from the
+    # local DB.  Stub it to "no reject" so this test stays focused on
+    # the drift exit path.
+    monkeypatch.setattr(
+        rollback, "_detect_cross_day", lambda *args, **kwargs: False,
+    )
     monkeypatch.setattr(
         rollback,
         "db_rollback_session",
         lambda *_args, **_kwargs: {"history": {"drift_skipped": 1}},
     )
+    # Suppress side-effect emit; we don't want test runs to write
+    # reports/d1_drift.jsonl.
+    monkeypatch.setattr(rollback, "_emit_metrics", lambda summary: None)
 
     rc = rollback.main(["--session-id", "7", "--apply"])
 
