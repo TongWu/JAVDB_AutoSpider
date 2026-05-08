@@ -192,7 +192,7 @@ jobs:
           name: stale-session-cleanup-log
           path: |
             logs/stale_session_cleanup.log
-            reports/d1_drift.jsonl
+            reports/D1/d1_drift.jsonl
           retention-days: 30
           if-no-files-found: ignore
 
