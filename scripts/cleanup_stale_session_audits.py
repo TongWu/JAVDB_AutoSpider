@@ -573,6 +573,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     report_path = args.report_path or os.path.join(
         reports_dir,
+        "D1",
+        "cleanup_stale_session_audits",
         "cleanup_stale_session_audits_{}_{}.json".format(
             "dryrun" if args.dry_run else "apply",
             datetime.now().strftime("%Y%m%d_%H%M%S"),

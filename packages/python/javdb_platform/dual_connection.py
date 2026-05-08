@@ -107,7 +107,7 @@ def _is_read(sql: str) -> bool:
 # ── Drift log file ──────────────────────────────────────────────────────
 # Resolved lazily so tests can monkeypatch the module-level constant.
 _DRIFT_LOG_PATH = os.path.join(
-    os.environ.get("REPORTS_DIR", "reports"), "d1_drift.jsonl"
+    os.environ.get("REPORTS_DIR", "reports"), "D1", "d1_drift.jsonl"
 )
 _DRIFT_LOG_LOCK = threading.Lock()
 

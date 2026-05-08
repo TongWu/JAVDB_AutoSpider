@@ -68,8 +68,8 @@ logger = get_logger(__name__)
 # ── Defaults / paths ──────────────────────────────────────────────────────
 
 _REPORTS_DIR = cfg("REPORTS_DIR", "reports")
-_DEFAULT_DRIFT_LOG = os.path.join(_REPORTS_DIR, "d1_drift.jsonl")
-_DEFAULT_PROCESSED_LOG = os.path.join(_REPORTS_DIR, "d1_drift.processed.jsonl")
+_DEFAULT_DRIFT_LOG = os.path.join(_REPORTS_DIR, "D1", "d1_drift.jsonl")
+_DEFAULT_PROCESSED_LOG = os.path.join(_REPORTS_DIR, "D1", "d1_drift.processed.jsonl")
 
 _LOGICAL_TO_DB_PATH = {
     "history": cfg("HISTORY_DB_PATH", os.path.join(_REPORTS_DIR, "history.db")),

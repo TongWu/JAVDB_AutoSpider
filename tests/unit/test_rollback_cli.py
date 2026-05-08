@@ -183,7 +183,7 @@ class TestMetricsEmission:
             "--scope", "reports",
         ])
 
-        path = os.path.join(reports_dir, "d1_drift.jsonl")
+        path = os.path.join(reports_dir, "D1", "d1_drift.jsonl")
         assert os.path.exists(path)
         with open(path, encoding="utf-8") as f:
             lines = [
