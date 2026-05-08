@@ -3005,6 +3005,7 @@ def db_find_in_progress_sessions(
     since: Optional[str] = None,
     db_path: Optional[str] = None,
     max_age_hours: Optional[float] = None,
+    require_run_identity: bool = False,
 ) -> List[int]:
     """Return ``ReportSessions.Id`` rows still flagged ``in_progress``.
 
@@ -3015,6 +3016,10 @@ def db_find_in_progress_sessions(
     *max_age_hours* — alternative window for the stale-session cleanup
     cron: returns sessions whose ``DateTimeCreated`` is older than
     ``now - max_age_hours``.  Mutually exclusive with *since*.
+
+    *require_run_identity* — when true, only include sessions with a
+    non-empty ``RunId``.  This helps stale-session cleanup skip legacy
+    pre-run-identity rows that were historically marked ``in_progress``.
     """
     with get_db(db_path or REPORTS_DB_PATH) as conn:
         if since and max_age_hours is not None:
@@ -3027,20 +3032,35 @@ def db_find_in_progress_sessions(
             cutoff = datetime.utcfromtimestamp(cutoff_ts).strftime(
                 "%Y-%m-%d %H:%M:%S"
             )
+            run_identity_clause = (
+                " AND RunId IS NOT NULL AND TRIM(RunId) != ''"
+                if require_run_identity else ""
+            )
             rows = conn.execute(
                 "SELECT Id FROM ReportSessions "
-                "WHERE Status='in_progress' AND DateTimeCreated < ?",
+                "WHERE Status='in_progress' AND DateTimeCreated < ?"
+                + run_identity_clause,
                 (cutoff,),
             ).fetchall()
         elif since:
+            run_identity_clause = (
+                " AND RunId IS NOT NULL AND TRIM(RunId) != ''"
+                if require_run_identity else ""
+            )
             rows = conn.execute(
                 "SELECT Id FROM ReportSessions "
-                "WHERE Status='in_progress' AND DateTimeCreated >= ?",
+                "WHERE Status='in_progress' AND DateTimeCreated >= ?"
+                + run_identity_clause,
                 (since,),
             ).fetchall()
         else:
+            run_identity_clause = (
+                " AND RunId IS NOT NULL AND TRIM(RunId) != ''"
+                if require_run_identity else ""
+            )
             rows = conn.execute(
-                "SELECT Id FROM ReportSessions WHERE Status='in_progress'",
+                "SELECT Id FROM ReportSessions WHERE Status='in_progress'"
+                + run_identity_clause,
             ).fetchall()
     return [r['Id'] for r in rows]
 
