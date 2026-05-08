@@ -321,7 +321,7 @@ def _main():
             from packages.python.javdb_platform.db import (
                 init_db,
                 db_create_report_session,
-                db_count_in_progress_sessions_for_run,
+                db_find_in_progress_session_ids_for_run_csv,
             )
             from packages.python.javdb_core.url_helper import detect_url_type, extract_url_identifier
             init_db(force=True)
@@ -348,21 +348,36 @@ def _main():
                 except ValueError:
                     run_attempt = None
 
-            # Self-check: a single workflow run must own at most one
-            # in-progress session.  Catching duplicates here prevents the
-            # 2026-05-08 incident where two sessions (332 and 346) were
-            # created for the same run and rollback later mishandled them.
-            if run_id:
-                existing = db_count_in_progress_sessions_for_run(
-                    run_id, run_attempt,
+            # Self-check (2026-05-08 evening, root-cause fix):
+            #   * Multiple in-progress sessions per (RunId, RunAttempt)
+            #     are *legitimate* — DailyIngestion / AdHocIngestion run
+            #     several spider invocations in the same GitHub run, each
+            #     with its own CSV filename. So we no longer warn on
+            #     siblings.
+            #   * The true invariant ("no two in-progress sessions for
+            #     the same CSV in the same run") is now enforced by the
+            #     partial UNIQUE index ``uq_reportsessions_runidentity_csv``
+            #     on ``ReportSessions(RunId, RunAttempt, CsvFilename)``.
+            #     A re-entry / dual-write drift would fail with
+            #     ``sqlite3.IntegrityError`` at INSERT time, regardless
+            #     of which path called us.
+            #   * This Python check stays as fail-fast defence-in-depth:
+            #     it surfaces a clear, structured error message before
+            #     the INSERT instead of a raw IntegrityError, and it
+            #     handles the ``RunId IS NULL`` case (local dev) the
+            #     index intentionally excludes.
+            csv_basename = os.path.basename(csv_path) if csv_path else ''
+            if run_id and csv_basename:
+                dup_ids = db_find_in_progress_session_ids_for_run_csv(
+                    run_id, run_attempt, csv_basename,
                 )
-                if existing > 0:
+                if dup_ids:
                     logger.error(
                         "Refusing to create a new report session: "
                         "GITHUB_RUN_ID=%s GITHUB_RUN_ATTEMPT=%s already "
-                        "owns %d in-progress session(s). Investigate / "
-                        "roll back the prior session before retrying.",
-                        run_id, run_attempt, existing,
+                        "owns in-progress session(s) %s for the same "
+                        "CSV %r. Roll back before retrying.",
+                        run_id, run_attempt, dup_ids, csv_basename,
                     )
                     sys.exit(1)
 
