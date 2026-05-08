@@ -317,7 +317,7 @@ def _resolve_failure_reason(args: argparse.Namespace) -> Optional[str]:
 
 
 def _emit_metrics(summary: dict) -> None:
-    """Append rollback metrics to reports/d1_drift.jsonl + GITHUB_OUTPUT."""
+    """Append rollback metrics to reports/D1/d1_drift.jsonl + GITHUB_OUTPUT."""
     record = {
         "kind": "rollback_summary",
         "ts": datetime.now(timezone.utc).isoformat(),
@@ -336,7 +336,7 @@ def _emit_metrics(summary: dict) -> None:
     }
     try:
         reports_dir = os.environ.get("REPORTS_DIR", "reports")
-        path = os.path.join(reports_dir, "d1_drift.jsonl")
+        path = os.path.join(reports_dir, "D1", "d1_drift.jsonl")
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")

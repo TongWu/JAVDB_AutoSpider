@@ -458,6 +458,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     report_path = args.report_path or os.path.join(
         reports_dir,
+        "D1",
+        "sync_d1_to_sqlite",
         "sync_d1_to_sqlite_{}_{}.json".format(
             "dryrun" if args.dry_run else "apply",
             datetime.now().strftime("%Y%m%d_%H%M%S"),

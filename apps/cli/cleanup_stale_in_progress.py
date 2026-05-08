@@ -204,7 +204,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Append metric line so the parent workflow can grep it.
     try:
         reports_dir = os.environ.get("REPORTS_DIR", "reports")
-        path = os.path.join(reports_dir, "d1_drift.jsonl")
+        path = os.path.join(reports_dir, "D1", "d1_drift.jsonl")
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(summary, ensure_ascii=False) + "\n")
