@@ -32,6 +32,7 @@ import os
 import re
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -149,6 +150,8 @@ _SESSION_ID_SENTINEL = object()
 # Callers may also pass ``session_id=`` explicitly to override.
 _active_session_id_lock = threading.Lock()
 _active_session_id_value: Optional[int] = None
+_active_run_id_value: Optional[str] = None
+_active_run_attempt_value: Optional[int] = None
 
 
 def set_active_session_id(session_id: Optional[int]) -> None:
@@ -168,10 +171,36 @@ def set_active_session_id(session_id: Optional[int]) -> None:
         _active_session_id_value = session_id
 
 
+def set_active_run_identity(
+    run_id: Optional[str],
+    run_attempt: Optional[int],
+) -> None:
+    """Set the GitHub Actions workflow identity for subsequent audit rows.
+
+    Called by the spider alongside :func:`set_active_session_id` so that
+    every ``MovieHistoryAudit`` / ``TorrentHistoryAudit`` row written by
+    this process is stamped with the run that produced it.  Allows the
+    rollback CLI to look up audit rows by ``(RunId, RunAttempt)`` —
+    independent of any ``ReportSessions.Id`` drift between SQLite and D1.
+    """
+    global _active_run_id_value, _active_run_attempt_value
+    with _active_session_id_lock:
+        _active_run_id_value = run_id
+        _active_run_attempt_value = (
+            int(run_attempt) if run_attempt is not None else None
+        )
+
+
 def get_active_session_id() -> Optional[int]:
     """Return the currently-active ``ReportSessions.Id`` or ``None``."""
     with _active_session_id_lock:
         return _active_session_id_value
+
+
+def get_active_run_identity() -> Tuple[Optional[str], Optional[int]]:
+    """Return ``(RunId, RunAttempt)`` from the active session context."""
+    with _active_session_id_lock:
+        return _active_run_id_value, _active_run_attempt_value
 
 
 def _resolve_session_id(explicit: Any = _SESSION_ID_SENTINEL) -> Optional[int]:
@@ -186,6 +215,58 @@ def _resolve_session_id(explicit: Any = _SESSION_ID_SENTINEL) -> Optional[int]:
 # half-applied state. ``_do_init`` also touches the file system, which is
 # itself unsafe to run concurrently against the same SQLite paths.
 _init_lock = threading.Lock()
+
+
+# ── Application-generated session id ─────────────────────────────────────
+#
+# Why not just use ReportSessions.Id AUTOINCREMENT?  Under STORAGE_BACKEND=
+# dual the SQLite-side and D1-side AUTOINCREMENT counters are independent,
+# and any past asymmetric INSERT (one side committed, the other failed)
+# leaves them permanently out of sync.  ``cur.lastrowid`` returns whichever
+# backend the cursor wraps; trusting it as ``SessionId`` for downstream
+# tables is what caused the 2026-05-08 incident where the local id 332
+# collided with a stale 332 on D1 from a prior run.
+#
+# Solution: generate the id ourselves and INSERT with an explicit ``Id``
+# column on both backends.  The id needs to be (a) monotonic-enough that
+# concurrent processes don't collide, (b) representable as a 64-bit
+# signed INTEGER for D1 / SQLite compatibility, (c) easy to glance at
+# when debugging.
+#
+# Layout: ``millisecond_timestamp << 10 | counter`` where the counter
+# wraps at 1024 per millisecond.
+#   * milliseconds since the epoch fit in 41 bits through year 2039.
+#   * 10 bits of counter give 1024 ids per millisecond — well above any
+#     realistic concurrent-INSERT rate from a single Python process.
+#   * 41 + 10 = 51 bits, comfortably inside int64 (max 63 bits).
+#
+# Across processes we still rely on the fact that two GitHub Actions
+# runners almost never start a session in the same millisecond *and*
+# also collide on the bottom 10 bits.  The
+# ``db_count_in_progress_sessions_for_run`` self-check (Phase 5) is the
+# real defence against duplicate sessions per workflow run.
+_SESSION_ID_LOCK = threading.Lock()
+_SESSION_ID_LAST = 0
+_SESSION_ID_COUNTER_BITS = 10
+_SESSION_ID_COUNTER_MASK = (1 << _SESSION_ID_COUNTER_BITS) - 1
+
+
+def _generate_session_id() -> int:
+    """Return a 51-bit INTEGER suitable for ``ReportSessions.Id``.
+
+    Format: ``(time.time_ns() // 1_000_000) << 10`` with a 10-bit
+    monotonic counter for the low bits.  Strictly increasing within a
+    process; comfortably fits a signed 64-bit INTEGER on both SQLite
+    and Cloudflare D1.
+    """
+    global _SESSION_ID_LAST
+    with _SESSION_ID_LOCK:
+        ms = time.time_ns() // 1_000_000
+        candidate = ms << _SESSION_ID_COUNTER_BITS
+        if candidate <= _SESSION_ID_LAST:
+            candidate = _SESSION_ID_LAST + 1
+        _SESSION_ID_LAST = candidate
+        return candidate
 
 
 def _is_valid_sqlite(path: str) -> bool:
@@ -336,15 +417,25 @@ CREATE INDEX IF NOT EXISTS idx_torrent_history_session ON TorrentHistory(Session
 -- to MovieHistory / TorrentHistory captures a row here in the same D1 batch
 -- (atomic per Cloudflare D1 contract), so a failed run can be rolled back
 -- by replaying the audit log in reverse order.
+--
+-- (RunId, RunAttempt) duplicate the GitHub Actions identity already stored
+-- on ReportSessions so the rollback CLI can address audit rows directly
+-- by run identity (the primary lookup path) without first joining through
+-- ReportSessions. Both columns are NULLABLE: legacy audit rows predate the
+-- 2026-05-08 migration and the rollback CLI falls back to SessionId for
+-- those rows.
 CREATE TABLE IF NOT EXISTS MovieHistoryAudit (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     TargetId INTEGER NOT NULL,
     Action TEXT NOT NULL,
     OldRowJson TEXT,
     SessionId INTEGER NOT NULL,
-    DateTimeCreated TEXT NOT NULL
+    DateTimeCreated TEXT NOT NULL,
+    RunId TEXT,
+    RunAttempt INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_mh_audit_session ON MovieHistoryAudit(SessionId, Id);
+CREATE INDEX IF NOT EXISTS idx_mh_audit_run ON MovieHistoryAudit(RunId, RunAttempt);
 
 CREATE TABLE IF NOT EXISTS TorrentHistoryAudit (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -352,12 +443,27 @@ CREATE TABLE IF NOT EXISTS TorrentHistoryAudit (
     Action TEXT NOT NULL,
     OldRowJson TEXT,
     SessionId INTEGER NOT NULL,
-    DateTimeCreated TEXT NOT NULL
+    DateTimeCreated TEXT NOT NULL,
+    RunId TEXT,
+    RunAttempt INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_th_audit_session ON TorrentHistoryAudit(SessionId, Id);
+CREATE INDEX IF NOT EXISTS idx_th_audit_run ON TorrentHistoryAudit(RunId, RunAttempt);
 """
 
 _REPORTS_DDL = _SCHEMA_VERSION_DDL + """
+-- ReportSessions.Id is a PRIMARY KEY but new rows MUST supply Id explicitly
+-- (see :func:`_generate_session_id`).  AUTOINCREMENT is retained only for
+-- legacy callers (csv_to_sqlite migration tool, older test fixtures) that
+-- still rely on auto-assignment.  The application layer stopped using it
+-- on 2026-05-08 to fix sqlite-vs-D1 lastrowid drift under STORAGE_BACKEND=
+-- dual where each backend's autoincrement counter is independent.
+--
+-- (RunId, RunAttempt) carry the GitHub Actions workflow run identity so
+-- the rollback CLI can locate sessions by run rather than relying solely
+-- on the application-generated Id.  FailureReason is set by the rollback
+-- CLI alongside Status='failed' to capture *why* a session was unwound
+-- (timeout, workflow_cancel, runtime error, ...).
 CREATE TABLE IF NOT EXISTS ReportSessions (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
     ReportType TEXT NOT NULL,
@@ -369,11 +475,15 @@ CREATE TABLE IF NOT EXISTS ReportSessions (
     EndPage INTEGER,
     CsvFilename TEXT NOT NULL,
     DateTimeCreated TEXT NOT NULL,
-    Status TEXT DEFAULT 'in_progress'
+    Status TEXT DEFAULT 'in_progress',
+    RunId TEXT,
+    RunAttempt INTEGER,
+    FailureReason TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_report_sessions_type_date ON ReportSessions(ReportType, ReportDate);
 CREATE INDEX IF NOT EXISTS idx_report_sessions_csv ON ReportSessions(CsvFilename);
 CREATE INDEX IF NOT EXISTS idx_report_sessions_status ON ReportSessions(Status, DateTimeCreated);
+CREATE INDEX IF NOT EXISTS idx_report_sessions_run ON ReportSessions(RunId, RunAttempt);
 
 CREATE TABLE IF NOT EXISTS ReportMovies (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -854,10 +964,15 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
 
     Adds:
       - ReportSessions.Status TEXT DEFAULT 'in_progress'
+      - ReportSessions.RunId, ReportSessions.RunAttempt,
+        ReportSessions.FailureReason  (added 2026-05-08; identifies the
+        owning GitHub Actions workflow run and stores rollback context)
       - MovieHistory.SessionId, TorrentHistory.SessionId
       - PikpakHistory.SessionId, DedupRecords.SessionId,
         InventoryAlignNoExactMatch.SessionId
       - MovieHistoryAudit, TorrentHistoryAudit tables and indexes
+      - MovieHistoryAudit.RunId, MovieHistoryAudit.RunAttempt and the
+        symmetric pair on TorrentHistoryAudit (added 2026-05-08).
 
     This handles existing databases that were created before the X3 rollback
     schema. New DBs are created with the columns directly via the DDL
@@ -866,8 +981,15 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
     """
     add_column_specs = [
         ('ReportSessions', 'Status', "TEXT DEFAULT 'in_progress'"),
+        ('ReportSessions', 'RunId', 'TEXT'),
+        ('ReportSessions', 'RunAttempt', 'INTEGER'),
+        ('ReportSessions', 'FailureReason', 'TEXT'),
         ('MovieHistory', 'SessionId', 'INTEGER'),
         ('TorrentHistory', 'SessionId', 'INTEGER'),
+        ('MovieHistoryAudit', 'RunId', 'TEXT'),
+        ('MovieHistoryAudit', 'RunAttempt', 'INTEGER'),
+        ('TorrentHistoryAudit', 'RunId', 'TEXT'),
+        ('TorrentHistoryAudit', 'RunAttempt', 'INTEGER'),
         ('PikpakHistory', 'SessionId', 'INTEGER'),
         ('DedupRecords', 'SessionId', 'INTEGER'),
         ('InventoryAlignNoExactMatch', 'SessionId', 'INTEGER'),
@@ -889,20 +1011,28 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
             Action TEXT NOT NULL,
             OldRowJson TEXT,
             SessionId INTEGER NOT NULL,
-            DateTimeCreated TEXT NOT NULL
+            DateTimeCreated TEXT NOT NULL,
+            RunId TEXT,
+            RunAttempt INTEGER
         );
         CREATE INDEX IF NOT EXISTS idx_mh_audit_session
             ON MovieHistoryAudit(SessionId, Id);
+        CREATE INDEX IF NOT EXISTS idx_mh_audit_run
+            ON MovieHistoryAudit(RunId, RunAttempt);
         CREATE TABLE IF NOT EXISTS TorrentHistoryAudit (
             Id INTEGER PRIMARY KEY AUTOINCREMENT,
             TargetId INTEGER NOT NULL,
             Action TEXT NOT NULL,
             OldRowJson TEXT,
             SessionId INTEGER NOT NULL,
-            DateTimeCreated TEXT NOT NULL
+            DateTimeCreated TEXT NOT NULL,
+            RunId TEXT,
+            RunAttempt INTEGER
         );
         CREATE INDEX IF NOT EXISTS idx_th_audit_session
             ON TorrentHistoryAudit(SessionId, Id);
+        CREATE INDEX IF NOT EXISTS idx_th_audit_run
+            ON TorrentHistoryAudit(RunId, RunAttempt);
         """
     )
     if _has_table(conn, 'MovieHistory'):
@@ -913,6 +1043,12 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
         ('idx_torrent_history_session', 'TorrentHistory', 'SessionId'),
         ('idx_report_sessions_status',
          'ReportSessions', 'Status, DateTimeCreated'),
+        ('idx_report_sessions_run',
+         'ReportSessions', 'RunId, RunAttempt'),
+        ('idx_mh_audit_run',
+         'MovieHistoryAudit', 'RunId, RunAttempt'),
+        ('idx_th_audit_run',
+         'TorrentHistoryAudit', 'RunId, RunAttempt'),
         ('idx_pikpak_history_session', 'PikpakHistory', 'SessionId'),
         ('idx_dedup_records_session', 'DedupRecords', 'SessionId'),
         ('idx_align_no_match_session',
@@ -1522,23 +1658,23 @@ def db_load_history(db_path: Optional[str] = None, phase: Optional[int] = None) 
 # atomic, so the mutation and audit row succeed or fail together.
 
 _MOVIE_AUDIT_SQL = """INSERT INTO MovieHistoryAudit
-   (TargetId, Action, OldRowJson, SessionId, DateTimeCreated)
-   VALUES (?, ?, ?, ?, ?)"""
+   (TargetId, Action, OldRowJson, SessionId, DateTimeCreated, RunId, RunAttempt)
+   VALUES (?, ?, ?, ?, ?, ?, ?)"""
 
 _MOVIE_AUDIT_FOR_HREF_SQL = """INSERT INTO MovieHistoryAudit
-   (TargetId, Action, OldRowJson, SessionId, DateTimeCreated)
-   VALUES ((SELECT Id FROM MovieHistory WHERE Href=?), ?, ?, ?, ?)"""
+   (TargetId, Action, OldRowJson, SessionId, DateTimeCreated, RunId, RunAttempt)
+   VALUES ((SELECT Id FROM MovieHistory WHERE Href=?), ?, ?, ?, ?, ?, ?)"""
 
 _TORRENT_AUDIT_SQL = """INSERT INTO TorrentHistoryAudit
-   (TargetId, Action, OldRowJson, SessionId, DateTimeCreated)
-   VALUES (?, ?, ?, ?, ?)"""
+   (TargetId, Action, OldRowJson, SessionId, DateTimeCreated, RunId, RunAttempt)
+   VALUES (?, ?, ?, ?, ?, ?, ?)"""
 
 _TORRENT_AUDIT_FOR_TYPE_SQL = """INSERT INTO TorrentHistoryAudit
-   (TargetId, Action, OldRowJson, SessionId, DateTimeCreated)
+   (TargetId, Action, OldRowJson, SessionId, DateTimeCreated, RunId, RunAttempt)
    VALUES (
        (SELECT Id FROM TorrentHistory
         WHERE MovieHistoryId=? AND SubtitleIndicator=? AND CensorIndicator=?),
-       ?, ?, ?, ?
+       ?, ?, ?, ?, ?, ?
    )"""
 
 
@@ -1576,9 +1712,11 @@ def _movie_audit_statement(
         return None
     if when is None:
         when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    run_id, run_attempt = get_active_run_identity()
     return (
         _MOVIE_AUDIT_SQL,
-        (target_id, action, _audit_old_json(old_row), session_id, when),
+        (target_id, action, _audit_old_json(old_row), session_id, when,
+         run_id, run_attempt),
     )
 
 
@@ -1592,7 +1730,11 @@ def _movie_insert_audit_statement_for_href(
         return None
     if when is None:
         when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    return (_MOVIE_AUDIT_FOR_HREF_SQL, (href, 'INSERT', None, session_id, when))
+    run_id, run_attempt = get_active_run_identity()
+    return (
+        _MOVIE_AUDIT_FOR_HREF_SQL,
+        (href, 'INSERT', None, session_id, when, run_id, run_attempt),
+    )
 
 
 def _torrent_audit_statement(
@@ -1607,9 +1749,11 @@ def _torrent_audit_statement(
         return None
     if when is None:
         when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    run_id, run_attempt = get_active_run_identity()
     return (
         _TORRENT_AUDIT_SQL,
-        (target_id, action, _audit_old_json(old_row), session_id, when),
+        (target_id, action, _audit_old_json(old_row), session_id, when,
+         run_id, run_attempt),
     )
 
 
@@ -1625,9 +1769,11 @@ def _torrent_insert_audit_statement_for_type(
         return None
     if when is None:
         when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    run_id, run_attempt = get_active_run_identity()
     return (
         _TORRENT_AUDIT_FOR_TYPE_SQL,
-        (movie_id, sub_ind, cen_ind, 'INSERT', None, session_id, when),
+        (movie_id, sub_ind, cen_ind, 'INSERT', None, session_id, when,
+         run_id, run_attempt),
     )
 
 
@@ -2739,8 +2885,26 @@ def db_create_report_session(
     end_page: Optional[int] = None,
     created_at: Optional[str] = None,
     db_path: Optional[str] = None,
+    run_id: Optional[str] = None,
+    run_attempt: Optional[int] = None,
+    session_id: Optional[int] = None,
 ) -> int:
     """Create a new report session and return its id.
+
+    Behaviour change (2026-05-08): the *Id* is now generated by the
+    application (via :func:`_generate_session_id`) and inserted explicitly,
+    so SQLite and Cloudflare D1 see the same value. The previous behaviour
+    relied on each backend's AUTOINCREMENT and ``cur.lastrowid``, which
+    drifts under ``STORAGE_BACKEND=dual``.
+
+    *run_id* / *run_attempt* (optional) record the GitHub Actions workflow
+    run that owns this session. The rollback CLI's primary lookup path is
+    by ``(RunId, RunAttempt)``; ``Id`` is the secondary path for callers
+    that already know the snowflake id.
+
+    *session_id* (optional, advanced) lets the caller pin a specific id
+    instead of generating one — used by the migration tool that needs to
+    preserve historical ids when copying CSVs into the DB.
 
     The new row is tagged with ``Status='in_progress'`` so the rollback CLI
     can identify uncommitted runs. Call :func:`db_mark_session_committed`
@@ -2749,16 +2913,19 @@ def db_create_report_session(
     """
     if created_at is None:
         created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    sid = int(session_id) if session_id is not None else _generate_session_id()
     with get_db(db_path or REPORTS_DB_PATH) as conn:
-        cur = conn.execute(
+        conn.execute(
             """INSERT INTO ReportSessions
-               (ReportType, ReportDate, UrlType, DisplayName,
-                Url, StartPage, EndPage, CsvFilename, DateTimeCreated, Status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_progress')""",
-            (report_type, report_date, url_type, display_name,
-             url, start_page, end_page, csv_filename, created_at),
+               (Id, ReportType, ReportDate, UrlType, DisplayName,
+                Url, StartPage, EndPage, CsvFilename, DateTimeCreated,
+                Status, RunId, RunAttempt)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_progress', ?, ?)""",
+            (sid, report_type, report_date, url_type, display_name,
+             url, start_page, end_page, csv_filename, created_at,
+             run_id, run_attempt),
         )
-        return cur.lastrowid
+    return sid
 
 
 def db_mark_session_committed(
@@ -2767,8 +2934,14 @@ def db_mark_session_committed(
 ) -> int:
     """Mark a session as ``committed`` so it survives any future cleanup.
 
-    Returns the number of rows updated (0 if session not found / already
-    committed). Idempotent: re-running on a committed session is a no-op.
+    Once a session is committed, its audit rows in
+    ``MovieHistoryAudit`` / ``TorrentHistoryAudit`` are pruned (the
+    rollback CLI refuses committed sessions anyway, so the audit log is
+    no longer needed and only adds noise + table bloat).
+
+    Returns the number of ReportSessions rows updated (0 if session not
+    found or already committed). Idempotent: re-running on a committed
+    session is a no-op (and prunes any leftover audit rows).
     """
     with get_db(db_path or REPORTS_DB_PATH) as conn:
         cur = conn.execute(
@@ -2776,18 +2949,53 @@ def db_mark_session_committed(
             "AND Status IS NOT 'committed'",
             (session_id,),
         )
-        return cur.rowcount or 0
+        marked = cur.rowcount or 0
+
+    # Audit retention: prune audit rows for this session even when the
+    # ReportSessions update was a no-op (Status was already 'committed' on
+    # a previous call). Keeps the tables bounded if commit is retried.
+    try:
+        with get_db(HISTORY_DB_PATH) as conn:
+            mh = conn.execute(
+                "DELETE FROM MovieHistoryAudit WHERE SessionId=?",
+                (session_id,),
+            )
+            th = conn.execute(
+                "DELETE FROM TorrentHistoryAudit WHERE SessionId=?",
+                (session_id,),
+            )
+        pruned = (mh.rowcount or 0) + (th.rowcount or 0)
+        if pruned > 0:
+            logger.info(
+                "Pruned %d audit row(s) on commit of session %s",
+                pruned, session_id,
+            )
+    except Exception as exc:  # noqa: BLE001 - best-effort retention
+        logger.warning(
+            "Could not prune audit rows for committed session %s: %s",
+            session_id, exc,
+        )
+
+    return marked
 
 
 def db_mark_session_failed(
     session_id: int,
     db_path: Optional[str] = None,
+    *,
+    reason: Optional[str] = None,
 ) -> int:
-    """Mark a session as ``failed`` (debug-only flag set right before delete)."""
+    """Mark a session as ``failed`` (debug-only flag set right before delete).
+
+    *reason* is persisted to ``ReportSessions.FailureReason`` so post-
+    incident analysis can distinguish workflow_cancel vs runtime crash
+    vs stale_timeout (set by the daily stale-cleanup cron).
+    """
     with get_db(db_path or REPORTS_DB_PATH) as conn:
         cur = conn.execute(
-            "UPDATE ReportSessions SET Status='failed' WHERE Id=?",
-            (session_id,),
+            "UPDATE ReportSessions SET Status='failed', FailureReason=? "
+            "WHERE Id=?",
+            (reason, session_id),
         )
         return cur.rowcount or 0
 
@@ -2796,15 +3004,35 @@ def db_find_in_progress_sessions(
     *,
     since: Optional[str] = None,
     db_path: Optional[str] = None,
+    max_age_hours: Optional[float] = None,
 ) -> List[int]:
     """Return ``ReportSessions.Id`` rows still flagged ``in_progress``.
 
     *since* (ISO timestamp) restricts the search to sessions created on
     or after the given moment — typically the workflow ``run_started_at``
     so the cleanup job only sees sessions belonging to the failed run.
+
+    *max_age_hours* — alternative window for the stale-session cleanup
+    cron: returns sessions whose ``DateTimeCreated`` is older than
+    ``now - max_age_hours``.  Mutually exclusive with *since*.
     """
     with get_db(db_path or REPORTS_DB_PATH) as conn:
-        if since:
+        if since and max_age_hours is not None:
+            raise ValueError(
+                "db_find_in_progress_sessions: pass either 'since' or "
+                "'max_age_hours', not both"
+            )
+        if max_age_hours is not None:
+            cutoff_ts = time.time() - (max_age_hours * 3600)
+            cutoff = datetime.utcfromtimestamp(cutoff_ts).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+            rows = conn.execute(
+                "SELECT Id FROM ReportSessions "
+                "WHERE Status='in_progress' AND DateTimeCreated < ?",
+                (cutoff,),
+            ).fetchall()
+        elif since:
             rows = conn.execute(
                 "SELECT Id FROM ReportSessions "
                 "WHERE Status='in_progress' AND DateTimeCreated >= ?",
@@ -2815,6 +3043,88 @@ def db_find_in_progress_sessions(
                 "SELECT Id FROM ReportSessions WHERE Status='in_progress'",
             ).fetchall()
     return [r['Id'] for r in rows]
+
+
+def db_count_in_progress_sessions_for_run(
+    run_id: str,
+    run_attempt: Optional[int] = None,
+    *,
+    db_path: Optional[str] = None,
+) -> int:
+    """Count ``in_progress`` sessions belonging to a (RunId, RunAttempt) pair.
+
+    Used by the spider self-check: a single workflow run must own at most
+    one in-progress session at any given time.  Detecting >0 here means a
+    prior step already created one; the caller should refuse to start a
+    fresh session and instead re-use / fail loudly.
+    """
+    with get_db(db_path or REPORTS_DB_PATH) as conn:
+        if run_attempt is None:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM ReportSessions "
+                "WHERE Status='in_progress' AND RunId=?",
+                (run_id,),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM ReportSessions "
+                "WHERE Status='in_progress' AND RunId=? AND RunAttempt=?",
+                (run_id, int(run_attempt)),
+            ).fetchone()
+    return int((row or {'n': 0})['n'] or 0)
+
+
+def db_find_sessions_by_run(
+    run_id: str,
+    run_attempt: Optional[int] = None,
+    *,
+    reports_db_path: Optional[str] = None,
+    history_db_path: Optional[str] = None,
+) -> List[int]:
+    """Return every session id touched by a (RunId, RunAttempt) workflow run.
+
+    Looks at ``ReportSessions`` first (the canonical owner record) and
+    then unions in ``MovieHistoryAudit`` / ``TorrentHistoryAudit`` for any
+    audit rows tagged with the run identity but whose owning
+    ReportSessions row is missing (e.g. the row was deleted by a previous
+    failed rollback attempt).  Returns ids sorted ascending.
+    """
+    found: set = set()
+    with get_db(reports_db_path or REPORTS_DB_PATH) as conn:
+        if run_attempt is None:
+            rows = conn.execute(
+                "SELECT Id FROM ReportSessions WHERE RunId=?", (run_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT Id FROM ReportSessions WHERE RunId=? AND RunAttempt=?",
+                (run_id, int(run_attempt)),
+            ).fetchall()
+        for r in rows:
+            found.add(int(r['Id']))
+
+    with get_db(history_db_path or HISTORY_DB_PATH) as conn:
+        for table in ('MovieHistoryAudit', 'TorrentHistoryAudit'):
+            try:
+                if run_attempt is None:
+                    rows = conn.execute(
+                        f"SELECT DISTINCT SessionId FROM {table} WHERE RunId=?",
+                        (run_id,),
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        f"SELECT DISTINCT SessionId FROM {table} "
+                        f"WHERE RunId=? AND RunAttempt=?",
+                        (run_id, int(run_attempt)),
+                    ).fetchall()
+            except sqlite3.OperationalError:
+                # Table doesn't exist (history db wasn't initialised yet)
+                continue
+            for r in rows:
+                if r['SessionId'] is not None:
+                    found.add(int(r['SessionId']))
+
+    return sorted(found)
 
 
 # ── Rollback orchestration (X3 hybrid) ───────────────────────────────────
@@ -2949,11 +3259,15 @@ def _rollback_operations(
     return counts
 
 
+_ORPHAN_PRUNE_AGE_HOURS = 24
+
+
 def _rollback_history(
     session_id: int,
     *,
     dry_run: bool,
     db_path: Optional[str] = None,
+    run_started_at: Optional[str] = None,
 ) -> Dict[str, int]:
     """Reverse-apply MovieHistoryAudit + TorrentHistoryAudit for *session_id*.
 
@@ -2965,8 +3279,22 @@ def _rollback_history(
     Audit rows must be replayed in *reverse* order (highest Id first) so
     multi-step audits applied in the same run unwind correctly.
 
-    After replay, audit rows for this session are deleted to keep the
-    table tidy.
+    Idempotency
+    -----------
+    Each successfully applied audit row is DELETEd from the audit table
+    immediately, before processing the next row.  This means a partial
+    failure (e.g. D1 transient error halfway through) can be retried
+    safely: the rerun won't re-process audit rows that already succeeded.
+
+    Orphan pruning
+    --------------
+    When *run_started_at* is supplied and an audit row is older than
+    ``run_started_at - 24h`` AND the corresponding ``main_table`` row
+    cannot be located (either deleted or never existed), the audit row
+    is treated as a phantom from a long-ago run and pruned without
+    counting as drift.  The :func:`db_rollback_session` caller is
+    responsible for ensuring *run_started_at* is recent — otherwise the
+    24h grace might prune legitimate audit rows.
     """
     counts: Dict[str, int] = {
         'MovieHistoryAudit': 0,
@@ -2978,31 +3306,49 @@ def _rollback_history(
         'MovieHistory.reinserted': 0,
         'TorrentHistory.reinserted': 0,
         'drift_skipped': 0,
+        'orphan_pruned': 0,
     }
+    orphan_cutoff: Optional[str] = None
+    if run_started_at:
+        try:
+            from datetime import timedelta
+            base = datetime.strptime(run_started_at, "%Y-%m-%d %H:%M:%S")
+            orphan_cutoff = (
+                base - timedelta(hours=_ORPHAN_PRUNE_AGE_HOURS)
+            ).strftime("%Y-%m-%d %H:%M:%S")
+        except (TypeError, ValueError):
+            orphan_cutoff = None
+
+    def _delete_audit_row(conn, table: str, audit_id: int) -> None:
+        conn.execute(f"DELETE FROM {table} WHERE Id=?", (audit_id,))
+
     with get_db(db_path or HISTORY_DB_PATH) as conn:
         for kind, audit_table, main_table in (
             ('torrent', 'TorrentHistoryAudit', 'TorrentHistory'),
             ('movie', 'MovieHistoryAudit', 'MovieHistory'),
         ):
             audit_rows = conn.execute(
-                f"SELECT Id, TargetId, Action, OldRowJson FROM {audit_table} "
+                f"SELECT Id, TargetId, Action, OldRowJson, DateTimeCreated "
+                f"FROM {audit_table} "
                 f"WHERE SessionId=? ORDER BY Id DESC",
                 (session_id,),
             ).fetchall()
             counts[audit_table] = len(audit_rows)
             if dry_run or not audit_rows:
                 continue
-            applied_ids: List[int] = []
+            drifted = 0
+            applied = 0
             for row in audit_rows:
                 audit_id = int(row['Id'])
                 action = row['Action']
                 target_id = row['TargetId']
                 old_json = row['OldRowJson']
+                created = row['DateTimeCreated']
                 try:
                     if action == 'INSERT':
-                        # Only delete if the current row is still tagged with
-                        # this session; otherwise another run later updated
-                        # it and we must not erase their work.
+                        # Only delete if the current row is still tagged
+                        # with this session; otherwise another run later
+                        # updated it and we must not erase their work.
                         cur = conn.execute(
                             f"DELETE FROM {main_table} "
                             f"WHERE Id=? AND SessionId=?",
@@ -3010,23 +3356,43 @@ def _rollback_history(
                         )
                         if (cur.rowcount or 0) > 0:
                             counts[f'{main_table}.deleted'] += 1
-                            applied_ids.append(audit_id)
+                            _delete_audit_row(conn, audit_table, audit_id)
+                            applied += 1
+                        elif _is_orphan_audit(
+                            conn, main_table, target_id,
+                            created, orphan_cutoff,
+                        ):
+                            counts['orphan_pruned'] += 1
+                            _delete_audit_row(conn, audit_table, audit_id)
+                            logger.info(
+                                "Orphan audit pruned: %s TargetId=%s "
+                                "(action=INSERT; row missing and audit "
+                                "older than %s)",
+                                main_table, target_id, orphan_cutoff,
+                            )
                         else:
                             counts['drift_skipped'] += 1
+                            drifted += 1
                             logger.warning(
-                                "Rollback drift: %s row Id=%s SessionId mismatch "
-                                "or row already gone (action=INSERT)",
+                                "Rollback drift: %s row Id=%s SessionId "
+                                "mismatch or row already gone "
+                                "(action=INSERT)",
                                 main_table, target_id,
                             )
                     elif action == 'UPDATE':
                         if not old_json:
                             counts['drift_skipped'] += 1
+                            drifted += 1
                             continue
                         old = json.loads(old_json)
-                        # Build column list dynamically to support both tables.
+                        # Build column list dynamically to support both
+                        # MovieHistory and TorrentHistory.
                         cols = [c for c in old.keys() if c != 'Id']
                         set_clause = ', '.join(f'{c}=?' for c in cols)
-                        params = [old[c] for c in cols] + [target_id, session_id]
+                        params = (
+                            [old[c] for c in cols]
+                            + [target_id, session_id]
+                        )
                         cur = conn.execute(
                             f"UPDATE {main_table} SET {set_clause} "
                             f"WHERE Id=? AND SessionId=?",
@@ -3034,19 +3400,35 @@ def _rollback_history(
                         )
                         if (cur.rowcount or 0) > 0:
                             counts[f'{main_table}.restored'] += 1
-                            applied_ids.append(audit_id)
+                            _delete_audit_row(conn, audit_table, audit_id)
+                            applied += 1
+                        elif _is_orphan_audit(
+                            conn, main_table, target_id,
+                            created, orphan_cutoff,
+                        ):
+                            counts['orphan_pruned'] += 1
+                            _delete_audit_row(conn, audit_table, audit_id)
+                            logger.info(
+                                "Orphan audit pruned: %s TargetId=%s "
+                                "(action=UPDATE; row missing and audit "
+                                "older than %s)",
+                                main_table, target_id, orphan_cutoff,
+                            )
                         else:
-                            # Concurrent run touched the row after us; can't
-                            # safely overwrite their state — log drift.
+                            # Concurrent run touched the row after us;
+                            # can't safely overwrite their state — log drift.
                             counts['drift_skipped'] += 1
+                            drifted += 1
                             logger.warning(
-                                "Rollback drift: %s row Id=%s SessionId mismatch "
-                                "(action=UPDATE) — manual review needed",
+                                "Rollback drift: %s row Id=%s SessionId "
+                                "mismatch (action=UPDATE) — manual review "
+                                "needed",
                                 main_table, target_id,
                             )
                     elif action == 'DELETE':
                         if not old_json:
                             counts['drift_skipped'] += 1
+                            drifted += 1
                             continue
                         old = json.loads(old_json)
                         cols = list(old.keys())
@@ -3060,39 +3442,60 @@ def _rollback_history(
                                 params,
                             )
                             counts[f'{main_table}.reinserted'] += 1
-                            applied_ids.append(audit_id)
+                            _delete_audit_row(conn, audit_table, audit_id)
+                            applied += 1
                         except sqlite3.IntegrityError as e:
-                            # E.g. UNIQUE conflict — concurrent run reinserted
-                            # something with the same key. Skip + drift log.
+                            # E.g. UNIQUE conflict — a concurrent run
+                            # already reinserted something with the same
+                            # business key. Skip + drift log.
                             counts['drift_skipped'] += 1
+                            drifted += 1
                             logger.warning(
                                 "Rollback drift: cannot re-insert %s row "
                                 "(action=DELETE): %s", main_table, e,
                             )
                 except Exception as e:
                     counts['drift_skipped'] += 1
+                    drifted += 1
                     logger.error(
                         "Rollback step failed (table=%s action=%s id=%s): %s",
                         main_table, action, target_id, e,
                     )
 
-            if applied_ids:
-                # Tidy only the audit rows that replayed successfully. Any
-                # drifted tail remains for manual recovery.
-                for i in range(0, len(applied_ids), 90):
-                    chunk = applied_ids[i:i + 90]
-                    placeholders = ', '.join('?' for _ in chunk)
-                    conn.execute(
-                        f"DELETE FROM {audit_table} WHERE Id IN ({placeholders})",
-                        tuple(chunk),
-                    )
-            if len(applied_ids) != len(audit_rows):
+            if drifted > 0:
                 logger.warning(
                     "Kept %s unapplied %s row(s) for SessionId=%s because "
                     "rollback encountered drift or row-level errors",
-                    len(audit_rows) - len(applied_ids), audit_table, session_id,
+                    drifted, audit_table, session_id,
                 )
     return counts
+
+
+def _is_orphan_audit(
+    conn,
+    main_table: str,
+    target_id: Any,
+    audit_created: Optional[str],
+    orphan_cutoff: Optional[str],
+) -> bool:
+    """Return True when an audit row's main-table target is gone AND old.
+
+    Used to decide whether a drift can be safely pruned (orphan from a
+    long-departed run) vs. preserved for manual review (potentially fresh
+    contention).
+    """
+    if not orphan_cutoff or not audit_created:
+        return False
+    if audit_created >= orphan_cutoff:
+        return False
+    try:
+        row = conn.execute(
+            f"SELECT 1 FROM {main_table} WHERE Id=?",
+            (target_id,),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return False
+    return row is None
 
 
 def db_rollback_session(
@@ -3104,6 +3507,8 @@ def db_rollback_session(
     history_db_path: Optional[str] = None,
     reports_db_path: Optional[str] = None,
     operations_db_path: Optional[str] = None,
+    run_started_at: Optional[str] = None,
+    failure_reason: Optional[str] = None,
 ) -> Dict[str, Dict[str, int]]:
     """Roll back all D1/SQLite writes that belong to *session_id*.
 
@@ -3121,6 +3526,17 @@ def db_rollback_session(
     ``ReportSessions.Status='committed'`` to prevent accidental data loss
     on successful runs. Set ``force=True`` for explicit recovery
     scenarios (the manual workflow exposes this as an opt-in flag).
+
+    *run_started_at* (optional, ISO ``YYYY-MM-DD HH:MM:SS``): used by
+    history rollback to decide which drift rows are stale-enough to
+    prune as orphans (audit rows older than ``run_started_at - 24h``
+    whose target has been deleted long ago).  Pass-through to
+    :func:`_rollback_history`.
+
+    *failure_reason* (optional): persisted to ``ReportSessions.
+    FailureReason`` alongside ``Status='failed'`` so post-incident
+    analysis can distinguish ``workflow_cancel`` / ``runtime_error`` /
+    ``stale_timeout`` etc.  Defaults to no annotation when omitted.
 
     Marks the ``ReportSessions`` row ``Status='failed'`` BEFORE the
     deletions for traceability (committed sessions are intentionally
@@ -3152,7 +3568,11 @@ def db_rollback_session(
     if not dry_run and current_status != 'committed':
         # Best-effort flag — failure here shouldn't block the rollback.
         try:
-            db_mark_session_failed(session_id, db_path=reports_db_path)
+            db_mark_session_failed(
+                session_id,
+                db_path=reports_db_path,
+                reason=failure_reason,
+            )
         except Exception as e:
             logger.warning(
                 f"Could not mark session {session_id} as failed "
@@ -3170,7 +3590,10 @@ def db_rollback_session(
         )
     if scope in ('history', 'all'):
         result['history'] = _rollback_history(
-            session_id, dry_run=dry_run, db_path=history_db_path,
+            session_id,
+            dry_run=dry_run,
+            db_path=history_db_path,
+            run_started_at=run_started_at,
         )
     return result
 

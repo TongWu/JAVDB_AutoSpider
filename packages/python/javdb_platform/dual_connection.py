@@ -32,6 +32,19 @@ band reconciliation job can later inspect what diverged.
 
 To avoid log floods, repeated failures of the same SQL template within a
 short LRU window are downgraded from WARNING to DEBUG.
+
+Application-generated PRIMARY KEY tables
+----------------------------------------
+Tables listed in :data:`APPLICATION_GENERATED_ID_TABLES` (currently
+``ReportSessions``) MUST be inserted with an explicit ``Id`` column on
+both backends.  Trusting AUTOINCREMENT under STORAGE_BACKEND=dual makes
+``cur.lastrowid`` return whichever backend the cursor wraps, and the
+SQLite-side id silently disagrees with the D1-side id whenever the two
+counters have ever drifted.  When :class:`DualCursor` detects mismatched
+``lastrowid`` values for a guarded table, the transaction is aborted via
+:class:`DualWriteIdMismatchError` so the corrupted id never reaches
+downstream rows.  See ``migration/d1/2026_05_08_sessionid_decouple.md``
+for the incident that motivated this guard.
 """
 
 from __future__ import annotations
@@ -143,6 +156,36 @@ _INSERT_TABLE_RE = re.compile(
 _ID_DELTA_LOCK = threading.Lock()
 _ID_DELTA_BY_TABLE: "dict[str, int]" = {}
 
+# ── Application-generated PRIMARY KEY tables ────────────────────────────
+#
+# These tables MUST be inserted with an explicit ``Id`` column on both
+# backends.  Trusting AUTOINCREMENT under STORAGE_BACKEND=dual means the
+# two backends drift the moment a single asymmetric INSERT lands (one
+# side commits, the other fails), and ``cur.lastrowid`` then returns
+# whichever backend the cursor wraps — corrupting any ``SessionId`` that
+# downstream rows are tagged with.
+#
+# The 2026-05-08 incident report (``migration/d1/2026_05_08_sessionid_
+# decouple.md``) walks through one concrete failure caused by trusting
+# the SQLite-side AUTOINCREMENT.
+#
+# When :meth:`DualCursor.__init__` sees an INSERT into one of these
+# tables and the two ``lastrowid`` values disagree, the transaction is
+# aborted (``DualWriteIdMismatchError``) so the corrupted Id never
+# reaches downstream code.
+APPLICATION_GENERATED_ID_TABLES: frozenset = frozenset({"ReportSessions"})
+
+
+class DualWriteIdMismatchError(RuntimeError):
+    """Raised when an application-generated PRIMARY KEY drifts between SQLite and D1.
+
+    Indicates the application failed to supply an explicit ``Id`` for an
+    insert into one of :data:`APPLICATION_GENERATED_ID_TABLES`, or that
+    the two backends silently assigned different AUTOINCREMENT values.
+    Either way the transaction must be rolled back to avoid tagging
+    downstream rows with the wrong session id.
+    """
+
 
 def _extract_insert_table(sql: str) -> Optional[str]:
     """Return the target table name of an INSERT/REPLACE, or ``None``."""
@@ -167,6 +210,54 @@ class DualCursor:
         self.rowcount = (
             sqlite_cur.rowcount if sqlite_cur is not None else getattr(d1_cur, "rowcount", -1)
         )
+
+    @classmethod
+    def for_write(cls, sqlite_cur, d1_cur, sql: str):
+        """Build a cursor and enforce id consistency for guarded tables.
+
+        Used by :meth:`DualConnection.execute` / ``batch_execute`` after
+        a write.  When *sql* targets an application-generated-id table
+        (:data:`APPLICATION_GENERATED_ID_TABLES`) and the two backends
+        report different ``lastrowid`` values, the divergent state is
+        flushed to ``d1_drift.jsonl`` and a
+        :class:`DualWriteIdMismatchError` is raised so the surrounding
+        transaction can roll back.
+        """
+        if (
+            sqlite_cur is not None
+            and d1_cur is not None
+        ):
+            table = _extract_insert_table(sql)
+            if (
+                table
+                and table in APPLICATION_GENERATED_ID_TABLES
+            ):
+                s_id = getattr(sqlite_cur, "lastrowid", None)
+                d_id = getattr(d1_cur, "lastrowid", None)
+                if s_id is not None and d_id is not None and s_id != d_id:
+                    record = {
+                        "kind": "application_id_mismatch",
+                        "table": table,
+                        "sqlite_lastrowid": int(s_id),
+                        "d1_lastrowid": int(d_id),
+                        "sql": _shorten(sql),
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }
+                    _append_drift_record(record)
+                    logger.error(
+                        "DualConnection: application-generated id "
+                        "mismatch on %s (sqlite=%s, d1=%s); aborting "
+                        "transaction. Caller must INSERT with explicit "
+                        "Id (see migration/d1/2026_05_08_sessionid_"
+                        "decouple.md). | sql=%s",
+                        table, s_id, d_id, _shorten(sql),
+                    )
+                    raise DualWriteIdMismatchError(
+                        f"{table}: SQLite lastrowid {s_id} != "
+                        f"D1 lastrowid {d_id}; INSERT must supply Id "
+                        f"explicitly under STORAGE_BACKEND=dual"
+                    )
+        return cls(sqlite_cur, d1_cur)
 
     def fetchone(self):
         if self._d1_cur is not None:
@@ -276,7 +367,7 @@ class DualConnection:
             self._maybe_warn_id_drift(sqlite_cur, d1_cur, sql)
         except Exception as exc:
             self._record_d1_failure(sql, exc, kind="write")
-        return DualCursor(sqlite_cur, d1_cur)
+        return DualCursor.for_write(sqlite_cur, d1_cur, sql)
 
     def executemany(self, sql: str, seq_of_params: Iterable[Iterable[Any]]):
         seq_list = list(seq_of_params)
@@ -338,8 +429,10 @@ class DualConnection:
             if d1_cur is None and _is_read(sql):
                 d1_cursors[idx] = _SqliteFallbackCursor(sqlite_cur)
         return [
-            DualCursor(sqlite_cur, d1_cur)
-            for sqlite_cur, d1_cur in zip(sqlite_cursors, d1_cursors)
+            DualCursor.for_write(sqlite_cur, d1_cur, sql)
+            for (sql, _params), sqlite_cur, d1_cur in zip(
+                statements, sqlite_cursors, d1_cursors,
+            )
         ]
 
     # ── Transaction & lifecycle ─────────────────────────────────────────

@@ -4,6 +4,8 @@ import os
 import sys
 
 import logging
+from typing import Optional
+
 import requests
 from datetime import datetime
 
@@ -316,7 +318,11 @@ def _main():
 
     if db_storage_enabled:
         try:
-            from packages.python.javdb_platform.db import init_db, db_create_report_session
+            from packages.python.javdb_platform.db import (
+                init_db,
+                db_create_report_session,
+                db_count_in_progress_sessions_for_run,
+            )
             from packages.python.javdb_core.url_helper import detect_url_type, extract_url_identifier
             init_db(force=True)
             report_type = 'adhoc' if custom_url else 'daily'
@@ -329,6 +335,37 @@ def _main():
                     display_name = extract_url_identifier(custom_url)
                 except Exception:
                     pass
+            # GitHub Actions identity — records the workflow run that
+            # owns this session.  When unset (local dev) the columns
+            # remain NULL and rollback CLI falls back to SessionId-only
+            # lookup.
+            run_id = os.environ.get('GITHUB_RUN_ID') or None
+            run_attempt_raw = os.environ.get('GITHUB_RUN_ATTEMPT')
+            run_attempt: Optional[int] = None
+            if run_attempt_raw:
+                try:
+                    run_attempt = int(run_attempt_raw)
+                except ValueError:
+                    run_attempt = None
+
+            # Self-check: a single workflow run must own at most one
+            # in-progress session.  Catching duplicates here prevents the
+            # 2026-05-08 incident where two sessions (332 and 346) were
+            # created for the same run and rollback later mishandled them.
+            if run_id:
+                existing = db_count_in_progress_sessions_for_run(
+                    run_id, run_attempt,
+                )
+                if existing > 0:
+                    logger.error(
+                        "Refusing to create a new report session: "
+                        "GITHUB_RUN_ID=%s GITHUB_RUN_ATTEMPT=%s already "
+                        "owns %d in-progress session(s). Investigate / "
+                        "roll back the prior session before retrying.",
+                        run_id, run_attempt, existing,
+                    )
+                    sys.exit(1)
+
             _session_id = db_create_report_session(
                 report_type=report_type,
                 report_date=report_date,
@@ -337,6 +374,8 @@ def _main():
                 display_name=display_name,
                 url=custom_url,
                 start_page=start_page,
+                run_id=run_id,
+                run_attempt=run_attempt,
             )
             set_active_session(_session_id)
             # Tag every history / dedup / align write that follows in this
@@ -345,13 +384,20 @@ def _main():
             try:
                 from packages.python.javdb_platform.db import (
                     set_active_session_id as _set_active_session_id,
+                    set_active_run_identity as _set_active_run_identity,
                 )
                 _set_active_session_id(_session_id)
+                _set_active_run_identity(run_id, run_attempt)
             except Exception as _e:
                 logger.warning(
                     f"Could not propagate session_id to db audit context: {_e}"
                 )
-            logger.info(f"Created report session: id={_session_id}")
+            logger.info(
+                "Created report session: id=%s run_id=%s run_attempt=%s",
+                _session_id, run_id, run_attempt,
+            )
+        except SystemExit:
+            raise
         except Exception as e:
             logger.error(
                 "Aborting after init_db/db_create_report_session failure under "
@@ -567,8 +613,10 @@ def main():
         try:
             from packages.python.javdb_platform.db import (
                 set_active_session_id as _set_active_session_id,
+                set_active_run_identity as _set_active_run_identity,
             )
             _set_active_session_id(None)
+            _set_active_run_identity(None, None)
         except Exception as _e:
             logger.warning(
                 f"Could not clear db audit session context on exit: {_e}"
