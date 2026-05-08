@@ -186,6 +186,14 @@ class ClaimResult:
     cooldown_until: int = 0
     last_error_kind: str = ""
     fail_count: int = 0
+    #: Phase-1 — ``session_id`` of the staged_complete entry blocking this
+    #: href, if any.  Empty string when no staged entry exists.  When the
+    #: request supplied a matching ``session_id`` the DO sets
+    #: ``already_completed=True`` AND echoes this field so the client can
+    #: confirm the same-session idempotent path.  When the staged entry
+    #: belongs to a *different* session ``already_completed`` is ``False``
+    #: and the claim proceeds normally — the field is informational.
+    staged_session_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -207,14 +215,75 @@ class CompleteResult:
     """Reply from ``POST /complete_movie``.
 
     ``completed`` is ``True`` when the href is now in the shard's
-    ``completed[]`` list — either freshly added by this caller or already
-    present from a previous successful complete (idempotent).  ``False``
-    means a stale-holder complete (the active claim belongs to someone
-    else); the caller should typically log + retry from a fresh claim.
+    ``completed_committed[]`` list — either freshly added by this caller
+    or already present from a previous successful complete (idempotent).
+    ``False`` means a stale-holder complete (the active claim belongs to
+    someone else); the caller should typically log + retry from a fresh
+    claim.
+
+    Note: this endpoint is the legacy P1-B path that commits the href
+    immediately; Phase-1 callers should prefer :meth:`MovieClaimClient.stage_complete`
+    so a downstream rollback can erase the runner's footprint.
     """
 
     completed: bool
     href: str
+    server_time_ms: int
+
+
+@dataclass(frozen=True)
+class StageCompleteResult:
+    """Reply from ``POST /stage_complete_movie`` (Phase-1).
+
+    ``staged`` is ``True`` when the href now has a staged completion in
+    the shard's ``staged_complete{}`` map — either fresh, or an
+    idempotent re-stage by the same ``session_id``.  ``False`` means
+    one of three rejection paths:
+
+    * The reporting holder is not the active claim holder
+      (stale-holder);
+    * Another session already staged this href; ``session_id`` echoes
+      the *winner's* session so the caller can decide whether to wait
+      for that session's commit / rollback before retrying;
+    * The href is already in ``completed_committed[]`` (the call still
+      returns ``staged=True`` here — the work is durable, no further
+      action needed).
+
+    A staged entry survives until the spider's session-end CLI calls
+    :meth:`commit_completed_movies` (promotes to durable) or
+    :meth:`rollback_staged_movies` (drops it without affecting peers).
+    """
+
+    staged: bool
+    href: str
+    session_id: str
+    server_time_ms: int
+
+
+@dataclass(frozen=True)
+class CommitCompletedMoviesResult:
+    """Reply from ``POST /commit_completed_movies`` (Phase-1)."""
+
+    promoted: int
+    session_id: str
+    server_time_ms: int
+
+
+@dataclass(frozen=True)
+class RollbackStagedMoviesResult:
+    """Reply from ``POST /rollback_staged_movies`` (Phase-1)."""
+
+    removed: int
+    session_id: str
+    server_time_ms: int
+
+
+@dataclass(frozen=True)
+class SweepOrphanStagesResult:
+    """Reply from ``GET /sweep_orphan_stages`` (Phase-1, cron-only)."""
+
+    removed: int
+    cutoff_ms: int
     server_time_ms: int
 
 
@@ -234,6 +303,13 @@ class StatusResult:
     cooldown_until: int = 0
     last_error_kind: str = ""
     fail_count: int = 0
+    #: Phase-1 — session_id owning the current ``staged_complete`` entry,
+    #: or empty string when none.  Surfaced so ops can correlate
+    #: staged-but-not-committed state via /movie_status.
+    staged_session_id: str = ""
+    #: Phase-1 — wall-clock ms epoch when the current staged_complete
+    #: entry was recorded.  ``0`` when no staged entry exists.
+    staged_at: int = 0
 
 
 @dataclass(frozen=True)
@@ -317,6 +393,7 @@ class MovieClaimClient:
         *,
         ttl_ms: int = DEFAULT_CLAIM_TTL_MS,
         date: Optional[str] = None,
+        session_id: Optional[str] = None,
     ) -> ClaimResult:
         """Try to acquire (or renew) the claim on *href* for the current shard.
 
@@ -325,6 +402,13 @@ class MovieClaimClient:
         date at task dispatch time and pass it explicitly; otherwise the
         same href could land in two shards across midnight and lose
         cross-runner exclusivity.
+
+        ``session_id`` (Phase-1) ties the claim to the spider's
+        ``ReportSessions.Id`` so a peer session's staged completion does
+        not block this caller, while a same-session staged completion is
+        treated as ``already_completed=True`` (idempotent skip).  Pass
+        ``None`` to reproduce legacy P1-B semantics where any staged
+        completion is ignored on the read path.
 
         Returns immediately with a :class:`ClaimResult`; raises
         :class:`MovieClaimUnavailable` on any failure (timeout, non-2xx,
@@ -340,6 +424,8 @@ class MovieClaimClient:
             "ttl_ms": int(ttl_ms),
             "date": date or current_shard_date(),
         }
+        if session_id is not None and session_id != "":
+            body["session_id"] = str(session_id)
         resp = self._do_request("POST", "/claim_movie", body)
         try:
             return ClaimResult(
@@ -351,6 +437,7 @@ class MovieClaimClient:
                 cooldown_until=int(resp.get("cooldown_until", 0) or 0),
                 last_error_kind=str(resp.get("last_error_kind", "") or ""),
                 fail_count=int(resp.get("fail_count", 0) or 0),
+                staged_session_id=str(resp.get("staged_session_id", "") or ""),
             )
         except (KeyError, TypeError, ValueError) as e:
             raise MovieClaimUnavailable(
@@ -424,6 +511,154 @@ class MovieClaimClient:
         except (KeyError, TypeError, ValueError) as e:
             raise MovieClaimUnavailable(
                 f"malformed complete response: {resp!r} ({e})"
+            ) from e
+
+    def stage_complete(
+        self,
+        href: str,
+        holder_id: str,
+        session_id: str,
+        *,
+        date: Optional[str] = None,
+    ) -> StageCompleteResult:
+        """Stage *href* as completed for *session_id* (Phase-1).
+
+        Replaces :meth:`complete` on the spider's success path: writes
+        into the DO's ``staged_complete{}`` map instead of jumping
+        straight to ``completed_committed[]``.  The session-end CLI
+        then either calls :meth:`commit_completed_movies` (success) or
+        :meth:`rollback_staged_movies` (failure) to resolve the stage.
+
+        ``session_id`` MUST be the spider's ``ReportSessions.Id``.  An
+        empty string is rejected by the Worker (would make the staged
+        entry un-rollbackable).
+
+        Same idempotency / stale-holder semantics as :meth:`complete`;
+        see :class:`StageCompleteResult` for the three rejection paths.
+        """
+        if not href:
+            raise MovieClaimUnavailable("href must be a non-empty string")
+        if not holder_id:
+            raise MovieClaimUnavailable("holder_id must be a non-empty string")
+        if not session_id:
+            raise MovieClaimUnavailable("session_id must be a non-empty string")
+        body = {
+            "href": href,
+            "holder_id": holder_id,
+            "session_id": str(session_id),
+            "date": date or current_shard_date(),
+        }
+        resp = self._do_request("POST", "/stage_complete_movie", body)
+        try:
+            return StageCompleteResult(
+                staged=bool(resp["staged"]),
+                href=str(resp.get("href", href)),
+                session_id=str(resp.get("session_id", session_id) or ""),
+                server_time_ms=_extract_server_time_ms(resp),
+            )
+        except (KeyError, TypeError, ValueError) as e:
+            raise MovieClaimUnavailable(
+                f"malformed stage_complete response: {resp!r} ({e})"
+            ) from e
+
+    def commit_completed_movies(
+        self,
+        session_id: str,
+        *,
+        date: Optional[str] = None,
+    ) -> CommitCompletedMoviesResult:
+        """Promote all stages for *session_id* to committed (Phase-1).
+
+        Called by ``apps.cli.commit_session`` immediately after the
+        ReportSessions row flips to ``committed``.  Idempotent: a re-run
+        returns ``promoted=0``.  Failures must NOT block the DB commit
+        (the staged entries will still match an orphan-sweep cutoff so
+        the next StaleSessionCleanup cron tidies them up).
+        """
+        if not session_id:
+            raise MovieClaimUnavailable("session_id must be a non-empty string")
+        body = {
+            "session_id": str(session_id),
+            "date": date or current_shard_date(),
+        }
+        resp = self._do_request("POST", "/commit_completed_movies", body)
+        try:
+            return CommitCompletedMoviesResult(
+                promoted=int(resp["promoted"]),
+                session_id=str(resp.get("session_id", session_id) or ""),
+                server_time_ms=_extract_server_time_ms(resp),
+            )
+        except (KeyError, TypeError, ValueError) as e:
+            raise MovieClaimUnavailable(
+                f"malformed commit_completed_movies response: {resp!r} ({e})"
+            ) from e
+
+    def rollback_staged_movies(
+        self,
+        session_id: str,
+        *,
+        date: Optional[str] = None,
+    ) -> RollbackStagedMoviesResult:
+        """Drop every stage for *session_id* (Phase-1).
+
+        Called by ``apps.cli.rollback`` after (or alongside) the DB-side
+        rollback completes.  Idempotent: a re-run returns ``removed=0``.
+        Other sessions' stages are NEVER touched — the per-session scope
+        is the whole point of the rollback-safety split.
+        """
+        if not session_id:
+            raise MovieClaimUnavailable("session_id must be a non-empty string")
+        body = {
+            "session_id": str(session_id),
+            "date": date or current_shard_date(),
+        }
+        resp = self._do_request("POST", "/rollback_staged_movies", body)
+        try:
+            return RollbackStagedMoviesResult(
+                removed=int(resp["removed"]),
+                session_id=str(resp.get("session_id", session_id) or ""),
+                server_time_ms=_extract_server_time_ms(resp),
+            )
+        except (KeyError, TypeError, ValueError) as e:
+            raise MovieClaimUnavailable(
+                f"malformed rollback_staged_movies response: {resp!r} ({e})"
+            ) from e
+
+    def sweep_orphan_stages(
+        self,
+        *,
+        older_than_ms: Optional[int] = None,
+        date: Optional[str] = None,
+    ) -> SweepOrphanStagesResult:
+        """Prune stages older than *older_than_ms* (Phase-1, cron-only).
+
+        Defence-in-depth for the case where a runner crashed between
+        :meth:`stage_complete` and the session-end CLI's commit /
+        rollback.  ``older_than_ms`` defaults to the Worker's
+        ``DEFAULT_SWEEP_ORPHAN_MS`` (48h) and is floored at 1h
+        server-side so a buggy operator can't accidentally wipe live
+        stages.
+
+        Designed to be called from a cron CLI (StaleSessionCleanup
+        workflow) — passing the per-day shard ``date`` lets the cron
+        walk multiple historical shards in one job.
+        """
+        params: list[str] = []
+        target_date = date or current_shard_date()
+        params.append(f"date={target_date}")
+        if older_than_ms is not None:
+            params.append(f"older_than_ms={int(older_than_ms)}")
+        path = "/sweep_orphan_stages?" + "&".join(params)
+        resp = self._do_request("GET", path)
+        try:
+            return SweepOrphanStagesResult(
+                removed=int(resp["removed"]),
+                cutoff_ms=int(resp.get("cutoff_ms", 0) or 0),
+                server_time_ms=_extract_server_time_ms(resp),
+            )
+        except (KeyError, TypeError, ValueError) as e:
+            raise MovieClaimUnavailable(
+                f"malformed sweep_orphan_stages response: {resp!r} ({e})"
             ) from e
 
     def report_failure(
@@ -502,6 +737,8 @@ class MovieClaimClient:
                 cooldown_until=int(resp.get("cooldown_until", 0) or 0),
                 last_error_kind=str(resp.get("last_error_kind", "") or ""),
                 fail_count=int(resp.get("fail_count", 0) or 0),
+                staged_session_id=str(resp.get("staged_session_id", "") or ""),
+                staged_at=int(resp.get("staged_at", 0) or 0),
             )
         except (KeyError, TypeError, ValueError) as e:
             raise MovieClaimUnavailable(

@@ -262,7 +262,12 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: rollback-log
-          path: logs/rollback.log
+          # Phase-1 — also surface d1_drift.jsonl so any failed
+          # rollback_staged_movies retries appear in the artifact bundle
+          # for the orphan-sweep cron to reconcile.
+          path: |
+            logs/rollback.log
+            reports/D1/d1_drift.jsonl
           retention-days: 30
           if-no-files-found: ignore
 

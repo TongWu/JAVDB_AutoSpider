@@ -42,6 +42,11 @@ from packages.python.javdb_platform.logging_config import (
     get_logger,
     setup_logging,
 )
+from packages.python.javdb_platform.movie_claim_client import (
+    MovieClaimUnavailable,
+    create_movie_claim_client_from_env,
+    current_shard_date,
+)
 
 
 logger = get_logger(__name__)
@@ -73,11 +78,96 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
              "covers all sessions belonging to this run.",
     )
     parser.add_argument(
+        "--shard-date",
+        type=str,
+        default=None,
+        help="YYYY-MM-DD (Asia/Singapore) shard date for the MovieClaim "
+             "coordinator's commit_completed_movies call. Defaults to today; "
+             "long-running sessions that crossed midnight should pass the "
+             "date the spider used at task dispatch time.",
+    )
+    parser.add_argument(
+        "--no-claim-commit",
+        action="store_true",
+        default=False,
+        help="Skip the MovieClaim coordinator's commit_completed_movies "
+             "call (for tests / one-off CLIs that don't have a coordinator "
+             "configured).  The DB-side commit is unaffected.",
+    )
+    parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         default="INFO",
     )
     return parser.parse_args(argv)
+
+
+def _commit_movie_claim_stages(
+    session_ids: List[int],
+    shard_date: Optional[str],
+) -> List[dict]:
+    """Promote staged completions for *session_ids* on the coordinator.
+
+    Best-effort: a coordinator outage MUST NOT block the DB-side commit
+    (the staged entries will still match the StaleSessionCleanup orphan
+    sweep cutoff in 48h).  Returns one summary record per session for
+    the CLI's JSON output; an empty list when no client is configured.
+    """
+    if not session_ids:
+        return []
+    client = create_movie_claim_client_from_env()
+    if client is None:
+        logger.info(
+            "MovieClaim coordinator not configured — skipping "
+            "commit_completed_movies (DB-side commit unaffected)",
+        )
+        return []
+    target_date = shard_date or current_shard_date()
+    summaries: List[dict] = []
+    try:
+        for sid in session_ids:
+            try:
+                result = client.commit_completed_movies(
+                    str(sid), date=target_date,
+                )
+                logger.info(
+                    "MovieClaim commit: session=%s shard=%s promoted=%s",
+                    sid, target_date, result.promoted,
+                )
+                summaries.append({
+                    "session_id": sid,
+                    "shard_date": target_date,
+                    "promoted": result.promoted,
+                    "ok": True,
+                })
+            except MovieClaimUnavailable as exc:
+                logger.warning(
+                    "MovieClaim commit unavailable for session=%s shard=%s "
+                    "(%s) — orphan sweep will reconcile later",
+                    sid, target_date, exc,
+                )
+                summaries.append({
+                    "session_id": sid,
+                    "shard_date": target_date,
+                    "promoted": 0,
+                    "ok": False,
+                    "error": str(exc),
+                })
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Unexpected MovieClaim commit error for session=%s shard=%s",
+                    sid, target_date, exc_info=True,
+                )
+                summaries.append({
+                    "session_id": sid,
+                    "shard_date": target_date,
+                    "promoted": 0,
+                    "ok": False,
+                    "error": str(exc),
+                })
+    finally:
+        client.close()
+    return summaries
 
 
 def _normalize_run_started_at(raw: Optional[str]) -> Optional[str]:
@@ -162,17 +252,31 @@ def main(argv: Optional[List[str]] = None) -> int:
             # Already committed — that's fine, idempotent.
             skipped.append(sid)
 
+    # Phase-1 — promote each session's MovieClaim stages to committed
+    # AFTER the DB row flips.  Run for the union of (committed,
+    # skipped == already_committed) so a re-invocation of this CLI on
+    # a partially-committed run still tidies up the coordinator side.
+    claim_commit_summaries: List[dict] = []
+    if not args.no_claim_commit:
+        claim_commit_summaries = _commit_movie_claim_stages(
+            sorted(set(committed) | set(skipped)),
+            args.shard_date,
+        )
+
     summary = {
         "run_started_at": args.run_started_at,
         "session_id": args.session_id,
         "committed": committed,
         "already_committed_or_missing": skipped,
         "failed_commits": failed_commits,
+        "movie_claim_commits": claim_commit_summaries,
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     logger.info(
-        "Commit done: committed=%d already_committed_or_missing=%d failed=%d",
+        "Commit done: committed=%d already_committed_or_missing=%d failed=%d "
+        "claim_commits=%d",
         len(committed), len(skipped), len(failed_commits),
+        len(claim_commit_summaries),
     )
 
     close_db()

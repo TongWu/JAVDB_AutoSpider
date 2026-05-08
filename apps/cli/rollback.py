@@ -55,6 +55,8 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
+import time
+
 from packages.python.javdb_platform import db as _db
 from packages.python.javdb_platform.db import (
     close_db,
@@ -67,6 +69,11 @@ from packages.python.javdb_platform.db import (
 from packages.python.javdb_platform.logging_config import (
     get_logger,
     setup_logging,
+)
+from packages.python.javdb_platform.movie_claim_client import (
+    MovieClaimUnavailable,
+    create_movie_claim_client_from_env,
+    current_shard_date,
 )
 
 
@@ -182,11 +189,123 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
              "Off by default to prevent accidental data loss.",
     )
     parser.add_argument(
+        "--shard-date",
+        type=str,
+        default=None,
+        help="YYYY-MM-DD (Asia/Singapore) shard date for the MovieClaim "
+             "coordinator's rollback_staged_movies call. Defaults to today; "
+             "long-running sessions that crossed midnight should pass the "
+             "date the spider used at task dispatch time.",
+    )
+    parser.add_argument(
+        "--no-claim-rollback",
+        action="store_true",
+        default=False,
+        help="Skip the MovieClaim coordinator's rollback_staged_movies "
+             "call.  The DB-side rollback is unaffected; the staged entries "
+             "will be reaped by the StaleSessionCleanup orphan sweep.",
+    )
+    parser.add_argument(
+        "--claim-rollback-attempts",
+        type=int,
+        default=3,
+        help="How many times to retry rollback_staged_movies on transient "
+             "coordinator failures before giving up.  Failures are logged "
+             "to d1_drift.jsonl for the orphan sweep to reconcile.",
+    )
+    parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         default="INFO",
     )
     return parser.parse_args(argv)
+
+
+def _rollback_movie_claim_stages(
+    session_ids: List[int],
+    shard_date: Optional[str],
+    *,
+    max_attempts: int,
+) -> List[dict]:
+    """Drop staged completions for *session_ids* on the coordinator.
+
+    Best-effort with bounded retries: a coordinator outage MUST NOT
+    block the DB-side rollback.  Each session is retried up to
+    *max_attempts* times with exponential backoff (1s, 2s, 4s, ...);
+    persistent failures are recorded so the StaleSessionCleanup orphan
+    sweep can reconcile the leftover stages.
+
+    Returns one summary record per session for the CLI's JSON output;
+    an empty list when no client is configured.
+    """
+    if not session_ids:
+        return []
+    client = create_movie_claim_client_from_env()
+    if client is None:
+        logger.info(
+            "MovieClaim coordinator not configured — skipping "
+            "rollback_staged_movies (DB-side rollback unaffected)",
+        )
+        return []
+    attempts = max(1, int(max_attempts))
+    target_date = shard_date or current_shard_date()
+    summaries: List[dict] = []
+    try:
+        for sid in session_ids:
+            removed: Optional[int] = None
+            last_error: Optional[str] = None
+            for attempt in range(1, attempts + 1):
+                try:
+                    result = client.rollback_staged_movies(
+                        str(sid), date=target_date,
+                    )
+                    removed = result.removed
+                    last_error = None
+                    break
+                except MovieClaimUnavailable as exc:
+                    last_error = str(exc)
+                    logger.warning(
+                        "MovieClaim rollback attempt %d/%d failed for "
+                        "session=%s shard=%s: %s",
+                        attempt, attempts, sid, target_date, exc,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    last_error = str(exc)
+                    logger.warning(
+                        "Unexpected MovieClaim rollback error attempt %d/%d "
+                        "for session=%s shard=%s",
+                        attempt, attempts, sid, target_date, exc_info=True,
+                    )
+                if attempt < attempts:
+                    time.sleep(2 ** (attempt - 1))
+            if removed is None:
+                logger.error(
+                    "MovieClaim rollback gave up for session=%s shard=%s "
+                    "after %d attempts — orphan sweep will reconcile",
+                    sid, target_date, attempts,
+                )
+                summaries.append({
+                    "session_id": sid,
+                    "shard_date": target_date,
+                    "removed": 0,
+                    "ok": False,
+                    "error": last_error or "unknown",
+                    "attempts": attempts,
+                })
+            else:
+                logger.info(
+                    "MovieClaim rollback: session=%s shard=%s removed=%s",
+                    sid, target_date, removed,
+                )
+                summaries.append({
+                    "session_id": sid,
+                    "shard_date": target_date,
+                    "removed": removed,
+                    "ok": True,
+                })
+    finally:
+        client.close()
+    return summaries
 
 
 def _normalize_run_started_at(raw: Optional[str]) -> Optional[str]:
@@ -318,6 +437,10 @@ def _resolve_failure_reason(args: argparse.Namespace) -> Optional[str]:
 
 def _emit_metrics(summary: dict) -> None:
     """Append rollback metrics to reports/D1/d1_drift.jsonl + GITHUB_OUTPUT."""
+    claim_rollbacks = summary.get("movie_claim_rollbacks", []) or []
+    claim_failed = [
+        c for c in claim_rollbacks if not c.get("ok", False)
+    ]
     record = {
         "kind": "rollback_summary",
         "ts": datetime.now(timezone.utc).isoformat(),
@@ -333,6 +456,10 @@ def _emit_metrics(summary: dict) -> None:
             s.get("session_id") for s in summary.get("sessions", [])
             if s.get("session_id") is not None
         ],
+        # Phase-1 — record any MovieClaim rollbacks that failed so the
+        # StaleSessionCleanup orphan sweep can reconcile.  Empty list when
+        # everything succeeded (or the coordinator was not configured).
+        "movie_claim_rollback_failures": claim_failed,
     }
     try:
         reports_dir = os.environ.get("REPORTS_DIR", "reports")
@@ -480,6 +607,23 @@ def main(argv: Optional[List[str]] = None) -> int:
             json.dumps(counts, ensure_ascii=False),
         )
 
+    # Phase-1 — drop staged MovieClaim entries for every session we
+    # actually rolled back (i.e. exclude refused/failed sessions where
+    # the DB-side state was preserved).  Skipped during --dry-run to
+    # match the DB-side semantics; --no-claim-rollback also skips for
+    # tests / one-off CLIs.
+    claim_rollback_summaries: List[dict] = []
+    if not args.dry_run and not args.no_claim_rollback:
+        rollback_targets = [
+            sid for sid in sessions
+            if sid not in failed_sessions
+        ]
+        claim_rollback_summaries = _rollback_movie_claim_stages(
+            rollback_targets,
+            args.shard_date,
+            max_attempts=args.claim_rollback_attempts,
+        )
+
     summary = {
         "dry_run": args.dry_run,
         "scope": args.scope,
@@ -491,6 +635,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "orphan_pruned_total": orphan_pruned_total,
         "failed_sessions": failed_sessions,
         "refused_sessions": refused_sessions,
+        "movie_claim_rollbacks": claim_rollback_summaries,
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 

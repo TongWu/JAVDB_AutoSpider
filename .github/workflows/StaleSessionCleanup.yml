@@ -185,6 +185,23 @@ jobs:
           echo "Executing: ${CMD[*]}"
           "${CMD[@]}" 2>&1 | tee logs/stale_session_cleanup.log
 
+      # Phase-1 — defence-in-depth sweep of orphaned MovieClaim stages.
+      # Runs unconditionally (independent of --apply) because the Worker
+      # server-floors ``older_than_ms`` at 1h: a buggy invocation cannot
+      # wipe live stages.  Coordinator outages / unconfigured deploys
+      # are no-op success paths.  Failures are recorded to
+      # reports/D1/d1_drift.jsonl for the audit trail.
+      - name: Sweep orphaned MovieClaim stages
+        run: |
+          set -e
+          set -o pipefail
+
+          mkdir -p logs reports
+          python3 -m apps.cli.sweep_movie_claim_stages \
+            --log-level "$INPUT_LOG_LEVEL" \
+            2>&1 | tee logs/movie_claim_sweep.log
+        continue-on-error: true
+
       - name: Upload cleanup log
         if: always()
         uses: actions/upload-artifact@v7
@@ -192,6 +209,7 @@ jobs:
           name: stale-session-cleanup-log
           path: |
             logs/stale_session_cleanup.log
+            logs/movie_claim_sweep.log
             reports/D1/d1_drift.jsonl
           retention-days: 30
           if-no-files-found: ignore
