@@ -170,7 +170,12 @@ jobs:
           echo ""
           echo "NOTE: This workflow does NOT commit or push any changes"
           echo "NOTE: qBittorrent, PikPak, and Email steps are DISABLED"
+          echo "NOTE: All DB writes from this run will be ROLLED BACK at end"
           echo "============================================"
+
+      - name: Capture workflow run start (UTC ISO)
+        id: capture_run_started_at
+        run: echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
 
       # ========================================
       # PART 1: Daily Ingestion Test (Spider Only)
@@ -239,6 +244,148 @@ jobs:
           else
             echo "Warning: Could not capture AdHoc CSV filename from spider output"
           fi
+
+      # ============================================================
+      # MANDATORY CLEANUP — runs on success AND failure (always()).
+      #
+      # TestIngestion exercises the *full* dual-write pipeline so it
+      # catches D1 / SQLite drift before it reaches DailyIngestion.
+      # The only thing that distinguishes it from production is that
+      # every ReportSessions / audit row produced by this run must be
+      # rewound at the end — the production DB stays free of mock
+      # rows.
+      #
+      # We rely on the X3 rollback machinery already used by
+      # cleanup-on-failure in DailyIngestion / AdHocIngestion:
+      #   * `apps.cli.rollback --run-id <id> --attempt <n> --scope all
+      #     --apply` finds every sibling session via the (RunId,
+      #     RunAttempt) union query, rewinds each one through the
+      #     audit tables (handles INSERT / UPDATE / DELETE), then
+      #     deletes the ReportSessions row.
+      #   * Spider does NOT auto-commit — sessions stay
+      #     `Status='in_progress'` until either a workflow's
+      #     `commit_session` step runs (DailyIngestion / AdHoc) or
+      #     this rollback step runs (TestIngestion).
+      #
+      # If rollback fails the workflow fails — better to surface the
+      # bug than leave production polluted.
+      # ============================================================
+      - name: "[CLEANUP] Roll back all DB writes from this run"
+        if: always()
+        env:
+          RUN_STARTED_AT: ${{ steps.capture_run_started_at.outputs.started_at }}
+          ROLLBACK_REASON: test_ingestion_cleanup
+        run: |
+          set -e
+          set -o pipefail
+          echo "============================================"
+          echo "TestIngestion cleanup — rolling back all writes"
+          echo "  RUN_ID=${{ github.run_id }}"
+          echo "  ATTEMPT=${{ github.run_attempt }}"
+          echo "  RUN_STARTED_AT=$RUN_STARTED_AT"
+          echo "============================================"
+          python3 -m apps.cli.rollback \
+            --run-id "${{ github.run_id }}" \
+            --attempt "${{ github.run_attempt }}" \
+            --run-started-at "$RUN_STARTED_AT" \
+            --scope all \
+            --failure-reason "$ROLLBACK_REASON" \
+            --apply
+
+      - name: "[CLEANUP] Verify no rows remain tagged to this run"
+        if: always()
+        run: |
+          set -e
+          echo "============================================"
+          echo "Verifying ZERO leftover rows for run "
+          echo "  ${{ github.run_id }} attempt ${{ github.run_attempt }}"
+          echo "============================================"
+          python3 - <<'PY'
+          import os, sqlite3, sys
+          run_id = "${{ github.run_id }}"
+          attempt = int("${{ github.run_attempt }}")
+          # Local SQLite — every dual-write went here too.  The
+          # rollback CLI already runs in dual mode and has touched
+          # both sides; this is the local-side proof.
+          checks = [
+              ('reports/reports.db', 'ReportSessions',
+               "RunId=? AND RunAttempt=?"),
+              ('reports/history.db', 'MovieHistoryAudit',
+               "RunId=? AND RunAttempt=?"),
+              ('reports/history.db', 'TorrentHistoryAudit',
+               "RunId=? AND RunAttempt=?"),
+          ]
+          violations = []
+          for path, table, where in checks:
+              if not os.path.exists(path):
+                  print(f"[skip] {path} — file absent")
+                  continue
+              conn = sqlite3.connect(path)
+              try:
+                  try:
+                      n = conn.execute(
+                          f"SELECT COUNT(*) FROM {table} WHERE {where}",
+                          (run_id, attempt),
+                      ).fetchone()[0]
+                  except sqlite3.OperationalError as e:
+                      print(f"[skip] {path}::{table} — {e}")
+                      continue
+                  if n:
+                      violations.append(
+                          f"{path}::{table} has {n} row(s) for "
+                          f"run {run_id}/{attempt}"
+                      )
+                      print(f"[FAIL] {path}::{table} = {n} rows")
+                  else:
+                      print(f"[ok]   {path}::{table} = 0 rows")
+              finally:
+                  conn.close()
+          if violations:
+              print("FATAL: rollback did not fully clean up:")
+              for v in violations:
+                  print(f"  - {v}")
+              sys.exit(1)
+          print("OK: local SQLite is clean for this run.")
+          PY
+
+      - name: "[CLEANUP] Verify D1 has no rows tagged to this run"
+        if: always()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          D1_REPORTS_DB_ID: ${{ secrets.D1_REPORTS_DB_ID }}
+          D1_HISTORY_DB_ID: ${{ secrets.D1_HISTORY_DB_ID }}
+        run: |
+          set -e
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$D1_REPORTS_DB_ID" ]; then
+            echo "Cloudflare credentials not configured — skipping D1 verification"
+            exit 0
+          fi
+          RUN_ID="${{ github.run_id }}"
+          ATTEMPT="${{ github.run_attempt }}"
+          fail=0
+          check_d1() {
+            local db_id="$1"; local table="$2"
+            resp=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$db_id/query" \
+              -d "{\"sql\":\"SELECT COUNT(*) AS n FROM $table WHERE RunId='$RUN_ID' AND RunAttempt=$ATTEMPT;\"}")
+            n=$(echo "$resp" | python3 -c 'import json,sys; r=json.load(sys.stdin); print(r["result"][0]["results"][0]["n"])')
+            if [ "$n" != "0" ]; then
+              echo "[FAIL] D1::$table has $n row(s) for run $RUN_ID/$ATTEMPT"
+              fail=1
+            else
+              echo "[ok]   D1::$table = 0 rows"
+            fi
+          }
+          check_d1 "$D1_REPORTS_DB_ID" "ReportSessions"
+          check_d1 "$D1_HISTORY_DB_ID" "MovieHistoryAudit"
+          check_d1 "$D1_HISTORY_DB_ID" "TorrentHistoryAudit"
+          if [ "$fail" = "1" ]; then
+            echo "FATAL: D1 still has rows tagged to this run"
+            exit 1
+          fi
+          echo "OK: D1 is clean for this run."
 
       - name: Display generated reports
         run: |
