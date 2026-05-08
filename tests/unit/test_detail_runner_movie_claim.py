@@ -624,7 +624,7 @@ def test_mixed_claim_outcomes_are_partitioned_correctly(monkeypatch):
     e_busy = _entry("BUSY-1", href="/v/busy")
     backend = _StubBackend(results=[_make_success_result(e_keep)])
 
-    def fake_claim(href, holder, *, ttl_ms, date):
+    def fake_claim(href, holder, *, ttl_ms, date, session_id=None):
         if href == "/v/keep":
             return _claim_ok(href)
         if href == "/v/done":
