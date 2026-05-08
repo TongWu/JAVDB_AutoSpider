@@ -1,0 +1,210 @@
+name: Stale Session Cleanup
+
+# Daily safety net: any ReportSessions row that has been in_progress for
+# more than --max-age-hours is treated as a workflow that crashed past
+# the point of writing rows but before its cleanup-on-failure step ran.
+# This cron rolls those sessions back via the standard rollback pipeline
+# (FailureReason='stale_timeout') so the audit tables don't accumulate
+# undeletable phantoms.
+#
+# The first run after merging this workflow MUST be invoked with
+# `apply=false` so the operator can review the dry-run output before
+# letting it touch real data.  D1 currently has ~334 in_progress rows
+# from the pre-fix era; some of those are legitimately committed but
+# missing the Status flip and would be lost forever if cleaned up
+# blind.
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    # 02:00 UTC = 10:00 Asia/Singapore.  Comfortably after Daily/AdHoc
+    # ingestion windows finish so we don't accidentally race a healthy
+    # in-progress session.
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      max_age_hours:
+        description: 'Sessions older than this many hours are eligible.'
+        required: false
+        default: '48'
+        type: string
+      apply:
+        description: 'Apply cleanup. Default false (dry-run).'
+        required: false
+        default: false
+        type: boolean
+      scope:
+        description: 'Limit cleanup to one logical DB.'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - reports
+          - operations
+          - history
+      log_level:
+        description: 'CLI log level.'
+        required: false
+        default: 'INFO'
+        type: choice
+        options:
+          - DEBUG
+          - INFO
+          - WARNING
+          - ERROR
+      runner:
+        description: 'Runner type.'
+        required: false
+        default: 'self-hosted'
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'self-hosted'
+
+# Serialize so two cron invocations (e.g. retry within retry) don't
+# clobber each other's audit state.
+concurrency:
+  group: stale-session-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
+    timeout-minutes: 60
+    environment: Production
+    env:
+      TZ: Asia/Singapore
+      INPUT_MAX_AGE_HOURS: ${{ inputs.max_age_hours || '48' }}
+      INPUT_APPLY: ${{ inputs.apply }}
+      INPUT_SCOPE: ${{ inputs.scope || 'all' }}
+      INPUT_LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
+      ROLLBACK_REASON: 'stale_timeout'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          lfs: true
+
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.11'
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          # ============ SECRETS ============
+          VAR_QB_URL: ${{ secrets.QB_URL }}
+          VAR_QB_USERNAME: ${{ secrets.QB_USERNAME }}
+          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
+          VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
+          VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
+          VAR_JAVDB_SESSION_COOKIE: ${{ secrets.JAVDB_SESSION_COOKIE }}
+          VAR_PIKPAK_PASSWORD: ${{ secrets.PIKPAK_PASSWORD }}
+          # ============ VARIABLES ============
+          VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
+          VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
+          VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
+          VAR_TORRENT_SAVE_PATH: ${{ vars.TORRENT_SAVE_PATH }}
+          VAR_AUTO_START: ${{ vars.AUTO_START }}
+          VAR_SKIP_CHECKING: ${{ vars.SKIP_CHECKING || 'False' }}
+          VAR_REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT || '30' }}
+          VAR_DELAY_BETWEEN_ADDITIONS: ${{ vars.DELAY_BETWEEN_ADDITIONS }}
+          VAR_SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          VAR_SMTP_PORT: ${{ vars.SMTP_PORT }}
+          VAR_SMTP_USER: ${{ secrets.SMTP_USER }}
+          VAR_EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          VAR_EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
+          VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES || 3 }}
+          VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
+          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
+          VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED || 'True' }}
+          VAR_PAGE_START: ${{ vars.PAGE_START }}
+          VAR_PAGE_END: ${{ vars.PAGE_END }}
+          VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}
+          VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
+          VAR_BASE_URL: ${{ vars.BASE_URL || 'https://javdb.com' }}
+          VAR_JAVDB_USERNAME: ${{ secrets.JAVDB_USERNAME }}
+          VAR_GPT_API_URL: ${{ secrets.GPT_API_URL }}
+          VAR_GPT_API_KEY: ${{ secrets.GPT_API_KEY }}
+          VAR_MOVIE_SLEEP: ${{ vars.MOVIE_SLEEP }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+          VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE || 'logs/spider.log' }}
+          VAR_UPLOADER_LOG_FILE: ${{ vars.UPLOADER_LOG_FILE || 'logs/qb_uploader.log' }}
+          VAR_PIPELINE_LOG_FILE: ${{ vars.PIPELINE_LOG_FILE || 'logs/pipeline.log' }}
+          VAR_EMAIL_NOTIFICATION_LOG_FILE: ${{ vars.EMAIL_NOTIFICATION_LOG_FILE || 'logs/email_notification.log' }}
+          VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER || 'False' }}
+          VAR_INCLUDE_DOWNLOADED_IN_REPORT: ${{ vars.INCLUDE_DOWNLOADED_IN_REPORT || 'False' }}
+          VAR_REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+          VAR_DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'reports/DailyReport' }}
+          VAR_AD_HOC_DIR: ${{ vars.AD_HOC_DIR || 'reports/AdHoc' }}
+          VAR_PARSED_MOVIES_CSV: ${{ vars.PARSED_MOVIES_CSV }}
+          VAR_PIKPAK_EMAIL: ${{ secrets.PIKPAK_EMAIL }}
+          VAR_PIKPAK_LOG_FILE: ${{ vars.PIKPAK_LOG_FILE || 'logs/pikpak_bridge.log' }}
+          VAR_PIKPAK_REQUEST_DELAY: ${{ vars.PIKPAK_REQUEST_DELAY }}
+          VAR_PIKPAK_ROOT_FOLDER: ${{ vars.PIKPAK_ROOT_FOLDER || '/Javdb_AutoSpider' }}
+          VAR_RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
+          VAR_RCLONE_FOLDER_PATH: ${{ vars.RCLONE_FOLDER_PATH }}
+          VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
+          # D1 / Cloudflare — required when STORAGE_BACKEND in {d1,dual}
+          VAR_STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
+          VAR_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VAR_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          VAR_D1_HISTORY_DB_ID: ${{ secrets.D1_HISTORY_DB_ID }}
+          VAR_D1_REPORTS_DB_ID: ${{ secrets.D1_REPORTS_DB_ID }}
+          VAR_D1_OPERATIONS_DB_ID: ${{ secrets.D1_OPERATIONS_DB_ID }}
+          VAR_PROXY_COORDINATOR_URL: ${{ vars.PROXY_COORDINATOR_URL }}
+          VAR_PROXY_COORDINATOR_TOKEN: ${{ secrets.PROXY_COORDINATOR_TOKEN }}
+          VAR_MOVIE_CLAIM_ENABLED: ${{ vars.MOVIE_CLAIM_ENABLED || 'auto' }}
+        run: python3 -m apps.cli.config_generator --github-actions
+
+      - name: Run stale-session cleanup
+        run: |
+          set -e
+          set -o pipefail
+
+          CMD=(python3 -m apps.cli.cleanup_stale_in_progress
+               --max-age-hours "$INPUT_MAX_AGE_HOURS"
+               --scope "$INPUT_SCOPE"
+               --log-level "$INPUT_LOG_LEVEL")
+
+          if [ "$INPUT_APPLY" = "true" ]; then
+            CMD+=(--apply)
+          else
+            CMD+=(--dry-run)
+          fi
+
+          mkdir -p logs reports
+          echo "Executing: ${CMD[*]}"
+          "${CMD[@]}" 2>&1 | tee logs/stale_session_cleanup.log
+
+      - name: Upload cleanup log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: stale-session-cleanup-log
+          path: |
+            logs/stale_session_cleanup.log
+            reports/d1_drift.jsonl
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Stale Session Cleanup"
+            echo ""
+            printf -- '- **Mode**: %s\n' "$([ "$INPUT_APPLY" = "true" ] && echo 'Apply' || echo 'Dry run')"
+            printf -- '- **Max age (hours)**: %s\n' "$INPUT_MAX_AGE_HOURS"
+            printf -- '- **Scope**: %s\n' "$INPUT_SCOPE"
+            echo ""
+            echo "See the **stale-session-cleanup-log** artifact for the full JSON summary."
+          } >> $GITHUB_STEP_SUMMARY
