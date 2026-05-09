@@ -106,6 +106,30 @@ class TestIncludeOrphanedGating:
         assert t_left == 0
         assert s_left == 0
 
+    def test_invalid_run_started_at_refuses_global_in_progress_sweep(
+        self, reports_dir,
+    ):
+        # A malformed timestamp used to normalize to None and then flow into
+        # db_find_in_progress_sessions(since=None), which selects every
+        # in-progress ReportSessions row.
+        a = _create_session(csv="invalid-a.csv")
+        b = _create_session(csv="invalid-b.csv")
+
+        rc = rollback_cli.main([
+            "--run-started-at", "not-a-time",
+            "--include-orphaned",
+            "--apply",
+            "--scope", "reports",
+        ])
+
+        assert rc == 2
+        with db_mod.get_db() as conn:
+            remaining = conn.execute(
+                "SELECT COUNT(*) AS n FROM ReportSessions WHERE Id IN (?, ?)",
+                (a, b),
+            ).fetchone()["n"]
+        assert remaining == 2
+
 
 # ── Cross-day reject ─────────────────────────────────────────────────────
 
