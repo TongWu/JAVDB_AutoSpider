@@ -506,6 +506,14 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     run_started_at_normalized = _normalize_run_started_at(args.run_started_at)
     failure_reason = _resolve_failure_reason(args)
+    if args.run_started_at is not None and run_started_at_normalized is None:
+        logger.error(
+            "Invalid --run-started-at value %r; refusing rollback so the "
+            "fallback window scan cannot expand to every in-progress session.",
+            args.run_started_at,
+        )
+        close_db()
+        return 2
 
     try:
         sessions = _resolve_target_sessions(args, run_started_at_normalized)
