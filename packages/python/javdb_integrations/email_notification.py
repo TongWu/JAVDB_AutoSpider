@@ -279,6 +279,28 @@ def parse_arguments():
                         help='Running from pipeline.py - use GIT_USERNAME for commits')
     parser.add_argument('--session-id', type=int, default=None,
                         help='Report session ID for fetching stats from SQLite')
+    parser.add_argument(
+        '--verify-jsonl',
+        type=str,
+        default=None,
+        help=(
+            'Path to reports/D1/d1_drift.jsonl. When provided, the email '
+            "renders a 'Pending Mode Verification' section using the "
+            'pending_session_verify records and may prefix the subject '
+            "with [PENDING-ALERT] / [PENDING-ROLLBACK-AUTO]. Defaults to "
+            '$REPORTS_DIR/D1/d1_drift.jsonl when the file exists.'
+        ),
+    )
+    parser.add_argument(
+        '--health-snapshot',
+        type=str,
+        default=None,
+        help=(
+            'Path to reports/D1/pending_health_24h.json (Phase 3 Health '
+            'Snapshot).  When provided, an additional 24h aggregate '
+            'block is rendered after Pending Mode Verification.'
+        ),
+    )
     return parser.parse_args()
 
 
@@ -1137,10 +1159,344 @@ def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
     }
 
 
+# =============================================================================
+# Phase 2 / Phase 3 — Pending Mode Verification + Health Snapshot
+# =============================================================================
+#
+# `pending_session_verify` records are emitted by both
+# `apps.cli.commit_session` and `apps.cli.rollback` whenever a pending-
+# mode session ends.  They live in `reports/D1/d1_drift.jsonl` (one
+# JSON object per line, mixed with other `kind` records).  The email
+# pipeline reads the file at the end of the run, isolates the verify
+# records belonging to this run, and renders a "Pending Mode
+# Verification" table.  Any record above the alert threshold makes the
+# email subject line gain a `[PENDING-ALERT]` (soft) or
+# `[PENDING-ROLLBACK-AUTO]` (critical) prefix.
+
+# Phase 2 alert thresholds — referenced by Phase 3 with tighter cuts.
+_PHASE2_PENDING_ALERT_THRESHOLDS = {
+    'pending_residual_count_max': 0,
+    'commit_attempts_max': 2,
+    'derived_recompute_drift_max': 0,
+    'd1_request_count_audit_baseline_ratio_max': 2.0,
+    'worker_stage_rollback_failed_max': 0,
+}
+
+# Phase 3 thresholds — production SLO.  See plan §Phase 3.A.
+_PHASE3_PENDING_ALERT_THRESHOLDS = {
+    'pending_residual_count_max': 0,
+    'commit_attempts_max': 1,
+    'derived_recompute_drift_max': 0,
+    'd1_request_count_audit_baseline_ratio_max': 1.8,
+    'worker_stage_rollback_failed_max': 0,
+    'cleanup_path_mismatch_count_max': 0,
+    'staged_claim_orphan_count_max': 0,
+}
+
+
+def _resolve_pending_alert_thresholds():
+    """Return the active threshold dict.
+
+    Phase 3 default; flip to Phase 2 by setting JAVDB_PENDING_ALERT_PHASE=2
+    (used by TestIngestion canary while it warms up).
+    """
+    raw = os.environ.get('JAVDB_PENDING_ALERT_PHASE', '').strip()
+    if raw == '2':
+        merged = dict(_PHASE2_PENDING_ALERT_THRESHOLDS)
+        merged.update({
+            # Phase 2 baseline didn't have these keys; treat as soft +inf
+            # so the metric never triggers an alert before Phase 3 cuts in.
+            'cleanup_path_mismatch_count_max': float('inf'),
+            'staged_claim_orphan_count_max': float('inf'),
+        })
+        return merged
+    return _PHASE3_PENDING_ALERT_THRESHOLDS
+
+
+# Critical alerts trigger the auto-fallback path; soft alerts only
+# annotate the subject line.  Names match the JSON field names of
+# `pending_session_verify` records.
+_CRITICAL_ALERT_FIELDS = (
+    'pending_residual_count',
+    'derived_recompute_drift',
+    'cleanup_path_mismatch_count',
+)
+
+
+def _load_pending_verify_records(jsonl_path, run_id=None, run_attempt=None):
+    """Read every ``pending_session_verify`` record from *jsonl_path*.
+
+    When *run_id* / *run_attempt* are provided, restricts to records
+    whose ``run_id`` / ``run_attempt`` match.  Returns ``[]`` on
+    missing file or read error so the email pipeline never raises.
+    """
+    if not jsonl_path:
+        return []
+    if not os.path.exists(jsonl_path):
+        return []
+    records = []
+    try:
+        with open(jsonl_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = __import__('json').loads(line)
+                except Exception:
+                    continue
+                if rec.get('kind') != 'pending_session_verify':
+                    continue
+                if run_id is not None:
+                    if str(rec.get('run_id') or '') != str(run_id):
+                        continue
+                if run_attempt is not None:
+                    try:
+                        if int(rec.get('run_attempt') or -1) != int(run_attempt):
+                            continue
+                    except (TypeError, ValueError):
+                        continue
+                records.append(rec)
+    except Exception as e:
+        logger.warning('Failed to read pending_session_verify records: %s', e)
+        return []
+    return records
+
+
+def _evaluate_pending_alerts(records, thresholds=None):
+    """Return ``(alerts, has_critical)`` for *records*.
+
+    *alerts* is a list of ``(field, value, threshold, severity)`` tuples
+    where severity is ``'critical'`` or ``'soft'``.  *has_critical* is
+    True iff at least one critical alert fired (drives the auto-fallback
+    decision in the calling workflow).
+    """
+    th = thresholds or _resolve_pending_alert_thresholds()
+    alerts = []
+    has_critical = False
+    for rec in records:
+        for key, max_key in (
+            ('pending_residual_count', 'pending_residual_count_max'),
+            ('commit_attempts', 'commit_attempts_max'),
+            ('derived_recompute_drift', 'derived_recompute_drift_max'),
+            ('worker_stage_rollback_failed',
+             'worker_stage_rollback_failed_max'),
+            ('cleanup_path_mismatch_count',
+             'cleanup_path_mismatch_count_max'),
+            ('staged_claim_orphan_count', 'staged_claim_orphan_count_max'),
+        ):
+            limit = th.get(max_key)
+            if limit is None:
+                continue
+            try:
+                value = float(rec.get(key) or 0)
+            except (TypeError, ValueError):
+                continue
+            if value > limit:
+                severity = (
+                    'critical' if key in _CRITICAL_ALERT_FIELDS else 'soft'
+                )
+                alerts.append((key, value, limit, severity, rec))
+                if severity == 'critical':
+                    has_critical = True
+        # final_status='finalizing' = commit stuck
+        if rec.get('final_status') == 'finalizing':
+            alerts.append((
+                'final_status_finalizing', 1, 0, 'soft', rec,
+            ))
+    return alerts, has_critical
+
+
+def _format_pending_verify_section(records, alerts):
+    """Render the "Pending Mode Verification" body block.
+
+    Returns the section as a string, or ``''`` when there are no
+    pending-mode records (so the email renders unchanged on audit-only
+    runs).
+    """
+    if not records:
+        return ''
+    alerted_keys_per_record = {}
+    for key, value, limit, severity, rec in alerts:
+        sid = rec.get('session_id')
+        alerted_keys_per_record.setdefault(sid, []).append((key, severity))
+
+    lines = ['', '───────────────────────────────',
+             '🧪 PENDING MODE VERIFICATION',
+             '───────────────────────────────', '']
+    for rec in records:
+        sid = rec.get('session_id')
+        flagged = alerted_keys_per_record.get(sid, [])
+        flagged_str = ''
+        if flagged:
+            crit = [k for k, s in flagged if s == 'critical']
+            soft = [k for k, s in flagged if s == 'soft']
+            tag_parts = []
+            if crit:
+                tag_parts.append('[CRITICAL] ' + ', '.join(crit))
+            if soft:
+                tag_parts.append('[ALERT] ' + ', '.join(soft))
+            flagged_str = '   ⚠️  ' + ' | '.join(tag_parts)
+        lines.append(
+            f"Session {sid}  mode={rec.get('write_mode')}  "
+            f"status={rec.get('final_status')}  "
+            f"source={rec.get('source')}{flagged_str}"
+        )
+        lines.append(
+            f"  staged={rec.get('pending_staged_count')}  "
+            f"applied={rec.get('pending_applied_count')}  "
+            f"residual={rec.get('pending_residual_count')}"
+        )
+        lines.append(
+            f"  commit_attempts={rec.get('commit_attempts')}  "
+            f"commit_duration_ms={rec.get('commit_duration_ms')}  "
+            f"hrefs={rec.get('hrefs_processed')}"
+        )
+        movies = rec.get('movies_upserted', 0)
+        torr_up = rec.get('torrents_upserted', 0)
+        torr_del = rec.get('torrents_deleted', 0)
+        lines.append(
+            f"  movies_upserted={movies}  torrents_upserted={torr_up}  "
+            f"torrents_deleted={torr_del}"
+        )
+        if rec.get('shadow_audit_enabled'):
+            lines.append(
+                f"  derived_recompute_drift="
+                f"{rec.get('derived_recompute_drift', 0)}  "
+                f"samples={rec.get('derived_drift_samples') or []}"
+            )
+        wsf = int(rec.get('worker_stage_rollback_failed', 0) or 0)
+        cpm = int(rec.get('cleanup_path_mismatch_count', 0) or 0)
+        soc = int(rec.get('staged_claim_orphan_count', 0) or 0)
+        if wsf or cpm or soc:
+            lines.append(
+                f"  worker_stage_rollback_failed={wsf}  "
+                f"cleanup_path_mismatch_count={cpm}  "
+                f"staged_claim_orphan_count={soc}"
+            )
+        if rec.get('error'):
+            lines.append(f"  error={rec.get('error')}")
+        lines.append('')
+    if not alerts:
+        lines.append('All pending-mode metrics within Phase 3 thresholds.')
+    else:
+        lines.append('See [PENDING-ALERT] / [PENDING-ROLLBACK-AUTO] subject.')
+    return '\n'.join(lines)
+
+
+def _format_health_snapshot_section(snapshot_path):
+    """Render the Phase 3 24h Health Snapshot, if available."""
+    if not snapshot_path or not os.path.exists(snapshot_path):
+        return ''
+    try:
+        import json as _json
+        with open(snapshot_path, 'r', encoding='utf-8') as f:
+            snap = _json.load(f)
+    except Exception as e:
+        logger.warning('Failed to read pending_health_24h.json: %s', e)
+        return ''
+    if not snap:
+        return ''
+    lines = ['', '───────────────────────────────',
+             '📈 HEALTH SNAPSHOT (24h)',
+             '───────────────────────────────', '']
+    lines.append(
+        f"Window: {snap.get('window_start')} → {snap.get('window_end')}"
+    )
+    lines.append(
+        f"Pending sessions:           {snap.get('pending_session_count', 0)}"
+    )
+    lines.append(
+        f"Successful (committed):     "
+        f"{snap.get('successful_committed_count', 0)}"
+    )
+    lines.append(
+        f"Failed (rollback_pending):  "
+        f"{snap.get('rolled_back_count', 0)}"
+    )
+    success_rate = snap.get('success_rate_percent')
+    if success_rate is not None:
+        lines.append(f"Success rate:               {success_rate:.1f}%")
+    lines.append(
+        f"Avg commit_duration_ms:     "
+        f"{snap.get('avg_commit_duration_ms', 0)}"
+    )
+    lines.append(
+        f"p95 per_movie_ms:           "
+        f"{snap.get('p95_per_movie_ms', 0)}"
+    )
+    lines.append(
+        f"Σ commit_attempts:          {snap.get('total_commit_attempts', 0)}"
+    )
+    lines.append(
+        f"Σ derived_recompute_drift:  "
+        f"{snap.get('total_derived_recompute_drift', 0)}"
+    )
+    lines.append(
+        f"Σ worker_stage_rollback_failed: "
+        f"{snap.get('total_worker_stage_rollback_failed', 0)}"
+    )
+    lines.append(
+        f"Σ stale resume successes:   "
+        f"{snap.get('stale_resume_successes', 0)}"
+    )
+    lines.append(
+        f"Σ stale resume failures:    "
+        f"{snap.get('stale_resume_failures', 0)}"
+    )
+    return '\n'.join(lines)
+
+
+def _resolve_default_verify_jsonl(explicit_path):
+    """Pick the verify-jsonl path: CLI arg, env var, then default."""
+    if explicit_path:
+        return explicit_path
+    reports_dir = os.environ.get('REPORTS_DIR', _EMAIL_REPORTS_DIR)
+    candidate = os.path.join(reports_dir, 'D1', 'd1_drift.jsonl')
+    if os.path.exists(candidate):
+        return candidate
+    return None
+
+
+def _resolve_default_health_snapshot(explicit_path):
+    if explicit_path:
+        return explicit_path
+    reports_dir = os.environ.get('REPORTS_DIR', _EMAIL_REPORTS_DIR)
+    candidate = os.path.join(reports_dir, 'D1', 'pending_health_24h.json')
+    if os.path.exists(candidate):
+        return candidate
+    return None
+
+
+def _build_pending_subject_prefix(records, alerts, has_critical, mode):
+    """Return the subject-line prefix for pending-mode results.
+
+    Returns ``''`` when there are no pending records or no alerts.
+
+    * Critical → ``[PENDING-ROLLBACK-AUTO]`` (auto-fallback also kicked).
+    * Soft     → ``[PENDING-ALERT]``.
+    The first alert's summary is appended in parentheses so the operator
+    sees the trigger without opening the email body.
+    """
+    if not records:
+        return ''
+    if not alerts:
+        return ''
+    first = alerts[0]
+    field, value, limit, severity, rec = first
+    sid = rec.get('session_id')
+    summary = f"{field}={value:g} > {limit:g} session={sid}"
+    if has_critical:
+        return f"[PENDING-ROLLBACK-AUTO] ({summary}) "
+    return f"[PENDING-ALERT] ({summary}) "
+
+
 def format_email_report(spider_stats, uploader_stats, pikpak_stats, ban_summary,
                         show_spider=True, show_uploader=True, show_pikpak=True,
                         mode='daily', adhoc_info=None, proxy_ban_html_summary=None,
-                        dedup_stats=None, report_dt=None, report_end_dt=None):
+                        dedup_stats=None, report_dt=None, report_end_dt=None,
+                        pending_verify_records=None, pending_alerts=None,
+                        health_snapshot_path=None):
     """
     Format a mobile-friendly email report.
     Only includes sections for components that ran successfully.
@@ -1309,12 +1665,26 @@ Deleted This Run:
 🚦 PROXY STATUS
 ───────────────────────────────
 
-{ban_summary}
+{ban_summary}""")
 
+    # Pending Mode Verification + Health Snapshot (Phase 2 / 3)
+    if pending_verify_records:
+        verify_block = _format_pending_verify_section(
+            pending_verify_records, pending_alerts or [],
+        )
+        if verify_block:
+            sections.append(verify_block)
+        snapshot_block = _format_health_snapshot_section(
+            health_snapshot_path,
+        )
+        if snapshot_block:
+            sections.append(snapshot_block)
+
+    sections.append("""
 ═══════════════════════════════
 End of Report
 ═══════════════════════════════""")
-    
+
     return "\n".join(sections)
 
 
@@ -1736,7 +2106,30 @@ def main():
     report_end_dt = (
         datetime.now(tz=report_dt.tzinfo) if report_dt.tzinfo is not None else datetime.now()
     )
-    
+
+    # Phase 2 / Phase 3 — load pending_session_verify records and the
+    # 24h Health Snapshot so the email body and subject can surface
+    # pending-mode anomalies.  Restricted to this run via $GITHUB_RUN_ID
+    # so a long-lived d1_drift.jsonl doesn't bleed unrelated runs into
+    # this report.
+    pending_jsonl = _resolve_default_verify_jsonl(args.verify_jsonl)
+    health_snapshot_path = _resolve_default_health_snapshot(
+        args.health_snapshot,
+    )
+    run_id_filter = os.environ.get('GITHUB_RUN_ID')
+    run_attempt_filter = os.environ.get('GITHUB_RUN_ATTEMPT')
+    pending_verify_records = _load_pending_verify_records(
+        pending_jsonl,
+        run_id=run_id_filter,
+        run_attempt=run_attempt_filter,
+    )
+    pending_alerts, pending_has_critical = _evaluate_pending_alerts(
+        pending_verify_records,
+    )
+    pending_prefix = _build_pending_subject_prefix(
+        pending_verify_records, pending_alerts, pending_has_critical, mode,
+    )
+
     # Send email based on status
     if not has_critical_errors:
         body = format_email_report(
@@ -1750,8 +2143,11 @@ def main():
             dedup_stats=dedup_stats,
             report_dt=report_dt,
             report_end_dt=report_end_dt,
+            pending_verify_records=pending_verify_records,
+            pending_alerts=pending_alerts,
+            health_snapshot_path=health_snapshot_path,
         )
-        subject = f'✓ SUCCESS - JavDB {mode_display} Report {today_str}{adhoc_subject_suffix}'
+        subject = f'{pending_prefix}✓ SUCCESS - JavDB {mode_display} Report {today_str}{adhoc_subject_suffix}'
     else:
         error_details = "\n".join([f"  • {error}" for error in pipeline_errors])
         stats_report = format_email_report(
@@ -1765,6 +2161,9 @@ def main():
             dedup_stats=dedup_stats,
             report_dt=report_dt,
             report_end_dt=report_end_dt,
+            pending_verify_records=pending_verify_records,
+            pending_alerts=pending_alerts,
+            health_snapshot_path=health_snapshot_path,
         )
         
         # Add mode info to failure report header
@@ -1789,7 +2188,7 @@ Check attached logs for details.
 
 {stats_report}
 """
-        subject = f'✗ FAILED - JavDB {mode_display} Report {today_str}{adhoc_subject_suffix}'
+        subject = f'{pending_prefix}✗ FAILED - JavDB {mode_display} Report {today_str}{adhoc_subject_suffix}'
     
     # Send email
     email_sent = send_email(subject, body, attachments, args.dry_run)
