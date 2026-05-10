@@ -309,6 +309,26 @@ class TestGetConfigMap:
         assert entry[1] == 'MOVIE_CLAIM_ENABLED'
         assert entry[3] == 'auto'
 
+    def test_contains_runner_registry_enabled(self):
+        """Should expose RUNNER_REGISTRY_ENABLED with safe 'false' default.
+
+        The default must stay 'false' so existing single-runner workflows
+        keep their historic behaviour: enabling cohort signalling has to
+        be an explicit opt-in via the GH variable.
+        """
+        config_map = get_config_map()
+        entry = next(
+            (item for item in config_map if item[0] == 'RUNNER_REGISTRY_ENABLED'),
+            None,
+        )
+        assert entry is not None, (
+            "RUNNER_REGISTRY_ENABLED missing from config_map; "
+            "ingestion workflows cannot opt into RunnerRegistry"
+        )
+        assert entry[1] == 'RUNNER_REGISTRY_ENABLED'
+        assert entry[3] == 'false'
+        assert entry[4] == 'RUNNER REGISTRY CONFIGURATION'
+
 
 class TestGenerateConfigContent:
     """Tests for generate_config_content function."""
@@ -597,6 +617,24 @@ class TestGenerateConfigContentExtended:
         with patch.dict(os.environ, env, clear=True):
             content = generate_config_content()
         assert "MOVIE_CLAIM_ENABLED = 'false'" in content
+
+    def test_runner_registry_enabled_default_false(self):
+        """When VAR_RUNNER_REGISTRY_ENABLED is unset, generated config
+        must emit ``RUNNER_REGISTRY_ENABLED = 'false'`` so the runner
+        does NOT auto-register on baseline workflows."""
+        env: dict = {}
+        with patch.dict(os.environ, env, clear=True):
+            content = generate_config_content()
+        assert "RUNNER_REGISTRY_ENABLED = 'false'" in content
+
+    def test_runner_registry_enabled_from_environment(self):
+        """Setting VAR_RUNNER_REGISTRY_ENABLED=true at workflow level
+        must surface in the generated config so the spider opts into
+        the cohort registry path."""
+        env = {'VAR_RUNNER_REGISTRY_ENABLED': 'true'}
+        with patch.dict(os.environ, env, clear=True):
+            content = generate_config_content()
+        assert "RUNNER_REGISTRY_ENABLED = 'true'" in content
 
 
 class TestMaskSensitiveValuesExtended:

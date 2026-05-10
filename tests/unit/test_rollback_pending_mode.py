@@ -955,3 +955,186 @@ class TestCommitSessionCLIDrainsPending:
         # All applied pending rows must be drained at the end.
         movie_pending, torrent_pending = _pending_counts(sid)
         assert (movie_pending, torrent_pending) == (0, 0)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 10. Batch-update side channels (visit timestamp + actors) go pending
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestBatchUpdatesRouteToPending:
+    """``db_batch_update_last_visited`` and ``db_batch_update_movie_actors``
+    are the other two history write paths the spider hits at the end of
+    each phase.  Phase 2 must keep them off the live MovieHistory table
+    when the active session is in pending mode, otherwise the dual-write
+    log shows ``UPDATE MovieHistory SET DateTimeVisited=...`` mid-run
+    and the "MovieHistory ever only holds committed state" invariant
+    breaks.  Sparse stages from the same href must merge field-wise so
+    a visit-only stage doesn't clobber the earlier actor stage's
+    columns at commit time.
+    """
+
+    def _setup_pending_session(self) -> int:
+        db_mod.set_active_session_id(None)
+        db_mod.set_active_run_identity(None, None)
+        db_mod.set_active_write_mode(None)
+        sid = db_mod.db_create_report_session(
+            report_type="DailyReport",
+            report_date="2026-05-09",
+            csv_filename="batch-pending.csv",
+            write_mode="pending",
+        )
+        db_mod.set_active_session_id(sid)
+        db_mod.set_active_run_identity("rid-batch", 1)
+        db_mod.set_active_write_mode("pending")
+        return sid
+
+    def _teardown(self):
+        db_mod.set_active_session_id(None)
+        db_mod.set_active_run_identity(None, None)
+        db_mod.set_active_write_mode(None)
+
+    def test_visit_batch_stages_pending_only(self):
+        sid = self._setup_pending_session()
+        try:
+            db_mod.db_stage_history_write(
+                sid,
+                "movie",
+                {
+                    "Href": "/v/BAT-001",
+                    "VideoCode": "BAT-001",
+                    "ActorName": "Bat Actor",
+                    "ActorGender": "female",
+                    "ActorLink": "/actors/bat",
+                    "DateTimeVisited": "2026-05-09 12:00:00",
+                },
+            )
+            n = db_mod.db_batch_update_last_visited(["/v/BAT-001"])
+            assert n == 1
+        finally:
+            self._teardown()
+
+        # Live tables must be untouched.
+        from tests.unit.test_rollback_pending_mode import _href_variants
+        variants = _href_variants("/v/BAT-001")
+        placeholders = ",".join("?" for _ in variants)
+        with db_mod.get_db() as conn:
+            n_live = conn.execute(
+                f"SELECT COUNT(*) AS n FROM MovieHistory "
+                f"WHERE Href IN ({placeholders})",
+                variants,
+            ).fetchone()["n"]
+            n_audit = conn.execute(
+                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
+                "WHERE SessionId=?",
+                (int(sid),),
+            ).fetchone()["n"]
+        assert n_live == 0
+        assert n_audit == 0
+
+        # Two pending movie rows: the actor stage + the visit stage.
+        with db_mod.get_db() as conn:
+            rows = conn.execute(
+                "SELECT * FROM PendingMovieHistoryWrites "
+                "WHERE SessionId=? ORDER BY Seq ASC",
+                (int(sid),),
+            ).fetchall()
+        assert len(rows) == 2
+        assert rows[0]["ActorName"] == "Bat Actor"
+        assert rows[0]["DateTimeVisited"] == "2026-05-09 12:00:00"
+        assert rows[1]["ActorName"] is None
+        assert rows[1]["DateTimeVisited"] is not None
+
+        # Commit must carry the actor field forward (sparse merge) and
+        # the latest DateTimeVisited.
+        db_mod.db_commit_session_history(sid)
+        with db_mod.get_db() as conn:
+            live = conn.execute(
+                f"SELECT ActorName, DateTimeVisited FROM MovieHistory "
+                f"WHERE Href IN ({placeholders})",
+                variants,
+            ).fetchone()
+            pending_left = conn.execute(
+                "SELECT COUNT(*) AS n FROM PendingMovieHistoryWrites "
+                "WHERE SessionId=? AND ApplyState='pending'",
+                (int(sid),),
+            ).fetchone()["n"]
+        assert live is not None
+        assert live["ActorName"] == "Bat Actor"
+        # DateTimeVisited should be the visit-stage timestamp (latest).
+        assert live["DateTimeVisited"] == rows[1]["DateTimeVisited"]
+        assert pending_left == 0, (
+            "sparse-stage rows must all be drained on commit"
+        )
+
+    def test_actor_batch_stages_pending_only(self):
+        sid = self._setup_pending_session()
+        try:
+            n = db_mod.db_batch_update_movie_actors([
+                ("/v/ACT-001", "Act Actor", "female", "/actors/act", None),
+            ])
+            assert n == 1
+        finally:
+            self._teardown()
+
+        from tests.unit.test_rollback_pending_mode import _href_variants
+        variants = _href_variants("/v/ACT-001")
+        placeholders = ",".join("?" for _ in variants)
+        with db_mod.get_db() as conn:
+            n_live = conn.execute(
+                f"SELECT COUNT(*) AS n FROM MovieHistory "
+                f"WHERE Href IN ({placeholders})",
+                variants,
+            ).fetchone()["n"]
+            n_audit = conn.execute(
+                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
+                "WHERE SessionId=?",
+                (int(sid),),
+            ).fetchone()["n"]
+            n_pending = conn.execute(
+                "SELECT COUNT(*) AS n FROM PendingMovieHistoryWrites "
+                "WHERE SessionId=?",
+                (int(sid),),
+            ).fetchone()["n"]
+        assert n_live == 0
+        assert n_audit == 0
+        assert n_pending == 1
+
+    def test_audit_session_keeps_in_place_batch_update(self):
+        # Default WriteMode='audit'; routes must continue to UPDATE live.
+        db_mod.set_active_session_id(None)
+        db_mod.set_active_run_identity(None, None)
+        db_mod.set_active_write_mode(None)
+        sid = db_mod.db_create_report_session(
+            report_type="DailyReport",
+            report_date="2026-05-09",
+            csv_filename="batch-audit.csv",
+        )
+        db_mod.set_active_session_id(sid)
+        db_mod.set_active_run_identity("rid-bauda", 1)
+        try:
+            db_mod.db_upsert_history(
+                href="/v/BAUD-001",
+                video_code="BAUD-001",
+                magnet_links={"subtitle": "magnet:baud-sub"},
+            )
+            db_mod.db_batch_update_last_visited(["/v/BAUD-001"])
+        finally:
+            self._teardown()
+
+        with db_mod.get_db() as conn:
+            audit_n = conn.execute(
+                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
+                "WHERE SessionId=?",
+                (int(sid),),
+            ).fetchone()["n"]
+            pending_n = conn.execute(
+                "SELECT COUNT(*) AS n FROM PendingMovieHistoryWrites "
+                "WHERE SessionId=?",
+                (int(sid),),
+            ).fetchone()["n"]
+        # Audit rows from the upsert + the visit batch UPDATE.
+        assert audit_n >= 2
+        assert pending_n == 0, (
+            "audit-mode batch must not touch pending tables"
+        )
