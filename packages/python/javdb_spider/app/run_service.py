@@ -9,7 +9,10 @@ from typing import Optional
 import requests
 from datetime import datetime
 
-from packages.python.javdb_platform.logging_config import get_logger
+from packages.python.javdb_platform.logging_config import (
+    get_logger,
+    log_section,
+)
 from packages.python.javdb_platform.history_manager import load_parsed_movies_history, validate_history_file
 from packages.python.javdb_platform.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 from packages.python.javdb_core.filename_helper import generate_output_csv_name
@@ -134,9 +137,9 @@ def _main():
         use_history_for_loading = not args.disable_all_filters
         use_history_for_saving = True
 
-    logger.info("Starting JavDB spider...")
+    log_section(logger, "START · JavDB spider", emoji='▶')
     if args.disable_all_filters:
-        logger.info("⚠️  ALL FILTERS DISABLED: history, rclone inventory, release date filters are all bypassed")
+        logger.warning("ALL FILTERS DISABLED: history, rclone inventory, release date filters all bypassed")
     logger.info(f"Arguments: start_page={start_page}, end_page={end_page}, phase={phase_mode}")
     if custom_url:
         logger.info(f"Custom URL: {custom_url}")
@@ -454,17 +457,18 @@ def _main():
     # Process Phase 1 entries
     # ======================================================================
     if phase_mode in ['1', 'all']:
-        logger.info("=" * 75)
         original_count_phase1 = len(all_index_results_phase1)
         if max_movies_phase1 is not None and max_movies_phase1 > 0 and original_count_phase1 > max_movies_phase1:
-            logger.info(f"PHASE 1: Discovered {original_count_phase1} entries, limiting to {max_movies_phase1} (--max-movies-phase1)")
             all_index_results_phase1 = all_index_results_phase1[:max_movies_phase1]
-
-        if custom_url is not None:
-            logger.info(f"PHASE 1: Processing {len(all_index_results_phase1)} entries with subtitle (AD HOC MODE)")
+            phase1_title = (
+                f"PHASE 1 · {len(all_index_results_phase1)} subtitle "
+                f"(capped from {original_count_phase1})"
+            )
+        elif custom_url is not None:
+            phase1_title = f"PHASE 1 · {len(all_index_results_phase1)} subtitle (AD HOC)"
         else:
-            logger.info(f"PHASE 1: Processing {len(all_index_results_phase1)} entries with subtitle")
-        logger.info("=" * 75)
+            phase1_title = f"PHASE 1 · {len(all_index_results_phase1)} subtitle"
+        log_section(logger, phase1_title, emoji='🎬')
 
         total_entries_phase1 = len(all_index_results_phase1)
 
@@ -517,17 +521,21 @@ def _main():
             else:
                 logger.info("Phase 1 had no entries to process, skipping phase transition cooldown")
 
-        logger.info("=" * 75)
         original_count_phase2 = len(all_index_results_phase2)
         if max_movies_phase2 is not None and max_movies_phase2 > 0 and original_count_phase2 > max_movies_phase2:
-            logger.info(f"PHASE 2: Discovered {original_count_phase2} entries, limiting to {max_movies_phase2} (--max-movies-phase2)")
             all_index_results_phase2 = all_index_results_phase2[:max_movies_phase2]
-
-        if custom_url is not None:
-            logger.info(f"PHASE 2: Processing {len(all_index_results_phase2)} entries (AD HOC MODE - all filters disabled)")
+            phase2_title = (
+                f"PHASE 2 · {len(all_index_results_phase2)} entries "
+                f"(capped from {original_count_phase2})"
+            )
+        elif custom_url is not None:
+            phase2_title = f"PHASE 2 · {len(all_index_results_phase2)} entries (AD HOC)"
         else:
-            logger.info(f"PHASE 2: Processing {len(all_index_results_phase2)} entries (rate > {PHASE2_MIN_RATE}, comments > {PHASE2_MIN_COMMENTS})")
-        logger.info("=" * 75)
+            phase2_title = (
+                f"PHASE 2 · {len(all_index_results_phase2)} entries "
+                f"(rate>{PHASE2_MIN_RATE}, cmt>{PHASE2_MIN_COMMENTS})"
+            )
+        log_section(logger, phase2_title, emoji='🎬')
 
         p2_backend = create_detail_backend(
             use_parallel=use_parallel,
