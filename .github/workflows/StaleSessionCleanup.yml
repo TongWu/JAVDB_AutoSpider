@@ -1,11 +1,20 @@
 name: Stale Session Cleanup
 
-# Daily safety net: any ReportSessions row that has been in_progress for
-# more than --max-age-hours is treated as a workflow that crashed past
-# the point of writing rows but before its cleanup-on-failure step ran.
-# This cron rolls those sessions back via the standard rollback pipeline
-# (FailureReason='stale_timeout') so the audit tables don't accumulate
-# undeletable phantoms.
+# Daily safety net: any ReportSessions row stuck in
+# ``Status IN ('in_progress', 'finalizing')`` for more than
+# --max-age-hours is treated as a workflow that crashed past the point
+# of writing rows but before its cleanup-on-failure step ran.
+#
+# Ingestion Perfect Rollback (Phase 3) dispatch (per-session):
+#   in_progress (audit or pending) → DB-side rollback through
+#     :func:`db_rollback_session`, FailureReason='stale_timeout'.
+#   finalizing  (pending only)     → :func:`db_resume_finalizing_session`
+#     drives the half-applied session to ``committed``.  This branch
+#     is critical: rolling back a finalizing session would lose every
+#     UPSERT that already landed in MovieHistory / TorrentHistory.
+# An audit-mode session in ``finalizing`` is not expected (audit only
+# uses in_progress / committed / failed); the CLI refuses to act and
+# logs ``audit_finalizing_unexpected`` so an operator investigates.
 #
 # The first run after merging this workflow MUST be invoked with
 # `apply=false` so the operator can review the dry-run output before

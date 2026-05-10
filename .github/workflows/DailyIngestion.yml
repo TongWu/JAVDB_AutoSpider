@@ -1,11 +1,35 @@
 name: JavDB Daily Ingestion Pipeline
 
+# Ingestion Perfect Rollback (Phase 3): the default write path is now
+# `pending` — every history mutation lands in PendingMovie/Torrent
+# HistoryWrites first, gets recomputed and UPSERTed into the live
+# tables only at commit time, and is rolled back via DELETE-pending
+# (in_progress) or resume_commit (finalizing) instead of the legacy
+# X3 audit replay.  See:
+#   - docs/D1_ROLLBACK.md       (architecture + validation playbook)
+#   - apps/cli/commit_session.py (Status='committed' transition)
+#   - apps/cli/rollback.py      (cleanup-on-failure dispatcher)
+#   - .publish-config.yml `pending_mode_disabled_until` (emergency
+#     audit fallback set by the auto-fallback step on critical alert)
+# Override per run via the workflow_dispatch `write_mode_override`
+# input or globally by writing `pending_mode_disabled_until: <ISO>`
+# into .publish-config.yml.
+
 permissions:
   contents: read
 
 on:
   workflow_dispatch:
     inputs:
+      write_mode_override:
+        description: 'Override JAVDB_HISTORY_WRITE_MODE for this run only (audit | pending). Leave empty to honour the default + .publish-config.yml override.'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - 'audit'
+          - 'pending'
       disable_all_filters:
         description: 'Disable ALL filters (history, rclone inventory, release date) — process every entry from index'
         required: false
@@ -74,6 +98,7 @@ jobs:
     outputs:
       branch: ${{ steps.branch_check.outputs.branch }}
       pipeline_workflow_run_started_at: ${{ steps.capture_run_started_at.outputs.started_at }}
+      effective_write_mode: ${{ steps.resolve_write_mode.outputs.mode }}
     env:
       TZ: Asia/Singapore
     
@@ -86,6 +111,52 @@ jobs:
         uses: actions/checkout@v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
+
+      # Ingestion Perfect Rollback (Phase 3): resolve the effective
+      # JAVDB_HISTORY_WRITE_MODE for this run so every downstream job
+      # uses the same value.  Precedence (highest first):
+      #   1. workflow_dispatch input `write_mode_override`
+      #   2. `.publish-config.yml` -> pending_mode_disabled_until (when
+      #      set and in the future, auto-fallback engaged → audit)
+      #   3. Phase 3 default 'pending'
+      - name: Resolve effective WriteMode
+        id: resolve_write_mode
+        run: |
+          set -euo pipefail
+          OVERRIDE="${{ inputs.write_mode_override }}"
+          if [ -n "$OVERRIDE" ]; then
+            echo "Honouring workflow_dispatch override: $OVERRIDE"
+            echo "mode=$OVERRIDE" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          MODE="pending"
+          if [ -f .publish-config.yml ]; then
+            DISABLE=$(python3 -c "
+            import datetime, sys, re
+            try:
+                with open('.publish-config.yml') as f:
+                    for line in f:
+                        m = re.match(r'^\s*pending_mode_disabled_until:\s*[\'\"]?([0-9T:\\-+Z\\.]+)[\'\"]?', line)
+                        if m:
+                            ts = m.group(1)
+                            try:
+                                until = datetime.datetime.fromisoformat(ts.replace('Z','+00:00'))
+                            except ValueError:
+                                sys.exit(0)
+                            now = datetime.datetime.now(tz=until.tzinfo or datetime.timezone.utc)
+                            if now < until:
+                                print('audit')
+                            sys.exit(0)
+            except FileNotFoundError:
+                pass
+            ")
+            if [ "$DISABLE" = "audit" ]; then
+              echo "pending_mode_disabled_until is in the future → forcing audit"
+              MODE="audit"
+            fi
+          fi
+          echo "Effective JAVDB_HISTORY_WRITE_MODE: $MODE"
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
 
       - name: Get current branch
         id: branch_check
@@ -260,6 +331,12 @@ jobs:
       # from secrets) — we only surface STORAGE_BACKEND here so the
       # downstream `if:` gates can short-circuit cheaply.
       STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
+      # Ingestion Perfect Rollback (Phase 3): default WriteMode='pending'.
+      # Resolved by the setup job so downstream commit_session.py /
+      # rollback.py see the same value. Override at workflow_dispatch
+      # via `write_mode_override` input or by writing
+      # `pending_mode_disabled_until: <ISO>` to .publish-config.yml.
+      JAVDB_HISTORY_WRITE_MODE: ${{ needs.setup.outputs.effective_write_mode }}
     
     steps:
       - name: Checkout repository
@@ -632,6 +709,13 @@ jobs:
     env:
       TZ: Asia/Singapore
       STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
+      # Phase 3 — must match the run-pipeline value so the rollback CLI's
+      # WriteMode dispatcher sees the same resolved mode.  The CLI itself
+      # then reads each session's recorded WriteMode column to decide
+      # between audit replay / DELETE pending / resume_commit per session,
+      # so this env var is mostly cosmetic for cleanup (it controls
+      # creation of new sessions, which cleanup never does).
+      JAVDB_HISTORY_WRITE_MODE: ${{ needs.setup.outputs.effective_write_mode }}
 
     steps:
       - name: Checkout repository
@@ -673,11 +757,20 @@ jobs:
           # ReportSessions row. --run-started-at is the legacy fallback
           # that kicks in only when no session_id was captured (run
           # died before the spider printed SPIDER_SESSION_ID).
+          #
+          # Ingestion Perfect Rollback (Phase 3): the dispatcher inside
+          # `apps.cli.rollback` reads each session's WriteMode + Status
+          # before deciding what to do, so a single CMD covers the
+          # mixed audit / pending / finalizing cases this run produced.
+          # `--auto-resume-finalizing` is the default but stated
+          # explicitly so the YAML doubles as documentation for the
+          # operator-facing failure SOP in docs/D1_ROLLBACK.md.
           CMD_ARGS=(python3 -m apps.cli.rollback
                     --run-id "${{ github.run_id }}"
                     --attempt "${{ github.run_attempt }}"
                     --run-started-at "$RUN_STARTED_AT"
                     --scope all
+                    --auto-resume-finalizing
                     --apply)
           if [ -n "$SPIDER_SESSION_ID" ]; then
             if [[ "$SPIDER_SESSION_ID" =~ ^[0-9]+$ ]]; then
@@ -707,17 +800,25 @@ jobs:
     runs-on: ubuntu-latest
     environment: Production
     permissions:
-      contents: read
+      # Phase 3 — email job also runs the auto-fallback step which may
+      # commit + push pending_mode_disabled_until to .publish-config.yml.
+      contents: write
     needs: [setup, run-pipeline]
     if: always()
     env:
       TZ: Asia/Singapore
       # Email subject/body date ≈ workflow start (first job UTC timestamp), not send time
       PIPELINE_WORKFLOW_RUN_STARTED_AT: ${{ needs.setup.outputs.pipeline_workflow_run_started_at }}
+      GH_TOKEN: ${{ github.token }}
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          # Phase 3: SSH key needed so the auto-fallback step can push
+          # pending_mode_disabled_until back to the branch when a
+          # critical pending alert fires.  No-op cost on healthy runs.
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
 
       - name: Set up Python, venv, dependencies, Rust extension
         uses: ./.github/actions/setup-python-env
@@ -837,6 +938,18 @@ jobs:
           CSV_PATH="${{ needs.run-pipeline.outputs.csv_filename }}"
           echo "csv_path=$CSV_PATH" >> $GITHUB_OUTPUT
 
+      # Phase 3 — produce reports/D1/pending_health_24h.json so the
+      # email body can render the 24h Health Snapshot.  Best-effort:
+      # a missing input jsonl writes an empty snapshot, the email
+      # rendering quietly skips the section.
+      - name: Aggregate Pending Health (24h)
+        if: always()
+        run: |
+          set -e
+          mkdir -p reports/D1
+          python3 -m scripts.aggregate_pending_health \
+            --window-hours 24 || true
+
       - name: Run Email Notification
         env:
           PIPELINE_HAS_FAILURE: ${{ steps.status.outputs.has_failure }}
@@ -865,6 +978,78 @@ jobs:
           
           echo "Executing: ${CMD_ARGS[*]}"
           "${CMD_ARGS[@]}"
+
+      # Phase 3 — auto-fallback on critical pending-mode alerts.  Reads
+      # this run's pending_session_verify records (filtered by
+      # GITHUB_RUN_ID inside the script) and, if any critical metric is
+      # over threshold, writes pending_mode_disabled_until to
+      # .publish-config.yml so the next ingestion run downgrades to
+      # audit.  Soft alerts (commit_attempts, ratio, worker_stage_
+      # rollback_failed) only annotate the email subject — they do
+      # NOT trigger this block.
+      - name: Auto-fallback on critical pending alert
+        if: always() && needs.run-pipeline.outputs.session_id != ''
+        env:
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -e
+          set -o pipefail
+          DECISION=$(python3 - <<'PY'
+          import json, os, sys
+          path = os.path.join(os.environ.get("REPORTS_DIR", "reports"),
+                              "D1", "d1_drift.jsonl")
+          if not os.path.exists(path):
+              sys.exit(0)
+          run_id = os.environ.get("GITHUB_RUN_ID", "")
+          attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "")
+          critical_fields = (
+              "pending_residual_count",
+              "derived_recompute_drift",
+              "cleanup_path_mismatch_count",
+          )
+          for line in open(path, "r", encoding="utf-8"):
+              line = line.strip()
+              if not line:
+                  continue
+              try:
+                  rec = json.loads(line)
+              except Exception:
+                  continue
+              if rec.get("kind") != "pending_session_verify":
+                  continue
+              if str(rec.get("run_id") or "") != run_id:
+                  continue
+              for k in critical_fields:
+                  try:
+                      if int(rec.get(k) or 0) > 0:
+                          print(f"{k}={rec.get(k)} session={rec.get('session_id')}")
+                          sys.exit(0)
+                  except (TypeError, ValueError):
+                      continue
+          PY
+          )
+          if [ -z "$DECISION" ]; then
+            echo "No critical pending-mode alert — auto-fallback NOT triggered."
+            exit 0
+          fi
+          echo "::warning::Critical pending alert detected: $DECISION"
+          echo "Engaging Phase 3 auto-fallback (24h audit window)."
+          python3 -m scripts.pending_mode_auto_fallback \
+            --hours 24 \
+            --reason "DailyIngestion run ${{ github.run_id }}: $DECISION"
+          # Best-effort commit + push so the next run sees the change.
+          # Non-fatal: a missing token / write permission only logs a warning.
+          if [ -n "${GH_TOKEN:-}" ] || [ -n "${GITHUB_TOKEN:-}" ]; then
+            git config user.name "github-actions[bot]" || true
+            git config user.email "github-actions[bot]@users.noreply.github.com" || true
+            git add .publish-config.yml || true
+            git commit -m "ci(rollback): auto-fallback to audit (24h) — $DECISION" || true
+            git push || echo "::warning::auto-fallback commit push failed"
+          else
+            echo "::warning::No GH_TOKEN — leaving .publish-config.yml uncommitted; operator must commit manually."
+          fi
+        continue-on-error: true
 
   # =============================================================================
   # Job 5: Commit Results - commit generated data only after a successful
