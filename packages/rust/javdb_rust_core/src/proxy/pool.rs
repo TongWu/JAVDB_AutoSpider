@@ -568,6 +568,10 @@ impl ProxyPool {
     #[pyo3(signature = (level=None))]
     #[allow(unused_variables)]
     pub fn log_statistics(&self, level: Option<i32>) {
+        // INFO summary is a single line so mobile / GitHub Actions scans
+        // catch it at a glance.  Per-proxy detail goes to DEBUG so
+        // operators who want forensic detail flip ``LOG_LEVEL=DEBUG``
+        // and the rest of the run stays readable.
         let pool = self.inner.lock();
         check_cooldowns(&pool.proxies);
 
@@ -581,12 +585,19 @@ impl ProxyPool {
             })
             .count();
         let in_cooldown = pool.proxies.iter().filter(|p| p.lock().is_in_cooldown()).count();
+        let banned = pool
+            .proxies
+            .iter()
+            .filter(|p| {
+                let proxy = p.lock();
+                proxy.banned
+            })
+            .count();
         let no_proxy_mode = pool.no_proxy_mode;
 
-        info!("=== Proxy Pool Statistics ===");
         info!(
-            "Total: {} | Available: {} | Cooldown: {} | No-Proxy Mode: {}",
-            total, available, in_cooldown, no_proxy_mode
+            "Proxy pool · available={}/{} · cooldown={} · banned={} · no-proxy={}",
+            available, total, in_cooldown, banned, no_proxy_mode
         );
 
         for (i, arc) in pool.proxies.iter().enumerate() {
@@ -610,7 +621,7 @@ impl ProxyPool {
                 .last_failure
                 .map_or("Never".to_string(), |t| t.format("%H:%M:%S").to_string());
 
-            info!(
+            debug!(
                 "  {} [{}]{}: {}/{} requests ({:.1}%), failures={}, last_ok={}, last_fail={}",
                 proxy.name,
                 status,
@@ -623,7 +634,6 @@ impl ProxyPool {
                 last_failure,
             );
         }
-        info!("=============================");
     }
 
     #[pyo3(signature = (include_ip=false))]
