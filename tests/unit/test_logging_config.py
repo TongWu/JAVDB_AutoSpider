@@ -15,9 +15,18 @@ sys.path.insert(0, project_root)
 
 from utils.infra.logging_config import setup_logging, get_logger
 from packages.python.javdb_platform.logging_config import (
-    get_logger_name_mapping,
-    _shorten_logger_name,
+    _CompactConsoleFormatter,
+    _LegacyVerboseFormatter,
+    _PlainConsoleFormatter,
     _reset_logging_state,
+    _resolve_console_style,
+    _resolve_github_groups,
+    _shorten_logger_name,
+    get_logger_name_mapping,
+    log_group_end,
+    log_group_start,
+    log_section,
+    log_summary_block,
 )
 
 
@@ -370,3 +379,234 @@ class TestSetupLoggingGuard:
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+
+# ---------------------------------------------------------------------------
+# Dual-mode (compact console + verbose file) tests
+# ---------------------------------------------------------------------------
+
+
+def _our_console_formatters(root):
+    """Return formatters of console (non-file) handlers we installed.
+
+    pytest injects its own ``LogCaptureHandler`` (also a StreamHandler) into
+    the root logger, so a naive ``isinstance(StreamHandler)`` filter would
+    pick that up.  We restrict to formatters whose class lives in our
+    canonical logging module.
+    """
+    from packages.python.javdb_platform import logging_config as _mod
+    out = []
+    for h in root.handlers:
+        if isinstance(h, logging.FileHandler):
+            continue
+        fmt = h.formatter
+        if fmt is None:
+            continue
+        if type(fmt).__module__ == _mod.__name__:
+            out.append(fmt)
+    return out
+
+
+class TestDualModeFormatters:
+    """Ensure console and file handlers use distinct formatters."""
+
+    def test_default_console_uses_compact_formatter(self):
+        setup_logging()
+        root = logging.getLogger()
+        formatters = _our_console_formatters(root)
+        assert formatters, "No console handler with our formatter"
+        assert any(isinstance(f, _CompactConsoleFormatter) for f in formatters)
+
+    def test_default_file_uses_verbose_formatter(self):
+        temp_dir = tempfile.mkdtemp()
+        log_file = os.path.join(temp_dir, 'test.log')
+        try:
+            setup_logging(log_file=log_file)
+            root = logging.getLogger()
+            file_handlers = [h for h in root.handlers if isinstance(h, logging.FileHandler)]
+            assert file_handlers, "No file handler installed"
+            assert isinstance(file_handlers[0].formatter, _LegacyVerboseFormatter)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_log_style_plain_uses_plain_formatter(self):
+        setup_logging(log_style='plain')
+        root = logging.getLogger()
+        formatters = _our_console_formatters(root)
+        assert any(isinstance(f, _PlainConsoleFormatter) for f in formatters)
+
+    def test_log_style_verbose_rolls_back_console(self):
+        setup_logging(log_style='verbose')
+        root = logging.getLogger()
+        formatters = _our_console_formatters(root)
+        assert any(isinstance(f, _LegacyVerboseFormatter) for f in formatters)
+
+    def test_invalid_log_style_falls_back_to_compact(self):
+        setup_logging(log_style='not-a-real-style')
+        root = logging.getLogger()
+        formatters = _our_console_formatters(root)
+        assert any(isinstance(f, _CompactConsoleFormatter) for f in formatters)
+
+    def test_log_style_env_var_picks_plain(self, monkeypatch):
+        monkeypatch.setenv('LOG_STYLE', 'plain')
+        assert _resolve_console_style(None) == 'plain'
+
+    def test_log_style_arg_overrides_env(self, monkeypatch):
+        monkeypatch.setenv('LOG_STYLE', 'plain')
+        assert _resolve_console_style('verbose') == 'verbose'
+
+
+class TestGithubGroupsResolution:
+    """``LOG_GITHUB_GROUPS`` env var + ``GITHUB_ACTIONS`` auto-detection."""
+
+    def test_auto_off_when_not_in_actions(self, monkeypatch):
+        monkeypatch.delenv('GITHUB_ACTIONS', raising=False)
+        monkeypatch.delenv('LOG_GITHUB_GROUPS', raising=False)
+        assert _resolve_github_groups() is False
+
+    def test_auto_on_when_in_actions(self, monkeypatch):
+        monkeypatch.setenv('GITHUB_ACTIONS', 'true')
+        monkeypatch.delenv('LOG_GITHUB_GROUPS', raising=False)
+        assert _resolve_github_groups() is True
+
+    def test_explicit_off_overrides_actions(self, monkeypatch):
+        monkeypatch.setenv('GITHUB_ACTIONS', 'true')
+        monkeypatch.setenv('LOG_GITHUB_GROUPS', 'off')
+        assert _resolve_github_groups() is False
+
+    def test_explicit_on_overrides_no_actions(self, monkeypatch):
+        monkeypatch.delenv('GITHUB_ACTIONS', raising=False)
+        monkeypatch.setenv('LOG_GITHUB_GROUPS', 'on')
+        assert _resolve_github_groups() is True
+
+
+class TestSectionAndSummaryHelpers:
+    """Section / group / summary helpers must render correctly per handler."""
+
+    def _capture_console(self, log_style='compact', github_groups=False):
+        """Install a memory handler at the place our StreamHandler would go.
+
+        Filters out pytest's own ``LogCaptureHandler`` so we capture only
+        what our formatters render.
+        """
+        from io import StringIO
+        from packages.python.javdb_platform import logging_config as _mod
+        _reset_logging_state()
+        setup_logging(log_style=log_style)
+        root = logging.getLogger()
+        for h in root.handlers[:]:
+            if isinstance(h, logging.FileHandler):
+                continue
+            if h.formatter is None:
+                continue
+            if type(h.formatter).__module__ != _mod.__name__:
+                continue
+            if log_style == 'compact':
+                h.setFormatter(_CompactConsoleFormatter(github_groups=github_groups))
+            buf = StringIO()
+            h.stream = buf
+            return buf, h
+        raise AssertionError("no console handler with our formatter")
+
+    def test_log_section_renders_unicode_divider_on_compact(self):
+        buf, _ = self._capture_console(log_style='compact')
+        log_section(get_logger('test.section'), 'PHASE 1', emoji='🎬')
+        out = buf.getvalue()
+        assert '🎬' in out
+        assert 'PHASE 1' in out
+        assert '────' in out  # Unicode horizontal divider
+        assert '::group::' not in out
+
+    def test_log_section_renders_ascii_on_plain(self):
+        buf, _ = self._capture_console(log_style='plain')
+        log_section(get_logger('test.section'), 'PHASE 1')
+        out = buf.getvalue()
+        assert 'PHASE 1' in out
+        assert '====' in out
+        assert '────' not in out
+
+    def test_log_summary_block_emits_kv_lines_compact(self):
+        buf, _ = self._capture_console(log_style='compact')
+        log_summary_block(
+            get_logger('test.summary'),
+            'OVERALL',
+            [('found', 65), ('parsed', 19), ('failed', 0)],
+            emoji='📊',
+        )
+        out = buf.getvalue()
+        assert 'OVERALL' in out
+        assert 'found' in out and '65' in out
+        assert 'parsed' in out and '19' in out
+        assert 'failed' in out and '0' in out
+
+    def test_log_group_emits_github_markers_when_enabled(self):
+        buf, _ = self._capture_console(log_style='compact', github_groups=True)
+        log_group_start(get_logger('test.group'), 'Proxy stats')
+        log_group_end(get_logger('test.group'))
+        out = buf.getvalue()
+        # ``::group::`` must be at column 0 — no timestamp prefix.
+        lines = [ln for ln in out.split('\n') if ln.strip()]
+        assert any(ln.startswith('::group::Proxy stats') for ln in lines), out
+        assert any(ln.startswith('::endgroup::') for ln in lines), out
+
+    def test_log_group_falls_back_to_divider_without_actions(self):
+        buf, _ = self._capture_console(log_style='compact', github_groups=False)
+        log_group_start(get_logger('test.group'), 'Proxy stats')
+        log_group_end(get_logger('test.group'))
+        out = buf.getvalue()
+        assert '::group::' not in out
+        assert 'Proxy stats' in out
+        assert '────' in out
+
+    def test_file_handler_keeps_verbose_format_for_section(self):
+        temp_dir = tempfile.mkdtemp()
+        log_file = os.path.join(temp_dir, 'test.log')
+        try:
+            setup_logging(log_file=log_file)
+            log_section(get_logger('test.section'), 'PHASE 1', emoji='🎬')
+            log_summary_block(
+                get_logger('test.summary'),
+                'OVERALL',
+                [('found', 1)],
+                emoji='📊',
+            )
+            log_group_start(get_logger('test.group'), 'Group title')
+            log_group_end(get_logger('test.group'))
+            with open(log_file, 'r') as f:
+                content = f.read()
+            # File log MUST stay free of CI-only ``::group::`` markers and
+            # Unicode dividers — keep the on-disk forensic baseline in
+            # ASCII so legacy grep / log shippers keep working.
+            assert '::group::' not in content
+            assert '────' not in content
+            # The verbose 4-field format prefix must be present.
+            assert ' - INFO - ' in content
+            # Section title rendered as ``=== TITLE ===`` plain ASCII.
+            assert '=== PHASE 1 ===' in content
+            assert '=== OVERALL ===' in content
+            # Group rendered as plain ``--- begin: ... ---``.
+            assert 'begin: Group title' in content
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+class TestRustBridgeShortNames:
+    """Rust-side `pyo3_log` targets land on Python with `::` separators
+    in some configurations and `.` in others — the short-name map covers
+    both so the compact console field stays at 12 chars wide."""
+
+    def test_rust_dot_separator_maps_to_short_name(self):
+        assert _shorten_logger_name('javdb_rust_core.proxy.pool') == 'ProxyPool'
+        assert _shorten_logger_name('javdb_rust_core.proxy.ban_manager') == 'BanManager'
+
+    def test_rust_double_colon_separator_maps_to_short_name(self):
+        assert _shorten_logger_name('javdb_rust_core::proxy::pool') == 'ProxyPool'
+        assert _shorten_logger_name('javdb_rust_core::proxy::ban_manager') == 'BanManager'
+
+    def test_new_javdb_platform_clients_have_short_names(self):
+        # These were unmapped before the log redesign and showed up as
+        # ``javdb_platform.runner_registry_client`` etc.  They must now
+        # render via the short-name map.
+        mapping = get_logger_name_mapping()
+        for short in ('RunnerRegistry', 'MovieClaim', 'ProxyCoord',
+                      'LoginState', 'D1', 'DualDB'):
+            assert short in mapping, f"{short} missing from short-name map"
