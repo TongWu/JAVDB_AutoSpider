@@ -59,6 +59,7 @@ from packages.python.javdb_platform.d1_client import (  # noqa: E402
 )
 from packages.python.javdb_platform.logging_config import (  # noqa: E402
     get_logger,
+    log_section,
     setup_logging,
 )
 
@@ -1047,15 +1048,12 @@ def reconcile(
         else:
             consumed.extend(rec for rec in drift_records if rec.get("db") == db)
 
-    print()
-    print("=" * 78)
-    print("D1 drift reconciliation summary" + (" (DRY RUN)" if dry_run else ""))
-    print("=" * 78)
+    title = "D1 drift reconciliation summary" + (" (DRY RUN)" if dry_run else "")
+    log_section(logger, title, emoji='📊')
     if not all_stats:
-        print("(no tables processed)")
+        logger.info("(no tables processed)")
     for stat in all_stats:
-        print("  " + stat.as_summary())
-    print("=" * 78)
+        logger.info("  %s", stat.as_summary())
 
     if dry_run:
         logger.info("Dry-run: leaving drift log untouched")

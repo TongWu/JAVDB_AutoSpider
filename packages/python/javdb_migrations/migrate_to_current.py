@@ -31,7 +31,11 @@ os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from packages.python.javdb_platform.logging_config import setup_logging, get_logger  # noqa: E402
+from packages.python.javdb_platform.logging_config import (  # noqa: E402
+    get_logger,
+    log_section,
+    setup_logging,
+)
 
 setup_logging()
 logger = get_logger(__name__)
@@ -197,7 +201,7 @@ def main() -> int:
             _normalize_three_dbs(h, r, o)
 
     if args.verify:
-        logger.info("-" * 60)
+        log_section(logger, "Verify v8 layout", emoji='🔍')
         if not verify_v8_layout(h, r, o):
             logger.error("Verification FAILED")
             return 1
