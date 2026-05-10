@@ -68,6 +68,8 @@ from packages.python.javdb_platform.d1_client import (
 from packages.python.javdb_platform import db as db_mod
 from packages.python.javdb_platform.logging_config import (
     get_logger,
+    log_group_end,
+    log_group_start,
     setup_logging,
 )
 
@@ -469,7 +471,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(overall, f, ensure_ascii=False, indent=2)
     logger.info("Wrote report: %s", report_path)
+    # Verbatim JSON output is preserved (downstream pipelines / humans
+    # may be parsing it), but wrap it in a GitHub Actions group so the
+    # CI UI folds the multi-line dump by default.  On non-Actions
+    # consoles ``log_group_*`` degrade to a section divider.
+    log_group_start(logger, "JSON output")
     print(json.dumps(overall, ensure_ascii=False, indent=2))
+    log_group_end(logger)
 
     # Non-zero exit when any logical sync errored or any post-apply
     # consistency check failed.
