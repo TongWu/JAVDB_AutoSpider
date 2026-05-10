@@ -125,6 +125,10 @@ jobs:
           VAR_D1_REPORTS_DB_ID: ${{ secrets.D1_REPORTS_DB_ID }}
           VAR_D1_OPERATIONS_DB_ID: ${{ secrets.D1_OPERATIONS_DB_ID }}
           VAR_MOVIE_CLAIM_ENABLED: ${{ vars.MOVIE_CLAIM_ENABLED || 'auto' }}
+          # Cross-runner registry (P2-E RunnerRegistry DO).  Default 'false'
+          # — flip the GitHub Variable RUNNER_REGISTRY_ENABLED to 'true' to
+          # let rclone runs participate in cohort signalling.
+          VAR_RUNNER_REGISTRY_ENABLED: ${{ vars.RUNNER_REGISTRY_ENABLED || 'false' }}
           # File paths / logging
           VAR_REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
           VAR_DEDUP_DIR: ${{ vars.DEDUP_DIR }}
