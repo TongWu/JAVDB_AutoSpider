@@ -3261,11 +3261,14 @@ def db_finish_commit_session(
 
 # ── Ingestion Perfect Rollback: pending write path (Phase 2) ─────────────
 #
-# These four functions form the new ingestion write surface.  Spider /
-# detail / qb_uploader / pikpak_bridge code paths will be migrated off
-# ``db_upsert_history`` to ``db_stage_history_write`` once Phase 2 cuts
-# DailyIngestion / AdHocIngestion over (currently only TestIngestion runs
-# under ``WriteMode='pending'``).
+# These four functions form the new ingestion write surface.  Phase 3
+# default-on: every ingestion workflow (DailyIngestion, AdHocIngestion,
+# TestIngestion) ships under ``WriteMode='pending'`` unless the
+# ``write_mode_override`` workflow input or the
+# ``pending_mode_disabled_until`` marker in ``.publish-config.yml`` flips
+# it back to audit.  ``db_upsert_history`` is therefore only reached via
+# legacy / fallback routes today; Phase 4 will mark it ``@deprecated``
+# and reject new writes.
 #
 # Lifecycle:
 #   db_stage_history_write(...)     # zero or more, while Status='in_progress'
@@ -3330,6 +3333,15 @@ def db_stage_history_write(
     context (set via :func:`set_active_run_identity`) is mirrored into
     the pending row so the rollback CLI can join across the run identity
     when the ReportSessions row was reaped early.
+
+    Phase 2 ``Seq`` is generated via :func:`_generate_session_id` (the
+    same 51-bit snowflake used by ``ReportSessions.Id``) and inserted
+    explicitly.  Both Pending tables are listed in
+    ``APPLICATION_GENERATED_ID_TABLES`` so the dual-backend guard catches
+    any case where SQLite and D1 see different ``Seq`` for the same
+    logical row — a drift here would silently leave residual pending
+    rows after commit because ``_commit_one_movie`` marks ``applied`` by
+    ``Seq IN (...)``.
     """
     if kind not in _PENDING_KINDS:
         raise ValueError(
@@ -3347,15 +3359,17 @@ def db_stage_history_write(
     )
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     run_id, run_attempt = get_active_run_identity()
+    seq = _generate_session_id()
     with get_db(db_path or HISTORY_DB_PATH) as conn:
         if kind == _KIND_MOVIE:
-            cur = conn.execute(
+            conn.execute(
                 """INSERT INTO PendingMovieHistoryWrites
-                   (SessionId, RunId, RunAttempt, Href, VideoCode,
+                   (Seq, SessionId, RunId, RunAttempt, Href, VideoCode,
                     ActorName, ActorGender, ActorLink, SupportingActors,
                     DateTimeVisited, CreatedAt, ApplyState)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
                 (
+                    seq,
                     int(session_id),
                     run_id,
                     run_attempt,
@@ -3385,14 +3399,15 @@ def db_stage_history_write(
                 sub_ind, cen_ind = category_to_indicators(category)
             if not category:
                 category = indicators_to_category(int(sub_ind), int(cen_ind))
-            cur = conn.execute(
+            conn.execute(
                 """INSERT INTO PendingTorrentHistoryWrites
-                   (SessionId, RunId, RunAttempt, Href, VideoCode,
+                   (Seq, SessionId, RunId, RunAttempt, Href, VideoCode,
                     Category, SubtitleIndicator, CensorIndicator,
                     MagnetUri, Size, FileCount, ResolutionType,
                     DateTimeVisited, CreatedAt, ApplyState)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
                 (
+                    seq,
                     int(session_id),
                     run_id,
                     run_attempt,
@@ -3409,7 +3424,7 @@ def db_stage_history_write(
                     now,
                 ),
             )
-        return int(cur.lastrowid or 0)
+        return seq
 
 
 def _pending_movie_overlay(
