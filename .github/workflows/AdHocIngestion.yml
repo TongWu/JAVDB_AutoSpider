@@ -546,6 +546,33 @@ jobs:
             fi
           fi
 
+          # Markdown summary so the GitHub Actions UI surfaces the run's
+          # key metrics without having to expand the spider log block.
+          STAT_PAGES=$(echo "$SPIDER_OUTPUT" | grep '^SPIDER_STAT_PAGES=' | cut -d'=' -f2 | tail -1 || true)
+          STAT_FOUND=$(echo "$SPIDER_OUTPUT" | grep '^SPIDER_STAT_FOUND=' | cut -d'=' -f2 | tail -1 || true)
+          STAT_PARSED=$(echo "$SPIDER_OUTPUT" | grep '^SPIDER_STAT_PARSED=' | cut -d'=' -f2 | tail -1 || true)
+          STAT_SKIPPED=$(echo "$SPIDER_OUTPUT" | grep '^SPIDER_STAT_SKIPPED=' | cut -d'=' -f2 | tail -1 || true)
+          STAT_FAILED=$(echo "$SPIDER_OUTPUT" | grep '^SPIDER_STAT_FAILED=' | cut -d'=' -f2 | tail -1 || true)
+          if [ -n "$STAT_PAGES$STAT_FOUND$STAT_PARSED$STAT_SKIPPED$STAT_FAILED" ]; then
+            {
+              echo "## Spider run summary (Ad-Hoc)"
+              echo
+              echo "| metric | value |"
+              echo "| --- | --- |"
+              echo "| pages | ${STAT_PAGES:-?} |"
+              echo "| found | ${STAT_FOUND:-?} |"
+              echo "| parsed | ${STAT_PARSED:-?} |"
+              echo "| skipped (history) | ${STAT_SKIPPED:-?} |"
+              echo "| failed | ${STAT_FAILED:-?} |"
+              if [ -n "$CSV_FILENAME" ]; then
+                echo "| csv | \`$CSV_FILENAME\` |"
+              fi
+              if [ -n "$SESSION_ID" ]; then
+                echo "| session_id | \`$SESSION_ID\` |"
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           if [ "$SPIDER_EXIT" -ne 0 ]; then
             echo "Spider exited with code $SPIDER_EXIT"
             exit "$SPIDER_EXIT"
