@@ -449,6 +449,66 @@ CREATE TABLE IF NOT EXISTS TorrentHistoryAudit (
 );
 CREATE INDEX IF NOT EXISTS idx_th_audit_session ON TorrentHistoryAudit(SessionId, Id);
 CREATE INDEX IF NOT EXISTS idx_th_audit_run ON TorrentHistoryAudit(RunId, RunAttempt);
+
+-- Pending history write tables (Ingestion Perfect Rollback, Phase 0).
+--
+-- Every ingestion mutation against MovieHistory / TorrentHistory under
+-- ``WriteMode='pending'`` is staged here first.  ``apps.cli.commit_session``
+-- promotes them into the live tables atomically per movie at the end of
+-- a successful run; ``apps.cli.rollback`` deletes them on in_progress
+-- failure or resumes the commit on finalizing failure (so the audit
+-- replay path is never needed in pending mode).
+--
+-- Overlay semantics: ``db_load_history_snapshot`` joins the live tables
+-- with the per-session pending overlay using ``MAX(Seq)`` so callers see
+-- a consistent "committed live + this session's tentative writes" view.
+-- Other sessions' pending rows are intentionally invisible to avoid the
+-- dirty-read window that derived-field recomputation
+-- (PerfectMatchIndicator / HiResIndicator) is sensitive to.
+CREATE TABLE IF NOT EXISTS PendingMovieHistoryWrites (
+    Seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    SessionId INTEGER NOT NULL,
+    RunId TEXT,
+    RunAttempt INTEGER,
+    Href TEXT NOT NULL,
+    VideoCode TEXT,
+    ActorName TEXT,
+    ActorGender TEXT,
+    ActorLink TEXT,
+    SupportingActors TEXT,
+    DateTimeVisited TEXT NOT NULL,
+    CreatedAt TEXT NOT NULL,
+    ApplyState TEXT NOT NULL DEFAULT 'pending'
+);
+CREATE INDEX IF NOT EXISTS idx_pmhw_session ON PendingMovieHistoryWrites(SessionId);
+CREATE INDEX IF NOT EXISTS idx_pmhw_run ON PendingMovieHistoryWrites(RunId, RunAttempt);
+CREATE INDEX IF NOT EXISTS idx_pmhw_href ON PendingMovieHistoryWrites(Href);
+CREATE INDEX IF NOT EXISTS idx_pmhw_session_state
+    ON PendingMovieHistoryWrites(SessionId, ApplyState);
+
+CREATE TABLE IF NOT EXISTS PendingTorrentHistoryWrites (
+    Seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    SessionId INTEGER NOT NULL,
+    RunId TEXT,
+    RunAttempt INTEGER,
+    Href TEXT NOT NULL,
+    VideoCode TEXT,
+    Category TEXT NOT NULL,
+    SubtitleIndicator INTEGER NOT NULL,
+    CensorIndicator INTEGER NOT NULL,
+    MagnetUri TEXT,
+    Size TEXT,
+    FileCount INTEGER,
+    ResolutionType INTEGER,
+    DateTimeVisited TEXT NOT NULL,
+    CreatedAt TEXT NOT NULL,
+    ApplyState TEXT NOT NULL DEFAULT 'pending'
+);
+CREATE INDEX IF NOT EXISTS idx_pthw_session ON PendingTorrentHistoryWrites(SessionId);
+CREATE INDEX IF NOT EXISTS idx_pthw_run ON PendingTorrentHistoryWrites(RunId, RunAttempt);
+CREATE INDEX IF NOT EXISTS idx_pthw_href ON PendingTorrentHistoryWrites(Href);
+CREATE INDEX IF NOT EXISTS idx_pthw_session_state
+    ON PendingTorrentHistoryWrites(SessionId, ApplyState);
 """
 
 _REPORTS_DDL = _SCHEMA_VERSION_DDL + """
@@ -478,9 +538,18 @@ CREATE TABLE IF NOT EXISTS ReportSessions (
     Status TEXT DEFAULT 'in_progress',
     RunId TEXT,
     RunAttempt INTEGER,
-    FailureReason TEXT
+    FailureReason TEXT,
+    -- Ingestion Perfect Rollback (Phase 0): ``audit`` keeps the
+    -- legacy X3 audit-replay rollback path; ``pending`` stages
+    -- writes into PendingMovie/TorrentHistoryWrites and drains
+    -- them via ``db_commit_session_history`` /
+    -- ``db_resume_finalizing_session``.  Defaults to ``audit`` so
+    -- the new tables ship dark until ``JAVDB_HISTORY_WRITE_MODE``
+    -- (read by ``db_create_report_session``) is flipped per-workflow.
+    WriteMode TEXT DEFAULT 'audit'
 );
 CREATE INDEX IF NOT EXISTS idx_report_sessions_type_date ON ReportSessions(ReportType, ReportDate);
+CREATE INDEX IF NOT EXISTS idx_report_sessions_write_mode ON ReportSessions(WriteMode, Status);
 CREATE INDEX IF NOT EXISTS idx_report_sessions_csv ON ReportSessions(CsvFilename);
 CREATE INDEX IF NOT EXISTS idx_report_sessions_status ON ReportSessions(Status, DateTimeCreated);
 CREATE INDEX IF NOT EXISTS idx_report_sessions_run ON ReportSessions(RunId, RunAttempt);
@@ -1004,6 +1073,9 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
         ('PikpakHistory', 'SessionId', 'INTEGER'),
         ('DedupRecords', 'SessionId', 'INTEGER'),
         ('InventoryAlignNoExactMatch', 'SessionId', 'INTEGER'),
+        # Ingestion Perfect Rollback (Phase 0): WriteMode column on
+        # ReportSessions, gating the audit-vs-pending dispatch.
+        ('ReportSessions', 'WriteMode', "TEXT DEFAULT 'audit'"),
     ]
     for table, column, ddl in add_column_specs:
         if not _has_table(conn, table):
@@ -1048,6 +1120,62 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
     )
     if _has_table(conn, 'MovieHistory'):
         conn.executescript(audit_ddl)
+
+    pending_ddl = (
+        """
+        CREATE TABLE IF NOT EXISTS PendingMovieHistoryWrites (
+            Seq INTEGER PRIMARY KEY AUTOINCREMENT,
+            SessionId INTEGER NOT NULL,
+            RunId TEXT,
+            RunAttempt INTEGER,
+            Href TEXT NOT NULL,
+            VideoCode TEXT,
+            ActorName TEXT,
+            ActorGender TEXT,
+            ActorLink TEXT,
+            SupportingActors TEXT,
+            DateTimeVisited TEXT NOT NULL,
+            CreatedAt TEXT NOT NULL,
+            ApplyState TEXT NOT NULL DEFAULT 'pending'
+        );
+        CREATE INDEX IF NOT EXISTS idx_pmhw_session
+            ON PendingMovieHistoryWrites(SessionId);
+        CREATE INDEX IF NOT EXISTS idx_pmhw_run
+            ON PendingMovieHistoryWrites(RunId, RunAttempt);
+        CREATE INDEX IF NOT EXISTS idx_pmhw_href
+            ON PendingMovieHistoryWrites(Href);
+        CREATE INDEX IF NOT EXISTS idx_pmhw_session_state
+            ON PendingMovieHistoryWrites(SessionId, ApplyState);
+        CREATE TABLE IF NOT EXISTS PendingTorrentHistoryWrites (
+            Seq INTEGER PRIMARY KEY AUTOINCREMENT,
+            SessionId INTEGER NOT NULL,
+            RunId TEXT,
+            RunAttempt INTEGER,
+            Href TEXT NOT NULL,
+            VideoCode TEXT,
+            Category TEXT NOT NULL,
+            SubtitleIndicator INTEGER NOT NULL,
+            CensorIndicator INTEGER NOT NULL,
+            MagnetUri TEXT,
+            Size TEXT,
+            FileCount INTEGER,
+            ResolutionType INTEGER,
+            DateTimeVisited TEXT NOT NULL,
+            CreatedAt TEXT NOT NULL,
+            ApplyState TEXT NOT NULL DEFAULT 'pending'
+        );
+        CREATE INDEX IF NOT EXISTS idx_pthw_session
+            ON PendingTorrentHistoryWrites(SessionId);
+        CREATE INDEX IF NOT EXISTS idx_pthw_run
+            ON PendingTorrentHistoryWrites(RunId, RunAttempt);
+        CREATE INDEX IF NOT EXISTS idx_pthw_href
+            ON PendingTorrentHistoryWrites(Href);
+        CREATE INDEX IF NOT EXISTS idx_pthw_session_state
+            ON PendingTorrentHistoryWrites(SessionId, ApplyState);
+        """
+    )
+    if _has_table(conn, 'MovieHistory'):
+        conn.executescript(pending_ddl)
 
     extra_indexes = [
         ('idx_movie_history_session', 'MovieHistory', 'SessionId'),
@@ -1104,6 +1232,15 @@ def _materialize_report_session_status_default(conn: sqlite3.Connection) -> None
             conn.execute(
                 "UPDATE ReportSessions "
                 "SET Status='in_progress' WHERE Status IS NULL"
+            )
+        if 'WriteMode' in columns:
+            # Ingestion Perfect Rollback (Phase 0): legacy rows pre-date
+            # the WriteMode column; backfill them to 'audit' so the
+            # rollback dispatcher (Phase 2) treats them like the existing
+            # X3 audit-replay path.
+            conn.execute(
+                "UPDATE ReportSessions "
+                "SET WriteMode='audit' WHERE WriteMode IS NULL"
             )
     except sqlite3.OperationalError:
         pass
@@ -2898,6 +3035,826 @@ def db_delete_align_no_exact_match(
         )
 
 
+
+# ── Ingestion Perfect Rollback: WriteMode + state machine helpers ────────
+#
+# The state machine handled here:
+#
+#     in_progress → finalizing  (set by db_begin_finalize_session)
+#     finalizing  → committed   (set by db_finish_commit_session)
+#     in_progress → failed      (rollback path; existing behaviour)
+#     finalizing  → finalizing  (idempotent resume; see
+#                                db_resume_finalizing_session)
+#
+# The rollback CLI dispatches based on the (WriteMode, Status) pair so
+# legacy ``audit`` sessions and Phase-2 ``pending`` sessions can coexist
+# inside the same workflow run.
+_ALLOWED_STATUSES = ("in_progress", "finalizing", "committed", "failed")
+_ALLOWED_WRITE_MODES = ("audit", "pending")
+
+
+def _resolve_write_mode(explicit: Optional[str]) -> str:
+    """Return a validated WriteMode (``audit`` or ``pending``).
+
+    Resolution order:
+      1. Explicit *explicit* argument (when set).
+      2. ``JAVDB_HISTORY_WRITE_MODE`` env var.
+      3. Default ``'audit'`` so the historic X3 path stays in effect for
+         every workflow that has not opted in.
+    """
+    candidate = explicit
+    if candidate is None:
+        candidate = os.environ.get("JAVDB_HISTORY_WRITE_MODE")
+    if not candidate:
+        return "audit"
+    candidate = candidate.strip().lower()
+    if candidate not in _ALLOWED_WRITE_MODES:
+        raise ValueError(
+            f"Unknown WriteMode {candidate!r}; "
+            f"expected one of {_ALLOWED_WRITE_MODES}"
+        )
+    return candidate
+
+
+def db_get_session_status(
+    session_id: int,
+    *,
+    db_path: Optional[str] = None,
+) -> Optional[Tuple[str, str]]:
+    """Return ``(WriteMode, Status)`` for *session_id*, or ``None`` if absent.
+
+    Centralised so the rollback dispatcher and the commit / resume helpers
+    all see the same view of the session row even when the underlying
+    table briefly lacks the WriteMode column on legacy schemas.
+    """
+    with get_db(db_path or REPORTS_DB_PATH) as conn:
+        try:
+            row = conn.execute(
+                "SELECT WriteMode, Status FROM ReportSessions WHERE Id=?",
+                (session_id,),
+            ).fetchone()
+        except sqlite3.OperationalError:
+            row = conn.execute(
+                "SELECT Status FROM ReportSessions WHERE Id=?",
+                (session_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            return ("audit", row["Status"])
+    if row is None:
+        return None
+    write_mode = row["WriteMode"] if row["WriteMode"] else "audit"
+    return (write_mode, row["Status"])
+
+
+def db_begin_finalize_session(
+    session_id: int,
+    *,
+    db_path: Optional[str] = None,
+) -> int:
+    """Flip ``Status`` from ``in_progress`` to ``finalizing`` for *session_id*.
+
+    Idempotent: a session already in ``finalizing`` returns 0 (no row
+    change) so a crashed-during-finalize resume can call this without
+    raising.  Sessions that are already ``committed`` or ``failed``
+    refuse the transition (returns 0) — the caller is expected to call
+    :func:`db_resume_finalizing_session` only when status is finalizing.
+    """
+    with get_db(db_path or REPORTS_DB_PATH) as conn:
+        cur = conn.execute(
+            "UPDATE ReportSessions SET Status='finalizing' "
+            "WHERE Id=? AND Status='in_progress'",
+            (session_id,),
+        )
+        return cur.rowcount or 0
+
+
+def db_finish_commit_session(
+    session_id: int,
+    *,
+    db_path: Optional[str] = None,
+) -> int:
+    """Flip ``Status`` from ``finalizing`` to ``committed`` for *session_id*.
+
+    Used by :func:`db_commit_session_history` once every per-movie commit
+    has applied successfully.  Idempotent against ``committed`` rows.
+    """
+    with get_db(db_path or REPORTS_DB_PATH) as conn:
+        cur = conn.execute(
+            "UPDATE ReportSessions SET Status='committed' "
+            "WHERE Id=? AND Status='finalizing'",
+            (session_id,),
+        )
+        return cur.rowcount or 0
+
+# ── Ingestion Perfect Rollback: pending write path (Phase 2) ─────────────
+#
+# These four functions form the new ingestion write surface.  Spider /
+# detail / qb_uploader / pikpak_bridge code paths will be migrated off
+# ``db_upsert_history`` to ``db_stage_history_write`` once Phase 2 cuts
+# DailyIngestion / AdHocIngestion over (currently only TestIngestion runs
+# under ``WriteMode='pending'``).
+#
+# Lifecycle:
+#   db_stage_history_write(...)     # zero or more, while Status='in_progress'
+#   db_load_history_snapshot(sid)   # any number of reads, returns committed
+#                                   # live + this session's pending overlay
+#   db_commit_session_history(sid)  # set finalizing → per-movie lock,
+#                                   # recompute derived fields, UPSERT live,
+#                                   # mark applied, set committed, delete
+#                                   # applied pending rows
+#   db_resume_finalizing_session(sid)  # idempotent re-run of commit, called
+#                                      # by rollback CLI when a finalizing
+#                                      # session crashed
+#
+# Rollback dispatch (see db_rollback_session):
+#   WriteMode='audit'                       → existing X3 audit replay
+#   WriteMode='pending', Status='in_progress'   → DELETE pending rows
+#   WriteMode='pending', Status='finalizing'    → resume commit
+#   Status='committed'                      → refused (X3 behaviour)
+
+
+_PENDING_HREF_LOCKS_LOCK = threading.Lock()
+_PENDING_HREF_LOCKS: "dict[str, threading.Lock]" = {}
+
+
+def _href_lock(href: str) -> threading.Lock:
+    """Return a process-local lock for *href*.
+
+    Phase 2 runs spider / detail / qb_uploader / pikpak_bridge as separate
+    processes that share a SessionId; the per-process lock here protects
+    the in-process commit loop from accidentally running twice for the
+    same Href when commit / resume race inside one CLI invocation.  The
+    *cross-process* lease is the caller's job (Worker / MovieClaim
+    coordinator); see Phase 1 of the plan.
+    """
+    with _PENDING_HREF_LOCKS_LOCK:
+        lock = _PENDING_HREF_LOCKS.get(href)
+        if lock is None:
+            lock = threading.Lock()
+            _PENDING_HREF_LOCKS[href] = lock
+    return lock
+
+
+_KIND_MOVIE = "movie"
+_KIND_TORRENT = "torrent"
+_PENDING_KINDS = (_KIND_MOVIE, _KIND_TORRENT)
+
+
+def db_stage_history_write(
+    session_id: int,
+    kind: str,
+    payload: Dict[str, Any],
+    *,
+    db_path: Optional[str] = None,
+) -> int:
+    """Append a row to PendingMovie/TorrentHistoryWrites.
+
+    *kind* must be ``'movie'`` or ``'torrent'``; *payload* carries the
+    row columns expected by the matching table (the helper extracts
+    them and supplies defaults so callers can be dict-shape lenient).
+
+    Returns the new ``Seq`` value.  The active ``(RunId, RunAttempt)``
+    context (set via :func:`set_active_run_identity`) is mirrored into
+    the pending row so the rollback CLI can join across the run identity
+    when the ReportSessions row was reaped early.
+    """
+    if kind not in _PENDING_KINDS:
+        raise ValueError(
+            f"db_stage_history_write: kind must be one of {_PENDING_KINDS}, "
+            f"got {kind!r}"
+        )
+    if not payload.get("Href") and not payload.get("href"):
+        raise ValueError("db_stage_history_write: payload requires 'Href'")
+    href = payload.get("Href") or payload.get("href")
+    video_code = payload.get("VideoCode") or payload.get("video_code")
+    visited = (
+        payload.get("DateTimeVisited")
+        or payload.get("date_time_visited")
+        or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    run_id, run_attempt = get_active_run_identity()
+    with get_db(db_path or HISTORY_DB_PATH) as conn:
+        if kind == _KIND_MOVIE:
+            cur = conn.execute(
+                """INSERT INTO PendingMovieHistoryWrites
+                   (SessionId, RunId, RunAttempt, Href, VideoCode,
+                    ActorName, ActorGender, ActorLink, SupportingActors,
+                    DateTimeVisited, CreatedAt, ApplyState)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
+                (
+                    int(session_id),
+                    run_id,
+                    run_attempt,
+                    href,
+                    video_code,
+                    payload.get("ActorName") or payload.get("actor_name"),
+                    payload.get("ActorGender") or payload.get("actor_gender"),
+                    payload.get("ActorLink") or payload.get("actor_link"),
+                    (
+                        payload.get("SupportingActors")
+                        or payload.get("supporting_actors")
+                    ),
+                    visited,
+                    now,
+                ),
+            )
+        else:
+            sub_ind = payload.get("SubtitleIndicator")
+            cen_ind = payload.get("CensorIndicator")
+            category = payload.get("Category") or payload.get("category")
+            if sub_ind is None or cen_ind is None:
+                if not category:
+                    raise ValueError(
+                        "db_stage_history_write(torrent): payload needs "
+                        "either Category or (SubtitleIndicator, CensorIndicator)"
+                    )
+                sub_ind, cen_ind = category_to_indicators(category)
+            if not category:
+                category = indicators_to_category(int(sub_ind), int(cen_ind))
+            cur = conn.execute(
+                """INSERT INTO PendingTorrentHistoryWrites
+                   (SessionId, RunId, RunAttempt, Href, VideoCode,
+                    Category, SubtitleIndicator, CensorIndicator,
+                    MagnetUri, Size, FileCount, ResolutionType,
+                    DateTimeVisited, CreatedAt, ApplyState)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
+                (
+                    int(session_id),
+                    run_id,
+                    run_attempt,
+                    href,
+                    video_code,
+                    category,
+                    int(sub_ind),
+                    int(cen_ind),
+                    payload.get("MagnetUri") or payload.get("magnet_uri"),
+                    payload.get("Size") or payload.get("size"),
+                    int(payload.get("FileCount") or payload.get("file_count") or 0),
+                    payload.get("ResolutionType") or payload.get("resolution_type"),
+                    visited,
+                    now,
+                ),
+            )
+        return int(cur.lastrowid or 0)
+
+
+def _pending_movie_overlay(
+    conn,
+    session_id: int,
+    *,
+    href: Optional[str] = None,
+    include_states: Tuple[str, ...] = ("pending",),
+) -> Dict[str, dict]:
+    """Return ``{href: latest_pending_movie_row}`` for *session_id*.
+
+    Picks the row with the largest ``Seq`` per Href so "same session
+    writes the same movie twice" deterministically resolves to the most
+    recent payload.
+    """
+    placeholders = ",".join("?" for _ in include_states)
+    params: list = [int(session_id)]
+    params.extend(include_states)
+    where_extra = ""
+    if href is not None:
+        where_extra = " AND Href=?"
+        params.append(href)
+    sql = (
+        "SELECT * FROM PendingMovieHistoryWrites "
+        f"WHERE SessionId=? AND ApplyState IN ({placeholders}){where_extra}"
+        " ORDER BY Seq ASC"
+    )
+    overlay: Dict[str, dict] = {}
+    for row in conn.execute(sql, params).fetchall():
+        d = dict(row)
+        overlay[d["Href"]] = d
+    return overlay
+
+
+def _pending_torrent_overlay(
+    conn,
+    session_id: int,
+    *,
+    href: Optional[str] = None,
+    include_states: Tuple[str, ...] = ("pending",),
+) -> Dict[Tuple[str, int, int], dict]:
+    """Return ``{(href, sub, cen): latest_pending_torrent_row}`` for *session_id*."""
+    placeholders = ",".join("?" for _ in include_states)
+    params: list = [int(session_id)]
+    params.extend(include_states)
+    where_extra = ""
+    if href is not None:
+        where_extra = " AND Href=?"
+        params.append(href)
+    sql = (
+        "SELECT * FROM PendingTorrentHistoryWrites "
+        f"WHERE SessionId=? AND ApplyState IN ({placeholders}){where_extra}"
+        " ORDER BY Seq ASC"
+    )
+    overlay: Dict[Tuple[str, int, int], dict] = {}
+    for row in conn.execute(sql, params).fetchall():
+        d = dict(row)
+        key = (
+            d["Href"],
+            int(d["SubtitleIndicator"]),
+            int(d["CensorIndicator"]),
+        )
+        overlay[key] = d
+    return overlay
+
+
+def db_load_history_snapshot(
+    session_id: Optional[int] = None,
+    *,
+    db_path: Optional[str] = None,
+) -> Dict[str, dict]:
+    """Return committed-live history with the *session_id* pending overlay.
+
+    When *session_id* is ``None``, returns just the committed live state
+    (equivalent to :func:`load_history_joined`).  Otherwise, the pending
+    rows for that session shadow the live values per Href / per torrent
+    type, giving the caller a "what would we see if we committed right
+    now" view without polluting other sessions' reads.
+    """
+    with get_db(db_path or HISTORY_DB_PATH) as conn:
+        snapshot = _load_history_joined(conn)
+        if session_id is None:
+            return snapshot
+        movie_overlay = _pending_movie_overlay(conn, session_id)
+        torrent_overlay = _pending_torrent_overlay(conn, session_id)
+
+    for href, row in movie_overlay.items():
+        item = snapshot.get(href)
+        if item is None:
+            item = {
+                "VideoCode": row.get("VideoCode") or "",
+                "DateTimeCreated": row.get("CreatedAt") or "",
+                "DateTimeUpdated": row.get("CreatedAt") or "",
+                "DateTimeVisited": row.get("DateTimeVisited") or "",
+                "PerfectMatchIndicator": False,
+                "HiResIndicator": False,
+                "ActorName": row.get("ActorName"),
+                "ActorGender": row.get("ActorGender"),
+                "ActorLink": row.get("ActorLink"),
+                "SupportingActors": row.get("SupportingActors"),
+                "torrent_types": [],
+                "torrents": {},
+            }
+            snapshot[href] = item
+        else:
+            for col in (
+                "VideoCode", "ActorName", "ActorGender",
+                "ActorLink", "SupportingActors",
+            ):
+                if row.get(col) is not None:
+                    item[col] = row.get(col)
+            if row.get("DateTimeVisited"):
+                item["DateTimeVisited"] = row["DateTimeVisited"]
+
+    for (href, sub, cen), row in torrent_overlay.items():
+        item = snapshot.get(href)
+        if item is None:
+            item = {
+                "VideoCode": row.get("VideoCode") or "",
+                "DateTimeCreated": row.get("CreatedAt") or "",
+                "DateTimeUpdated": row.get("CreatedAt") or "",
+                "DateTimeVisited": row.get("DateTimeVisited") or "",
+                "PerfectMatchIndicator": False,
+                "HiResIndicator": False,
+                "ActorName": None,
+                "ActorGender": None,
+                "ActorLink": None,
+                "SupportingActors": None,
+                "torrent_types": [],
+                "torrents": {},
+            }
+            snapshot[href] = item
+        cat = indicators_to_category(int(sub), int(cen))
+        if cat not in item["torrent_types"]:
+            item["torrent_types"].append(cat)
+        item["torrents"][(int(sub), int(cen))] = {
+            "MagnetUri": row.get("MagnetUri") or "",
+            "Size": row.get("Size") or "",
+            "FileCount": row.get("FileCount") or 0,
+            "ResolutionType": row.get("ResolutionType"),
+            "DateTimeCreated": row.get("CreatedAt") or "",
+            "DateTimeUpdated": row.get("CreatedAt") or "",
+        }
+
+    # Recompute the derived indicators so callers see the same value the
+    # commit step would land in MovieHistory.PerfectMatchIndicator /
+    # HiResIndicator.  Live-only callers (session_id=None) skip this.
+    for item in snapshot.values():
+        torrents = item.get("torrents", {})
+        item["PerfectMatchIndicator"] = bool(
+            (1, 0) in torrents and (1, 1) in torrents
+        )
+        item["HiResIndicator"] = any(
+            (t.get("ResolutionType") or 0) >= 2560
+            for t in torrents.values()
+        )
+
+    return snapshot
+
+
+def _commit_one_movie(
+    conn,
+    session_id: int,
+    href: str,
+    *,
+    when: str,
+) -> Dict[str, int]:
+    """Apply one Href's pending writes onto the live tables.
+
+    The function is idempotent: it always recomputes the live row from
+    ``MovieHistory + TorrentHistory + (every pending row for this href in
+    this session)``, then upserts the result and marks every consumed
+    pending row ``ApplyState='applied'``.  A crash + resume re-runs it
+    against the same inputs and lands the same outputs.
+    """
+    counts = {
+        "movies_upserted": 0,
+        "torrents_upserted": 0,
+        "torrents_deleted": 0,
+        "pending_marked_applied": 0,
+    }
+    movie_overlay = _pending_movie_overlay(
+        conn, session_id, href=href, include_states=("pending", "applied"),
+    )
+    torrent_overlay = _pending_torrent_overlay(
+        conn, session_id, href=href, include_states=("pending", "applied"),
+    )
+    movie_payload = movie_overlay.get(href)
+
+    base_url = cfg("BASE_URL", "https://javdb.com")
+    path_href, abs_href = movie_href_lookup_values(href, base_url)
+    lookup_hrefs = [h for h in (path_href, abs_href, href) if h]
+
+    placeholders = ",".join("?" for _ in lookup_hrefs)
+    existing = conn.execute(
+        f"SELECT * FROM MovieHistory WHERE Href IN ({placeholders})",
+        lookup_hrefs,
+    ).fetchone()
+
+    if movie_payload is None and existing is None and not torrent_overlay:
+        return counts
+
+    if existing is None:
+        video_code = (
+            (movie_payload or {}).get("VideoCode")
+            or next(
+                (
+                    r.get("VideoCode") for r in torrent_overlay.values()
+                    if r.get("VideoCode")
+                ),
+                "",
+            )
+            or ""
+        )
+        normalized_href = abs_href or href
+        cur = conn.execute(
+            """INSERT INTO MovieHistory
+               (VideoCode, Href, DateTimeCreated, DateTimeUpdated,
+                DateTimeVisited, ActorName, ActorGender, ActorLink,
+                SupportingActors, SessionId)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                video_code,
+                normalized_href,
+                when,
+                when,
+                (movie_payload or {}).get("DateTimeVisited") or when,
+                (movie_payload or {}).get("ActorName"),
+                (movie_payload or {}).get("ActorGender"),
+                (movie_payload or {}).get("ActorLink"),
+                (movie_payload or {}).get("SupportingActors"),
+                int(session_id),
+            ),
+        )
+        movie_id = int(cur.lastrowid or 0)
+        counts["movies_upserted"] += 1
+    else:
+        movie_id = int(existing["Id"])
+        update_fields = ["DateTimeUpdated=?", "SessionId=?"]
+        params: list = [when, int(session_id)]
+        if movie_payload is not None:
+            update_fields.append("DateTimeVisited=?")
+            params.append(
+                movie_payload.get("DateTimeVisited") or when
+            )
+            for column, payload_key in (
+                ("ActorName", "ActorName"),
+                ("ActorGender", "ActorGender"),
+                ("ActorLink", "ActorLink"),
+                ("SupportingActors", "SupportingActors"),
+                ("VideoCode", "VideoCode"),
+            ):
+                value = movie_payload.get(payload_key)
+                if value is not None:
+                    update_fields.append(f"{column}=?")
+                    params.append(value)
+        params.append(movie_id)
+        conn.execute(
+            f"UPDATE MovieHistory SET {', '.join(update_fields)} WHERE Id=?",
+            params,
+        )
+        counts["movies_upserted"] += 1
+
+    consumed_movie_seqs = [
+        int(r["Seq"]) for r in movie_overlay.values()
+    ]
+
+    consumed_torrent_seqs: list = []
+    for (_, sub, cen), payload in torrent_overlay.items():
+        existing_t = conn.execute(
+            "SELECT Id FROM TorrentHistory "
+            "WHERE MovieHistoryId=? AND SubtitleIndicator=? AND CensorIndicator=?",
+            (movie_id, int(sub), int(cen)),
+        ).fetchone()
+        if existing_t is None:
+            conn.execute(
+                """INSERT INTO TorrentHistory
+                   (MovieHistoryId, MagnetUri, SubtitleIndicator,
+                    CensorIndicator, ResolutionType, Size, FileCount,
+                    DateTimeCreated, DateTimeUpdated, SessionId)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    movie_id,
+                    payload.get("MagnetUri"),
+                    int(sub),
+                    int(cen),
+                    payload.get("ResolutionType"),
+                    payload.get("Size") or "",
+                    int(payload.get("FileCount") or 0),
+                    when,
+                    when,
+                    int(session_id),
+                ),
+            )
+        else:
+            conn.execute(
+                """UPDATE TorrentHistory
+                   SET MagnetUri=?, Size=?, FileCount=?, ResolutionType=?,
+                       DateTimeUpdated=?, SessionId=?
+                   WHERE Id=?""",
+                (
+                    payload.get("MagnetUri"),
+                    payload.get("Size") or "",
+                    int(payload.get("FileCount") or 0),
+                    payload.get("ResolutionType"),
+                    when,
+                    int(session_id),
+                    int(existing_t["Id"]),
+                ),
+            )
+        counts["torrents_upserted"] += 1
+        consumed_torrent_seqs.append(int(payload["Seq"]))
+
+    # Apply the same "hacked_subtitle wins over hacked_no_subtitle, subtitle
+    # wins over no_subtitle" rule the audit path enforces in db_upsert_history.
+    has_hacked_sub = any(
+        sub == 1 and cen == 0 for (_, sub, cen) in torrent_overlay.keys()
+    )
+    has_subtitle = any(
+        sub == 1 and cen == 1 for (_, sub, cen) in torrent_overlay.keys()
+    )
+    if has_hacked_sub:
+        cur = conn.execute(
+            "DELETE FROM TorrentHistory WHERE MovieHistoryId=? "
+            "AND SubtitleIndicator=0 AND CensorIndicator=0",
+            (movie_id,),
+        )
+        counts["torrents_deleted"] += cur.rowcount or 0
+    if has_subtitle:
+        cur = conn.execute(
+            "DELETE FROM TorrentHistory WHERE MovieHistoryId=? "
+            "AND SubtitleIndicator=0 AND CensorIndicator=1",
+            (movie_id,),
+        )
+        counts["torrents_deleted"] += cur.rowcount or 0
+
+    # Recompute derived indicators directly (avoid the audit-tagged
+    # _update_movie_indicators path; pending mode never writes audit rows).
+    perfect_row = conn.execute(
+        "SELECT 1 FROM TorrentHistory t1 "
+        "JOIN TorrentHistory t2 ON t1.MovieHistoryId=t2.MovieHistoryId "
+        "WHERE t1.MovieHistoryId=? "
+        "AND t1.SubtitleIndicator=1 AND t1.CensorIndicator=0 "
+        "AND t2.SubtitleIndicator=1 AND t2.CensorIndicator=1",
+        (movie_id,),
+    ).fetchone()
+    hires_row = conn.execute(
+        "SELECT 1 FROM TorrentHistory "
+        "WHERE MovieHistoryId=? AND ResolutionType >= 2560",
+        (movie_id,),
+    ).fetchone()
+    conn.execute(
+        "UPDATE MovieHistory SET PerfectMatchIndicator=?, "
+        "HiResIndicator=? WHERE Id=?",
+        (1 if perfect_row else 0, 1 if hires_row else 0, movie_id),
+    )
+
+    consumed_seqs = consumed_movie_seqs
+    if consumed_seqs:
+        ph = ",".join("?" for _ in consumed_seqs)
+        cur = conn.execute(
+            f"UPDATE PendingMovieHistoryWrites SET ApplyState='applied' "
+            f"WHERE Seq IN ({ph})",
+            consumed_seqs,
+        )
+        counts["pending_marked_applied"] += cur.rowcount or 0
+    if consumed_torrent_seqs:
+        ph = ",".join("?" for _ in consumed_torrent_seqs)
+        cur = conn.execute(
+            f"UPDATE PendingTorrentHistoryWrites SET ApplyState='applied' "
+            f"WHERE Seq IN ({ph})",
+            consumed_torrent_seqs,
+        )
+        counts["pending_marked_applied"] += cur.rowcount or 0
+    return counts
+
+
+def _pending_distinct_hrefs(conn, session_id: int) -> List[str]:
+    """Return every Href that has at least one pending row for *session_id*."""
+    rows = conn.execute(
+        "SELECT Href FROM ("
+        "  SELECT Href FROM PendingMovieHistoryWrites "
+        "  WHERE SessionId=? AND ApplyState IN ('pending','applied') "
+        "  UNION "
+        "  SELECT Href FROM PendingTorrentHistoryWrites "
+        "  WHERE SessionId=? AND ApplyState IN ('pending','applied')"
+        ") ORDER BY Href",
+        (int(session_id), int(session_id)),
+    ).fetchall()
+    return [r["Href"] for r in rows]
+
+
+def db_commit_session_history(
+    session_id: int,
+    *,
+    history_db_path: Optional[str] = None,
+    reports_db_path: Optional[str] = None,
+) -> Dict[str, int]:
+    """Drain pending writes for *session_id* into MovieHistory / TorrentHistory.
+
+    State transitions executed:
+
+      in_progress → finalizing  (set up-front)
+      finalizing → committed    (set when every Href has applied)
+
+    Returns aggregate per-table counts.  Callers should treat the
+    function as the canonical "drain pending" entry point; recovery
+    from a crash midway through is via :func:`db_resume_finalizing_session`.
+    """
+    when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    counts = {
+        "movies_upserted": 0,
+        "torrents_upserted": 0,
+        "torrents_deleted": 0,
+        "pending_marked_applied": 0,
+        "pending_deleted": 0,
+        "hrefs_processed": 0,
+    }
+
+    state = db_get_session_status(
+        session_id, db_path=reports_db_path,
+    )
+    if state is None:
+        return counts
+    write_mode, status = state
+    if write_mode != "pending":
+        raise ValueError(
+            f"db_commit_session_history: session {session_id} has "
+            f"WriteMode={write_mode!r}; expected 'pending'"
+        )
+    if status not in ("in_progress", "finalizing", "committed"):
+        raise ValueError(
+            f"db_commit_session_history: session {session_id} has "
+            f"Status={status!r}; expected one of in_progress / "
+            f"finalizing / committed"
+        )
+
+    if status == "in_progress":
+        db_begin_finalize_session(session_id, db_path=reports_db_path)
+
+    with get_db(history_db_path or HISTORY_DB_PATH) as conn:
+        hrefs = _pending_distinct_hrefs(conn, session_id)
+    counts["hrefs_processed"] = len(hrefs)
+
+    for href in hrefs:
+        with _href_lock(href):
+            with get_db(history_db_path or HISTORY_DB_PATH) as conn:
+                per_movie = _commit_one_movie(
+                    conn, session_id, href, when=when,
+                )
+                for k, v in per_movie.items():
+                    counts[k] = counts.get(k, 0) + v
+
+    with get_db(history_db_path or HISTORY_DB_PATH) as conn:
+        cur_m = conn.execute(
+            "DELETE FROM PendingMovieHistoryWrites "
+            "WHERE SessionId=? AND ApplyState='applied'",
+            (int(session_id),),
+        )
+        cur_t = conn.execute(
+            "DELETE FROM PendingTorrentHistoryWrites "
+            "WHERE SessionId=? AND ApplyState='applied'",
+            (int(session_id),),
+        )
+        counts["pending_deleted"] = (cur_m.rowcount or 0) + (cur_t.rowcount or 0)
+
+    db_finish_commit_session(session_id, db_path=reports_db_path)
+    return counts
+
+
+def db_resume_finalizing_session(
+    session_id: int,
+    *,
+    history_db_path: Optional[str] = None,
+    reports_db_path: Optional[str] = None,
+) -> Dict[str, int]:
+    """Idempotently finish a session left in ``Status='finalizing'``.
+
+    Identical to :func:`db_commit_session_history` aside from the
+    pre-condition: the session must already be in ``finalizing`` (or
+    ``committed`` — then the call is a no-op).  Used by the rollback CLI
+    to drive a crashed-mid-commit session to ``committed`` instead of
+    rewinding it.
+    """
+    state = db_get_session_status(
+        session_id, db_path=reports_db_path,
+    )
+    if state is None:
+        return {
+            "movies_upserted": 0,
+            "torrents_upserted": 0,
+            "torrents_deleted": 0,
+            "pending_marked_applied": 0,
+            "pending_deleted": 0,
+            "hrefs_processed": 0,
+        }
+    write_mode, status = state
+    if write_mode != "pending":
+        raise ValueError(
+            f"db_resume_finalizing_session: session {session_id} has "
+            f"WriteMode={write_mode!r}; expected 'pending'"
+        )
+    if status not in ("finalizing", "committed"):
+        raise ValueError(
+            f"db_resume_finalizing_session: session {session_id} has "
+            f"Status={status!r}; expected 'finalizing' or 'committed'"
+        )
+    return db_commit_session_history(
+        session_id,
+        history_db_path=history_db_path,
+        reports_db_path=reports_db_path,
+    )
+
+
+def _rollback_pending_in_progress(
+    session_id: int,
+    *,
+    dry_run: bool,
+    db_path: Optional[str] = None,
+) -> Dict[str, int]:
+    """Drop pending writes for an in-progress pending-mode session.
+
+    Mirrors the structure of :func:`_rollback_history` for the audit
+    path: returns per-table counts, supports dry-run, never touches
+    other sessions' rows.
+    """
+    counts: Dict[str, int] = {
+        "PendingMovieHistoryWrites": 0,
+        "PendingTorrentHistoryWrites": 0,
+        "drift_skipped": 0,
+        "orphan_pruned": 0,
+    }
+    with get_db(db_path or HISTORY_DB_PATH) as conn:
+        if dry_run:
+            counts["PendingMovieHistoryWrites"] = (conn.execute(
+                "SELECT COUNT(*) AS n FROM PendingMovieHistoryWrites "
+                "WHERE SessionId=?",
+                (int(session_id),),
+            ).fetchone() or {"n": 0})["n"]
+            counts["PendingTorrentHistoryWrites"] = (conn.execute(
+                "SELECT COUNT(*) AS n FROM PendingTorrentHistoryWrites "
+                "WHERE SessionId=?",
+                (int(session_id),),
+            ).fetchone() or {"n": 0})["n"]
+            return counts
+        cur_m = conn.execute(
+            "DELETE FROM PendingMovieHistoryWrites WHERE SessionId=?",
+            (int(session_id),),
+        )
+        cur_t = conn.execute(
+            "DELETE FROM PendingTorrentHistoryWrites WHERE SessionId=?",
+            (int(session_id),),
+        )
+        counts["PendingMovieHistoryWrites"] = cur_m.rowcount or 0
+        counts["PendingTorrentHistoryWrites"] = cur_t.rowcount or 0
+    return counts
+
 # ── ReportSessions + ReportMovies + ReportTorrents helpers ───────────────
 
 def db_create_report_session(
@@ -2915,6 +3872,7 @@ def db_create_report_session(
     run_id: Optional[str] = None,
     run_attempt: Optional[int] = None,
     session_id: Optional[int] = None,
+    write_mode: Optional[str] = None,
 ) -> int:
     """Create a new report session and return its id.
 
@@ -2952,16 +3910,17 @@ def db_create_report_session(
     if created_at is None:
         created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     sid = int(session_id) if session_id is not None else _generate_session_id()
+    resolved_mode = _resolve_write_mode(write_mode)
     with get_db(db_path or REPORTS_DB_PATH) as conn:
         conn.execute(
             """INSERT INTO ReportSessions
                (Id, ReportType, ReportDate, UrlType, DisplayName,
                 Url, StartPage, EndPage, CsvFilename, DateTimeCreated,
-                Status, RunId, RunAttempt)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_progress', ?, ?)""",
+                Status, RunId, RunAttempt, WriteMode)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_progress', ?, ?, ?)""",
             (sid, report_type, report_date, url_type, display_name,
              url, start_page, end_page, csv_filename, created_at,
-             run_id, run_attempt),
+             run_id, run_attempt, resolved_mode),
         )
     return sid
 
@@ -3600,6 +4559,7 @@ def db_rollback_session(
     operations_db_path: Optional[str] = None,
     run_started_at: Optional[str] = None,
     failure_reason: Optional[str] = None,
+    auto_resume_finalizing: bool = True,
 ) -> Dict[str, Dict[str, int]]:
     """Roll back all D1/SQLite writes that belong to *session_id*.
 
@@ -3656,7 +4616,26 @@ def db_rollback_session(
             f"undo a successful run's writes."
         )
 
-    if not dry_run and current_status != 'committed':
+    # Ingestion Perfect Rollback (Phase 2): pending-mode sessions
+    # already in 'finalizing' must NOT be flipped to 'failed' before
+    # the dispatcher runs — that would reroute the resume_commit
+    # branch into rollback_pending and silently lose the in-flight
+    # commit.  We only flip on legacy audit sessions and on pending
+    # sessions that are still in 'in_progress' (true rollback path).
+    pre_state = db_get_session_status(
+        session_id, db_path=reports_db_path,
+    )
+    pre_write_mode = pre_state[0] if pre_state else 'audit'
+    pre_status = pre_state[1] if pre_state else current_status
+    skip_mark_failed = (
+        pre_write_mode == 'pending'
+        and pre_status == 'finalizing'
+    )
+    if (
+        not dry_run
+        and current_status != 'committed'
+        and not skip_mark_failed
+    ):
         # Best-effort flag — failure here shouldn't block the rollback.
         try:
             db_mark_session_failed(
@@ -3680,12 +4659,59 @@ def db_rollback_session(
             session_id, dry_run=dry_run, db_path=operations_db_path,
         )
     if scope in ('history', 'all'):
-        result['history'] = _rollback_history(
-            session_id,
-            dry_run=dry_run,
-            db_path=history_db_path,
-            run_started_at=run_started_at,
-        )
+        # Ingestion Perfect Rollback (Phase 2): dispatch on
+        # (WriteMode, Status).  Pending sessions never have audit
+        # rows so the legacy replay would be a no-op; we want to
+        # either DELETE pending (in_progress) or resume the commit
+        # (finalizing).
+        # NOTE: _rollback_reports above DELETEs the ReportSessions row,
+        # so a fresh db_get_session_status() here would always return
+        # None and silently fall back to 'audit'.  Reuse the snapshot we
+        # captured before any deletion ran.
+        write_mode = pre_write_mode
+        sess_status = pre_status
+        if write_mode == 'pending':
+            if sess_status == 'finalizing':
+                if not auto_resume_finalizing:
+                    raise ValueError(
+                        f"Refusing to roll back ReportSessions."
+                        f"Id={session_id}: pending-mode session is "
+                        "in Status='finalizing' and "
+                        "auto_resume_finalizing=False. Pass "
+                        "--auto-resume-finalizing to drive it to "
+                        "committed instead, or --force-fail-finalizing "
+                        "to give up."
+                    )
+                if dry_run:
+                    result['history'] = {
+                        'mode': 'resume_commit',
+                        'dry_run': 1,
+                    }
+                else:
+                    counts = db_resume_finalizing_session(
+                        session_id,
+                        history_db_path=history_db_path,
+                        reports_db_path=reports_db_path,
+                    )
+                    counts['mode'] = 'resume_commit'
+                    result['history'] = counts
+            else:
+                counts = _rollback_pending_in_progress(
+                    session_id,
+                    dry_run=dry_run,
+                    db_path=history_db_path,
+                )
+                counts['mode'] = 'rollback_pending'
+                result['history'] = counts
+        else:
+            counts = _rollback_history(
+                session_id,
+                dry_run=dry_run,
+                db_path=history_db_path,
+                run_started_at=run_started_at,
+            )
+            counts['mode'] = 'audit_replay'
+            result['history'] = counts
     return result
 
 

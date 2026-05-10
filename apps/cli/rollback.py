@@ -205,6 +205,30 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
              "call.  The DB-side rollback is unaffected; the staged entries "
              "will be reaped by the StaleSessionCleanup orphan sweep.",
     )
+    # Ingestion Perfect Rollback (Phase 2/3): pending-mode sessions
+    # caught in Status='finalizing' are driven to committed via
+    # db_resume_finalizing_session by default; pass
+    # ``--no-auto-resume-finalizing`` to refuse and surface them as
+    # failed_sessions instead.
+    parser.set_defaults(auto_resume_finalizing=True)
+    ar_group = parser.add_mutually_exclusive_group()
+    ar_group.add_argument(
+        "--auto-resume-finalizing",
+        dest="auto_resume_finalizing",
+        action="store_true",
+        help="For pending-mode sessions in Status='finalizing', "
+             "call db_resume_finalizing_session to drive them to "
+             "committed (the default; explicit flag exists so the "
+             "behaviour is documented in workflow YAML).",
+    )
+    ar_group.add_argument(
+        "--no-auto-resume-finalizing",
+        dest="auto_resume_finalizing",
+        action="store_false",
+        help="Refuse to act on a pending-mode session that is in "
+             "Status='finalizing'; surface it as a failed_sessions "
+             "entry instead of resuming the commit.",
+    )
     parser.add_argument(
         "--claim-rollback-attempts",
         type=int,
@@ -582,6 +606,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 force=args.force,
                 run_started_at=run_started_at_normalized,
                 failure_reason=failure_reason,
+                auto_resume_finalizing=args.auto_resume_finalizing,
             )
         except ValueError as e:
             logger.error("Refused to roll back session %s: %s", sid, e)
