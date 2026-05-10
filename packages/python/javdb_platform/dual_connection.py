@@ -173,7 +173,19 @@ _ID_DELTA_BY_TABLE: "dict[str, int]" = {}
 # tables and the two ``lastrowid`` values disagree, the transaction is
 # aborted (``DualWriteIdMismatchError``) so the corrupted Id never
 # reaches downstream code.
-APPLICATION_GENERATED_ID_TABLES: frozenset = frozenset({"ReportSessions"})
+APPLICATION_GENERATED_ID_TABLES: frozenset = frozenset({
+    "ReportSessions",
+    # Ingestion Perfect Rollback (Phase 2): the Pending tables also need
+    # the same protection — ``_commit_one_movie`` flips ``ApplyState`` by
+    # ``Seq IN (...)`` and ``db_commit_session_history`` later DELETEs by
+    # ``ApplyState='applied'``.  If the SQLite-side Seq disagrees with
+    # the D1-side Seq for the same logical row (e.g. asymmetric INSERT
+    # failure during a stage burst), the apply / delete loop touches the
+    # wrong row on at least one backend and leaves residual ``pending``
+    # entries that trigger the Phase 3 critical alert.
+    "PendingMovieHistoryWrites",
+    "PendingTorrentHistoryWrites",
+})
 
 
 class DualWriteIdMismatchError(RuntimeError):

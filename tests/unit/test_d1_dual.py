@@ -1104,3 +1104,239 @@ def test_unguarded_table_id_drift_is_warning_not_error(tmp_path):
         "INSERT INTO OtherTable (v) VALUES (?)", ("hi",),
     )
     assert cur is not None
+
+
+# ── Pending tables (R2: Ingestion Perfect Rollback) ─────────────────────
+#
+# PendingMovie/TorrentHistoryWrites must be guarded the same way
+# ReportSessions is, otherwise a Seq drift between SQLite and D1 would
+# silently leave residual ``ApplyState='pending'`` rows after commit
+# (``_commit_one_movie`` flips ``applied`` by ``Seq IN (...)`` and the
+# subsequent DELETE is keyed off ``ApplyState='applied'``).  These tests
+# protect the contract on both sides: the table-set membership and the
+# explicit-Seq INSERT pattern that ``db_stage_history_write`` emits.
+
+
+_PENDING_MOVIE_DDL = (
+    "CREATE TABLE PendingMovieHistoryWrites ("
+    "Seq INTEGER PRIMARY KEY AUTOINCREMENT, "
+    "SessionId INTEGER NOT NULL, "
+    "RunId TEXT, RunAttempt INTEGER, "
+    "Href TEXT NOT NULL, VideoCode TEXT, "
+    "ActorName TEXT, ActorGender TEXT, ActorLink TEXT, SupportingActors TEXT, "
+    "DateTimeVisited TEXT NOT NULL, "
+    "CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+    "ApplyState TEXT NOT NULL DEFAULT 'pending' "
+    "CHECK(ApplyState IN ('pending','applied')))"
+)
+
+_PENDING_TORRENT_DDL = (
+    "CREATE TABLE PendingTorrentHistoryWrites ("
+    "Seq INTEGER PRIMARY KEY AUTOINCREMENT, "
+    "SessionId INTEGER NOT NULL, "
+    "RunId TEXT, RunAttempt INTEGER, "
+    "Href TEXT NOT NULL, VideoCode TEXT, "
+    "Category TEXT, "
+    "SubtitleIndicator INTEGER NOT NULL, CensorIndicator INTEGER NOT NULL, "
+    "MagnetUri TEXT, Size TEXT, FileCount INTEGER, ResolutionType INTEGER, "
+    "DateTimeVisited TEXT NOT NULL, "
+    "CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+    "ApplyState TEXT NOT NULL DEFAULT 'pending' "
+    "CHECK(ApplyState IN ('pending','applied')))"
+)
+
+
+def _make_pending_tables_sqlite(tmp_path):
+    path = tmp_path / "pending.db"
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    conn.execute(_PENDING_MOVIE_DDL)
+    conn.execute(_PENDING_TORRENT_DDL)
+    return conn
+
+
+class _FixedLastrowidCursor:
+    def __init__(self, lastrowid, rowcount=1):
+        self.lastrowid = lastrowid
+        self.rowcount = rowcount
+        self._rows = []
+
+    def fetchone(self):
+        return None
+
+    def fetchall(self):
+        return []
+
+
+@pytest.mark.parametrize(
+    "table",
+    ["PendingMovieHistoryWrites", "PendingTorrentHistoryWrites"],
+)
+def test_pending_tables_in_application_id_guard_set(table):
+    """R2: both Pending tables must be guarded against dual-mode Seq drift."""
+    assert table in APPLICATION_GENERATED_ID_TABLES
+
+
+def test_explicit_seq_into_pending_movie_history_is_accepted(tmp_path):
+    """When SQLite + D1 agree on the explicit Seq, the guard passes."""
+    sqlite_conn = _make_pending_tables_sqlite(tmp_path)
+    fake_d1 = FakeD1Connection()
+
+    SAME_SEQ = 1755545088000123
+    fake_d1.execute = lambda sql, params=(): _FixedLastrowidCursor(  # type: ignore[assignment]
+        lastrowid=SAME_SEQ, rowcount=1,
+    )
+
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
+    cur = dual.execute(
+        "INSERT INTO PendingMovieHistoryWrites "
+        "(Seq, SessionId, Href, DateTimeVisited, ApplyState) "
+        "VALUES (?, ?, ?, ?, 'pending')",
+        (SAME_SEQ, 42, "/v/abc", "2026-05-08 12:00:00"),
+    )
+    assert cur.lastrowid == SAME_SEQ
+
+
+def test_explicit_seq_into_pending_torrent_history_is_accepted(tmp_path):
+    sqlite_conn = _make_pending_tables_sqlite(tmp_path)
+    fake_d1 = FakeD1Connection()
+
+    SAME_SEQ = 1755545088000456
+    fake_d1.execute = lambda sql, params=(): _FixedLastrowidCursor(  # type: ignore[assignment]
+        lastrowid=SAME_SEQ, rowcount=1,
+    )
+
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
+    cur = dual.execute(
+        "INSERT INTO PendingTorrentHistoryWrites "
+        "(Seq, SessionId, Href, SubtitleIndicator, CensorIndicator, "
+        "DateTimeVisited, ApplyState) "
+        "VALUES (?, ?, ?, ?, ?, ?, 'pending')",
+        (SAME_SEQ, 42, "/v/abc", 1, 1, "2026-05-08 12:00:00"),
+    )
+    assert cur.lastrowid == SAME_SEQ
+
+
+def test_lastrowid_mismatch_on_pending_movie_history_raises(monkeypatch, tmp_path):
+    """Without explicit Seq, AUTOINCREMENT can drift → guard MUST raise.
+
+    This is the regression net for R2: if a future caller forgets to
+    supply Seq under STORAGE_BACKEND=dual, the dual guard catches the
+    SQLite (=1) vs D1 (=999) mismatch before any downstream apply loop
+    keys off the wrong row.
+    """
+    sqlite_conn = _make_pending_tables_sqlite(tmp_path)
+    fake_d1 = FakeD1Connection()
+    fake_d1.execute = lambda sql, params=(): _FixedLastrowidCursor(  # type: ignore[assignment]
+        lastrowid=999, rowcount=1,
+    )
+
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
+    with pytest.raises(DualWriteIdMismatchError):
+        dual.execute(
+            "INSERT INTO PendingMovieHistoryWrites "
+            "(SessionId, Href, DateTimeVisited) VALUES (?, ?, ?)",
+            (42, "/v/abc", "2026-05-08 12:00:00"),
+        )
+
+    assert drift_path.exists()
+    contents = drift_path.read_text(encoding="utf-8").splitlines()
+    assert any("application_id_mismatch" in line for line in contents)
+    assert any("PendingMovieHistoryWrites" in line for line in contents)
+
+
+def test_lastrowid_mismatch_on_pending_torrent_history_raises(monkeypatch, tmp_path):
+    sqlite_conn = _make_pending_tables_sqlite(tmp_path)
+    fake_d1 = FakeD1Connection()
+    fake_d1.execute = lambda sql, params=(): _FixedLastrowidCursor(  # type: ignore[assignment]
+        lastrowid=999, rowcount=1,
+    )
+
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
+    with pytest.raises(DualWriteIdMismatchError):
+        dual.execute(
+            "INSERT INTO PendingTorrentHistoryWrites "
+            "(SessionId, Href, SubtitleIndicator, CensorIndicator, "
+            "DateTimeVisited) VALUES (?, ?, ?, ?, ?)",
+            (42, "/v/abc", 1, 1, "2026-05-08 12:00:00"),
+        )
+
+    assert drift_path.exists()
+    contents = drift_path.read_text(encoding="utf-8").splitlines()
+    assert any("application_id_mismatch" in line for line in contents)
+    assert any("PendingTorrentHistoryWrites" in line for line in contents)
+
+
+def test_db_stage_history_write_supplies_explicit_seq():
+    """Integration: db_stage_history_write must INSERT with explicit Seq.
+
+    A regression here means the guard above stops catching real drift
+    because production writes go back through AUTOINCREMENT (and that's
+    exactly the silent-residual scenario R2 was filed against).
+    """
+    from packages.python.javdb_platform import db as _db
+
+    # The autouse `_isolate_sqlite` conftest fixture has already pointed
+    # _db.HISTORY_DB_PATH at a temp file and run init_db.  Stage one
+    # row, then read back the Seq.
+    _db.db_create_report_session(
+        report_type="DailyReport",
+        report_date="2026-05-09",
+        csv_filename="r2-test.csv",
+        write_mode="pending",
+    )
+    sid = 999_999_999
+    seq = _db.db_stage_history_write(
+        sid, "movie", {"Href": "/v/r2-test", "VideoCode": "R2TEST"},
+    )
+    # Snowflake = 41 ms bits + 10 counter bits = 51 bits ≥ 2**40.
+    # AUTOINCREMENT would give a small number (1, 2, ...).
+    assert seq >= (1 << 40), (
+        f"Seq={seq} looks like AUTOINCREMENT; the explicit-Seq INSERT "
+        "path may have regressed."
+    )
+    with _db.get_db(_db.HISTORY_DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT Seq, SessionId, Href FROM PendingMovieHistoryWrites "
+            "WHERE SessionId=?",
+            (sid,),
+        ).fetchone()
+    assert row is not None
+    assert int(row["Seq"]) == seq
+    assert row["Href"] == "/v/r2-test"
+
+
+def test_db_stage_history_write_torrent_supplies_explicit_seq():
+    """Same as above for the torrent staging path."""
+    from packages.python.javdb_platform import db as _db
+
+    _db.db_create_report_session(
+        report_type="DailyReport",
+        report_date="2026-05-09",
+        csv_filename="r2-torrent-test.csv",
+        write_mode="pending",
+    )
+    sid = 888_888_888
+    seq = _db.db_stage_history_write(
+        sid, "torrent",
+        {
+            "Href": "/v/r2-tor",
+            "VideoCode": "R2TOR",
+            "Category": "subtitle",
+            "MagnetUri": "magnet:?xt=urn:btih:abc",
+        },
+    )
+    assert seq >= (1 << 40), f"torrent Seq={seq} looks like AUTOINCREMENT"
+    with _db.get_db(_db.HISTORY_DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT Seq FROM PendingTorrentHistoryWrites WHERE SessionId=?",
+            (sid,),
+        ).fetchone()
+    assert row is not None
+    assert int(row["Seq"]) == seq
