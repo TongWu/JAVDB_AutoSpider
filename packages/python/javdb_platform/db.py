@@ -2389,10 +2389,43 @@ def db_batch_update_last_visited(
     value), each affected MovieHistory row also gets ``SessionId=?`` and a
     companion ``MovieHistoryAudit`` row capturing the prior state so the
     visit timestamp change can be rolled back.
+
+    Ingestion Perfect Rollback (Phase 2): when the active session runs
+    under ``WriteMode='pending'`` the visit timestamps are staged into
+    :data:`PendingMovieHistoryWrites` (a sparse "DateTimeVisited only"
+    row per href) and applied to live in :func:`db_commit_session_history`.
+    The audit-mode in-place UPDATE path is preserved for legacy sessions.
     """
     if not hrefs:
         return 0
     sid = _resolve_session_id(session_id)
+    if sid is not None and get_active_write_mode() == 'pending':
+        # Pending route: dedupe + stage one sparse pending movie row
+        # per href.  ``_pending_movie_overlay`` will sparse-merge this
+        # with any earlier stages from the same session at commit time
+        # so we never clobber the actor fields with the visit row's
+        # NULLs.
+        unique_hrefs = list(dict.fromkeys(h for h in hrefs if h))
+        if not unique_hrefs:
+            return 0
+        for href in unique_hrefs:
+            db_stage_history_write(
+                int(sid),
+                _KIND_MOVIE,
+                {
+                    "Href": href,
+                    # Explicit visited timestamp — db_stage_history_write
+                    # would otherwise default to "now" via its own
+                    # fallback, which is what we want anyway, but pin
+                    # it here so every href in the batch shares the
+                    # exact same value (mirrors the audit path).
+                    "DateTimeVisited": (
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    ),
+                },
+                db_path=db_path,
+            )
+        return len(unique_hrefs)
     base_url = cfg('BASE_URL', 'https://javdb.com')
     lookup_hrefs: List[str] = []
     for href in hrefs:
@@ -2462,10 +2495,34 @@ def db_batch_update_movie_actors(
     When *session_id* is set (or :func:`get_active_session_id` returns a
     value), each affected MovieHistory row also gets ``SessionId=?`` and a
     companion ``MovieHistoryAudit`` row capturing the prior state.
+
+    Ingestion Perfect Rollback (Phase 2): pending-mode sessions stage a
+    sparse "actor fields only" pending movie row per href instead of
+    UPDATE-ing live + writing audit; commit merges with the earlier
+    stages from the same session.
     """
     if not updates:
         return 0
     sid = _resolve_session_id(session_id)
+    if sid is not None and get_active_write_mode() == 'pending':
+        for href, actor_name, actor_gender, actor_link, supporting_actors in (
+            updates
+        ):
+            if not href:
+                continue
+            db_stage_history_write(
+                int(sid),
+                _KIND_MOVIE,
+                {
+                    "Href": href,
+                    "ActorName": actor_name,
+                    "ActorGender": actor_gender,
+                    "ActorLink": actor_link,
+                    "SupportingActors": supporting_actors,
+                },
+                db_path=db_path,
+            )
+        return len([u for u in updates if u and u[0]])
     with get_db(db_path or HISTORY_DB_PATH) as conn:
         return _batch_update_movie_actors(
             conn, updates,
@@ -3348,11 +3405,25 @@ def _pending_movie_overlay(
     href: Optional[str] = None,
     include_states: Tuple[str, ...] = ("pending",),
 ) -> Dict[str, dict]:
-    """Return ``{href: latest_pending_movie_row}`` for *session_id*.
+    """Return ``{href: merged_pending_movie_row}`` for *session_id*.
 
-    Picks the row with the largest ``Seq`` per Href so "same session
-    writes the same movie twice" deterministically resolves to the most
-    recent payload.
+    Each pending row is sparse: a write coming from
+    :func:`save_parsed_movie_to_history` carries the actor / supporting
+    fields, while a write coming from :func:`db_batch_update_last_visited`
+    only carries ``DateTimeVisited``.  We merge across the rows for a
+    single Href so a later sparse stage cannot accidentally clobber the
+    earlier stage's columns just because its own copy of those columns
+    is ``NULL``.
+
+    Merge rule, ordered by ``Seq ASC``:
+      * later rows override earlier rows whenever their value is not
+        ``None``;
+      * ``Seq`` reflects the latest stage; the full list of Seqs that
+        contributed to the merged payload is exposed under the
+        ``_merged_seqs`` private key so the commit path can mark
+        every contributing row as ``applied`` (otherwise an earlier
+        sparse stage would leak as a permanent ``pending`` row after
+        commit).
     """
     placeholders = ",".join("?" for _ in include_states)
     params: list = [int(session_id)]
@@ -3369,7 +3440,21 @@ def _pending_movie_overlay(
     overlay: Dict[str, dict] = {}
     for row in conn.execute(sql, params).fetchall():
         d = dict(row)
-        overlay[d["Href"]] = d
+        key = d["Href"]
+        existing = overlay.get(key)
+        if existing is None:
+            d["_merged_seqs"] = [int(d["Seq"])]
+            overlay[key] = d
+            continue
+        existing["_merged_seqs"].append(int(d["Seq"]))
+        for col, value in d.items():
+            if col == "_merged_seqs":
+                continue
+            if col == "Seq":
+                existing[col] = value
+                continue
+            if value is not None:
+                existing[col] = value
     return overlay
 
 
@@ -3602,9 +3687,14 @@ def _commit_one_movie(
         )
         counts["movies_upserted"] += 1
 
-    consumed_movie_seqs = [
-        int(r["Seq"]) for r in movie_overlay.values()
-    ]
+    consumed_movie_seqs: list = []
+    for r in movie_overlay.values():
+        # ``_merged_seqs`` is populated by ``_pending_movie_overlay``
+        # for sparse-merge mode (Phase 2: visit-only / actor-only
+        # stages contribute multiple rows per href).  Fall back to
+        # ``Seq`` for the legacy single-row case to stay defensive.
+        seqs = r.get("_merged_seqs") or [int(r["Seq"])]
+        consumed_movie_seqs.extend(int(s) for s in seqs)
 
     consumed_torrent_seqs: list = []
     for (_, sub, cen), payload in torrent_overlay.items():
