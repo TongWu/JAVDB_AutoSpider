@@ -575,7 +575,17 @@ def test_dual_batch_execute_read_none_cursor_uses_dict_fallback(sqlite_conn):
     assert row.get("n") == 0
 
 
-def test_rclone_inventory_swap_raises_when_dual_batch_d1_write_fails(sqlite_conn):
+def test_rclone_inventory_swap_raises_when_dual_batch_d1_write_fails(
+    sqlite_conn, tmp_path, monkeypatch,
+):
+    # Redirect the drift log so test-injected "simulated D1 batch outage"
+    # rollback records don't pollute the git-tracked production
+    # ``reports/D1/d1_drift.jsonl`` (the path consumed by
+    # ``scripts/aggregate_pending_health.py`` and the email Phase 3 alerts).
+    monkeypatch.setattr(
+        _dual_module, "_DRIFT_LOG_PATH",
+        str(tmp_path / "d1_drift.jsonl"),
+    )
     sqlite_conn.execute("DROP TABLE IF EXISTS RcloneInventory")
     sqlite_conn.execute(
         """

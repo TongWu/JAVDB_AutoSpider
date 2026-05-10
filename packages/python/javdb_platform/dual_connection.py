@@ -256,18 +256,24 @@ class DualCursor:
                         "ts": datetime.now(timezone.utc).isoformat(),
                     }
                     _append_drift_record(record)
+                    # Do NOT include the raw lastrowid values or SQL text in
+                    # the user-facing log / exception message: those identify
+                    # ReportSessions / Pending*HistoryWrites rows (private
+                    # session ids) and the SQL may carry inline literals.
+                    # The full forensic detail is already persisted to
+                    # reports/D1/d1_drift.jsonl above; operators read it from
+                    # there, not from console / CI logs.
                     logger.error(
                         "DualConnection: application-generated id "
-                        "mismatch on %s (sqlite=%s, d1=%s); aborting "
-                        "transaction. Caller must INSERT with explicit "
-                        "Id (see migration/d1/2026_05_08_sessionid_"
-                        "decouple.md). | sql=%s",
-                        table, s_id, d_id, _shorten(sql),
+                        "mismatch on %s; aborting transaction. Caller must "
+                        "INSERT with explicit Id (see migration/d1/"
+                        "2026_05_08_sessionid_decouple.md); details in %s",
+                        table, _DRIFT_LOG_PATH,
                     )
                     raise DualWriteIdMismatchError(
-                        f"{table}: SQLite lastrowid {s_id} != "
-                        f"D1 lastrowid {d_id}; INSERT must supply Id "
-                        f"explicitly under STORAGE_BACKEND=dual"
+                        f"{table}: SQLite vs D1 lastrowid mismatch; "
+                        f"INSERT must supply Id explicitly under "
+                        f"STORAGE_BACKEND=dual (see drift log for details)"
                     )
         return cls(sqlite_cur, d1_cur)
 
