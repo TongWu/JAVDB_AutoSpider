@@ -6,17 +6,20 @@ Ad hoc script to clean up existing history CSV file by applying priority rules:
 """
 
 import csv
-import logging
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 os.chdir(REPO_ROOT)
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-# Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+from packages.python.javdb_platform.logging_config import setup_logging, get_logger
+
+setup_logging()
+logger = get_logger(__name__)
 
 def cleanup_history_priorities(history_file):
     """Clean up history CSV by applying priority rules"""

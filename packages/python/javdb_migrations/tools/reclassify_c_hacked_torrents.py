@@ -4,17 +4,20 @@ Ad hoc script to reclassify -C.无码破解 torrents in history CSV from no_subt
 """
 
 import csv
-import logging
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 os.chdir(REPO_ROOT)
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-# Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+from packages.python.javdb_platform.logging_config import setup_logging, get_logger
+
+setup_logging()
+logger = get_logger(__name__)
 
 def reclassify_c_hacked_torrents(history_file):
     """Reclassify -C.无码破解 torrents from no_subtitle to hacked_subtitle"""

@@ -41,6 +41,7 @@ from packages.python.javdb_core.masking import mask_ip_address
 
 # Import configuration
 from packages.python.javdb_platform.config_helper import cfg
+from packages.python.javdb_platform.logging_config import setup_logging, get_logger
 from packages.python.javdb_platform.proxy_policy import add_proxy_arguments, resolve_proxy_override, should_proxy_module
 from packages.python.javdb_platform.qb_config import (
     qb_allow_insecure_http,
@@ -62,12 +63,12 @@ PROXY_MODE = cfg('PROXY_MODE', 'pool')
 PROXY_MODULES = cfg('PROXY_MODULES', ['spider'])
 LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
 
-# Setup basic logging
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Use the canonical logging stack so console / file Formatters stay
+# consistent with the rest of the spider (compact mobile-friendly
+# console + verbose file). LOG_LEVEL / LOG_STYLE env vars are honoured
+# by setup_logging.
+setup_logging(log_level=LOG_LEVEL)
+logger = get_logger(__name__)
 
 
 def check_qbittorrent_connection() -> Tuple[bool, str]:
