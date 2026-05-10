@@ -3,7 +3,7 @@
 import os
 from typing import Optional
 
-from packages.python.javdb_platform.logging_config import get_logger
+from packages.python.javdb_platform.logging_config import get_logger, log_section
 from packages.python.javdb_core.parser import parse_index
 from packages.python.javdb_core.url_helper import detect_url_type
 from packages.python.javdb_core.filename_helper import generate_output_csv_name_from_html
@@ -40,9 +40,12 @@ def fetch_all_index_pages(
         any_proxy_banned, use_proxy, use_cf_bypass, csv_path
     """
 
-    logger.info("=" * 75)
-    logger.info("Fetching and parsing index pages%s", " (parallel)" if use_parallel else "")
-    logger.info("=" * 75)
+    log_section(
+        logger,
+        f"INDEX · pages {start_page}-{end_page if not parse_all else '*'}"
+        f"{' (parallel)' if use_parallel else ''}",
+        emoji='🌐',
+    )
 
     from packages.python.javdb_spider.runtime.config import PROXY_POOL
     active_workers = len(PROXY_POOL) if (use_parallel and PROXY_POOL) else 1

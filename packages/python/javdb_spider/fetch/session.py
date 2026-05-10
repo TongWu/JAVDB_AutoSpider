@@ -2,7 +2,7 @@
 
 from typing import Iterable, Optional
 
-from packages.python.javdb_platform.logging_config import get_logger
+from packages.python.javdb_platform.logging_config import get_logger, log_section
 from packages.python.javdb_platform.login_state_client import LoginStateUnavailable
 from packages.python.javdb_platform.bridges.rust_adapters.parser_adapter import is_login_page
 import packages.python.javdb_spider.runtime.state as state
@@ -197,14 +197,12 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
         if used_proxy_name else '?'
     )
 
-    logger.info("=" * 60)
-    logger.info(
-        "ATTEMPTING SESSION COOKIE REFRESH VIA LOGIN "
-        "(attempt %s/%s, proxy %s: %s/%s)",
-        attempt_num, budget_str,
-        used_proxy_name or 'default', proxy_attempt, LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
+    log_section(
+        logger,
+        f"LOGIN · attempt {attempt_num}/{budget_str} · proxy {used_proxy_name or 'default'} "
+        f"({proxy_attempt}/{LOGIN_ATTEMPTS_PER_PROXY_LIMIT})",
+        emoji='🔑',
     )
-    logger.info("=" * 60)
 
     if not spider_uses_proxy:
         logger.info("Login will use direct connection (no proxy)")
@@ -245,7 +243,6 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
                     logger.info("✓ Updated request handler with new session cookie")
                 if publish_to_do:
                     _publish_login_state_to_do(used_proxy_name, new_cookie)
-                logger.info("=" * 60)
                 return True, new_cookie, used_proxy_name
             else:
                 logger.warning("Failed to update config.py, using cookie directly for this run")
@@ -255,11 +252,9 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
                     logger.info("✓ Updated request handler with new session cookie")
                 if publish_to_do:
                     _publish_login_state_to_do(used_proxy_name, session_cookie)
-                logger.info("=" * 60)
                 return True, session_cookie, used_proxy_name
         else:
             logger.error(f"✗ Login failed: {message}")
-            logger.info("=" * 60)
             return False, None, None
 
     except ImportError as e:
