@@ -1,10 +1,17 @@
-"""Daily cron: roll back ReportSessions stuck in ``in_progress`` for too long.
+"""Daily cron: roll back ReportSessions stuck in ``in_progress`` / drive ``finalizing`` to ``committed``.
 
 Used by the ``StaleSessionCleanup.yml`` workflow. Walks every
-``ReportSessions`` row whose ``Status='in_progress'`` and whose
-``DateTimeCreated`` is older than ``--max-age-hours`` (default 48), and
-unwinds each one via :func:`db_rollback_session` with
-``failure_reason='stale_timeout'``.
+``ReportSessions`` row whose ``Status IN ('in_progress', 'finalizing')``
+and whose ``DateTimeCreated`` is older than ``--max-age-hours``
+(default 48), and dispatches per-session:
+
+* ``Status='in_progress'`` (audit or pending) — rolled back via
+  :func:`db_rollback_session` with ``failure_reason='stale_timeout'``.
+* ``Status='finalizing'`` (pending only) — driven to ``committed`` via
+  :func:`db_resume_finalizing_session`.  The legacy behaviour was to
+  rollback these too, but the Phase 3 contract is that finalizing
+  sessions must NEVER lose their already-half-applied writes — they
+  are idempotent and resume cleanly.
 
 Default mode is dry-run; the cron passes ``--apply`` after a manual
 review of the first run's output.
@@ -13,7 +20,7 @@ Exit codes
 ----------
 * 0 — success (or dry-run finished with no errors)
 * 3 — could not connect to the local DB / D1
-* 4 — at least one session failed to roll back cleanly
+* 4 — at least one session failed to roll back / resume cleanly
 """
 
 from __future__ import annotations
@@ -29,6 +36,8 @@ from packages.python.javdb_platform import db as _db
 from packages.python.javdb_platform.db import (
     close_db,
     db_find_in_progress_sessions,
+    db_get_session_status,
+    db_resume_finalizing_session,
     db_rollback_session,
     init_db,
     get_db,
@@ -124,45 +133,121 @@ def main(argv: Optional[List[str]] = None) -> int:
         logger.error("Failed to init DB: %s", e)
         return 3
 
+    # Phase 3: walk both in_progress AND finalizing sessions.  The new
+    # helper returns (Id, Status, WriteMode) so we can dispatch per-row:
+    #   in_progress → db_rollback_session (audit replay or DELETE pending)
+    #   finalizing  → db_resume_finalizing_session (idempotent commit drive)
     try:
-        sessions = db_find_in_progress_sessions(
+        from packages.python.javdb_platform.db import (
+            db_find_stale_pending_sessions,
+        )
+        rows = db_find_stale_pending_sessions(
             max_age_hours=args.max_age_hours,
             require_run_identity=not args.include_legacy,
         )
     except Exception as e:
-        logger.error("Failed to query in_progress sessions: %s", e)
+        logger.error("Failed to query stale sessions: %s", e)
         close_db()
         return 3
 
-    if not sessions:
+    if not rows:
         logger.info(
-            "No in_progress sessions older than %s hour(s) — nothing to do.",
+            "No stale in_progress / finalizing sessions older than %s "
+            "hour(s) — nothing to do.",
             args.max_age_hours,
         )
         close_db()
         return 0
 
+    in_progress_sessions = [r for r in rows if r[1] == 'in_progress']
+    finalizing_sessions = [r for r in rows if r[1] == 'finalizing']
+    sessions = [r[0] for r in rows]
+
     logger.info(
-        "Found %d stale in_progress session(s) (older than %sh): %s",
-        len(sessions), args.max_age_hours, sessions,
+        "Found %d stale session(s) (older than %sh): "
+        "in_progress=%d finalizing=%d",
+        len(rows), args.max_age_hours,
+        len(in_progress_sessions), len(finalizing_sessions),
     )
 
     summaries: List[dict] = []
     failed: List[int] = []
     drift_total = 0
     orphan_pruned_total = 0
-    for sid in sessions:
+    resume_successes = 0
+    resume_failures = 0
+    for sid, status, write_mode in rows:
         meta = _read_session_meta(sid)
         if args.dry_run:
             summaries.append({
                 "session_id": sid,
+                "status": status,
+                "write_mode": write_mode,
                 "meta": meta,
                 "would_apply": True,
+                "action": (
+                    "resume_commit" if status == 'finalizing'
+                    else "rollback"
+                ),
             })
             logger.info(
-                "[dry-run] Would clean up session %s (%s)", sid, meta,
+                "[dry-run] Would handle session %s status=%s mode=%s",
+                sid, status, write_mode,
             )
             continue
+
+        if status == 'finalizing' and write_mode == 'pending':
+            # Phase 3: drive the half-applied session to committed
+            # rather than rolling it back.  resume is idempotent so
+            # repeated cron runs converge.
+            try:
+                counts = db_resume_finalizing_session(sid)
+                summaries.append({
+                    "session_id": sid,
+                    "status": status,
+                    "write_mode": write_mode,
+                    "meta": meta,
+                    "action": "resume_commit",
+                    "counts": counts,
+                })
+                resume_successes += 1
+                logger.info(
+                    "Resumed finalizing session %s: %s",
+                    sid, json.dumps(counts, ensure_ascii=False),
+                )
+            except Exception as e:
+                logger.error(
+                    "Resume of finalizing session %s failed: %s", sid, e,
+                )
+                failed.append(sid)
+                resume_failures += 1
+                summaries.append({
+                    "session_id": sid,
+                    "status": status,
+                    "write_mode": write_mode,
+                    "action": "resume_commit",
+                    "error": str(e),
+                })
+            continue
+
+        if status == 'finalizing':
+            # Audit-mode finalizing should not exist (only pending uses
+            # finalizing).  Refuse to rollback so we don't lose data.
+            logger.warning(
+                "Refusing to clean up audit-mode finalizing session %s — "
+                "WriteMode=%s; manual investigation required.",
+                sid, write_mode,
+            )
+            failed.append(sid)
+            summaries.append({
+                "session_id": sid,
+                "status": status,
+                "write_mode": write_mode,
+                "action": "skipped",
+                "error": "audit_finalizing_unexpected",
+            })
+            continue
+
         try:
             counts = db_rollback_session(
                 sid,
@@ -174,10 +259,18 @@ def main(argv: Optional[List[str]] = None) -> int:
                 # based on a single bogus reference time.
                 run_started_at=None,
                 failure_reason="stale_timeout",
+                # Phase 3 belt-and-braces: should never fire here
+                # because we routed finalizing above, but keep the
+                # default-on flag explicit so any race that lands a
+                # finalizing row in this branch still resumes.
+                auto_resume_finalizing=True,
             )
             summaries.append({
                 "session_id": sid,
+                "status": status,
+                "write_mode": write_mode,
                 "meta": meta,
+                "action": "rollback",
                 "counts": counts,
             })
             history = counts.get("history", {})
@@ -188,15 +281,25 @@ def main(argv: Optional[List[str]] = None) -> int:
                 sid, json.dumps(counts, ensure_ascii=False),
             )
         except ValueError as e:
-            # e.g. attempted to roll back a committed session — should
-            # not happen because we only fetched in_progress, but cope.
             logger.error("Refused to clean up session %s: %s", sid, e)
             failed.append(sid)
-            summaries.append({"session_id": sid, "error": str(e)})
+            summaries.append({
+                "session_id": sid,
+                "status": status,
+                "write_mode": write_mode,
+                "action": "rollback",
+                "error": str(e),
+            })
         except Exception as e:
             logger.error("Cleanup of session %s failed: %s", sid, e)
             failed.append(sid)
-            summaries.append({"session_id": sid, "error": str(e)})
+            summaries.append({
+                "session_id": sid,
+                "status": status,
+                "write_mode": write_mode,
+                "action": "rollback",
+                "error": str(e),
+            })
 
     summary = {
         "kind": "stale_session_cleanup",
@@ -204,7 +307,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         "max_age_hours": args.max_age_hours,
         "scope": args.scope,
         "dry_run": args.dry_run,
-        "session_count": len(sessions),
+        "session_count": len(rows),
+        "in_progress_count": len(in_progress_sessions),
+        "finalizing_count": len(finalizing_sessions),
+        "stale_resume_successes": resume_successes,
+        "stale_resume_failures": resume_failures,
         "drift_total": drift_total,
         "orphan_pruned_total": orphan_pruned_total,
         "failed_sessions": failed,
