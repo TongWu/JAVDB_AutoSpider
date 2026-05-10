@@ -548,35 +548,38 @@ class ProxyPool:
             }
             
     def log_statistics(self, level: int = logging.INFO) -> None:
-        """Log proxy pool statistics"""
+        """Log proxy pool statistics.
+
+        At ``level`` (INFO by default) a single one-line summary is
+        emitted (``available=N/total · cooldown=K · banned=B``).  The
+        per-proxy detail rows are kept at DEBUG so a typical run prints
+        one line, but ``LOG_LEVEL=DEBUG`` still surfaces every proxy's
+        success rate / last-ok / last-fail timestamps for forensic use.
+        """
         stats = self.get_statistics()
-        
-        logger.log(level, "=" * 50)
-        logger.log(level, "PROXY POOL STATISTICS")
-        logger.log(level, "=" * 50)
-        logger.log(level, f"Total proxies: {stats['total_proxies']}")
-        logger.log(level, f"Available proxies: {stats['available_proxies']}")
-        logger.log(level, f"In cooldown: {stats['in_cooldown']}")
-        logger.log(level, f"No-proxy mode: {stats['no_proxy_mode']}")
-        logger.log(level, "")
-        
-        if stats['proxies']:
-            logger.log(level, "Individual proxy statistics:")
-            for proxy_stat in stats['proxies']:
-                status = "ACTIVE" if proxy_stat['is_current'] else "Standby"
-                if proxy_stat['in_cooldown']:
-                    status += f" (Cooldown: {proxy_stat.get('cooldown_remaining', 'N/A')})"
-                elif not proxy_stat['is_available']:
-                    status += " (Unavailable)"
-                    
-                logger.log(level, f"  [{status}] {proxy_stat['name']}:")
-                logger.log(level, f"    - Total requests: {proxy_stat['total_requests']}")
-                logger.log(level, f"    - Success rate: {proxy_stat['success_rate']}")
-                logger.log(level, f"    - Consecutive failures: {proxy_stat['consecutive_failures']}")
-                logger.log(level, f"    - Last success: {proxy_stat['last_success']}")
-                logger.log(level, f"    - Last failure: {proxy_stat['last_failure']}")
-        
-        logger.log(level, "=" * 50)
+        banned = sum(1 for p in stats['proxies'] if not p.get('is_available') and not p.get('in_cooldown'))
+        logger.log(
+            level,
+            "Proxy pool · available=%d/%d · cooldown=%d · banned=%d · no-proxy=%s",
+            stats['available_proxies'], stats['total_proxies'],
+            stats['in_cooldown'], banned, stats['no_proxy_mode'],
+        )
+        # Per-proxy detail — only when the operator wants DEBUG.
+        for proxy_stat in stats['proxies']:
+            status = "ACTIVE" if proxy_stat['is_current'] else "STANDBY"
+            if proxy_stat['in_cooldown']:
+                status = f"COOLDOWN ({proxy_stat.get('cooldown_remaining', 'N/A')})"
+            elif not proxy_stat['is_available']:
+                status = "UNAVAILABLE"
+            logger.debug(
+                "  %s [%s]: %s reqs (success %s, failures=%d, ok=%s, fail=%s)",
+                proxy_stat['name'], status,
+                proxy_stat['total_requests'],
+                proxy_stat['success_rate'],
+                proxy_stat['consecutive_failures'],
+                proxy_stat['last_success'],
+                proxy_stat['last_failure'],
+            )
     
     def get_ban_summary(self, include_ip: bool = False) -> str:
         """Get ban summary from ban manager"""
