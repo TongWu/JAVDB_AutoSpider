@@ -62,6 +62,9 @@ from packages.python.javdb_platform.db import (
     close_db,
     db_find_in_progress_sessions,
     db_find_sessions_by_run,
+    db_get_session_run_identity,
+    db_get_session_status,
+    db_pending_session_stats,
     db_rollback_session,
     init_db,
     get_db,
@@ -459,6 +462,104 @@ def _resolve_failure_reason(args: argparse.Namespace) -> Optional[str]:
     return None
 
 
+def _emit_pending_verify_for_session(
+    session_id: int,
+    *,
+    pre_status: Optional[str],
+    pre_write_mode: Optional[str],
+    counts: Optional[dict],
+    duration_ms: Optional[int],
+    error: Optional[str] = None,
+    cleanup_path_mismatch: bool = False,
+    worker_stage_rollback_failed: int = 0,
+) -> None:
+    """Emit one ``pending_session_verify`` JSONL line for a rollback-CLI session.
+
+    Phase 2 — every pending-mode session must be observable from the
+    email pipeline regardless of whether it landed in ``committed``
+    (resume_commit branch) or ``failed`` (rollback_pending branch).
+    The rollback CLI is the second emit point alongside
+    :mod:`apps.cli.commit_session`; the email helper consumes the union
+    of every ``pending_session_verify`` record produced during a run.
+
+    *cleanup_path_mismatch* — set to True when a finalizing session was
+    forced into the rollback-pending branch (this is the new Phase 3
+    metric exercised by the failure SOP).  Defaults to False.
+    """
+    if pre_write_mode != "pending":
+        return
+    counts = counts or {}
+    mode = counts.get("mode")
+    if mode == "resume_commit":
+        final_status = "committed" if not error else "finalizing"
+    elif mode == "rollback_pending":
+        final_status = "failed" if not error else pre_status or "finalizing"
+    elif mode == "audit_replay":
+        # Should never happen for write_mode='pending', but stay defensive.
+        final_status = pre_status or "failed"
+    else:
+        final_status = pre_status or "in_progress"
+
+    stats = db_pending_session_stats(int(session_id))
+    pending_applied = int(counts.get("pending_marked_applied", 0) or 0)
+    pending_staged = (
+        pending_applied
+        + int(stats.get("pending_residual_count", 0) or 0)
+        + int(counts.get("PendingMovieHistoryWrites", 0) or 0)
+        + int(counts.get("PendingTorrentHistoryWrites", 0) or 0)
+    )
+    record = {
+        "kind": "pending_session_verify",
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "source": "rollback",
+        "session_id": int(session_id),
+        "write_mode": pre_write_mode,
+        "final_status": final_status,
+        "rollback_mode": mode,
+        "pending_staged_count": pending_staged,
+        "pending_applied_count": pending_applied,
+        "pending_residual_count": int(
+            stats.get("pending_residual_count", 0) or 0,
+        ),
+        # commit_attempts in the rollback CLI: 1 for the original commit
+        # attempt that failed + 1 for the resume_commit we're driving now.
+        # rollback_pending sessions never went past in_progress, so they
+        # log 0 commit attempts.
+        "commit_attempts": 2 if mode == "resume_commit" else 0,
+        "commit_duration_ms": duration_ms,
+        "hrefs_processed": int(counts.get("hrefs_processed", 0) or 0),
+        "torrents_upserted": int(counts.get("torrents_upserted", 0) or 0),
+        "torrents_deleted": int(counts.get("torrents_deleted", 0) or 0),
+        "movies_upserted": int(counts.get("movies_upserted", 0) or 0),
+        "worker_stage_rollback_failed": int(worker_stage_rollback_failed),
+        "cleanup_path_mismatch_count": 1 if cleanup_path_mismatch else 0,
+        "shadow_audit_enabled": False,
+        "derived_recompute_drift": 0,
+        "derived_drift_samples": [],
+    }
+    if error is not None:
+        record["error"] = error
+    try:
+        identity = db_get_session_run_identity(int(session_id))
+    except Exception:  # noqa: BLE001
+        identity = None
+    if identity is not None:
+        record["run_id"] = identity[0]
+        record["run_attempt"] = identity[1]
+
+    try:
+        reports_dir = os.environ.get("REPORTS_DIR", "reports")
+        path = os.path.join(reports_dir, "D1", "d1_drift.jsonl")
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Failed to append pending_session_verify metric to "
+            "d1_drift.jsonl: %s", exc,
+        )
+
+
 def _emit_metrics(summary: dict) -> None:
     """Append rollback metrics to reports/D1/d1_drift.jsonl + GITHUB_OUTPUT."""
     claim_rollbacks = summary.get("movie_claim_rollbacks", []) or []
@@ -605,7 +706,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     failed_sessions: List[int] = []
     refused_committed_sessions: List[int] = []
     summaries: List[dict] = []
+    pending_verify_records: List[dict] = []
     for sid in sessions:
+        # Capture (WriteMode, Status) BEFORE rollback so the verify
+        # record sees the pre-state — _rollback_reports might delete
+        # the ReportSessions row and obliterate the snapshot.
+        pre_state = db_get_session_status(sid)
+        pre_write_mode = pre_state[0] if pre_state else None
+        pre_status = pre_state[1] if pre_state else None
+        rollback_started = time.monotonic()
         try:
             counts = db_rollback_session(
                 sid,
@@ -621,11 +730,31 @@ def main(argv: Optional[List[str]] = None) -> int:
             failed_sessions.append(sid)
             refused_committed_sessions.append(sid)
             summaries.append({"session_id": sid, "error": str(e)})
+            if pre_write_mode == "pending" and not args.dry_run:
+                duration_ms = int((time.monotonic() - rollback_started) * 1000)
+                _emit_pending_verify_for_session(
+                    sid,
+                    pre_status=pre_status,
+                    pre_write_mode=pre_write_mode,
+                    counts=None,
+                    duration_ms=duration_ms,
+                    error=str(e),
+                )
             continue
         except Exception as e:
             logger.error("Rollback of session %s failed: %s", sid, e)
             failed_sessions.append(sid)
             summaries.append({"session_id": sid, "error": str(e)})
+            if pre_write_mode == "pending" and not args.dry_run:
+                duration_ms = int((time.monotonic() - rollback_started) * 1000)
+                _emit_pending_verify_for_session(
+                    sid,
+                    pre_status=pre_status,
+                    pre_write_mode=pre_write_mode,
+                    counts=None,
+                    duration_ms=duration_ms,
+                    error=str(e),
+                )
             continue
         summaries.append({"session_id": sid, "counts": counts})
         history_counts = counts.get("history", {})
@@ -639,6 +768,25 @@ def main(argv: Optional[List[str]] = None) -> int:
             "(dry-run)" if args.dry_run else "applied",
             json.dumps(counts, ensure_ascii=False),
         )
+        # Phase 2 verify — emit one pending_session_verify line per
+        # pending-mode session the rollback CLI handled.  Skipped on
+        # dry-run so we don't pollute the metric stream with hypothetical
+        # numbers.
+        if pre_write_mode == "pending" and not args.dry_run:
+            duration_ms = int((time.monotonic() - rollback_started) * 1000)
+            verify_record = {
+                "session_id": sid,
+                "pre_status": pre_status,
+                "rollback_mode": history_counts.get("mode"),
+            }
+            pending_verify_records.append(verify_record)
+            _emit_pending_verify_for_session(
+                sid,
+                pre_status=pre_status,
+                pre_write_mode=pre_write_mode,
+                counts=history_counts,
+                duration_ms=duration_ms,
+            )
 
     # Phase-1 — drop staged MovieClaim entries for every session we
     # actually rolled back (i.e. exclude refused/failed sessions where
