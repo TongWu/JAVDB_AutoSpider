@@ -131,25 +131,41 @@ jobs:
           fi
           MODE="pending"
           if [ -f .publish-config.yml ]; then
-            DISABLE=$(python3 -c "
-            import datetime, sys, re
-            try:
-                with open('.publish-config.yml') as f:
-                    for line in f:
-                        m = re.match(r'^\s*pending_mode_disabled_until:\s*[\'\"]?([0-9T:\\-+Z\\.]+)[\'\"]?', line)
-                        if m:
-                            ts = m.group(1)
-                            try:
-                                until = datetime.datetime.fromisoformat(ts.replace('Z','+00:00'))
-                            except ValueError:
-                                sys.exit(0)
-                            now = datetime.datetime.now(tz=until.tzinfo or datetime.timezone.utc)
-                            if now < until:
-                                print('audit')
-                            sys.exit(0)
-            except FileNotFoundError:
-                pass
-            ")
+            # NOTE: must use stdin heredoc (`python3 - <<'PY'`) here, NOT
+            # `python3 -c "..."`.  YAML's literal block strips the common
+            # leading indent but leaves any extra; an inline `python3 -c`
+            # script then gets non-zero leading whitespace and dies with
+            # IndentationError, silently dropping us back to pending and
+            # breaking the Phase 3 auto-fallback contract.  The heredoc
+            # form lets YAML strip every line uniformly so Python sees
+            # column-0 source.  See R1 in the audit plan.
+            DISABLE=$(python3 - <<'PY'
+          import datetime, re, sys
+          try:
+              with open('.publish-config.yml') as f:
+                  for line in f:
+                      m = re.match(
+                          r"^\s*pending_mode_disabled_until:\s*['\"]?([0-9T:\-+Z.]+)['\"]?",
+                          line,
+                      )
+                      if not m:
+                          continue
+                      try:
+                          until = datetime.datetime.fromisoformat(
+                              m.group(1).replace('Z', '+00:00')
+                          )
+                      except ValueError:
+                          sys.exit(0)
+                      now = datetime.datetime.now(
+                          tz=until.tzinfo or datetime.timezone.utc
+                      )
+                      if now < until:
+                          print('audit')
+                      sys.exit(0)
+          except FileNotFoundError:
+              pass
+          PY
+          )
             if [ "$DISABLE" = "audit" ]; then
               echo "pending_mode_disabled_until is in the future → forcing audit"
               MODE="audit"
