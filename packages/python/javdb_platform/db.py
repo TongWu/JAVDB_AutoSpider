@@ -3093,10 +3093,18 @@ def db_upsert_align_no_exact_match(
     """Record a video code that had no exact match on JavDB search.
 
     *session_id*: tags the row for X3 rollback; defaults to
-    :func:`get_active_session_id`. Note: this table uses INSERT OR
-    REPLACE, so on conflict any prior session's tag is overwritten —
-    rollback acceptably loses that earlier tag (the table is small and
-    idempotent).
+    :func:`get_active_session_id`.
+
+    Ingestion Perfect Rollback (Phase 3): the legacy implementation used
+    a naked ``INSERT OR REPLACE`` which overwrote any prior session's
+    tag whenever the same VideoCode was recorded a second time.  That
+    silently broke rollback for the *original* writer: a daily session
+    that staked the row could be ripped out by an unrelated adhoc
+    re-recording with the same reason.  We now switch to an
+    ``INSERT … ON CONFLICT(VideoCode) DO UPDATE`` whose UPDATE branch
+    only triggers when the row *meaningfully* changes (a new ``Reason``).
+    For an unchanged re-record the existing SessionId / DateTimeRecorded
+    are preserved verbatim — the original writer keeps ownership.
     """
     sid = _resolve_session_id(session_id)
     normalized = video_code.strip().upper()
@@ -3105,9 +3113,15 @@ def db_upsert_align_no_exact_match(
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with get_db(db_path or OPERATIONS_DB_PATH) as conn:
         conn.execute(
-            """INSERT OR REPLACE INTO InventoryAlignNoExactMatch
-               (VideoCode, Reason, DateTimeRecorded, SessionId)
-               VALUES (?, ?, ?, ?)""",
+            """INSERT INTO InventoryAlignNoExactMatch
+                   (VideoCode, Reason, DateTimeRecorded, SessionId)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(VideoCode) DO UPDATE SET
+                   Reason = excluded.Reason,
+                   DateTimeRecorded = excluded.DateTimeRecorded,
+                   SessionId = excluded.SessionId
+               WHERE InventoryAlignNoExactMatch.Reason
+                     IS NOT excluded.Reason""",
             (normalized, reason, now, sid),
         )
 
@@ -3943,6 +3957,87 @@ def db_resume_finalizing_session(
     )
 
 
+def db_pending_session_stats(
+    session_id: int,
+    *,
+    db_path: Optional[str] = None,
+) -> Dict[str, int]:
+    """Snapshot pending-table counts for *session_id* (Phase 2 verify).
+
+    Returns a dict with three keys:
+
+    * ``pending_residual_count`` — rows still flagged ``ApplyState='pending'``
+      across both ``PendingMovieHistoryWrites`` and
+      ``PendingTorrentHistoryWrites``.  After a successful commit this
+      number must be 0; a non-zero value means
+      :func:`db_commit_session_history` did not drain every staged row
+      and the session is half-applied.
+    * ``pending_applied_count`` — rows currently flagged
+      ``ApplyState='applied'``.  ``db_commit_session_history`` deletes
+      these at the end of its run, so once the session is committed
+      this is also 0.  A non-zero value here on a committed session
+      points at an interrupted commit (operator must re-run
+      :func:`db_resume_finalizing_session`).
+    * ``pending_total_count`` — sum of the two above (the row count that
+      is still resident in the pending tables for this session).
+
+    Tables that don't exist yet (e.g. legacy-schema test fixtures) are
+    treated as zero so callers in the metric-emission path never raise.
+    """
+    counts = {
+        "pending_residual_count": 0,
+        "pending_applied_count": 0,
+        "pending_total_count": 0,
+    }
+    with get_db(db_path or HISTORY_DB_PATH) as conn:
+        for tbl in (
+            "PendingMovieHistoryWrites",
+            "PendingTorrentHistoryWrites",
+        ):
+            try:
+                row = conn.execute(
+                    f"SELECT "
+                    f"  SUM(CASE WHEN ApplyState='pending' THEN 1 ELSE 0 END) "
+                    f"    AS pending_n, "
+                    f"  SUM(CASE WHEN ApplyState='applied' THEN 1 ELSE 0 END) "
+                    f"    AS applied_n "
+                    f"FROM {tbl} WHERE SessionId=?",
+                    (int(session_id),),
+                ).fetchone()
+            except sqlite3.OperationalError:
+                continue
+            if row is None:
+                continue
+            counts["pending_residual_count"] += int(row["pending_n"] or 0)
+            counts["pending_applied_count"] += int(row["applied_n"] or 0)
+    counts["pending_total_count"] = (
+        counts["pending_residual_count"] + counts["pending_applied_count"]
+    )
+    return counts
+
+
+def db_get_session_run_identity(
+    session_id: int,
+    *,
+    db_path: Optional[str] = None,
+) -> Optional[Tuple[Optional[str], Optional[int]]]:
+    """Return ``(RunId, RunAttempt)`` for *session_id*, or ``None`` if absent.
+
+    Used by the verify-metric writers so the emitted JSONL line can be
+    correlated with the GitHub Actions workflow run that produced it
+    (workflow logs only capture the env values; the verify line lets
+    operators look up the original run after the fact).
+    """
+    with get_db(db_path or REPORTS_DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT RunId, RunAttempt FROM ReportSessions WHERE Id=?",
+            (int(session_id),),
+        ).fetchone()
+    if row is None:
+        return None
+    return (row["RunId"], row["RunAttempt"])
+
+
 def _rollback_pending_in_progress(
     session_id: int,
     *,
@@ -4213,6 +4308,54 @@ def db_find_in_progress_sessions(
                 + run_identity_clause,
             ).fetchall()
     return [r['Id'] for r in rows]
+
+
+def db_find_stale_pending_sessions(
+    *,
+    db_path: Optional[str] = None,
+    max_age_hours: float = 48.0,
+    require_run_identity: bool = True,
+) -> List[Tuple[int, str, str]]:
+    """Return ``[(Id, Status, WriteMode), ...]`` for stale Phase 3 sessions.
+
+    Used by :mod:`apps.cli.cleanup_stale_in_progress` to dispatch
+    in_progress sessions to rollback and finalizing sessions to
+    resume_commit.  Filters on ``Status IN ('in_progress', 'finalizing')``
+    so audit-mode sessions still get rolled back through this cron path.
+
+    *require_run_identity* — when True, skips legacy rows with empty
+    RunId (matches the existing :func:`db_find_in_progress_sessions`
+    contract).
+    """
+    cutoff_ts = time.time() - (max_age_hours * 3600)
+    cutoff = datetime.utcfromtimestamp(cutoff_ts).strftime(
+        "%Y-%m-%d %H:%M:%S",
+    )
+    run_identity_clause = (
+        " AND RunId IS NOT NULL AND TRIM(RunId) != ''"
+        if require_run_identity else ""
+    )
+    with get_db(db_path or REPORTS_DB_PATH) as conn:
+        try:
+            rows = conn.execute(
+                "SELECT Id, Status, COALESCE(WriteMode,'audit') AS WriteMode "
+                "FROM ReportSessions "
+                "WHERE Status IN ('in_progress','finalizing') "
+                "AND DateTimeCreated < ?" + run_identity_clause,
+                (cutoff,),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            # Legacy schema without WriteMode column — fall back to audit.
+            rows = conn.execute(
+                "SELECT Id, Status FROM ReportSessions "
+                "WHERE Status IN ('in_progress','finalizing') "
+                "AND DateTimeCreated < ?" + run_identity_clause,
+                (cutoff,),
+            ).fetchall()
+            return [(int(r["Id"]), r["Status"], "audit") for r in rows]
+    return [
+        (int(r["Id"]), r["Status"], r["WriteMode"]) for r in rows
+    ]
 
 
 def db_count_in_progress_sessions_for_run(
