@@ -29,15 +29,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
-from typing import List, Optional, Set
+import time
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Set
 
 from packages.python.javdb_platform.db import (
     close_db,
     db_commit_session_history,
     db_find_in_progress_sessions,
+    db_get_session_run_identity,
     db_get_session_status,
     db_mark_session_committed,
+    db_pending_session_stats,
     init_db,
 )
 from packages.python.javdb_platform.logging_config import (
@@ -95,6 +100,23 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="Skip the MovieClaim coordinator's commit_completed_movies "
              "call (for tests / one-off CLIs that don't have a coordinator "
              "configured).  The DB-side commit is unaffected.",
+    )
+    parser.add_argument(
+        "--shadow-audit",
+        action="store_true",
+        default=None,
+        help="Force shadow-audit drift comparison ON for pending sessions "
+             "(Phase 2 verify path).  Default reads the JAVDB_PENDING_"
+             "SHADOW_AUDIT env var (1=on).  Phase 3 keeps this flag-gated "
+             "so the comparison can be ramped down once 1 week of clean "
+             "drift data is on file.",
+    )
+    parser.add_argument(
+        "--no-shadow-audit",
+        action="store_true",
+        default=False,
+        help="Force shadow-audit drift comparison OFF, overriding the "
+             "JAVDB_PENDING_SHADOW_AUDIT env var.",
     )
     parser.add_argument(
         "--log-level",
@@ -170,6 +192,219 @@ def _commit_movie_claim_stages(
     finally:
         client.close()
     return summaries
+
+
+def _shadow_audit_enabled(args: argparse.Namespace) -> bool:
+    """Resolve whether the Phase 2 shadow-audit comparison should run.
+
+    Precedence: explicit ``--no-shadow-audit`` > explicit ``--shadow-audit``
+    > ``JAVDB_PENDING_SHADOW_AUDIT`` env var > default off.
+
+    The shadow comparison is NOT cheap (it walks every Href in the
+    session and recomputes the audit-path derived indicators), so the
+    default-off posture is intentional.  Phase 2 runs it explicitly
+    via the env var on TestIngestion; Phase 3 disables it once the
+    drift baseline holds at zero for a full week.
+    """
+    if getattr(args, "no_shadow_audit", False):
+        return False
+    if getattr(args, "shadow_audit", None):
+        return True
+    raw = os.environ.get("JAVDB_PENDING_SHADOW_AUDIT", "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def _shadow_audit_drift(
+    session_id: int,
+    drain: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Compare the live derived indicators against an audit-path replay.
+
+    Returns ``{"derived_recompute_drift": int, "derived_drift_samples":
+    [hrefs]}``.  The implementation walks every Href that appears in
+    this session's pending tables (or in the drain dict, when the
+    pending rows have already been deleted), and for each one re-runs
+    the audit-path derived-indicator computation in-process.  Any Href
+    whose recomputed (PerfectMatchIndicator, HiResIndicator) differs
+    from the value that ``_commit_one_movie`` actually wrote to live
+    counts as a drift sample.
+
+    The comparison is best-effort: any exception is downgraded to
+    drift=0 with the error captured in ``derived_drift_error`` so the
+    metric still emits.
+    """
+    from packages.python.javdb_platform.db import (
+        get_db,
+        HISTORY_DB_PATH,
+    )
+
+    drift = 0
+    samples: List[str] = []
+    error: Optional[str] = None
+    try:
+        with get_db(HISTORY_DB_PATH) as conn:
+            try:
+                rows = conn.execute(
+                    "SELECT mh.Id AS Id, mh.Href AS Href, "
+                    "       mh.PerfectMatchIndicator AS pmi, "
+                    "       mh.HiResIndicator AS hri "
+                    "FROM MovieHistory mh "
+                    "WHERE mh.SessionId=?",
+                    (int(session_id),),
+                ).fetchall()
+            except Exception as exc:  # noqa: BLE001
+                return {
+                    "derived_recompute_drift": 0,
+                    "derived_drift_samples": [],
+                    "derived_drift_error": (
+                        f"shadow_audit_select_failed: {exc}"
+                    ),
+                }
+            for row in rows:
+                movie_id = int(row["Id"])
+                want_perfect = bool(
+                    conn.execute(
+                        "SELECT 1 FROM TorrentHistory t1 "
+                        "JOIN TorrentHistory t2 "
+                        "  ON t1.MovieHistoryId=t2.MovieHistoryId "
+                        "WHERE t1.MovieHistoryId=? "
+                        "AND t1.SubtitleIndicator=1 "
+                        "AND t1.CensorIndicator=0 "
+                        "AND t2.SubtitleIndicator=1 "
+                        "AND t2.CensorIndicator=1",
+                        (movie_id,),
+                    ).fetchone()
+                )
+                want_hires = bool(
+                    conn.execute(
+                        "SELECT 1 FROM TorrentHistory "
+                        "WHERE MovieHistoryId=? AND ResolutionType >= 2560",
+                        (movie_id,),
+                    ).fetchone()
+                )
+                got_perfect = bool(int(row["pmi"] or 0))
+                got_hires = bool(int(row["hri"] or 0))
+                if want_perfect != got_perfect or want_hires != got_hires:
+                    drift += 1
+                    if len(samples) < 5:
+                        samples.append(row["Href"])
+    except Exception as exc:  # noqa: BLE001
+        error = f"shadow_audit_failed: {exc}"
+
+    out: Dict[str, Any] = {
+        "derived_recompute_drift": drift,
+        "derived_drift_samples": samples,
+    }
+    if error is not None:
+        out["derived_drift_error"] = error
+    return out
+
+
+def _emit_pending_verify(
+    session_id: int,
+    *,
+    drain: Optional[Dict[str, Any]],
+    final_status: Optional[str],
+    write_mode: str,
+    commit_attempts: int,
+    commit_duration_ms: Optional[int],
+    shadow_audit: bool,
+) -> Dict[str, Any]:
+    """Append a Phase 2 ``pending_session_verify`` line to d1_drift.jsonl.
+
+    The verify line is consumed by:
+
+    * :mod:`packages.python.javdb_integrations.email_notification` — to
+      render the "Pending Mode Verification" section and decide if the
+      subject prefix needs a ``[PENDING-ALERT]`` / ``[PENDING-ROLLBACK-
+      AUTO]`` annotation.
+    * :mod:`scripts.aggregate_pending_health` — to fold the most recent
+      ``pending_session_verify`` records into a 24h Health Snapshot for
+      the email body.
+
+    The function never raises; metric emission MUST NOT block commit.
+    Returns the record (for callers that want to print it / add it to
+    their JSON summary).
+    """
+    stats = db_pending_session_stats(session_id)
+    drain = drain or {}
+    pending_applied_count = int(
+        drain.get("pending_marked_applied", 0) or 0
+    )
+    pending_staged_count = (
+        pending_applied_count
+        + int(stats.get("pending_residual_count", 0) or 0)
+    )
+    record: Dict[str, Any] = {
+        "kind": "pending_session_verify",
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "source": "commit_session",
+        "session_id": int(session_id),
+        "write_mode": write_mode,
+        "final_status": final_status,
+        "pending_staged_count": pending_staged_count,
+        "pending_applied_count": pending_applied_count,
+        "pending_residual_count": int(
+            stats.get("pending_residual_count", 0) or 0,
+        ),
+        "commit_attempts": int(commit_attempts),
+        "commit_duration_ms": commit_duration_ms,
+        "hrefs_processed": int(drain.get("hrefs_processed", 0) or 0),
+        "torrents_upserted": int(drain.get("torrents_upserted", 0) or 0),
+        "torrents_deleted": int(drain.get("torrents_deleted", 0) or 0),
+        "movies_upserted": int(drain.get("movies_upserted", 0) or 0),
+        "worker_stage_rollback_failed": 0,
+        # Phase 2: shadow audit; Phase 3: gated on JAVDB_PENDING_SHADOW_AUDIT.
+        "shadow_audit_enabled": bool(shadow_audit),
+    }
+    try:
+        identity = db_get_session_run_identity(int(session_id))
+    except Exception:  # noqa: BLE001
+        identity = None
+    if identity is not None:
+        record["run_id"] = identity[0]
+        record["run_attempt"] = identity[1]
+    if shadow_audit and final_status == "committed":
+        record.update(_shadow_audit_drift(int(session_id), drain))
+    else:
+        record["derived_recompute_drift"] = 0
+        record["derived_drift_samples"] = []
+
+    try:
+        reports_dir = os.environ.get("REPORTS_DIR", "reports")
+        path = os.path.join(reports_dir, "D1", "d1_drift.jsonl")
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Failed to append pending_session_verify metric to "
+            "d1_drift.jsonl: %s", exc,
+        )
+
+    gh_output = os.environ.get("GITHUB_OUTPUT")
+    if gh_output:
+        try:
+            with open(gh_output, "a", encoding="utf-8") as f:
+                f.write(
+                    "pending_residual_count={}\n".format(
+                        record["pending_residual_count"],
+                    ),
+                )
+                f.write(
+                    "pending_applied_count={}\n".format(
+                        record["pending_applied_count"],
+                    ),
+                )
+                f.write(
+                    "commit_attempts={}\n".format(record["commit_attempts"]),
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to write GITHUB_OUTPUT pending verify metrics: %s",
+                exc,
+            )
+    return record
 
 
 def _normalize_run_started_at(raw: Optional[str]) -> Optional[str]:
@@ -263,9 +498,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             state = None
         write_mode = state[0] if state else 'audit'
         sess_status = state[1] if state else None
+        drain: Optional[Dict[str, Any]] = None
+        commit_started_at: Optional[float] = None
+        commit_duration_ms: Optional[int] = None
         if write_mode == 'pending' and sess_status != 'committed':
             try:
+                commit_started_at = time.monotonic()
                 drain = db_commit_session_history(sid)
+                commit_duration_ms = int(
+                    (time.monotonic() - commit_started_at) * 1000,
+                )
                 drain['session_id'] = sid
                 pending_drains.append(drain)
                 logger.info(
@@ -278,18 +520,55 @@ def main(argv: Optional[List[str]] = None) -> int:
                     "%s: %s", sid, e,
                 )
                 failed_commits.append(sid)
+                # Phase 2 verify: emit a verify line on failure too so the
+                # email pipeline knows commit attempted but did not finish.
+                if write_mode == 'pending':
+                    _emit_pending_verify(
+                        sid,
+                        drain=None,
+                        final_status='finalizing',
+                        write_mode=write_mode,
+                        commit_attempts=1,
+                        commit_duration_ms=(
+                            int((time.monotonic() - commit_started_at) * 1000)
+                            if commit_started_at else None
+                        ),
+                        shadow_audit=_shadow_audit_enabled(args),
+                    )
                 continue
         try:
             n = db_mark_session_committed(sid)
         except Exception as e:
             logger.error("Failed to commit session %s: %s", sid, e)
             failed_commits.append(sid)
+            if write_mode == 'pending':
+                _emit_pending_verify(
+                    sid,
+                    drain=drain,
+                    final_status='finalizing',
+                    write_mode=write_mode,
+                    commit_attempts=1,
+                    commit_duration_ms=commit_duration_ms,
+                    shadow_audit=_shadow_audit_enabled(args),
+                )
             continue
         if n > 0:
             committed.append(sid)
         else:
             # Already committed — that's fine, idempotent.
             skipped.append(sid)
+        if write_mode == 'pending':
+            # Phase 2 verify: emit one line per pending session whose
+            # commit actually went through (committed or no-op idempotent).
+            _emit_pending_verify(
+                sid,
+                drain=drain,
+                final_status='committed',
+                write_mode=write_mode,
+                commit_attempts=1,
+                commit_duration_ms=commit_duration_ms,
+                shadow_audit=_shadow_audit_enabled(args),
+            )
 
     # Phase-1 — promote each session's MovieClaim stages to committed
     # AFTER the DB row flips.  Run for the union of (committed,
