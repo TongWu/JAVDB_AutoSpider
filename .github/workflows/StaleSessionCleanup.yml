@@ -42,7 +42,11 @@ on:
       apply:
         description: 'Apply cleanup. Default false (dry-run).'
         required: false
-        default: true
+        # cron triggers leave inputs.apply unset → bash sees empty → dry-run.
+        # workflow_dispatch must explicitly tick this to apply, matching the
+        # description (avoid the foot-gun where an operator accepts the
+        # default and runs apply by accident).
+        default: false
         type: boolean
       scope:
         description: 'Limit cleanup to one logical DB.'
