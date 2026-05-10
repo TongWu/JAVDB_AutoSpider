@@ -135,7 +135,12 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code,
     if use_sqlite():
         _ensure_db()
     if use_sqlite():
-        from packages.python.javdb_platform.db import db_upsert_history
+        from packages.python.javdb_platform.db import (
+            db_upsert_history,
+            db_stage_history_write,
+            get_active_session_id,
+            get_active_write_mode,
+        )
 
         filtered = {}
         filtered_sizes = {}
@@ -162,17 +167,65 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code,
             filtered_fc['no_subtitle'] = file_count_links.get('no_subtitle', 0)
             filtered_res['no_subtitle'] = resolution_links.get('no_subtitle')
 
-        db_upsert_history(
-            href, video_code, filtered,
-            size_links=filtered_sizes,
-            file_count_links=filtered_fc,
-            resolution_links=filtered_res,
-            actor_name=actor_name,
-            actor_gender=actor_gender,
-            actor_link=actor_link,
-            supporting_actors=supporting_actors,
-        )
-        logger.debug(f"Saved history for {href} with magnet links: {list(magnet_links.keys())}")
+        # Ingestion Perfect Rollback (Phase 2): when this process is
+        # running under WriteMode='pending' the writes go to the staging
+        # tables instead of the live MovieHistory / TorrentHistory
+        # tables.  ``db_commit_session_history`` (called by
+        # ``apps.cli.commit_session`` once the run succeeds) drains the
+        # staged rows into live; on failure the rollback CLI deletes
+        # them with no audit-replay drift.  Audit mode (default) keeps
+        # the legacy in-place upsert with X3 audit logging.
+        active_sid = get_active_session_id()
+        write_mode = get_active_write_mode()
+        if write_mode == 'pending' and active_sid is not None:
+            db_stage_history_write(
+                int(active_sid),
+                'movie',
+                {
+                    'Href': href,
+                    'VideoCode': video_code,
+                    'ActorName': actor_name,
+                    'ActorGender': actor_gender,
+                    'ActorLink': actor_link,
+                    'SupportingActors': supporting_actors,
+                },
+            )
+            for cat, magnet in filtered.items():
+                if magnet is None:
+                    continue
+                db_stage_history_write(
+                    int(active_sid),
+                    'torrent',
+                    {
+                        'Href': href,
+                        'VideoCode': video_code,
+                        'Category': cat,
+                        'MagnetUri': magnet,
+                        'Size': filtered_sizes.get(cat, ''),
+                        'FileCount': filtered_fc.get(cat, 0) or 0,
+                        'ResolutionType': filtered_res.get(cat),
+                    },
+                )
+            logger.debug(
+                "Staged pending history for %s with magnet links: %s "
+                "(session=%s, mode=pending)",
+                href, list(filtered.keys()), active_sid,
+            )
+        else:
+            db_upsert_history(
+                href, video_code, filtered,
+                size_links=filtered_sizes,
+                file_count_links=filtered_fc,
+                resolution_links=filtered_res,
+                actor_name=actor_name,
+                actor_gender=actor_gender,
+                actor_link=actor_link,
+                supporting_actors=supporting_actors,
+            )
+            logger.debug(
+                "Saved history for %s with magnet links: %s (mode=%s)",
+                href, list(magnet_links.keys()), write_mode,
+            )
 
     if use_csv():
         _csv_save_parsed_movie_to_history(history_file, href, phase, video_code, magnet_links, size_links)
