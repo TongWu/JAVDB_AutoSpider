@@ -27,14 +27,15 @@ This document is the operator's reference for rolling back partial Cloudflare D1
 
 ---
 
-## Strategy summary (X3 hybrid)
+## Strategy summary (Pending default + X3 audit fallback)
 
-The plan in `.cursor/plans/d1_workflow_rollback_plan_*.plan.md` (kept for reference) describes the design rationale. Each table is rolled back the way that's cheapest for it:
+The original X3 audit hybrid plan in `.cursor/plans/d1_workflow_rollback_plan_*.plan.md` is preserved for reference; Phase 3 (`.cursor/plans/ingestion_perfect_rollback_2152bae2.plan.md`) layered the Pending write path on top — that path is now the **default** for `MovieHistory` / `TorrentHistory`.  Each table is rolled back the way that's cheapest for it:
 
 | Table family | Rollback technique | Schema additions |
 |---|---|---|
-| `ReportMovies`, `ReportTorrents`, `ReportSessions`, `SpiderStats`, `UploaderStats`, `PikpakStats` | Cascade-delete by `SessionId`; refuse to delete `ReportSessions` rows whose `Status='committed'` | `ReportSessions.Status TEXT DEFAULT 'in_progress'` |
-| `MovieHistory`, `TorrentHistory` | Replay `*_Audit` tables in reverse to undo each `INSERT` / `UPDATE` / `DELETE`; skip rows whose current `SessionId` no longer matches (drift) | `SessionId INTEGER` on each table; new `MovieHistoryAudit` and `TorrentHistoryAudit` tables |
+| `ReportMovies`, `ReportTorrents`, `ReportSessions`, `SpiderStats`, `UploaderStats`, `PikpakStats` | Cascade-delete by `SessionId`; refuse to delete `ReportSessions` rows whose `Status='committed'` | `ReportSessions.Status TEXT DEFAULT 'in_progress'`; Phase 3 added `WriteMode` and the `finalizing` value to `Status` |
+| `MovieHistory`, `TorrentHistory` (Pending mode — Phase 3 default) | All writes stage into `PendingMovie/TorrentHistoryWrites` first; commit recomputes derived fields once and UPSERTs live in one pass; rollback `DELETE`s the staged rows for `Status='in_progress'` and `db_resume_finalizing_session` for `Status='finalizing'`. No audit replay needed. | `PendingMovieHistoryWrites` and `PendingTorrentHistoryWrites` tables (each with explicit application-generated snowflake `Seq`, `ApplyState`, `SessionId` / `RunId` / `RunAttempt`) |
+| `MovieHistory`, `TorrentHistory` (Audit fallback — `WriteMode='audit'` only) | Replay `*_Audit` tables in reverse to undo each `INSERT` / `UPDATE` / `DELETE`; skip rows whose current `SessionId` no longer matches (drift). Engaged by the `pending_mode_disabled_until` auto-fallback or workflow `write_mode_override`. | `SessionId INTEGER` on each live table; `MovieHistoryAudit` and `TorrentHistoryAudit` tables (kept read-only after Phase 4) |
 | `PikpakHistory`, `DedupRecords`, `InventoryAlignNoExactMatch` | Delete session-scoped rows. `DedupRecords` soft-delete/orphan updates first snapshot their pre-image into `DedupRecordsRollback_<session_id>`, so rollback restores pre-existing rows and deletes rows created by the failed session | `SessionId INTEGER` on each table; per-session `DedupRecordsRollback_<session_id>` backup table |
 | `RcloneInventory` | Per-session staging table → atomic D1 batch swap. A failed scan drops staging; the live table never sees a half-written scan | `RcloneInventoryStaging_<session_id>` (created/dropped per run) |
 
@@ -424,7 +425,7 @@ into `.publish-config.yml`, then commits + pushes the change so the **next** ing
 | Email subject `[PENDING-ROLLBACK-AUTO]` | `pending_residual_count`, `derived_recompute_drift`, `cleanup_path_mismatch_count` | System auto-disabled pending for 24h. Investigate, fix, then either revert the auto-commit on `.publish-config.yml` or wait. |
 | `final_status='finalizing'` two cron cycles in a row | StaleSessionCleanup unable to drive session to `committed` | `python3 -m apps.cli.commit_session --session-id <id> --shadow-audit --log-level DEBUG`; if 3 attempts still fail, `python3 -m apps.cli.rollback --session-id <id> --no-auto-resume-finalizing --apply` to mark `failed`. |
 | `worker_stage_rollback_failed > 0` | Rollback CLI couldn't reach MovieClaim coordinator | Check coordinator health; orphan sweep cron will reconcile within 4h. |
-| `pending_residual_count > 0` on a `committed` session | Half-applied commit, residual `ApplyState='pending'` rows | Future helper `cleanup_residual_pending --session-id <id> --apply` (planned); manual `DELETE FROM PendingMovie/TorrentHistoryWrites WHERE SessionId=?` is also safe — these tables never feed live reads. |
+| `pending_residual_count > 0` on a `committed` session | Half-applied commit, residual `ApplyState='pending'` rows | Live tables are already correct (the `committed` flip is the source of truth); the residual rows just need clearing. Safe options, in order of preference: (1) manual `DELETE FROM PendingMovieHistoryWrites WHERE SessionId=? AND ApplyState='pending'` plus the same on `PendingTorrentHistoryWrites` after asserting `SELECT Status FROM ReportSessions WHERE Id=?` returns `'committed'` — these tables never feed live reads, so the DELETE is non-destructive; (2) one-shot Python: `python3 -c "from packages.python.javdb_platform.db import db_commit_session_history; print(db_commit_session_history(<id>))"` — drains then deletes via the same applied-cleanup path used at commit time. (`apps.cli.commit_session` skips the drain when the session row is already `committed`, so the CLI route does **not** clear the residual.) |
 
 ---
 
