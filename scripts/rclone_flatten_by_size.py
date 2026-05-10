@@ -272,12 +272,33 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _init_logging(verbose: bool) -> None:
+    """Use the canonical setup_logging when importable, fall back otherwise.
+
+    Standalone CLI scripts under ``scripts/`` may be invoked outside the
+    repo's import path; if the canonical logging module is unreachable
+    we fall back to ``logging.basicConfig`` to preserve standalone use.
+    """
+    import logging as _logging
+    import os as _os
+    import pathlib as _pathlib
+    import sys as _sys
+    repo_root = _pathlib.Path(__file__).resolve().parents[1]
+    if str(repo_root) not in _sys.path:
+        _sys.path.insert(0, str(repo_root))
+    try:
+        from packages.python.javdb_platform.logging_config import setup_logging
+        setup_logging(log_level='DEBUG' if verbose else 'INFO')
+    except ImportError:
+        _logging.basicConfig(
+            level=_logging.DEBUG if verbose else _logging.INFO,
+            format="%(asctime)s %(levelname)s %(message)s",
+        )
+
+
 def main() -> int:
     args = parse_args()
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-    )
+    _init_logging(args.verbose)
 
     try:
         run_rclone(["version"], check=True, capture=True, timeout=15)

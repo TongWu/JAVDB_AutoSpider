@@ -33,12 +33,19 @@ os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-# Setup logging - use existing logger if available, otherwise create a basic one
+# Use the canonical logging stack — when imported in-tree, transitive
+# imports usually have ``setup_logging`` already installed.  When the
+# module is run as a standalone CLI we still want the compact console
+# Formatter, so call ``setup_logging`` defensively here (it's a no-op
+# when the root logger already has handlers).
 try:
-    from packages.python.javdb_platform.logging_config import get_logger
+    from packages.python.javdb_platform.logging_config import (
+        get_logger,
+        setup_logging,
+    )
+    setup_logging()
     logger = get_logger(__name__)
 except ImportError:
-    # Fallback: create a basic logger for standalone use
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'

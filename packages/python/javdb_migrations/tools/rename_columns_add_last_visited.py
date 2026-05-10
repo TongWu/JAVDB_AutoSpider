@@ -11,11 +11,17 @@ Changes:
 
 import csv
 import os
-import logging
+import sys
 from pathlib import Path
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+REPO_ROOT = Path(__file__).resolve().parents[4]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from packages.python.javdb_platform.logging_config import setup_logging, get_logger
+
+setup_logging()
+logger = get_logger(__name__)
 
 HISTORY_FILE = os.path.join(
     Path(__file__).resolve().parents[4],
