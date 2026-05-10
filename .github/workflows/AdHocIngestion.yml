@@ -216,6 +216,11 @@ jobs:
           VAR_PROXY_COORDINATOR_URL: ${{ vars.PROXY_COORDINATOR_URL }}
           VAR_PROXY_COORDINATOR_TOKEN: ${{ secrets.PROXY_COORDINATOR_TOKEN }}
           VAR_MOVIE_CLAIM_ENABLED: ${{ vars.MOVIE_CLAIM_ENABLED || 'auto' }}
+          # Cross-runner registry (P2-E RunnerRegistry DO).  When 'true' the
+          # spider registers/heartbeats so MovieClaim auto-mount, proxy-pool
+          # drift detection and cohort summaries see this run.  Default
+          # 'false' preserves single-runner behaviour.
+          VAR_RUNNER_REGISTRY_ENABLED: ${{ vars.RUNNER_REGISTRY_ENABLED || 'false' }}
         run: python3 -m apps.cli.config_generator --github-actions
 
       - name: Pull latest changes from remote

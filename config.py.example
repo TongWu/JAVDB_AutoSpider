@@ -196,6 +196,15 @@ PROXY_COORDINATOR_TOKEN = ''
 # into config.py).  Leaving it unset here keeps the new default.
 MOVIE_CLAIM_ENABLED = 'auto'
 
+# RUNNER_REGISTRY_ENABLED: when 'true', the spider POSTs /register at startup
+# against the Cloudflare ``RunnerRegistry`` Durable Object, sends 60s heart-
+# beats, and unregisters on exit.  This makes the run visible to peers so
+# MovieClaim's ``auto`` mount/unmount, proxy-pool drift detection, and
+# cohort summaries can take it into account.  Leave 'false' (the default)
+# to preserve historic single-runner behaviour.  GH Variable
+# RUNNER_REGISTRY_ENABLED feeds this via config_generator.
+RUNNER_REGISTRY_ENABLED = 'false'
+
 # Example configurations:
 # PROXY_MODULES = ['spider']  # Default: only spider (including login), not qBittorrent/PikPak
 # PROXY_MODULES = ['all']  # Enable proxy for all modules

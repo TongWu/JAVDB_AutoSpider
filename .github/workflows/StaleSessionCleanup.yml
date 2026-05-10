@@ -163,6 +163,10 @@ jobs:
           VAR_PROXY_COORDINATOR_URL: ${{ vars.PROXY_COORDINATOR_URL }}
           VAR_PROXY_COORDINATOR_TOKEN: ${{ secrets.PROXY_COORDINATOR_TOKEN }}
           VAR_MOVIE_CLAIM_ENABLED: ${{ vars.MOVIE_CLAIM_ENABLED || 'auto' }}
+          # Cross-runner registry (P2-E RunnerRegistry DO).  Default 'false'
+          # — flip the GitHub Variable RUNNER_REGISTRY_ENABLED to 'true' to
+          # let cleanup runners participate in cohort signalling.
+          VAR_RUNNER_REGISTRY_ENABLED: ${{ vars.RUNNER_REGISTRY_ENABLED || 'false' }}
         run: python3 -m apps.cli.config_generator --github-actions
 
       - name: Run stale-session cleanup
