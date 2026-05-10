@@ -80,6 +80,15 @@ jobs:
     environment: Production
     env:
       TZ: Asia/Singapore
+      # Ingestion Perfect Rollback (Phase 2): TestIngestion is the
+      # experimental canary for the pending write path.  Setting
+      # JAVDB_HISTORY_WRITE_MODE=pending makes db_create_report_session
+      # record WriteMode='pending' on every ReportSessions row this
+      # workflow creates, which routes the cleanup-on-failure rollback
+      # through the new DELETE-pending / resume-finalizing path instead
+      # of the legacy X3 audit replay.  DailyIngestion / AdHocIngestion
+      # remain on the default 'audit' until Phase 3.
+      JAVDB_HISTORY_WRITE_MODE: pending
     
     steps:
       - name: Checkout repository
