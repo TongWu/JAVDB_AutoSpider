@@ -381,6 +381,22 @@ def _main():
                     )
                     sys.exit(1)
 
+            # Ingestion Perfect Rollback (Phase 2): resolve WriteMode
+            # explicitly so we can both (a) log it and (b) propagate it
+            # to the per-process active context that the write helpers
+            # (`save_parsed_movie_to_history`, etc.) consult.  Falling
+            # back to ``_resolve_write_mode`` keeps the env-var/default
+            # behaviour aligned with ``db_create_report_session``.
+            from packages.python.javdb_platform.db import (
+                _resolve_write_mode as _resolve_wm,
+            )
+            requested_write_mode = _resolve_wm(None)
+            logger.info(
+                "Resolved WriteMode for new session: requested=%s "
+                "JAVDB_HISTORY_WRITE_MODE=%r",
+                requested_write_mode,
+                os.environ.get('JAVDB_HISTORY_WRITE_MODE', ''),
+            )
             _session_id = db_create_report_session(
                 report_type=report_type,
                 report_date=report_date,
@@ -391,25 +407,37 @@ def _main():
                 start_page=start_page,
                 run_id=run_id,
                 run_attempt=run_attempt,
+                write_mode=requested_write_mode,
             )
             set_active_session(_session_id)
             # Tag every history / dedup / align write that follows in this
             # process with this session id so a downstream rollback can
             # surgically undo just our rows (X3 hybrid strategy).
+            effective_write_mode = requested_write_mode
             try:
                 from packages.python.javdb_platform.db import (
-                    set_active_session_id as _set_active_session_id,
+                    db_get_session_status as _db_get_session_status,
                     set_active_run_identity as _set_active_run_identity,
+                    set_active_session_id as _set_active_session_id,
+                    set_active_write_mode as _set_active_write_mode,
                 )
                 _set_active_session_id(_session_id)
                 _set_active_run_identity(run_id, run_attempt)
+                # Read back the row so the in-process WriteMode mirrors
+                # whatever actually landed (defends against a downgrade
+                # path injecting 'audit' on legacy schemas).
+                _state = _db_get_session_status(_session_id)
+                if _state and _state[0]:
+                    effective_write_mode = _state[0]
+                _set_active_write_mode(effective_write_mode)
             except Exception as _e:
                 logger.warning(
                     f"Could not propagate session_id to db audit context: {_e}"
                 )
             logger.info(
-                "Created report session: id=%s run_id=%s run_attempt=%s",
-                _session_id, run_id, run_attempt,
+                "Created report session: id=%s run_id=%s run_attempt=%s "
+                "write_mode=%s",
+                _session_id, run_id, run_attempt, effective_write_mode,
             )
         except SystemExit:
             raise

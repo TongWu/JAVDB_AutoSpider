@@ -679,3 +679,279 @@ class TestAuditModeStillWorks:
                 csv_filename="bad-mode.csv",
                 write_mode="banana",
             )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 7. Phase 2 wiring — spider write path actually goes pending
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestSpiderWritePathRoutesToPending:
+    """Once ``set_active_write_mode('pending')`` is set,
+    ``save_parsed_movie_to_history`` must stage rows into the pending
+    tables and leave the live + audit tables untouched.  Audit mode
+    keeps the legacy in-place upsert.  These two tests are the
+    minimum guard that Phase 2's plumbing is wired all the way from
+    the public history API down to the new tables.
+    """
+
+    def _live_counts(
+        self, href: str, *, session_id: int,
+    ) -> Tuple[int, int, int, int]:
+        # MovieHistoryAudit / TorrentHistoryAudit don't carry the Href
+        # column directly (they reference the live row via TargetId);
+        # filter audit by SessionId, which uniquely identifies our test
+        # session here.
+        from tests.unit.test_rollback_pending_mode import _href_variants
+        variants = _href_variants(href)
+        placeholders = ",".join("?" for _ in variants)
+        with db_mod.get_db() as conn:
+            mh = conn.execute(
+                f"SELECT COUNT(*) AS n FROM MovieHistory "
+                f"WHERE Href IN ({placeholders})",
+                variants,
+            ).fetchone()["n"]
+            mha = conn.execute(
+                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
+                "WHERE SessionId=?",
+                (int(session_id),),
+            ).fetchone()["n"]
+            th = conn.execute(
+                f"SELECT COUNT(*) AS n FROM TorrentHistory th "
+                f"JOIN MovieHistory mh ON mh.Id=th.MovieHistoryId "
+                f"WHERE mh.Href IN ({placeholders})",
+                variants,
+            ).fetchone()["n"]
+            tha = conn.execute(
+                "SELECT COUNT(*) AS n FROM TorrentHistoryAudit "
+                "WHERE SessionId=?",
+                (int(session_id),),
+            ).fetchone()["n"]
+        return mh, mha, th, tha
+
+    def test_pending_active_mode_stages_into_pending_tables(
+        self, monkeypatch,
+    ):
+        from packages.python.javdb_platform.history_manager import (
+            save_parsed_movie_to_history,
+        )
+        # Reset any stale active state from earlier tests.
+        db_mod.set_active_session_id(None)
+        db_mod.set_active_run_identity(None, None)
+        db_mod.set_active_write_mode(None)
+        sid = db_mod.db_create_report_session(
+            report_type="DailyReport",
+            report_date="2026-05-09",
+            csv_filename="wire-pending.csv",
+            write_mode="pending",
+        )
+        db_mod.set_active_session_id(sid)
+        db_mod.set_active_run_identity("rid-wire", 1)
+        db_mod.set_active_write_mode("pending")
+        try:
+            save_parsed_movie_to_history(
+                history_file=None,
+                href="/v/WIRE-001",
+                phase=1,
+                video_code="WIRE-001",
+                magnet_links={
+                    "subtitle": "magnet:?xt=urn:btih:wire-sub",
+                    "no_subtitle": "magnet:?xt=urn:btih:wire-nosub",
+                },
+                size_links={"subtitle": "1.0GB", "no_subtitle": "0.9GB"},
+                file_count_links={"subtitle": 1, "no_subtitle": 1},
+                resolution_links={"subtitle": None, "no_subtitle": None},
+                actor_name="Wire Actor",
+                actor_gender="female",
+                actor_link="/actors/wire",
+                supporting_actors=None,
+            )
+        finally:
+            db_mod.set_active_session_id(None)
+            db_mod.set_active_run_identity(None, None)
+            db_mod.set_active_write_mode(None)
+
+        # Pending tables hold the writes; live + audit are pristine.
+        movie_pending, torrent_pending = _pending_counts(sid)
+        assert movie_pending == 1
+        assert torrent_pending >= 1
+        mh, mha, th, tha = self._live_counts("/v/WIRE-001", session_id=sid)
+        assert (mh, mha, th, tha) == (0, 0, 0, 0)
+
+    def test_audit_active_mode_keeps_in_place_upsert(self, monkeypatch):
+        # Make sure the env var doesn't leak from a prior test.
+        monkeypatch.delenv("JAVDB_HISTORY_WRITE_MODE", raising=False)
+        from packages.python.javdb_platform.history_manager import (
+            save_parsed_movie_to_history,
+        )
+        db_mod.set_active_session_id(None)
+        db_mod.set_active_run_identity(None, None)
+        db_mod.set_active_write_mode(None)
+        sid = db_mod.db_create_report_session(
+            report_type="DailyReport",
+            report_date="2026-05-09",
+            csv_filename="wire-audit.csv",
+        )
+        db_mod.set_active_session_id(sid)
+        db_mod.set_active_run_identity("rid-audit", 1)
+        # Active mode left as None; resolves to 'audit' via env/default.
+        try:
+            save_parsed_movie_to_history(
+                history_file=None,
+                href="/v/AUDIT-001",
+                phase=1,
+                video_code="AUDIT-001",
+                magnet_links={"subtitle": "magnet:?xt=urn:btih:audit-sub"},
+            )
+        finally:
+            db_mod.set_active_session_id(None)
+            db_mod.set_active_run_identity(None, None)
+            db_mod.set_active_write_mode(None)
+
+        # Live + audit get the row; pending stays empty.
+        mh, mha, th, tha = self._live_counts("/v/AUDIT-001", session_id=sid)
+        assert mh == 1
+        assert mha >= 1
+        assert th >= 1
+        assert tha >= 1
+        movie_pending, torrent_pending = _pending_counts(sid)
+        assert (movie_pending, torrent_pending) == (0, 0)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 8. Rollback safety net — pending dispatcher catches stray audit rows
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestPendingRollbackSafetyNet:
+    """If a half-migrated callsite still calls ``db_upsert_history``
+    while the session is in pending mode, the pending rollback path
+    must replay the stray audit rows so the live tables stay clean.
+    """
+
+    def test_pending_rollback_replays_legacy_audit_rows(self):
+        sid = db_mod.db_create_report_session(
+            report_type="DailyReport",
+            report_date="2026-05-09",
+            csv_filename="safety-net.csv",
+            write_mode="pending",
+        )
+        db_mod.set_active_session_id(sid)
+        db_mod.set_active_run_identity("rid-safety", 1)
+        try:
+            # Simulate a legacy callsite: write directly via
+            # db_upsert_history under the pending session.
+            db_mod.db_upsert_history(
+                href="/v/SAFE-001",
+                video_code="SAFE-001",
+                magnet_links={"subtitle": "magnet:safe-sub"},
+            )
+        finally:
+            db_mod.set_active_session_id(None)
+            db_mod.set_active_run_identity(None, None)
+
+        from tests.unit.test_rollback_pending_mode import _href_variants
+        variants = _href_variants("/v/SAFE-001")
+        placeholders = ",".join("?" for _ in variants)
+        with db_mod.get_db() as conn:
+            n_live = conn.execute(
+                f"SELECT COUNT(*) AS n FROM MovieHistory "
+                f"WHERE Href IN ({placeholders})",
+                variants,
+            ).fetchone()["n"]
+            n_audit = conn.execute(
+                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
+                "WHERE SessionId=?",
+                (int(sid),),
+            ).fetchone()["n"]
+        assert n_live == 1, "legacy upsert should have written live row"
+        assert n_audit >= 1, "legacy upsert should have written audit row"
+
+        # Pending dispatcher (Status='in_progress', WriteMode='pending')
+        # must replay the audit row and leave live tables clean.
+        result = db_mod.db_rollback_session(sid, scope="all")
+        assert result["history"]["mode"] == "rollback_pending"
+
+        with db_mod.get_db() as conn:
+            n_live_after = conn.execute(
+                f"SELECT COUNT(*) AS n FROM MovieHistory "
+                f"WHERE Href IN ({placeholders})",
+                variants,
+            ).fetchone()["n"]
+            n_audit_after = conn.execute(
+                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
+                "WHERE SessionId=?",
+                (int(sid),),
+            ).fetchone()["n"]
+        assert n_live_after == 0, "safety net failed to delete live row"
+        assert n_audit_after == 0, "safety net failed to drain audit row"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 9. commit_session CLI drains pending session before flipping Status
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestCommitSessionCLIDrainsPending:
+    """The CLI must call ``db_commit_session_history`` for pending
+    sessions before ``db_mark_session_committed`` flips the Status
+    flag, otherwise live tables miss the staged rows and the
+    PendingMovie/TorrentHistoryWrites accumulate forever.
+    """
+
+    def test_commit_session_promotes_pending_into_live(self, capsys):
+        from apps.cli import commit_session as cs_mod
+
+        sid = db_mod.db_create_report_session(
+            report_type="DailyReport",
+            report_date="2026-05-09",
+            csv_filename="commit-cli.csv",
+            write_mode="pending",
+        )
+        db_mod.db_stage_history_write(
+            sid,
+            "movie",
+            {
+                "Href": "/v/CLI-001",
+                "VideoCode": "CLI-001",
+                "DateTimeVisited": "2026-05-09 12:00:00",
+            },
+        )
+        db_mod.db_stage_history_write(
+            sid,
+            "torrent",
+            {
+                "Href": "/v/CLI-001",
+                "VideoCode": "CLI-001",
+                "Category": "subtitle",
+                "MagnetUri": "magnet:cli-sub",
+                "Size": "1.0GB",
+                "FileCount": 1,
+                "DateTimeVisited": "2026-05-09 12:00:00",
+            },
+        )
+
+        rc = cs_mod.main([
+            "--session-id", str(sid),
+            "--no-claim-commit",
+            "--log-level", "WARNING",
+        ])
+        assert rc == 0, capsys.readouterr().err
+
+        state = db_mod.db_get_session_status(sid)
+        assert state == ("pending", "committed")
+
+        from tests.unit.test_rollback_pending_mode import _href_variants
+        variants = _href_variants("/v/CLI-001")
+        placeholders = ",".join("?" for _ in variants)
+        with db_mod.get_db() as conn:
+            n_live = conn.execute(
+                f"SELECT COUNT(*) AS n FROM MovieHistory "
+                f"WHERE Href IN ({placeholders})",
+                variants,
+            ).fetchone()["n"]
+        assert n_live == 1, "commit_session did not promote pending into live"
+
+        # All applied pending rows must be drained at the end.
+        movie_pending, torrent_pending = _pending_counts(sid)
+        assert (movie_pending, torrent_pending) == (0, 0)

@@ -34,7 +34,9 @@ from typing import List, Optional, Set
 
 from packages.python.javdb_platform.db import (
     close_db,
+    db_commit_session_history,
     db_find_in_progress_sessions,
+    db_get_session_status,
     db_mark_session_committed,
     init_db,
 )
@@ -239,7 +241,44 @@ def main(argv: Optional[List[str]] = None) -> int:
     committed: List[int] = []
     skipped: List[int] = []
     failed_commits: List[int] = []
+    pending_drains: List[dict] = []
     for sid in sorted(targets):
+        # Ingestion Perfect Rollback (Phase 2): pending-mode sessions
+        # need their staged rows promoted into the live MovieHistory /
+        # TorrentHistory tables BEFORE the Status flip; otherwise the
+        # downstream rollback CLI sees a 'committed' row with leftover
+        # PendingMovie/TorrentHistoryWrites and the live tables miss
+        # all of this session's writes.  ``db_commit_session_history``
+        # itself walks in_progress → finalizing → committed and is
+        # idempotent, so calling it on an already-committed pending
+        # session is a no-op.  Audit-mode sessions skip the call so
+        # the legacy upsert + audit log path is unaffected.
+        try:
+            state = db_get_session_status(sid)
+        except Exception as e:
+            logger.warning(
+                "commit_session: could not read WriteMode for session %s "
+                "(%s); falling back to legacy mark_committed only", sid, e,
+            )
+            state = None
+        write_mode = state[0] if state else 'audit'
+        sess_status = state[1] if state else None
+        if write_mode == 'pending' and sess_status != 'committed':
+            try:
+                drain = db_commit_session_history(sid)
+                drain['session_id'] = sid
+                pending_drains.append(drain)
+                logger.info(
+                    "Pending session committed: id=%s mode=%s drain=%s",
+                    sid, write_mode, drain,
+                )
+            except Exception as e:
+                logger.error(
+                    "db_commit_session_history failed for pending session "
+                    "%s: %s", sid, e,
+                )
+                failed_commits.append(sid)
+                continue
         try:
             n = db_mark_session_committed(sid)
         except Exception as e:
@@ -270,6 +309,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "already_committed_or_missing": skipped,
         "failed_commits": failed_commits,
         "movie_claim_commits": claim_commit_summaries,
+        "pending_session_drains": pending_drains,
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     logger.info(

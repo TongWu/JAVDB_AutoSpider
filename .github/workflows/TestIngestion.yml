@@ -89,6 +89,14 @@ jobs:
       # of the legacy X3 audit replay.  DailyIngestion / AdHocIngestion
       # remain on the default 'audit' until Phase 3.
       JAVDB_HISTORY_WRITE_MODE: pending
+      # Ingestion Perfect Rollback (Phase 2): make TestIngestion's
+      # storage backend explicit at the workflow level so the canary
+      # always exercises the dual-write path against D1 even if the
+      # repo-level ``vars.STORAGE_BACKEND`` drifts back to ``sqlite``.
+      # DailyIngestion / AdHocIngestion still honour the repo var; only
+      # TestIngestion is pinned, since this is the only workflow whose
+      # entire write tail is rolled back at the end.
+      STORAGE_BACKEND: dual
     
     steps:
       - name: Checkout repository
@@ -186,6 +194,14 @@ jobs:
         id: capture_run_started_at
         run: echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
 
+      - name: "[DEBUG] Show ingestion mode env"
+        run: |
+          echo "============================================"
+          echo "Ingestion Perfect Rollback canary parameters"
+          echo "  JAVDB_HISTORY_WRITE_MODE=$JAVDB_HISTORY_WRITE_MODE"
+          echo "  STORAGE_BACKEND=$STORAGE_BACKEND"
+          echo "============================================"
+
       # ========================================
       # PART 1: Daily Ingestion Test (Spider Only)
       # ========================================
@@ -254,6 +270,42 @@ jobs:
             echo "Warning: Could not capture AdHoc CSV filename from spider output"
           fi
 
+      - name: "[VERIFY] Snapshot pending tables BEFORE rollback"
+        if: always()
+        run: |
+          # Ingestion Perfect Rollback (Phase 2): proves the pending
+          # write path was actually taken before the cleanup step
+          # wipes the rows.  Non-zero counts here + zero counts after
+          # rollback = the canary worked.  Zero here means the spider
+          # silently fell back to the audit upsert and we're not
+          # validating Phase 2 at all.
+          set -e
+          python3 - <<'PY'
+          import os, sqlite3
+          run_id = "${{ github.run_id }}"
+          attempt = int("${{ github.run_attempt }}")
+          db = "reports/history.db"
+          if not os.path.exists(db):
+              print(f"[skip] {db} absent — cannot snapshot pending counts")
+              raise SystemExit(0)
+          conn = sqlite3.connect(db)
+          try:
+              for tbl in ("PendingMovieHistoryWrites",
+                          "PendingTorrentHistoryWrites"):
+                  try:
+                      n = conn.execute(
+                          f"SELECT COUNT(*) FROM {tbl} "
+                          f"WHERE RunId=? AND RunAttempt=?",
+                          (run_id, attempt),
+                      ).fetchone()[0]
+                  except sqlite3.OperationalError as e:
+                      print(f"[skip] {tbl} — {e}")
+                      continue
+                  print(f"[snap] {tbl} = {n} rows for run {run_id}/{attempt}")
+          finally:
+              conn.close()
+          PY
+
       # ============================================================
       # MANDATORY CLEANUP — runs on success AND failure (always()).
       #
@@ -316,12 +368,22 @@ jobs:
           # Local SQLite — every dual-write went here too.  The
           # rollback CLI already runs in dual mode and has touched
           # both sides; this is the local-side proof.
+          # Ingestion Perfect Rollback (Phase 2): also assert the
+          # pending tables are empty for this run.  A non-zero count
+          # would mean the cleanup rollback dispatcher missed the
+          # `WriteMode='pending'` branch.  Audit-mode columns stay
+          # checked too — TestIngestion may downgrade to audit during
+          # an emergency.
           checks = [
               ('reports/reports.db', 'ReportSessions',
                "RunId=? AND RunAttempt=?"),
               ('reports/history.db', 'MovieHistoryAudit',
                "RunId=? AND RunAttempt=?"),
               ('reports/history.db', 'TorrentHistoryAudit',
+               "RunId=? AND RunAttempt=?"),
+              ('reports/history.db', 'PendingMovieHistoryWrites',
+               "RunId=? AND RunAttempt=?"),
+              ('reports/history.db', 'PendingTorrentHistoryWrites',
                "RunId=? AND RunAttempt=?"),
           ]
           violations = []
@@ -390,6 +452,9 @@ jobs:
           check_d1 "$D1_REPORTS_DB_ID" "ReportSessions"
           check_d1 "$D1_HISTORY_DB_ID" "MovieHistoryAudit"
           check_d1 "$D1_HISTORY_DB_ID" "TorrentHistoryAudit"
+          # Ingestion Perfect Rollback (Phase 2) — pending tables.
+          check_d1 "$D1_HISTORY_DB_ID" "PendingMovieHistoryWrites"
+          check_d1 "$D1_HISTORY_DB_ID" "PendingTorrentHistoryWrites"
           if [ "$fail" = "1" ]; then
             echo "FATAL: D1 still has rows tagged to this run"
             exit 1

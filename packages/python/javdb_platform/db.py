@@ -152,6 +152,13 @@ _active_session_id_lock = threading.Lock()
 _active_session_id_value: Optional[int] = None
 _active_run_id_value: Optional[str] = None
 _active_run_attempt_value: Optional[int] = None
+# Ingestion Perfect Rollback (Phase 2): the spider sets this once after
+# creating the report session so that every history-write code path
+# (`save_parsed_movie_to_history`, etc.) can decide between the legacy
+# audit upsert and the new pending-stage path without re-querying
+# `ReportSessions` per movie.  ``None`` means "not set — fall back to
+# the JAVDB_HISTORY_WRITE_MODE env var, then to 'audit'".
+_active_write_mode_value: Optional[str] = None
 
 
 def set_active_session_id(session_id: Optional[int]) -> None:
@@ -201,6 +208,40 @@ def get_active_run_identity() -> Tuple[Optional[str], Optional[int]]:
     """Return ``(RunId, RunAttempt)`` from the active session context."""
     with _active_session_id_lock:
         return _active_run_id_value, _active_run_attempt_value
+
+
+def set_active_write_mode(write_mode: Optional[str]) -> None:
+    """Pin the active session's WriteMode for the current process.
+
+    Set by the spider (and the rclone staging session) immediately after
+    :func:`db_create_report_session` so the write-path helpers
+    (`save_parsed_movie_to_history`, etc.) can branch to
+    :func:`db_stage_history_write` without re-reading ``ReportSessions``
+    for every movie.  Pass ``None`` to clear (e.g. between phases in
+    long-lived processes / tests).
+    """
+    global _active_write_mode_value
+    if write_mode is not None:
+        write_mode = _resolve_write_mode(write_mode)
+    with _active_session_id_lock:
+        _active_write_mode_value = write_mode
+
+
+def get_active_write_mode() -> str:
+    """Return the resolved active WriteMode (``'audit'`` or ``'pending'``).
+
+    Resolution order, mirrors :func:`_resolve_write_mode` so the helpers
+    used at session-create time and at write time agree:
+
+      1. Process-local override set by :func:`set_active_write_mode`.
+      2. Env var ``JAVDB_HISTORY_WRITE_MODE``.
+      3. Default ``'audit'``.
+    """
+    with _active_session_id_lock:
+        cached = _active_write_mode_value
+    if cached:
+        return cached
+    return _resolve_write_mode(None)
 
 
 def _resolve_session_id(explicit: Any = _SESSION_ID_SENTINEL) -> Optional[int]:
@@ -3817,12 +3858,22 @@ def _rollback_pending_in_progress(
     *,
     dry_run: bool,
     db_path: Optional[str] = None,
+    run_started_at: Optional[str] = None,
 ) -> Dict[str, int]:
     """Drop pending writes for an in-progress pending-mode session.
 
     Mirrors the structure of :func:`_rollback_history` for the audit
     path: returns per-table counts, supports dry-run, never touches
     other sessions' rows.
+
+    Safety net (Phase 2 transition): even though pending-mode sessions
+    SHOULD only hold rows in PendingMovie/TorrentHistoryWrites, any code
+    path that still calls :func:`db_upsert_history` directly under a
+    pending session writes live rows + audit rows.  We replay those
+    audit rows here so a half-migrated callsite cannot silently leak
+    writes into the live MovieHistory / TorrentHistory tables.  Once
+    every ingestion path goes pending the replay finds zero rows and
+    is a cheap no-op.
     """
     counts: Dict[str, int] = {
         "PendingMovieHistoryWrites": 0,
@@ -3842,17 +3893,29 @@ def _rollback_pending_in_progress(
                 "WHERE SessionId=?",
                 (int(session_id),),
             ).fetchone() or {"n": 0})["n"]
-            return counts
-        cur_m = conn.execute(
-            "DELETE FROM PendingMovieHistoryWrites WHERE SessionId=?",
-            (int(session_id),),
-        )
-        cur_t = conn.execute(
-            "DELETE FROM PendingTorrentHistoryWrites WHERE SessionId=?",
-            (int(session_id),),
-        )
-        counts["PendingMovieHistoryWrites"] = cur_m.rowcount or 0
-        counts["PendingTorrentHistoryWrites"] = cur_t.rowcount or 0
+        else:
+            cur_m = conn.execute(
+                "DELETE FROM PendingMovieHistoryWrites WHERE SessionId=?",
+                (int(session_id),),
+            )
+            cur_t = conn.execute(
+                "DELETE FROM PendingTorrentHistoryWrites WHERE SessionId=?",
+                (int(session_id),),
+            )
+            counts["PendingMovieHistoryWrites"] = cur_m.rowcount or 0
+            counts["PendingTorrentHistoryWrites"] = cur_t.rowcount or 0
+
+    # Safety net: replay any leftover audit rows for this session.
+    # Returns its own per-table counts; merge into ours so the caller
+    # sees both halves in a single dict (legacy keys stay intact).
+    audit_counts = _rollback_history(
+        session_id,
+        dry_run=dry_run,
+        db_path=db_path,
+        run_started_at=run_started_at,
+    )
+    for k, v in audit_counts.items():
+        counts[k] = counts.get(k, 0) + v
     return counts
 
 # ── ReportSessions + ReportMovies + ReportTorrents helpers ───────────────
@@ -4700,6 +4763,7 @@ def db_rollback_session(
                     session_id,
                     dry_run=dry_run,
                     db_path=history_db_path,
+                    run_started_at=run_started_at,
                 )
                 counts['mode'] = 'rollback_pending'
                 result['history'] = counts
