@@ -1474,6 +1474,36 @@ Progress tracking includes:
 - `[15/75]` - Entry-level progress across all pages
 - `[1/25]` - Upload progress for qBittorrent
 
+### Console / file dual-mode formatting
+
+Console output is rendered in a **mobile-friendly compact format** by
+default; file logs (`logs/spider.log` etc.) keep the **verbose 4-field**
+format unchanged so on-disk forensic logs remain grep- and shipper-
+friendly. Sections / summaries are emitted via shared helpers
+(`log_section`, `log_summary_block`, `log_group_start|end`) so the same
+call renders correctly in every target.
+
+| `LOG_STYLE` | Console behaviour                                                      |
+| ----------- | ---------------------------------------------------------------------- |
+| `compact` (default) | `HH:MM:SS  ▸ Component  message` + Unicode section dividers; emoji-anchored phase / summary blocks. Optimised for GitHub mobile and 30-second eye-scan. |
+| `plain`     | `HH:MM:SS LVL Component  message` ASCII; sections render as `==== TITLE ====`. Best for `tail | grep` pipelines and minimal terminals. |
+| `verbose`   | Legacy `<asctime> - <name> - <level> - <message>` format. Full rollback escape hatch — set when bisecting log changes. |
+
+GitHub Actions group folding (`::group::TITLE` / `::endgroup::`) is
+auto-detected when `GITHUB_ACTIONS=true` is set in the environment, and
+can be forced on/off via `LOG_GITHUB_GROUPS=on|off|auto` (default
+`auto`). With folding enabled, long but low-density blocks
+(per-proxy detail, dual-write deltas, JSON dumps) collapse by default
+in the GitHub Actions UI so the run summary panel surfaces the run's
+key metrics first.
+
+The ingestion workflows (`DailyIngestion` / `AdHocIngestion`) parse
+the spider's `SPIDER_STAT_*` stdout lines and write a Markdown table
+to `$GITHUB_STEP_SUMMARY`, so the run's pages / found / parsed /
+skipped / failed counts and the final CSV / `session_id` are visible
+in the Actions UI summary panel without expanding the spider log
+block.
+
 ## Troubleshooting
 
 ### Common Issues
@@ -1519,12 +1549,32 @@ Progress tracking includes:
 
 ### Debug Mode
 
-To see detailed operations, you can temporarily increase logging level in the scripts:
+To see detailed operations, increase the log level via either source
+(env var wins over `config.py`):
+
+```bash
+# Bash / GitHub Actions step
+export LOG_LEVEL=DEBUG
+# Optional: force the legacy 4-field format on the console too while
+# bisecting a log-format issue:
+export LOG_STYLE=verbose
+# Optional: explicitly turn off ::group:: folding in CI when scraping
+# raw spider logs from the run:
+export LOG_GITHUB_GROUPS=off
+```
 
 ```python
 # In config.py
 LOG_LEVEL = 'DEBUG'  # Shows detailed debug information
 ```
+
+At `DEBUG` the proxy pool's per-proxy detail rows (success rate /
+last-ok / last-fail per proxy) are surfaced; at `INFO` only the
+single-line summary (`available=N/total · cooldown=K · banned=B`) is
+emitted. Rust-side log targets (`javdb_rust_core::proxy::pool`, etc.)
+flow through the same Python formatter via `pyo3_log` and are mapped
+to short display names: `ProxyPool`, `BanManager`, `FetchEngine`,
+`Parser`.
 
 ## Security Notes
 
