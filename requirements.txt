@@ -24,3 +24,6 @@ pytest>=7.0.0
 pytest-cov>=4.0.0
 coverage>=7.0.0
 flake8>=6.0.0
+# Required by tests/unit/test_workflow_resolve_write_mode.py to parse
+# .github/workflows/*.yml when validating the resolve_write_mode step.
+PyYAML>=6.0
