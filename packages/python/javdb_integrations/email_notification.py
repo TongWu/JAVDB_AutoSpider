@@ -16,6 +16,7 @@ import logging
 import os
 import sys
 import re
+import json
 import shutil
 import html as html_module
 import argparse
@@ -1470,6 +1471,71 @@ def _resolve_default_health_snapshot(explicit_path):
     return None
 
 
+def _build_dual_drift_advisory(reports_dir: str) -> str:
+    """Return a banner string for the email body when D1 drift was logged today.
+
+    P0-6: in ``STORAGE_BACKEND=dual`` the application's read path goes
+    to D1 first, but the email's stats are explicitly pulled from
+    SQLite-local (see the ``db_get_*_local`` calls in :func:`main`). A
+    discrepancy between those two sources is exactly the symptom of the
+    asymmetric-write drift that prompted this hardening, so when
+    ``reports/D1/d1_drift.jsonl`` carries entries from today we surface
+    a top-of-email banner pointing the operator at the drift log.
+
+    Returns an empty string when the drift file is missing, empty, or
+    has no records from today (UTC).
+    """
+    jsonl_path = os.path.join(reports_dir, 'D1', 'd1_drift.jsonl')
+    if not os.path.exists(jsonl_path):
+        return ''
+    today_utc = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    todays_records = 0
+    sample_first_sql = None
+    sample_db = None
+    rollback_drift_rows = 0
+    failure_count_total = 0
+    try:
+        with open(jsonl_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except (ValueError, TypeError):
+                    continue
+                ts = rec.get('ts') or ''
+                if not ts.startswith(today_utc):
+                    continue
+                todays_records += 1
+                failure_count_total += int(rec.get('failure_count') or 0)
+                rollback_drift_rows += int(rec.get('uncommitted_d1_writes') or 0)
+                if sample_first_sql is None and rec.get('first_failed_sql'):
+                    sample_first_sql = rec.get('first_failed_sql')
+                    sample_db = rec.get('db')
+    except OSError:
+        return ''
+
+    if todays_records == 0:
+        return ''
+
+    lines = [
+        '⚠️  D1 DRIFT ADVISORY  ⚠️',
+        f'  - {todays_records} drift record(s) appended to d1_drift.jsonl since 00:00 UTC',
+        f'  - cumulative D1 write failures today: {failure_count_total}',
+        f'  - rows D1 kept after SQLite rollback today: {rollback_drift_rows}',
+    ]
+    if sample_first_sql:
+        lines.append(
+            f'  - first failed SQL (db={sample_db}): {sample_first_sql}'
+        )
+    lines.append(
+        '  - source: stats below are read from SQLite-local (canonical); '
+        'D1 may be behind. Reconcile via scripts/sync_d1_to_sqlite.py.'
+    )
+    return '\n'.join(lines) + '\n\n'
+
+
 def _build_pending_subject_prefix(records, alerts, has_critical, mode):
     """Return the subject-line prefix for pending-mode results.
 
@@ -1885,26 +1951,43 @@ def main():
     # Determine if we have critical errors (from logs OR from workflow job status)
     has_critical_errors = len(pipeline_errors) > 0 or has_job_failure
     
-    # Try loading stats from SQLite first, fallback to log parsing
+    # P0-6: stats MUST come from the canonical SQLite mirror, never from
+    # D1, even in STORAGE_BACKEND=dual. The dual read-path proves that D1
+    # can serve queries before cutover, but the email is a *report on
+    # what this run actually did* — if D1 is behind by N rows because a
+    # dual-write was asymmetric, the email would understate the result
+    # and operators would never notice the drift (this is exactly the
+    # 2026-05 ReportSessions/SpiderStats -1 incident). The dedicated
+    # `_local` variants always open a raw sqlite3 connection regardless
+    # of backend.
     _sid = None
     _db_spider_stats = None
     _db_uploader_stats = None
     _db_pikpak_stats = None
+    _stats_backend_label = 'sqlite-local'
     try:
         from packages.python.javdb_platform.config_helper import use_sqlite as _use_sqlite
         if _use_sqlite():
-            from packages.python.javdb_platform.db import init_db, db_get_latest_session, db_get_spider_stats, db_get_uploader_stats, db_get_pikpak_stats, current_backend as _cur_be
+            from packages.python.javdb_platform.db import (
+                init_db,
+                db_get_latest_session_local,
+                db_get_spider_stats_local,
+                db_get_uploader_stats_local,
+                db_get_pikpak_stats_local,
+                current_backend as _cur_be,
+            )
             init_db()
+            _stats_backend_label = f"{_cur_be()} (stats forced sqlite-local)"
             _sid = args.session_id
             if _sid is None:
-                latest = db_get_latest_session()
+                latest = db_get_latest_session_local()
                 if latest:
                     _sid = latest.get('Id', latest.get('id'))
                     logger.debug(f"No --session-id provided, falling back to latest session: {_sid}")
             if _sid is not None:
-                _db_spider_stats = db_get_spider_stats(_sid)
-                _db_uploader_stats = db_get_uploader_stats(_sid)
-                _db_pikpak_stats = db_get_pikpak_stats(_sid)
+                _db_spider_stats = db_get_spider_stats_local(_sid)
+                _db_uploader_stats = db_get_uploader_stats_local(_sid)
+                _db_pikpak_stats = db_get_pikpak_stats_local(_sid)
     except Exception as e:
         logger.debug(f"SQLite stats not available: {e}")
 
@@ -2199,7 +2282,32 @@ Check attached logs for details.
 {stats_report}
 """
         subject = f'{pending_prefix}✗ FAILED - JavDB {mode_display} Report {today_str}{adhoc_subject_suffix}'
-    
+
+    # P0-6: prepend a top-of-body banner when STORAGE_BACKEND=dual and
+    # ``d1_drift.jsonl`` accumulated entries today. The body up to here
+    # is sourced from SQLite-local (forced via ``db_get_*_local``); the
+    # banner makes it visible to operators that D1 and SQLite may have
+    # diverged, and points at the reconcile tool.
+    try:
+        from packages.python.javdb_platform.config_helper import cfg as _cfg
+        backend = (
+            os.environ.get('STORAGE_BACKEND')
+            or _cfg('STORAGE_BACKEND', 'sqlite')
+            or 'sqlite'
+        ).strip().lower()
+    except Exception:  # noqa: BLE001
+        backend = 'sqlite'
+    if backend in ('dual', 'd1'):
+        reports_dir_for_advisory = os.environ.get('REPORTS_DIR', _EMAIL_REPORTS_DIR)
+        advisory = _build_dual_drift_advisory(reports_dir_for_advisory)
+        if advisory:
+            body = advisory + body
+            logger.warning(
+                "Prepended D1 drift advisory to email body — see "
+                "%s/D1/d1_drift.jsonl",
+                reports_dir_for_advisory,
+            )
+
     # Send email
     email_sent = send_email(subject, body, attachments, args.dry_run)
     
@@ -2243,11 +2351,25 @@ Check attached logs for details.
     logger.info("=" * 60)
     logger.info("EMAIL NOTIFICATION COMPLETED")
     logger.info("=" * 60)
-    
-    # Exit with success - email notification itself succeeded
-    # The email content will indicate if there were pipeline errors
-    # This ensures the email notification job doesn't fail just because
-    # some component scripts failed or logs are missing
+
+    # P0-5: exit non-zero when the SMTP send actually failed so the CI
+    # job (and any operator watching the dashboard) sees the failure.
+    # Previously the script always returned 0, so a stalled relay,
+    # rejected credentials, or oversized body were silently masked and
+    # the pipeline appeared "notified" when no email was ever delivered.
+    #
+    # ``email_sent`` is set by ``send_email()`` — True on a successful
+    # ``server.send_message()``, False on any caught exception. In
+    # ``--dry-run`` we deliberately skip SMTP, so the success-path
+    # boolean is forced True there and this branch never fires.
+    if not args.dry_run and not email_sent:
+        logger.error(
+            "Email send FAILED for subject=%r; exiting non-zero so the "
+            "CI job surfaces the failure instead of marking the pipeline "
+            "as notified.",
+            subject,
+        )
+        sys.exit(2)
     sys.exit(0)
 
 
