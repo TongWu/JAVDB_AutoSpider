@@ -66,6 +66,50 @@ logger = get_logger(__name__)
 _READ_KEYWORDS = ("SELECT", "PRAGMA", "EXPLAIN")
 
 
+# ── P0-1 strict-dual-write switch ───────────────────────────────────────
+#
+# Default behaviour (``STRICT_DUAL_WRITE`` unset or "0"/"false") preserves
+# the original semantics: D1 write failures are logged to the drift file
+# and counted, but SQLite still commits.  That is appropriate for the
+# initial parallel-test phase where SQLite is canonical and D1 is a
+# best-effort mirror.
+#
+# When ``STRICT_DUAL_WRITE=1`` (or any non-empty value other than "0"/"false"):
+#   * Any write into an application-generated-id table where ``d1_cur is
+#     None`` immediately raises :class:`DualWriteIdMismatchError` so the
+#     business transaction aborts (mirrors the existing behaviour for
+#     lastrowid disagreements).
+#   * :meth:`DualConnection.commit` refuses to commit a transaction whose
+#     D1 failure count is non-zero, so SQLite + D1 stay in lock-step
+#     instead of drifting silently.
+#
+# Operators flip the flag on once the rest of the dual-write rough edges
+# are fixed (executemany chunking, batch_execute None-cursor, etc.) and
+# the email notification surfaces drift loudly.
+_STRICT_DUAL_WRITE_ENV = "STRICT_DUAL_WRITE"
+
+
+def _strict_dual_write_enabled() -> bool:
+    """Return True iff the strict-dual-write opt-in is active.
+
+    Read at call-time (not module import) so tests can monkeypatch
+    ``os.environ`` without re-importing the module.
+    """
+    raw = os.environ.get(_STRICT_DUAL_WRITE_ENV, "")
+    if not raw:
+        return False
+    return raw.strip().lower() not in {"0", "false", "no", "off", ""}
+
+
+class DualWriteStrictError(RuntimeError):
+    """Raised when STRICT_DUAL_WRITE detects asymmetric SQLite / D1 state.
+
+    Distinct from :class:`DualWriteIdMismatchError` so callers (and
+    tests) can distinguish "lastrowid disagreed" from "commit refused
+    because D1 failures were recorded".
+    """
+
+
 def _is_read(sql: str) -> bool:
     # Linear scan that skips leading whitespace, ``--`` line comments, and
     # ``/* ... */`` block comments before matching a read-only keyword.
@@ -165,9 +209,23 @@ def _signature(sql: str) -> str:
 #
 # State is keyed by table name, lives for the lifetime of the process, and
 # is guarded by a lock since DualConnection is used from multiple threads.
+# P1: support all four SQL identifier-quoting styles (double-quote,
+# backtick, single-quote, square-bracket). A bracket-quoted INSERT like
+# ``INSERT INTO [ReportSessions] ...`` previously slipped past the
+# guarded-table check entirely because the regex only allowed
+# ``"`'`` opening characters.
 _INSERT_TABLE_RE = re.compile(
-    r"^\s*(?:INSERT|REPLACE)\s+(?:OR\s+\w+\s+)?INTO\s+[\"`']?([\w.]+)[\"`']?",
-    re.IGNORECASE,
+    r"""^\s*
+    (?:INSERT|REPLACE)\s+
+    (?:OR\s+\w+\s+)?
+    INTO\s+
+    (?:
+        \[\s*([\w.]+)\s*\]              # [Table] form
+        |
+        [\"`']?([\w.]+)[\"`']?           # "Table" / `Table` / 'Table' / bare
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
 _ID_DELTA_LOCK = threading.Lock()
 _ID_DELTA_BY_TABLE: "dict[str, int]" = {}
@@ -220,7 +278,9 @@ def _extract_insert_table(sql: str) -> Optional[str]:
     m = _INSERT_TABLE_RE.match(sql)
     if not m:
         return None
-    name = m.group(1)
+    # Group 1 = ``[Table]`` capture, group 2 = ``"Table"`` / bare. Exactly
+    # one of them matches because the alternation is mutually exclusive.
+    name = m.group(1) or m.group(2)
     return name.split(".")[-1] if name else None
 
 
@@ -246,13 +306,42 @@ class DualCursor:
         Shared by :meth:`for_write` and the
         :meth:`DualConnection.executemany` / :meth:`executescript` paths
         so the same invariant holds regardless of which write API was
-        used.  A no-op when either cursor is missing (read fallback /
-        D1 failure already recorded via the drift counters).
+        used.  When a guarded-table write lands on SQLite but D1 is
+        missing (``d1_cur is None``) and :data:`STRICT_DUAL_WRITE` is on,
+        the transaction is aborted via :class:`DualWriteIdMismatchError`
+        — that is precisely the asymmetric-INSERT pattern responsible
+        for the ``ReportSessions`` / ``SpiderStats`` ``-1`` drift seen
+        in the 2026-05 dry-run reconcile reports.
         """
-        if sqlite_cur is None or d1_cur is None:
+        if sqlite_cur is None:
             return
         table = _extract_insert_table(sql)
         if not table or table not in APPLICATION_GENERATED_ID_TABLES:
+            return
+        if d1_cur is None:
+            # SQLite-only write into a guarded table. In default
+            # (non-strict) mode the drift has already been recorded via
+            # ``_record_d1_failure`` upstream so we silently continue;
+            # in strict mode we abort the transaction so SQLite + D1
+            # never split.
+            if _strict_dual_write_enabled():
+                record = {
+                    "kind": "application_id_missing_d1_cursor",
+                    "table": table,
+                    "sql": _shorten(sql),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+                _append_drift_record(record)
+                logger.error(
+                    "DualConnection: STRICT_DUAL_WRITE aborting transaction — "
+                    "guarded INSERT into %s landed on SQLite but D1 cursor is "
+                    "missing; details in %s",
+                    table, _DRIFT_LOG_PATH,
+                )
+                raise DualWriteIdMismatchError(
+                    f"{table}: SQLite committed but D1 cursor missing under "
+                    f"STRICT_DUAL_WRITE; refusing to drift (see drift log)"
+                )
             return
         s_id = getattr(sqlite_cur, "lastrowid", None)
         d_id = getattr(d1_cur, "lastrowid", None)
@@ -379,6 +468,11 @@ class DualConnection:
         self._d1_failure_count = 0
         self._d1_failure_first_sql: Optional[str] = None
         self._d1_failure_first_error: Optional[str] = None
+        # Optional structured details about the first failure — kept as a
+        # dict so executemany can attach partial_prefix_count, etc., and
+        # the JSONL reconciler does not need to scrape the human-readable
+        # error string.
+        self._d1_failure_first_extra: Optional[dict] = None
         # Successful D1 writes since the last commit/rollback. Tracked
         # separately from failures because D1 auto-commits each statement,
         # so a SQLite rollback with N>0 means D1 keeps rows SQLite no
@@ -413,21 +507,95 @@ class DualConnection:
         return DualCursor.for_write(sqlite_cur, d1_cur, sql)
 
     def executemany(self, sql: str, seq_of_params: Iterable[Iterable[Any]]):
+        # P0-2: D1 auto-commits each HTTP batch, so a naive
+        # ``sqlite.executemany(N) ; d1.executemany(N)`` lets D1 commit a
+        # prefix and SQLite keep the full N rows when D1 chunk k fails.
+        # We instead step through ``_BATCH_LIMIT``-sized chunks:
+        #
+        #   for each chunk:
+        #       d1.executemany(chunk)      # may raise; SQLite untouched
+        #       sqlite.executemany(chunk)  # only if D1 succeeded
+        #
+        # On D1 failure we record the drift with ``partial_prefix_count``
+        # (the number of rows D1 has already auto-committed) and raise
+        # so the outer transaction sees the failure and can rollback its
+        # remaining work; D1 keeps the prefix and the drift JSONL points
+        # the reconciler at exactly where it landed.
         seq_list = list(seq_of_params)
-        sqlite_cur = self._sqlite.executemany(sql, seq_list)
-        d1_cur = None
-        try:
-            d1_cur = self._d1.executemany(sql, seq_list)
-            self._d1_uncommitted_writes += len(seq_list)
-        except Exception as exc:
-            # On partial failure D1 may still have applied a prefix of the
-            # batch; ``_d1_uncommitted_writes`` is intentionally a lower
-            # bound so the failure record is the source of truth here.
-            self._record_d1_failure(sql, exc, kind="executemany")
+        if not seq_list:
+            # Match sqlite3's no-op behaviour for empty batches.
+            self._sqlite.executemany(sql, seq_list)
+            return
+
+        # Import lazily so we keep the legacy import surface stable and
+        # avoid a hard circular dependency at module load time.
+        from packages.python.javdb_platform.d1_client import _BATCH_LIMIT
+
+        chunk_size = max(1, int(_BATCH_LIMIT))
+        partial_prefix_count = 0
+        last_sqlite_cur = None
+        last_d1_cur = None
+        last_chunk_failed = False
+
+        for start in range(0, len(seq_list), chunk_size):
+            chunk = seq_list[start:start + chunk_size]
+            d1_chunk_cur = None
+            try:
+                d1_chunk_cur = self._d1.executemany(sql, chunk)
+            except Exception as exc:
+                last_chunk_failed = True
+                # Record drift with a precise prefix count so reconcilers
+                # know exactly how many rows ended up only on D1.
+                self._record_d1_failure(
+                    sql, exc, kind="executemany",
+                    extra={"partial_prefix_count": partial_prefix_count,
+                           "failed_chunk_size": len(chunk)},
+                )
+                # Enforce guarded-table invariant for an asymmetric
+                # INSERT batch (SQLite has NOT been touched for this
+                # chunk, but downstream code may be relying on a clean
+                # break — let _check_id_consistency decide based on the
+                # strict-mode flag).
+                table = _extract_insert_table(sql)
+                if table and table in APPLICATION_GENERATED_ID_TABLES:
+                    if _strict_dual_write_enabled():
+                        raise DualWriteStrictError(
+                            f"{table}: executemany chunk failed on D1 with "
+                            f"partial_prefix_count={partial_prefix_count}; "
+                            f"refusing to commit further chunks under "
+                            f"STRICT_DUAL_WRITE"
+                        ) from exc
+                # Non-strict: stop iterating but do NOT re-raise so the
+                # legacy "SQLite is canonical" semantics are preserved
+                # for callers that don't opt in.
+                break
+
+            # D1 chunk succeeded — mirror to SQLite. If SQLite raises
+            # here we have NEW drift toward D1 (D1 has the chunk, SQLite
+            # does not). Record it and propagate the exception so the
+            # outer transaction aborts.
+            try:
+                sqlite_chunk_cur = self._sqlite.executemany(sql, chunk)
+            except Exception as sqlite_exc:
+                self._record_d1_failure(
+                    sql, sqlite_exc, kind="executemany_sqlite_after_d1",
+                    extra={"partial_prefix_count": partial_prefix_count,
+                           "d1_already_applied_chunk_size": len(chunk)},
+                )
+                raise
+
+            partial_prefix_count += len(chunk)
+            self._d1_uncommitted_writes += len(chunk)
+            last_sqlite_cur = sqlite_chunk_cur
+            last_d1_cur = d1_chunk_cur
+
         # Enforce the same guarded-table ``lastrowid`` invariant as
-        # :meth:`execute` so an asymmetric INSERT batch into one of the
-        # application-generated-id tables aborts the transaction.
-        DualCursor._check_id_consistency(sqlite_cur, d1_cur, sql)
+        # :meth:`execute`. Skipped when the last chunk failed because
+        # ``last_d1_cur`` would be ``None`` and the strict-mode raise
+        # has already happened (or non-strict legacy continues without
+        # the check, matching the prior behaviour).
+        if not last_chunk_failed:
+            DualCursor._check_id_consistency(last_sqlite_cur, last_d1_cur, sql)
 
     def executescript(self, script: str):
         # If a script wedges an INSERT into one of the guarded
@@ -461,6 +629,12 @@ class DualConnection:
         if not statements:
             return []
         first_sql = statements[0][0]
+        # ``batch_outer_raised`` distinguishes "all writes failed because
+        # batch_execute itself raised" (handled by the except below; the
+        # P0-3 follow-up check must NOT double-record) from "batch
+        # succeeded but returned None for some entries" (the malformed-
+        # response case the P0-3 check exists to catch).
+        batch_outer_raised = False
         try:
             batch = getattr(self._d1, "batch_execute", None)
             if callable(batch):
@@ -478,6 +652,7 @@ class DualConnection:
             ):
                 self._maybe_warn_id_drift(sqlite_cur, d1_cur, sql)
         except Exception as exc:
+            batch_outer_raised = True
             if any(not _is_read(sql) for sql, _params in statements):
                 self._record_d1_failure(first_sql, exc, kind="batch_execute")
         d1_cursors = list(d1_cursors)
@@ -506,6 +681,45 @@ class DualConnection:
             d1_cursors = d1_cursors + [None] * (
                 len(sqlite_cursors) - len(d1_cursors)
             )
+        # P0-3: ``d1_cursors`` may have the same length as ``statements``
+        # while still containing ``None`` for individual write entries
+        # (malformed CF response, single-statement timeout inside a
+        # batch, etc.). Reads transparently fall back to SQLite below,
+        # but writes must be recorded as drift — otherwise the caller
+        # receives a DualCursor that hides the missing D1 mirror. Skip
+        # this check when the outer ``batch_execute`` already raised:
+        # the except clause above has already recorded the batch-wide
+        # failure and we'd otherwise double-count.
+        missing_write_indices: list[int] = []
+        if not batch_outer_raised:
+            for idx, ((sql, _params), d1_cur) in enumerate(zip(statements, d1_cursors)):
+                if d1_cur is None and not _is_read(sql):
+                    missing_write_indices.append(idx)
+
+        if missing_write_indices:
+            sample_sql, _ = statements[missing_write_indices[0]]
+            self._record_d1_failure(
+                sample_sql,
+                RuntimeError(
+                    "batch_execute returned None cursor for "
+                    f"{len(missing_write_indices)} write statement(s)"
+                ),
+                kind="batch_execute_missing_write_cursor",
+                extra={
+                    "missing_write_indices": missing_write_indices,
+                    "total_statements": len(statements),
+                },
+            )
+            # Under strict mode, abort the transaction so SQLite (which
+            # already executed every statement above) is rolled back by
+            # the outer ``get_db()`` context.
+            if _strict_dual_write_enabled():
+                raise DualWriteStrictError(
+                    f"batch_execute: {len(missing_write_indices)} write "
+                    f"statement(s) returned no D1 cursor under "
+                    f"STRICT_DUAL_WRITE; refusing to drift."
+                )
+
         for idx, ((sql, _params), sqlite_cur, d1_cur) in enumerate(zip(
             statements, sqlite_cursors, d1_cursors,
         )):
@@ -521,11 +735,58 @@ class DualConnection:
     # ── Transaction & lifecycle ─────────────────────────────────────────
 
     def commit(self):
+        # P0-1: Under STRICT_DUAL_WRITE we refuse to commit a transaction
+        # whose D1 mirror is already known to be inconsistent (any write
+        # raised earlier). Abort the SQLite side too so callers see a
+        # clear error instead of silently inheriting drift.
+        #
+        # Snapshotted before ``_flush_drift_record`` clears the failure
+        # counters; otherwise the error message would always report 0.
+        strict = _strict_dual_write_enabled()
+        pending_failures = self._d1_failure_count
+        first_sql = self._d1_failure_first_sql
+        first_err = self._d1_failure_first_error
+
+        if strict and pending_failures > 0:
+            # Roll back SQLite to restore parity, log the abort, and
+            # raise. _flush_drift_record() is still called inside
+            # rollback() so the drift JSONL captures the event.
+            logger.error(
+                "DualConnection.commit(): STRICT_DUAL_WRITE refusing to commit "
+                "on db=%s — %d D1 write failure(s) recorded in this transaction. "
+                "Rolling back SQLite to keep backends in lock-step.",
+                self._logical_name, pending_failures,
+            )
+            try:
+                self.rollback()
+            except Exception:
+                logger.exception(
+                    "DualConnection.commit(): rollback() raised while aborting "
+                    "after D1 failures on db=%s — proceeding to raise.",
+                    self._logical_name,
+                )
+            raise DualWriteStrictError(
+                f"db={self._logical_name}: {pending_failures} D1 write "
+                f"failure(s) under STRICT_DUAL_WRITE; first failed sql="
+                f"{first_sql!r} first_error={first_err!r}"
+            )
+
         self._sqlite.commit()
         try:
             self._d1.commit()
         except Exception as exc:
             self._record_d1_failure("COMMIT", exc, kind="commit")
+            if _strict_dual_write_enabled() and self._d1_uncommitted_writes > 0:
+                # COMMIT itself raised on D1 *and* the transaction had
+                # at least one successful prior D1 write. SQLite has
+                # already committed so we cannot truly recover, but we
+                # surface the mismatch loudly instead of silently
+                # claiming success.
+                self._flush_drift_record(committed=True)
+                raise DualWriteStrictError(
+                    f"db={self._logical_name}: SQLite commit succeeded but "
+                    f"D1 commit raised under STRICT_DUAL_WRITE: {exc!r}"
+                ) from exc
         self._flush_drift_record(committed=True)
 
     def rollback(self):
@@ -576,29 +837,43 @@ class DualConnection:
             self._recent_failure_signatures.popitem(last=False)
         return prior
 
-    def _record_d1_failure(self, sql: str, exc: Exception, *, kind: str) -> None:
+    def _record_d1_failure(
+        self,
+        sql: str,
+        exc: Exception,
+        *,
+        kind: str,
+        extra: Optional[dict] = None,
+    ) -> None:
         """Record a D1 *write*-side failure (counts toward drift JSONL).
 
         Only call this for paths that mutate D1 state (INSERT / UPDATE /
         DELETE / executemany / executescript / commit). Read failures
         must use :meth:`_record_d1_read_failure` so they don't pollute
         the drift counters.
+
+        *extra* is an optional structured payload (e.g. ``{"partial_
+        prefix_count": 100}`` from :meth:`executemany`) merged into the
+        drift JSONL record so reconcilers can act precisely without
+        regexing the human-readable error string.
         """
         self._d1_failure_count += 1
         if self._d1_failure_first_sql is None:
             self._d1_failure_first_sql = _shorten(sql, 200)
             self._d1_failure_first_error = f"{type(exc).__name__}: {exc}"
+            if extra:
+                self._d1_failure_first_extra = dict(extra)
 
         prior = self._track_failure_signature(sql)
         if prior >= 1:
             logger.debug(
-                "D1 %s failed (repeat #%d for this signature): %s | sql=%s",
-                kind, prior + 1, exc, _shorten(sql),
+                "D1 %s failed (repeat #%d for this signature): %s | sql=%s | extra=%s",
+                kind, prior + 1, exc, _shorten(sql), extra or {},
             )
         else:
             logger.warning(
-                "D1 %s failed (SQLite still applied): %s | sql=%s",
-                kind, exc, _shorten(sql),
+                "D1 %s failed (SQLite still applied): %s | sql=%s | extra=%s",
+                kind, exc, _shorten(sql), extra or {},
             )
 
     def _record_d1_read_failure(self, sql: str, exc: Exception) -> None:
@@ -645,6 +920,11 @@ class DualConnection:
             "first_failed_sql": self._d1_failure_first_sql,
             "first_error": self._d1_failure_first_error,
         }
+        # P0-2: surface structured extras (e.g. executemany
+        # partial_prefix_count) so the reconciler can target exactly the
+        # rows D1 already auto-committed.
+        if self._d1_failure_first_extra:
+            record["first_failed_extra"] = self._d1_failure_first_extra
         _append_drift_record(record)
         if self._d1_failure_count > 0:
             logger.error(
@@ -663,6 +943,7 @@ class DualConnection:
 
     def _reset_failure_state(self) -> None:
         self._d1_failure_count = 0
+        self._d1_failure_first_extra = None
         self._d1_failure_first_sql = None
         self._d1_failure_first_error = None
         self._d1_uncommitted_writes = 0
