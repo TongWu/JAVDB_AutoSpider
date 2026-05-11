@@ -296,3 +296,107 @@ def mask_proxy_url(proxy_url: Optional[str]) -> str:
     # Couldn't parse, return partially masked
     return mask_partial(proxy_url, show_start=10, show_end=5)
 
+
+# ── P0-7 helpers: header / proxy-dict redaction for DEBUG logs ──────────
+#
+# ``request_handler`` previously logged raw ``req_headers`` and ``req_proxies``
+# at DEBUG, which exposed the JavDB session cookie and proxy credentials
+# (``http://user:pass@host:port``) whenever CI dialled up the log level.
+# Use the helpers below in any log-line that would otherwise stringify
+# those mappings.
+
+# Header names whose VALUE must be fully redacted in logs. Compared
+# case-insensitively. Keys themselves are left visible for diagnostics.
+_SENSITIVE_HEADER_NAMES = frozenset({
+    'cookie',
+    'set-cookie',
+    'authorization',
+    'proxy-authorization',
+    'x-api-key',
+    'x-auth-token',
+    'x-csrf-token',
+    'x-jdb-token',
+    'x-d1-token',
+    'cf-access-client-secret',
+    'cf-access-client-id',
+})
+
+
+def mask_headers(headers) -> dict:
+    """Return a copy of *headers* with sensitive values redacted.
+
+    Accepts any mapping-like object (``dict``, ``requests.CaseInsensitiveDict``,
+    ``None``).  Sensitive header names listed in ``_SENSITIVE_HEADER_NAMES``
+    are replaced with ``********``; all other values are returned verbatim.
+
+    The function never raises and degrades gracefully so callers can use
+    it inline inside ``logger.debug(...)`` without try/except boilerplate.
+    """
+    if not headers:
+        return {}
+    try:
+        out: dict = {}
+        for raw_key, raw_value in headers.items():
+            key_lc = str(raw_key).lower()
+            if key_lc in _SENSITIVE_HEADER_NAMES:
+                out[raw_key] = mask_full(str(raw_value) if raw_value is not None else '')
+            else:
+                out[raw_key] = raw_value
+        return out
+    except Exception:  # noqa: BLE001 — last-resort safeguard, never raise
+        return {'_mask_error': '<unmaskable headers>'}
+
+
+def mask_proxies(proxies) -> dict:
+    """Return a copy of a ``requests``-style proxy mapping with creds hidden.
+
+    Input is typically ``{"http": "http://user:pass@host:port", "https": ...}``
+    or ``None``.  Each value is run through :func:`mask_proxy_url`; other
+    types are stringified and partially masked.
+    """
+    if not proxies:
+        return {}
+    try:
+        out: dict = {}
+        for scheme, url in proxies.items():
+            if url is None:
+                out[scheme] = None
+            elif isinstance(url, str):
+                out[scheme] = mask_proxy_url(url)
+            else:
+                out[scheme] = mask_partial(str(url), show_start=4, show_end=4)
+        return out
+    except Exception:  # noqa: BLE001
+        return {'_mask_error': '<unmaskable proxies>'}
+
+
+# Environment-variable name patterns whose VALUE is always sensitive.
+# Used by :func:`mask_env_value` for ad-hoc log lines that may render
+# resolved config (SMTP credentials, D1 / Cloudflare Bearer tokens,
+# proxy-coordinator JWTs, etc.).
+_SENSITIVE_ENV_PATTERNS = (
+    re.compile(r'(?i)password'),
+    re.compile(r'(?i)secret'),
+    re.compile(r'(?i)token'),
+    re.compile(r'(?i)api[_-]?key'),
+    re.compile(r'(?i)smtp[_-]?(?:user|host|server)'),
+    re.compile(r'(?i)cloudflare[_-]?api'),
+    re.compile(r'(?i)d1[_-]?(?:db|bearer)'),
+    re.compile(r'(?i)proxy[_-]?coordinator'),
+)
+
+
+def mask_env_value(name: Optional[str], value: Optional[str]) -> str:
+    """Return ``mask_full(value)`` when *name* matches a sensitive pattern.
+
+    Used by request_handler / config loaders to redact resolved env values
+    in DEBUG logs without having to hardcode each token name.  Falls back
+    to ``value`` unchanged for non-sensitive names.
+    """
+    if not name:
+        return str(value) if value is not None else 'None'
+    for pattern in _SENSITIVE_ENV_PATTERNS:
+        if pattern.search(name):
+            return mask_full(value)
+    return str(value) if value is not None else 'None'
+
