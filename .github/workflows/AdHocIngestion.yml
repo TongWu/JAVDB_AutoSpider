@@ -115,16 +115,16 @@ on:
         default: '0.30'
         type: string
 
-# Mirror DailyIngestion: serialise concurrent dispatches on the same ref so
-# two operator-triggered runs (or a re-run racing the original) cannot
-# interleave their INSERTs into the shared pending / D1 / git state.
-# ``cancel-in-progress: false`` keeps the in-flight ingestion intact and
-# just queues the next one — pending-mode rollback is too expensive to
-# trigger by cancellation. The group key intentionally omits inputs so a
-# dispatch with a different URL still queues behind any active run.
-concurrency:
-  group: adhoc-ingestion-${{ github.ref }}
-  cancel-in-progress: false
+# NOTE: deliberately NO ``concurrency:`` group on this workflow. AdHoc is
+# expected to support multiple parallel dispatches by design — the entire
+# D1 + Durable Object + pending-write architecture exists precisely so
+# concurrent ingestions of different URLs do not collide. Per-session
+# isolation lives in the snowflake SessionId (with B.2 process tag),
+# per-href contention is arbitrated by the MovieClaim DO, per-proxy
+# throttling by the ProxyCoordinator DO, and the singleton login mutex
+# by the GlobalLoginState DO. Serialising AdHoc here would defeat the
+# architecture; DailyIngestion's own group exists only to prevent the
+# scheduled cron from overlapping itself across day boundaries.
 
 jobs:
   # =============================================================================
