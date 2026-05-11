@@ -399,29 +399,64 @@ class RequestHandler:
     
     @staticmethod
     def is_cf_bypass_failure(html_content: str) -> bool:
-        """
-        Check if the CF bypass response indicates a failure.
-        
-        Failure criteria: HTML size < 1000 bytes AND contains 'fail' keyword
-        
+        """Check if the CF bypass response indicates a failure.
+
+        The bypass service can return either an explicit error envelope
+        (FlareSolverr-style JSON ``{"status":"error", "message":"..."}``)
+        or a tiny HTML stub when the upstream challenge could not be
+        cleared. Both share the property of being short — large
+        responses are virtually always genuine pages even when they
+        happen to contain the word "fail" (e.g. "failover", a JS
+        callback name, an unrelated 404 page).
+
+        B.6 (2026-05-12): tighten the marker check from a bare
+        ``'fail' in html.lower()`` to a small set of specific bypass
+        failure phrases. The size cap stays at ``< 1500`` (small bump
+        from 1000 to forgive a slightly larger JSON error envelope) so
+        a legitimate ~1KB page that happens to contain one of the
+        marker phrases (extremely rare) does not get force-retried.
+        Returns True only when both the size cap AND one of the
+        specific markers match.
+
         Args:
             html_content: The HTML content returned by bypass service
-        
+
         Returns:
             True if the response is considered a failure
         """
         if html_content is None:
             return True
-        
+
         content_size = len(html_content)
-        contains_fail = 'fail' in html_content.lower()
-        
-        is_failure = content_size < 1000 and contains_fail
-        
-        if is_failure:
-            logger.debug(f"[CF Bypass] Failure detected: size={content_size} bytes, contains_fail={contains_fail}")
-        
-        return is_failure
+        if content_size >= 1500:
+            return False
+
+        lowered = html_content.lower()
+        # Specific failure fingerprints. Anchored substrings — bare
+        # ``fail`` is too noisy and was the original bug.
+        markers = (
+            '"status":"error"',
+            '"status":"fail"',
+            '"status": "error"',
+            '"status": "fail"',
+            'failed to bypass',
+            'bypass failed',
+            'cloudflare challenge failed',
+            'unable to solve challenge',
+            'timeout waiting for selector',
+            'error solving challenge',
+        )
+        matched_marker: Optional[str] = next(
+            (m for m in markers if m in lowered), None,
+        )
+        if matched_marker is None:
+            return False
+
+        logger.debug(
+            "[CF Bypass] Failure detected: size=%d bytes marker=%r",
+            content_size, matched_marker,
+        )
+        return True
     
     def _get_proxies_config(self, module_name: str, use_proxy: bool) -> Tuple[Optional[Dict[str, str]], bool]:
         """
@@ -665,6 +700,29 @@ class RequestHandler:
                 return body, Exception(
                     f"403 Client Error: Forbidden for url: {target_url}"
                 )
+
+            # B.7 (2026-05-12): mirror the requests-branch ``Retry-After``
+            # handling so a 429 / 503 from curl_cffi also pauses before
+            # propagating the error. ``raise_for_status`` immediately
+            # below would otherwise hand control back to the caller's
+            # retry loop, which then hammers the upstream during the
+            # exact window the server told us to back off in.
+            if response.status_code in (429, 503):
+                retry_after_raw = response.headers.get('Retry-After', '')
+                wait_seconds: Optional[float] = None
+                try:
+                    wait_seconds = float(int(retry_after_raw))
+                except (TypeError, ValueError):
+                    wait_seconds = None
+                if wait_seconds is not None and wait_seconds > 0:
+                    wait_seconds = min(wait_seconds, 60.0)
+                    logger.warning(
+                        "[%s] [curl_cffi] HTTP %d from %s with Retry-After=%ss; "
+                        "sleeping %.1fs before propagating error.",
+                        context_msg, response.status_code, target_url,
+                        retry_after_raw, wait_seconds,
+                    )
+                    time.sleep(wait_seconds)
 
             response.raise_for_status()
             
