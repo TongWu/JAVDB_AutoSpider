@@ -425,6 +425,55 @@ class TestFinalizingResumeIdempotency:
         assert _live_torrent_categories(href) == [(1, 1)]
         assert _pending_counts(sid) == (0, 0)
 
+    def test_commit_atomicity_crash_after_status_flip_recovers(self):
+        """C1 regression — crash between Status='committed' flip and the
+        final DELETE of applied pending rows must be recoverable.
+
+        The fix in ``db_commit_session_history`` reordered the two steps
+        so the flip lands FIRST.  A crash *between* them now leaves the
+        monitoring-friendly state ``Status='committed'`` + residual
+        ``ApplyState='applied'`` pending rows (the reverse order used
+        to leave ``Status='finalizing'`` with zero pending rows — any
+        "stuck session" alert misreads that as a hung commit).
+        Resume must clean up the residual rows without re-running
+        ``_commit_one_movie`` (which would risk regressing live data
+        that another session updated in the meantime).
+        """
+        href = "/v/ATOM-001"
+        sid = _create_session(csv_filename="atomicity-crash.csv")
+        _stage_movie(sid, href, "ATOM-001", actor_name="AtomActor")
+        _stage_torrent(sid, href, "ATOM-001", "subtitle", magnet="magnet:atom-sub")
+
+        # Simulate the "crash between flip and DELETE" footprint by hand:
+        #   1. Move into finalizing
+        #   2. Apply each movie (marks rows ApplyState='applied')
+        #   3. Flip Status to 'committed'  ← reordered step
+        #   4. *Skip* the DELETE          ← simulated crash
+        assert db_mod.db_begin_finalize_session(sid) == 1
+        when = "2026-05-09 12:00:00"
+        with db_mod.get_db() as conn:
+            db_mod._commit_one_movie(conn, sid, href, when=when)
+        db_mod.db_finish_commit_session(sid)
+
+        state = db_mod.db_get_session_status(sid)
+        assert state is not None and state[1] == "committed"
+
+        stats_before = db_mod.db_pending_session_stats(sid)
+        assert stats_before["pending_applied_count"] > 0, (
+            "expected leftover applied rows to simulate crash-after-flip"
+        )
+        assert stats_before["pending_residual_count"] == 0
+
+        # Resume must clean up the residual applied rows without
+        # re-running _commit_one_movie (live tables already correct).
+        counts = db_mod.db_resume_finalizing_session(sid)
+        assert counts["pending_deleted"] >= 1
+
+        stats_after = db_mod.db_pending_session_stats(sid)
+        assert stats_after["pending_applied_count"] == 0
+        assert stats_after["pending_residual_count"] == 0
+        assert _live_torrent_categories(href) == [(1, 1)]
+
 
 # ──────────────────────────────────────────────────────────────────────
 # 5. IO threshold: pending path stays within 2.0× audit baseline
@@ -899,7 +948,13 @@ class TestCommitSessionCLIDrainsPending:
     PendingMovie/TorrentHistoryWrites accumulate forever.
     """
 
-    def test_commit_session_promotes_pending_into_live(self, capsys):
+    def test_commit_session_promotes_pending_into_live(
+        self, capsys, monkeypatch, tmp_path,
+    ):
+        # Redirect REPORTS_DIR so the CLI's _emit_pending_verify writes
+        # the test's pending_session_verify record into the tmp dir
+        # rather than the git-tracked reports/D1/d1_drift.jsonl.
+        monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
         from apps.cli import commit_session as cs_mod
 
         sid = db_mod.db_create_report_session(
