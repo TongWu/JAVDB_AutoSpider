@@ -86,6 +86,16 @@ on:
     # Run daily at 12:00 UTC (20:00 Beijing Time)
     - cron: '00 12 * * *'
 
+# P1: scope the concurrency group so a long-running scheduled run cannot
+# overlap with a manually-triggered one (or a re-run of itself) and
+# corrupt the pending tables / D1 mirror by interleaving INSERTs from
+# two parallel pipelines into the same SessionId space. We keep
+# ``cancel-in-progress: false`` so an in-flight ingestion isn't killed
+# mid-commit; a queued run will start once the active one finishes.
+concurrency:
+  group: daily-ingestion-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # =============================================================================
   # Job 1: Setup - Checkout, install dependencies, generate config (includes Rust wheel build/cache)
