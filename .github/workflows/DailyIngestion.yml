@@ -1064,6 +1064,8 @@ jobs:
                   continue
               if str(rec.get("run_id") or "") != run_id:
                   continue
+              if str(rec.get("run_attempt") or "") != attempt:
+                  continue
               for k in critical_fields:
                   try:
                       if int(rec.get(k) or 0) > 0:

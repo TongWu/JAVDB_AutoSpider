@@ -476,9 +476,35 @@ def _apply(side, findings: Dict[str, Any]) -> Dict[str, int]:
     return dict(deleted)
 
 
+def _refuse_when_dual_or_d1_under_apply(args: argparse.Namespace) -> None:
+    """Hard-stop when --apply runs while live writers may be writing.
+
+    Mirrors :func:`scripts.sync_d1_to_sqlite._refuse_when_dual_or_d1`: a
+    pipeline running with ``STORAGE_BACKEND in {dual,d1}`` could race
+    the destructive deletes/null-outs in :func:`_apply` and leave the
+    two sides drifted in the very way this tool is meant to repair.
+    Dry-run is read-only, so the guard only fires under --apply.
+    """
+    if args.dry_run:
+        return
+    backend = (
+        os.environ.get("STORAGE_BACKEND")
+        or cfg("STORAGE_BACKEND", "sqlite")
+        or "sqlite"
+    ).strip().lower()
+    if backend in ("dual", "d1"):
+        logger.error(
+            "STORAGE_BACKEND=%s is set; pause live writers and re-run with "
+            "STORAGE_BACKEND=sqlite (or unset). Refusing --apply.",
+            backend,
+        )
+        sys.exit(1)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     args = _parse_args(argv)
     setup_logging(log_level=args.log_level)
+    _refuse_when_dual_or_d1_under_apply(args)
 
     constrain = _parse_session_ids(args.session_ids)
 
