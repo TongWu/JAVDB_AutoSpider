@@ -30,3 +30,80 @@ def test_missing_api_secret_raises_in_production(monkeypatch):
 
     with pytest.raises(RuntimeError, match="API_SECRET_KEY is required"):
         _reload_auth_module()
+
+
+class _StubURL:
+    def __init__(self, path: str) -> None:
+        self.path = path
+
+
+class _StubRequest:
+    """Minimal duck-typed Request for ``_verify_csrf``."""
+
+    def __init__(
+        self,
+        *,
+        method: str,
+        path: str,
+        header_token: str,
+        cookie_token: str,
+    ) -> None:
+        self.method = method
+        self.url = _StubURL(path)
+        self.headers = {"X-CSRF-Token": header_token} if header_token else {}
+        self.cookies = {"csrf_token": cookie_token} if cookie_token else {}
+
+
+def _csrf_verifier(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    return _reload_auth_module()._verify_csrf
+
+
+def test_csrf_accepts_matching_tokens(monkeypatch):
+    fn = _csrf_verifier(monkeypatch)
+    # No exception → accepted. Matching tokens must pass the constant-time
+    # check (hmac.compare_digest replaces a plain ``!=`` comparison).
+    fn(_StubRequest(
+        method="POST", path="/api/tasks/daily",
+        header_token="abc123", cookie_token="abc123",
+    ))
+
+
+def test_csrf_rejects_mismatched_tokens(monkeypatch):
+    from fastapi import HTTPException
+    fn = _csrf_verifier(monkeypatch)
+    with pytest.raises(HTTPException) as excinfo:
+        fn(_StubRequest(
+            method="POST", path="/api/tasks/daily",
+            header_token="abc123", cookie_token="xyz789",
+        ))
+    assert excinfo.value.status_code == 403
+
+
+def test_csrf_rejects_missing_header(monkeypatch):
+    from fastapi import HTTPException
+    fn = _csrf_verifier(monkeypatch)
+    with pytest.raises(HTTPException):
+        fn(_StubRequest(
+            method="POST", path="/api/tasks/daily",
+            header_token="", cookie_token="abc123",
+        ))
+
+
+def test_csrf_skips_get_methods(monkeypatch):
+    fn = _csrf_verifier(monkeypatch)
+    # GET must bypass CSRF even with empty tokens.
+    fn(_StubRequest(
+        method="GET", path="/api/tasks/daily",
+        header_token="", cookie_token="",
+    ))
+
+
+def test_csrf_skips_login_endpoint(monkeypatch):
+    fn = _csrf_verifier(monkeypatch)
+    # /api/auth/login is the only POST that intentionally bypasses CSRF —
+    # the CSRF cookie is *set* by this endpoint.
+    fn(_StubRequest(
+        method="POST", path="/api/auth/login",
+        header_token="", cookie_token="",
+    ))

@@ -1803,13 +1803,22 @@ def _plain_to_html(text):
 def send_email(subject, body, attachments=None, dry_run=False):
     """Send email with attachments"""
     if dry_run:
+        # The body can carry failed-fetch URLs, session ids, and other
+        # bits an operator probably does not want in CI logs verbatim.
+        # Emit a fingerprint at INFO and keep the full body at DEBUG so
+        # local development can still see it when needed.
+        import hashlib as _hashlib
+        body_str = body if isinstance(body, str) else str(body)
+        body_sha = _hashlib.sha256(body_str.encode('utf-8', 'replace')).hexdigest()[:12]
         logger.info("=" * 60)
         logger.info("[DRY RUN] Email would be sent:")
         logger.info(f"Subject: {subject}")
         logger.info(f"From: {mask_email(EMAIL_FROM)}")
         logger.info(f"To: {mask_email(EMAIL_TO)}")
-        logger.info("Body:")
-        logger.info(body)
+        logger.info(
+            "Body: length=%d sha256_12=%s", len(body_str), body_sha,
+        )
+        logger.debug("Full body:\n%s", body_str)
         if attachments:
             logger.info(f"Attachments: {attachments}")
         logger.info("=" * 60)
@@ -1841,7 +1850,11 @@ def send_email(subject, body, attachments=None, dry_run=False):
 
     logger.info(f'Connecting to SMTP server {mask_server(SMTP_SERVER)}:{SMTP_PORT}...')
     try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        # ``timeout=30`` so a hung / unreachable SMTP server can't pin the
+        # GH Actions job until the workflow-level ceiling. ``smtplib.SMTP``
+        # otherwise inherits ``socket._GLOBAL_DEFAULT_TIMEOUT`` (``None``),
+        # which blocks indefinitely on connect / login / send.
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
             server.starttls()
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.send_message(msg)
