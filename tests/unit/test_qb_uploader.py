@@ -647,21 +647,63 @@ class TestReadCsvFile:
         """Test that read_csv_file returns ([], True) when file exists but is empty."""
         import csv
         from scripts.qb_uploader import read_csv_file
-        
+
         csv_file = os.path.join(temp_dir, 'empty_torrents.csv')
-        
+
         # Create an empty CSV file with just headers
         with open(csv_file, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.DictWriter(f, fieldnames=[
-                'page', 'href', 'video_code', 'hacked_subtitle', 
+                'page', 'href', 'video_code', 'hacked_subtitle',
                 'hacked_no_subtitle', 'subtitle', 'no_subtitle'
             ])
             writer.writeheader()
-        
+
         torrents, file_exists = read_csv_file(csv_file)
-        
+
         assert file_exists is True
         assert torrents == []
+
+    def test_read_csv_file_downloaded_type_does_not_skip_other_types(self, temp_dir):
+        """A row where one column is already-downloaded must NOT short-circuit
+        the row's remaining columns.
+
+        Regression for an earlier per-column ``continue`` in the for-row loop
+        that dropped every column after the first ``[DOWNLOADED]`` magnet, so
+        e.g. a row carrying both a downloaded hacked_subtitle and a pending
+        subtitle silently lost the subtitle entry.
+        """
+        import csv
+        from scripts.qb_uploader import read_csv_file
+
+        csv_file = os.path.join(temp_dir, 'mixed_torrents.csv')
+        with open(csv_file, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.DictWriter(f, fieldnames=[
+                'page', 'href', 'video_code',
+                'hacked_subtitle', 'hacked_no_subtitle',
+                'subtitle', 'no_subtitle',
+            ])
+            writer.writeheader()
+            # hacked_subtitle marked downloaded; the other three columns are
+            # fresh magnets that must all be appended.
+            writer.writerow({
+                'page': '1',
+                'href': '/v/MIX-001',
+                'video_code': 'MIX-001',
+                'hacked_subtitle': '[DOWNLOADED PREVIOUSLY] magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                'hacked_no_subtitle': 'magnet:?xt=urn:btih:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+                'subtitle': 'magnet:?xt=urn:btih:cccccccccccccccccccccccccccccccccccccccc',
+                'no_subtitle': 'magnet:?xt=urn:btih:dddddddddddddddddddddddddddddddddddddddd',
+            })
+
+        torrents, file_exists = read_csv_file(csv_file)
+
+        assert file_exists is True
+        types_collected = sorted(t['type'] for t in torrents)
+        # hacked_subtitle was [DOWNLOADED] → skipped; the remaining three
+        # MUST all survive even though they share the same CSV row.
+        assert types_collected == [
+            'hacked_no_subtitle', 'no_subtitle', 'subtitle',
+        ], f"expected 3 fresh torrents, got {types_collected!r}"
 
 
 class TestFindLatestAdhocCsv:

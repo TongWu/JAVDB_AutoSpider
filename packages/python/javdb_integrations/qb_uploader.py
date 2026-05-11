@@ -416,65 +416,43 @@ def read_csv_file(filename):
         with open(filename, 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
             
+            # Iterate over the four torrent columns per row.  The earlier
+            # implementation used per-column ``continue`` inside this for-loop,
+            # which short-circuited the *remaining* columns whenever the first
+            # populated column was already-downloaded — so a row that had
+            # ``hacked_subtitle`` (downloaded) plus ``subtitle`` (not
+            # downloaded) silently dropped the second torrent.  Iterating over
+            # a tuple of (column, label, type) lets per-column skip stay local.
+            torrent_columns = (
+                ('hacked_subtitle', 'Hacked+Subtitle', 'hacked_subtitle'),
+                ('hacked_no_subtitle', 'Hacked-NoSubtitle', 'hacked_no_subtitle'),
+                ('subtitle', 'Subtitle', 'subtitle'),
+                ('no_subtitle', 'NoSubtitle', 'no_subtitle'),
+            )
             for row in reader:
                 href = row.get('href', '')
                 video_code = row.get('video_code', '')
-                
-                # Extract magnet links from all four columns, skipping downloaded ones
-                if row.get('hacked_subtitle') and row['hacked_subtitle'].strip():
-                    if is_downloaded_torrent(row['hacked_subtitle']):
-                        logger.debug(f"Skipping downloaded torrent: {video_code} [Hacked+Subtitle]")
+
+                for col, label, ttype in torrent_columns:
+                    raw = row.get(col)
+                    if not raw:
+                        continue
+                    magnet = raw.strip()
+                    if not magnet:
+                        continue
+                    if is_downloaded_torrent(magnet):
+                        logger.debug(
+                            f"Skipping downloaded torrent: {video_code} [{label}]"
+                        )
                         skipped_count += 1
                         continue
                     torrents.append({
-                        'magnet': row['hacked_subtitle'].strip(),
-                        'title': f"{video_code} [Hacked+Subtitle]",
+                        'magnet': magnet,
+                        'title': f"{video_code} [{label}]",
                         'page': row.get('page', 'N/A'),
-                        'type': 'hacked_subtitle',
+                        'type': ttype,
                         'href': href,
-                        'video_code': video_code
-                    })
-                
-                if row.get('hacked_no_subtitle') and row['hacked_no_subtitle'].strip():
-                    if is_downloaded_torrent(row['hacked_no_subtitle']):
-                        logger.debug(f"Skipping downloaded torrent: {video_code} [Hacked-NoSubtitle]")
-                        skipped_count += 1
-                        continue
-                    torrents.append({
-                        'magnet': row['hacked_no_subtitle'].strip(),
-                        'title': f"{video_code} [Hacked-NoSubtitle]",
-                        'page': row.get('page', 'N/A'),
-                        'type': 'hacked_no_subtitle',
-                        'href': href,
-                        'video_code': video_code
-                    })
-                
-                if row.get('subtitle') and row['subtitle'].strip():
-                    if is_downloaded_torrent(row['subtitle']):
-                        logger.debug(f"Skipping downloaded torrent: {video_code} [Subtitle]")
-                        skipped_count += 1
-                        continue
-                    torrents.append({
-                        'magnet': row['subtitle'].strip(),
-                        'title': f"{video_code} [Subtitle]",
-                        'page': row.get('page', 'N/A'),
-                        'type': 'subtitle',
-                        'href': href,
-                        'video_code': video_code
-                    })
-                
-                if row.get('no_subtitle') and row['no_subtitle'].strip():
-                    if is_downloaded_torrent(row['no_subtitle']):
-                        logger.debug(f"Skipping downloaded torrent: {video_code} [NoSubtitle]")
-                        skipped_count += 1
-                        continue
-                    torrents.append({
-                        'magnet': row['no_subtitle'].strip(),
-                        'title': f"{video_code} [NoSubtitle]",
-                        'page': row.get('page', 'N/A'),
-                        'type': 'no_subtitle',
-                        'href': href,
-                        'video_code': video_code
+                        'video_code': video_code,
                     })
         
         logger.info(f"Found {len(torrents)} torrent links in {filename}")
