@@ -179,16 +179,25 @@ def main(argv: Optional[List[str]] = None) -> int:
     for sid, status, write_mode in rows:
         meta = _read_session_meta(sid)
         if args.dry_run:
+            # Mirror the apply-path branching: only pending+finalizing
+            # gets resumed; audit-mode finalizing is refused (would_apply
+            # False) since the apply path also refuses to rollback it.
+            if status == 'finalizing' and write_mode == 'pending':
+                action = "resume_commit"
+                would_apply = True
+            elif status == 'finalizing':
+                action = "skipped"
+                would_apply = False
+            else:
+                action = "rollback"
+                would_apply = True
             summaries.append({
                 "session_id": sid,
                 "status": status,
                 "write_mode": write_mode,
                 "meta": meta,
-                "would_apply": True,
-                "action": (
-                    "resume_commit" if status == 'finalizing'
-                    else "rollback"
-                ),
+                "would_apply": would_apply,
+                "action": action,
             })
             logger.info(
                 "[dry-run] Would handle session %s status=%s mode=%s",
@@ -319,17 +328,24 @@ def main(argv: Optional[List[str]] = None) -> int:
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 
-    # Append metric line so the parent workflow can grep it.
+    # Append metric line so the parent workflow can grep it.  Dry-run
+    # summaries go to a preview file so they don't pollute the live
+    # Phase 3 aggregation stream.
     try:
         reports_dir = os.environ.get("REPORTS_DIR", "reports")
-        path = os.path.join(reports_dir, "D1", "d1_drift.jsonl")
+        if summary.get("dry_run"):
+            path = os.path.join(
+                reports_dir, "D1", "d1_drift_preview.jsonl",
+            )
+        else:
+            path = os.path.join(reports_dir, "D1", "d1_drift.jsonl")
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(summary, ensure_ascii=False) + "\n")
     except Exception as exc:
         logger.warning(
-            "Failed to append stale-cleanup metric to d1_drift.jsonl: %s",
-            exc,
+            "Failed to append stale-cleanup metric to %s: %s",
+            path, exc,
         )
 
     close_db()

@@ -100,8 +100,15 @@ class TestKillSwitchBlocksDbCreateReportSession:
         assert 'JAVDB_FORBID_DB_WRITES' in str(exc_info.value)
 
     def test_db_create_report_session_works_when_switch_off(
-        self, kill_switch_off
+        self, kill_switch_off, monkeypatch
     ):
+        # Pin the backend to sqlite so this test never tries to construct
+        # a D1 client off whatever STORAGE_BACKEND happens to be exported
+        # in the surrounding environment (e.g., a developer with
+        # STORAGE_BACKEND=dual, or CI runs that pre-set it).  The kill
+        # switch itself isn't engaged here, so storage_backend() falls
+        # through to the env var resolution path.
+        monkeypatch.setenv('STORAGE_BACKEND', 'sqlite')
         sid = db_mod.db_create_report_session(
             report_type='daily',
             report_date='2026-05-08',
