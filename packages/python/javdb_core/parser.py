@@ -26,9 +26,13 @@ IGNORE_RELEASE_DATE_FILTER = cfg('IGNORE_RELEASE_DATE_FILTER', False)
 
 from packages.python.javdb_platform.logging_config import get_logger
 
-# New API layer imports
-from apps.api.parsers.index_parser import parse_index_page as _api_parse_index
-from apps.api.parsers.detail_parser import parse_detail_page as _api_parse_detail
+# New API layer imports — go through the package __init__ so the Rust-first
+# routing in apps/api/parsers/__init__.py applies. Importing the submodules
+# directly bypasses Rust and forces the FROZEN Python fallback.
+from apps.api.parsers import (
+    parse_index_page as _api_parse_index,
+    parse_detail_page as _api_parse_detail,
+)
 
 logger = get_logger(__name__)
 
