@@ -31,7 +31,13 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 
 # Import masking utilities
-from packages.python.javdb_core.masking import mask_ip_address, mask_proxy_url, mask_error
+from packages.python.javdb_core.masking import (
+    mask_ip_address,
+    mask_proxy_url,
+    mask_error,
+    mask_headers,
+    mask_proxies,
+)
 from packages.python.javdb_platform.proxy_policy import should_proxy_module
 
 # Try Rust implementations
@@ -475,9 +481,13 @@ class RequestHandler:
         start_monotonic = time.monotonic()
         try:
             logger.debug(f"[{context_msg}] Requesting: {target_url}")
-            logger.debug(f"[{context_msg}] Headers: {req_headers}")
+            # P0-7: redact Cookie / Authorization / token-bearing headers and
+            # strip proxy credentials before any log emission. Raw mappings
+            # used to leak _jdb_session cookies and proxy passwords whenever
+            # CI dialed up to DEBUG.
+            logger.debug(f"[{context_msg}] Headers: {mask_headers(req_headers)}")
             if req_proxies:
-                logger.debug(f"[{context_msg}] Using proxies: {req_proxies}")
+                logger.debug(f"[{context_msg}] Using proxies: {mask_proxies(req_proxies)}")
             
             response = use_session.get(target_url, headers=req_headers, proxies=req_proxies, timeout=timeout)
 
@@ -494,6 +504,31 @@ class RequestHandler:
                     f"403 Client Error: Forbidden for url: {target_url}",
                     response=response,
                 )
+
+            # P1: honour ``Retry-After`` on rate-limit / overloaded
+            # responses so we don't pummel the upstream with the same
+            # request the moment they tell us to wait. ``Retry-After``
+            # may be a delta-seconds integer or an HTTP-date string —
+            # we only parse the simple integer form here (matches what
+            # CloudFront / nginx / Cloudflare emit in practice) and cap
+            # it to a generous upper bound so a misbehaving header
+            # doesn't stall the spider for hours.
+            if response.status_code in (429, 503):
+                retry_after_raw = response.headers.get('Retry-After', '')
+                wait_seconds: Optional[float] = None
+                try:
+                    wait_seconds = float(int(retry_after_raw))
+                except (TypeError, ValueError):
+                    wait_seconds = None
+                if wait_seconds is not None and wait_seconds > 0:
+                    wait_seconds = min(wait_seconds, 60.0)
+                    logger.warning(
+                        "[%s] HTTP %d from %s with Retry-After=%ss; "
+                        "sleeping %.1fs before propagating error to caller.",
+                        context_msg, response.status_code, target_url,
+                        retry_after_raw, wait_seconds,
+                    )
+                    time.sleep(wait_seconds)
 
             response.raise_for_status()
             
@@ -562,8 +597,10 @@ class RequestHandler:
             else:
                 logger.debug(f"[{context_msg}] [curl_cffi] No Cookie header in request")
             if req_proxies:
-                masked_proxies = {k: mask_proxy_url(v) for k, v in req_proxies.items()}
-                logger.debug(f"[{context_msg}] [curl_cffi] Using proxies: {masked_proxies}")
+                # Use the shared mask_proxies() helper instead of an ad-hoc
+                # dict-comprehension so the curl_cffi and requests paths stay
+                # in lock-step on what counts as masked.
+                logger.debug(f"[{context_msg}] [curl_cffi] Using proxies: {mask_proxies(req_proxies)}")
             
             # Handle cookie merging when manual Cookie header is present.
             # When curl_cffi session is reused, the session's internal cookie jar can override
@@ -1321,7 +1358,7 @@ class RequestHandler:
         while retry_count < max_retries:
             logger.debug(f"Fetching URL: {url} (attempt {retry_count + 1}/{max_retries})")
             if proxies:
-                logger.debug(f"Using proxies: {proxies}")
+                logger.debug(f"Using proxies: {mask_proxies(proxies)}")
             
             html_content, success, is_turnstile = self._fetch_direct(
                 url, proxies, f"Proxy={proxy_name}" if proxies else "No proxy", 
@@ -1470,7 +1507,7 @@ class ProxyHelper:
         if self.proxy_https:
             proxies['https'] = self.proxy_https
         
-        logger.debug(f"[{module_name}] Using single proxy: {proxies}")
+        logger.debug(f"[{module_name}] Using single proxy: {mask_proxies(proxies)}")
         return proxies
     
     def get_current_proxy_name(self) -> str:
