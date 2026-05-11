@@ -827,18 +827,29 @@ class LoginCoordinator:
                 self.logged_in_worker_id is not None
                 and self.logged_in_worker_id != worker.worker_id
             ):
-                logged_in_proxy = self._all_workers[
-                    self.logged_in_worker_id
-                ].proxy_name
-                task.failed_proxies.discard(logged_in_proxy)
-                login_queue.put(task)
-                logger.info(
-                    "%s Login required for %s, "
-                    "routing to logged-in worker [%s]",
-                    _task_worker_ctx(task.entry_index, worker.proxy_name),
-                    video_code, logged_in_proxy,
-                )
-                return
+                # ``worker_id`` is not guaranteed to be a 0-based index into
+                # ``_all_workers`` (legacy callers may pass non-sequential ids),
+                # so look it up via the existing helper instead of treating the
+                # id as a list index.
+                logged_in_worker = self._worker_for_id(self.logged_in_worker_id)
+                if logged_in_worker is None:
+                    logger.warning(
+                        "logged_in_worker_id=%s not present in _all_workers; "
+                        "treating as unset and falling through to login flow",
+                        self.logged_in_worker_id,
+                    )
+                    self.logged_in_worker_id = None
+                else:
+                    logged_in_proxy = logged_in_worker.proxy_name
+                    task.failed_proxies.discard(logged_in_proxy)
+                    login_queue.put(task)
+                    logger.info(
+                        "%s Login required for %s, "
+                        "routing to logged-in worker [%s]",
+                        _task_worker_ctx(task.entry_index, worker.proxy_name),
+                        video_code, logged_in_proxy,
+                    )
+                    return
 
             # -- Budget exhausted ------------------------------------------
             if (
