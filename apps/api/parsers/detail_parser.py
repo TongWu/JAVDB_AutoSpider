@@ -6,6 +6,10 @@ including title, code, duration, maker/publisher, series, directors, tags,
 rating, poster, fanart, trailer, actors, magnets, review stats, etc.
 
 No ``time.sleep`` calls are made – the caller controls request pacing.
+
+FROZEN: Python fallback for ``javdb_rust_core.parse_detail_page``. DO NOT EXTEND.
+New parsing logic goes into ``packages/rust/javdb_rust_core/src/scraper/``.
+See ``tests/parity/test_parser_parity.py`` for drift detection.
 """
 
 from __future__ import annotations
