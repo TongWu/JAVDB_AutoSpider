@@ -413,10 +413,19 @@ def _hours_between(a: Optional[str], b: Optional[str]) -> Optional[float]:
             "_hours_between: unparseable timestamp(s) a=%r b=%r", a, b,
         )
         return None
-    # Strip tzinfo when only one side carries it so subtraction works.
-    if (ta.tzinfo is None) != (tb.tzinfo is None):
-        ta = ta.replace(tzinfo=None)
-        tb = tb.replace(tzinfo=None)
+    # P1: when one timestamp is tz-aware and the other naïve, the legacy
+    # implementation stripped both to naïve and silently lost the
+    # timezone offset — e.g. a UTC timestamp paired with a naïve
+    # Asia/Singapore (+08:00) reading produced 8h of phantom drift. Treat
+    # any naïve timestamp as UTC (the canonical wire format for our
+    # session-audit table) and compute the delta in UTC space.
+    from datetime import timezone as _tz
+    if ta.tzinfo is None:
+        ta = ta.replace(tzinfo=_tz.utc)
+    if tb.tzinfo is None:
+        tb = tb.replace(tzinfo=_tz.utc)
+    ta = ta.astimezone(_tz.utc)
+    tb = tb.astimezone(_tz.utc)
     return abs((tb - ta).total_seconds()) / 3600.0
 
 

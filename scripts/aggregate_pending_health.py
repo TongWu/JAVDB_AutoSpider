@@ -28,7 +28,7 @@ import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
@@ -132,6 +132,22 @@ def aggregate(records: Iterable[dict], window_hours: float) -> dict:
         if r.get("rollback_mode") == "rollback_pending"
         or r.get("final_status") == "failed"
     )
+
+    # P1: split rolled-back sessions by failure_class so the Phase 3
+    # critical-pending alert can distinguish operational failures
+    # (D1 dual-write asymmetry, dry-run timeout, runner SIGTERM) from
+    # spider crashes (HTML schema drift, login expiry, proxy ban). The
+    # legacy aggregator lumped them all together which made automatic
+    # fallback decisions noisier than necessary. Records that predate
+    # this field are bucketed as ``unknown`` so old runs still summarise.
+    failure_class_counts: Dict[str, int] = {}
+    for r in pending_session_records:
+        if (
+            r.get("rollback_mode") == "rollback_pending"
+            or r.get("final_status") == "failed"
+        ):
+            cls = (r.get("failure_class") or "unknown").strip() or "unknown"
+            failure_class_counts[cls] = failure_class_counts.get(cls, 0) + 1
     success_rate_percent: Optional[float]
     if pending_session_count > 0:
         success_rate_percent = (
@@ -209,6 +225,7 @@ def aggregate(records: Iterable[dict], window_hours: float) -> dict:
         ),
         "stale_resume_successes": stale_resume_successes,
         "stale_resume_failures": stale_resume_failures,
+        "rolled_back_by_failure_class": failure_class_counts,
     }
 
 
