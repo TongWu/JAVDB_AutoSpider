@@ -498,7 +498,15 @@ def _emit_pending_verify_for_session(
     else:
         final_status = pre_status or "in_progress"
 
-    stats = db_pending_session_stats(int(session_id))
+    try:
+        stats = db_pending_session_stats(int(session_id))
+    except Exception as exc:  # noqa: BLE001 — emission must stay best-effort
+        logger.warning(
+            "db_pending_session_stats failed for session_id=%s: %s; "
+            "emitting pending_session_verify with default counts.",
+            session_id, exc,
+        )
+        stats = {}
     pending_applied = int(counts.get("pending_marked_applied", 0) or 0)
     pending_staged = (
         pending_applied
