@@ -27,6 +27,7 @@ from packages.python.javdb_platform.dual_connection import (  # noqa: E402
     DualConnection,
     DualWriteIdMismatchError,
     _is_read,
+    _iter_complete_statements,
 )
 from packages.python.javdb_platform.db_layer.operations_repo import (  # noqa: E402
     append_rclone_staging,
@@ -46,6 +47,13 @@ from packages.python.javdb_platform.db_layer.operations_repo import (  # noqa: E
         "PRAGMA table_info(x)",
         "EXPLAIN SELECT 1",
         "-- comment line\nSELECT 1",
+        # B.5 (2026-05-11): leading parens are now skipped so wrapped /
+        # set-operation reads are routed through the read path instead
+        # of being executed against both backends as if they were writes.
+        "(SELECT 1)",
+        "  ( SELECT * FROM x )",
+        "((SELECT 1))",
+        "VALUES (1), (2)",
     ],
 )
 def test_is_read_true(sql):
@@ -69,6 +77,47 @@ def test_is_read_true(sql):
 )
 def test_is_read_false(sql):
     assert not _is_read(sql)
+
+
+# ── _iter_complete_statements (B.4) ──────────────────────────────────────
+
+
+def test_iter_complete_statements_basic():
+    """Trivial 3-statement script split into 3 complete statements."""
+    script = "CREATE TABLE x(a); INSERT INTO x VALUES(1); INSERT INTO x VALUES(2);"
+    stmts = [s.strip() for s in _iter_complete_statements(script) if s.strip()]
+    assert stmts == [
+        "CREATE TABLE x(a);",
+        "INSERT INTO x VALUES(1);",
+        "INSERT INTO x VALUES(2);",
+    ]
+
+
+def test_iter_complete_statements_does_not_split_on_semicolon_inside_string():
+    """Regression for B.4: a ``;`` inside a string literal must NOT
+    terminate the surrounding statement. The legacy split-on-semicolon
+    walker would have emitted ``INSERT INTO note VALUES ('hi`` as a
+    standalone (and let a guarded INSERT slip past inspection if the
+    operator's payload happened to wedge one inside a literal)."""
+    script = "INSERT INTO note VALUES ('hi; there'); SELECT 1;"
+    stmts = [s.strip() for s in _iter_complete_statements(script) if s.strip()]
+    assert stmts == [
+        "INSERT INTO note VALUES ('hi; there');",
+        "SELECT 1;",
+    ]
+
+
+def test_iter_complete_statements_handles_trailing_fragment_without_semicolon():
+    """Trailing statement without a closing ``;`` is still emitted so
+    callers (e.g. ``executescript``'s guarded-INSERT check) can inspect
+    it. Defensive: we'd rather over-report a slice than silently
+    discard a fragment."""
+    script = "CREATE TABLE x(a); INSERT INTO x VALUES(1)"
+    stmts = [s.strip() for s in _iter_complete_statements(script) if s.strip()]
+    assert stmts == [
+        "CREATE TABLE x(a);",
+        "INSERT INTO x VALUES(1)",
+    ]
 
 
 # ── D1Cursor ─────────────────────────────────────────────────────────────
@@ -1362,6 +1411,7 @@ def test_db_stage_history_write_torrent_supplies_explicit_seq():
 
 
 from packages.python.javdb_platform.dual_connection import (  # noqa: E402
+    DualWriteAsymmetryError,
     DualWriteStrictError,
 )
 
@@ -1437,7 +1487,16 @@ class _ChunkAwareFakeD1(FakeD1Connection):
 def test_executemany_chunked_failure_records_partial_prefix_count(
     sqlite_conn, monkeypatch, tmp_path,
 ):
-    """P0-2: executemany chunk failure carries partial_prefix_count."""
+    """B.3 (2026-05-11): executemany chunk failure now raises
+    ``DualWriteAsymmetryError`` instead of silently returning.
+
+    The legacy path used to ``break`` out of the chunking loop without
+    surfacing the failure to the caller; SQLite + D1 ended up with
+    matching prefix rows while the remainder simply went missing. The
+    raise is the contract that lets the surrounding ``get_db()``
+    transaction rollback. ``first_failed_extra.partial_prefix_count``
+    in the drift JSONL still records exactly where D1 stopped.
+    """
     _strict_env(monkeypatch, False)
     # Force a tiny BATCH_LIMIT so we get multiple chunks for a small input.
     monkeypatch.setattr(_d1_client_module, "_BATCH_LIMIT", 2)
@@ -1447,13 +1506,15 @@ def test_executemany_chunked_failure_records_partial_prefix_count(
     fake_d1 = _ChunkAwareFakeD1(fail_chunk_at_call=2)
     dual = DualConnection(sqlite_conn, fake_d1)
 
-    dual.executemany(
-        "INSERT INTO t (v) VALUES (?)",
-        [("a",), ("b",), ("c",), ("d",), ("e",)],
-    )
+    with pytest.raises(DualWriteAsymmetryError) as excinfo:
+        dual.executemany(
+            "INSERT INTO t (v) VALUES (?)",
+            [("a",), ("b",), ("c",), ("d",), ("e",)],
+        )
+    assert "partial_prefix_count=2" in str(excinfo.value)
 
-    # First chunk landed on both backends; later chunks were aborted on
-    # SQLite as well, so SQLite ends up with the same prefix D1 has.
+    # First chunk landed on both backends; the raise then aborted SQLite
+    # writes too, so the chunk-1 prefix is still observable locally.
     sqlite_rows = sqlite_conn.execute(
         "SELECT v FROM t ORDER BY id"
     ).fetchall()
@@ -1500,7 +1561,15 @@ def test_executemany_chunked_failure_strict_mode_raises_for_guarded_table(
 def test_batch_execute_missing_d1_cursor_records_drift(
     sqlite_conn, monkeypatch, tmp_path,
 ):
-    """P0-3: ``None`` D1 cursor on a write statement triggers drift."""
+    """B.3 (2026-05-11): a ``None`` D1 cursor on a write statement now
+    raises ``DualWriteAsymmetryError`` in non-strict mode as well.
+
+    Legacy behaviour returned the half-asymmetric DualCursor list back
+    to the caller; the drift counter still moved but callers had no
+    syntactic signal to abort. Non-strict raise matches the
+    ``executemany`` contract above so any batched write that lost a
+    mirror surfaces to the surrounding transaction.
+    """
     _strict_env(monkeypatch, False)
     drift = tmp_path / "drift.jsonl"
     monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift))
@@ -1515,10 +1584,11 @@ def test_batch_execute_missing_d1_cursor_records_drift(
     fake_d1.batch_execute = _batch  # type: ignore[attr-defined]
 
     dual = DualConnection(sqlite_conn, fake_d1)
-    dual.batch_execute([
-        ("INSERT INTO t (v) VALUES (?)", ("a",)),
-        ("INSERT INTO t (v) VALUES (?)", ("b",)),
-    ])
+    with pytest.raises(DualWriteAsymmetryError):
+        dual.batch_execute([
+            ("INSERT INTO t (v) VALUES (?)", ("a",)),
+            ("INSERT INTO t (v) VALUES (?)", ("b",)),
+        ])
 
     assert dual.d1_failure_count >= 1, (
         "expected _record_d1_failure to fire on the None write cursor"

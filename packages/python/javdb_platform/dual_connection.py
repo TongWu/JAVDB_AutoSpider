@@ -63,7 +63,7 @@ from packages.python.javdb_platform.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-_READ_KEYWORDS = ("SELECT", "PRAGMA", "EXPLAIN")
+_READ_KEYWORDS = ("SELECT", "PRAGMA", "EXPLAIN", "VALUES")
 
 
 # ── P0-1 strict-dual-write switch ───────────────────────────────────────
@@ -110,14 +110,48 @@ class DualWriteStrictError(RuntimeError):
     """
 
 
+class DualWriteAsymmetryError(RuntimeError):
+    """Raised when a batched write asymmetrically applied to one backend.
+
+    Specifically the cases where the legacy path used to ``break``
+    silently and let the caller believe the full batch had been written:
+
+    * :meth:`DualConnection.executemany` — D1 raised on chunk k, so
+      chunks 0..k-1 are mirrored on both backends but k..N-1 were never
+      attempted. SQLite is canonical for those earlier chunks, but the
+      caller's expectation of "N rows written" is violated.
+    * :meth:`DualConnection.batch_execute` — D1 returned ``None`` cursors
+      for individual writes inside an otherwise-successful batch.
+
+    The drift JSONL still captures forensic detail (``partial_prefix_count``
+    / ``missing_write_indices``); this exception just makes the asymmetry
+    impossible to ignore.
+
+    Distinct from :class:`DualWriteStrictError` so callers can
+    distinguish "STRICT_DUAL_WRITE on, refusing to commit" from "the
+    batch landed only on one backend". Subclassing keeps existing
+    ``except DualWriteStrictError`` handlers a no-op against the new
+    raise — they specifically opt into strict-mode behaviour.
+    """
+
+
 def _is_read(sql: str) -> bool:
-    # Linear scan that skips leading whitespace, ``--`` line comments, and
-    # ``/* ... */`` block comments before matching a read-only keyword.
+    # Linear scan that skips leading whitespace, ``--`` line comments,
+    # ``/* ... */`` block comments and leading ``(`` (e.g.
+    # ``( SELECT ... ) UNION ...``) before matching a read-only keyword.
     #
     # Implemented without regex on purpose: a pattern like
     # ``(?:--[^\n]*\n\s*|/\*.*?\*/\s*)*`` exhibits catastrophic backtracking
     # on inputs that begin with ``/`` followed by many ``/*`` fragments
     # (classic ReDoS), because the engine retries every alternation split.
+    #
+    # Note on ``WITH``: SQLite supports ``WITH cte AS (...) <SELECT |
+    # INSERT | UPDATE | DELETE>`` so we deliberately do NOT treat ``WITH``
+    # as a read keyword. A misclassified CTE-prefixed write would skip the
+    # SQLite mirror entirely; whereas a CTE-prefixed read landing on the
+    # write path is merely wasteful (D1 rejects mid-statement and the
+    # SQLite path still serves the answer). Callers that need a CTE
+    # SELECT should rewrite as a sub-select.
     n = len(sql)
     i = 0
     while i < n:
@@ -136,6 +170,14 @@ def _is_read(sql: str) -> bool:
             if end == -1:
                 return False
             i = end + 2
+            continue
+        if ch == "(":
+            # Skip a single leading paren (most read patterns wrap once).
+            # Multiple leading parens are uncommon but the next loop
+            # iteration handles them. We do NOT try to match the closing
+            # paren — only the first non-paren/non-whitespace token
+            # decides read vs write.
+            i += 1
             continue
         break
 
@@ -565,10 +607,22 @@ class DualConnection:
                             f"refusing to commit further chunks under "
                             f"STRICT_DUAL_WRITE"
                         ) from exc
-                # Non-strict: stop iterating but do NOT re-raise so the
-                # legacy "SQLite is canonical" semantics are preserved
-                # for callers that don't opt in.
-                break
+                # B.3 (post-2026-05-11 review): even in non-strict mode
+                # we now raise instead of silently ``break``ing. Earlier
+                # behaviour let the caller believe N rows were written
+                # when only ``partial_prefix_count`` actually mirrored
+                # to D1; the remaining ``len(seq_list) - partial_prefix_count``
+                # entries weren't attempted on either backend. The drift
+                # JSONL already captures forensic detail above — this
+                # raise just makes the asymmetry visible to the caller
+                # so the surrounding transaction can rollback.
+                raise DualWriteAsymmetryError(
+                    f"executemany chunk failed on D1 (sql={_shorten(sql)}): "
+                    f"partial_prefix_count={partial_prefix_count}, "
+                    f"failed_chunk_size={len(chunk)}, "
+                    f"remaining_chunks_skipped={(len(seq_list) - start - len(chunk))}; "
+                    f"drift recorded in {_DRIFT_LOG_PATH}"
+                ) from exc
 
             # D1 chunk succeeded — mirror to SQLite. If SQLite raises
             # here we have NEW drift toward D1 (D1 has the chunk, SQLite
@@ -605,7 +659,15 @@ class DualConnection:
         # invariant in :meth:`DualCursor._check_id_consistency` cannot be
         # enforced.  Route guarded INSERTs through :meth:`execute` /
         # :meth:`executemany` / :meth:`batch_execute` instead.
-        for stmt in script.split(";"):
+        #
+        # B.4: use sqlite3.complete_statement to walk the script
+        # statement-by-statement instead of naive ``split(";")``. The
+        # split-on-semicolon path mis-segmented when a string literal,
+        # a trigger body, or a multi-line BEGIN…END block contained an
+        # inline semicolon, so a guarded INSERT embedded in such a
+        # construct could slip past the refusal.
+        statements = list(_iter_complete_statements(script))
+        for stmt in statements:
             table = _extract_insert_table(stmt.strip())
             if table and table in APPLICATION_GENERATED_ID_TABLES:
                 raise DualWriteIdMismatchError(
@@ -616,7 +678,13 @@ class DualConnection:
         self._sqlite.executescript(script)
         try:
             self._d1.executescript(script)
-            self._d1_uncommitted_writes += 1
+            # B.10: count each statement that lands on D1 instead of a
+            # flat +1. The drift JSONL's ``uncommitted_d1_writes`` is
+            # the rollback reconciler's primary signal for "how many D1
+            # rows are orphaned after a rollback"; a per-script +1 lost
+            # the picture for any non-trivial migration script.
+            stmt_count = sum(1 for s in statements if s.strip())
+            self._d1_uncommitted_writes += max(1, stmt_count)
         except Exception as exc:
             self._record_d1_failure(script, exc, kind="executescript")
 
@@ -712,13 +780,29 @@ class DualConnection:
             )
             # Under strict mode, abort the transaction so SQLite (which
             # already executed every statement above) is rolled back by
-            # the outer ``get_db()`` context.
+            # the outer ``get_db()`` context. Keep the StrictError
+            # subclass for tests / handlers that opt into strict-only
+            # semantics; non-strict callers still see an
+            # AsymmetryError so they can't ignore the dropped writes.
             if _strict_dual_write_enabled():
                 raise DualWriteStrictError(
                     f"batch_execute: {len(missing_write_indices)} write "
                     f"statement(s) returned no D1 cursor under "
                     f"STRICT_DUAL_WRITE; refusing to drift."
                 )
+            # B.3 (post-2026-05-11 review): non-strict mode used to
+            # silently return DualCursors whose ``_d1_cur`` was None
+            # for the missing writes, so downstream code (especially
+            # readers that fall back to SQLite via _SqliteFallbackCursor)
+            # could not even detect the asymmetry. Raise so the
+            # surrounding transaction aborts — drift is already in the
+            # JSONL above for the reconciler.
+            raise DualWriteAsymmetryError(
+                f"batch_execute: {len(missing_write_indices)} write "
+                f"statement(s) returned no D1 cursor "
+                f"(total={len(statements)}); drift recorded in "
+                f"{_DRIFT_LOG_PATH}"
+            )
 
         for idx, ((sql, _params), sqlite_cur, d1_cur) in enumerate(zip(
             statements, sqlite_cursors, d1_cursors,
@@ -1010,3 +1094,52 @@ class DualConnection:
 def _shorten(sql: str, n: int = 100) -> str:
     s = " ".join(sql.split())
     return s[:n] + ("…" if len(s) > n else "")
+
+
+def _iter_complete_statements(script: str):
+    """Yield individual SQL statements from a multi-statement script.
+
+    Uses ``sqlite3.complete_statement`` to track parser state — so an
+    inline ``;`` inside a string literal, a trigger body, or a
+    ``BEGIN…END`` block does NOT prematurely terminate the current
+    statement. Falls back to emitting the whole script when sqlite3
+    cannot identify any complete statement at all (e.g. operator-supplied
+    DDL with a missing trailing ``;``).
+    """
+    remainder = script
+    any_yielded = False
+    # Forward-scan each ``;`` position. The first one whose prefix is a
+    # complete statement marks a real boundary; an earlier ``;`` whose
+    # prefix is incomplete means we're still inside a string literal or
+    # a BEGIN…END block and we need to keep scanning forward.
+    while remainder:
+        # Find the earliest ``;`` that closes a complete statement.
+        idx = 0
+        boundary = -1
+        while True:
+            pos = remainder.find(";", idx)
+            if pos == -1:
+                break
+            prefix = remainder[: pos + 1]
+            if sqlite3.complete_statement(prefix):
+                boundary = pos
+                break
+            idx = pos + 1
+        if boundary == -1:
+            # No more complete statements. Emit any trailing non-blank
+            # fragment so callers (e.g. the guarded-INSERT scan) still
+            # see it.
+            tail = remainder.strip()
+            if tail:
+                yield tail
+                any_yielded = True
+            break
+        stmt = remainder[: boundary + 1]
+        yield stmt
+        any_yielded = True
+        remainder = remainder[boundary + 1 :]
+    if not any_yielded and script.strip():
+        # Defensive fallback: never lose the script entirely if our
+        # walker mis-segments — emit it as a single statement so the
+        # caller sees at least one slice to inspect.
+        yield script
