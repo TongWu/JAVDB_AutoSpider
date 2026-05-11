@@ -115,6 +115,17 @@ on:
         default: '0.30'
         type: string
 
+# Mirror DailyIngestion: serialise concurrent dispatches on the same ref so
+# two operator-triggered runs (or a re-run racing the original) cannot
+# interleave their INSERTs into the shared pending / D1 / git state.
+# ``cancel-in-progress: false`` keeps the in-flight ingestion intact and
+# just queues the next one — pending-mode rollback is too expensive to
+# trigger by cancellation. The group key intentionally omits inputs so a
+# dispatch with a different URL still queues behind any active run.
+concurrency:
+  group: adhoc-ingestion-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # =============================================================================
   # Job 1: Setup - Checkout, install dependencies, generate config (includes Rust wheel build/cache)
