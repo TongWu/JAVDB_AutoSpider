@@ -38,6 +38,36 @@ logger = get_logger(__name__)
 
 
 _DEFAULT_TIMEOUT_SEC = 5.0
+
+
+# B.11 (2026-05-11): keys that may carry the live session cookie or
+# anything else worth redacting before we bake the raw dict into an
+# exception message. Anything not in this allow-list survives so
+# operators still see useful schema info like the missing key names.
+_LOGIN_RESP_REDACTED_KEYS = frozenset({"cookie", "cookie_ciphertext"})
+
+
+def _redact_resp(resp) -> dict:
+    """Return a shallow copy of *resp* with sensitive fields stubbed.
+
+    ``LoginStateClient`` raises ``LoginStateUnavailable`` with the raw
+    response embedded when JSON parsing of one of its methods fails. If
+    the only thing wrong is a missing key, the rest of the dict still
+    contains the decrypted ``cookie`` — and exception text routinely
+    survives in CI logs / Sentry / operator transcripts long after the
+    cookie remains valid. Redact the live cookie field down to a length
+    indicator so debugging info (other fields, the exception's parser
+    error) is preserved without leaking the secret.
+    """
+    if not isinstance(resp, dict):
+        return {"_resp_type": type(resp).__name__}
+    out = {}
+    for k, v in resp.items():
+        if k in _LOGIN_RESP_REDACTED_KEYS and isinstance(v, str) and v:
+            out[k] = f"<redacted length={len(v)}>"
+        else:
+            out[k] = v
+    return out
 _DEFAULT_USER_AGENT = "javdb-spider-login-state-client/1.0"
 
 # Server-side bounds on ``ttl_ms`` (mirror ``LOGIN_LEASE_TTL_*_MS`` in the
@@ -255,7 +285,7 @@ class LoginStateClient:
             )
         except (KeyError, TypeError, ValueError) as e:
             raise LoginStateUnavailable(
-                f"malformed get_state response: {resp!r} ({e})"
+                f"malformed get_state response: {_redact_resp(resp)!r} ({e})"
             ) from e
 
     def acquire_lease(
@@ -298,7 +328,7 @@ class LoginStateClient:
             )
         except (KeyError, TypeError, ValueError) as e:
             raise LoginStateUnavailable(
-                f"malformed acquire_lease response: {resp!r} ({e})"
+                f"malformed acquire_lease response: {_redact_resp(resp)!r} ({e})"
             ) from e
 
     def publish(
@@ -330,7 +360,7 @@ class LoginStateClient:
             )
         except (KeyError, TypeError, ValueError) as e:
             raise LoginStateUnavailable(
-                f"malformed publish response: {resp!r} ({e})"
+                f"malformed publish response: {_redact_resp(resp)!r} ({e})"
             ) from e
 
     def invalidate(self, version: int) -> InvalidateResult:
@@ -355,7 +385,7 @@ class LoginStateClient:
             )
         except (KeyError, TypeError, ValueError) as e:
             raise LoginStateUnavailable(
-                f"malformed invalidate response: {resp!r} ({e})"
+                f"malformed invalidate response: {_redact_resp(resp)!r} ({e})"
             ) from e
 
     def record_attempt(
@@ -401,7 +431,7 @@ class LoginStateClient:
             )
         except (KeyError, TypeError, ValueError) as e:
             raise LoginStateUnavailable(
-                f"malformed record_attempt response: {resp!r} ({e})"
+                f"malformed record_attempt response: {_redact_resp(resp)!r} ({e})"
             ) from e
 
     def release_lease(self, holder_id: str) -> ReleaseLeaseResult:
@@ -422,7 +452,7 @@ class LoginStateClient:
             )
         except (KeyError, TypeError, ValueError) as e:
             raise LoginStateUnavailable(
-                f"malformed release_lease response: {resp!r} ({e})"
+                f"malformed release_lease response: {_redact_resp(resp)!r} ({e})"
             ) from e
 
     def health_check(self) -> bool:

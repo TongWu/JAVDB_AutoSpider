@@ -158,6 +158,38 @@ def test_get_state_raises_on_malformed_payload():
             c.get_state()
 
 
+def test_get_state_malformed_response_redacts_live_cookie():
+    """B.11 (2026-05-11): a malformed-payload exception used to embed
+    ``resp!r`` verbatim, which leaked the decrypted cookie if the response
+    happened to carry one (network blip dropped a non-cookie field). The
+    redact helper now stubs known sensitive keys to a length indicator
+    while preserving the rest of the dict so operators can still see what
+    was missing.
+    """
+    c = _make_client()
+    leaked_cookie = "_jdb_session=top-secret-cookie-value"
+    resp = _mock_response(200, {
+        # ``version`` is the field the response builder needs but it's
+        # the wrong type, so the constructor raises and the helper
+        # baking ``resp!r`` into the message fires.
+        "version": "not-an-int",
+        "cookie": leaked_cookie,
+        "proxy_name": "JP-1",
+    })
+    with patch.object(c._session, "get", return_value=resp):
+        with pytest.raises(LoginStateUnavailable) as excinfo:
+            c.get_state()
+    message = str(excinfo.value)
+    assert leaked_cookie not in message, (
+        f"cookie value leaked into exception message: {message!r}"
+    )
+    assert "redacted length=" in message, (
+        f"expected cookie length stub in {message!r}"
+    )
+    # Non-sensitive fields still survive so the operator can correlate.
+    assert "JP-1" in message
+
+
 # ── acquire_lease ───────────────────────────────────────────────────────────
 
 
