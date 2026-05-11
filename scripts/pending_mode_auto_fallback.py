@@ -171,8 +171,26 @@ def write_fallback(
 
     text += "\n".join(block_lines) + "\n"
 
-    with open(config_path, "w", encoding="utf-8") as f:
-        f.write(text)
+    # P1: write atomically. Without this, two concurrent auto-fallback
+    # invocations (e.g. AdHocIngestion + DailyIngestion finishing at the
+    # same moment) could interleave bytes inside ``.publish-config.yml``
+    # and produce an unparsable file. ``os.replace`` is atomic on the
+    # same filesystem and replaces the file in a single step.
+    import tempfile
+    target_dir = os.path.dirname(os.path.abspath(config_path)) or "."
+    fd, tmp_path = tempfile.mkstemp(
+        prefix=".publish-config.", suffix=".tmp", dir=target_dir,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp_path, config_path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 def main(argv=None) -> int:
