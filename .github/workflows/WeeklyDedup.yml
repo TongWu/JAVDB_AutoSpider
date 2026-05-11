@@ -30,10 +30,20 @@ on:
         default: 'gdrive:/剧集/不可以色色/JAV-Sync'
         type: string
       dry_run:
-        description: 'Dry run mode — simulate execute without deleting'
+        # P0-9: scheduled runs intentionally execute real dedup (cron at
+        # Sunday 20:00 UTC). For manual workflow_dispatch the default is
+        # `true` so a single accidental click can't trigger destructive
+        # rclone deletes. To run a real execute manually, flip dry_run to
+        # false AND type "I-UNDERSTAND" in confirm_production.
+        description: 'Dry run mode — simulate execute without deleting (default: true for manual runs)'
         required: false
-        default: false
+        default: true
         type: boolean
+      confirm_production:
+        description: 'Type "I-UNDERSTAND" to allow manual non-dry-run execute (ignored on scheduled runs)'
+        required: false
+        default: ''
+        type: string
       incremental:
         description: 'Incremental mode — only process recent changes in report'
         required: false
@@ -74,8 +84,23 @@ jobs:
       INPUT_LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
       INPUT_DRY_RUN: ${{ inputs.dry_run || 'false' }}
       INPUT_INCREMENTAL: ${{ inputs.incremental || 'false' }}
+      INPUT_CONFIRM_PRODUCTION: ${{ inputs.confirm_production || '' }}
 
     steps:
+      - name: Verify production confirmation (manual runs only)
+        # P0-9 guard: only enforced for manual workflow_dispatch with
+        # dry_run=false. Scheduled cron runs (Sunday 20:00 UTC) intentionally
+        # execute real dedup and bypass this check — they have no inputs so
+        # confirm_production stays empty by design.
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == false }}
+        run: |
+          if [ "${INPUT_CONFIRM_PRODUCTION}" != "I-UNDERSTAND" ]; then
+            echo "::error::Refusing manual non-dry-run dedup unless confirm_production='I-UNDERSTAND' (got: '${INPUT_CONFIRM_PRODUCTION}')."
+            echo "::error::Re-run the workflow and either keep dry_run=true OR type I-UNDERSTAND in confirm_production."
+            exit 1
+          fi
+          echo "Production confirmation accepted."
+
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
@@ -320,11 +345,18 @@ jobs:
 
   # After the weekly dedup finishes, run Migration.yml's align_inventory_history
   # task with default settings. Capped at 10 hours (600 minutes).
+  #
+  # Migration.yml.workflow_call.dry_run now defaults to true (P0-9 safety),
+  # so this caller must explicitly opt into a real run. The pairing of
+  # dry_run=false + confirm_production="I-UNDERSTAND" matches Migration's
+  # production-confirmation guard.
   align-inventory-history:
     needs: weekly-dedup
     uses: ./.github/workflows/Migration.yml
     secrets: inherit
     with:
       align_inventory_history: true
+      dry_run: false
+      confirm_production: 'I-UNDERSTAND'
       runner: ${{ inputs.runner || 'self-hosted' }}
       timeout_minutes: 600

@@ -9,10 +9,23 @@ on:
     inputs:
       # ---- Core Options ----
       dry_run:
+        # Defaults to true so that a single accidental click in the GitHub UI
+        # cannot trigger destructive schema migrations / inventory align /
+        # backfills against production databases. Flip to false explicitly
+        # and supply confirm_production="I-UNDERSTAND" to actually mutate
+        # production state.
         description: 'Dry run — preview only, no database writes'
         required: false
-        default: false
+        default: true
         type: boolean
+      confirm_production:
+        # Belt-and-suspenders guard: required (literal "I-UNDERSTAND") when
+        # dry_run=false to actually apply changes. Enforced by the
+        # "Verify production confirmation" step below.
+        description: 'Type "I-UNDERSTAND" to allow non-dry-run execution'
+        required: false
+        default: ''
+        type: string
       backup:
         description: 'Backup DB files before migration'
         required: false
@@ -121,9 +134,16 @@ on:
   workflow_call:
     inputs:
       dry_run:
+        # Mirrors workflow_dispatch.dry_run default (true). Callers (e.g.
+        # WeeklyDedup.yml) that intentionally want a real migration must
+        # pass dry_run: false AND confirm_production: 'I-UNDERSTAND'.
         required: false
-        default: false
+        default: true
         type: boolean
+      confirm_production:
+        required: false
+        default: ''
+        type: string
       backup:
         required: false
         default: false
@@ -234,8 +254,24 @@ jobs:
       INPUT_ALIGN_EXECUTE_DELETE: ${{ inputs.align_execute_delete }}
       INPUT_ALIGN_QB_CATEGORY: ${{ inputs.align_qb_category }}
       INPUT_RUNNER: ${{ inputs.runner || 'self-hosted' }}
+      INPUT_CONFIRM_PRODUCTION: ${{ inputs.confirm_production }}
 
     steps:
+      - name: Verify production confirmation
+        # P0-9 guard: dry_run defaults to true; users must explicitly opt
+        # into a real migration by setting dry_run=false AND typing the
+        # literal "I-UNDERSTAND" into confirm_production. This prevents
+        # a single accidental click in the GitHub UI from running a
+        # destructive schema migration / inventory align / backfill.
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          if [ "${INPUT_CONFIRM_PRODUCTION}" != "I-UNDERSTAND" ]; then
+            echo "::error::Refusing to run with dry_run=false unless confirm_production='I-UNDERSTAND' (got: '${INPUT_CONFIRM_PRODUCTION}')."
+            echo "::error::Re-run the workflow and either keep dry_run=true OR type I-UNDERSTAND in confirm_production."
+            exit 1
+          fi
+          echo "Production confirmation accepted."
+
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
