@@ -350,11 +350,16 @@ def _get_connection(db_path: str):
         conns = {}
         _local.conns = conns
 
-    conn = conns.get(db_path)
+    backend = _backend_mode()
+
+    # P1: key the cache on ``(db_path, backend)`` so a runtime flip of
+    # ``STORAGE_BACKEND`` (kill-switch, JAVDB_FORBID_DB_WRITES escalation,
+    # operator toggling between sqlite-only and dual) returns the right
+    # connection type instead of a stale facade from before the switch.
+    cache_key = (db_path, backend)
+    conn = conns.get(cache_key)
     if conn is not None:
         return conn
-
-    backend = _backend_mode()
 
     if backend == 'sqlite':
         conn = _open_sqlite_connection(db_path)
@@ -370,7 +375,7 @@ def _get_connection(db_path: str):
     else:
         raise RuntimeError(f"Unknown STORAGE_BACKEND={backend!r}")
 
-    conns[db_path] = conn
+    conns[cache_key] = conn
     return conn
 
 
@@ -390,12 +395,41 @@ def get_db(db_path: Optional[str] = None):
         raise
 
 
+@contextmanager
+def get_local_sqlite_db(db_path: Optional[str] = None):
+    """Context manager that always yields a raw ``sqlite3.Connection``.
+
+    P0-6: under ``STORAGE_BACKEND=dual`` the default :func:`get_db` returns
+    a :class:`DualConnection` whose reads are served by D1. That is the
+    right behaviour for the application's hot path, but several
+    observability code paths (email notification, drift reconciler,
+    operator dashboards) MUST read the locally-canonical state instead so
+    they do not paper over D1 lag. This helper opens a dedicated SQLite
+    connection irrespective of the configured backend, with auto-commit
+    on exit. The connection is NOT cached in the thread-local registry.
+    """
+    path = db_path or HISTORY_DB_PATH
+    conn = _open_sqlite_connection(path)
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def close_db():
     """Close all thread-local connections (call before process exit)."""
     conns: dict = getattr(_local, 'conns', None)
     if not conns:
         return
-    for path, conn in list(conns.items()):
+    for key, conn in list(conns.items()):
+        # Cache keys are ``(db_path, backend)`` tuples (see _get_connection).
         # Only attempt WAL checkpoint on real SQLite connections; D1 / Dual
         # facades reject PRAGMA writes so we skip them silently.
         if isinstance(conn, sqlite3.Connection):
@@ -691,6 +725,21 @@ CREATE TABLE IF NOT EXISTS PikpakStats (
     DeleteFailedCount INTEGER,
     DateTimeCreated   TEXT
 );
+
+-- P1: Per-session stats rows must be unique per SessionId. Without a
+-- UNIQUE index the legacy `db_save_*` paths' plain INSERT silently
+-- duplicates rows whenever a retry or re-run hits the same SessionId,
+-- producing the "SpiderStats -1" type drift between SQLite and D1.
+-- ``CREATE UNIQUE INDEX IF NOT EXISTS`` is non-destructive: it
+-- succeeds when the table is already clean and raises a clear error
+-- (caught by the migration) if duplicates exist so the operator can
+-- dedupe before re-running.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_spiderstats_session
+    ON SpiderStats(SessionId);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_uploaderstats_session
+    ON UploaderStats(SessionId);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_pikpakstats_session
+    ON PikpakStats(SessionId);
 """
 
 _OPERATIONS_DDL = _SCHEMA_VERSION_DDL + """
@@ -1393,6 +1442,45 @@ def _migrate_defaults_to_null(conn: sqlite3.Connection) -> None:
         logger.warning(f"Integrity check after schema update: {integrity[0]}")
 
 
+def _dedupe_session_keyed_stats_rows(conn: sqlite3.Connection) -> None:
+    """Collapse duplicate ``(SessionId)`` rows in per-session stats tables.
+
+    Each ``db_save_*_stats`` historically used a plain ``INSERT`` and
+    therefore produced multiple rows whenever a retry/re-run landed on
+    the same SessionId. The DDL below now adds ``UNIQUE(SessionId)``;
+    creating that index against a table with existing duplicates would
+    raise. This helper runs *before* the DDL and keeps only the row
+    with the largest ``Id`` (the most recent write) per session.
+
+    Idempotent: on a fresh DB or a DB that's already clean this is a
+    no-op. Logs the count of rows removed so an operator inspecting
+    the init log sees what happened on first migration.
+    """
+    for table in ("SpiderStats", "UploaderStats", "PikpakStats"):
+        if not _has_table(conn, table):
+            continue
+        try:
+            cur = conn.execute(
+                f"DELETE FROM {table} WHERE Id NOT IN ("
+                f"SELECT MAX(Id) FROM {table} GROUP BY SessionId"
+                f")"
+            )
+        except sqlite3.OperationalError as exc:
+            # Table missing the Id column on extremely old schemas — skip.
+            logger.warning(
+                "_dedupe_session_keyed_stats_rows: skipped %s (%s)",
+                table, exc,
+            )
+            continue
+        removed = cur.rowcount or 0
+        if removed > 0:
+            logger.info(
+                "_dedupe_session_keyed_stats_rows: removed %d duplicate "
+                "row(s) from %s before unique-index migration",
+                removed, table,
+            )
+
+
 def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
     """Initialise one database file: create tables and set schema version."""
     if not force:
@@ -1422,6 +1510,15 @@ def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
         # below creates everything from scratch. The post-DDL call kept
         # below is a redundant idempotent safety net.
         _ensure_rollback_columns(conn)
+
+        # P1: dedupe pre-existing SpiderStats / UploaderStats / PikpakStats
+        # rows that share a SessionId before the DDL's new UNIQUE indexes
+        # land. Without this, ``CREATE UNIQUE INDEX IF NOT EXISTS`` would
+        # raise on any database that ever ran a stats save twice for the
+        # same session (which is exactly the regression the index is
+        # designed to prevent). We keep the row with the largest Id (most
+        # recent) and drop the rest.
+        _dedupe_session_keyed_stats_rows(conn)
 
         conn.executescript(ddl)
 
@@ -3514,7 +3611,21 @@ def _pending_torrent_overlay(
     href: Optional[str] = None,
     include_states: Tuple[str, ...] = ("pending",),
 ) -> Dict[Tuple[str, int, int], dict]:
-    """Return ``{(href, sub, cen): latest_pending_torrent_row}`` for *session_id*."""
+    """Return ``{(href, sub, cen): merged_pending_torrent_row}`` for *session_id*.
+
+    Mirrors :func:`_pending_movie_overlay`: when multiple pending rows
+    share the same ``(href, sub, cen)`` key (e.g. a retry / re-fetch
+    staged a second time for the same torrent type), the **latest**
+    non-NULL field values shadow earlier ones, but the merged row's
+    ``_merged_seqs`` list carries **every** consumed ``Seq`` so the
+    commit path can mark them all ``ApplyState='applied'``.
+
+    P0-4: the legacy implementation only retained the last ``Seq``,
+    leaving earlier rows stuck in ``pending`` after
+    ``db_commit_session_history``. That residue then triggered the
+    Phase 3 critical pending-mode alert and the auto-fallback to
+    audit mode for the next run.
+    """
     placeholders = ",".join("?" for _ in include_states)
     params: list = [int(session_id)]
     params.extend(include_states)
@@ -3535,7 +3646,22 @@ def _pending_torrent_overlay(
             int(d["SubtitleIndicator"]),
             int(d["CensorIndicator"]),
         )
-        overlay[key] = d
+        existing = overlay.get(key)
+        if existing is None:
+            d["_merged_seqs"] = [int(d["Seq"])]
+            overlay[key] = d
+            continue
+        existing["_merged_seqs"].append(int(d["Seq"]))
+        for col, value in d.items():
+            if col == "_merged_seqs":
+                continue
+            if col == "Seq":
+                # Track the newest Seq as the canonical row pointer; the
+                # full list lives in _merged_seqs.
+                existing[col] = value
+                continue
+            if value is not None:
+                existing[col] = value
     return overlay
 
 
@@ -3789,7 +3915,19 @@ def _commit_one_movie(
                 ),
             )
         counts["torrents_upserted"] += 1
-        consumed_torrent_seqs.append(int(payload["Seq"]))
+        # P0-4: consume EVERY pending row that fed into this merged
+        # payload, not just the last Seq. ``_pending_torrent_overlay``
+        # now populates ``_merged_seqs`` for the same reason
+        # ``_pending_movie_overlay`` does — re-staging (retry / re-fetch
+        # / sparse-merge) creates multiple rows per (href, sub, cen)
+        # and the legacy single-Seq update silently left the earlier
+        # rows stuck in ``ApplyState='pending'``, which then tripped
+        # the Phase 3 residual-pending alert.
+        merged = payload.get("_merged_seqs")
+        if merged:
+            consumed_torrent_seqs.extend(int(s) for s in merged)
+        else:
+            consumed_torrent_seqs.append(int(payload["Seq"]))
 
     # Apply the same "hacked_subtitle wins over hacked_no_subtitle, subtitle
     # wins over no_subtitle" rule the audit path enforces in db_upsert_history.
@@ -3918,18 +4056,46 @@ def db_commit_session_history(
     if status == "in_progress":
         db_begin_finalize_session(session_id, db_path=reports_db_path)
 
+    # P1: snapshot the href list, but re-scan at the end so any pending
+    # rows staged AFTER the initial scan (by a concurrent stager that
+    # raced this finalize) are not left stuck in ``ApplyState='pending'``
+    # — that residue is the Phase 3 critical alert trigger.
+    processed: set = set()
     with get_db(history_db_path or HISTORY_DB_PATH) as conn:
         hrefs = _pending_distinct_hrefs(conn, session_id)
-    counts["hrefs_processed"] = len(hrefs)
 
-    for href in hrefs:
-        with _href_lock(href):
-            with get_db(history_db_path or HISTORY_DB_PATH) as conn:
-                per_movie = _commit_one_movie(
-                    conn, session_id, href, when=when,
-                )
-                for k, v in per_movie.items():
-                    counts[k] = counts.get(k, 0) + v
+    def _drain(href_list):
+        for href in href_list:
+            if href in processed:
+                continue
+            with _href_lock(href):
+                with get_db(history_db_path or HISTORY_DB_PATH) as conn:
+                    per_movie = _commit_one_movie(
+                        conn, session_id, href, when=when,
+                    )
+                    for k, v in per_movie.items():
+                        counts[k] = counts.get(k, 0) + v
+            processed.add(href)
+
+    _drain(hrefs)
+
+    # Re-scan for hrefs that arrived after the initial snapshot. Bounded
+    # by a small loop count to avoid the (pathological) case where a
+    # stager keeps adding pending rows in lock-step with this finalize.
+    for _ in range(3):
+        with get_db(history_db_path or HISTORY_DB_PATH) as conn:
+            extra = [h for h in _pending_distinct_hrefs(conn, session_id)
+                     if h not in processed]
+        if not extra:
+            break
+        logger.info(
+            "db_commit_session_history(session=%s): rescan found %d "
+            "additional pending href(s) staged after initial snapshot",
+            session_id, len(extra),
+        )
+        _drain(extra)
+
+    counts["hrefs_processed"] = len(processed)
 
     # Flip Status to 'committed' BEFORE the final pending-table DELETE so a
     # crash between the two leaves a recoverable footprint.  Failure modes:
@@ -5197,7 +5363,14 @@ def db_get_sessions_by_date(report_date: str, report_type: Optional[str] = None,
 # ── Stats helpers ────────────────────────────────────────────────────────
 
 def db_save_spider_stats(session_id: int, stats: dict, db_path: Optional[str] = None) -> int:
-    """Save spider statistics for a session."""
+    """Save spider statistics for a session.
+
+    P1: idempotent via ``ON CONFLICT(SessionId) DO UPDATE`` so a re-run
+    (e.g. retry after timeout, manual operator re-execution) replaces
+    the row instead of duplicating it. The legacy plain INSERT path
+    silently created duplicate rows that then caused SQLite to diverge
+    from D1 by exactly the number of retries.
+    """
     import json as _json
     failed_movies_json = _json.dumps(stats.get('failed_movies', []), ensure_ascii=False) if stats.get('failed_movies') else ''
     with get_db(db_path or REPORTS_DB_PATH) as conn:
@@ -5210,7 +5383,24 @@ def db_save_spider_stats(session_id: int, stats: dict, db_path: Optional[str] = 
                 Phase2NoNew, Phase2Failed,
                 TotalDiscovered, TotalProcessed, TotalSkipped,
                 TotalNoNew, TotalFailed, FailedMovies)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(SessionId) DO UPDATE SET
+                   Phase1Discovered=excluded.Phase1Discovered,
+                   Phase1Processed=excluded.Phase1Processed,
+                   Phase1Skipped=excluded.Phase1Skipped,
+                   Phase1NoNew=excluded.Phase1NoNew,
+                   Phase1Failed=excluded.Phase1Failed,
+                   Phase2Discovered=excluded.Phase2Discovered,
+                   Phase2Processed=excluded.Phase2Processed,
+                   Phase2Skipped=excluded.Phase2Skipped,
+                   Phase2NoNew=excluded.Phase2NoNew,
+                   Phase2Failed=excluded.Phase2Failed,
+                   TotalDiscovered=excluded.TotalDiscovered,
+                   TotalProcessed=excluded.TotalProcessed,
+                   TotalSkipped=excluded.TotalSkipped,
+                   TotalNoNew=excluded.TotalNoNew,
+                   TotalFailed=excluded.TotalFailed,
+                   FailedMovies=excluded.FailedMovies""",
             (session_id,
              stats.get('phase1_discovered', 0), stats.get('phase1_processed', 0),
              stats.get('phase1_skipped', 0), stats.get('phase1_no_new', 0),
@@ -5226,14 +5416,25 @@ def db_save_spider_stats(session_id: int, stats: dict, db_path: Optional[str] = 
 
 
 def db_save_uploader_stats(session_id: int, stats: dict, db_path: Optional[str] = None) -> int:
-    """Save uploader statistics for a session."""
+    """Save uploader statistics for a session (idempotent via ON CONFLICT)."""
     with get_db(db_path or REPORTS_DB_PATH) as conn:
         cur = conn.execute(
             """INSERT INTO UploaderStats
                (SessionId, TotalTorrents, DuplicateCount, Attempted,
                 SuccessfullyAdded, FailedCount, HackedSub, HackedNosub,
                 SubtitleCount, NoSubtitleCount, SuccessRate)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(SessionId) DO UPDATE SET
+                   TotalTorrents=excluded.TotalTorrents,
+                   DuplicateCount=excluded.DuplicateCount,
+                   Attempted=excluded.Attempted,
+                   SuccessfullyAdded=excluded.SuccessfullyAdded,
+                   FailedCount=excluded.FailedCount,
+                   HackedSub=excluded.HackedSub,
+                   HackedNosub=excluded.HackedNosub,
+                   SubtitleCount=excluded.SubtitleCount,
+                   NoSubtitleCount=excluded.NoSubtitleCount,
+                   SuccessRate=excluded.SuccessRate""",
             (session_id,
              stats.get('total_torrents', 0), stats.get('duplicate_count', 0),
              stats.get('attempted', 0), stats.get('successfully_added', 0),
@@ -5245,14 +5446,22 @@ def db_save_uploader_stats(session_id: int, stats: dict, db_path: Optional[str] 
 
 
 def db_save_pikpak_stats(session_id: int, stats: dict, db_path: Optional[str] = None) -> int:
-    """Save PikPak bridge statistics for a session."""
+    """Save PikPak bridge statistics for a session (idempotent via ON CONFLICT)."""
     with get_db(db_path or REPORTS_DB_PATH) as conn:
         cur = conn.execute(
             """INSERT INTO PikpakStats
                (SessionId, ThresholdDays, TotalTorrents,
                 FilteredOld, SuccessfulCount, FailedCount,
                 UploadedCount, DeleteFailedCount)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(SessionId) DO UPDATE SET
+                   ThresholdDays=excluded.ThresholdDays,
+                   TotalTorrents=excluded.TotalTorrents,
+                   FilteredOld=excluded.FilteredOld,
+                   SuccessfulCount=excluded.SuccessfulCount,
+                   FailedCount=excluded.FailedCount,
+                   UploadedCount=excluded.UploadedCount,
+                   DeleteFailedCount=excluded.DeleteFailedCount""",
             (session_id,
              stats.get('threshold_days', 3), stats.get('total_torrents', 0),
              stats.get('filtered_old', 0), stats.get('successful_count', 0),
@@ -5287,4 +5496,74 @@ def db_get_pikpak_stats(session_id: int, db_path: Optional[str] = None) -> Optio
         row = conn.execute(
             "SELECT * FROM PikpakStats WHERE SessionId = ?", (session_id,)
         ).fetchone()
+        return dict(row) if row else None
+
+
+# ── P0-6 SQLite-canonical readers for observability tooling ─────────────
+#
+# In ``STORAGE_BACKEND=dual``, the regular ``db_get_*_stats`` helpers
+# above resolve reads via D1 (see ``DualConnection.execute``). That is
+# intentional for the application's hot path — it proves D1 can serve
+# reads before cutover. It is **wrong** for the email notifier and any
+# other "what actually happened this run" reporter, because D1 may be
+# behind SQLite by N rows when a dual-write asymmetry occurred (the
+# 2026-05 ``ReportSessions``/``SpiderStats`` -1 drift). Reading from
+# D1 there would silently understate the pipeline's real output.
+#
+# These ``*_local`` variants always go through :func:`get_local_sqlite_db`
+# so the email body / drift advisory reflect the canonical local state.
+
+
+def db_get_spider_stats_local(
+    session_id: int, db_path: Optional[str] = None,
+) -> Optional[dict]:
+    """SQLite-only counterpart to :func:`db_get_spider_stats`."""
+    with get_local_sqlite_db(db_path or REPORTS_DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT * FROM SpiderStats WHERE SessionId = ?", (session_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def db_get_uploader_stats_local(
+    session_id: int, db_path: Optional[str] = None,
+) -> Optional[dict]:
+    """SQLite-only counterpart to :func:`db_get_uploader_stats`."""
+    with get_local_sqlite_db(db_path or REPORTS_DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT * FROM UploaderStats WHERE SessionId = ?", (session_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def db_get_pikpak_stats_local(
+    session_id: int, db_path: Optional[str] = None,
+) -> Optional[dict]:
+    """SQLite-only counterpart to :func:`db_get_pikpak_stats`."""
+    with get_local_sqlite_db(db_path or REPORTS_DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT * FROM PikpakStats WHERE SessionId = ?", (session_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def db_get_latest_session_local(
+    report_type: Optional[str] = None, db_path: Optional[str] = None,
+) -> Optional[dict]:
+    """SQLite-only counterpart to :func:`db_get_latest_session`."""
+    with get_local_sqlite_db(db_path or REPORTS_DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        if report_type is not None:
+            row = conn.execute(
+                "SELECT * FROM ReportSessions WHERE ReportType = ? "
+                "ORDER BY Id DESC LIMIT 1",
+                (report_type,),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT * FROM ReportSessions ORDER BY Id DESC LIMIT 1"
+            ).fetchone()
         return dict(row) if row else None
