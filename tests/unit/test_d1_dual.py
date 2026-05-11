@@ -1350,3 +1350,213 @@ def test_db_stage_history_write_torrent_supplies_explicit_seq():
         ).fetchone()
     assert row is not None
     assert int(row["Seq"]) == seq
+
+
+# ─── P0 hardening regression tests ──────────────────────────────────────
+#
+# These cover the cross-backend invariants that were silently broken
+# before the 2026-05 hardening pass: STRICT_DUAL_WRITE commit-refusal,
+# executemany chunk alignment, batch_execute None-cursor accounting,
+# and the legacy plain-INSERT semantics under default (non-strict)
+# mode (no behaviour change there — only opt-in).
+
+
+from packages.python.javdb_platform.dual_connection import (  # noqa: E402
+    DualWriteStrictError,
+)
+
+
+def _strict_env(monkeypatch, enabled: bool = True) -> None:
+    """Helper: toggle STRICT_DUAL_WRITE on/off for a single test."""
+    if enabled:
+        monkeypatch.setenv("STRICT_DUAL_WRITE", "1")
+    else:
+        monkeypatch.delenv("STRICT_DUAL_WRITE", raising=False)
+
+
+def test_strict_mode_commit_raises_when_d1_failure_recorded(
+    sqlite_conn, monkeypatch, tmp_path,
+):
+    """P0-1: commit() must abort under strict mode + D1 failure."""
+    _strict_env(monkeypatch, True)
+    drift = tmp_path / "drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift))
+
+    fake_d1 = FakeD1Connection(fail_on_write=True)
+    dual = DualConnection(sqlite_conn, fake_d1)
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("x",))
+    assert dual.d1_failure_count == 1
+
+    with pytest.raises(DualWriteStrictError):
+        dual.commit()
+
+
+def test_strict_mode_commit_clean_path_unaffected(
+    sqlite_conn, monkeypatch,
+):
+    """P0-1: clean transactions still commit normally under strict mode."""
+    _strict_env(monkeypatch, True)
+    fake_d1 = FakeD1Connection()
+    dual = DualConnection(sqlite_conn, fake_d1)
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("y",))
+    dual.commit()  # must NOT raise
+    assert fake_d1.commits == 1
+
+
+def test_default_mode_legacy_behaviour_preserved(sqlite_conn, monkeypatch):
+    """P0-1: with STRICT_DUAL_WRITE unset, legacy semantics still apply."""
+    _strict_env(monkeypatch, False)
+    fake_d1 = FakeD1Connection(fail_on_write=True)
+    dual = DualConnection(sqlite_conn, fake_d1)
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("z",))
+    # Legacy: commit() does NOT raise even though D1 had a failure
+    dual.commit()
+
+
+class _ChunkAwareFakeD1(FakeD1Connection):
+    """Variant that fails ``executemany`` only on the Nth chunk.
+
+    Mirrors what CF does in practice: chunks 1..k-1 auto-commit, chunk
+    k raises (timeout / 5xx / network blip), chunks k+1..n never run.
+    """
+
+    def __init__(self, fail_chunk_at_call: int):
+        super().__init__()
+        self.fail_chunk_at_call = fail_chunk_at_call
+        self._chunk_call_count = 0
+
+    def executemany(self, sql, seq):
+        self._chunk_call_count += 1
+        if self._chunk_call_count == self.fail_chunk_at_call:
+            raise RuntimeError(
+                f"simulated D1 chunk failure on call #{self._chunk_call_count}"
+            )
+        super().executemany(sql, seq)
+
+
+def test_executemany_chunked_failure_records_partial_prefix_count(
+    sqlite_conn, monkeypatch, tmp_path,
+):
+    """P0-2: executemany chunk failure carries partial_prefix_count."""
+    _strict_env(monkeypatch, False)
+    # Force a tiny BATCH_LIMIT so we get multiple chunks for a small input.
+    monkeypatch.setattr(_d1_client_module, "_BATCH_LIMIT", 2)
+    drift = tmp_path / "drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift))
+
+    fake_d1 = _ChunkAwareFakeD1(fail_chunk_at_call=2)
+    dual = DualConnection(sqlite_conn, fake_d1)
+
+    dual.executemany(
+        "INSERT INTO t (v) VALUES (?)",
+        [("a",), ("b",), ("c",), ("d",), ("e",)],
+    )
+
+    # First chunk landed on both backends; later chunks were aborted on
+    # SQLite as well, so SQLite ends up with the same prefix D1 has.
+    sqlite_rows = sqlite_conn.execute(
+        "SELECT v FROM t ORDER BY id"
+    ).fetchall()
+    assert [r["v"] for r in sqlite_rows] == ["a", "b"]
+    # Drift record carries the structured prefix count.
+    dual.rollback()  # flushes any pending drift JSONL record
+    assert drift.exists()
+    payload = [json.loads(line) for line in drift.read_text().splitlines() if line]
+    extras = [
+        rec.get("first_failed_extra") for rec in payload
+        if rec.get("first_failed_extra")
+    ]
+    assert extras, f"expected first_failed_extra in {payload!r}"
+    assert extras[0].get("partial_prefix_count") == 2
+
+
+def test_executemany_chunked_failure_strict_mode_raises_for_guarded_table(
+    tmp_path, monkeypatch,
+):
+    """P0-2 + P0-1: guarded-table chunk failure under strict raises."""
+    _strict_env(monkeypatch, True)
+    monkeypatch.setattr(_d1_client_module, "_BATCH_LIMIT", 1)
+    drift = tmp_path / "drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift))
+
+    sqlite_path = tmp_path / "guarded.db"
+    conn = sqlite3.connect(sqlite_path)
+    conn.row_factory = sqlite3.Row
+    # Mirror enough of ReportSessions schema for the test
+    conn.execute(
+        "CREATE TABLE ReportSessions (Id INTEGER PRIMARY KEY, Note TEXT)"
+    )
+
+    fake_d1 = _ChunkAwareFakeD1(fail_chunk_at_call=1)
+    dual = DualConnection(conn, fake_d1)
+
+    with pytest.raises(DualWriteStrictError):
+        dual.executemany(
+            "INSERT INTO ReportSessions (Id, Note) VALUES (?, ?)",
+            [(1, "a"), (2, "b")],
+        )
+
+
+def test_batch_execute_missing_d1_cursor_records_drift(
+    sqlite_conn, monkeypatch, tmp_path,
+):
+    """P0-3: ``None`` D1 cursor on a write statement triggers drift."""
+    _strict_env(monkeypatch, False)
+    drift = tmp_path / "drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift))
+
+    fake_d1 = FakeD1Connection()
+
+    def _batch(statements):
+        # Same length as statements but second entry is ``None`` to
+        # simulate a malformed CF response losing a write cursor.
+        return [FakeD1Cursor(lastrowid=1, rowcount=1), None]
+
+    fake_d1.batch_execute = _batch  # type: ignore[attr-defined]
+
+    dual = DualConnection(sqlite_conn, fake_d1)
+    dual.batch_execute([
+        ("INSERT INTO t (v) VALUES (?)", ("a",)),
+        ("INSERT INTO t (v) VALUES (?)", ("b",)),
+    ])
+
+    assert dual.d1_failure_count >= 1, (
+        "expected _record_d1_failure to fire on the None write cursor"
+    )
+
+
+def test_batch_execute_missing_d1_cursor_strict_mode_raises(
+    sqlite_conn, monkeypatch,
+):
+    """P0-3 + P0-1: strict mode raises on dropped batch_execute write."""
+    _strict_env(monkeypatch, True)
+    fake_d1 = FakeD1Connection()
+
+    def _batch(statements):
+        return [FakeD1Cursor(lastrowid=1, rowcount=1), None]
+
+    fake_d1.batch_execute = _batch  # type: ignore[attr-defined]
+    dual = DualConnection(sqlite_conn, fake_d1)
+
+    with pytest.raises(DualWriteStrictError):
+        dual.batch_execute([
+            ("INSERT INTO t (v) VALUES (?)", ("a",)),
+            ("INSERT INTO t (v) VALUES (?)", ("b",)),
+        ])
+
+
+def test_bracket_quoted_table_name_recognised():
+    """P1: [Table]-style identifiers must route through the guarded-table check."""
+    from packages.python.javdb_platform.dual_connection import (
+        _extract_insert_table,
+    )
+
+    assert _extract_insert_table(
+        "INSERT INTO [ReportSessions] (Id) VALUES (1)"
+    ) == "ReportSessions"
+    assert _extract_insert_table(
+        "INSERT INTO \"ReportSessions\" (Id) VALUES (1)"
+    ) == "ReportSessions"
+    assert _extract_insert_table(
+        "INSERT INTO ReportSessions (Id) VALUES (1)"
+    ) == "ReportSessions"
