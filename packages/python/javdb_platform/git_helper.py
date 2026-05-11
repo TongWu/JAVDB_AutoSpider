@@ -7,11 +7,43 @@ Supports two modes:
 2. Standalone mode: Try github-actions[bot] first, fallback to GIT_USERNAME
 """
 
+import base64
 import os
 import re
 import subprocess
 import logging
 from datetime import datetime
+
+
+def _git_push_with_basic_auth(
+    git_repo_url: str,
+    git_username: str,
+    git_password: str,
+    branch: str,
+) -> None:
+    """Push *branch* to *git_repo_url* using HTTP Basic auth without
+    embedding the password into the URL.
+
+    B.9 (2026-05-12): the legacy pattern was
+    ``git push https://user:pass@host/...``, which leaks the password
+    into every process listing (``ps``, ``proc``) and any subprocess
+    error trace the parent re-raises. Use ``-c http.extraheader=...``
+    with the credentials base64-encoded instead — argv still contains
+    the encoded form, but no plaintext password is exposed.
+
+    Caller is responsible for catching ``subprocess.CalledProcessError``.
+    """
+    token = base64.b64encode(
+        f"{git_username}:{git_password}".encode("utf-8")
+    ).decode("ascii")
+    subprocess.run(
+        [
+            "git",
+            "-c", f"http.extraheader=Authorization: Basic {token}",
+            "push", git_repo_url, branch,
+        ],
+        check=True,
+    )
 
 # Get logger
 logger = logging.getLogger(__name__)
@@ -194,17 +226,21 @@ def git_commit_and_push(files_to_add, commit_message, from_pipeline=False,
         
         # Push
         if from_pipeline and git_username and git_password and git_repo_url:
-            # Use authenticated URL for pipeline mode
-            remote_url_with_auth = git_repo_url.replace('https://', f'https://{git_username}:{git_password}@')
-            subprocess.run(['git', 'push', remote_url_with_auth, current_branch], check=True)
+            # B.9: use the basic-auth helper rather than embedding the
+            # password directly in the URL, which would otherwise show up
+            # in ``ps`` and any propagated CalledProcessError.cmd.
+            _git_push_with_basic_auth(
+                git_repo_url, git_username, git_password, current_branch,
+            )
         elif is_github_actions():
             # In GitHub Actions, push normally (GITHUB_TOKEN should be configured)
             subprocess.run(['git', 'push'], check=True)
         else:
             # Local: try with credentials if available
             if git_username and git_password and git_repo_url:
-                remote_url_with_auth = git_repo_url.replace('https://', f'https://{git_username}:{git_password}@')
-                subprocess.run(['git', 'push', remote_url_with_auth, current_branch], check=True)
+                _git_push_with_basic_auth(
+                    git_repo_url, git_username, git_password, current_branch,
+                )
             else:
                 # Try normal push (might work if SSH keys are configured)
                 subprocess.run(['git', 'push'], check=True)

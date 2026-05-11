@@ -699,3 +699,52 @@ class TestMaskSensitiveInfoAdvanced:
         masked = mask_sensitive_info(text)
         assert 'mysecretpassword' not in masked
 
+
+class TestGitPushBasicAuthNoPlaintextInArgv:
+    """B.9 (2026-05-12): credentials must NOT appear in plaintext in the
+    git subprocess argv. The legacy ``https://user:pass@host/...`` URL
+    trick has been replaced with ``-c http.extraheader='Authorization:
+    Basic <base64>'`` so the password is no longer recoverable from a
+    process listing.
+    """
+
+    def test_basic_auth_helper_does_not_embed_plaintext_password_in_argv(self):
+        from unittest.mock import patch as _patch
+        from packages.python.javdb_platform.git_helper import (
+            _git_push_with_basic_auth,
+        )
+        captured_cmds = []
+
+        def _fake_run(cmd, check=True, **kwargs):
+            captured_cmds.append(cmd)
+
+            class _Result:
+                returncode = 0
+            return _Result()
+
+        with _patch(
+            "packages.python.javdb_platform.git_helper.subprocess.run",
+            _fake_run,
+        ):
+            _git_push_with_basic_auth(
+                "https://github.com/user/repo.git",
+                "myuser",
+                "super-secret-token",
+                "main",
+            )
+
+        assert captured_cmds, "expected exactly one git push invocation"
+        argv = captured_cmds[0]
+        joined = " ".join(argv)
+        # Plaintext password must NOT appear anywhere in the argv.
+        assert "super-secret-token" not in joined, (
+            f"plaintext password leaked into argv: {argv!r}"
+        )
+        # extraheader form must be used.
+        assert any(
+            "http.extraheader=Authorization: Basic " in part for part in argv
+        ), f"expected extraheader-based auth in argv: {argv!r}"
+        # The repo URL is passed verbatim (no embedded credentials).
+        assert "https://github.com/user/repo.git" in argv
+        assert "https://myuser:" not in joined
+

@@ -196,8 +196,40 @@ class TestRequestHandler:
         """Test is_cf_bypass_failure with small content without 'fail'."""
         content = '{"status": "ok"}'
         result = RequestHandler.is_cf_bypass_failure(content)
-        
+
         assert result is False
+
+    def test_is_cf_bypass_failure_small_with_unrelated_fail_word(self):
+        """B.6 (2026-05-12): a small page that merely *contains* the
+        substring ``fail`` (e.g. inside ``failover``, a JS callback name,
+        a 404 page mentioning ``failed to load``) must NOT be flagged
+        as a bypass failure. The legacy ``'fail' in html.lower()`` check
+        was a permanent source of spurious bypass retries.
+        """
+        # 200-byte HTML stub containing the substring ``fail`` but no
+        # specific bypass-failure marker.
+        content = (
+            "<html><body><p>Switched to failover route, please retry.</p>"
+            + "x" * 100 +
+            "</body></html>"
+        )
+        assert len(content) < 1500
+        assert RequestHandler.is_cf_bypass_failure(content) is False
+
+    def test_is_cf_bypass_failure_status_error_marker(self):
+        """A FlareSolverr-style error envelope is still detected even
+        though it doesn't contain the bare substring ``fail``.
+        """
+        content = '{"status":"error","message":"Cloudflare challenge solver timed out"}'
+        assert RequestHandler.is_cf_bypass_failure(content) is True
+
+    def test_is_cf_bypass_failure_large_content_with_marker(self):
+        """Markers in a large page (≥1500 bytes) are intentionally
+        ignored — those almost always come from a legitimate page
+        whose content happens to mention failure (e.g. an article
+        body)."""
+        content = '"status":"error" ' + ('x' * 2000)
+        assert RequestHandler.is_cf_bypass_failure(content) is False
     
     def test_reset_cf_bypass_state(self):
         """Test reset_cf_bypass_state."""
