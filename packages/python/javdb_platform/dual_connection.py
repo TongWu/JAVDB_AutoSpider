@@ -114,6 +114,22 @@ _DRIFT_LOG_LOCK = threading.Lock()
 
 def _append_drift_record(record: dict) -> None:
     """Append a JSON line to the drift log; never raises."""
+    # Defence in depth against polluting the git-tracked production drift
+    # log from a test that forgot to monkeypatch ``_DRIFT_LOG_PATH``.  The
+    # ``_isolate_drift_log`` autouse fixture in ``tests/conftest.py`` is
+    # the primary protection; this is a last-line check for tests run via
+    # pytest that bypass the conftest (e.g. nested pytest invocations,
+    # third-party harnesses).
+    if os.environ.get("PYTEST_CURRENT_TEST") and (
+        "reports/D1/d1_drift.jsonl" in _DRIFT_LOG_PATH.replace(os.sep, "/")
+    ):
+        logger.warning(
+            "Refusing to write drift record to production path %s under "
+            "PYTEST_CURRENT_TEST=%s.  Test should monkeypatch "
+            "_DRIFT_LOG_PATH (autouse fixture in tests/conftest.py).",
+            _DRIFT_LOG_PATH, os.environ.get("PYTEST_CURRENT_TEST"),
+        )
+        return
     try:
         os.makedirs(os.path.dirname(_DRIFT_LOG_PATH) or ".", exist_ok=True)
         with _DRIFT_LOG_LOCK:
