@@ -5,6 +5,11 @@ top/ranking pages).
 This parser extracts **all** movie entries without applying any business
 filters (no phase logic, no subtitle/release-date filtering).  Filtering is
 the responsibility of the caller (e.g. ``spider.py``).
+
+FROZEN: Python fallback for ``javdb_rust_core.parse_{index,category,top}_page``.
+DO NOT EXTEND. New parsing logic goes into
+``packages/rust/javdb_rust_core/src/scraper/``.
+See ``tests/parity/test_parser_parity.py`` for drift detection.
 """
 
 from __future__ import annotations
