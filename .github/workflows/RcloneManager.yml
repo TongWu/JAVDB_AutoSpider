@@ -129,6 +129,11 @@ jobs:
           # — flip the GitHub Variable RUNNER_REGISTRY_ENABLED to 'true' to
           # let rclone runs participate in cohort signalling.
           VAR_RUNNER_REGISTRY_ENABLED: ${{ vars.RUNNER_REGISTRY_ENABLED || 'false' }}
+          # Cross-instance proxy coordinator (Cloudflare DO). Required when
+          # RUNNER_REGISTRY_ENABLED=true so the registered runner can reach
+          # the coordinator endpoint; both empty ⇒ local-only behaviour.
+          VAR_PROXY_COORDINATOR_URL: ${{ vars.PROXY_COORDINATOR_URL || '' }}
+          VAR_PROXY_COORDINATOR_TOKEN: ${{ secrets.PROXY_COORDINATOR_TOKEN || '' }}
           # File paths / logging
           VAR_REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
           VAR_DEDUP_DIR: ${{ vars.DEDUP_DIR }}

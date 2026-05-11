@@ -135,9 +135,11 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--attempt",
-        type=str,
+        type=int,
         default=None,
-        help="GITHUB_RUN_ATTEMPT (used with --run-id for primary lookup).",
+        help="GITHUB_RUN_ATTEMPT (used with --run-id for primary lookup). "
+             "Must be a valid integer; omit to target every attempt of the "
+             "given --run-id.",
     )
     parser.add_argument(
         "--run-started-at",
@@ -379,14 +381,10 @@ def _resolve_target_sessions(
         targets.add(int(args.session_id))
 
     if args.run_id is not None:
-        attempt: Optional[int]
-        if args.attempt is not None:
-            try:
-                attempt = int(args.attempt)
-            except ValueError:
-                attempt = None
-        else:
-            attempt = None
+        # ``--attempt`` is now ``type=int`` so argparse rejects malformed
+        # input at parse time; ``None`` here means the caller explicitly
+        # opted into all-attempts lookup.
+        attempt: Optional[int] = args.attempt
         try:
             run_sessions = db_find_sessions_by_run(args.run_id, attempt)
         except Exception as e:
