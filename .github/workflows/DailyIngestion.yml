@@ -1032,7 +1032,7 @@ jobs:
       # rollback_failed) only annotate the email subject — they do
       # NOT trigger this block.
       - name: Auto-fallback on critical pending alert
-        if: always() && needs.run-pipeline.outputs.session_id != ''
+        if: always()
         env:
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}

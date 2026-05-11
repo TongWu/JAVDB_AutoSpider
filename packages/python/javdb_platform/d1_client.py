@@ -186,15 +186,28 @@ class D1Connection:
         self._total_changes += cursor.rowcount
         return cursor
 
-    def executemany(self, sql: str, seq_of_params: Iterable[Iterable[Any]]) -> None:
+    def executemany(
+        self, sql: str, seq_of_params: Iterable[Iterable[Any]],
+    ) -> Optional[D1Cursor]:
+        """Send ``sql`` once per param tuple; return the last batched cursor.
+
+        Existing callers ignore the return value (signature was ``-> None``
+        historically), so the optional return is backwards-compatible.
+        :class:`DualConnection` uses it to enforce the guarded-table
+        ``lastrowid`` invariant after a batched INSERT.
+        """
         statements = [{"sql": sql, "params": list(p)} for p in seq_of_params]
         if not statements:
-            return
+            return None
+        last_cursor: Optional[D1Cursor] = None
         for chunk in _split(statements, _BATCH_LIMIT):
             # CF /query batch shape: {batch: [{sql, params}, ...]}
             cursors = self._post_with_retry({"batch": chunk})
             for c in cursors:
                 self._total_changes += c.rowcount
+            if cursors:
+                last_cursor = cursors[-1]
+        return last_cursor
 
     def executescript(self, script: str) -> None:
         """Execute a sequence of DDL statements separated by ``;``.

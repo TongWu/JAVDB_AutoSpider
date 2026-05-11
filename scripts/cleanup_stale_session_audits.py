@@ -319,34 +319,38 @@ class _D1Side:
     def delete_audit_rows(self, table: str, session_ids: List[int]) -> int:
         if not session_ids:
             return 0
-        # D1 has a 100-bound-param cap per statement.
-        deleted = 0
+        # D1 has a 100-bound-param cap per statement.  Build one
+        # parameterised statement per chunk and submit the full list via
+        # ``batch_execute`` so the chunks land atomically on D1's side —
+        # the previous per-chunk ``execute`` loop auto-committed each
+        # chunk, leaving partial state behind on failure.
+        statements: List[Tuple[str, List[int]]] = []
         for chunk_start in range(0, len(session_ids), 90):
             chunk = session_ids[chunk_start: chunk_start + 90]
             placeholders = ",".join("?" for _ in chunk)
-            cur = self._history.execute(
+            statements.append((
                 f"DELETE FROM {table} WHERE SessionId IN ({placeholders})",
-                chunk,
-            )
-            deleted += cur.rowcount or 0
-        return deleted
+                list(chunk),
+            ))
+        cursors = self._history.batch_execute(statements)
+        return sum(int(c.rowcount or 0) for c in cursors)
 
     def nullify_history_session(
         self, table: str, session_ids: List[int],
     ) -> int:
         if not session_ids:
             return 0
-        updated = 0
+        statements: List[Tuple[str, List[int]]] = []
         for chunk_start in range(0, len(session_ids), 90):
             chunk = session_ids[chunk_start: chunk_start + 90]
             placeholders = ",".join("?" for _ in chunk)
-            cur = self._history.execute(
+            statements.append((
                 f"UPDATE {table} SET SessionId=NULL "
                 f"WHERE SessionId IN ({placeholders})",
-                chunk,
-            )
-            updated += cur.rowcount or 0
-        return updated
+                list(chunk),
+            ))
+        cursors = self._history.batch_execute(statements)
+        return sum(int(c.rowcount or 0) for c in cursors)
 
     def commit(self) -> None:
         # D1 auto-commits per statement.
@@ -369,14 +373,50 @@ class _D1Side:
 # ── Detection ──────────────────────────────────────────────────────────
 
 
+def _parse_timestamp(value: str) -> Optional[datetime]:
+    """Best-effort parse of audit timestamps.
+
+    Audit rows may carry either the legacy ``%Y-%m-%d %H:%M:%S`` shape
+    or ISO 8601 (with ``T`` separator and/or trailing ``Z``).  Silently
+    returning ``None`` on any unrecognised format used to hide cross-day
+    phantoms; on failure we log the offending input so the operator can
+    extend this helper.
+    """
+    try:
+        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        pass
+    iso = value.strip()
+    if iso.endswith("Z"):
+        iso = iso[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(iso)
+    except ValueError:
+        pass
+    try:  # optional dateutil fallback for assorted offsets
+        from dateutil import parser as _dateutil_parser  # type: ignore
+    except ImportError:
+        return None
+    try:
+        return _dateutil_parser.parse(value)
+    except (ValueError, TypeError):
+        return None
+
+
 def _hours_between(a: Optional[str], b: Optional[str]) -> Optional[float]:
     if not a or not b:
         return None
-    try:
-        ta = datetime.strptime(a, "%Y-%m-%d %H:%M:%S")
-        tb = datetime.strptime(b, "%Y-%m-%d %H:%M:%S")
-    except ValueError:
+    ta = _parse_timestamp(a)
+    tb = _parse_timestamp(b)
+    if ta is None or tb is None:
+        logger.warning(
+            "_hours_between: unparseable timestamp(s) a=%r b=%r", a, b,
+        )
         return None
+    # Strip tzinfo when only one side carries it so subtraction works.
+    if (ta.tzinfo is None) != (tb.tzinfo is None):
+        ta = ta.replace(tzinfo=None)
+        tb = tb.replace(tzinfo=None)
     return abs((tb - ta).total_seconds()) / 3600.0
 
 
@@ -453,27 +493,54 @@ def _detect_phantoms(
 # ── Apply ──────────────────────────────────────────────────────────────
 
 
-def _apply(side, findings: Dict[str, Any]) -> Dict[str, int]:
-    deleted = defaultdict(int)
-    for audit_table, items in findings.get("audit", {}).items():
-        sids = sorted({int(item["session_id"]) for item in items})
-        if not sids:
-            continue
-        n = side.delete_audit_rows(audit_table, sids)
-        deleted[audit_table] = n
-        logger.info("Deleted %d row(s) from %s on %s", n, audit_table, side.label)
-    for history_table, items in findings.get("history", {}).items():
-        sids = sorted({int(item["session_id"]) for item in items})
-        if not sids:
-            continue
-        n = side.nullify_history_session(history_table, sids)
-        deleted[f"{history_table}.SessionId_nulled"] = n
-        logger.info(
-            "Nulled SessionId on %d row(s) of %s on %s",
-            n, history_table, side.label,
+def _apply(side, findings: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply findings; capture per-table status so callers can see how
+    far we got before any failure (no rollback is possible on D1)."""
+    deleted: Dict[str, int] = defaultdict(int)
+    table_status: Dict[str, str] = {}
+    try:
+        for audit_table, items in findings.get("audit", {}).items():
+            sids = sorted({int(item["session_id"]) for item in items})
+            if not sids:
+                table_status[audit_table] = "skipped_empty"
+                continue
+            n = side.delete_audit_rows(audit_table, sids)
+            deleted[audit_table] = n
+            table_status[audit_table] = "ok"
+            logger.info(
+                "Deleted %d row(s) from %s on %s", n, audit_table, side.label,
+            )
+        for history_table, items in findings.get("history", {}).items():
+            sids = sorted({int(item["session_id"]) for item in items})
+            key = f"{history_table}.SessionId_nulled"
+            if not sids:
+                table_status[key] = "skipped_empty"
+                continue
+            n = side.nullify_history_session(history_table, sids)
+            deleted[key] = n
+            table_status[key] = "ok"
+            logger.info(
+                "Nulled SessionId on %d row(s) of %s on %s",
+                n, history_table, side.label,
+            )
+        side.commit()
+        return {
+            "rows_changed": dict(deleted),
+            "table_status": table_status,
+            "partial_success": False,
+        }
+    except Exception as exc:
+        logger.exception(
+            "Apply on %s failed mid-stream after %d table(s) completed: %s",
+            side.label, sum(1 for v in table_status.values() if v == "ok"),
+            exc,
         )
-    side.commit()
-    return dict(deleted)
+        return {
+            "rows_changed": dict(deleted),
+            "table_status": table_status,
+            "partial_success": True,
+            "error": str(exc),
+        }
 
 
 def _refuse_when_dual_or_d1_under_apply(args: argparse.Namespace) -> None:
@@ -565,13 +632,23 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
         else:
             try:
-                applied = _apply(side, findings)
+                apply_result = _apply(side, findings)
                 overall["results"].append({
                     "side": name,
                     "findings": findings,
                     "applied": True,
-                    "rows_changed": applied,
+                    "rows_changed": apply_result.get("rows_changed", {}),
+                    "table_status": apply_result.get("table_status", {}),
+                    "partial_success": apply_result.get(
+                        "partial_success", False,
+                    ),
+                    **(
+                        {"error": apply_result["error"]}
+                        if apply_result.get("error") else {}
+                    ),
                 })
+                if apply_result.get("partial_success"):
+                    rc = 4
             except Exception as exc:
                 logger.exception(
                     "Apply failed for side=%s: %s", name, exc,

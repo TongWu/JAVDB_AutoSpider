@@ -223,6 +223,54 @@ class DualCursor:
             sqlite_cur.rowcount if sqlite_cur is not None else getattr(d1_cur, "rowcount", -1)
         )
 
+    @staticmethod
+    def _check_id_consistency(sqlite_cur, d1_cur, sql: str) -> None:
+        """Log drift / raise on ``lastrowid`` mismatch for guarded tables.
+
+        Shared by :meth:`for_write` and the
+        :meth:`DualConnection.executemany` / :meth:`executescript` paths
+        so the same invariant holds regardless of which write API was
+        used.  A no-op when either cursor is missing (read fallback /
+        D1 failure already recorded via the drift counters).
+        """
+        if sqlite_cur is None or d1_cur is None:
+            return
+        table = _extract_insert_table(sql)
+        if not table or table not in APPLICATION_GENERATED_ID_TABLES:
+            return
+        s_id = getattr(sqlite_cur, "lastrowid", None)
+        d_id = getattr(d1_cur, "lastrowid", None)
+        if s_id is None or d_id is None or s_id == d_id:
+            return
+        record = {
+            "kind": "application_id_mismatch",
+            "table": table,
+            "sqlite_lastrowid": int(s_id),
+            "d1_lastrowid": int(d_id),
+            "sql": _shorten(sql),
+            "ts": datetime.now(timezone.utc).isoformat(),
+        }
+        _append_drift_record(record)
+        # Do NOT include the raw lastrowid values or SQL text in
+        # the user-facing log / exception message: those identify
+        # ReportSessions / Pending*HistoryWrites rows (private
+        # session ids) and the SQL may carry inline literals.
+        # The full forensic detail is already persisted to
+        # reports/D1/d1_drift.jsonl above; operators read it from
+        # there, not from console / CI logs.
+        logger.error(
+            "DualConnection: application-generated id "
+            "mismatch on %s; aborting transaction. Caller must "
+            "INSERT with explicit Id (see migration/d1/"
+            "2026_05_08_sessionid_decouple.md); details in %s",
+            table, _DRIFT_LOG_PATH,
+        )
+        raise DualWriteIdMismatchError(
+            f"{table}: SQLite vs D1 lastrowid mismatch; "
+            f"INSERT must supply Id explicitly under "
+            f"STORAGE_BACKEND=dual (see drift log for details)"
+        )
+
     @classmethod
     def for_write(cls, sqlite_cur, d1_cur, sql: str):
         """Build a cursor and enforce id consistency for guarded tables.
@@ -235,46 +283,7 @@ class DualCursor:
         :class:`DualWriteIdMismatchError` is raised so the surrounding
         transaction can roll back.
         """
-        if (
-            sqlite_cur is not None
-            and d1_cur is not None
-        ):
-            table = _extract_insert_table(sql)
-            if (
-                table
-                and table in APPLICATION_GENERATED_ID_TABLES
-            ):
-                s_id = getattr(sqlite_cur, "lastrowid", None)
-                d_id = getattr(d1_cur, "lastrowid", None)
-                if s_id is not None and d_id is not None and s_id != d_id:
-                    record = {
-                        "kind": "application_id_mismatch",
-                        "table": table,
-                        "sqlite_lastrowid": int(s_id),
-                        "d1_lastrowid": int(d_id),
-                        "sql": _shorten(sql),
-                        "ts": datetime.now(timezone.utc).isoformat(),
-                    }
-                    _append_drift_record(record)
-                    # Do NOT include the raw lastrowid values or SQL text in
-                    # the user-facing log / exception message: those identify
-                    # ReportSessions / Pending*HistoryWrites rows (private
-                    # session ids) and the SQL may carry inline literals.
-                    # The full forensic detail is already persisted to
-                    # reports/D1/d1_drift.jsonl above; operators read it from
-                    # there, not from console / CI logs.
-                    logger.error(
-                        "DualConnection: application-generated id "
-                        "mismatch on %s; aborting transaction. Caller must "
-                        "INSERT with explicit Id (see migration/d1/"
-                        "2026_05_08_sessionid_decouple.md); details in %s",
-                        table, _DRIFT_LOG_PATH,
-                    )
-                    raise DualWriteIdMismatchError(
-                        f"{table}: SQLite vs D1 lastrowid mismatch; "
-                        f"INSERT must supply Id explicitly under "
-                        f"STORAGE_BACKEND=dual (see drift log for details)"
-                    )
+        cls._check_id_consistency(sqlite_cur, d1_cur, sql)
         return cls(sqlite_cur, d1_cur)
 
     def fetchone(self):
@@ -389,17 +398,37 @@ class DualConnection:
 
     def executemany(self, sql: str, seq_of_params: Iterable[Iterable[Any]]):
         seq_list = list(seq_of_params)
-        self._sqlite.executemany(sql, seq_list)
+        sqlite_cur = self._sqlite.executemany(sql, seq_list)
+        d1_cur = None
         try:
-            self._d1.executemany(sql, seq_list)
+            d1_cur = self._d1.executemany(sql, seq_list)
             self._d1_uncommitted_writes += len(seq_list)
         except Exception as exc:
             # On partial failure D1 may still have applied a prefix of the
             # batch; ``_d1_uncommitted_writes`` is intentionally a lower
             # bound so the failure record is the source of truth here.
             self._record_d1_failure(sql, exc, kind="executemany")
+        # Enforce the same guarded-table ``lastrowid`` invariant as
+        # :meth:`execute` so an asymmetric INSERT batch into one of the
+        # application-generated-id tables aborts the transaction.
+        DualCursor._check_id_consistency(sqlite_cur, d1_cur, sql)
 
     def executescript(self, script: str):
+        # If a script wedges an INSERT into one of the guarded
+        # application-generated-id tables we must NOT execute it through
+        # this path: neither SQLite's nor D1's ``executescript`` exposes
+        # per-statement ``lastrowid`` for the cross-backend check, so the
+        # invariant in :meth:`DualCursor._check_id_consistency` cannot be
+        # enforced.  Route guarded INSERTs through :meth:`execute` /
+        # :meth:`executemany` / :meth:`batch_execute` instead.
+        for stmt in script.split(";"):
+            table = _extract_insert_table(stmt.strip())
+            if table and table in APPLICATION_GENERATED_ID_TABLES:
+                raise DualWriteIdMismatchError(
+                    f"executescript() refuses INSERT into guarded table "
+                    f"{table}; use execute()/executemany()/batch_execute() "
+                    f"so SQLite vs D1 lastrowid can be compared"
+                )
         self._sqlite.executescript(script)
         try:
             self._d1.executescript(script)
@@ -435,12 +464,32 @@ class DualConnection:
         except Exception as exc:
             if any(not _is_read(sql) for sql, _params in statements):
                 self._record_d1_failure(first_sql, exc, kind="batch_execute")
-        if len(d1_cursors) < len(sqlite_cursors):
-            d1_cursors = list(d1_cursors) + [None] * (
+        d1_cursors = list(d1_cursors)
+        # Fail fast if D1 returned fewer cursors than statements on the
+        # write path: silently padding with ``None`` would mask a dropped
+        # mirror write and let downstream code believe both backends
+        # applied the batch.  Reads are allowed to fall back to SQLite
+        # below.
+        if len(d1_cursors) < len(statements):
+            missing_writes = [
+                sql for (sql, _p), d1_cur in zip(
+                    statements,
+                    d1_cursors + [None] * (
+                        len(statements) - len(d1_cursors)
+                    ),
+                ) if d1_cur is None and not _is_read(sql)
+            ]
+            if missing_writes:
+                raise RuntimeError(
+                    "DualConnection.batch_execute: D1 returned "
+                    f"{len(d1_cursors)} cursor(s) for {len(statements)} "
+                    f"statement(s); {len(missing_writes)} write(s) were "
+                    "dropped by the mirror — refusing to silently pad with "
+                    "None and continue."
+                )
+            d1_cursors = d1_cursors + [None] * (
                 len(sqlite_cursors) - len(d1_cursors)
             )
-        else:
-            d1_cursors = list(d1_cursors)
         for idx, ((sql, _params), sqlite_cur, d1_cur) in enumerate(zip(
             statements, sqlite_cursors, d1_cursors,
         )):
