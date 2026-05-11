@@ -1669,18 +1669,20 @@ Deleted This Run:
 
 {ban_summary}""")
 
-    # Pending Mode Verification + Health Snapshot (Phase 2 / 3)
+    # Pending Mode Verification + Health Snapshot (Phase 2 / 3).
+    # The 24h health snapshot is rendered independently so audit-only
+    # and zero-pending runs still surface it.
     if pending_verify_records:
         verify_block = _format_pending_verify_section(
             pending_verify_records, pending_alerts or [],
         )
         if verify_block:
             sections.append(verify_block)
-        snapshot_block = _format_health_snapshot_section(
-            health_snapshot_path,
-        )
-        if snapshot_block:
-            sections.append(snapshot_block)
+    snapshot_block = _format_health_snapshot_section(
+        health_snapshot_path,
+    )
+    if snapshot_block:
+        sections.append(snapshot_block)
 
     sections.append("""
 ═══════════════════════════════
@@ -2120,11 +2122,17 @@ def main():
     )
     run_id_filter = os.environ.get('GITHUB_RUN_ID')
     run_attempt_filter = os.environ.get('GITHUB_RUN_ATTEMPT')
-    pending_verify_records = _load_pending_verify_records(
-        pending_jsonl,
-        run_id=run_id_filter,
-        run_attempt=run_attempt_filter,
-    )
+    # Only load the shared verify JSONL when this run is scoped by
+    # GITHUB_RUN_ID / GITHUB_RUN_ATTEMPT; otherwise we would bleed
+    # stale historical pending records into this report.
+    if run_id_filter or run_attempt_filter:
+        pending_verify_records = _load_pending_verify_records(
+            pending_jsonl,
+            run_id=run_id_filter,
+            run_attempt=run_attempt_filter,
+        )
+    else:
+        pending_verify_records = []
     pending_alerts, pending_has_critical = _evaluate_pending_alerts(
         pending_verify_records,
     )
