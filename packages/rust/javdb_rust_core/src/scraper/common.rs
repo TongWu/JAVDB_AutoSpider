@@ -8,7 +8,9 @@ use crate::models::MovieLink;
 
 // Pre-compiled regex patterns
 static RATE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+\.?\d*)分").unwrap());
+static RATE_RE_EN: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+\.?\d*),\s*by").unwrap());
 static COMMENT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"由(\d+)人評價").unwrap());
+static COMMENT_RE_EN: Lazy<Regex> = Lazy::new(|| Regex::new(r"by\s+(\d+)\s+users?").unwrap());
 
 static PAGE_TYPE_PATTERNS: Lazy<Vec<(&str, Regex)>> = Lazy::new(|| {
     vec![
@@ -32,11 +34,13 @@ static URL_RE: Lazy<Regex> = Lazy::new(|| {
 pub fn extract_rate_and_comments(score_text: &str) -> (String, String) {
     let rate = RATE_RE
         .captures(score_text)
+        .or_else(|| RATE_RE_EN.captures(score_text))
         .and_then(|c| c.get(1))
         .map_or(String::new(), |m| m.as_str().to_string());
 
     let comment_count = COMMENT_RE
         .captures(score_text)
+        .or_else(|| COMMENT_RE_EN.captures(score_text))
         .and_then(|c| c.get(1))
         .map_or(String::new(), |m| m.as_str().to_string());
 
@@ -260,7 +264,15 @@ fn class_contains_in_html(el: &ElementRef, substr: &str) -> bool {
 }
 
 pub fn get_text_content(el: &ElementRef) -> String {
-    el.text().collect::<Vec<_>>().join("")
+    // Mirror BeautifulSoup's `get_text(strip=True)`: strip each text node
+    // before joining with the empty separator. Without this, adjacent
+    // text nodes around inline tags (e.g. `<strong>code</strong> title`)
+    // leave a stray space between code and title in index entries.
+    el.text()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("")
 }
 
 pub fn has_class(el: &ElementRef, class_name: &str) -> bool {
