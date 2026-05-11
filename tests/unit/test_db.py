@@ -1108,3 +1108,58 @@ class TestReportMigration:
         migrate_single_csv(csv_path, 'dup.csv', False, _isolate_sqlite, False)
         result2 = migrate_single_csv(csv_path, 'dup.csv', False, _isolate_sqlite, False)
         assert result2['skipped'] is True
+
+
+class TestSnowflakeProcessTag:
+    """B.2 (2026-05-11): per-process random tag eliminates cross-process
+    collision when two GH Actions runners start a session in the same
+    millisecond AND happen to be at counter=0. Without the tag, those two
+    Ids would collide on a PRIMARY KEY INSERT and abort the runner.
+    """
+
+    def test_ids_within_one_process_are_monotonic(self):
+        from packages.python.javdb_platform.db import _generate_session_id
+        ids = [_generate_session_id() for _ in range(50)]
+        # Strictly increasing within the process — the in-process counter
+        # guarantees this even when many ids land in the same ms.
+        assert ids == sorted(ids), "snowflake Ids must be monotonic"
+        assert len(set(ids)) == len(ids), "snowflake Ids must be unique"
+
+    def test_ids_carry_consistent_process_tag(self):
+        """Layout: ``ms(41) << 22 | tag(12) << 10 | counter(10)``. Within
+        one process the tag is fixed at import time, so every Id should
+        share the same 12-bit value in [10:22).
+        """
+        from packages.python.javdb_platform.db import _generate_session_id
+        ids = [_generate_session_id() for _ in range(30)]
+        tag_bits = [(i >> 10) & ((1 << 12) - 1) for i in ids]
+        assert len(set(tag_bits)) == 1, (
+            f"process tag should be constant per process; got {set(tag_bits)!r}"
+        )
+
+    def test_two_simulated_processes_get_disjoint_ids(self, monkeypatch):
+        """Re-mint Ids with a different per-process tag (simulating a
+        sibling Python process that drew a different ``secrets.randbits``)
+        and confirm the two Id streams are disjoint even when ms + counter
+        could otherwise collide.
+        """
+        from packages.python.javdb_platform import db as dbmod
+
+        ids_a = [dbmod._generate_session_id() for _ in range(3)]
+
+        # Swap in a different 12-bit tag and reset the monotonic-clamp
+        # state so a sibling process starting from counter=0 is the case
+        # we are testing.
+        new_tag = (dbmod._SESSION_ID_PROCESS_TAG ^ 0xABC) & ((1 << 12) - 1)
+        if new_tag == dbmod._SESSION_ID_PROCESS_TAG:
+            new_tag = (new_tag + 1) & ((1 << 12) - 1)
+        monkeypatch.setattr(dbmod, "_SESSION_ID_PROCESS_TAG", new_tag)
+        monkeypatch.setattr(dbmod, "_SESSION_ID_LAST", 0)
+        ids_b = [dbmod._generate_session_id() for _ in range(3)]
+
+        tag_a = (ids_a[0] >> 10) & ((1 << 12) - 1)
+        tag_b = (ids_b[0] >> 10) & ((1 << 12) - 1)
+        assert tag_a != tag_b, "patched tag should produce different bits"
+        assert set(ids_a).isdisjoint(set(ids_b)), (
+            "different process tags must yield disjoint Id sets"
+        )

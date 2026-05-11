@@ -96,6 +96,10 @@ if READONLY_PASSWORD_HASH:
 
 
 def _prune_revoked_jti(now: Optional[int] = None) -> None:
+    # Caller is expected to hold ``_AUTH_LOCK`` (see ``_prune_sessions``
+    # and ``_jwt_decode``); doc this in the body since the lock-free
+    # implementation here would otherwise race against concurrent
+    # mutations of REVOKED_JTI from a peer worker thread.
     ts = now if now is not None else int(datetime.now(timezone.utc).timestamp())
     expired = [jti for jti, exp in REVOKED_JTI.items() if exp <= ts]
     for jti in expired:
@@ -103,6 +107,16 @@ def _prune_revoked_jti(now: Optional[int] = None) -> None:
 
 
 def _prune_sessions(username: str) -> list[tuple[str, int]]:
+    """Drop expired / revoked sessions for *username* and return the rest.
+
+    Caller MUST hold ``_AUTH_LOCK``. Both production callsites
+    (``login_payload`` / ``refresh_token_payload`` in
+    ``apps/api/services/auth_service.py``) already wrap the call in
+    ``with auth_infra._AUTH_LOCK:`` so the read-filter-write trio on
+    ``ACTIVE_TOKENS[username]`` stays atomic; making this function take
+    the lock itself would deadlock against those callers because
+    ``threading.Lock`` is non-reentrant.
+    """
     now = int(datetime.now(timezone.utc).timestamp())
     _prune_revoked_jti(now)
     sessions = ACTIVE_TOKENS.get(username, [])
@@ -158,6 +172,18 @@ def _rate_limit(
     request: Request,
     user: Optional[Dict[str, Any]] = None,
 ) -> None:
+    """Sliding-window rate limit against the in-memory ``RATE_BUCKETS``.
+
+    The body is the classic GET-FILTER-APPEND-PUT cycle on a shared dict,
+    so a flood of concurrent requests sharing the same ``key`` would race
+    on the filter step: two threads each see ``len(records) == limit - 1``,
+    each append their own ``now``, each ``RATE_BUCKETS[key] = records``
+    overwriting the peer's write — the net effect is the limit ceiling
+    leaks by N×workers and the rate limit becomes advisory. Wrapping the
+    read-filter-write in ``_AUTH_LOCK`` is enough to make the ceiling
+    accurate within a single process (cross-process scaling still requires
+    moving the bucket state into a shared store; see batch E plan).
+    """
     path = request.url.path
     if path in METHOD_LIMITS:
         limit, window, strategy = METHOD_LIMITS[path]
@@ -169,14 +195,18 @@ def _rate_limit(
         host = request.client.host if request.client else "unknown"
         key = f"{scope}:{path}:ip:{host}"
     now = time.time()
-    records = RATE_BUCKETS.get(key, [])
-    records = [ts for ts in records if now - ts < window]
-    if not records:
-        RATE_BUCKETS.pop(key, None)
-    if len(records) >= limit:
-        raise HTTPException(status_code=429, detail="Too many requests")
-    records.append(now)
-    RATE_BUCKETS[key] = records
+    with _AUTH_LOCK:
+        records = RATE_BUCKETS.get(key, [])
+        records = [ts for ts in records if now - ts < window]
+        if len(records) >= limit:
+            # Keep the filtered bucket persisted so subsequent calls
+            # don't re-include the expired entries we just dropped; do
+            # NOT append the current ``now`` because the request is
+            # being denied.
+            RATE_BUCKETS[key] = records
+            raise HTTPException(status_code=429, detail="Too many requests")
+        records.append(now)
+        RATE_BUCKETS[key] = records
 
 
 def _require_auth(request: Request) -> Dict[str, Any]:

@@ -30,6 +30,7 @@ ad-hoc maintenance scripts) want fine-grained control.
 import json
 import os
 import re
+import secrets
 import sqlite3
 import threading
 import time
@@ -290,20 +291,39 @@ _SESSION_ID_LOCK = threading.Lock()
 _SESSION_ID_LAST = 0
 _SESSION_ID_COUNTER_BITS = 10
 _SESSION_ID_COUNTER_MASK = (1 << _SESSION_ID_COUNTER_BITS) - 1
+# Per-process random tag (12 bit) that sits between the ms timestamp and
+# the in-process counter (B.2, 2026-05-11). Without it, two GitHub Actions
+# runners that start a session in the same millisecond *and* happen to be
+# at counter=0 would mint the same Id and then race a PRIMARY KEY collision
+# on ReportSessions / Pending* INSERTs (the existing inline comment above
+# acknowledged the gap and pointed at db_count_in_progress_sessions_for_run
+# as the only defence; that self-check runs *after* the INSERT, so a
+# collision still aborts the runner). The 12-bit tag gives 1/4096 odds of
+# two peers picking the same tag on top of the (much rarer) same-ms +
+# same-counter coincidence — effectively eliminates the collision in
+# practice. Layout: 41 bit ms + 12 bit tag + 10 bit counter = 63 bit, still
+# inside signed int64 on both SQLite and Cloudflare D1.
+_SESSION_ID_PROCESS_TAG_BITS = 12
+_SESSION_ID_PROCESS_TAG = secrets.randbits(_SESSION_ID_PROCESS_TAG_BITS)
 
 
 def _generate_session_id() -> int:
-    """Return a 51-bit INTEGER suitable for ``ReportSessions.Id``.
+    """Return a 63-bit INTEGER suitable for ``ReportSessions.Id``.
 
-    Format: ``(time.time_ns() // 1_000_000) << 10`` with a 10-bit
-    monotonic counter for the low bits.  Strictly increasing within a
-    process; comfortably fits a signed 64-bit INTEGER on both SQLite
-    and Cloudflare D1.
+    Format: ``ms << 22 | process_tag << 10 | counter`` where
+    ``process_tag`` is a per-process 12-bit random value, ``counter``
+    is a 10-bit in-process monotonic counter that resets every ms, and
+    ``ms`` is ``time.time_ns() // 1_000_000``. Strictly increasing
+    within a process; comfortably fits a signed 64-bit INTEGER on both
+    SQLite and Cloudflare D1.
     """
     global _SESSION_ID_LAST
+    process_shift = _SESSION_ID_PROCESS_TAG_BITS + _SESSION_ID_COUNTER_BITS
     with _SESSION_ID_LOCK:
         ms = time.time_ns() // 1_000_000
-        candidate = ms << _SESSION_ID_COUNTER_BITS
+        candidate = (ms << process_shift) | (
+            _SESSION_ID_PROCESS_TAG << _SESSION_ID_COUNTER_BITS
+        )
         if candidate <= _SESSION_ID_LAST:
             candidate = _SESSION_ID_LAST + 1
         _SESSION_ID_LAST = candidate
@@ -3467,13 +3487,18 @@ def db_stage_history_write(
     seq = _generate_session_id()
     # Defence in depth: catch any future code path that bypasses
     # ``_generate_session_id`` (and would otherwise let SQLite emit a
-    # small AUTOINCREMENT id that diverges from D1).  ``_SESSION_ID_BITS``
-    # for the millisecond timestamp put any real snowflake at >= 1 << 40
-    # (~1.1e12) for any time after 2004-09-17.
+    # small AUTOINCREMENT id that diverges from D1). Post-B.2 (2026-05-11)
+    # layout is ``ms (41 bit) << 22 | process_tag (12 bit) << 10 |
+    # counter (10 bit)``, so any real snowflake is >= ``1 << 52`` for
+    # any time after 2004-09-17. We keep the assertion at ``1 << 40``
+    # so older callers that minted Ids under the pre-B.2 layout
+    # (``ms << 10``, lower bound ``1 << 40``) still pass — the goal is
+    # to catch a stray ``1`` / small AUTOINCREMENT, not enforce the
+    # exact layout.
     if seq < (1 << 40):
         raise ValueError(
             f"db_stage_history_write: refusing to INSERT with Seq={seq!r} "
-            f"(expected a 51-bit snowflake from _generate_session_id; "
+            f"(expected a 63-bit snowflake from _generate_session_id; "
             f"a small int here means a caller bypassed the snowflake path "
             f"and would diverge from D1 under STORAGE_BACKEND=dual)."
         )
