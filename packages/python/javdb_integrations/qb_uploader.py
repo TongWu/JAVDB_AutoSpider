@@ -394,11 +394,15 @@ def add_torrent_to_qbittorrent(
 
 def read_csv_file(filename):
     """Read the CSV file and extract all magnet links, skipping downloaded torrents.
-    
+
     Returns:
-        tuple: (torrents_list, file_exists_bool)
-            - torrents_list: List of torrent dictionaries
-            - file_exists_bool: True if file was found, False if file not found
+        tuple: (torrents_list, ok_bool)
+            - torrents_list: List of torrent dictionaries (may be partial
+              when ``ok_bool`` is False — useful for diagnostics only).
+            - ok_bool: True iff the file was read end-to-end without
+              raising. False on both "file not found" and "file existed
+              but read failed". P1 widened the False case so partial
+              CSV reads no longer get treated as success by the caller.
     """
     torrents = []
     skipped_count = 0
@@ -479,8 +483,14 @@ def read_csv_file(filename):
         return torrents, True  # File exists
         
     except Exception as e:
+        # P1: previously returned ``(torrents, True)`` here, which lied
+        # to the caller — partial CSV reads were silently treated as
+        # "file exists, here are the rows" and the uploader proceeded
+        # with whatever subset had parsed before the exception. Surface
+        # the failure as ``(partial_rows, False)`` so the workflow can
+        # fail-fast and the operator can re-fetch the upstream CSV.
         logger.error(f"Error reading CSV file: {e}")
-        return torrents, True  # File exists but had read error
+        return torrents, False
 
 def initialize_proxy_helper(proxy_override):
     """Initialize global proxy pool and proxy helper."""
@@ -601,12 +611,22 @@ def main():
         csv_filename = get_csv_filename(mode)
         logger.info(f"Looking for CSV file: {csv_filename}")
     
-    # Read torrent links from CSV
-    torrents, file_exists = read_csv_file(csv_filename)
-    
-    if not file_exists:
-        logger.error("CSV file not found - this is a critical error!")
-        logger.error("The spider script may have failed to generate the report file.")
+    # Read torrent links from CSV. P1: ``csv_ok`` is False for both
+    # "file not found" and "file existed but read raised" — the second
+    # case used to be silently swallowed and the partial subset was
+    # uploaded.
+    torrents, csv_ok = read_csv_file(csv_filename)
+
+    if not csv_ok:
+        logger.error(
+            "CSV %s could not be read end-to-end (missing or partial); "
+            "refusing to upload to qBittorrent based on incomplete data.",
+            csv_filename,
+        )
+        logger.error(
+            "Re-run the spider step that produces this CSV, or supply "
+            "--csv-input with a known-good copy."
+        )
         sys.exit(1)
     
     if not torrents:
