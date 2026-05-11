@@ -95,19 +95,29 @@ pub struct MagnetInfo {
     #[pyo3(get, set)]
     pub size: String,
     #[pyo3(get, set)]
+    pub file_count: u32,
+    #[pyo3(get, set)]
     pub timestamp: String,
 }
 
 #[pymethods]
 impl MagnetInfo {
     #[new]
-    #[pyo3(signature = (href, name, tags=vec![], size=String::new(), timestamp=String::new()))]
-    fn new(href: String, name: String, tags: Vec<String>, size: String, timestamp: String) -> Self {
+    #[pyo3(signature = (href, name, tags=vec![], size=String::new(), file_count=0, timestamp=String::new()))]
+    fn new(
+        href: String,
+        name: String,
+        tags: Vec<String>,
+        size: String,
+        file_count: u32,
+        timestamp: String,
+    ) -> Self {
         Self {
             href,
             name,
             tags,
             size,
+            file_count,
             timestamp,
         }
     }
@@ -118,6 +128,7 @@ impl MagnetInfo {
         dict.set_item("name", &self.name)?;
         dict.set_item("tags", &self.tags)?;
         dict.set_item("size", &self.size)?;
+        dict.set_item("file_count", self.file_count)?;
         dict.set_item("timestamp", &self.timestamp)?;
         Ok(dict)
     }
