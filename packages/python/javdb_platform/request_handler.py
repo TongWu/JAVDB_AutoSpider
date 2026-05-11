@@ -989,10 +989,17 @@ class RequestHandler:
             logger.warning(f"Cloudflare Turnstile verification page detected for {url} (Size: {len(html_content)} bytes)")
             return None
         
-        # Check for age verification modal
+        # Check for age verification modal.
+        # Short-circuit on the raw class substring before paying for a full
+        # BeautifulSoup parse — the age modal is absent on the vast majority
+        # of pages once a session cookie is set, and this `in` test is a few
+        # microseconds vs ~milliseconds for a fresh `html.parser` run.
+        if 'modal is-active over18-modal' not in html_content:
+            return html_content
+
         soup = BeautifulSoup(html_content, 'html.parser')
         age_modal = soup.find('div', class_='modal is-active over18-modal')
-        
+
         if age_modal:
             # IMPORTANT: JavDB returns the full page content even with age modal present.
             # The age modal is just an overlay, the actual content (movie-list, video-detail)
