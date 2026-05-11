@@ -65,6 +65,16 @@ jobs:
           path: /tmp/rust-wheel/*.whl
           retention-days: 7
 
+      # Drift detection: assert the freshly-built Rust parsers produce
+      # the same output as the FROZEN Python fallbacks under
+      # apps/api/parsers/ on real HTML fixtures. Known drifts are tracked
+      # via xfail markers in tests/parity/test_parser_parity.py — flip them
+      # to expected-pass when the underlying Rust gap is closed.
+      - name: Install Python deps for parity tests
+        run: pip install -r requirements.txt
+      - name: Run Rust/Python parser parity tests
+        run: pytest tests/parity/ -v
+
   # =============================================================================
   # ARM build (self-hosted)
   # Timeout after 5 min if no runner picks it up; failure does not block x64.
