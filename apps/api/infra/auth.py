@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import os
 import secrets
 import threading
@@ -205,7 +206,14 @@ def _verify_csrf(request: Request) -> None:
     if request.method in {"POST", "PUT", "DELETE"} and request.url.path != "/api/auth/login":
         header_token = request.headers.get("X-CSRF-Token", "")
         cookie_token = request.cookies.get("csrf_token", "")
-        if not header_token or not cookie_token or header_token != cookie_token:
+        # ``hmac.compare_digest`` runs in time independent of the index of the
+        # first differing byte, so an attacker who can measure the response
+        # latency cannot probe out the cookie value one byte at a time. The
+        # short-circuit on empty strings still leaks "token present" vs "token
+        # absent", which is unavoidable when one side is genuinely missing.
+        if not header_token or not cookie_token:
+            raise HTTPException(status_code=403, detail="CSRF token invalid")
+        if not hmac.compare_digest(header_token, cookie_token):
             raise HTTPException(status_code=403, detail="CSRF token invalid")
 
 

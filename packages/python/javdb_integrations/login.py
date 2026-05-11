@@ -299,7 +299,14 @@ def solve_captcha_with_ai(image_data, proxies=None):
             result = response.json()
             if 'choices' in result and len(result['choices']) > 0:
                 captcha_code = result['choices'][0]['message']['content'].strip()
-                logger.info(f"AI recognized captcha: {captcha_code}")
+                # Avoid INFO-logging the full captcha string: any operator
+                # tailing logs gets a steady stream of solved-captcha tokens
+                # that, while short-lived, are still a credential the AI
+                # service produced specifically for this login attempt.
+                # Length is enough for INFO-level correlation; the full
+                # value is only emitted at DEBUG.
+                logger.info("AI recognized captcha (length=%d)", len(captcha_code))
+                logger.debug("AI captcha value: %s", captcha_code)
                 return captcha_code
             logger.warning("AI API returned empty response")
             return None
