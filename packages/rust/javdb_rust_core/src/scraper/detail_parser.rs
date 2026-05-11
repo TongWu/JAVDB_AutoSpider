@@ -46,31 +46,54 @@ static MAGNET_ITEM_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"item columns is-desktop").unwrap());
 static SIZE_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"([\d.]+(?:GB|MB|KB|TB))").unwrap());
-static REVIEW_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"短評\((\d+)\)").unwrap());
-static WANT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)人想看").unwrap());
-static WATCHED_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)人看過").unwrap());
+static FILE_COUNT_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(\d+)\s*(?:個文件|files?)").unwrap());
+static REVIEW_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?:短評|Reviews)\((\d+)\)").unwrap());
+static WANT_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(\d+)\s*(?:人想看|want to watch)").unwrap());
+static WATCHED_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(\d+)\s*(?:人看過|have seen)").unwrap());
+
+// Bilingual label sets for panel-block matching.
+// JavDB serves both Traditional Chinese (zh-Hant) and English; Cloudflare
+// bypass paths sometimes return EN. Mirrors apps/api/parsers/detail_parser.py:51-60.
+const L_CODE: &[&str] = &["番號:", "ID:"];
+const L_DATE: &[&str] = &["日期:", "Released Date:"];
+const L_DURATION: &[&str] = &["時長:", "Duration:"];
+const L_DIRECTOR: &[&str] = &["導演:", "Director:"];
+const L_MAKER: &[&str] = &["片商:", "Maker:"];
+const L_PUBLISHER: &[&str] = &["發行商:", "Publisher:"];
+const L_SERIES: &[&str] = &["系列:", "Series:"];
+const L_RATING: &[&str] = &["評分:", "Rating:"];
+const L_TAGS: &[&str] = &["類別:", "Tags:"];
+const L_ACTOR: &[&str] = &["演員:", "Actor(s):"];
 
 fn find_panel_block<'a>(
     panel_blocks: &[ElementRef<'a>],
-    label: &str,
+    labels: &[&str],
 ) -> Option<ElementRef<'a>> {
-    panel_blocks.iter().find(|block| {
-        block
-            .select(&SEL_STRONG)
-            .next()
-            .map_or(false, |strong| get_text_content(&strong).contains(label))
-    }).copied()
+    panel_blocks
+        .iter()
+        .find(|block| {
+            block.select(&SEL_STRONG).next().map_or(false, |strong| {
+                let text = get_text_content(&strong);
+                let trimmed = text.trim();
+                labels.iter().any(|lbl| trimmed == *lbl)
+            })
+        })
+        .copied()
 }
 
-fn extract_link_from_panel(panel_blocks: &[ElementRef], label: &str) -> Option<MovieLink> {
-    let block = find_panel_block(panel_blocks, label)?;
+fn extract_link_from_panel(panel_blocks: &[ElementRef], labels: &[&str]) -> Option<MovieLink> {
+    let block = find_panel_block(panel_blocks, labels)?;
     let value_span = block.select(&SEL_VALUE).next()?;
     let a_tag = value_span.select(&SEL_A).next()?;
     extract_movie_link(&a_tag)
 }
 
-fn extract_links_from_panel(panel_blocks: &[ElementRef], label: &str) -> Vec<MovieLink> {
-    let block = match find_panel_block(panel_blocks, label) {
+fn extract_links_from_panel(panel_blocks: &[ElementRef], labels: &[&str]) -> Vec<MovieLink> {
+    let block = match find_panel_block(panel_blocks, labels) {
         Some(b) => b,
         None => return Vec::new(),
     };
@@ -104,7 +127,7 @@ fn gender_after_actor(actor: &ElementRef<'_>) -> String {
 }
 
 fn extract_actors_with_gender(panel_blocks: &[ElementRef]) -> Vec<ActorCredit> {
-    let block = match find_panel_block(panel_blocks, "演員:") {
+    let block = match find_panel_block(panel_blocks, L_ACTOR) {
         Some(b) => b,
         None => return Vec::new(),
     };
@@ -156,7 +179,7 @@ fn is_no_actor_placeholder_text(text: &str) -> bool {
 }
 
 fn detect_no_actor_listing(panel_blocks: &[ElementRef]) -> bool {
-    let block = match find_panel_block(panel_blocks, "演員:") {
+    let block = match find_panel_block(panel_blocks, L_ACTOR) {
         Some(b) => b,
         None => return false,
     };
@@ -171,8 +194,8 @@ fn detect_no_actor_listing(panel_blocks: &[ElementRef]) -> bool {
     is_no_actor_placeholder_text(&raw)
 }
 
-fn extract_text_from_panel(panel_blocks: &[ElementRef], label: &str) -> String {
-    let block = match find_panel_block(panel_blocks, label) {
+fn extract_text_from_panel(panel_blocks: &[ElementRef], labels: &[&str]) -> String {
+    let block = match find_panel_block(panel_blocks, labels) {
         Some(b) => b,
         None => return String::new(),
     };
@@ -218,16 +241,23 @@ fn parse_magnets(document: &Html) -> (Vec<MagnetInfo>, bool) {
             .next()
             .map_or(String::new(), |s| get_text_content(&s).trim().to_string());
 
-        // Size
-        let size = magnet_a
+        // Size + file count (both extracted from the same .meta span text)
+        let (size, file_count) = magnet_a
             .select(&SEL_META_SPAN)
             .next()
-            .and_then(|meta| {
+            .map(|meta| {
                 let meta_text = get_text_content(&meta).trim().to_string();
-                SIZE_RE
+                let size = SIZE_RE
                     .captures(&meta_text)
                     .and_then(|c| c.get(1))
                     .map(|m| m.as_str().to_string())
+                    .unwrap_or_default();
+                let file_count = FILE_COUNT_RE
+                    .captures(&meta_text)
+                    .and_then(|c| c.get(1))
+                    .and_then(|m| m.as_str().parse::<u32>().ok())
+                    .unwrap_or(0);
+                (size, file_count)
             })
             .unwrap_or_default();
 
@@ -253,6 +283,7 @@ fn parse_magnets(document: &Html) -> (Vec<MagnetInfo>, bool) {
             name,
             tags,
             size,
+            file_count,
             timestamp,
         });
     }
@@ -276,7 +307,7 @@ pub fn parse_detail_page(html_content: &str) -> MovieDetail {
         .unwrap_or_default();
 
     // Video code + prefix link
-    if let Some(first_block) = find_panel_block(&panel_blocks, "番號:") {
+    if let Some(first_block) = find_panel_block(&panel_blocks, L_CODE) {
         if let Some(value_span) = first_block.select(&SEL_VALUE).next() {
             detail.video_code = get_text_content(&value_span).trim().to_string();
             if let Some(prefix_a) = value_span.select(&SEL_A).next() {
@@ -287,17 +318,17 @@ pub fn parse_detail_page(html_content: &str) -> MovieDetail {
     }
 
     // Release date, Duration
-    detail.release_date = extract_text_from_panel(&panel_blocks, "日期:");
-    detail.duration = extract_text_from_panel(&panel_blocks, "時長:");
+    detail.release_date = extract_text_from_panel(&panel_blocks, L_DATE);
+    detail.duration = extract_text_from_panel(&panel_blocks, L_DURATION);
 
     // Directors, Maker, Publisher, Series
-    detail.directors = extract_links_from_panel(&panel_blocks, "導演:");
-    detail.maker = extract_link_from_panel(&panel_blocks, "片商:");
-    detail.publisher = extract_link_from_panel(&panel_blocks, "發行商:");
-    detail.series = extract_link_from_panel(&panel_blocks, "系列:");
+    detail.directors = extract_links_from_panel(&panel_blocks, L_DIRECTOR);
+    detail.maker = extract_link_from_panel(&panel_blocks, L_MAKER);
+    detail.publisher = extract_link_from_panel(&panel_blocks, L_PUBLISHER);
+    detail.series = extract_link_from_panel(&panel_blocks, L_SERIES);
 
     // Rating & comment count
-    if let Some(rating_block) = find_panel_block(&panel_blocks, "評分:") {
+    if let Some(rating_block) = find_panel_block(&panel_blocks, L_RATING) {
         if let Some(value_span) = rating_block.select(&SEL_VALUE).next() {
             let score_text = get_text_content(&value_span).trim().to_string();
             let (r, c) = extract_rate_and_comments(&score_text);
@@ -307,7 +338,7 @@ pub fn parse_detail_page(html_content: &str) -> MovieDetail {
     }
 
     // Tags, Actors (with ♀/♂ markers)
-    detail.tags = extract_links_from_panel(&panel_blocks, "類別:");
+    detail.tags = extract_links_from_panel(&panel_blocks, L_TAGS);
     detail.actors = extract_actors_with_gender(&panel_blocks);
     if detail.actors.is_empty() {
         detail.no_actor_listing = detect_no_actor_listing(&panel_blocks);
