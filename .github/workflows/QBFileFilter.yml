@@ -1,7 +1,11 @@
 name: qBittorrent File Filter
 
-# This workflow filters out small files from recently added torrents
-# Scheduled to run 2 hours after DailyIngestion (10:00 UTC + 2h = 12:00 UTC)
+# This workflow filters out small files from recently added torrents.
+# Scheduled to run 4 hours after DailyIngestion (12:00 UTC + 4h = 16:00 UTC,
+# i.e. 00:00 Asia/Singapore the next day) so qB has time to pick up the
+# magnets the ingestion just enqueued before we look at file sizes. The
+# canonical cron is below (``0 16 * * *``); update both together if the
+# DailyIngestion schedule shifts.
 
 permissions:
   contents: read

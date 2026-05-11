@@ -70,6 +70,11 @@ on:
         options:
           - 'ubuntu-latest'
           - 'self-hosted'
+      confirm_production:
+        description: 'Required when dry_run=false or force=true. Type "I-UNDERSTAND" verbatim to acknowledge this run will mutate production state.'
+        required: false
+        default: ''
+        type: string
 
 # Serialize rollback runs so we don't have two operators clobbering audit
 # state simultaneously.
@@ -92,6 +97,7 @@ jobs:
       INPUT_DRY_RUN: ${{ inputs.dry_run }}
       INPUT_FORCE: ${{ inputs.force }}
       INPUT_LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
+      INPUT_CONFIRM: ${{ inputs.confirm_production }}
 
     steps:
       - name: Validate inputs
@@ -107,6 +113,19 @@ jobs:
           if [ -n "$INPUT_SESSION_ID" ] && ! [[ "$INPUT_SESSION_ID" =~ ^[0-9]+$ ]]; then
             echo "::error::session_id must be an integer ReportSessions.Id; got '$INPUT_SESSION_ID'."
             exit 1
+          fi
+          # Production guard: any non-dry-run or --force invocation must
+          # carry the literal "I-UNDERSTAND" acknowledgement. Mirrors the
+          # same guard in Migration.yml so operators can't muscle-memory
+          # through a destructive rollback with a stray click.
+          if [ "$INPUT_DRY_RUN" != "true" ] || [ "$INPUT_FORCE" = "true" ]; then
+            if [ "$INPUT_CONFIRM" != "I-UNDERSTAND" ]; then
+              echo "::error::dry_run=false or force=true requires confirm_production='I-UNDERSTAND'."
+              echo "  This run would mutate production D1 / SQLite / git state."
+              echo "  Re-dispatch with confirm_production set to the literal string I-UNDERSTAND."
+              exit 1
+            fi
+            echo "::notice::confirm_production acknowledged; proceeding with destructive rollback."
           fi
           if [ "$INPUT_FORCE" = "true" ] && [ "$INPUT_DRY_RUN" != "true" ]; then
             echo "::warning::--force enabled with dry_run=false. Committed sessions"
