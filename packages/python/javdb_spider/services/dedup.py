@@ -8,10 +8,26 @@ priority upgrades).  Storage backend is controlled by ``STORAGE_MODE``.
 import csv
 import os
 import tempfile
+import unicodedata
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Set, Tuple, NamedTuple
 
 from packages.python.javdb_platform.config_helper import use_sqlite, use_csv, cfg
+
+
+def _normalise_code(code: Optional[str]) -> str:
+    """Normalise a video code key for inventory lookup.
+
+    P1: previously the code was only ``str.strip().upper()``-ed, so the
+    same logical work staged under two different Unicode forms (e.g.
+    full-width ``ＳＳＮＩ-001`` from a CJK keyboard vs ASCII
+    ``SSNI-001``) would fail to dedupe and produce duplicate ingestion.
+    NFKC folds compatibility codepoints to their canonical ASCII
+    equivalents before the upper-case step.
+    """
+    if not code:
+        return ''
+    return unicodedata.normalize('NFKC', code).strip().upper()
 from packages.python.javdb_core.contracts import (
     UNCENSORED_SENSOR_PRIORITY,
     is_uncensored_category,
@@ -102,9 +118,12 @@ def load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
         raw = db_load_rclone_inventory()
         inventory: Dict[str, List[RcloneEntry]] = {}
         for code, entries in raw.items():
-            inventory[code] = [
+            normalised_code = _normalise_code(code)
+            inventory.setdefault(normalised_code, []).extend(
                 RcloneEntry(
-                    video_code=e.get('VideoCode', e.get('video_code', code)).upper(),
+                    video_code=_normalise_code(
+                        e.get('VideoCode', e.get('video_code', normalised_code))
+                    ),
                     sensor_category=e.get('SensorCategory', e.get('sensor_category', '')),
                     subtitle_category=e.get('SubtitleCategory', e.get('subtitle_category', '')),
                     folder_path=e.get('FolderPath', e.get('folder_path', '')),
@@ -113,7 +132,7 @@ def load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
                     scan_datetime=e.get('DateTimeScanned', e.get('scan_datetime', '')),
                 )
                 for e in entries
-            ]
+            )
         backend = current_backend()
         if inventory:
             logger.info(f"Loaded rclone inventory: {len(inventory)} unique codes from {backend} backend")
@@ -135,7 +154,7 @@ def _csv_load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
         with open(csv_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                code = row.get('video_code', '').strip().upper()
+                code = _normalise_code(row.get('video_code', ''))
                 if not code:
                     continue
                 entry = RcloneEntry(
@@ -160,7 +179,7 @@ def _csv_load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
 
 def is_in_rclone_inventory(video_code: str, inventory: Dict[str, List[RcloneEntry]]) -> bool:
     """Check whether a video_code exists in the rclone inventory."""
-    return video_code.upper() in inventory
+    return _normalise_code(video_code) in inventory
 
 
 def should_skip_from_rclone(
@@ -175,7 +194,7 @@ def should_skip_from_rclone(
     because we still want to detect potential upgrades.  When dedup is
     disabled, we skip if any entry for this code already has 中字.
     """
-    code = video_code.upper()
+    code = _normalise_code(video_code)
     entries = inventory.get(code)
     if not entries:
         return False
