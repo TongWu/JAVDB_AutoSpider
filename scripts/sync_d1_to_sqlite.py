@@ -28,7 +28,7 @@ Safety
 ------
 * Default mode is dry-run: prints a summary table of counts and
   diffs, and writes a JSON report to
-  ``reports/sync_d1_to_sqlite_dryrun_<ts>.json``.
+  ``reports/D1/sync_d1_to_sqlite/sync_d1_to_sqlite_dryrun_<ts>.json``.
 * ``--apply`` first copies the existing ``reports/*.db`` into
   ``reports/_backup_<ts>/`` so you can always roll back.
 * Aborts if STORAGE_BACKEND is ``dual`` or ``d1`` while the script runs,
@@ -121,11 +121,24 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="Actually overwrite local sqlite (after backing up to "
              "reports/_backup_<ts>/).",
     )
+    def _positive_int(raw: str) -> int:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError) as exc:
+            raise argparse.ArgumentTypeError(
+                f"--page-size must be an integer, got {raw!r}"
+            ) from exc
+        if value <= 0:
+            raise argparse.ArgumentTypeError(
+                f"--page-size must be > 0, got {value}"
+            )
+        return value
+
     p.add_argument(
         "--page-size",
-        type=int,
+        type=_positive_int,
         default=_DEFAULT_PAGE_SIZE,
-        help="Rows per D1 page query (default 500).",
+        help="Rows per D1 page query (default 500). Must be > 0.",
     )
     p.add_argument(
         "--logical-names",
@@ -139,7 +152,8 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         type=str,
         default=None,
         help="Where to write the JSON report. Defaults to "
-             "reports/sync_d1_to_sqlite_<dryrun|apply>_<ts>.json.",
+             "reports/D1/sync_d1_to_sqlite/sync_d1_to_sqlite_"
+             "<dryrun|apply>_<ts>.json.",
     )
     p.add_argument(
         "--log-level",
@@ -226,9 +240,14 @@ def _sqlite_table_count(conn: sqlite3.Connection, table: str) -> int:
 
 
 def _ensure_local_sqlite_schema(conn: sqlite3.Connection) -> None:
-    """Bring a local mirror forward before inserting D1's current columns."""
+    """Bring a local mirror forward before inserting D1's current columns.
+
+    The caller invokes this **inside** the data-sync transaction so any
+    failure during the subsequent DELETE/INSERT phase rolls back the
+    schema bump along with the partial data load — otherwise a
+    half-applied schema would survive a failed sync.
+    """
     db_mod._ensure_rollback_columns(conn)
-    conn.commit()
 
 
 def _backup_sqlite(target_paths: List[str]) -> Optional[str]:
@@ -308,10 +327,15 @@ def _sync_one_table(
         if "Id" in columns:
             try:
                 if isinstance(page_rows[-1], dict):
-                    last_id_seen = int(page_rows[-1].get("Id") or 0)
+                    extracted_id = int(page_rows[-1].get("Id") or 0)
                 else:
                     idx = columns.index("Id")
-                    last_id_seen = int(page_rows[-1][idx] or 0)
+                    extracted_id = int(page_rows[-1][idx] or 0)
+                # Track the running max across pages so sqlite_sequence
+                # ends up reflecting MAX(Id) even if D1's ROWID ordering
+                # surfaces a lower Id on the final page.
+                if last_id_seen is None or extracted_id > last_id_seen:
+                    last_id_seen = extracted_id
             except (TypeError, ValueError, IndexError):
                 pass
         if len(page_rows) < page_size:
@@ -367,8 +391,6 @@ def _sync_one_logical(
     sqlite_conn = sqlite3.connect(sqlite_path)
     sqlite_conn.row_factory = sqlite3.Row
     sqlite_conn.execute("PRAGMA foreign_keys=OFF")
-    if not dry_run:
-        _ensure_local_sqlite_schema(sqlite_conn)
 
     summary: Dict[str, Any] = {
         "logical_name": logical_name,
@@ -381,6 +403,10 @@ def _sync_one_logical(
             logger.warning("No business tables on logical=%s", logical_name)
         sqlite_conn.execute("BEGIN")
         try:
+            if not dry_run:
+                # Schema bump runs inside the transaction so a failure
+                # during the data phase rolls it back too.
+                _ensure_local_sqlite_schema(sqlite_conn)
             for table in tables:
                 tbl_summary = _sync_one_table(
                     d1, sqlite_conn, table,
@@ -415,11 +441,21 @@ def main(argv: Optional[List[str]] = None) -> int:
     setup_logging(log_level=args.log_level)
     _refuse_when_dual_or_d1()
 
+    available_names = [t[0] for t in _TARGETS]
     selected_logical = (
         [s.strip() for s in args.logical_names.split(",") if s.strip()]
         if args.logical_names
-        else [t[0] for t in _TARGETS]
+        else list(available_names)
     )
+    if args.logical_names:
+        unknown = [n for n in selected_logical if n not in available_names]
+        if unknown:
+            logger.error(
+                "Unknown logical name(s) in --logical-names: %s. "
+                "Valid choices: %s",
+                ", ".join(unknown), ", ".join(available_names),
+            )
+            return 2
     targets = [t for t in _TARGETS if t[0] in selected_logical]
     if not targets:
         logger.error("No matching logical names from %s", args.logical_names)
