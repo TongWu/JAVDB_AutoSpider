@@ -14,6 +14,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 from utils.infra.path_helper import (
+    atomic_write,
     get_dated_subdir,
     get_dated_report_path,
     ensure_dated_dir,
@@ -273,3 +274,64 @@ class TestPathHelperIntegration:
         # Find the file
         found = find_latest_report_in_dated_dirs(base_dir, 'Javdb_TodayTitle_*.csv')
         assert found == full_path
+
+
+class TestAtomicWrite:
+    """B.8 (2026-05-12): atomic_write should publish the destination
+    file via tempfile + os.replace so partial writes (kill mid-flush,
+    disk full, container restart) never leave a half-written file.
+    """
+
+    def test_writes_str_content_via_replace(self, tmp_path):
+        target = tmp_path / "config.txt"
+        atomic_write(str(target), "hello world")
+        assert target.read_text(encoding="utf-8") == "hello world"
+
+    def test_writes_bytes_content_via_replace(self, tmp_path):
+        target = tmp_path / "blob.bin"
+        atomic_write(str(target), b"\x00\x01\x02\xff")
+        assert target.read_bytes() == b"\x00\x01\x02\xff"
+
+    def test_overwrites_existing_file_atomically(self, tmp_path):
+        target = tmp_path / "config.txt"
+        target.write_text("old", encoding="utf-8")
+        atomic_write(str(target), "new")
+        assert target.read_text(encoding="utf-8") == "new"
+
+    def test_applies_chmod_before_replace(self, tmp_path):
+        target = tmp_path / "creds.conf"
+        atomic_write(str(target), "secret=value", mode=0o600)
+        st_mode = target.stat().st_mode & 0o777
+        assert st_mode == 0o600, f"expected 0o600, got {oct(st_mode)}"
+
+    def test_temp_file_cleaned_up_after_success(self, tmp_path):
+        target = tmp_path / "config.txt"
+        atomic_write(str(target), "x")
+        leftover = [
+            p for p in tmp_path.iterdir() if p.name.startswith(".atomic_write_")
+        ]
+        assert leftover == [], (
+            f"atomic_write left tempfile behind: {leftover!r}"
+        )
+
+    def test_temp_file_cleaned_up_after_failure(self, tmp_path, monkeypatch):
+        target = tmp_path / "subdir" / "config.txt"
+
+        def _boom(src, dst):
+            raise RuntimeError("simulated replace failure")
+
+        monkeypatch.setattr("os.replace", _boom)
+        with pytest.raises(RuntimeError, match="simulated replace failure"):
+            atomic_write(str(target), "x")
+        leftover = [
+            p for p in target.parent.iterdir()
+            if p.name.startswith(".atomic_write_")
+        ]
+        assert leftover == [], (
+            f"atomic_write should remove tempfile on failure: {leftover!r}"
+        )
+
+    def test_rejects_non_str_non_bytes(self, tmp_path):
+        target = tmp_path / "config.txt"
+        with pytest.raises(TypeError, match="must be str or bytes"):
+            atomic_write(str(target), 12345)

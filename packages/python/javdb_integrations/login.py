@@ -54,6 +54,7 @@ except ImportError:
 
 # Import configuration
 from packages.python.javdb_platform.config_helper import cfg
+from packages.python.javdb_platform.path_helper import atomic_write
 
 JAVDB_USERNAME = cfg('JAVDB_USERNAME', None)
 JAVDB_PASSWORD = cfg('JAVDB_PASSWORD', None)
@@ -751,8 +752,14 @@ def update_config_file(session_cookie):
 
         new_content = re.sub(pattern, rf"\g<1>{session_cookie}\g<3>", content)
 
-        with open(config_path, 'w', encoding='utf-8') as f:
-            f.write(new_content)
+        # B.8 (2026-05-12): write atomically via tempfile + os.replace.
+        # The previous direct-overwrite path left a window where
+        # config.py could be observed as a truncated / half-written
+        # file by a peer process (or by a re-read inside the same
+        # process if the spider crashed mid-flush), which then crashes
+        # at import time with a SyntaxError instead of degrading
+        # gracefully against the old cookie.
+        atomic_write(config_path, new_content, encoding='utf-8')
 
         # logger.info(f"Updated {config_path} with new session cookie")
         return True

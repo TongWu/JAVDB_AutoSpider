@@ -23,7 +23,10 @@ from collections import defaultdict
 
 from packages.python.javdb_core.contracts import UNCENSORED_SENSOR_PRIORITY
 from packages.python.javdb_platform.logging_config import get_logger
-from packages.python.javdb_platform.path_helper import ensure_dated_dir
+from packages.python.javdb_platform.path_helper import (
+    atomic_write,
+    ensure_dated_dir,
+)
 
 logger = get_logger(__name__)
 
@@ -370,9 +373,13 @@ def setup_rclone_config_from_base64(config_base64: str) -> bool:
         config_dir = os.path.expanduser('~/.config/rclone')
         os.makedirs(config_dir, exist_ok=True)
         config_path = os.path.join(config_dir, 'rclone.conf')
-        with open(config_path, 'wb') as f:
-            f.write(config_bytes)
-        os.chmod(config_path, 0o600)
+        # B.8 (2026-05-12): atomic_write + 0o600 in one call. The legacy
+        # ``open('wb')`` left a window where rclone could observe a
+        # partially-written config (truncated remote section, missing
+        # credentials) after a kill/restart and silently fall back to
+        # an unprotected route. The temp-file-and-replace dance keeps
+        # the destination either complete-old or complete-new.
+        atomic_write(config_path, config_bytes, mode=0o600)
         logger.info(f"rclone config written to {config_path}")
         return True
     except Exception as e:
