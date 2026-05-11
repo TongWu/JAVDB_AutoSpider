@@ -333,7 +333,20 @@ def get_captcha_from_user(captcha_url, session, headers, use_auto_solve=True, pr
         if captcha_response.status_code == 200:
             logger.info("Captcha image downloaded")
 
-            captcha_file = 'javdb_captcha.png'
+            # P1: write the captcha image into the OS temp directory
+            # instead of the current working directory. Previously this
+            # landed as ``javdb_captcha.png`` in whatever folder the CLI
+            # was launched from — usually the repo root — which polluted
+            # ``git status`` and, if forgotten, could have been committed.
+            import tempfile
+            captcha_dir = os.environ.get(
+                "JAVDB_CAPTCHA_DIR"
+            ) or tempfile.gettempdir()
+            try:
+                os.makedirs(captcha_dir, exist_ok=True)
+            except OSError:
+                captcha_dir = tempfile.gettempdir()
+            captcha_file = os.path.join(captcha_dir, 'javdb_captcha.png')
             save_captcha_image(captcha_response.content, captcha_file)
 
             if use_auto_solve:
