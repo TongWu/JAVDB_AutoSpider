@@ -1127,6 +1127,7 @@ jobs:
           if not os.path.exists(path):
               sys.exit(0)
           run_id = os.environ.get("GITHUB_RUN_ID", "")
+          attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "")
           critical_fields = (
               "pending_residual_count",
               "derived_recompute_drift",
@@ -1143,6 +1144,8 @@ jobs:
               if rec.get("kind") != "pending_session_verify":
                   continue
               if str(rec.get("run_id") or "") != run_id:
+                  continue
+              if str(rec.get("run_attempt") or "") != attempt:
                   continue
               for k in critical_fields:
                   try:

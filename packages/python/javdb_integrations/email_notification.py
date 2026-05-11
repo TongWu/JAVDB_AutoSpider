@@ -1284,6 +1284,8 @@ def _evaluate_pending_alerts(records, thresholds=None):
             ('cleanup_path_mismatch_count',
              'cleanup_path_mismatch_count_max'),
             ('staged_claim_orphan_count', 'staged_claim_orphan_count_max'),
+            ('d1_request_count_audit_baseline_ratio',
+             'd1_request_count_audit_baseline_ratio_max'),
         ):
             limit = th.get(max_key)
             if limit is None:

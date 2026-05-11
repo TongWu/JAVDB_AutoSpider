@@ -179,16 +179,25 @@ def main(argv: Optional[List[str]] = None) -> int:
     for sid, status, write_mode in rows:
         meta = _read_session_meta(sid)
         if args.dry_run:
+            # Mirror the apply-path branching: only pending+finalizing
+            # gets resumed; audit-mode finalizing is refused (would_apply
+            # False) since the apply path also refuses to rollback it.
+            if status == 'finalizing' and write_mode == 'pending':
+                action = "resume_commit"
+                would_apply = True
+            elif status == 'finalizing':
+                action = "skipped"
+                would_apply = False
+            else:
+                action = "rollback"
+                would_apply = True
             summaries.append({
                 "session_id": sid,
                 "status": status,
                 "write_mode": write_mode,
                 "meta": meta,
-                "would_apply": True,
-                "action": (
-                    "resume_commit" if status == 'finalizing'
-                    else "rollback"
-                ),
+                "would_apply": would_apply,
+                "action": action,
             })
             logger.info(
                 "[dry-run] Would handle session %s status=%s mode=%s",

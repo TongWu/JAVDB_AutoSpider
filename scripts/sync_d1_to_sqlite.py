@@ -121,11 +121,24 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="Actually overwrite local sqlite (after backing up to "
              "reports/_backup_<ts>/).",
     )
+    def _positive_int(raw: str) -> int:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError) as exc:
+            raise argparse.ArgumentTypeError(
+                f"--page-size must be an integer, got {raw!r}"
+            ) from exc
+        if value <= 0:
+            raise argparse.ArgumentTypeError(
+                f"--page-size must be > 0, got {value}"
+            )
+        return value
+
     p.add_argument(
         "--page-size",
-        type=int,
+        type=_positive_int,
         default=_DEFAULT_PAGE_SIZE,
-        help="Rows per D1 page query (default 500).",
+        help="Rows per D1 page query (default 500). Must be > 0.",
     )
     p.add_argument(
         "--logical-names",
@@ -415,11 +428,21 @@ def main(argv: Optional[List[str]] = None) -> int:
     setup_logging(log_level=args.log_level)
     _refuse_when_dual_or_d1()
 
+    available_names = [t[0] for t in _TARGETS]
     selected_logical = (
         [s.strip() for s in args.logical_names.split(",") if s.strip()]
         if args.logical_names
-        else [t[0] for t in _TARGETS]
+        else list(available_names)
     )
+    if args.logical_names:
+        unknown = [n for n in selected_logical if n not in available_names]
+        if unknown:
+            logger.error(
+                "Unknown logical name(s) in --logical-names: %s. "
+                "Valid choices: %s",
+                ", ".join(unknown), ", ".join(available_names),
+            )
+            return 2
     targets = [t for t in _TARGETS if t[0] in selected_logical]
     if not targets:
         logger.error("No matching logical names from %s", args.logical_names)
