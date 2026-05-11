@@ -28,8 +28,70 @@ Usage:
 """
 
 import os
+import tempfile
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
+
+
+def atomic_write(
+    path: str,
+    content: Union[str, bytes],
+    *,
+    encoding: str = "utf-8",
+    mode: Optional[int] = None,
+) -> None:
+    """Write *content* to *path* atomically via tempfile + os.replace.
+
+    Invariant: either the destination file holds the FULL new content
+    or it holds the OLD content. Partial writes (process killed
+    mid-flush, disk full, container restart) must never leave a
+    half-written file. Standard pattern:
+
+      1. Open a temp file in the SAME directory as *path* (otherwise
+         ``os.replace`` would cross filesystems and lose atomicity).
+      2. Write + flush + fsync the temp file.
+      3. ``os.replace`` to the destination — POSIX guarantees atomic
+         publish at the directory inode level.
+
+    If *content* is ``str``, it is encoded with *encoding* before write.
+    If *mode* is provided, the file's permission bits are set via
+    ``os.chmod`` BEFORE the replace, so the destination never exists
+    with the default (looser) tempfile permissions.
+    """
+    if not isinstance(content, (str, bytes)):
+        raise TypeError(
+            f"atomic_write content must be str or bytes; got {type(content).__name__}"
+        )
+    payload: bytes = (
+        content if isinstance(content, bytes) else content.encode(encoding)
+    )
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    os.makedirs(directory, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(
+        prefix=".atomic_write_", suffix=".tmp", dir=directory,
+    )
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(payload)
+            fh.flush()
+            try:
+                os.fsync(fh.fileno())
+            except OSError:
+                # Some filesystems (e.g. tmpfs in tests) reject fsync.
+                # The replace below still publishes the bytes atomically
+                # from the kernel's POV; durability across power loss
+                # is the only guarantee we lose here.
+                pass
+        if mode is not None:
+            os.chmod(tmp_path, mode)
+        os.replace(tmp_path, path)
+        tmp_path = None  # ownership transferred to ``path``
+    finally:
+        if tmp_path is not None and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 
 def get_history_file_path(reports_dir: str, filename: str) -> str:
