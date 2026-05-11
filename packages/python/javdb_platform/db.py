@@ -506,8 +506,16 @@ CREATE INDEX IF NOT EXISTS idx_th_audit_run ON TorrentHistoryAudit(RunId, RunAtt
 -- Other sessions' pending rows are intentionally invisible to avoid the
 -- dirty-read window that derived-field recomputation
 -- (PerfectMatchIndicator / HiResIndicator) is sensitive to.
+-- Seq is application-generated (51-bit snowflake from
+-- ``_generate_session_id``).  AUTOINCREMENT is intentionally absent: the
+-- only writer (``db_stage_history_write``) supplies Seq explicitly, and
+-- under STORAGE_BACKEND=dual any forgotten Seq would let SQLite silently
+-- emit small ints (1, 2, 3...) that would diverge from D1 and trip
+-- ``DualWriteIdMismatchError`` only after the bad row has been written.
+-- Removing AUTOINCREMENT makes the omitted-Seq case a hard NULL constraint
+-- failure at INSERT time instead of catching it later via drift detection.
 CREATE TABLE IF NOT EXISTS PendingMovieHistoryWrites (
-    Seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    Seq INTEGER PRIMARY KEY NOT NULL,
     SessionId INTEGER NOT NULL,
     RunId TEXT,
     RunAttempt INTEGER,
@@ -528,7 +536,7 @@ CREATE INDEX IF NOT EXISTS idx_pmhw_session_state
     ON PendingMovieHistoryWrites(SessionId, ApplyState);
 
 CREATE TABLE IF NOT EXISTS PendingTorrentHistoryWrites (
-    Seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    Seq INTEGER PRIMARY KEY NOT NULL,
     SessionId INTEGER NOT NULL,
     RunId TEXT,
     RunAttempt INTEGER,
@@ -1165,7 +1173,7 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
     pending_ddl = (
         """
         CREATE TABLE IF NOT EXISTS PendingMovieHistoryWrites (
-            Seq INTEGER PRIMARY KEY AUTOINCREMENT,
+            Seq INTEGER PRIMARY KEY NOT NULL,
             SessionId INTEGER NOT NULL,
             RunId TEXT,
             RunAttempt INTEGER,
@@ -1188,7 +1196,7 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_pmhw_session_state
             ON PendingMovieHistoryWrites(SessionId, ApplyState);
         CREATE TABLE IF NOT EXISTS PendingTorrentHistoryWrites (
-            Seq INTEGER PRIMARY KEY AUTOINCREMENT,
+            Seq INTEGER PRIMARY KEY NOT NULL,
             SessionId INTEGER NOT NULL,
             RunId TEXT,
             RunAttempt INTEGER,
@@ -3360,6 +3368,18 @@ def db_stage_history_write(
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     run_id, run_attempt = get_active_run_identity()
     seq = _generate_session_id()
+    # Defence in depth: catch any future code path that bypasses
+    # ``_generate_session_id`` (and would otherwise let SQLite emit a
+    # small AUTOINCREMENT id that diverges from D1).  ``_SESSION_ID_BITS``
+    # for the millisecond timestamp put any real snowflake at >= 1 << 40
+    # (~1.1e12) for any time after 2004-09-17.
+    if seq < (1 << 40):
+        raise ValueError(
+            f"db_stage_history_write: refusing to INSERT with Seq={seq!r} "
+            f"(expected a 51-bit snowflake from _generate_session_id; "
+            f"a small int here means a caller bypassed the snowflake path "
+            f"and would diverge from D1 under STORAGE_BACKEND=dual)."
+        )
     with get_db(db_path or HISTORY_DB_PATH) as conn:
         if kind == _KIND_MOVIE:
             conn.execute(
@@ -3911,6 +3931,21 @@ def db_commit_session_history(
                 for k, v in per_movie.items():
                     counts[k] = counts.get(k, 0) + v
 
+    # Flip Status to 'committed' BEFORE the final pending-table DELETE so a
+    # crash between the two leaves a recoverable footprint.  Failure modes:
+    #   * crash before flip → Status='finalizing' + applied rows.  Resume
+    #     re-runs the loop (idempotent per ``_commit_one_movie`` docstring),
+    #     reaches this point, flips, deletes.
+    #   * crash after flip, before delete → Status='committed' + applied
+    #     rows.  Resume re-enters via ``db_resume_finalizing_session`` which
+    #     accepts 'committed', re-runs the loop (idempotent on already-
+    #     applied rows since ``_pending_*_overlay`` reads both states),
+    #     reaches the no-op flip, deletes.
+    # The reverse order (delete first, flip last) was monitoring-hostile:
+    # a crash mid-flip left ``Status='finalizing'`` with zero pending rows,
+    # which any "stuck session" alert misreads as a hung commit.
+    db_finish_commit_session(session_id, db_path=reports_db_path)
+
     with get_db(history_db_path or HISTORY_DB_PATH) as conn:
         cur_m = conn.execute(
             "DELETE FROM PendingMovieHistoryWrites "
@@ -3924,7 +3959,6 @@ def db_commit_session_history(
         )
         counts["pending_deleted"] = (cur_m.rowcount or 0) + (cur_t.rowcount or 0)
 
-    db_finish_commit_session(session_id, db_path=reports_db_path)
     return counts
 
 
