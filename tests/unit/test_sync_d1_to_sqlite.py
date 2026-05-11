@@ -32,6 +32,19 @@ class TestArgs:
         args = sync_mod._parse_args(["--logical-names", "history,reports"])
         assert "history,reports" in args.logical_names
 
+    def test_prune_local_only_defaults_off(self):
+        """P0-8: destructive prune must be off unless explicitly requested."""
+        args = sync_mod._parse_args([])
+        assert args.prune_local_only is False
+
+    def test_allow_local_prune_on_drift_defaults_off(self):
+        args = sync_mod._parse_args([])
+        assert args.allow_local_prune_on_drift is False
+
+    def test_prune_local_only_explicit_opt_in(self):
+        args = sync_mod._parse_args(["--apply", "--prune-local-only"])
+        assert args.prune_local_only is True
+
 
 # ── STORAGE_BACKEND refusal ─────────────────────────────────────────────
 
@@ -93,6 +106,33 @@ class _FakeD1Connection:
             return _FakeD1Cursor([{"n": len(self.rows)}])
         if s.startswith("SELECT"):
             return _FakeD1Cursor(self.rows)
+        return _FakeD1Cursor([])
+
+    def close(self):
+        pass
+
+
+class _FakeMovieHistoryD1Connection:
+    """Returns a PRAGMA pk=1 on Id so prune/upsert tests can identify the PK."""
+
+    def __init__(self, rows):
+        self.rows = list(rows)
+
+    def execute(self, sql, params=()):
+        s = sql.upper()
+        if "FROM SQLITE_MASTER" in s:
+            return _FakeD1Cursor([{"name": "MovieHistory"}])
+        if "PRAGMA TABLE_INFO" in s:
+            # cid, name, type, notnull, dflt_value, pk — pk=1 on Id only.
+            return _FakeD1Cursor([
+                {"name": "Id", "pk": 1},
+                {"name": "VideoCode", "pk": 0},
+            ])
+        if "SELECT COUNT(*)" in s:
+            return _FakeD1Cursor([{"n": len(self.rows)}])
+        if s.startswith("SELECT"):
+            offset = int(params[1]) if len(params) > 1 else 0
+            return _FakeD1Cursor(self.rows[offset:])
         return _FakeD1Cursor([])
 
     def close(self):
@@ -236,7 +276,12 @@ class TestApplySchemaCompatibility:
             "reports", str(sqlite_path), page_size=500, dry_run=False,
         )
 
-        assert result["tables"][0]["consistent_after"] is True
+        # P0-8: upsert-only mode preserves SQLite-only rows; the
+        # consistency-after assertion now only fires under
+        # ``prune_local_only=True``. We still confirm the row landed.
+        assert result["tables"][0]["mode"] == "upsert-only"
+        assert result["tables"][0]["rows_streamed"] == 1
+        assert result["tables"][0]["sqlite_count_after"] == 1
         conn = sqlite3.connect(sqlite_path)
         try:
             cols = {
@@ -252,3 +297,148 @@ class TestApplySchemaCompatibility:
 
         assert {"RunId", "RunAttempt", "FailureReason"}.issubset(cols)
         assert row == ("25549335675", 1)
+
+
+# ── P0-8 upsert / prune safety guarantees ───────────────────────────────
+
+
+class TestUpsertPreservesSqliteOnlyRows:
+    """P0-8: ``--apply`` without ``--prune-local-only`` must NOT delete
+    SQLite rows that exist locally but not on D1. The legacy DELETE+REINSERT
+    behaviour silently destroyed those rows whenever D1 was behind by even
+    one asymmetric write — exactly the 2026-05 ``ReportSessions`` /
+    ``SpiderStats`` -1 incident.
+    """
+
+    def _seed_local_movie(
+        self, sqlite_path, video_code: str, *, local_id: int = 9999,
+    ):
+        conn = sqlite3.connect(sqlite_path)
+        conn.execute(
+            "CREATE TABLE MovieHistory ("
+            "Id INTEGER PRIMARY KEY AUTOINCREMENT, VideoCode TEXT)"
+        )
+        # Explicit Id so the test can use a PK that doesn't collide with
+        # whatever the fake D1 source returns. The legacy DELETE+REINSERT
+        # path destroyed THIS row even when no PK collision existed.
+        conn.execute(
+            "INSERT INTO MovieHistory (Id, VideoCode) VALUES (?, ?)",
+            (local_id, video_code),
+        )
+        conn.commit()
+        conn.close()
+
+    def test_default_apply_preserves_sqlite_only_rows(
+        self, monkeypatch, tmp_path,
+    ):
+        sqlite_path = tmp_path / "history.db"
+        self._seed_local_movie(sqlite_path, "LOCAL-ONLY-001")
+
+        # D1 has a different row.
+        d1 = _FakeMovieHistoryD1Connection(
+            [{"Id": 1, "VideoCode": "D1-ONLY-001"}]
+        )
+        monkeypatch.setattr(sync_mod, "D1Connection", lambda *a, **k: d1)
+        monkeypatch.setattr(sync_mod, "get_d1_account_id", lambda: "fake")
+        monkeypatch.setattr(
+            sync_mod, "get_d1_database_id", lambda name: "fake",
+        )
+        monkeypatch.setattr(sync_mod, "get_d1_api_token", lambda: "fake")
+
+        result = sync_mod._sync_one_logical(
+            "history", str(sqlite_path),
+            page_size=500, dry_run=False,
+            prune_local_only=False,
+        )
+        assert result["tables"][0]["mode"] == "upsert-only"
+
+        conn = sqlite3.connect(sqlite_path)
+        try:
+            codes = sorted(
+                row[0] for row in conn.execute(
+                    "SELECT VideoCode FROM MovieHistory"
+                ).fetchall()
+            )
+        finally:
+            conn.close()
+        # Both rows present: SQLite-only row was NOT pruned.
+        assert codes == ["D1-ONLY-001", "LOCAL-ONLY-001"], (
+            f"P0-8 regression: SQLite-only row was deleted; codes={codes!r}"
+        )
+
+    def test_prune_refuses_when_dry_run_showed_local_ahead(
+        self, monkeypatch, tmp_path,
+    ):
+        """Prune must self-block when SQLite has rows D1 lacks (delta < 0).
+
+        ``--allow-local-prune-on-drift`` is the explicit override; without
+        it the script keeps the SQLite-only rows so the operator can
+        reconcile by hand.
+        """
+        sqlite_path = tmp_path / "history.db"
+        self._seed_local_movie(sqlite_path, "LOCAL-ONLY-002")
+
+        # D1 is empty — SQLite is one row ahead.
+        d1 = _FakeMovieHistoryD1Connection([])
+        monkeypatch.setattr(sync_mod, "D1Connection", lambda *a, **k: d1)
+        monkeypatch.setattr(sync_mod, "get_d1_account_id", lambda: "fake")
+        monkeypatch.setattr(
+            sync_mod, "get_d1_database_id", lambda name: "fake",
+        )
+        monkeypatch.setattr(sync_mod, "get_d1_api_token", lambda: "fake")
+
+        result = sync_mod._sync_one_logical(
+            "history", str(sqlite_path),
+            page_size=500, dry_run=False,
+            prune_local_only=True,
+            allow_local_prune_on_drift=False,
+        )
+        tbl = result["tables"][0]
+        assert tbl["prune_blocked_reason"] is not None, (
+            "prune must be blocked when delta_d1_minus_sqlite_before < 0"
+        )
+        assert "refusing to prune" in tbl["prune_blocked_reason"]
+
+        # Local row is preserved.
+        conn = sqlite3.connect(sqlite_path)
+        try:
+            n = conn.execute(
+                "SELECT COUNT(*) FROM MovieHistory WHERE VideoCode='LOCAL-ONLY-002'"
+            ).fetchone()[0]
+        finally:
+            conn.close()
+        assert n == 1, "P0-8 regression: blocked prune still deleted the row"
+
+    def test_prune_with_override_actually_deletes(
+        self, monkeypatch, tmp_path,
+    ):
+        """``--allow-local-prune-on-drift`` unlocks the destructive path."""
+        sqlite_path = tmp_path / "history.db"
+        self._seed_local_movie(sqlite_path, "LOCAL-ONLY-003")
+
+        d1 = _FakeMovieHistoryD1Connection([])
+        monkeypatch.setattr(sync_mod, "D1Connection", lambda *a, **k: d1)
+        monkeypatch.setattr(sync_mod, "get_d1_account_id", lambda: "fake")
+        monkeypatch.setattr(
+            sync_mod, "get_d1_database_id", lambda name: "fake",
+        )
+        monkeypatch.setattr(sync_mod, "get_d1_api_token", lambda: "fake")
+
+        result = sync_mod._sync_one_logical(
+            "history", str(sqlite_path),
+            page_size=500, dry_run=False,
+            prune_local_only=True,
+            allow_local_prune_on_drift=True,
+        )
+        tbl = result["tables"][0]
+        assert tbl["prune_blocked_reason"] is None
+        assert tbl["pruned_rows"] == 1
+
+        conn = sqlite3.connect(sqlite_path)
+        try:
+            n = conn.execute(
+                "SELECT COUNT(*) FROM MovieHistory"
+            ).fetchone()[0]
+        finally:
+            conn.close()
+        assert n == 0

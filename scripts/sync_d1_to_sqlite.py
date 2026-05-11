@@ -4,12 +4,15 @@
 Usage::
 
     python -m scripts.sync_d1_to_sqlite              # dry-run report
-    python -m scripts.sync_d1_to_sqlite --apply      # actually overwrite local DBs
+    python -m scripts.sync_d1_to_sqlite --apply      # upsert D1 into sqlite
+    python -m scripts.sync_d1_to_sqlite --apply --prune-local-only
+                                                      # additionally remove
+                                                      # local rows not on D1
 
 Why this exists
 ---------------
 On 2026-05-08 the local sqlite mirror drifted ~1k rows behind D1 because
-some CI runs commit only the D1 side (no `git push reports/*.db`).  When
+some CI runs commit only the D1 side (no ``git push reports/*.db``). When
 the planned cleanup of the 332/346 phantom audits runs, both sides need
 to start from the same snapshot — otherwise pulling D1 into sqlite later
 will quietly resurrect the very phantoms we just deleted.
@@ -19,10 +22,12 @@ What it does
 For each of ``javdb-history`` / ``javdb-reports`` / ``javdb-operations``,
 walks the business tables (skipping ``_cf_KV``, ``sqlite_sequence``,
 ``SchemaVersion``), pages through ``SELECT *`` from D1 in chunks of
-``--page-size`` rows, and replays them into local sqlite preserving
-the original ``Id`` columns.  The local sqlite is wiped first
-(``DELETE FROM <table>``) so dry-run row counts after sync exactly
-match D1.
+``--page-size`` rows, and **upserts** them into local sqlite preserving
+the original ``Id`` columns. Default mode never deletes SQLite rows —
+this protects against the legacy DELETE+REINSERT behaviour that
+permanently destroyed SQLite-only rows whenever D1 was behind on even
+a single asymmetric insert (e.g. the 2026-05 ``ReportSessions`` /
+``SpiderStats`` -1 deltas).
 
 Safety
 ------
@@ -31,13 +36,21 @@ Safety
   ``reports/D1/sync_d1_to_sqlite/sync_d1_to_sqlite_dryrun_<ts>.json``.
 * ``--apply`` first copies the existing ``reports/*.db`` into
   ``reports/_backup_<ts>/`` so you can always roll back.
+* ``--apply`` is now **upsert-only** by default. Pass
+  ``--prune-local-only`` to additionally delete SQLite rows whose PK
+  is not present on D1. The prune step refuses to run on any table
+  where the dry-run delta showed ``delta_d1_minus_sqlite_before < 0``
+  (SQLite ahead of D1) unless ``--allow-local-prune-on-drift`` is
+  explicitly set — that combination is the legacy DELETE+REINSERT
+  behaviour and should only ever be reached after reconciling the
+  drift log by hand.
 * Aborts if STORAGE_BACKEND is ``dual`` or ``d1`` while the script runs,
   to prevent live writes from racing the import.
 
 Not for cron
 ------------
-This is an incident-response tool.  Run it by hand, look at the output,
-re-run with ``--apply``.  Never wire it into a workflow.
+This is an incident-response tool. Run it by hand, look at the output,
+re-run with ``--apply``. Never wire it into a workflow.
 """
 
 from __future__ import annotations
@@ -141,6 +154,32 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="Rows per D1 page query (default 500). Must be > 0.",
     )
     p.add_argument(
+        "--prune-local-only",
+        dest="prune_local_only",
+        action="store_true",
+        default=False,
+        help=(
+            "Destructive: when --apply is set, also delete local rows "
+            "that do not exist in D1 (matched by primary key). Default "
+            "off — the upsert-only mode preserves SQLite-only rows so a "
+            "transient asymmetric insert (D1 -1 relative to SQLite) is "
+            "not amplified into permanent local deletion. Required to "
+            "reproduce the legacy DELETE+REINSERT mirror semantics."
+        ),
+    )
+    p.add_argument(
+        "--allow-local-prune-on-drift",
+        dest="allow_local_prune_on_drift",
+        action="store_true",
+        default=False,
+        help=(
+            "By default --prune-local-only refuses to delete when the "
+            "dry-run pass observes delta_d1_minus_sqlite_before < 0 "
+            "(SQLite has rows D1 does not). Pass this flag to override "
+            "that safety check after manually reconciling the drift log."
+        ),
+    )
+    p.add_argument(
         "--logical-names",
         type=str,
         default=None,
@@ -213,6 +252,32 @@ def _table_columns(d1: D1Connection, table: str) -> List[str]:
     return cols
 
 
+def _table_pk_columns(d1: D1Connection, table: str) -> List[str]:
+    """Return the ordered PRIMARY KEY columns of *table* (empty if none).
+
+    Used by the UPSERT and prune paths so we can identify rows by their
+    declared primary key instead of the (transient) ROWID. ``PRAGMA
+    table_info`` reports a ``pk`` integer per column: 0 means "not a
+    primary-key column", 1+ encodes the column's position in a possibly-
+    composite key.
+    """
+    cur = d1.execute(f"PRAGMA table_info({table})")
+    rows = cur.fetchall() or []
+    pk_pairs: List[Tuple[int, str]] = []
+    for r in rows:
+        if isinstance(r, dict):
+            name = r.get("name")
+            pk = int(r.get("pk") or 0)
+        else:
+            # Row positional layout: (cid, name, type, notnull, dflt_value, pk)
+            name = r[1] if len(r) > 1 else None
+            pk = int(r[5] or 0) if len(r) > 5 else 0
+        if name and pk > 0:
+            pk_pairs.append((pk, name))
+    pk_pairs.sort(key=lambda kv: kv[0])
+    return [name for _, name in pk_pairs]
+
+
 def _quote(name: str) -> str:
     return '"' + name.replace('"', '""') + '"'
 
@@ -278,8 +343,22 @@ def _sync_one_table(
     *,
     page_size: int,
     dry_run: bool,
+    prune_local_only: bool = False,
+    allow_local_prune_on_drift: bool = False,
 ) -> Dict[str, Any]:
-    """Page through D1 and (optionally) overwrite the sqlite table."""
+    """Page through D1 and (optionally) mirror the rows into sqlite.
+
+    P0-8 changes the default mode from DELETE-then-INSERT (which
+    permanently destroyed SQLite-only rows whenever D1 was behind on
+    even a single asymmetric write) to INSERT-OR-REPLACE keyed on the
+    table's PRIMARY KEY. SQLite rows that have no D1 counterpart are
+    preserved unless the caller explicitly opts into
+    ``--prune-local-only``, and even then we refuse to prune if the
+    dry-run delta showed SQLite leading D1 (``delta_d1_minus_sqlite_
+    before < 0``) — exactly the scenario that produced the 2026-05
+    ``ReportSessions`` / ``SpiderStats`` -1 deltas in
+    ``reports/D1/sync_d1_to_sqlite/``.
+    """
     columns = _table_columns(d1, table)
     if not columns:
         return {
@@ -287,19 +366,47 @@ def _sync_one_table(
             "skipped": True,
             "reason": "no columns reported by D1",
         }
+    pk_columns = _table_pk_columns(d1, table)
     quoted_cols = ", ".join(_quote(c) for c in columns)
     placeholders = ", ".join("?" for _ in columns)
 
     pre_d1 = _table_count(d1, table)
     pre_sqlite = _sqlite_table_count(sqlite_conn, table)
 
-    if not dry_run:
-        sqlite_conn.execute(f"DELETE FROM {_quote(table)}")
+    # P0-8: default = upsert; preserve SQLite-only rows. INSERT OR
+    # REPLACE keys on the table's declared UNIQUE / PRIMARY KEY
+    # constraint(s); ON CONFLICT-DO-UPDATE would require knowing the PK
+    # at SQL-compile time and is functionally equivalent here.
+    insert_sql = (
+        f"INSERT OR REPLACE INTO {_quote(table)} ({quoted_cols}) "
+        f"VALUES ({placeholders})"
+    )
+
+    # Decide whether prune is allowed *before* mutating anything.
+    delta_before = pre_d1 - pre_sqlite
+    prune_blocked_reason: Optional[str] = None
+    if prune_local_only and not pk_columns:
+        prune_blocked_reason = (
+            "table has no PRIMARY KEY; prune would require a full DELETE "
+            "and is refused"
+        )
+    elif (
+        prune_local_only
+        and delta_before < 0
+        and not allow_local_prune_on_drift
+    ):
+        prune_blocked_reason = (
+            f"delta_d1_minus_sqlite_before={delta_before} (SQLite has "
+            f"{-delta_before} extra row(s) D1 lacks); refusing to "
+            f"prune without --allow-local-prune-on-drift"
+        )
 
     written = 0
     offset = 0
     pages = 0
     last_id_seen: Optional[int] = None
+    seen_pks: set = set() if (not dry_run and prune_local_only and pk_columns
+                              and prune_blocked_reason is None) else set()
     while True:
         cur = d1.execute(
             f"SELECT {quoted_cols} FROM {_quote(table)} "
@@ -317,11 +424,11 @@ def _sync_one_table(
                     tuples.append(tuple(r.get(c) for c in columns))
                 else:
                     tuples.append(tuple(r))
-            sqlite_conn.executemany(
-                f"INSERT INTO {_quote(table)} ({quoted_cols}) "
-                f"VALUES ({placeholders})",
-                tuples,
-            )
+            sqlite_conn.executemany(insert_sql, tuples)
+            if pk_columns and prune_local_only and prune_blocked_reason is None:
+                pk_indices = [columns.index(pk) for pk in pk_columns]
+                for t in tuples:
+                    seen_pks.add(tuple(t[i] for i in pk_indices))
         written += len(page_rows)
         offset += len(page_rows)
         if "Id" in columns:
@@ -340,6 +447,40 @@ def _sync_one_table(
                 pass
         if len(page_rows) < page_size:
             break
+
+    pruned_rows = 0
+    if (
+        not dry_run
+        and prune_local_only
+        and pk_columns
+        and prune_blocked_reason is None
+    ):
+        # Delete SQLite rows whose PK is not in the seen set. Done in
+        # one statement using a temp table to handle composite keys and
+        # avoid SQL-IN length limits.
+        cur = sqlite_conn.cursor()
+        cur.execute(
+            "CREATE TEMP TABLE IF NOT EXISTS _sync_seen_pk ("
+            + ", ".join(f"k{i} TEXT" for i in range(len(pk_columns)))
+            + ")"
+        )
+        cur.execute("DELETE FROM _sync_seen_pk")
+        if seen_pks:
+            cur.executemany(
+                "INSERT INTO _sync_seen_pk VALUES ("
+                + ", ".join("?" for _ in pk_columns)
+                + ")",
+                [tuple(str(v) for v in pk) for pk in seen_pks],
+            )
+        pk_join = " AND ".join(
+            f"CAST(t.{_quote(c)} AS TEXT) = s.k{i}"
+            for i, c in enumerate(pk_columns)
+        )
+        cur.execute(
+            f"DELETE FROM {_quote(table)} AS t "
+            f"WHERE NOT EXISTS (SELECT 1 FROM _sync_seen_pk AS s WHERE {pk_join})"
+        )
+        pruned_rows = cur.rowcount or 0
 
     if not dry_run and "Id" in columns and last_id_seen is not None:
         # Update sqlite_sequence so future AUTOINCREMENT inserts don't
@@ -364,10 +505,21 @@ def _sync_one_table(
         "rows_streamed": written,
         "pages": pages,
         "last_id_seen": last_id_seen,
-        "delta_d1_minus_sqlite_before": pre_d1 - pre_sqlite,
+        "delta_d1_minus_sqlite_before": delta_before,
         "consistent_after": (
-            (pre_d1 == post_sqlite) if not dry_run else None
+            (pre_d1 == post_sqlite) if (not dry_run and prune_local_only
+                                        and prune_blocked_reason is None)
+            else None
         ),
+        "mode": (
+            "dry-run" if dry_run
+            else ("upsert+prune" if (prune_local_only
+                                     and prune_blocked_reason is None)
+                  else "upsert-only")
+        ),
+        "pk_columns": pk_columns,
+        "pruned_rows": pruned_rows,
+        "prune_blocked_reason": prune_blocked_reason,
     }
 
 
@@ -377,10 +529,12 @@ def _sync_one_logical(
     *,
     page_size: int,
     dry_run: bool,
+    prune_local_only: bool = False,
+    allow_local_prune_on_drift: bool = False,
 ) -> Dict[str, Any]:
     logger.info(
-        "Syncing logical=%s sqlite=%s dry_run=%s",
-        logical_name, sqlite_path, dry_run,
+        "Syncing logical=%s sqlite=%s dry_run=%s prune_local_only=%s",
+        logical_name, sqlite_path, dry_run, prune_local_only,
     )
     d1 = D1Connection(
         account_id=get_d1_account_id(),
@@ -411,6 +565,8 @@ def _sync_one_logical(
                 tbl_summary = _sync_one_table(
                     d1, sqlite_conn, table,
                     page_size=page_size, dry_run=dry_run,
+                    prune_local_only=prune_local_only,
+                    allow_local_prune_on_drift=allow_local_prune_on_drift,
                 )
                 summary["tables"].append(tbl_summary)
                 logger.info(
@@ -423,12 +579,28 @@ def _sync_one_logical(
                         f" sqlite_after={tbl_summary.get('sqlite_count_after')}"
                     ),
                 )
+            # Python's sqlite3 driver may auto-commit when DDL ran inside
+            # the loop (PRAGMA / ALTER inside _ensure_local_sqlite_schema)
+            # which terminates our outer BEGIN. Tolerate the "no
+            # transaction is active" race that follows — it means the
+            # transaction has already been flushed, which is functionally
+            # what we wanted on the COMMIT path; on dry-run a missing
+            # transaction is also harmless because no DML survived.
             if dry_run:
-                sqlite_conn.execute("ROLLBACK")
+                try:
+                    sqlite_conn.execute("ROLLBACK")
+                except sqlite3.OperationalError:
+                    pass
             else:
-                sqlite_conn.execute("COMMIT")
+                try:
+                    sqlite_conn.execute("COMMIT")
+                except sqlite3.OperationalError:
+                    pass
         except Exception:
-            sqlite_conn.execute("ROLLBACK")
+            try:
+                sqlite_conn.execute("ROLLBACK")
+            except sqlite3.OperationalError:
+                pass
             raise
     finally:
         sqlite_conn.close()
@@ -475,11 +647,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         "logical_names": selected_logical,
         "results": [],
     }
+    overall["prune_local_only"] = args.prune_local_only
+    overall["allow_local_prune_on_drift"] = args.allow_local_prune_on_drift
     for (logical_name, _key, _default), sqlite_path in zip(targets, sqlite_paths):
         try:
             result = _sync_one_logical(
                 logical_name, sqlite_path,
                 page_size=args.page_size, dry_run=args.dry_run,
+                prune_local_only=args.prune_local_only,
+                allow_local_prune_on_drift=args.allow_local_prune_on_drift,
             )
         except Exception as exc:
             logger.exception(
