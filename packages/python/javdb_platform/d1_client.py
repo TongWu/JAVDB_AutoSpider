@@ -70,18 +70,27 @@ _RETRY_MAX_SLEEP_SEC = _env_float("D1_RETRY_MAX_SLEEP_SEC", 30.0)
 
 # Substrings in CF "errors[].message" / errors[].code that signal a recoverable
 # backend hiccup. Compared case-insensitively against the stringified errors.
+#
+# IMPORTANT: classify on the **message text**, not the wrapper code 7500. CF
+# D1 maps every SQLite error onto code 7500 (their generic "SQLITE_ERROR"),
+# so transient conditions (export lock, busy, locked) AND permanent ones
+# (constraint mismatch, no-such-table, syntax errors) all carry that same
+# code. A blanket "7500 ⇒ transient" rule misclassifies permanent failures
+# as transient and wastes five retries × ~15s back-off per failure (observed
+# 2026-05-12 on a SpiderStats upsert when the D1 side lacked the
+# uq_spiderstats_session UNIQUE index — see
+# migration/d1/2026_05_12_add_unique_stats_session_indexes.sql).
 _TRANSIENT_ERROR_KEYWORDS = (
     "D1_RESET_DO",
     "busy",
+    "locked",
     "timeout",
     "overloaded",
     "internal error",
     "temporarily",
-    # CF D1 returns this 400/code-7500 when a manual or scheduled D1 export is
-    # holding a database-wide read/write lock. Treat as transient so callers
-    # back off and retry instead of dropping the write.
+    # Export-lock case: CF returns 400 + code 7500 + this exact phrase when
+    # a manual or scheduled D1 export is holding a database-wide R/W lock.
     "long-running export",
-    "7500",
 )
 
 # Substrings indicating the export-lock case specifically. Backoff for these is
@@ -89,7 +98,6 @@ _TRANSIENT_ERROR_KEYWORDS = (
 # short retries waste round-trips on the lock window.
 _EXPORT_LOCK_KEYWORDS = (
     "long-running export",
-    "7500",
 )
 _EXPORT_LOCK_BACKOFF_FLOOR_SEC = _env_float("D1_EXPORT_LOCK_FLOOR_SEC", 15.0)
 
