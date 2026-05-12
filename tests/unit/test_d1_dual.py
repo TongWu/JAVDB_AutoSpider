@@ -1091,6 +1091,48 @@ def test_explicit_id_into_report_sessions_is_accepted(tmp_path):
     assert cur.lastrowid == SAME_ID
 
 
+def test_explicit_id_skips_lastrowid_check_even_when_backends_disagree(tmp_path):
+    """2026-05-12 regression: when the INSERT supplies an explicit Id,
+    the application has chosen the canonical value and both backends
+    write it. Cloudflare D1's HTTP API has been observed to report a
+    ``last_row_id`` that disagrees with SQLite's ``lastrowid`` for the
+    same explicit-Id INSERT (D1 returns its internal AUTOINCREMENT
+    counter, not the explicit rowid). The guard must not raise in that
+    case — the row is consistent.
+    """
+    sqlite_conn = _make_report_sessions_sqlite(tmp_path)
+    fake_d1 = FakeD1Connection()
+
+    SID = 1821300000000001  # snowflake-shaped session id
+
+    class _Cursor:
+        def __init__(self, lastrowid, rowcount=1):
+            self.lastrowid = lastrowid
+            self.rowcount = rowcount
+            self._rows = []
+        def fetchone(self):
+            return None
+        def fetchall(self):
+            return []
+
+    # D1 returns a *different* lastrowid (e.g. its internal counter
+    # value) — SQLite returns SID because Id is the rowid alias.
+    fake_d1.execute = lambda sql, params=(): _Cursor(  # type: ignore[assignment]
+        lastrowid=347, rowcount=1,
+    )
+
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="reports")
+    # Should NOT raise — explicit Id is in the column list.
+    cur = dual.execute(
+        "INSERT INTO ReportSessions (Id, ReportType, ReportDate, "
+        "CsvFilename, DateTimeCreated, Status) "
+        "VALUES (?, ?, ?, ?, ?, 'in_progress')",
+        (SID, "daily", "2026-05-12", "x.csv", "2026-05-12 00:00:00"),
+    )
+    # SQLite is canonical → DualCursor.lastrowid reflects SID.
+    assert cur.lastrowid == SID
+
+
 def test_lastrowid_mismatch_on_report_sessions_raises(monkeypatch, tmp_path):
     sqlite_conn = _make_report_sessions_sqlite(tmp_path)
     fake_d1 = FakeD1Connection()
@@ -1274,6 +1316,30 @@ def test_explicit_seq_into_pending_torrent_history_is_accepted(tmp_path):
         (SAME_SEQ, 42, "/v/abc", 1, 1, "2026-05-08 12:00:00"),
     )
     assert cur.lastrowid == SAME_SEQ
+
+
+def test_explicit_seq_skips_lastrowid_check_even_when_backends_disagree(tmp_path):
+    """Pending-table counterpart of the ReportSessions regression test:
+    when ``Seq`` is supplied explicitly the dual guard must trust the
+    application value and not raise on a per-backend ``lastrowid``
+    disagreement.
+    """
+    sqlite_conn = _make_pending_tables_sqlite(tmp_path)
+    fake_d1 = FakeD1Connection()
+
+    SEQ = 1821300000000099
+    fake_d1.execute = lambda sql, params=(): _FixedLastrowidCursor(  # type: ignore[assignment]
+        lastrowid=42, rowcount=1,
+    )
+
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
+    cur = dual.execute(
+        "INSERT INTO PendingMovieHistoryWrites "
+        "(Seq, SessionId, Href, DateTimeVisited, ApplyState) "
+        "VALUES (?, ?, ?, ?, 'pending')",
+        (SEQ, 7, "/v/abc", "2026-05-12 00:00:00"),
+    )
+    assert cur.lastrowid == SEQ
 
 
 def test_lastrowid_mismatch_on_pending_movie_history_raises(monkeypatch, tmp_path):
