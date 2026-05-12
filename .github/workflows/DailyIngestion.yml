@@ -82,9 +82,9 @@ on:
         required: false
         default: '0.30'
         type: string
-  schedule:
+  # schedule: # DISABLED FOR PUBLIC REPO
     # Run daily at 12:00 UTC (20:00 Beijing Time)
-    - cron: '00 12 * * *'
+    # - cron: '00 12 * * *'
 
 # P1: scope the concurrency group so a long-running scheduled run cannot
 # overlap with a manually-triggered one (or a re-run of itself) and
