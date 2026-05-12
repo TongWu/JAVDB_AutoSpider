@@ -491,6 +491,44 @@ def test_400_real_sql_error_remains_permanent(monkeypatch, d1_conn, no_sleep):
     assert no_sleep == []
 
 
+def test_400_code_7500_constraint_mismatch_is_permanent(monkeypatch, d1_conn, no_sleep):
+    """2026-05-12 regression: CF D1 maps every SQLite error onto wrapper
+    code 7500, so the classifier must decide on message text rather than
+    blanket-classifying 7500 as transient. The case in production was a
+    SpiderStats upsert against D1 missing the uq_spiderstats_session
+    UNIQUE index — its ``ON CONFLICT(SessionId)`` failed permanently,
+    but the old classifier retried five times wasting ~60s.
+    """
+    calls = []
+
+    def fake_post(url, headers, json, timeout):
+        calls.append(json)
+        return _FakeResponse(
+            status_code=400,
+            json_body={
+                "success": False,
+                "errors": [{
+                    "code": 7500,
+                    "message": (
+                        "ON CONFLICT clause does not match any PRIMARY KEY "
+                        "or UNIQUE constraint: SQLITE_ERROR"
+                    ),
+                }],
+            },
+        )
+
+    monkeypatch.setattr(d1_conn, "_post_request", fake_post)
+    with pytest.raises(D1PermanentError):
+        d1_conn.execute(
+            "INSERT INTO SpiderStats (SessionId) VALUES (?) "
+            "ON CONFLICT(SessionId) DO UPDATE SET SessionId=excluded.SessionId",
+            (1,),
+        )
+    # Permanent ⇒ exactly one call, zero retries, zero sleeps.
+    assert len(calls) == 1
+    assert no_sleep == []
+
+
 def test_export_lock_backoff_capped_by_max_sleep(monkeypatch, d1_conn, no_sleep):
     """Even with the export floor, backoff is bounded by D1_RETRY_MAX_SLEEP_SEC."""
     monkeypatch.setattr(_d1_client_module, "_RETRY_MAX_SLEEP_SEC", 5.0)
@@ -1205,6 +1243,64 @@ def test_unguarded_table_id_drift_is_warning_not_error(tmp_path):
         "INSERT INTO OtherTable (v) VALUES (?)", ("hi",),
     )
     assert cur is not None
+
+
+def test_explicit_pk_insert_does_not_emit_drift_warning(tmp_path, caplog):
+    """2026-05-12 follow-up: when the INSERT supplies the explicit PK,
+    Cloudflare D1's HTTP API can return a ``last_row_id`` whose low bits
+    are clipped (JSON Number → IEEE-754 double, losing precision above
+    2^53). The row is canonical on both sides; the per-INSERT
+    ``_maybe_warn_id_drift`` must therefore stay silent — otherwise
+    every Pending* INSERT for a real-sized snowflake Seq spams the log
+    with bogus "drift CHANGED" warnings.
+    """
+    import logging
+    from packages.python.javdb_platform import dual_connection as _dual_mod
+
+    sqlite_conn = _make_pending_tables_sqlite(tmp_path)
+    fake_d1 = FakeD1Connection()
+
+    # Two snowflake Seqs whose float-converted D1 last_row_ids differ
+    # from SQLite's by varying low-bit deltas — the exact pattern that
+    # produced "delta -56 -> +64 -> -8" warnings in production logs.
+    plan = [
+        (7459908895307053056, 7459908895307053000),  # delta -56
+        (7459908897626503168, 7459908897626503000),  # delta -168
+        (7459908898851239936, 7459908898851240000),  # delta +64
+        (7459908904106702848, 7459908904106703000),  # delta +152
+    ]
+    cursor_iter = iter(plan)
+
+    def _fake_execute(sql, params=()):
+        _, d1_lr = next(cursor_iter)
+        return _FixedLastrowidCursor(lastrowid=d1_lr, rowcount=1)
+
+    fake_d1.execute = _fake_execute  # type: ignore[assignment]
+    # Clear cross-test pollution in the process-wide delta tracker so
+    # the WARN-on-change branch is exercised faithfully.
+    with _dual_mod._ID_DELTA_LOCK:
+        _dual_mod._ID_DELTA_BY_TABLE.pop("PendingTorrentHistoryWrites", None)
+
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
+    with caplog.at_level(logging.WARNING, logger="packages.python.javdb_platform.dual_connection"):
+        for sid_seq, _ in plan:
+            dual.execute(
+                "INSERT INTO PendingTorrentHistoryWrites "
+                "(Seq, SessionId, Href, SubtitleIndicator, CensorIndicator, "
+                "DateTimeVisited, ApplyState) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'pending')",
+                (sid_seq, 7, "/v/abc", 1, 1, "2026-05-12 00:00:00"),
+            )
+
+    drift_warnings = [
+        r for r in caplog.records
+        if r.levelno >= logging.WARNING
+        and "Dual-write ID drift" in r.getMessage()
+    ]
+    assert drift_warnings == [], (
+        f"Explicit-Seq INSERTs must not emit ID-drift warnings; got: "
+        f"{[w.getMessage() for w in drift_warnings]}"
+    )
 
 
 # ── Pending tables (R2: Ingestion Perfect Rollback) ─────────────────────

@@ -1119,8 +1119,21 @@ class DualConnection:
           * INFO once per table for the baseline delta (first observation).
           * WARNING when the delta changes (real new drift event).
           * DEBUG for steady-state matches (unchanged delta).
+
+        Skipped entirely for application-generated-PK INSERTs that supply
+        the PK column explicitly: both backends write the same Id/Seq, so
+        any reported ``lastrowid`` disagreement is a backend-side
+        reporting artifact rather than real drift. Cloudflare D1's HTTP
+        API serializes ``meta.last_row_id`` as a JSON Number (IEEE-754
+        double) and loses precision for snowflake Seq values that exceed
+        2^53 ≈ 9e15 — observed in production as "d1 ends in 000" deltas
+        on PendingMovieHistoryWrites / PendingTorrentHistoryWrites.
         """
         if sqlite_cur is None or d1_cur is None:
+            return
+        table = _extract_insert_table(sql) or "<unknown>"
+        pk_col = APPLICATION_GENERATED_ID_PK_COLUMN.get(table)
+        if pk_col and _insert_supplies_column(sql, pk_col):
             return
         s_id = getattr(sqlite_cur, "lastrowid", None)
         d_id = getattr(d1_cur, "lastrowid", None)
@@ -1128,7 +1141,6 @@ class DualConnection:
             return
 
         delta = int(d_id) - int(s_id)
-        table = _extract_insert_table(sql) or "<unknown>"
 
         with _ID_DELTA_LOCK:
             prior = _ID_DELTA_BY_TABLE.get(table)
