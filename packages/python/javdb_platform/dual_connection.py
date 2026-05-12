@@ -35,16 +35,20 @@ short LRU window are downgraded from WARNING to DEBUG.
 
 Application-generated PRIMARY KEY tables
 ----------------------------------------
-Tables listed in :data:`APPLICATION_GENERATED_ID_TABLES` (currently
-``ReportSessions``) MUST be inserted with an explicit ``Id`` column on
-both backends.  Trusting AUTOINCREMENT under STORAGE_BACKEND=dual makes
-``cur.lastrowid`` return whichever backend the cursor wraps, and the
-SQLite-side id silently disagrees with the D1-side id whenever the two
-counters have ever drifted.  When :class:`DualCursor` detects mismatched
-``lastrowid`` values for a guarded table, the transaction is aborted via
+Tables listed in :data:`APPLICATION_GENERATED_ID_TABLES`
+(``ReportSessions`` and the ``Pending*HistoryWrites`` pair) MUST be
+inserted with an explicit PK column (``Id`` / ``Seq``) on both backends
+— see ``migration/d1/2026_05_08_sessionid_decouple.md``. When the
+INSERT supplies that column in its column list, the application has
+already chosen the canonical value and both backends write the same id;
+the row is consistent regardless of either side's AUTOINCREMENT
+counter, so :class:`DualCursor` skips the ``lastrowid`` comparison in
+that case. When the INSERT *omits* the PK column the caller is back to
+trusting AUTOINCREMENT, and the SQLite-side id silently disagrees with
+the D1-side id whenever the two counters have ever drifted; the
+mismatch is detected, recorded to the drift log, and raised as
 :class:`DualWriteIdMismatchError` so the corrupted id never reaches
-downstream rows.  See ``migration/d1/2026_05_08_sessionid_decouple.md``
-for the incident that motivated this guard.
+downstream rows.
 """
 
 from __future__ import annotations
@@ -289,8 +293,20 @@ _ID_DELTA_BY_TABLE: "dict[str, int]" = {}
 # tables and the two ``lastrowid`` values disagree, the transaction is
 # aborted (``DualWriteIdMismatchError``) so the corrupted Id never
 # reaches downstream code.
-APPLICATION_GENERATED_ID_TABLES: frozenset = frozenset({
-    "ReportSessions",
+# Map each guarded table to the application-generated PRIMARY KEY column
+# whose value the application supplies explicitly in INSERTs. When the
+# INSERT carries that column in its column list, the caller has already
+# decided the canonical Id and the cross-backend ``lastrowid`` check
+# becomes meaningless — Cloudflare D1's HTTP API has been observed to
+# return a ``last_row_id`` that disagrees with SQLite's ``lastrowid`` for
+# the same explicit-Id INSERT (e.g. when D1's AUTOINCREMENT counter has
+# drifted ahead and reports the counter value rather than the explicit
+# rowid). The row itself is written with the same ``Id`` on both
+# backends, so that disagreement is a backend reporting quirk, not real
+# drift; raising on it would (and did, 2026-05-12) abort otherwise-fine
+# pipeline runs after the 2026-05-08 sessionid-decouple migration.
+APPLICATION_GENERATED_ID_PK_COLUMN: "dict[str, str]" = {
+    "ReportSessions": "Id",
     # Ingestion Perfect Rollback (Phase 2): the Pending tables also need
     # the same protection — ``_commit_one_movie`` flips ``ApplyState`` by
     # ``Seq IN (...)`` and ``db_commit_session_history`` later DELETEs by
@@ -299,9 +315,12 @@ APPLICATION_GENERATED_ID_TABLES: frozenset = frozenset({
     # failure during a stage burst), the apply / delete loop touches the
     # wrong row on at least one backend and leaves residual ``pending``
     # entries that trigger the Phase 3 critical alert.
-    "PendingMovieHistoryWrites",
-    "PendingTorrentHistoryWrites",
-})
+    "PendingMovieHistoryWrites": "Seq",
+    "PendingTorrentHistoryWrites": "Seq",
+}
+APPLICATION_GENERATED_ID_TABLES: frozenset = frozenset(
+    APPLICATION_GENERATED_ID_PK_COLUMN
+)
 
 
 class DualWriteIdMismatchError(RuntimeError):
@@ -324,6 +343,44 @@ def _extract_insert_table(sql: str) -> Optional[str]:
     # one of them matches because the alternation is mutually exclusive.
     name = m.group(1) or m.group(2)
     return name.split(".")[-1] if name else None
+
+
+# Matches the column list of an INSERT/REPLACE statement, e.g. the
+# ``(Id, ReportType, ...)`` block that follows the table name. Used to
+# detect whether the caller is supplying the application-generated PK
+# column (Id / Seq) explicitly, in which case the cross-backend lastrowid
+# check is moot — the row is written with the same explicit value on
+# both SQLite and D1.
+_INSERT_COLUMN_LIST_RE = re.compile(
+    r"""^\s*
+    (?:INSERT|REPLACE)\s+
+    (?:OR\s+\w+\s+)?
+    INTO\s+
+    (?:\[\s*[\w.]+\s*\]|["`']?[\w.]+["`']?)\s*
+    \(\s*(?P<cols>[^)]*?)\s*\)
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def _insert_supplies_column(sql: str, column: str) -> bool:
+    """Return True iff *sql* is an INSERT whose column list contains *column*.
+
+    Comparison is case-insensitive and ignores surrounding quoting
+    (``"Id"`` / ``[Id]`` / ``` `Id` ``` / bare). An INSERT without an
+    explicit column list (``INSERT INTO t VALUES (...)``) returns False —
+    we cannot tell which columns the values map to, so we treat it as
+    *not* supplying the column.
+    """
+    m = _INSERT_COLUMN_LIST_RE.match(sql)
+    if not m:
+        return False
+    target = column.strip().lower()
+    for raw in m.group("cols").split(","):
+        name = raw.strip().strip('"').strip("`").strip("'").strip("[]").strip()
+        if name.lower() == target:
+            return True
+    return False
 
 
 class DualCursor:
@@ -384,6 +441,21 @@ class DualCursor:
                     f"{table}: SQLite committed but D1 cursor missing under "
                     f"STRICT_DUAL_WRITE; refusing to drift (see drift log)"
                 )
+            return
+        # Post-2026-05-08: ``db_create_report_session`` (and the
+        # equivalent Pending-table writers) supply the PK column
+        # explicitly via :func:`_generate_session_id`, so the same Id
+        # lands on both backends regardless of either side's
+        # AUTOINCREMENT counter. In that case the cross-backend
+        # ``lastrowid`` comparison no longer tells us anything useful
+        # — Cloudflare D1's HTTP API has been observed to return a
+        # ``last_row_id`` that differs from SQLite's ``lastrowid`` for
+        # the same explicit-Id INSERT (the D1 wrapper reports the
+        # session's internal counter rather than the explicit rowid).
+        # The row is written correctly on both backends; raising would
+        # abort an otherwise-fine pipeline run.
+        pk_col = APPLICATION_GENERATED_ID_PK_COLUMN.get(table)
+        if pk_col and _insert_supplies_column(sql, pk_col):
             return
         s_id = getattr(sqlite_cur, "lastrowid", None)
         d_id = getattr(d1_cur, "lastrowid", None)
