@@ -104,7 +104,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
-def _read_session_meta(session_id: int) -> dict:
+def _read_session_meta(session_id: str) -> dict:
     with get_db(_db.REPORTS_DB_PATH) as conn:
         row = conn.execute(
             "SELECT Id, ReportType, ReportDate, DisplayName, Status, "
