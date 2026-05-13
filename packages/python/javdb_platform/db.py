@@ -1616,9 +1616,11 @@ def _rebuild_table_with_new_ddl(
     ).fetchall()
 
     # Swap *table* -> *tmp_name* in the DDL so the new CREATE doesn't
-    # collide with the existing one.
+    # collide with the existing one.  SQLite may store the table name with
+    # or without double-quote delimiters (e.g. `"MovieHistory"` vs
+    # `MovieHistory`); the pattern handles both forms.
     create_new = re.sub(
-        rf"\bCREATE\s+TABLE\s+(IF\s+NOT\s+EXISTS\s+)?{re.escape(table)}\b",
+        rf'\bCREATE\s+TABLE\s+(IF\s+NOT\s+EXISTS\s+)?"?{re.escape(table)}"?(?=\s*\()',
         f"CREATE TABLE {tmp_name}",
         new_ddl,
         count=1,
@@ -2139,6 +2141,8 @@ def _init_single_legacy_db(db_path: str, *, force: bool = False):
             _migrate_v5_to_v6(conn)
         if current < 10:
             _migrate_defaults_to_null(conn)
+        if current < 12:
+            _migrate_session_id_to_text(conn)
 
         existing = conn.execute("SELECT Version FROM SchemaVersion LIMIT 1").fetchone()
         if existing is None:
