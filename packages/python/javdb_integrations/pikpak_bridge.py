@@ -461,7 +461,7 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
         try:
             from packages.python.javdb_platform.db import set_active_session_id
             active_session_setter = set_active_session_id
-            active_session_setter(int(session_id))
+            active_session_setter(session_id)
         except Exception as e:
             logger.warning(f"Could not set active session_id for PikPak: {e}")
 
@@ -851,7 +851,7 @@ def main():
         no_help='Force-disable proxy for PikPak and qBittorrent requests in this command',
     )
     parser.add_argument("--from-pipeline", action="store_true", help="Running from pipeline.py - use GIT_USERNAME for commits")
-    parser.add_argument("--session-id", type=int, default=None, help="Report session ID for saving pikpak stats to SQLite")
+    parser.add_argument("--session-id", type=str, default=None, help="Report session ID for saving pikpak stats to SQLite")
     parser.add_argument(
         "--root-folder",
         default=None,
