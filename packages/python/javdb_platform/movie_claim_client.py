@@ -36,7 +36,7 @@ from typing import Optional, Tuple
 
 import requests
 
-from packages.python.javdb_platform.config_helper import cfg, env_or_cfg_str
+from packages.python.javdb_platform import config_helper
 from packages.python.javdb_platform.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -811,39 +811,29 @@ def create_movie_claim_client_with_mode_from_env(
     token_env: str = "PROXY_COORDINATOR_TOKEN",
     enabled_env: str = "MOVIE_CLAIM_ENABLED",
 ) -> Tuple[Optional[MovieClaimClient], str]:
-    """Build a client + resolve the activation mode from env vars.
+    """Build a client + resolve the activation mode.
+
+    ``PROXY_COORDINATOR_URL`` and ``PROXY_COORDINATOR_TOKEN`` are read
+    **only** from :func:`packages.python.javdb_platform.config_helper.cfg`
+    (i.e. ``config.py``).  ``os.environ`` is ignored for those two so CI
+    jobs that render credentials exclusively into ``config.py`` behave the
+    same as CLIs.  Missing or blank values disable movie-claim for this call.
+
+    ``MOVIE_CLAIM_ENABLED`` uses the process environment when the variable
+    is present there; otherwise it falls back to ``cfg`` (same attribute
+    name).  ``None`` / unset maps to ``auto``; explicit empty string in the
+    environment still means force-off.
 
     Returns a ``(client_or_none, mode)`` tuple.  The mode is one of
     :data:`MOVIE_CLAIM_MODE_OFF` / :data:`MOVIE_CLAIM_MODE_AUTO` /
-    :data:`MOVIE_CLAIM_MODE_FORCE_ON` and reflects what the env var
-    actually said *plus* the configuration / health gates: a healthy
-    auto deploy returns ``(client, "auto")``, an unhealthy or
-    unconfigured auto deploy returns ``(None, "off")`` so the runtime
-    state can short-circuit downstream signal handling.
-
-    Three independent disable paths, all returning
-    ``(None, MOVIE_CLAIM_MODE_OFF)`` so the spider transparently falls
-    back to its pre-DO behaviour:
-
-    - ``MOVIE_CLAIM_ENABLED`` resolves to ``off`` via
-      :func:`parse_movie_claim_mode` (default semantics: explicit
-      ``false`` / ``0`` / empty string force off; **unset** maps to
-      ``auto``);
-    - either of ``PROXY_COORDINATOR_URL`` / ``PROXY_COORDINATOR_TOKEN``
-      is empty (the supported way to disable *all* coordinator features);
-    - the URL is configured but ``/health`` does not respond (logs an
-      ERROR so deployment misconfiguration surfaces early).
-
-    The `force_on` and `auto` happy paths both return a ready-to-use
-    client; the difference lives in `state.setup_movie_claim_client`,
-    which mounts the auto-mode client behind the registry signal while
-    force-on mode unconditionally publishes it on
-    `state.global_movie_claim_client`.
+    :data:`MOVIE_CLAIM_MODE_FORCE_ON`.  A healthy auto deploy returns
+    ``(client, "auto")``; missing URL/token, disabled mode, or ``/health``
+    failure collapses to ``(None, off)``.
     """
     if enabled_env in os.environ:
         raw_value = os.environ.get(enabled_env)
     else:
-        configured = cfg(enabled_env, None)
+        configured = config_helper.cfg(enabled_env, None)
         raw_value = None if configured is None else str(configured)
     # ``None`` means "var not set at all" → apply the new ``auto`` default.
     # Empty string means "set to nothing" → keep the old "force-off" intuition
@@ -859,12 +849,12 @@ def create_movie_claim_client_with_mode_from_env(
         )
         return None, MOVIE_CLAIM_MODE_OFF
 
-    url = env_or_cfg_str(url_env)
-    token = env_or_cfg_str(token_env)
+    url = (config_helper.cfg(url_env, None) or "").strip()
+    token = (config_helper.cfg(token_env, None) or "").strip()
     if not url or not token:
         logger.info(
-            "Movie-claim client not configured (%s/%s unset, mode=%s) — "
-            "using per-process dedup only",
+            "Movie-claim client not configured (%s/%s missing or empty in "
+            "config.py, mode=%s) — using per-process dedup only",
             url_env, token_env, mode,
         )
         return None, MOVIE_CLAIM_MODE_OFF
@@ -893,15 +883,9 @@ def create_movie_claim_client_from_env(
 ) -> Optional[MovieClaimClient]:
     """Backward-compatible thin wrapper over the with-mode factory.
 
-    Preserves the legacy single-return signature for callers that only
-    care about "is there a client at all".  ``auto`` and ``force_on`` modes
-    both yield a constructed client here (the runtime layer is responsible
-    for deciding when to actually mount it on the global state).
-
-    Designed to mirror :func:`create_login_state_client_from_env` so
-    wiring code can decide independently whether the per-proxy throttle,
-    cross-runtime login state, and movie-claim coordinator are each
-    enabled — without juggling three sets of env vars.
+    URL and token are taken from ``config.py`` via
+    :func:`packages.python.javdb_platform.config_helper.cfg` only; see
+    :func:`create_movie_claim_client_with_mode_from_env`.
     """
     client, _mode = create_movie_claim_client_with_mode_from_env(
         url_env=url_env, token_env=token_env, enabled_env=enabled_env,

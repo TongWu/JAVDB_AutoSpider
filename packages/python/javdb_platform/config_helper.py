@@ -23,30 +23,6 @@ def cfg(name, default):
     return getattr(_config_module, name, default)
 
 
-def env_or_cfg_str(name: str) -> str:
-    """Resolve *name* as a stripped string: explicit env overrides *config*.
-
-    If *name* is **present** in :data:`os.environ` (even when set to ``""``
-    or whitespace-only), only that value is used after ``str.strip()`` —
-    **no** ``config.py`` fallback.  This preserves the documented runtime
-    kill-switch: exporting empty ``PROXY_COORDINATOR_URL`` /
-    ``PROXY_COORDINATOR_TOKEN`` must disable coordinator-backed features for
-    that process even when ``config.py`` still holds credentials.
-
-    If *name* is **absent** from the environment, read from :func:`cfg`
-    (e.g. CI jobs that only materialise secrets via
-    ``apps.cli.config_generator`` into ``config.py``).
-    """
-    import os
-
-    if name in os.environ:
-        return str(os.environ.get(name, "")).strip()
-    val = cfg(name, None)
-    if val is None:
-        return ""
-    return str(val).strip()
-
-
 # ── Storage-mode helpers ──────────────────────────────────────────────────
 
 from typing import Optional
