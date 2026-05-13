@@ -118,7 +118,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--session-id",
-        type=int,
+        type=str,
         default=None,
         help="ReportSessions.Id to roll back. By itself this targets only "
              "that session; combine with --include-orphaned to also pull in "
@@ -378,7 +378,7 @@ def _resolve_target_sessions(
     """
     targets: set = set()
     if args.session_id is not None:
-        targets.add(int(args.session_id))
+        targets.add(args.session_id)
 
     if args.run_id is not None:
         # ``--attempt`` is now ``type=int`` so argparse rejects malformed
@@ -394,7 +394,7 @@ def _resolve_target_sessions(
             )
             run_sessions = []
         for sid in run_sessions:
-            targets.add(int(sid))
+            targets.add(sid)
 
     # Legacy / fallback: --run-started-at window scan.
     if args.run_started_at is not None:
@@ -403,13 +403,13 @@ def _resolve_target_sessions(
                 since=run_started_at_normalized,
             )
             for sid in sessions:
-                targets.add(int(sid))
+                targets.add(sid)
 
     return sorted(targets)
 
 
 def _detect_cross_day(
-    session_id: int,
+    session_id: str,
     run_started_at_normalized: Optional[str],
 ) -> bool:
     """True if session's DateTimeCreated is far older than run start.
@@ -461,7 +461,7 @@ def _resolve_failure_reason(args: argparse.Namespace) -> Optional[str]:
 
 
 def _emit_pending_verify_for_session(
-    session_id: int,
+    session_id: str,
     *,
     pre_status: Optional[str],
     pre_write_mode: Optional[str],
@@ -499,7 +499,7 @@ def _emit_pending_verify_for_session(
         final_status = pre_status or "in_progress"
 
     try:
-        stats = db_pending_session_stats(int(session_id))
+        stats = db_pending_session_stats(session_id)
     except Exception as exc:  # noqa: BLE001 — emission must stay best-effort
         logger.warning(
             "db_pending_session_stats failed for session_id=%s: %s; "
@@ -518,7 +518,7 @@ def _emit_pending_verify_for_session(
         "kind": "pending_session_verify",
         "ts": datetime.now(timezone.utc).isoformat(),
         "source": "rollback",
-        "session_id": int(session_id),
+        "session_id": session_id,
         "write_mode": pre_write_mode,
         "final_status": final_status,
         "rollback_mode": mode,
@@ -546,7 +546,7 @@ def _emit_pending_verify_for_session(
     if error is not None:
         record["error"] = error
     try:
-        identity = db_get_session_run_identity(int(session_id))
+        identity = db_get_session_run_identity(session_id)
     except Exception:  # noqa: BLE001
         identity = None
     if identity is not None:
