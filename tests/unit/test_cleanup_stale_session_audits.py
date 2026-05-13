@@ -49,7 +49,7 @@ def reports_dir(tmp_path, monkeypatch) -> str:
 class TestDetection:
     def test_orphan_session_audit_is_flagged(self, reports_dir, monkeypatch):
         # SessionId 999999 doesn't exist in ReportSessions.
-        _stamp_audit(999999, 1, when="2026-05-08 09:00:00")
+        _stamp_audit("999999", 1, when="2026-05-08 09:00:00")
 
         rc = cleanup.main([
             "--target", "sqlite",
@@ -74,7 +74,7 @@ class TestDetection:
         )
         flagged = sqlite["findings"]["audit"]["MovieHistoryAudit"]
         assert any(
-            item["session_id"] == 999999 and item["reason"] == "orphan_session"
+            item["session_id"] == "999999" and item["reason"] == "orphan_session"
             for item in flagged
         )
 

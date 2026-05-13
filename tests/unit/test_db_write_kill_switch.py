@@ -116,4 +116,4 @@ class TestKillSwitchBlocksDbCreateReportSession:
             run_id='non-kill-run',
             run_attempt=1,
         )
-        assert sid > 0
+        assert isinstance(sid, str) and db_mod._SESSION_ID_PATTERN.match(sid)

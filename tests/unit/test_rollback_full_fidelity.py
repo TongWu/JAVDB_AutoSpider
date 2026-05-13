@@ -787,11 +787,15 @@ def _columns_in_migration_sql(sql: str) -> Dict[str, Set[str]]:
         out.setdefault(table, set()).add(col)
 
     # CREATE TABLE X ( ... )
+    # Exclude the "_new" intermediary tables created by the 12-step ALTER
+    # pattern used in D1 migrations (e.g. MovieHistory_new → MovieHistory).
     for m in re.finditer(
         r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(",
         sql, flags=re.IGNORECASE,
     ):
         table = m.group(1)
+        if table.endswith("_new"):
+            continue
         # Find the matching closing paren accounting for nested.
         start = m.end() - 1  # position of '('
         depth = 0

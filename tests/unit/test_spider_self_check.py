@@ -159,7 +159,7 @@ class TestCsvScopedDuplicateCheck:
             run_id="run-UQ",
             run_attempt=1,
         )
-        assert sid > 0
+        assert isinstance(sid, str) and db_mod._SESSION_ID_PATTERN.match(sid)
 
         # A bypass-the-Python-helper raw INSERT that would have created
         # a second in-progress row for the same CSV must now be refused
@@ -172,7 +172,12 @@ class TestCsvScopedDuplicateCheck:
                     "DateTimeCreated, Status, RunId, RunAttempt) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (
-                        sid + 1,
+                        # Different Id (any TEXT value distinct from sid).
+                        # The integrity check the test cares about is the
+                        # partial UNIQUE index on
+                        # (RunId, RunAttempt, CsvFilename) WHERE
+                        # Status='in_progress', not the PK collision.
+                        sid + "_dup",
                         "DailyReport",
                         "2026-05-08",
                         "uq-block.csv",
@@ -203,7 +208,7 @@ class TestCsvScopedDuplicateCheck:
             run_id="run-UQ-SIB",
             run_attempt=1,
         )
-        assert sid_b > 0
+        assert isinstance(sid_b, str) and db_mod._SESSION_ID_PATTERN.match(sid_b)
 
     def test_partial_unique_index_allows_csv_reuse_after_resolution(self):
         """The partial WHERE clause excludes resolved sessions, so the
@@ -226,7 +231,7 @@ class TestCsvScopedDuplicateCheck:
             run_id="run-UQ-RC",
             run_attempt=2,
         )
-        assert sid2 > 0
+        assert isinstance(sid2, str) and db_mod._SESSION_ID_PATTERN.match(sid2)
         # And the same CSV in the *same* attempt also works once the
         # previous one is resolved.
         db_mod.db_mark_session_committed(sid2)
@@ -237,7 +242,7 @@ class TestCsvScopedDuplicateCheck:
             run_id="run-UQ-RC",
             run_attempt=2,
         )
-        assert sid3 > 0
+        assert isinstance(sid3, str) and db_mod._SESSION_ID_PATTERN.match(sid3)
 
     def test_partial_unique_index_ignores_legacy_null_runid(self):
         """Legacy rows with RunId IS NULL are intentionally excluded —
@@ -259,7 +264,7 @@ class TestCsvScopedDuplicateCheck:
             run_id=None,
             run_attempt=None,
         )
-        assert sid2 > 0
+        assert isinstance(sid2, str) and db_mod._SESSION_ID_PATTERN.match(sid2)
 
     def test_attempt_isolation_for_csv_check(self):
         db_mod.db_create_report_session(

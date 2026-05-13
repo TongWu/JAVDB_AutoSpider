@@ -96,7 +96,11 @@ class TestInitDb:
             row = c3.execute(
                 "SELECT SessionId FROM MovieHistory WHERE VideoCode='ABC-001'"
             ).fetchone()
-            assert row[0] == 123
+            # SessionId column is TEXT post-2026-05-13; SQLite coerces the
+            # seeded int 123 to "123" when the rebuild copies it into the
+            # new TEXT column. The legacy fixture above declares SessionId
+            # INTEGER, so the value is still an int there.
+            assert str(row[0]) == "123"
         finally:
             c3.close()
 
@@ -377,7 +381,9 @@ class TestInitDb:
                 "SELECT Status FROM ReportSessions LIMIT 1"
             ).fetchone()
         assert row["Status"] == "in_progress"
-        assert db_mod.db_find_in_progress_sessions(db_path=db_path) == [1]
+        # ReportSessions.Id is TEXT post-2026-05-13; the legacy v5 integer id
+        # (1) is preserved as the string "1" by the migration's CAST.
+        assert db_mod.db_find_in_progress_sessions(db_path=db_path) == ["1"]
 
     def test_unversioned_legacy_single_db_runs_v5_to_v6_migration(self, tmp_path):
         db_path = str(tmp_path / 'legacy_unversioned.db')
@@ -901,7 +907,8 @@ class TestReportSessions:
             csv_filename='test.csv', db_path=_isolate_sqlite,
         )
         assert sid is not None
-        assert isinstance(sid, int)
+        assert isinstance(sid, str)
+        assert db_mod._SESSION_ID_PATTERN.match(sid)
 
     def test_duplicate_csv_filename_allowed(self, _isolate_sqlite):
         sid1 = db_mod.db_create_report_session(
@@ -1111,55 +1118,54 @@ class TestReportMigration:
 
 
 class TestSnowflakeProcessTag:
-    """B.2 (2026-05-11): per-process random tag eliminates cross-process
-    collision when two GH Actions runners start a session in the same
-    millisecond AND happen to be at counter=0. Without the tag, those two
-    Ids would collide on a PRIMARY KEY INSERT and abort the runner.
+    """Per-process random tag eliminates cross-process collision when two
+    GH Actions runners start a session in the same microsecond AND happen
+    to be at counter=0. Without the tag, those two Ids would collide on a
+    PRIMARY KEY INSERT and abort the runner.
+
+    Layout is verified in detail by ``tests/unit/test_session_id.py``;
+    this class focuses on the cross-process collision-avoidance property.
     """
 
     def test_ids_within_one_process_are_monotonic(self):
         from packages.python.javdb_platform.db import _generate_session_id
         ids = [_generate_session_id() for _ in range(50)]
-        # Strictly increasing within the process — the in-process counter
-        # guarantees this even when many ids land in the same ms.
         assert ids == sorted(ids), "snowflake Ids must be monotonic"
         assert len(set(ids)) == len(ids), "snowflake Ids must be unique"
 
     def test_ids_carry_consistent_process_tag(self):
-        """Layout: ``ms(41) << 22 | tag(12) << 10 | counter(10)``. Within
-        one process the tag is fixed at import time, so every Id should
-        share the same 12-bit value in [10:22).
+        """Tag is fixed at import time, so every Id from one process
+        shares the same hex tag segment (the second ``-``-delimited block).
         """
         from packages.python.javdb_platform.db import _generate_session_id
         ids = [_generate_session_id() for _ in range(30)]
-        tag_bits = [(i >> 10) & ((1 << 12) - 1) for i in ids]
-        assert len(set(tag_bits)) == 1, (
-            f"process tag should be constant per process; got {set(tag_bits)!r}"
+        tags = {sid.split("-")[1] for sid in ids}
+        assert len(tags) == 1, (
+            f"process tag should be constant per process; got {tags!r}"
         )
 
     def test_two_simulated_processes_get_disjoint_ids(self, monkeypatch):
-        """Re-mint Ids with a different per-process tag (simulating a
+        """Re-mint Ids with a different per-process tag hex (simulating a
         sibling Python process that drew a different ``secrets.randbits``)
-        and confirm the two Id streams are disjoint even when ms + counter
-        could otherwise collide.
+        and confirm the two Id streams are disjoint.
         """
         from packages.python.javdb_platform import db as dbmod
 
         ids_a = [dbmod._generate_session_id() for _ in range(3)]
 
-        # Swap in a different 12-bit tag and reset the monotonic-clamp
-        # state so a sibling process starting from counter=0 is the case
-        # we are testing.
-        new_tag = (dbmod._SESSION_ID_PROCESS_TAG ^ 0xABC) & ((1 << 12) - 1)
+        new_tag = (dbmod._SESSION_ID_PROCESS_TAG ^ 0xABCD) & 0xFFFF
         if new_tag == dbmod._SESSION_ID_PROCESS_TAG:
-            new_tag = (new_tag + 1) & ((1 << 12) - 1)
+            new_tag = (new_tag + 1) & 0xFFFF
         monkeypatch.setattr(dbmod, "_SESSION_ID_PROCESS_TAG", new_tag)
-        monkeypatch.setattr(dbmod, "_SESSION_ID_LAST", 0)
+        monkeypatch.setattr(dbmod, "_SESSION_ID_TAG_HEX", f"{new_tag:04x}")
+        monkeypatch.setattr(dbmod, "_SESSION_ID_LAST", "")
+        monkeypatch.setattr(dbmod, "_SESSION_ID_LAST_US", -1)
+        monkeypatch.setattr(dbmod, "_SESSION_ID_COUNTER", 0)
         ids_b = [dbmod._generate_session_id() for _ in range(3)]
 
-        tag_a = (ids_a[0] >> 10) & ((1 << 12) - 1)
-        tag_b = (ids_b[0] >> 10) & ((1 << 12) - 1)
-        assert tag_a != tag_b, "patched tag should produce different bits"
+        tag_a = ids_a[0].split("-")[1]
+        tag_b = ids_b[0].split("-")[1]
+        assert tag_a != tag_b, "patched tag should produce different hex"
         assert set(ids_a).isdisjoint(set(ids_b)), (
             "different process tags must yield disjoint Id sets"
         )
