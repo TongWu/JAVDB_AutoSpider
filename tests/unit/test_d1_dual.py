@@ -322,6 +322,32 @@ def test_execute_sends_single_object_body(monkeypatch, d1_conn, no_sleep):
     assert captured["json"] == {"sql": "SELECT * FROM t WHERE id = ?", "params": [1]}
 
 
+def test_execute_stringifies_json_unsafe_integer_params(monkeypatch, d1_conn, no_sleep):
+    """Ints beyond JS Number.MAX_SAFE_INTEGER must not be JSON Number on the wire."""
+    captured = {}
+
+    def fake_post(url, headers, json, timeout):
+        captured["json"] = json
+        return _FakeResponse(
+            status_code=200,
+            json_body={"success": True, "result": [{"meta": {"changes": 1}, "results": []}]},
+        )
+
+    monkeypatch.setattr(d1_conn, "_post_request", fake_post)
+    unsafe = 2**53  # first integer not exactly representable as IEEE-754 double
+    d1_conn.execute("INSERT INTO t (id) VALUES (?)", (unsafe,))
+    assert captured["json"]["params"] == [str(unsafe)]
+
+    captured.clear()
+    safe = 2**53 - 1
+    d1_conn.execute("INSERT INTO t (id) VALUES (?)", (safe,))
+    assert captured["json"]["params"] == [safe]
+
+    captured.clear()
+    d1_conn.execute("SELECT x FROM t WHERE ok = ?", (True,))
+    assert captured["json"]["params"] == [True]
+
+
 def test_executemany_sends_batch_object_body(monkeypatch, d1_conn, no_sleep):
     """Multi-statement must be {batch: [...]}, not a bare array."""
     captured = []
@@ -1512,14 +1538,15 @@ def test_db_stage_history_write_supplies_explicit_seq():
         csv_filename="r2-test.csv",
         write_mode="pending",
     )
-    sid = 999_999_999
+    sid = "999_999_999"
     seq = _db.db_stage_history_write(
         sid, "movie", {"Href": "/v/r2-test", "VideoCode": "R2TEST"},
     )
-    # Snowflake = 41 ms bits + 10 counter bits = 51 bits ≥ 2**40.
-    # AUTOINCREMENT would give a small number (1, 2, ...).
-    assert seq >= (1 << 40), (
-        f"Seq={seq} looks like AUTOINCREMENT; the explicit-Seq INSERT "
+    # Post-2026-05-13 Seq is a TEXT ISO-like snowflake. AUTOINCREMENT
+    # would give a tiny decimal string like "1" / "2"; assert the
+    # canonical shape instead.
+    assert _db._SESSION_ID_PATTERN.match(seq), (
+        f"Seq={seq!r} looks like AUTOINCREMENT; the explicit-Seq INSERT "
         "path may have regressed."
     )
     with _db.get_db(_db.HISTORY_DB_PATH) as conn:
@@ -1529,7 +1556,7 @@ def test_db_stage_history_write_supplies_explicit_seq():
             (sid,),
         ).fetchone()
     assert row is not None
-    assert int(row["Seq"]) == seq
+    assert row["Seq"] == seq
     assert row["Href"] == "/v/r2-test"
 
 
@@ -1543,7 +1570,7 @@ def test_db_stage_history_write_torrent_supplies_explicit_seq():
         csv_filename="r2-torrent-test.csv",
         write_mode="pending",
     )
-    sid = 888_888_888
+    sid = "888_888_888"
     seq = _db.db_stage_history_write(
         sid, "torrent",
         {
@@ -1553,14 +1580,16 @@ def test_db_stage_history_write_torrent_supplies_explicit_seq():
             "MagnetUri": "magnet:?xt=urn:btih:abc",
         },
     )
-    assert seq >= (1 << 40), f"torrent Seq={seq} looks like AUTOINCREMENT"
+    assert _db._SESSION_ID_PATTERN.match(seq), (
+        f"torrent Seq={seq!r} looks like AUTOINCREMENT"
+    )
     with _db.get_db(_db.HISTORY_DB_PATH) as conn:
         row = conn.execute(
             "SELECT Seq FROM PendingTorrentHistoryWrites WHERE SessionId=?",
             (sid,),
         ).fetchone()
     assert row is not None
-    assert int(row["Seq"]) == seq
+    assert row["Seq"] == seq
 
 
 # ─── P0 hardening regression tests ──────────────────────────────────────

@@ -95,5 +95,6 @@ def test_commit_session_explicit_id_survives_window_lookup_failure(monkeypatch):
     ])
 
     assert rc == 0
-    assert marked == [7]
+    # --session-id is parsed as str post-2026-05-13 (TEXT snowflake PK).
+    assert marked == ["7"]
     assert close_calls == [True]

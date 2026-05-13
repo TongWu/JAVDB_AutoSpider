@@ -763,7 +763,7 @@ class TestSpiderWritePathRoutesToPending:
             mha = conn.execute(
                 "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
                 "WHERE SessionId=?",
-                (int(session_id),),
+                (session_id,),
             ).fetchone()["n"]
             th = conn.execute(
                 f"SELECT COUNT(*) AS n FROM TorrentHistory th "
@@ -774,7 +774,7 @@ class TestSpiderWritePathRoutesToPending:
             tha = conn.execute(
                 "SELECT COUNT(*) AS n FROM TorrentHistoryAudit "
                 "WHERE SessionId=?",
-                (int(session_id),),
+                (session_id,),
             ).fetchone()["n"]
         return mh, mha, th, tha
 
@@ -911,7 +911,7 @@ class TestPendingRollbackSafetyNet:
             n_audit = conn.execute(
                 "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
                 "WHERE SessionId=?",
-                (int(sid),),
+                (sid,),
             ).fetchone()["n"]
         assert n_live == 1, "legacy upsert should have written live row"
         assert n_audit >= 1, "legacy upsert should have written audit row"
@@ -930,7 +930,7 @@ class TestPendingRollbackSafetyNet:
             n_audit_after = conn.execute(
                 "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
                 "WHERE SessionId=?",
-                (int(sid),),
+                (sid,),
             ).fetchone()["n"]
         assert n_live_after == 0, "safety net failed to delete live row"
         assert n_audit_after == 0, "safety net failed to drain audit row"
@@ -1082,7 +1082,7 @@ class TestBatchUpdatesRouteToPending:
             n_audit = conn.execute(
                 "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
                 "WHERE SessionId=?",
-                (int(sid),),
+                (sid,),
             ).fetchone()["n"]
         assert n_live == 0
         assert n_audit == 0
@@ -1092,7 +1092,7 @@ class TestBatchUpdatesRouteToPending:
             rows = conn.execute(
                 "SELECT * FROM PendingMovieHistoryWrites "
                 "WHERE SessionId=? ORDER BY Seq ASC",
-                (int(sid),),
+                (sid,),
             ).fetchall()
         assert len(rows) == 2
         assert rows[0]["ActorName"] == "Bat Actor"
@@ -1112,7 +1112,7 @@ class TestBatchUpdatesRouteToPending:
             pending_left = conn.execute(
                 "SELECT COUNT(*) AS n FROM PendingMovieHistoryWrites "
                 "WHERE SessionId=? AND ApplyState='pending'",
-                (int(sid),),
+                (sid,),
             ).fetchone()["n"]
         assert live is not None
         assert live["ActorName"] == "Bat Actor"
@@ -1144,12 +1144,12 @@ class TestBatchUpdatesRouteToPending:
             n_audit = conn.execute(
                 "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
                 "WHERE SessionId=?",
-                (int(sid),),
+                (sid,),
             ).fetchone()["n"]
             n_pending = conn.execute(
                 "SELECT COUNT(*) AS n FROM PendingMovieHistoryWrites "
                 "WHERE SessionId=?",
-                (int(sid),),
+                (sid,),
             ).fetchone()["n"]
         assert n_live == 0
         assert n_audit == 0
@@ -1181,12 +1181,12 @@ class TestBatchUpdatesRouteToPending:
             audit_n = conn.execute(
                 "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
                 "WHERE SessionId=?",
-                (int(sid),),
+                (sid,),
             ).fetchone()["n"]
             pending_n = conn.execute(
                 "SELECT COUNT(*) AS n FROM PendingMovieHistoryWrites "
                 "WHERE SessionId=?",
-                (int(sid),),
+                (sid,),
             ).fetchone()["n"]
         # Audit rows from the upsert + the visit batch UPDATE.
         assert audit_n >= 2
