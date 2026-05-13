@@ -1351,7 +1351,7 @@ def main() -> int:
 
         total_written = 0
         _sqlite_ok = False
-        _staging_session_id: Optional[int] = None
+        _staging_session_id: Optional[str] = None
         _created_local_staging_session = False
         if _use_sqlite():
             try:
