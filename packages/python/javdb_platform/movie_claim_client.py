@@ -36,6 +36,7 @@ from typing import Optional, Tuple
 
 import requests
 
+from packages.python.javdb_platform.config_helper import cfg, env_or_cfg_str
 from packages.python.javdb_platform.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -839,7 +840,11 @@ def create_movie_claim_client_with_mode_from_env(
     force-on mode unconditionally publishes it on
     `state.global_movie_claim_client`.
     """
-    raw_value = os.environ.get(enabled_env)
+    if enabled_env in os.environ:
+        raw_value = os.environ.get(enabled_env)
+    else:
+        configured = cfg(enabled_env, None)
+        raw_value = None if configured is None else str(configured)
     # ``None`` means "var not set at all" → apply the new ``auto`` default.
     # Empty string means "set to nothing" → keep the old "force-off" intuition
     # so an operator who wants to silence the feature can still use
@@ -854,8 +859,8 @@ def create_movie_claim_client_with_mode_from_env(
         )
         return None, MOVIE_CLAIM_MODE_OFF
 
-    url = (os.environ.get(url_env) or "").strip()
-    token = (os.environ.get(token_env) or "").strip()
+    url = env_or_cfg_str(url_env)
+    token = env_or_cfg_str(token_env)
     if not url or not token:
         logger.info(
             "Movie-claim client not configured (%s/%s unset, mode=%s) — "
