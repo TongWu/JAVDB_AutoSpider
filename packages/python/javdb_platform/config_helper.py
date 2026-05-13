@@ -23,6 +23,26 @@ def cfg(name, default):
     return getattr(_config_module, name, default)
 
 
+def env_or_cfg_str(name: str) -> str:
+    """Resolve *name* as a stripped non-empty string: env first, else *config*.
+
+    Mirrors :func:`packages.python.javdb_platform.d1_client._resolve_credential`
+    for string credentials: an env var set to whitespace-only is treated as
+    unset so GitHub Actions jobs that only materialise secrets inside
+    ``config.py`` (via ``apps.cli.config_generator``) still pick up values
+    without exporting duplicate process env vars.
+    """
+    import os
+
+    raw = os.environ.get(name)
+    if raw is not None and str(raw).strip():
+        return str(raw).strip()
+    val = cfg(name, None)
+    if val is None:
+        return ''
+    return str(val).strip()
+
+
 # ── Storage-mode helpers ──────────────────────────────────────────────────
 
 from typing import Optional

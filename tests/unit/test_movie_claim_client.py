@@ -673,6 +673,38 @@ def test_factory_returns_none_when_unconfigured(monkeypatch):
     assert create_movie_claim_client_from_env() is None
 
 
+def test_factory_reads_proxy_credentials_from_config_when_env_missing(
+    monkeypatch,
+):
+    """StaleSessionCleanup / config_generator: URL+token live in config.py."""
+    monkeypatch.delenv("MOVIE_CLAIM_ENABLED", raising=False)
+    monkeypatch.delenv("PROXY_COORDINATOR_URL", raising=False)
+    monkeypatch.delenv("PROXY_COORDINATOR_TOKEN", raising=False)
+
+    def _env_or_cfg(name: str) -> str:
+        return {
+            "PROXY_COORDINATOR_URL": "https://coord.test",
+            "PROXY_COORDINATOR_TOKEN": "t",
+        }.get(name, "")
+
+    def _cfg(name, default):
+        if name == "MOVIE_CLAIM_ENABLED":
+            return None
+        return default
+
+    with patch(
+        "packages.python.javdb_platform.movie_claim_client.env_or_cfg_str",
+        side_effect=_env_or_cfg,
+    ), patch(
+        "packages.python.javdb_platform.movie_claim_client.cfg",
+        side_effect=_cfg,
+    ), patch.object(MovieClaimClient, "health_check", return_value=True):
+        client = create_movie_claim_client_from_env()
+    assert client is not None
+    assert isinstance(client, MovieClaimClient)
+    client.close()
+
+
 def test_factory_returns_none_when_movie_claim_explicitly_false(monkeypatch):
     monkeypatch.setenv("PROXY_COORDINATOR_URL", "https://coord.test")
     monkeypatch.setenv("PROXY_COORDINATOR_TOKEN", "t")
