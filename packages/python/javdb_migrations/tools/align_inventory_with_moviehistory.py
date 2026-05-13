@@ -1096,7 +1096,7 @@ def main() -> int:
     if getattr(args, 'session_id', None) is not None:
         try:
             from packages.python.javdb_platform.db import set_active_session_id
-            set_active_session_id(int(args.session_id))
+            set_active_session_id(args.session_id)
         except Exception as e:
             logger.warning(
                 f"Could not set active session_id={args.session_id} for align run: {e}"
