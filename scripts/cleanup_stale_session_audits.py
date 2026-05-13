@@ -144,18 +144,15 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
-def _parse_session_ids(raw: Optional[str]) -> Optional[Set[int]]:
+def _parse_session_ids(raw: Optional[str]) -> Optional[Set[str]]:
     if not raw:
         return None
-    ids: Set[int] = set()
+    ids: Set[str] = set()
     for part in raw.split(","):
         part = part.strip()
         if not part:
             continue
-        try:
-            ids.add(int(part))
-        except ValueError:
-            raise SystemExit(f"Invalid session id in --session-ids: {part!r}")
+        ids.add(part)
     return ids or None
 
 
@@ -176,24 +173,24 @@ class _SqliteSide:
         self._reports = sqlite3.connect(_db.REPORTS_DB_PATH)
         self._reports.row_factory = sqlite3.Row
 
-    def fetch_report_session_ids(self) -> Tuple[Set[int], Set[int]]:
+    def fetch_report_session_ids(self) -> Tuple[Set[str], Set[str]]:
         """Return (all_session_ids, committed_session_ids)."""
         rows = self._reports.execute(
             "SELECT Id, Status FROM ReportSessions"
         ).fetchall()
-        all_ids: Set[int] = set()
-        committed: Set[int] = set()
+        all_ids: Set[str] = set()
+        committed: Set[str] = set()
         for r in rows:
             sid = r["Id"]
             if sid is None:
                 continue
-            sid = int(sid)
+            sid = str(sid)
             all_ids.add(sid)
             if (r["Status"] or "").strip() == "committed":
                 committed.add(sid)
         return all_ids, committed
 
-    def fetch_audit_groups(self, table: str) -> Dict[int, Dict[str, Any]]:
+    def fetch_audit_groups(self, table: str) -> Dict[str, Dict[str, Any]]:
         rows = self._history.execute(
             f"SELECT SessionId, COUNT(*) AS c, "
             f"MIN(DateTimeCreated) AS first_at, "
@@ -201,9 +198,9 @@ class _SqliteSide:
             f"FROM {table} WHERE SessionId IS NOT NULL "
             f"GROUP BY SessionId"
         ).fetchall()
-        out: Dict[int, Dict[str, Any]] = {}
+        out: Dict[str, Dict[str, Any]] = {}
         for r in rows:
-            sid = int(r["SessionId"])
+            sid = str(r["SessionId"])
             out[sid] = {
                 "count": int(r["c"] or 0),
                 "first_at": r["first_at"],
@@ -218,7 +215,7 @@ class _SqliteSide:
         ).fetchall()
         return {int(r["SessionId"]): int(r["c"] or 0) for r in rows}
 
-    def delete_audit_rows(self, table: str, session_ids: List[int]) -> int:
+    def delete_audit_rows(self, table: str, session_ids: List[str]) -> int:
         if not session_ids:
             return 0
         placeholders = ",".join("?" for _ in session_ids)
@@ -229,7 +226,7 @@ class _SqliteSide:
         return cur.rowcount or 0
 
     def nullify_history_session(
-        self, table: str, session_ids: List[int],
+        self, table: str, session_ids: List[str],
     ) -> int:
         if not session_ids:
             return 0
@@ -273,23 +270,23 @@ class _D1Side:
             api_token=token,
         )
 
-    def fetch_report_session_ids(self) -> Tuple[Set[int], Set[int]]:
+    def fetch_report_session_ids(self) -> Tuple[Set[str], Set[str]]:
         cur = self._reports.execute("SELECT Id, Status FROM ReportSessions")
         rows = cur.fetchall() or []
-        all_ids: Set[int] = set()
-        committed: Set[int] = set()
+        all_ids: Set[str] = set()
+        committed: Set[str] = set()
         for r in rows:
             sid = r.get("Id") if isinstance(r, dict) else r[0]
             status = r.get("Status") if isinstance(r, dict) else r[1]
             if sid is None:
                 continue
-            sid = int(sid)
+            sid = str(sid)
             all_ids.add(sid)
             if (status or "").strip() == "committed":
                 committed.add(sid)
         return all_ids, committed
 
-    def fetch_audit_groups(self, table: str) -> Dict[int, Dict[str, Any]]:
+    def fetch_audit_groups(self, table: str) -> Dict[str, Dict[str, Any]]:
         cur = self._history.execute(
             f"SELECT SessionId, COUNT(*) AS c, "
             f"MIN(DateTimeCreated) AS first_at, "
@@ -298,9 +295,9 @@ class _D1Side:
             f"GROUP BY SessionId"
         )
         rows = cur.fetchall() or []
-        out: Dict[int, Dict[str, Any]] = {}
+        out: Dict[str, Dict[str, Any]] = {}
         for r in rows:
-            sid = int(r.get("SessionId"))
+            sid = str(r.get("SessionId"))
             out[sid] = {
                 "count": int(r.get("c") or 0),
                 "first_at": r.get("first_at"),
@@ -316,7 +313,7 @@ class _D1Side:
         rows = cur.fetchall() or []
         return {int(r.get("SessionId")): int(r.get("c") or 0) for r in rows}
 
-    def delete_audit_rows(self, table: str, session_ids: List[int]) -> int:
+    def delete_audit_rows(self, table: str, session_ids: List[str]) -> int:
         if not session_ids:
             return 0
         # D1 has a 100-bound-param cap per statement.  Build one
@@ -324,7 +321,7 @@ class _D1Side:
         # ``batch_execute`` so the chunks land atomically on D1's side —
         # the previous per-chunk ``execute`` loop auto-committed each
         # chunk, leaving partial state behind on failure.
-        statements: List[Tuple[str, List[int]]] = []
+        statements: List[Tuple[str, List[str]]] = []
         for chunk_start in range(0, len(session_ids), 90):
             chunk = session_ids[chunk_start: chunk_start + 90]
             placeholders = ",".join("?" for _ in chunk)
@@ -336,11 +333,11 @@ class _D1Side:
         return sum(int(c.rowcount or 0) for c in cursors)
 
     def nullify_history_session(
-        self, table: str, session_ids: List[int],
+        self, table: str, session_ids: List[str],
     ) -> int:
         if not session_ids:
             return 0
-        statements: List[Tuple[str, List[int]]] = []
+        statements: List[Tuple[str, List[str]]] = []
         for chunk_start in range(0, len(session_ids), 90):
             chunk = session_ids[chunk_start: chunk_start + 90]
             placeholders = ",".join("?" for _ in chunk)
@@ -433,7 +430,7 @@ def _detect_phantoms(
     side,
     *,
     cross_day_hours: float,
-    constrain_to_ids: Optional[Set[int]],
+    constrain_to_ids: Optional[Set[str]],
     include_history_tables: bool,
 ) -> Dict[str, Any]:
     """Run the three detection passes and return a dry-run-shaped dict."""
@@ -509,7 +506,7 @@ def _apply(side, findings: Dict[str, Any]) -> Dict[str, Any]:
     table_status: Dict[str, str] = {}
     try:
         for audit_table, items in findings.get("audit", {}).items():
-            sids = sorted({int(item["session_id"]) for item in items})
+            sids = sorted({item["session_id"] for item in items})
             if not sids:
                 table_status[audit_table] = "skipped_empty"
                 continue
@@ -520,7 +517,7 @@ def _apply(side, findings: Dict[str, Any]) -> Dict[str, Any]:
                 "Deleted %d row(s) from %s on %s", n, audit_table, side.label,
             )
         for history_table, items in findings.get("history", {}).items():
-            sids = sorted({int(item["session_id"]) for item in items})
+            sids = sorted({item["session_id"] for item in items})
             key = f"{history_table}.SessionId_nulled"
             if not sids:
                 table_status[key] = "skipped_empty"
