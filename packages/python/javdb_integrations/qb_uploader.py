@@ -139,7 +139,7 @@ def parse_arguments():
     )
     parser.add_argument('--from-pipeline', action='store_true', help='Running from pipeline.py - use GIT_USERNAME for commits')
     parser.add_argument('--category', type=str, help='Override qBittorrent category (defaults to TORRENT_CATEGORY_ADHOC for adhoc mode, TORRENT_CATEGORY for daily mode)')
-    parser.add_argument('--session-id', type=int, default=None, help='Report session ID for saving uploader stats to SQLite')
+    parser.add_argument('--session-id', type=str, default=None, help='Report session ID for saving uploader stats to SQLite')
     return parser.parse_args()
 
 
