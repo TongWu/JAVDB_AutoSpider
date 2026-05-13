@@ -31,6 +31,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from packages.python.javdb_platform.logging_config import setup_logging, get_logger
 from packages.python.javdb_platform.sqlite_datetime import normalize_storage_datetime
+from packages.python.javdb_platform.db import _generate_session_id
 from apps.api.parsers.common import javdb_absolute_url
 from packages.python.javdb_platform.config_helper import cfg
 
@@ -654,16 +655,20 @@ def migrate_single_csv(csv_path: str, filename: str, is_adhoc: bool,
             return {'session_id': existing[0], 'row_count': 0, 'skipped': True}
 
         created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cur = conn.execute(
+        # ReportSessions.Id is TEXT post-2026-05-13 (no AUTOINCREMENT), so
+        # the migration tool must supply an explicit Id rather than relying
+        # on cur.lastrowid.
+        session_id = _generate_session_id()
+        conn.execute(
             """INSERT INTO ReportSessions
-               (ReportType, ReportDate, UrlType, DisplayName,
+               (Id, ReportType, ReportDate, UrlType, DisplayName,
                 Url, StartPage, EndPage, CsvFilename, DateTimeCreated)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (meta['report_type'], meta['report_date'],
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (session_id,
+             meta['report_type'], meta['report_date'],
              meta.get('url_type'), meta.get('display_name'),
              None, None, None, filename, created_at),
         )
-        session_id = cur.lastrowid
 
         for row in rows:
             href = javdb_absolute_url(row.get('href', ''), _BASE_URL)
@@ -700,7 +705,7 @@ def migrate_single_csv(csv_path: str, filename: str, is_adhoc: bool,
     return {'session_id': session_id, 'row_count': len(rows), 'skipped': False}
 
 
-def verify_session(session_id: int, csv_path: str, db_path: str) -> bool:
+def verify_session(session_id: str, csv_path: str, db_path: str) -> bool:
     """Verify a migrated session: movie count matches CSV row count."""
     from packages.python.javdb_platform.db import get_db
 
