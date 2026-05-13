@@ -705,6 +705,14 @@ def test_factory_reads_proxy_credentials_from_config_when_env_missing(
     client.close()
 
 
+def test_factory_empty_proxy_url_in_env_disables_kill_switch(monkeypatch):
+    """Empty PROXY_COORDINATOR_URL in the environment must not fall back to config."""
+    monkeypatch.setenv("PROXY_COORDINATOR_URL", "")
+    monkeypatch.setenv("PROXY_COORDINATOR_TOKEN", "t")
+    monkeypatch.setenv("MOVIE_CLAIM_ENABLED", "true")
+    assert create_movie_claim_client_from_env() is None
+
+
 def test_factory_returns_none_when_movie_claim_explicitly_false(monkeypatch):
     monkeypatch.setenv("PROXY_COORDINATOR_URL", "https://coord.test")
     monkeypatch.setenv("PROXY_COORDINATOR_TOKEN", "t")
