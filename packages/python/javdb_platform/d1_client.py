@@ -68,6 +68,28 @@ _MAX_RETRIES = _env_int("D1_MAX_RETRIES", 5)
 _RETRY_BASE_SEC = _env_float("D1_RETRY_BASE_SEC", 1.0)
 _RETRY_MAX_SLEEP_SEC = _env_float("D1_RETRY_MAX_SLEEP_SEC", 30.0)
 
+# JSON numbers are parsed as IEEE-754 doubles on Cloudflare's D1 /query path.
+# Integers with |x| > 2**53-1 lose precision (e.g. application snowflake session
+# ids), desynchronizing dual-write SQLite vs D1.  SQLite accepts a STRING bind
+# for an INTEGER column and coerces it — so we ship oversized ints as decimal
+# strings in the JSON ``params`` array only (2026-05-12 incident).
+_JSON_SAFE_INTEGER_MAX = 2**53 - 1
+
+
+def _params_for_d1_json(params: Iterable[Any]) -> List[Any]:
+    """Return *params* safe for D1's JSON Number parsing.
+
+    ``bool`` is a ``int`` subclass in Python; use ``type(x) is int`` so we
+    never stringify ``True``/``False``.
+    """
+    out: List[Any] = []
+    for p in params:
+        if type(p) is int and abs(p) > _JSON_SAFE_INTEGER_MAX:
+            out.append(str(p))
+        else:
+            out.append(p)
+    return out
+
 # Substrings in CF "errors[].message" / errors[].code that signal a recoverable
 # backend hiccup. Compared case-insensitively against the stringified errors.
 #
@@ -182,7 +204,9 @@ class D1Connection:
 
     def execute(self, sql: str, params: Iterable[Any] = ()) -> D1Cursor:
         # CF /query single-statement shape: {sql, params}
-        cursors = self._post_with_retry({"sql": sql, "params": list(params)})
+        cursors = self._post_with_retry(
+            {"sql": sql, "params": _params_for_d1_json(params)},
+        )
         if not cursors:
             # success=true but empty result[] — should never happen per CF docs,
             # but guard against API regressions / proxy stripping the body.
@@ -204,7 +228,9 @@ class D1Connection:
         :class:`DualConnection` uses it to enforce the guarded-table
         ``lastrowid`` invariant after a batched INSERT.
         """
-        statements = [{"sql": sql, "params": list(p)} for p in seq_of_params]
+        statements = [
+            {"sql": sql, "params": _params_for_d1_json(p)} for p in seq_of_params
+        ]
         if not statements:
             return None
         last_cursor: Optional[D1Cursor] = None
@@ -256,7 +282,9 @@ class D1Connection:
         cursors: List[D1Cursor] = []
         if not statements:
             return cursors
-        body_stmts = [{"sql": s, "params": list(p)} for s, p in statements]
+        body_stmts = [
+            {"sql": s, "params": _params_for_d1_json(p)} for s, p in statements
+        ]
         for chunk in _split(body_stmts, _BATCH_LIMIT):
             chunk_cursors = self._post_with_retry({"batch": chunk})
             for c in chunk_cursors:
