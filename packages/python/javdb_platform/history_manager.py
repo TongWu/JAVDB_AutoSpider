@@ -179,7 +179,7 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code,
         write_mode = get_active_write_mode()
         if write_mode == 'pending' and active_sid is not None:
             db_stage_history_write(
-                int(active_sid),
+                active_sid,
                 'movie',
                 {
                     'Href': href,
@@ -194,7 +194,7 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code,
                 if magnet is None:
                     continue
                 db_stage_history_write(
-                    int(active_sid),
+                    active_sid,
                     'torrent',
                     {
                         'Href': href,

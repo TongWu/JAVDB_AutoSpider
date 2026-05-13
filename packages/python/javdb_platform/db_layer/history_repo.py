@@ -112,7 +112,7 @@ def batch_update_movie_actors(
     conn,
     updates: List[Tuple[str, str, str, str, str]],
     *,
-    session_id: Optional[int] = None,
+    session_id: Optional[str] = None,
     audit_record_movie_change=None,
     audit_movie_change_statement=None,
 ) -> int:
