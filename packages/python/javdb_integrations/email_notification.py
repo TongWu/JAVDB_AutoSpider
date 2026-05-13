@@ -278,7 +278,7 @@ def parse_arguments():
     parser.add_argument('--dry-run', action='store_true', help='Print email content without sending')
     parser.add_argument('--from-pipeline', action='store_true',
                         help='Running from pipeline.py - use GIT_USERNAME for commits')
-    parser.add_argument('--session-id', type=int, default=None,
+    parser.add_argument('--session-id', type=str, default=None,
                         help='Report session ID for fetching stats from SQLite')
     parser.add_argument(
         '--verify-jsonl',
