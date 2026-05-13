@@ -112,3 +112,6 @@ pytest-of-tedwu/*
 # Keep the path ignored so any stray local clone here won't accidentally
 # get committed back into this monorepo.
 proxy_coordinator/
+
+# Cursor rules
+.cursor/
