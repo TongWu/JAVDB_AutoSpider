@@ -34,6 +34,7 @@ import secrets
 import sqlite3
 import threading
 import time
+import warnings
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -2178,6 +2179,31 @@ def db_load_history(db_path: Optional[str] = None, phase: Optional[int] = None) 
 # mutation whenever a session_id is active. SQLite executes the batch
 # inside the surrounding transaction; D1 treats each backend batch as
 # atomic, so the mutation and audit row succeed or fail together.
+#
+# Phase 4 deprecation (2026-05-13)
+# --------------------------------
+# Setting ``JAVDB_AUDIT_WRITES_DISABLED=1`` (or ``true``) turns every
+# audit-row INSERT here into a no-op so the audit tables become append-
+# never — only the existing rows remain queryable for forensic /
+# historical-session rollback.  The default is ``0`` (writes still
+# enabled) because the legacy ``WriteMode='audit'`` rollback fallback
+# still depends on audit rows being recorded for any sessions running
+# under that mode.  Operators flip the env to ``1`` once they're
+# confident no ingestion workflow is still pinning ``audit``.
+
+
+def _audit_writes_disabled() -> bool:
+    """Return True when Phase 4 has pinned ``JAVDB_AUDIT_WRITES_DISABLED``.
+
+    Accepts ``1``, ``true``, ``yes`` (case-insensitive).  Used to gate
+    the ``_movie_*`` / ``_torrent_*`` audit-statement helpers so flipping
+    the env turns audit appends into no-ops while preserving the rest of
+    the historic write path (live ``MovieHistory`` / ``TorrentHistory``
+    rows still get written for any session still running under
+    ``WriteMode='audit'``).
+    """
+    raw = os.environ.get("JAVDB_AUDIT_WRITES_DISABLED", "")
+    return raw.strip().lower() in ("1", "true", "yes", "on")
 
 _MOVIE_AUDIT_SQL = """INSERT INTO MovieHistoryAudit
    (TargetId, Action, OldRowJson, SessionId, DateTimeCreated, RunId, RunAttempt)
@@ -2232,6 +2258,8 @@ def _movie_audit_statement(
 ) -> Optional[Tuple[str, Tuple[Any, ...]]]:
     if session_id is None:
         return None
+    if _audit_writes_disabled():
+        return None
     if when is None:
         when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     run_id, run_attempt = get_active_run_identity()
@@ -2249,6 +2277,8 @@ def _movie_insert_audit_statement_for_href(
     when: Optional[str] = None,
 ) -> Optional[Tuple[str, Tuple[Any, ...]]]:
     if session_id is None:
+        return None
+    if _audit_writes_disabled():
         return None
     if when is None:
         when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -2269,6 +2299,8 @@ def _torrent_audit_statement(
 ) -> Optional[Tuple[str, Tuple[Any, ...]]]:
     if session_id is None:
         return None
+    if _audit_writes_disabled():
+        return None
     if when is None:
         when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     run_id, run_attempt = get_active_run_identity()
@@ -2288,6 +2320,8 @@ def _torrent_insert_audit_statement_for_type(
     when: Optional[str] = None,
 ) -> Optional[Tuple[str, Tuple[Any, ...]]]:
     if session_id is None:
+        return None
+    if _audit_writes_disabled():
         return None
     if when is None:
         when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -2369,14 +2403,38 @@ def db_upsert_history(
 ) -> None:
     """Insert or update history across MovieHistory + TorrentHistory.
 
+    .. deprecated:: Phase 4 (2026-05-13)
+        Direct callers must switch to
+        :func:`packages.python.javdb_platform.history_manager.save_parsed_movie_to_history`
+        (or :func:`db_stage_history_write` when the active session is in
+        ``WriteMode='pending'``).  Calling this function emits
+        :class:`DeprecationWarning` so the remaining audit-mode callsites
+        surface in CI logs; the implementation is **still** functional
+        for the audit fallback path and for the migration tool, but
+        every ingestion workflow now defaults to pending mode where this
+        upsert is no longer reached.  See
+        :doc:`docs/D1_ROLLBACK.md` (Appendix A) for the sunset timeline.
+
     Actor fields: when ``None``, existing MovieHistory values are left unchanged
     on update; use ``''`` to clear. On insert, ``None`` stays NULL.
 
     *session_id*: the active ``ReportSessions.Id`` for X3 rollback bookkeeping.
     Defaults to :func:`get_active_session_id`. When set, the row's ``SessionId``
     column is populated and a companion ``MovieHistoryAudit`` /
-    ``TorrentHistoryAudit`` row is written for each INSERT/UPDATE.
+    ``TorrentHistoryAudit`` row is written for each INSERT/UPDATE — unless
+    ``JAVDB_AUDIT_WRITES_DISABLED=1`` is set (Phase 4 kill switch), in which
+    case the audit row is silently skipped.
     """
+    warnings.warn(
+        "db_upsert_history is deprecated (Phase 4, 2026-05). "
+        "Route ingestion writes through "
+        "javdb_platform.history_manager.save_parsed_movie_to_history "
+        "(pending-mode auto-stage) or db_stage_history_write. "
+        "This entry-point will keep working through the audit fallback "
+        "sunset window — see docs/D1_ROLLBACK.md Appendix A.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     if magnet_links is None:
         magnet_links = {}
     if size_links is None:
