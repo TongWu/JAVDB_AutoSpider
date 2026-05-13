@@ -1,0 +1,178 @@
+name: Audit Archive
+
+# Phase 4 — Ingestion Perfect Rollback.
+#
+# Weekly cron that prunes MovieHistoryAudit / TorrentHistoryAudit rows
+# whose owning session is older than ``--older-than-days`` (default 30)
+# and either committed, failed, in_progress/finalizing past the
+# threshold, or orphaned (SessionId not present in ReportSessions).
+#
+# Why a separate workflow?  ``StaleSessionCleanup.yml`` already mops up
+# stuck ReportSessions rows, but audit rows survive ``Status='committed'``
+# inline pruning in three corners:
+#   1. legacy data created before db_mark_session_committed prune logic;
+#   2. ``db_mark_session_committed`` calls that hit a transient D1 error
+#      and never retried;
+#   3. orphaned audit rows whose owning ReportSessions row was deleted
+#      by an earlier botched rollback.
+#
+# The first run after merging this workflow MUST be invoked with
+# ``apply=false`` so the operator can review the dry-run output before
+# letting it touch real data.
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    # 04:00 UTC every Monday = 12:00 Asia/Singapore.
+    # Comfortably after Daily/AdHoc ingestion windows finish; staggered
+    # away from StaleSessionCleanup (02:00 UTC daily) so the two crons
+    # don't pile onto the same self-hosted runner.
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      older_than_days:
+        description: 'Audit rows older than this many days are eligible.'
+        required: false
+        default: '30'
+        type: string
+      apply:
+        description: 'Apply archival. Default false (dry-run).'
+        required: false
+        # cron triggers leave inputs.apply unset → bash sees empty → dry-run.
+        default: false
+        type: boolean
+      target:
+        description: 'Which side to archive.'
+        required: false
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - sqlite
+          - d1
+      log_level:
+        description: 'CLI log level.'
+        required: false
+        default: 'INFO'
+        type: choice
+        options:
+          - DEBUG
+          - INFO
+          - WARNING
+          - ERROR
+      runner:
+        description: 'Runner type.'
+        required: false
+        default: 'self-hosted'
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'self-hosted'
+
+# Serialize so two cron invocations (e.g. retry within retry) don't
+# clobber each other's report file or fight for the same DELETEs.
+concurrency:
+  group: audit-archive
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
+    timeout-minutes: 30
+    environment: Production
+    env:
+      TZ: Asia/Singapore
+      INPUT_OLDER_THAN_DAYS: ${{ inputs.older_than_days || '30' }}
+      INPUT_APPLY: ${{ inputs.apply }}
+      INPUT_TARGET: ${{ inputs.target || 'both' }}
+      INPUT_LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          lfs: true
+
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.11'
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          # ============ SECRETS ============
+          VAR_QB_URL: ${{ secrets.QB_URL }}
+          VAR_QB_USERNAME: ${{ secrets.QB_USERNAME }}
+          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
+          VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
+          VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
+          VAR_JAVDB_SESSION_COOKIE: ${{ secrets.JAVDB_SESSION_COOKIE }}
+          VAR_PIKPAK_PASSWORD: ${{ secrets.PIKPAK_PASSWORD }}
+          # ============ VARIABLES ============
+          VAR_GIT_REPO_URL: ${{ vars.GIT_REPO_URL }}
+          VAR_GIT_BRANCH: ${{ vars.GIT_BRANCH }}
+          VAR_BASE_URL: ${{ vars.BASE_URL || 'https://javdb.com' }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+          VAR_REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+          VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
+          # D1 / Cloudflare — required when STORAGE_BACKEND in {d1,dual}
+          VAR_STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
+          VAR_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VAR_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          VAR_D1_HISTORY_DB_ID: ${{ secrets.D1_HISTORY_DB_ID }}
+          VAR_D1_REPORTS_DB_ID: ${{ secrets.D1_REPORTS_DB_ID }}
+          VAR_D1_OPERATIONS_DB_ID: ${{ secrets.D1_OPERATIONS_DB_ID }}
+        run: python3 -m apps.cli.config_generator --github-actions
+
+      - name: Run audit archive
+        run: |
+          set -e
+          set -o pipefail
+
+          CMD=(python3 -m scripts.audit_archive
+               --older-than-days "$INPUT_OLDER_THAN_DAYS"
+               --target "$INPUT_TARGET"
+               --log-level "$INPUT_LOG_LEVEL")
+
+          # ``--apply`` is the destructive flag; bash sees the boolean
+          # workflow input as the literal string "true" / "false".  cron
+          # invocations leave it empty → dry-run.
+          if [ "$INPUT_APPLY" = "true" ]; then
+            CMD+=(--apply)
+          else
+            CMD+=(--dry-run)
+          fi
+
+          mkdir -p logs reports
+          echo "Executing: ${CMD[*]}"
+          "${CMD[@]}" 2>&1 | tee logs/audit_archive.log
+
+      - name: Upload archive log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: audit-archive-log
+          path: |
+            logs/audit_archive.log
+            reports/D1/audit_archive/*.json
+          retention-days: 60
+          if-no-files-found: ignore
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Audit Archive"
+            echo ""
+            printf -- '- **Mode**: %s\n' "$([ "$INPUT_APPLY" = "true" ] && echo 'Apply' || echo 'Dry run')"
+            printf -- '- **Older than (days)**: %s\n' "$INPUT_OLDER_THAN_DAYS"
+            printf -- '- **Target**: %s\n' "$INPUT_TARGET"
+            echo ""
+            echo "See the **audit-archive-log** artifact for the full JSON summary."
+            echo ""
+            echo "Phase 4 contract — audit tables are read-only; this cron mops up rows from sessions older than the configured window. See [docs/D1_ROLLBACK.md §Appendix A](./docs/D1_ROLLBACK.md#appendix-a-legacy-audit-fallback-sunset-2026-08)."
+          } >> $GITHUB_STEP_SUMMARY
