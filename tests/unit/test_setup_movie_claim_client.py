@@ -39,12 +39,20 @@ def _reset_globals(monkeypatch):
         state, "_movie_claim_mode",
         state.MOVIE_CLAIM_MODE_OFF, raising=False,
     )
+    monkeypatch.setattr(
+        state, "_movie_claim_intended_mode",
+        state.MOVIE_CLAIM_MODE_OFF, raising=False,
+    )
     monkeypatch.setattr(state, "_movie_claim_last_recommended", False, raising=False)
     yield
     monkeypatch.setattr(state, "global_movie_claim_client", None, raising=False)
     monkeypatch.setattr(state, "_movie_claim_client_pending", None, raising=False)
     monkeypatch.setattr(
         state, "_movie_claim_mode",
+        state.MOVIE_CLAIM_MODE_OFF, raising=False,
+    )
+    monkeypatch.setattr(
+        state, "_movie_claim_intended_mode",
         state.MOVIE_CLAIM_MODE_OFF, raising=False,
     )
     monkeypatch.setattr(state, "_movie_claim_last_recommended", False, raising=False)
@@ -428,3 +436,104 @@ def test_next_heartbeat_interval_takes_lock_to_read_state(monkeypatch):
     assert acquired.is_set(), \
         "_next_heartbeat_interval must take _movie_claim_lock to read state"
     assert interval == state._HEARTBEAT_INTERVAL_SINGLE_RUNNER_SEC
+
+
+# ── MR-4: enforce_movie_claim_for_d1 — fail-closed in d1-only mode ─────────
+
+
+class TestEnforceMovieClaimForD1:
+    """MR-4 (multi-runtime): under STORAGE_BACKEND=d1, refuse to start when
+    the operator wanted movie-claim coordination but the Worker is
+    unreachable / unconfigured. No-op in sqlite / dual modes and when the
+    intended mode is an explicit OFF.
+    """
+
+    def test_d1_with_unreachable_worker_raises(self, monkeypatch):
+        # Operator wanted coordination (auto) but /health failed → factory
+        # returned None, so both client slots are empty.
+        monkeypatch.setenv("STORAGE_BACKEND", "d1")
+        monkeypatch.delenv("JAVDB_ALLOW_UNCOORDINATED_D1", raising=False)
+        monkeypatch.setattr(
+            state, "_movie_claim_intended_mode",
+            state.MOVIE_CLAIM_MODE_AUTO, raising=False,
+        )
+        monkeypatch.setattr(state, "global_movie_claim_client", None, raising=False)
+        monkeypatch.setattr(state, "_movie_claim_client_pending", None, raising=False)
+        with pytest.raises(RuntimeError, match="requires the MovieClaim coordinator"):
+            state.enforce_movie_claim_for_d1()
+
+    def test_d1_with_healthy_worker_does_not_raise(self, monkeypatch):
+        # Client is mounted (Worker healthy) → guard is satisfied.
+        monkeypatch.setenv("STORAGE_BACKEND", "d1")
+        monkeypatch.setattr(
+            state, "_movie_claim_intended_mode",
+            state.MOVIE_CLAIM_MODE_AUTO, raising=False,
+        )
+        monkeypatch.setattr(
+            state, "global_movie_claim_client",
+            MagicMock(spec=MovieClaimClient), raising=False,
+        )
+        state.enforce_movie_claim_for_d1()  # no exception
+
+    def test_d1_with_pending_client_does_not_raise(self, monkeypatch):
+        # Auto mode keeps the client in _movie_claim_client_pending until
+        # the first register response; that still counts as "available".
+        monkeypatch.setenv("STORAGE_BACKEND", "d1")
+        monkeypatch.setattr(
+            state, "_movie_claim_intended_mode",
+            state.MOVIE_CLAIM_MODE_AUTO, raising=False,
+        )
+        monkeypatch.setattr(state, "global_movie_claim_client", None, raising=False)
+        monkeypatch.setattr(
+            state, "_movie_claim_client_pending",
+            MagicMock(spec=MovieClaimClient), raising=False,
+        )
+        state.enforce_movie_claim_for_d1()  # no exception
+
+    def test_d1_with_intended_off_does_not_raise(self, monkeypatch):
+        # Operator explicitly disabled coordination — respected (warns,
+        # does not raise) even though no client is present.
+        monkeypatch.setenv("STORAGE_BACKEND", "d1")
+        monkeypatch.setattr(
+            state, "_movie_claim_intended_mode",
+            state.MOVIE_CLAIM_MODE_OFF, raising=False,
+        )
+        monkeypatch.setattr(state, "global_movie_claim_client", None, raising=False)
+        monkeypatch.setattr(state, "_movie_claim_client_pending", None, raising=False)
+        state.enforce_movie_claim_for_d1()  # no exception
+
+    def test_d1_with_escape_hatch_does_not_raise(self, monkeypatch):
+        # JAVDB_ALLOW_UNCOORDINATED_D1=1 is the deliberate single-runtime
+        # escape hatch.
+        monkeypatch.setenv("STORAGE_BACKEND", "d1")
+        monkeypatch.setenv("JAVDB_ALLOW_UNCOORDINATED_D1", "1")
+        monkeypatch.setattr(
+            state, "_movie_claim_intended_mode",
+            state.MOVIE_CLAIM_MODE_FORCE_ON, raising=False,
+        )
+        monkeypatch.setattr(state, "global_movie_claim_client", None, raising=False)
+        monkeypatch.setattr(state, "_movie_claim_client_pending", None, raising=False)
+        state.enforce_movie_claim_for_d1()  # no exception
+
+    def test_sqlite_mode_is_noop_even_when_unreachable(self, monkeypatch):
+        # In sqlite mode the local mirror is the canonical fallback — the
+        # guard must not fire regardless of Worker reachability.
+        monkeypatch.setenv("STORAGE_BACKEND", "sqlite")
+        monkeypatch.setattr(
+            state, "_movie_claim_intended_mode",
+            state.MOVIE_CLAIM_MODE_AUTO, raising=False,
+        )
+        monkeypatch.setattr(state, "global_movie_claim_client", None, raising=False)
+        monkeypatch.setattr(state, "_movie_claim_client_pending", None, raising=False)
+        state.enforce_movie_claim_for_d1()  # no exception
+
+    def test_dual_mode_is_noop_even_when_unreachable(self, monkeypatch):
+        # Dual mode also has the SQLite mirror, so no fail-closed.
+        monkeypatch.setenv("STORAGE_BACKEND", "dual")
+        monkeypatch.setattr(
+            state, "_movie_claim_intended_mode",
+            state.MOVIE_CLAIM_MODE_AUTO, raising=False,
+        )
+        monkeypatch.setattr(state, "global_movie_claim_client", None, raising=False)
+        monkeypatch.setattr(state, "_movie_claim_client_pending", None, raising=False)
+        state.enforce_movie_claim_for_d1()  # no exception
