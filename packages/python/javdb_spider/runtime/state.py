@@ -975,6 +975,79 @@ def _unregister_runner_at_exit() -> None:
         _runner_heartbeat_thread = None
 
 
+# MR-5 (multi-runtime): opportunistic orphan-stage sweep on clean exit.
+#
+# The StaleSessionCleanup cron sweeps once a day; a stage orphaned by a
+# crashed peer therefore lingered up to ~24h + the (now 6h) cutoff. By
+# also sweeping when ANY runner exits cleanly, the effective sweep
+# cadence becomes "every runner shutdown" — far more frequent, at zero
+# extra GH Actions minutes (it piggy-backs on the existing atexit
+# lifecycle). The 6h cutoff means a clean runner only reaps stages that
+# have been orphaned long enough to be unambiguously dead, never a live
+# peer's in-flight stage.
+_MOVIE_CLAIM_SWEEP_AT_EXIT_OLDER_THAN_MS = 6 * 60 * 60 * 1000
+_movie_claim_swept_at_exit: bool = False
+
+
+def _movie_claim_sweep_shard_dates() -> list:
+    """Today + yesterday in the ops timezone (Asia/Singapore, UTC+8).
+
+    Two days covers a session that staged just before midnight and a
+    runner exiting just after — the same cross-midnight window the
+    ``sweep_movie_claim_stages`` CLI guards with its 3-day default.
+    """
+    import datetime as _dt
+
+    ops_tz = _dt.timezone(_dt.timedelta(hours=8))
+    base = _dt.datetime.now(ops_tz)
+    return [
+        (base - _dt.timedelta(days=offset)).strftime("%Y-%m-%d")
+        for offset in (0, 1)
+    ]
+
+
+def _sweep_movie_claim_stages_at_exit() -> None:
+    """Best-effort opportunistic sweep of orphaned MovieClaim stages.
+
+    Registered via :func:`atexit.register` from
+    :func:`setup_movie_claim_client`.  Idempotent
+    (``_movie_claim_swept_at_exit`` flag).  Never raises — orphan-stage
+    hygiene must not block the spider's shutdown.
+
+    Only meaningful when a MovieClaim client is mounted; a no-op
+    otherwise.  Uses a conservative 6h cutoff (well above the Worker's
+    1h server floor) so a clean runner can never wipe a live peer's
+    in-flight stage — it only reaps stages old enough to be
+    unambiguously orphaned by a crashed runner.
+    """
+    global _movie_claim_swept_at_exit
+    if _movie_claim_swept_at_exit:
+        return
+    _movie_claim_swept_at_exit = True
+    client = global_movie_claim_client or _movie_claim_client_pending
+    if client is None:
+        return
+    for shard_date in _movie_claim_sweep_shard_dates():
+        try:
+            result = client.sweep_orphan_stages(
+                older_than_ms=_MOVIE_CLAIM_SWEEP_AT_EXIT_OLDER_THAN_MS,
+                date=shard_date,
+            )
+        except Exception as exc:  # noqa: BLE001 — never block shutdown
+            logger.debug(
+                "Movie-claim orphan-stage sweep at exit failed for shard %s "
+                "(non-fatal): %s",
+                shard_date, exc,
+            )
+            continue
+        if result.removed:
+            logger.info(
+                "Movie-claim orphan-stage sweep at exit: removed %d stale "
+                "stage(s) from shard %s",
+                result.removed, shard_date,
+            )
+
+
 def _warn_on_proxy_pool_drift(
     self_hash: str,
     summary,  # type: ignore[no-untyped-def] — sequence of PoolHashBucket
@@ -1214,6 +1287,11 @@ def setup_proxy_pool(use_proxy) -> None:
     # after setup_movie_claim_client() so the client / pending slots and
     # _movie_claim_intended_mode are populated.
     enforce_movie_claim_for_d1()
+    # MR-5: opportunistic orphan-stage sweep on clean shutdown. Registered
+    # unconditionally — the hook itself no-ops when no MovieClaim client
+    # was mounted, and registering once here keeps the lifecycle wiring
+    # in one place alongside the runner-registry atexit hook.
+    atexit.register(_sweep_movie_claim_stages_at_exit)
     setup_runner_registry_client()
 
     if is_proxy_mode_disabled(PROXY_MODE):

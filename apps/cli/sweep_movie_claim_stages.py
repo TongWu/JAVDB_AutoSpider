@@ -48,11 +48,24 @@ from packages.python.javdb_platform.movie_claim_client import (
 logger = get_logger(__name__)
 
 
-# 48 h matches the Worker's ``DEFAULT_SWEEP_ORPHAN_MS`` and is the
-# operational sweet-spot: comfortably past the longest legitimate
-# session (``StaleSessionCleanup`` rolls back in-progress sessions at
-# 48 h too) yet short enough to keep the shard footprint bounded.
-_DEFAULT_OLDER_THAN_MS = 48 * 60 * 60 * 1000
+# MR-5 (multi-runtime, 2026-05-12): 6 h, down from the original 48 h.
+#
+# The Worker caps a single MovieClaim TTL at ``MOVIE_CLAIM_TTL_MAX_MS``
+# (2 h), so any legitimate in-flight session has refreshed its stage's
+# ``ts`` heartbeat within the last 2 h. A stage whose ``ts`` is older
+# than 6 h therefore belongs to a runner that crashed between
+# ``stage_complete`` and the session-end commit / rollback — there is no
+# live session it could still belong to. Reaping at 6 h instead of 48 h
+# shrinks the window during which a crashed peer's orphan stage makes
+# other sessions' ``stage_complete`` calls bounce (``staged=false``) and
+# causes the shard to re-fetch that href on a later run.
+#
+# Still comfortably above the Worker's server-side floor
+# (``MIN_SWEEP_ORPHAN_MS`` = 1 h) so a buggy ``older_than_ms`` can never
+# wipe a live stage. The Worker's own ``DEFAULT_SWEEP_ORPHAN_MS`` (48 h)
+# is unchanged — it is only the fallback when no ``older_than_ms`` query
+# arg is sent, and this CLI always sends one explicitly.
+_DEFAULT_OLDER_THAN_MS = 6 * 60 * 60 * 1000
 
 
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
@@ -77,7 +90,8 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--older-than-hours",
         type=float,
         default=None,
-        help="Sweep horizon in hours.  Default: 48.  Server-floored at 1 h.",
+        help="Sweep horizon in hours.  Default: 6 (MR-5 — was 48).  "
+             "Server-floored at 1 h.",
     )
     parser.add_argument(
         "--log-level",
