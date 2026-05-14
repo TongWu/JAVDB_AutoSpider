@@ -110,8 +110,8 @@ jobs:
             echo "    in-progress session created at-or-after that timestamp."
             exit 1
           fi
-          if [ -n "$INPUT_SESSION_ID" ] && ! [[ "$INPUT_SESSION_ID" =~ ^[0-9]+$ ]]; then
-            echo "::error::session_id must be an integer ReportSessions.Id; got '$INPUT_SESSION_ID'."
+          if [ -n "$INPUT_SESSION_ID" ] && ! echo "$INPUT_SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
+            echo "::error::session_id contains invalid characters; got '$INPUT_SESSION_ID'."
             exit 1
           fi
           # Production guard: any non-dry-run or --force invocation must
