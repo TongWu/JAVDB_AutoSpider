@@ -1034,20 +1034,23 @@ class TestSessionIdExtraction:
         """Mirrors pipeline.extract_session_id_from_output without importing pipeline."""
         for line in output.splitlines():
             if line.startswith('SPIDER_SESSION_ID='):
-                try:
-                    return int(line.split('=', 1)[1].strip())
-                except (ValueError, IndexError):
-                    return None
+                val = line.split('=', 1)[1].strip()
+                return val if val else None
         return None
 
-    def test_extract_valid(self):
-        assert self._extract("log line\nSPIDER_SESSION_ID=42\nmore") == 42
+    def test_extract_valid_numeric(self):
+        assert self._extract("log line\nSPIDER_SESSION_ID=42\nmore") == "42"
+
+    def test_extract_valid_text_format(self):
+        assert self._extract(
+            "log line\nSPIDER_SESSION_ID=20260514T045526.767565Z-1738-0000\nmore"
+        ) == "20260514T045526.767565Z-1738-0000"
 
     def test_extract_missing(self):
         assert self._extract("no id here\nfoo=bar") is None
 
-    def test_extract_invalid(self):
-        assert self._extract("SPIDER_SESSION_ID=abc") is None
+    def test_extract_empty_value(self):
+        assert self._extract("SPIDER_SESSION_ID=") is None
 
     def test_extract_empty(self):
         assert self._extract("") is None

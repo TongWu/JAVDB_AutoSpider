@@ -462,7 +462,7 @@ jobs:
           
           SESSION_ID=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_SESSION_ID=" | cut -d'=' -f2 | tail -1 || true)
           if [ -n "$SESSION_ID" ]; then
-            if echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+            if echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
               echo "session_id=$SESSION_ID" >> $GITHUB_OUTPUT
               echo "Captured session ID: $SESSION_ID"
             else
@@ -530,7 +530,7 @@ jobs:
           # Pass session_id for SQLite stats
           SESSION_ID="$SPIDER_SESSION_ID"
           if [ -n "$SESSION_ID" ]; then
-            if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+            if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
               echo "::error::Invalid SESSION_ID format: $SESSION_ID"
               exit 1
             fi
@@ -578,7 +578,7 @@ jobs:
           CMD_ARGS=(python3 -m apps.cli.pikpak_bridge --days 3)
           SESSION_ID="$SPIDER_SESSION_ID"
           if [ -n "$SESSION_ID" ]; then
-            if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+            if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
               echo "::error::Invalid SESSION_ID format: $SESSION_ID"
               exit 1
             fi
@@ -617,10 +617,10 @@ jobs:
           CMD_ARGS=(python3 -m apps.cli.commit_session
                     --run-started-at "$RUN_STARTED_AT")
           if [ -n "$SPIDER_SESSION_ID" ]; then
-            if [[ "$SPIDER_SESSION_ID" =~ ^[0-9]+$ ]]; then
+            if echo "$SPIDER_SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
               CMD_ARGS+=(--session-id "$SPIDER_SESSION_ID")
             else
-              echo "::warning::Skipping non-numeric SPIDER_SESSION_ID for commit_session: $SPIDER_SESSION_ID"
+              echo "::warning::Skipping invalid SPIDER_SESSION_ID for commit_session: $SPIDER_SESSION_ID"
             fi
           fi
           echo "Executing: ${CMD_ARGS[*]}"
@@ -792,11 +792,11 @@ jobs:
       - name: Roll back uncommitted D1 writes
         env:
           RUN_STARTED_AT: ${{ needs.setup.outputs.pipeline_workflow_run_started_at }}
-          # SPIDER_SESSION_ID format change (2026-05-08): the application
-          # now generates ReportSessions.Id as a 51-bit snowflake instead
-          # of letting AUTOINCREMENT pick it. The shell regex below still
-          # accepts the new shape (digits only) — no update needed — but
-          # values are now ~16 digits long instead of ~3.
+          # SPIDER_SESSION_ID format change (2026-05-13): the application
+          # now generates ReportSessions.Id as a text timestamp
+          # (YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS) instead of a numeric
+          # snowflake. The shell validation below accepts both old
+          # numeric ids and the new text format.
           SPIDER_SESSION_ID: ${{ needs.run-pipeline.outputs.session_id }}
           # ROLLBACK_REASON is consumed by apps.cli.rollback to populate
           # ReportSessions.FailureReason. cleanup-on-failure runs because
@@ -827,10 +827,10 @@ jobs:
                     --auto-resume-finalizing
                     --apply)
           if [ -n "$SPIDER_SESSION_ID" ]; then
-            if [[ "$SPIDER_SESSION_ID" =~ ^[0-9]+$ ]]; then
+            if echo "$SPIDER_SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
               CMD_ARGS+=(--session-id "$SPIDER_SESSION_ID")
             else
-              echo "::warning::Skipping non-numeric SPIDER_SESSION_ID for rollback: $SPIDER_SESSION_ID"
+              echo "::warning::Skipping invalid SPIDER_SESSION_ID for rollback: $SPIDER_SESSION_ID"
             fi
           fi
           echo "Executing: ${CMD_ARGS[*]}"
@@ -1023,7 +1023,7 @@ jobs:
           # Pass session_id for SQLite stats
           SESSION_ID="${{ needs.run-pipeline.outputs.session_id }}"
           if [ -n "$SESSION_ID" ]; then
-            if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+            if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
               echo "::error::Invalid SESSION_ID format: $SESSION_ID"
               exit 1
             fi
