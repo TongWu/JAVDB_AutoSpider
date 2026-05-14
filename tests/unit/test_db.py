@@ -1120,6 +1120,50 @@ class TestReportMigration:
         assert result2['skipped'] is True
 
 
+class TestBackendAgnosticErrorTuples:
+    """MR-3 (multi-runtime): the best-effort "table/column missing" and
+    "UNIQUE conflict" catches in db.py must cover the D1 backend too.
+
+    Under STORAGE_BACKEND=d1 the connection is a D1Connection whose
+    execute() raises D1PermanentError (Cloudflare HTTP-400 application
+    error) for BOTH a missing table/column AND a constraint violation —
+    it never raises the sqlite3.* types. _DB_OPERATIONAL_ERRORS /
+    _DB_INTEGRITY_ERRORS broaden the catches so a rollback / verify path
+    doesn't abort on a recoverable D1-side structural error.
+    """
+
+    def test_operational_errors_tuple_includes_d1_permanent(self):
+        from packages.python.javdb_platform.d1_client import D1PermanentError
+        assert sqlite3.OperationalError in db_mod._DB_OPERATIONAL_ERRORS
+        assert D1PermanentError in db_mod._DB_OPERATIONAL_ERRORS
+
+    def test_integrity_errors_tuple_includes_d1_permanent(self):
+        from packages.python.javdb_platform.d1_client import D1PermanentError
+        assert sqlite3.IntegrityError in db_mod._DB_INTEGRITY_ERRORS
+        assert D1PermanentError in db_mod._DB_INTEGRITY_ERRORS
+
+    def test_d1_transient_error_is_NOT_swallowed(self):
+        """D1TransientError must NOT be in either tuple — by the time it
+        surfaces from execute() the retries are already exhausted, and
+        silently treating it as 'legacy schema' / 'concurrent run' would
+        lose data on a genuine network failure."""
+        from packages.python.javdb_platform.d1_client import D1TransientError
+        assert D1TransientError not in db_mod._DB_OPERATIONAL_ERRORS
+        assert D1TransientError not in db_mod._DB_INTEGRITY_ERRORS
+
+    def test_d1_permanent_error_is_caught_by_operational_tuple(self):
+        """A raised D1PermanentError is actually caught by the tuple —
+        guards against the tuple being assembled but the except clause
+        somehow not matching (e.g. subclass mismatch)."""
+        from packages.python.javdb_platform.d1_client import D1PermanentError
+        caught = False
+        try:
+            raise D1PermanentError("D1 API returned HTTP 400: no such table: X")
+        except db_mod._DB_OPERATIONAL_ERRORS:
+            caught = True
+        assert caught, "D1PermanentError should be caught by _DB_OPERATIONAL_ERRORS"
+
+
 class TestSnowflakeProcessTag:
     """Per-process random tag eliminates cross-process collision when two
     GH Actions runners start a session in the same microsecond AND happen
