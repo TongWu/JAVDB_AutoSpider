@@ -62,6 +62,37 @@ from packages.python.javdb_platform.db_layer.operations_repo import (
 
 logger = get_logger(__name__)
 
+# MR-3 (multi-runtime): backend-agnostic exception tuples.
+#
+# Several best-effort code paths catch ``sqlite3.OperationalError`` to mean
+# "table / column doesn't exist on a legacy schema, fall back" and
+# ``sqlite3.IntegrityError`` to mean "UNIQUE conflict, a concurrent run
+# already did this". Under ``STORAGE_BACKEND=d1`` the connection is a
+# ``D1Connection`` whose ``execute`` raises ``D1PermanentError`` (HTTP 400
+# application-level error from Cloudflare) for BOTH situations — it never
+# raises the ``sqlite3.*`` types. Without broadening the catch, a missing
+# table or a UNIQUE conflict on D1 would propagate out of those
+# best-effort paths and abort an otherwise-recoverable rollback / verify.
+#
+# ``D1PermanentError`` (not the ``D1Error`` base) is intentionally the only
+# D1 type added: ``D1TransientError`` means retries were already exhausted
+# by ``_post_with_retry`` and must NOT be silently swallowed as "legacy
+# schema" / "concurrent run". The import is guarded so a sqlite-only
+# deployment without the d1_client deps still loads db.py.
+try:  # pragma: no cover - import wiring
+    from packages.python.javdb_platform.d1_client import (
+        D1PermanentError as _D1PermanentError,
+    )
+    _DB_OPERATIONAL_ERRORS: Tuple[type, ...] = (
+        sqlite3.OperationalError, _D1PermanentError,
+    )
+    _DB_INTEGRITY_ERRORS: Tuple[type, ...] = (
+        sqlite3.IntegrityError, _D1PermanentError,
+    )
+except Exception:  # noqa: BLE001 - d1_client optional in sqlite-only installs
+    _DB_OPERATIONAL_ERRORS = (sqlite3.OperationalError,)
+    _DB_INTEGRITY_ERRORS = (sqlite3.IntegrityError,)
+
 _REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
 
 HISTORY_DB_PATH = cfg('HISTORY_DB_PATH', os.path.join(_REPORTS_DIR, 'history.db'))
@@ -3596,7 +3627,10 @@ def db_get_session_status(
                 "SELECT WriteMode, Status FROM ReportSessions WHERE Id=?",
                 (session_id,),
             ).fetchone()
-        except sqlite3.OperationalError:
+        except _DB_OPERATIONAL_ERRORS:
+            # Legacy schema without the WriteMode column. Under d1-only the
+            # missing column surfaces as D1PermanentError, not
+            # sqlite3.OperationalError — see _DB_OPERATIONAL_ERRORS.
             row = conn.execute(
                 "SELECT Status FROM ReportSessions WHERE Id=?",
                 (session_id,),
@@ -4970,7 +5004,10 @@ def db_pending_session_stats(
                     f"FROM {tbl} WHERE SessionId=?",
                     (session_id,),
                 ).fetchone()
-            except sqlite3.OperationalError:
+            except _DB_OPERATIONAL_ERRORS:
+                # Pending table absent on a legacy / partially-migrated
+                # schema — treat as zero. d1-only surfaces this as
+                # D1PermanentError, hence _DB_OPERATIONAL_ERRORS.
                 continue
             if row is None:
                 continue
@@ -5310,8 +5347,9 @@ def db_find_stale_pending_sessions(
                 "AND DateTimeCreated < ?" + run_identity_clause,
                 (cutoff,),
             ).fetchall()
-        except sqlite3.OperationalError:
+        except _DB_OPERATIONAL_ERRORS:
             # Legacy schema without WriteMode column — fall back to audit.
+            # d1-only surfaces the missing column as D1PermanentError.
             rows = conn.execute(
                 "SELECT Id, Status FROM ReportSessions "
                 "WHERE Status IN ('in_progress','finalizing') "
@@ -5429,8 +5467,9 @@ def db_find_sessions_by_run(
                         f"WHERE RunId=? AND RunAttempt=?",
                         (run_id, int(run_attempt)),
                     ).fetchall()
-            except sqlite3.OperationalError:
-                # Table doesn't exist (history db wasn't initialised yet)
+            except _DB_OPERATIONAL_ERRORS:
+                # Table doesn't exist (history db wasn't initialised yet).
+                # d1-only surfaces the missing table as D1PermanentError.
                 continue
             for r in rows:
                 if r['SessionId'] is not None:
@@ -5756,10 +5795,18 @@ def _rollback_history(
                             counts[f'{main_table}.reinserted'] += 1
                             _delete_audit_row(conn, audit_table, audit_id)
                             applied += 1
-                        except sqlite3.IntegrityError as e:
+                        except _DB_INTEGRITY_ERRORS as e:
                             # E.g. UNIQUE conflict — a concurrent run
                             # already reinserted something with the same
-                            # business key. Skip + drift log.
+                            # business key. Skip + drift log. d1-only
+                            # surfaces a UNIQUE violation as
+                            # D1PermanentError (D1 collapses all HTTP-400
+                            # application errors into that type), hence
+                            # _DB_INTEGRITY_ERRORS rather than the bare
+                            # sqlite3.IntegrityError. D1TransientError is
+                            # deliberately NOT caught here — retries are
+                            # already exhausted by then and a network
+                            # failure mid-reinsert must abort, not skip.
                             counts['drift_skipped'] += 1
                             drifted += 1
                             logger.warning(
@@ -5805,7 +5852,10 @@ def _is_orphan_audit(
             f"SELECT 1 FROM {main_table} WHERE Id=?",
             (target_id,),
         ).fetchone()
-    except sqlite3.OperationalError:
+    except _DB_OPERATIONAL_ERRORS:
+        # Main table missing — can't prove the row is orphaned, so play
+        # safe and keep the audit row. d1-only surfaces a missing table
+        # as D1PermanentError.
         return False
     return row is None
 
