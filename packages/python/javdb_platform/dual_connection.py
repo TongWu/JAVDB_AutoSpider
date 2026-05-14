@@ -317,6 +317,17 @@ APPLICATION_GENERATED_ID_PK_COLUMN: "dict[str, str]" = {
     # entries that trigger the Phase 3 critical alert.
     "PendingMovieHistoryWrites": "Seq",
     "PendingTorrentHistoryWrites": "Seq",
+    # Batch C (C.1): MovieHistory.Id and TorrentHistory.Id are INTEGER
+    # AUTOINCREMENT.  Under STORAGE_BACKEND=dual the SQLite and D1
+    # AUTOINCREMENT counters are independent — any prior asymmetric INSERT
+    # permanently diverges them, causing TorrentHistory.MovieHistoryId FK
+    # references to point at wrong rows on one backend, and UPDATE WHERE
+    # Id=? to silently touch 0 rows on the backend whose Id differs.
+    # Fix: _commit_one_movie / _commit_session_bulk / db_upsert_history
+    # now supply an explicit Id via _generate_integer_id() (52-bit integer
+    # snowflake, always < 2**53 so safe for D1 JSON transport).
+    "MovieHistory": "Id",
+    "TorrentHistory": "Id",
 }
 APPLICATION_GENERATED_ID_TABLES: frozenset = frozenset(
     APPLICATION_GENERATED_ID_PK_COLUMN
