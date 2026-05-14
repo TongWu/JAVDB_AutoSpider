@@ -137,7 +137,7 @@ def _logical_name_for(db_path: str) -> str:
 # Legacy single-DB path — kept for migration source detection
 DB_PATH = cfg('SQLITE_DB_PATH', os.path.join(_REPORTS_DIR, 'javdb_autospider.db'))
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 # ── Connection management ────────────────────────────────────────────────
 
@@ -1496,7 +1496,7 @@ _V12_REPORTSESSIONS_ID_RE = re.compile(
     re.IGNORECASE,
 )
 _V12_PENDING_SEQ_RE = re.compile(
-    r'\bSeq\s+INTEGER\s+PRIMARY\s+KEY\s+NOT\s+NULL\b',
+    r'\bSeq\s+INTEGER\s+PRIMARY\s+KEY\s+(?:NOT\s+NULL|AUTOINCREMENT)\b',
     re.IGNORECASE,
 )
 # Tables whose `Id INTEGER PRIMARY KEY AUTOINCREMENT` is the snowflake PK
@@ -1507,7 +1507,7 @@ _V12_REPORTSESSIONS_TABLES = ("ReportSessions",)
 
 def _migrate_session_id_to_text(conn: sqlite3.Connection) -> None:
     """Rewrite SessionId / ReportSessions.Id / Pending*.Seq columns from
-    INTEGER to TEXT (v11 -> v12).
+    INTEGER to TEXT (v11 -> v12, re-run at v13 for partial-migration fix).
 
     Cloudflare D1's HTTP JSON path serializes integers as IEEE-754 doubles
     and silently truncates anything above 2**53 - 1, so the 63-bit
@@ -1531,7 +1531,14 @@ def _migrate_session_id_to_text(conn: sqlite3.Connection) -> None:
     explicitly since 2026-05-08, so the autoincrement counter was already
     dead weight.
 
-    Idempotent: on a fresh DB or a DB already at v12 nothing matches.
+    v13 fix: the original ``_V12_PENDING_SEQ_RE`` only matched
+    ``Seq INTEGER PRIMARY KEY NOT NULL`` but the v9 creation DDL used
+    ``AUTOINCREMENT``.  Databases that migrated at v12 had Seq left as
+    INTEGER (causing ``datatype mismatch`` on insert).  The regex now
+    matches both suffixes and the migration re-runs at v13 to repair
+    partially-migrated databases.
+
+    Idempotent: on a fresh DB or a DB already fully at v13 nothing matches.
     """
     rebuild_specs = [
         # (table, old_pk_regex, new_pk_decl, also_change_session_id)
@@ -1744,7 +1751,7 @@ def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
         if current > 0 and current < 10:
             _migrate_defaults_to_null(conn)
 
-        if current > 0 and current < 12:
+        if current > 0 and current < 13:
             _migrate_session_id_to_text(conn)
 
         if current == 0:
@@ -2142,7 +2149,7 @@ def _init_single_legacy_db(db_path: str, *, force: bool = False):
             _migrate_v5_to_v6(conn)
         if current < 10:
             _migrate_defaults_to_null(conn)
-        if current < 12:
+        if current < 13:
             _migrate_session_id_to_text(conn)
 
         existing = conn.execute("SELECT Version FROM SchemaVersion LIMIT 1").fetchone()
