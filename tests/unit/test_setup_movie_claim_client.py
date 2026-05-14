@@ -537,3 +537,81 @@ class TestEnforceMovieClaimForD1:
         monkeypatch.setattr(state, "global_movie_claim_client", None, raising=False)
         monkeypatch.setattr(state, "_movie_claim_client_pending", None, raising=False)
         state.enforce_movie_claim_for_d1()  # no exception
+
+
+# ── MR-5: opportunistic orphan-stage sweep at clean exit ──────────────────
+
+
+class TestSweepMovieClaimStagesAtExit:
+    """MR-5 (multi-runtime): a clean runner exit opportunistically sweeps
+    orphaned MovieClaim stages so a crashed peer's stage doesn't linger
+    until the next daily StaleSessionCleanup cron.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _reset_sweep_flag(self, monkeypatch):
+        monkeypatch.setattr(
+            state, "_movie_claim_swept_at_exit", False, raising=False,
+        )
+        yield
+        monkeypatch.setattr(
+            state, "_movie_claim_swept_at_exit", False, raising=False,
+        )
+
+    def test_noop_when_no_client_mounted(self, monkeypatch):
+        monkeypatch.setattr(state, "global_movie_claim_client", None, raising=False)
+        monkeypatch.setattr(state, "_movie_claim_client_pending", None, raising=False)
+        # Must not raise even with nothing mounted.
+        state._sweep_movie_claim_stages_at_exit()
+
+    def test_sweeps_today_and_yesterday_when_client_mounted(self, monkeypatch):
+        fake = MagicMock(spec=MovieClaimClient)
+        fake.sweep_orphan_stages.return_value = MagicMock(removed=0)
+        monkeypatch.setattr(
+            state, "global_movie_claim_client", fake, raising=False,
+        )
+        monkeypatch.setattr(state, "_movie_claim_client_pending", None, raising=False)
+
+        state._sweep_movie_claim_stages_at_exit()
+
+        # Two shards (today + yesterday), each with the conservative 6h cutoff.
+        assert fake.sweep_orphan_stages.call_count == 2
+        for call in fake.sweep_orphan_stages.call_args_list:
+            assert call.kwargs["older_than_ms"] == (
+                state._MOVIE_CLAIM_SWEEP_AT_EXIT_OLDER_THAN_MS
+            )
+            assert call.kwargs["older_than_ms"] == 6 * 60 * 60 * 1000
+            # date is a YYYY-MM-DD string
+            assert len(call.kwargs["date"]) == 10
+
+    def test_uses_pending_client_when_global_unmounted(self, monkeypatch):
+        # Auto mode keeps the client in _movie_claim_client_pending after
+        # a single-runner unmount — the at-exit sweep should still use it.
+        fake = MagicMock(spec=MovieClaimClient)
+        fake.sweep_orphan_stages.return_value = MagicMock(removed=3)
+        monkeypatch.setattr(state, "global_movie_claim_client", None, raising=False)
+        monkeypatch.setattr(
+            state, "_movie_claim_client_pending", fake, raising=False,
+        )
+        state._sweep_movie_claim_stages_at_exit()
+        assert fake.sweep_orphan_stages.call_count == 2
+
+    def test_idempotent(self, monkeypatch):
+        fake = MagicMock(spec=MovieClaimClient)
+        fake.sweep_orphan_stages.return_value = MagicMock(removed=0)
+        monkeypatch.setattr(
+            state, "global_movie_claim_client", fake, raising=False,
+        )
+        state._sweep_movie_claim_stages_at_exit()
+        state._sweep_movie_claim_stages_at_exit()  # second call is a no-op
+        assert fake.sweep_orphan_stages.call_count == 2  # not 4
+
+    def test_never_raises_on_client_error(self, monkeypatch):
+        fake = MagicMock(spec=MovieClaimClient)
+        fake.sweep_orphan_stages.side_effect = RuntimeError("worker down")
+        monkeypatch.setattr(
+            state, "global_movie_claim_client", fake, raising=False,
+        )
+        # Exceptions from the client must never block shutdown.
+        state._sweep_movie_claim_stages_at_exit()
+        assert fake.sweep_orphan_stages.call_count == 2  # both shards attempted
