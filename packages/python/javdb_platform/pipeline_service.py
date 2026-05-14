@@ -225,10 +225,8 @@ def extract_session_id_from_output(output):
     """Extract session_id from spider output (SPIDER_SESSION_ID=<id>)."""
     for line in output.splitlines():
         if line.startswith('SPIDER_SESSION_ID='):
-            try:
-                return int(line.split('=', 1)[1].strip())
-            except (ValueError, IndexError):
-                return None
+            val = line.split('=', 1)[1].strip()
+            return val if val else None
     return None
 
 
