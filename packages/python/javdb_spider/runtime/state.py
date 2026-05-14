@@ -26,6 +26,7 @@ from packages.python.javdb_platform.movie_claim_client import (
     MovieClaimClient,
     create_movie_claim_client_from_env,
     create_movie_claim_client_with_mode_from_env,
+    parse_movie_claim_mode,
 )
 from packages.python.javdb_platform.proxy_ban_manager import (
     set_remote_ban_hook,
@@ -103,6 +104,16 @@ global_movie_claim_client: Optional[MovieClaimClient] = None
 #   global out from under each other.
 _movie_claim_client_pending: Optional[MovieClaimClient] = None
 _movie_claim_mode: str = MOVIE_CLAIM_MODE_OFF
+# MR-4 (multi-runtime): the operator's *intended* mode, parsed from the
+# raw ``MOVIE_CLAIM_ENABLED`` cfg BEFORE the factory collapses
+# unconfigured / unreachable into ``OFF``. ``setup_movie_claim_client``
+# records it so :func:`enforce_movie_claim_for_d1` can tell apart
+# "operator deliberately disabled coordination" (intended==OFF, fine)
+# from "operator wanted coordination but the Worker is unreachable"
+# (intended!=OFF but client is None — fatal in d1-only mode, since
+# there is no local SQLite fallback and uncoordinated parallel runtimes
+# would duplicate every detail fetch and race PRIMARY KEY INSERTs).
+_movie_claim_intended_mode: str = MOVIE_CLAIM_MODE_OFF
 _movie_claim_last_recommended: bool = False
 _movie_claim_lock: threading.Lock = threading.Lock()
 # Cross-instance runner registry (P2-E; singleton ``RunnerRegistry`` DO).
@@ -565,6 +576,7 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
        :meth:`MovieClaimClient.close`-d so we don't leak its session.
     """
     global global_movie_claim_client, _movie_claim_client_pending, _movie_claim_mode
+    global _movie_claim_intended_mode
     with _movie_claim_lock:
         if global_movie_claim_client is not None:
             return global_movie_claim_client
@@ -583,6 +595,15 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
     url = (cfg('PROXY_COORDINATOR_URL', '') or '').strip()
     token = (cfg('PROXY_COORDINATOR_TOKEN', '') or '').strip()
     raw_enabled_cfg = cfg('MOVIE_CLAIM_ENABLED', None)
+    # MR-4: capture the operator's *intended* mode now, before the factory
+    # collapses "unconfigured" / "/health failed" into a plain OFF. ``None``
+    # cfg means "var unset" → the factory's auto default; any explicit value
+    # is parsed through the same helper the factory uses.
+    intended_mode = (
+        MOVIE_CLAIM_MODE_AUTO
+        if raw_enabled_cfg is None
+        else parse_movie_claim_mode(str(raw_enabled_cfg))
+    )
 
     # Set the env vars expected by the factory for the duration of the call,
     # then delegate to ``create_movie_claim_client_with_mode_from_env`` so
@@ -655,6 +676,12 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
         # registry-signal handler and the heartbeat-interval picker can
         # branch on it later.
         _movie_claim_mode = mode
+        # MR-4: also persist the operator's *intended* mode. The factory
+        # collapses unconfigured / unreachable into ``mode == OFF``, so
+        # ``_movie_claim_mode`` alone cannot distinguish a deliberate
+        # disable from a broken Worker — ``enforce_movie_claim_for_d1``
+        # needs the intended value to decide whether to fail closed.
+        _movie_claim_intended_mode = intended_mode
 
         if client is None or mode == MOVIE_CLAIM_MODE_OFF:
             # Off path covers: explicit disable, missing URL/token,
@@ -692,6 +719,86 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
             url, runtime_holder_id,
         )
         return client
+
+
+def enforce_movie_claim_for_d1() -> None:
+    """MR-4 (multi-runtime): fail closed when d1-only mode wants movie
+    claim coordination but the Worker is unreachable.
+
+    Must be called AFTER :func:`setup_movie_claim_client`. The rationale:
+
+    * In ``STORAGE_BACKEND=d1`` there is no local SQLite fallback. If two
+      runtimes run without MovieClaim coordination they each fetch every
+      detail page (wasted D1 / proxy / Worker quota) and then race
+      concurrent same-``Href`` ``INSERT``s into ``MovieHistory``, hitting
+      the ``UNIQUE(Href)`` constraint and aborting one runner mid-run.
+    * ``create_movie_claim_client_with_mode_from_env`` collapses three
+      very different situations into ``(None, OFF)``: (a) operator
+      explicitly disabled coordination, (b) URL/token not configured,
+      (c) the Worker ``/health`` probe failed. Only (a) is safe to
+      proceed on; (b) and (c) mean the operator *wanted* coordination
+      and it silently isn't there.
+
+    This guard raises ``RuntimeError`` for (b)/(c) under d1-only mode so
+    the misconfiguration surfaces at startup instead of as duplicated
+    work + PRIMARY KEY aborts mid-run. The intentional escape hatch is
+    ``JAVDB_ALLOW_UNCOORDINATED_D1=1`` for an operator who knowingly
+    wants to run a single d1-only runtime without the Worker.
+
+    No-op in ``sqlite`` / ``dual`` modes (the local mirror still gives a
+    canonical fallback there) and when the operator's *intended* mode is
+    ``OFF`` (a deliberate choice, not a misconfiguration).
+    """
+    from packages.python.javdb_platform.config_helper import storage_backend
+
+    if storage_backend() != "d1":
+        return
+
+    if _movie_claim_intended_mode == MOVIE_CLAIM_MODE_OFF:
+        # Operator explicitly disabled coordination. Respect it, but make
+        # the risk visible — uncoordinated parallel d1-only runtimes will
+        # duplicate work and may race PRIMARY KEY INSERTs.
+        logger.warning(
+            "MOVIE_CLAIM_ENABLED resolves to OFF under STORAGE_BACKEND=d1 — "
+            "running without cross-runtime detail-claim coordination. Parallel "
+            "runtimes will duplicate detail fetches and may race UNIQUE(Href) "
+            "INSERTs. Set MOVIE_CLAIM_ENABLED=auto to enable coordination."
+        )
+        return
+
+    with _movie_claim_lock:
+        have_client = (
+            global_movie_claim_client is not None
+            or _movie_claim_client_pending is not None
+        )
+    if have_client:
+        return
+
+    allow_uncoordinated = (
+        os.environ.get("JAVDB_ALLOW_UNCOORDINATED_D1", "").strip().lower()
+        in ("1", "true", "yes", "on")
+    )
+    if allow_uncoordinated:
+        logger.warning(
+            "STORAGE_BACKEND=d1 wants movie-claim coordination "
+            "(intended mode=%s) but the Worker is unreachable / unconfigured; "
+            "JAVDB_ALLOW_UNCOORDINATED_D1 is set so proceeding anyway. This is "
+            "only safe for a SINGLE d1-only runtime — concurrent runs will "
+            "duplicate fetches and race PRIMARY KEY INSERTs.",
+            _movie_claim_intended_mode,
+        )
+        return
+
+    raise RuntimeError(
+        "STORAGE_BACKEND=d1 requires the MovieClaim coordinator but it is "
+        "unreachable or unconfigured (intended MOVIE_CLAIM_ENABLED mode="
+        f"{_movie_claim_intended_mode!r}; PROXY_COORDINATOR_URL/TOKEN must be "
+        "set and the Worker /health probe must succeed). Without it, parallel "
+        "d1-only runtimes duplicate every detail fetch and race UNIQUE(Href) "
+        "INSERTs into MovieHistory. Fix the Worker deployment, or set "
+        "JAVDB_ALLOW_UNCOORDINATED_D1=1 to deliberately run a single "
+        "uncoordinated d1-only runtime."
+    )
 
 
 def _resolve_proxy_pool_json() -> str:
@@ -1102,6 +1209,11 @@ def setup_proxy_pool(use_proxy) -> None:
     setup_proxy_coordinator()
     setup_login_state_client()
     setup_movie_claim_client()
+    # MR-4: in d1-only mode, refuse to start when the operator wanted
+    # movie-claim coordination but the Worker is unreachable. Must run
+    # after setup_movie_claim_client() so the client / pending slots and
+    # _movie_claim_intended_mode are populated.
+    enforce_movie_claim_for_d1()
     setup_runner_registry_client()
 
     if is_proxy_mode_disabled(PROXY_MODE):
