@@ -729,7 +729,22 @@ class ProxyCoordinatorClient:
         """
         try:
             resp = self._session.get(f"{self._base_url}/health", timeout=self._timeout)
-            return resp.status_code == 200
+            if resp.status_code == 200:
+                return True
+            if resp.status_code == 403 and resp.headers.get("cf-mitigated"):
+                logger.warning(
+                    "Proxy coordinator /health returned 403 with Cloudflare "
+                    "challenge (cf-mitigated=%s) — the domain's WAF/bot rules "
+                    "are blocking automated requests; add a WAF exception for "
+                    "the /health path or use a Cloudflare Access service token",
+                    resp.headers.get("cf-mitigated"),
+                )
+            else:
+                logger.warning(
+                    "Proxy coordinator /health returned HTTP %d (expected 200)",
+                    resp.status_code,
+                )
+            return False
         except Exception:  # noqa: BLE001
             return False
 

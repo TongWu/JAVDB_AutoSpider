@@ -1,4 +1,4 @@
-"""v11 -> v12: rewrite INTEGER session_id / Seq columns to TEXT.
+"""v11 -> v12 -> v13: rewrite INTEGER session_id / Seq columns to TEXT.
 
 These tests exercise :func:`packages.python.javdb_platform.db._migrate_session_id_to_text`
 end-to-end: build a fixture DB with the pre-migration schema, seed a
@@ -10,6 +10,11 @@ snowflake-shaped integers, run the migration, and assert:
 * ``PRAGMA foreign_key_check`` is empty
 * the seeded values round-trip losslessly (no truncation)
 * a representative cross-table query still returns the same joined row
+
+v13 additions: verify the AUTOINCREMENT variant of ``Seq INTEGER
+PRIMARY KEY`` (used in the original 2026-05-09 creation DDL) is also
+matched and rewritten, and that partially-migrated databases (v12 with
+Seq still INTEGER) are repaired on re-run.
 """
 
 from __future__ import annotations
@@ -279,3 +284,195 @@ def test_new_writes_after_migration_use_text_affinity(tmp_path):
         assert isinstance(row[0], str)
     finally:
         chk.close()
+
+
+# ── v13 regression: AUTOINCREMENT variant ─────────────────────────────
+
+_LEGACY_HISTORY_AUTOINCREMENT_DDL = """
+CREATE TABLE SchemaVersion (Version INTEGER NOT NULL);
+INSERT INTO SchemaVersion (Version) VALUES (11);
+
+CREATE TABLE MovieHistory (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    VideoCode TEXT NOT NULL,
+    Href TEXT NOT NULL UNIQUE,
+    SessionId INTEGER
+);
+
+CREATE TABLE MovieHistoryAudit (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    TargetId INTEGER NOT NULL,
+    Action TEXT NOT NULL,
+    OldRowJson TEXT,
+    SessionId INTEGER NOT NULL,
+    DateTimeCreated TEXT NOT NULL
+);
+
+CREATE TABLE PendingMovieHistoryWrites (
+    Seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    SessionId INTEGER NOT NULL,
+    Href TEXT NOT NULL,
+    VideoCode TEXT,
+    DateTimeVisited TEXT NOT NULL,
+    CreatedAt TEXT NOT NULL,
+    ApplyState TEXT NOT NULL DEFAULT 'pending'
+);
+
+CREATE TABLE PendingTorrentHistoryWrites (
+    Seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    SessionId INTEGER NOT NULL,
+    Href TEXT NOT NULL,
+    VideoCode TEXT,
+    Category TEXT NOT NULL,
+    SubtitleIndicator INTEGER NOT NULL,
+    CensorIndicator INTEGER NOT NULL,
+    MagnetUri TEXT,
+    Size TEXT,
+    FileCount INTEGER,
+    ResolutionType INTEGER,
+    DateTimeVisited TEXT NOT NULL,
+    CreatedAt TEXT NOT NULL,
+    ApplyState TEXT NOT NULL DEFAULT 'pending'
+);
+"""
+
+
+def test_autoincrement_seq_is_migrated_to_text(tmp_path):
+    """The original 2026-05-09 DDL used ``Seq INTEGER PRIMARY KEY
+    AUTOINCREMENT``.  The v12 regex only matched ``NOT NULL`` and left
+    Seq as INTEGER, causing ``datatype mismatch`` on TEXT snowflake
+    inserts.  Verify the fixed regex converts both Pending tables.
+    """
+    db_path = str(tmp_path / "history_autoincrement.db")
+    seed = sqlite3.connect(db_path)
+    seed.executescript(_LEGACY_HISTORY_AUTOINCREMENT_DDL)
+    seed.commit()
+    seed.close()
+
+    conn = sqlite3.connect(db_path)
+    try:
+        db_mod._migrate_session_id_to_text(conn)
+    finally:
+        conn.close()
+
+    chk = sqlite3.connect(db_path)
+    chk.row_factory = sqlite3.Row
+    try:
+        assert _column_type(chk, "PendingMovieHistoryWrites", "Seq") == "TEXT"
+        assert _column_type(chk, "PendingMovieHistoryWrites", "SessionId") == "TEXT"
+        assert _column_type(chk, "PendingTorrentHistoryWrites", "Seq") == "TEXT"
+        assert _column_type(chk, "PendingTorrentHistoryWrites", "SessionId") == "TEXT"
+
+        text_seq = "20260514T100000.000000Z-abcd-0001"
+        text_sid = "20260514T100000.000000Z-abcd-0002"
+        chk.execute(
+            "INSERT INTO PendingMovieHistoryWrites "
+            "(Seq, SessionId, Href, DateTimeVisited, CreatedAt) "
+            "VALUES (?, ?, '/v/Z', '2026-05-14 10:00:00', '2026-05-14 10:00:01')",
+            (text_seq, text_sid),
+        )
+        chk.commit()
+        row = chk.execute(
+            "SELECT Seq, SessionId FROM PendingMovieHistoryWrites"
+        ).fetchone()
+        assert row["Seq"] == text_seq
+        assert row["SessionId"] == text_sid
+    finally:
+        chk.close()
+
+
+def test_partial_v12_migration_repaired_at_v13(tmp_path):
+    """Simulate the v12 partial migration where SessionId was converted to
+    TEXT but Seq remained ``INTEGER PRIMARY KEY AUTOINCREMENT``.  A second
+    migration run (as triggered at v13) must repair the Seq column.
+    """
+    db_path = str(tmp_path / "history_partial.db")
+    seed = sqlite3.connect(db_path)
+    seed.executescript(_LEGACY_HISTORY_AUTOINCREMENT_DDL)
+    seed.execute("UPDATE SchemaVersion SET Version = 12")
+    seed.commit()
+
+    partially_migrated_ddl = seed.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' "
+        "AND name='PendingMovieHistoryWrites'"
+    ).fetchone()[0]
+    assert "AUTOINCREMENT" in partially_migrated_ddl
+
+    new_ddl = partially_migrated_ddl.replace(
+        "SessionId INTEGER", "SessionId TEXT"
+    )
+    seed.execute("DROP TABLE PendingMovieHistoryWrites")
+    seed.execute(new_ddl)
+    seed.commit()
+
+    partially_migrated_ddl_t = seed.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' "
+        "AND name='PendingTorrentHistoryWrites'"
+    ).fetchone()[0]
+    new_ddl_t = partially_migrated_ddl_t.replace(
+        "SessionId INTEGER", "SessionId TEXT"
+    )
+    seed.execute("DROP TABLE PendingTorrentHistoryWrites")
+    seed.execute(new_ddl_t)
+    seed.commit()
+    seed.close()
+
+    verify = sqlite3.connect(db_path)
+    pmhw_ddl = verify.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' "
+        "AND name='PendingMovieHistoryWrites'"
+    ).fetchone()[0]
+    assert "Seq INTEGER PRIMARY KEY AUTOINCREMENT" in pmhw_ddl
+    assert "SessionId TEXT" in pmhw_ddl
+    verify.close()
+
+    conn = sqlite3.connect(db_path)
+    try:
+        db_mod._migrate_session_id_to_text(conn)
+    finally:
+        conn.close()
+
+    chk = sqlite3.connect(db_path)
+    chk.row_factory = sqlite3.Row
+    try:
+        assert _column_type(chk, "PendingMovieHistoryWrites", "Seq") == "TEXT"
+        assert _column_type(chk, "PendingTorrentHistoryWrites", "Seq") == "TEXT"
+
+        text_seq = "20260514T120000.000000Z-beef-0001"
+        chk.execute(
+            "INSERT INTO PendingMovieHistoryWrites "
+            "(Seq, SessionId, Href, DateTimeVisited, CreatedAt) "
+            "VALUES (?, 'sid', '/v/W', '2026-05-14', '2026-05-14')",
+            (text_seq,),
+        )
+        chk.commit()
+        row = chk.execute(
+            "SELECT Seq FROM PendingMovieHistoryWrites"
+        ).fetchone()
+        assert row["Seq"] == text_seq
+        assert isinstance(row["Seq"], str)
+    finally:
+        chk.close()
+
+
+def test_autoincrement_seq_insert_fails_without_fix(tmp_path):
+    """Without the migration, inserting a TEXT snowflake into
+    ``Seq INTEGER PRIMARY KEY AUTOINCREMENT`` raises ``IntegrityError:
+    datatype mismatch`` — the exact production crash.
+    """
+    db_path = str(tmp_path / "history_unfixed.db")
+    seed = sqlite3.connect(db_path)
+    seed.executescript(_LEGACY_HISTORY_AUTOINCREMENT_DDL)
+    seed.commit()
+    seed.close()
+
+    conn = sqlite3.connect(db_path)
+    text_seq = "20260514T100000.000000Z-dead-0001"
+    with pytest.raises(sqlite3.IntegrityError, match="datatype mismatch"):
+        conn.execute(
+            "INSERT INTO PendingMovieHistoryWrites "
+            "(Seq, SessionId, Href, DateTimeVisited, CreatedAt) "
+            "VALUES (?, 123, '/v/X', '2026-05-14', '2026-05-14')",
+            (text_seq,),
+        )
+    conn.close()
