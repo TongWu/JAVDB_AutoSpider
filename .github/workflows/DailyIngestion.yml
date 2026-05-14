@@ -1123,7 +1123,15 @@ jobs:
     env:
       TZ: Asia/Singapore
       GH_TOKEN: ${{ github.token }}
-    
+      # MR-2 (multi-runtime): surfaced so the commit step can skip the
+      # reports/*.db git add when STORAGE_BACKEND=d1. In d1-only mode the
+      # SQLite mirror files are never written by the pipeline (the DB
+      # layer uses a D1Connection, not _open_sqlite_connection), so
+      # staging them is at best a misleading no-op and at worst keeps a
+      # stale binary in git that two parallel runtimes would `-X ours`
+      # clobber. D1 is the source of truth in that mode.
+      STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -1191,13 +1199,26 @@ jobs:
           # This ensures files are tracked and won't conflict with remote
           # ============================================================
           echo "Step 1: Staging files..."
+          # MR-2 (multi-runtime): in d1-only mode the SQLite mirror files
+          # (history.db / reports.db / operations.db) are never written by
+          # the pipeline — D1 is the source of truth — so staging them
+          # only risks two parallel runtimes `-X ours`-clobbering a stale
+          # binary. Skip them entirely. dual / sqlite modes keep the
+          # original behaviour.
+          stage_db_mirrors() {
+            if [ "$STORAGE_BACKEND" = "d1" ]; then
+              echo "STORAGE_BACKEND=d1 — skipping reports/*.db (D1 is source of truth)"
+              return 0
+            fi
+            git add "$REPORTS_DIR/history.db" 2>/dev/null || true
+            git add "$REPORTS_DIR/reports.db" 2>/dev/null || true
+            git add "$REPORTS_DIR/operations.db" 2>/dev/null || true
+          }
           if [[ "$SPIDER_SUCCESS" == "true" && "$UPLOADER_SUCCESS" == "true" ]]; then
             echo "Spider and Uploader both succeeded - staging all data files"
             git add "$REPORTS_DIR/parsed_movies_history.csv" 2>/dev/null || true
             git add "$REPORTS_DIR/pikpak_bridge_history.csv" 2>/dev/null || true
-            git add "$REPORTS_DIR/history.db" 2>/dev/null || true
-            git add "$REPORTS_DIR/reports.db" 2>/dev/null || true
-            git add "$REPORTS_DIR/operations.db" 2>/dev/null || true
+            stage_db_mirrors
             git add "$REPORTS_DIR/rclone_inventory.csv" 2>/dev/null || true
             git add "$REPORTS_DIR/dedup_history.csv" 2>/dev/null || true
             find "$REPORTS_DIR/Dedup" -name "*.csv" -exec git add {} \; 2>/dev/null || true
