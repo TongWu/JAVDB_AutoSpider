@@ -381,6 +381,57 @@ def _generate_session_id() -> str:
         return candidate
 
 
+# ── Integer snowflake for INTEGER PRIMARY KEY tables ─────────────────────
+#
+# MovieHistory.Id and TorrentHistory.Id are declared INTEGER, so they cannot
+# use the TEXT session-id format above.  To keep dual-write consistent we
+# need to supply explicit ids that are identical on both SQLite and D1.
+#
+# Constraints:
+#   • Must stay within D1's JSON-safe range: |x| < 2**53
+#   • Must be strictly increasing within a process so two concurrent
+#     inserts cannot collide
+#   • Must be unlikely to collide across processes (dual-mode multi-runner)
+#
+# Layout (52 bits, little-headroom below 2**53):
+#   relative_ms (40 bits) — ms since 2026-01-01T00:00:00Z; overflows year 2060
+#   process_tag  (6 bits) — secrets.randbits(6) per process (64 slots)
+#   counter      (6 bits) — monotonic per-ms in-process counter (64 per ms)
+#
+# Collision probability for two simultaneous processes within the same ms:
+#   P ≈ 1 / 64  (process_tag birthday) × 1/(64 slots) = ~0.02 % per ms burst.
+# The MovieClaim DO (MR-4) guarantees at most one runner processes a given
+# href at a time, so same-href concurrent inserts are already prevented;
+# cross-href collisions would require two distinct hrefs to be new at the
+# exact same ms with the same 6-bit tag and counter — acceptable risk.
+_INT_ID_EPOCH_BASE_MS: int = 1_735_689_600_000  # 2026-01-01T00:00:00Z
+_INT_ID_PROCESS_TAG: int = secrets.randbits(6)
+_INT_ID_LOCK = threading.Lock()
+_INT_ID_LAST_MS: int = -1
+_INT_ID_COUNTER: int = 0
+
+
+def _generate_integer_id() -> int:
+    """Return a 52-bit integer PK for INTEGER PRIMARY KEY tables.
+
+    Safe for Cloudflare D1 JSON transport (all values < 2**53).
+    Strictly increasing within a process; monotonicity forced on clock skew.
+    """
+    global _INT_ID_LAST_MS, _INT_ID_COUNTER
+    with _INT_ID_LOCK:
+        ms = int(time.time() * 1000) - _INT_ID_EPOCH_BASE_MS
+        if ms > _INT_ID_LAST_MS:
+            _INT_ID_LAST_MS = ms
+            _INT_ID_COUNTER = 0
+        else:
+            # Same ms or clock went backwards — stay monotonic on _INT_ID_LAST_MS.
+            _INT_ID_COUNTER += 1
+            if _INT_ID_COUNTER >= 64:
+                _INT_ID_LAST_MS += 1
+                _INT_ID_COUNTER = 0
+        return (_INT_ID_LAST_MS << 12) | (_INT_ID_PROCESS_TAG << 6) | _INT_ID_COUNTER
+
+
 def _is_valid_sqlite(path: str) -> bool:
     """Quick check: file must start with the SQLite magic header."""
     try:
@@ -2518,12 +2569,13 @@ def db_upsert_history(
             ).fetchone()
 
         if existing is None:
+            movie_id = _generate_integer_id()
             insert_movie = (
                 """INSERT INTO MovieHistory
-                   (VideoCode, Href, DateTimeCreated, DateTimeUpdated, DateTimeVisited,
+                   (Id, VideoCode, Href, DateTimeCreated, DateTimeUpdated, DateTimeVisited,
                     ActorName, ActorGender, ActorLink, SupportingActors, SessionId)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (video_code, normalized_href, now, now, now,
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (movie_id, video_code, normalized_href, now, now, now,
                  actor_name, actor_gender, prepared_actor_link,
                  prepared_supporting_actors, sid),
             )
@@ -2535,14 +2587,7 @@ def db_upsert_history(
             )
             if audit_stmt is not None:
                 statements.append(audit_stmt)
-            cursors = _execute_backend_batch(conn, statements)
-            movie_id = getattr(cursors[0], "lastrowid", None) if cursors else None
-            if not movie_id:
-                row = conn.execute(
-                    "SELECT Id FROM MovieHistory WHERE Href=?",
-                    (normalized_href,),
-                ).fetchone()
-                movie_id = row['Id']
+            _execute_backend_batch(conn, statements)
         else:
             movie_id = existing['Id']
             old_full = conn.execute(
@@ -2620,14 +2665,15 @@ def db_upsert_history(
             ).fetchone()
 
             if existing_t is None:
+                torrent_id = _generate_integer_id()
                 insert_torrent = (
                     """INSERT INTO TorrentHistory
-                       (MovieHistoryId, MagnetUri, SubtitleIndicator, CensorIndicator,
+                       (Id, MovieHistoryId, MagnetUri, SubtitleIndicator, CensorIndicator,
                         ResolutionType, Size, FileCount, DateTimeCreated,
                         DateTimeUpdated, SessionId)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (movie_id, magnet, sub_ind, cen_ind, res, size, fc, now, now,
-                     sid),
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (torrent_id, movie_id, magnet, sub_ind, cen_ind, res, size, fc,
+                     now, now, sid),
                 )
                 statements = [insert_torrent]
                 audit_stmt = _torrent_insert_audit_statement_for_type(
@@ -4192,13 +4238,15 @@ def _commit_one_movie(
             or ""
         )
         normalized_href = abs_href or href
-        cur = conn.execute(
+        movie_id = _generate_integer_id()
+        conn.execute(
             """INSERT INTO MovieHistory
-               (VideoCode, Href, DateTimeCreated, DateTimeUpdated,
+               (Id, VideoCode, Href, DateTimeCreated, DateTimeUpdated,
                 DateTimeVisited, ActorName, ActorGender, ActorLink,
                 SupportingActors, SessionId)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
+                movie_id,
                 video_code,
                 normalized_href,
                 when,
@@ -4211,7 +4259,6 @@ def _commit_one_movie(
                 session_id,
             ),
         )
-        movie_id = int(cur.lastrowid or 0)
         counts["movies_upserted"] += 1
     else:
         movie_id = int(existing["Id"])
@@ -4259,11 +4306,12 @@ def _commit_one_movie(
         if existing_t is None:
             conn.execute(
                 """INSERT INTO TorrentHistory
-                   (MovieHistoryId, MagnetUri, SubtitleIndicator,
+                   (Id, MovieHistoryId, MagnetUri, SubtitleIndicator,
                     CensorIndicator, ResolutionType, Size, FileCount,
                     DateTimeCreated, DateTimeUpdated, SessionId)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
+                    _generate_integer_id(),
                     movie_id,
                     payload.get("MagnetUri"),
                     int(sub),
@@ -4487,7 +4535,10 @@ def _commit_session_bulk(
 
     # ── Phase B: classify each href into INSERT-new / UPDATE / skip ──
     base_url = cfg("BASE_URL", "https://javdb.com")
-    new_movie_inserts: List[Tuple[str, str, tuple]] = []
+    # href → (sql, params) for new-movie INSERTs.  Ids are pre-generated so
+    # we never need cur.lastrowid (which is unreliable across dual-write
+    # backends under STORAGE_BACKEND=dual — see C.1 in the audit plan).
+    new_movie_insert_stmts: List[Tuple[str, tuple]] = []
     movie_updates: List[Tuple[str, tuple]] = []
     consumed_movie_seqs: List[str] = []
     consumed_torrent_seqs: List[str] = []
@@ -4522,14 +4573,16 @@ def _commit_session_bulk(
             )
             _, abs_href = movie_href_lookup_values(href, base_url)
             normalized_href = abs_href or href
-            new_movie_inserts.append((
-                href,
+            movie_id = _generate_integer_id()
+            href_to_movie_id[href] = movie_id
+            new_movie_insert_stmts.append((
                 """INSERT INTO MovieHistory
-                   (VideoCode, Href, DateTimeCreated, DateTimeUpdated,
+                   (Id, VideoCode, Href, DateTimeCreated, DateTimeUpdated,
                     DateTimeVisited, ActorName, ActorGender, ActorLink,
                     SupportingActors, SessionId)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
+                    movie_id,
                     video_code,
                     normalized_href,
                     when,
@@ -4567,18 +4620,10 @@ def _commit_session_bulk(
             ))
         counts["movies_upserted"] += 1
 
-    # ── Phase C1: flush new-movie INSERTs in batches; capture lastrowid ─
-    for chunk in _chunked(new_movie_inserts, 50):
-        stmts = [(sql, params) for _, sql, params in chunk]
-        cursors = _bulk_run(conn, stmts)
-        for (href, _sql, _params), cur in zip(chunk, cursors):
-            mid = int(getattr(cur, "lastrowid", 0) or 0)
-            if mid == 0:
-                raise RuntimeError(
-                    "_commit_session_bulk: INSERT MovieHistory returned "
-                    f"lastrowid=0 for href={href!r}; cannot link TorrentHistory"
-                )
-            href_to_movie_id[href] = mid
+    # ── Phase C1: flush new-movie INSERTs in batches ─────────────────────
+    # Ids are already in href_to_movie_id; no lastrowid needed.
+    for chunk in _chunked(new_movie_insert_stmts, 50):
+        _bulk_run(conn, chunk)
 
     # ── Phase C2: bulk-read live TorrentHistory by MovieHistoryId ───────
     live_torrents_by_mid: Dict[int, Dict[Tuple[int, int], dict]] = {}
@@ -4621,11 +4666,12 @@ def _commit_session_bulk(
             if existing_t is None:
                 write_stmts.append((
                     """INSERT INTO TorrentHistory
-                       (MovieHistoryId, MagnetUri, SubtitleIndicator,
+                       (Id, MovieHistoryId, MagnetUri, SubtitleIndicator,
                         CensorIndicator, ResolutionType, Size, FileCount,
                         DateTimeCreated, DateTimeUpdated, SessionId)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
+                        _generate_integer_id(),
                         mid,
                         payload.get("MagnetUri"),
                         sub_i,
