@@ -35,6 +35,7 @@ from packages.python.javdb_spider.runtime.sleep import (
     MovieSleepManager,
     PenaltyTracker,
     TripleWindowThrottle,
+    _DEGRADE_THRESHOLD,
 )
 
 
@@ -441,3 +442,171 @@ class TestSleepMirrorsRemoteCfBypass:
             _state.always_bypass_time = original_always
             _state.proxies_requiring_cf_bypass.clear()
             _state.proxies_requiring_cf_bypass.update(original_dict)
+
+
+# ---------------------------------------------------------------------------
+# Circuit breaker — plan_sleep degrades after repeated coordinator failures
+# ---------------------------------------------------------------------------
+
+
+class TestCircuitBreaker:
+
+    def test_circuit_opens_after_threshold_plus_one_failures(self, caplog):
+        coord = MagicMock()
+        coord.lease.side_effect = CoordinatorUnavailable("down")
+        mgr = MovieSleepManager(
+            0.01, 0.02, coordinator=coord, proxy_id="p", throttle=None,
+        )
+
+        with caplog.at_level("DEBUG", logger="packages.python.javdb_spider.runtime.sleep"):
+            for _ in range(_DEGRADE_THRESHOLD + 1):
+                mgr.plan_sleep()
+
+        error_lines = [r for r in caplog.records if r.levelname == "ERROR" and "Coordinator unavailable" in r.message]
+        assert len(error_lines) == _DEGRADE_THRESHOLD, (
+            f"expected {_DEGRADE_THRESHOLD} ERROR lines, got {len(error_lines)}"
+        )
+        warning_lines = [r for r in caplog.records if r.levelname == "WARNING" and "Circuit breaker open" in r.message]
+        assert len(warning_lines) == 1
+        assert mgr._degraded is True
+
+    def test_degraded_skips_coordinator_calls(self):
+        coord = MagicMock()
+        coord.lease.return_value = _mk_lease(wait_ms=10)
+        mgr = MovieSleepManager(
+            0.01, 0.02, coordinator=coord, proxy_id="p", throttle=None,
+        )
+        mgr._degraded = True
+        mgr._degraded_since = time.time()
+
+        _, used_coordinator = mgr.plan_sleep()
+
+        coord.lease.assert_not_called()
+        assert used_coordinator is False
+
+    def test_half_open_probe_after_recovery_period(self):
+        call_count = [0]
+
+        def lease_side_effect(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] <= _DEGRADE_THRESHOLD + 1:
+                raise CoordinatorUnavailable("down")
+            return _mk_lease(wait_ms=10)
+
+        coord = MagicMock()
+        coord.lease.side_effect = lease_side_effect
+        mgr = MovieSleepManager(
+            0.01, 0.02, coordinator=coord, proxy_id="p", throttle=None,
+        )
+        mgr._recovery_probe_sec = 0.01
+
+        # Open the circuit
+        for _ in range(_DEGRADE_THRESHOLD + 1):
+            mgr.plan_sleep()
+        assert mgr._degraded is True
+
+        time.sleep(0.02)
+
+        # Probe — coordinator now succeeds
+        _, used_coordinator = mgr.plan_sleep()
+        assert used_coordinator is True
+        assert mgr._degraded is False
+
+    def test_half_open_probe_failure_keeps_circuit_open(self):
+        coord = MagicMock()
+        coord.lease.side_effect = CoordinatorUnavailable("still down")
+        mgr = MovieSleepManager(
+            0.01, 0.02, coordinator=coord, proxy_id="p", throttle=None,
+        )
+        mgr._recovery_probe_sec = 0.01
+
+        # Open the circuit
+        for _ in range(_DEGRADE_THRESHOLD + 1):
+            mgr.plan_sleep()
+        assert mgr._degraded is True
+        old_since = mgr._degraded_since
+
+        time.sleep(0.02)
+
+        # Probe — coordinator still fails
+        _, used_coordinator = mgr.plan_sleep()
+        assert used_coordinator is False
+        assert mgr._degraded is True
+        assert mgr._degraded_since >= old_since
+
+    def test_recovery_resets_counter_and_closes_circuit(self, caplog):
+        call_count = [0]
+
+        def lease_side_effect(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] <= _DEGRADE_THRESHOLD + 1:
+                raise CoordinatorUnavailable("down")
+            return _mk_lease(wait_ms=10)
+
+        coord = MagicMock()
+        coord.lease.side_effect = lease_side_effect
+        mgr = MovieSleepManager(
+            0.01, 0.02, coordinator=coord, proxy_id="p", throttle=None,
+        )
+        mgr._recovery_probe_sec = 0.01
+
+        with caplog.at_level("DEBUG", logger="packages.python.javdb_spider.runtime.sleep"):
+            for _ in range(_DEGRADE_THRESHOLD + 1):
+                mgr.plan_sleep()
+            assert mgr._degraded is True
+
+            time.sleep(0.02)
+            mgr.plan_sleep()
+
+        assert mgr._degraded is False
+        assert mgr._coord_failures == 0
+        closed_lines = [r for r in caplog.records if "Circuit breaker closed" in r.message]
+        assert len(closed_lines) >= 1
+
+
+# ---------------------------------------------------------------------------
+# set_coordinator — late injection of coordinator
+# ---------------------------------------------------------------------------
+
+
+class TestSetCoordinator:
+
+    def test_set_coordinator_injects_coordinator(self):
+        mgr = MovieSleepManager(0.01, 0.02, throttle=None)
+        coord = MagicMock()
+        mgr.set_coordinator(coord)
+        assert mgr._coordinator is coord
+
+    def test_set_coordinator_resets_circuit_breaker(self):
+        mgr = MovieSleepManager(0.01, 0.02, throttle=None)
+        mgr._degraded = True
+        mgr._coord_failures = 5
+        coord = MagicMock()
+        mgr.set_coordinator(coord)
+        assert mgr._degraded is False
+        assert mgr._coord_failures == 0
+
+    def test_set_coordinator_with_proxy_id_override(self):
+        mgr = MovieSleepManager(0.01, 0.02, throttle=None)
+        coord = MagicMock()
+        mgr.set_coordinator(coord, proxy_id="new-proxy")
+        assert mgr._proxy_id == "new-proxy"
+
+
+# ---------------------------------------------------------------------------
+# set_active_runners — delegates to throttle.set_runner_scale
+# ---------------------------------------------------------------------------
+
+
+class TestSetActiveRunners:
+
+    def test_delegates_to_throttle(self):
+        throttle = TripleWindowThrottle()
+        mgr = MovieSleepManager(0.01, 0.02, throttle=throttle)
+        mgr.set_active_runners(3)
+        assert throttle.long_max == 10
+        assert throttle.extra_max == 66
+
+    def test_noop_when_no_throttle(self):
+        mgr = MovieSleepManager(0.01, 0.02, throttle=None)
+        mgr.set_active_runners(3)  # should not raise

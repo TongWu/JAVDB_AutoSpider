@@ -719,6 +719,32 @@ def test_heartbeat_alive_false_still_parses_recommendation():
         c.close()
 
 
+def test_heartbeat_parses_active_runners_count():
+    c = _make_client()
+    body = {
+        "alive": True,
+        "server_time_ms": 1,
+        "active_runners_count": 5,
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+            r = c.heartbeat("x")
+        assert r.active_runners_count == 5
+    finally:
+        c.close()
+
+
+def test_heartbeat_defaults_active_runners_count_when_missing():
+    c = _make_client()
+    body = {"alive": True, "server_time_ms": 1}
+    try:
+        with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+            r = c.heartbeat("x")
+        assert r.active_runners_count == 0
+    finally:
+        c.close()
+
+
 def test_parse_hash_summary_rejects_malformed_buckets():
     with pytest.raises(ValueError, match="entries"):
         _parse_hash_summary([

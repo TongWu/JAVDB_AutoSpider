@@ -46,6 +46,7 @@ from packages.python.javdb_platform.movie_claim_client import (  # noqa: E402
     current_shard_date,
     parse_movie_claim_mode,
     _extract_server_time_ms,
+    _ENABLED_UNSET,
 )
 
 
@@ -915,3 +916,59 @@ def test_legacy_factory_default_unset_now_returns_client_in_auto_mode(monkeypatc
         client = create_movie_claim_client_from_env()
     assert client is not None
     client.close()
+
+
+def test_with_mode_factory_override_unset_resolves_to_auto(monkeypatch):
+    """enabled_mode_override=_ENABLED_UNSET → raw_value=None → auto mode."""
+    monkeypatch.setenv("MOVIE_CLAIM_ENABLED", "false")  # env says off
+    with patch(
+        "packages.python.javdb_platform.config_helper.cfg",
+        side_effect=_movie_claim_cfg_mapping(
+            PROXY_COORDINATOR_URL="https://coord.test",
+            PROXY_COORDINATOR_TOKEN="t",
+        ),
+    ), patch.object(MovieClaimClient, "health_check", return_value=True):
+        client, mode = create_movie_claim_client_with_mode_from_env(
+            enabled_mode_override=_ENABLED_UNSET,
+        )
+    assert client is not None
+    assert mode == MOVIE_CLAIM_MODE_AUTO
+    client.close()
+
+
+def test_with_mode_factory_override_true_forces_on(monkeypatch):
+    """enabled_mode_override='true' → force_on, ignoring env."""
+    monkeypatch.setenv("MOVIE_CLAIM_ENABLED", "false")  # env says off
+    with patch(
+        "packages.python.javdb_platform.config_helper.cfg",
+        side_effect=_movie_claim_cfg_mapping(
+            PROXY_COORDINATOR_URL="https://coord.test",
+            PROXY_COORDINATOR_TOKEN="t",
+        ),
+    ), patch.object(MovieClaimClient, "health_check", return_value=True):
+        client, mode = create_movie_claim_client_with_mode_from_env(
+            enabled_mode_override="true",
+        )
+    assert client is not None
+    assert mode == MOVIE_CLAIM_MODE_FORCE_ON
+    client.close()
+
+
+def test_with_mode_factory_override_empty_string_forces_off(monkeypatch):
+    """enabled_mode_override='' → off mode, ignoring env auto."""
+    monkeypatch.delenv("MOVIE_CLAIM_ENABLED", raising=False)
+    client, mode = create_movie_claim_client_with_mode_from_env(
+        enabled_mode_override="",
+    )
+    assert client is None
+    assert mode == MOVIE_CLAIM_MODE_OFF
+
+
+def test_with_mode_factory_override_none_falls_through_to_env(monkeypatch):
+    """enabled_mode_override=None (default) → reads from env as before."""
+    monkeypatch.setenv("MOVIE_CLAIM_ENABLED", "false")
+    client, mode = create_movie_claim_client_with_mode_from_env(
+        enabled_mode_override=None,
+    )
+    assert client is None
+    assert mode == MOVIE_CLAIM_MODE_OFF
