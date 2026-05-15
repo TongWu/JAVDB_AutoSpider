@@ -43,7 +43,7 @@ def test_qb_base_url_candidates_http_fallback_when_insecure_allowed():
 
 def test_build_qb_base_url_rejects_http_without_flag():
     with pytest.raises(ValueError, match="insecure"):
-        build_qb_base_url("http://qb.internal:8080")
+        build_qb_base_url("http://qb.internal:8080", allow_insecure_http=False)
 
 
 def test_build_qb_base_url_accepts_explicit_http_url_with_flag():
