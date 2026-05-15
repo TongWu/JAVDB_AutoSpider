@@ -35,16 +35,16 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
-from packages.python.javdb_platform.db import (
-    close_db,
-    db_commit_session_history,
+from packages.python.javdb_platform.db_connection import close_db
+from packages.python.javdb_platform.db_history_write import db_commit_session_history
+from packages.python.javdb_platform.db_reports import (
     db_find_in_progress_sessions,
     db_get_session_run_identity,
     db_get_session_status,
     db_mark_session_committed,
     db_pending_session_stats,
-    init_db,
 )
+from packages.python.javdb_platform.db_migrations import init_db
 from packages.python.javdb_platform.logging_config import (
     get_logger,
     setup_logging,
@@ -233,7 +233,7 @@ def _shadow_audit_drift(
     drift=0 with the error captured in ``derived_drift_error`` so the
     metric still emits.
     """
-    from packages.python.javdb_platform.db import (
+    from packages.python.javdb_platform.db_connection import (
         get_db,
         HISTORY_DB_PATH,
     )

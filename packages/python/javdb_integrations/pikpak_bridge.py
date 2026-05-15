@@ -427,7 +427,8 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
 
     if use_sqlite():
         try:
-            from packages.python.javdb_platform.db import init_db, db_append_pikpak_history
+            from packages.python.javdb_platform.db_migrations import init_db
+            from packages.python.javdb_platform.db_operations import db_append_pikpak_history
             init_db()
             db_append_pikpak_history(record)
         except Exception as e:
@@ -459,7 +460,7 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
     # so a downstream rollback can scope cleanly to just our rows.
     if session_id is not None:
         try:
-            from packages.python.javdb_platform.db import set_active_session_id
+            from packages.python.javdb_platform.db_session import set_active_session_id
             active_session_setter = set_active_session_id
             active_session_setter(session_id)
         except Exception as e:
@@ -794,7 +795,8 @@ def _pikpak_bridge_impl(days, dry_run, batch_mode=True, use_proxy=None, from_pip
         try:
             from packages.python.javdb_platform.config_helper import use_sqlite as _use_sqlite
             if _use_sqlite():
-                from packages.python.javdb_platform.db import init_db, db_save_pikpak_stats
+                from packages.python.javdb_platform.db_migrations import init_db
+                from packages.python.javdb_platform.db_stats import db_save_pikpak_stats
                 init_db()
                 db_save_pikpak_stats(session_id, {
                     'threshold_days': days,
@@ -805,7 +807,7 @@ def _pikpak_bridge_impl(days, dry_run, batch_mode=True, use_proxy=None, from_pip
                     'uploaded_count': successful_count + delete_failed_count,
                     'delete_failed_count': delete_failed_count,
                 })
-                from packages.python.javdb_platform.db import current_backend
+                from packages.python.javdb_platform.db_connection import current_backend
                 logger.info(f"PikPak stats saved to {current_backend()} backend (session_id={session_id})")
         except Exception as e:
             logger.warning(f"Failed to save pikpak stats to db backend: {e}")
@@ -837,7 +839,7 @@ def _pikpak_bridge_impl(days, dry_run, batch_mode=True, use_proxy=None, from_pip
 
 def main():
     import atexit
-    from packages.python.javdb_platform.db import close_db
+    from packages.python.javdb_platform.db_connection import close_db
 
     atexit.register(close_db)
 

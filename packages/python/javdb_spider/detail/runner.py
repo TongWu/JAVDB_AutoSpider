@@ -8,10 +8,8 @@ from urllib.parse import urljoin
 
 from packages.python.javdb_platform.logging_config import get_logger
 from packages.python.javdb_platform.config_helper import use_sqlite
-from packages.python.javdb_platform.db import (
-    db_batch_update_movie_actors,
-    get_active_session_id,
-)
+from packages.python.javdb_platform.db_history_read import db_batch_update_movie_actors
+from packages.python.javdb_platform.db_session import get_active_session_id
 from packages.python.javdb_platform.history_manager import (
     save_parsed_movie_to_history,
     batch_update_last_visited,

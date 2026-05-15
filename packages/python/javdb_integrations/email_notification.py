@@ -1045,7 +1045,8 @@ def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
     try:
         from packages.python.javdb_platform.config_helper import use_sqlite
         if use_sqlite():
-            from packages.python.javdb_platform.db import init_db, db_load_dedup_records
+            from packages.python.javdb_platform.db_migrations import init_db
+            from packages.python.javdb_platform.db_operations import db_load_dedup_records
             init_db()
             db_rows = db_load_dedup_records()
             if db_rows:
@@ -1981,14 +1982,14 @@ def main():
     try:
         from packages.python.javdb_platform.config_helper import use_sqlite as _use_sqlite
         if _use_sqlite():
-            from packages.python.javdb_platform.db import (
-                init_db,
-                db_get_latest_session_local,
+            from packages.python.javdb_platform.db_migrations import init_db
+            from packages.python.javdb_platform.db_reports import db_get_latest_session_local
+            from packages.python.javdb_platform.db_stats import (
                 db_get_spider_stats_local,
                 db_get_uploader_stats_local,
                 db_get_pikpak_stats_local,
-                current_backend as _cur_be,
             )
+            from packages.python.javdb_platform.db_connection import current_backend as _cur_be
             init_db()
             _stats_backend_label = f"{_cur_be()} (stats forced sqlite-local)"
             _sid = args.session_id
@@ -2078,7 +2079,7 @@ def main():
         session_start_time = None
         if _sid is not None:
             try:
-                from packages.python.javdb_platform.db import get_db, REPORTS_DB_PATH
+                from packages.python.javdb_platform.db_connection import get_db, REPORTS_DB_PATH
                 with get_db(REPORTS_DB_PATH) as _conn:
                     _row = _conn.execute(
                         "SELECT DateTimeCreated FROM ReportSessions WHERE Id = ?", (_sid,)
