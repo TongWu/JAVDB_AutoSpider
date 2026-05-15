@@ -640,10 +640,12 @@ class TestPerProxyLoginRouting:
     TestMixedDetailLogin, and TestCookieRevocationAndFailover.
     """
 
-    def test_attempt_login_refresh_returns_three_tuple(self):
+    def test_attempt_login_refresh_returns_three_tuple(self, monkeypatch):
         """attempt_login_refresh returns (success, cookie, proxy_name)."""
         import scripts.spider.runtime.state as st
+        import packages.python.javdb_spider.fetch.session as sess_mod
 
+        monkeypatch.setattr(sess_mod, "LOGIN_FEATURE_AVAILABLE", False)
         original = st.login_attempted
         st.login_attempted = True
         try:
@@ -657,10 +659,12 @@ class TestPerProxyLoginRouting:
         finally:
             st.login_attempted = original
 
-    def test_attempt_login_refresh_accepts_explicit_proxies(self):
+    def test_attempt_login_refresh_accepts_explicit_proxies(self, monkeypatch):
         """attempt_login_refresh accepts explicit_proxies / explicit_proxy_name."""
         import scripts.spider.runtime.state as st
+        import packages.python.javdb_spider.fetch.session as sess_mod
 
+        monkeypatch.setattr(sess_mod, "LOGIN_FEATURE_AVAILABLE", False)
         original = st.login_attempted
         st.login_attempted = True
         try:
