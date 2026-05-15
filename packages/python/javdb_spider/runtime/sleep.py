@@ -185,6 +185,7 @@ class PenaltyTracker:
 # ---------------------------------------------------------------------------
 
 THROTTLE_MAX_WAIT = 60.0  # seconds – hard ceiling on additional blocking
+_DEGRADE_THRESHOLD = 3  # consecutive coordinator failures before circuit opens
 
 
 class TripleWindowThrottle:
@@ -210,9 +211,11 @@ class TripleWindowThrottle:
         self._base_short_max = int(short_max)
         self.short_max = self._base_short_max
         self.long_window = long_window_sec
-        self.long_max = long_max
+        self._base_long_max = int(long_max)
+        self.long_max = self._base_long_max
         self.extra_window = extra_window_sec
-        self.extra_max = extra_max
+        self._base_extra_max = int(extra_max)
+        self.extra_max = self._base_extra_max
 
     def _purge(self, now: float) -> None:
         oldest_keep = now - self.extra_window
@@ -257,6 +260,13 @@ class TripleWindowThrottle:
             self._purge(now)
             self._timestamps.append(now)
         return waited
+
+    def set_runner_scale(self, active_runners: int) -> None:
+        """Scale long/extra window limits by runner count for degraded-mode safety."""
+        n = max(1, active_runners)
+        with self._lock:
+            self.long_max = max(1, self._base_long_max // n)
+            self.extra_max = max(1, self._base_extra_max // n)
 
     def tighten_short_window(self, per_worker_n: int) -> None:
         """Adjust short-window burst limit from volume; restores toward constructor baseline."""
@@ -339,6 +349,9 @@ class MovieSleepManager:
         self._local_proxy_key = proxy_label or self._proxy_id
         self._remote_factor_ttl_sec = float(remote_factor_ttl_sec)
         self._coord_failures = 0
+        self._degraded: bool = False
+        self._degraded_since: float = 0.0
+        self._recovery_probe_sec: float = 300.0
 
         self._lock = threading.Lock()
         self._rng = random.Random()
@@ -353,6 +366,13 @@ class MovieSleepManager:
         self._coordinator = coordinator
         if proxy_id is not None:
             self._proxy_id = proxy_id
+        self._coord_failures = 0
+        self._degraded = False
+
+    def set_active_runners(self, count: int) -> None:
+        """Scale local throttle windows by runner count for degraded-mode safety."""
+        if self._throttle is not None:
+            self._throttle.set_runner_scale(count)
 
     # -- factor setters ----------------------------------------------------
 
@@ -594,6 +614,15 @@ class MovieSleepManager:
         )
 
         if self._coordinator is not None and self._proxy_id:
+            if self._degraded:
+                if time.time() - self._degraded_since < self._recovery_probe_sec:
+                    return t, False
+                logger.info(
+                    "Circuit breaker half-open: probing coordinator "
+                    "for proxy '%s'",
+                    self._proxy_id,
+                )
+
             try:
                 lease = self._coordinator.lease(self._proxy_id, int(t * 1000))
                 wait_seconds = max(0.0, lease.wait_ms / 1000.0)
@@ -618,14 +647,31 @@ class MovieSleepManager:
                     self._mirror_remote_ban_locally(local_proxy_key)
                 if getattr(lease, "requires_cf_bypass", False):
                     self._mirror_remote_cf_bypass_locally(local_proxy_key)
+                if self._degraded:
+                    logger.info(
+                        "Circuit breaker closed: coordinator recovered "
+                        "for proxy '%s'",
+                        self._proxy_id,
+                    )
+                    self._degraded = False
                 self._coord_failures = 0
                 return wait_seconds, True
             except Exception as e:
-                # Log only the first ~3 failures at ERROR to avoid log spam
-                # when the Worker is down for an extended period; the
-                # behaviour after that is identical (silent fail-open).
                 self._coord_failures += 1
-                if self._coord_failures <= 3:
+                if not self._degraded and self._coord_failures > _DEGRADE_THRESHOLD:
+                    self._degraded = True
+                    self._degraded_since = time.time()
+                    logger.warning(
+                        "Circuit breaker open: coordinator degraded after "
+                        "%d failures for proxy '%s' — local throttle for "
+                        "%.0fs",
+                        self._coord_failures,
+                        self._proxy_id,
+                        self._recovery_probe_sec,
+                    )
+                elif self._degraded:
+                    self._degraded_since = time.time()
+                elif self._coord_failures <= 3:
                     logger.error(
                         "Coordinator unavailable (#%d), falling back to local "
                         "throttle for proxy '%s': %s",
