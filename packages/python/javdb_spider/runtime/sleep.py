@@ -19,12 +19,13 @@ must be adapted to use ``multiprocessing.Manager`` or similar.
 
 from __future__ import annotations
 
+import bisect
 import math
 import random
 import threading
 import time
 from collections import deque
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from packages.python.javdb_platform.logging_config import get_logger
 
@@ -205,7 +206,17 @@ class TripleWindowThrottle:
         extra_window_sec: float = 1800.0,
         extra_max: int = 200,
     ):
-        self._timestamps: deque = deque()
+        # ``_timestamps`` holds monotonically-increasing ``time.monotonic()``
+        # samples in append order. A list (rather than a ``deque``) is used
+        # because the hot path counts how many samples fall inside the
+        # ``short`` / ``long`` windows — a ``bisect_left`` lookup on a sorted
+        # list is O(log N), whereas iterating a deque to test each element
+        # is O(N) (W4.2a). The trade-off is that ``_purge`` does an O(N)
+        # ``del lst[:cutoff]`` instead of O(amortised 1) ``popleft``, but at
+        # production ``extra_max=200`` the purge fires only when the oldest
+        # sample is older than ``extra_window`` (1800 s by default), so the
+        # amortised cost is negligible.
+        self._timestamps: List[float] = []
         self._lock = threading.Lock()
         self.short_window = short_window_sec
         self._base_short_max = int(short_max)
@@ -218,28 +229,52 @@ class TripleWindowThrottle:
         self.extra_max = self._base_extra_max
 
     def _purge(self, now: float) -> None:
+        """Drop samples older than ``extra_window``.
+
+        Uses ``bisect_left`` to find the cutoff index in one pass and
+        removes the prefix in a single slice delete — O(log N + k) where
+        k is the number of evicted samples, vs an O(k) ``popleft`` loop.
+        """
+        if not self._timestamps:
+            return
         oldest_keep = now - self.extra_window
-        while self._timestamps and self._timestamps[0] < oldest_keep:
-            self._timestamps.popleft()
+        if self._timestamps[0] >= oldest_keep:
+            return
+        cutoff = bisect.bisect_left(self._timestamps, oldest_keep)
+        if cutoff:
+            del self._timestamps[:cutoff]
 
     def wait_if_needed(self) -> float:
         """Block until all three windows have capacity.
 
         Returns total seconds spent waiting.  Never waits longer than
         ``THROTTLE_MAX_WAIT``.
+
+        Performance note: ``_timestamps`` is monotonically appended (every
+        ``now`` from ``time.monotonic()`` is >= every prior sample), so a
+        sorted-list ``bisect_left`` lookup yields the count of samples
+        inside each window in O(log N) — no full deque scan. This was the
+        top per-iter offender in the W4.1 baseline (947 µs → projected
+        ~20 µs at production ``extra_max=200``).
         """
         waited = 0.0
         while waited < THROTTLE_MAX_WAIT:
             now = time.monotonic()
             with self._lock:
                 self._purge(now)
-                short_count = sum(
-                    1 for t in self._timestamps if t >= now - self.short_window
-                )
-                long_count = sum(
-                    1 for t in self._timestamps if t >= now - self.long_window
-                )
                 extra_count = len(self._timestamps)
+                # Count samples inside each window without scanning the
+                # entire list: bisect_left returns the index of the first
+                # sample >= threshold, so ``extra_count - idx`` is the
+                # count of samples in [threshold, now].
+                short_idx = bisect.bisect_left(
+                    self._timestamps, now - self.short_window,
+                )
+                long_idx = bisect.bisect_left(
+                    self._timestamps, now - self.long_window,
+                )
+                short_count = extra_count - short_idx
+                long_count = extra_count - long_idx
                 if (
                     short_count < self.short_max
                     and long_count < self.long_max

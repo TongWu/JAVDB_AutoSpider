@@ -126,12 +126,29 @@ def _bench(
 # ---------------------------------------------------------------------------
 
 
-def bench_parse_detail_inner(iterations: int) -> Dict[str, float]:
-    """Pure parser: parse_detail_page on a real detail-page fixture."""
+def bench_parse_detail_python_only(iterations: int) -> Dict[str, float]:
+    """Pure-Python BeautifulSoup fallback (NOT the production path).
+
+    Imports directly from the submodule to bypass the Rust dispatcher in
+    ``apps.api.parsers.__init__``. Use this only to measure the cost of
+    the FROZEN Python fallback, e.g. when validating that the Rust path
+    actually beats it.
+    """
     from apps.api.parsers.detail_parser import parse_detail_page
     html = _load_fixture("detail_page_AVSW-067.html")
     return _bench(
-        "parse_detail_inner", iterations,
+        "parse_detail_python_only", iterations,
+        lambda: parse_detail_page(html),
+    )
+
+
+def bench_parse_detail_canonical(iterations: int) -> Dict[str, float]:
+    """Canonical entry: apps.api.parsers.parse_detail_page (Rust if available)."""
+    from apps.api.parsers import parse_detail_page, RUST_PARSERS_AVAILABLE
+    html = _load_fixture("detail_page_AVSW-067.html")
+    print(f"  (RUST_PARSERS_AVAILABLE={RUST_PARSERS_AVAILABLE})")
+    return _bench(
+        "parse_detail_canonical", iterations,
         lambda: parse_detail_page(html),
     )
 
@@ -146,12 +163,30 @@ def bench_parse_detail_wrapper(iterations: int) -> Dict[str, float]:
     )
 
 
-def bench_parse_index_inner(iterations: int) -> Dict[str, float]:
-    """Pure parser: parse_index_page on a real index-page fixture."""
+def bench_parse_index_python_only(iterations: int) -> Dict[str, float]:
+    """Pure-Python BeautifulSoup fallback (FROZEN, NOT the production path)."""
     from apps.api.parsers.index_parser import parse_index_page
     html = _load_fixture("JavDB-normal_index-page1.html")
     return _bench(
-        "parse_index_inner", iterations,
+        "parse_index_python_only", iterations,
+        lambda: parse_index_page(html, 1),
+    )
+
+
+def bench_parse_index_canonical(iterations: int) -> Dict[str, float]:
+    """Canonical entry: apps.api.parsers.parse_index_page (Rust if available).
+
+    Important: ``apps.api.parsers/__init__.py`` dispatches to ``javdb_rust_core``
+    when the extension is installed. Importing from the submodule
+    (``apps.api.parsers.index_parser``) bypasses that dispatcher and hits
+    the FROZEN Python fallback — which is what the W4.1 baseline did
+    until this correction.
+    """
+    from apps.api.parsers import parse_index_page, RUST_PARSERS_AVAILABLE
+    html = _load_fixture("JavDB-normal_index-page1.html")
+    print(f"  (RUST_PARSERS_AVAILABLE={RUST_PARSERS_AVAILABLE})")
+    return _bench(
+        "parse_index_canonical", iterations,
         lambda: parse_index_page(html, 1),
     )
 
@@ -182,9 +217,13 @@ def bench_plan_sleep_no_coord(iterations: int) -> Dict[str, float]:
 def bench_throttle_compute(iterations: int) -> Dict[str, float]:
     """TripleWindowThrottle.wait_if_needed with capacity to spare (no sleep)."""
     from packages.python.javdb_spider.runtime.sleep import TripleWindowThrottle
-    # Huge maxes ensure the windows always have capacity, so no time.sleep().
+    # Limits set to 10^9 so even a high-iteration benchmark never hits the
+    # wait branch — we want to time the index-lookup hot path, not the
+    # 1-3 s random.uniform back-off. Production limits are 3/30/200, but
+    # those would saturate after a few hundred calls and the rest of the
+    # benchmark would be dominated by time.sleep().
     throttle = TripleWindowThrottle(
-        short_max=10_000, long_max=10_000, extra_max=10_000,
+        short_max=10**9, long_max=10**9, extra_max=10**9,
     )
     return _bench(
         "throttle_compute", iterations,
@@ -333,10 +372,14 @@ def bench_is_proxy_usable(iterations: int) -> Dict[str, float]:
 
 
 BENCHMARKS: List[Tuple[str, Callable[[int], Dict[str, float]], int]] = [
-    # HTML parsing — small iteration counts because each call is ~ms-scale.
-    ("parse_detail_inner",        bench_parse_detail_inner,        200),
-    ("parse_detail_wrapper",      bench_parse_detail_wrapper,      200),
-    ("parse_index_inner",         bench_parse_index_inner,         50),
+    # HTML parsing — canonical entries dispatch to Rust when the extension
+    # is installed. The _python_only variants are kept for comparison with
+    # the FROZEN BeautifulSoup fallback.
+    ("parse_detail_canonical",    bench_parse_detail_canonical,    1_000),
+    ("parse_detail_python_only",  bench_parse_detail_python_only,  100),
+    ("parse_detail_wrapper",      bench_parse_detail_wrapper,      1_000),
+    ("parse_index_canonical",     bench_parse_index_canonical,     500),
+    ("parse_index_python_only",   bench_parse_index_python_only,   30),
     # Throttle / sleep — sub-microsecond when uncontended; large counts.
     ("plan_sleep_no_coord",       bench_plan_sleep_no_coord,       100_000),
     ("throttle_compute",          bench_throttle_compute,          100_000),
