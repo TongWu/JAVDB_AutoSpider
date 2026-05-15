@@ -23,6 +23,13 @@ import shutil
 import utils.infra.db as _db_mod
 import utils.infra.config_helper as _cfg_mod
 import scripts.spider.services.dedup as _dedup_mod
+import packages.python.javdb_platform.db_connection as _db_conn_mod
+import packages.python.javdb_platform.db_history_read as _db_history_read_mod
+import packages.python.javdb_platform.db_history_write as _db_history_write_mod
+import packages.python.javdb_platform.db_reports as _db_reports_mod
+import packages.python.javdb_platform.db_migrations as _db_migrations_mod
+import packages.python.javdb_platform.db_operations as _db_operations_mod
+import packages.python.javdb_platform.db_stats as _db_stats_mod
 
 
 @pytest.fixture(autouse=True)
@@ -50,6 +57,22 @@ def _isolate_sqlite(tmp_path):
     _db_mod.OPERATIONS_DB_PATH = test_db
     _cfg_mod._storage_mode_override = 'db'
 
+    # Patch db_connection module paths (used by split db_* modules)
+    orig_conn_history = _db_conn_mod.HISTORY_DB_PATH
+    orig_conn_reports = _db_conn_mod.REPORTS_DB_PATH
+    orig_conn_operations = _db_conn_mod.OPERATIONS_DB_PATH
+    _db_conn_mod.HISTORY_DB_PATH = test_db
+    _db_conn_mod.REPORTS_DB_PATH = test_db
+    _db_conn_mod.OPERATIONS_DB_PATH = test_db
+
+    # Reset lazy-init sentinels so _ensure_imports() re-caches paths
+    _db_history_read_mod._get_db = None
+    _db_history_write_mod._get_db = None
+    _db_reports_mod._get_db = None
+    _db_migrations_mod._get_db = None
+    _db_operations_mod._get_db = None
+    _db_stats_mod._get_db = None
+
     # Reset dedup_checker module-level state
     _dedup_mod._db_initialised = False
     _dedup_mod._pending_paths_cache = None
@@ -63,6 +86,9 @@ def _isolate_sqlite(tmp_path):
     _db_mod.HISTORY_DB_PATH = orig_history
     _db_mod.REPORTS_DB_PATH = orig_reports
     _db_mod.OPERATIONS_DB_PATH = orig_operations
+    _db_conn_mod.HISTORY_DB_PATH = orig_conn_history
+    _db_conn_mod.REPORTS_DB_PATH = orig_conn_reports
+    _db_conn_mod.OPERATIONS_DB_PATH = orig_conn_operations
     _cfg_mod._storage_mode_override = orig_override
 
 
