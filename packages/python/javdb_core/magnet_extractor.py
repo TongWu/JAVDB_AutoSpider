@@ -165,7 +165,7 @@ def _python_extract_magnets(magnets, index=None):
     for m in magnets:
         name = m['name']
         is_subtitle = any('字幕' in tag for tag in m['tags']) and '.无码破解' not in name
-        is_hacked = any(p in name for p in ('-UC', '-U', '.无码破解'))
+        is_hacked = any(p in name for p in ('-UC', '-CU', '-C.无码破解', '-U-C', '-C-U', '-U', '.无码破解'))
         if not is_subtitle and not is_hacked:
             if '4k' in name.lower():
                 k4_magnets.append(m)
