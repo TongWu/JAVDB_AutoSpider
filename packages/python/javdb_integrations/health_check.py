@@ -108,54 +108,54 @@ def check_qbittorrent_connection() -> Tuple[bool, str]:
 
             logger.info(f"Testing qBittorrent connection to {masked_url}...")
 
-            session = requests.Session()
-            # Disable environment proxy to avoid interference
-            session.trust_env = False
-            session.verify = verify_tls
+            with requests.Session() as session:
+                # Disable environment proxy to avoid interference
+                session.trust_env = False
+                session.verify = verify_tls
 
-            try:
-                response = session.post(
-                    login_url,
-                    data={'username': QB_USERNAME, 'password': QB_PASSWORD},
-                    timeout=10,
-                    verify=verify_tls,
-                )
-            except requests.exceptions.ConnectionError:
-                last_message = f"Cannot connect to {masked_url} - connection refused"
-                continue
-            except requests.exceptions.Timeout:
-                last_message = f"Connection timeout to {masked_url}"
-                continue
+                try:
+                    response = session.post(
+                        login_url,
+                        data={'username': QB_USERNAME, 'password': QB_PASSWORD},
+                        timeout=10,
+                        verify=verify_tls,
+                    )
+                except requests.exceptions.ConnectionError:
+                    last_message = f"Cannot connect to {masked_url} - connection refused"
+                    continue
+                except requests.exceptions.Timeout:
+                    last_message = f"Connection timeout to {masked_url}"
+                    continue
 
-            # qB <=5.1.x returns 200 + "Ok."; qB >=5.2.0 returns 204
-            # (No Content) for a successful login. See qbittorrent PR
-            # #21349 (milestone 5.2). Accept both.
-            login_ok = (
-                (response.status_code == 200 and response.text == 'Ok.')
-                or response.status_code == 204
-            )
-            if login_ok:
-                version_response = session.get(
-                    f"{base_url}/api/v2/app/version",
-                    timeout=5,
-                    verify=verify_tls,
+                # qB <=5.1.x returns 200 + "Ok."; qB >=5.2.0 returns 204
+                # (No Content) for a successful login. See qbittorrent PR
+                # #21349 (milestone 5.2). Accept both.
+                login_ok = (
+                    (response.status_code == 200 and response.text == 'Ok.')
+                    or response.status_code == 204
                 )
-                if version_response.status_code == 200:
-                    version = version_response.text
+                if login_ok:
+                    version_response = session.get(
+                        f"{base_url}/api/v2/app/version",
+                        timeout=5,
+                        verify=verify_tls,
+                    )
+                    if version_response.status_code == 200:
+                        version = version_response.text
+                        if base_url != base_urls[0]:
+                            return True, f"Connected successfully via HTTP fallback at {masked_url} (version: {version})"
+                        return True, f"Connected successfully (version: {version})"
                     if base_url != base_urls[0]:
-                        return True, f"Connected successfully via HTTP fallback at {masked_url} (version: {version})"
-                    return True, f"Connected successfully (version: {version})"
-                if base_url != base_urls[0]:
-                    return True, f"Connected and authenticated via HTTP fallback at {masked_url}"
-                return True, "Connected and authenticated"
-            # qB <=5.1.x rejects bad credentials with 403; qB >=5.2.0
-            # surfaces them as 401 (APIErrorType::Unauthorized in
-            # AuthController::loginAction).
-            if response.status_code in (401, 403):
-                last_message = "Authentication failed - check QB_USERNAME and QB_PASSWORD"
-                continue
+                        return True, f"Connected and authenticated via HTTP fallback at {masked_url}"
+                    return True, "Connected and authenticated"
+                # qB <=5.1.x rejects bad credentials with 403; qB >=5.2.0
+                # surfaces them as 401 (APIErrorType::Unauthorized in
+                # AuthController::loginAction).
+                if response.status_code in (401, 403):
+                    last_message = "Authentication failed - check QB_USERNAME and QB_PASSWORD"
+                    continue
 
-            last_message = f"Unexpected response from {masked_url}: {response.status_code} - {response.text}"
+                last_message = f"Unexpected response from {masked_url}: {response.status_code} - {response.text}"
         return False, last_message
             
     except ValueError as exc:

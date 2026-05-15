@@ -798,19 +798,23 @@ def get_all_movie_folders_for_year(
     return folders
 
 
-def get_folder_stats(remote_path: str) -> Tuple[int, int]:
-    """Get folder size and file count using rclone."""
+def get_folder_stats(remote_path: str) -> Optional[Tuple[int, int]]:
+    """Get folder size and file count using rclone.
+
+    Returns ``None`` on error (rclone failure, timeout, JSON parse error)
+    and ``(0, 0)`` for a reachable but empty folder.
+    """
     try:
         result = subprocess.run(
             ['rclone', 'size', remote_path, '--json'],
             capture_output=True, text=True, timeout=60,
         )
-        if result.returncode == 0:
-            data = json.loads(result.stdout)
-            return data.get('bytes', 0), data.get('count', 0)
+        if result.returncode != 0:
+            return None
+        data = json.loads(result.stdout)
+        return data.get('bytes', 0), data.get('count', 0)
     except Exception:
-        pass
-    return 0, 0
+        return None
 
 
 def get_video_file_mod_time(remote_path: str) -> Optional[datetime]:
@@ -832,7 +836,8 @@ def get_video_file_mod_time(remote_path: str) -> Optional[datetime]:
                 if mod_time_str:
                     try:
                         mod_time = datetime.fromisoformat(mod_time_str.replace('Z', '+00:00'))
-                        mod_time = mod_time.replace(tzinfo=None)
+                        from datetime import timezone
+                        mod_time = mod_time.astimezone(timezone.utc).replace(tzinfo=None)
                         if latest_mod_time is None or mod_time > latest_mod_time:
                             latest_mod_time = mod_time
                     except ValueError:
@@ -883,9 +888,9 @@ def get_folder_stats_batch(folders: List[FolderInfo], max_workers: int = 4) -> N
         for future in as_completed(future_to_folder):
             folder = future_to_folder[future]
             try:
-                size, count = future.result()
-                folder.size = size
-                folder.file_count = count
+                result = future.result()
+                if result is not None:
+                    folder.size, folder.file_count = result
             except Exception as e:
                 logger.debug(f"Could not get stats for {folder.full_path}: {str(e)}")
 
