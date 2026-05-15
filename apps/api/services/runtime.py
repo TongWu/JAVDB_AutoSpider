@@ -136,6 +136,9 @@ async def auth_csrf_middleware(request: Request, call_next):
         return await call_next(request)
     if request.url.path.startswith("/api/"):
         try:
+            # /api/explore/* endpoints are read-only HTML proxies consumed
+            # by the SPA via fetch(); they carry no side-effects, so CSRF
+            # protection is intentionally skipped for navigation requests.
             if not request.url.path.startswith("/api/explore/"):
                 _verify_csrf(request)
         except Exception as exc:

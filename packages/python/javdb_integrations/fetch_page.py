@@ -96,6 +96,10 @@ def main():
 
     out_path = args.output or default_output_path(url)
     out_path = os.path.abspath(out_path)
+    cwd = os.getcwd()
+    if os.path.commonpath([cwd, out_path]) != cwd:
+        logger.error("Output path %s is outside the working directory", out_path)
+        sys.exit(1)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(html)
