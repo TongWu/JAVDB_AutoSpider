@@ -32,22 +32,6 @@ def _build_allowed_hosts() -> frozenset[str]:
 ALLOWED_HOSTS = _build_allowed_hosts()
 
 
-def _validate_target_url(url: str) -> None:
-    """Reject URLs whose scheme/host fall outside the allowlist (SSRF guard)."""
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"URL scheme must be http or https, got {parsed.scheme!r}",
-        )
-    host = (parsed.hostname or "").lower()
-    if host not in ALLOWED_HOSTS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Host {host!r} is not in the allowed domain list",
-        )
-
-
 def _is_valid_javdb_host(url: str) -> bool:
     """Return True if *url* targets a known JavDB hostname."""
     parsed = urlparse(url)
@@ -57,20 +41,13 @@ def _is_valid_javdb_host(url: str) -> bool:
     return hostname in ALLOWED_HOSTS
 
 
-def _resolve_public_target_or_422(url: str) -> tuple[object, str, str]:
-    """Validate *url* and resolve it to a single public IP address."""
+def _dns_reject_private(parsed, *, single_ip: bool = False) -> set[str]:
+    """DNS-resolve *parsed* URL and reject private/reserved IPs.
 
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise HTTPException(status_code=422, detail="url must use http or https scheme")
-    if not parsed.netloc:
-        raise HTTPException(status_code=422, detail="url must include a host")
-    if not _is_valid_javdb_host(url):
-        raise HTTPException(
-            status_code=422,
-            detail="url must target a valid javdb.com host",
-        )
-
+    Returns the set of resolved public IP strings.  When *single_ip* is
+    True, also rejects hosts that resolve to more than one address (DNS
+    rebinding defence for callers that connect to the resolved IP).
+    """
     hostname = parsed.hostname or ""
     try:
         resolved_public_ips: set[str] = set()
@@ -100,12 +77,46 @@ def _resolve_public_target_or_422(url: str) -> tuple[object, str, str]:
 
     if not resolved_public_ips:
         raise HTTPException(status_code=422, detail="url host DNS resolution failed")
-    if len(resolved_public_ips) > 1:
+    if single_ip and len(resolved_public_ips) > 1:
         raise HTTPException(
             status_code=422,
             detail="url host resolves to multiple public IPs; rejected to prevent DNS rebinding",
         )
-    return parsed, hostname, next(iter(resolved_public_ips))
+    return resolved_public_ips
+
+
+def _validate_target_url(url: str) -> None:
+    """Unified SSRF guard: allowlist check + DNS resolve + private IP rejection."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"URL scheme must be http or https, got {parsed.scheme!r}",
+        )
+    host = (parsed.hostname or "").lower()
+    if host not in ALLOWED_HOSTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Host {host!r} is not in the allowed domain list",
+        )
+    _dns_reject_private(parsed)
+
+
+def _resolve_public_target_or_422(url: str) -> tuple[object, str, str]:
+    """Validate *url* and resolve it to a single public IP address."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=422, detail="url must use http or https scheme")
+    if not parsed.netloc:
+        raise HTTPException(status_code=422, detail="url must include a host")
+    if not _is_valid_javdb_host(url):
+        raise HTTPException(
+            status_code=422,
+            detail="url must target a valid javdb.com host",
+        )
+    resolved_ips = _dns_reject_private(parsed, single_ip=True)
+    hostname = parsed.hostname or ""
+    return parsed, hostname, next(iter(resolved_ips))
 
 
 def _sanitize_output_filename(value: str) -> str:

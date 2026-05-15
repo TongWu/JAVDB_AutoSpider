@@ -319,6 +319,11 @@ _SENSITIVE_HEADER_NAMES = frozenset({
     'x-d1-token',
     'cf-access-client-secret',
     'cf-access-client-id',
+    'x-forwarded-for',
+    'x-real-ip',
+    'x-client-ip',
+    'cf-connecting-ip',
+    'true-client-ip',
 })
 
 
