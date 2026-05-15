@@ -190,125 +190,21 @@ _login_budget_deducted_proxies: set = set()
 _login_budget_lock = threading.Lock()
 
 
-def _deduct_proxy_login_budget_locked(proxy_name: str) -> int:
-    """Core deduction logic. Caller must hold :data:`_login_budget_lock`."""
-    global login_total_budget
-    if proxy_name in _login_budget_deducted_proxies:
-        return 0
-    if login_total_budget <= 0:
-        _login_budget_deducted_proxies.add(proxy_name)
-        return 0
-
-    used = login_attempts_per_proxy.get(proxy_name, 0)
-    remaining = LOGIN_ATTEMPTS_PER_PROXY_LIMIT - used
-    if remaining <= 0:
-        _login_budget_deducted_proxies.add(proxy_name)
-        return 0
-
-    # Never let the global budget drop below total attempts already spent
-    # (otherwise downstream budget checks would falsely report "exhausted").
-    new_budget = max(login_total_attempts, login_total_budget - remaining)
-    actually_deducted = login_total_budget - new_budget
-    login_total_budget = new_budget
-    _login_budget_deducted_proxies.add(proxy_name)
-    if actually_deducted > 0:
-        logger.info(
-            "Login budget reduced by %d for banned proxy '%s' (now %d, attempts so far %d)",
-            actually_deducted, proxy_name, new_budget, login_total_attempts,
-        )
-    return actually_deducted
-
-
-def deduct_proxy_login_budget(proxy_name: Optional[str]) -> int:
-    """Remove a proxy's unused login attempts from the global budget.
-
-    Called when a proxy is banned (either pre-banned at startup or banned
-    during runtime).  The proxy's *remaining* per-proxy budget
-    (``LOGIN_ATTEMPTS_PER_PROXY_LIMIT - login_attempts_per_proxy[proxy]``,
-    floored at 0) is subtracted from :data:`login_total_budget` so that
-    banned workers no longer reserve login credits they cannot use.
-
-    Idempotent per ``proxy_name`` — repeated calls for the same proxy are
-    no-ops, even if it gets re-banned.  Thread-safe: concurrent callers
-    for different (or the same) proxy cannot double-deduct.
-
-    Args:
-        proxy_name: Name of the proxy whose budget should be reclaimed.
-            ``None``/empty inputs are silently ignored.
-
-    Returns:
-        The number of login attempts deducted (``0`` when nothing changed).
-    """
-    if not proxy_name:
-        return 0
-    with _login_budget_lock:
-        return _deduct_proxy_login_budget_locked(proxy_name)
-
 # ---------------------------------------------------------------------------
-# CF bypass helpers
+# Login-budget + CF-bypass helpers — moved to :mod:`runtime.proxy_state`
+# (W3.4). Re-exported here so the canonical ``state.X`` API is unchanged.
+#
+# Imported AFTER the mutable globals above are defined so the cross-import
+# cycle (``proxy_state`` reads ``state.<global>``) resolves cleanly.
 # ---------------------------------------------------------------------------
 
+from packages.python.javdb_spider.runtime.proxy_state import (  # noqa: E402
+    _deduct_proxy_login_budget_locked,
+    deduct_proxy_login_budget,
+    proxy_needs_cf_bypass,
+    mark_proxy_cf_bypass,
+)
 
-def proxy_needs_cf_bypass(proxy_name: str) -> bool:
-    """Check if a proxy is still within the configured CF bypass window."""
-    if always_bypass_time is None:
-        return False
-
-    with _cf_bypass_lock:
-        marked_at = proxies_requiring_cf_bypass.get(proxy_name)
-        if marked_at is None:
-            return False
-
-        if always_bypass_time == 0:
-            return True
-
-        window_seconds = always_bypass_time * 60
-        if time.time() - marked_at <= window_seconds:
-            return True
-
-        # Expired: fall back to direct-first behavior.
-        proxies_requiring_cf_bypass.pop(proxy_name, None)
-        return False
-
-
-def mark_proxy_cf_bypass(proxy_name: str):
-    """Mark a proxy for CF bypass reuse according to --always-bypass-time.
-
-    Side effect (P1-A): when the cross-instance proxy coordinator is wired
-    up, the requirement is also published to the Worker DO via
-    :meth:`ProxyCoordinatorClient.mark_cf_bypass` so peer runners pick it
-    up on their next ``/lease``.  This is fire-and-forget and never raises;
-    when the coordinator is not configured the call is a no-op and the
-    behaviour is identical to the pre-DO world.
-    """
-    if always_bypass_time is None:
-        return
-
-    with _cf_bypass_lock:
-        proxies_requiring_cf_bypass[proxy_name] = time.time()
-    if always_bypass_time == 0:
-        logger.info(f"Proxy '{proxy_name}' marked as requiring CF bypass for this runtime")
-    else:
-        logger.info(
-            f"Proxy '{proxy_name}' marked for CF bypass reuse for {always_bypass_time} minute(s)"
-        )
-
-    coord = global_proxy_coordinator
-    if coord is not None and proxy_name:
-        # ``always_bypass_time``:
-        #   - 0       → permanent for this session  → DO ttl_ms = 0
-        #   - N (min) → expires after N minutes     → DO ttl_ms = N * 60_000
-        # The Worker stores the tri-state so peers see the right window.
-        ttl_ms = (
-            0 if always_bypass_time == 0 else int(always_bypass_time) * 60 * 1000
-        )
-        try:
-            coord.mark_cf_bypass(proxy_name, ttl_ms=ttl_ms)
-        except Exception:  # noqa: BLE001 — fail-open; never break local marker
-            logger.warning(
-                "Failed to dispatch CF bypass marker for '%s' to coordinator",
-                proxy_name, exc_info=True,
-            )
 
 # ---------------------------------------------------------------------------
 # Request delegation
