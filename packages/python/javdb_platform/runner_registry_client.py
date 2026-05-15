@@ -46,7 +46,7 @@ import hashlib
 import json
 import os
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -131,6 +131,60 @@ class PoolHashBucket:
 
 
 @dataclass(frozen=True)
+class ConfigSnapshot:
+    """W5.3 — versioned snapshot of operator-tunable runtime config.
+
+    Surfaced by the Worker on every ``/register`` and ``/heartbeat``
+    response (when the v4 migration is applied). ``version`` increments
+    monotonically on every successful ``PATCH /config``; clients use it
+    to detect changes between heartbeats without diffing ``values``.
+
+    ``values`` is a partial map of operator-set overrides. Keys not
+    present in ``values`` fall back to the Worker's env-var defaults —
+    so a fresh deployment with no PATCH applied returns
+    ``ConfigSnapshot(version=0, values={})``.
+
+    Treated as opaque by old Python clients (the field defaults to
+    ``None`` when the Worker is on a pre-W5.3 deploy that omits it).
+    """
+
+    version: int = 0
+    updated_at_ms: int = 0
+    values: Dict[str, str] = field(default_factory=dict)
+
+
+def _parse_config_snapshot(payload: Any) -> Optional[ConfigSnapshot]:
+    """Decode the ``config`` field embedded in register/heartbeat replies.
+
+    Returns ``None`` when the Worker omits the field (forward-compat
+    with pre-W5.3 Workers) or sends a structurally invalid payload —
+    the Python client treats either case as "no config override, use
+    local defaults" and continues, never raising. This mirrors the
+    "fail-open on telemetry" contract of the rest of this client.
+    """
+    if payload is None:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    try:
+        raw_values = payload.get("values", {}) or {}
+        if not isinstance(raw_values, dict):
+            return None
+        # Coerce values to str on read so a Worker that ever returns a
+        # number doesn't crash the dataclass freeze.
+        values: Dict[str, str] = {
+            str(k): str(v) for k, v in raw_values.items()
+        }
+        return ConfigSnapshot(
+            version=int(payload.get("version", 0) or 0),
+            updated_at_ms=int(payload.get("updated_at", 0) or 0),
+            values=values,
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+@dataclass(frozen=True)
 class RegisterResult:
     """Reply from ``POST /register``.
 
@@ -149,6 +203,10 @@ class RegisterResult:
     ``False`` / ``0`` for forward compatibility with older Workers that
     don't ship the field — matching the safe "single-runner" semantics
     the auto-toggle uses to keep claim coordination off.
+
+    ``config`` is the W5.3 dynamic-config snapshot; ``None`` when the
+    Worker is on a pre-W5.3 deploy. Consumers fall back to env-var
+    defaults in that case.
     """
 
     registered: bool
@@ -157,6 +215,7 @@ class RegisterResult:
     server_time_ms: int = 0
     movie_claim_recommended: bool = False
     movie_claim_min_runners: int = 0
+    config: Optional[ConfigSnapshot] = None
 
 
 @dataclass(frozen=True)
@@ -174,6 +233,11 @@ class HeartbeatResult:
     changes (e.g. a peer's atexit ``unregister`` arriving) into
     ``state._apply_movie_claim_recommendation`` without an extra
     register round-trip.  Defaults to ``False`` / ``0`` for old Workers.
+
+    ``config`` mirrors the field on :class:`RegisterResult`: long-running
+    runners pick up operator PATCHes within one heartbeat interval
+    without an explicit ``GET /config`` round-trip. ``None`` on pre-W5.3
+    Workers.
     """
 
     alive: bool
@@ -181,6 +245,7 @@ class HeartbeatResult:
     movie_claim_recommended: bool = False
     movie_claim_min_runners: int = 0
     active_runners_count: int = 0
+    config: Optional[ConfigSnapshot] = None
 
 
 @dataclass(frozen=True)
@@ -346,6 +411,8 @@ class RunnerRegistryClient(BaseDOClient):
                 movie_claim_min_runners=int(
                     resp.get("movie_claim_min_runners", 0) or 0
                 ),
+                # W5.3 — dynamic-config snapshot; ``None`` on pre-v4 Workers.
+                config=_parse_config_snapshot(resp.get("config")),
             )
         except (KeyError, TypeError, ValueError) as e:
             raise RunnerRegistryUnavailable(
@@ -380,6 +447,8 @@ class RunnerRegistryClient(BaseDOClient):
                 active_runners_count=int(
                     resp.get("active_runners_count", 0) or 0
                 ),
+                # W5.3 — dynamic-config snapshot; ``None`` on pre-v4 Workers.
+                config=_parse_config_snapshot(resp.get("config")),
             )
         except (KeyError, TypeError, ValueError) as e:
             raise RunnerRegistryUnavailable(
