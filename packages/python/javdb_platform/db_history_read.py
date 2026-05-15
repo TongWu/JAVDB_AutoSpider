@@ -210,7 +210,7 @@ def db_batch_update_movie_actors(
     _ensure_imports()
 
     with _get_db(db_path or _HISTORY_DB_PATH) as conn:
-        return _batch_update_movie_actors(conn, updates, session_id)
+        return _batch_update_movie_actors(conn, updates, session_id=session_id)
 
 
 # ── Delegating wrappers (pending full migration) ────────────────────────
