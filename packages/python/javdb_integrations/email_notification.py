@@ -65,6 +65,23 @@ from packages.python.javdb_platform.logging_config import setup_logging, get_log
 setup_logging(EMAIL_NOTIFICATION_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
+_MAX_READ_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+def _read_capped(path, max_bytes=_MAX_READ_BYTES, encoding="utf-8"):
+    """Read a text file, truncating to *max_bytes* to avoid OOM on huge logs."""
+    try:
+        size = os.path.getsize(path)
+        with open(path, "r", encoding=encoding, errors="replace") as f:
+            content = f.read(max_bytes)
+        if size > max_bytes:
+            logger.warning("Truncated %s from %d to %d bytes", path, size, max_bytes)
+            content += f"\n\n... [truncated — {size - max_bytes} bytes omitted] ..."
+        return content
+    except Exception as exc:
+        logger.warning("Failed to read %s: %s", path, exc)
+        return ""
+
 # Import masking utilities
 from packages.python.javdb_core.masking import mask_email, mask_server, mask_full
 
@@ -312,10 +329,9 @@ def analyze_spider_log(log_path):
     """
     if not os.path.exists(log_path):
         return False, "Spider log file not found (script may not have run)", False
-    
-    with open(log_path, 'r', encoding='utf-8') as f:
-        log_content = f.read()
-    
+
+    log_content = _read_capped(log_path)
+
     # Check for explicit proxy ban detection (highest priority)
     if 'CRITICAL: PROXY BAN DETECTED DURING THIS RUN' in log_content:
         return True, "Proxy ban detected - one or more proxies were blocked by JavDB", True
@@ -402,10 +418,9 @@ def analyze_uploader_log(log_path):
     """
     if not os.path.exists(log_path):
         return False, "Uploader log file not found (script may not have run)", False
-    
-    with open(log_path, 'r', encoding='utf-8') as f:
-        log_content = f.read()
-    
+
+    log_content = _read_capped(log_path)
+
     critical_patterns = [
         "Cannot connect to qBittorrent",
         "Failed to login to qBittorrent",
@@ -436,10 +451,9 @@ def analyze_pikpak_log(log_path):
     if not os.path.exists(log_path):
         # PikPak is optional, so missing log is not critical
         return False, None, False
-    
-    with open(log_path, 'r', encoding='utf-8') as f:
-        log_content = f.read()
-    
+
+    log_content = _read_capped(log_path)
+
     critical_patterns = [
         "qBittorrent login failed",
         "Failed to login qBittorrent",
@@ -462,10 +476,9 @@ def analyze_pipeline_log(log_path):
     if not os.path.exists(log_path):
         # Pipeline log missing is not critical in GitHub Actions context
         return False, "Pipeline log file not found", False
-    
-    with open(log_path, 'r', encoding='utf-8') as f:
-        log_content = f.read()
-    
+
+    log_content = _read_capped(log_path)
+
     # Check for script execution failures
     script_failures = []
     
@@ -516,11 +529,10 @@ def extract_spider_statistics(log_path):
     
     if not os.path.exists(log_path):
         return stats
-    
+
     try:
-        with open(log_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
+        content = _read_capped(log_path)
+
         # Extract phase 1 statistics from current format (without skipped session):
         # "Phase 1 completed: X movies discovered, Y processed, Z skipped (history), N no new torrents, F failed"
         phase1_with_no_new = re.search(
@@ -723,11 +735,10 @@ def extract_uploader_statistics(log_path):
     
     if not os.path.exists(log_path):
         return stats
-    
+
     try:
-        with open(log_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
+        content = _read_capped(log_path)
+
         total = re.search(r'Total torrents in CSV: (\d+)', content)
         if total:
             stats['total'] = int(total.group(1))
@@ -780,11 +791,10 @@ def extract_pikpak_statistics(log_path):
     
     if not os.path.exists(log_path):
         return stats
-    
+
     try:
-        with open(log_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
+        content = _read_capped(log_path)
+
         threshold = re.search(r'older than (\d+) days', content)
         if threshold:
             stats['threshold_days'] = int(threshold.group(1))

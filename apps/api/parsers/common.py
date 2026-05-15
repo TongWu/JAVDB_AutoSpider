@@ -179,7 +179,10 @@ def extract_video_code(a_tag: Tag) -> str:
 
     Accepts standard hyphenated codes and hyphen-less codes when they contain
     both letters and digits (e.g. ``n0656``). Other values return an empty string.
+    Full-width characters are normalized to ASCII via NFKC.
     """
+    import unicodedata
+
     video_title_div = a_tag.find('div', class_='video-title')
     if video_title_div:
         strong_tag = video_title_div.find('strong')
@@ -187,6 +190,8 @@ def extract_video_code(a_tag: Tag) -> str:
             video_code = strong_tag.get_text(strip=True)
         else:
             video_code = video_title_div.get_text(strip=True)
+
+        video_code = unicodedata.normalize('NFKC', video_code)
 
         if not _is_plausible_video_code(video_code):
             logger.debug("Skipping invalid or implausible video code: %s", video_code)
