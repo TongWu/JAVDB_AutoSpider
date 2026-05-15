@@ -805,11 +805,15 @@ class MovieClaimClient:
             raise MovieClaimUnavailable(f"invalid JSON: {e}") from e
 
 
+_ENABLED_UNSET = object()
+
+
 def create_movie_claim_client_with_mode_from_env(
     *,
     url_env: str = "PROXY_COORDINATOR_URL",
     token_env: str = "PROXY_COORDINATOR_TOKEN",
     enabled_env: str = "MOVIE_CLAIM_ENABLED",
+    enabled_mode_override: object = None,
 ) -> Tuple[Optional[MovieClaimClient], str]:
     """Build a client + resolve the activation mode.
 
@@ -824,13 +828,20 @@ def create_movie_claim_client_with_mode_from_env(
     name).  ``None`` / unset maps to ``auto``; explicit empty string in the
     environment still means force-off.
 
+    When *enabled_mode_override* is provided (not ``None``), it is used
+    directly as the raw enabled value, bypassing both ``os.environ`` and
+    ``cfg`` lookups for the enabled flag.  This avoids thread-unsafe
+    ``os.environ`` manipulation in callers.
+
     Returns a ``(client_or_none, mode)`` tuple.  The mode is one of
     :data:`MOVIE_CLAIM_MODE_OFF` / :data:`MOVIE_CLAIM_MODE_AUTO` /
     :data:`MOVIE_CLAIM_MODE_FORCE_ON`.  A healthy auto deploy returns
     ``(client, "auto")``; missing URL/token, disabled mode, or ``/health``
     failure collapses to ``(None, off)``.
     """
-    if enabled_env in os.environ:
+    if enabled_mode_override is not None:
+        raw_value = None if enabled_mode_override is _ENABLED_UNSET else str(enabled_mode_override)
+    elif enabled_env in os.environ:
         raw_value = os.environ.get(enabled_env)
     else:
         configured = config_helper.cfg(enabled_env, None)

@@ -179,6 +179,7 @@ login_total_budget: int = len(PROXY_POOL) * LOGIN_ATTEMPTS_PER_PROXY_LIMIT if PR
 
 always_bypass_time: Optional[int] = None
 proxies_requiring_cf_bypass: Dict[str, float] = {}
+_cf_bypass_lock = threading.Lock()
 
 # Proxies whose remaining login budget has already been deducted from
 # ``login_total_budget`` (idempotency guard for ``deduct_proxy_login_budget``).
@@ -253,20 +254,21 @@ def proxy_needs_cf_bypass(proxy_name: str) -> bool:
     if always_bypass_time is None:
         return False
 
-    marked_at = proxies_requiring_cf_bypass.get(proxy_name)
-    if marked_at is None:
+    with _cf_bypass_lock:
+        marked_at = proxies_requiring_cf_bypass.get(proxy_name)
+        if marked_at is None:
+            return False
+
+        if always_bypass_time == 0:
+            return True
+
+        window_seconds = always_bypass_time * 60
+        if time.time() - marked_at <= window_seconds:
+            return True
+
+        # Expired: fall back to direct-first behavior.
+        proxies_requiring_cf_bypass.pop(proxy_name, None)
         return False
-
-    if always_bypass_time == 0:
-        return True
-
-    window_seconds = always_bypass_time * 60
-    if time.time() - marked_at <= window_seconds:
-        return True
-
-    # Expired: fall back to direct-first behavior.
-    proxies_requiring_cf_bypass.pop(proxy_name, None)
-    return False
 
 
 def mark_proxy_cf_bypass(proxy_name: str):
@@ -282,7 +284,8 @@ def mark_proxy_cf_bypass(proxy_name: str):
     if always_bypass_time is None:
         return
 
-    proxies_requiring_cf_bypass[proxy_name] = time.time()
+    with _cf_bypass_lock:
+        proxies_requiring_cf_bypass[proxy_name] = time.time()
     if always_bypass_time == 0:
         logger.info(f"Proxy '{proxy_name}' marked as requiring CF bypass for this runtime")
     else:
@@ -605,40 +608,15 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
         else parse_movie_claim_mode(str(raw_enabled_cfg))
     )
 
-    # Set the env vars expected by the factory for the duration of the call,
-    # then delegate to ``create_movie_claim_client_with_mode_from_env`` so
-    # the disable paths and ``/health`` semantics stay defined in one place.
-    prior = (
-        os.environ.get('PROXY_COORDINATOR_URL'),
-        os.environ.get('PROXY_COORDINATOR_TOKEN'),
-        os.environ.get('MOVIE_CLAIM_ENABLED'),
+    # P0-3: Pass the enabled mode directly to the factory via the new
+    # ``enabled_mode_override`` parameter instead of manipulating
+    # ``os.environ``.  The factory reads URL/token from ``cfg()`` already,
+    # so no env manipulation is needed for those.
+    from packages.python.javdb_platform.movie_claim_client import _ENABLED_UNSET
+    override = _ENABLED_UNSET if raw_enabled_cfg is None else raw_enabled_cfg
+    client, mode = create_movie_claim_client_with_mode_from_env(
+        enabled_mode_override=override,
     )
-    try:
-        if url:
-            os.environ['PROXY_COORDINATOR_URL'] = url
-        else:
-            os.environ.pop('PROXY_COORDINATOR_URL', None)
-        if token:
-            os.environ['PROXY_COORDINATOR_TOKEN'] = token
-        else:
-            os.environ.pop('PROXY_COORDINATOR_TOKEN', None)
-        # Pass the cfg value through verbatim so the factory can
-        # distinguish "var not set in config" (→ auto default) from
-        # "var explicitly empty" (→ off, matches operator intuition).
-        if raw_enabled_cfg is None:
-            os.environ.pop('MOVIE_CLAIM_ENABLED', None)
-        else:
-            os.environ['MOVIE_CLAIM_ENABLED'] = str(raw_enabled_cfg)
-        client, mode = create_movie_claim_client_with_mode_from_env()
-    finally:
-        for key, value in zip(
-            ('PROXY_COORDINATOR_URL', 'PROXY_COORDINATOR_TOKEN', 'MOVIE_CLAIM_ENABLED'),
-            prior,
-        ):
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
 
     # Re-acquire the lock to commit the resolved state atomically with the
     # other readers (``_apply_movie_claim_recommendation``,

@@ -39,6 +39,10 @@ from packages.python.javdb_core.masking import (
     mask_proxies,
 )
 from packages.python.javdb_platform.proxy_policy import should_proxy_module
+from packages.python.javdb_platform.bridges.rust_adapters.parser_adapter import (
+    is_login_page as _is_login_page,
+    is_maintenance_page as _is_maintenance_page,
+)
 
 # Try Rust implementations
 try:
@@ -1223,10 +1227,11 @@ class RequestHandler:
     
     def _get_page_with_cf_bypass(self, url: str, session: requests.Session, use_cookie: bool,
                                   use_proxy: bool, module_name: str, max_retries: int,
-                                  proxies: Optional[Dict], use_proxy_pool_mode: bool, 
+                                  proxies: Optional[Dict], use_proxy_pool_mode: bool,
                                   proxy_name: str, use_local_bypass: bool, use_proxy_bypass: bool) -> Optional[str]:
         """Handle page fetching with CF bypass enabled."""
         turnstile_detected = False
+        _last_fallback_html = None
         log_ctx = self._log_ctx(module_name, proxy_name)
         
         # Check if using proxy+bypass mode but no proxy available
@@ -1236,10 +1241,12 @@ class RequestHandler:
         
         # Step: Initial CF bypass attempt
         html_content, success, is_turnstile = self._fetch_with_cf_bypass(
-            url, proxies, f"Proxy={proxy_name}", 
+            url, proxies, f"Proxy={proxy_name}",
             force_local=use_local_bypass, use_proxy_bypass=use_proxy_bypass, session=session,
             proxy_name=proxy_name
         )
+        if html_content:
+            _last_fallback_html = html_content
         if success:
             result = self._process_html(url, html_content, proxies, use_cookie, session, from_cf_bypass=True)
             if result and len(result) >= 10000:
@@ -1275,6 +1282,8 @@ class RequestHandler:
             force_local=use_local_bypass, use_proxy_bypass=use_proxy_bypass, session=session,
             proxy_name=proxy_name
         )
+        if html_content:
+            _last_fallback_html = html_content
         if success:
             result = self._process_html(url, html_content, proxies, use_cookie, session, from_cf_bypass=True)
             if result and len(result) >= 10000:
@@ -1309,6 +1318,8 @@ class RequestHandler:
             
             logger.debug(f"[{module_name}] Fallback step (b): Direct request with current proxy (no bypass)")
             html_content, success, is_turnstile = self._fetch_direct(url, proxies, f"Proxy={proxy_name}", use_cookie, session, proxy_name=proxy_name)
+            if html_content:
+                _last_fallback_html = html_content
             if success:
                 result = self._process_html(url, html_content, proxies, use_cookie, session)
                 if result and len(result) >= 10000:
@@ -1345,6 +1356,8 @@ class RequestHandler:
                 # Step (c): Try direct with new proxy
                 logger.debug(f"[{module_name}] Fallback step (c): Direct request with new proxy={proxy_name} (no bypass)")
                 html_content, success, is_turnstile = self._fetch_direct(url, proxies, f"Proxy={proxy_name}", use_cookie, session, proxy_name=proxy_name)
+                if html_content:
+                    _last_fallback_html = html_content
                 if success:
                     result = self._process_html(url, html_content, proxies, use_cookie, session)
                     if result and len(result) >= 10000:
@@ -1361,10 +1374,12 @@ class RequestHandler:
                 # Step (d): Try CF bypass with new proxy
                 logger.debug(f"[{module_name}] Fallback step (d): CF bypass with new proxy={proxy_name}")
                 html_content, success, is_turnstile = self._fetch_with_cf_bypass(
-                    url, proxies, f"Proxy={proxy_name}", force_local=False, 
+                    url, proxies, f"Proxy={proxy_name}", force_local=False,
                     use_proxy_bypass=True, session=session,
                     proxy_name=proxy_name
                 )
+                if html_content:
+                    _last_fallback_html = html_content
                 if success:
                     result = self._process_html(url, html_content, proxies, use_cookie, session, from_cf_bypass=True)
                     if result and len(result) >= 10000:
@@ -1388,6 +1403,24 @@ class RequestHandler:
         
         # All fallbacks failed
         logger.error(f"{log_ctx} All CF bypass fallback attempts exhausted for {url}")
+
+        # P0-2: Before recording a CF event, check if the last response was
+        # actually a maintenance or login page — those are site-wide issues,
+        # not proxy-specific CF blocks.
+        if _last_fallback_html:
+            if _is_maintenance_page(_last_fallback_html):
+                logger.warning(
+                    f"{log_ctx} Last response appears to be a maintenance page — "
+                    "skipping CF event recording (site-wide issue, not proxy-specific)"
+                )
+                return None
+            if _is_login_page(_last_fallback_html):
+                logger.warning(
+                    f"{log_ctx} Last response appears to be a login page — "
+                    "skipping CF event recording (session issue, not proxy-specific)"
+                )
+                return None
+
         self.cf_bypass_failure_count += 1
         self._record_cf_event(proxy_name)
         if self.cf_bypass_failure_count >= self.config.cf_bypass_ban_threshold:
