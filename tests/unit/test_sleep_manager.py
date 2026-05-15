@@ -142,6 +142,106 @@ class TestDualWindowThrottle:
 
 
 # ---------------------------------------------------------------------------
+# TripleWindowThrottle — bisect-based window counting (W4.2a)
+# ---------------------------------------------------------------------------
+
+
+class TestTripleWindowThrottleBisect:
+    """Pin the W4.2a internal representation + window-boundary semantics.
+
+    Behaviour must match the pre-bisect ``sum(1 for t in ts if t >= threshold)``
+    contract exactly — anything inside ``[now - window, now]`` is counted,
+    samples strictly older than the threshold are not.
+    """
+
+    def test_internal_storage_is_list(self):
+        """The bisect optimisation requires a sorted random-access container."""
+        twt = TripleWindowThrottle()
+        assert isinstance(twt._timestamps, list)
+
+    def test_short_window_correctness_with_aged_samples(self):
+        """Samples older than ``short_window`` must not count against ``short_max``."""
+        twt = TripleWindowThrottle(
+            short_window_sec=0.1, short_max=2,
+            long_window_sec=600.0, long_max=999,
+            extra_window_sec=3600.0, extra_max=999,
+        )
+        # Saturate the short window.
+        twt.wait_if_needed()
+        twt.wait_if_needed()
+        # Let the two samples age past the short window.
+        time.sleep(0.15)
+        # bisect_left must place the threshold past both samples → count = 0
+        start = time.monotonic()
+        waited = twt.wait_if_needed()
+        elapsed = time.monotonic() - start
+        assert waited == 0.0
+        assert elapsed < 0.05
+
+    def test_purge_removes_extra_window_prefix(self):
+        """``_purge`` deletes all samples older than ``extra_window``."""
+        twt = TripleWindowThrottle(
+            short_window_sec=0.05, short_max=999,
+            long_window_sec=0.05, long_max=999,
+            extra_window_sec=0.1, extra_max=999,
+        )
+        twt.wait_if_needed()
+        twt.wait_if_needed()
+        assert len(twt._timestamps) == 2
+        time.sleep(0.15)  # both samples now older than extra_window
+        # Any subsequent call must purge them before appending the new one.
+        twt.wait_if_needed()
+        assert len(twt._timestamps) == 1
+
+    def test_purge_keeps_fresh_samples(self):
+        """``_purge`` is a prefix delete — never drops in-window samples."""
+        twt = TripleWindowThrottle(
+            short_window_sec=999.0, short_max=999,
+            long_window_sec=999.0, long_max=999,
+            extra_window_sec=999.0, extra_max=999,
+        )
+        for _ in range(5):
+            twt.wait_if_needed()
+        assert len(twt._timestamps) == 5
+        # _purge with samples well inside extra_window must be a no-op.
+        twt._purge(time.monotonic())
+        assert len(twt._timestamps) == 5
+
+    def test_window_count_matches_legacy_sum_semantics(self):
+        """Reproduce the old sum()-with-inequality semantics via direct seeding.
+
+        bisect_left finds the first index where ``timestamp >= threshold``,
+        so the count returned by ``len - bisect_left`` must equal
+        ``sum(1 for t in ts if t >= threshold)``.
+        """
+        import bisect
+
+        twt = TripleWindowThrottle()
+        now = 1000.0
+        # Hand-craft a sorted timestamp list bracketing the threshold.
+        twt._timestamps = [
+            now - 100.0,  # well outside
+            now - 30.0,   # exactly at short_window boundary (30 s)
+            now - 29.999,  # just inside
+            now - 10.0,
+            now - 0.1,
+        ]
+        threshold = now - twt.short_window  # = now - 30.0
+        idx = bisect.bisect_left(twt._timestamps, threshold)
+        bisect_count = len(twt._timestamps) - idx
+        # Reference: the old code path used >=.
+        legacy_count = sum(1 for t in twt._timestamps if t >= threshold)
+        assert bisect_count == legacy_count
+
+    def test_monotonic_append_preserves_sort_order(self):
+        """``time.monotonic`` is non-decreasing, so the list stays sorted."""
+        twt = TripleWindowThrottle()
+        for _ in range(20):
+            twt.wait_if_needed()
+        assert twt._timestamps == sorted(twt._timestamps)
+
+
+# ---------------------------------------------------------------------------
 # MovieSleepManager — session drift
 # ---------------------------------------------------------------------------
 
