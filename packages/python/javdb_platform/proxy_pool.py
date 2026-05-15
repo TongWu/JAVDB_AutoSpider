@@ -365,12 +365,13 @@ class ProxyPool:
         """Get the name of current active proxy"""
         if self.no_proxy_mode:
             return "No-Proxy (Direct)"
-            
+
         if not self.proxies:
             return "None"
-            
-        proxy = self.proxies[self.current_index]
-        return proxy.name
+
+        with self.lock:
+            proxy = self.proxies[self.current_index]
+            return proxy.name
         
     def mark_success(self) -> None:
         """Mark the current proxy as successful"""
