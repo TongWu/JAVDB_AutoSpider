@@ -403,6 +403,18 @@ def setup_proxy_coordinator() -> Optional[ProxyCoordinatorClient]:
     # fire-and-forget so a coordinator outage cannot stall the ban path.
     set_remote_ban_hook(lambda name: client.mark_proxy_banned(name))
     set_remote_unban_hook(lambda name: client.mark_proxy_unbanned(name))
+
+    # P0-5 — inject coordinator into the module-level movie_sleep_mgr singleton.
+    # The singleton is created at import time before the coordinator is
+    # available, so we wire it up here once the coordinator is ready.
+    try:
+        from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _mgr
+        if _mgr._coordinator is None:
+            _mgr.set_coordinator(client)
+            logger.debug("Coordinator injected into movie_sleep_mgr")
+    except Exception:
+        logger.debug("Failed to inject coordinator into movie_sleep_mgr", exc_info=True)
+
     return client
 
 
@@ -1311,9 +1323,8 @@ def setup_proxy_pool(use_proxy) -> None:
         global_proxy_pool = None
 
     # P2-D — when both the pool and the cross-instance coordinator are
-    # available AND the pool exposes ``set_health_provider`` (Python
-    # ProxyPool only — the Rust pool currently keeps round-robin), wire
-    # the coordinator's per-proxy health cache as the weighting source.
+    # available AND the pool exposes ``set_health_provider``, wire the
+    # coordinator's per-proxy health cache as the weighting source.
     # Reads from the cache populated by ``lease()`` so weighted selection
     # piggy-backs on the requests the spider was already making.
     if (

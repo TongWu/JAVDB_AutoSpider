@@ -231,6 +231,7 @@ struct PoolInner {
 #[pyclass(name = "RustProxyPool")]
 pub struct ProxyPool {
     inner: Mutex<PoolInner>,
+    health_provider: Mutex<Option<PyObject>>,
     #[pyo3(get)]
     cooldown_seconds: i64,
     #[pyo3(get)]
@@ -252,6 +253,7 @@ impl ProxyPool {
                 current_index: 0,
                 no_proxy_mode: false,
             }),
+            health_provider: Mutex::new(None),
             cooldown_seconds,
             max_failures_before_cooldown,
             ban_manager: get_ban_manager(""),
@@ -381,7 +383,20 @@ impl ProxyPool {
         None
     }
 
+    #[pyo3(signature = (provider=None))]
+    pub fn set_health_provider(&self, provider: Option<PyObject>) {
+        let mut hp = self.health_provider.lock();
+        *hp = provider;
+    }
+
     pub fn get_next_proxy(&self) -> Option<HashMap<String, String>> {
+        let has_provider = self.health_provider.lock().is_some();
+        if has_provider {
+            if let Some(result) = self.try_health_weighted_selection() {
+                return Some(result);
+            }
+        }
+
         let mut pool = self.inner.lock();
         if pool.no_proxy_mode {
             return None;
@@ -709,6 +724,70 @@ impl ProxyPool {
 
     pub fn get_proxy_count(&self) -> usize {
         self.inner.lock().proxies.len()
+    }
+}
+
+impl ProxyPool {
+    fn try_health_weighted_selection(&self) -> Option<HashMap<String, String>> {
+        let candidates: Vec<(usize, String)> = {
+            let pool = self.inner.lock();
+            if pool.no_proxy_mode || pool.proxies.is_empty() {
+                return None;
+            }
+            check_cooldowns(&pool.proxies);
+            pool.proxies
+                .iter()
+                .enumerate()
+                .filter_map(|(i, arc)| {
+                    let p = arc.lock();
+                    if p.is_available && !p.banned && !p.is_in_cooldown() {
+                        Some((i, p.name.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        };
+
+        if candidates.is_empty() {
+            return None;
+        }
+
+        let best_idx = Python::with_gil(|py| -> Option<usize> {
+            let hp_guard = self.health_provider.lock();
+            let provider = hp_guard.as_ref()?;
+
+            let mut best_score = f64::NEG_INFINITY;
+            let mut best: Option<usize> = None;
+
+            for &(idx, ref name) in &candidates {
+                match provider.call1(py, (name.as_str(),)) {
+                    Ok(obj) => {
+                        if let Ok(score) = obj.extract::<f64>(py) {
+                            if score > best_score {
+                                best_score = score;
+                                best = Some(idx);
+                            }
+                        }
+                        // None return from provider → skip, no score available
+                    }
+                    Err(e) => {
+                        debug!("Health provider error for '{}': {}", name, e);
+                    }
+                }
+            }
+            best
+        });
+
+        if let Some(idx) = best_idx {
+            let mut pool = self.inner.lock();
+            pool.current_index = idx;
+            let proxy = pool.proxies[idx].lock();
+            debug!("Health-weighted selected proxy: {}", proxy.name);
+            return Some(proxy.get_proxies_dict());
+        }
+
+        None
     }
 }
 
