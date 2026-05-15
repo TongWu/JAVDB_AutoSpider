@@ -64,14 +64,22 @@ COPY pipeline.py .
 COPY docker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Create necessary directories (will be mounted from host)
-RUN mkdir -p /app/logs /app/"Ad Hoc" /app/"Daily Report"
+# Non-root runtime user.  The cron DAEMON must run as root so that it can
+# fork jobs as a different user (the ``spider`` username in each cron line
+# in /etc/cron.d/).  The Python app processes themselves therefore never run
+# as root.  We intentionally omit a top-level ``USER`` directive here:
+# setting USER=spider would break ``cron -f`` (daemon won't start as
+# non-root).  Use ``docker exec -u spider ...`` for interactive debugging.
+RUN useradd -m -u 10001 -s /bin/bash spider
 
-# Create log file for cron
-RUN touch /var/log/cron.log
+# Create necessary directories (will be mounted from host)
+RUN mkdir -p /app/logs /app/"Ad Hoc" /app/"Daily Report" \
+    && chown -R spider:spider /app \
+    && touch /var/log/cron.log \
+    && chmod 0622 /var/log/cron.log
 
 # Use entrypoint script
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
-# Default command: start cron in foreground and tail the log
+# Default command: start cron in foreground
 CMD ["cron", "-f"]
