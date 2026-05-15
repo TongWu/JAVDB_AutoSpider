@@ -1,10 +1,39 @@
-"""Shared proxy policy helpers for CLI and runtime code."""
+"""Shared proxy policy helpers for CLI and runtime code.
+
+Mixes two concerns under one "policy" umbrella:
+
+1. CLI / config policy — proxy mode parsing, ``--use-proxy`` / ``--no-proxy``
+   flag handling, module-level proxy gating. (Original purpose of this
+   module.)
+2. Identity / selection policy (W3.3) — canonical proxy ID for DO
+   addressing (:func:`normalize_proxy_id`) and the unified
+   "is this proxy currently usable?" predicate
+   (:func:`is_proxy_usable`).
+
+Both are pure functions with no I/O. Kept together because both encode
+operator-facing decisions about how proxies are addressed and selected.
+
+Out of scope for this module (deliberately):
+
+* ``mask_proxy_url`` — two implementations (``proxy_pool`` and
+  ``javdb_core.masking``) emit subtly different log formats; merging
+  them risks breaking log-grep workflows. Tracked separately.
+* CF-bypass time-window predicate — depends on mutable runtime state in
+  ``runtime/state.py`` and is unified there in W3.4.
+* Health-score clamping — entangled with :class:`ProxyPool` instance
+  state; left in the pool module until a follow-up.
+"""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import socket
 from typing import Optional, Sequence
+
+from packages.python.javdb_platform.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 ProxyOverride = Optional[bool]
@@ -113,3 +142,76 @@ def is_cf_bypass_reachable(host: str = '127.0.0.1', port: int = 8000,
         else:
             _cf_bypass_checked = False
         return False
+
+
+# ── Identity & selection policy (W3.3) ─────────────────────────────────────
+
+
+def normalize_proxy_id(
+    raw: Optional[str],
+    *,
+    fallback_seed: Optional[str] = None,
+) -> str:
+    """Deterministically normalise a proxy identifier for DO addressing.
+
+    All runners must derive the same string for the same physical proxy,
+    or the per-proxy Durable Object mutex falls apart silently. The rule
+    is:
+
+    1. If *raw* is a non-empty string, strip whitespace and use it verbatim
+       (truncated to the 256-char DO ``idFromName`` limit).
+    2. Otherwise, if *fallback_seed* is provided (typically ``host:port``),
+       hash it to a stable 16-char hex digest and prefix ``proxy-``.
+    3. Otherwise, raise :class:`ValueError` so the bug surfaces loudly.
+
+    Returns a string of length 1..256.
+    """
+    if isinstance(raw, str):
+        trimmed = raw.strip()
+        if trimmed:
+            return trimmed[:256]
+    if fallback_seed:
+        # Not security-critical — only used to bucket a configurable
+        # host:port into a stable DO key. ``usedforsecurity=False``
+        # silences Bandit/Ruff S324 without changing the digest, so
+        # existing runners that already derived IDs keep agreeing on
+        # the same DO key.
+        digest = hashlib.sha1(  # noqa: S324 — see comment above
+            fallback_seed.encode("utf-8"), usedforsecurity=False,
+        ).hexdigest()[:16]
+        derived = f"proxy-{digest}"
+        logger.warning(
+            "Coordinator proxy_id derived from host:port hash: %s — "
+            "recommend setting `name` in PROXY_POOL_JSON so all "
+            "runners agree",
+            derived,
+        )
+        return derived
+    raise ValueError("proxy_id is empty and no fallback_seed was provided")
+
+
+def is_proxy_usable(proxy) -> bool:
+    """Return ``True`` iff *proxy* is currently selectable for a request.
+
+    Canonical form of the three-clause check that the proxy pool's
+    selection paths previously repeated at five different call-sites:
+
+    .. code-block:: python
+
+        proxy.is_available and not proxy.banned and not proxy.is_in_cooldown()
+
+    Strictly speaking the ``not banned`` clause is redundant given the
+    pool's invariant (a banned proxy always has ``is_available = False``),
+    but keeping it makes the predicate self-documenting and resilient to
+    future drift.
+
+    Duck-typed: accepts any object exposing the three attributes / method
+    — typically :class:`ProxyInfo`, but the loose signature lets the
+    Rust-backed pool reuse the same predicate without coupling to a
+    specific dataclass.
+    """
+    return (
+        proxy.is_available
+        and not proxy.banned
+        and not proxy.is_in_cooldown()
+    )

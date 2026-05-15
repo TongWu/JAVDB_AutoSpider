@@ -41,6 +41,7 @@ from packages.python.javdb_platform.proxy_ban_manager import (
     get_ban_manager,
     ProxyBanManager,
 )
+from packages.python.javdb_platform.proxy_policy import is_proxy_usable
 
 
 logger = logging.getLogger(__name__)
@@ -246,16 +247,16 @@ class ProxyPool:
             attempts = 0
             while attempts < len(self.proxies):
                 proxy = self.proxies[self.current_index]
-                
-                if proxy.is_available and not proxy.banned and not proxy.is_in_cooldown():
+
+                if is_proxy_usable(proxy):
                     return proxy.get_proxies_dict()
-                    
+
                 self.current_index = (self.current_index + 1) % len(self.proxies)
                 attempts += 1
-            
+
             logger.debug("All proxies are unavailable or in cooldown")
             return None
-    
+
     def set_health_provider(
         self,
         provider: Optional[Callable[[str], Optional[float]]],
@@ -319,7 +320,7 @@ class ProxyPool:
             
             available = [
                 (i, p) for i, p in enumerate(self.proxies)
-                if p.is_available and not p.banned and not p.is_in_cooldown()
+                if is_proxy_usable(p)
             ]
             if not available:
                 logger.debug("All proxies are unavailable or in cooldown")
@@ -351,13 +352,13 @@ class ProxyPool:
             while attempts < len(self.proxies):
                 self.current_index = (self.current_index + 1) % len(self.proxies)
                 proxy = self.proxies[self.current_index]
-                
-                if proxy.is_available and not proxy.banned and not proxy.is_in_cooldown():
+
+                if is_proxy_usable(proxy):
                     logger.debug(f"Round-robin selected proxy: {proxy.name}")
                     return proxy.get_proxies_dict()
-                    
+
                 attempts += 1
-            
+
             logger.warning("Unexpected: no available proxy found after rotation")
             return None
             
@@ -427,13 +428,17 @@ class ProxyPool:
             while attempts < len(self.proxies):
                 self.current_index = (self.current_index + 1) % len(self.proxies)
                 next_proxy = self.proxies[self.current_index]
-                
-                if next_proxy.is_available and not next_proxy.is_in_cooldown():
+
+                # Previously this check omitted ``not banned``; harmless
+                # in practice because the pool's invariant guarantees
+                # ``banned implies not is_available``, but unifying via
+                # the shared predicate makes that intent explicit.
+                if is_proxy_usable(next_proxy):
                     logger.debug(f"Switched from '{current_proxy.name}' to '{next_proxy.name}'")
                     return True
-                    
+
                 attempts += 1
-            
+
             self.current_index = original_index
             logger.error("Failed to switch proxy: all proxies are unavailable")
             return False
@@ -489,7 +494,7 @@ class ProxyPool:
             while attempts < len(self.proxies):
                 candidate = (candidate + 1) % len(self.proxies)
                 next_proxy = self.proxies[candidate]
-                if next_proxy.is_available and not next_proxy.banned and not next_proxy.is_in_cooldown():
+                if is_proxy_usable(next_proxy):
                     self.current_index = candidate
                     logger.debug(f"Switched from '{target.name}' to '{next_proxy.name}'")
                     return True
