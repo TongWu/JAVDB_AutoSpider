@@ -195,57 +195,19 @@ def db_stage_history_write(
     return seq
 
 
-def db_commit_session_history(
-    session_id: str,
-    db_path: Optional[str] = None,
-) -> Tuple[int, int]:
-    """Commit all pending writes for a session.
-
-    Bulk-commits PendingMovieHistoryWrites and PendingTorrentHistoryWrites
-    into MovieHistory and TorrentHistory.
-
-    Args:
-        session_id: Session identifier
-        db_path: Database path (defaults to HISTORY_DB_PATH)
-
-    Returns:
-        Tuple of (movies_committed, torrents_committed)
-    """
-    _ensure_imports()
-
-    # Import commit logic from db.py (will be refactored later)
-    from packages.python.javdb_platform.db import _commit_session_bulk
-
-    with _get_db(db_path or _HISTORY_DB_PATH) as conn:
-        return _commit_session_bulk(conn, session_id)
+def db_commit_session_history(session_id, **kwargs):
+    """Commit all pending writes for a session. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_commit_session_history as _f
+    return _f(session_id, **kwargs)
 
 
 # ── Audit mode (legacy) ──────────────────────────────────────────────────
 
 
-def db_upsert_history(
-    href: str,
-    movie_data: dict,
-    torrent_data: List[dict],
-    session_id: Optional[str] = None,
-) -> None:
-    """Legacy audit-mode upsert (deprecated, use pending mode).
-
-    Args:
-        href: Movie href
-        movie_data: Movie metadata dict
-        torrent_data: List of torrent dicts
-        session_id: Session identifier (optional)
-    """
-    _ensure_imports()
-
-    # Import upsert logic from db.py (will be refactored later)
-    from packages.python.javdb_platform.db import (
-        _db_upsert_history_impl,
-    )
-
-    with _get_db(_HISTORY_DB_PATH) as conn:
-        _db_upsert_history_impl(conn, href, movie_data, torrent_data, session_id)
+def db_upsert_history(*args, **kwargs):
+    """Legacy audit-mode upsert. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_upsert_history as _f
+    return _f(*args, **kwargs)
 
 
 # ── Rollback interface ───────────────────────────────────────────────────

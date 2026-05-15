@@ -16,7 +16,8 @@ discovered in each run (used for CSV report generation).
 import os
 import time
 from datetime import datetime
-from typing import List, Optional, Tuple
+import sqlite3
+from typing import Dict, List, Optional, Tuple
 
 from packages.python.javdb_platform.config_helper import cfg
 from packages.python.javdb_platform.logging_config import get_logger
@@ -25,6 +26,7 @@ logger = get_logger(__name__)
 
 # Lazy imports to avoid circular dependencies
 _get_db = None
+_get_local_sqlite_db = None
 _REPORTS_DB_PATH = None
 _HISTORY_DB_PATH = None
 _generate_session_id = None
@@ -34,11 +36,12 @@ _DB_OPERATIONAL_ERRORS = None
 
 def _ensure_imports():
     """Lazy import to avoid circular dependency with db_connection and db_session."""
-    global _get_db, _REPORTS_DB_PATH, _HISTORY_DB_PATH
+    global _get_db, _get_local_sqlite_db, _REPORTS_DB_PATH, _HISTORY_DB_PATH
     global _generate_session_id, _resolve_write_mode, _DB_OPERATIONAL_ERRORS
     if _get_db is None:
         from packages.python.javdb_platform.db_connection import (
             get_db,
+            get_local_sqlite_db,
             REPORTS_DB_PATH,
             HISTORY_DB_PATH,
         )
@@ -47,6 +50,7 @@ def _ensure_imports():
             _resolve_write_mode as resolve_wm,
         )
         _get_db = get_db
+        _get_local_sqlite_db = get_local_sqlite_db
         _REPORTS_DB_PATH = REPORTS_DB_PATH
         _HISTORY_DB_PATH = HISTORY_DB_PATH
         _generate_session_id = generate_session_id
@@ -54,10 +58,8 @@ def _ensure_imports():
 
         try:
             from packages.python.javdb_platform.d1_client import D1PermanentError
-            import sqlite3
             _DB_OPERATIONAL_ERRORS = (sqlite3.OperationalError, D1PermanentError)
         except ImportError:
-            import sqlite3
             _DB_OPERATIONAL_ERRORS = (sqlite3.OperationalError,)
 
 
@@ -625,34 +627,161 @@ def rollback_reports_for_session(
 # ── Delegating wrappers (pending full migration) ────────────────────────
 
 
-def db_find_in_progress_session_ids_for_run_csv(*args, **kwargs):
-    """Find in-progress sessions for a run+csv combo. Delegates to db.py."""
-    from packages.python.javdb_platform.db import (
-        db_find_in_progress_session_ids_for_run_csv as _f,
+def db_find_in_progress_session_ids_for_run_csv(
+    run_id: str,
+    run_attempt: Optional[int],
+    csv_filename: str,
+    *,
+    db_path: Optional[str] = None,
+) -> List[str]:
+    """Return ``in_progress`` SessionIds for the same (RunId, RunAttempt, CSVFilename).
+
+    Used by the spider self-check to distinguish *legitimate* sibling
+    sessions in the same workflow run from a *true* duplicate.
+    """
+    _ensure_imports()
+    with _get_db(db_path or _REPORTS_DB_PATH) as conn:
+        if run_attempt is None:
+            rows = conn.execute(
+                "SELECT Id FROM ReportSessions "
+                "WHERE Status='in_progress' AND RunId=? AND CSVFilename=?",
+                (run_id, csv_filename),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT Id FROM ReportSessions WHERE Status='in_progress' "
+                "AND RunId=? AND RunAttempt=? AND CSVFilename=?",
+                (run_id, int(run_attempt), csv_filename),
+            ).fetchall()
+    return [r['Id'] for r in rows]
+
+
+def db_get_latest_session_local(
+    report_type: Optional[str] = None, db_path: Optional[str] = None,
+) -> Optional[dict]:
+    """SQLite-only counterpart to :func:`db_get_latest_session`."""
+    _ensure_imports()
+    with _get_local_sqlite_db(db_path or _REPORTS_DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        if report_type is not None:
+            row = conn.execute(
+                "SELECT * FROM ReportSessions WHERE ReportType = ? "
+                "ORDER BY Id DESC LIMIT 1",
+                (report_type,),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT * FROM ReportSessions ORDER BY Id DESC LIMIT 1"
+            ).fetchone()
+        return dict(row) if row else None
+
+
+def db_get_session_run_identity(
+    session_id: str,
+    *,
+    db_path: Optional[str] = None,
+) -> Optional[Tuple[Optional[str], Optional[int]]]:
+    """Return ``(RunId, RunAttempt)`` for *session_id*, or ``None`` if absent."""
+    _ensure_imports()
+    with _get_db(db_path or _REPORTS_DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT RunId, RunAttempt FROM ReportSessions WHERE Id=?",
+            (session_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    return (row["RunId"], row["RunAttempt"])
+
+
+def db_pending_session_stats(
+    session_id: str,
+    *,
+    db_path: Optional[str] = None,
+) -> Dict[str, int]:
+    """Snapshot pending-table counts for *session_id* (Phase 2 verify).
+
+    Returns dict with keys: pending_residual_count, pending_applied_count,
+    pending_total_count.
+    """
+    _ensure_imports()
+    counts = {
+        "pending_residual_count": 0,
+        "pending_applied_count": 0,
+        "pending_total_count": 0,
+    }
+    with _get_db(db_path or _HISTORY_DB_PATH) as conn:
+        for tbl in (
+            "PendingMovieHistoryWrites",
+            "PendingTorrentHistoryWrites",
+        ):
+            try:
+                row = conn.execute(
+                    f"SELECT "
+                    f"  SUM(CASE WHEN ApplyState='pending' THEN 1 ELSE 0 END) "
+                    f"    AS pending_n, "
+                    f"  SUM(CASE WHEN ApplyState='applied' THEN 1 ELSE 0 END) "
+                    f"    AS applied_n "
+                    f"FROM {tbl} WHERE SessionId=?",
+                    (session_id,),
+                ).fetchone()
+            except _DB_OPERATIONAL_ERRORS:
+                continue
+            if row is None:
+                continue
+            counts["pending_residual_count"] += int(row["pending_n"] or 0)
+            counts["pending_applied_count"] += int(row["applied_n"] or 0)
+    counts["pending_total_count"] = (
+        counts["pending_residual_count"] + counts["pending_applied_count"]
     )
-    return _f(*args, **kwargs)
+    return counts
 
 
-def db_get_latest_session_local(*args, **kwargs):
-    """SQLite-only latest session lookup. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_get_latest_session_local as _f
-    return _f(*args, **kwargs)
+def db_find_sessions_by_run(
+    run_id: str,
+    run_attempt: Optional[int] = None,
+    *,
+    reports_db_path: Optional[str] = None,
+    history_db_path: Optional[str] = None,
+) -> List[str]:
+    """Return every session id touched by a (RunId, RunAttempt) workflow run.
 
+    Looks at ReportSessions first, then unions in audit tables for any
+    rows tagged with the run identity but whose owning session row is missing.
+    """
+    _ensure_imports()
+    found: set = set()
+    with _get_db(reports_db_path or _REPORTS_DB_PATH) as conn:
+        if run_attempt is None:
+            rows = conn.execute(
+                "SELECT Id FROM ReportSessions WHERE RunId=?", (run_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT Id FROM ReportSessions WHERE RunId=? AND RunAttempt=?",
+                (run_id, int(run_attempt)),
+            ).fetchall()
+        for r in rows:
+            found.add(r['Id'])
 
-def db_get_session_run_identity(*args, **kwargs):
-    """Get RunId/RunAttempt for a session. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_get_session_run_identity as _f
-    return _f(*args, **kwargs)
+    with _get_db(history_db_path or _HISTORY_DB_PATH) as conn:
+        for table in ('MovieHistoryAudit', 'TorrentHistoryAudit'):
+            try:
+                if run_attempt is None:
+                    rows = conn.execute(
+                        f"SELECT DISTINCT SessionId FROM {table} WHERE RunId=?",
+                        (run_id,),
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        f"SELECT DISTINCT SessionId FROM {table} "
+                        f"WHERE RunId=? AND RunAttempt=?",
+                        (run_id, int(run_attempt)),
+                    ).fetchall()
+            except _DB_OPERATIONAL_ERRORS:
+                continue
+            for r in rows:
+                if r['SessionId'] is not None:
+                    found.add(r['SessionId'])
 
-
-def db_pending_session_stats(*args, **kwargs):
-    """Get pending row counts for a session. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_pending_session_stats as _f
-    return _f(*args, **kwargs)
-
-
-def db_find_sessions_by_run(*args, **kwargs):
-    """Find sessions by RunId/RunAttempt. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_find_sessions_by_run as _f
-    return _f(*args, **kwargs)
+    return sorted(found)
 
