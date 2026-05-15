@@ -69,6 +69,18 @@ def get_active_session_id() -> Optional[str]:
         return _active_session_id_value
 
 
+# ── Session ID resolution ───────────────────────────────────────────────
+
+_SESSION_ID_SENTINEL = object()
+
+
+def _resolve_session_id(explicit=_SESSION_ID_SENTINEL) -> Optional[str]:
+    """Pick the explicit override or fall back to the active context."""
+    if explicit is _SESSION_ID_SENTINEL:
+        return get_active_session_id()
+    return explicit
+
+
 # ── Run identity setters/getters ─────────────────────────────────────────
 
 
