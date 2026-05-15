@@ -67,7 +67,6 @@ FIXTURES = [
             {"href": "magnet:?xt=urn:btih:cu1", "name": "PQR-678-CU.mp4", "tags": [], "size": "4.4GB", "timestamp": "2026-04-01"},
             {"href": "magnet:?xt=urn:btih:u1", "name": "PQR-678-U.mp4", "tags": [], "size": "4.3GB", "timestamp": "2026-04-01"},
         ],
-        marks=pytest.mark.xfail(reason="Python classifies -CU as no_subtitle; Rust classifies it as hacked"),
         id="hacked-priority-UC-over-U",
     ),
     pytest.param(
