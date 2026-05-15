@@ -849,6 +849,102 @@ def test_register_parses_embedded_config_snapshot():
         c.close()
 
 
+# ── W5.4 — active signal parsing ───────────────────────────────────────────
+
+
+def test_heartbeat_parses_active_signals_list():
+    """Heartbeat returns operator-pushed signals via HeartbeatResult.active_signals."""
+    from packages.python.javdb_platform.runner_registry_client import Signal
+    c = _make_client()
+    body = {
+        "alive": True,
+        "server_time_ms": 1,
+        "active_signals": [
+            {
+                "id": "sig-1", "kind": "throttle_global",
+                "expires_at_ms": 9999, "created_at_ms": 1,
+                "factor": 2.5, "reason": "burst",
+            },
+            {
+                "id": "sig-2", "kind": "pause_all",
+                "expires_at_ms": 9999, "created_at_ms": 1,
+            },
+        ],
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+            r = c.heartbeat("x")
+        assert len(r.active_signals) == 2
+        assert all(isinstance(s, Signal) for s in r.active_signals)
+        throttle = next(s for s in r.active_signals if s.kind == "throttle_global")
+        assert throttle.factor == 2.5
+        assert throttle.reason == "burst"
+    finally:
+        c.close()
+
+
+def test_heartbeat_defaults_active_signals_to_empty_list():
+    """Pre-W5.4 Workers omit active_signals; the client returns an empty list."""
+    c = _make_client()
+    body = {"alive": True, "server_time_ms": 1}
+    try:
+        with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+            r = c.heartbeat("x")
+        assert r.active_signals == []
+    finally:
+        c.close()
+
+
+def test_heartbeat_drops_malformed_signal_entries():
+    """A garbage entry in the array is silently dropped (fail-open)."""
+    c = _make_client()
+    body = {
+        "alive": True,
+        "server_time_ms": 1,
+        "active_signals": [
+            {"id": "ok", "kind": "pause_all", "expires_at_ms": 1, "created_at_ms": 0},
+            "not-a-dict",
+            {"kind": "throttle_global"},  # missing id
+            {"id": "bad", "kind": "unknown_kind", "expires_at_ms": 1, "created_at_ms": 0},
+        ],
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+            r = c.heartbeat("x")
+        assert len(r.active_signals) == 1
+        assert r.active_signals[0].id == "ok"
+    finally:
+        c.close()
+
+
+def test_register_parses_active_signals():
+    """Register response also surfaces signals."""
+    from packages.python.javdb_platform.runner_registry_client import Signal
+    c = _make_client()
+    body = {
+        "registered": True,
+        "active_runners": [],
+        "pool_hash_summary": [],
+        "server_time_ms": 1,
+        "active_signals": [
+            {
+                "id": "sig-X", "kind": "ban_proxy",
+                "expires_at_ms": 1, "created_at_ms": 0,
+                "proxy_id": "Proxy-3",
+            },
+        ],
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+            r = c.register(holder_id="rid")
+        assert len(r.active_signals) == 1
+        s: Signal = r.active_signals[0]
+        assert s.kind == "ban_proxy"
+        assert s.proxy_id == "Proxy-3"
+    finally:
+        c.close()
+
+
 def test_parse_hash_summary_rejects_malformed_buckets():
     with pytest.raises(ValueError, match="entries"):
         _parse_hash_summary([
