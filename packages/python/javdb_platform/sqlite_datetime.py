@@ -1,4 +1,11 @@
-"""Normalize TEXT datetime values stored in SQLite to ``YYYY-MM-DD HH:MM:SS``."""
+"""Normalize TEXT datetime values stored in SQLite to ``YYYY-MM-DD HH:MM:SS``.
+
+All datetimes in the database are **naive** strings representing SGT
+(UTC+8) wall-clock time.  Any timezone-aware input is deliberately
+stripped to naive form (``replace(tzinfo=None)``) before storage so
+that comparisons across rows remain consistent without requiring
+every query to carry timezone logic.
+"""
 
 from __future__ import annotations
 

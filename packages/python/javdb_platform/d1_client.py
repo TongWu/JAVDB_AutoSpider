@@ -358,6 +358,15 @@ class D1Connection:
                 return max(0.0, float(retry_after))
             except (TypeError, ValueError):
                 pass
+            try:
+                import email.utils as _eu
+                dt = _eu.parsedate_to_datetime(str(retry_after))
+                delay = (dt - __import__("datetime").datetime.now(
+                    tz=__import__("datetime").timezone.utc
+                )).total_seconds()
+                return max(0.0, delay)
+            except Exception:
+                pass
         base = _RETRY_BASE_SEC * (2 ** attempt)
         # Export-lock errors require a longer floor: short retries reliably
         # land back inside the same lock window.

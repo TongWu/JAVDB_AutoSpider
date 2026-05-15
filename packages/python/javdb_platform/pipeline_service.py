@@ -16,6 +16,7 @@ import logging
 import os
 import sys
 import argparse
+import time
 from datetime import datetime
 
 from compat import activate_repo_root
@@ -143,19 +144,20 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def run_command(command, args=None):
+def run_command(command, args=None, *, timeout=3600):
     """
     Run a canonical CLI command with arguments and stream output.
-    
+
     Args:
         command: Base command to run
         args: List of arguments to pass to the script
-    
+        timeout: Maximum wall-clock seconds before the child is killed (default 3600).
+
     Returns:
         str: Captured output from the script
-    
+
     Raises:
-        RuntimeError: If the command fails with non-zero exit code
+        RuntimeError: If the command fails with non-zero exit code or times out
     """
     cmd = list(command)
     if args:
@@ -169,6 +171,8 @@ def run_command(command, args=None):
             file_handler = handler
             break
 
+    deadline = time.monotonic() + timeout
+
     # Run with real-time output
     process = subprocess.Popen(
         cmd,
@@ -181,6 +185,7 @@ def run_command(command, args=None):
 
     # Capture output and write to both console and log file
     output_lines = []
+    timed_out = False
     if process.stdout:
         for line in iter(process.stdout.readline, ''):
             if line:
@@ -191,15 +196,25 @@ def run_command(command, args=None):
                 if file_handler:
                     file_handler.stream.write(line)
                     file_handler.stream.flush()
+            if time.monotonic() > deadline:
+                timed_out = True
+                break
 
         process.stdout.close()
+
+    if timed_out:
+        process.kill()
+        process.wait()
+        raise RuntimeError(
+            f'Command {" ".join(cmd)} timed out after {timeout}s'
+        )
 
     return_code = process.wait()
 
     if return_code != 0:
         logger.error(f'Command {" ".join(command)} failed with return code {return_code}')
         raise RuntimeError(f'Command {" ".join(command)} failed with return code {return_code}')
-    
+
     return ''.join(output_lines)
 
 

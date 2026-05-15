@@ -40,12 +40,17 @@ HISTORY_FIELDNAMES = [
 ]
 
 _db_initialised = False
+_db_init_lock = __import__("threading").Lock()
 
 
 def _ensure_db():
-    """Lazily initialise the database on first use."""
+    """Lazily initialise the database on first use (thread-safe)."""
     global _db_initialised
-    if not _db_initialised:
+    if _db_initialised:
+        return
+    with _db_init_lock:
+        if _db_initialised:
+            return
         from packages.python.javdb_platform.db_migrations import init_db
         init_db()
         _db_initialised = True
