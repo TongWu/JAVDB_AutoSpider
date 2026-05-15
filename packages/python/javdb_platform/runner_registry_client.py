@@ -131,6 +131,92 @@ class PoolHashBucket:
 
 
 @dataclass(frozen=True)
+class Signal:
+    """W5.4 — operator-pushed active signal.
+
+    Mirrors the Worker-side ``Signal`` type. ``kind`` is one of
+    ``throttle_global`` / ``ban_proxy`` / ``pause_all`` / ``resume``.
+    Time-bounded via ``expires_at_ms`` (Worker GC + read-time filter
+    drop expired entries automatically).
+
+    The Python client parses these but does NOT yet apply them — the
+    consumer integration with :class:`MovieSleepManager` and
+    :class:`ProxyPool` is deferred to a follow-up. Until then this
+    surface lets the heartbeat loop expose the signal list for ops
+    visibility without coupling to specific consumers.
+    """
+
+    id: str
+    kind: str
+    expires_at_ms: int
+    created_at_ms: int
+    reason: Optional[str] = None
+    factor: Optional[float] = None
+    proxy_id: Optional[str] = None
+
+
+_VALID_SIGNAL_KINDS = frozenset(
+    {"throttle_global", "ban_proxy", "pause_all", "resume"}
+)
+
+
+def _parse_signal(payload: Any) -> Optional[Signal]:
+    """Decode one signal entry from a wire payload, returning ``None`` on
+    any structural / type error. Fail-open: bad signals are dropped, not
+    raised. Coerces numeric / string fields defensively so a Worker that
+    sends a number where a string is expected (or vice versa) doesn't
+    crash the heartbeat parser."""
+    if not isinstance(payload, dict):
+        return None
+    try:
+        kind = str(payload.get("kind", ""))
+        if kind not in _VALID_SIGNAL_KINDS:
+            return None
+        sig_id = str(payload.get("id", ""))
+        if not sig_id:
+            return None
+        expires = int(payload.get("expires_at_ms", 0) or 0)
+        created = int(payload.get("created_at_ms", 0) or 0)
+        reason_raw = payload.get("reason")
+        reason = str(reason_raw) if reason_raw not in (None, "") else None
+        factor_raw = payload.get("factor")
+        factor = float(factor_raw) if factor_raw is not None else None
+        proxy_id_raw = payload.get("proxy_id")
+        proxy_id = (
+            str(proxy_id_raw)
+            if proxy_id_raw not in (None, "")
+            else None
+        )
+        return Signal(
+            id=sig_id,
+            kind=kind,
+            expires_at_ms=expires,
+            created_at_ms=created,
+            reason=reason,
+            factor=factor,
+            proxy_id=proxy_id,
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_signal_list(payload: Any) -> List[Signal]:
+    """Decode a list of signals from a wire payload. Always returns a
+    list (possibly empty); never raises. Drops individual malformed
+    entries silently so one bad signal doesn't poison the rest."""
+    if payload is None:
+        return []
+    if not isinstance(payload, list):
+        return []
+    out: List[Signal] = []
+    for entry in payload:
+        sig = _parse_signal(entry)
+        if sig is not None:
+            out.append(sig)
+    return out
+
+
+@dataclass(frozen=True)
 class ConfigSnapshot:
     """W5.3 — versioned snapshot of operator-tunable runtime config.
 
@@ -216,6 +302,9 @@ class RegisterResult:
     movie_claim_recommended: bool = False
     movie_claim_min_runners: int = 0
     config: Optional[ConfigSnapshot] = None
+    #: W5.4 — operator-pushed active signals (always a list, possibly empty;
+    #: never ``None`` so call-sites don't need to guard).
+    active_signals: List[Signal] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -246,6 +335,8 @@ class HeartbeatResult:
     movie_claim_min_runners: int = 0
     active_runners_count: int = 0
     config: Optional[ConfigSnapshot] = None
+    #: W5.4 — see :attr:`RegisterResult.active_signals`.
+    active_signals: List[Signal] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -413,6 +504,8 @@ class RunnerRegistryClient(BaseDOClient):
                 ),
                 # W5.3 — dynamic-config snapshot; ``None`` on pre-v4 Workers.
                 config=_parse_config_snapshot(resp.get("config")),
+                # W5.4 — operator signals; empty list on pre-W5.4 Workers.
+                active_signals=_parse_signal_list(resp.get("active_signals")),
             )
         except (KeyError, TypeError, ValueError) as e:
             raise RunnerRegistryUnavailable(
@@ -449,6 +542,8 @@ class RunnerRegistryClient(BaseDOClient):
                 ),
                 # W5.3 — dynamic-config snapshot; ``None`` on pre-v4 Workers.
                 config=_parse_config_snapshot(resp.get("config")),
+                # W5.4 — operator signals; empty list on pre-W5.4 Workers.
+                active_signals=_parse_signal_list(resp.get("active_signals")),
             )
         except (KeyError, TypeError, ValueError) as e:
             raise RunnerRegistryUnavailable(
