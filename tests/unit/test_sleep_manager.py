@@ -500,3 +500,52 @@ class TestVolumeTiers:
         mgr.apply_volume_multiplier(200)
         assert mgr.sleep_min > before_min
         assert mgr.sleep_max > before_max
+
+
+# ---------------------------------------------------------------------------
+# TripleWindowThrottle.set_runner_scale
+# ---------------------------------------------------------------------------
+
+
+class TestRunnerScale:
+
+    def test_single_runner_no_change(self):
+        twt = TripleWindowThrottle()
+        twt.set_runner_scale(1)
+        assert twt.long_max == 30
+        assert twt.extra_max == 200
+
+    def test_three_runners_divides_long_and_extra(self):
+        twt = TripleWindowThrottle()
+        twt.set_runner_scale(3)
+        assert twt.long_max == 10
+        assert twt.extra_max == 66
+
+    def test_five_runners(self):
+        twt = TripleWindowThrottle()
+        twt.set_runner_scale(5)
+        assert twt.long_max == 6
+        assert twt.extra_max == 40
+
+    def test_minimum_one(self):
+        twt = TripleWindowThrottle(long_max=2, extra_max=3)
+        twt.set_runner_scale(9999)
+        assert twt.long_max == 1
+        assert twt.extra_max == 1
+
+    def test_short_max_unaffected(self):
+        twt = TripleWindowThrottle()
+        twt.set_runner_scale(5)
+        assert twt.short_max == 3
+
+    def test_zero_runners_treated_as_one(self):
+        twt = TripleWindowThrottle()
+        twt.set_runner_scale(0)
+        assert twt.long_max == 30
+        assert twt.extra_max == 200
+
+    def test_negative_runners_treated_as_one(self):
+        twt = TripleWindowThrottle()
+        twt.set_runner_scale(-3)
+        assert twt.long_max == 30
+        assert twt.extra_max == 200
