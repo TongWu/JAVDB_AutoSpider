@@ -854,6 +854,17 @@ def _next_heartbeat_interval() -> float:
     )
 
 
+def _update_sleep_runner_count(count: int) -> None:
+    """Feed active runner count to the sleep manager for degraded-mode throttle scaling."""
+    if count <= 0:
+        return
+    try:
+        from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _mgr
+        _mgr.set_active_runners(count)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None:
     """Background thread: ping ``/heartbeat`` until stopped.
 
@@ -907,6 +918,7 @@ def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None
                 # toggle re-syncs after eviction (the cohort may have
                 # changed while we were missing).
                 _apply_movie_claim_recommendation(rereg.movie_claim_recommended)
+                _update_sleep_runner_count(len(rereg.active_runners))
             except RunnerRegistryUnavailable:
                 logger.debug("Runner-registry re-register unavailable; will retry")
             except Exception:  # noqa: BLE001
@@ -920,6 +932,7 @@ def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None
         # Old Workers omit the field; the parser defaults it to False
         # which the auto path treats as "single runner, unmount".
         _apply_movie_claim_recommendation(result.movie_claim_recommended)
+        _update_sleep_runner_count(result.active_runners_count)
 
 
 def _unregister_runner_at_exit() -> None:
@@ -1165,6 +1178,7 @@ def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
         # in place (≥2 runners) or unmounts it (single runner) within
         # milliseconds of startup; force_on / off modes ignore it.
         _apply_movie_claim_recommendation(result.movie_claim_recommended)
+        _update_sleep_runner_count(len(result.active_runners))
     except RunnerRegistryUnavailable:
         logger.warning(
             "Runner-registry register failed at startup; continuing without "

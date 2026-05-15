@@ -176,6 +176,7 @@ class HeartbeatResult:
     server_time_ms: int
     movie_claim_recommended: bool = False
     movie_claim_min_runners: int = 0
+    active_runners_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -397,6 +398,9 @@ class RunnerRegistryClient:
                 ),
                 movie_claim_min_runners=int(
                     resp.get("movie_claim_min_runners", 0) or 0
+                ),
+                active_runners_count=int(
+                    resp.get("active_runners_count", 0) or 0
                 ),
             )
         except (KeyError, TypeError, ValueError) as e:
