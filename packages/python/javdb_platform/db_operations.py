@@ -108,21 +108,10 @@ def db_replace_rclone_inventory(
         return _replace_rclone_inventory(conn, rows)
 
 
-def db_swap_rclone_inventory(
-    db_path: Optional[str] = None,
-) -> int:
-    """Swap RcloneInventoryStaging into RcloneInventory.
-
-    Args:
-        db_path: Database path (defaults to OPERATIONS_DB_PATH)
-
-    Returns:
-        Number of rows swapped
-    """
-    _ensure_imports()
-
-    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
-        return _swap_rclone_inventory(conn)
+def db_swap_rclone_inventory(*args, **kwargs):
+    """Atomically swap staging into live RcloneInventory. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_swap_rclone_inventory as _f
+    return _f(*args, **kwargs)
 
 
 # ── DedupRecords ─────────────────────────────────────────────────────────
@@ -179,37 +168,10 @@ def db_load_dedup_records(
     return [dict(r) for r in rows]
 
 
-def db_save_dedup_records(
-    records: List[dict],
-    session_id: Optional[str] = None,
-    db_path: Optional[str] = None,
-) -> int:
-    """Save dedup records.
-
-    Args:
-        records: List of dedup record dicts
-        session_id: Session identifier (optional)
-        db_path: Database path (defaults to OPERATIONS_DB_PATH)
-
-    Returns:
-        Number of records inserted
-    """
-    _ensure_imports()
-
-    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
-        for rec in records:
-            conn.execute(
-                """INSERT INTO DedupRecords
-                   (Href, Reason, SessionId, CreatedAt)
-                   VALUES (?, ?, ?, ?)""",
-                (
-                    rec.get('href') or rec.get('Href'),
-                    rec.get('reason') or rec.get('Reason'),
-                    session_id,
-                    rec.get('created_at') or rec.get('CreatedAt'),
-                ),
-            )
-    return len(records)
+def db_save_dedup_records(*args, **kwargs):
+    """Save dedup records. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_save_dedup_records as _f
+    return _f(*args, **kwargs)
 
 
 # ── PikpakHistory ────────────────────────────────────────────────────────
