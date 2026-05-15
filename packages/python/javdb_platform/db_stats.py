@@ -28,26 +28,14 @@ def _ensure_imports():
     """Lazy import to avoid circular dependency with db_connection."""
     global _get_db, _get_local_sqlite_db, _REPORTS_DB_PATH
     if _get_db is None:
-        try:
-            from packages.python.javdb_platform.db_connection import (
-                get_db,
-                get_local_sqlite_db,
-                REPORTS_DB_PATH,
-            )
-            _get_db = get_db
-            _get_local_sqlite_db = get_local_sqlite_db
-            _REPORTS_DB_PATH = REPORTS_DB_PATH
-        except ImportError:
-            # db_connection doesn't exist yet (e.g., during testing or Phase 1)
-            # Fall back to importing from db.py
-            from packages.python.javdb_platform.db import (
-                get_db,
-                get_local_sqlite_db,
-                REPORTS_DB_PATH,
-            )
-            _get_db = get_db
-            _get_local_sqlite_db = get_local_sqlite_db
-            _REPORTS_DB_PATH = REPORTS_DB_PATH
+        from packages.python.javdb_platform.db_connection import (
+            get_db,
+            get_local_sqlite_db,
+            REPORTS_DB_PATH,
+        )
+        _get_db = get_db
+        _get_local_sqlite_db = get_local_sqlite_db
+        _REPORTS_DB_PATH = REPORTS_DB_PATH
 
 
 # ── Save Stats ───────────────────────────────────────────────────────────

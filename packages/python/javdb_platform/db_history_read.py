@@ -27,43 +27,25 @@ def _ensure_imports():
     global _load_history_joined, _pending_movie_overlay, _pending_torrent_overlay
     global _batch_update_movie_actors
     if _get_db is None:
-        try:
-            from packages.python.javdb_platform.db_connection import (
-                get_db,
-                HISTORY_DB_PATH,
-            )
-            from packages.python.javdb_platform.db_layer.history_repo import (
-                load_history_joined,
-                batch_update_movie_actors,
-            )
-            _get_db = get_db
-            _HISTORY_DB_PATH = HISTORY_DB_PATH
-            _load_history_joined = load_history_joined
-            _batch_update_movie_actors = batch_update_movie_actors
+        from packages.python.javdb_platform.db_connection import (
+            get_db,
+            HISTORY_DB_PATH,
+        )
+        from packages.python.javdb_platform.db_layer.history_repo import (
+            load_history_joined,
+            batch_update_movie_actors,
+        )
+        _get_db = get_db
+        _HISTORY_DB_PATH = HISTORY_DB_PATH
+        _load_history_joined = load_history_joined
+        _batch_update_movie_actors = batch_update_movie_actors
 
-            # Import pending overlay helpers from db.py (will be moved later)
-            from packages.python.javdb_platform.db import (
-                _pending_movie_overlay,
-                _pending_torrent_overlay,
-            )
-            globals()['_pending_movie_overlay'] = _pending_movie_overlay
-            globals()['_pending_torrent_overlay'] = _pending_torrent_overlay
-        except ImportError:
-            # Fallback to db.py during Phase 1
-            from packages.python.javdb_platform.db import (
-                get_db,
-                HISTORY_DB_PATH,
-                _load_history_joined as load_hist,
-                _pending_movie_overlay as pmo,
-                _pending_torrent_overlay as pto,
-                _batch_update_movie_actors as batch_actors,
-            )
-            _get_db = get_db
-            _HISTORY_DB_PATH = HISTORY_DB_PATH
-            _load_history_joined = load_hist
-            _pending_movie_overlay = pmo
-            _pending_torrent_overlay = pto
-            _batch_update_movie_actors = batch_actors
+        from packages.python.javdb_platform.db import (
+            _pending_movie_overlay,
+            _pending_torrent_overlay,
+        )
+        globals()['_pending_movie_overlay'] = _pending_movie_overlay
+        globals()['_pending_torrent_overlay'] = _pending_torrent_overlay
 
 
 # ── History loading ──────────────────────────────────────────────────────

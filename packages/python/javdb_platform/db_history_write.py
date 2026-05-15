@@ -31,35 +31,20 @@ def _ensure_imports():
     global _get_db, _HISTORY_DB_PATH, _generate_session_id
     global _get_active_run_identity, _SESSION_ID_PATTERN
     if _get_db is None:
-        try:
-            from packages.python.javdb_platform.db_connection import (
-                get_db,
-                HISTORY_DB_PATH,
-            )
-            from packages.python.javdb_platform.db_session import (
-                generate_session_id,
-                get_active_run_identity,
-                SESSION_ID_PATTERN,
-            )
-            _get_db = get_db
-            _HISTORY_DB_PATH = HISTORY_DB_PATH
-            _generate_session_id = generate_session_id
-            _get_active_run_identity = get_active_run_identity
-            _SESSION_ID_PATTERN = SESSION_ID_PATTERN
-        except ImportError:
-            # Fallback to db.py during Phase 1
-            from packages.python.javdb_platform.db import (
-                get_db,
-                HISTORY_DB_PATH,
-                _generate_session_id as gen_sid,
-                get_active_run_identity as get_run_id,
-                _SESSION_ID_PATTERN as sid_pattern,
-            )
-            _get_db = get_db
-            _HISTORY_DB_PATH = HISTORY_DB_PATH
-            _generate_session_id = gen_sid
-            _get_active_run_identity = get_run_id
-            _SESSION_ID_PATTERN = sid_pattern
+        from packages.python.javdb_platform.db_connection import (
+            get_db,
+            HISTORY_DB_PATH,
+        )
+        from packages.python.javdb_platform.db_session import (
+            generate_session_id,
+            get_active_run_identity,
+            SESSION_ID_PATTERN,
+        )
+        _get_db = get_db
+        _HISTORY_DB_PATH = HISTORY_DB_PATH
+        _generate_session_id = generate_session_id
+        _get_active_run_identity = get_active_run_identity
+        _SESSION_ID_PATTERN = SESSION_ID_PATTERN
 
 
 # Constants

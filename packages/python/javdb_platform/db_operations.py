@@ -31,47 +31,26 @@ def _ensure_imports():
     global _replace_rclone_inventory, _open_rclone_staging, _append_rclone_staging
     global _swap_rclone_inventory, _merge_rclone_inventory_from_stage, _drop_rclone_staging
     if _get_db is None:
-        try:
-            from packages.python.javdb_platform.db_connection import (
-                get_db,
-                OPERATIONS_DB_PATH,
-            )
-            from packages.python.javdb_platform.db_layer.operations_repo import (
-                replace_rclone_inventory,
-                open_rclone_staging,
-                append_rclone_staging,
-                swap_rclone_inventory,
-                merge_rclone_inventory_from_stage,
-                drop_rclone_staging,
-            )
-            _get_db = get_db
-            _OPERATIONS_DB_PATH = OPERATIONS_DB_PATH
-            _replace_rclone_inventory = replace_rclone_inventory
-            _open_rclone_staging = open_rclone_staging
-            _append_rclone_staging = append_rclone_staging
-            _swap_rclone_inventory = swap_rclone_inventory
-            _merge_rclone_inventory_from_stage = merge_rclone_inventory_from_stage
-            _drop_rclone_staging = drop_rclone_staging
-        except ImportError:
-            # Fallback to db.py during Phase 1
-            from packages.python.javdb_platform.db import (
-                get_db,
-                OPERATIONS_DB_PATH,
-                _replace_rclone_inventory as replace_inv,
-                _open_rclone_staging as open_stage,
-                _append_rclone_staging as append_stage,
-                _swap_rclone_inventory as swap_inv,
-                _merge_rclone_inventory_from_stage as merge_stage,
-                _drop_rclone_staging as drop_stage,
-            )
-            _get_db = get_db
-            _OPERATIONS_DB_PATH = OPERATIONS_DB_PATH
-            _replace_rclone_inventory = replace_inv
-            _open_rclone_staging = open_stage
-            _append_rclone_staging = append_stage
-            _swap_rclone_inventory = swap_inv
-            _merge_rclone_inventory_from_stage = merge_stage
-            _drop_rclone_staging = drop_stage
+        from packages.python.javdb_platform.db_connection import (
+            get_db,
+            OPERATIONS_DB_PATH,
+        )
+        from packages.python.javdb_platform.db_layer.operations_repo import (
+            replace_rclone_inventory,
+            open_rclone_staging,
+            append_rclone_staging,
+            swap_rclone_inventory,
+            merge_rclone_inventory_from_stage,
+            drop_rclone_staging,
+        )
+        _get_db = get_db
+        _OPERATIONS_DB_PATH = OPERATIONS_DB_PATH
+        _replace_rclone_inventory = replace_rclone_inventory
+        _open_rclone_staging = open_rclone_staging
+        _append_rclone_staging = append_rclone_staging
+        _swap_rclone_inventory = swap_rclone_inventory
+        _merge_rclone_inventory_from_stage = merge_rclone_inventory_from_stage
+        _drop_rclone_staging = drop_rclone_staging
 
 
 # ── RcloneInventory ──────────────────────────────────────────────────────
