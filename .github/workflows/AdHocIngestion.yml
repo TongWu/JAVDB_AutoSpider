@@ -148,7 +148,7 @@ jobs:
         run: echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
 
@@ -348,7 +348,7 @@ jobs:
           echo "✓ Config encrypted successfully"
 
       - name: Upload encrypted config artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: config-encrypted
           path: config.py.enc
@@ -377,7 +377,7 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
           lfs: true
@@ -760,7 +760,7 @@ jobs:
 
       - name: Upload encrypted logs artifact
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: pipeline-logs-encrypted
           path: encrypted_artifacts/logs.tar.gz.enc
@@ -831,7 +831,7 @@ jobs:
 
       - name: Upload encrypted reports artifact
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: pipeline-reports-encrypted
           path: encrypted_artifacts/reports.tar.gz.enc
@@ -860,7 +860,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
           lfs: true
@@ -921,7 +921,7 @@ jobs:
 
       - name: Upload rollback log
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: rollback-log
           path: logs/rollback.log
@@ -948,7 +948,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           # Phase 3 — SSH key needed so the auto-fallback step can push
           # pending_mode_disabled_until back to the branch.  No-op cost
@@ -967,7 +967,7 @@ jobs:
           artifact-key: ${{ secrets.ARTIFACT_KEY }}
 
       - name: Download encrypted logs (if available)
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: pipeline-logs-encrypted
           path: encrypted_artifacts
@@ -1006,7 +1006,7 @@ jobs:
           fi
 
       - name: Download encrypted reports (if available)
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: pipeline-reports-encrypted
           path: encrypted_artifacts
@@ -1213,13 +1213,13 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
           lfs: true
 
       - name: Download encrypted reports
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: pipeline-reports-encrypted
           path: encrypted_artifacts
