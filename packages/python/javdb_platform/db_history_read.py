@@ -6,7 +6,7 @@ The history tables store cumulative records of all movies and torrents that
 have been processed, used for incremental scraping (avoiding re-downloads).
 """
 
-from typing import Dict, Optional
+from typing import Any, Dict, Iterable, Optional, Tuple
 
 from packages.python.javdb_platform.logging_config import get_logger
 
@@ -16,16 +16,17 @@ logger = get_logger(__name__)
 _get_db = None
 _HISTORY_DB_PATH = None
 _load_history_joined = None
-_pending_movie_overlay = None
-_pending_torrent_overlay = None
 _batch_update_movie_actors = None
+_category_to_indicators = None
+_movie_href_lookup_values = None
+_cfg = None
 
 
 def _ensure_imports():
     """Lazy import to avoid circular dependency with db_connection."""
     global _get_db, _HISTORY_DB_PATH
-    global _load_history_joined, _pending_movie_overlay, _pending_torrent_overlay
-    global _batch_update_movie_actors
+    global _load_history_joined, _batch_update_movie_actors
+    global _category_to_indicators, _movie_href_lookup_values, _cfg
     if _get_db is None:
         from packages.python.javdb_platform.db_connection import (
             get_db,
@@ -35,17 +36,16 @@ def _ensure_imports():
             load_history_joined,
             batch_update_movie_actors,
         )
+        from packages.python.javdb_core.contracts import category_to_indicators
+        from apps.api.parsers.common import movie_href_lookup_values
+        from packages.python.javdb_platform.config_helper import cfg
         _get_db = get_db
         _HISTORY_DB_PATH = HISTORY_DB_PATH
         _load_history_joined = load_history_joined
         _batch_update_movie_actors = batch_update_movie_actors
-
-        from packages.python.javdb_platform.db import (
-            _pending_movie_overlay,
-            _pending_torrent_overlay,
-        )
-        globals()['_pending_movie_overlay'] = _pending_movie_overlay
-        globals()['_pending_torrent_overlay'] = _pending_torrent_overlay
+        _category_to_indicators = category_to_indicators
+        _movie_href_lookup_values = movie_href_lookup_values
+        _cfg = cfg
 
 
 # ── History loading ──────────────────────────────────────────────────────
@@ -110,8 +110,8 @@ def db_load_history_snapshot(
         snapshot = _load_history_joined(conn)
         if session_id is None:
             return snapshot
-        movie_overlay = _pending_movie_overlay(conn, session_id)
-        torrent_overlay = _pending_torrent_overlay(conn, session_id)
+        movie_overlay = _pending_movie_overlay_impl(conn, session_id)
+        torrent_overlay = _pending_torrent_overlay_impl(conn, session_id)
 
     # Merge movie overlay
     for href, row in movie_overlay.items():
@@ -213,16 +213,159 @@ def db_batch_update_movie_actors(
         return _batch_update_movie_actors(conn, updates, session_id=session_id)
 
 
+# ── Pending overlay helpers ──────────────────────────────────────────────
+
+
+def _merge_movie_overlay_rows(rows: Iterable[Any]) -> Dict[str, dict]:
+    """Merge pending-movie rows (Seq-ascending order) into a sparse overlay."""
+    overlay: Dict[str, dict] = {}
+    for row in rows:
+        d = dict(row)
+        key = d["Href"]
+        existing = overlay.get(key)
+        if existing is None:
+            d["_merged_seqs"] = [d["Seq"]]
+            overlay[key] = d
+            continue
+        existing["_merged_seqs"].append(d["Seq"])
+        for col, value in d.items():
+            if col == "_merged_seqs":
+                continue
+            if col == "Seq":
+                existing[col] = value
+                continue
+            if value is not None:
+                existing[col] = value
+    return overlay
+
+
+def _merge_torrent_overlay_rows(
+    rows: Iterable[Any],
+) -> Dict[Tuple[str, int, int], dict]:
+    """Merge pending-torrent rows (Seq-ascending) into a sparse overlay."""
+    overlay: Dict[Tuple[str, int, int], dict] = {}
+    for row in rows:
+        d = dict(row)
+        key = (
+            d["Href"],
+            int(d["SubtitleIndicator"]),
+            int(d["CensorIndicator"]),
+        )
+        existing = overlay.get(key)
+        if existing is None:
+            d["_merged_seqs"] = [d["Seq"]]
+            overlay[key] = d
+            continue
+        existing["_merged_seqs"].append(d["Seq"])
+        for col, value in d.items():
+            if col == "_merged_seqs":
+                continue
+            if col == "Seq":
+                existing[col] = value
+                continue
+            if value is not None:
+                existing[col] = value
+    return overlay
+
+
+def _pending_movie_overlay_impl(
+    conn,
+    session_id: str,
+    *,
+    href: Optional[str] = None,
+    include_states: Tuple[str, ...] = ("pending",),
+) -> Dict[str, dict]:
+    """Return ``{href: merged_pending_movie_row}`` for *session_id*."""
+    placeholders = ",".join("?" for _ in include_states)
+    params: list = [session_id]
+    params.extend(include_states)
+    where_extra = ""
+    if href is not None:
+        where_extra = " AND Href=?"
+        params.append(href)
+    sql = (
+        "SELECT * FROM PendingMovieHistoryWrites "
+        f"WHERE SessionId=? AND ApplyState IN ({placeholders}){where_extra}"
+        " ORDER BY Seq ASC"
+    )
+    return _merge_movie_overlay_rows(conn.execute(sql, params).fetchall())
+
+
+def _pending_torrent_overlay_impl(
+    conn,
+    session_id: str,
+    *,
+    href: Optional[str] = None,
+    include_states: Tuple[str, ...] = ("pending",),
+) -> Dict[Tuple[str, int, int], dict]:
+    """Return ``{(href, sub, cen): merged_pending_torrent_row}`` for *session_id*."""
+    placeholders = ",".join("?" for _ in include_states)
+    params: list = [session_id]
+    params.extend(include_states)
+    where_extra = ""
+    if href is not None:
+        where_extra = " AND Href=?"
+        params.append(href)
+    sql = (
+        "SELECT * FROM PendingTorrentHistoryWrites "
+        f"WHERE SessionId=? AND ApplyState IN ({placeholders}){where_extra}"
+        " ORDER BY Seq ASC"
+    )
+    return _merge_torrent_overlay_rows(conn.execute(sql, params).fetchall())
+
+
+# ── Torrent history check ───────────────────────────────────────────────
+
+
+def db_check_torrent_in_history(
+    href: str, torrent_type: str, db_path: Optional[str] = None,
+) -> bool:
+    """Check if a specific torrent type exists for href."""
+    _ensure_imports()
+    sub_ind, cen_ind = _category_to_indicators(torrent_type)
+    base_url = _cfg('BASE_URL', 'https://javdb.com')
+    path_href, abs_href = _movie_href_lookup_values(href, base_url)
+    with _get_db(db_path or _HISTORY_DB_PATH) as conn:
+        if path_href and abs_href:
+            row = conn.execute(
+                """
+                SELECT t.MagnetUri FROM TorrentHistory t
+                JOIN MovieHistory m ON t.MovieHistoryId = m.Id
+                WHERE m.Href IN (?, ?)
+                  AND t.SubtitleIndicator = ? AND t.CensorIndicator = ?
+                """,
+                (path_href, abs_href, sub_ind, cen_ind),
+            ).fetchone()
+        else:
+            lookup = path_href or abs_href or href
+            row = conn.execute(
+                """
+                SELECT t.MagnetUri FROM TorrentHistory t
+                JOIN MovieHistory m ON t.MovieHistoryId = m.Id
+                WHERE m.Href = ? AND t.SubtitleIndicator = ? AND t.CensorIndicator = ?
+                """,
+                (lookup, sub_ind, cen_ind),
+            ).fetchone()
+        if row is None:
+            return False
+        return bool(row['MagnetUri'] and row['MagnetUri'].startswith('magnet:'))
+
+
+# ── All history records (migration support) ─────────────────────────────
+
+
+def db_get_all_history_records(db_path: Optional[str] = None) -> list:
+    """Return all MovieHistory records as dicts (for migration verification)."""
+    _ensure_imports()
+    with _get_db(db_path or _HISTORY_DB_PATH) as conn:
+        rows = conn.execute("SELECT * FROM MovieHistory ORDER BY Id").fetchall()
+        return [dict(r) for r in rows]
+
+
 # ── Delegating wrappers (pending full migration) ────────────────────────
 
 
 def db_batch_update_last_visited(*args, **kwargs):
     """Update DateTimeVisited for a batch of hrefs. Delegates to db.py."""
     from packages.python.javdb_platform.db import db_batch_update_last_visited as _f
-    return _f(*args, **kwargs)
-
-
-def db_check_torrent_in_history(*args, **kwargs):
-    """Check if a specific torrent type exists for href. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_check_torrent_in_history as _f
     return _f(*args, **kwargs)

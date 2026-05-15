@@ -785,3 +785,56 @@ def db_find_sessions_by_run(
 
     return sorted(found)
 
+
+def db_begin_finalize_session(
+    session_id: str,
+    *,
+    db_path: Optional[str] = None,
+) -> int:
+    """Flip ``Status`` from ``in_progress`` to ``finalizing``."""
+    _ensure_imports()
+    with _get_db(db_path or _REPORTS_DB_PATH) as conn:
+        cur = conn.execute(
+            "UPDATE ReportSessions SET Status='finalizing' "
+            "WHERE Id=? AND Status='in_progress'",
+            (session_id,),
+        )
+        return cur.rowcount or 0
+
+
+def db_finish_commit_session(
+    session_id: str,
+    *,
+    db_path: Optional[str] = None,
+) -> int:
+    """Flip ``Status`` from ``finalizing`` to ``committed``."""
+    _ensure_imports()
+    with _get_db(db_path or _REPORTS_DB_PATH) as conn:
+        cur = conn.execute(
+            "UPDATE ReportSessions SET Status='committed' "
+            "WHERE Id=? AND Status='finalizing'",
+            (session_id,),
+        )
+        return cur.rowcount or 0
+
+
+def db_get_sessions_by_date(
+    report_date: str,
+    report_type: Optional[str] = None,
+    db_path: Optional[str] = None,
+) -> List[dict]:
+    """Get all sessions for a given date."""
+    _ensure_imports()
+    with _get_db(db_path or _REPORTS_DB_PATH) as conn:
+        if report_type:
+            rows = conn.execute(
+                "SELECT * FROM ReportSessions WHERE ReportDate = ? AND ReportType = ? ORDER BY Id",
+                (report_date, report_type),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM ReportSessions WHERE ReportDate = ? ORDER BY Id",
+                (report_date,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+

@@ -51,15 +51,6 @@ from packages.python.javdb_platform.db_layer.history_repo import (
     batch_update_movie_actors as _batch_update_movie_actors,
     _has_meaningful_actor_data,
 )
-from packages.python.javdb_platform.db_layer.operations_repo import (
-    replace_rclone_inventory as _replace_rclone_inventory,
-    open_rclone_staging as _open_rclone_staging,
-    append_rclone_staging as _append_rclone_staging,
-    swap_rclone_inventory as _swap_rclone_inventory,
-    merge_rclone_inventory_from_stage as _merge_rclone_inventory_from_stage,
-    drop_rclone_staging as _drop_rclone_staging,
-)
-
 logger = get_logger(__name__)
 
 # MR-3 (multi-runtime): backend-agnostic exception tuples.
@@ -2151,13 +2142,11 @@ def _init_single_legacy_db(db_path: str, *, force: bool = False):
 # ── MovieHistory + TorrentHistory helpers ────────────────────────────────
 
 def db_load_history(db_path: Optional[str] = None, phase: Optional[int] = None) -> Dict[str, dict]:
-    """Load history from MovieHistory + TorrentHistory into a dict keyed by Href.
-
-    The *phase* parameter is accepted for backward compatibility but ignored
-    (the new schema does not store phase).
-    """
-    with get_db(db_path or HISTORY_DB_PATH) as conn:
-        return _load_history_joined(conn)
+    """Load history from MovieHistory + TorrentHistory into a dict keyed by Href."""
+    from packages.python.javdb_platform.db_history_read import (
+        db_load_history as _f,
+    )
+    return _f(db_path=db_path or HISTORY_DB_PATH, phase=phase)
 
 
 # ── Audit helpers (X3 rollback) ──────────────────────────────────────────
@@ -2898,40 +2887,18 @@ def db_batch_update_movie_actors(
 
 def db_check_torrent_in_history(href: str, torrent_type: str, db_path: Optional[str] = None) -> bool:
     """Check if a specific torrent type exists for href."""
-    sub_ind, cen_ind = category_to_indicators(torrent_type)
-    base_url = cfg('BASE_URL', 'https://javdb.com')
-    path_href, abs_href = movie_href_lookup_values(href, base_url)
-    with get_db(db_path or HISTORY_DB_PATH) as conn:
-        if path_href and abs_href:
-            row = conn.execute(
-                """
-                SELECT t.MagnetUri FROM TorrentHistory t
-                JOIN MovieHistory m ON t.MovieHistoryId = m.Id
-                WHERE m.Href IN (?, ?)
-                  AND t.SubtitleIndicator = ? AND t.CensorIndicator = ?
-                """,
-                (path_href, abs_href, sub_ind, cen_ind),
-            ).fetchone()
-        else:
-            lookup = path_href or abs_href or href
-            row = conn.execute(
-                """
-                SELECT t.MagnetUri FROM TorrentHistory t
-                JOIN MovieHistory m ON t.MovieHistoryId = m.Id
-                WHERE m.Href = ? AND t.SubtitleIndicator = ? AND t.CensorIndicator = ?
-                """,
-                (lookup, sub_ind, cen_ind),
-            ).fetchone()
-        if row is None:
-            return False
-        return bool(row['MagnetUri'] and row['MagnetUri'].startswith('magnet:'))
+    from packages.python.javdb_platform.db_history_read import (
+        db_check_torrent_in_history as _f,
+    )
+    return _f(href, torrent_type, db_path=db_path)
 
 
 def db_get_all_history_records(db_path: Optional[str] = None) -> List[dict]:
     """Return all MovieHistory records as dicts (for migration verification)."""
-    with get_db(db_path or HISTORY_DB_PATH) as conn:
-        rows = conn.execute("SELECT * FROM MovieHistory ORDER BY Id").fetchall()
-        return [dict(r) for r in rows]
+    from packages.python.javdb_platform.db_history_read import (
+        db_get_all_history_records as _f,
+    )
+    return _f(db_path=db_path)
 
 
 # ── RcloneInventory helpers ──────────────────────────────────────────────
@@ -2941,33 +2908,22 @@ def db_replace_rclone_inventory(
     db_path: Optional[str] = None,
     session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
-    """Replace the entire RcloneInventory table (full scan refresh).
-
-    When *session_id* is provided the staging-then-swap pattern is used:
-    rows go to ``RcloneInventoryStaging_<session_id>`` first and only
-    swap into the live table once everything has been written. A failed
-    or stalled run leaves the main table untouched.
-    """
-    sid = _resolve_session_id(session_id)
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        return _replace_rclone_inventory(conn, entries, session_id=sid)
+    """Replace the entire RcloneInventory table (full scan refresh)."""
+    from packages.python.javdb_platform.db_operations import (
+        db_replace_rclone_inventory as _f,
+    )
+    return _f(entries, db_path=db_path or OPERATIONS_DB_PATH, session_id=session_id)
 
 
 def db_open_rclone_staging(
     session_id: Any = _SESSION_ID_SENTINEL,
     db_path: Optional[str] = None,
 ) -> Optional[str]:
-    """Initialise this session's RcloneInventory staging table.
-
-    Returns the staging table name, or ``None`` when no session_id is
-    available — callers in that case should keep using the legacy
-    clear+append flow.
-    """
-    sid = _resolve_session_id(session_id)
-    if sid is None:
-        return None
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        return _open_rclone_staging(conn, sid)
+    """Initialise this session's RcloneInventory staging table."""
+    from packages.python.javdb_platform.db_operations import (
+        db_open_rclone_staging as _f,
+    )
+    return _f(session_id=session_id, db_path=db_path or OPERATIONS_DB_PATH)
 
 
 def db_append_rclone_staging(
@@ -2976,15 +2932,10 @@ def db_append_rclone_staging(
     db_path: Optional[str] = None,
 ) -> int:
     """Append rows to this session's RcloneInventory staging table."""
-    if not entries:
-        return 0
-    sid = _resolve_session_id(session_id)
-    if sid is None:
-        # No active session — fall back to direct main-table append so
-        # callers that opted out of rollback still work.
-        return db_append_rclone_inventory(entries, db_path=db_path)
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        return _append_rclone_staging(conn, entries, sid)
+    from packages.python.javdb_platform.db_operations import (
+        db_append_rclone_staging as _f,
+    )
+    return _f(entries, session_id=session_id, db_path=db_path or OPERATIONS_DB_PATH)
 
 
 def db_swap_rclone_inventory(
@@ -2992,14 +2943,10 @@ def db_swap_rclone_inventory(
     db_path: Optional[str] = None,
 ) -> int:
     """Atomically swap this session's staging into the live RcloneInventory."""
-    sid = _resolve_session_id(session_id)
-    if sid is None:
-        raise ValueError(
-            "db_swap_rclone_inventory requires an active session_id "
-            "(set via set_active_session_id or pass explicitly)."
-        )
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        return _swap_rclone_inventory(conn, sid)
+    from packages.python.javdb_platform.db_operations import (
+        db_swap_rclone_inventory as _f,
+    )
+    return _f(session_id=session_id, db_path=db_path)
 
 
 def db_merge_rclone_inventory_from_stage(
@@ -3008,16 +2955,10 @@ def db_merge_rclone_inventory_from_stage(
     db_path: Optional[str] = None,
 ) -> int:
     """Merge this session's staging rows into selected RcloneInventory years."""
-    sid = _resolve_session_id(session_id)
-    if sid is None:
-        raise ValueError(
-            "db_merge_rclone_inventory_from_stage requires an active "
-            "session_id (set via set_active_session_id or pass explicitly)."
-        )
-    if years is None:
-        raise ValueError("db_merge_rclone_inventory_from_stage requires years")
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        return _merge_rclone_inventory_from_stage(conn, sid, years)
+    from packages.python.javdb_platform.db_operations import (
+        db_merge_rclone_inventory_from_stage as _f,
+    )
+    return _f(session_id=session_id, years=years, db_path=db_path or OPERATIONS_DB_PATH)
 
 
 def db_drop_rclone_staging(
@@ -3025,89 +2966,55 @@ def db_drop_rclone_staging(
     db_path: Optional[str] = None,
 ) -> None:
     """DROP TABLE IF EXISTS RcloneInventoryStaging_<session_id> (idempotent)."""
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        _drop_rclone_staging(conn, session_id)
+    from packages.python.javdb_platform.db_operations import (
+        db_drop_rclone_staging as _f,
+    )
+    _f(session_id, db_path=db_path or OPERATIONS_DB_PATH)
 
 
 def db_clear_rclone_inventory(db_path: Optional[str] = None) -> None:
     """Delete all rows from RcloneInventory."""
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        conn.execute("DELETE FROM RcloneInventory")
+    from packages.python.javdb_platform.db_operations import (
+        db_clear_rclone_inventory as _f,
+    )
+    _f(db_path=db_path)
 
 
 def db_append_rclone_inventory(entries: List[dict], db_path: Optional[str] = None) -> int:
     """Append rows to RcloneInventory using executemany for speed."""
-    if not entries:
-        return 0
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        conn.executemany(
-            """INSERT INTO RcloneInventory
-               (VideoCode, SensorCategory, SubtitleCategory,
-                FolderPath, FolderSize, FileCount, DateTimeScanned)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            [
-                (e.get('VideoCode', e.get('video_code', '')),
-                 e.get('SensorCategory', e.get('sensor_category')),
-                 e.get('SubtitleCategory', e.get('subtitle_category')),
-                 e.get('FolderPath', e.get('folder_path')),
-                 int(e.get('FolderSize', e.get('folder_size', 0)) or 0),
-                 int(e.get('FileCount', e.get('file_count', 0)) or 0),
-                 e.get('DateTimeScanned', e.get('scan_datetime')))
-                for e in entries
-            ],
-        )
-        return len(entries)
+    from packages.python.javdb_platform.db_operations import (
+        db_append_rclone_inventory as _f,
+    )
+    return _f(entries, db_path=db_path)
 
 
 def db_load_rclone_inventory(db_path: Optional[str] = None) -> Dict[str, list]:
     """Load inventory grouped by VideoCode."""
-    inventory: Dict[str, list] = {}
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        rows = conn.execute("SELECT * FROM RcloneInventory").fetchall()
-    for row in rows:
-        r = dict(row)
-        code = r['VideoCode'].strip().upper()
-        if not code:
-            continue
-        inventory.setdefault(code, []).append(r)
-    return inventory
+    from packages.python.javdb_platform.db_operations import (
+        db_load_rclone_inventory as _f,
+    )
+    return _f(db_path=db_path or OPERATIONS_DB_PATH)
 
 
 def db_delete_rclone_inventory_paths(
     paths: Iterable[str],
     db_path: Optional[str] = None,
 ) -> int:
-    """Bulk delete RcloneInventory rows by FolderPath. Returns affected row count.
-
-    Uses chunked ``IN (...)`` deletes so each chunk is a single statement
-    (one D1 round-trip per chunk instead of one per path). The chunk size
-    matches :func:`db_batch_update_last_visited` — D1 caps bound parameters
-    at ~100 per statement, so we use 90 placeholders per batch for safety.
-    """
-    path_list = [p for p in paths if p]
-    if not path_list:
-        return 0
-    CHUNK = 90
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        deleted = 0
-        for i in range(0, len(path_list), CHUNK):
-            chunk = path_list[i:i + CHUNK]
-            placeholders = ','.join('?' for _ in chunk)
-            cur = conn.execute(
-                f"DELETE FROM RcloneInventory WHERE FolderPath IN ({placeholders})",
-                chunk,
-            )
-            deleted += cur.rowcount or 0
-        return deleted
+    """Bulk delete RcloneInventory rows by FolderPath."""
+    from packages.python.javdb_platform.db_operations import (
+        db_delete_rclone_inventory_paths as _f,
+    )
+    return _f(paths, db_path=db_path or OPERATIONS_DB_PATH)
 
 
 # ── DedupRecords helpers ─────────────────────────────────────────────────
 
 def db_load_dedup_records(db_path: Optional[str] = None) -> List[dict]:
     """Load all dedup records."""
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        rows = conn.execute("SELECT * FROM DedupRecords ORDER BY Id").fetchall()
-        return [dict(r) for r in rows]
+    from packages.python.javdb_platform.db_operations import (
+        db_load_dedup_records as _f,
+    )
+    return _f(db_path=db_path or OPERATIONS_DB_PATH)
 
 
 _DEDUP_RECORD_COLUMNS = (
@@ -3232,36 +3139,11 @@ def db_append_dedup_record(
     db_path: Optional[str] = None,
     session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
-    """Append a single dedup record. Returns the new row id, or -1 if duplicate.
-
-    *session_id*: tags the row for X3 rollback; defaults to
-    :func:`get_active_session_id`. Pass ``None`` explicitly for ad-hoc
-    backfills that should not be rolled back with the current run.
-    """
-    sid = _resolve_session_id(session_id)
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        cur = conn.execute(
-            """INSERT OR IGNORE INTO DedupRecords
-               (VideoCode, ExistingSensor, ExistingSubtitle,
-                ExistingGdrivePath, ExistingFolderSize,
-                NewTorrentCategory, DeletionReason,
-                DateTimeDetected, IsDeleted, DateTimeDeleted, SessionId)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (record.get('VideoCode', record.get('video_code')),
-             record.get('ExistingSensor', record.get('existing_sensor')),
-             record.get('ExistingSubtitle', record.get('existing_subtitle')),
-             record.get('ExistingGdrivePath', record.get('existing_gdrive_path')),
-             int(record.get('ExistingFolderSize', record.get('existing_folder_size', 0)) or 0),
-             record.get('NewTorrentCategory', record.get('new_torrent_category')),
-             record.get('DeletionReason', record.get('deletion_reason')),
-             record.get('DateTimeDetected', record.get('detect_datetime')),
-             1 if str(record.get('IsDeleted', record.get('is_deleted', 'False'))).lower() in ('true', '1') else 0,
-             record.get('DateTimeDeleted', record.get('delete_datetime')),
-             sid),
-        )
-        if cur.rowcount == 0:
-            return -1
-        return cur.lastrowid
+    """Append a single dedup record. Returns the new row id, or -1 if duplicate."""
+    from packages.python.javdb_platform.db_operations import (
+        db_append_dedup_record as _f,
+    )
+    return _f(record, db_path=db_path or OPERATIONS_DB_PATH, session_id=session_id)
 
 
 def db_mark_records_deleted(
@@ -3269,54 +3151,11 @@ def db_mark_records_deleted(
     db_path: Optional[str] = None,
     session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
-    """Mark specific dedup records as deleted by gdrive path.
-
-    Real-world callers (e.g. the rclone purge loop) use a single
-    ``DateTimeDeleted`` value for all paths in one batch, so we group by
-    datetime and issue one chunked ``IN (...)`` update per group instead of
-    one statement per pair. The chunk size matches
-    :func:`db_batch_update_last_visited` (90 placeholders per batch, leaving
-    headroom under D1's ~100-parameter cap once the ``DateTimeDeleted`` slot
-    is reserved).
-    """
-    if not path_datetime_pairs:
-        return 0
-    grouped: Dict[str, List[str]] = {}
-    for path, dt in path_datetime_pairs:
-        if not path:
-            continue
-        grouped.setdefault(dt, []).append(path)
-    if not grouped:
-        return 0
-    sid = _resolve_session_id(session_id)
-    CHUNK = 90
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        updated = 0
-        for dt, paths in grouped.items():
-            for i in range(0, len(paths), CHUNK):
-                chunk = paths[i:i + CHUNK]
-                placeholders = ','.join('?' for _ in chunk)
-                if sid is not None:
-                    rows = conn.execute(
-                        f"SELECT * FROM DedupRecords "
-                        f"WHERE ExistingGdrivePath IN ({placeholders}) AND IsDeleted=0",
-                        chunk,
-                    ).fetchall()
-                    _snapshot_dedup_rows_for_rollback(conn, sid, rows)
-                    cur = conn.execute(
-                        f"UPDATE DedupRecords "
-                        f"SET IsDeleted=1, DateTimeDeleted=?, SessionId=? "
-                        f"WHERE ExistingGdrivePath IN ({placeholders}) AND IsDeleted=0",
-                        [dt, sid] + chunk,
-                    )
-                else:
-                    cur = conn.execute(
-                        f"UPDATE DedupRecords SET IsDeleted=1, DateTimeDeleted=? "
-                        f"WHERE ExistingGdrivePath IN ({placeholders}) AND IsDeleted=0",
-                        [dt] + chunk,
-                    )
-                updated += cur.rowcount or 0
-        return updated
+    """Mark specific dedup records as deleted by gdrive path."""
+    from packages.python.javdb_platform.db_operations import (
+        db_mark_records_deleted as _f,
+    )
+    return _f(path_datetime_pairs, db_path=db_path or OPERATIONS_DB_PATH, session_id=session_id)
 
 
 def db_mark_orphan_records(
@@ -3326,53 +3165,11 @@ def db_mark_orphan_records(
     db_path: Optional[str] = None,
     session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
-    """Mark dedup pending rows as deleted with custom reason suffix appended.
-
-    For each path in ``paths`` whose ``DedupRecords`` row has ``IsDeleted=0``:
-      - sets ``IsDeleted=1`` and ``DateTimeDeleted=when``
-      - appends ``reason_suffix`` to the existing ``DeletionReason`` (space-
-        separated). If ``DeletionReason`` is NULL/empty, it becomes the suffix.
-
-    Returns total affected row count.
-    """
-    path_list = [p for p in paths if p]
-    if not path_list:
-        return 0
-    sid = _resolve_session_id(session_id)
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        updated = 0
-        for path in path_list:
-            if sid is not None:
-                rows = conn.execute(
-                    "SELECT * FROM DedupRecords "
-                    "WHERE ExistingGdrivePath = ? AND IsDeleted = 0",
-                    (path,),
-                ).fetchall()
-                _snapshot_dedup_rows_for_rollback(conn, sid, rows)
-                cur = conn.execute(
-                    """UPDATE DedupRecords
-                       SET IsDeleted = 1,
-                           DateTimeDeleted = ?,
-                           DeletionReason = TRIM(
-                             COALESCE(DeletionReason, '') || ' ' || ?
-                           ),
-                           SessionId = ?
-                       WHERE ExistingGdrivePath = ? AND IsDeleted = 0""",
-                    (when, reason_suffix, sid, path),
-                )
-            else:
-                cur = conn.execute(
-                    """UPDATE DedupRecords
-                       SET IsDeleted = 1,
-                           DateTimeDeleted = ?,
-                           DeletionReason = TRIM(
-                             COALESCE(DeletionReason, '') || ' ' || ?
-                           )
-                       WHERE ExistingGdrivePath = ? AND IsDeleted = 0""",
-                    (when, reason_suffix, path),
-                )
-            updated += cur.rowcount
-        return updated
+    """Mark dedup pending rows as deleted with custom reason suffix appended."""
+    from packages.python.javdb_platform.db_operations import (
+        db_mark_orphan_records as _f,
+    )
+    return _f(paths, reason_suffix, when, db_path=db_path or OPERATIONS_DB_PATH, session_id=session_id)
 
 
 def db_cleanup_deleted_records(
@@ -3380,44 +3177,18 @@ def db_cleanup_deleted_records(
     db_path: Optional[str] = None,
 ) -> int:
     """Remove dedup records that were deleted more than *older_than_days* ago."""
-    from datetime import timedelta
-    cutoff = (datetime.now() - timedelta(days=older_than_days)).strftime('%Y-%m-%d %H:%M:%S')
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        cur = conn.execute(
-            "DELETE FROM DedupRecords "
-            "WHERE IsDeleted=1 AND DateTimeDeleted IS NOT NULL AND DateTimeDeleted < ?",
-            (cutoff,),
-        )
-        return cur.rowcount
+    from packages.python.javdb_platform.db_operations import (
+        db_cleanup_deleted_records as _f,
+    )
+    return _f(older_than_days, db_path=db_path or OPERATIONS_DB_PATH)
 
 
 def db_save_dedup_records(rows: List[dict], db_path: Optional[str] = None) -> None:
     """Overwrite all dedup records (deprecated)."""
-    logger.warning(
-        "db_save_dedup_records is deprecated — use db_mark_records_deleted "
-        "for targeted updates instead"
+    from packages.python.javdb_platform.db_operations import (
+        db_save_dedup_records as _f,
     )
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        conn.execute("DELETE FROM DedupRecords")
-        for r in rows:
-            conn.execute(
-                """INSERT INTO DedupRecords
-                   (VideoCode, ExistingSensor, ExistingSubtitle,
-                    ExistingGdrivePath, ExistingFolderSize,
-                    NewTorrentCategory, DeletionReason,
-                    DateTimeDetected, IsDeleted, DateTimeDeleted)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (r.get('VideoCode', r.get('video_code')),
-                 r.get('ExistingSensor', r.get('existing_sensor')),
-                 r.get('ExistingSubtitle', r.get('existing_subtitle')),
-                 r.get('ExistingGdrivePath', r.get('existing_gdrive_path')),
-                 int(r.get('ExistingFolderSize', r.get('existing_folder_size', 0)) or 0),
-                 r.get('NewTorrentCategory', r.get('new_torrent_category')),
-                 r.get('DeletionReason', r.get('deletion_reason')),
-                 r.get('DateTimeDetected', r.get('detect_datetime')),
-                 1 if str(r.get('IsDeleted', r.get('is_deleted', 'False'))).lower() in ('true', '1') else 0,
-                 r.get('DateTimeDeleted', r.get('delete_datetime'))),
-            )
+    return _f(rows, db_path=db_path)
 
 
 # ── PikpakHistory helpers ────────────────────────────────────────────────
@@ -3427,32 +3198,11 @@ def db_append_pikpak_history(
     db_path: Optional[str] = None,
     session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
-    """Append a PikPak transfer record.
-
-    *session_id*: tags the row for X3 rollback; defaults to
-    :func:`get_active_session_id`.
-    """
-    sid = _resolve_session_id(session_id)
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        cur = conn.execute(
-            """INSERT INTO PikpakHistory
-               (TorrentHash, TorrentName, Category, MagnetUri,
-                DateTimeAddedToQb, DateTimeDeletedFromQb,
-                DateTimeUploadedToPikpak, TransferStatus, ErrorMessage,
-                SessionId)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (record.get('TorrentHash', record.get('torrent_hash')),
-             record.get('TorrentName', record.get('torrent_name')),
-             record.get('Category', record.get('category')),
-             record.get('MagnetUri', record.get('magnet_uri')),
-             record.get('DateTimeAddedToQb', record.get('added_to_qb_date')),
-             record.get('DateTimeDeletedFromQb', record.get('deleted_from_qb_date')),
-             record.get('DateTimeUploadedToPikpak', record.get('uploaded_to_pikpak_date')),
-             record.get('TransferStatus', record.get('transfer_status')),
-             record.get('ErrorMessage', record.get('error_message')),
-             sid),
-        )
-        return cur.lastrowid
+    """Append a PikPak transfer record."""
+    from packages.python.javdb_platform.db_operations import (
+        db_append_pikpak_history as _f,
+    )
+    return _f(record, db_path=db_path or OPERATIONS_DB_PATH, session_id=session_id)
 
 
 # ── InventoryAlignNoExactMatch helpers ───────────────────────────────────
@@ -3463,61 +3213,30 @@ def db_upsert_align_no_exact_match(
     db_path: Optional[str] = None,
     session_id: Any = _SESSION_ID_SENTINEL,
 ) -> None:
-    """Record a video code that had no exact match on JavDB search.
-
-    *session_id*: tags the row for X3 rollback; defaults to
-    :func:`get_active_session_id`.
-
-    Ingestion Perfect Rollback (Phase 3): the legacy implementation used
-    a naked ``INSERT OR REPLACE`` which overwrote any prior session's
-    tag whenever the same VideoCode was recorded a second time.  That
-    silently broke rollback for the *original* writer: a daily session
-    that staked the row could be ripped out by an unrelated adhoc
-    re-recording with the same reason.  We now switch to an
-    ``INSERT … ON CONFLICT(VideoCode) DO UPDATE`` whose UPDATE branch
-    only triggers when the row *meaningfully* changes (a new ``Reason``).
-    For an unchanged re-record the existing SessionId / DateTimeRecorded
-    are preserved verbatim — the original writer keeps ownership.
-    """
-    sid = _resolve_session_id(session_id)
-    normalized = video_code.strip().upper()
-    if not normalized:
-        return
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        conn.execute(
-            """INSERT INTO InventoryAlignNoExactMatch
-                   (VideoCode, Reason, DateTimeRecorded, SessionId)
-               VALUES (?, ?, ?, ?)
-               ON CONFLICT(VideoCode) DO UPDATE SET
-                   Reason = excluded.Reason,
-                   DateTimeRecorded = excluded.DateTimeRecorded,
-                   SessionId = excluded.SessionId
-               WHERE InventoryAlignNoExactMatch.Reason
-                     IS NOT excluded.Reason""",
-            (normalized, reason, now, sid),
-        )
+    """Record a video code that had no exact match on JavDB search."""
+    from packages.python.javdb_platform.db_operations import (
+        db_upsert_align_no_exact_match as _f,
+    )
+    return _f(video_code, reason=reason, db_path=db_path, session_id=session_id)
 
 
 def db_load_align_no_exact_match_codes(db_path: Optional[str] = None) -> set:
     """Return the set of normalised video codes previously marked as no-exact-match."""
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        rows = conn.execute(
-            "SELECT VideoCode FROM InventoryAlignNoExactMatch"
-        ).fetchall()
-    return {r['VideoCode'] for r in rows}
+    from packages.python.javdb_platform.db_operations import (
+        db_load_align_no_exact_match_codes as _f,
+    )
+    return _f(db_path=db_path)
 
 
 def db_delete_align_no_exact_match(
     video_code: str,
     db_path: Optional[str] = None,
 ) -> None:
-    """Remove a video code from the no-exact-match table (e.g. after a successful match)."""
-    with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-        conn.execute(
-            "DELETE FROM InventoryAlignNoExactMatch WHERE VideoCode = ?",
-            (video_code.strip().upper(),),
-        )
+    """Remove a video code from the no-exact-match table."""
+    from packages.python.javdb_platform.db_operations import (
+        db_delete_align_no_exact_match as _f,
+    )
+    return _f(video_code, db_path=db_path)
 
 
 
@@ -3542,33 +3261,11 @@ def db_get_session_status(
     *,
     db_path: Optional[str] = None,
 ) -> Optional[Tuple[str, str]]:
-    """Return ``(WriteMode, Status)`` for *session_id*, or ``None`` if absent.
-
-    Centralised so the rollback dispatcher and the commit / resume helpers
-    all see the same view of the session row even when the underlying
-    table briefly lacks the WriteMode column on legacy schemas.
-    """
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        try:
-            row = conn.execute(
-                "SELECT WriteMode, Status FROM ReportSessions WHERE Id=?",
-                (session_id,),
-            ).fetchone()
-        except _DB_OPERATIONAL_ERRORS:
-            # Legacy schema without the WriteMode column. Under d1-only the
-            # missing column surfaces as D1PermanentError, not
-            # sqlite3.OperationalError — see _DB_OPERATIONAL_ERRORS.
-            row = conn.execute(
-                "SELECT Status FROM ReportSessions WHERE Id=?",
-                (session_id,),
-            ).fetchone()
-            if row is None:
-                return None
-            return ("audit", row["Status"])
-    if row is None:
-        return None
-    write_mode = row["WriteMode"] if row["WriteMode"] else "audit"
-    return (write_mode, row["Status"])
+    """Return ``(WriteMode, Status)`` for *session_id*, or ``None`` if absent."""
+    from packages.python.javdb_platform.db_reports import (
+        db_get_session_status as _f,
+    )
+    return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_begin_finalize_session(
@@ -3576,21 +3273,11 @@ def db_begin_finalize_session(
     *,
     db_path: Optional[str] = None,
 ) -> int:
-    """Flip ``Status`` from ``in_progress`` to ``finalizing`` for *session_id*.
-
-    Idempotent: a session already in ``finalizing`` returns 0 (no row
-    change) so a crashed-during-finalize resume can call this without
-    raising.  Sessions that are already ``committed`` or ``failed``
-    refuse the transition (returns 0) — the caller is expected to call
-    :func:`db_resume_finalizing_session` only when status is finalizing.
-    """
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        cur = conn.execute(
-            "UPDATE ReportSessions SET Status='finalizing' "
-            "WHERE Id=? AND Status='in_progress'",
-            (session_id,),
-        )
-        return cur.rowcount or 0
+    """Flip ``Status`` from ``in_progress`` to ``finalizing``."""
+    from packages.python.javdb_platform.db_reports import (
+        db_begin_finalize_session as _f,
+    )
+    return _f(session_id, db_path=db_path)
 
 
 def db_finish_commit_session(
@@ -3598,18 +3285,11 @@ def db_finish_commit_session(
     *,
     db_path: Optional[str] = None,
 ) -> int:
-    """Flip ``Status`` from ``finalizing`` to ``committed`` for *session_id*.
-
-    Used by :func:`db_commit_session_history` once every per-movie commit
-    has applied successfully.  Idempotent against ``committed`` rows.
-    """
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        cur = conn.execute(
-            "UPDATE ReportSessions SET Status='committed' "
-            "WHERE Id=? AND Status='finalizing'",
-            (session_id,),
-        )
-        return cur.rowcount or 0
+    """Flip ``Status`` from ``finalizing`` to ``committed``."""
+    from packages.python.javdb_platform.db_reports import (
+        db_finish_commit_session as _f,
+    )
+    return _f(session_id, db_path=db_path)
 
 # ── Ingestion Perfect Rollback: pending write path (Phase 2) ─────────────
 #
@@ -3831,31 +3511,11 @@ def _compute_indicators(
 
 
 def _merge_movie_overlay_rows(rows: Iterable[Any]) -> Dict[str, dict]:
-    """Merge pending-movie rows (Seq-ascending order) into a sparse overlay.
-
-    Extracted so the per-href DB-fetching helper and the bulk session-level
-    commit path apply byte-identical merge semantics. Caller is responsible
-    for issuing the SELECT and passing rows already ordered by ``Seq ASC``.
-    """
-    overlay: Dict[str, dict] = {}
-    for row in rows:
-        d = dict(row)
-        key = d["Href"]
-        existing = overlay.get(key)
-        if existing is None:
-            d["_merged_seqs"] = [d["Seq"]]
-            overlay[key] = d
-            continue
-        existing["_merged_seqs"].append(d["Seq"])
-        for col, value in d.items():
-            if col == "_merged_seqs":
-                continue
-            if col == "Seq":
-                existing[col] = value
-                continue
-            if value is not None:
-                existing[col] = value
-    return overlay
+    """Merge pending-movie rows (Seq-ascending order) into a sparse overlay."""
+    from packages.python.javdb_platform.db_history_read import (
+        _merge_movie_overlay_rows as _f,
+    )
+    return _f(rows)
 
 
 def _pending_movie_overlay(
@@ -3865,72 +3525,23 @@ def _pending_movie_overlay(
     href: Optional[str] = None,
     include_states: Tuple[str, ...] = ("pending",),
 ) -> Dict[str, dict]:
-    """Return ``{href: merged_pending_movie_row}`` for *session_id*.
-
-    Each pending row is sparse: a write coming from
-    :func:`save_parsed_movie_to_history` carries the actor / supporting
-    fields, while a write coming from :func:`db_batch_update_last_visited`
-    only carries ``DateTimeVisited``.  We merge across the rows for a
-    single Href so a later sparse stage cannot accidentally clobber the
-    earlier stage's columns just because its own copy of those columns
-    is ``NULL``.
-
-    Merge rule, ordered by ``Seq ASC``:
-      * later rows override earlier rows whenever their value is not
-        ``None``;
-      * ``Seq`` reflects the latest stage; the full list of Seqs that
-        contributed to the merged payload is exposed under the
-        ``_merged_seqs`` private key so the commit path can mark
-        every contributing row as ``applied`` (otherwise an earlier
-        sparse stage would leak as a permanent ``pending`` row after
-        commit).
-    """
-    placeholders = ",".join("?" for _ in include_states)
-    params: list = [session_id]
-    params.extend(include_states)
-    where_extra = ""
-    if href is not None:
-        where_extra = " AND Href=?"
-        params.append(href)
-    sql = (
-        "SELECT * FROM PendingMovieHistoryWrites "
-        f"WHERE SessionId=? AND ApplyState IN ({placeholders}){where_extra}"
-        " ORDER BY Seq ASC"
+    """Return ``{href: merged_pending_movie_row}`` for *session_id*."""
+    from packages.python.javdb_platform.db_history_read import (
+        _pending_movie_overlay_impl,
     )
-    return _merge_movie_overlay_rows(conn.execute(sql, params).fetchall())
+    return _pending_movie_overlay_impl(
+        conn, session_id, href=href, include_states=include_states,
+    )
 
 
 def _merge_torrent_overlay_rows(
     rows: Iterable[Any],
 ) -> Dict[Tuple[str, int, int], dict]:
-    """Merge pending-torrent rows (Seq-ascending) into a sparse overlay.
-
-    Mirror of :func:`_merge_movie_overlay_rows` for the torrent table.
-    Used by both the per-href DB-fetching helper and the bulk commit path.
-    """
-    overlay: Dict[Tuple[str, int, int], dict] = {}
-    for row in rows:
-        d = dict(row)
-        key = (
-            d["Href"],
-            int(d["SubtitleIndicator"]),
-            int(d["CensorIndicator"]),
-        )
-        existing = overlay.get(key)
-        if existing is None:
-            d["_merged_seqs"] = [d["Seq"]]
-            overlay[key] = d
-            continue
-        existing["_merged_seqs"].append(d["Seq"])
-        for col, value in d.items():
-            if col == "_merged_seqs":
-                continue
-            if col == "Seq":
-                existing[col] = value
-                continue
-            if value is not None:
-                existing[col] = value
-    return overlay
+    """Merge pending-torrent rows (Seq-ascending) into a sparse overlay."""
+    from packages.python.javdb_platform.db_history_read import (
+        _merge_torrent_overlay_rows as _f,
+    )
+    return _f(rows)
 
 
 def _pending_torrent_overlay(
@@ -3940,34 +3551,13 @@ def _pending_torrent_overlay(
     href: Optional[str] = None,
     include_states: Tuple[str, ...] = ("pending",),
 ) -> Dict[Tuple[str, int, int], dict]:
-    """Return ``{(href, sub, cen): merged_pending_torrent_row}`` for *session_id*.
-
-    Mirrors :func:`_pending_movie_overlay`: when multiple pending rows
-    share the same ``(href, sub, cen)`` key (e.g. a retry / re-fetch
-    staged a second time for the same torrent type), the **latest**
-    non-NULL field values shadow earlier ones, but the merged row's
-    ``_merged_seqs`` list carries **every** consumed ``Seq`` so the
-    commit path can mark them all ``ApplyState='applied'``.
-
-    P0-4: the legacy implementation only retained the last ``Seq``,
-    leaving earlier rows stuck in ``pending`` after
-    ``db_commit_session_history``. That residue then triggered the
-    Phase 3 critical pending-mode alert and the auto-fallback to
-    audit mode for the next run.
-    """
-    placeholders = ",".join("?" for _ in include_states)
-    params: list = [session_id]
-    params.extend(include_states)
-    where_extra = ""
-    if href is not None:
-        where_extra = " AND Href=?"
-        params.append(href)
-    sql = (
-        "SELECT * FROM PendingTorrentHistoryWrites "
-        f"WHERE SessionId=? AND ApplyState IN ({placeholders}){where_extra}"
-        " ORDER BY Seq ASC"
+    """Return ``{(href, sub, cen): merged_pending_torrent_row}`` for *session_id*."""
+    from packages.python.javdb_platform.db_history_read import (
+        _pending_torrent_overlay_impl,
     )
-    return _merge_torrent_overlay_rows(conn.execute(sql, params).fetchall())
+    return _pending_torrent_overlay_impl(
+        conn, session_id, href=href, include_states=include_states,
+    )
 
 
 def db_load_history_snapshot(
@@ -3975,93 +3565,11 @@ def db_load_history_snapshot(
     *,
     db_path: Optional[str] = None,
 ) -> Dict[str, dict]:
-    """Return committed-live history with the *session_id* pending overlay.
-
-    When *session_id* is ``None``, returns just the committed live state
-    (equivalent to :func:`load_history_joined`).  Otherwise, the pending
-    rows for that session shadow the live values per Href / per torrent
-    type, giving the caller a "what would we see if we committed right
-    now" view without polluting other sessions' reads.
-    """
-    with get_db(db_path or HISTORY_DB_PATH) as conn:
-        snapshot = _load_history_joined(conn)
-        if session_id is None:
-            return snapshot
-        movie_overlay = _pending_movie_overlay(conn, session_id)
-        torrent_overlay = _pending_torrent_overlay(conn, session_id)
-
-    for href, row in movie_overlay.items():
-        item = snapshot.get(href)
-        if item is None:
-            item = {
-                "VideoCode": row.get("VideoCode") or "",
-                "DateTimeCreated": row.get("CreatedAt") or "",
-                "DateTimeUpdated": row.get("CreatedAt") or "",
-                "DateTimeVisited": row.get("DateTimeVisited") or "",
-                "PerfectMatchIndicator": False,
-                "HiResIndicator": False,
-                "ActorName": row.get("ActorName"),
-                "ActorGender": row.get("ActorGender"),
-                "ActorLink": row.get("ActorLink"),
-                "SupportingActors": row.get("SupportingActors"),
-                "torrent_types": [],
-                "torrents": {},
-            }
-            snapshot[href] = item
-        else:
-            for col in (
-                "VideoCode", "ActorName", "ActorGender",
-                "ActorLink", "SupportingActors",
-            ):
-                if row.get(col) is not None:
-                    item[col] = row.get(col)
-            if row.get("DateTimeVisited"):
-                item["DateTimeVisited"] = row["DateTimeVisited"]
-
-    for (href, sub, cen), row in torrent_overlay.items():
-        item = snapshot.get(href)
-        if item is None:
-            item = {
-                "VideoCode": row.get("VideoCode") or "",
-                "DateTimeCreated": row.get("CreatedAt") or "",
-                "DateTimeUpdated": row.get("CreatedAt") or "",
-                "DateTimeVisited": row.get("DateTimeVisited") or "",
-                "PerfectMatchIndicator": False,
-                "HiResIndicator": False,
-                "ActorName": None,
-                "ActorGender": None,
-                "ActorLink": None,
-                "SupportingActors": None,
-                "torrent_types": [],
-                "torrents": {},
-            }
-            snapshot[href] = item
-        cat = indicators_to_category(int(sub), int(cen))
-        if cat not in item["torrent_types"]:
-            item["torrent_types"].append(cat)
-        item["torrents"][(int(sub), int(cen))] = {
-            "MagnetUri": row.get("MagnetUri") or "",
-            "Size": row.get("Size") or "",
-            "FileCount": row.get("FileCount") or 0,
-            "ResolutionType": row.get("ResolutionType"),
-            "DateTimeCreated": row.get("CreatedAt") or "",
-            "DateTimeUpdated": row.get("CreatedAt") or "",
-        }
-
-    # Recompute the derived indicators so callers see the same value the
-    # commit step would land in MovieHistory.PerfectMatchIndicator /
-    # HiResIndicator.  Live-only callers (session_id=None) skip this.
-    for item in snapshot.values():
-        torrents = item.get("torrents", {})
-        item["PerfectMatchIndicator"] = bool(
-            (1, 0) in torrents and (1, 1) in torrents
-        )
-        item["HiResIndicator"] = any(
-            (t.get("ResolutionType") or 0) >= 2560
-            for t in torrents.values()
-        )
-
-    return snapshot
+    """Return committed-live history with the *session_id* pending overlay."""
+    from packages.python.javdb_platform.db_history_read import (
+        db_load_history_snapshot as _f,
+    )
+    return _f(session_id, db_path=db_path)
 
 
 def _commit_one_movie(
@@ -4889,61 +4397,11 @@ def db_pending_session_stats(
     *,
     db_path: Optional[str] = None,
 ) -> Dict[str, int]:
-    """Snapshot pending-table counts for *session_id* (Phase 2 verify).
-
-    Returns a dict with three keys:
-
-    * ``pending_residual_count`` — rows still flagged ``ApplyState='pending'``
-      across both ``PendingMovieHistoryWrites`` and
-      ``PendingTorrentHistoryWrites``.  After a successful commit this
-      number must be 0; a non-zero value means
-      :func:`db_commit_session_history` did not drain every staged row
-      and the session is half-applied.
-    * ``pending_applied_count`` — rows currently flagged
-      ``ApplyState='applied'``.  ``db_commit_session_history`` deletes
-      these at the end of its run, so once the session is committed
-      this is also 0.  A non-zero value here on a committed session
-      points at an interrupted commit (operator must re-run
-      :func:`db_resume_finalizing_session`).
-    * ``pending_total_count`` — sum of the two above (the row count that
-      is still resident in the pending tables for this session).
-
-    Tables that don't exist yet (e.g. legacy-schema test fixtures) are
-    treated as zero so callers in the metric-emission path never raise.
-    """
-    counts = {
-        "pending_residual_count": 0,
-        "pending_applied_count": 0,
-        "pending_total_count": 0,
-    }
-    with get_db(db_path or HISTORY_DB_PATH) as conn:
-        for tbl in (
-            "PendingMovieHistoryWrites",
-            "PendingTorrentHistoryWrites",
-        ):
-            try:
-                row = conn.execute(
-                    f"SELECT "
-                    f"  SUM(CASE WHEN ApplyState='pending' THEN 1 ELSE 0 END) "
-                    f"    AS pending_n, "
-                    f"  SUM(CASE WHEN ApplyState='applied' THEN 1 ELSE 0 END) "
-                    f"    AS applied_n "
-                    f"FROM {tbl} WHERE SessionId=?",
-                    (session_id,),
-                ).fetchone()
-            except _DB_OPERATIONAL_ERRORS:
-                # Pending table absent on a legacy / partially-migrated
-                # schema — treat as zero. d1-only surfaces this as
-                # D1PermanentError, hence _DB_OPERATIONAL_ERRORS.
-                continue
-            if row is None:
-                continue
-            counts["pending_residual_count"] += int(row["pending_n"] or 0)
-            counts["pending_applied_count"] += int(row["applied_n"] or 0)
-    counts["pending_total_count"] = (
-        counts["pending_residual_count"] + counts["pending_applied_count"]
+    """Snapshot pending-table counts for *session_id* (Phase 2 verify)."""
+    from packages.python.javdb_platform.db_reports import (
+        db_pending_session_stats as _f,
     )
-    return counts
+    return _f(session_id, db_path=db_path or HISTORY_DB_PATH)
 
 
 def db_get_session_run_identity(
@@ -4951,21 +4409,11 @@ def db_get_session_run_identity(
     *,
     db_path: Optional[str] = None,
 ) -> Optional[Tuple[Optional[str], Optional[int]]]:
-    """Return ``(RunId, RunAttempt)`` for *session_id*, or ``None`` if absent.
-
-    Used by the verify-metric writers so the emitted JSONL line can be
-    correlated with the GitHub Actions workflow run that produced it
-    (workflow logs only capture the env values; the verify line lets
-    operators look up the original run after the fact).
-    """
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        row = conn.execute(
-            "SELECT RunId, RunAttempt FROM ReportSessions WHERE Id=?",
-            (session_id,),
-        ).fetchone()
-    if row is None:
-        return None
-    return (row["RunId"], row["RunAttempt"])
+    """Return ``(RunId, RunAttempt)`` for *session_id*, or ``None`` if absent."""
+    from packages.python.javdb_platform.db_reports import (
+        db_get_session_run_identity as _f,
+    )
+    return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
 
 
 def _rollback_pending_in_progress(
@@ -5052,106 +4500,27 @@ def db_create_report_session(
     session_id: Optional[str] = None,
     write_mode: Optional[str] = None,
 ) -> int:
-    """Create a new report session and return its id.
-
-    Behaviour change (2026-05-08): the *Id* is now generated by the
-    application (via :func:`_generate_session_id`) and inserted explicitly,
-    so SQLite and Cloudflare D1 see the same value. The previous behaviour
-    relied on each backend's AUTOINCREMENT and ``cur.lastrowid``, which
-    drifts under ``STORAGE_BACKEND=dual``.
-
-    *run_id* / *run_attempt* (optional) record the GitHub Actions workflow
-    run that owns this session. The rollback CLI's primary lookup path is
-    by ``(RunId, RunAttempt)``; ``Id`` is the secondary path for callers
-    that already know the snowflake id.
-
-    *session_id* (optional, advanced) lets the caller pin a specific id
-    instead of generating one — used by the migration tool that needs to
-    preserve historical ids when copying CSVs into the DB.
-
-    The new row is tagged with ``Status='in_progress'`` so the rollback CLI
-    can identify uncommitted runs. Call :func:`db_mark_session_committed`
-    after the pipeline successfully finishes to flip the flag and protect
-    the session's writes from being cleaned up.
-    """
-    from packages.python.javdb_platform.config_helper import (
-        db_writes_forbidden,
+    """Create a new report session and return its id."""
+    from packages.python.javdb_platform.db_reports import (
+        db_create_report_session as _f,
     )
-    if db_writes_forbidden():
-        raise RuntimeError(
-            "db_create_report_session refused: "
-            "JAVDB_FORBID_DB_WRITES=1 is engaged. This kill switch is "
-            "set by smoke-test workflows (TestIngestion) that must not "
-            "pollute production D1 / SQLite. Unset it if you really "
-            "need to write to a database."
-        )
-    if created_at is None:
-        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    sid = session_id if session_id is not None else _generate_session_id()
-    resolved_mode = _resolve_write_mode(write_mode)
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        conn.execute(
-            """INSERT INTO ReportSessions
-               (Id, ReportType, ReportDate, UrlType, DisplayName,
-                Url, StartPage, EndPage, CsvFilename, DateTimeCreated,
-                Status, RunId, RunAttempt, WriteMode)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_progress', ?, ?, ?)""",
-            (sid, report_type, report_date, url_type, display_name,
-             url, start_page, end_page, csv_filename, created_at,
-             run_id, run_attempt, resolved_mode),
-        )
-    return sid
+    return _f(report_type, report_date, csv_filename, url_type=url_type,
+              display_name=display_name, url=url, start_page=start_page,
+              end_page=end_page, created_at=created_at,
+              db_path=db_path or REPORTS_DB_PATH,
+              run_id=run_id, run_attempt=run_attempt, session_id=session_id,
+              write_mode=write_mode)
 
 
 def db_mark_session_committed(
     session_id: str,
     db_path: Optional[str] = None,
 ) -> int:
-    """Mark a session as ``committed`` so it survives any future cleanup.
-
-    Once a session is committed, its audit rows in
-    ``MovieHistoryAudit`` / ``TorrentHistoryAudit`` are pruned (the
-    rollback CLI refuses committed sessions anyway, so the audit log is
-    no longer needed and only adds noise + table bloat).
-
-    Returns the number of ReportSessions rows updated (0 if session not
-    found or already committed). Idempotent: re-running on a committed
-    session is a no-op (and prunes any leftover audit rows).
-    """
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        cur = conn.execute(
-            "UPDATE ReportSessions SET Status='committed' WHERE Id=? "
-            "AND Status IS NOT 'committed'",
-            (session_id,),
-        )
-        marked = cur.rowcount or 0
-
-    # Audit retention: prune audit rows for this session even when the
-    # ReportSessions update was a no-op (Status was already 'committed' on
-    # a previous call). Keeps the tables bounded if commit is retried.
-    try:
-        with get_db(HISTORY_DB_PATH) as conn:
-            mh = conn.execute(
-                "DELETE FROM MovieHistoryAudit WHERE SessionId=?",
-                (session_id,),
-            )
-            th = conn.execute(
-                "DELETE FROM TorrentHistoryAudit WHERE SessionId=?",
-                (session_id,),
-            )
-        pruned = (mh.rowcount or 0) + (th.rowcount or 0)
-        if pruned > 0:
-            logger.info(
-                "Pruned %d audit row(s) on commit of session %s",
-                pruned, session_id,
-            )
-    except Exception as exc:  # noqa: BLE001 - best-effort retention
-        logger.warning(
-            "Could not prune audit rows for committed session %s: %s",
-            session_id, exc,
-        )
-
-    return marked
+    """Mark a session as ``committed`` so it survives any future cleanup."""
+    from packages.python.javdb_platform.db_reports import (
+        db_mark_session_committed as _f,
+    )
+    return _f(session_id, db_path or REPORTS_DB_PATH)
 
 
 def db_mark_session_failed(
@@ -5160,19 +4529,11 @@ def db_mark_session_failed(
     *,
     reason: Optional[str] = None,
 ) -> int:
-    """Mark a session as ``failed`` (debug-only flag set right before delete).
-
-    *reason* is persisted to ``ReportSessions.FailureReason`` so post-
-    incident analysis can distinguish workflow_cancel vs runtime crash
-    vs stale_timeout (set by the daily stale-cleanup cron).
-    """
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        cur = conn.execute(
-            "UPDATE ReportSessions SET Status='failed', FailureReason=? "
-            "WHERE Id=?",
-            (reason, session_id),
-        )
-        return cur.rowcount or 0
+    """Mark a session as ``failed`` (debug-only flag set right before delete)."""
+    from packages.python.javdb_platform.db_reports import (
+        db_mark_session_failed as _f,
+    )
+    return _f(session_id, db_path or REPORTS_DB_PATH, reason=reason)
 
 
 def db_find_in_progress_sessions(
@@ -5182,62 +4543,13 @@ def db_find_in_progress_sessions(
     max_age_hours: Optional[float] = None,
     require_run_identity: bool = False,
 ) -> List[str]:
-    """Return ``ReportSessions.Id`` rows still flagged ``in_progress``.
-
-    *since* (ISO timestamp) restricts the search to sessions created on
-    or after the given moment — typically the workflow ``run_started_at``
-    so the cleanup job only sees sessions belonging to the failed run.
-
-    *max_age_hours* — alternative window for the stale-session cleanup
-    cron: returns sessions whose ``DateTimeCreated`` is older than
-    ``now - max_age_hours``.  Mutually exclusive with *since*.
-
-    *require_run_identity* — when true, only include sessions with a
-    non-empty ``RunId``.  This helps stale-session cleanup skip legacy
-    pre-run-identity rows that were historically marked ``in_progress``.
-    """
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        if since and max_age_hours is not None:
-            raise ValueError(
-                "db_find_in_progress_sessions: pass either 'since' or "
-                "'max_age_hours', not both"
-            )
-        if max_age_hours is not None:
-            cutoff_ts = time.time() - (max_age_hours * 3600)
-            cutoff = datetime.utcfromtimestamp(cutoff_ts).strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
-            run_identity_clause = (
-                " AND RunId IS NOT NULL AND TRIM(RunId) != ''"
-                if require_run_identity else ""
-            )
-            rows = conn.execute(
-                "SELECT Id FROM ReportSessions "
-                "WHERE Status='in_progress' AND DateTimeCreated < ?"
-                + run_identity_clause,
-                (cutoff,),
-            ).fetchall()
-        elif since:
-            run_identity_clause = (
-                " AND RunId IS NOT NULL AND TRIM(RunId) != ''"
-                if require_run_identity else ""
-            )
-            rows = conn.execute(
-                "SELECT Id FROM ReportSessions "
-                "WHERE Status='in_progress' AND DateTimeCreated >= ?"
-                + run_identity_clause,
-                (since,),
-            ).fetchall()
-        else:
-            run_identity_clause = (
-                " AND RunId IS NOT NULL AND TRIM(RunId) != ''"
-                if require_run_identity else ""
-            )
-            rows = conn.execute(
-                "SELECT Id FROM ReportSessions WHERE Status='in_progress'"
-                + run_identity_clause,
-            ).fetchall()
-    return [r['Id'] for r in rows]
+    """Return ``ReportSessions.Id`` rows still flagged ``in_progress``."""
+    from packages.python.javdb_platform.db_reports import (
+        db_find_in_progress_sessions as _f,
+    )
+    return _f(since=since, db_path=db_path or REPORTS_DB_PATH,
+              max_age_hours=max_age_hours,
+              require_run_identity=require_run_identity)
 
 
 def db_find_stale_pending_sessions(
@@ -5246,47 +4558,12 @@ def db_find_stale_pending_sessions(
     max_age_hours: float = 48.0,
     require_run_identity: bool = True,
 ) -> List[Tuple[int, str, str]]:
-    """Return ``[(Id, Status, WriteMode), ...]`` for stale Phase 3 sessions.
-
-    Used by :mod:`apps.cli.cleanup_stale_in_progress` to dispatch
-    in_progress sessions to rollback and finalizing sessions to
-    resume_commit.  Filters on ``Status IN ('in_progress', 'finalizing')``
-    so audit-mode sessions still get rolled back through this cron path.
-
-    *require_run_identity* — when True, skips legacy rows with empty
-    RunId (matches the existing :func:`db_find_in_progress_sessions`
-    contract).
-    """
-    cutoff_ts = time.time() - (max_age_hours * 3600)
-    cutoff = datetime.utcfromtimestamp(cutoff_ts).strftime(
-        "%Y-%m-%d %H:%M:%S",
+    """Return ``[(Id, Status, WriteMode), ...]`` for stale Phase 3 sessions."""
+    from packages.python.javdb_platform.db_reports import (
+        db_find_stale_pending_sessions as _f,
     )
-    run_identity_clause = (
-        " AND RunId IS NOT NULL AND TRIM(RunId) != ''"
-        if require_run_identity else ""
-    )
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        try:
-            rows = conn.execute(
-                "SELECT Id, Status, COALESCE(WriteMode,'audit') AS WriteMode "
-                "FROM ReportSessions "
-                "WHERE Status IN ('in_progress','finalizing') "
-                "AND DateTimeCreated < ?" + run_identity_clause,
-                (cutoff,),
-            ).fetchall()
-        except _DB_OPERATIONAL_ERRORS:
-            # Legacy schema without WriteMode column — fall back to audit.
-            # d1-only surfaces the missing column as D1PermanentError.
-            rows = conn.execute(
-                "SELECT Id, Status FROM ReportSessions "
-                "WHERE Status IN ('in_progress','finalizing') "
-                "AND DateTimeCreated < ?" + run_identity_clause,
-                (cutoff,),
-            ).fetchall()
-            return [(r["Id"], r["Status"], "audit") for r in rows]
-    return [
-        (r["Id"], r["Status"], r["WriteMode"]) for r in rows
-    ]
+    return _f(db_path=db_path or REPORTS_DB_PATH, max_age_hours=max_age_hours,
+              require_run_identity=require_run_identity)
 
 
 def db_count_in_progress_sessions_for_run(
@@ -5295,27 +4572,11 @@ def db_count_in_progress_sessions_for_run(
     *,
     db_path: Optional[str] = None,
 ) -> int:
-    """Count ``in_progress`` sessions belonging to a (RunId, RunAttempt) pair.
-
-    Used by the spider self-check: a single workflow run must own at most
-    one in-progress session at any given time.  Detecting >0 here means a
-    prior step already created one; the caller should refuse to start a
-    fresh session and instead re-use / fail loudly.
-    """
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        if run_attempt is None:
-            row = conn.execute(
-                "SELECT COUNT(*) AS n FROM ReportSessions "
-                "WHERE Status='in_progress' AND RunId=?",
-                (run_id,),
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT COUNT(*) AS n FROM ReportSessions "
-                "WHERE Status='in_progress' AND RunId=? AND RunAttempt=?",
-                (run_id, int(run_attempt)),
-            ).fetchone()
-    return int((row or {'n': 0})['n'] or 0)
+    """Count ``in_progress`` sessions belonging to a (RunId, RunAttempt) pair."""
+    from packages.python.javdb_platform.db_reports import (
+        db_count_in_progress_sessions_for_run as _f,
+    )
+    return _f(run_id, run_attempt, db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_find_in_progress_session_ids_for_run_csv(
@@ -5325,30 +4586,12 @@ def db_find_in_progress_session_ids_for_run_csv(
     *,
     db_path: Optional[str] = None,
 ) -> List[str]:
-    """Return ``in_progress`` SessionIds for the same (RunId, RunAttempt, CSVFilename).
-
-    Used by the spider self-check to distinguish *legitimate* sibling
-    sessions in the same workflow run (e.g. DailyIngestion's TodayTitle
-    spider followed by an AdHoc spider — different CSV files) from a
-    *true* duplicate (same CSV being ingested twice in the same run, which
-    indicates a re-entry / retry-without-cleanup bug worth aborting on).
-    Matching by CSV filename is exact and case-sensitive; callers should
-    pass the basename only.
-    """
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        if run_attempt is None:
-            rows = conn.execute(
-                "SELECT Id FROM ReportSessions "
-                "WHERE Status='in_progress' AND RunId=? AND CSVFilename=?",
-                (run_id, csv_filename),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT Id FROM ReportSessions WHERE Status='in_progress' "
-                "AND RunId=? AND RunAttempt=? AND CSVFilename=?",
-                (run_id, int(run_attempt), csv_filename),
-            ).fetchall()
-    return [r['Id'] for r in rows]
+    """Return ``in_progress`` SessionIds for the same (RunId, RunAttempt, CSVFilename)."""
+    from packages.python.javdb_platform.db_reports import (
+        db_find_in_progress_session_ids_for_run_csv as _f,
+    )
+    return _f(run_id, run_attempt, csv_filename,
+              db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_find_sessions_by_run(
@@ -5358,51 +4601,13 @@ def db_find_sessions_by_run(
     reports_db_path: Optional[str] = None,
     history_db_path: Optional[str] = None,
 ) -> List[str]:
-    """Return every session id touched by a (RunId, RunAttempt) workflow run.
-
-    Looks at ``ReportSessions`` first (the canonical owner record) and
-    then unions in ``MovieHistoryAudit`` / ``TorrentHistoryAudit`` for any
-    audit rows tagged with the run identity but whose owning
-    ReportSessions row is missing (e.g. the row was deleted by a previous
-    failed rollback attempt).  Returns ids sorted ascending.
-    """
-    found: set = set()
-    with get_db(reports_db_path or REPORTS_DB_PATH) as conn:
-        if run_attempt is None:
-            rows = conn.execute(
-                "SELECT Id FROM ReportSessions WHERE RunId=?", (run_id,),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT Id FROM ReportSessions WHERE RunId=? AND RunAttempt=?",
-                (run_id, int(run_attempt)),
-            ).fetchall()
-        for r in rows:
-            found.add(r['Id'])
-
-    with get_db(history_db_path or HISTORY_DB_PATH) as conn:
-        for table in ('MovieHistoryAudit', 'TorrentHistoryAudit'):
-            try:
-                if run_attempt is None:
-                    rows = conn.execute(
-                        f"SELECT DISTINCT SessionId FROM {table} WHERE RunId=?",
-                        (run_id,),
-                    ).fetchall()
-                else:
-                    rows = conn.execute(
-                        f"SELECT DISTINCT SessionId FROM {table} "
-                        f"WHERE RunId=? AND RunAttempt=?",
-                        (run_id, int(run_attempt)),
-                    ).fetchall()
-            except _DB_OPERATIONAL_ERRORS:
-                # Table doesn't exist (history db wasn't initialised yet).
-                # d1-only surfaces the missing table as D1PermanentError.
-                continue
-            for r in rows:
-                if r['SessionId'] is not None:
-                    found.add(r['SessionId'])
-
-    return sorted(found)
+    """Return every session id touched by a (RunId, RunAttempt) workflow run."""
+    from packages.python.javdb_platform.db_reports import (
+        db_find_sessions_by_run as _f,
+    )
+    return _f(run_id, run_attempt,
+              reports_db_path=reports_db_path or REPORTS_DB_PATH,
+              history_db_path=history_db_path or HISTORY_DB_PATH)
 
 
 # ── Rollback orchestration (X3 hybrid) ───────────────────────────────────
@@ -5956,275 +5161,86 @@ def db_rollback_session(
 
 
 def db_insert_report_rows(session_id: str, rows: List[dict], db_path: Optional[str] = None) -> int:
-    """Insert report rows into ReportMovies + ReportTorrents.
-
-    Accepts rows in the legacy flat dict format with keys like
-    ``hacked_subtitle``, ``subtitle``, etc.  Each non-empty magnet
-    becomes a separate ReportTorrents row.
-    """
-    _CATS = [
-        ('hacked_subtitle',    'size_hacked_subtitle',    'file_count_hacked_subtitle',    'resolution_hacked_subtitle',    1, 0),
-        ('hacked_no_subtitle', 'size_hacked_no_subtitle', 'file_count_hacked_no_subtitle', 'resolution_hacked_no_subtitle', 0, 0),
-        ('subtitle',           'size_subtitle',           'file_count_subtitle',           'resolution_subtitle',           1, 1),
-        ('no_subtitle',        'size_no_subtitle',        'file_count_no_subtitle',        'resolution_no_subtitle',        0, 1),
-    ]
-    base_url = cfg('BASE_URL', 'https://javdb.com')
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        for row in rows:
-            href = javdb_absolute_url(row.get('href') or '', base_url)
-            cur = conn.execute(
-                """INSERT INTO ReportMovies
-                   (SessionId, Href, VideoCode, Page, Actor, Rate, CommentNumber)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (session_id,
-                 href, row.get('video_code'),
-                 int(row['page']) if row.get('page') else None,
-                 row.get('actor'),
-                 float(row['rate']) if row.get('rate') else None,
-                 int(row['comment_number']) if row.get('comment_number') else None),
-            )
-            rm_id = cur.lastrowid
-            vc = row.get('video_code')
-            for cat, size_cat, fc_cat, res_cat, sub_ind, cen_ind in _CATS:
-                magnet = (row.get(cat) or '').strip()
-                if magnet:
-                    conn.execute(
-                        """INSERT INTO ReportTorrents
-                           (ReportMovieId, VideoCode, MagnetUri,
-                            SubtitleIndicator, CensorIndicator,
-                            ResolutionType, Size, FileCount)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (rm_id, vc, magnet, sub_ind, cen_ind,
-                         row.get(res_cat),
-                         row.get(size_cat),
-                         int(row.get(fc_cat, 0) or 0)),
-                    )
-        return len(rows)
+    """Insert report rows into ReportMovies + ReportTorrents."""
+    from packages.python.javdb_platform.db_reports import (
+        db_insert_report_rows as _f,
+    )
+    return _f(session_id, rows, db_path or REPORTS_DB_PATH)
 
 
 def db_get_report_rows(session_id: str, db_path: Optional[str] = None) -> List[dict]:
-    """Get all rows for a session as flat dicts (backward compatible).
-
-    Aggregates ReportMovies + ReportTorrents back into the legacy format
-    with ``hacked_subtitle``, ``subtitle``, etc. columns.
-    """
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        movies = conn.execute(
-            "SELECT * FROM ReportMovies WHERE SessionId = ? ORDER BY Id",
-            (session_id,),
-        ).fetchall()
-
-        result = []
-        for m in movies:
-            m = dict(m)
-            flat = {
-                'href': m.get('Href', ''),
-                'video_code': m.get('VideoCode', ''),
-                'page': m.get('Page'),
-                'actor': m.get('Actor', ''),
-                'rate': m.get('Rate'),
-                'comment_number': m.get('CommentNumber'),
-                'hacked_subtitle': '',
-                'hacked_no_subtitle': '',
-                'subtitle': '',
-                'no_subtitle': '',
-                'size_hacked_subtitle': '',
-                'size_hacked_no_subtitle': '',
-                'size_subtitle': '',
-                'size_no_subtitle': '',
-                'file_count_hacked_subtitle': 0,
-                'file_count_hacked_no_subtitle': 0,
-                'file_count_subtitle': 0,
-                'file_count_no_subtitle': 0,
-                'resolution_hacked_subtitle': None,
-                'resolution_hacked_no_subtitle': None,
-                'resolution_subtitle': None,
-                'resolution_no_subtitle': None,
-            }
-            torrents = conn.execute(
-                "SELECT * FROM ReportTorrents WHERE ReportMovieId = ?",
-                (m['Id'],),
-            ).fetchall()
-            for t in torrents:
-                t = dict(t)
-                cat = indicators_to_category(t['SubtitleIndicator'], t['CensorIndicator'])
-                flat[cat] = t.get('MagnetUri', '')
-                flat[f'size_{cat}'] = t.get('Size', '')
-                flat[f'file_count_{cat}'] = t.get('FileCount', 0)
-                flat[f'resolution_{cat}'] = t.get('ResolutionType')
-            result.append(flat)
-        return result
+    """Get all rows for a session as flat dicts (backward compatible)."""
+    from packages.python.javdb_platform.db_reports import (
+        db_get_report_rows as _f,
+    )
+    return _f(session_id, db_path or REPORTS_DB_PATH)
 
 
 def db_get_latest_session(report_type: Optional[str] = None, db_path: Optional[str] = None) -> Optional[dict]:
     """Get the most recent report session, optionally filtered by type."""
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        if report_type:
-            row = conn.execute(
-                "SELECT * FROM ReportSessions WHERE ReportType = ? ORDER BY Id DESC LIMIT 1",
-                (report_type,),
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT * FROM ReportSessions ORDER BY Id DESC LIMIT 1"
-            ).fetchone()
-        return dict(row) if row else None
+    from packages.python.javdb_platform.db_reports import (
+        db_get_latest_session as _f,
+    )
+    return _f(report_type, db_path or REPORTS_DB_PATH)
 
 
 def db_get_sessions_by_date(report_date: str, report_type: Optional[str] = None,
                             db_path: Optional[str] = None) -> List[dict]:
     """Get all sessions for a given date."""
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        if report_type:
-            rows = conn.execute(
-                "SELECT * FROM ReportSessions WHERE ReportDate = ? AND ReportType = ? ORDER BY Id",
-                (report_date, report_type),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT * FROM ReportSessions WHERE ReportDate = ? ORDER BY Id",
-                (report_date,),
-            ).fetchall()
-        return [dict(r) for r in rows]
+    from packages.python.javdb_platform.db_reports import (
+        db_get_sessions_by_date as _f,
+    )
+    return _f(report_date, report_type=report_type, db_path=db_path)
 
 
 # ── Stats helpers ────────────────────────────────────────────────────────
 
 def db_save_spider_stats(session_id: str, stats: dict, db_path: Optional[str] = None) -> int:
-    """Save spider statistics for a session.
-
-    P1: idempotent via ``ON CONFLICT(SessionId) DO UPDATE`` so a re-run
-    (e.g. retry after timeout, manual operator re-execution) replaces
-    the row instead of duplicating it. The legacy plain INSERT path
-    silently created duplicate rows that then caused SQLite to diverge
-    from D1 by exactly the number of retries.
-    """
-    import json as _json
-    failed_movies_json = _json.dumps(stats.get('failed_movies', []), ensure_ascii=False) if stats.get('failed_movies') else ''
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        cur = conn.execute(
-            """INSERT INTO SpiderStats
-               (SessionId,
-                Phase1Discovered, Phase1Processed, Phase1Skipped,
-                Phase1NoNew, Phase1Failed,
-                Phase2Discovered, Phase2Processed, Phase2Skipped,
-                Phase2NoNew, Phase2Failed,
-                TotalDiscovered, TotalProcessed, TotalSkipped,
-                TotalNoNew, TotalFailed, FailedMovies)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(SessionId) DO UPDATE SET
-                   Phase1Discovered=excluded.Phase1Discovered,
-                   Phase1Processed=excluded.Phase1Processed,
-                   Phase1Skipped=excluded.Phase1Skipped,
-                   Phase1NoNew=excluded.Phase1NoNew,
-                   Phase1Failed=excluded.Phase1Failed,
-                   Phase2Discovered=excluded.Phase2Discovered,
-                   Phase2Processed=excluded.Phase2Processed,
-                   Phase2Skipped=excluded.Phase2Skipped,
-                   Phase2NoNew=excluded.Phase2NoNew,
-                   Phase2Failed=excluded.Phase2Failed,
-                   TotalDiscovered=excluded.TotalDiscovered,
-                   TotalProcessed=excluded.TotalProcessed,
-                   TotalSkipped=excluded.TotalSkipped,
-                   TotalNoNew=excluded.TotalNoNew,
-                   TotalFailed=excluded.TotalFailed,
-                   FailedMovies=excluded.FailedMovies""",
-            (session_id,
-             stats.get('phase1_discovered', 0), stats.get('phase1_processed', 0),
-             stats.get('phase1_skipped', 0), stats.get('phase1_no_new', 0),
-             stats.get('phase1_failed', 0),
-             stats.get('phase2_discovered', 0), stats.get('phase2_processed', 0),
-             stats.get('phase2_skipped', 0), stats.get('phase2_no_new', 0),
-             stats.get('phase2_failed', 0),
-             stats.get('total_discovered', 0), stats.get('total_processed', 0),
-             stats.get('total_skipped', 0), stats.get('total_no_new', 0),
-             stats.get('total_failed', 0), failed_movies_json),
-        )
-        return cur.lastrowid
+    """Save spider statistics for a session (idempotent via ON CONFLICT)."""
+    from packages.python.javdb_platform.db_stats import (
+        db_save_spider_stats as _f,
+    )
+    return _f(session_id, stats, db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_save_uploader_stats(session_id: str, stats: dict, db_path: Optional[str] = None) -> int:
     """Save uploader statistics for a session (idempotent via ON CONFLICT)."""
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        cur = conn.execute(
-            """INSERT INTO UploaderStats
-               (SessionId, TotalTorrents, DuplicateCount, Attempted,
-                SuccessfullyAdded, FailedCount, HackedSub, HackedNosub,
-                SubtitleCount, NoSubtitleCount, SuccessRate)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(SessionId) DO UPDATE SET
-                   TotalTorrents=excluded.TotalTorrents,
-                   DuplicateCount=excluded.DuplicateCount,
-                   Attempted=excluded.Attempted,
-                   SuccessfullyAdded=excluded.SuccessfullyAdded,
-                   FailedCount=excluded.FailedCount,
-                   HackedSub=excluded.HackedSub,
-                   HackedNosub=excluded.HackedNosub,
-                   SubtitleCount=excluded.SubtitleCount,
-                   NoSubtitleCount=excluded.NoSubtitleCount,
-                   SuccessRate=excluded.SuccessRate""",
-            (session_id,
-             stats.get('total_torrents', 0), stats.get('duplicate_count', 0),
-             stats.get('attempted', 0), stats.get('successfully_added', 0),
-             stats.get('failed_count', 0), stats.get('hacked_sub', 0),
-             stats.get('hacked_nosub', 0), stats.get('subtitle_count', 0),
-             stats.get('no_subtitle_count', 0), stats.get('success_rate', 0.0)),
-        )
-        return cur.lastrowid
+    from packages.python.javdb_platform.db_stats import (
+        db_save_uploader_stats as _f,
+    )
+    return _f(session_id, stats, db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_save_pikpak_stats(session_id: str, stats: dict, db_path: Optional[str] = None) -> int:
     """Save PikPak bridge statistics for a session (idempotent via ON CONFLICT)."""
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        cur = conn.execute(
-            """INSERT INTO PikpakStats
-               (SessionId, ThresholdDays, TotalTorrents,
-                FilteredOld, SuccessfulCount, FailedCount,
-                UploadedCount, DeleteFailedCount)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(SessionId) DO UPDATE SET
-                   ThresholdDays=excluded.ThresholdDays,
-                   TotalTorrents=excluded.TotalTorrents,
-                   FilteredOld=excluded.FilteredOld,
-                   SuccessfulCount=excluded.SuccessfulCount,
-                   FailedCount=excluded.FailedCount,
-                   UploadedCount=excluded.UploadedCount,
-                   DeleteFailedCount=excluded.DeleteFailedCount""",
-            (session_id,
-             stats.get('threshold_days', 3), stats.get('total_torrents', 0),
-             stats.get('filtered_old', 0), stats.get('successful_count', 0),
-             stats.get('failed_count', 0),
-             stats.get('uploaded_count', stats.get('successful_count', 0)),
-             stats.get('delete_failed_count', 0)),
-        )
-        return cur.lastrowid
+    from packages.python.javdb_platform.db_stats import (
+        db_save_pikpak_stats as _f,
+    )
+    return _f(session_id, stats, db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_get_spider_stats(session_id: str, db_path: Optional[str] = None) -> Optional[dict]:
     """Get spider stats for a session."""
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        row = conn.execute(
-            "SELECT * FROM SpiderStats WHERE SessionId = ?", (session_id,)
-        ).fetchone()
-        return dict(row) if row else None
+    from packages.python.javdb_platform.db_stats import (
+        db_get_spider_stats as _f,
+    )
+    return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_get_uploader_stats(session_id: str, db_path: Optional[str] = None) -> Optional[dict]:
     """Get uploader stats for a session."""
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        row = conn.execute(
-            "SELECT * FROM UploaderStats WHERE SessionId = ?", (session_id,)
-        ).fetchone()
-        return dict(row) if row else None
+    from packages.python.javdb_platform.db_stats import (
+        db_get_uploader_stats as _f,
+    )
+    return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_get_pikpak_stats(session_id: str, db_path: Optional[str] = None) -> Optional[dict]:
     """Get PikPak stats for a session."""
-    with get_db(db_path or REPORTS_DB_PATH) as conn:
-        row = conn.execute(
-            "SELECT * FROM PikpakStats WHERE SessionId = ?", (session_id,)
-        ).fetchone()
-        return dict(row) if row else None
+    from packages.python.javdb_platform.db_stats import (
+        db_get_pikpak_stats as _f,
+    )
+    return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
 
 
 # ── P0-6 SQLite-canonical readers for observability tooling ─────────────
@@ -6246,52 +5262,37 @@ def db_get_spider_stats_local(
     session_id: str, db_path: Optional[str] = None,
 ) -> Optional[dict]:
     """SQLite-only counterpart to :func:`db_get_spider_stats`."""
-    with get_local_sqlite_db(db_path or REPORTS_DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
-        row = conn.execute(
-            "SELECT * FROM SpiderStats WHERE SessionId = ?", (session_id,)
-        ).fetchone()
-        return dict(row) if row else None
+    from packages.python.javdb_platform.db_stats import (
+        db_get_spider_stats_local as _f,
+    )
+    return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_get_uploader_stats_local(
     session_id: str, db_path: Optional[str] = None,
 ) -> Optional[dict]:
     """SQLite-only counterpart to :func:`db_get_uploader_stats`."""
-    with get_local_sqlite_db(db_path or REPORTS_DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
-        row = conn.execute(
-            "SELECT * FROM UploaderStats WHERE SessionId = ?", (session_id,)
-        ).fetchone()
-        return dict(row) if row else None
+    from packages.python.javdb_platform.db_stats import (
+        db_get_uploader_stats_local as _f,
+    )
+    return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_get_pikpak_stats_local(
     session_id: str, db_path: Optional[str] = None,
 ) -> Optional[dict]:
     """SQLite-only counterpart to :func:`db_get_pikpak_stats`."""
-    with get_local_sqlite_db(db_path or REPORTS_DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
-        row = conn.execute(
-            "SELECT * FROM PikpakStats WHERE SessionId = ?", (session_id,)
-        ).fetchone()
-        return dict(row) if row else None
+    from packages.python.javdb_platform.db_stats import (
+        db_get_pikpak_stats_local as _f,
+    )
+    return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_get_latest_session_local(
     report_type: Optional[str] = None, db_path: Optional[str] = None,
 ) -> Optional[dict]:
     """SQLite-only counterpart to :func:`db_get_latest_session`."""
-    with get_local_sqlite_db(db_path or REPORTS_DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
-        if report_type is not None:
-            row = conn.execute(
-                "SELECT * FROM ReportSessions WHERE ReportType = ? "
-                "ORDER BY Id DESC LIMIT 1",
-                (report_type,),
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT * FROM ReportSessions ORDER BY Id DESC LIMIT 1"
-            ).fetchone()
-        return dict(row) if row else None
+    from packages.python.javdb_platform.db_reports import (
+        db_get_latest_session_local as _f,
+    )
+    return _f(report_type, db_path=db_path or REPORTS_DB_PATH)
