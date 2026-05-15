@@ -32,6 +32,10 @@ from typing import Optional
 
 import requests
 
+from packages.python.javdb_platform.do_client_base import (
+    BaseDOClient,
+    DOClientUnavailable,
+)
 from packages.python.javdb_platform.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -77,7 +81,7 @@ LEASE_TTL_MIN_MS = 5_000
 LEASE_TTL_MAX_MS = 300_000
 
 
-class LoginStateUnavailable(Exception):
+class LoginStateUnavailable(DOClientUnavailable):
     """Raised when the login-state Worker cannot be reached or returns an error.
 
     This is a *signal*, not a panic.  Every callsite in the spider treats
@@ -210,18 +214,14 @@ class ReleaseLeaseResult:
 def _extract_server_time_ms(data: dict) -> int:
     """Read the server-side timestamp from a coordinator response.
 
-    Prefers ``server_time_ms`` (matches the Python dataclass field name)
-    and falls back to ``server_time`` for parity with the Worker, which
-    currently emits the latter from ``Date.now()`` already in ms.  The
-    fallback lets the Worker migrate to the explicit key without
-    coordinated client deploys.
+    Module-level alias of :meth:`BaseDOClient._extract_server_time_ms`
+    so existing tests / call-sites can keep importing it from this
+    module unchanged.
     """
-    if "server_time_ms" in data:
-        return int(data["server_time_ms"])
-    return int(data["server_time"])
+    return BaseDOClient._extract_server_time_ms(data)
 
 
-class LoginStateClient:
+class LoginStateClient(BaseDOClient):
     """HTTP client for the GlobalLoginState DO.
 
     Construct once per process and pass into the runtime's
@@ -238,31 +238,7 @@ class LoginStateClient:
         user_agent: Optional override for the ``User-Agent`` header.
     """
 
-    def __init__(
-        self,
-        base_url: str,
-        token: str,
-        *,
-        timeout: float = _DEFAULT_TIMEOUT_SEC,
-        user_agent: str = _DEFAULT_USER_AGENT,
-    ):
-        if not base_url or not isinstance(base_url, str):
-            raise ValueError("base_url must be a non-empty string")
-        if not token or not isinstance(token, str):
-            raise ValueError("token must be a non-empty string")
-        self._base_url = base_url.rstrip("/")
-        self._token = token
-        self._timeout = float(timeout)
-        self._session = requests.Session()
-        self._session.headers.update({
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "User-Agent": user_agent,
-        })
-
-    @property
-    def base_url(self) -> str:
-        return self._base_url
+    _unavailable_exc = LoginStateUnavailable
 
     # -- public API ---------------------------------------------------------
 
@@ -455,61 +431,9 @@ class LoginStateClient:
                 f"malformed release_lease response: {_redact_resp(resp)!r} ({e})"
             ) from e
 
-    def health_check(self) -> bool:
-        """Return ``True`` if ``GET /health`` returns 200.
-
-        Reuses the ProxyCoordinator's unauthenticated liveness probe — the
-        login-state endpoints share the same Worker, so a single ``/health``
-        call validates that the new routes are reachable as well.  Never
-        raises.
-        """
-        try:
-            resp = self._session.get(f"{self._base_url}/health", timeout=self._timeout)
-            return resp.status_code == 200
-        except Exception:  # noqa: BLE001
-            return False
-
-    def close(self) -> None:
-        """Release the underlying ``requests.Session``.  Idempotent.
-
-        Symmetric with :meth:`ProxyCoordinatorClient.close` for tidy
-        shutdown in tests / long-lived hosts.
-        """
-        try:
-            self._session.close()
-        except Exception as exc:  # noqa: BLE001 - cleanup is best-effort
-            logger.warning("Failed to close login-state HTTP session: %s", exc)
-
-    # -- internals ---------------------------------------------------------
-
-    def _do_request(self, method: str, path: str, body: Optional[dict] = None) -> dict:
-        """Issue a single HTTP call and decode its JSON body.
-
-        All four exception paths (timeout, connection error, non-2xx,
-        malformed JSON) collapse into :class:`LoginStateUnavailable` so
-        callers only have to handle one type.  Never retries.
-        """
-        url = f"{self._base_url}{path}"
-        try:
-            if method == "GET":
-                resp = self._session.get(url, timeout=self._timeout)
-            else:
-                resp = self._session.post(url, json=body or {}, timeout=self._timeout)
-        except (requests.Timeout, requests.ConnectionError) as e:
-            raise LoginStateUnavailable(f"network error: {e}") from e
-        except requests.RequestException as e:
-            raise LoginStateUnavailable(f"request failed: {e}") from e
-
-        if resp.status_code >= 300:
-            # Surface the Worker's error message verbatim (truncated) so the
-            # operator can see e.g. ``409 lease_required`` directly in logs.
-            raise LoginStateUnavailable(
-                f"HTTP {resp.status_code}: {resp.text[:200]}"
-            )
-        try:
-            return resp.json()
-        except ValueError as e:
-            raise LoginStateUnavailable(f"invalid JSON: {e}") from e
+    # ``health_check``, ``close``, and ``_do_request`` are inherited
+    # from :class:`BaseDOClient` and behave identically to the
+    # previously-inlined versions.
 
 
 def create_login_state_client_from_env(

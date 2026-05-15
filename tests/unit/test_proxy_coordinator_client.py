@@ -343,9 +343,15 @@ def test_extract_server_time_ms_falls_back_to_server_time():
     assert _extract_server_time_ms({"server_time": 789}) == 789
 
 
-def test_extract_server_time_ms_raises_on_missing_keys():
-    with pytest.raises(KeyError):
-        _extract_server_time_ms({"wait_ms": 100})
+def test_extract_server_time_ms_defaults_to_zero_when_missing():
+    """Missing both keys → returns 0 (forward-compat with older Workers).
+
+    Aligned with the shared :class:`BaseDOClient._extract_server_time_ms`
+    contract: a Worker that omits the timestamp shouldn't crash the
+    response parser. Was previously strict (raised KeyError); unified
+    with the more tolerant runner_registry variant in W3.2.
+    """
+    assert _extract_server_time_ms({"wait_ms": 100}) == 0
 
 
 def _fake_response(payload: dict, status_code: int = 200):
