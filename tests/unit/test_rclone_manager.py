@@ -248,6 +248,47 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
     assert [row["Status"] for row in sessions] == ["failed"]
 
 
+def _patch_rclone_db_mocks(monkeypatch, db_mod, order, overrides=None):
+    """Patch both db_mod and the split modules the rclone manager imports from."""
+    import packages.python.javdb_platform.db_migrations as _mig
+    import packages.python.javdb_platform.db_reports as _rep
+    import packages.python.javdb_platform.db_operations as _ops
+    import packages.python.javdb_platform.db_session as _sess
+
+    defaults = {
+        "init_db": lambda *_a, **_kw: order.append("init_db"),
+        "get_active_session_id": lambda: None,
+        "db_create_report_session": lambda **_kw: order.append("create_session") or 123,
+        "db_open_rclone_staging": lambda sid: order.append(("open_staging", sid)),
+        "db_append_rclone_staging": lambda rows, session_id: order.append(("append_staging", session_id)),
+        "db_mark_session_committed": lambda sid: order.append(("mark_committed", sid)) or 1,
+        "db_mark_session_failed": lambda sid: order.append(("mark_failed", sid)) or 1,
+        "db_swap_rclone_inventory": lambda *_a, **_kw: order.append(("swap_inventory", _kw.get("session_id", _a[0] if _a else None))) or 1,
+        "db_merge_rclone_inventory_from_stage": lambda *_a, **_kw: order.append(("merge_inventory", _kw.get("session_id", _a[0] if _a else None), _kw.get("years", _a[1] if len(_a) > 1 else None))) or 1,
+        "db_drop_rclone_staging": lambda sid: order.append(("drop_staging", sid)),
+    }
+    if overrides:
+        defaults.update(overrides)
+
+    module_map = {
+        "init_db": [(_mig, "init_db")],
+        "get_active_session_id": [(_sess, "get_active_session_id")],
+        "db_create_report_session": [(_rep, "db_create_report_session")],
+        "db_mark_session_committed": [(_rep, "db_mark_session_committed")],
+        "db_mark_session_failed": [(_rep, "db_mark_session_failed")],
+        "db_open_rclone_staging": [(_ops, "db_open_rclone_staging")],
+        "db_append_rclone_staging": [(_ops, "db_append_rclone_staging")],
+        "db_swap_rclone_inventory": [(_ops, "db_swap_rclone_inventory")],
+        "db_merge_rclone_inventory_from_stage": [(_ops, "db_merge_rclone_inventory_from_stage")],
+        "db_drop_rclone_staging": [(_ops, "db_drop_rclone_staging")],
+    }
+
+    for name, mock_fn in defaults.items():
+        monkeypatch.setattr(db_mod, name, mock_fn)
+        for mod, attr in module_map.get(name, []):
+            monkeypatch.setattr(mod, attr, mock_fn)
+
+
 def test_scan_marks_local_session_committed_after_inventory_swap(
     monkeypatch, tmp_path, storage_mode_db
 ):
@@ -274,38 +315,7 @@ def test_scan_marks_local_session_committed_after_inventory_swap(
     monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
     monkeypatch.setattr(rm, "scan_inventory", fake_scan)
     monkeypatch.setattr(rm, "export_db_to_csv", lambda _path: order.append("export"))
-    monkeypatch.setattr(db_mod, "init_db", lambda: order.append("init_db"))
-    monkeypatch.setattr(db_mod, "get_active_session_id", lambda: None)
-    monkeypatch.setattr(
-        db_mod,
-        "db_create_report_session",
-        lambda **_kwargs: order.append("create_session") or 123,
-    )
-    monkeypatch.setattr(
-        db_mod,
-        "db_open_rclone_staging",
-        lambda sid: order.append(("open_staging", sid)),
-    )
-    monkeypatch.setattr(
-        db_mod,
-        "db_append_rclone_staging",
-        lambda rows, session_id: order.append(("append_staging", session_id)),
-    )
-    monkeypatch.setattr(
-        db_mod,
-        "db_mark_session_committed",
-        lambda sid: order.append(("mark_committed", sid)) or 1,
-    )
-    monkeypatch.setattr(
-        db_mod,
-        "db_swap_rclone_inventory",
-        lambda session_id: order.append(("swap_inventory", session_id)) or 1,
-    )
-    monkeypatch.setattr(
-        db_mod,
-        "db_merge_rclone_inventory_from_stage",
-        lambda session_id, years: order.append(("merge_inventory", session_id, years)) or 1,
-    )
+    _patch_rclone_db_mocks(monkeypatch, db_mod, order)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -345,8 +355,8 @@ def test_scan_year_filter_merges_staging_instead_of_full_swap(
         row_callback([incoming])
         return 1, 0
 
-    def fail_swap(session_id):
-        order.append(("swap_inventory", session_id))
+    def fail_swap(*_a, **_kw):
+        order.append(("swap_inventory", _kw.get("session_id", _a[0] if _a else None)))
         raise AssertionError("year-filtered scans must not full-swap inventory")
 
     monkeypatch.setattr(rm, "RCLONE_CONFIG_BASE64", "")
@@ -354,34 +364,9 @@ def test_scan_year_filter_merges_staging_instead_of_full_swap(
     monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
     monkeypatch.setattr(rm, "scan_inventory", fake_scan)
     monkeypatch.setattr(rm, "export_db_to_csv", lambda _path: order.append("export"))
-    monkeypatch.setattr(db_mod, "init_db", lambda: order.append("init_db"))
-    monkeypatch.setattr(db_mod, "get_active_session_id", lambda: None)
-    monkeypatch.setattr(
-        db_mod,
-        "db_create_report_session",
-        lambda **_kwargs: order.append("create_session") or 123,
-    )
-    monkeypatch.setattr(
-        db_mod,
-        "db_open_rclone_staging",
-        lambda sid: order.append(("open_staging", sid)),
-    )
-    monkeypatch.setattr(
-        db_mod,
-        "db_append_rclone_staging",
-        lambda rows, session_id: order.append(("append_staging", session_id)),
-    )
-    monkeypatch.setattr(
-        db_mod,
-        "db_mark_session_committed",
-        lambda sid: order.append(("mark_committed", sid)) or 1,
-    )
-    monkeypatch.setattr(db_mod, "db_swap_rclone_inventory", fail_swap)
-    monkeypatch.setattr(
-        db_mod,
-        "db_merge_rclone_inventory_from_stage",
-        lambda session_id, years: order.append(("merge_inventory", session_id, years)) or 1,
-    )
+    _patch_rclone_db_mocks(monkeypatch, db_mod, order, overrides={
+        "db_swap_rclone_inventory": fail_swap,
+    })
     monkeypatch.setattr(
         sys,
         "argv",
@@ -425,8 +410,8 @@ def test_scan_does_not_mark_local_session_committed_when_swap_fails(
         row_callback([incoming])
         return 1, 0
 
-    def fail_swap(session_id):
-        order.append(("swap_inventory", session_id))
+    def fail_swap(*_a, **_kw):
+        order.append(("swap_inventory", _kw.get("session_id", _a[0] if _a else None)))
         raise RuntimeError("swap failed")
 
     def fail_drop(session_id):
@@ -437,39 +422,10 @@ def test_scan_does_not_mark_local_session_committed_when_swap_fails(
     monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
     monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
     monkeypatch.setattr(rm, "scan_inventory", fake_scan)
-    monkeypatch.setattr(db_mod, "init_db", lambda: order.append("init_db"))
-    monkeypatch.setattr(db_mod, "get_active_session_id", lambda: None)
-    monkeypatch.setattr(
-        db_mod,
-        "db_create_report_session",
-        lambda **_kwargs: order.append("create_session") or 123,
-    )
-    monkeypatch.setattr(
-        db_mod,
-        "db_open_rclone_staging",
-        lambda sid: order.append(("open_staging", sid)),
-    )
-    monkeypatch.setattr(
-        db_mod,
-        "db_append_rclone_staging",
-        lambda rows, session_id: order.append(("append_staging", session_id)),
-    )
-    monkeypatch.setattr(
-        db_mod,
-        "db_mark_session_committed",
-        lambda sid: order.append(("mark_committed", sid)) or 1,
-    )
-    monkeypatch.setattr(
-        db_mod,
-        "db_mark_session_failed",
-        lambda sid: order.append(("mark_failed", sid)) or 1,
-    )
-    monkeypatch.setattr(db_mod, "db_swap_rclone_inventory", fail_swap)
-    monkeypatch.setattr(
-        db_mod,
-        "db_drop_rclone_staging",
-        fail_drop,
-    )
+    _patch_rclone_db_mocks(monkeypatch, db_mod, order, overrides={
+        "db_swap_rclone_inventory": fail_swap,
+        "db_drop_rclone_staging": fail_drop,
+    })
     monkeypatch.setattr(
         sys,
         "argv",
@@ -526,34 +482,16 @@ def test_scan_succeeds_when_post_swap_commit_marking_fails(
     monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
     monkeypatch.setattr(rm, "scan_inventory", fake_scan)
     monkeypatch.setattr(rm, "export_db_to_csv", lambda _path: order.append("export"))
-    monkeypatch.setattr(db_mod, "init_db", lambda: order.append("init_db"))
-    monkeypatch.setattr(db_mod, "get_active_session_id", lambda: None)
-    monkeypatch.setattr(
-        db_mod,
-        "db_create_report_session",
-        lambda **_kwargs: order.append("create_session") or 123,
-    )
-    monkeypatch.setattr(
-        db_mod,
-        "db_open_rclone_staging",
-        lambda sid: order.append(("open_staging", sid)),
-    )
-    monkeypatch.setattr(
-        db_mod,
-        "db_append_rclone_staging",
-        lambda rows, session_id: order.append(("append_staging", session_id)),
-    )
-    monkeypatch.setattr(db_mod, "db_mark_session_committed", fail_mark)
-    monkeypatch.setattr(
-        db_mod,
-        "db_swap_rclone_inventory",
-        lambda session_id: order.append(("swap_inventory", session_id)) or 1,
-    )
+    _patch_rclone_db_mocks(monkeypatch, db_mod, order, overrides={
+        "db_mark_session_committed": fail_mark,
+    })
     monkeypatch.setattr(
         db_mod,
         "db_drop_rclone_staging",
         lambda sid: order.append(("drop_staging", sid)),
     )
+    import packages.python.javdb_platform.db_operations as _ops
+    monkeypatch.setattr(_ops, "db_drop_rclone_staging", lambda sid: order.append(("drop_staging", sid)))
     monkeypatch.setattr(
         sys,
         "argv",
@@ -590,32 +528,17 @@ def test_scan_aborts_when_sqlite_staging_init_fails(
         order.append(("drop_staging", session_id))
         raise RuntimeError("drop failed")
 
+    def fail_open(sid):
+        raise RuntimeError("staging failed")
+
     monkeypatch.setattr(rm, "RCLONE_CONFIG_BASE64", "")
     monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
     monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
     monkeypatch.setattr(rm, "scan_inventory", fake_scan)
-    monkeypatch.setattr(db_mod, "init_db", lambda: order.append("init_db"))
-    monkeypatch.setattr(db_mod, "get_active_session_id", lambda: None)
-    monkeypatch.setattr(
-        db_mod,
-        "db_create_report_session",
-        lambda **_kwargs: order.append("create_session") or 123,
-    )
-    monkeypatch.setattr(
-        db_mod,
-        "db_open_rclone_staging",
-        lambda sid: (_ for _ in ()).throw(RuntimeError("staging failed")),
-    )
-    monkeypatch.setattr(
-        db_mod,
-        "db_drop_rclone_staging",
-        fail_drop,
-    )
-    monkeypatch.setattr(
-        db_mod,
-        "db_mark_session_failed",
-        lambda sid: order.append(("mark_failed", sid)) or 1,
-    )
+    _patch_rclone_db_mocks(monkeypatch, db_mod, order, overrides={
+        "db_open_rclone_staging": fail_open,
+        "db_drop_rclone_staging": fail_drop,
+    })
     monkeypatch.setattr(
         sys,
         "argv",
