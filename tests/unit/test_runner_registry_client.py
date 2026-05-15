@@ -745,6 +745,110 @@ def test_heartbeat_defaults_active_runners_count_when_missing():
         c.close()
 
 
+# ── W5.3 — config snapshot parsing ─────────────────────────────────────────
+
+
+def test_heartbeat_parses_embedded_config_snapshot():
+    """The W5.3 config block in a heartbeat is exposed as HeartbeatResult.config."""
+    from packages.python.javdb_platform.runner_registry_client import (
+        ConfigSnapshot,
+    )
+    c = _make_client()
+    body = {
+        "alive": True,
+        "server_time_ms": 1,
+        "config": {
+            "version": 7,
+            "updated_at": 123_456_789,
+            "values": {"short_max": "5", "extra_max": "150"},
+        },
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+            r = c.heartbeat("x")
+        assert isinstance(r.config, ConfigSnapshot)
+        assert r.config.version == 7
+        assert r.config.updated_at_ms == 123_456_789
+        assert r.config.values == {"short_max": "5", "extra_max": "150"}
+    finally:
+        c.close()
+
+
+def test_heartbeat_config_defaults_to_none_on_pre_w53_worker():
+    """Pre-W5.3 Workers omit the config field; client must keep working."""
+    c = _make_client()
+    body = {"alive": True, "server_time_ms": 1}
+    try:
+        with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+            r = c.heartbeat("x")
+        assert r.config is None
+    finally:
+        c.close()
+
+
+def test_heartbeat_config_swallows_malformed_payload():
+    """A garbage `config` block falls back to None (fail-open contract)."""
+    c = _make_client()
+    body = {
+        "alive": True,
+        "server_time_ms": 1,
+        "config": "not-a-dict",
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+            r = c.heartbeat("x")
+        assert r.config is None
+    finally:
+        c.close()
+
+
+def test_heartbeat_config_coerces_non_string_values_to_strings():
+    """A numeric value in the wire payload is coerced (defence-in-depth)."""
+    c = _make_client()
+    body = {
+        "alive": True,
+        "server_time_ms": 1,
+        "config": {
+            "version": 1,
+            "updated_at": 0,
+            "values": {"short_max": 5},  # number, not string
+        },
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+            r = c.heartbeat("x")
+        assert r.config is not None
+        assert r.config.values == {"short_max": "5"}
+    finally:
+        c.close()
+
+
+def test_register_parses_embedded_config_snapshot():
+    """Same parsing on RegisterResult for completeness."""
+    from packages.python.javdb_platform.runner_registry_client import (
+        ConfigSnapshot,
+    )
+    c = _make_client()
+    body = {
+        "registered": True,
+        "active_runners": [],
+        "pool_hash_summary": [],
+        "server_time_ms": 1,
+        "config": {
+            "version": 3,
+            "updated_at": 1,
+            "values": {"long_max": "30"},
+        },
+    }
+    try:
+        with patch.object(c._session, "post", return_value=_mock_response(200, body)):
+            r = c.register(holder_id="rid")
+        assert isinstance(r.config, ConfigSnapshot)
+        assert r.config.values == {"long_max": "30"}
+    finally:
+        c.close()
+
+
 def test_parse_hash_summary_rejects_malformed_buckets():
     with pytest.raises(ValueError, match="entries"):
         _parse_hash_summary([
