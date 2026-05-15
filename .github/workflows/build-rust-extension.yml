@@ -37,10 +37,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: '3.11'
 
@@ -52,14 +52,14 @@ jobs:
         run: echo "name=$(echo '${{ github.ref_name }}' | sed 's/[^a-zA-Z0-9._-]/-/g')" >> $GITHUB_OUTPUT
 
       - name: Upload Rust extension wheel artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: rust-extension-wheel-x64-${{ github.sha }}
           path: /tmp/rust-wheel/*.whl
           retention-days: 30
 
       - name: Upload Rust extension wheel artifact (branch latest)
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: rust-extension-wheel-x64-latest-${{ steps.branch.outputs.name }}
           path: /tmp/rust-wheel/*.whl
@@ -91,7 +91,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Ensure Python 3 is available
         shell: bash
@@ -110,14 +110,14 @@ jobs:
         run: echo "name=$(echo '${{ github.ref_name }}' | sed 's/[^a-zA-Z0-9._-]/-/g')" >> $GITHUB_OUTPUT
 
       - name: Upload Rust extension wheel artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: rust-extension-wheel-arm-${{ github.sha }}
           path: /tmp/rust-wheel/*.whl
           retention-days: 30
 
       - name: Upload Rust extension wheel artifact (branch latest)
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: rust-extension-wheel-arm-latest-${{ steps.branch.outputs.name }}
           path: /tmp/rust-wheel/*.whl
