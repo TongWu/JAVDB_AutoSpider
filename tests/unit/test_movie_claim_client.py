@@ -607,6 +607,16 @@ def test_extract_server_time_ms_falls_back_to_server_time():
     assert _extract_server_time_ms({"server_time": 9}) == 9
 
 
+def test_extract_server_time_ms_defaults_to_zero_when_missing():
+    """W3.2 contract: missing both keys → 0, not KeyError.
+
+    Aligned with BaseDOClient._extract_server_time_ms so an older Worker
+    that omits the timestamp can coexist with newer clients without
+    crashing the response parser.
+    """
+    assert _extract_server_time_ms({"acquired": True}) == 0
+
+
 def test_claim_parses_server_time_ms_wire_key():
     c = _make_client()
     body = {
