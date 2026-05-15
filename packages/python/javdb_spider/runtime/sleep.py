@@ -348,6 +348,12 @@ class MovieSleepManager:
         self._parsed_since_micro_break = 0
         self._micro_break_gate = random.randint(MICRO_BREAK_MIN_MOVIES, MICRO_BREAK_MAX_MOVIES)
 
+    def set_coordinator(self, coordinator: "ProxyCoordinatorClient", proxy_id: Optional[str] = None) -> None:
+        """Inject a coordinator after construction (for module-level singletons)."""
+        self._coordinator = coordinator
+        if proxy_id is not None:
+            self._proxy_id = proxy_id
+
     # -- factor setters ----------------------------------------------------
 
     def record_parsed_movie(self) -> None:
@@ -548,7 +554,8 @@ class MovieSleepManager:
             # ``always_bypass_time is None``.
             if _state.always_bypass_time is None:
                 return
-            _state.proxies_requiring_cf_bypass[proxy_id] = time.time()
+            with _state._cf_bypass_lock:
+                _state.proxies_requiring_cf_bypass[proxy_id] = time.time()
         except Exception:  # noqa: BLE001
             logger.warning(
                 "Failed to mirror remote CF bypass marker for '%s' locally",
