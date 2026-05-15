@@ -28,49 +28,20 @@ def _ensure_imports():
     global _rollback_history_for_session, _rollback_reports_for_session
     global _rollback_operations_for_session, _get_session_status
     if _rollback_history_for_session is None:
-        try:
-            from packages.python.javdb_platform.db_history_write import (
-                rollback_history_for_session,
-            )
-            from packages.python.javdb_platform.db_reports import (
-                rollback_reports_for_session,
-                db_get_session_status,
-            )
-            from packages.python.javdb_platform.db_operations import (
-                rollback_operations_for_session,
-            )
-            _rollback_history_for_session = rollback_history_for_session
-            _rollback_reports_for_session = rollback_reports_for_session
-            _rollback_operations_for_session = rollback_operations_for_session
-            _get_session_status = db_get_session_status
-        except ImportError:
-            # Fallback to db.py during Phase 1
-            from packages.python.javdb_platform.db import (
-                _rollback_history,
-                _rollback_reports,
-                _rollback_operations,
-                db_get_session_status,
-            )
-            # Wrap the internal functions to match the new interface
-            def rollback_history_wrapper(session_id, db_path=None):
-                from packages.python.javdb_platform.db import get_db, HISTORY_DB_PATH
-                with get_db(db_path or HISTORY_DB_PATH) as conn:
-                    return _rollback_history(conn, session_id)
-
-            def rollback_reports_wrapper(session_id, db_path=None):
-                from packages.python.javdb_platform.db import get_db, REPORTS_DB_PATH
-                with get_db(db_path or REPORTS_DB_PATH) as conn:
-                    return _rollback_reports(conn, session_id)
-
-            def rollback_operations_wrapper(session_id, db_path=None):
-                from packages.python.javdb_platform.db import get_db, OPERATIONS_DB_PATH
-                with get_db(db_path or OPERATIONS_DB_PATH) as conn:
-                    return _rollback_operations(conn, session_id)
-
-            _rollback_history_for_session = rollback_history_wrapper
-            _rollback_reports_for_session = rollback_reports_wrapper
-            _rollback_operations_for_session = rollback_operations_wrapper
-            _get_session_status = db_get_session_status
+        from packages.python.javdb_platform.db_history_write import (
+            rollback_history_for_session,
+        )
+        from packages.python.javdb_platform.db_reports import (
+            rollback_reports_for_session,
+            db_get_session_status,
+        )
+        from packages.python.javdb_platform.db_operations import (
+            rollback_operations_for_session,
+        )
+        _rollback_history_for_session = rollback_history_for_session
+        _rollback_reports_for_session = rollback_reports_for_session
+        _rollback_operations_for_session = rollback_operations_for_session
+        _get_session_status = db_get_session_status
 
 
 # ── Rollback coordinator ─────────────────────────────────────────────────

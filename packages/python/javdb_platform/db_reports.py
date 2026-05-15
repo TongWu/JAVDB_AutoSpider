@@ -37,52 +37,28 @@ def _ensure_imports():
     global _get_db, _REPORTS_DB_PATH, _HISTORY_DB_PATH
     global _generate_session_id, _resolve_write_mode, _DB_OPERATIONAL_ERRORS
     if _get_db is None:
+        from packages.python.javdb_platform.db_connection import (
+            get_db,
+            REPORTS_DB_PATH,
+            HISTORY_DB_PATH,
+        )
+        from packages.python.javdb_platform.db_session import (
+            generate_session_id,
+            _resolve_write_mode as resolve_wm,
+        )
+        _get_db = get_db
+        _REPORTS_DB_PATH = REPORTS_DB_PATH
+        _HISTORY_DB_PATH = HISTORY_DB_PATH
+        _generate_session_id = generate_session_id
+        _resolve_write_mode = resolve_wm
+
         try:
-            from packages.python.javdb_platform.db_connection import (
-                get_db,
-                REPORTS_DB_PATH,
-                HISTORY_DB_PATH,
-            )
-            from packages.python.javdb_platform.db_session import (
-                generate_session_id,
-                _resolve_write_mode as resolve_wm,
-            )
-            _get_db = get_db
-            _REPORTS_DB_PATH = REPORTS_DB_PATH
-            _HISTORY_DB_PATH = HISTORY_DB_PATH
-            _generate_session_id = generate_session_id
-            _resolve_write_mode = resolve_wm
-
-            # Import DB exception types
-            try:
-                from packages.python.javdb_platform.d1_client import D1PermanentError
-                import sqlite3
-                _DB_OPERATIONAL_ERRORS = (sqlite3.OperationalError, D1PermanentError)
-            except ImportError:
-                import sqlite3
-                _DB_OPERATIONAL_ERRORS = (sqlite3.OperationalError,)
+            from packages.python.javdb_platform.d1_client import D1PermanentError
+            import sqlite3
+            _DB_OPERATIONAL_ERRORS = (sqlite3.OperationalError, D1PermanentError)
         except ImportError:
-            # Fallback to db.py during Phase 1
-            from packages.python.javdb_platform.db import (
-                get_db,
-                REPORTS_DB_PATH,
-                HISTORY_DB_PATH,
-                _generate_session_id as gen_sid,
-                _resolve_write_mode as resolve_wm,
-            )
-            _get_db = get_db
-            _REPORTS_DB_PATH = REPORTS_DB_PATH
-            _HISTORY_DB_PATH = HISTORY_DB_PATH
-            _generate_session_id = gen_sid
-            _resolve_write_mode = resolve_wm
-
-            try:
-                from packages.python.javdb_platform.d1_client import D1PermanentError
-                import sqlite3
-                _DB_OPERATIONAL_ERRORS = (sqlite3.OperationalError, D1PermanentError)
-            except ImportError:
-                import sqlite3
-                _DB_OPERATIONAL_ERRORS = (sqlite3.OperationalError,)
+            import sqlite3
+            _DB_OPERATIONAL_ERRORS = (sqlite3.OperationalError,)
 
 
 # ── Session creation ─────────────────────────────────────────────────────

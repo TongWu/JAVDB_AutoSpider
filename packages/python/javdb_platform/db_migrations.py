@@ -36,41 +36,22 @@ def _ensure_imports():
     global _HISTORY_DB_PATH, _REPORTS_DB_PATH, _OPERATIONS_DB_PATH
     global _DB_PATH, _SCHEMA_VERSION
     if _get_db is None:
-        try:
-            from packages.python.javdb_platform.db_connection import (
-                get_db,
-                get_local_sqlite_db,
-                HISTORY_DB_PATH,
-                REPORTS_DB_PATH,
-                OPERATIONS_DB_PATH,
-                DB_PATH,
-                SCHEMA_VERSION,
-            )
-            _get_db = get_db
-            _get_local_sqlite_db = get_local_sqlite_db
-            _HISTORY_DB_PATH = HISTORY_DB_PATH
-            _REPORTS_DB_PATH = REPORTS_DB_PATH
-            _OPERATIONS_DB_PATH = OPERATIONS_DB_PATH
-            _DB_PATH = DB_PATH
-            _SCHEMA_VERSION = SCHEMA_VERSION
-        except ImportError:
-            # Fallback to db.py during Phase 1
-            from packages.python.javdb_platform.db import (
-                get_db,
-                get_local_sqlite_db,
-                HISTORY_DB_PATH,
-                REPORTS_DB_PATH,
-                OPERATIONS_DB_PATH,
-                DB_PATH,
-                SCHEMA_VERSION,
-            )
-            _get_db = get_db
-            _get_local_sqlite_db = get_local_sqlite_db
-            _HISTORY_DB_PATH = HISTORY_DB_PATH
-            _REPORTS_DB_PATH = REPORTS_DB_PATH
-            _OPERATIONS_DB_PATH = OPERATIONS_DB_PATH
-            _DB_PATH = DB_PATH
-            _SCHEMA_VERSION = SCHEMA_VERSION
+        from packages.python.javdb_platform.db_connection import (
+            get_db,
+            get_local_sqlite_db,
+            HISTORY_DB_PATH,
+            REPORTS_DB_PATH,
+            OPERATIONS_DB_PATH,
+            DB_PATH,
+            SCHEMA_VERSION,
+        )
+        _get_db = get_db
+        _get_local_sqlite_db = get_local_sqlite_db
+        _HISTORY_DB_PATH = HISTORY_DB_PATH
+        _REPORTS_DB_PATH = REPORTS_DB_PATH
+        _OPERATIONS_DB_PATH = OPERATIONS_DB_PATH
+        _DB_PATH = DB_PATH
+        _SCHEMA_VERSION = SCHEMA_VERSION
 
 
 # Serializes the dual-backend init window
