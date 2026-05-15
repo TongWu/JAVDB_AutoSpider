@@ -253,9 +253,9 @@ _TaskQueue = Union[queue_module.Queue, _PriorityTaskQueue]
 ProcessFn = Callable[['WorkerContext', EngineTask], Any]
 
 
-def _task_worker_ctx(entry_index: str, worker_name: str) -> str:
-    """Unified task log prefix: entry first, then worker."""
-    return f"[{entry_index}][worker={worker_name}]"
+from packages.python.javdb_spider.fetch.utils import (  # noqa: E402
+    task_worker_ctx as _task_worker_ctx,
+)
 
 
 # ---------------------------------------------------------------------------

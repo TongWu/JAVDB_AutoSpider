@@ -11,17 +11,21 @@ sys.path.insert(0, project_root)
 
 def test_create_detail_backend_selects_parallel(monkeypatch):
     import scripts.spider.app.main as spider_main
+    import packages.python.javdb_spider.app.run_service as run_service
 
     sentinel = object()
     calls = []
 
+    # ``create_detail_backend`` lives in run_service (main.py re-exports it
+    # after W3.5), so the builders it calls must be patched on the
+    # canonical module — patching spider_main would have no effect.
     monkeypatch.setattr(
-        spider_main,
+        run_service,
         'build_parallel_detail_backend',
         lambda **kwargs: calls.append(kwargs) or sentinel,
     )
     monkeypatch.setattr(
-        spider_main,
+        run_service,
         'build_sequential_detail_backend',
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssertionError('sequential builder should not be called')
@@ -49,20 +53,23 @@ def test_create_detail_backend_selects_parallel(monkeypatch):
 
 def test_create_detail_backend_selects_sequential(monkeypatch):
     import scripts.spider.app.main as spider_main
+    import packages.python.javdb_spider.app.run_service as run_service
 
     sentinel = object()
     session = object()
     calls = []
 
+    # See parallel-case test above for why builders are patched on
+    # run_service rather than spider_main (W3.5 re-export).
     monkeypatch.setattr(
-        spider_main,
+        run_service,
         'build_parallel_detail_backend',
         lambda **_kwargs: (_ for _ in ()).throw(
             AssertionError('parallel builder should not be called')
         ),
     )
     monkeypatch.setattr(
-        spider_main,
+        run_service,
         'build_sequential_detail_backend',
         lambda *args, **kwargs: calls.append((args, kwargs)) or sentinel,
     )

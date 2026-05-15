@@ -65,9 +65,9 @@ _POLL_IDLE_ITERATIONS_BEFORE_EXIT = 5
 _POLL_MAX_CONSECUTIVE_GET_STATE_FAILURES = 3
 
 
-def _task_worker_ctx(entry_index: str, worker_name: str) -> str:
-    """Unified task log prefix: entry first, then worker."""
-    return f"[{entry_index}][worker={worker_name}]"
+from packages.python.javdb_spider.fetch.utils import (  # noqa: E402
+    task_worker_ctx as _task_worker_ctx,
+)
 
 
 def _get_login_verified(task) -> bool:
