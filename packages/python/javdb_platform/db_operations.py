@@ -90,28 +90,71 @@ def db_load_rclone_inventory(
 
 
 def db_replace_rclone_inventory(
-    rows: List[dict],
+    entries: List[dict],
+    db_path: Optional[str] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
+) -> int:
+    """Replace the entire RcloneInventory table (full scan refresh).
+
+    When *session_id* is provided the staging-then-swap pattern is used:
+    rows go to ``RcloneInventoryStaging_<session_id>`` first and only
+    swap into the live table once everything has been written. A failed
+    or stalled run leaves the main table untouched.
+    """
+    sid = _resolve_session_id(session_id)
+    _ensure_imports()
+    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+        return _replace_rclone_inventory(conn, entries, session_id=sid)
+
+
+def db_swap_rclone_inventory(
+    session_id: Any = _SESSION_ID_SENTINEL,
     db_path: Optional[str] = None,
 ) -> int:
-    """Replace RcloneInventory with new rows (via staging table).
-
-    Args:
-        rows: List of inventory dicts
-        db_path: Database path (defaults to OPERATIONS_DB_PATH)
-
-    Returns:
-        Number of rows inserted
-    """
+    """Atomically swap this session's staging into the live RcloneInventory."""
+    sid = _resolve_session_id(session_id)
+    if sid is None:
+        raise ValueError(
+            "db_swap_rclone_inventory requires an active session_id "
+            "(set via set_active_session_id or pass explicitly)."
+        )
     _ensure_imports()
-
     with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
-        return _replace_rclone_inventory(conn, rows)
+        return _swap_rclone_inventory(conn, sid)
 
 
-def db_swap_rclone_inventory(*args, **kwargs):
-    """Atomically swap staging into live RcloneInventory. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_swap_rclone_inventory as _f
-    return _f(*args, **kwargs)
+def db_clear_rclone_inventory(db_path: Optional[str] = None) -> None:
+    """Delete all rows from RcloneInventory."""
+    _ensure_imports()
+    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+        conn.execute("DELETE FROM RcloneInventory")
+
+
+def db_append_rclone_inventory(
+    entries: List[dict], db_path: Optional[str] = None,
+) -> int:
+    """Append rows to RcloneInventory using executemany for speed."""
+    if not entries:
+        return 0
+    _ensure_imports()
+    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+        conn.executemany(
+            """INSERT INTO RcloneInventory
+               (VideoCode, SensorCategory, SubtitleCategory,
+                FolderPath, FolderSize, FileCount, DateTimeScanned)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            [
+                (e.get('VideoCode', e.get('video_code', '')),
+                 e.get('SensorCategory', e.get('sensor_category')),
+                 e.get('SubtitleCategory', e.get('subtitle_category')),
+                 e.get('FolderPath', e.get('folder_path')),
+                 int(e.get('FolderSize', e.get('folder_size', 0)) or 0),
+                 int(e.get('FileCount', e.get('file_count', 0)) or 0),
+                 e.get('DateTimeScanned', e.get('scan_datetime')))
+                for e in entries
+            ],
+        )
+        return len(entries)
 
 
 # ── DedupRecords ─────────────────────────────────────────────────────────
@@ -168,45 +211,71 @@ def db_load_dedup_records(
     return [dict(r) for r in rows]
 
 
-def db_save_dedup_records(*args, **kwargs):
-    """Save dedup records. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_save_dedup_records as _f
-    return _f(*args, **kwargs)
+def db_save_dedup_records(rows: List[dict], db_path: Optional[str] = None) -> None:
+    """Overwrite all dedup records (deprecated)."""
+    logger.warning(
+        "db_save_dedup_records is deprecated — use db_mark_records_deleted "
+        "for targeted updates instead"
+    )
+    _ensure_imports()
+    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+        conn.execute("DELETE FROM DedupRecords")
+        for r in rows:
+            conn.execute(
+                """INSERT INTO DedupRecords
+                   (VideoCode, ExistingSensor, ExistingSubtitle,
+                    ExistingGdrivePath, ExistingFolderSize,
+                    NewTorrentCategory, DeletionReason,
+                    DateTimeDetected, IsDeleted, DateTimeDeleted)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (r.get('VideoCode', r.get('video_code')),
+                 r.get('ExistingSensor', r.get('existing_sensor')),
+                 r.get('ExistingSubtitle', r.get('existing_subtitle')),
+                 r.get('ExistingGdrivePath', r.get('existing_gdrive_path')),
+                 int(r.get('ExistingFolderSize', r.get('existing_folder_size', 0)) or 0),
+                 r.get('NewTorrentCategory', r.get('new_torrent_category')),
+                 r.get('DeletionReason', r.get('deletion_reason')),
+                 r.get('DateTimeDetected', r.get('detect_datetime')),
+                 1 if str(r.get('IsDeleted', r.get('is_deleted', 'False'))).lower() in ('true', '1') else 0,
+                 r.get('DateTimeDeleted', r.get('delete_datetime'))),
+            )
 
 
 # ── PikpakHistory ────────────────────────────────────────────────────────
 
 
 def db_append_pikpak_history(
-    entry: dict,
-    session_id: Optional[str] = None,
+    record: dict,
     db_path: Optional[str] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
-    """Append an entry to PikpakHistory.
+    """Append a PikPak transfer record.
 
-    Args:
-        entry: PikPak history entry dict
-        session_id: Session identifier (optional)
-        db_path: Database path (defaults to OPERATIONS_DB_PATH)
-
-    Returns:
-        Last row ID
+    *session_id*: tags the row for X3 rollback; defaults to
+    :func:`get_active_session_id`.
     """
+    sid = _resolve_session_id(session_id)
     _ensure_imports()
-
     with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
         cur = conn.execute(
             """INSERT INTO PikpakHistory
-               (TorrentHash, FileName, SessionId, SyncedAt)
-               VALUES (?, ?, ?, ?)""",
-            (
-                entry.get('torrent_hash') or entry.get('TorrentHash'),
-                entry.get('file_name') or entry.get('FileName'),
-                session_id,
-                entry.get('synced_at') or entry.get('SyncedAt'),
-            ),
+               (TorrentHash, TorrentName, Category, MagnetUri,
+                DateTimeAddedToQb, DateTimeDeletedFromQb,
+                DateTimeUploadedToPikpak, TransferStatus, ErrorMessage,
+                SessionId)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (record.get('TorrentHash', record.get('torrent_hash')),
+             record.get('TorrentName', record.get('torrent_name')),
+             record.get('Category', record.get('category')),
+             record.get('MagnetUri', record.get('magnet_uri')),
+             record.get('DateTimeAddedToQb', record.get('added_to_qb_date')),
+             record.get('DateTimeDeletedFromQb', record.get('deleted_from_qb_date')),
+             record.get('DateTimeUploadedToPikpak', record.get('uploaded_to_pikpak_date')),
+             record.get('TransferStatus', record.get('transfer_status')),
+             record.get('ErrorMessage', record.get('error_message')),
+             sid),
         )
-    return cur.lastrowid
+        return cur.lastrowid
 
 
 # ── Rollback interface ───────────────────────────────────────────────────
@@ -496,3 +565,57 @@ def db_delete_rclone_inventory_paths(
             )
             deleted += cur.rowcount or 0
         return deleted
+
+
+# ── InventoryAlignNoExactMatch ──────────────────────────────────────────
+
+
+def db_upsert_align_no_exact_match(
+    video_code: str,
+    reason: str = 'exact_video_code_not_found',
+    db_path: Optional[str] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
+) -> None:
+    """Record a video code that had no exact match on JavDB search."""
+    sid = _resolve_session_id(session_id)
+    normalized = video_code.strip().upper()
+    if not normalized:
+        return
+    _ensure_imports()
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+        conn.execute(
+            """INSERT INTO InventoryAlignNoExactMatch
+                   (VideoCode, Reason, DateTimeRecorded, SessionId)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(VideoCode) DO UPDATE SET
+                   Reason = excluded.Reason,
+                   DateTimeRecorded = excluded.DateTimeRecorded,
+                   SessionId = excluded.SessionId
+               WHERE InventoryAlignNoExactMatch.Reason
+                     IS NOT excluded.Reason""",
+            (normalized, reason, now, sid),
+        )
+
+
+def db_load_align_no_exact_match_codes(db_path: Optional[str] = None) -> set:
+    """Return the set of normalised video codes previously marked as no-exact-match."""
+    _ensure_imports()
+    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT VideoCode FROM InventoryAlignNoExactMatch"
+        ).fetchall()
+    return {r['VideoCode'] for r in rows}
+
+
+def db_delete_align_no_exact_match(
+    video_code: str,
+    db_path: Optional[str] = None,
+) -> None:
+    """Remove a video code from the no-exact-match table."""
+    _ensure_imports()
+    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+        conn.execute(
+            "DELETE FROM InventoryAlignNoExactMatch WHERE VideoCode = ?",
+            (video_code.strip().upper(),),
+        )
