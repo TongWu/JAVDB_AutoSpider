@@ -253,3 +253,60 @@ def rollback_operations_for_session(
         ).rowcount or 0
 
     return dedup_deleted + pikpak_deleted
+
+
+# ── Delegating wrappers (pending full migration) ────────────────────────
+
+
+def db_append_dedup_record(*args, **kwargs):
+    """Append a single dedup record. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_append_dedup_record as _f
+    return _f(*args, **kwargs)
+
+
+def db_mark_records_deleted(*args, **kwargs):
+    """Mark dedup records as deleted by gdrive path. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_mark_records_deleted as _f
+    return _f(*args, **kwargs)
+
+
+def db_cleanup_deleted_records(*args, **kwargs):
+    """Remove old deleted dedup records. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_cleanup_deleted_records as _f
+    return _f(*args, **kwargs)
+
+
+def db_mark_orphan_records(*args, **kwargs):
+    """Mark dedup pending rows as deleted with custom reason. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_mark_orphan_records as _f
+    return _f(*args, **kwargs)
+
+
+def db_open_rclone_staging(*args, **kwargs):
+    """Open a staging table for rclone inventory refresh. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_open_rclone_staging as _f
+    return _f(*args, **kwargs)
+
+
+def db_append_rclone_staging(*args, **kwargs):
+    """Append rows to rclone staging table. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_append_rclone_staging as _f
+    return _f(*args, **kwargs)
+
+
+def db_merge_rclone_inventory_from_stage(*args, **kwargs):
+    """Merge staging table into live rclone inventory. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_merge_rclone_inventory_from_stage as _f
+    return _f(*args, **kwargs)
+
+
+def db_drop_rclone_staging(*args, **kwargs):
+    """Drop rclone staging table. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_drop_rclone_staging as _f
+    return _f(*args, **kwargs)
+
+
+def db_delete_rclone_inventory_paths(*args, **kwargs):
+    """Delete specific paths from rclone inventory. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_delete_rclone_inventory_paths as _f
+    return _f(*args, **kwargs)

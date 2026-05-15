@@ -645,3 +645,38 @@ def rollback_reports_for_session(
         )
         return cur.rowcount or 0
 
+
+# ── Delegating wrappers (pending full migration) ────────────────────────
+
+
+def db_find_in_progress_session_ids_for_run_csv(*args, **kwargs):
+    """Find in-progress sessions for a run+csv combo. Delegates to db.py."""
+    from packages.python.javdb_platform.db import (
+        db_find_in_progress_session_ids_for_run_csv as _f,
+    )
+    return _f(*args, **kwargs)
+
+
+def db_get_latest_session_local(*args, **kwargs):
+    """SQLite-only latest session lookup. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_get_latest_session_local as _f
+    return _f(*args, **kwargs)
+
+
+def db_get_session_run_identity(*args, **kwargs):
+    """Get RunId/RunAttempt for a session. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_get_session_run_identity as _f
+    return _f(*args, **kwargs)
+
+
+def db_pending_session_stats(*args, **kwargs):
+    """Get pending row counts for a session. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_pending_session_stats as _f
+    return _f(*args, **kwargs)
+
+
+def db_find_sessions_by_run(*args, **kwargs):
+    """Find sessions by RunId/RunAttempt. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_find_sessions_by_run as _f
+    return _f(*args, **kwargs)
+

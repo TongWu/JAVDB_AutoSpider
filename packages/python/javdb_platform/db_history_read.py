@@ -229,3 +229,18 @@ def db_batch_update_movie_actors(
 
     with _get_db(db_path or _HISTORY_DB_PATH) as conn:
         return _batch_update_movie_actors(conn, updates, session_id)
+
+
+# ── Delegating wrappers (pending full migration) ────────────────────────
+
+
+def db_batch_update_last_visited(*args, **kwargs):
+    """Update DateTimeVisited for a batch of hrefs. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_batch_update_last_visited as _f
+    return _f(*args, **kwargs)
+
+
+def db_check_torrent_in_history(*args, **kwargs):
+    """Check if a specific torrent type exists for href. Delegates to db.py."""
+    from packages.python.javdb_platform.db import db_check_torrent_in_history as _f
+    return _f(*args, **kwargs)

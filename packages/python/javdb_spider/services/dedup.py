@@ -53,7 +53,7 @@ def _ensure_db():
     """
     global _db_initialised
     if not _db_initialised:
-        from packages.python.javdb_platform.db import init_db
+        from packages.python.javdb_platform.db_migrations import init_db
         init_db(force=True)
         _db_initialised = True
 
@@ -114,7 +114,8 @@ def load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
     if use_sqlite():
         _ensure_db()
     if use_sqlite():
-        from packages.python.javdb_platform.db import db_load_rclone_inventory, current_backend
+        from packages.python.javdb_platform.db_operations import db_load_rclone_inventory
+        from packages.python.javdb_platform.db_connection import current_backend
         raw = db_load_rclone_inventory()
         inventory: Dict[str, List[RcloneEntry]] = {}
         for code, entries in raw.items():
@@ -416,7 +417,7 @@ def _load_pending_paths_cache() -> Set[str]:
     paths: Set[str] = set()
     try:
         _ensure_db()
-        from packages.python.javdb_platform.db import db_load_dedup_records
+        from packages.python.javdb_platform.db_operations import db_load_dedup_records
         for r in db_load_dedup_records():
             is_del = r.get('IsDeleted', r.get('is_deleted'))
             if is_del not in (1, True, 'True', '1'):
@@ -488,7 +489,7 @@ def load_dedup_csv(csv_path: str, from_file_only: bool = False) -> List[Dict[str
 
     if use_sqlite():
         _ensure_db()
-        from packages.python.javdb_platform.db import db_load_dedup_records
+        from packages.python.javdb_platform.db_operations import db_load_dedup_records
         rows = db_load_dedup_records()
         for r in rows:
             r.pop('Id', None)
@@ -528,7 +529,7 @@ def append_dedup_record(dedup_csv_path: str, record: DedupRecord) -> bool:
         return False
 
     _ensure_db()
-    from packages.python.javdb_platform.db import db_append_dedup_record
+    from packages.python.javdb_platform.db_operations import db_append_dedup_record
     row_id = db_append_dedup_record(record._asdict())
 
     if row_id == -1:
@@ -552,7 +553,7 @@ def mark_records_deleted(
     a CSV snapshot from the DB when needed.
     """
     _ensure_db()
-    from packages.python.javdb_platform.db import db_mark_records_deleted
+    from packages.python.javdb_platform.db_operations import db_mark_records_deleted
     updated = db_mark_records_deleted(path_datetime_pairs)
 
     # Invalidate cache so next append sees the new state
@@ -577,7 +578,7 @@ def cleanup_deleted_records(
     a CSV snapshot from the DB when needed.
     """
     _ensure_db()
-    from packages.python.javdb_platform.db import db_cleanup_deleted_records
+    from packages.python.javdb_platform.db_operations import db_cleanup_deleted_records
     removed = db_cleanup_deleted_records(older_than_days)
 
     logger.info(f"Cleaned up {removed} old deleted dedup records (retention={older_than_days}d)")
@@ -596,7 +597,7 @@ def save_dedup_csv(csv_path: str, rows: List[Dict[str, str]]) -> None:
     )
     if use_sqlite():
         _ensure_db()
-        from packages.python.javdb_platform.db import db_save_dedup_records
+        from packages.python.javdb_platform.db_operations import db_save_dedup_records
         db_save_dedup_records(rows)
 
     if use_csv():
@@ -615,7 +616,7 @@ def export_dedup_db_to_csv(output_path: str) -> int:
     the rclone_inventory table.
     """
     _ensure_db()
-    from packages.python.javdb_platform.db import db_load_dedup_records
+    from packages.python.javdb_platform.db_operations import db_load_dedup_records
 
     rows = db_load_dedup_records()
     if not rows:
