@@ -174,114 +174,19 @@ SCHEMA_VERSION = 13
 
 _local = threading.local()
 
-_SESSION_ID_SENTINEL = object()
-
-
-# ── Active session context (X3 rollback) ─────────────────────────────────
-# Module-global so subprocess workers and main pipeline share a single
-# "current session" once the spider sets it via ``set_active_session_id``.
-# Callers may also pass ``session_id=`` explicitly to override.
-_active_session_id_lock = threading.Lock()
-_active_session_id_value: Optional[str] = None
-_active_run_id_value: Optional[str] = None
-_active_run_attempt_value: Optional[int] = None
-# Ingestion Perfect Rollback (Phase 2): the spider sets this once after
-# creating the report session so that every history-write code path
-# (`save_parsed_movie_to_history`, etc.) can decide between the legacy
-# audit upsert and the new pending-stage path without re-querying
-# `ReportSessions` per movie.  ``None`` means "not set — fall back to
-# the JAVDB_HISTORY_WRITE_MODE env var, then to 'audit'".
-_active_write_mode_value: Optional[str] = None
-
-
-def set_active_session_id(session_id: Optional[str]) -> None:
-    """Set the current pipeline ``ReportSessions.Id``.
-
-    Called by the spider once after creating the report session. All
-    subsequent ``db_upsert_history`` / ``db_batch_update_last_visited``
-    / ``db_batch_update_movie_actors`` / etc. that don't pass an explicit
-    ``session_id=`` will tag their writes with this value (and audit
-    rows where applicable).
-
-    Pass ``None`` to clear the context (e.g. between pipeline phases in
-    long-lived processes / tests).
-    """
-    global _active_session_id_value
-    with _active_session_id_lock:
-        _active_session_id_value = session_id
-
-
-def set_active_run_identity(
-    run_id: Optional[str],
-    run_attempt: Optional[int],
-) -> None:
-    """Set the GitHub Actions workflow identity for subsequent audit rows.
-
-    Called by the spider alongside :func:`set_active_session_id` so that
-    every ``MovieHistoryAudit`` / ``TorrentHistoryAudit`` row written by
-    this process is stamped with the run that produced it.  Allows the
-    rollback CLI to look up audit rows by ``(RunId, RunAttempt)`` —
-    independent of any ``ReportSessions.Id`` drift between SQLite and D1.
-    """
-    global _active_run_id_value, _active_run_attempt_value
-    with _active_session_id_lock:
-        _active_run_id_value = run_id
-        _active_run_attempt_value = (
-            int(run_attempt) if run_attempt is not None else None
-        )
-
-
-def get_active_session_id() -> Optional[str]:
-    """Return the currently-active ``ReportSessions.Id`` or ``None``."""
-    with _active_session_id_lock:
-        return _active_session_id_value
-
-
-def get_active_run_identity() -> Tuple[Optional[str], Optional[int]]:
-    """Return ``(RunId, RunAttempt)`` from the active session context."""
-    with _active_session_id_lock:
-        return _active_run_id_value, _active_run_attempt_value
-
-
-def set_active_write_mode(write_mode: Optional[str]) -> None:
-    """Pin the active session's WriteMode for the current process.
-
-    Set by the spider (and the rclone staging session) immediately after
-    :func:`db_create_report_session` so the write-path helpers
-    (`save_parsed_movie_to_history`, etc.) can branch to
-    :func:`db_stage_history_write` without re-reading ``ReportSessions``
-    for every movie.  Pass ``None`` to clear (e.g. between phases in
-    long-lived processes / tests).
-    """
-    global _active_write_mode_value
-    if write_mode is not None:
-        write_mode = _resolve_write_mode(write_mode)
-    with _active_session_id_lock:
-        _active_write_mode_value = write_mode
-
-
-def get_active_write_mode() -> str:
-    """Return the resolved active WriteMode (``'audit'`` or ``'pending'``).
-
-    Resolution order, mirrors :func:`_resolve_write_mode` so the helpers
-    used at session-create time and at write time agree:
-
-      1. Process-local override set by :func:`set_active_write_mode`.
-      2. Env var ``JAVDB_HISTORY_WRITE_MODE``.
-      3. Default ``'audit'``.
-    """
-    with _active_session_id_lock:
-        cached = _active_write_mode_value
-    if cached:
-        return cached
-    return _resolve_write_mode(None)
-
-
-def _resolve_session_id(explicit: Any = _SESSION_ID_SENTINEL) -> Optional[str]:
-    """Pick the explicit override or fall back to the active context."""
-    if explicit is _SESSION_ID_SENTINEL:
-        return get_active_session_id()
-    return explicit
+# ── Active session context ─────────────────────────────────────────────────
+# Delegate to db_session.py so there is a single source of truth.
+from packages.python.javdb_platform.db_session import (
+    _SESSION_ID_SENTINEL,
+    _resolve_session_id,
+    set_active_session_id,
+    get_active_session_id,
+    set_active_run_identity,
+    get_active_run_identity,
+    set_active_write_mode,
+    get_active_write_mode,
+    _resolve_write_mode,
+)
 
 # Serializes the dual-backend init window. Without this, two threads racing
 # into ``init_db`` would both try to mutate ``_local.conns`` and the env-var /
@@ -3630,30 +3535,6 @@ def db_delete_align_no_exact_match(
 # legacy ``audit`` sessions and Phase-2 ``pending`` sessions can coexist
 # inside the same workflow run.
 _ALLOWED_STATUSES = ("in_progress", "finalizing", "committed", "failed")
-_ALLOWED_WRITE_MODES = ("audit", "pending")
-
-
-def _resolve_write_mode(explicit: Optional[str]) -> str:
-    """Return a validated WriteMode (``audit`` or ``pending``).
-
-    Resolution order:
-      1. Explicit *explicit* argument (when set).
-      2. ``JAVDB_HISTORY_WRITE_MODE`` env var.
-      3. Default ``'audit'`` so the historic X3 path stays in effect for
-         every workflow that has not opted in.
-    """
-    candidate = explicit
-    if candidate is None:
-        candidate = os.environ.get("JAVDB_HISTORY_WRITE_MODE")
-    if not candidate:
-        return "audit"
-    candidate = candidate.strip().lower()
-    if candidate not in _ALLOWED_WRITE_MODES:
-        raise ValueError(
-            f"Unknown WriteMode {candidate!r}; "
-            f"expected one of {_ALLOWED_WRITE_MODES}"
-        )
-    return candidate
 
 
 def db_get_session_status(

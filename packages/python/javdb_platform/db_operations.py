@@ -8,9 +8,17 @@ These tables support auxiliary operations:
 - PikpakHistory: PikPak sync history
 """
 
-from typing import List, Optional
+import json
+import re
+from collections.abc import Iterable
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 
 from packages.python.javdb_platform.logging_config import get_logger
+from packages.python.javdb_platform.db_session import (
+    _SESSION_ID_SENTINEL,
+    _resolve_session_id,
+)
 
 logger = get_logger(__name__)
 
@@ -58,20 +66,27 @@ def _ensure_imports():
 
 def db_load_rclone_inventory(
     db_path: Optional[str] = None,
-) -> List[dict]:
-    """Load all rows from RcloneInventory.
+) -> Dict[str, list]:
+    """Load inventory grouped by VideoCode.
 
     Args:
         db_path: Database path (defaults to OPERATIONS_DB_PATH)
 
     Returns:
-        List of inventory dicts
+        Dict mapping VideoCode -> list of inventory row dicts
     """
     _ensure_imports()
 
+    inventory: Dict[str, list] = {}
     with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
         rows = conn.execute("SELECT * FROM RcloneInventory").fetchall()
-    return [dict(r) for r in rows]
+    for row in rows:
+        r = dict(row)
+        code = r['VideoCode'].strip().upper()
+        if not code:
+            continue
+        inventory.setdefault(code, []).append(r)
+    return inventory
 
 
 def db_replace_rclone_inventory(
@@ -111,6 +126,39 @@ def db_swap_rclone_inventory(
 
 
 # ── DedupRecords ─────────────────────────────────────────────────────────
+
+
+def _session_id_to_identifier_suffix(session_id: Any) -> str:
+    """Sanitize a session id for safe use as a SQL identifier suffix."""
+    return re.sub(r'[^0-9A-Za-z_]', '_', str(session_id))
+
+
+def _dedup_rollback_table(session_id: str) -> str:
+    return f"DedupRecordsRollback_{_session_id_to_identifier_suffix(session_id)}"
+
+
+def _ensure_dedup_rollback_table(conn, session_id: str) -> str:
+    table = _dedup_rollback_table(session_id)
+    conn.execute(
+        f"""CREATE TABLE IF NOT EXISTS {table} (
+            DedupRecordId INTEGER PRIMARY KEY,
+            OldRowJson TEXT NOT NULL
+        )"""
+    )
+    return table
+
+
+def _snapshot_dedup_rows_for_rollback(conn, session_id: Optional[str], rows) -> None:
+    if session_id is None or not rows:
+        return
+    table = _ensure_dedup_rollback_table(conn, session_id)
+    conn.executemany(
+        f"INSERT OR IGNORE INTO {table} (DedupRecordId, OldRowJson) VALUES (?, ?)",
+        [
+            (row['Id'], json.dumps(dict(row), ensure_ascii=False))
+            for row in rows
+        ],
+    )
 
 
 def db_load_dedup_records(
@@ -237,55 +285,252 @@ def rollback_operations_for_session(
 # ── Delegating wrappers (pending full migration) ────────────────────────
 
 
-def db_append_dedup_record(*args, **kwargs):
-    """Append a single dedup record. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_append_dedup_record as _f
-    return _f(*args, **kwargs)
+def db_append_dedup_record(
+    record: dict,
+    db_path: Optional[str] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
+) -> int:
+    """Append a single dedup record. Returns the new row id, or -1 if duplicate."""
+    _ensure_imports()
+    sid = _resolve_session_id(session_id)
+    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+        cur = conn.execute(
+            """INSERT OR IGNORE INTO DedupRecords
+               (VideoCode, ExistingSensor, ExistingSubtitle,
+                ExistingGdrivePath, ExistingFolderSize,
+                NewTorrentCategory, DeletionReason,
+                DateTimeDetected, IsDeleted, DateTimeDeleted, SessionId)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (record.get('VideoCode', record.get('video_code')),
+             record.get('ExistingSensor', record.get('existing_sensor')),
+             record.get('ExistingSubtitle', record.get('existing_subtitle')),
+             record.get('ExistingGdrivePath', record.get('existing_gdrive_path')),
+             int(record.get('ExistingFolderSize', record.get('existing_folder_size', 0)) or 0),
+             record.get('NewTorrentCategory', record.get('new_torrent_category')),
+             record.get('DeletionReason', record.get('deletion_reason')),
+             record.get('DateTimeDetected', record.get('detect_datetime')),
+             1 if str(record.get('IsDeleted', record.get('is_deleted', 'False'))).lower() in ('true', '1') else 0,
+             record.get('DateTimeDeleted', record.get('delete_datetime')),
+             sid),
+        )
+        if cur.rowcount == 0:
+            return -1
+        return cur.lastrowid
 
 
-def db_mark_records_deleted(*args, **kwargs):
-    """Mark dedup records as deleted by gdrive path. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_mark_records_deleted as _f
-    return _f(*args, **kwargs)
+def db_mark_records_deleted(
+    path_datetime_pairs: List[Tuple[str, str]],
+    db_path: Optional[str] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
+) -> int:
+    """Mark specific dedup records as deleted by gdrive path."""
+    if not path_datetime_pairs:
+        return 0
+    grouped: Dict[str, List[str]] = {}
+    for path, dt in path_datetime_pairs:
+        if not path:
+            continue
+        grouped.setdefault(dt, []).append(path)
+    if not grouped:
+        return 0
+    _ensure_imports()
+    sid = _resolve_session_id(session_id)
+    CHUNK = 90
+    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+        updated = 0
+        for dt, paths in grouped.items():
+            for i in range(0, len(paths), CHUNK):
+                chunk = paths[i:i + CHUNK]
+                placeholders = ','.join('?' for _ in chunk)
+                if sid is not None:
+                    rows = conn.execute(
+                        f"SELECT * FROM DedupRecords "
+                        f"WHERE ExistingGdrivePath IN ({placeholders}) AND IsDeleted=0",
+                        chunk,
+                    ).fetchall()
+                    _snapshot_dedup_rows_for_rollback(conn, sid, rows)
+                    cur = conn.execute(
+                        f"UPDATE DedupRecords "
+                        f"SET IsDeleted=1, DateTimeDeleted=?, SessionId=? "
+                        f"WHERE ExistingGdrivePath IN ({placeholders}) AND IsDeleted=0",
+                        [dt, sid] + chunk,
+                    )
+                else:
+                    cur = conn.execute(
+                        f"UPDATE DedupRecords SET IsDeleted=1, DateTimeDeleted=? "
+                        f"WHERE ExistingGdrivePath IN ({placeholders}) AND IsDeleted=0",
+                        [dt] + chunk,
+                    )
+                updated += cur.rowcount or 0
+        return updated
 
 
-def db_cleanup_deleted_records(*args, **kwargs):
-    """Remove old deleted dedup records. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_cleanup_deleted_records as _f
-    return _f(*args, **kwargs)
+def db_cleanup_deleted_records(
+    older_than_days: int = 30,
+    db_path: Optional[str] = None,
+) -> int:
+    """Remove dedup records that were deleted more than *older_than_days* ago."""
+    _ensure_imports()
+    cutoff = (datetime.now() - timedelta(days=older_than_days)).strftime('%Y-%m-%d %H:%M:%S')
+    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+        cur = conn.execute(
+            "DELETE FROM DedupRecords "
+            "WHERE IsDeleted=1 AND DateTimeDeleted IS NOT NULL AND DateTimeDeleted < ?",
+            (cutoff,),
+        )
+        return cur.rowcount
 
 
-def db_mark_orphan_records(*args, **kwargs):
-    """Mark dedup pending rows as deleted with custom reason. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_mark_orphan_records as _f
-    return _f(*args, **kwargs)
+def db_mark_orphan_records(
+    paths: Iterable[str],
+    reason_suffix: str,
+    when: str,
+    db_path: Optional[str] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
+) -> int:
+    """Mark dedup pending rows as deleted with custom reason suffix appended."""
+    path_list = [p for p in paths if p]
+    if not path_list:
+        return 0
+    _ensure_imports()
+    sid = _resolve_session_id(session_id)
+    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+        updated = 0
+        for path in path_list:
+            if sid is not None:
+                rows = conn.execute(
+                    "SELECT * FROM DedupRecords "
+                    "WHERE ExistingGdrivePath = ? AND IsDeleted = 0",
+                    (path,),
+                ).fetchall()
+                _snapshot_dedup_rows_for_rollback(conn, sid, rows)
+                cur = conn.execute(
+                    """UPDATE DedupRecords
+                       SET IsDeleted = 1,
+                           DateTimeDeleted = ?,
+                           DeletionReason = TRIM(
+                             COALESCE(DeletionReason, '') || ' ' || ?
+                           ),
+                           SessionId = ?
+                       WHERE ExistingGdrivePath = ? AND IsDeleted = 0""",
+                    (when, reason_suffix, sid, path),
+                )
+            else:
+                cur = conn.execute(
+                    """UPDATE DedupRecords
+                       SET IsDeleted = 1,
+                           DateTimeDeleted = ?,
+                           DeletionReason = TRIM(
+                             COALESCE(DeletionReason, '') || ' ' || ?
+                           )
+                       WHERE ExistingGdrivePath = ? AND IsDeleted = 0""",
+                    (when, reason_suffix, path),
+                )
+            updated += cur.rowcount
+        return updated
 
 
-def db_open_rclone_staging(*args, **kwargs):
-    """Open a staging table for rclone inventory refresh. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_open_rclone_staging as _f
-    return _f(*args, **kwargs)
+def db_open_rclone_staging(
+    session_id: Any = _SESSION_ID_SENTINEL,
+    db_path: Optional[str] = None,
+) -> Optional[str]:
+    """Initialise this session's RcloneInventory staging table.
+
+    Returns the staging table name, or None when no session_id is
+    available — callers in that case should keep using the legacy
+    clear+append flow.
+    """
+    sid = _resolve_session_id(session_id)
+    if sid is None:
+        return None
+    _ensure_imports()
+    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+        return _open_rclone_staging(conn, sid)
 
 
-def db_append_rclone_staging(*args, **kwargs):
-    """Append rows to rclone staging table. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_append_rclone_staging as _f
-    return _f(*args, **kwargs)
+def db_append_rclone_staging(
+    entries: List[dict],
+    session_id: Any = _SESSION_ID_SENTINEL,
+    db_path: Optional[str] = None,
+) -> int:
+    """Append rows to this session's RcloneInventory staging table."""
+    if not entries:
+        return 0
+    sid = _resolve_session_id(session_id)
+    _ensure_imports()
+    if sid is None:
+        with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+            conn.executemany(
+                """INSERT INTO RcloneInventory
+                   (VideoCode, SensorCategory, SubtitleCategory,
+                    FolderPath, FolderSize, FileCount, DateTimeScanned)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                [
+                    (e.get('VideoCode', e.get('video_code', '')),
+                     e.get('SensorCategory', e.get('sensor_category')),
+                     e.get('SubtitleCategory', e.get('subtitle_category')),
+                     e.get('FolderPath', e.get('folder_path')),
+                     int(e.get('FolderSize', e.get('folder_size', 0)) or 0),
+                     int(e.get('FileCount', e.get('file_count', 0)) or 0),
+                     e.get('DateTimeScanned', e.get('scan_datetime')))
+                    for e in entries
+                ],
+            )
+            return len(entries)
+    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+        return _append_rclone_staging(conn, entries, sid)
 
 
-def db_merge_rclone_inventory_from_stage(*args, **kwargs):
-    """Merge staging table into live rclone inventory. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_merge_rclone_inventory_from_stage as _f
-    return _f(*args, **kwargs)
+def db_merge_rclone_inventory_from_stage(
+    session_id: Any = _SESSION_ID_SENTINEL,
+    years: Optional[Iterable[str]] = None,
+    db_path: Optional[str] = None,
+) -> int:
+    """Merge this session's staging rows into selected RcloneInventory years."""
+    sid = _resolve_session_id(session_id)
+    if sid is None:
+        raise ValueError(
+            "db_merge_rclone_inventory_from_stage requires an active "
+            "session_id (set via set_active_session_id or pass explicitly)."
+        )
+    if years is None:
+        raise ValueError("db_merge_rclone_inventory_from_stage requires years")
+    _ensure_imports()
+    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+        return _merge_rclone_inventory_from_stage(conn, sid, years)
 
 
-def db_drop_rclone_staging(*args, **kwargs):
-    """Drop rclone staging table. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_drop_rclone_staging as _f
-    return _f(*args, **kwargs)
+def db_drop_rclone_staging(
+    session_id: str,
+    db_path: Optional[str] = None,
+) -> None:
+    """DROP TABLE IF EXISTS RcloneInventoryStaging_<session_id> (idempotent)."""
+    _ensure_imports()
+    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+        _drop_rclone_staging(conn, session_id)
 
 
-def db_delete_rclone_inventory_paths(*args, **kwargs):
-    """Delete specific paths from rclone inventory. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_delete_rclone_inventory_paths as _f
-    return _f(*args, **kwargs)
+def db_delete_rclone_inventory_paths(
+    paths: Iterable[str],
+    db_path: Optional[str] = None,
+) -> int:
+    """Bulk delete RcloneInventory rows by FolderPath.
+
+    Uses chunked IN (...) deletes (90 per batch for D1 parameter cap safety).
+    """
+    _ensure_imports()
+    path_list = [p for p in paths if p]
+    if not path_list:
+        return 0
+    CHUNK = 90
+    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+        deleted = 0
+        for i in range(0, len(path_list), CHUNK):
+            chunk = path_list[i:i + CHUNK]
+            placeholders = ','.join('?' for _ in chunk)
+            cur = conn.execute(
+                f"DELETE FROM RcloneInventory WHERE FolderPath IN ({placeholders})",
+                chunk,
+            )
+            deleted += cur.rowcount or 0
+        return deleted
