@@ -30,10 +30,37 @@ _LOGIN_REQUIRED_TEXT_MARKERS = (
     "not available in your country",
 )
 
+_MAINTENANCE_MARKERS = (
+    "系統維護中",
+    "系统维护中",
+    "system maintenance",
+    "service unavailable",
+    "temporarily unavailable",
+    "暫時無法使用",
+)
+
 
 def _has_login_required_text(html: str) -> bool:
     lower_html = html.lower()
     return all(marker in lower_html for marker in _LOGIN_REQUIRED_TEXT_MARKERS)
+
+
+def is_maintenance_page(html: str) -> bool:
+    """Detect javdb maintenance or service-unavailable pages.
+
+    These should NOT trigger CF penalty events — the issue is site-wide,
+    not proxy-specific.
+    """
+    if not html:
+        return False
+    lower_html = html.lower()
+    if any(marker.lower() in lower_html for marker in _MAINTENANCE_MARKERS):
+        return True
+    if len(html) < 2000 and "<html" in lower_html:
+        if "movie-list" not in lower_html and "video-detail" not in lower_html:
+            if "503" in html or "502" in html or "maintenance" in lower_html:
+                return True
+    return False
 
 
 def result_to_dict(result: Any) -> dict:

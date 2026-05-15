@@ -303,11 +303,11 @@ def test_setup_commits_state_under_lock_after_io(monkeypatch):
     real_factory = state.create_movie_claim_client_with_mode_from_env
     factory_was_called_unlocked = []
 
-    def wrapped_factory():
+    def wrapped_factory(**kwargs):
         # /health must run with NO threads holding _movie_claim_lock —
         # otherwise a slow Worker would stall heartbeat readers.
         factory_was_called_unlocked.append(not probe.locked())
-        return real_factory()
+        return real_factory(**kwargs)
 
     monkeypatch.setattr(
         state, "create_movie_claim_client_with_mode_from_env",
@@ -351,12 +351,12 @@ def test_setup_double_checked_lock_drops_duplicate_when_other_thread_wins(
     other_thread_done = threading.Event()
     real_factory = state.create_movie_claim_client_with_mode_from_env
 
-    def slow_factory():
+    def slow_factory(**kwargs):
         # Signal that we've entered the I/O window, then block until the
         # rival thread has cached its winner under the lock.
         factory_started.set()
         other_thread_done.wait(timeout=5.0)
-        return real_factory()
+        return real_factory(**kwargs)
 
     monkeypatch.setattr(
         state, "create_movie_claim_client_with_mode_from_env",
