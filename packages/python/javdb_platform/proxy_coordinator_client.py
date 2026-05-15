@@ -34,6 +34,10 @@ from typing import Dict, List, Optional, Tuple
 
 import requests
 
+from packages.python.javdb_platform.do_client_base import (
+    BaseDOClient,
+    DOClientUnavailable,
+)
 from packages.python.javdb_platform.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -66,7 +70,7 @@ _ASYNC_REPORT_QUEUE_SIZE = 64
 _ASYNC_QUEUE_SENTINEL: Tuple = (None, None)
 
 
-class CoordinatorUnavailable(Exception):
+class CoordinatorUnavailable(DOClientUnavailable):
     """Raised when the coordinator cannot be reached or returns an error.
 
     This is a *signal*, not a panic: callers in the spider's hot path
@@ -239,18 +243,14 @@ def _validate_kind(kind: str) -> str:
 def _extract_server_time_ms(data: dict) -> int:
     """Read the server-side timestamp from a coordinator response.
 
-    Prefers the ``server_time_ms`` wire key (matches the dataclass field
-    name) and falls back to ``server_time`` for backward compatibility with
-    the current Worker, which emits ``server_time`` from a ``Date.now()``
-    call (already in milliseconds). The fallback lets the Worker migrate to
-    the explicit ``server_time_ms`` key without coordinated Python deploys.
+    Module-level alias of :meth:`BaseDOClient._extract_server_time_ms`
+    so existing tests / call-sites keep importing it from this module
+    unchanged.
     """
-    if "server_time_ms" in data:
-        return int(data["server_time_ms"])
-    return int(data["server_time"])
+    return BaseDOClient._extract_server_time_ms(data)
 
 
-class ProxyCoordinatorClient:
+class ProxyCoordinatorClient(BaseDOClient):
     """HTTP client for the proxy-coordinator Worker.
 
     Construct once per process and pass into :class:`MovieSleepManager` and
@@ -266,6 +266,8 @@ class ProxyCoordinatorClient:
         user_agent: Optional override for the ``User-Agent`` header.
     """
 
+    _unavailable_exc = CoordinatorUnavailable
+
     def __init__(
         self,
         base_url: str,
@@ -276,19 +278,7 @@ class ProxyCoordinatorClient:
         async_workers: int = _ASYNC_REPORT_WORKERS,
         async_queue_size: int = _ASYNC_REPORT_QUEUE_SIZE,
     ):
-        if not base_url or not isinstance(base_url, str):
-            raise ValueError("base_url must be a non-empty string")
-        if not token or not isinstance(token, str):
-            raise ValueError("token must be a non-empty string")
-        self._base_url = base_url.rstrip("/")
-        self._token = token
-        self._timeout = float(timeout)
-        self._session = requests.Session()
-        self._session.headers.update({
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "User-Agent": user_agent,
-        })
+        super().__init__(base_url, token, timeout=timeout, user_agent=user_agent)
         self._async_worker_count = max(1, int(async_workers))
         # Bounded fire-and-forget pool for ``report_async``. Keep capacity at
         # least equal to the worker count so shutdown can enqueue one sentinel
@@ -309,15 +299,9 @@ class ProxyCoordinatorClient:
         self._health_cache: Dict[str, ProxyHealthSnapshot] = {}
         self._health_cache_lock = threading.Lock()
 
-    def _close_session(self) -> None:
-        try:
-            self._session.close()
-        except Exception as exc:  # noqa: BLE001 - cleanup must be best-effort
-            logger.warning("Failed to close proxy coordinator HTTP session: %s", exc)
-
-    @property
-    def base_url(self) -> str:
-        return self._base_url
+    # ``base_url`` property and ``_close_session`` are inherited from
+    # :class:`BaseDOClient`. ``close()`` is overridden below to drain the
+    # async report queue before closing the session.
 
     # -- public API ---------------------------------------------------------
 

@@ -37,6 +37,10 @@ from typing import Optional, Tuple
 import requests
 
 from packages.python.javdb_platform import config_helper
+from packages.python.javdb_platform.do_client_base import (
+    BaseDOClient,
+    DOClientUnavailable,
+)
 from packages.python.javdb_platform.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -140,7 +144,7 @@ def current_shard_date() -> str:
     return datetime.now(_OPS_TZ).strftime("%Y-%m-%d")
 
 
-class MovieClaimUnavailable(Exception):
+class MovieClaimUnavailable(DOClientUnavailable):
     """Raised when the movie claim Worker cannot be reached or returns an error.
 
     This is a *signal*, not a panic.  Every callsite in the spider treats
@@ -332,18 +336,14 @@ class ReportFailureResult:
 def _extract_server_time_ms(data: dict) -> int:
     """Read the server-side timestamp from a response.
 
-    Prefers ``server_time_ms`` and falls back to ``server_time`` for parity
-    with the Worker (which currently emits the latter from ``Date.now()``
-    already in ms).  Mirrors :func:`login_state_client._extract_server_time_ms`
-    so the Worker can migrate to the explicit-units key without coordinated
-    client deploys.
+    Module-level alias of :meth:`BaseDOClient._extract_server_time_ms`
+    so existing tests / call-sites keep importing it from this module
+    unchanged.
     """
-    if "server_time_ms" in data:
-        return int(data["server_time_ms"])
-    return int(data["server_time"])
+    return BaseDOClient._extract_server_time_ms(data)
 
 
-class MovieClaimClient:
+class MovieClaimClient(BaseDOClient):
     """HTTP client for the MovieClaimState DO.
 
     Construct once per process and pass into the runtime's detail-fetch
@@ -359,31 +359,7 @@ class MovieClaimClient:
         user_agent: Optional override for the ``User-Agent`` header.
     """
 
-    def __init__(
-        self,
-        base_url: str,
-        token: str,
-        *,
-        timeout: float = _DEFAULT_TIMEOUT_SEC,
-        user_agent: str = _DEFAULT_USER_AGENT,
-    ):
-        if not base_url or not isinstance(base_url, str):
-            raise ValueError("base_url must be a non-empty string")
-        if not token or not isinstance(token, str):
-            raise ValueError("token must be a non-empty string")
-        self._base_url = base_url.rstrip("/")
-        self._token = token
-        self._timeout = float(timeout)
-        self._session = requests.Session()
-        self._session.headers.update({
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "User-Agent": user_agent,
-        })
-
-    @property
-    def base_url(self) -> str:
-        return self._base_url
+    _unavailable_exc = MovieClaimUnavailable
 
     # -- public API ---------------------------------------------------------
 
@@ -746,63 +722,10 @@ class MovieClaimClient:
                 f"malformed status response: {resp!r} ({e})"
             ) from e
 
-    def health_check(self) -> bool:
-        """Return ``True`` if ``GET /health`` returns 200.
-
-        Reuses the unauthenticated liveness probe shared with the proxy
-        coordinator and login-state DOs (they all live behind the same
-        Worker), so a single ``/health`` call validates that the new
-        ``/claim_movie`` etc. routes are reachable.  Never raises.
-        """
-        try:
-            resp = self._session.get(f"{self._base_url}/health", timeout=self._timeout)
-            return resp.status_code == 200
-        except Exception:  # noqa: BLE001
-            return False
-
-    def close(self) -> None:
-        """Release the underlying ``requests.Session``.  Idempotent."""
-        try:
-            self._session.close()
-        except Exception as exc:  # noqa: BLE001 — cleanup is best-effort
-            logger.warning("Failed to close movie-claim HTTP session: %s", exc)
-
-    # -- internals ---------------------------------------------------------
-
-    def _do_request(
-        self,
-        method: str,
-        path: str,
-        body: Optional[dict] = None,
-    ) -> dict:
-        """Issue a single HTTP call and decode its JSON body.
-
-        All four exception paths (timeout, connection error, non-2xx,
-        malformed JSON) collapse into :class:`MovieClaimUnavailable` so
-        callers only have to handle one type.  Never retries.
-        """
-        url = f"{self._base_url}{path}"
-        try:
-            if method == "GET":
-                resp = self._session.get(url, timeout=self._timeout)
-            else:
-                resp = self._session.post(url, json=body or {}, timeout=self._timeout)
-        except (requests.Timeout, requests.ConnectionError) as e:
-            raise MovieClaimUnavailable(f"network error: {e}") from e
-        except requests.RequestException as e:
-            raise MovieClaimUnavailable(f"request failed: {e}") from e
-
-        if resp.status_code >= 300:
-            # 503 here typically means "MOVIE_CLAIM_DO binding missing" —
-            # i.e. the v3 migration hasn't been applied yet.  Surfacing the
-            # status in the message lets the operator notice & deploy.
-            raise MovieClaimUnavailable(
-                f"HTTP {resp.status_code}: {resp.text[:200]}"
-            )
-        try:
-            return resp.json()
-        except ValueError as e:
-            raise MovieClaimUnavailable(f"invalid JSON: {e}") from e
+    # ``health_check``, ``close``, and ``_do_request`` are inherited
+    # from :class:`BaseDOClient`. A non-2xx status surfaces verbatim in
+    # the ``MovieClaimUnavailable`` message so e.g. "503 MOVIE_CLAIM_DO
+    # binding missing" (v3 migration not applied) is visible in logs.
 
 
 _ENABLED_UNSET = object()
