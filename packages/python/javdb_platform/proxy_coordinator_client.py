@@ -25,7 +25,6 @@ underlying ``requests.Session`` only stores connection-pool metadata.
 
 from __future__ import annotations
 
-import hashlib
 import os
 import queue
 import threading
@@ -173,40 +172,14 @@ class ReportResult:
     server_time_ms: int
 
 
-def _normalize_proxy_id(raw: Optional[str], *, fallback_seed: Optional[str] = None) -> str:
-    """Deterministically normalise a proxy identifier for DO addressing.
-
-    All runners must derive the same string for the same physical proxy,
-    or the per-proxy DO mutex falls apart silently.  The rule is:
-
-    1. If *raw* is a non-empty string, strip whitespace and use it verbatim.
-    2. Otherwise, if *fallback_seed* is provided (typically ``host:port``),
-       hash it to a stable 16-char hex digest and prefix ``proxy-``.
-    3. Otherwise, raise :class:`ValueError` so the bug surfaces loudly.
-
-    Returns a string of length 1..256 (the DO ``idFromName`` limit).
-    """
-    if isinstance(raw, str):
-        trimmed = raw.strip()
-        if trimmed:
-            return trimmed[:256]
-    if fallback_seed:
-        # Not a security-critical hash — only used to bucket a configurable
-        # ``host:port`` into a stable 16-char DO key. ``usedforsecurity=False``
-        # silences the Bandit S324 / Ruff S324 lint without changing the
-        # produced digest, so existing runners that may have already derived
-        # IDs continue to agree on the same DO key.
-        digest = hashlib.sha1(  # noqa: S324 — see comment above
-            fallback_seed.encode("utf-8"), usedforsecurity=False
-        ).hexdigest()[:16]
-        derived = f"proxy-{digest}"
-        logger.warning(
-            "Coordinator proxy_id derived from host:port hash: %s — "
-            "recommend setting `name` in PROXY_POOL_JSON so all runners agree",
-            derived,
-        )
-        return derived
-    raise ValueError("proxy_id is empty and no fallback_seed was provided")
+#: Backwards-compatible alias for the previously-private helper. The
+#: canonical home is :func:`packages.python.javdb_platform.proxy_policy.normalize_proxy_id`;
+#: this re-export keeps existing imports
+#: (``from proxy_coordinator_client import _normalize_proxy_id``) working
+#: without churn while internal call-sites migrate.
+from packages.python.javdb_platform.proxy_policy import (  # noqa: E402
+    normalize_proxy_id as _normalize_proxy_id,
+)
 
 
 # P1-A — ``ban`` / ``unban`` / ``cf_bypass`` are *out-of-band* report kinds
