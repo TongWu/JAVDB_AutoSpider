@@ -1,20 +1,25 @@
 """W6.C integration tests: ``process_detail_entries`` x WorkDistributor.
 
-This commit ships the **producer-only** integration — when the queue
-client is enabled, each runner enqueues its discovered hrefs so peers
-get queue-depth visibility via ``/work/stats``. The local dispatch
-loop is intentionally unchanged; the pull/consume side is a planned
-follow-up.
+The W6.C follow-up ships the **full producer + consumer** integration:
+enqueue + pull-based dispatch + per-task complete/release acks.
 
-Two contracts under test:
+Contracts under test:
 
-1. **Disabled is invisible** — when ``state.global_work_distributor_client``
-   is ``None`` (the default), the runner must NOT touch any client
-   surface. Existing dispatch path unchanged.
-2. **Enabled enqueues survivors** — when a client is present, ``enqueue``
-   is called once with the surviving candidates' hrefs. Failures are
-   fail-open: an enqueue exception is logged and the local dispatch
-   loop continues.
+1. **Disabled is invisible** — client=None → no client surface
+   touched; original local-iteration dispatch unchanged.
+2. **Producer enqueues survivors** — client set → exactly one enqueue
+   with surviving hrefs; idempotent dedup is the Worker's job.
+3. **Consumer pulls and dispatches** — pulled items become
+   EngineTasks; pulled hrefs the runner has no local metadata for are
+   released back.
+4. **Success → complete()** — task success path calls
+   complete(holder_id, [href]) once.
+5. **Failure → release()** — task failure path calls release(...),
+   never complete().
+6. **Pull failure falls back to local dispatch** — pull exception
+   doesn't strand candidates; the local-loop tail-path picks them up.
+7. **Shutdown bulk-releases held leases** — finally block fires
+   release for everything in queue_held_hrefs.
 
 Smoke-level test machinery (stub backend / result / persist patches)
 reused from ``test_detail_runner_movie_claim``.
@@ -35,8 +40,12 @@ sys.path.insert(0, project_root)
 
 import packages.python.javdb_spider.runtime.state as state  # noqa: E402
 from packages.python.javdb_platform.work_distributor_client import (  # noqa: E402
+    CompleteResult,
     EnqueueResult,
+    PullResult,
+    ReleaseResult,
     WorkDistributorUnavailable,
+    WorkItem,
 )
 from packages.python.javdb_spider.fetch.backend import FetchRuntimeState  # noqa: E402
 from packages.python.javdb_spider.detail import runner as detail_runner  # noqa: E402
@@ -118,6 +127,62 @@ def _success(entry: dict) -> _StubResult:
     )
 
 
+def _failure(entry: dict, error: str = "fetch error") -> _StubResult:
+    return _StubResult(
+        task=_StubTask(entry, entry_index="1/1"),
+        success=False,
+        error=error,
+    )
+
+
+def _work_item(href: str) -> WorkItem:
+    return WorkItem(
+        key=href, payload=None, enqueued_at_ms=1, attempt_count=1,
+    )
+
+
+def _make_pull_client(pulled_hrefs, *, enqueue_result=None, complete_ok=True, release_ok=True):
+    """Build a MagicMock WorkDistributorClient.
+
+    ``pulled_hrefs`` is the list of hrefs returned by the first pull;
+    subsequent pulls return empty (signals "queue drained"). Use a
+    sequence of lists to script multi-batch pulls.
+    """
+    client = MagicMock()
+    client.enqueue.return_value = enqueue_result or EnqueueResult(
+        enqueued=list(pulled_hrefs), duplicates=[],
+        queue_size=len(pulled_hrefs), server_time_ms=1,
+    )
+    if isinstance(pulled_hrefs, list) and pulled_hrefs and isinstance(pulled_hrefs[0], list):
+        # Multi-batch script.
+        batches = pulled_hrefs + [[]]  # final empty
+        side_effects = [
+            PullResult(
+                items=[_work_item(h) for h in batch],
+                queue_size=sum(len(b) for b in batches[i+1:]),
+                server_time_ms=1,
+            )
+            for i, batch in enumerate(batches)
+        ]
+        client.pull.side_effect = side_effects
+    else:
+        client.pull.side_effect = [
+            PullResult(
+                items=[_work_item(h) for h in pulled_hrefs],
+                queue_size=len(pulled_hrefs),
+                server_time_ms=1,
+            ),
+            PullResult(items=[], queue_size=0, server_time_ms=1),
+        ]
+    client.complete.return_value = CompleteResult(
+        completed=[], skipped=[], server_time_ms=1,
+    ) if complete_ok else None
+    client.release.return_value = ReleaseResult(
+        released=[], skipped=[], server_time_ms=1,
+    ) if release_ok else None
+    return client
+
+
 @pytest.fixture(autouse=True)
 def _reset_state(monkeypatch):
     state.parsed_links.clear()
@@ -175,39 +240,97 @@ def test_disabled_does_not_touch_work_distributor(monkeypatch):
     assert len(backend.submitted) == 1
 
 
-def test_enabled_enqueues_surviving_hrefs(monkeypatch):
-    """Queue client present → exactly one enqueue() with all survivor hrefs."""
+def test_enabled_enqueues_and_pulls_survivors(monkeypatch):
+    """Queue client present → enqueue + pull-based dispatch."""
     _patch_pipeline(monkeypatch)
-    entries = [
-        _entry("A", "/v/aaa"),
-        _entry("B", "/v/bbb"),
-        _entry("C", "/v/ccc"),
-    ]
+    entries = [_entry("A", "/v/aaa"), _entry("B", "/v/bbb"), _entry("C", "/v/ccc")]
     backend = _StubBackend(results=[_success(e) for e in entries])
 
-    client = MagicMock()
-    client.enqueue.return_value = EnqueueResult(
-        enqueued=["/v/aaa", "/v/bbb", "/v/ccc"],
-        duplicates=[],
-        queue_size=3,
-        server_time_ms=1,
-    )
+    client = _make_pull_client(["/v/aaa", "/v/bbb", "/v/ccc"])
     monkeypatch.setattr(state, "global_work_distributor_client", client)
 
     process_detail_entries(
         backend=backend, entries=entries, phase=1, **_common_kwargs(),
     )
 
+    # Enqueue called once with the surviving hrefs.
     client.enqueue.assert_called_once()
-    args, _ = client.enqueue.call_args
-    assert args[0] == ["/v/aaa", "/v/bbb", "/v/ccc"]
-    # Local dispatch is unchanged — every entry was still submitted to
-    # the backend.
+    assert client.enqueue.call_args[0][0] == ["/v/aaa", "/v/bbb", "/v/ccc"]
+    # Pull called at least once.
+    assert client.pull.call_count >= 1
+    # All three tasks dispatched via the queue path.
     assert len(backend.submitted) == 3
 
 
-def test_enqueue_failure_is_swallowed_local_dispatch_continues(monkeypatch):
-    """Queue Unavailable must NOT prevent local dispatch."""
+def test_success_calls_complete_per_task(monkeypatch):
+    """Each successful task triggers one complete() call."""
+    _patch_pipeline(monkeypatch)
+    entries = [_entry("A", "/v/aaa"), _entry("B", "/v/bbb")]
+    backend = _StubBackend(results=[_success(e) for e in entries])
+
+    client = _make_pull_client(["/v/aaa", "/v/bbb"])
+    monkeypatch.setattr(state, "global_work_distributor_client", client)
+
+    process_detail_entries(
+        backend=backend, entries=entries, phase=1, **_common_kwargs(),
+    )
+
+    # Two completes — one per task — with the correct holder_id.
+    completed_hrefs = sorted(
+        call.args[1][0] for call in client.complete.call_args_list
+    )
+    assert completed_hrefs == ["/v/aaa", "/v/bbb"]
+    for call in client.complete.call_args_list:
+        assert call.args[0] == state.runtime_holder_id
+    # No release() call on the happy path.
+    client.release.assert_not_called()
+
+
+def test_failure_calls_release_not_complete(monkeypatch):
+    """A failed task triggers release(), never complete()."""
+    _patch_pipeline(monkeypatch)
+    entries = [_entry("A", "/v/aaa")]
+    backend = _StubBackend(results=[_failure(entries[0], error="timeout")])
+
+    client = _make_pull_client(["/v/aaa"])
+    monkeypatch.setattr(state, "global_work_distributor_client", client)
+
+    process_detail_entries(
+        backend=backend, entries=entries, phase=1, **_common_kwargs(),
+    )
+
+    client.complete.assert_not_called()
+    # release() is called at least once with the failed href.
+    assert any(
+        call.args[1] == ["/v/aaa"] for call in client.release.call_args_list
+    )
+
+
+def test_pull_failure_falls_back_to_local_dispatch(monkeypatch):
+    """A pull exception must NOT strand candidates."""
+    _patch_pipeline(monkeypatch)
+    entries = [_entry("A", "/v/aaa"), _entry("B", "/v/bbb")]
+    backend = _StubBackend(results=[_success(e) for e in entries])
+
+    client = MagicMock()
+    client.enqueue.return_value = EnqueueResult(
+        enqueued=["/v/aaa", "/v/bbb"], duplicates=[],
+        queue_size=2, server_time_ms=1,
+    )
+    client.pull.side_effect = WorkDistributorUnavailable("transient")
+    monkeypatch.setattr(state, "global_work_distributor_client", client)
+
+    process_detail_entries(
+        backend=backend, entries=entries, phase=1, **_common_kwargs(),
+    )
+
+    # All candidates still dispatched (via the local-loop fallback after
+    # the queue path failed).
+    assert len(backend.submitted) == 2
+
+
+def test_enqueue_failure_disables_pull_and_falls_back(monkeypatch):
+    """Enqueue exception → don't even attempt pull; local loop dispatches."""
     _patch_pipeline(monkeypatch)
     entries = [_entry("A", "/v/aaa")]
     backend = _StubBackend(results=[_success(entries[0])])
@@ -216,19 +339,20 @@ def test_enqueue_failure_is_swallowed_local_dispatch_continues(monkeypatch):
     client.enqueue.side_effect = WorkDistributorUnavailable("worker down")
     monkeypatch.setattr(state, "global_work_distributor_client", client)
 
-    # Must NOT raise out of process_detail_entries.
     process_detail_entries(
         backend=backend, entries=entries, phase=1, **_common_kwargs(),
     )
 
-    # Local dispatch happened despite the queue failure.
+    # pull / complete / release must not be called when enqueue fails.
+    client.pull.assert_not_called()
+    client.complete.assert_not_called()
+    # Local dispatch happened.
     assert len(backend.submitted) == 1
 
 
 def test_no_entries_skips_enqueue(monkeypatch):
     """Empty survivor list → no enqueue call (avoids a no-op round-trip)."""
     _patch_pipeline(monkeypatch)
-    # has_complete_subtitles → True so every entry is filtered out.
     monkeypatch.setattr(detail_runner, "has_complete_subtitles", lambda *a, **kw: True)
     backend = _StubBackend(results=[])
 
@@ -240,3 +364,27 @@ def test_no_entries_skips_enqueue(monkeypatch):
     )
 
     client.enqueue.assert_not_called()
+    client.pull.assert_not_called()
+
+
+def test_peer_enqueued_href_with_no_local_metadata_is_released(monkeypatch):
+    """A pulled href the runner has no candidate for → release back."""
+    _patch_pipeline(monkeypatch)
+    entries = [_entry("A", "/v/aaa")]  # only one local survivor
+    backend = _StubBackend(results=[_success(entries[0])])
+
+    # Worker returns BOTH our /v/aaa AND a peer-enqueued /v/peer.
+    client = _make_pull_client(["/v/aaa", "/v/peer"])
+    monkeypatch.setattr(state, "global_work_distributor_client", client)
+
+    process_detail_entries(
+        backend=backend, entries=entries, phase=1, **_common_kwargs(),
+    )
+
+    # /v/peer was released because we have no local entry for it.
+    release_calls = [call.args[1] for call in client.release.call_args_list]
+    assert ["/v/peer"] in release_calls
+    # /v/aaa was dispatched + completed.
+    assert len(backend.submitted) == 1
+    completed = [call.args[1][0] for call in client.complete.call_args_list]
+    assert "/v/aaa" in completed
