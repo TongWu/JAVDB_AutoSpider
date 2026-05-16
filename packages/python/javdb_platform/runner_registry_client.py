@@ -480,6 +480,7 @@ class RunnerRegistryClient(BaseDOClient):
         started_at: Optional[int] = None,
         proxy_hash: str = "",
         page_range: Optional[str] = None,
+        proxy_pool: Optional[list[dict]] = None,
     ) -> RegisterResult:
         """Register *this* runner with the singleton registry.
 
@@ -492,6 +493,13 @@ class RunnerRegistryClient(BaseDOClient):
         drift check; pass :func:`proxy_pool_hash` of the runner's
         ``PROXY_POOL_JSON`` so peers see a consistent hash across
         logically-equivalent JSON.
+
+        ``proxy_pool`` (W5.7 / ADR-004): pass the output of
+        :func:`proxy_pool_summary_for_registry` so the Worker can persist
+        the full pool — including idle backup proxies — to ``proxies_seen``
+        for dashboard enumeration. Omit (or pass ``None``) when targeting
+        pre-Phase-2 Workers — the Worker silently ignores unknown payload
+        fields, so this is safe to ship before the matching Worker change.
 
         Raises :class:`ValueError` for invalid caller input and
         :class:`RunnerRegistryUnavailable` on registry failures
@@ -508,6 +516,8 @@ class RunnerRegistryClient(BaseDOClient):
         }
         if started_at is not None:
             body["started_at"] = int(started_at)
+        if proxy_pool is not None:
+            body["proxy_pool"] = proxy_pool
         resp = self._do_request("POST", "/register", body)
         try:
             return RegisterResult(
