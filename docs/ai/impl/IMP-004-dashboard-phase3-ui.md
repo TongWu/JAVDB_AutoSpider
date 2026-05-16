@@ -1,11 +1,11 @@
-# ADR-011: Dashboard Overhaul — Phase 3: Main Dashboard UI
+# IMP-004: Dashboard Overhaul — Phase 3: Main Dashboard UI
 
 **Status**: Accepted — Planned
 **Date**: 2026-05-16
 **Deciders**: Proxy Coordinator Dashboard rewrite working stream
-**Related**: implements [ADR-003](ADR-003-metrics-pipeline.md); requires [ADR-010](ADR-010-dashboard-phase2-worker-backend.md) deployed; prerequisite for [ADR-012](ADR-012-dashboard-phase4-history-drilldowns.md)
+**Related**: implements [ADR-003](../adr/ADR-003-metrics-pipeline.md); requires [IMP-003](IMP-003-dashboard-phase2-worker-backend.md) deployed; prerequisite for [IMP-005](IMP-005-dashboard-phase4-history-drilldowns.md)
 
-> **Note on format:** This ADR was originally written as a step-by-step implementation plan and relocated into the ADR space (per repo convention for design records). The decision context is captured in the **Goal / Architecture / Tech Stack** preamble below; the rest is the execution checklist preserved from the original plan.
+> **Note on format:** This file is an **implementation plan** — written by the writing-plans workflow, not a design document. It records HOW to execute the related design decisions (see **Related** above). The preamble (Goal / Architecture / Tech Stack) frames the work; the body is the step-by-step execution checklist. English-only by repo convention.
 >
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

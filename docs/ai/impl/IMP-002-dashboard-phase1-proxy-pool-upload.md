@@ -1,11 +1,11 @@
-# ADR-009: Dashboard Overhaul — Phase 1: Runner Reports `proxy_pool` to Worker
+# IMP-002: Dashboard Overhaul — Phase 1: Runner Reports `proxy_pool` to Worker
 
 **Status**: Accepted — Completed 2026-05-16 (merged via #f4c5d23c + #e224c374 + #60797d16)
 **Date**: 2026-05-16
 **Deciders**: Proxy Coordinator Dashboard rewrite working stream
-**Related**: implements [ADR-004](ADR-004-proxy-discovery-via-runner-pool-upload.md); prerequisite for [ADR-010](ADR-010-dashboard-phase2-worker-backend.md)
+**Related**: implements [ADR-004](../adr/ADR-004-proxy-discovery-via-runner-pool-upload.md); prerequisite for [IMP-003](IMP-003-dashboard-phase2-worker-backend.md)
 
-> **Note on format:** This ADR was originally written as a step-by-step implementation plan and relocated into the ADR space (per repo convention for design records). The decision context is captured in the **Goal / Architecture / Tech Stack** preamble below; the rest is the execution checklist preserved from the original plan.
+> **Note on format:** This file is an **implementation plan** — written by the writing-plans workflow, not a design document. It records HOW to execute the related design decisions (see **Related** above). The preamble (Goal / Architecture / Tech Stack) frames the work; the body is the step-by-step execution checklist. English-only by repo convention.
 >
 > **For agentic workers (historical):** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
