@@ -64,3 +64,50 @@ class OnboardingTestResponse(BaseModel):
 
 class DismissHintPayload(BaseModel):
     hint_id: str = Field(min_length=1, max_length=64)
+
+
+# ── Sessions (Tasks 12-15) ────────────────────────────────────────────────────
+
+class SessionItem(BaseModel):
+    session_id: str
+    state: str
+    write_mode: str
+    run_id: str | None
+    run_attempt: int | None
+    created_at: str
+
+
+class SessionListResponse(BaseModel):
+    items: list[SessionItem]
+    next_cursor: str | None
+    total_estimate: int | None = None
+
+
+class SessionDetailResponse(BaseModel):
+    session: SessionItem
+    movies: list[dict]
+    torrents: list[dict]
+
+
+class SessionRollbackPayload(BaseModel):
+    dry_run: bool = True
+    include_pending: bool = True
+    restore_from_audit: bool = True
+
+
+class SessionRollbackResponse(BaseModel):
+    session_id: str
+    dry_run: bool
+    actions: list[dict]
+    summary: dict[str, int]
+
+
+class SessionCommitPayload(BaseModel):
+    force: bool = False
+    drop_pending: bool = False
+
+
+class SessionCommitResponse(BaseModel):
+    session_id: str
+    new_state: str
+    pending_dropped: int = 0

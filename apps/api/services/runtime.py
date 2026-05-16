@@ -42,6 +42,7 @@ from apps.api.parsers import RUST_PARSERS_AVAILABLE
 from apps.api.routers.auth import login, logout, refresh_token, router as auth_router
 from apps.api.routers.capabilities import router as capabilities_router
 from apps.api.routers.onboarding import router as onboarding_router
+from apps.api.routers.sessions import router as sessions_router
 from apps.api.routers.system_state import router as system_state_router
 from apps.api.routers.config import (
     get_config,
@@ -167,6 +168,7 @@ for router in (
     capabilities_router,
     system_state_router,
     onboarding_router,
+    sessions_router,
 ):
     app.include_router(router)
 
