@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from typing import Any
 
 
@@ -13,16 +12,29 @@ class SystemStateRepo:
       - dismissed_hints array
       - any other client-side preference that needs to survive between
         sessions / multiple devices.
+
+    Accepts any duck-typed connection (sqlite3.Connection, D1Connection,
+    DualConnection) — backend dispatch is handled by get_db() at call site.
+    Callers must not call conn.commit() themselves; get_db() auto-commits on
+    context exit. Explicit commit() calls are intentionally absent here to
+    avoid mid-transaction drift-log flushes under DualConnection.
     """
 
-    def __init__(self, conn: sqlite3.Connection) -> None:
+    def __init__(self, conn: Any) -> None:
         self._conn = conn
 
     def get(self, key: str, *, default: str | None = None) -> str | None:
-        row = self._conn.execute(
+        cur = self._conn.execute(
             "SELECT value FROM system_state WHERE key = ?", (key,)
-        ).fetchone()
-        return row[0] if row else default
+        )
+        row = cur.fetchone()
+        if row is None:
+            return default
+        # D1 returns dicts; sqlite3.Row supports both name and index access
+        try:
+            return row["value"]
+        except (KeyError, TypeError, IndexError):
+            return row[0]
 
     def put(self, key: str, value: str) -> None:
         self._conn.execute(
@@ -34,11 +46,9 @@ class SystemStateRepo:
             """,
             (key, value),
         )
-        self._conn.commit()
 
     def delete(self, key: str) -> None:
         self._conn.execute("DELETE FROM system_state WHERE key = ?", (key,))
-        self._conn.commit()
 
     def get_json(self, key: str, *, default: Any = None) -> Any:
         raw = self.get(key)
