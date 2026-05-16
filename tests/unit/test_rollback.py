@@ -133,7 +133,7 @@ class TestRollbackCliTargetResolution:
             raise AssertionError("lookup should not run for --session-id alone")
 
         monkeypatch.setattr(
-            rollback_cli, "db_find_in_progress_sessions", fail_lookup,
+            rollback_cli, "find_window_sessions", fail_lookup,
         )
         args = argparse.Namespace(
             session_id=42,
@@ -154,7 +154,7 @@ class TestRollbackCliTargetResolution:
             )
 
         monkeypatch.setattr(
-            rollback_cli, "db_find_in_progress_sessions", fail_lookup,
+            rollback_cli, "find_window_sessions", fail_lookup,
         )
         args = argparse.Namespace(
             session_id=42,
@@ -174,12 +174,12 @@ class TestRollbackCliTargetResolution:
 
         captured = {}
 
-        def fake_lookup(*, since=None, max_age_hours=None):
+        def fake_lookup(since):
             captured["since"] = since
             return [7, 42]
 
         monkeypatch.setattr(
-            rollback_cli, "db_find_in_progress_sessions", fake_lookup,
+            rollback_cli, "find_window_sessions", fake_lookup,
         )
         args = argparse.Namespace(
             session_id=42,
@@ -199,14 +199,14 @@ class TestRollbackCliTargetResolution:
 
         monkeypatch.setattr(
             rollback_cli,
-            "db_find_sessions_by_run",
+            "find_run_sessions",
             lambda run_id, attempt: [101, 102],
         )
         # Also assert that window scan does NOT run when targets came
         # from the run-id path.
         monkeypatch.setattr(
             rollback_cli,
-            "db_find_in_progress_sessions",
+            "find_window_sessions",
             lambda *args, **kwargs: pytest.fail(
                 "window scan must not run when run-id yielded targets"
             ),

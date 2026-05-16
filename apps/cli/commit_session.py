@@ -30,17 +30,22 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
+from apps.cli._session_helpers import (
+    append_jsonl_record,
+    attach_run_identity,
+    fanout_movie_claim,
+    normalize_run_started_at,
+    read_session_pre_state,
+    write_github_output,
+)
 from packages.python.javdb_platform.db_connection import close_db
 from packages.python.javdb_platform.db_history_write import db_commit_session_history
 from packages.python.javdb_platform.db_reports import (
     db_find_in_progress_sessions,
-    db_get_session_run_identity,
-    db_get_session_status,
     db_mark_session_committed,
     db_pending_session_stats,
 )
@@ -48,11 +53,6 @@ from packages.python.javdb_platform.db_migrations import init_db
 from packages.python.javdb_platform.logging_config import (
     get_logger,
     setup_logging,
-)
-from packages.python.javdb_platform.movie_claim_client import (
-    MovieClaimUnavailable,
-    create_movie_claim_client_from_env,
-    current_shard_date,
 )
 
 
@@ -124,74 +124,6 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         default="INFO",
     )
     return parser.parse_args(argv)
-
-
-def _commit_movie_claim_stages(
-    session_ids: List[int],
-    shard_date: Optional[str],
-) -> List[dict]:
-    """Promote staged completions for *session_ids* on the coordinator.
-
-    Best-effort: a coordinator outage MUST NOT block the DB-side commit
-    (the staged entries will still match the StaleSessionCleanup orphan
-    sweep cutoff in 48h).  Returns one summary record per session for
-    the CLI's JSON output; an empty list when no client is configured.
-    """
-    if not session_ids:
-        return []
-    client = create_movie_claim_client_from_env()
-    if client is None:
-        logger.info(
-            "MovieClaim coordinator not configured — skipping "
-            "commit_completed_movies (DB-side commit unaffected)",
-        )
-        return []
-    target_date = shard_date or current_shard_date()
-    summaries: List[dict] = []
-    try:
-        for sid in session_ids:
-            try:
-                result = client.commit_completed_movies(
-                    str(sid), date=target_date,
-                )
-                logger.info(
-                    "MovieClaim commit: session=%s shard=%s promoted=%s",
-                    sid, target_date, result.promoted,
-                )
-                summaries.append({
-                    "session_id": sid,
-                    "shard_date": target_date,
-                    "promoted": result.promoted,
-                    "ok": True,
-                })
-            except MovieClaimUnavailable as exc:
-                logger.warning(
-                    "MovieClaim commit unavailable for session=%s shard=%s "
-                    "(%s) — orphan sweep will reconcile later",
-                    sid, target_date, exc,
-                )
-                summaries.append({
-                    "session_id": sid,
-                    "shard_date": target_date,
-                    "promoted": 0,
-                    "ok": False,
-                    "error": str(exc),
-                })
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "Unexpected MovieClaim commit error for session=%s shard=%s",
-                    sid, target_date, exc_info=True,
-                )
-                summaries.append({
-                    "session_id": sid,
-                    "shard_date": target_date,
-                    "promoted": 0,
-                    "ok": False,
-                    "error": str(exc),
-                })
-    finally:
-        client.close()
-    return summaries
 
 
 def _shadow_audit_enabled(args: argparse.Namespace) -> bool:
@@ -357,71 +289,20 @@ def _emit_pending_verify(
         # Phase 2: shadow audit; Phase 3: gated on JAVDB_PENDING_SHADOW_AUDIT.
         "shadow_audit_enabled": bool(shadow_audit),
     }
-    try:
-        identity = db_get_session_run_identity(session_id)
-    except Exception:  # noqa: BLE001
-        identity = None
-    if identity is not None:
-        record["run_id"] = identity[0]
-        record["run_attempt"] = identity[1]
+    attach_run_identity(record, session_id)
     if shadow_audit and final_status == "committed":
         record.update(_shadow_audit_drift(session_id, drain))
     else:
         record["derived_recompute_drift"] = 0
         record["derived_drift_samples"] = []
 
-    try:
-        reports_dir = os.environ.get("REPORTS_DIR", "reports")
-        path = os.path.join(reports_dir, "D1", "d1_drift.jsonl")
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "Failed to append pending_session_verify metric to "
-            "d1_drift.jsonl: %s", exc,
-        )
-
-    gh_output = os.environ.get("GITHUB_OUTPUT")
-    if gh_output:
-        try:
-            with open(gh_output, "a", encoding="utf-8") as f:
-                f.write(
-                    "pending_residual_count={}\n".format(
-                        record["pending_residual_count"],
-                    ),
-                )
-                f.write(
-                    "pending_applied_count={}\n".format(
-                        record["pending_applied_count"],
-                    ),
-                )
-                f.write(
-                    "commit_attempts={}\n".format(record["commit_attempts"]),
-                )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "Failed to write GITHUB_OUTPUT pending verify metrics: %s",
-                exc,
-            )
+    append_jsonl_record(record)
+    write_github_output(
+        pending_residual_count=record["pending_residual_count"],
+        pending_applied_count=record["pending_applied_count"],
+        commit_attempts=record["commit_attempts"],
+    )
     return record
-
-
-def _normalize_run_started_at(raw: Optional[str]) -> Optional[str]:
-    """Same conversion as ``apps.cli.rollback`` — keep the two CLIs aligned."""
-    if not raw:
-        return None
-    s = raw.strip()
-    if not s:
-        return None
-    if s.endswith("Z"):
-        s = s[:-1]
-    if "+" in s and "T" in s:
-        s = s.split("+", 1)[0]
-    s = s.replace("T", " ")
-    if "." in s:
-        s = s.split(".", 1)[0]
-    return s
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -443,8 +324,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.session_id is not None:
         targets.add(args.session_id)
 
-    since = _normalize_run_started_at(args.run_started_at)
+    since = normalize_run_started_at(args.run_started_at)
     if since:
+        # commit_session has stricter window-scan semantics than the
+        # generic helper in _session_helpers: a DB hiccup with no
+        # explicit ``--session-id`` is a hard error (exit 1) so an
+        # operator notices, but with an explicit id we still try to
+        # commit it. Call db_find_in_progress_sessions directly so the
+        # helper's "swallow-and-warn" default doesn't downgrade the
+        # no-explicit-id error path.
         try:
             window_sessions = db_find_in_progress_sessions(since=since)
         except Exception as e:
@@ -488,16 +376,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         # idempotent, so calling it on an already-committed pending
         # session is a no-op.  Audit-mode sessions skip the call so
         # the legacy upsert + audit log path is unaffected.
-        try:
-            state = db_get_session_status(sid)
-        except Exception as e:
-            logger.warning(
-                "commit_session: could not read WriteMode for session %s "
-                "(%s); falling back to legacy mark_committed only", sid, e,
-            )
-            state = None
-        write_mode = state[0] if state else 'audit'
-        sess_status = state[1] if state else None
+        pre = read_session_pre_state(sid)
+        write_mode = pre.write_mode
+        sess_status = pre.status
         drain: Optional[Dict[str, Any]] = None
         commit_started_at: Optional[float] = None
         commit_duration_ms: Optional[int] = None
@@ -576,9 +457,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     # a partially-committed run still tidies up the coordinator side.
     claim_commit_summaries: List[dict] = []
     if not args.no_claim_commit:
-        claim_commit_summaries = _commit_movie_claim_stages(
+        claim_commit_summaries = fanout_movie_claim(
             sorted(set(committed) | set(skipped)),
-            args.shard_date,
+            operation="commit",
+            shard_date=args.shard_date,
         )
 
     summary = {
