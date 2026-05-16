@@ -957,9 +957,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          # Phase 3 — SSH key needed so the auto-fallback step can push
-          # pending_mode_disabled_until back to the branch.  No-op cost
-          # on healthy runs.
+          # ADR-006 — SSH key needed so the alert-and-pause step can push
+          # pipeline_paused_until back to the branch.  No-op cost on
+          # healthy runs.
           ssh-key: ${{ secrets.DEPLOY_KEY }}
 
       - name: Set up Python, venv, dependencies, Rust extension

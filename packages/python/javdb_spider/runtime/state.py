@@ -9,6 +9,7 @@ import json
 import os
 import re
 import logging
+import sys
 import threading
 import time
 import uuid
@@ -39,6 +40,7 @@ from packages.python.javdb_platform.runner_registry_client import (
     ConfigSnapshot,
     RunnerRegistryClient,
     RunnerRegistryUnavailable,
+    SessionPayload,
     Signal,
     create_runner_registry_client_from_env,
     proxy_pool_hash,
@@ -145,6 +147,12 @@ _runner_heartbeat_stop = threading.Event()
 # Track that we already ran ``unregister`` so atexit + signal handlers
 # can both fire without sending two requests.
 _runner_unregistered: bool = False
+
+# Phase-1 ADR-008 — cached session lifecycle state. Updated by
+# :func:`set_active_runner_session` and consumed by the heartbeat thread +
+# :func:`_unregister_runner_at_exit` so every Coordinator round-trip
+# carries the current `SessionPayload`.
+_runner_session: Optional[SessionPayload] = None
 
 # Heartbeat cadences.
 #
@@ -972,6 +980,90 @@ def _apply_active_signals(signals: list) -> None:
                     )
 
 
+def _maybe_honour_pipeline_pause(
+    *,
+    pipeline_paused_until_ms: int,
+    reason: Optional[str],
+) -> None:
+    """Phase-1 ADR-008 — exit cleanly when an operator-set pause is active.
+
+    The Coordinator's ConfigState carries ``pipeline_paused_until`` (ms
+    epoch). When that future-dated value is present, the runner SHOULD
+    NOT start a fresh ingestion — the operator is signalling a freeze.
+    We log + write `.publish-config.yml: pipeline_paused: true` (existing
+    ADR-006 gate) for downstream workflow steps, then exit 0.
+
+    `sys.exit(0)` keeps the workflow run "successful" rather than failed
+    — pausing is a deliberate operational decision, not an error.
+    """
+    if not pipeline_paused_until_ms or pipeline_paused_until_ms <= 0:
+        return
+    now_ms = int(time.time() * 1000)
+    if pipeline_paused_until_ms <= now_ms:
+        return
+    remaining_min = (pipeline_paused_until_ms - now_ms) / 60_000
+    logger.warning(
+        "Pipeline paused by operator (Coordinator config). Exiting cleanly. "
+        "paused_until_ms=%s remaining=%.1f min reason=%s",
+        pipeline_paused_until_ms, remaining_min, reason or "",
+    )
+    # Best-effort: write a marker the downstream workflow steps can read.
+    try:
+        with open(".publish-config.yml", "w", encoding="utf-8") as fh:
+            fh.write(
+                "# Phase-1 ADR-008 — written by runner startup pause check.\n"
+                "pipeline_paused: true\n"
+                f"paused_until_ms: {pipeline_paused_until_ms}\n"
+                f"reason: {reason or ''}\n"
+            )
+    except Exception:  # noqa: BLE001
+        logger.debug("Failed to write .publish-config.yml pause marker", exc_info=True)
+    sys.exit(0)
+
+
+def set_active_runner_session(
+    *,
+    session_id: str,
+    status: str,
+    write_mode: Optional[str] = None,
+    report_type: Optional[str] = None,
+    failure_reason: Optional[str] = None,
+    flush_immediately: bool = False,
+) -> None:
+    """Phase-1 ADR-008 — update the session payload echoed to the Coordinator.
+
+    Call this from the spider's `run_service` whenever the session
+    transitions: ``in_progress`` on create, ``finalizing`` before
+    commit, ``committed`` on success, ``failed`` on error, etc.
+
+    The new payload rides on the next heartbeat tick (≤60s by default).
+    Pass ``flush_immediately=True`` for terminal transitions (committed
+    / failed / cancelled) so the dashboard sees the final status without
+    waiting for the next periodic heartbeat — this is fire-and-forget
+    and never raises.
+    """
+    global _runner_session
+    _runner_session = SessionPayload(
+        session_id=str(session_id),
+        status=str(status),
+        write_mode=write_mode,
+        report_type=report_type,
+        failure_reason=failure_reason,
+    )
+    if not flush_immediately:
+        return
+    client = global_runner_registry_client
+    if client is None:
+        return
+    try:
+        client.heartbeat(runtime_holder_id, session=_runner_session)
+    except Exception:  # noqa: BLE001
+        logger.debug(
+            "Coordinator session-status flush failed; will retry on next heartbeat",
+            exc_info=True,
+        )
+
+
 def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None:
     """Background thread: ping ``/heartbeat`` until stopped.
 
@@ -996,7 +1088,7 @@ def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None
     """
     while not _runner_heartbeat_stop.wait(_next_heartbeat_interval()):
         try:
-            result = client.heartbeat(holder_id)
+            result = client.heartbeat(holder_id, session=_runner_session)
         except RunnerRegistryUnavailable:
             # Transient outage; just try again on the next tick.
             logger.debug("Runner-registry heartbeat unavailable; will retry")
@@ -1020,6 +1112,7 @@ def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None
                     workflow_name=os.environ.get("GITHUB_WORKFLOW", ""),
                     proxy_hash=proxy_pool_hash(_resolve_proxy_pool_json()),
                     proxy_pool=proxy_pool_summary_for_registry(PROXY_POOL),
+                    session=_runner_session,
                 )
                 logger.info("Runner-registry recovered after eviction")
                 # Feed the registry's fresh recommendation so the auto-
@@ -1076,7 +1169,10 @@ def _unregister_runner_at_exit() -> None:
         else:
             _runner_heartbeat_thread = None
     try:
-        client.unregister(runtime_holder_id)
+        # Phase-1 ADR-008 — surface the final session state to the Coordinator
+        # so the dashboard never shows a runner stuck in `in_progress` after
+        # it has actually exited.
+        client.unregister(runtime_holder_id, session=_runner_session)
     except RunnerRegistryUnavailable:
         logger.debug("Runner-registry unregister unavailable at exit")
     except Exception:  # noqa: BLE001
@@ -1288,6 +1384,13 @@ def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
             result.movie_claim_recommended,
         )
         _warn_on_proxy_pool_drift(self_hash, result.pool_hash_summary)
+        # Phase-1 ADR-008 — honour operator-set pipeline pause. The pause is
+        # surfaced by the Worker via the embedded ConfigState snapshot; if
+        # active, this runner exits cleanly without touching JavDB.
+        _maybe_honour_pipeline_pause(
+            pipeline_paused_until_ms=result.pipeline_paused_until,
+            reason=result.pipeline_pause_reason,
+        )
         # Feed the auto-toggle with the very first cohort snapshot.  In
         # auto mode this either keeps the optimistically-mounted client
         # in place (≥2 runners) or unmounts it (single runner) within
