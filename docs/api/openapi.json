@@ -1,0 +1,1780 @@
+{
+  "components": {
+    "schemas": {
+      "AdhocTaskPayload": {
+        "properties": {
+          "date_filter": {
+            "default": false,
+            "title": "Date Filter",
+            "type": "boolean"
+          },
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "end_page": {
+            "default": 1,
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "End Page",
+            "type": "integer"
+          },
+          "history_filter": {
+            "default": false,
+            "title": "History Filter",
+            "type": "boolean"
+          },
+          "ignore_release_date": {
+            "default": true,
+            "title": "Ignore Release Date",
+            "type": "boolean"
+          },
+          "max_movies_phase1": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Movies Phase1"
+          },
+          "max_movies_phase2": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Movies Phase2"
+          },
+          "no_proxy": {
+            "default": false,
+            "title": "No Proxy",
+            "type": "boolean"
+          },
+          "phase": {
+            "default": "all",
+            "title": "Phase",
+            "type": "string"
+          },
+          "qb_category": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qb Category"
+          },
+          "start_page": {
+            "default": 1,
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Start Page",
+            "type": "integer"
+          },
+          "url": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          },
+          "use_proxy": {
+            "default": false,
+            "title": "Use Proxy",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "AdhocTaskPayload",
+        "type": "object"
+      },
+      "CrawlIndexPayload": {
+        "properties": {
+          "crawl_all": {
+            "default": false,
+            "title": "Crawl All",
+            "type": "boolean"
+          },
+          "end_page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Page"
+          },
+          "max_consecutive_empty": {
+            "default": 2,
+            "title": "Max Consecutive Empty",
+            "type": "integer"
+          },
+          "page_delay": {
+            "default": 1.0,
+            "title": "Page Delay",
+            "type": "number"
+          },
+          "start_page": {
+            "default": 1,
+            "title": "Start Page",
+            "type": "integer"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "use_cf_bypass": {
+            "default": true,
+            "title": "Use Cf Bypass",
+            "type": "boolean"
+          },
+          "use_cookie": {
+            "default": false,
+            "title": "Use Cookie",
+            "type": "boolean"
+          },
+          "use_proxy": {
+            "default": true,
+            "title": "Use Proxy",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "CrawlIndexPayload",
+        "type": "object"
+      },
+      "DailyTaskPayload": {
+        "properties": {
+          "all": {
+            "default": false,
+            "title": "All",
+            "type": "boolean"
+          },
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "end_page": {
+            "default": 10,
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "End Page",
+            "type": "integer"
+          },
+          "ignore_history": {
+            "default": false,
+            "title": "Ignore History",
+            "type": "boolean"
+          },
+          "ignore_release_date": {
+            "default": false,
+            "title": "Ignore Release Date",
+            "type": "boolean"
+          },
+          "max_movies_phase1": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Movies Phase1"
+          },
+          "max_movies_phase2": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Movies Phase2"
+          },
+          "mode": {
+            "default": "pipeline",
+            "title": "Mode",
+            "type": "string"
+          },
+          "no_proxy": {
+            "default": false,
+            "title": "No Proxy",
+            "type": "boolean"
+          },
+          "output_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output File"
+          },
+          "phase": {
+            "default": "all",
+            "title": "Phase",
+            "type": "string"
+          },
+          "pikpak_individual": {
+            "default": false,
+            "title": "Pikpak Individual",
+            "type": "boolean"
+          },
+          "start_page": {
+            "default": 1,
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Start Page",
+            "type": "integer"
+          },
+          "use_proxy": {
+            "default": false,
+            "title": "Use Proxy",
+            "type": "boolean"
+          }
+        },
+        "title": "DailyTaskPayload",
+        "type": "object"
+      },
+      "ExploreCookiePayload": {
+        "properties": {
+          "cookie": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Cookie",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cookie"
+        ],
+        "title": "ExploreCookiePayload",
+        "type": "object"
+      },
+      "ExploreIndexStatusPayload": {
+        "properties": {
+          "movies": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Movies",
+            "type": "array"
+          },
+          "use_cookie": {
+            "default": true,
+            "title": "Use Cookie",
+            "type": "boolean"
+          },
+          "use_proxy": {
+            "default": true,
+            "title": "Use Proxy",
+            "type": "boolean"
+          }
+        },
+        "title": "ExploreIndexStatusPayload",
+        "type": "object"
+      },
+      "ExploreMagnetPayload": {
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "magnet": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Magnet",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 255,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "magnet"
+        ],
+        "title": "ExploreMagnetPayload",
+        "type": "object"
+      },
+      "ExploreOneClickPayload": {
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "detail_url": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Detail Url",
+            "type": "string"
+          },
+          "use_cookie": {
+            "default": true,
+            "title": "Use Cookie",
+            "type": "boolean"
+          },
+          "use_proxy": {
+            "default": true,
+            "title": "Use Proxy",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "detail_url"
+        ],
+        "title": "ExploreOneClickPayload",
+        "type": "object"
+      },
+      "ExploreResolvePayload": {
+        "properties": {
+          "page_num": {
+            "default": 1,
+            "maximum": 9999.0,
+            "minimum": 1.0,
+            "title": "Page Num",
+            "type": "integer"
+          },
+          "url": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          },
+          "use_cookie": {
+            "default": true,
+            "title": "Use Cookie",
+            "type": "boolean"
+          },
+          "use_proxy": {
+            "default": true,
+            "title": "Use Proxy",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "ExploreResolvePayload",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthCheckPayload": {
+        "properties": {
+          "check_smtp": {
+            "default": true,
+            "title": "Check Smtp",
+            "type": "boolean"
+          },
+          "no_proxy": {
+            "default": false,
+            "title": "No Proxy",
+            "type": "boolean"
+          },
+          "use_proxy": {
+            "default": false,
+            "title": "Use Proxy",
+            "type": "boolean"
+          }
+        },
+        "title": "HealthCheckPayload",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "properties": {
+          "rust_core_available": {
+            "default": false,
+            "title": "Rust Core Available",
+            "type": "boolean"
+          },
+          "status": {
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "HtmlPayload": {
+        "properties": {
+          "html": {
+            "maxLength": 5242880,
+            "title": "Html",
+            "type": "string"
+          },
+          "page_num": {
+            "default": 1,
+            "maximum": 9999.0,
+            "minimum": 1.0,
+            "title": "Page Num",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "html"
+        ],
+        "title": "HtmlPayload",
+        "type": "object"
+      },
+      "LoginPayload": {
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginPayload",
+        "type": "object"
+      },
+      "SpiderJobPayload": {
+        "properties": {
+          "crawl_all": {
+            "default": false,
+            "title": "Crawl All",
+            "type": "boolean"
+          },
+          "disable_all_filters": {
+            "default": false,
+            "title": "Disable All Filters",
+            "type": "boolean"
+          },
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "enable_dedup": {
+            "default": false,
+            "title": "Enable Dedup",
+            "type": "boolean"
+          },
+          "enable_redownload": {
+            "default": false,
+            "title": "Enable Redownload",
+            "type": "boolean"
+          },
+          "end_page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Page"
+          },
+          "ignore_history": {
+            "default": false,
+            "title": "Ignore History",
+            "type": "boolean"
+          },
+          "ignore_release_date": {
+            "default": false,
+            "title": "Ignore Release Date",
+            "type": "boolean"
+          },
+          "max_movies_phase1": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Movies Phase1"
+          },
+          "max_movies_phase2": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Movies Phase2"
+          },
+          "no_proxy": {
+            "default": false,
+            "title": "No Proxy",
+            "type": "boolean"
+          },
+          "no_rclone_filter": {
+            "default": false,
+            "title": "No Rclone Filter",
+            "type": "boolean"
+          },
+          "phase": {
+            "default": "all",
+            "enum": [
+              "1",
+              "2",
+              "all"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "redownload_threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redownload Threshold"
+          },
+          "start_page": {
+            "default": 1,
+            "title": "Start Page",
+            "type": "integer"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "use_history": {
+            "default": false,
+            "title": "Use History",
+            "type": "boolean"
+          },
+          "use_proxy": {
+            "default": false,
+            "title": "Use Proxy",
+            "type": "boolean"
+          }
+        },
+        "title": "SpiderJobPayload",
+        "type": "object"
+      },
+      "UrlPayload": {
+        "properties": {
+          "page_num": {
+            "default": 1,
+            "title": "Page Num",
+            "type": "integer"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "use_cf_bypass": {
+            "default": true,
+            "title": "Use Cf Bypass",
+            "type": "boolean"
+          },
+          "use_cookie": {
+            "default": false,
+            "title": "Use Cookie",
+            "type": "boolean"
+          },
+          "use_proxy": {
+            "default": true,
+            "title": "Use Proxy",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "UrlPayload",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "VideoCodeSearchPayload": {
+        "properties": {
+          "f": {
+            "default": "all",
+            "maxLength": 32,
+            "title": "F",
+            "type": "string"
+          },
+          "use_cookie": {
+            "default": true,
+            "title": "Use Cookie",
+            "type": "boolean"
+          },
+          "use_proxy": {
+            "default": true,
+            "title": "Use Proxy",
+            "type": "boolean"
+          },
+          "video_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Video Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "video_code"
+        ],
+        "title": "VideoCodeSearchPayload",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Fullstack API for config, tasks and parsing.",
+    "title": "JAVDB AutoSpider API",
+    "version": "0.2.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/auth/login": {
+      "post": {
+        "operationId": "login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login"
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "operationId": "logout_api_auth_logout_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout"
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "operationId": "refresh_token_api_auth_refresh_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Refresh Token"
+      }
+    },
+    "/api/config": {
+      "get": {
+        "operationId": "get_config_api_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Config"
+      },
+      "put": {
+        "operationId": "update_config_api_config_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Config Updates",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Config"
+      }
+    },
+    "/api/config/meta": {
+      "get": {
+        "operationId": "get_config_meta_api_config_meta_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Config Meta"
+      }
+    },
+    "/api/crawl/index": {
+      "post": {
+        "operationId": "api_crawl_index_api_crawl_index_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrawlIndexPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Crawl Index"
+      }
+    },
+    "/api/detect-page-type": {
+      "post": {
+        "operationId": "api_detect_page_type_api_detect_page_type_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HtmlPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Detect Page Type"
+      }
+    },
+    "/api/explore/download-magnet": {
+      "post": {
+        "operationId": "explore_download_magnet_api_explore_download_magnet_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExploreMagnetPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Explore Download Magnet"
+      }
+    },
+    "/api/explore/index-status": {
+      "post": {
+        "operationId": "explore_index_status_api_explore_index_status_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExploreIndexStatusPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Explore Index Status"
+      }
+    },
+    "/api/explore/one-click": {
+      "post": {
+        "operationId": "explore_one_click_api_explore_one_click_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExploreOneClickPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Explore One Click"
+      }
+    },
+    "/api/explore/proxy-page": {
+      "get": {
+        "operationId": "explore_proxy_page_api_explore_proxy_page_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "url",
+            "required": true,
+            "schema": {
+              "title": "Url",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Explore Proxy Page"
+      }
+    },
+    "/api/explore/resolve": {
+      "post": {
+        "operationId": "explore_resolve_api_explore_resolve_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExploreResolvePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Explore Resolve"
+      }
+    },
+    "/api/explore/search-by-video-code": {
+      "post": {
+        "operationId": "explore_search_by_video_code_api_explore_search_by_video_code_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideoCodeSearchPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Explore Search By Video Code"
+      }
+    },
+    "/api/explore/sync-cookie": {
+      "post": {
+        "operationId": "explore_sync_cookie_api_explore_sync_cookie_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExploreCookiePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Explore Sync Cookie"
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "health_check_api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health Check"
+      }
+    },
+    "/api/health-check": {
+      "post": {
+        "operationId": "run_health_check_api_health_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HealthCheckPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Health Check"
+      }
+    },
+    "/api/jobs/spider": {
+      "post": {
+        "operationId": "api_submit_spider_job_api_jobs_spider_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpiderJobPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Submit Spider Job"
+      }
+    },
+    "/api/jobs/{job_id}/status": {
+      "get": {
+        "operationId": "api_get_spider_job_status_api_jobs__job_id__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Get Spider Job Status"
+      }
+    },
+    "/api/login/refresh": {
+      "post": {
+        "operationId": "refresh_javdb_session_api_login_refresh_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Refresh Javdb Session"
+      }
+    },
+    "/api/parse/category": {
+      "post": {
+        "operationId": "api_parse_category_api_parse_category_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HtmlPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Parse Category"
+      }
+    },
+    "/api/parse/detail": {
+      "post": {
+        "operationId": "api_parse_detail_api_parse_detail_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HtmlPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Parse Detail"
+      }
+    },
+    "/api/parse/index": {
+      "post": {
+        "operationId": "api_parse_index_api_parse_index_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HtmlPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Parse Index"
+      }
+    },
+    "/api/parse/tags": {
+      "post": {
+        "operationId": "api_parse_tags_api_parse_tags_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HtmlPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Parse Tags"
+      }
+    },
+    "/api/parse/top": {
+      "post": {
+        "operationId": "api_parse_top_api_parse_top_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HtmlPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Parse Top"
+      }
+    },
+    "/api/parse/url": {
+      "post": {
+        "operationId": "api_parse_url_api_parse_url_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UrlPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Parse Url"
+      }
+    },
+    "/api/tasks": {
+      "get": {
+        "operationId": "list_tasks_api_tasks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Tasks"
+      }
+    },
+    "/api/tasks/adhoc": {
+      "post": {
+        "operationId": "trigger_adhoc_api_tasks_adhoc_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdhocTaskPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trigger Adhoc"
+      }
+    },
+    "/api/tasks/daily": {
+      "post": {
+        "operationId": "trigger_daily_api_tasks_daily_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DailyTaskPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trigger Daily"
+      }
+    },
+    "/api/tasks/stats": {
+      "get": {
+        "operationId": "task_stats_api_tasks_stats_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Task Stats"
+      }
+    },
+    "/api/tasks/{job_id}": {
+      "get": {
+        "operationId": "get_task_api_tasks__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Task"
+      }
+    },
+    "/api/tasks/{job_id}/stream": {
+      "get": {
+        "operationId": "get_task_stream_api_tasks__job_id__stream_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Task Stream"
+      }
+    }
+  }
+}
