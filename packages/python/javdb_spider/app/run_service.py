@@ -444,6 +444,22 @@ def _main():
                 "write_mode=%s",
                 _session_id, run_id, run_attempt, effective_write_mode,
             )
+            # Phase-1 ADR-008 — surface session lifecycle to the Coordinator
+            # so the dashboard's Sessions panel reflects live state. Best-
+            # effort: never let a registry hiccup abort spider startup.
+            try:
+                from packages.python.javdb_spider.runtime import state as _runtime_state
+                _runtime_state.set_active_runner_session(
+                    session_id=str(_session_id),
+                    status="in_progress",
+                    write_mode=str(effective_write_mode or "unknown"),
+                    report_type=str(report_type or ""),
+                )
+            except Exception as _e:
+                logger.debug(
+                    "Coordinator session-state report skipped at create: %s",
+                    _e,
+                )
         except SystemExit:
             raise
         except Exception as e:
@@ -640,6 +656,21 @@ def _main():
 
         print(f"SPIDER_SESSION_ID={_session_id}")
 
+        # Phase-1 ADR-008 — flush a `committed` status now so the dashboard
+        # reflects the successful run even if the process exits before the
+        # next heartbeat tick. Idempotent on session_id.
+        try:
+            from packages.python.javdb_spider.runtime import state as _runtime_state
+            _runtime_state.set_active_runner_session(
+                session_id=str(_session_id),
+                status="committed",
+                write_mode=str(effective_write_mode or "unknown"),
+                report_type=str(report_type or ""),
+                flush_immediately=True,
+            )
+        except Exception:
+            logger.debug("Coordinator committed-status flush skipped", exc_info=True)
+
     from_pipeline = args.from_pipeline if hasattr(args, 'from_pipeline') else False
 
     if not dry_run and has_git_credentials(GIT_USERNAME, GIT_PASSWORD):
@@ -663,6 +694,32 @@ def _main():
 def main():
     try:
         return _main()
+    except BaseException as exc:
+        # Phase-1 ADR-008 — surface a `failed` session state to the Coordinator
+        # before re-raising so the dashboard's Sessions panel + alert
+        # webhook fires even when the spider crashes mid-run. SystemExit(0)
+        # is treated as success — only non-zero exits transition to failed.
+        try:
+            from packages.python.javdb_spider.runtime import state as _runtime_state
+            from packages.python.javdb_platform.db_session import (
+                get_active_session_id as _get_active_session_id,
+            )
+            should_mark_failed = True
+            if isinstance(exc, SystemExit):
+                code = exc.code if exc.code is not None else 0
+                should_mark_failed = code != 0
+            if should_mark_failed:
+                active_sess = _get_active_session_id()
+                if active_sess is not None:
+                    _runtime_state.set_active_runner_session(
+                        session_id=str(active_sess),
+                        status="failed",
+                        failure_reason=str(exc)[:1000] if not isinstance(exc, SystemExit) else f"exit code {exc.code}",
+                        flush_immediately=True,
+                    )
+        except Exception:
+            logger.debug("Coordinator failed-status flush skipped", exc_info=True)
+        raise
     finally:
         try:
             from packages.python.javdb_platform.db_session import (
