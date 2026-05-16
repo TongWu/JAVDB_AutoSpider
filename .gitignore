@@ -101,6 +101,12 @@ rust_core/target/wheels/
 rust_core/target/dist/
 rust_core/target/sdist/
 
+# Private keys / certificates
+*.pem
+*.key
+*.p12
+*.pfx
+
 # SQLite temporary files
 *.db-wal
 *.db-shm
@@ -112,3 +118,6 @@ pytest-of-tedwu/*
 # Keep the path ignored so any stray local clone here won't accidentally
 # get committed back into this monorepo.
 proxy_coordinator/
+
+# Cursor rules
+.cursor/

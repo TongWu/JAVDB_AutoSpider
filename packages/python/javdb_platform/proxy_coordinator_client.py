@@ -25,7 +25,6 @@ underlying ``requests.Session`` only stores connection-pool metadata.
 
 from __future__ import annotations
 
-import hashlib
 import os
 import queue
 import threading
@@ -34,6 +33,10 @@ from typing import Dict, List, Optional, Tuple
 
 import requests
 
+from packages.python.javdb_platform.do_client_base import (
+    BaseDOClient,
+    DOClientUnavailable,
+)
 from packages.python.javdb_platform.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -66,7 +69,7 @@ _ASYNC_REPORT_QUEUE_SIZE = 64
 _ASYNC_QUEUE_SENTINEL: Tuple = (None, None)
 
 
-class CoordinatorUnavailable(Exception):
+class CoordinatorUnavailable(DOClientUnavailable):
     """Raised when the coordinator cannot be reached or returns an error.
 
     This is a *signal*, not a panic: callers in the spider's hot path
@@ -169,40 +172,14 @@ class ReportResult:
     server_time_ms: int
 
 
-def _normalize_proxy_id(raw: Optional[str], *, fallback_seed: Optional[str] = None) -> str:
-    """Deterministically normalise a proxy identifier for DO addressing.
-
-    All runners must derive the same string for the same physical proxy,
-    or the per-proxy DO mutex falls apart silently.  The rule is:
-
-    1. If *raw* is a non-empty string, strip whitespace and use it verbatim.
-    2. Otherwise, if *fallback_seed* is provided (typically ``host:port``),
-       hash it to a stable 16-char hex digest and prefix ``proxy-``.
-    3. Otherwise, raise :class:`ValueError` so the bug surfaces loudly.
-
-    Returns a string of length 1..256 (the DO ``idFromName`` limit).
-    """
-    if isinstance(raw, str):
-        trimmed = raw.strip()
-        if trimmed:
-            return trimmed[:256]
-    if fallback_seed:
-        # Not a security-critical hash — only used to bucket a configurable
-        # ``host:port`` into a stable 16-char DO key. ``usedforsecurity=False``
-        # silences the Bandit S324 / Ruff S324 lint without changing the
-        # produced digest, so existing runners that may have already derived
-        # IDs continue to agree on the same DO key.
-        digest = hashlib.sha1(  # noqa: S324 — see comment above
-            fallback_seed.encode("utf-8"), usedforsecurity=False
-        ).hexdigest()[:16]
-        derived = f"proxy-{digest}"
-        logger.warning(
-            "Coordinator proxy_id derived from host:port hash: %s — "
-            "recommend setting `name` in PROXY_POOL_JSON so all runners agree",
-            derived,
-        )
-        return derived
-    raise ValueError("proxy_id is empty and no fallback_seed was provided")
+#: Backwards-compatible alias for the previously-private helper. The
+#: canonical home is :func:`packages.python.javdb_platform.proxy_policy.normalize_proxy_id`;
+#: this re-export keeps existing imports
+#: (``from proxy_coordinator_client import _normalize_proxy_id``) working
+#: without churn while internal call-sites migrate.
+from packages.python.javdb_platform.proxy_policy import (  # noqa: E402
+    normalize_proxy_id as _normalize_proxy_id,
+)
 
 
 # P1-A — ``ban`` / ``unban`` / ``cf_bypass`` are *out-of-band* report kinds
@@ -239,18 +216,14 @@ def _validate_kind(kind: str) -> str:
 def _extract_server_time_ms(data: dict) -> int:
     """Read the server-side timestamp from a coordinator response.
 
-    Prefers the ``server_time_ms`` wire key (matches the dataclass field
-    name) and falls back to ``server_time`` for backward compatibility with
-    the current Worker, which emits ``server_time`` from a ``Date.now()``
-    call (already in milliseconds). The fallback lets the Worker migrate to
-    the explicit ``server_time_ms`` key without coordinated Python deploys.
+    Module-level alias of :meth:`BaseDOClient._extract_server_time_ms`
+    so existing tests / call-sites keep importing it from this module
+    unchanged.
     """
-    if "server_time_ms" in data:
-        return int(data["server_time_ms"])
-    return int(data["server_time"])
+    return BaseDOClient._extract_server_time_ms(data)
 
 
-class ProxyCoordinatorClient:
+class ProxyCoordinatorClient(BaseDOClient):
     """HTTP client for the proxy-coordinator Worker.
 
     Construct once per process and pass into :class:`MovieSleepManager` and
@@ -266,6 +239,8 @@ class ProxyCoordinatorClient:
         user_agent: Optional override for the ``User-Agent`` header.
     """
 
+    _unavailable_exc = CoordinatorUnavailable
+
     def __init__(
         self,
         base_url: str,
@@ -276,19 +251,7 @@ class ProxyCoordinatorClient:
         async_workers: int = _ASYNC_REPORT_WORKERS,
         async_queue_size: int = _ASYNC_REPORT_QUEUE_SIZE,
     ):
-        if not base_url or not isinstance(base_url, str):
-            raise ValueError("base_url must be a non-empty string")
-        if not token or not isinstance(token, str):
-            raise ValueError("token must be a non-empty string")
-        self._base_url = base_url.rstrip("/")
-        self._token = token
-        self._timeout = float(timeout)
-        self._session = requests.Session()
-        self._session.headers.update({
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "User-Agent": user_agent,
-        })
+        super().__init__(base_url, token, timeout=timeout, user_agent=user_agent)
         self._async_worker_count = max(1, int(async_workers))
         # Bounded fire-and-forget pool for ``report_async``. Keep capacity at
         # least equal to the worker count so shutdown can enqueue one sentinel
@@ -309,15 +272,9 @@ class ProxyCoordinatorClient:
         self._health_cache: Dict[str, ProxyHealthSnapshot] = {}
         self._health_cache_lock = threading.Lock()
 
-    def _close_session(self) -> None:
-        try:
-            self._session.close()
-        except Exception as exc:  # noqa: BLE001 - cleanup must be best-effort
-            logger.warning("Failed to close proxy coordinator HTTP session: %s", exc)
-
-    @property
-    def base_url(self) -> str:
-        return self._base_url
+    # ``base_url`` property and ``_close_session`` are inherited from
+    # :class:`BaseDOClient`. ``close()`` is overridden below to drain the
+    # async report queue before closing the session.
 
     # -- public API ---------------------------------------------------------
 
@@ -729,7 +686,22 @@ class ProxyCoordinatorClient:
         """
         try:
             resp = self._session.get(f"{self._base_url}/health", timeout=self._timeout)
-            return resp.status_code == 200
+            if resp.status_code == 200:
+                return True
+            if resp.status_code == 403 and resp.headers.get("cf-mitigated"):
+                logger.warning(
+                    "Proxy coordinator /health returned 403 with Cloudflare "
+                    "challenge (cf-mitigated=%s) — the domain's WAF/bot rules "
+                    "are blocking automated requests; add a WAF exception for "
+                    "the /health path or use a Cloudflare Access service token",
+                    resp.headers.get("cf-mitigated"),
+                )
+            else:
+                logger.warning(
+                    "Proxy coordinator /health returned HTTP %d (expected 200)",
+                    resp.status_code,
+                )
+            return False
         except Exception:  # noqa: BLE001
             return False
 

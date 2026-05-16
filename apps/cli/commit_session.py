@@ -35,16 +35,16 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
-from packages.python.javdb_platform.db import (
-    close_db,
-    db_commit_session_history,
+from packages.python.javdb_platform.db_connection import close_db
+from packages.python.javdb_platform.db_history_write import db_commit_session_history
+from packages.python.javdb_platform.db_reports import (
     db_find_in_progress_sessions,
     db_get_session_run_identity,
     db_get_session_status,
     db_mark_session_committed,
     db_pending_session_stats,
-    init_db,
 )
+from packages.python.javdb_platform.db_migrations import init_db
 from packages.python.javdb_platform.logging_config import (
     get_logger,
     setup_logging,
@@ -71,7 +71,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--session-id",
-        type=int,
+        type=str,
         default=None,
         help="Specific ReportSessions.Id to commit (e.g. the spider's "
              "primary session). Optional.",
@@ -215,7 +215,7 @@ def _shadow_audit_enabled(args: argparse.Namespace) -> bool:
 
 
 def _shadow_audit_drift(
-    session_id: int,
+    session_id: str,
     drain: Dict[str, Any],
 ) -> Dict[str, Any]:
     """Compare the live derived indicators against an audit-path replay.
@@ -233,7 +233,7 @@ def _shadow_audit_drift(
     drift=0 with the error captured in ``derived_drift_error`` so the
     metric still emits.
     """
-    from packages.python.javdb_platform.db import (
+    from packages.python.javdb_platform.db_connection import (
         get_db,
         HISTORY_DB_PATH,
     )
@@ -250,7 +250,7 @@ def _shadow_audit_drift(
                     "       mh.HiResIndicator AS hri "
                     "FROM MovieHistory mh "
                     "WHERE mh.SessionId=?",
-                    (int(session_id),),
+                    (session_id,),
                 ).fetchall()
             except Exception as exc:  # noqa: BLE001
                 return {
@@ -301,7 +301,7 @@ def _shadow_audit_drift(
 
 
 def _emit_pending_verify(
-    session_id: int,
+    session_id: str,
     *,
     drain: Optional[Dict[str, Any]],
     final_status: Optional[str],
@@ -339,7 +339,7 @@ def _emit_pending_verify(
         "kind": "pending_session_verify",
         "ts": datetime.now(timezone.utc).isoformat(),
         "source": "commit_session",
-        "session_id": int(session_id),
+        "session_id": session_id,
         "write_mode": write_mode,
         "final_status": final_status,
         "pending_staged_count": pending_staged_count,
@@ -358,14 +358,14 @@ def _emit_pending_verify(
         "shadow_audit_enabled": bool(shadow_audit),
     }
     try:
-        identity = db_get_session_run_identity(int(session_id))
+        identity = db_get_session_run_identity(session_id)
     except Exception:  # noqa: BLE001
         identity = None
     if identity is not None:
         record["run_id"] = identity[0]
         record["run_attempt"] = identity[1]
     if shadow_audit and final_status == "committed":
-        record.update(_shadow_audit_drift(int(session_id), drain))
+        record.update(_shadow_audit_drift(session_id, drain))
     else:
         record["derived_recompute_drift"] = 0
         record["derived_drift_samples"] = []
@@ -441,7 +441,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     targets: Set[int] = set()
     if args.session_id is not None:
-        targets.add(int(args.session_id))
+        targets.add(args.session_id)
 
     since = _normalize_run_started_at(args.run_started_at)
     if since:
@@ -463,7 +463,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 close_db()
                 return 1
         for sid in window_sessions:
-            targets.add(int(sid))
+            targets.add(sid)
 
     if not targets:
         logger.info(

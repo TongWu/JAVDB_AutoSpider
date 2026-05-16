@@ -110,8 +110,8 @@ jobs:
             echo "    in-progress session created at-or-after that timestamp."
             exit 1
           fi
-          if [ -n "$INPUT_SESSION_ID" ] && ! [[ "$INPUT_SESSION_ID" =~ ^[0-9]+$ ]]; then
-            echo "::error::session_id must be an integer ReportSessions.Id; got '$INPUT_SESSION_ID'."
+          if [ -n "$INPUT_SESSION_ID" ] && ! echo "$INPUT_SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
+            echo "::error::session_id contains invalid characters; got '$INPUT_SESSION_ID'."
             exit 1
           fi
           # Production guard: any non-dry-run or --force invocation must
@@ -134,7 +134,7 @@ jobs:
           fi
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
           lfs: true
@@ -282,7 +282,7 @@ jobs:
 
       - name: Upload rollback log
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: rollback-log
           # Phase-1 — also surface d1_drift.jsonl so any failed

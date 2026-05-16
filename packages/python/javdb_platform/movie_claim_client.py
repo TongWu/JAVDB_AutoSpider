@@ -36,6 +36,11 @@ from typing import Optional, Tuple
 
 import requests
 
+from packages.python.javdb_platform import config_helper
+from packages.python.javdb_platform.do_client_base import (
+    BaseDOClient,
+    DOClientUnavailable,
+)
 from packages.python.javdb_platform.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -139,7 +144,7 @@ def current_shard_date() -> str:
     return datetime.now(_OPS_TZ).strftime("%Y-%m-%d")
 
 
-class MovieClaimUnavailable(Exception):
+class MovieClaimUnavailable(DOClientUnavailable):
     """Raised when the movie claim Worker cannot be reached or returns an error.
 
     This is a *signal*, not a panic.  Every callsite in the spider treats
@@ -331,18 +336,14 @@ class ReportFailureResult:
 def _extract_server_time_ms(data: dict) -> int:
     """Read the server-side timestamp from a response.
 
-    Prefers ``server_time_ms`` and falls back to ``server_time`` for parity
-    with the Worker (which currently emits the latter from ``Date.now()``
-    already in ms).  Mirrors :func:`login_state_client._extract_server_time_ms`
-    so the Worker can migrate to the explicit-units key without coordinated
-    client deploys.
+    Module-level alias of :meth:`BaseDOClient._extract_server_time_ms`
+    so existing tests / call-sites keep importing it from this module
+    unchanged.
     """
-    if "server_time_ms" in data:
-        return int(data["server_time_ms"])
-    return int(data["server_time"])
+    return BaseDOClient._extract_server_time_ms(data)
 
 
-class MovieClaimClient:
+class MovieClaimClient(BaseDOClient):
     """HTTP client for the MovieClaimState DO.
 
     Construct once per process and pass into the runtime's detail-fetch
@@ -358,31 +359,7 @@ class MovieClaimClient:
         user_agent: Optional override for the ``User-Agent`` header.
     """
 
-    def __init__(
-        self,
-        base_url: str,
-        token: str,
-        *,
-        timeout: float = _DEFAULT_TIMEOUT_SEC,
-        user_agent: str = _DEFAULT_USER_AGENT,
-    ):
-        if not base_url or not isinstance(base_url, str):
-            raise ValueError("base_url must be a non-empty string")
-        if not token or not isinstance(token, str):
-            raise ValueError("token must be a non-empty string")
-        self._base_url = base_url.rstrip("/")
-        self._token = token
-        self._timeout = float(timeout)
-        self._session = requests.Session()
-        self._session.headers.update({
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "User-Agent": user_agent,
-        })
-
-    @property
-    def base_url(self) -> str:
-        return self._base_url
+    _unavailable_exc = MovieClaimUnavailable
 
     # -- public API ---------------------------------------------------------
 
@@ -745,63 +722,13 @@ class MovieClaimClient:
                 f"malformed status response: {resp!r} ({e})"
             ) from e
 
-    def health_check(self) -> bool:
-        """Return ``True`` if ``GET /health`` returns 200.
+    # ``health_check``, ``close``, and ``_do_request`` are inherited
+    # from :class:`BaseDOClient`. A non-2xx status surfaces verbatim in
+    # the ``MovieClaimUnavailable`` message so e.g. "503 MOVIE_CLAIM_DO
+    # binding missing" (v3 migration not applied) is visible in logs.
 
-        Reuses the unauthenticated liveness probe shared with the proxy
-        coordinator and login-state DOs (they all live behind the same
-        Worker), so a single ``/health`` call validates that the new
-        ``/claim_movie`` etc. routes are reachable.  Never raises.
-        """
-        try:
-            resp = self._session.get(f"{self._base_url}/health", timeout=self._timeout)
-            return resp.status_code == 200
-        except Exception:  # noqa: BLE001
-            return False
 
-    def close(self) -> None:
-        """Release the underlying ``requests.Session``.  Idempotent."""
-        try:
-            self._session.close()
-        except Exception as exc:  # noqa: BLE001 — cleanup is best-effort
-            logger.warning("Failed to close movie-claim HTTP session: %s", exc)
-
-    # -- internals ---------------------------------------------------------
-
-    def _do_request(
-        self,
-        method: str,
-        path: str,
-        body: Optional[dict] = None,
-    ) -> dict:
-        """Issue a single HTTP call and decode its JSON body.
-
-        All four exception paths (timeout, connection error, non-2xx,
-        malformed JSON) collapse into :class:`MovieClaimUnavailable` so
-        callers only have to handle one type.  Never retries.
-        """
-        url = f"{self._base_url}{path}"
-        try:
-            if method == "GET":
-                resp = self._session.get(url, timeout=self._timeout)
-            else:
-                resp = self._session.post(url, json=body or {}, timeout=self._timeout)
-        except (requests.Timeout, requests.ConnectionError) as e:
-            raise MovieClaimUnavailable(f"network error: {e}") from e
-        except requests.RequestException as e:
-            raise MovieClaimUnavailable(f"request failed: {e}") from e
-
-        if resp.status_code >= 300:
-            # 503 here typically means "MOVIE_CLAIM_DO binding missing" —
-            # i.e. the v3 migration hasn't been applied yet.  Surfacing the
-            # status in the message lets the operator notice & deploy.
-            raise MovieClaimUnavailable(
-                f"HTTP {resp.status_code}: {resp.text[:200]}"
-            )
-        try:
-            return resp.json()
-        except ValueError as e:
-            raise MovieClaimUnavailable(f"invalid JSON: {e}") from e
+_ENABLED_UNSET = object()
 
 
 def create_movie_claim_client_with_mode_from_env(
@@ -809,37 +736,39 @@ def create_movie_claim_client_with_mode_from_env(
     url_env: str = "PROXY_COORDINATOR_URL",
     token_env: str = "PROXY_COORDINATOR_TOKEN",
     enabled_env: str = "MOVIE_CLAIM_ENABLED",
+    enabled_mode_override: object = None,
 ) -> Tuple[Optional[MovieClaimClient], str]:
-    """Build a client + resolve the activation mode from env vars.
+    """Build a client + resolve the activation mode.
+
+    ``PROXY_COORDINATOR_URL`` and ``PROXY_COORDINATOR_TOKEN`` are read
+    **only** from :func:`packages.python.javdb_platform.config_helper.cfg`
+    (i.e. ``config.py``).  ``os.environ`` is ignored for those two so CI
+    jobs that render credentials exclusively into ``config.py`` behave the
+    same as CLIs.  Missing or blank values disable movie-claim for this call.
+
+    ``MOVIE_CLAIM_ENABLED`` uses the process environment when the variable
+    is present there; otherwise it falls back to ``cfg`` (same attribute
+    name).  ``None`` / unset maps to ``auto``; explicit empty string in the
+    environment still means force-off.
+
+    When *enabled_mode_override* is provided (not ``None``), it is used
+    directly as the raw enabled value, bypassing both ``os.environ`` and
+    ``cfg`` lookups for the enabled flag.  This avoids thread-unsafe
+    ``os.environ`` manipulation in callers.
 
     Returns a ``(client_or_none, mode)`` tuple.  The mode is one of
     :data:`MOVIE_CLAIM_MODE_OFF` / :data:`MOVIE_CLAIM_MODE_AUTO` /
-    :data:`MOVIE_CLAIM_MODE_FORCE_ON` and reflects what the env var
-    actually said *plus* the configuration / health gates: a healthy
-    auto deploy returns ``(client, "auto")``, an unhealthy or
-    unconfigured auto deploy returns ``(None, "off")`` so the runtime
-    state can short-circuit downstream signal handling.
-
-    Three independent disable paths, all returning
-    ``(None, MOVIE_CLAIM_MODE_OFF)`` so the spider transparently falls
-    back to its pre-DO behaviour:
-
-    - ``MOVIE_CLAIM_ENABLED`` resolves to ``off`` via
-      :func:`parse_movie_claim_mode` (default semantics: explicit
-      ``false`` / ``0`` / empty string force off; **unset** maps to
-      ``auto``);
-    - either of ``PROXY_COORDINATOR_URL`` / ``PROXY_COORDINATOR_TOKEN``
-      is empty (the supported way to disable *all* coordinator features);
-    - the URL is configured but ``/health`` does not respond (logs an
-      ERROR so deployment misconfiguration surfaces early).
-
-    The `force_on` and `auto` happy paths both return a ready-to-use
-    client; the difference lives in `state.setup_movie_claim_client`,
-    which mounts the auto-mode client behind the registry signal while
-    force-on mode unconditionally publishes it on
-    `state.global_movie_claim_client`.
+    :data:`MOVIE_CLAIM_MODE_FORCE_ON`.  A healthy auto deploy returns
+    ``(client, "auto")``; missing URL/token, disabled mode, or ``/health``
+    failure collapses to ``(None, off)``.
     """
-    raw_value = os.environ.get(enabled_env)
+    if enabled_mode_override is not None:
+        raw_value = None if enabled_mode_override is _ENABLED_UNSET else str(enabled_mode_override)
+    elif enabled_env in os.environ:
+        raw_value = os.environ.get(enabled_env)
+    else:
+        configured = config_helper.cfg(enabled_env, None)
+        raw_value = None if configured is None else str(configured)
     # ``None`` means "var not set at all" → apply the new ``auto`` default.
     # Empty string means "set to nothing" → keep the old "force-off" intuition
     # so an operator who wants to silence the feature can still use
@@ -854,12 +783,12 @@ def create_movie_claim_client_with_mode_from_env(
         )
         return None, MOVIE_CLAIM_MODE_OFF
 
-    url = (os.environ.get(url_env) or "").strip()
-    token = (os.environ.get(token_env) or "").strip()
+    url = (config_helper.cfg(url_env, None) or "").strip()
+    token = (config_helper.cfg(token_env, None) or "").strip()
     if not url or not token:
         logger.info(
-            "Movie-claim client not configured (%s/%s unset, mode=%s) — "
-            "using per-process dedup only",
+            "Movie-claim client not configured (%s/%s missing or empty in "
+            "config.py, mode=%s) — using per-process dedup only",
             url_env, token_env, mode,
         )
         return None, MOVIE_CLAIM_MODE_OFF
@@ -888,15 +817,9 @@ def create_movie_claim_client_from_env(
 ) -> Optional[MovieClaimClient]:
     """Backward-compatible thin wrapper over the with-mode factory.
 
-    Preserves the legacy single-return signature for callers that only
-    care about "is there a client at all".  ``auto`` and ``force_on`` modes
-    both yield a constructed client here (the runtime layer is responsible
-    for deciding when to actually mount it on the global state).
-
-    Designed to mirror :func:`create_login_state_client_from_env` so
-    wiring code can decide independently whether the per-proxy throttle,
-    cross-runtime login state, and movie-claim coordinator are each
-    enabled — without juggling three sets of env vars.
+    URL and token are taken from ``config.py`` via
+    :func:`packages.python.javdb_platform.config_helper.cfg` only; see
+    :func:`create_movie_claim_client_with_mode_from_env`.
     """
     client, _mode = create_movie_claim_client_with_mode_from_env(
         url_env=url_env, token_env=token_env, enabled_env=enabled_env,

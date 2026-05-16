@@ -4,7 +4,7 @@ from compat import activate_repo_root
 
 activate_repo_root()
 
-from packages.python.javdb_platform.db import close_db  # noqa: E402
+from packages.python.javdb_platform.db_connection import close_db  # noqa: E402
 
 atexit.register(close_db)
 

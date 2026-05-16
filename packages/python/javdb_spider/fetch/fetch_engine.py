@@ -49,7 +49,9 @@ from urllib.parse import urlparse
 
 from packages.python.javdb_platform.logging_config import get_logger
 from packages.python.javdb_platform.login_state_client import LoginStateUnavailable
-from packages.python.javdb_platform.proxy_coordinator_client import _normalize_proxy_id
+from packages.python.javdb_platform.proxy_policy import (
+    normalize_proxy_id as _normalize_proxy_id,
+)
 from packages.python.javdb_platform.proxy_ban_manager import get_ban_manager
 from packages.python.javdb_platform.proxy_pool import create_proxy_pool_from_config
 from packages.python.javdb_platform.request_handler import (
@@ -251,9 +253,9 @@ _TaskQueue = Union[queue_module.Queue, _PriorityTaskQueue]
 ProcessFn = Callable[['WorkerContext', EngineTask], Any]
 
 
-def _task_worker_ctx(entry_index: str, worker_name: str) -> str:
-    """Unified task log prefix: entry first, then worker."""
-    return f"[{entry_index}][worker={worker_name}]"
+from packages.python.javdb_spider.fetch.utils import (  # noqa: E402
+    task_worker_ctx as _task_worker_ctx,
+)
 
 
 # ---------------------------------------------------------------------------

@@ -8,10 +8,8 @@ from urllib.parse import urljoin
 
 from packages.python.javdb_platform.logging_config import get_logger
 from packages.python.javdb_platform.config_helper import use_sqlite
-from packages.python.javdb_platform.db import (
-    db_batch_update_movie_actors,
-    get_active_session_id,
-)
+from packages.python.javdb_platform.db_history_read import db_batch_update_movie_actors
+from packages.python.javdb_platform.db_session import get_active_session_id
 from packages.python.javdb_platform.history_manager import (
     save_parsed_movie_to_history,
     batch_update_last_visited,
@@ -406,7 +404,100 @@ def process_detail_entries(
     # a lease to release.
     held_claims: Set[str] = set(leased_hrefs)
 
+    # W6.C (W5.2) — opt-in WorkDistributor producer + pull-based consumer.
+    # When the queue is enabled, this runner:
+    #   1. Enqueues its filtered survivor hrefs (idempotent on key).
+    #   2. Pulls from the shared queue, leases each pulled item to
+    #      itself, and submits tasks for items it has local metadata
+    #      for (skips peer-enqueued hrefs we didn't scan).
+    # Tasks dispatched via the queue path are tracked in
+    # ``queue_held_hrefs`` so the results loop below can fire
+    # ``complete``/``release`` per-task — symmetric with the existing
+    # MovieClaim ack flow. MovieClaim continues running as
+    # defence-in-depth per the W5.2 plan.
+    #
+    # When the queue is disabled (default), the existing local-loop
+    # dispatch path runs unchanged — zero behavioural drift.
+    work_client = state.global_work_distributor_client
+    queue_held_hrefs: Set[str] = set()
+    # Gate the entire producer + consumer path on `prepared_entries`:
+    # an empty survivor list means there's nothing to enqueue AND we
+    # don't have local metadata for anything peers might have queued.
+    # Skipping cleanly avoids a network round-trip in the no-op case.
+    if work_client is not None and not prepared_entries:
+        work_client = None
+    if work_client is not None:
+        try:
+            keys = [c.href for c in prepared_entries if c.href]
+            enqueue_result = work_client.enqueue(keys)
+            logger.info(
+                "Phase %d: W5.2 enqueued %d hrefs to WorkDistributor "
+                "(queue_size=%d, %d duplicates ignored)",
+                phase, len(enqueue_result.enqueued),
+                enqueue_result.queue_size, len(enqueue_result.duplicates),
+            )
+        except Exception:  # noqa: BLE001 — queue is best-effort
+            logger.warning(
+                "Phase %d: WorkDistributor enqueue failed; falling back to local dispatch",
+                phase, exc_info=True,
+            )
+            work_client = None  # disable consumer side for this phase
+
+    if work_client is not None:
+        # Consumer path: pull from queue and dispatch only the items
+        # this runner is allowed to process (each item carries a
+        # visibility lease tied to ``state.runtime_holder_id``).
+        prepared_by_href = {c.href: c for c in prepared_entries}
+        holder_id = state.runtime_holder_id
+        pull_batch_size = max(10, min(50, len(prepared_entries) or 10))
+        try:
+            while True:
+                pull = work_client.pull(
+                    holder_id,
+                    max_items=pull_batch_size,
+                    visibility_timeout_ms=30 * 60 * 1000,
+                )
+                if not pull.items:
+                    break
+                for item in pull.items:
+                    candidate = prepared_by_href.get(item.key)
+                    if candidate is None:
+                        # Peer-enqueued href we don't have local metadata
+                        # for — release back so a peer with the entry
+                        # picks it up. Worker dedup makes this rare.
+                        try:
+                            work_client.release(holder_id, [item.key])
+                        except Exception:  # noqa: BLE001
+                            pass
+                        continue
+                    queue_held_hrefs.add(item.key)
+                    detail_url = urljoin(BASE_URL, candidate.href)
+                    backend.submit_task(
+                        EngineTask(
+                            url=detail_url,
+                            entry_index=candidate.entry_index,
+                            meta={
+                                'entry': candidate.entry,
+                                'phase': phase,
+                                'video_code': candidate.entry.get('video_code', ''),
+                            },
+                        )
+                    )
+        except Exception:  # noqa: BLE001 — pull failure is fail-open
+            logger.warning(
+                "Phase %d: WorkDistributor pull failed; "
+                "remaining %d candidates will run via local dispatch",
+                phase, len(prepared_entries) - len(queue_held_hrefs),
+                exc_info=True,
+            )
+            # Fall through to the local-dispatch loop below for any
+            # candidates not yet submitted via the queue.
+
+    # Local-dispatch path (default; also the fallback after a queue
+    # outage). Skips candidates already dispatched via the queue.
     for candidate in prepared_entries:
+        if candidate.href in queue_held_hrefs:
+            continue
         detail_url = urljoin(BASE_URL, candidate.href)
         logger.debug(
             f"[{candidate.entry_index}] [Page {candidate.page_num}] "
@@ -491,6 +582,19 @@ def process_detail_entries(
                     ):
                         _release_movie_claim(href, shard_date)
                     held_claims.discard(href)
+                # W5.2 — failed task → release queue lease so a peer
+                # (or this runner on retry) can re-pull. We deliberately
+                # do NOT call complete on failure: the queue dedup
+                # treats released items as still-pending.
+                if href in queue_held_hrefs and work_client is not None:
+                    try:
+                        work_client.release(state.runtime_holder_id, [href])
+                    except Exception:  # noqa: BLE001 — fail-open
+                        logger.debug(
+                            "WorkDistributor release(%s) failed", href,
+                            exc_info=True,
+                        )
+                    queue_held_hrefs.discard(href)
                 current_runtime_state = backend.runtime_state()
                 result.acknowledge(
                     'failed',
@@ -563,6 +667,20 @@ def process_detail_entries(
                     _release_movie_claim(href, shard_date)
                 held_claims.discard(href)
 
+            # W5.2 — successful task → mark the queue item complete so
+            # the Worker removes it from the visible pool. Fail-open: a
+            # complete failure leaves the lease in place; the visibility
+            # timeout (30 min, set at pull time) is the safety net.
+            if href in queue_held_hrefs and work_client is not None:
+                try:
+                    work_client.complete(state.runtime_holder_id, [href])
+                except Exception:  # noqa: BLE001 — fail-open
+                    logger.debug(
+                        "WorkDistributor complete(%s) failed", href,
+                        exc_info=True,
+                    )
+                queue_held_hrefs.discard(href)
+
             current_runtime_state = backend.runtime_state()
             result.acknowledge(
                 outcome.status,
@@ -581,6 +699,19 @@ def process_detail_entries(
         for stuck_href in list(held_claims):
             _release_movie_claim(stuck_href, shard_date)
         held_claims.clear()
+        # W5.2 — same recovery for queue leases. Releasing all at once
+        # in a single API call keeps shutdown latency bounded.
+        if queue_held_hrefs and work_client is not None:
+            try:
+                work_client.release(
+                    state.runtime_holder_id, list(queue_held_hrefs),
+                )
+            except Exception:  # noqa: BLE001 — fail-open on shutdown
+                logger.debug(
+                    "WorkDistributor bulk release on shutdown failed",
+                    exc_info=True,
+                )
+            queue_held_hrefs.clear()
         backend.shutdown()
 
     finalize_detail_phase(

@@ -10,6 +10,7 @@ just drops the staging table.
 
 from __future__ import annotations
 
+import re
 from typing import Iterable, List, Optional, Tuple
 from packages.python.javdb_core.contracts import (
     get_video_code,
@@ -33,12 +34,18 @@ CREATE TABLE {staging} (
 """
 
 
-def _staging_table_name(session_id: int) -> str:
-    """Derive the per-session staging table name (validated for safety)."""
-    sid = int(session_id)
-    if sid <= 0:
-        raise ValueError(f"session_id must be a positive int, got {session_id!r}")
-    return f"RcloneInventoryStaging_{sid}"
+def _staging_table_name(session_id: str) -> str:
+    """Derive the per-session staging table name (validated for safety).
+
+    Session ids are TEXT snowflakes (post-2026-05-13) that contain ``.``
+    and ``-`` separators; both are illegal in unquoted SQL identifiers,
+    so map every non-``[A-Za-z0-9_]`` byte to ``_`` before splicing into
+    the table name. Empty or whitespace-only ids are rejected.
+    """
+    if session_id is None or str(session_id).strip() == "":
+        raise ValueError(f"session_id must be non-empty, got {session_id!r}")
+    suffix = re.sub(r'[^0-9A-Za-z_]', '_', str(session_id))
+    return f"RcloneInventoryStaging_{suffix}"
 
 
 def _normalize_inventory_entry(entry: dict) -> Tuple[str, str, str, str, int, int, str]:
@@ -53,7 +60,7 @@ def _normalize_inventory_entry(entry: dict) -> Tuple[str, str, str, str, int, in
     )
 
 
-def open_rclone_staging(conn, session_id: int) -> str:
+def open_rclone_staging(conn, session_id: str) -> str:
     """Drop+recreate the staging table for *session_id*.
 
     Returns the staging table name. Idempotent: safe to call at the start
@@ -68,7 +75,7 @@ def open_rclone_staging(conn, session_id: int) -> str:
 def append_rclone_staging(
     conn,
     entries: List[dict],
-    session_id: int,
+    session_id: str,
 ) -> int:
     """INSERT *entries* into this session's staging table."""
     if not entries:
@@ -108,7 +115,7 @@ def _execute_inventory_batch(conn, statements, *, action: str) -> None:
             conn.execute(sql, params)
 
 
-def swap_rclone_inventory(conn, session_id: int) -> int:
+def swap_rclone_inventory(conn, session_id: str) -> int:
     """Atomically replace ``RcloneInventory`` with this session's staging rows.
 
     Issues DELETE + INSERT FROM staging + DROP staging in a single D1
@@ -152,7 +159,7 @@ def swap_rclone_inventory(conn, session_id: int) -> int:
 
 def merge_rclone_inventory_from_stage(
     conn,
-    session_id: int,
+    session_id: str,
     years: Iterable[str],
 ) -> int:
     """Refresh only the requested year prefixes from this session's staging."""
@@ -204,7 +211,7 @@ def merge_rclone_inventory_from_stage(
         return int(row[0])
 
 
-def drop_rclone_staging(conn, session_id: int) -> None:
+def drop_rclone_staging(conn, session_id: str) -> None:
     """Drop this session's staging table (idempotent; rollback cleanup)."""
     staging = _staging_table_name(session_id)
     conn.execute(f"DROP TABLE IF EXISTS {staging}")
@@ -214,7 +221,7 @@ def replace_rclone_inventory(
     conn,
     entries: List[dict],
     *,
-    session_id: Optional[int] = None,
+    session_id: Optional[str] = None,
 ) -> int:
     """Replace the inventory table.
 

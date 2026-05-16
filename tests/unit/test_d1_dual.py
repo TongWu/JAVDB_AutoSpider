@@ -322,6 +322,32 @@ def test_execute_sends_single_object_body(monkeypatch, d1_conn, no_sleep):
     assert captured["json"] == {"sql": "SELECT * FROM t WHERE id = ?", "params": [1]}
 
 
+def test_execute_stringifies_json_unsafe_integer_params(monkeypatch, d1_conn, no_sleep):
+    """Ints beyond JS Number.MAX_SAFE_INTEGER must not be JSON Number on the wire."""
+    captured = {}
+
+    def fake_post(url, headers, json, timeout):
+        captured["json"] = json
+        return _FakeResponse(
+            status_code=200,
+            json_body={"success": True, "result": [{"meta": {"changes": 1}, "results": []}]},
+        )
+
+    monkeypatch.setattr(d1_conn, "_post_request", fake_post)
+    unsafe = 2**53  # first integer not exactly representable as IEEE-754 double
+    d1_conn.execute("INSERT INTO t (id) VALUES (?)", (unsafe,))
+    assert captured["json"]["params"] == [str(unsafe)]
+
+    captured.clear()
+    safe = 2**53 - 1
+    d1_conn.execute("INSERT INTO t (id) VALUES (?)", (safe,))
+    assert captured["json"]["params"] == [safe]
+
+    captured.clear()
+    d1_conn.execute("SELECT x FROM t WHERE ok = ?", (True,))
+    assert captured["json"]["params"] == [True]
+
+
 def test_executemany_sends_batch_object_body(monkeypatch, d1_conn, no_sleep):
     """Multi-statement must be {batch: [...]}, not a bare array."""
     captured = []
@@ -487,6 +513,44 @@ def test_400_real_sql_error_remains_permanent(monkeypatch, d1_conn, no_sleep):
     monkeypatch.setattr(d1_conn, "_post_request", fake_post)
     with pytest.raises(D1PermanentError):
         d1_conn.execute("SELEKT * FORM t")
+    assert len(calls) == 1
+    assert no_sleep == []
+
+
+def test_400_code_7500_constraint_mismatch_is_permanent(monkeypatch, d1_conn, no_sleep):
+    """2026-05-12 regression: CF D1 maps every SQLite error onto wrapper
+    code 7500, so the classifier must decide on message text rather than
+    blanket-classifying 7500 as transient. The case in production was a
+    SpiderStats upsert against D1 missing the uq_spiderstats_session
+    UNIQUE index — its ``ON CONFLICT(SessionId)`` failed permanently,
+    but the old classifier retried five times wasting ~60s.
+    """
+    calls = []
+
+    def fake_post(url, headers, json, timeout):
+        calls.append(json)
+        return _FakeResponse(
+            status_code=400,
+            json_body={
+                "success": False,
+                "errors": [{
+                    "code": 7500,
+                    "message": (
+                        "ON CONFLICT clause does not match any PRIMARY KEY "
+                        "or UNIQUE constraint: SQLITE_ERROR"
+                    ),
+                }],
+            },
+        )
+
+    monkeypatch.setattr(d1_conn, "_post_request", fake_post)
+    with pytest.raises(D1PermanentError):
+        d1_conn.execute(
+            "INSERT INTO SpiderStats (SessionId) VALUES (?) "
+            "ON CONFLICT(SessionId) DO UPDATE SET SessionId=excluded.SessionId",
+            (1,),
+        )
+    # Permanent ⇒ exactly one call, zero retries, zero sleeps.
     assert len(calls) == 1
     assert no_sleep == []
 
@@ -1091,6 +1155,48 @@ def test_explicit_id_into_report_sessions_is_accepted(tmp_path):
     assert cur.lastrowid == SAME_ID
 
 
+def test_explicit_id_skips_lastrowid_check_even_when_backends_disagree(tmp_path):
+    """2026-05-12 regression: when the INSERT supplies an explicit Id,
+    the application has chosen the canonical value and both backends
+    write it. Cloudflare D1's HTTP API has been observed to report a
+    ``last_row_id`` that disagrees with SQLite's ``lastrowid`` for the
+    same explicit-Id INSERT (D1 returns its internal AUTOINCREMENT
+    counter, not the explicit rowid). The guard must not raise in that
+    case — the row is consistent.
+    """
+    sqlite_conn = _make_report_sessions_sqlite(tmp_path)
+    fake_d1 = FakeD1Connection()
+
+    SID = 1821300000000001  # snowflake-shaped session id
+
+    class _Cursor:
+        def __init__(self, lastrowid, rowcount=1):
+            self.lastrowid = lastrowid
+            self.rowcount = rowcount
+            self._rows = []
+        def fetchone(self):
+            return None
+        def fetchall(self):
+            return []
+
+    # D1 returns a *different* lastrowid (e.g. its internal counter
+    # value) — SQLite returns SID because Id is the rowid alias.
+    fake_d1.execute = lambda sql, params=(): _Cursor(  # type: ignore[assignment]
+        lastrowid=347, rowcount=1,
+    )
+
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="reports")
+    # Should NOT raise — explicit Id is in the column list.
+    cur = dual.execute(
+        "INSERT INTO ReportSessions (Id, ReportType, ReportDate, "
+        "CsvFilename, DateTimeCreated, Status) "
+        "VALUES (?, ?, ?, ?, ?, 'in_progress')",
+        (SID, "daily", "2026-05-12", "x.csv", "2026-05-12 00:00:00"),
+    )
+    # SQLite is canonical → DualCursor.lastrowid reflects SID.
+    assert cur.lastrowid == SID
+
+
 def test_lastrowid_mismatch_on_report_sessions_raises(monkeypatch, tmp_path):
     sqlite_conn = _make_report_sessions_sqlite(tmp_path)
     fake_d1 = FakeD1Connection()
@@ -1163,6 +1269,64 @@ def test_unguarded_table_id_drift_is_warning_not_error(tmp_path):
         "INSERT INTO OtherTable (v) VALUES (?)", ("hi",),
     )
     assert cur is not None
+
+
+def test_explicit_pk_insert_does_not_emit_drift_warning(tmp_path, caplog):
+    """2026-05-12 follow-up: when the INSERT supplies the explicit PK,
+    Cloudflare D1's HTTP API can return a ``last_row_id`` whose low bits
+    are clipped (JSON Number → IEEE-754 double, losing precision above
+    2^53). The row is canonical on both sides; the per-INSERT
+    ``_maybe_warn_id_drift`` must therefore stay silent — otherwise
+    every Pending* INSERT for a real-sized snowflake Seq spams the log
+    with bogus "drift CHANGED" warnings.
+    """
+    import logging
+    from packages.python.javdb_platform import dual_connection as _dual_mod
+
+    sqlite_conn = _make_pending_tables_sqlite(tmp_path)
+    fake_d1 = FakeD1Connection()
+
+    # Two snowflake Seqs whose float-converted D1 last_row_ids differ
+    # from SQLite's by varying low-bit deltas — the exact pattern that
+    # produced "delta -56 -> +64 -> -8" warnings in production logs.
+    plan = [
+        (7459908895307053056, 7459908895307053000),  # delta -56
+        (7459908897626503168, 7459908897626503000),  # delta -168
+        (7459908898851239936, 7459908898851240000),  # delta +64
+        (7459908904106702848, 7459908904106703000),  # delta +152
+    ]
+    cursor_iter = iter(plan)
+
+    def _fake_execute(sql, params=()):
+        _, d1_lr = next(cursor_iter)
+        return _FixedLastrowidCursor(lastrowid=d1_lr, rowcount=1)
+
+    fake_d1.execute = _fake_execute  # type: ignore[assignment]
+    # Clear cross-test pollution in the process-wide delta tracker so
+    # the WARN-on-change branch is exercised faithfully.
+    with _dual_mod._ID_DELTA_LOCK:
+        _dual_mod._ID_DELTA_BY_TABLE.pop("PendingTorrentHistoryWrites", None)
+
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
+    with caplog.at_level(logging.WARNING, logger="packages.python.javdb_platform.dual_connection"):
+        for sid_seq, _ in plan:
+            dual.execute(
+                "INSERT INTO PendingTorrentHistoryWrites "
+                "(Seq, SessionId, Href, SubtitleIndicator, CensorIndicator, "
+                "DateTimeVisited, ApplyState) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'pending')",
+                (sid_seq, 7, "/v/abc", 1, 1, "2026-05-12 00:00:00"),
+            )
+
+    drift_warnings = [
+        r for r in caplog.records
+        if r.levelno >= logging.WARNING
+        and "Dual-write ID drift" in r.getMessage()
+    ]
+    assert drift_warnings == [], (
+        f"Explicit-Seq INSERTs must not emit ID-drift warnings; got: "
+        f"{[w.getMessage() for w in drift_warnings]}"
+    )
 
 
 # ── Pending tables (R2: Ingestion Perfect Rollback) ─────────────────────
@@ -1276,6 +1440,30 @@ def test_explicit_seq_into_pending_torrent_history_is_accepted(tmp_path):
     assert cur.lastrowid == SAME_SEQ
 
 
+def test_explicit_seq_skips_lastrowid_check_even_when_backends_disagree(tmp_path):
+    """Pending-table counterpart of the ReportSessions regression test:
+    when ``Seq`` is supplied explicitly the dual guard must trust the
+    application value and not raise on a per-backend ``lastrowid``
+    disagreement.
+    """
+    sqlite_conn = _make_pending_tables_sqlite(tmp_path)
+    fake_d1 = FakeD1Connection()
+
+    SEQ = 1821300000000099
+    fake_d1.execute = lambda sql, params=(): _FixedLastrowidCursor(  # type: ignore[assignment]
+        lastrowid=42, rowcount=1,
+    )
+
+    dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
+    cur = dual.execute(
+        "INSERT INTO PendingMovieHistoryWrites "
+        "(Seq, SessionId, Href, DateTimeVisited, ApplyState) "
+        "VALUES (?, ?, ?, ?, 'pending')",
+        (SEQ, 7, "/v/abc", "2026-05-12 00:00:00"),
+    )
+    assert cur.lastrowid == SEQ
+
+
 def test_lastrowid_mismatch_on_pending_movie_history_raises(monkeypatch, tmp_path):
     """Without explicit Seq, AUTOINCREMENT can drift → guard MUST raise.
 
@@ -1350,14 +1538,15 @@ def test_db_stage_history_write_supplies_explicit_seq():
         csv_filename="r2-test.csv",
         write_mode="pending",
     )
-    sid = 999_999_999
+    sid = "999_999_999"
     seq = _db.db_stage_history_write(
         sid, "movie", {"Href": "/v/r2-test", "VideoCode": "R2TEST"},
     )
-    # Snowflake = 41 ms bits + 10 counter bits = 51 bits ≥ 2**40.
-    # AUTOINCREMENT would give a small number (1, 2, ...).
-    assert seq >= (1 << 40), (
-        f"Seq={seq} looks like AUTOINCREMENT; the explicit-Seq INSERT "
+    # Post-2026-05-13 Seq is a TEXT ISO-like snowflake. AUTOINCREMENT
+    # would give a tiny decimal string like "1" / "2"; assert the
+    # canonical shape instead.
+    assert _db._SESSION_ID_PATTERN.match(seq), (
+        f"Seq={seq!r} looks like AUTOINCREMENT; the explicit-Seq INSERT "
         "path may have regressed."
     )
     with _db.get_db(_db.HISTORY_DB_PATH) as conn:
@@ -1367,7 +1556,7 @@ def test_db_stage_history_write_supplies_explicit_seq():
             (sid,),
         ).fetchone()
     assert row is not None
-    assert int(row["Seq"]) == seq
+    assert row["Seq"] == seq
     assert row["Href"] == "/v/r2-test"
 
 
@@ -1381,7 +1570,7 @@ def test_db_stage_history_write_torrent_supplies_explicit_seq():
         csv_filename="r2-torrent-test.csv",
         write_mode="pending",
     )
-    sid = 888_888_888
+    sid = "888_888_888"
     seq = _db.db_stage_history_write(
         sid, "torrent",
         {
@@ -1391,14 +1580,16 @@ def test_db_stage_history_write_torrent_supplies_explicit_seq():
             "MagnetUri": "magnet:?xt=urn:btih:abc",
         },
     )
-    assert seq >= (1 << 40), f"torrent Seq={seq} looks like AUTOINCREMENT"
+    assert _db._SESSION_ID_PATTERN.match(seq), (
+        f"torrent Seq={seq!r} looks like AUTOINCREMENT"
+    )
     with _db.get_db(_db.HISTORY_DB_PATH) as conn:
         row = conn.execute(
             "SELECT Seq FROM PendingTorrentHistoryWrites WHERE SessionId=?",
             (sid,),
         ).fetchone()
     assert row is not None
-    assert int(row["Seq"]) == seq
+    assert row["Seq"] == seq
 
 
 # ─── P0 hardening regression tests ──────────────────────────────────────

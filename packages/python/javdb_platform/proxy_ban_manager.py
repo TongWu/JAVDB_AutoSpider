@@ -160,6 +160,25 @@ class ProxyBanManager:
         # but firing on every call would amplify queue pressure pointlessly.
         if newly_banned:
             _dispatch_remote_ban(proxy_name)
+
+    def remove_ban(self, proxy_name: str) -> bool:
+        """Drop a ban record (W6.A.2 follow-up — used by signal unban).
+
+        Returns ``True`` iff an entry was present and removed. The
+        cross-runner unban dispatch is intentionally NOT fired here —
+        :meth:`ProxyPool.unban_proxy` owns the dispatch so the contract
+        is identical between this Python implementation and the Rust
+        :class:`RustProxyBanManager` (which can't reach the Python
+        ``_dispatch_remote_unban`` hook from inside the extension).
+        """
+        with self.lock:
+            if proxy_name in self.banned_proxies:
+                del self.banned_proxies[proxy_name]
+                logger.debug(
+                    "Proxy '%s' ban removed [W5.4 unban path]", proxy_name,
+                )
+                return True
+        return False
     
     def get_banned_proxies(self) -> List[ProxyBanRecord]:
         """Get list of currently banned proxies."""

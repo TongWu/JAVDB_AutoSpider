@@ -19,12 +19,13 @@ must be adapted to use ``multiprocessing.Manager`` or similar.
 
 from __future__ import annotations
 
+import bisect
 import math
 import random
 import threading
 import time
 from collections import deque
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from packages.python.javdb_platform.logging_config import get_logger
 
@@ -185,6 +186,7 @@ class PenaltyTracker:
 # ---------------------------------------------------------------------------
 
 THROTTLE_MAX_WAIT = 60.0  # seconds – hard ceiling on additional blocking
+_DEGRADE_THRESHOLD = 3  # consecutive coordinator failures before circuit opens
 
 
 class TripleWindowThrottle:
@@ -204,39 +206,75 @@ class TripleWindowThrottle:
         extra_window_sec: float = 1800.0,
         extra_max: int = 200,
     ):
-        self._timestamps: deque = deque()
+        # ``_timestamps`` holds monotonically-increasing ``time.monotonic()``
+        # samples in append order. A list (rather than a ``deque``) is used
+        # because the hot path counts how many samples fall inside the
+        # ``short`` / ``long`` windows — a ``bisect_left`` lookup on a sorted
+        # list is O(log N), whereas iterating a deque to test each element
+        # is O(N) (W4.2a). The trade-off is that ``_purge`` does an O(N)
+        # ``del lst[:cutoff]`` instead of O(amortised 1) ``popleft``, but at
+        # production ``extra_max=200`` the purge fires only when the oldest
+        # sample is older than ``extra_window`` (1800 s by default), so the
+        # amortised cost is negligible.
+        self._timestamps: List[float] = []
         self._lock = threading.Lock()
         self.short_window = short_window_sec
         self._base_short_max = int(short_max)
         self.short_max = self._base_short_max
         self.long_window = long_window_sec
-        self.long_max = long_max
+        self._base_long_max = int(long_max)
+        self.long_max = self._base_long_max
         self.extra_window = extra_window_sec
-        self.extra_max = extra_max
+        self._base_extra_max = int(extra_max)
+        self.extra_max = self._base_extra_max
 
     def _purge(self, now: float) -> None:
+        """Drop samples older than ``extra_window``.
+
+        Uses ``bisect_left`` to find the cutoff index in one pass and
+        removes the prefix in a single slice delete — O(log N + k) where
+        k is the number of evicted samples, vs an O(k) ``popleft`` loop.
+        """
+        if not self._timestamps:
+            return
         oldest_keep = now - self.extra_window
-        while self._timestamps and self._timestamps[0] < oldest_keep:
-            self._timestamps.popleft()
+        if self._timestamps[0] >= oldest_keep:
+            return
+        cutoff = bisect.bisect_left(self._timestamps, oldest_keep)
+        if cutoff:
+            del self._timestamps[:cutoff]
 
     def wait_if_needed(self) -> float:
         """Block until all three windows have capacity.
 
         Returns total seconds spent waiting.  Never waits longer than
         ``THROTTLE_MAX_WAIT``.
+
+        Performance note: ``_timestamps`` is monotonically appended (every
+        ``now`` from ``time.monotonic()`` is >= every prior sample), so a
+        sorted-list ``bisect_left`` lookup yields the count of samples
+        inside each window in O(log N) — no full deque scan. This was the
+        top per-iter offender in the W4.1 baseline (947 µs → projected
+        ~20 µs at production ``extra_max=200``).
         """
         waited = 0.0
         while waited < THROTTLE_MAX_WAIT:
             now = time.monotonic()
             with self._lock:
                 self._purge(now)
-                short_count = sum(
-                    1 for t in self._timestamps if t >= now - self.short_window
-                )
-                long_count = sum(
-                    1 for t in self._timestamps if t >= now - self.long_window
-                )
                 extra_count = len(self._timestamps)
+                # Count samples inside each window without scanning the
+                # entire list: bisect_left returns the index of the first
+                # sample >= threshold, so ``extra_count - idx`` is the
+                # count of samples in [threshold, now].
+                short_idx = bisect.bisect_left(
+                    self._timestamps, now - self.short_window,
+                )
+                long_idx = bisect.bisect_left(
+                    self._timestamps, now - self.long_window,
+                )
+                short_count = extra_count - short_idx
+                long_count = extra_count - long_idx
                 if (
                     short_count < self.short_max
                     and long_count < self.long_max
@@ -257,6 +295,55 @@ class TripleWindowThrottle:
             self._purge(now)
             self._timestamps.append(now)
         return waited
+
+    def set_runner_scale(self, active_runners: int) -> None:
+        """Scale long/extra window limits by runner count for degraded-mode safety."""
+        n = max(1, active_runners)
+        with self._lock:
+            self.long_max = max(1, self._base_long_max // n)
+            self.extra_max = max(1, self._base_extra_max // n)
+
+    def apply_config(
+        self,
+        *,
+        short_max: Optional[int] = None,
+        long_max: Optional[int] = None,
+        extra_max: Optional[int] = None,
+        short_window_sec: Optional[float] = None,
+        long_window_sec: Optional[float] = None,
+        extra_window_sec: Optional[float] = None,
+    ) -> None:
+        """W6.A.1 — apply operator-pushed config overrides from ConfigState.
+
+        Updates the active limits AND the ``_base_*`` baselines so
+        downstream ``set_runner_scale`` divides by the correct base. Any
+        argument left as ``None`` is preserved verbatim — operators can
+        PATCH a single key without inadvertently resetting the others.
+
+        Window-duration fields don't have ``_base_*`` baselines today;
+        they're applied directly. Negative / zero values are clamped to
+        1 (or 1.0 for seconds) so a typo in a PATCH can't poison the
+        purge / counting math.
+        """
+        with self._lock:
+            if short_max is not None:
+                value = max(1, int(short_max))
+                self._base_short_max = value
+                self.short_max = value
+            if long_max is not None:
+                value = max(1, int(long_max))
+                self._base_long_max = value
+                self.long_max = value
+            if extra_max is not None:
+                value = max(1, int(extra_max))
+                self._base_extra_max = value
+                self.extra_max = value
+            if short_window_sec is not None:
+                self.short_window = max(1.0, float(short_window_sec))
+            if long_window_sec is not None:
+                self.long_window = max(1.0, float(long_window_sec))
+            if extra_window_sec is not None:
+                self.extra_window = max(1.0, float(extra_window_sec))
 
     def tighten_short_window(self, per_worker_n: int) -> None:
         """Adjust short-window burst limit from volume; restores toward constructor baseline."""
@@ -327,6 +414,16 @@ class MovieSleepManager:
         self._volume_min_mult = 1.0
         self._volume_max_mult = 1.0
 
+        # W6.A.2 — operator-pushed multiplier from `throttle_global` signal
+        # (W5.4). Reconciled on every heartbeat by ``state._apply_active_signals``;
+        # 1.0 when no signal is active.
+        self._global_factor: float = 1.0
+
+        # W6.A.2 — operator-pushed pause until wall-clock ms from
+        # `pause_all` signal. Each ``sleep()`` call blocks until this
+        # timestamp passes. 0 = not paused.
+        self._pause_until_ms: int = 0
+
         self._penalty_tracker = penalty_tracker
         self._throttle = throttle
         self._proxy_label = proxy_label
@@ -339,6 +436,9 @@ class MovieSleepManager:
         self._local_proxy_key = proxy_label or self._proxy_id
         self._remote_factor_ttl_sec = float(remote_factor_ttl_sec)
         self._coord_failures = 0
+        self._degraded: bool = False
+        self._degraded_since: float = 0.0
+        self._recovery_probe_sec: float = 300.0
 
         self._lock = threading.Lock()
         self._rng = random.Random()
@@ -347,6 +447,51 @@ class MovieSleepManager:
         self._last_volume_total = 0
         self._parsed_since_micro_break = 0
         self._micro_break_gate = random.randint(MICRO_BREAK_MIN_MOVIES, MICRO_BREAK_MAX_MOVIES)
+
+    def set_coordinator(self, coordinator: "ProxyCoordinatorClient", proxy_id: Optional[str] = None) -> None:
+        """Inject a coordinator after construction (for module-level singletons)."""
+        self._coordinator = coordinator
+        if proxy_id is not None:
+            self._proxy_id = proxy_id
+        self._coord_failures = 0
+        self._degraded = False
+
+    def set_active_runners(self, count: int) -> None:
+        """Scale local throttle windows by runner count for degraded-mode safety."""
+        if self._throttle is not None:
+            self._throttle.set_runner_scale(count)
+
+    def set_global_factor(self, factor: float) -> None:
+        """W6.A.2 — apply the W5.4 ``throttle_global`` signal's multiplier.
+
+        ``factor=1.0`` (the default) means "no signal active". Larger
+        values multiply both ``sleep_min`` and ``sleep_max`` so workers
+        wait proportionally longer between requests. Clamped to
+        ``[1.0, COMPOSITE_MULTIPLIER_CAP]`` so a runaway operator value
+        can't blow the per-request sleep past ABSOLUTE_MAX_SLEEP.
+        """
+        try:
+            f = float(factor)
+        except (TypeError, ValueError):
+            return
+        f = max(1.0, min(f, COMPOSITE_MULTIPLIER_CAP))
+        with self._lock:
+            self._global_factor = f
+            self._recalc_range()
+
+    def set_pause_until_ms(self, expires_at_ms: int) -> None:
+        """W6.A.2 — apply the W5.4 ``pause_all`` signal's expiry.
+
+        ``0`` clears the pause. Each subsequent :meth:`sleep` call
+        blocks until ``time.time() * 1000 >= expires_at_ms`` before
+        doing its normal pacing.
+        """
+        try:
+            value = int(expires_at_ms)
+        except (TypeError, ValueError):
+            value = 0
+        with self._lock:
+            self._pause_until_ms = max(0, value)
 
     # -- factor setters ----------------------------------------------------
 
@@ -396,9 +541,20 @@ class MovieSleepManager:
 
         The dynamic ``penalty_factor`` is applied at sampling time so that
         it tracks real-time CF events.
+
+        W6.A.2 — the operator-pushed ``_global_factor`` (from a W5.4
+        ``throttle_global`` signal) is composed with the volume multiplier
+        before the COMPOSITE_MULTIPLIER_CAP. Both multipliers can pile up
+        but never push the effective range past the cap.
         """
-        eff_min_mult = min(self._volume_min_mult, COMPOSITE_MULTIPLIER_CAP)
-        eff_max_mult = min(self._volume_max_mult, COMPOSITE_MULTIPLIER_CAP)
+        eff_min_mult = min(
+            self._volume_min_mult * self._global_factor,
+            COMPOSITE_MULTIPLIER_CAP,
+        )
+        eff_max_mult = min(
+            self._volume_max_mult * self._global_factor,
+            COMPOSITE_MULTIPLIER_CAP,
+        )
         self.sleep_min = round(self.base_min * eff_min_mult, 2)
         self.sleep_max = round(self.base_max * eff_max_mult, 2)
 
@@ -548,7 +704,8 @@ class MovieSleepManager:
             # ``always_bypass_time is None``.
             if _state.always_bypass_time is None:
                 return
-            _state.proxies_requiring_cf_bypass[proxy_id] = time.time()
+            with _state._cf_bypass_lock:
+                _state.proxies_requiring_cf_bypass[proxy_id] = time.time()
         except Exception:  # noqa: BLE001
             logger.warning(
                 "Failed to mirror remote CF bypass marker for '%s' locally",
@@ -587,6 +744,15 @@ class MovieSleepManager:
         )
 
         if self._coordinator is not None and self._proxy_id:
+            if self._degraded:
+                if time.time() - self._degraded_since < self._recovery_probe_sec:
+                    return t, False
+                logger.info(
+                    "Circuit breaker half-open: probing coordinator "
+                    "for proxy '%s'",
+                    self._proxy_id,
+                )
+
             try:
                 lease = self._coordinator.lease(self._proxy_id, int(t * 1000))
                 wait_seconds = max(0.0, lease.wait_ms / 1000.0)
@@ -611,14 +777,31 @@ class MovieSleepManager:
                     self._mirror_remote_ban_locally(local_proxy_key)
                 if getattr(lease, "requires_cf_bypass", False):
                     self._mirror_remote_cf_bypass_locally(local_proxy_key)
+                if self._degraded:
+                    logger.info(
+                        "Circuit breaker closed: coordinator recovered "
+                        "for proxy '%s'",
+                        self._proxy_id,
+                    )
+                    self._degraded = False
                 self._coord_failures = 0
                 return wait_seconds, True
             except Exception as e:
-                # Log only the first ~3 failures at ERROR to avoid log spam
-                # when the Worker is down for an extended period; the
-                # behaviour after that is identical (silent fail-open).
                 self._coord_failures += 1
-                if self._coord_failures <= 3:
+                if not self._degraded and self._coord_failures > _DEGRADE_THRESHOLD:
+                    self._degraded = True
+                    self._degraded_since = time.time()
+                    logger.warning(
+                        "Circuit breaker open: coordinator degraded after "
+                        "%d failures for proxy '%s' — local throttle for "
+                        "%.0fs",
+                        self._coord_failures,
+                        self._proxy_id,
+                        self._recovery_probe_sec,
+                    )
+                elif self._degraded:
+                    self._degraded_since = time.time()
+                elif self._coord_failures <= 3:
                     logger.error(
                         "Coordinator unavailable (#%d), falling back to local "
                         "throttle for proxy '%s': %s",
@@ -642,12 +825,22 @@ class MovieSleepManager:
         outage cannot block the spider.
 
         Returns the total time spent (sleep + any throttle wait).
+
+        W6.A.2 — when a ``pause_all`` signal is active
+        (``self._pause_until_ms`` in the future), the call blocks until
+        the pause expires BEFORE doing its normal pacing. The pause is
+        not racy against signal updates: a longer pause arriving mid-
+        sleep won't shorten the current sleep, and a shorter pause that
+        arrives mid-sleep takes effect on the NEXT call (acceptable for
+        the heartbeat-driven signal model).
         """
+        pause_wait = self._wait_for_pause()
+
         wait_seconds, used_coordinator = self.plan_sleep()
 
         if used_coordinator:
             time.sleep(wait_seconds)
-            return wait_seconds
+            return pause_wait + wait_seconds
 
         time.sleep(wait_seconds)
 
@@ -657,7 +850,27 @@ class MovieSleepManager:
             if throttle_wait > 0:
                 logger.debug("Throttle additional wait: %.1fs", throttle_wait)
 
-        return wait_seconds + throttle_wait
+        return pause_wait + wait_seconds + throttle_wait
+
+    def _wait_for_pause(self) -> float:
+        """Block while a ``pause_all`` signal is active. Returns ms slept."""
+        with self._lock:
+            target = self._pause_until_ms
+        if target <= 0:
+            return 0.0
+        now_ms = time.time() * 1000.0
+        remaining_ms = target - now_ms
+        if remaining_ms <= 0:
+            return 0.0
+        # Cap each iteration at ABSOLUTE_MAX_SLEEP to remain interruptible
+        # by signal updates that shorten the pause.
+        wait_s = min(remaining_ms / 1000.0, ABSOLUTE_MAX_SLEEP)
+        logger.info(
+            "W5.4 pause_all signal active; waiting %.1fs until %d",
+            wait_s, target,
+        )
+        time.sleep(wait_s)
+        return wait_s
 
 
 def _resolve_base_range():

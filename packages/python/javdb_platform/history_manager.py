@@ -40,13 +40,18 @@ HISTORY_FIELDNAMES = [
 ]
 
 _db_initialised = False
+_db_init_lock = __import__("threading").Lock()
 
 
 def _ensure_db():
-    """Lazily initialise the database on first use."""
+    """Lazily initialise the database on first use (thread-safe)."""
     global _db_initialised
-    if not _db_initialised:
-        from packages.python.javdb_platform.db import init_db
+    if _db_initialised:
+        return
+    with _db_init_lock:
+        if _db_initialised:
+            return
+        from packages.python.javdb_platform.db_migrations import init_db
         init_db()
         _db_initialised = True
 
@@ -87,7 +92,7 @@ def load_parsed_movies_history(history_file, phase=None):
     if use_sqlite():
         _ensure_db()
     if use_sqlite():
-        from packages.python.javdb_platform.db import db_load_history
+        from packages.python.javdb_platform.db_history_read import db_load_history
         history = db_load_history(phase=phase)
         if history:
             logger.info(f"Loaded {len(history)} previously parsed movies from history")
@@ -135,9 +140,11 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code,
     if use_sqlite():
         _ensure_db()
     if use_sqlite():
-        from packages.python.javdb_platform.db import (
+        from packages.python.javdb_platform.db_history_write import (
             db_upsert_history,
             db_stage_history_write,
+        )
+        from packages.python.javdb_platform.db_session import (
             get_active_session_id,
             get_active_write_mode,
         )
@@ -179,7 +186,7 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code,
         write_mode = get_active_write_mode()
         if write_mode == 'pending' and active_sid is not None:
             db_stage_history_write(
-                int(active_sid),
+                active_sid,
                 'movie',
                 {
                     'Href': href,
@@ -194,7 +201,7 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code,
                 if magnet is None:
                     continue
                 db_stage_history_write(
-                    int(active_sid),
+                    active_sid,
                     'torrent',
                     {
                         'Href': href,
@@ -246,7 +253,7 @@ def batch_update_last_visited(history_file, visited_hrefs):
     if use_sqlite():
         _ensure_db()
     if use_sqlite():
-        from packages.python.javdb_platform.db import db_batch_update_last_visited
+        from packages.python.javdb_platform.db_history_read import db_batch_update_last_visited
         updated = db_batch_update_last_visited(list(visited_hrefs))
         if updated:
             logger.debug(f"Updated last_visited_datetime for {updated} movies")
@@ -260,7 +267,7 @@ def check_torrent_in_history(history_file, href, torrent_type):
     if use_sqlite():
         _ensure_db()
     if use_sqlite():
-        from packages.python.javdb_platform.db import db_check_torrent_in_history
+        from packages.python.javdb_platform.db_history_read import db_check_torrent_in_history
         return db_check_torrent_in_history(href, torrent_type)
     return _csv_check_torrent_in_history(history_file, href, torrent_type)
 

@@ -2,11 +2,20 @@
 
 Targets the sqlite side only — D1 needs live credentials and is exercised
 through the same code path via ``--target d1`` in production.
+
+Phase 4 contract
+----------------
+The script is **read-only** since Phase 4 (2026-05).  Detection still
+flags ``orphan_session``, ``cross_day``, and ``committed_with_audit``
+phantoms, but ``--apply`` is a deprecated alias that logs a warning and
+behaves identically to ``--dry-run``.  The destructive archival path
+moved to :mod:`scripts.audit_archive`.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 
@@ -43,13 +52,26 @@ def reports_dir(tmp_path, monkeypatch) -> str:
     return str(rd)
 
 
+def _latest_report(reports_dir: str) -> dict:
+    report_dir = os.path.join(
+        reports_dir, "D1", "cleanup_stale_session_audits"
+    )
+    files = sorted(
+        f for f in os.listdir(report_dir)
+        if f.startswith("cleanup_stale_session_audits_")
+    )
+    assert files, "expected at least one report file"
+    with open(os.path.join(report_dir, files[-1])) as f:
+        return json.load(f)
+
+
 # ── Detection ───────────────────────────────────────────────────────────
 
 
 class TestDetection:
     def test_orphan_session_audit_is_flagged(self, reports_dir, monkeypatch):
         # SessionId 999999 doesn't exist in ReportSessions.
-        _stamp_audit(999999, 1, when="2026-05-08 09:00:00")
+        _stamp_audit("999999", 1, when="2026-05-08 09:00:00")
 
         rc = cleanup.main([
             "--target", "sqlite",
@@ -57,24 +79,13 @@ class TestDetection:
         ])
         assert rc == 0
 
-        # Find the dry-run report file.
-        report_dir = os.path.join(
-            reports_dir, "D1", "cleanup_stale_session_audits"
-        )
-        files = [
-            f for f in os.listdir(report_dir)
-            if f.startswith("cleanup_stale_session_audits_")
-        ]
-        assert files
-        with open(os.path.join(report_dir, files[0])) as f:
-            report = json.load(f)
-        # Locate the sqlite result.
+        report = _latest_report(reports_dir)
         sqlite = next(
             r for r in report["results"] if r.get("side") == "sqlite"
         )
         flagged = sqlite["findings"]["audit"]["MovieHistoryAudit"]
         assert any(
-            item["session_id"] == 999999 and item["reason"] == "orphan_session"
+            item["session_id"] == "999999" and item["reason"] == "orphan_session"
             for item in flagged
         )
 
@@ -91,15 +102,7 @@ class TestDetection:
         ])
         assert rc == 0
 
-        report_dir = os.path.join(
-            reports_dir, "D1", "cleanup_stale_session_audits"
-        )
-        files = [
-            f for f in os.listdir(report_dir)
-            if f.startswith("cleanup_stale_session_audits_")
-        ]
-        with open(os.path.join(report_dir, files[0])) as f:
-            report = json.load(f)
+        report = _latest_report(reports_dir)
         sqlite = next(
             r for r in report["results"] if r.get("side") == "sqlite"
         )
@@ -125,15 +128,7 @@ class TestDetection:
         ])
         assert rc == 0
 
-        report_dir = os.path.join(
-            reports_dir, "D1", "cleanup_stale_session_audits"
-        )
-        files = [
-            f for f in os.listdir(report_dir)
-            if f.startswith("cleanup_stale_session_audits_")
-        ]
-        with open(os.path.join(report_dir, files[0])) as f:
-            report = json.load(f)
+        report = _latest_report(reports_dir)
         sqlite = next(
             r for r in report["results"] if r.get("side") == "sqlite"
         )
@@ -161,11 +156,13 @@ class TestDetection:
         assert n == 1
 
 
-# ── Apply ───────────────────────────────────────────────────────────────
+# ── Read-only contract (Phase 4) ───────────────────────────────────────
 
 
-class TestApply:
-    def test_apply_deletes_orphan_audit_rows(self, reports_dir):
+class TestReadOnlyContract:
+    """``--apply`` is now a deprecated alias for ``--dry-run``."""
+
+    def test_apply_does_not_delete_audit_rows(self, reports_dir):
         _stamp_audit(999997, 1, when="2026-05-08 09:00:00")
 
         rc = cleanup.main([
@@ -174,9 +171,46 @@ class TestApply:
         ])
         assert rc == 0
 
+        # Phase 4 contract: audit row survives ``--apply``.  The
+        # archival cron (scripts.audit_archive) is the only writer.
         with db_mod.get_db() as conn:
             n = conn.execute(
                 "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
                 "WHERE SessionId=999997"
             ).fetchone()["n"]
-        assert n == 0
+        assert n == 1
+
+    def test_apply_emits_deprecation_warning(self, reports_dir, caplog):
+        _stamp_audit(999996, 1, when="2026-05-08 09:00:00")
+
+        with caplog.at_level(logging.WARNING):
+            rc = cleanup.main([
+                "--target", "sqlite",
+                "--apply",
+            ])
+        assert rc == 0
+        assert any(
+            "deprecated" in record.getMessage().lower()
+            and "audit_archive" in record.getMessage()
+            for record in caplog.records
+        ), f"expected deprecation warning, got {[r.getMessage() for r in caplog.records]!r}"
+
+    def test_apply_writes_dryrun_named_report(self, reports_dir):
+        # Even when ``--apply`` is the CLI arg, the readonly fallback
+        # surfaces in the report filename so artifacts are easy to tag.
+        _stamp_audit(999995, 1, when="2026-05-08 09:00:00")
+
+        rc = cleanup.main([
+            "--target", "sqlite",
+            "--apply",
+        ])
+        assert rc == 0
+
+        report_dir = os.path.join(
+            reports_dir, "D1", "cleanup_stale_session_audits"
+        )
+        files = sorted(os.listdir(report_dir))
+        assert files, "expected at least one report file"
+        # ``dryrun`` token is the new default because args.dry_run is
+        # always coerced to True by ``_enforce_readonly``.
+        assert all("dryrun" in f for f in files), files

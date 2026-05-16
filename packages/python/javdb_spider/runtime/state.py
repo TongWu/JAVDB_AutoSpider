@@ -26,6 +26,7 @@ from packages.python.javdb_platform.movie_claim_client import (
     MovieClaimClient,
     create_movie_claim_client_from_env,
     create_movie_claim_client_with_mode_from_env,
+    parse_movie_claim_mode,
 )
 from packages.python.javdb_platform.proxy_ban_manager import (
     set_remote_ban_hook,
@@ -35,10 +36,13 @@ from packages.python.javdb_platform.proxy_coordinator_client import (
     ProxyCoordinatorClient,
 )
 from packages.python.javdb_platform.runner_registry_client import (
+    ConfigSnapshot,
     RunnerRegistryClient,
     RunnerRegistryUnavailable,
+    Signal,
     create_runner_registry_client_from_env,
     proxy_pool_hash,
+    proxy_pool_summary_for_registry,
 )
 from packages.python.javdb_platform.proxy_pool import ProxyPool, create_proxy_pool_from_config
 from packages.python.javdb_platform.proxy_policy import should_proxy_module
@@ -103,6 +107,16 @@ global_movie_claim_client: Optional[MovieClaimClient] = None
 #   global out from under each other.
 _movie_claim_client_pending: Optional[MovieClaimClient] = None
 _movie_claim_mode: str = MOVIE_CLAIM_MODE_OFF
+# MR-4 (multi-runtime): the operator's *intended* mode, parsed from the
+# raw ``MOVIE_CLAIM_ENABLED`` cfg BEFORE the factory collapses
+# unconfigured / unreachable into ``OFF``. ``setup_movie_claim_client``
+# records it so :func:`enforce_movie_claim_for_d1` can tell apart
+# "operator deliberately disabled coordination" (intended==OFF, fine)
+# from "operator wanted coordination but the Worker is unreachable"
+# (intended!=OFF but client is None — fatal in d1-only mode, since
+# there is no local SQLite fallback and uncoordinated parallel runtimes
+# would duplicate every detail fetch and race PRIMARY KEY INSERTs).
+_movie_claim_intended_mode: str = MOVIE_CLAIM_MODE_OFF
 _movie_claim_last_recommended: bool = False
 _movie_claim_lock: threading.Lock = threading.Lock()
 # Cross-instance runner registry (P2-E; singleton ``RunnerRegistry`` DO).
@@ -112,6 +126,17 @@ _movie_claim_lock: threading.Lock = threading.Lock()
 # ``RUNNER_REGISTRY_ENABLED`` is truthy AND the URL/token pair is
 # configured AND the Worker's ``/health`` probe succeeds.
 global_runner_registry_client: Optional[RunnerRegistryClient] = None
+# W6.B (W5.5) — TTL-cached cross-DO proxy-health policy. Constructed in
+# ``setup_proxy_pool`` when RECOMMEND_PROXY_ENABLED is truthy AND the
+# Worker /health probe succeeds. ``None`` means the runner is using
+# the legacy local-cache health provider (or no provider at all).
+global_recommend_proxy_policy = None
+# W6.C (W5.2) — opt-in cross-runner work queue client. Constructed by
+# ``setup_work_distributor_client`` when WORK_DISTRIBUTOR_ENABLED is
+# truthy AND /health succeeds. ``None`` means the spider falls back
+# to its existing "iterate local list + MovieClaim mutex" dispatch
+# path (the default and zero-overhead model).
+global_work_distributor_client = None
 # Background daemon thread that pings ``/heartbeat`` every 60 s once a
 # registry client is configured.  Holds a reference here so the atexit
 # handler can flag it for shutdown without leaking a reference cycle.
@@ -168,6 +193,7 @@ login_total_budget: int = len(PROXY_POOL) * LOGIN_ATTEMPTS_PER_PROXY_LIMIT if PR
 
 always_bypass_time: Optional[int] = None
 proxies_requiring_cf_bypass: Dict[str, float] = {}
+_cf_bypass_lock = threading.Lock()
 
 # Proxies whose remaining login budget has already been deducted from
 # ``login_total_budget`` (idempotency guard for ``deduct_proxy_login_budget``).
@@ -178,123 +204,21 @@ _login_budget_deducted_proxies: set = set()
 _login_budget_lock = threading.Lock()
 
 
-def _deduct_proxy_login_budget_locked(proxy_name: str) -> int:
-    """Core deduction logic. Caller must hold :data:`_login_budget_lock`."""
-    global login_total_budget
-    if proxy_name in _login_budget_deducted_proxies:
-        return 0
-    if login_total_budget <= 0:
-        _login_budget_deducted_proxies.add(proxy_name)
-        return 0
-
-    used = login_attempts_per_proxy.get(proxy_name, 0)
-    remaining = LOGIN_ATTEMPTS_PER_PROXY_LIMIT - used
-    if remaining <= 0:
-        _login_budget_deducted_proxies.add(proxy_name)
-        return 0
-
-    # Never let the global budget drop below total attempts already spent
-    # (otherwise downstream budget checks would falsely report "exhausted").
-    new_budget = max(login_total_attempts, login_total_budget - remaining)
-    actually_deducted = login_total_budget - new_budget
-    login_total_budget = new_budget
-    _login_budget_deducted_proxies.add(proxy_name)
-    if actually_deducted > 0:
-        logger.info(
-            "Login budget reduced by %d for banned proxy '%s' (now %d, attempts so far %d)",
-            actually_deducted, proxy_name, new_budget, login_total_attempts,
-        )
-    return actually_deducted
-
-
-def deduct_proxy_login_budget(proxy_name: Optional[str]) -> int:
-    """Remove a proxy's unused login attempts from the global budget.
-
-    Called when a proxy is banned (either pre-banned at startup or banned
-    during runtime).  The proxy's *remaining* per-proxy budget
-    (``LOGIN_ATTEMPTS_PER_PROXY_LIMIT - login_attempts_per_proxy[proxy]``,
-    floored at 0) is subtracted from :data:`login_total_budget` so that
-    banned workers no longer reserve login credits they cannot use.
-
-    Idempotent per ``proxy_name`` — repeated calls for the same proxy are
-    no-ops, even if it gets re-banned.  Thread-safe: concurrent callers
-    for different (or the same) proxy cannot double-deduct.
-
-    Args:
-        proxy_name: Name of the proxy whose budget should be reclaimed.
-            ``None``/empty inputs are silently ignored.
-
-    Returns:
-        The number of login attempts deducted (``0`` when nothing changed).
-    """
-    if not proxy_name:
-        return 0
-    with _login_budget_lock:
-        return _deduct_proxy_login_budget_locked(proxy_name)
-
 # ---------------------------------------------------------------------------
-# CF bypass helpers
+# Login-budget + CF-bypass helpers — moved to :mod:`runtime.proxy_state`
+# (W3.4). Re-exported here so the canonical ``state.X`` API is unchanged.
+#
+# Imported AFTER the mutable globals above are defined so the cross-import
+# cycle (``proxy_state`` reads ``state.<global>``) resolves cleanly.
 # ---------------------------------------------------------------------------
 
+from packages.python.javdb_spider.runtime.proxy_state import (  # noqa: E402
+    _deduct_proxy_login_budget_locked,
+    deduct_proxy_login_budget,
+    proxy_needs_cf_bypass,
+    mark_proxy_cf_bypass,
+)
 
-def proxy_needs_cf_bypass(proxy_name: str) -> bool:
-    """Check if a proxy is still within the configured CF bypass window."""
-    if always_bypass_time is None:
-        return False
-
-    marked_at = proxies_requiring_cf_bypass.get(proxy_name)
-    if marked_at is None:
-        return False
-
-    if always_bypass_time == 0:
-        return True
-
-    window_seconds = always_bypass_time * 60
-    if time.time() - marked_at <= window_seconds:
-        return True
-
-    # Expired: fall back to direct-first behavior.
-    proxies_requiring_cf_bypass.pop(proxy_name, None)
-    return False
-
-
-def mark_proxy_cf_bypass(proxy_name: str):
-    """Mark a proxy for CF bypass reuse according to --always-bypass-time.
-
-    Side effect (P1-A): when the cross-instance proxy coordinator is wired
-    up, the requirement is also published to the Worker DO via
-    :meth:`ProxyCoordinatorClient.mark_cf_bypass` so peer runners pick it
-    up on their next ``/lease``.  This is fire-and-forget and never raises;
-    when the coordinator is not configured the call is a no-op and the
-    behaviour is identical to the pre-DO world.
-    """
-    if always_bypass_time is None:
-        return
-
-    proxies_requiring_cf_bypass[proxy_name] = time.time()
-    if always_bypass_time == 0:
-        logger.info(f"Proxy '{proxy_name}' marked as requiring CF bypass for this runtime")
-    else:
-        logger.info(
-            f"Proxy '{proxy_name}' marked for CF bypass reuse for {always_bypass_time} minute(s)"
-        )
-
-    coord = global_proxy_coordinator
-    if coord is not None and proxy_name:
-        # ``always_bypass_time``:
-        #   - 0       → permanent for this session  → DO ttl_ms = 0
-        #   - N (min) → expires after N minutes     → DO ttl_ms = N * 60_000
-        # The Worker stores the tri-state so peers see the right window.
-        ttl_ms = (
-            0 if always_bypass_time == 0 else int(always_bypass_time) * 60 * 1000
-        )
-        try:
-            coord.mark_cf_bypass(proxy_name, ttl_ms=ttl_ms)
-        except Exception:  # noqa: BLE001 — fail-open; never break local marker
-            logger.warning(
-                "Failed to dispatch CF bypass marker for '%s' to coordinator",
-                proxy_name, exc_info=True,
-            )
 
 # ---------------------------------------------------------------------------
 # Request delegation
@@ -389,6 +313,18 @@ def setup_proxy_coordinator() -> Optional[ProxyCoordinatorClient]:
     # fire-and-forget so a coordinator outage cannot stall the ban path.
     set_remote_ban_hook(lambda name: client.mark_proxy_banned(name))
     set_remote_unban_hook(lambda name: client.mark_proxy_unbanned(name))
+
+    # P0-5 — inject coordinator into the module-level movie_sleep_mgr singleton.
+    # The singleton is created at import time before the coordinator is
+    # available, so we wire it up here once the coordinator is ready.
+    try:
+        from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _mgr
+        if _mgr._coordinator is None:
+            _mgr.set_coordinator(client)
+            logger.debug("Coordinator injected into movie_sleep_mgr")
+    except Exception:
+        logger.debug("Failed to inject coordinator into movie_sleep_mgr", exc_info=True)
+
     return client
 
 
@@ -565,6 +501,7 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
        :meth:`MovieClaimClient.close`-d so we don't leak its session.
     """
     global global_movie_claim_client, _movie_claim_client_pending, _movie_claim_mode
+    global _movie_claim_intended_mode
     with _movie_claim_lock:
         if global_movie_claim_client is not None:
             return global_movie_claim_client
@@ -583,41 +520,25 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
     url = (cfg('PROXY_COORDINATOR_URL', '') or '').strip()
     token = (cfg('PROXY_COORDINATOR_TOKEN', '') or '').strip()
     raw_enabled_cfg = cfg('MOVIE_CLAIM_ENABLED', None)
-
-    # Set the env vars expected by the factory for the duration of the call,
-    # then delegate to ``create_movie_claim_client_with_mode_from_env`` so
-    # the disable paths and ``/health`` semantics stay defined in one place.
-    prior = (
-        os.environ.get('PROXY_COORDINATOR_URL'),
-        os.environ.get('PROXY_COORDINATOR_TOKEN'),
-        os.environ.get('MOVIE_CLAIM_ENABLED'),
+    # MR-4: capture the operator's *intended* mode now, before the factory
+    # collapses "unconfigured" / "/health failed" into a plain OFF. ``None``
+    # cfg means "var unset" → the factory's auto default; any explicit value
+    # is parsed through the same helper the factory uses.
+    intended_mode = (
+        MOVIE_CLAIM_MODE_AUTO
+        if raw_enabled_cfg is None
+        else parse_movie_claim_mode(str(raw_enabled_cfg))
     )
-    try:
-        if url:
-            os.environ['PROXY_COORDINATOR_URL'] = url
-        else:
-            os.environ.pop('PROXY_COORDINATOR_URL', None)
-        if token:
-            os.environ['PROXY_COORDINATOR_TOKEN'] = token
-        else:
-            os.environ.pop('PROXY_COORDINATOR_TOKEN', None)
-        # Pass the cfg value through verbatim so the factory can
-        # distinguish "var not set in config" (→ auto default) from
-        # "var explicitly empty" (→ off, matches operator intuition).
-        if raw_enabled_cfg is None:
-            os.environ.pop('MOVIE_CLAIM_ENABLED', None)
-        else:
-            os.environ['MOVIE_CLAIM_ENABLED'] = str(raw_enabled_cfg)
-        client, mode = create_movie_claim_client_with_mode_from_env()
-    finally:
-        for key, value in zip(
-            ('PROXY_COORDINATOR_URL', 'PROXY_COORDINATOR_TOKEN', 'MOVIE_CLAIM_ENABLED'),
-            prior,
-        ):
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
+
+    # P0-3: Pass the enabled mode directly to the factory via the new
+    # ``enabled_mode_override`` parameter instead of manipulating
+    # ``os.environ``.  The factory reads URL/token from ``cfg()`` already,
+    # so no env manipulation is needed for those.
+    from packages.python.javdb_platform.movie_claim_client import _ENABLED_UNSET
+    override = _ENABLED_UNSET if raw_enabled_cfg is None else raw_enabled_cfg
+    client, mode = create_movie_claim_client_with_mode_from_env(
+        enabled_mode_override=override,
+    )
 
     # Re-acquire the lock to commit the resolved state atomically with the
     # other readers (``_apply_movie_claim_recommendation``,
@@ -655,6 +576,12 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
         # registry-signal handler and the heartbeat-interval picker can
         # branch on it later.
         _movie_claim_mode = mode
+        # MR-4: also persist the operator's *intended* mode. The factory
+        # collapses unconfigured / unreachable into ``mode == OFF``, so
+        # ``_movie_claim_mode`` alone cannot distinguish a deliberate
+        # disable from a broken Worker — ``enforce_movie_claim_for_d1``
+        # needs the intended value to decide whether to fail closed.
+        _movie_claim_intended_mode = intended_mode
 
         if client is None or mode == MOVIE_CLAIM_MODE_OFF:
             # Off path covers: explicit disable, missing URL/token,
@@ -692,6 +619,86 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
             url, runtime_holder_id,
         )
         return client
+
+
+def enforce_movie_claim_for_d1() -> None:
+    """MR-4 (multi-runtime): fail closed when d1-only mode wants movie
+    claim coordination but the Worker is unreachable.
+
+    Must be called AFTER :func:`setup_movie_claim_client`. The rationale:
+
+    * In ``STORAGE_BACKEND=d1`` there is no local SQLite fallback. If two
+      runtimes run without MovieClaim coordination they each fetch every
+      detail page (wasted D1 / proxy / Worker quota) and then race
+      concurrent same-``Href`` ``INSERT``s into ``MovieHistory``, hitting
+      the ``UNIQUE(Href)`` constraint and aborting one runner mid-run.
+    * ``create_movie_claim_client_with_mode_from_env`` collapses three
+      very different situations into ``(None, OFF)``: (a) operator
+      explicitly disabled coordination, (b) URL/token not configured,
+      (c) the Worker ``/health`` probe failed. Only (a) is safe to
+      proceed on; (b) and (c) mean the operator *wanted* coordination
+      and it silently isn't there.
+
+    This guard raises ``RuntimeError`` for (b)/(c) under d1-only mode so
+    the misconfiguration surfaces at startup instead of as duplicated
+    work + PRIMARY KEY aborts mid-run. The intentional escape hatch is
+    ``JAVDB_ALLOW_UNCOORDINATED_D1=1`` for an operator who knowingly
+    wants to run a single d1-only runtime without the Worker.
+
+    No-op in ``sqlite`` / ``dual`` modes (the local mirror still gives a
+    canonical fallback there) and when the operator's *intended* mode is
+    ``OFF`` (a deliberate choice, not a misconfiguration).
+    """
+    from packages.python.javdb_platform.config_helper import storage_backend
+
+    if storage_backend() != "d1":
+        return
+
+    if _movie_claim_intended_mode == MOVIE_CLAIM_MODE_OFF:
+        # Operator explicitly disabled coordination. Respect it, but make
+        # the risk visible — uncoordinated parallel d1-only runtimes will
+        # duplicate work and may race PRIMARY KEY INSERTs.
+        logger.warning(
+            "MOVIE_CLAIM_ENABLED resolves to OFF under STORAGE_BACKEND=d1 — "
+            "running without cross-runtime detail-claim coordination. Parallel "
+            "runtimes will duplicate detail fetches and may race UNIQUE(Href) "
+            "INSERTs. Set MOVIE_CLAIM_ENABLED=auto to enable coordination."
+        )
+        return
+
+    with _movie_claim_lock:
+        have_client = (
+            global_movie_claim_client is not None
+            or _movie_claim_client_pending is not None
+        )
+    if have_client:
+        return
+
+    allow_uncoordinated = (
+        os.environ.get("JAVDB_ALLOW_UNCOORDINATED_D1", "").strip().lower()
+        in ("1", "true", "yes", "on")
+    )
+    if allow_uncoordinated:
+        logger.warning(
+            "STORAGE_BACKEND=d1 wants movie-claim coordination "
+            "(intended mode=%s) but the Worker is unreachable / unconfigured; "
+            "JAVDB_ALLOW_UNCOORDINATED_D1 is set so proceeding anyway. This is "
+            "only safe for a SINGLE d1-only runtime — concurrent runs will "
+            "duplicate fetches and race PRIMARY KEY INSERTs.",
+            _movie_claim_intended_mode,
+        )
+        return
+
+    raise RuntimeError(
+        "STORAGE_BACKEND=d1 requires the MovieClaim coordinator but it is "
+        "unreachable or unconfigured (intended MOVIE_CLAIM_ENABLED mode="
+        f"{_movie_claim_intended_mode!r}; PROXY_COORDINATOR_URL/TOKEN must be "
+        "set and the Worker /health probe must succeed). Without it, parallel "
+        "d1-only runtimes duplicate every detail fetch and race UNIQUE(Href) "
+        "INSERTs into MovieHistory. Fix the Worker deployment, or set "
+        "JAVDB_ALLOW_UNCOORDINATED_D1=1 to deliberately run a single "
+        "uncoordinated d1-only runtime."
+    )
 
 
 def _resolve_proxy_pool_json() -> str:
@@ -757,6 +764,214 @@ def _next_heartbeat_interval() -> float:
     )
 
 
+def _update_sleep_runner_count(count: int) -> None:
+    """Feed active runner count to the sleep manager for degraded-mode throttle scaling."""
+    if count <= 0:
+        return
+    try:
+        from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _mgr
+        _mgr.set_active_runners(count)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+# W6.A.1 — most recently applied ConfigState snapshot version. Used to
+# skip redundant re-applications when the heartbeat returns the same
+# snapshot it returned last tick (the common case).
+_last_applied_config_version: int = -1
+
+
+def _apply_config_snapshot(snap: ConfigSnapshot) -> None:
+    """Apply an operator-pushed config snapshot from the heartbeat.
+
+    Only keys the Python client actually consumes locally are honoured;
+    Worker-side knobs (ban_ttl_ms, movie_claim_ttl_ms, etc.) are silently
+    ignored because the Worker DOs read them directly from env vars,
+    not via this snapshot.
+
+    Skips work when ``snap.version`` matches the last applied version
+    (the steady-state case — every heartbeat carries the same snapshot).
+    Fail-open: every exception is swallowed; an invalid value MUST NOT
+    take down the heartbeat loop.
+    """
+    global _last_applied_config_version
+    if snap.version == _last_applied_config_version:
+        return
+    values = snap.values or {}
+
+    def _to_int(key: str) -> Optional[int]:
+        raw = values.get(key)
+        if raw is None or raw == "":
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            logger.warning("Config %s=%r is not an integer; ignoring", key, raw)
+            return None
+
+    def _to_float(key: str) -> Optional[float]:
+        raw = values.get(key)
+        if raw is None or raw == "":
+            return None
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            logger.warning("Config %s=%r is not a float; ignoring", key, raw)
+            return None
+
+    try:
+        from packages.python.javdb_spider.runtime.sleep import (
+            triple_window_throttle as _throttle,
+        )
+        _throttle.apply_config(
+            short_max=_to_int("short_max"),
+            long_max=_to_int("long_max"),
+            extra_max=_to_int("extra_max"),
+            short_window_sec=_to_float("short_window_sec"),
+            long_window_sec=_to_float("long_window_sec"),
+            extra_window_sec=_to_float("extra_window_sec"),
+        )
+    except Exception:  # noqa: BLE001 — config application is best-effort
+        logger.warning(
+            "Failed to apply throttle config from snapshot v%d", snap.version,
+            exc_info=True,
+        )
+
+    # heartbeat_interval_sec — module-level; affects the NEXT tick because
+    # the current loop iteration is already inside ``_runner_heartbeat_stop.wait()``.
+    hb_interval = _to_float("heartbeat_interval_sec")
+    if hb_interval is not None and hb_interval > 0:
+        global _RUNNER_HEARTBEAT_INTERVAL_SEC
+        global _HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC
+        _HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC = hb_interval
+        _RUNNER_HEARTBEAT_INTERVAL_SEC = hb_interval
+
+    _last_applied_config_version = snap.version
+    logger.info(
+        "Applied W5.3 config snapshot version=%d (%d operator overrides)",
+        snap.version, len(values),
+    )
+
+
+# ---------------------------------------------------------------------------
+# W6.A.2 — W5.4 active signals state
+# ---------------------------------------------------------------------------
+
+# Proxies the spider has banned in response to a `ban_proxy` signal. Tracked
+# so the same signal arriving on every heartbeat doesn't keep re-issuing
+# ban_proxy() calls.
+_signal_banned_proxies: set = set()
+# Serialises mutations to the three signal-state fields above so concurrent
+# heartbeat ticks (e.g., a re-register racing the main loop) cannot
+# interleave reads and writes.
+_signal_lock = threading.Lock()
+
+
+def _apply_active_signals(signals: list) -> None:
+    """Reconcile the runtime state against the W5.4 ``active_signals`` set.
+
+    Signals are STATE, not events: every heartbeat delivers the full
+    current set. This function diff'd against the last-applied state
+    each tick:
+
+    * ``throttle_global`` (factor) → ``movie_sleep_mgr.set_global_factor``.
+      When no such signal exists, factor resets to 1.0.
+    * ``ban_proxy`` (proxy_id, ttl) → ``proxy_pool.ban_proxy(name)``.
+      Once banned, the runner does NOT unban (ProxyPool bans are
+      session-permanent today). Signal TTL is intentionally not
+      honoured locally — see plan W6 trade-off #1.
+    * ``pause_all`` (ttl) → ``movie_sleep_mgr.set_pause_until_ms``.
+      When no such signal exists, the pause expiry resets to 0.
+    * ``resume`` never appears in this list (Worker consumes it as a
+      clear-all directive); a list with no other signals is equivalent.
+
+    Fail-open: every individual signal's application is wrapped in
+    try/except so a single malformed signal cannot disable the rest.
+    """
+    if signals is None:
+        signals = []
+
+    desired_factor = 1.0
+    desired_pause_until_ms = 0
+    desired_bans: set = set()
+    for sig in signals:
+        try:
+            kind = getattr(sig, "kind", None)
+            if kind == "throttle_global":
+                f = getattr(sig, "factor", None)
+                if f is not None:
+                    desired_factor = max(desired_factor, float(f))
+            elif kind == "pause_all":
+                exp = int(getattr(sig, "expires_at_ms", 0) or 0)
+                if exp > desired_pause_until_ms:
+                    desired_pause_until_ms = exp
+            elif kind == "ban_proxy":
+                pid = getattr(sig, "proxy_id", None)
+                if pid:
+                    desired_bans.add(str(pid))
+            # ``resume`` is consumed Worker-side; clients never see it in
+            # ``active_signals``. An empty list naturally restores defaults.
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "Skipping malformed signal during apply: %r", sig,
+                exc_info=True,
+            )
+
+    # Apply throttle_global.
+    try:
+        from packages.python.javdb_spider.runtime.sleep import (
+            movie_sleep_mgr as _mgr,
+        )
+        _mgr.set_global_factor(desired_factor)
+        _mgr.set_pause_until_ms(desired_pause_until_ms)
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Failed to apply throttle_global / pause_all signal",
+            exc_info=True,
+        )
+
+    # Apply ban_proxy deltas. The full reconcile model:
+    #   new_bans     = desired - applied → call pool.ban_proxy()
+    #   removed_bans = applied - desired → call pool.unban_proxy()
+    # Bookkeeping uses set replacement (not update) so an empty
+    # desired set correctly produces an empty applied set, restoring
+    # full proxy availability after every signal expires.
+    global _signal_banned_proxies
+    with _signal_lock:
+        new_bans = desired_bans - _signal_banned_proxies
+        removed_bans = _signal_banned_proxies - desired_bans
+        _signal_banned_proxies = set(desired_bans)
+
+    pool = global_proxy_pool
+    if pool is not None:
+        if new_bans:
+            for proxy_id in new_bans:
+                try:
+                    pool.ban_proxy(proxy_id)
+                    logger.warning(
+                        "W5.4 ban_proxy signal applied: %s now banned",
+                        proxy_id,
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "Failed to apply ban_proxy signal for %s",
+                        proxy_id, exc_info=True,
+                    )
+        if removed_bans:
+            for proxy_id in removed_bans:
+                try:
+                    pool.unban_proxy(proxy_id)
+                    logger.info(
+                        "W5.4 ban_proxy signal expired: %s restored to rotation",
+                        proxy_id,
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "Failed to unban %s after signal expiry",
+                        proxy_id, exc_info=True,
+                    )
+
+
 def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None:
     """Background thread: ping ``/heartbeat`` until stopped.
 
@@ -804,12 +1019,17 @@ def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None
                     workflow_run_id=os.environ.get("GITHUB_RUN_ID", ""),
                     workflow_name=os.environ.get("GITHUB_WORKFLOW", ""),
                     proxy_hash=proxy_pool_hash(_resolve_proxy_pool_json()),
+                    proxy_pool=proxy_pool_summary_for_registry(PROXY_POOL),
                 )
                 logger.info("Runner-registry recovered after eviction")
                 # Feed the registry's fresh recommendation so the auto-
                 # toggle re-syncs after eviction (the cohort may have
                 # changed while we were missing).
                 _apply_movie_claim_recommendation(rereg.movie_claim_recommended)
+                _update_sleep_runner_count(len(rereg.active_runners))
+                if rereg.config is not None:
+                    _apply_config_snapshot(rereg.config)
+                _apply_active_signals(rereg.active_signals)
             except RunnerRegistryUnavailable:
                 logger.debug("Runner-registry re-register unavailable; will retry")
             except Exception:  # noqa: BLE001
@@ -823,6 +1043,10 @@ def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None
         # Old Workers omit the field; the parser defaults it to False
         # which the auto path treats as "single runner, unmount".
         _apply_movie_claim_recommendation(result.movie_claim_recommended)
+        _update_sleep_runner_count(result.active_runners_count)
+        if result.config is not None:
+            _apply_config_snapshot(result.config)
+        _apply_active_signals(result.active_signals)
 
 
 def _unregister_runner_at_exit() -> None:
@@ -866,6 +1090,79 @@ def _unregister_runner_at_exit() -> None:
     global_runner_registry_client = None
     if _runner_heartbeat_thread is not None and not _runner_heartbeat_thread.is_alive():
         _runner_heartbeat_thread = None
+
+
+# MR-5 (multi-runtime): opportunistic orphan-stage sweep on clean exit.
+#
+# The StaleSessionCleanup cron sweeps once a day; a stage orphaned by a
+# crashed peer therefore lingered up to ~24h + the (now 6h) cutoff. By
+# also sweeping when ANY runner exits cleanly, the effective sweep
+# cadence becomes "every runner shutdown" — far more frequent, at zero
+# extra GH Actions minutes (it piggy-backs on the existing atexit
+# lifecycle). The 6h cutoff means a clean runner only reaps stages that
+# have been orphaned long enough to be unambiguously dead, never a live
+# peer's in-flight stage.
+_MOVIE_CLAIM_SWEEP_AT_EXIT_OLDER_THAN_MS = 6 * 60 * 60 * 1000
+_movie_claim_swept_at_exit: bool = False
+
+
+def _movie_claim_sweep_shard_dates() -> list:
+    """Today + yesterday in the ops timezone (Asia/Singapore, UTC+8).
+
+    Two days covers a session that staged just before midnight and a
+    runner exiting just after — the same cross-midnight window the
+    ``sweep_movie_claim_stages`` CLI guards with its 3-day default.
+    """
+    import datetime as _dt
+
+    ops_tz = _dt.timezone(_dt.timedelta(hours=8))
+    base = _dt.datetime.now(ops_tz)
+    return [
+        (base - _dt.timedelta(days=offset)).strftime("%Y-%m-%d")
+        for offset in (0, 1)
+    ]
+
+
+def _sweep_movie_claim_stages_at_exit() -> None:
+    """Best-effort opportunistic sweep of orphaned MovieClaim stages.
+
+    Registered via :func:`atexit.register` from
+    :func:`setup_movie_claim_client`.  Idempotent
+    (``_movie_claim_swept_at_exit`` flag).  Never raises — orphan-stage
+    hygiene must not block the spider's shutdown.
+
+    Only meaningful when a MovieClaim client is mounted; a no-op
+    otherwise.  Uses a conservative 6h cutoff (well above the Worker's
+    1h server floor) so a clean runner can never wipe a live peer's
+    in-flight stage — it only reaps stages old enough to be
+    unambiguously orphaned by a crashed runner.
+    """
+    global _movie_claim_swept_at_exit
+    if _movie_claim_swept_at_exit:
+        return
+    _movie_claim_swept_at_exit = True
+    client = global_movie_claim_client or _movie_claim_client_pending
+    if client is None:
+        return
+    for shard_date in _movie_claim_sweep_shard_dates():
+        try:
+            result = client.sweep_orphan_stages(
+                older_than_ms=_MOVIE_CLAIM_SWEEP_AT_EXIT_OLDER_THAN_MS,
+                date=shard_date,
+            )
+        except Exception as exc:  # noqa: BLE001 — never block shutdown
+            logger.debug(
+                "Movie-claim orphan-stage sweep at exit failed for shard %s "
+                "(non-fatal): %s",
+                shard_date, exc,
+            )
+            continue
+        if result.removed:
+            logger.info(
+                "Movie-claim orphan-stage sweep at exit: removed %d stale "
+                "stage(s) from shard %s",
+                result.removed, shard_date,
+            )
 
 
 def _warn_on_proxy_pool_drift(
@@ -982,6 +1279,7 @@ def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
             workflow_run_id=os.environ.get("GITHUB_RUN_ID", ""),
             workflow_name=os.environ.get("GITHUB_WORKFLOW", ""),
             proxy_hash=self_hash,
+            proxy_pool=proxy_pool_summary_for_registry(PROXY_POOL),
         )
         logger.info(
             "Runner-registry client initialised: base_url=%s, holder_id=%s, "
@@ -995,6 +1293,7 @@ def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
         # in place (≥2 runners) or unmounts it (single runner) within
         # milliseconds of startup; force_on / off modes ignore it.
         _apply_movie_claim_recommendation(result.movie_claim_recommended)
+        _update_sleep_runner_count(len(result.active_runners))
     except RunnerRegistryUnavailable:
         logger.warning(
             "Runner-registry register failed at startup; continuing without "
@@ -1024,6 +1323,43 @@ def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
         )
         _runner_heartbeat_thread.start()
     atexit.register(_unregister_runner_at_exit)
+    return client
+
+
+def setup_work_distributor_client():
+    """W6.C (W5.2) — initialise the opt-in work-distribution queue client.
+
+    Companion of the other DO setup functions; gated by
+    ``WORK_DISTRIBUTOR_ENABLED`` so the default (off) keeps the spider
+    on its existing local-iteration + MovieClaim dispatch path with
+    zero overhead.
+
+    On success caches the client in :data:`global_work_distributor_client`.
+    On any failure (flag off, URL/token missing, /health failing) returns
+    ``None`` and leaves the global as ``None`` — the consumer loop in
+    :mod:`javdb_spider.detail.runner` checks for that and falls back.
+
+    Idempotent.
+    """
+    global global_work_distributor_client
+    if global_work_distributor_client is not None:
+        return global_work_distributor_client
+
+    try:
+        from packages.python.javdb_platform.work_distributor_client import (
+            create_work_distributor_client_from_env,
+        )
+    except Exception:  # noqa: BLE001 — import failure must not crash startup
+        logger.warning("WorkDistributor client import failed", exc_info=True)
+        return None
+
+    try:
+        client = create_work_distributor_client_from_env()
+    except Exception:  # noqa: BLE001 — factory wrapping is best-effort
+        logger.warning("WorkDistributor client setup failed", exc_info=True)
+        return None
+
+    global_work_distributor_client = client
     return client
 
 
@@ -1102,7 +1438,18 @@ def setup_proxy_pool(use_proxy) -> None:
     setup_proxy_coordinator()
     setup_login_state_client()
     setup_movie_claim_client()
+    # MR-4: in d1-only mode, refuse to start when the operator wanted
+    # movie-claim coordination but the Worker is unreachable. Must run
+    # after setup_movie_claim_client() so the client / pending slots and
+    # _movie_claim_intended_mode are populated.
+    enforce_movie_claim_for_d1()
+    # MR-5: opportunistic orphan-stage sweep on clean shutdown. Registered
+    # unconditionally — the hook itself no-ops when no MovieClaim client
+    # was mounted, and registering once here keeps the lifecycle wiring
+    # in one place alongside the runner-registry atexit hook.
+    atexit.register(_sweep_movie_claim_stages_at_exit)
     setup_runner_registry_client()
+    setup_work_distributor_client()
 
     if is_proxy_mode_disabled(PROXY_MODE):
         logger.info("Proxy globally disabled (PROXY_MODE='%s') - skipping pool init", PROXY_MODE)
@@ -1142,28 +1489,59 @@ def setup_proxy_pool(use_proxy) -> None:
             logger.warning("Proxy enabled but no proxy configuration found (neither PROXY_POOL nor PROXY_HTTP/PROXY_HTTPS)")
         global_proxy_pool = None
 
-    # P2-D — when both the pool and the cross-instance coordinator are
-    # available AND the pool exposes ``set_health_provider`` (Python
-    # ProxyPool only — the Rust pool currently keeps round-robin), wire
-    # the coordinator's per-proxy health cache as the weighting source.
-    # Reads from the cache populated by ``lease()`` so weighted selection
-    # piggy-backs on the requests the spider was already making.
+    # W6.B (W5.5) — when the operator has enabled cross-DO health
+    # aggregation via RECOMMEND_PROXY_ENABLED=true, prefer that policy
+    # over the local per-proxy cache: it integrates cohort-wide health
+    # data rather than only this runner's lease history. The local
+    # ``coord.get_proxy_health_score`` fallback runs unchanged when
+    # RecommendProxy is disabled or unreachable.
     if (
         global_proxy_pool is not None
-        and global_proxy_coordinator is not None
         and hasattr(global_proxy_pool, "set_health_provider")
     ):
+        provider_label = None
         try:
-            global_proxy_pool.set_health_provider(
-                global_proxy_coordinator.get_proxy_health_score
+            from packages.python.javdb_platform.recommend_proxy_client import (
+                create_recommend_proxy_client_from_env,
             )
-            logger.info(
-                "Proxy pool health-weighted selection enabled (P2-D coordinator)"
+            from packages.python.javdb_platform.recommend_proxy_policy import (
+                RecommendProxyPolicy,
             )
-        except Exception:  # noqa: BLE001 — wiring must not block startup
+            global global_recommend_proxy_policy
+            rec_client = create_recommend_proxy_client_from_env()
+            if rec_client is not None:
+                proxy_ids = [p.get('name', '') for p in (PROXY_POOL or [])
+                             if isinstance(p, dict) and p.get('name')]
+                policy = RecommendProxyPolicy(rec_client, proxy_ids=proxy_ids)
+                policy.start()
+                global_recommend_proxy_policy = policy
+                global_proxy_pool.set_health_provider(policy.score_for)
+                atexit.register(policy.shutdown)
+                provider_label = "W5.5 /recommend_proxy"
+        except Exception:  # noqa: BLE001 — Worker policy is best-effort
             logger.warning(
-                "Failed to wire proxy health provider; falling back to round-robin",
+                "Failed to wire RecommendProxy policy; will fall back to local cache",
                 exc_info=True,
+            )
+
+        # Fallback: existing P2-D local-cache provider when RecommendProxy
+        # is off or failed to start.
+        if provider_label is None and global_proxy_coordinator is not None:
+            try:
+                global_proxy_pool.set_health_provider(
+                    global_proxy_coordinator.get_proxy_health_score
+                )
+                provider_label = "P2-D coordinator cache"
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "Failed to wire proxy health provider; falling back to round-robin",
+                    exc_info=True,
+                )
+
+        if provider_label is not None:
+            logger.info(
+                "Proxy pool health-weighted selection enabled (%s)",
+                provider_label,
             )
 
 # ---------------------------------------------------------------------------

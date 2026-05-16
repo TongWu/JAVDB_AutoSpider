@@ -321,8 +321,8 @@ def _main():
 
     if db_storage_enabled:
         try:
-            from packages.python.javdb_platform.db import (
-                init_db,
+            from packages.python.javdb_platform.db_migrations import init_db
+            from packages.python.javdb_platform.db_reports import (
                 db_create_report_session,
                 db_find_in_progress_session_ids_for_run_csv,
             )
@@ -390,7 +390,7 @@ def _main():
             # (`save_parsed_movie_to_history`, etc.) consult.  Falling
             # back to ``_resolve_write_mode`` keeps the env-var/default
             # behaviour aligned with ``db_create_report_session``.
-            from packages.python.javdb_platform.db import (
+            from packages.python.javdb_platform.db_session import (
                 _resolve_write_mode as _resolve_wm,
             )
             requested_write_mode = _resolve_wm(None)
@@ -418,8 +418,10 @@ def _main():
             # surgically undo just our rows (X3 hybrid strategy).
             effective_write_mode = requested_write_mode
             try:
-                from packages.python.javdb_platform.db import (
+                from packages.python.javdb_platform.db_reports import (
                     db_get_session_status as _db_get_session_status,
+                )
+                from packages.python.javdb_platform.db_session import (
                     set_active_run_identity as _set_active_run_identity,
                     set_active_session_id as _set_active_session_id,
                     set_active_write_mode as _set_active_write_mode,
@@ -599,7 +601,8 @@ def _main():
     # Save spider stats and end_page to SQLite (when session exists)
     if _session_id is not None:
         try:
-            from packages.python.javdb_platform.db import db_save_spider_stats, get_db, REPORTS_DB_PATH
+            from packages.python.javdb_platform.db_stats import db_save_spider_stats
+            from packages.python.javdb_platform.db_connection import get_db, REPORTS_DB_PATH
             p1_discovered = len(all_index_results_phase1) if phase_mode in ('1', 'all') else 0
             p1_processed = len(phase1_rows)
             _p1 = p1_result if 'p1_result' in locals() else {}
@@ -662,7 +665,7 @@ def main():
         return _main()
     finally:
         try:
-            from packages.python.javdb_platform.db import (
+            from packages.python.javdb_platform.db_session import (
                 set_active_session_id as _set_active_session_id,
                 set_active_run_identity as _set_active_run_identity,
             )

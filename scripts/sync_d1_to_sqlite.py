@@ -242,7 +242,7 @@ def _list_business_tables(d1: D1Connection) -> List[str]:
 
 
 def _table_columns(d1: D1Connection, table: str) -> List[str]:
-    cur = d1.execute(f"PRAGMA table_info({table})")
+    cur = d1.execute(f'PRAGMA table_info("{table}")')
     rows = cur.fetchall() or []
     cols: List[str] = []
     for r in rows:
@@ -261,7 +261,7 @@ def _table_pk_columns(d1: D1Connection, table: str) -> List[str]:
     primary-key column", 1+ encodes the column's position in a possibly-
     composite key.
     """
-    cur = d1.execute(f"PRAGMA table_info({table})")
+    cur = d1.execute(f'PRAGMA table_info("{table}")')
     rows = cur.fetchall() or []
     pk_pairs: List[Tuple[int, str]] = []
     for r in rows:

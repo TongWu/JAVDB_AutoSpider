@@ -68,20 +68,51 @@ _MAX_RETRIES = _env_int("D1_MAX_RETRIES", 5)
 _RETRY_BASE_SEC = _env_float("D1_RETRY_BASE_SEC", 1.0)
 _RETRY_MAX_SLEEP_SEC = _env_float("D1_RETRY_MAX_SLEEP_SEC", 30.0)
 
+# JSON numbers are parsed as IEEE-754 doubles on Cloudflare's D1 /query path.
+# Integers with |x| > 2**53-1 lose precision (e.g. application snowflake session
+# ids), desynchronizing dual-write SQLite vs D1.  SQLite accepts a STRING bind
+# for an INTEGER column and coerces it — so we ship oversized ints as decimal
+# strings in the JSON ``params`` array only (2026-05-12 incident).
+_JSON_SAFE_INTEGER_MAX = 2**53 - 1
+
+
+def _params_for_d1_json(params: Iterable[Any]) -> List[Any]:
+    """Return *params* safe for D1's JSON Number parsing.
+
+    ``bool`` is a ``int`` subclass in Python; use ``type(x) is int`` so we
+    never stringify ``True``/``False``.
+    """
+    out: List[Any] = []
+    for p in params:
+        if type(p) is int and abs(p) > _JSON_SAFE_INTEGER_MAX:
+            out.append(str(p))
+        else:
+            out.append(p)
+    return out
+
 # Substrings in CF "errors[].message" / errors[].code that signal a recoverable
 # backend hiccup. Compared case-insensitively against the stringified errors.
+#
+# IMPORTANT: classify on the **message text**, not the wrapper code 7500. CF
+# D1 maps every SQLite error onto code 7500 (their generic "SQLITE_ERROR"),
+# so transient conditions (export lock, busy, locked) AND permanent ones
+# (constraint mismatch, no-such-table, syntax errors) all carry that same
+# code. A blanket "7500 ⇒ transient" rule misclassifies permanent failures
+# as transient and wastes five retries × ~15s back-off per failure (observed
+# 2026-05-12 on a SpiderStats upsert when the D1 side lacked the
+# uq_spiderstats_session UNIQUE index — see
+# migration/d1/2026_05_12_add_unique_stats_session_indexes.sql).
 _TRANSIENT_ERROR_KEYWORDS = (
     "D1_RESET_DO",
     "busy",
+    "locked",
     "timeout",
     "overloaded",
     "internal error",
     "temporarily",
-    # CF D1 returns this 400/code-7500 when a manual or scheduled D1 export is
-    # holding a database-wide read/write lock. Treat as transient so callers
-    # back off and retry instead of dropping the write.
+    # Export-lock case: CF returns 400 + code 7500 + this exact phrase when
+    # a manual or scheduled D1 export is holding a database-wide R/W lock.
     "long-running export",
-    "7500",
 )
 
 # Substrings indicating the export-lock case specifically. Backoff for these is
@@ -89,7 +120,6 @@ _TRANSIENT_ERROR_KEYWORDS = (
 # short retries waste round-trips on the lock window.
 _EXPORT_LOCK_KEYWORDS = (
     "long-running export",
-    "7500",
 )
 _EXPORT_LOCK_BACKOFF_FLOOR_SEC = _env_float("D1_EXPORT_LOCK_FLOOR_SEC", 15.0)
 
@@ -174,7 +204,9 @@ class D1Connection:
 
     def execute(self, sql: str, params: Iterable[Any] = ()) -> D1Cursor:
         # CF /query single-statement shape: {sql, params}
-        cursors = self._post_with_retry({"sql": sql, "params": list(params)})
+        cursors = self._post_with_retry(
+            {"sql": sql, "params": _params_for_d1_json(params)},
+        )
         if not cursors:
             # success=true but empty result[] — should never happen per CF docs,
             # but guard against API regressions / proxy stripping the body.
@@ -196,7 +228,9 @@ class D1Connection:
         :class:`DualConnection` uses it to enforce the guarded-table
         ``lastrowid`` invariant after a batched INSERT.
         """
-        statements = [{"sql": sql, "params": list(p)} for p in seq_of_params]
+        statements = [
+            {"sql": sql, "params": _params_for_d1_json(p)} for p in seq_of_params
+        ]
         if not statements:
             return None
         last_cursor: Optional[D1Cursor] = None
@@ -248,7 +282,9 @@ class D1Connection:
         cursors: List[D1Cursor] = []
         if not statements:
             return cursors
-        body_stmts = [{"sql": s, "params": list(p)} for s, p in statements]
+        body_stmts = [
+            {"sql": s, "params": _params_for_d1_json(p)} for s, p in statements
+        ]
         for chunk in _split(body_stmts, _BATCH_LIMIT):
             chunk_cursors = self._post_with_retry({"batch": chunk})
             for c in chunk_cursors:
@@ -321,6 +357,15 @@ class D1Connection:
             try:
                 return max(0.0, float(retry_after))
             except (TypeError, ValueError):
+                pass
+            try:
+                import email.utils as _eu
+                dt = _eu.parsedate_to_datetime(str(retry_after))
+                delay = (dt - __import__("datetime").datetime.now(
+                    tz=__import__("datetime").timezone.utc
+                )).total_seconds()
+                return max(0.0, delay)
+            except Exception:
                 pass
         base = _RETRY_BASE_SEC * (2 ** attempt)
         # Export-lock errors require a longer floor: short retries reliably

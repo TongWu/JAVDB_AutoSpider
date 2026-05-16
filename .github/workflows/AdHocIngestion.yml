@@ -11,13 +11,12 @@ on:
   workflow_dispatch:
     inputs:
       write_mode_override:
-        description: 'Override JAVDB_HISTORY_WRITE_MODE for this run only (audit | pending). Leave empty to honour the default + .publish-config.yml override.'
+        description: 'Force JAVDB_HISTORY_WRITE_MODE=pending for this run, bypassing any .publish-config.yml auto-fallback. Leave empty to honour the default (pending) + .publish-config.yml override. Audit is no longer a manual choice per ADR-006.'
         required: false
         default: ''
         type: choice
         options:
           - ''
-          - 'audit'
           - 'pending'
       disable_all_filters:
         description: 'Disable ALL filters (history, rclone inventory, release date) — process every entry from index'
@@ -139,48 +138,36 @@ jobs:
       branch: ${{ steps.branch_check.outputs.branch }}
       pipeline_workflow_run_started_at: ${{ steps.capture_run_started_at.outputs.started_at }}
       effective_write_mode: ${{ steps.resolve_write_mode.outputs.mode }}
+      paused: ${{ steps.pause_gate.outputs.paused }}
     env:
       TZ: Asia/Singapore
-    
+
     steps:
       - name: Capture workflow run start (UTC ISO)
         id: capture_run_started_at
         run: echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
 
-      # Ingestion Perfect Rollback (Phase 3): resolve effective WriteMode.
-      # See DailyIngestion.yml for the precedence rules.
-      - name: Resolve effective WriteMode
-        id: resolve_write_mode
+      # ADR-006: pipeline-wide pause gate. See DailyIngestion.yml for
+      # the rationale. Pauses are honoured across both Daily and AdHoc
+      # since they read the same .publish-config.yml.
+      - name: Pipeline pause gate (ADR-006)
+        id: pause_gate
         run: |
           set -euo pipefail
-          OVERRIDE="${{ inputs.write_mode_override }}"
-          if [ -n "$OVERRIDE" ]; then
-            echo "Honouring workflow_dispatch override: $OVERRIDE"
-            echo "mode=$OVERRIDE" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          MODE="pending"
+          PAUSED_UNTIL=""
           if [ -f .publish-config.yml ]; then
-            # NOTE: must use stdin heredoc (`python3 - <<'PY'`) here, NOT
-            # `python3 -c "..."`.  YAML's literal block strips the common
-            # leading indent but leaves any extra; an inline `python3 -c`
-            # script then gets non-zero leading whitespace and dies with
-            # IndentationError, silently dropping us back to pending and
-            # breaking the Phase 3 auto-fallback contract.  The heredoc
-            # form lets YAML strip every line uniformly so Python sees
-            # column-0 source.  See R1 in the audit plan.
-            DISABLE=$(python3 - <<'PY'
+            PAUSED_UNTIL=$(python3 - <<'PY'
           import datetime, re, sys
           try:
               with open('.publish-config.yml') as f:
                   for line in f:
                       m = re.match(
-                          r"^\s*pending_mode_disabled_until:\s*['\"]?([0-9T:\-+Z.]+)['\"]?",
+                          r"^\s*pipeline_paused_until:\s*['\"]?([0-9T:\-+Z.]+)['\"]?",
                           line,
                       )
                       if not m:
@@ -195,19 +182,35 @@ jobs:
                           tz=until.tzinfo or datetime.timezone.utc
                       )
                       if now < until:
-                          print('audit')
+                          print(until.isoformat())
                       sys.exit(0)
           except FileNotFoundError:
               pass
           PY
           )
-            if [ "$DISABLE" = "audit" ]; then
-              echo "pending_mode_disabled_until is in the future → forcing audit"
-              MODE="audit"
-            fi
           fi
-          echo "Effective JAVDB_HISTORY_WRITE_MODE: $MODE"
-          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          if [ -n "$PAUSED_UNTIL" ]; then
+            echo "::warning::Pipeline paused until $PAUSED_UNTIL — downstream jobs will be skipped."
+            echo "paused=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Pipeline not paused; proceeding."
+            echo "paused=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ADR-006: resolve effective JAVDB_HISTORY_WRITE_MODE.
+      # See DailyIngestion.yml for the precedence rules.
+      - name: Resolve effective WriteMode
+        id: resolve_write_mode
+        run: |
+          set -euo pipefail
+          OVERRIDE="${{ inputs.write_mode_override }}"
+          if [ -n "$OVERRIDE" ]; then
+            echo "Honouring workflow_dispatch override: $OVERRIDE"
+            echo "mode=$OVERRIDE" >> "$GITHUB_OUTPUT"
+          else
+            echo "No override; downstream defaults to pending."
+            echo "mode=pending" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Get current branch
         id: branch_check
@@ -348,7 +351,7 @@ jobs:
           echo "✓ Config encrypted successfully"
 
       - name: Upload encrypted config artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: config-encrypted
           path: config.py.enc
@@ -363,6 +366,7 @@ jobs:
     permissions:
       contents: read
     needs: [setup]
+    if: needs.setup.outputs.paused != 'true'
     outputs:
       spider_success: ${{ steps.spider.outcome == 'success' }}
       uploader_success: ${{ steps.uploader.outcome == 'success' }}
@@ -377,7 +381,7 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
           lfs: true
@@ -549,7 +553,7 @@ jobs:
           
           SESSION_ID=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_SESSION_ID=" | cut -d'=' -f2 | tail -1 || true)
           if [ -n "$SESSION_ID" ]; then
-            if echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+            if echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
               echo "session_id=$SESSION_ID" >> $GITHUB_OUTPUT
               echo "Captured session ID: $SESSION_ID"
             else
@@ -619,7 +623,7 @@ jobs:
           # Pass session_id for SQLite stats
           SESSION_ID="$SPIDER_SESSION_ID"
           if [ -n "$SESSION_ID" ]; then
-            if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+            if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
               echo "::error::Invalid SESSION_ID format: $SESSION_ID"
               exit 1
             fi
@@ -675,7 +679,7 @@ jobs:
           CMD_ARGS=(python3 -m apps.cli.pikpak_bridge --days 3)
           SESSION_ID="$SPIDER_SESSION_ID"
           if [ -n "$SESSION_ID" ]; then
-            if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+            if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
               echo "::error::Invalid SESSION_ID format: $SESSION_ID"
               exit 1
             fi
@@ -708,10 +712,10 @@ jobs:
           CMD_ARGS=(python3 -m apps.cli.commit_session
                     --run-started-at "$RUN_STARTED_AT")
           if [ -n "$SPIDER_SESSION_ID" ]; then
-            if [[ "$SPIDER_SESSION_ID" =~ ^[0-9]+$ ]]; then
+            if echo "$SPIDER_SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
               CMD_ARGS+=(--session-id "$SPIDER_SESSION_ID")
             else
-              echo "::warning::Skipping non-numeric SPIDER_SESSION_ID for commit_session: $SPIDER_SESSION_ID"
+              echo "::warning::Skipping invalid SPIDER_SESSION_ID for commit_session: $SPIDER_SESSION_ID"
             fi
           fi
           echo "Executing: ${CMD_ARGS[*]}"
@@ -760,7 +764,7 @@ jobs:
 
       - name: Upload encrypted logs artifact
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: pipeline-logs-encrypted
           path: encrypted_artifacts/logs.tar.gz.enc
@@ -831,7 +835,7 @@ jobs:
 
       - name: Upload encrypted reports artifact
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: pipeline-reports-encrypted
           path: encrypted_artifacts/reports.tar.gz.enc
@@ -849,7 +853,7 @@ jobs:
     permissions:
       contents: read
     needs: [setup, run-pipeline]
-    if: ${{ always() && (needs.run-pipeline.result == 'failure' || needs.run-pipeline.result == 'cancelled') }}
+    if: ${{ always() && needs.setup.outputs.paused != 'true' && (needs.run-pipeline.result == 'failure' || needs.run-pipeline.result == 'cancelled') }}
     env:
       TZ: Asia/Singapore
       STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
@@ -860,7 +864,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
           lfs: true
@@ -879,11 +883,11 @@ jobs:
       - name: Roll back uncommitted D1 writes
         env:
           RUN_STARTED_AT: ${{ needs.setup.outputs.pipeline_workflow_run_started_at }}
-          # SPIDER_SESSION_ID format change (2026-05-08): the application
-          # now generates ReportSessions.Id as a 51-bit snowflake instead
-          # of letting AUTOINCREMENT pick it. The shell regex below still
-          # accepts the new shape (digits only); values are now ~16
-          # digits long instead of ~3.
+          # SPIDER_SESSION_ID format change (2026-05-13): the application
+          # now generates ReportSessions.Id as a text timestamp
+          # (YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS) instead of a numeric
+          # snowflake. The shell validation below accepts both old
+          # numeric ids and the new text format.
           SPIDER_SESSION_ID: ${{ needs.run-pipeline.outputs.session_id }}
           ROLLBACK_REASON: cleanup_on_failure
         run: |
@@ -909,10 +913,10 @@ jobs:
                     --auto-resume-finalizing
                     --apply)
           if [ -n "$SPIDER_SESSION_ID" ]; then
-            if [[ "$SPIDER_SESSION_ID" =~ ^[0-9]+$ ]]; then
+            if echo "$SPIDER_SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
               CMD_ARGS+=(--session-id "$SPIDER_SESSION_ID")
             else
-              echo "::warning::Skipping non-numeric SPIDER_SESSION_ID for rollback: $SPIDER_SESSION_ID"
+              echo "::warning::Skipping invalid SPIDER_SESSION_ID for rollback: $SPIDER_SESSION_ID"
             fi
           fi
           echo "Executing: ${CMD_ARGS[*]}"
@@ -921,7 +925,7 @@ jobs:
 
       - name: Upload rollback log
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: rollback-log
           path: logs/rollback.log
@@ -936,11 +940,12 @@ jobs:
     runs-on: ubuntu-latest
     environment: Production
     permissions:
-      # Phase 3 — email job also runs the auto-fallback step which may
-      # commit + push pending_mode_disabled_until to .publish-config.yml.
+      # ADR-006 — email job also runs the alert+pause step which may
+      # commit + push pipeline_paused_until to .publish-config.yml.
       contents: write
     needs: [setup, run-pipeline]
-    if: always()
+    # Skip when paused — there is no run-pipeline result to summarise.
+    if: ${{ always() && needs.setup.outputs.paused != 'true' }}
     env:
       TZ: Asia/Singapore
       PIPELINE_WORKFLOW_RUN_STARTED_AT: ${{ needs.setup.outputs.pipeline_workflow_run_started_at }}
@@ -948,7 +953,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           # Phase 3 — SSH key needed so the auto-fallback step can push
           # pending_mode_disabled_until back to the branch.  No-op cost
@@ -967,7 +972,7 @@ jobs:
           artifact-key: ${{ secrets.ARTIFACT_KEY }}
 
       - name: Download encrypted logs (if available)
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: pipeline-logs-encrypted
           path: encrypted_artifacts
@@ -1006,7 +1011,7 @@ jobs:
           fi
 
       - name: Download encrypted reports (if available)
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: pipeline-reports-encrypted
           path: encrypted_artifacts
@@ -1111,7 +1116,7 @@ jobs:
           # Pass session_id for SQLite stats
           SESSION_ID="$PIPELINE_SESSION_ID"
           if [ -n "$SESSION_ID" ]; then
-            if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+            if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
               echo "::error::Invalid SESSION_ID format: $SESSION_ID"
               exit 1
             fi
@@ -1121,9 +1126,9 @@ jobs:
           echo "Executing: ${CMD_ARGS[*]}"
           "${CMD_ARGS[@]}"
 
-      # Phase 3 — auto-fallback on critical pending alerts; mirror of
+      # ADR-006 — alert+pause on critical pending alerts; mirror of
       # the DailyIngestion implementation.
-      - name: Auto-fallback on critical pending alert
+      - name: Alert + pause on critical pending alert (ADR-006)
         if: always()
         env:
           GITHUB_RUN_ID: ${{ github.run_id }}
@@ -1168,20 +1173,20 @@ jobs:
           PY
           )
           if [ -z "$DECISION" ]; then
-            echo "No critical pending-mode alert — auto-fallback NOT triggered."
+            echo "No critical pending-mode alert — pause NOT engaged."
             exit 0
           fi
           echo "::warning::Critical pending alert detected: $DECISION"
-          echo "Engaging Phase 3 auto-fallback (24h audit window)."
-          python3 -m scripts.pending_mode_auto_fallback \
+          echo "Engaging ADR-006 pipeline pause (24h)."
+          python3 -m scripts.pending_mode_alert_and_pause \
             --hours 24 \
             --reason "AdHocIngestion run ${{ github.run_id }}: $DECISION"
           if [ -n "${GH_TOKEN:-}" ] || [ -n "${GITHUB_TOKEN:-}" ]; then
             git config user.name "github-actions[bot]" || true
             git config user.email "github-actions[bot]@users.noreply.github.com" || true
             git add .publish-config.yml || true
-            git commit -m "ci(rollback): auto-fallback to audit (24h) — $DECISION" || true
-            git push || echo "::warning::auto-fallback commit push failed"
+            git commit -m "ci(pipeline): pause for 24h — $DECISION" || true
+            git push || echo "::warning::pause commit push failed"
           else
             echo "::warning::No GH_TOKEN — leaving .publish-config.yml uncommitted; operator must commit manually."
           fi
@@ -1195,23 +1200,31 @@ jobs:
     runs-on: ubuntu-latest
     environment: Production
     needs: [setup, run-pipeline]
-    if: ${{ needs.run-pipeline.result == 'success' }}
+    if: ${{ needs.setup.outputs.paused != 'true' && needs.run-pipeline.result == 'success' }}
     permissions:
       contents: write
       pull-requests: write
     env:
       TZ: Asia/Singapore
       GH_TOKEN: ${{ github.token }}
+      # MR-2 (multi-runtime): surfaced so the commit step can skip the
+      # reports/*.db git add when STORAGE_BACKEND=d1. In d1-only mode the
+      # SQLite mirror files are never written by the pipeline (the DB
+      # layer uses a D1Connection, not _open_sqlite_connection), so
+      # staging them is at best a misleading no-op and at worst keeps a
+      # stale binary in git that two parallel runtimes would `-X ours`
+      # clobber. D1 is the source of truth in that mode.
+      STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
           lfs: true
 
       - name: Download encrypted reports
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: pipeline-reports-encrypted
           path: encrypted_artifacts
@@ -1270,13 +1283,26 @@ jobs:
           # This ensures files are tracked and won't conflict with remote
           # ============================================================
           echo "Step 1: Staging files..."
+          # MR-2 (multi-runtime): in d1-only mode the SQLite mirror files
+          # (history.db / reports.db / operations.db) are never written by
+          # the pipeline — D1 is the source of truth — so staging them
+          # only risks two parallel runtimes `-X ours`-clobbering a stale
+          # binary. Skip them entirely. dual / sqlite modes keep the
+          # original behaviour.
+          stage_db_mirrors() {
+            if [ "$STORAGE_BACKEND" = "d1" ]; then
+              echo "STORAGE_BACKEND=d1 — skipping reports/*.db (D1 is source of truth)"
+              return 0
+            fi
+            git add "$REPORTS_DIR/history.db" 2>/dev/null || true
+            git add "$REPORTS_DIR/reports.db" 2>/dev/null || true
+            git add "$REPORTS_DIR/operations.db" 2>/dev/null || true
+          }
           if [[ "$SPIDER_SUCCESS" == "true" && "$UPLOADER_SUCCESS" == "true" ]]; then
             echo "Spider and Uploader both succeeded - staging all data files"
             git add "$REPORTS_DIR/parsed_movies_history.csv" 2>/dev/null || true
             git add "$REPORTS_DIR/pikpak_bridge_history.csv" 2>/dev/null || true
-            git add "$REPORTS_DIR/history.db" 2>/dev/null || true
-            git add "$REPORTS_DIR/reports.db" 2>/dev/null || true
-            git add "$REPORTS_DIR/operations.db" 2>/dev/null || true
+            stage_db_mirrors
             git add "$REPORTS_DIR/dedup_history.csv" 2>/dev/null || true
             find "$AD_HOC_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
             find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true

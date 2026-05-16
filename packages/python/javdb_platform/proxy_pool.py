@@ -38,9 +38,11 @@ except ImportError as e:
 
 from packages.python.javdb_platform.proxy_ban_manager import (
     _dispatch_remote_ban,
+    _dispatch_remote_unban,
     get_ban_manager,
     ProxyBanManager,
 )
+from packages.python.javdb_platform.proxy_policy import is_proxy_usable
 
 
 logger = logging.getLogger(__name__)
@@ -246,16 +248,16 @@ class ProxyPool:
             attempts = 0
             while attempts < len(self.proxies):
                 proxy = self.proxies[self.current_index]
-                
-                if proxy.is_available and not proxy.banned and not proxy.is_in_cooldown():
+
+                if is_proxy_usable(proxy):
                     return proxy.get_proxies_dict()
-                    
+
                 self.current_index = (self.current_index + 1) % len(self.proxies)
                 attempts += 1
-            
+
             logger.debug("All proxies are unavailable or in cooldown")
             return None
-    
+
     def set_health_provider(
         self,
         provider: Optional[Callable[[str], Optional[float]]],
@@ -319,7 +321,7 @@ class ProxyPool:
             
             available = [
                 (i, p) for i, p in enumerate(self.proxies)
-                if p.is_available and not p.banned and not p.is_in_cooldown()
+                if is_proxy_usable(p)
             ]
             if not available:
                 logger.debug("All proxies are unavailable or in cooldown")
@@ -351,13 +353,13 @@ class ProxyPool:
             while attempts < len(self.proxies):
                 self.current_index = (self.current_index + 1) % len(self.proxies)
                 proxy = self.proxies[self.current_index]
-                
-                if proxy.is_available and not proxy.banned and not proxy.is_in_cooldown():
+
+                if is_proxy_usable(proxy):
                     logger.debug(f"Round-robin selected proxy: {proxy.name}")
                     return proxy.get_proxies_dict()
-                    
+
                 attempts += 1
-            
+
             logger.warning("Unexpected: no available proxy found after rotation")
             return None
             
@@ -365,12 +367,13 @@ class ProxyPool:
         """Get the name of current active proxy"""
         if self.no_proxy_mode:
             return "No-Proxy (Direct)"
-            
+
         if not self.proxies:
             return "None"
-            
-        proxy = self.proxies[self.current_index]
-        return proxy.name
+
+        with self.lock:
+            proxy = self.proxies[self.current_index]
+            return proxy.name
         
     def mark_success(self) -> None:
         """Mark the current proxy as successful"""
@@ -426,13 +429,17 @@ class ProxyPool:
             while attempts < len(self.proxies):
                 self.current_index = (self.current_index + 1) % len(self.proxies)
                 next_proxy = self.proxies[self.current_index]
-                
-                if next_proxy.is_available and not next_proxy.is_in_cooldown():
+
+                # Previously this check omitted ``not banned``; harmless
+                # in practice because the pool's invariant guarantees
+                # ``banned implies not is_available``, but unifying via
+                # the shared predicate makes that intent explicit.
+                if is_proxy_usable(next_proxy):
                     logger.debug(f"Switched from '{current_proxy.name}' to '{next_proxy.name}'")
                     return True
-                    
+
                 attempts += 1
-            
+
             self.current_index = original_index
             logger.error("Failed to switch proxy: all proxies are unavailable")
             return False
@@ -488,7 +495,7 @@ class ProxyPool:
             while attempts < len(self.proxies):
                 candidate = (candidate + 1) % len(self.proxies)
                 next_proxy = self.proxies[candidate]
-                if next_proxy.is_available and not next_proxy.banned and not next_proxy.is_in_cooldown():
+                if is_proxy_usable(next_proxy):
                     self.current_index = candidate
                     logger.debug(f"Switched from '{target.name}' to '{next_proxy.name}'")
                     return True
@@ -496,6 +503,70 @@ class ProxyPool:
 
             logger.debug("ban_proxy: all proxies are unavailable after ban")
             return False
+
+    def unban_proxy(self, proxy_name: str) -> bool:
+        """W6.A.2 follow-up — clear a previously-applied ban.
+
+        Used by the W5.4 signal reconciliation loop in ``state.py``:
+        when a ``ban_proxy`` signal is no longer in the active set
+        (it ttl-expired Worker-side), this method restores the proxy
+        to rotation. Three actions, all under the pool lock:
+
+        1. Drop the entry from the local :class:`ProxyBanManager` so
+           subsequent ``add_proxy(name)`` for the same name doesn't
+           skip it.
+        2. Clear the :class:`ProxyInfo` flags so :func:`is_proxy_usable`
+           starts returning True again: ``banned = False``,
+           ``is_available = True``, ``cooldown_until = None``.
+        3. Best-effort cross-runner unban dispatch via
+           :func:`_dispatch_remote_unban` (fires when the ban manager
+           reported the removal).
+
+        Semantic note: this method does NOT distinguish *why* a proxy
+        was banned. If the proxy was banned by failure-threshold *and*
+        a signal, unban will restore it for both — operator override
+        is the documented intent. Operators who want permanent local
+        bans should not use ttl-bounded signals.
+
+        Returns ``True`` when an entry was matched + cleared, ``False``
+        when the proxy is unknown to the pool.
+        """
+        if self.no_proxy_mode or not self.proxies:
+            return False
+
+        with self.lock:
+            target: Optional[ProxyInfo] = None
+            for p in self.proxies:
+                if p.name == proxy_name:
+                    target = p
+                    break
+            if target is None:
+                logger.debug("unban_proxy: proxy '%s' not in pool", proxy_name)
+                # Even when the proxy isn't in this runner's pool config,
+                # clear the ban-manager entry so a future `add_proxy` of
+                # the same name isn't filtered out.
+                removed = bool(self.ban_manager.remove_ban(proxy_name))
+                if removed:
+                    _dispatch_remote_unban(proxy_name)
+                return False
+
+            removed = bool(self.ban_manager.remove_ban(target.name))
+            target.banned = False
+            target.is_available = True
+            target.cooldown_until = None
+            logger.info(
+                "Proxy '%s' unbanned (W5.4 signal expiry / operator override)",
+                target.name,
+            )
+
+        # W5.4 cross-runner unban dispatch, fired outside the pool lock so
+        # a slow Worker can never block the unban path. Both the Python
+        # and Rust ban-manager implementations now expose ``remove_ban``
+        # returning a bool; only fire when the ban actually came down to
+        # avoid amplifying queue pressure on repeated no-op calls.
+        if removed:
+            _dispatch_remote_unban(target.name)
+        return True
 
     def get_proxy_count(self) -> int:
         """Return the number of proxies in the pool"""

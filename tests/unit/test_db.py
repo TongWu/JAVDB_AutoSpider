@@ -96,7 +96,11 @@ class TestInitDb:
             row = c3.execute(
                 "SELECT SessionId FROM MovieHistory WHERE VideoCode='ABC-001'"
             ).fetchone()
-            assert row[0] == 123
+            # SessionId column is TEXT post-2026-05-13; SQLite coerces the
+            # seeded int 123 to "123" when the rebuild copies it into the
+            # new TEXT column. The legacy fixture above declares SessionId
+            # INTEGER, so the value is still an int there.
+            assert str(row[0]) == "123"
         finally:
             c3.close()
 
@@ -377,7 +381,9 @@ class TestInitDb:
                 "SELECT Status FROM ReportSessions LIMIT 1"
             ).fetchone()
         assert row["Status"] == "in_progress"
-        assert db_mod.db_find_in_progress_sessions(db_path=db_path) == [1]
+        # ReportSessions.Id is TEXT post-2026-05-13; the legacy v5 integer id
+        # (1) is preserved as the string "1" by the migration's CAST.
+        assert db_mod.db_find_in_progress_sessions(db_path=db_path) == ["1"]
 
     def test_unversioned_legacy_single_db_runs_v5_to_v6_migration(self, tmp_path):
         db_path = str(tmp_path / 'legacy_unversioned.db')
@@ -901,7 +907,8 @@ class TestReportSessions:
             csv_filename='test.csv', db_path=_isolate_sqlite,
         )
         assert sid is not None
-        assert isinstance(sid, int)
+        assert isinstance(sid, str)
+        assert db_mod._SESSION_ID_PATTERN.match(sid)
 
     def test_duplicate_csv_filename_allowed(self, _isolate_sqlite):
         sid1 = db_mod.db_create_report_session(
@@ -1027,20 +1034,23 @@ class TestSessionIdExtraction:
         """Mirrors pipeline.extract_session_id_from_output without importing pipeline."""
         for line in output.splitlines():
             if line.startswith('SPIDER_SESSION_ID='):
-                try:
-                    return int(line.split('=', 1)[1].strip())
-                except (ValueError, IndexError):
-                    return None
+                val = line.split('=', 1)[1].strip()
+                return val if val else None
         return None
 
-    def test_extract_valid(self):
-        assert self._extract("log line\nSPIDER_SESSION_ID=42\nmore") == 42
+    def test_extract_valid_numeric(self):
+        assert self._extract("log line\nSPIDER_SESSION_ID=42\nmore") == "42"
+
+    def test_extract_valid_text_format(self):
+        assert self._extract(
+            "log line\nSPIDER_SESSION_ID=20260514T045526.767565Z-1738-0000\nmore"
+        ) == "20260514T045526.767565Z-1738-0000"
 
     def test_extract_missing(self):
         assert self._extract("no id here\nfoo=bar") is None
 
-    def test_extract_invalid(self):
-        assert self._extract("SPIDER_SESSION_ID=abc") is None
+    def test_extract_empty_value(self):
+        assert self._extract("SPIDER_SESSION_ID=") is None
 
     def test_extract_empty(self):
         assert self._extract("") is None
@@ -1110,56 +1120,99 @@ class TestReportMigration:
         assert result2['skipped'] is True
 
 
+class TestBackendAgnosticErrorTuples:
+    """MR-3 (multi-runtime): the best-effort "table/column missing" and
+    "UNIQUE conflict" catches in db.py must cover the D1 backend too.
+
+    Under STORAGE_BACKEND=d1 the connection is a D1Connection whose
+    execute() raises D1PermanentError (Cloudflare HTTP-400 application
+    error) for BOTH a missing table/column AND a constraint violation —
+    it never raises the sqlite3.* types. _DB_OPERATIONAL_ERRORS /
+    _DB_INTEGRITY_ERRORS broaden the catches so a rollback / verify path
+    doesn't abort on a recoverable D1-side structural error.
+    """
+
+    def test_operational_errors_tuple_includes_d1_permanent(self):
+        from packages.python.javdb_platform.d1_client import D1PermanentError
+        assert sqlite3.OperationalError in db_mod._DB_OPERATIONAL_ERRORS
+        assert D1PermanentError in db_mod._DB_OPERATIONAL_ERRORS
+
+    def test_integrity_errors_tuple_includes_d1_permanent(self):
+        from packages.python.javdb_platform.d1_client import D1PermanentError
+        assert sqlite3.IntegrityError in db_mod._DB_INTEGRITY_ERRORS
+        assert D1PermanentError in db_mod._DB_INTEGRITY_ERRORS
+
+    def test_d1_transient_error_is_NOT_swallowed(self):
+        """D1TransientError must NOT be in either tuple — by the time it
+        surfaces from execute() the retries are already exhausted, and
+        silently treating it as 'legacy schema' / 'concurrent run' would
+        lose data on a genuine network failure."""
+        from packages.python.javdb_platform.d1_client import D1TransientError
+        assert D1TransientError not in db_mod._DB_OPERATIONAL_ERRORS
+        assert D1TransientError not in db_mod._DB_INTEGRITY_ERRORS
+
+    def test_d1_permanent_error_is_caught_by_operational_tuple(self):
+        """A raised D1PermanentError is actually caught by the tuple —
+        guards against the tuple being assembled but the except clause
+        somehow not matching (e.g. subclass mismatch)."""
+        from packages.python.javdb_platform.d1_client import D1PermanentError
+        caught = False
+        try:
+            raise D1PermanentError("D1 API returned HTTP 400: no such table: X")
+        except db_mod._DB_OPERATIONAL_ERRORS:
+            caught = True
+        assert caught, "D1PermanentError should be caught by _DB_OPERATIONAL_ERRORS"
+
+
 class TestSnowflakeProcessTag:
-    """B.2 (2026-05-11): per-process random tag eliminates cross-process
-    collision when two GH Actions runners start a session in the same
-    millisecond AND happen to be at counter=0. Without the tag, those two
-    Ids would collide on a PRIMARY KEY INSERT and abort the runner.
+    """Per-process random tag eliminates cross-process collision when two
+    GH Actions runners start a session in the same microsecond AND happen
+    to be at counter=0. Without the tag, those two Ids would collide on a
+    PRIMARY KEY INSERT and abort the runner.
+
+    Layout is verified in detail by ``tests/unit/test_session_id.py``;
+    this class focuses on the cross-process collision-avoidance property.
     """
 
     def test_ids_within_one_process_are_monotonic(self):
         from packages.python.javdb_platform.db import _generate_session_id
         ids = [_generate_session_id() for _ in range(50)]
-        # Strictly increasing within the process — the in-process counter
-        # guarantees this even when many ids land in the same ms.
         assert ids == sorted(ids), "snowflake Ids must be monotonic"
         assert len(set(ids)) == len(ids), "snowflake Ids must be unique"
 
     def test_ids_carry_consistent_process_tag(self):
-        """Layout: ``ms(41) << 22 | tag(12) << 10 | counter(10)``. Within
-        one process the tag is fixed at import time, so every Id should
-        share the same 12-bit value in [10:22).
+        """Tag is fixed at import time, so every Id from one process
+        shares the same hex tag segment (the second ``-``-delimited block).
         """
         from packages.python.javdb_platform.db import _generate_session_id
         ids = [_generate_session_id() for _ in range(30)]
-        tag_bits = [(i >> 10) & ((1 << 12) - 1) for i in ids]
-        assert len(set(tag_bits)) == 1, (
-            f"process tag should be constant per process; got {set(tag_bits)!r}"
+        tags = {sid.split("-")[1] for sid in ids}
+        assert len(tags) == 1, (
+            f"process tag should be constant per process; got {tags!r}"
         )
 
     def test_two_simulated_processes_get_disjoint_ids(self, monkeypatch):
-        """Re-mint Ids with a different per-process tag (simulating a
+        """Re-mint Ids with a different per-process tag hex (simulating a
         sibling Python process that drew a different ``secrets.randbits``)
-        and confirm the two Id streams are disjoint even when ms + counter
-        could otherwise collide.
+        and confirm the two Id streams are disjoint.
         """
         from packages.python.javdb_platform import db as dbmod
 
         ids_a = [dbmod._generate_session_id() for _ in range(3)]
 
-        # Swap in a different 12-bit tag and reset the monotonic-clamp
-        # state so a sibling process starting from counter=0 is the case
-        # we are testing.
-        new_tag = (dbmod._SESSION_ID_PROCESS_TAG ^ 0xABC) & ((1 << 12) - 1)
+        new_tag = (dbmod._SESSION_ID_PROCESS_TAG ^ 0xABCD) & 0xFFFF
         if new_tag == dbmod._SESSION_ID_PROCESS_TAG:
-            new_tag = (new_tag + 1) & ((1 << 12) - 1)
+            new_tag = (new_tag + 1) & 0xFFFF
         monkeypatch.setattr(dbmod, "_SESSION_ID_PROCESS_TAG", new_tag)
-        monkeypatch.setattr(dbmod, "_SESSION_ID_LAST", 0)
+        monkeypatch.setattr(dbmod, "_SESSION_ID_TAG_HEX", f"{new_tag:04x}")
+        monkeypatch.setattr(dbmod, "_SESSION_ID_LAST", "")
+        monkeypatch.setattr(dbmod, "_SESSION_ID_LAST_US", -1)
+        monkeypatch.setattr(dbmod, "_SESSION_ID_COUNTER", 0)
         ids_b = [dbmod._generate_session_id() for _ in range(3)]
 
-        tag_a = (ids_a[0] >> 10) & ((1 << 12) - 1)
-        tag_b = (ids_b[0] >> 10) & ((1 << 12) - 1)
-        assert tag_a != tag_b, "patched tag should produce different bits"
+        tag_a = ids_a[0].split("-")[1]
+        tag_b = ids_b[0].split("-")[1]
+        assert tag_a != tag_b, "patched tag should produce different hex"
         assert set(ids_a).isdisjoint(set(ids_b)), (
             "different process tags must yield disjoint Id sets"
         )

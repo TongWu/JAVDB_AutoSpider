@@ -90,7 +90,7 @@ def test_pending_torrent_overlay_collects_merged_seqs(
     assert "_merged_seqs" in payload, (
         "merged overlay row missing _merged_seqs — P0-4 regression"
     )
-    merged = sorted(int(s) for s in payload["_merged_seqs"])
+    merged = sorted(payload["_merged_seqs"])
     assert merged == sorted(seqs), (
         f"_merged_seqs={merged!r} must contain all staged Seqs={seqs!r}"
     )

@@ -274,7 +274,7 @@ def scan_inventory(
 
 def export_db_to_csv(output_path: str) -> int:
     """Export the rclone_inventory table from SQLite to a CSV file."""
-    from packages.python.javdb_platform.db import get_db, OPERATIONS_DB_PATH
+    from packages.python.javdb_platform.db_connection import get_db, OPERATIONS_DB_PATH
 
     with get_db(OPERATIONS_DB_PATH) as conn:
         rows = conn.execute(
@@ -317,7 +317,8 @@ def load_inventory_as_folder_structure(
 
     if use_sqlite():
         try:
-            from packages.python.javdb_platform.db import db_load_rclone_inventory, current_backend
+            from packages.python.javdb_platform.db_operations import db_load_rclone_inventory
+            from packages.python.javdb_platform.db_connection import current_backend
             raw = db_load_rclone_inventory()
             for entries in raw.values():
                 rows.extend(entries)
@@ -558,7 +559,7 @@ def validate_dedup_records_against_inventory() -> Tuple[int, List[dict]]:
     Returns ``(orphan_count, orphan_rows)``. Zero remote calls are made.
     """
     try:
-        from packages.python.javdb_platform.db import (
+        from packages.python.javdb_platform.db_operations import (
             db_load_rclone_inventory,
             db_load_dedup_records,
             db_mark_orphan_records,
@@ -741,7 +742,7 @@ def run_validate_inventory(
 
     Returns 0 on success, 1 on failure.
     """
-    from packages.python.javdb_platform.db import (
+    from packages.python.javdb_platform.db_operations import (
         db_load_rclone_inventory,
         db_delete_rclone_inventory_paths,
     )
@@ -839,7 +840,7 @@ def migrate_strip_drive_names() -> int:
     are updated; paths like ``dir/file:name`` are left unchanged.
     Returns the total number of rows updated across both tables.
     """
-    from packages.python.javdb_platform.db import get_db, OPERATIONS_DB_PATH
+    from packages.python.javdb_platform.db_connection import get_db, OPERATIONS_DB_PATH
 
     updated = 0
     with get_db(OPERATIONS_DB_PATH) as conn:
@@ -1351,22 +1352,24 @@ def main() -> int:
 
         total_written = 0
         _sqlite_ok = False
-        _staging_session_id: Optional[int] = None
+        _staging_session_id: Optional[str] = None
         _created_local_staging_session = False
         if _use_sqlite():
             try:
-                from packages.python.javdb_platform.db import (
-                    init_db,
+                from packages.python.javdb_platform.db_migrations import init_db
+                from packages.python.javdb_platform.db_reports import (
                     db_create_report_session,
                     db_mark_session_committed,
                     db_mark_session_failed,
+                )
+                from packages.python.javdb_platform.db_operations import (
                     db_open_rclone_staging,
                     db_append_rclone_staging,
                     db_swap_rclone_inventory,
                     db_merge_rclone_inventory_from_stage,
                     db_drop_rclone_staging,
-                    get_active_session_id,
                 )
+                from packages.python.javdb_platform.db_session import get_active_session_id
                 init_db()
                 _staging_session_id = get_active_session_id()
                 if _staging_session_id is None:

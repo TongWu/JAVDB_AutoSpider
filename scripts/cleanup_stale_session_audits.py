@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-shot tool: detect and (optionally) delete phantom audit / history rows.
+"""One-shot tool: detect phantom audit / history rows (read-only since Phase 4).
 
 Background
 ----------
@@ -21,21 +21,29 @@ This script identifies three kinds of phantoms:
    is ``Status='committed'`` and therefore should have been pruned by
    :func:`db_mark_session_committed` but weren't (legacy data).
 
-Default mode is dry-run: writes a JSON report to
-``reports/cleanup_stale_session_audits_dryrun_<ts>.json`` and prints it
-to stdout, but makes no changes.  Run with ``--apply`` to delete /
-NULL out the offending rows.
+Read-only since Phase 4 (2026-05-13)
+------------------------------------
+The audit tables are now treated as historical-session forensics only;
+their **write** path is owned by :mod:`scripts.audit_archive` (the
+30-day commit-window archival cron).  This script therefore writes a
+JSON report describing what it would have deleted under the legacy
+``--apply`` mode, but never mutates ``MovieHistoryAudit`` /
+``TorrentHistoryAudit`` / ``MovieHistory`` / ``TorrentHistory``.
+Passing ``--apply`` is accepted only to keep older runbooks parsable —
+it logs a warning and behaves identically to ``--dry-run``.
 
 Targets
 -------
 ``--target sqlite|d1|both`` (default ``both``) selects which side to
-inspect / clean.  When both, sqlite goes first so the operator can
-sanity-check the dry-run there before letting it loose on D1.
+inspect.  When both, sqlite goes first so the operator can sanity-check
+the report there before consulting D1.
 
 Not for cron
 ------------
 Use after :mod:`scripts.sync_d1_to_sqlite` has aligned both sides.
-Not safe to run while the spider / pipeline is mutating tables.
+The recurring archival job lives in
+:mod:`scripts.audit_archive` (``.github/workflows/AuditArchive.yml``);
+this entry point is reserved for one-shot incident-response audits.
 """
 
 from __future__ import annotations
@@ -45,7 +53,6 @@ import json
 import os
 import sqlite3
 import sys
-from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -79,8 +86,9 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="scripts.cleanup_stale_session_audits",
         description=(
-            "Identify (and optionally delete) phantom audit/history rows "
-            "left behind by botched rollbacks. Dry-run by default."
+            "Identify phantom audit / history rows left behind by botched "
+            "rollbacks. Read-only since Phase 4 — writes happen in "
+            "scripts.audit_archive."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
@@ -89,7 +97,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--target",
         choices=["sqlite", "d1", "both"],
         default="both",
-        help="Which side to inspect / clean. Default: both.",
+        help="Which side to inspect. Default: both.",
     )
     p.add_argument(
         "--session-ids",
@@ -110,24 +118,28 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--include-history-tables",
         action="store_true",
         default=False,
-        help="Also nullify SessionId on MovieHistory/TorrentHistory rows "
-             "where SessionId is NOT NULL but doesn't exist in "
-             "ReportSessions. Off by default — most legacy rows have "
-             "SessionId=NULL anyway.",
+        help="Also flag MovieHistory / TorrentHistory rows whose "
+             "SessionId is NOT NULL but doesn't exist in ReportSessions. "
+             "Off by default — most legacy rows have SessionId=NULL.",
     )
+    # ``--apply`` is retained for backwards-compatible CLI usage but now
+    # logs a warning and behaves like ``--dry-run`` (Phase 4 read-only
+    # contract).  Operators wanting an enforced apply path should use
+    # ``scripts.audit_archive``.
     p.set_defaults(dry_run=True)
     mode = p.add_mutually_exclusive_group()
     mode.add_argument(
         "--dry-run",
         dest="dry_run",
         action="store_true",
-        help="(default) Detect phantoms and write a report, but make no changes.",
+        help="(default) Detect phantoms and write a report, no changes.",
     )
     mode.add_argument(
         "--apply",
         dest="dry_run",
         action="store_false",
-        help="Apply the deletions / NULLs to the targeted side(s).",
+        help="DEPRECATED. Logs a warning and falls back to dry-run; use "
+             "scripts.audit_archive --apply for the cron archival path.",
     )
     p.add_argument(
         "--report-path",
@@ -144,18 +156,15 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
-def _parse_session_ids(raw: Optional[str]) -> Optional[Set[int]]:
+def _parse_session_ids(raw: Optional[str]) -> Optional[Set[str]]:
     if not raw:
         return None
-    ids: Set[int] = set()
+    ids: Set[str] = set()
     for part in raw.split(","):
         part = part.strip()
         if not part:
             continue
-        try:
-            ids.add(int(part))
-        except ValueError:
-            raise SystemExit(f"Invalid session id in --session-ids: {part!r}")
+        ids.add(part)
     return ids or None
 
 
@@ -176,24 +185,24 @@ class _SqliteSide:
         self._reports = sqlite3.connect(_db.REPORTS_DB_PATH)
         self._reports.row_factory = sqlite3.Row
 
-    def fetch_report_session_ids(self) -> Tuple[Set[int], Set[int]]:
+    def fetch_report_session_ids(self) -> Tuple[Set[str], Set[str]]:
         """Return (all_session_ids, committed_session_ids)."""
         rows = self._reports.execute(
             "SELECT Id, Status FROM ReportSessions"
         ).fetchall()
-        all_ids: Set[int] = set()
-        committed: Set[int] = set()
+        all_ids: Set[str] = set()
+        committed: Set[str] = set()
         for r in rows:
             sid = r["Id"]
             if sid is None:
                 continue
-            sid = int(sid)
+            sid = str(sid)
             all_ids.add(sid)
             if (r["Status"] or "").strip() == "committed":
                 committed.add(sid)
         return all_ids, committed
 
-    def fetch_audit_groups(self, table: str) -> Dict[int, Dict[str, Any]]:
+    def fetch_audit_groups(self, table: str) -> Dict[str, Dict[str, Any]]:
         rows = self._history.execute(
             f"SELECT SessionId, COUNT(*) AS c, "
             f"MIN(DateTimeCreated) AS first_at, "
@@ -201,9 +210,9 @@ class _SqliteSide:
             f"FROM {table} WHERE SessionId IS NOT NULL "
             f"GROUP BY SessionId"
         ).fetchall()
-        out: Dict[int, Dict[str, Any]] = {}
+        out: Dict[str, Dict[str, Any]] = {}
         for r in rows:
-            sid = int(r["SessionId"])
+            sid = str(r["SessionId"])
             out[sid] = {
                 "count": int(r["c"] or 0),
                 "first_at": r["first_at"],
@@ -217,37 +226,6 @@ class _SqliteSide:
             f"WHERE SessionId IS NOT NULL GROUP BY SessionId"
         ).fetchall()
         return {int(r["SessionId"]): int(r["c"] or 0) for r in rows}
-
-    def delete_audit_rows(self, table: str, session_ids: List[int]) -> int:
-        if not session_ids:
-            return 0
-        placeholders = ",".join("?" for _ in session_ids)
-        cur = self._history.execute(
-            f"DELETE FROM {table} WHERE SessionId IN ({placeholders})",
-            list(session_ids),
-        )
-        return cur.rowcount or 0
-
-    def nullify_history_session(
-        self, table: str, session_ids: List[int],
-    ) -> int:
-        if not session_ids:
-            return 0
-        placeholders = ",".join("?" for _ in session_ids)
-        cur = self._history.execute(
-            f"UPDATE {table} SET SessionId=NULL "
-            f"WHERE SessionId IN ({placeholders})",
-            list(session_ids),
-        )
-        return cur.rowcount or 0
-
-    def commit(self) -> None:
-        self._history.commit()
-        self._reports.commit()
-
-    def rollback(self) -> None:
-        self._history.rollback()
-        self._reports.rollback()
 
     def close(self) -> None:
         self._history.close()
@@ -273,23 +251,23 @@ class _D1Side:
             api_token=token,
         )
 
-    def fetch_report_session_ids(self) -> Tuple[Set[int], Set[int]]:
+    def fetch_report_session_ids(self) -> Tuple[Set[str], Set[str]]:
         cur = self._reports.execute("SELECT Id, Status FROM ReportSessions")
         rows = cur.fetchall() or []
-        all_ids: Set[int] = set()
-        committed: Set[int] = set()
+        all_ids: Set[str] = set()
+        committed: Set[str] = set()
         for r in rows:
             sid = r.get("Id") if isinstance(r, dict) else r[0]
             status = r.get("Status") if isinstance(r, dict) else r[1]
             if sid is None:
                 continue
-            sid = int(sid)
+            sid = str(sid)
             all_ids.add(sid)
             if (status or "").strip() == "committed":
                 committed.add(sid)
         return all_ids, committed
 
-    def fetch_audit_groups(self, table: str) -> Dict[int, Dict[str, Any]]:
+    def fetch_audit_groups(self, table: str) -> Dict[str, Dict[str, Any]]:
         cur = self._history.execute(
             f"SELECT SessionId, COUNT(*) AS c, "
             f"MIN(DateTimeCreated) AS first_at, "
@@ -298,9 +276,9 @@ class _D1Side:
             f"GROUP BY SessionId"
         )
         rows = cur.fetchall() or []
-        out: Dict[int, Dict[str, Any]] = {}
+        out: Dict[str, Dict[str, Any]] = {}
         for r in rows:
-            sid = int(r.get("SessionId"))
+            sid = str(r.get("SessionId"))
             out[sid] = {
                 "count": int(r.get("c") or 0),
                 "first_at": r.get("first_at"),
@@ -315,49 +293,6 @@ class _D1Side:
         )
         rows = cur.fetchall() or []
         return {int(r.get("SessionId")): int(r.get("c") or 0) for r in rows}
-
-    def delete_audit_rows(self, table: str, session_ids: List[int]) -> int:
-        if not session_ids:
-            return 0
-        # D1 has a 100-bound-param cap per statement.  Build one
-        # parameterised statement per chunk and submit the full list via
-        # ``batch_execute`` so the chunks land atomically on D1's side —
-        # the previous per-chunk ``execute`` loop auto-committed each
-        # chunk, leaving partial state behind on failure.
-        statements: List[Tuple[str, List[int]]] = []
-        for chunk_start in range(0, len(session_ids), 90):
-            chunk = session_ids[chunk_start: chunk_start + 90]
-            placeholders = ",".join("?" for _ in chunk)
-            statements.append((
-                f"DELETE FROM {table} WHERE SessionId IN ({placeholders})",
-                list(chunk),
-            ))
-        cursors = self._history.batch_execute(statements)
-        return sum(int(c.rowcount or 0) for c in cursors)
-
-    def nullify_history_session(
-        self, table: str, session_ids: List[int],
-    ) -> int:
-        if not session_ids:
-            return 0
-        statements: List[Tuple[str, List[int]]] = []
-        for chunk_start in range(0, len(session_ids), 90):
-            chunk = session_ids[chunk_start: chunk_start + 90]
-            placeholders = ",".join("?" for _ in chunk)
-            statements.append((
-                f"UPDATE {table} SET SessionId=NULL "
-                f"WHERE SessionId IN ({placeholders})",
-                list(chunk),
-            ))
-        cursors = self._history.batch_execute(statements)
-        return sum(int(c.rowcount or 0) for c in cursors)
-
-    def commit(self) -> None:
-        # D1 auto-commits per statement.
-        return None
-
-    def rollback(self) -> None:
-        return None
 
     def close(self) -> None:
         try:
@@ -433,7 +368,7 @@ def _detect_phantoms(
     side,
     *,
     cross_day_hours: float,
-    constrain_to_ids: Optional[Set[int]],
+    constrain_to_ids: Optional[Set[str]],
     include_history_tables: bool,
 ) -> Dict[str, Any]:
     """Run the three detection passes and return a dry-run-shaped dict."""
@@ -499,88 +434,39 @@ def _detect_phantoms(
     }
 
 
-# ── Apply ──────────────────────────────────────────────────────────────
+# ── Apply (removed in Phase 4) ─────────────────────────────────────────
+#
+# This entry point used to support ``--apply`` for destructive cleanup
+# of phantom audit rows.  The Phase 4 contract makes the audit tables
+# read-only (forensics for historic sessions only); the recurring
+# archival path is owned by :mod:`scripts.audit_archive`.  Operators
+# who reach for a one-shot destructive cleanup should use the archival
+# script directly.
 
 
-def _apply(side, findings: Dict[str, Any]) -> Dict[str, Any]:
-    """Apply findings; capture per-table status so callers can see how
-    far we got before any failure (no rollback is possible on D1)."""
-    deleted: Dict[str, int] = defaultdict(int)
-    table_status: Dict[str, str] = {}
-    try:
-        for audit_table, items in findings.get("audit", {}).items():
-            sids = sorted({int(item["session_id"]) for item in items})
-            if not sids:
-                table_status[audit_table] = "skipped_empty"
-                continue
-            n = side.delete_audit_rows(audit_table, sids)
-            deleted[audit_table] = n
-            table_status[audit_table] = "ok"
-            logger.info(
-                "Deleted %d row(s) from %s on %s", n, audit_table, side.label,
-            )
-        for history_table, items in findings.get("history", {}).items():
-            sids = sorted({int(item["session_id"]) for item in items})
-            key = f"{history_table}.SessionId_nulled"
-            if not sids:
-                table_status[key] = "skipped_empty"
-                continue
-            n = side.nullify_history_session(history_table, sids)
-            deleted[key] = n
-            table_status[key] = "ok"
-            logger.info(
-                "Nulled SessionId on %d row(s) of %s on %s",
-                n, history_table, side.label,
-            )
-        side.commit()
-        return {
-            "rows_changed": dict(deleted),
-            "table_status": table_status,
-            "partial_success": False,
-        }
-    except Exception as exc:
-        logger.exception(
-            "Apply on %s failed mid-stream after %d table(s) completed: %s",
-            side.label, sum(1 for v in table_status.values() if v == "ok"),
-            exc,
-        )
-        return {
-            "rows_changed": dict(deleted),
-            "table_status": table_status,
-            "partial_success": True,
-            "error": str(exc),
-        }
+def _enforce_readonly(args: argparse.Namespace) -> None:
+    """Phase 4 contract: this tool is now strictly read-only.
 
-
-def _refuse_when_dual_or_d1_under_apply(args: argparse.Namespace) -> None:
-    """Hard-stop when --apply runs while live writers may be writing.
-
-    Mirrors :func:`scripts.sync_d1_to_sqlite._refuse_when_dual_or_d1`: a
-    pipeline running with ``STORAGE_BACKEND in {dual,d1}`` could race
-    the destructive deletes/null-outs in :func:`_apply` and leave the
-    two sides drifted in the very way this tool is meant to repair.
-    Dry-run is read-only, so the guard only fires under --apply.
+    Operators (and CI runbooks) that still pass ``--apply`` get a clear
+    deprecation log and silently degrade to dry-run.  The destructive
+    archival path is owned by :mod:`scripts.audit_archive`, which targets
+    the 30-day commit-window only and runs from a dedicated cron.
     """
     if args.dry_run:
         return
-    backend = (
-        os.environ.get("STORAGE_BACKEND")
-        or cfg("STORAGE_BACKEND", "sqlite")
-        or "sqlite"
-    ).strip().lower()
-    if backend in ("dual", "d1"):
-        logger.error(
-            "STORAGE_BACKEND=%s is set; pause live writers and re-run with "
-            "STORAGE_BACKEND=sqlite (or unset). Refusing --apply.",
-            backend,
-        )
-        sys.exit(1)
+    logger.warning(
+        "--apply on scripts.cleanup_stale_session_audits is deprecated "
+        "since Phase 4 (2026-05). The audit tables are now read-only; "
+        "use `python3 -m scripts.audit_archive --apply` for the 30-day "
+        "commit-window archival cron. Falling back to dry-run."
+    )
+    args.dry_run = True
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = _parse_args(argv)
     setup_logging(log_level=args.log_level)
-    _refuse_when_dual_or_d1_under_apply(args)
+    _enforce_readonly(args)
 
     constrain = _parse_session_ids(args.session_ids)
 
@@ -627,52 +513,19 @@ def main(argv: Optional[List[str]] = None) -> int:
             rc = 4
             continue
 
-        if args.dry_run:
-            overall["results"].append({
-                "side": name,
-                "findings": findings,
-                "applied": False,
-            })
-            logger.info(
-                "[dry-run] %s: audit_orphans=%d history_orphans=%d",
-                name,
-                findings["summary"]["audit_orphans_total"],
-                findings["summary"]["history_orphans_total"],
-            )
-        else:
-            try:
-                apply_result = _apply(side, findings)
-                overall["results"].append({
-                    "side": name,
-                    "findings": findings,
-                    "applied": True,
-                    "rows_changed": apply_result.get("rows_changed", {}),
-                    "table_status": apply_result.get("table_status", {}),
-                    "partial_success": apply_result.get(
-                        "partial_success", False,
-                    ),
-                    **(
-                        {"error": apply_result["error"]}
-                        if apply_result.get("error") else {}
-                    ),
-                })
-                if apply_result.get("partial_success"):
-                    rc = 4
-            except Exception as exc:
-                logger.exception(
-                    "Apply failed for side=%s: %s", name, exc,
-                )
-                try:
-                    side.rollback()
-                except Exception:
-                    pass
-                overall["results"].append({
-                    "side": name,
-                    "findings": findings,
-                    "applied": False,
-                    "error": str(exc),
-                })
-                rc = 4
+        # Phase 4: read-only. ``_enforce_readonly`` already coerced
+        # ``args.dry_run`` to True, so we only ever record findings here.
+        overall["results"].append({
+            "side": name,
+            "findings": findings,
+            "applied": False,
+        })
+        logger.info(
+            "[read-only] %s: audit_orphans=%d history_orphans=%d",
+            name,
+            findings["summary"]["audit_orphans_total"],
+            findings["summary"]["history_orphans_total"],
+        )
         try:
             side.close()
         except Exception:

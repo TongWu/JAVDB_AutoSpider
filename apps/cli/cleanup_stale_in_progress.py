@@ -33,15 +33,16 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from packages.python.javdb_platform import db as _db
-from packages.python.javdb_platform.db import (
-    close_db,
+from packages.python.javdb_platform.db_connection import close_db, get_db
+from packages.python.javdb_platform.db_reports import (
     db_find_in_progress_sessions,
     db_get_session_status,
+)
+from packages.python.javdb_platform.db_rollback import (
     db_resume_finalizing_session,
     db_rollback_session,
-    init_db,
-    get_db,
 )
+from packages.python.javdb_platform.db_migrations import init_db
 from packages.python.javdb_platform.logging_config import (
     get_logger,
     setup_logging,
@@ -104,7 +105,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
-def _read_session_meta(session_id: int) -> dict:
+def _read_session_meta(session_id: str) -> dict:
     with get_db(_db.REPORTS_DB_PATH) as conn:
         row = conn.execute(
             "SELECT Id, ReportType, ReportDate, DisplayName, Status, "
@@ -138,7 +139,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     #   in_progress → db_rollback_session (audit replay or DELETE pending)
     #   finalizing  → db_resume_finalizing_session (idempotent commit drive)
     try:
-        from packages.python.javdb_platform.db import (
+        from packages.python.javdb_platform.db_reports import (
             db_find_stale_pending_sessions,
         )
         rows = db_find_stale_pending_sessions(

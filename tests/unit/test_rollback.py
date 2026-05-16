@@ -508,7 +508,9 @@ class TestRcloneStagingSwap:
 
         staging = db_mod.db_open_rclone_staging(sid)
         assert staging is not None
-        assert staging.endswith(str(sid))
+        # The staging name suffix sanitizes `.` / `-` from the TEXT
+        # snowflake to `_` so it stays a valid SQL identifier.
+        assert staging.endswith(db_mod._session_id_to_identifier_suffix(sid))
 
         db_mod.db_append_rclone_staging(
             [
@@ -596,7 +598,10 @@ class TestRcloneStagingSwap:
         db_mod.db_open_rclone_staging(sid)
         # Mid-run crash before swap → rollback should DROP the staging.
         result = db_mod.db_rollback_session(sid, scope="operations")
-        staging_name = f"RcloneInventoryStaging_{sid}"
+        staging_name = (
+            f"RcloneInventoryStaging_"
+            f"{db_mod._session_id_to_identifier_suffix(sid)}"
+        )
         assert result["operations"][staging_name] == 1
         with db_mod.get_db() as conn:
             assert conn.execute(
@@ -773,12 +778,11 @@ class TestApplicationGeneratedSessionId:
             report_date="2026-05-08",
             csv_filename="phase2.csv",
         )
-        # The id must be a sufficiently large snowflake-style integer
-        # (millisecond timestamp << 10).  AUTOINCREMENT would have
-        # produced a tiny value (~1).
-        assert sid > 1 << 32, (
-            "Application-generated id should be a millisecond "
-            "timestamp << 10, not an autoincrement starting at 1."
+        # The id must match the canonical TEXT snowflake shape (post
+        # 2026-05-13). AUTOINCREMENT would have produced None / "1" / etc.
+        assert isinstance(sid, str) and db_mod._SESSION_ID_PATTERN.match(sid), (
+            f"Application-generated id should match the ISO-like snowflake "
+            f"shape, got {sid!r}."
         )
 
         with db_mod.get_db() as conn:

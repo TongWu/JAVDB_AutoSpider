@@ -65,6 +65,23 @@ from packages.python.javdb_platform.logging_config import setup_logging, get_log
 setup_logging(EMAIL_NOTIFICATION_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
+_MAX_READ_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+def _read_capped(path, max_bytes=_MAX_READ_BYTES, encoding="utf-8"):
+    """Read a text file, truncating to *max_bytes* to avoid OOM on huge logs."""
+    try:
+        size = os.path.getsize(path)
+        with open(path, "r", encoding=encoding, errors="replace") as f:
+            content = f.read(max_bytes)
+        if size > max_bytes:
+            logger.warning("Truncated %s from %d to %d bytes", path, size, max_bytes)
+            content += f"\n\n... [truncated — {size - max_bytes} bytes omitted] ..."
+        return content
+    except Exception as exc:
+        logger.warning("Failed to read %s: %s", path, exc)
+        return ""
+
 # Import masking utilities
 from packages.python.javdb_core.masking import mask_email, mask_server, mask_full
 
@@ -278,7 +295,7 @@ def parse_arguments():
     parser.add_argument('--dry-run', action='store_true', help='Print email content without sending')
     parser.add_argument('--from-pipeline', action='store_true',
                         help='Running from pipeline.py - use GIT_USERNAME for commits')
-    parser.add_argument('--session-id', type=int, default=None,
+    parser.add_argument('--session-id', type=str, default=None,
                         help='Report session ID for fetching stats from SQLite')
     parser.add_argument(
         '--verify-jsonl',
@@ -312,10 +329,9 @@ def analyze_spider_log(log_path):
     """
     if not os.path.exists(log_path):
         return False, "Spider log file not found (script may not have run)", False
-    
-    with open(log_path, 'r', encoding='utf-8') as f:
-        log_content = f.read()
-    
+
+    log_content = _read_capped(log_path)
+
     # Check for explicit proxy ban detection (highest priority)
     if 'CRITICAL: PROXY BAN DETECTED DURING THIS RUN' in log_content:
         return True, "Proxy ban detected - one or more proxies were blocked by JavDB", True
@@ -402,10 +418,9 @@ def analyze_uploader_log(log_path):
     """
     if not os.path.exists(log_path):
         return False, "Uploader log file not found (script may not have run)", False
-    
-    with open(log_path, 'r', encoding='utf-8') as f:
-        log_content = f.read()
-    
+
+    log_content = _read_capped(log_path)
+
     critical_patterns = [
         "Cannot connect to qBittorrent",
         "Failed to login to qBittorrent",
@@ -436,10 +451,9 @@ def analyze_pikpak_log(log_path):
     if not os.path.exists(log_path):
         # PikPak is optional, so missing log is not critical
         return False, None, False
-    
-    with open(log_path, 'r', encoding='utf-8') as f:
-        log_content = f.read()
-    
+
+    log_content = _read_capped(log_path)
+
     critical_patterns = [
         "qBittorrent login failed",
         "Failed to login qBittorrent",
@@ -462,10 +476,9 @@ def analyze_pipeline_log(log_path):
     if not os.path.exists(log_path):
         # Pipeline log missing is not critical in GitHub Actions context
         return False, "Pipeline log file not found", False
-    
-    with open(log_path, 'r', encoding='utf-8') as f:
-        log_content = f.read()
-    
+
+    log_content = _read_capped(log_path)
+
     # Check for script execution failures
     script_failures = []
     
@@ -516,11 +529,10 @@ def extract_spider_statistics(log_path):
     
     if not os.path.exists(log_path):
         return stats
-    
+
     try:
-        with open(log_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
+        content = _read_capped(log_path)
+
         # Extract phase 1 statistics from current format (without skipped session):
         # "Phase 1 completed: X movies discovered, Y processed, Z skipped (history), N no new torrents, F failed"
         phase1_with_no_new = re.search(
@@ -723,11 +735,10 @@ def extract_uploader_statistics(log_path):
     
     if not os.path.exists(log_path):
         return stats
-    
+
     try:
-        with open(log_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
+        content = _read_capped(log_path)
+
         total = re.search(r'Total torrents in CSV: (\d+)', content)
         if total:
             stats['total'] = int(total.group(1))
@@ -780,11 +791,10 @@ def extract_pikpak_statistics(log_path):
     
     if not os.path.exists(log_path):
         return stats
-    
+
     try:
-        with open(log_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
+        content = _read_capped(log_path)
+
         threshold = re.search(r'older than (\d+) days', content)
         if threshold:
             stats['threshold_days'] = int(threshold.group(1))
@@ -1045,7 +1055,8 @@ def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
     try:
         from packages.python.javdb_platform.config_helper import use_sqlite
         if use_sqlite():
-            from packages.python.javdb_platform.db import init_db, db_load_dedup_records
+            from packages.python.javdb_platform.db_migrations import init_db
+            from packages.python.javdb_platform.db_operations import db_load_dedup_records
             init_db()
             db_rows = db_load_dedup_records()
             if db_rows:
@@ -1981,14 +1992,14 @@ def main():
     try:
         from packages.python.javdb_platform.config_helper import use_sqlite as _use_sqlite
         if _use_sqlite():
-            from packages.python.javdb_platform.db import (
-                init_db,
-                db_get_latest_session_local,
+            from packages.python.javdb_platform.db_migrations import init_db
+            from packages.python.javdb_platform.db_reports import db_get_latest_session_local
+            from packages.python.javdb_platform.db_stats import (
                 db_get_spider_stats_local,
                 db_get_uploader_stats_local,
                 db_get_pikpak_stats_local,
-                current_backend as _cur_be,
             )
+            from packages.python.javdb_platform.db_connection import current_backend as _cur_be
             init_db()
             _stats_backend_label = f"{_cur_be()} (stats forced sqlite-local)"
             _sid = args.session_id
@@ -2078,7 +2089,7 @@ def main():
         session_start_time = None
         if _sid is not None:
             try:
-                from packages.python.javdb_platform.db import get_db, REPORTS_DB_PATH
+                from packages.python.javdb_platform.db_connection import get_db, REPORTS_DB_PATH
                 with get_db(REPORTS_DB_PATH) as _conn:
                     _row = _conn.execute(
                         "SELECT DateTimeCreated FROM ReportSessions WHERE Id = ?", (_sid,)
